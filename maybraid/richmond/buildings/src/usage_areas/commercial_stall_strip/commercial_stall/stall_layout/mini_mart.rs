@@ -125,6 +125,7 @@ impl MiniMartRegions {
 			area_reserve: self.aisles_area_reserve.max(sales_floor),
 			reserve_cap_frac: 0.75,
 			grow_into: false,
+			max_axis_frac: None,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
 			door_width_min: MINI_MART_DOOR_WIDTH_MIN,

@@ -78,6 +78,7 @@ impl PartsRegions {
 				.max(PARTS_REGION_MIN * PARTS_REGION_MIN),
 			reserve_cap_frac: 0.7,
 			grow_into: false,
+			max_axis_frac: None,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
 			door_width_min: PARTS_DOOR_WIDTH_MIN,

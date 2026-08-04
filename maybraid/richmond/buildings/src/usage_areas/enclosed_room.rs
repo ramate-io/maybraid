@@ -58,6 +58,9 @@ pub struct EnclosedRoomParams {
 	pub reserve_cap_frac: f32,
 	/// Also `grow_into` after `grow_toward_area` (restroom fills harder).
 	pub grow_into: bool,
+	/// When set, clamp the packed room so each plan axis spans at most this
+	/// fraction of the host (e.g. `0.5` → never more than half the bay on X or Z).
+	pub max_axis_frac: Option<f32>,
 	/// Pull the free/sales face back so a door clearance band fits in-host.
 	/// Restroom usually leaves a reserved strip instead and sets this false.
 	pub shrink_sales_for_door_clear: bool,
@@ -124,6 +127,9 @@ impl EnclosedRoomParams {
 				self.mins,
 				self.contact,
 			)?;
+		}
+		if let Some(frac) = self.max_axis_frac {
+			room = clamp_room_axis_frac(host, room, seed_face, frac, self.mins, self.contact)?;
 		}
 		// Pull near-host lateral faces flush so we omit thin partition walls in the gap.
 		room = snap_near_host_sides(host, room, seed_face, clearances, HOST_WALL_SNAP);
@@ -361,6 +367,66 @@ struct EnclosureGeom {
 
 /// Gap below which a partition face should flush to the host (omit the wall).
 const HOST_WALL_SNAP: f32 = 0.45;
+
+/// Shrink `room` so each plan axis is ≤ `frac` of the host. Keeps the seed-wall
+/// contact; trims the sales face and centers the along-wall span.
+fn clamp_room_axis_frac(
+	host: Aabb2d,
+	mut room: Aabb2d,
+	seed_face: PlanOpeningFace,
+	frac: f32,
+	mins: EnclosedRoomMins,
+	contact: f32,
+) -> Option<Aabb2d> {
+	let frac = frac.clamp(0.05, 1.0);
+	let max_x = (host.max.x - host.min.x) * frac;
+	let max_y = (host.max.y - host.min.y) * frac;
+
+	if seed_face.thru_is_x {
+		let span = room.max.x - room.min.x;
+		if span > max_x + 1e-3 {
+			if seed_face.inward_positive {
+				room.max.x = room.min.x + max_x;
+			} else {
+				room.min.x = room.max.x - max_x;
+			}
+		}
+		let span = room.max.y - room.min.y;
+		if span > max_y + 1e-3 {
+			let mid = 0.5 * (room.min.y + room.max.y);
+			room.min.y = (mid - 0.5 * max_y).max(host.min.y);
+			room.max.y = (room.min.y + max_y).min(host.max.y);
+			room.min.y = (room.max.y - max_y).max(host.min.y);
+		}
+	} else {
+		let span = room.max.y - room.min.y;
+		if span > max_y + 1e-3 {
+			if seed_face.inward_positive {
+				room.max.y = room.min.y + max_y;
+			} else {
+				room.min.y = room.max.y - max_y;
+			}
+		}
+		let span = room.max.x - room.min.x;
+		if span > max_x + 1e-3 {
+			let mid = 0.5 * (room.min.x + room.max.x);
+			room.min.x = (mid - 0.5 * max_x).max(host.min.x);
+			room.max.x = (room.min.x + max_x).min(host.max.x);
+			room.min.x = (room.max.x - max_x).max(host.min.x);
+		}
+	}
+
+	if room.max.x - room.min.x < 1e-3 || room.max.y - room.min.y < 1e-3 {
+		return None;
+	}
+	if !mins.ok(room) {
+		return None;
+	}
+	if seed_face.shared_border_len(room) + 1e-3 < contact {
+		return None;
+	}
+	Some(room)
+}
 
 /// Expand lateral (and seed) faces that sit within `snap` of the host when the
 /// intervening strip is clear. Never snaps the sales face — that keeps door

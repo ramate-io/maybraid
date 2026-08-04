@@ -646,11 +646,27 @@ mod tests {
 		.unwrap();
 		for ns in &plan.packed.nightstands {
 			let n = aabb3_to_plan(ns, PlanAxes::XZ);
-			let abuts = plan.packed.beds.iter().any(|bed| {
+			let abuts_long_side = plan.packed.beds.iter().any(|bed| {
 				let b = aabb3_to_plan(bed, PlanAxes::XZ);
-				touches_aabb2(n, inflate_aabb2(b, 0.2))
+				if !touches_aabb2(n, inflate_aabb2(b, 0.2)) {
+					return false;
+				}
+				// Flank a long side (left/right), not head/foot.
+				let bed_w = b.max.x - b.min.x;
+				let bed_d = b.max.y - b.min.y;
+				const EPS: f32 = 0.15;
+				let nc = (n.min + n.max) * 0.5;
+				if bed_w + 1e-3 >= bed_d {
+					nc.x > b.min.x - EPS
+						&& nc.x < b.max.x + EPS
+						&& (nc.y > b.max.y - EPS || nc.y < b.min.y + EPS)
+				} else {
+					nc.y > b.min.y - EPS
+						&& nc.y < b.max.y + EPS
+						&& (nc.x > b.max.x - EPS || nc.x < b.min.x + EPS)
+				}
 			});
-			assert!(abuts, "nightstand not adjacent to any bed");
+			assert!(abuts_long_side, "nightstand not on a long side of any bed");
 		}
 	}
 
@@ -760,22 +776,37 @@ mod tests {
 			)
 			.unwrap();
 			if let Some(ensuite) = plan.packed.ensuites.first() {
-				found = Some(aabb2_area(aabb3_to_plan(&ensuite.bounds, PlanAxes::XZ)));
+				let plan2 = aabb3_to_plan(&ensuite.bounds, PlanAxes::XZ);
+				found = Some((aabb2_area(plan2), plan2));
 				break;
 			}
 		}
-		let area = found.expect("expected an ensuite in a large room");
+		let (area, bounds) = found.expect("expected an ensuite in a large room");
 		assert!(
 			area + 1e-3 >= 2.6 * 1.8,
 			"ensuite area {area} below enlarged mins"
 		);
+		// With ≤50% per axis, theoretical max area is ~25% of host.
 		assert!(
-			area + 0.5 >= host_area * 0.30,
-			"ensuite area {area} should grow toward a large share of host {host_area}"
+			area + 0.5 >= host_area * 0.12,
+			"ensuite area {area} should grow past mins in host {host_area}"
 		);
 		assert!(
-			area <= host_area * 0.50 + 1.0,
-			"ensuite area {area} should stay within about half the host {host_area}"
+			area <= host_area * 0.25 + 2.0,
+			"ensuite area {area} should stay within the half-axis envelope of host {host_area}"
+		);
+		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+		let ew = bounds.max.x - bounds.min.x;
+		let ed = bounds.max.y - bounds.min.y;
+		let hw = host.max.x - host.min.x;
+		let hd = host.max.y - host.min.y;
+		assert!(
+			ew <= hw * 0.5 + 1e-2,
+			"ensuite X span {ew} exceeds half host width {hw}"
+		);
+		assert!(
+			ed <= hd * 0.5 + 1e-2,
+			"ensuite Z span {ed} exceeds half host depth {hd}"
 		);
 	}
 

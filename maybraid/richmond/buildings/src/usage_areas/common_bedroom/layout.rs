@@ -369,6 +369,7 @@ impl CommonBedroomRegions {
 					OpeningId::scoped(SCOPE, "ensuite_door", "0"),
 					0.55,
 					true,
+					Some(0.5),
 				) {
 					return Some(Placed::Ensuite(part));
 				}
@@ -455,6 +456,7 @@ impl CommonBedroomRegions {
 			door_id,
 			0.72,
 			false,
+			None,
 		)
 	}
 
@@ -470,6 +472,7 @@ impl CommonBedroomRegions {
 		door_id: OpeningId,
 		reserve_cap_frac: f32,
 		grow_into: bool,
+		max_axis_frac: Option<f32>,
 	) -> Option<BedroomPartition> {
 		// Seed the **long** wall span. `grow_toward_area` stops near `area_target`
 		// (often ≈ min area); if contact < mins.long the grown rect can hit that
@@ -484,6 +487,7 @@ impl CommonBedroomRegions {
 			area_reserve,
 			reserve_cap_frac,
 			grow_into,
+			max_axis_frac,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
 			door_width_min: DOOR_WIDTH_MIN,
@@ -928,11 +932,19 @@ fn place_adjacent_to_bed(
 	gap: f32,
 ) -> Option<Aabb3d> {
 	for (bi, bed) in packed.beds.iter().enumerate() {
-		let start = (noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) * 4.0).floor() as u32 % 4;
-		for k in 0..4u32 {
-			let side = (start + k) % 4;
-			let mid_x = bed.min.x + (bed.max.x - bed.min.x) * 0.5 - extent.x * 0.5;
-			let mid_z = bed.min.z + (bed.max.z - bed.min.z) * 0.5 - extent.z * 0.5;
+		// Only the two long sides (left/right of the sleeper) — never head/foot.
+		let bed_w = bed.max.x - bed.min.x;
+		let bed_d = bed.max.z - bed.min.z;
+		let long_sides: [u32; 2] = if bed_w + 1e-3 >= bed_d {
+			[2, 3] // long along X → ±Z flanks
+		} else {
+			[0, 1] // long along Z → ±X flanks
+		};
+		let start = (noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) * 2.0).floor() as usize % 2;
+		for k in 0..2usize {
+			let side = long_sides[(start + k) % 2];
+			let mid_x = bed.min.x + bed_w * 0.5 - extent.x * 0.5;
+			let mid_z = bed.min.z + bed_d * 0.5 - extent.z * 0.5;
 			let min = match side {
 				0 => Vec3::new(bed.max.x + gap, host3.min.y, mid_z), // +X
 				1 => Vec3::new(bed.min.x - gap - extent.x, host3.min.y, mid_z), // −X
