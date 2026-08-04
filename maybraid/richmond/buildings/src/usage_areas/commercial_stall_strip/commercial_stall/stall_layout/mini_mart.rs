@@ -21,11 +21,15 @@ pub const MINI_MART_OFFICE_LONG_MIN: f32 = 3.0;
 pub const MINI_MART_OFFICE_SHORT_MIN: f32 = 2.0;
 /// Register plan minimum (both axes).
 pub const MINI_MART_REGISTER_MIN: f32 = 2.0;
-/// Aisles plan minimum (both axes).
+/// Primary aisles plan minimum (both axes) — at least one region must meet this.
 pub const MINI_MART_AISLES_MIN: f32 = 4.0;
+/// Extra discontiguous aisle pockets may be this small (both axes).
+pub const MINI_MART_AISLES_EXTRA_MIN: f32 = 2.0;
 /// Shelf depth sample / pack range.
 pub const MINI_MART_SHELF_DEPTH_MIN: f32 = 0.5;
 pub const MINI_MART_SHELF_DEPTH_MAX: f32 = 1.0;
+/// Minimum along-length for an opportunistic shelf segment.
+pub const MINI_MART_SHELF_ALONG_MIN: f32 = 0.75;
 /// Default place-rate for optional wall shelves.
 pub const MINI_MART_SHELF_PLACE_RATE: f32 = 0.55;
 /// Office door along-width range.
@@ -64,7 +68,8 @@ pub struct MiniMartRegions {
 pub struct MiniMartPacked {
 	pub office: Aabb3d,
 	pub register: Aabb3d,
-	pub aisles: Aabb3d,
+	/// One or more aisle pockets; the first meets [`MINI_MART_AISLES_MIN`].
+	pub aisles: Vec<Aabb3d>,
 	pub shelves: Vec<Aabb3d>,
 	pub office_walls: Vec<Rectangle>,
 }
@@ -86,6 +91,12 @@ impl MiniMartRegions {
 			.ok_or(FitError::TooSmall {
 				reason: "mini mart office",
 			})?;
+		// Leave ≥1m beyond the sales face so the office door clearance can extrude.
+		let office2 = Self::shrink_office_for_door_clearance(host, office2, seed_face).ok_or(
+			FitError::TooSmall {
+				reason: "mini mart office door",
+			},
+		)?;
 
 		let (office_walls, _door_face, door_clear) = self
 			.office_door_wall(host3, host, office2, seed_face)
@@ -106,12 +117,15 @@ impl MiniMartRegions {
 				reason: "mini mart aisles",
 			})?;
 
-		let shelves = self.pack_shelves(host, &clearances, office2, register2, aisles2);
+		let shelves = self.pack_shelves(host, &clearances, office2, register2, &aisles2);
 
 		Ok(MiniMartPacked {
 			office: plan_to_aabb3(host3, office2, PlanAxes::XZ),
 			register: plan_to_aabb3(host3, register2, PlanAxes::XZ),
-			aisles: plan_to_aabb3(host3, aisles2, PlanAxes::XZ),
+			aisles: aisles2
+				.into_iter()
+				.map(|a| plan_to_aabb3(host3, a, PlanAxes::XZ))
+				.collect(),
 			shelves: shelves
 				.into_iter()
 				.map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ))
@@ -201,6 +215,36 @@ impl MiniMartRegions {
 		let d = office.max.y - office.min.y;
 		let (long, short) = if w >= d { (w, d) } else { (d, w) };
 		long + 1e-3 >= MINI_MART_OFFICE_LONG_MIN && short + 1e-3 >= MINI_MART_OFFICE_SHORT_MIN
+	}
+
+	/// Pull the sales face back so a [`MINI_MART_PASSAGE_CLEARANCE`] band fits in-host.
+	fn shrink_office_for_door_clearance(
+		host: Aabb2d,
+		mut office: Aabb2d,
+		seed_face: PlanOpeningFace,
+	) -> Option<Aabb2d> {
+		let need = MINI_MART_PASSAGE_CLEARANCE + 0.05;
+		if seed_face.thru_is_x {
+			if seed_face.inward_positive {
+				office.max.x = office.max.x.min(host.max.x - need);
+			} else {
+				office.min.x = office.min.x.max(host.min.x + need);
+			}
+		} else if seed_face.inward_positive {
+			office.max.y = office.max.y.min(host.max.y - need);
+		} else {
+			office.min.y = office.min.y.max(host.min.y + need);
+		}
+		if office.max.x - office.min.x < 1e-3 || office.max.y - office.min.y < 1e-3 {
+			return None;
+		}
+		if !Self::office_dims_ok(office) {
+			return None;
+		}
+		if seed_face.shared_border_len(office) + 1e-3 < MINI_MART_OFFICE_CONTACT {
+			return None;
+		}
+		Some(office)
 	}
 
 	fn pack_office(
@@ -306,19 +350,36 @@ impl MiniMartRegions {
 		};
 		let door_face = door_face.clip_to_host(host)?;
 		let along_len = door_face.along_len();
+		// Keep ≥0.2m return on each side when the divider is long enough.
+		let max_door = (along_len - 0.4).max(along_len * 0.5);
 		let door_w = self
 			.door_width
 			.clamp(MINI_MART_DOOR_WIDTH_MIN, MINI_MART_DOOR_WIDTH_MAX)
-			.min(along_len * 0.85)
-			.max(MINI_MART_DOOR_WIDTH_MIN.min(along_len * 0.5));
-		if along_len + 1e-3 < door_w + 0.2 {
+			.min(max_door)
+			.min(along_len * 0.85);
+		if door_w + 1e-3 < MINI_MART_DOOR_WIDTH_MIN.min(along_len * 0.45) {
+			return None;
+		}
+		if along_len + 1e-3 < door_w {
 			return None;
 		}
 
-		let (door0, door1) =
-			place_along(door_face.along0, door_face.along1, door_w, self.door_along_t)?;
-		let door_clear =
-			door_face.band(host, door_w, MINI_MART_PASSAGE_CLEARANCE, self.door_along_t)?;
+		let mut door_t = self.door_along_t;
+		let (door0, door1, door_clear) = {
+			let mut placed = None;
+			for &t in &[door_t, 0.5, 0.25, 0.75] {
+				door_t = t;
+				let Some((d0, d1)) = place_along(door_face.along0, door_face.along1, door_w, t)
+				else {
+					continue;
+				};
+				if let Some(clear) = door_face.band(host, door_w, MINI_MART_PASSAGE_CLEARANCE, t) {
+					placed = Some((d0, d1, clear));
+					break;
+				}
+			}
+			placed?
+		};
 
 		let bmin = Vec3::from(host3.min);
 		let bmax = Vec3::from(host3.max);
@@ -352,9 +413,11 @@ impl MiniMartRegions {
 				walls.push(r);
 			}
 		}
+		// Prefer two returns, but accept a single panel if the door sits near an end.
 		if walls.is_empty() {
 			return None;
 		}
+		let _ = door_t;
 		Some((walls, door_face, door_clear))
 	}
 
@@ -414,13 +477,32 @@ impl MiniMartRegions {
 		clearances: &[Aabb2d],
 		office2: Aabb2d,
 		register2: Aabb2d,
-	) -> Option<Aabb2d> {
+	) -> Option<Vec<Aabb2d>> {
 		let mut hard = clearances.to_vec();
 		hard.push(office2);
 		hard.push(register2);
 		let seed = max_empty_rect2(host, &hard)?;
 		let grown = seed.grow_into(host, &hard);
-		clamp_min_size2(grown, Vec2::splat(MINI_MART_AISLES_MIN))
+		let primary = clamp_min_size2(grown, Vec2::splat(MINI_MART_AISLES_MIN))?;
+		let mut aisles = vec![primary];
+		hard.push(primary);
+
+		// Fill leftover pockets with smaller discontiguous aisle regions.
+		for _ in 0..6 {
+			let Some(seed) = max_empty_rect2(host, &hard) else {
+				break;
+			};
+			let grown = seed.grow_into(host, &hard);
+			let Some(extra) = clamp_min_size2(grown, Vec2::splat(MINI_MART_AISLES_EXTRA_MIN)) else {
+				break;
+			};
+			if !extra.is_clear_of(&hard) {
+				break;
+			}
+			aisles.push(extra);
+			hard.push(extra);
+		}
+		Some(aisles)
 	}
 
 	fn pack_shelves(
@@ -429,13 +511,15 @@ impl MiniMartRegions {
 		clearances: &[Aabb2d],
 		office2: Aabb2d,
 		register2: Aabb2d,
-		aisles2: Aabb2d,
+		aisles: &[Aabb2d],
 	) -> Vec<Aabb2d> {
 		let mut hard = clearances.to_vec();
 		hard.push(office2);
 		hard.push(register2);
-		hard.push(aisles2);
+		hard.extend_from_slice(aisles);
 		let mut out = Vec::new();
+
+		// Sampled shelf choices first.
 		for spec in &self.shelves {
 			let depth = spec
 				.shelf
@@ -453,12 +537,50 @@ impl MiniMartRegions {
 			if !band.is_clear_of(&hard) {
 				continue;
 			}
-			// Also avoid overlapping already-accepted shelves.
 			if out.iter().any(|s| intersects_aabb2(band, *s)) {
 				continue;
 			}
 			out.push(band);
 			hard.push(band);
+		}
+
+		// Opportunistic fill: more discontiguous shelves on free-wall free segments.
+		let free_faces: Vec<PlanOpeningFace> = self.shelves.iter().map(|s| s.face).collect();
+		for face in free_faces {
+			let depth = self
+				.shelves
+				.iter()
+				.find(|s| Self::same_wall(s.face, face))
+				.map(|s| {
+					s.shelf
+						.depth
+						.clamp(MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_DEPTH_MAX)
+				})
+				.unwrap_or(0.75);
+			// Recompute free segments as shelves are accepted.
+			for _ in 0..8 {
+				let Some((seg0, seg1)) = face.longest_free_segment(&hard, MINI_MART_SHELF_ALONG_MIN)
+				else {
+					break;
+				};
+				let avail = seg1 - seg0;
+				let seg_face = PlanOpeningFace {
+					along0: seg0,
+					along1: seg1,
+					..face
+				};
+				let Some(band) = seg_face.band(host, avail, depth, 0.5) else {
+					break;
+				};
+				if !band.is_clear_of(&hard) {
+					break;
+				}
+				if out.iter().any(|s| intersects_aabb2(band, *s)) {
+					break;
+				}
+				out.push(band);
+				hard.push(band);
+			}
 		}
 		out
 	}

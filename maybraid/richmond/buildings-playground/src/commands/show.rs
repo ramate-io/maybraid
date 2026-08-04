@@ -13,6 +13,8 @@ pub mod bites_sitdown_stall;
 pub mod bites_stall;
 pub mod commercial_stall;
 pub mod commercial_stall_strip;
+pub mod mini_mart;
+pub mod mini_mart_examples;
 pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
@@ -157,6 +159,10 @@ pub enum Show {
 	BitesSitdownStall(bites_sitdown_stall::BitesSitdownStall),
 	/// Gallery of bites + sit-down stalls (passage AABBs drawn as gizmos).
 	BitesExamples(bites_examples::BitesExamples),
+	/// MiniMart interior (clearances, office+door, register, aisles, shelves).
+	MiniMart(mini_mart::MiniMart),
+	/// Gallery of MiniMart stalls (passage AABBs drawn as gizmos).
+	MiniMartExamples(mini_mart_examples::MiniMartExamples),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
@@ -213,6 +219,8 @@ impl Show {
 			Self::BitesStall(cmd) => Ok(cmd.into_preview()),
 			Self::BitesSitdownStall(cmd) => Ok(cmd.into_preview()),
 			Self::BitesExamples(cmd) => Ok(cmd.into_preview()),
+			Self::MiniMart(cmd) => Ok(cmd.into_preview()),
+			Self::MiniMartExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};
