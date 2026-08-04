@@ -13,14 +13,14 @@ use super::knick_knack_stall::KnickKnackStall;
 use super::lounge::Lounge;
 use super::parts_stall::PartsStall;
 use super::public_restroom::PublicRestroom;
-use super::supermarket_stall::SupermarketStall;
+use super::mini_mart::MiniMart;
 
 /// Selected commercial stall interior.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CommercialStallInterior {
 	Bites(BitesStall),
 	BitesSitdown(BitesSitdownStall),
-	Supermarket(SupermarketStall),
+	MiniMart(MiniMart),
 	KnickKnack(KnickKnackStall),
 	Parts(PartsStall),
 	PublicRestroom(PublicRestroom),
@@ -32,7 +32,7 @@ pub enum CommercialStallInterior {
 enum InteriorKind {
 	Bites,
 	BitesSitdown,
-	Supermarket,
+	MiniMart,
 	KnickKnack,
 	Parts,
 	PublicRestroom,
@@ -41,7 +41,7 @@ enum InteriorKind {
 const FIRST_FIT_ORDER: &[InteriorKind] = &[
 	InteriorKind::Bites,
 	InteriorKind::BitesSitdown,
-	InteriorKind::Supermarket,
+	InteriorKind::MiniMart,
 	InteriorKind::KnickKnack,
 	InteriorKind::Parts,
 	InteriorKind::PublicRestroom,
@@ -51,7 +51,7 @@ fn interior_catalog() -> TypedBucketThrow<InteriorKind> {
 	let mut d = TypedBucketThrow::new();
 	d.add(InteriorKind::Bites, 3.0);
 	d.add(InteriorKind::BitesSitdown, 2.5);
-	d.add(InteriorKind::Supermarket, 1.5);
+	d.add(InteriorKind::MiniMart, 1.5);
 	d.add(InteriorKind::KnickKnack, 2.0);
 	d.add(InteriorKind::Parts, 1.5);
 	d.add(InteriorKind::PublicRestroom, 0.8);
@@ -76,8 +76,8 @@ fn try_fit_kind(
 			.map(|(s, r)| (CommercialStallInterior::Bites(s), r)),
 		InteriorKind::BitesSitdown => BitesSitdownStall::fit_to_confines(confines, noise)
 			.map(|(s, r)| (CommercialStallInterior::BitesSitdown(s), r)),
-		InteriorKind::Supermarket => SupermarketStall::fit_to_confines(confines, noise)
-			.map(|(s, r)| (CommercialStallInterior::Supermarket(s), r)),
+		InteriorKind::MiniMart => MiniMart::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::MiniMart(s), r)),
 		InteriorKind::KnickKnack => KnickKnackStall::fit_to_confines(confines, noise)
 			.map(|(s, r)| (CommercialStallInterior::KnickKnack(s), r)),
 		InteriorKind::Parts => PartsStall::fit_to_confines(confines, noise)
@@ -121,7 +121,7 @@ impl Fit for CommercialStallInterior {
 impl BuildingComponents for CommercialStallInterior {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		match self {
-			Self::Supermarket(s) => s.panel_nodes_for_level(level),
+			Self::MiniMart(s) => s.panel_nodes_for_level(level),
 			Self::Parts(s) => s.panel_nodes_for_level(level),
 			_ => Layers::new(),
 		}
@@ -131,7 +131,7 @@ impl BuildingComponents for CommercialStallInterior {
 		match self {
 			Self::Bites(s) => s.label_nodes_for_level(level),
 			Self::BitesSitdown(s) => s.label_nodes_for_level(level),
-			Self::Supermarket(s) => s.label_nodes_for_level(level),
+			Self::MiniMart(s) => s.label_nodes_for_level(level),
 			Self::KnickKnack(s) => s.label_nodes_for_level(level),
 			Self::Parts(s) => s.label_nodes_for_level(level),
 			Self::PublicRestroom(s) => s.label_nodes_for_level(level),

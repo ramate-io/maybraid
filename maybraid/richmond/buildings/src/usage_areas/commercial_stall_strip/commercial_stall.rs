@@ -6,19 +6,19 @@ mod interior;
 mod knick_knack_stall;
 mod label_util;
 mod lounge;
+mod mini_mart;
 mod parts_stall;
 mod public_restroom;
 mod stall_layout;
-mod supermarket_stall;
 
 pub use bites_sitdown_stall::{BitesSitdownParameterized, BitesSitdownPlan, BitesSitdownStall};
 pub use bites_stall::{BitesStall, BitesStallParameterized, BitesStallPlan};
 pub use interior::CommercialStallInterior;
 pub use knick_knack_stall::KnickKnackStall;
 pub use lounge::Lounge;
+pub use mini_mart::{MiniMart, MiniMartParameterized, MiniMartPlan};
 pub use parts_stall::PartsStall;
 pub use public_restroom::PublicRestroom;
-pub use supermarket_stall::SupermarketStall;
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};

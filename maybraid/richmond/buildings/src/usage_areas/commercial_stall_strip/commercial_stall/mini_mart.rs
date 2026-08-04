@@ -1,0 +1,274 @@
+//! MiniMart stall: passage clearances, office with door, register, aisles, optional shelves.
+
+pub mod parameterized;
+
+pub use parameterized::{MiniMartParameterized, MiniMartPlan};
+
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
+use richmond_building_components::panels::PanelNode;
+use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+
+use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::paneling::Rectangle;
+
+use super::label_util::label_filling_aabb;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MiniMart {
+	pub stall_type: LabelNode,
+	pub office_walls: Vec<Rectangle>,
+	pub office: LabelNode,
+	pub stall_aisles: LabelNode,
+	pub register: LabelNode,
+	pub grocery_shelves: Vec<LabelNode>,
+}
+
+impl MiniMart {
+	pub fn from_plan(plan: MiniMartPlan, confines: &Confines) -> Self {
+		let style = plan.parameterized.style;
+		let grocery_shelves = plan
+			.packed
+			.shelves
+			.iter()
+			.map(|aabb| label_filling_aabb(LabelStyle::Gray, "GroceryShelves", aabb, confines.roll))
+			.collect();
+		Self {
+			stall_type: label_filling_aabb(
+				LabelStyle::Blue,
+				"MiniMart",
+				&confines.bounds,
+				confines.roll,
+			),
+			office_walls: plan.packed.office_walls,
+			office: label_filling_aabb(
+				style,
+				"MiniMartOffice",
+				&plan.packed.office,
+				confines.roll,
+			),
+			stall_aisles: label_filling_aabb(
+				LabelStyle::Cyan,
+				"StallAisles",
+				&plan.packed.aisles,
+				confines.roll,
+			),
+			register: label_filling_aabb(
+				LabelStyle::Magenta,
+				"Register",
+				&plan.packed.register,
+				confines.roll,
+			),
+			grocery_shelves,
+		}
+	}
+}
+
+impl Fit for MiniMart {
+	fn fit_to_confines(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		let params = MiniMartParameterized::sample(confines, noise)?;
+		let plan = MiniMartPlan::from_parameterized(params, confines)?;
+		Ok((Self::from_plan(plan, confines), FillableRegions::empty()))
+	}
+}
+
+impl BuildingComponents for MiniMart {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = Layers::new();
+		for wall in &self.office_walls {
+			out.extend(wall.panel_nodes_for_level(level));
+		}
+		out
+	}
+
+	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
+		let mut labels = vec![
+			self.stall_type.clone(),
+			self.office.clone(),
+			self.stall_aisles.clone(),
+			self.register.clone(),
+		];
+		labels.extend(self.grocery_shelves.iter().cloned());
+		Layers::from_free(labels)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
+	use crate::openings::{Opening, OpeningId, Openings};
+	use procedural_common::{
+		aabb2_area, aabb3_to_plan, intersects_aabb2, Aabb2dPack, PlanAxes, PlanOpeningFace,
+	};
+
+	use super::super::stall_layout::{
+		MiniMartRegions, MINI_MART_AISLES_MIN, MINI_MART_OFFICE_LONG_MIN,
+		MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN,
+	};
+	use super::super::stall_layout::mini_mart::MINI_MART_PASSAGE_CLEARANCE;
+
+	fn roomy_south_doors() -> Confines {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door_a"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(1.0, 0.0, -0.2),
+				Vec3::new(3.5, 2.2, 0.2),
+			)),
+		);
+		openings.insert(
+			OpeningId::new("door_b"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(8.0, 0.0, -0.2),
+				Vec3::new(10.5, 2.2, 0.2),
+			)),
+		);
+		Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.0, 12.0)),
+			0.0,
+			openings,
+		)
+	}
+
+	fn plan_extent(aabb: &Aabb3d) -> (f32, f32) {
+		let p = aabb3_to_plan(aabb, PlanAxes::XZ);
+		(p.max.x - p.min.x, p.max.y - p.min.y)
+	}
+
+	fn office_dims_ok(aabb: &Aabb3d) -> bool {
+		let (w, d) = plan_extent(aabb);
+		let (long, short) = if w >= d { (w, d) } else { (d, w) };
+		long + 1e-3 >= MINI_MART_OFFICE_LONG_MIN && short + 1e-3 >= MINI_MART_OFFICE_SHORT_MIN
+	}
+
+	#[test]
+	fn mini_mart_fits_roomy_bay() {
+		let confines = roomy_south_doors();
+		let (stall, _) =
+			MiniMart::fit_to_confines(&confines, NoiseParams { seed: 7, ..Default::default() })
+				.unwrap();
+		assert_eq!(stall.stall_type.text.as_str(), "MiniMart");
+		assert!(
+			stall.office_walls.len() >= 2,
+			"office divider should leave a door gap (two panels)"
+		);
+	}
+
+	#[test]
+	fn mini_mart_meets_size_and_clearance_mins() {
+		let confines = roomy_south_doors();
+		let params = MiniMartParameterized::sample(
+			&confines,
+			NoiseParams {
+				seed: 11,
+				..Default::default()
+			},
+		)
+		.unwrap();
+		let plan = MiniMartPlan::from_parameterized(params, &confines).unwrap();
+
+		assert!(office_dims_ok(&plan.packed.office));
+		let (rw, rd) = plan_extent(&plan.packed.register);
+		assert!(rw + 1e-3 >= MINI_MART_REGISTER_MIN && rd + 1e-3 >= MINI_MART_REGISTER_MIN);
+		let (aw, ad) = plan_extent(&plan.packed.aisles);
+		assert!(aw + 1e-3 >= MINI_MART_AISLES_MIN && ad + 1e-3 >= MINI_MART_AISLES_MIN);
+
+		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+		for (_id, opening) in confines.openings.iter() {
+			let Some(face) =
+				PlanOpeningFace::from_passage(host, aabb3_to_plan(&opening.bounds, PlanAxes::XZ))
+			else {
+				continue;
+			};
+			let clear = face
+				.band(host, face.along_len(), MINI_MART_PASSAGE_CLEARANCE, 0.5)
+				.expect("clearance band");
+			// Register / office / aisles must not eat the clearance (open overlap).
+			for region in [
+				&plan.packed.office,
+				&plan.packed.register,
+				&plan.packed.aisles,
+			] {
+				let r = aabb3_to_plan(region, PlanAxes::XZ);
+				assert!(
+					r.is_clear_of(&[clear]) && !intersects_aabb2(r, clear),
+					"region overlaps passage clearance"
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn mini_mart_soft_fails_tiny_bay() {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(0.5, 0.0, -0.2),
+				Vec3::new(1.5, 2.0, 0.2),
+			)),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 3.5)),
+			0.0,
+			openings,
+		);
+		let err = MiniMart::fit_to_confines(&confines, NoiseParams::default()).unwrap_err();
+		assert!(matches!(err, FitError::TooSmall { .. }));
+	}
+
+	#[test]
+	fn mini_mart_office_area_varies_with_noise() {
+		let confines = roomy_south_doors();
+		let mut areas = Vec::new();
+		for seed in [1i32, 2, 3, 5, 8, 13, 21, 34] {
+			let params = MiniMartParameterized::sample(
+				&confines,
+				NoiseParams {
+					seed,
+					..Default::default()
+				},
+			)
+			.unwrap();
+			areas.push(params.office_area_target);
+		}
+		let min = areas.iter().cloned().fold(f32::INFINITY, f32::min);
+		let max = areas.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+		assert!(
+			max - min > 0.25,
+			"office_area_target should vary across seeds (min={min}, max={max})"
+		);
+
+		// Packed office area should also not be identical for every seed.
+		let mut packed_areas = Vec::new();
+		for seed in [1i32, 8, 21, 34, 55, 89] {
+			let params = MiniMartParameterized::sample(
+				&confines,
+				NoiseParams {
+					seed,
+					..Default::default()
+				},
+			)
+			.unwrap();
+			if let Ok(plan) = MiniMartPlan::from_parameterized(params, &confines) {
+				packed_areas.push(aabb2_area(aabb3_to_plan(
+					&plan.packed.office,
+					PlanAxes::XZ,
+				)));
+			}
+		}
+		assert!(packed_areas.len() >= 3);
+		let pmin = packed_areas.iter().cloned().fold(f32::INFINITY, f32::min);
+		let pmax = packed_areas.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+		assert!(
+			pmax - pmin > 0.1 || packed_areas.iter().any(|&a| (a - packed_areas[0]).abs() > 0.05),
+			"packed office area should show some seed variation"
+		);
+		let _ = MiniMartRegions::host_faces(aabb3_to_plan(&confines.bounds, PlanAxes::XZ));
+	}
+}

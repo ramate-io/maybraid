@@ -7,7 +7,7 @@ pub mod common_bedroom;
 pub use commercial_stall_strip::commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall, Lounge, PartsStall,
-	PublicRestroom, SupermarketStall,
+	MiniMart, PublicRestroom,
 };
 pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,

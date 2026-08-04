@@ -2,9 +2,11 @@
 //!
 //! - [`facade`] — cardinal [`StallSide`] bands (retail / office / restroom)
 //! - [`bites`] — plan-face bites counters / seating / kitchen
+//! - [`mini_mart`] — MiniMart clearances / office / register / aisles / shelves
 
 pub mod bites;
 pub mod facade;
+pub mod mini_mart;
 
 pub use bites::{
 	BitesCounterChoice, BitesKitchen, BitesPassageSpec, BitesSitdownRegions, EligibleBitesPassage,
@@ -12,6 +14,12 @@ pub use bites::{
 	BITES_PASSAGE_REMAIN_MIN, BITES_REGION_MIN_PLAN, BITES_SEATING_FACE_CONTACT,
 };
 pub use facade::{primary_facade, StallSide};
+pub use mini_mart::{
+	MiniMartPacked, MiniMartRegions, MiniMartShelfSpec, MINI_MART_AISLES_MIN,
+	MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN, MINI_MART_OFFICE_LONG_MIN,
+	MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN, MINI_MART_SHELF_DEPTH_MAX,
+	MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
+};
 
 use bevy_math::bounding::Aabb3d;
 use crate::paneling::Rectangle;
