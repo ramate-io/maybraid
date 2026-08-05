@@ -1,9 +1,9 @@
 //! Foliage domain: style + geometry + placement → [`FoliageNode`].
 
-mod geometry;
-mod node;
-mod probe;
-mod style;
+pub mod geometry;
+pub mod node;
+pub mod probe;
+pub mod style;
 
 pub use geometry::FoliageGeometry;
 pub use node::FoliageNode;

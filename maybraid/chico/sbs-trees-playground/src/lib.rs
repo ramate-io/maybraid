@@ -47,6 +47,7 @@ use ground::setup_ground;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{setup_render_materials, sync_render_material_handles};
+use scene_ref::SceneRefPlugin;
 
 pub struct SbsTreesPlaygroundPlugin;
 
@@ -54,6 +55,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
+		if !app.is_plugin_added::<SceneRefPlugin>() {
+			app.add_plugins(SceneRefPlugin);
+		}
 		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
 			app.add_plugins(VegetationProceduralPlugin);
 		}

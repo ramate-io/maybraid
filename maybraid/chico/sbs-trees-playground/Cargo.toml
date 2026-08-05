@@ -28,6 +28,7 @@ chico-stick-components = { workspace = true }
 chico-vegetation-components = { workspace = true }
 chico-vegetation-shaders = { workspace = true }
 lod = { workspace = true }
+scene-ref = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 
 [dev-dependencies]

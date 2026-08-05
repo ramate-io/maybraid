@@ -1,9 +1,9 @@
 //! Stick domain: style + geometry + placement → [`StickNode`].
 
-mod geometry;
-mod node;
-mod probe;
-mod style;
+pub mod geometry;
+pub mod node;
+pub mod probe;
+pub mod style;
 
 pub use geometry::StickGeometry;
 pub use node::StickNode;

@@ -1,7 +1,7 @@
 //! Stick segment → [`StickNode`] emission.
 
 use chico_sbs_geometry::BallStickSegment;
-use chico_vegetation_components::{Placement, StickGeometry, StickNode};
+use chico_vegetation_components::{Placement, StickNode};
 
 pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
 	let ray = segment.ray();
@@ -12,5 +12,5 @@ pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<S
 	let length = len_sq.sqrt();
 	let placement =
 		Placement::stick_segment(segment.start.position, ray, length, segment.start.radius)?;
-	Some(StickNode::noisy_cylinder(StickGeometry::Segment, placement))
+	Some(StickNode::segment(placement))
 }

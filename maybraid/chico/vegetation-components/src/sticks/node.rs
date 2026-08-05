@@ -30,12 +30,22 @@ impl StickNode {
 		Self::new(StickStyle::NoisyCylinder, geometry, placement)
 	}
 
+	/// Branch / connector segment using `vegetation/sticks/standard/` GLBs.
 	pub fn segment(placement: Placement) -> Self {
-		Self::noisy_cylinder(StickGeometry::Segment, placement)
+		Self::new(StickStyle::Standard, StickGeometry::Segment, placement)
 	}
 
+	/// Trunk segment using `vegetation/sticks/standard_trunk/` GLBs.
 	pub fn trunk(placement: Placement) -> Self {
-		Self::noisy_cylinder(StickGeometry::Trunk, placement)
+		Self::new(StickStyle::StandardTrunk, StickGeometry::Trunk, placement)
+	}
+
+	pub fn standard(geometry: StickGeometry, placement: Placement) -> Self {
+		Self::new(StickStyle::Standard, geometry, placement)
+	}
+
+	pub fn standard_trunk(geometry: StickGeometry, placement: Placement) -> Self {
+		Self::new(StickStyle::StandardTrunk, geometry, placement)
 	}
 
 	fn procedural_scene(&self) -> impl Scene + 'static {
