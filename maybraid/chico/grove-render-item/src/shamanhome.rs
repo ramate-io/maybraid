@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
-use chico_sbs_trees::SkippedStickMeshMaterial;
-use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
+use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -21,13 +21,8 @@ use chico_groves::{
 	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-/// Sope template for banyan placements (material slots match playground [`RenderSopesBanyan`]).
-pub type ShamanhomeSope = SopesBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// Sope template for banyan placements (LodScene / VegetationComponents).
+pub type ShamanhomeSope = SopesBanyan;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Shamanhome instance.
 pub type ShamanhomeStd = Shamanhome<
@@ -279,23 +274,10 @@ where
 					let samples = banyan.build_with_noise(build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<ChicoStickMaterial>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<ChicoLeafMaterial>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(
+						commands, &tree, local, bounds
+					)
 				}
 			};
 			out.extend(entities);

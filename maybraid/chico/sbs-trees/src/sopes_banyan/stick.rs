@@ -1,41 +1,16 @@
-use std::marker::PhantomData;
+//! Stick segment → [`StickNode`] emission.
 
-use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderRule;
-use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain};
-use chico_stick_components::chico_stick::ChicoStick;
-use procedural_common::NoiseParams;
+use chico_sbs_geometry::BallStickSegment;
+use chico_vegetation_components::{Placement, StickGeometry, StickNode};
 
-#[derive(Clone)]
-pub(crate) struct SopesBanyanStickRule<StickM, StickS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>>,
-{
-	pub surface_noise: NoiseParams,
-	pub stick_material: StickS,
-	pub(crate) __marker: PhantomData<fn() -> StickM>,
-}
-
-impl<StickM, StickS> StickRenderRule<ChicoStick<StickM, StickS>, SopesBanyanChain>
-	for SopesBanyanStickRule<StickM, StickS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Default + Send + Sync + 'static,
-{
-	fn stick_render_item_for(
-		&self,
-		segment: &BallStickSegment<'_>,
-		_parent_hysteresis: &SopesBanyanChain,
-		_child_hysteresis: &SopesBanyanChain,
-	) -> Option<ChicoStick<StickM, StickS>> {
-		let seed = self.surface_noise.seed
-			+ segment.start.position.length() as i32
-			+ segment.end.position.length() as i32;
-
-		let mut stick =
-			self.surface_noise.with_seed(seed).build_scalar::<ChicoStick<StickM, StickS>>();
-		stick.material = self.stick_material.clone();
-		Some(stick)
+pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
+	let ray = segment.ray();
+	let len_sq = ray.length_squared();
+	if len_sq < 1e-12 {
+		return None;
 	}
+	let length = len_sq.sqrt();
+	let placement =
+		Placement::stick_segment(segment.start.position, ray, length, segment.start.radius)?;
+	Some(StickNode::noisy_cylinder(StickGeometry::Segment, placement))
 }

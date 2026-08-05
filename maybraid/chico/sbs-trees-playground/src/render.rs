@@ -56,6 +56,7 @@ use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::tuft_patch::TuftPatch;
@@ -70,13 +71,8 @@ use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
 use render_item::RenderItem;
 
-/// [`SopesBanyan`] configured for this playground.
-pub type RenderSopesBanyan = SopesBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// [`SopesBanyan`] configured for this playground (LodScene / VegetationComponents).
+pub type RenderSopesBanyan = SopesBanyan;
 
 /// [`HonuBanyan`] — wide spreading banyan ([#250](https://github.com/ramate-io/maybraid/issues/250)).
 pub type RenderHonuBanyan = HonuBanyan<
@@ -1058,7 +1054,12 @@ impl RenderSubject {
 		transform: Transform,
 	) -> Vec<Entity> {
 		match self {
-			Self::SopesBanyan(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::SopesBanyan(item) => {
+				let bounds = vegetation_bounds(item);
+				spawn_vegetation_components(
+					commands, item, transform, bounds,
+				)
+			}
 			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LiamsConifer(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::FriendsConifer(item) => item.spawn_render_items(commands, chunk, transform),
@@ -1170,15 +1171,29 @@ fn render_sync_key(config: &RenderConfig) -> String {
 pub fn sync_render(
 	mut commands: Commands,
 	config: Res<RenderConfig>,
+	show_config: Res<crate::commands::show::ShowConfig>,
 	mut synced: Local<Option<String>>,
 	item_q: Query<Entity, (With<SbsRenderItem>, Without<ChildOf>)>,
+	show_roots: Query<Entity, With<crate::commands::show::ShowRoot>>,
 ) {
+	// `/show` owns the scene while a subject is set.
+	if show_config.subject.is_some() {
+		for entity in &item_q {
+			commands.entity(entity).despawn();
+		}
+		*synced = None;
+		return;
+	}
+
 	let key = render_sync_key(&config);
 	if synced.as_deref() == Some(&key) {
 		return;
 	}
 
 	for entity in &item_q {
+		commands.entity(entity).despawn();
+	}
+	for entity in &show_roots {
 		commands.entity(entity).despawn();
 	}
 

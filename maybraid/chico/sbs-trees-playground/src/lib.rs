@@ -38,6 +38,8 @@ use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
+use chico_vegetation_components::VegetationProceduralPlugin;
+use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
@@ -51,6 +53,10 @@ pub struct SbsTreesPlaygroundPlugin;
 impl Plugin for SbsTreesPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<RenderConfig>();
+		app.init_resource::<ShowConfig>();
+		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
+			app.add_plugins(VegetationProceduralPlugin);
+		}
 		ensure_sopes_banyan_render_plugins(app);
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
@@ -100,6 +106,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					sync_render
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
+					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

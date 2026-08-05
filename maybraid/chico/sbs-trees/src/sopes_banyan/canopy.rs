@@ -1,13 +1,10 @@
-//! Terminal canopy: mix **[Noisy Ball](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/02-noisy-ball/README.md)** and **[Plane Splay](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/05-plane-splay/README.md)** per [Sope's Banyan §3.1.7.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/06-sope-s-banyan/README.md).
+//! Terminal canopy: mix NoisyBall and PlaneSplay foliage nodes.
 
-use bevy::prelude::*;
-use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::node_mix_seed;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, SopesBanyanChain, SopesBanyanPhase};
+use chico_sbs_geometry::{BallStickNode, SopesBanyanChain, SopesBanyanPhase};
+use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
 
-use crate::layered_canopy::{LayeredTerminalCanopy, LayeredTerminalCanopyItem};
-
-/// Prefer plane splay in the rising crown; stay mostly on noisy balls along descenders (sparse foliage).
+/// Prefer plane splay in the rising crown; stay mostly on noisy balls along descenders.
 fn canopy_prefers_plane_splay(
 	node_idx: usize,
 	node: &BallStickNode,
@@ -25,41 +22,29 @@ fn canopy_prefers_plane_splay(
 	}
 }
 
-#[derive(Clone)]
-pub(crate) struct SopesBanyanLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>>,
-{
-	pub canopy: LayeredTerminalCanopy<LeafM, LeafS>,
-	pub min_height: f32,
-	/// World-space canopy radius numerator (uniform scale = this / [`BallStickNode::radius`]).
-	pub leaf_radius_world: f32,
-}
+pub(crate) fn foliage_node_for_terminal(
+	node_idx: usize,
+	node: &BallStickNode,
+	hysteresis: &SopesBanyanChain,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> Option<FoliageNode> {
+	if node.position.y < min_height {
+		return None;
+	}
+	let scale = leaf_radius_world / node.radius.max(1e-4);
+	let radius = node.radius * scale;
+	let placement = Placement::foliage_uniform(node.position, radius);
 
-impl<LeafM, LeafS> BallRenderRule<LayeredTerminalCanopyItem<LeafM, LeafS>, SopesBanyanChain>
-	for SopesBanyanLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	fn ball_render_item_for(
-		&self,
-		node_idx: usize,
-		node: &BallStickNode,
-		hysteresis: &SopesBanyanChain,
-		_chain: &BallStickChain<SopesBanyanChain>,
-	) -> Option<(LayeredTerminalCanopyItem<LeafM, LeafS>, f32)> {
-		if node.position.y < self.min_height {
-			return None;
-		}
-
-		let scale = self.leaf_radius_world / node.radius;
-
-		if canopy_prefers_plane_splay(node_idx, node, hysteresis) {
-			Some((self.canopy.plane_splay_item_varied(node_idx, node.position), scale))
-		} else {
-			Some((self.canopy.ball_item(), scale))
-		}
+	if canopy_prefers_plane_splay(node_idx, node, hysteresis) {
+		let seed = node_mix_seed(node_idx, node.position);
+		let geom = FoliageGeometry::plane_splay(
+			seed % 2,
+			0.8,
+			0.18 + 0.12 * ((seed % 17) as f32 / 16.0),
+		);
+		Some(FoliageNode::plane_splay(geom, placement))
+	} else {
+		Some(FoliageNode::noisy_ball(placement))
 	}
 }

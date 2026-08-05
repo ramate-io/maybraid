@@ -45,6 +45,7 @@ members = [
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
   "maybraid/chico/tree-components",
+  "maybraid/chico/vegetation-components",
   "maybraid/chico/sbs-geometry",
   "maybraid/chico/groves",
   "maybraid/chico/grove-render-item",
@@ -215,6 +216,7 @@ chico-sdf = { path = "maybraid/chico/sdf" }
 chico-ball-components = { path = "maybraid/chico/ball-components" }
 chico-stick-components = { path = "maybraid/chico/stick-components" }
 chico-tree-components = { path = "maybraid/chico/tree-components" }
+chico-vegetation-components = { path = "maybraid/chico/vegetation-components" }
 chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
 chico-groves = { path = "maybraid/chico/groves" }
 chico-grove-render-items = { path = "maybraid/chico/grove-render-item" }

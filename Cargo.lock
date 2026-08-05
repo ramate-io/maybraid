@@ -2210,6 +2210,7 @@ dependencies = [
  "chico-sbs-geometry",
  "chico-sbs-trees",
  "chico-tree-components",
+ "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
  "gimme-gen",
@@ -2260,7 +2261,9 @@ dependencies = [
  "chico-sdf",
  "chico-stick-components",
  "chico-tree-components",
+ "chico-vegetation-components",
  "clap",
+ "lod",
  "log",
  "procedural-common",
  "render-item",
@@ -2280,10 +2283,12 @@ dependencies = [
  "chico-sdf",
  "chico-stick-components",
  "chico-tree-components",
+ "chico-vegetation-components",
  "chico-vegetation-shaders",
  "chunk",
  "clap",
  "game-commands",
+ "lod",
  "log",
  "procedural-common",
  "render-item",
@@ -2321,6 +2326,17 @@ dependencies = [
  "clap",
  "procedural-common",
  "render-item",
+]
+
+[[package]]
+name = "chico-vegetation-components"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "scene-ref",
 ]
 
 [[package]]

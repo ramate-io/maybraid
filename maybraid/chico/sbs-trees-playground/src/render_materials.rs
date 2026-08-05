@@ -130,33 +130,15 @@ pub fn setup_render_materials(
 	}
 	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		grove.sope_template.stick_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
 	}
 	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		grove.sope_template.stick_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
 	}
 	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		grove.sope_template.stick_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
-	if let RenderSubject::Shamanhome(grove) = &mut config.subject {
-		grove.sope_template.stick_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh =
-			MeshMaterial3d(mats_snapshot.jungle_inner_leaf.clone());
 	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
@@ -206,10 +188,7 @@ fn attach_render_materials(
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
-		RenderSubject::SopesBanyan(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::SopesBanyan(_tree) => {}
 		RenderSubject::LiamsConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
@@ -476,25 +455,15 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	}
 	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
 	}
 	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
 	}
 	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
-	}
-	if let RenderSubject::Shamanhome(grove) = &mut config.subject {
-		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-		grove.sope_template.leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);
