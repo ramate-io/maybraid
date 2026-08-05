@@ -190,7 +190,10 @@ impl RectangularLivableArea {
 		program: &[RectQuarterKind],
 	) -> Result<(Self, FillableRegions), FitError> {
 		let fp = confines.footprint();
-		if fp.x < params.min_hall || fp.y < params.min_hall {
+		// Footprint gate uses door clear, not hall clear — a 1.2 m deep bay can
+		// still host open/guillotine layouts; spine strategies fail on their own
+		// when they cannot carve `min_hall`.
+		if fp.x < DOOR_WIDTH || fp.y < DOOR_WIDTH {
 			return Err(FitError::TooSmall {
 				reason: "rla_footprint",
 			});
@@ -763,8 +766,19 @@ fn fit_guillotine(
 	))
 }
 
-/// Normalize: passages on open ≥ min_hall; open connected; closed doors onto open.
+/// Door-face contact on open circulation. Hall clear (`min_hall`) can exceed
+/// authored [`DOOR_WIDTH`]; requiring overlap ≥ `min_hall` empties every layout
+/// that only punches a 1 m door onto open.
+fn min_door_contact(min_hall: f32) -> f32 {
+	DOOR_WIDTH.min(min_hall).max(0.7)
+}
+
+/// Normalize: passages on open ≥ door contact; open connected; closed doors onto open.
+///
+/// `min_hall` still sizes spine/bands at fit time. Contact checks use
+/// [`min_door_contact`] so wider halls do not demand wider door faces.
 pub fn normalize_ok(area: &RectangularLivableArea, min_hall: f32) -> bool {
+	let door_need = min_door_contact(min_hall);
 	let open_rects: Vec<Aabb2d> = area
 		.open_confines
 		.iter()
@@ -787,7 +801,7 @@ pub fn normalize_ok(area: &RectangularLivableArea, min_hall: f32) -> bool {
 		return open_connected(&open_rects, min_hall);
 	}
 	for p in &passages {
-		if passage_open_overlap(p, &open_rects, &area.confines, min_hall) < min_hall - EPS {
+		if passage_open_overlap(p, &open_rects, &area.confines, min_hall) < door_need - EPS {
 			return false;
 		}
 	}
@@ -797,9 +811,9 @@ pub fn normalize_ok(area: &RectangularLivableArea, min_hall: f32) -> bool {
 	for closed in &area.closed_confines {
 		let cz = host_xz(&closed.bounds);
 		let touches_open = open_rects.iter().any(|o| {
-			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall)
-				|| overlap_area_proxy(cz, &[*o]) + EPS >= min_hall
-				|| rect_covers_edge(cz, *o, min_hall)
+			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= door_need)
+				|| overlap_area_proxy(cz, &[*o]) + EPS >= door_need
+				|| rect_covers_edge(cz, *o, door_need)
 		});
 		if !touches_open {
 			return false;

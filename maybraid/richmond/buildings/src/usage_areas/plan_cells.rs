@@ -172,15 +172,20 @@ pub fn group_cells_to_apartments(
 /// Landlocked orphans absorb into the neighboring pinch-safe group with the
 /// longest shared contact; leftover frontage cells become force-one groups.
 ///
-/// Never emits a landlocked group (no hall frontage). `min_room_size` is unused.
+/// Never emits a landlocked group (no hall frontage).
+///
+/// After force-one frontage leftovers, a post-pass merges **degenerate**
+/// remnants (thin / high-aspect / tiny) into a pinch-safe neighbor when contact
+/// is good — keeps normal side-by-side door seeds separate.
 pub fn pack_apartments_to_targets(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
-	_min_room_size: Vec2,
+	min_room_size: Vec2,
 	targets: &[f32],
 	min_connectivity: f32,
 ) -> Vec<Vec<u32>> {
 	let min_conn = min_connectivity.max(EPS);
+	let min_room = Vec2::new(min_room_size.x.max(EPS), min_room_size.y.max(EPS));
 	let eligible: Vec<PlanCell> = cells.to_vec();
 	if eligible.is_empty() {
 		return Vec::new();
@@ -248,6 +253,8 @@ pub fn pack_apartments_to_targets(
 			assigned[i] = true;
 		}
 	}
+
+	merge_degenerate_frontage_groups(&eligible, &mut groups, min_conn, min_room);
 
 	groups
 		.into_iter()
@@ -409,6 +416,108 @@ fn best_grow_candidate(
 		}
 	}
 	best.map(|(i, _)| i)
+}
+
+/// Thin, snaky, or tiny force-one remnants that should prefer a neighbor.
+fn group_is_degenerate(cells: &[PlanCell], group: &[usize], min_room: Vec2) -> bool {
+	if group.is_empty() {
+		return false;
+	}
+	let area: f32 = group.iter().map(|&i| cells[i].area()).sum();
+	let b = group_bounds_xz(cells, group);
+	let s = (b.max - b.min).max(Vec2::splat(EPS));
+	let min_ext = s.x.min(s.y);
+	let aspect = s.x.max(s.y) / s.x.min(s.y);
+	let min_dim = min_room.x.min(min_room.y);
+	aspect > GROW_ASPECT_SOFT
+		|| min_ext + EPS < min_dim
+		|| area + EPS < min_dim * min_dim * 1.5
+}
+
+/// Pinch-safe contact between two groups (any member pair well-connected, no pinch).
+fn groups_can_merge(
+	cells: &[PlanCell],
+	a: &[usize],
+	b: &[usize],
+	min_conn: f32,
+) -> Option<f32> {
+	let mut shared = 0.0_f32;
+	let mut well = false;
+	for &ai in a {
+		for &bi in b {
+			let Some(len) = shared_edge_length(cells[ai].bounds, cells[bi].bounds, EPS) else {
+				continue;
+			};
+			if len + EPS >= min_conn {
+				well = true;
+				shared = shared.max(len);
+			} else if len > EPS {
+				return None;
+			}
+		}
+	}
+	well.then_some(shared)
+}
+
+/// Merge degenerate frontage remnants into pinch-safe neighbors when possible.
+fn merge_degenerate_frontage_groups(
+	cells: &[PlanCell],
+	groups: &mut Vec<Vec<usize>>,
+	min_conn: f32,
+	min_room: Vec2,
+) {
+	let mut guard = 0;
+	while guard < groups.len().saturating_mul(2).max(4) {
+		guard += 1;
+		let mut order: Vec<usize> = (0..groups.len()).collect();
+		// Smallest / skinniest first so fat suites absorb remnants.
+		order.sort_by(|&a, &b| {
+			let aa: f32 = groups[a].iter().map(|&i| cells[i].area()).sum();
+			let ab: f32 = groups[b].iter().map(|&i| cells[i].area()).sum();
+			aa.partial_cmp(&ab).unwrap_or(std::cmp::Ordering::Equal)
+		});
+		let mut did = false;
+		for gi in order {
+			if gi >= groups.len() || !group_is_degenerate(cells, &groups[gi], min_room) {
+				continue;
+			}
+			let mut best: Option<(usize, f32, f32)> = None; // tj, shared, aspect_after
+			for tj in 0..groups.len() {
+				if tj == gi {
+					continue;
+				}
+				let Some(shared) =
+					groups_can_merge(cells, &groups[gi], &groups[tj], min_conn)
+				else {
+					continue;
+				};
+				let mut probe = groups[tj].clone();
+				probe.extend_from_slice(&groups[gi]);
+				let aspect = group_aspect(cells, &probe);
+				let better = match best {
+					None => true,
+					Some((_, bs, ba)) => {
+						shared > bs + EPS
+							|| ((shared - bs).abs() <= EPS && aspect < ba - 1e-4)
+					}
+				};
+				if better {
+					best = Some((tj, shared, aspect));
+				}
+			}
+			let Some((tj, _, _)) = best else {
+				continue;
+			};
+			let mut absorbed = groups.remove(gi);
+			let tj = if tj > gi { tj - 1 } else { tj };
+			groups[tj].append(&mut absorbed);
+			did = true;
+			break;
+		}
+		if !did {
+			break;
+		}
+	}
 }
 
 fn find_absorb_group(
@@ -808,6 +917,34 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn post_pass_merges_degenerate_frontage_strip() {
+		// Fat suite (0+1+2) next to a thin frontage strip (3) that shares a full
+		// side — strip is force-one after grow, then post-pass should absorb it.
+		let rooms = vec![
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(6.0, 3.0)), // frontage
+			cell(1, Vec2::new(0.0, 3.0), Vec2::new(6.0, 6.0)),
+			cell(2, Vec2::new(0.0, 6.0), Vec2::new(6.0, 9.0)),
+			cell(3, Vec2::new(6.0, 0.0), Vec2::new(8.0, 9.0)), // thin frontage strip
+		];
+		let hall = Aabb2d {
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(8.0, 0.0),
+		};
+		let groups = pack_apartments_to_targets(
+			&rooms,
+			&[hall],
+			Vec2::new(2.5, 2.5),
+			&[45.0],
+			MIN_GROUP_CONNECTIVITY,
+		);
+		let g_fat = groups.iter().find(|g| g.contains(&0));
+		assert!(
+			g_fat.is_some_and(|g| g.contains(&3)),
+			"degenerate frontage strip should merge into neighbor: {groups:?}"
+		);
 	}
 
 	#[test]

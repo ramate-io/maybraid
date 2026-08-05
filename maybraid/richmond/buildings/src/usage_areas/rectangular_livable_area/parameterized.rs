@@ -30,7 +30,7 @@ pub struct RectangularLivableAreaParameterized {
 }
 
 pub const SCOPE: &str = "rectangular_livable_area";
-pub const DEFAULT_MIN_HALL: f32 = 1.0;
+pub const DEFAULT_MIN_HALL: f32 = 1.5;
 pub const DEFAULT_CLOSED_MAX_AREA: f32 = 36.0;
 
 impl Default for RectangularLivableAreaParameterized {
@@ -60,11 +60,7 @@ impl RectangularLivableAreaParameterized {
 		} else {
 			RectLivableStrategy::SingleClosed
 		};
-		Ok(Self {
-			strategy,
-			min_hall: DEFAULT_MIN_HALL,
-			closed_max_area: DEFAULT_CLOSED_MAX_AREA,
-		})
+		Ok(Self { strategy, min_hall: DEFAULT_MIN_HALL, closed_max_area: DEFAULT_CLOSED_MAX_AREA })
 	}
 }
 
