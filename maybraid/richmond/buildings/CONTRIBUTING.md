@@ -111,16 +111,16 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    `pack_apartments_to_targets` → **one hall door per group** →
    partition / hall-edge walls (no per-cell shells) →
    [`LivableApartment`](src/usage_areas/livable_apartment.rs) layout
-   (entryway → common / private zones → quarters). Apartment-level walls enclose
-   bedrooms / bathrooms only; entry + common stay open-plan (subtypes may wall
-   themselves). Ungrouped / unfilled pockets stay
-   [`SpaceKind::InternalSpace`](src/fit.rs); Full\* maps those leftovers to
-   [`SpaceKind::ClosetSpace`](src/fit.rs).
+   (entryway → ≥1 m walkway skeleton → private quarters abut walkways, common
+   quarters overlap them). Apartment-level walls enclose bedrooms / bathrooms
+   only; entry + common stay open-plan (subtypes may wall themselves). Ungrouped
+   / unfilled pockets stay [`SpaceKind::InternalSpace`](src/fit.rs); Full\* maps
+   those leftovers to [`SpaceKind::ClosetSpace`](src/fit.rs).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
 `/show livable-apartments-examples` (standalone packs; multi-cell groups),
-`/show livable-apartment-examples` (rect + L/T multi-cell apartment layouts),
+`/show livable-apartment-examples` (small→large rect + L/T layouts, walkway gizmos),
 `/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan

@@ -1,14 +1,16 @@
-//! Livable apartment: entryway → common / private zones → living quarters.
+//! Livable apartment: entryway → walkway skeleton → private abut / common overlap.
 //!
-//! Layout (first cut):
+//! Layout:
 //! 1. Carve an **entryway** box at the hall door.
-//! 2. Split the remainder into **common** (living / kitchen / dining / sitting)
-//!    and **private** (bedroom / bath / study) zones by area share.
-//! 3. Map total m² to a room-count program; guillotine-split each zone toward
-//!    those targets; first-fit the matching quarter type.
-//! 4. Leftovers stay [`SpaceKind::InternalSpace`] residuals, or become a
-//!    household closet when small enough. [`crate::IApartmentFullStorey`] maps
-//!    leftover InternalSpace → [`SpaceKind::ClosetSpace`].
+//! 2. Grow unwalled **walkway** bands (≥ [`WALK_WIDTH`]) from the entry through
+//!    the footprint (identification / circulation only — no panels).
+//! 3. Map total m² to a room-count program.
+//! 4. Pack **private** quarters (bedroom / bath / study) into pockets that
+//!    *abut* walkways with ≥1 m access; doors face the walkway.
+//! 5. Pack **common** quarters (living / kitchen / dining / sitting) into the
+//!    residual that *includes* walkways so open-plan rooms overlap circulation.
+//! 6. Leftovers stay [`SpaceKind::InternalSpace`] or become a household closet.
+//!    [`crate::IApartmentFullStorey`] maps leftover InternalSpace → ClosetSpace.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
@@ -43,6 +45,10 @@ const DOOR_WIDTH: f32 = 1.0;
 const ENTRY_DEPTH: f32 = 1.8;
 const ENTRY_WIDTH: f32 = 2.2;
 const MIN_ROOM: f32 = 2.2;
+/// Clear width of apartment walkway bands (m).
+const WALK_WIDTH: f32 = 1.0;
+/// Minimum shared-edge length (m) for private-room access onto a walkway.
+const MIN_HALL_ACCESS: f32 = 1.0;
 const SCOPE: &str = "livable_apartment";
 
 /// One packed space inside an apartment.
@@ -160,7 +166,9 @@ pub struct LivableApartment {
 	pub cells: MultiConfines,
 	/// Packed spaces (entryway, quarters, household closets).
 	pub rooms: Vec<ApartmentRoom>,
-	/// Partition strips between packed rooms (with connecting passages).
+	/// Unwalled circulation bands (≥ [`WALK_WIDTH`]); identification only.
+	pub walkways: Vec<Aabb2d>,
+	/// Partition strips for bedrooms / bathrooms (with connecting passages).
 	pub partitions: Vec<ClippedRectangularStrip>,
 	/// Optional envelope shell for the primary / first cell (presentation).
 	pub shell: Option<RectFloor>,
@@ -255,8 +263,11 @@ impl LivableApartment {
 			let s = r.max - r.min;
 			s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(*r) > 4.0
 		});
+		let entry_xz = rooms.iter().find_map(|r| match r {
+			ApartmentRoom::Entryway { confines, .. } => Some(host_xz(&confines.bounds)),
+			_ => None,
+		});
 		if work_rects.is_empty() {
-			// Degenerate after entry — still accept if we at least have entryway.
 			if rooms.is_empty() {
 				return Err(FitError::TooSmall {
 					reason: "livable_no_body",
@@ -267,6 +278,7 @@ impl LivableApartment {
 					region_id,
 					cells: cells.clone(),
 					rooms,
+					walkways: Vec::new(),
 					partitions: Vec::new(),
 					shell: None,
 				},
@@ -277,17 +289,17 @@ impl LivableApartment {
 			));
 		}
 
-		// --- Common / private split + greedy quarter packing --------------
-		// Private rooms (bedrooms) need larger contiguous slots; allocate them first.
-		let body_area: f32 = work_rects.iter().map(|r| aabb2_area(*r)).sum();
-		let private_frac = if program.bedrooms == 0 { 0.25 } else { 0.55 };
-		let private_target = body_area * private_frac;
-		let (mut private_free, mut common_free) =
-			allocate_zone_rects(&work_rects, private_target);
+		// --- Walkway skeleton (unwalled circulation) ----------------------
+		let walkways = grow_apartment_walkways(entry_xz, &work_rects);
 
-		pack_kinds_into_zone(
+		// Private pockets: footprint minus walkways; must abut a walkway.
+		let mut private_free = subtract_walkways(&work_rects, &walkways);
+		private_free.retain(|r| rect_usable(*r, 3.0));
+
+		pack_kinds_abutting_walkways(
 			&mut private_free,
 			&private_kind_list(program),
+			&walkways,
 			y0,
 			y1,
 			roll,
@@ -296,6 +308,17 @@ impl LivableApartment {
 			&mut filled_confines,
 			&mut residual_within,
 		)?;
+
+		// Common free: footprint minus packed non-entry slots (walkways stay → overlap).
+		let occupied: Vec<Aabb2d> = rooms
+			.iter()
+			.zip(filled_confines.iter())
+			.filter(|(room, _)| !matches!(room, ApartmentRoom::Entryway { .. }))
+			.map(|(_, (c, _))| host_xz(&c.bounds))
+			.collect();
+		let mut common_free = subtract_walkways(&work_rects, &occupied);
+		common_free.retain(|r| rect_usable(*r, 4.0) || aabb2_area(*r) > 6.0);
+
 		pack_kinds_into_zone(
 			&mut common_free,
 			&common_kind_list(program),
@@ -319,15 +342,14 @@ impl LivableApartment {
 			});
 		}
 
-		// Walls only around bedrooms / bathrooms; common rooms + entry stay open-plan.
-		let partitions = enclose_private_rooms(&filled_confines, region_id);
+		let partitions = enclose_private_rooms(&filled_confines, region_id, &walkways);
 		Ok((
 			Self {
 				region_id,
 				cells: cells.clone(),
 				rooms,
+				walkways,
 				partitions,
-				// Envelope shells are authored by LivableApartments / subtypes — not here.
 				shell: None,
 			},
 			FillableRegions {
@@ -515,39 +537,309 @@ fn carve_entryway(
 	Some((entry, rem))
 }
 
-fn allocate_zone_rects(rects: &[Aabb2d], common_target: f32) -> (Vec<Aabb2d>, Vec<Aabb2d>) {
-	let mut ordered: Vec<Aabb2d> = rects.to_vec();
-	ordered.sort_by(|a, b| {
-		aabb2_area(*b)
-			.partial_cmp(&aabb2_area(*a))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
-	let mut common = Vec::new();
-	let mut private = Vec::new();
-	let mut common_area = 0.0_f32;
-	for r in ordered {
-		if common_area + EPS < common_target {
-			// Prefer filling common first; bipartition oversized pieces.
-			let need = (common_target - common_area).max(0.0);
-			if aabb2_area(r) > need + 8.0 && need > 10.0 {
-				let frac = (need / aabb2_area(r)).clamp(0.2, 0.8);
-				let cut_x = (r.max.x - r.min.x) >= (r.max.y - r.min.y);
-				let (a, b) = r.bipartition_by_area(cut_x, true, frac);
-				common.push(a);
-				common_area += aabb2_area(a);
-				private.push(b);
-			} else {
-				common.push(r);
-				common_area += aabb2_area(r);
+/// Grow ≥[`WALK_WIDTH`] corridor bands from the entry through each footprint cell.
+fn grow_apartment_walkways(entry: Option<Aabb2d>, rects: &[Aabb2d]) -> Vec<Aabb2d> {
+	let w = WALK_WIDTH;
+	if rects.is_empty() {
+		return Vec::new();
+	}
+	let mut halls: Vec<Aabb2d> = Vec::new();
+	let mut visited = vec![false; rects.len()];
+	let mut queue: Vec<usize> = Vec::new();
+
+	if let Some(entry) = entry {
+		for (i, r) in rects.iter().enumerate() {
+			if let Some((along_x, lo, hi, mid)) = shared_edge_span_raw(entry, *r) {
+				if hi - lo + EPS < MIN_HALL_ACCESS {
+					continue;
+				}
+				if let Some(band) = corridor_into_host(*r, along_x, lo, hi, mid, w) {
+					halls.push(band);
+				}
+				halls.push(spine_from_contact(*r, along_x, lo, hi, w));
+				visited[i] = true;
+				queue.push(i);
 			}
-		} else {
-			private.push(r);
 		}
 	}
-	if common.is_empty() && !private.is_empty() {
-		common.push(private.remove(0));
+	if queue.is_empty() {
+		// No entry adjacency — spine the largest cell and BFS outward.
+		let Some((i, _)) = rects
+			.iter()
+			.enumerate()
+			.max_by(|a, b| {
+				aabb2_area(*a.1)
+					.partial_cmp(&aabb2_area(*b.1))
+					.unwrap_or(std::cmp::Ordering::Equal)
+			})
+		else {
+			return halls;
+		};
+		halls.push(spine_through(rects[i], w));
+		visited[i] = true;
+		queue.push(i);
 	}
-	(common, private)
+
+	while let Some(i) = queue.pop() {
+		let r = rects[i];
+		for (j, other) in rects.iter().enumerate() {
+			if visited[j] {
+				continue;
+			}
+			let Some((along_x, lo, hi, mid)) = shared_edge_span_raw(r, *other) else {
+				continue;
+			};
+			if hi - lo + EPS < MIN_HALL_ACCESS {
+				continue;
+			}
+			if let Some(band) = corridor_into_host(*other, along_x, lo, hi, mid, w) {
+				halls.push(band);
+			}
+			halls.push(spine_from_contact(*other, along_x, lo, hi, w));
+			visited[j] = true;
+			queue.push(j);
+		}
+	}
+	halls
+		.into_iter()
+		.filter(|h| {
+			let s = h.max - h.min;
+			s.x + EPS >= w * 0.9 && s.y + EPS >= w * 0.9 && aabb2_area(*h) > EPS
+		})
+		.collect()
+}
+
+fn shared_edge_span_raw(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
+	shared_edge_span(a, b)
+}
+
+fn corridor_into_host(
+	host: Aabb2d,
+	along_x: bool,
+	lo: f32,
+	hi: f32,
+	mid: f32,
+	w: f32,
+) -> Option<Aabb2d> {
+	let lo = lo.max(if along_x { host.min.x } else { host.min.y });
+	let hi = hi.min(if along_x { host.max.x } else { host.max.y });
+	if hi - lo + EPS < MIN_HALL_ACCESS {
+		return None;
+	}
+	if along_x {
+		// Horizontal contact (constant Z = mid).
+		let north = (host.min.y - mid).abs() < 0.08;
+		let (y0, y1) = if north {
+			(host.min.y, (host.min.y + w).min(host.max.y))
+		} else {
+			((host.max.y - w).max(host.min.y), host.max.y)
+		};
+		if y1 - y0 + EPS < w * 0.9 {
+			return None;
+		}
+		Some(Aabb2d {
+			min: Vec2::new(lo, y0),
+			max: Vec2::new(hi, y1),
+		})
+	} else {
+		let west = (host.min.x - mid).abs() < 0.08;
+		let (x0, x1) = if west {
+			(host.min.x, (host.min.x + w).min(host.max.x))
+		} else {
+			((host.max.x - w).max(host.min.x), host.max.x)
+		};
+		if x1 - x0 + EPS < w * 0.9 {
+			return None;
+		}
+		Some(Aabb2d {
+			min: Vec2::new(x0, lo),
+			max: Vec2::new(x1, hi),
+		})
+	}
+}
+
+fn spine_from_contact(host: Aabb2d, along_x: bool, lo: f32, hi: f32, w: f32) -> Aabb2d {
+	let center = 0.5 * (lo + hi);
+	if along_x {
+		// Entered from N/S — spine runs N–S (full Z), width w in X.
+		let x0 = (center - w * 0.5).clamp(host.min.x, (host.max.x - w).max(host.min.x));
+		Aabb2d {
+			min: Vec2::new(x0, host.min.y),
+			max: Vec2::new((x0 + w).min(host.max.x), host.max.y),
+		}
+	} else {
+		let y0 = (center - w * 0.5).clamp(host.min.y, (host.max.y - w).max(host.min.y));
+		Aabb2d {
+			min: Vec2::new(host.min.x, y0),
+			max: Vec2::new(host.max.x, (y0 + w).min(host.max.y)),
+		}
+	}
+}
+
+fn spine_through(host: Aabb2d, w: f32) -> Aabb2d {
+	let s = host.max - host.min;
+	if s.x >= s.y {
+		let y0 = (0.5 * (host.min.y + host.max.y) - w * 0.5)
+			.clamp(host.min.y, (host.max.y - w).max(host.min.y));
+		Aabb2d {
+			min: Vec2::new(host.min.x, y0),
+			max: Vec2::new(host.max.x, (y0 + w).min(host.max.y)),
+		}
+	} else {
+		let x0 = (0.5 * (host.min.x + host.max.x) - w * 0.5)
+			.clamp(host.min.x, (host.max.x - w).max(host.min.x));
+		Aabb2d {
+			min: Vec2::new(x0, host.min.y),
+			max: Vec2::new((x0 + w).min(host.max.x), host.max.y),
+		}
+	}
+}
+
+fn subtract_walkways(hosts: &[Aabb2d], cuts: &[Aabb2d]) -> Vec<Aabb2d> {
+	let mut out = Vec::new();
+	for host in hosts {
+		out.extend(subtract_aabb2(*host, cuts));
+	}
+	out
+}
+
+fn abuts_walkway(rect: Aabb2d, walkways: &[Aabb2d]) -> Option<(bool, f32, f32, f32)> {
+	let mut best: Option<(bool, f32, f32, f32, f32)> = None;
+	for hall in walkways {
+		let Some((along_x, lo, hi, mid)) = shared_edge_span(rect, *hall) else {
+			continue;
+		};
+		let len = hi - lo;
+		if len + EPS < MIN_HALL_ACCESS {
+			continue;
+		}
+		if best.map(|(_, _, _, _, bl)| len > bl).unwrap_or(true) {
+			best = Some((along_x, lo, hi, mid, len));
+		}
+	}
+	best.map(|(a, lo, hi, mid, _)| (a, lo, hi, mid))
+}
+
+/// Pack private quarters into pockets that share ≥[`MIN_HALL_ACCESS`] with a walkway.
+fn pack_kinds_abutting_walkways(
+	free: &mut Vec<Aabb2d>,
+	kinds: &[QuarterKind],
+	walkways: &[Aabb2d],
+	y0: f32,
+	y1: f32,
+	roll: f32,
+	noise: NoiseParams,
+	rooms: &mut Vec<ApartmentRoom>,
+	filled_confines: &mut Vec<(Confines, bool)>,
+	residual_within: &mut Vec<FillRegion>,
+) -> Result<(), FitError> {
+	for &kind in kinds {
+		let Some(host_i) = pick_abutting_host(free, walkways, kind) else {
+			continue;
+		};
+		let host = free.remove(host_i);
+		let cell_noise = noise_for_cell(noise, rooms.len() as i32);
+		let slot_id = rooms.len() as u32;
+		let (slot, rem) = take_slot_abutting(host, kind, walkways);
+		let needs_walls = kind_needs_apartment_walls(kind);
+		let openings = hall_facing_openings(slot, walkways, y0, y1, slot_id)
+			.unwrap_or_else(|| slot_passage_openings(slot, y0, y1, slot_id));
+		let confines = confines_from_xz(slot, y0, y1, roll, &openings);
+		match pack_quarter_into_cell(&confines, cell_noise, kind) {
+			Ok((room, nested)) => {
+				rooms.push(room);
+				filled_confines.push((confines, needs_walls));
+				residual_within.extend(nested.within);
+				return_remnants(free, rooms, residual_within, filled_confines, rem, y0, y1, roll);
+			}
+			Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
+				let openings = hall_facing_openings(host, walkways, y0, y1, slot_id)
+					.unwrap_or_else(|| slot_passage_openings(host, y0, y1, slot_id));
+				let confines = confines_from_xz(host, y0, y1, roll, &openings);
+				match pack_quarter_into_cell(&confines, cell_noise, kind) {
+					Ok((room, nested)) => {
+						rooms.push(room);
+						filled_confines.push((confines, needs_walls));
+						residual_within.extend(nested.within);
+					}
+					Err(FitError::TooSmall { .. }) => free.push(host),
+					Err(err) => return Err(err),
+				}
+			}
+			Err(FitError::TooSmall { .. }) => free.push(host),
+			Err(err) => return Err(err),
+		}
+	}
+	Ok(())
+}
+
+fn pick_abutting_host(free: &[Aabb2d], walkways: &[Aabb2d], kind: QuarterKind) -> Option<usize> {
+	let need = min_area_for(kind);
+	let mut best: Option<(usize, f32)> = None;
+	for (i, r) in free.iter().enumerate() {
+		if !rect_usable(*r, need) {
+			continue;
+		}
+		if abuts_walkway(*r, walkways).is_none() {
+			continue;
+		}
+		let a = aabb2_area(*r);
+		if best.map(|(_, ba)| a > ba).unwrap_or(true) {
+			best = Some((i, a));
+		}
+	}
+	best.map(|(i, _)| i)
+}
+
+fn take_slot_abutting(
+	host: Aabb2d,
+	kind: QuarterKind,
+	walkways: &[Aabb2d],
+) -> (Aabb2d, Vec<Aabb2d>) {
+	let (slot, rem) = take_slot(host, kind);
+	if abuts_walkway(slot, walkways).is_some() {
+		return (slot, rem);
+	}
+	// Prefer keeping the hall-facing side of the host intact.
+	if abuts_walkway(host, walkways).is_some() {
+		(host, Vec::new())
+	} else {
+		(slot, rem)
+	}
+}
+
+fn hall_facing_openings(
+	slot: Aabb2d,
+	walkways: &[Aabb2d],
+	y0: f32,
+	y1: f32,
+	slot_id: u32,
+) -> Option<Openings> {
+	let (along_x, lo, hi, mid) = abuts_walkway(slot, walkways)?;
+	let mut openings = Openings::new();
+	let door_w = DOOR_WIDTH.min(hi - lo - 0.1).clamp(0.7, 1.15);
+	let center = 0.5 * (lo + hi);
+	let half = door_w * 0.5;
+	let door_lo = (center - half).max(lo);
+	let door_hi = (center + half).min(hi);
+	let door_h = (y1 - y0).min(2.15).max(1.9);
+	let half_d = 0.12_f32;
+	let bounds = if along_x {
+		Aabb3d::from_min_max(
+			Vec3::new(door_lo, y0, mid - half_d),
+			Vec3::new(door_hi, y0 + door_h, mid + half_d),
+		)
+	} else {
+		Aabb3d::from_min_max(
+			Vec3::new(mid - half_d, y0, door_lo),
+			Vec3::new(mid + half_d, y0 + door_h, door_hi),
+		)
+	};
+	openings.insert(
+		OpeningId::scoped(SCOPE, "hall_door", format!("{slot_id}")),
+		Opening::passage(bounds),
+	);
+	Some(openings)
 }
 
 /// Greedy: carve a slot for each kind from the zone free-rect pool; skip kinds
@@ -886,6 +1178,7 @@ fn aabb2_near_eq(a: Aabb2d, b: Aabb2d) -> bool {
 fn enclose_private_rooms(
 	filled: &[(Confines, bool)],
 	apartment_id: u32,
+	walkways: &[Aabb2d],
 ) -> Vec<ClippedRectangularStrip> {
 	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	let mut partitions = Vec::new();
@@ -990,22 +1283,39 @@ fn enclose_private_rooms(
 
 		let mut best_door_face: Option<usize> = None;
 		if !door_for[i] {
-			if let Some(target) = entry_center {
-				let mut best_d = f32::INFINITY;
-				for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
-					if face_touching_filled(along_x, mid, lo, hi) {
-						continue;
-					}
-					let face_c = if along_x {
-						Vec2::new(0.5 * (lo + hi), mid)
-					} else {
-						Vec2::new(mid, 0.5 * (lo + hi))
-					};
-					let d = face_c.distance_squared(target);
-					if d < best_d {
-						best_d = d;
-						best_door_face = Some(fi);
-					}
+			// Prefer a door on a walkway face (≥ MIN_HALL_ACCESS); else toward entry.
+			let mut best_score = f32::NEG_INFINITY;
+			for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
+				if face_touching_filled(along_x, mid, lo, hi) {
+					continue;
+				}
+				let hall_len = walkways
+					.iter()
+					.filter_map(|hall| shared_edge_span(b, *hall))
+					.filter(|(ax, flo, fhi, fmid)| {
+						*ax == along_x
+							&& (*fmid - mid).abs() < 0.08
+							&& *flo <= hi + EPS
+							&& *fhi >= lo - EPS
+					})
+					.map(|(_, flo, fhi, _)| fhi - flo)
+					.fold(0.0_f32, f32::max);
+				let face_c = if along_x {
+					Vec2::new(0.5 * (lo + hi), mid)
+				} else {
+					Vec2::new(mid, 0.5 * (lo + hi))
+				};
+				let toward_entry = entry_center
+					.map(|t| 1.0 / (1.0 + face_c.distance_squared(t)))
+					.unwrap_or(0.0);
+				let score = if hall_len + EPS >= MIN_HALL_ACCESS {
+					1000.0 + hall_len + toward_entry
+				} else {
+					toward_entry
+				};
+				if score > best_score {
+					best_score = score;
+					best_door_face = Some(fi);
 				}
 			}
 		}
@@ -1369,5 +1679,54 @@ mod tests {
 				.any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
 			"expected a bedroom in ~140 m² apt"
 		);
+	}
+
+	#[test]
+	fn walkways_seed_and_private_abuts() {
+		let confines = apt_with_door(Vec3::new(16.0, 3.0, 12.0));
+		let (apt, _) = LivableApartment::from_confines(
+			0,
+			&confines,
+			NoiseParams {
+				seed: 11,
+				..Default::default()
+			},
+		)
+		.unwrap();
+		assert!(!apt.walkways.is_empty(), "expected walkway skeleton");
+		assert!(
+			apt.walkways.iter().all(|w| {
+				let s = w.max - w.min;
+				s.x + 1e-3 >= WALK_WIDTH * 0.9 && s.y + 1e-3 >= WALK_WIDTH * 0.9
+			}),
+			"walkways should be ≥ {WALK_WIDTH} m clear"
+		);
+		let private_labels: Vec<&LabelNode> = apt
+			.rooms
+			.iter()
+			.filter_map(|r| match r {
+				ApartmentRoom::Bedroom(b) => Some(&b.room_type),
+				ApartmentRoom::Bathroom(b) => Some(&b.room_type),
+				ApartmentRoom::HalfBath(b) => Some(&b.room_type),
+				ApartmentRoom::Study(s) => Some(&s.room_type),
+				_ => None,
+			})
+			.collect();
+		assert!(
+			!private_labels.is_empty(),
+			"expected at least one private quarter"
+		);
+		for label in private_labels {
+			let c = label.placement.translation;
+			let e = label.placement.scale.abs() * 0.5;
+			let rect = Aabb2d {
+				min: Vec2::new(c.x - e.x, c.z - e.z),
+				max: Vec2::new(c.x + e.x, c.z + e.z),
+			};
+			assert!(
+				abuts_walkway(rect, &apt.walkways).is_some(),
+				"private quarter should abut a walkway"
+			);
+		}
 	}
 }

@@ -3107,7 +3107,7 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 }
 
 const LIVABLE_APARTMENT_GALLERY_COLS: usize = 3;
-const LIVABLE_APARTMENT_GALLERY_GAP: f32 = 6.0;
+const LIVABLE_APARTMENT_GALLERY_GAP: f32 = 8.0;
 
 #[derive(Clone, Copy)]
 enum LivableApartmentExampleShape {
@@ -3127,9 +3127,10 @@ enum LivableApartmentExampleShape {
 	},
 }
 
-/// Curated `(shape, seed)` hosts — mix of rectangular and multi-cell footprints.
+/// Curated `(shape, seed)` hosts — small stress cases through larger well-formed plans.
 fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)> {
 	vec![
+		// Small / tight
 		(
 			LivableApartmentExampleShape::Rect {
 				extent: Vec3::new(8.0, 3.0, 6.5),
@@ -3150,49 +3151,73 @@ fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)
 			},
 			21,
 		),
-		(
-			LivableApartmentExampleShape::TBar {
-				bar: Vec2::new(12.0, 4.0),
-				stem: Vec2::new(4.5, 6.5),
-				height: 3.0,
-			},
-			3,
-		),
-		(
-			LivableApartmentExampleShape::LStem {
-				stem: Vec2::new(10.0, 5.0),
-				bar: Vec2::new(5.5, 8.0),
-				height: 3.0,
-			},
-			42,
-		),
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(16.0, 3.2, 12.0),
-			},
-			55,
-		),
+		// Medium
 		(
 			LivableApartmentExampleShape::TBar {
 				bar: Vec2::new(14.0, 4.5),
 				stem: Vec2::new(5.0, 7.0),
 				height: 3.0,
 			},
+			3,
+		),
+		(
+			LivableApartmentExampleShape::LStem {
+				stem: Vec2::new(12.0, 6.0),
+				bar: Vec2::new(6.5, 10.0),
+				height: 3.0,
+			},
+			42,
+		),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(18.0, 3.2, 14.0),
+			},
+			55,
+		),
+		// Larger / well-formed
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(22.0, 3.2, 16.0),
+			},
 			77,
 		),
 		(
 			LivableApartmentExampleShape::LStem {
-				stem: Vec2::new(7.0, 4.0),
-				bar: Vec2::new(4.0, 6.0),
-				height: 3.0,
+				stem: Vec2::new(16.0, 7.0),
+				bar: Vec2::new(8.0, 14.0),
+				height: 3.2,
 			},
 			99,
 		),
 		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(18.0, 3.2, 12.0),
+			LivableApartmentExampleShape::TBar {
+				bar: Vec2::new(20.0, 6.0),
+				stem: Vec2::new(7.0, 12.0),
+				height: 3.2,
 			},
 			1337,
+		),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(28.0, 3.4, 20.0),
+			},
+			19,
+		),
+		(
+			LivableApartmentExampleShape::LStem {
+				stem: Vec2::new(20.0, 9.0),
+				bar: Vec2::new(10.0, 16.0),
+				height: 3.4,
+			},
+			201,
+		),
+		(
+			LivableApartmentExampleShape::TBar {
+				bar: Vec2::new(26.0, 7.0),
+				stem: Vec2::new(8.0, 14.0),
+				height: 3.4,
+			},
+			404,
 		),
 	]
 }
@@ -3330,6 +3355,35 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 	let host = Color::srgb(0.72, 0.72, 0.78);
 	for part in apt.cells.iter() {
 		gizmos.aabb_3d(part.confines.bounds, tf, host);
+	}
+	// Walkway skeleton (unwalled circulation bands).
+	let y0 = apt
+		.cells
+		.parts
+		.first()
+		.map(|p| Vec3::from(p.confines.bounds.min).y)
+		.unwrap_or(0.0);
+	let y1 = apt
+		.cells
+		.parts
+		.first()
+		.map(|p| Vec3::from(p.confines.bounds.max).y)
+		.unwrap_or(3.0);
+	let walk = Color::srgb(0.95, 0.85, 0.25);
+	for (wi, band) in apt.walkways.iter().enumerate() {
+		let color = if wi % 2 == 0 {
+			walk
+		} else {
+			Color::srgb(0.9, 0.7, 0.2)
+		};
+		gizmos.aabb_3d(
+			Aabb3d::from_min_max(
+				Vec3::new(band.min.x, y0, band.min.y),
+				Vec3::new(band.max.x, y1, band.max.y),
+			),
+			tf,
+			color,
+		);
 	}
 	for room in &apt.rooms {
 		let (bounds, color) = match room {
