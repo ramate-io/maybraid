@@ -28,7 +28,9 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
+};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
@@ -189,6 +191,28 @@ impl LodScene for WizardsTower {
 					tf,
 				)) as Box<dyn Scene>
 			}
+		}
+	}
+
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		match level {
+			LodSceneLevel::High => {
+				let spire_confines = self.column.spire_confine_capsule();
+				let mut chunks = Vec::new();
+				for floor in &self.column.floors {
+					let mut children: Vec<Box<dyn Scene>> = Vec::new();
+					floor.emit_external_features(&mut children, lod_ref);
+					floor.emit_internal_features(&mut children, lod_ref);
+					floor.emit_spire_features(&mut children, lod_ref, spire_confines);
+					chunks.push(SceneChunk::weighted(4, scene_children(children)));
+				}
+				let mut perch_children: Vec<Box<dyn Scene>> = Vec::new();
+				self.column.perch.emit_external_features(&mut perch_children, lod_ref);
+				self.column.perch.emit_internal_features(&mut perch_children, lod_ref);
+				chunks.push(SceneChunk::weighted(3, scene_children(perch_children)));
+				SceneChunk::chunks(chunks)
+			}
+			other => SceneChunk::primitive(self.scene_with_level(lod_ref, other)),
 		}
 	}
 

@@ -14,6 +14,7 @@ use crate::gen::spatial_index::{SpatialIndex, Version};
 use crate::lod_cull::LodSceneCulls;
 use crate::lod_level::LodSceneLevel;
 use crate::lod_ref::LodRef;
+use crate::scene_chunk::SceneChunk;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
 
@@ -62,6 +63,18 @@ pub trait LodScene {
 
 	/// Scene for one LOD level root (primary implementation target).
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static;
+
+	/// Incremental composition for one LOD level root.
+	///
+	/// Default wraps [`Self::scene_with_level`] as a single
+	/// [`SceneChunk::primitive`]. Override to split expensive levels into
+	/// weighted sub-chunks for [`crate::chunk_fulfill`] drain.
+	///
+	/// Note: the default still builds the full scene up front; hitch reduction
+	/// requires an override (or future lazy chunk nodes).
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+	}
 
 	/// Scene for the **current** LOD selection only (first present / non-host path).
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
