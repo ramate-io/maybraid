@@ -2,7 +2,8 @@
 //!
 //! Pipeline (no camera types here):
 //! [`LodViewer`] transform → [`LodViewerState`] → [`update_lod_host_levels`] →
-//! [`crate::sync_lod_level_roots`] → [`fulfill_lod_level_spawn`].
+//! [`crate::sync_lod_level_roots`] → [`fulfill_lod_level_spawn`] →
+//! [`cull_lod_level_roots`].
 //!
 //! Construct [`LodRef`] ephemerally from [`LodViewerState`] + [`LodHostBounds`]
 //! (no owned `LodRef` component).
@@ -12,6 +13,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
 use crate::gen::LodScene;
+use crate::lod_cull::LodSceneCulls;
 use crate::lod_level::LodSceneLevel;
 use crate::lod_ref::LodRef;
 use crate::lod_scene_host::{
@@ -76,6 +78,8 @@ pub enum LodFinePassSystems {
 	SyncRoots,
 	/// Spawn missing level-root content for hosts with a spawn request.
 	Fulfill,
+	/// Despawn inactive level roots per [`LodScene::scene_lod_culls`].
+	Cull,
 }
 
 pub(crate) fn configure_fine_pass_sets(app: &mut App) {
@@ -86,6 +90,7 @@ pub(crate) fn configure_fine_pass_sets(app: &mut App) {
 			LodFinePassSystems::UpdateLevels,
 			LodFinePassSystems::SyncRoots,
 			LodFinePassSystems::Fulfill,
+			LodFinePassSystems::Cull,
 		)
 			.chain(),
 	);
@@ -125,21 +130,27 @@ pub fn update_lod_host_levels<T: Component + LodScene>(
 }
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
+///
+/// Culls only despawn; this is what brings a band back when
+/// [`sync_lod_level_roots`] inserts [`LodLevelSpawnRequest`]. `LodHostBounds` is
+/// optional (probe hosts synthesize ephemeral bounds).
 pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Res<LodViewerState>,
 	hosts: Query<
-		(Entity, &T, &LodHostBounds, &LodLevelSpawnRequest, &Children),
+		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
 		With<LodSceneHost>,
 	>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+	root_keys: Query<&LodLevelRoot>,
 ) {
 	if viewer.entity == Entity::PLACEHOLDER {
 		return;
 	}
 
-	for (host, scene, bounds, request, host_children) in &hosts {
-		let lod_ref = viewer.lod_ref(&bounds.0);
+	for (host, scene, host_bounds, request, host_children) in &hosts {
+		let bounds = ephemeral_bounds(host_bounds);
+		let lod_ref = viewer.lod_ref(&bounds);
 
 		let mut roots_entity = None;
 		for child in host_children.iter() {
@@ -155,6 +166,17 @@ pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 		};
 
 		if let Ok((_, Some(root_children))) = level_roots_heads.get(roots_entity) {
+			let mut already_present = false;
+			for child in root_children.iter() {
+				if root_keys.get(child).is_ok_and(|root| root.0 == request.level) {
+					already_present = true;
+					break;
+				}
+			}
+			if already_present {
+				commands.entity(host).remove::<LodLevelSpawnRequest>();
+				continue;
+			}
 			for child in root_children.iter() {
 				commands.entity(child).insert(Visibility::Hidden);
 			}
@@ -176,9 +198,69 @@ pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 	}
 }
 
+/// Placeholder bounds when a host has no [`LodHostBounds`] (probe-driven hosts).
+fn ephemeral_bounds(host_bounds: Option<&LodHostBounds>) -> Aabb3d {
+	host_bounds.map(|b| b.0).unwrap_or_else(|| Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))
+}
+
+/// Despawn inactive [`LodLevelRoot`]s listed by [`LodScene::scene_lod_culls`].
+///
+/// Never despawns the host's current [`LodSceneLevel`]. Hidden roots not listed
+/// stay warm for cheap band flips.
+pub fn cull_lod_level_roots<T: Component + LodScene>(
+	viewer: Res<LodViewerState>,
+	mut commands: Commands,
+	hosts: Query<
+		(&T, Option<&LodHostBounds>, &LodSceneLevel, &Children),
+		With<LodSceneHost>,
+	>,
+	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
+	root_keys: Query<&LodLevelRoot>,
+) {
+	if viewer.entity == Entity::PLACEHOLDER {
+		return;
+	}
+
+	for (scene, host_bounds, current, host_children) in &hosts {
+		let bounds = ephemeral_bounds(host_bounds);
+		let lod_ref = viewer.lod_ref(&bounds);
+		let culls = scene.scene_lod_culls(&lod_ref, *current);
+		if matches!(culls, LodSceneCulls::None) {
+			continue;
+		}
+
+		let mut roots_entity = None;
+		for child in host_children.iter() {
+			if level_roots_heads.contains(child) {
+				roots_entity = Some(child);
+				break;
+			}
+		}
+		let Some(roots_entity) = roots_entity else {
+			continue;
+		};
+		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+			continue;
+		};
+
+		for child in root_children.iter() {
+			let Ok(root) = root_keys.get(child) else {
+				continue;
+			};
+			if root.0 == *current {
+				continue;
+			}
+			if culls.should_cull(root.0) {
+				commands.entity(child).despawn();
+			}
+		}
+	}
+}
+
 /// Initializes [`LodViewerState`], tracks [`LodViewer`], and schedules root sync.
 ///
-/// Register per-type update/fulfill with [`add_fine_pass_for`].
+/// Register per-type update/fulfill/cull with [`add_fine_pass_for`], or cull-only
+/// with [`add_fine_pass_cull_for`] for probe-driven hosts that already update levels.
 pub struct LodFinePassPlugin;
 
 impl Plugin for LodFinePassPlugin {
@@ -194,7 +276,7 @@ impl Plugin for LodFinePassPlugin {
 	}
 }
 
-/// Register fine-phase update + fulfill for one [`LodScene`] host component type.
+/// Register fine-phase update + fulfill + cull for one [`LodScene`] host component type.
 pub fn add_fine_pass_for<T: Component + LodScene>(app: &mut App) {
 	configure_fine_pass_sets(app);
 	app.add_systems(
@@ -202,6 +284,23 @@ pub fn add_fine_pass_for<T: Component + LodScene>(app: &mut App) {
 		(
 			update_lod_host_levels::<T>.in_set(LodFinePassSystems::UpdateLevels),
 			fulfill_lod_level_spawn::<T>.in_set(LodFinePassSystems::Fulfill),
+			cull_lod_level_roots::<T>.in_set(LodFinePassSystems::Cull),
+		),
+	);
+}
+
+/// Register fulfill + cull for hosts that already update [`LodSceneLevel`] elsewhere
+/// (e.g. warm mesh root kits while a probe writes the level).
+///
+/// Cull despawns inactive roots; Sync requests the desired level; Fulfill builds
+/// it with [`LodScene::scene_with_level`].
+pub fn add_fine_pass_cull_for<T: Component + LodScene>(app: &mut App) {
+	configure_fine_pass_sets(app);
+	app.add_systems(
+		Update,
+		(
+			fulfill_lod_level_spawn::<T>.in_set(LodFinePassSystems::Fulfill),
+			cull_lod_level_roots::<T>.in_set(LodFinePassSystems::Cull),
 		),
 	);
 }

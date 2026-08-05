@@ -6,13 +6,20 @@ pub use lod_cascade as cascade;
 pub use lod_cascade_system as cascade_system;
 pub mod fine_pass;
 pub mod gen;
+pub mod lod_cull;
 pub mod lod_level;
 pub mod lod_ref;
 pub mod lod_scene_host;
 
 pub use fine_pass::{
-	add_fine_pass_for, fulfill_lod_level_spawn, track_lod_viewer, update_lod_host_levels,
-	LodFinePassPlugin, LodFinePassSystems, LodHostBounds, LodViewer, LodViewerState,
+	add_fine_pass_cull_for, add_fine_pass_for, cull_lod_level_roots, fulfill_lod_level_spawn,
+	track_lod_viewer, update_lod_host_levels, LodFinePassPlugin, LodFinePassSystems,
+	LodHostBounds, LodViewer, LodViewerState,
+};
+pub use lod_cull::{
+	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
+	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
+	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
 pub use lod_level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene_host::{

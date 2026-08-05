@@ -6,10 +6,11 @@
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
 use crate::floors::RoughStoneFloorRightTriangle;
+use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::warm_content_host_hsl;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
@@ -136,6 +137,11 @@ impl LodScene for PartitionNode {
 		self.placement.partition_lod_status(lod_ref)
 	}
 
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		let _ = lod_ref;
+		warm_mesh_lod_culls(current)
+	}
+
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		confined_scene(self.confines, scene_children(self.kit_scenes_for_level(lod_ref, level)))
 	}
@@ -170,6 +176,14 @@ macro_rules! impl_partition_mesh_lod_scene {
 			) -> ::lod::gen::LodSceneStatus {
 				$crate::partitions::probe::PartitionLodProbe::from_aabb(lod_ref.bounds)
 					.status_for_lod_ref(lod_ref)
+			}
+
+			fn scene_lod_culls(
+				&self,
+				_lod_ref: &::lod::lod_ref::LodRef,
+				current: ::lod::gen::LodSceneLevel,
+			) -> ::lod::gen::LodSceneCulls {
+				$crate::lod_band::warm_mesh_lod_culls(current)
 			}
 
 			fn scene_with_level(

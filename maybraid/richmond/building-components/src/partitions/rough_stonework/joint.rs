@@ -18,6 +18,14 @@ impl lod::gen::LodScene for RoughStoneworkJoint {
 		PartitionLodProbe::from_aabb(lod_ref.bounds).status_for_lod_ref(lod_ref)
 	}
 
+	fn scene_lod_culls(
+		&self,
+		_lod_ref: &lod::lod_ref::LodRef,
+		current: lod::gen::LodSceneLevel,
+	) -> lod::gen::LodSceneCulls {
+		crate::lod_band::warm_mesh_lod_culls(current)
+	}
+
 	fn scene_with_level(
 		&self,
 		_lod_ref: &lod::lod_ref::LodRef,

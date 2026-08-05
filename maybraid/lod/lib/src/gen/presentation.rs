@@ -11,6 +11,7 @@ pub mod tests;
 
 use crate::gen::id::Id;
 use crate::gen::spatial_index::{SpatialIndex, Version};
+use crate::lod_cull::LodSceneCulls;
 use crate::lod_level::LodSceneLevel;
 use crate::lod_ref::LodRef;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
@@ -39,6 +40,24 @@ pub trait LodScene {
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
 		let _ = lod_ref;
 		LodSceneStatus::Changed(LodSceneLevel::High)
+	}
+
+	/// Inactive [`crate::LodLevelRoot`]s this scene is willing to despawn.
+	///
+	/// Must be cheap — no scene build. `current` is the host's desired
+	/// [`LodSceneLevel`]. Default keeps every root warm ([`LodSceneCulls::None`]).
+	/// Prefer [`crate::cull_non_adjacent_bands`] (or [`crate::cull_offset_bands`])
+	/// when memory matters; “not current” alone is not a cull reason. Culling the
+	/// immediately adjacent band is usually a bad idea — respawning that root on
+	/// the way back is expensive; keep it warm unless you are well into the
+	/// current band.
+	///
+	/// Host GC never despawns the host's current/desired level even if listed.
+	/// After a despawn, Sync + Fulfill spawn the desired level again via
+	/// [`Self::scene_with_level`] — there is no separate rebuild path.
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		let _ = (lod_ref, current);
+		LodSceneCulls::None
 	}
 
 	/// Scene for one LOD level root (primary implementation target).

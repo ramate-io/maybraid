@@ -28,7 +28,7 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
+use lod::gen::{cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
@@ -166,6 +166,12 @@ impl LodScene for WizardsTower {
 		} else {
 			LodSceneStatus::Changed(curr)
 		}
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Offset bands: drop High once ~halfway into Medium; Low keeps Medium warm.
+		let (level, progress) = self.band_progress_for_lod_ref(lod_ref);
+		cull_offset_bands(level, progress).with_customs()
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
