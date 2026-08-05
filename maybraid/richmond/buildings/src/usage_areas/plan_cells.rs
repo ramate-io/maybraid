@@ -9,11 +9,12 @@ use procedural_common::{aabb2_area, Aabb2dPack};
 
 const EPS: f32 = 1e-3;
 
-/// Default minimum shared-edge length (m) for grouping cells into one apartment.
+/// Default minimum shared-edge length (m) for grouping cells into one suite.
 ///
 /// Shorter contacts are treated as pinches — adjacent for walls, but not for
-/// apartment connectivity / grow / absorb.
-pub const MIN_GROUP_CONNECTIVITY: f32 = 1.5;
+/// suite connectivity / grow / absorb. ~2 m avoids door-width pinches joining
+/// separate rooms.
+pub const MIN_GROUP_CONNECTIVITY: f32 = 2.0;
 
 /// One axis-aligned plan cell (`Aabb2d` uses \(x → X\), \(y → Z\)).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -333,10 +334,14 @@ fn best_grow_candidate(
 		if !touches {
 			continue;
 		}
-		let area = cell.area();
+		// Prefer larger, less-skinny cells so groups stay walkable without a
+		// hard min-width reject.
+		let size = cell.size();
+		let aspect = size.x.max(size.y) / size.x.min(size.y).max(1e-3);
+		let score = cell.area() / aspect.sqrt();
 		match best {
-			None => best = Some((i, area)),
-			Some((_, ba)) if area > ba => best = Some((i, area)),
+			None => best = Some((i, score)),
+			Some((_, bs)) if score > bs => best = Some((i, score)),
 			_ => {}
 		}
 	}

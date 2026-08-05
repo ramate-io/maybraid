@@ -14,6 +14,7 @@ pub mod common_bedroom;
 pub mod enclosed_room;
 pub mod enclosure_panels;
 pub mod furniture_util;
+pub mod hall_connected_suites;
 pub mod halls_to_shafts;
 pub mod janitorial;
 pub mod label_util;
@@ -43,6 +44,9 @@ pub use common_bedroom::{
 	CommonBedroom, CommonBedroomParameterized, CommonBedroomPlan, SCOPE as COMMON_BEDROOM_SCOPE,
 };
 pub use enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
+pub use hall_connected_suites::{
+	HallConnectedGroups, HallEnclosedSuites, HallSuiteEncloseParams, HallSuitePackParams,
+};
 pub use halls_to_shafts::{
 	HallsToShafts, HallsToShaftsOptions, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
 };
