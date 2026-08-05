@@ -3504,7 +3504,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5)],
 			strategy: CaseAttempt,
 			seed: 2,
-			program: &[Living, Bathroom],
+			program: &[Eating, Living, Bathroom],
 		},
 		// Medium AllOpen, 1 port
 		LivableRectangleExampleSpec {
@@ -3513,7 +3513,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5)],
 			strategy: AllOpen,
 			seed: 3,
-			program: &[Living, Eating],
+			program: &[Eating, Living],
 		},
 		// Opposite ports + SpineHall
 		LivableRectangleExampleSpec {
@@ -3522,7 +3522,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5), (North, 0.5)],
 			strategy: SpineHall,
 			seed: 4,
-			program: &[Living, Bedroom, Bathroom],
+			program: &[Eating, Living, Bedroom, Bathroom],
 		},
 		// Adjacent (L) ports
 		LivableRectangleExampleSpec {
@@ -3531,7 +3531,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.35), (East, 0.5)],
 			strategy: CaseAttempt,
 			seed: 5,
-			program: &[Living, Eating, Bedroom],
+			program: &[Eating, Living, Bedroom],
 		},
 		// 3 ports
 		LivableRectangleExampleSpec {
@@ -3540,7 +3540,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5), (North, 0.35), (West, 0.5)],
 			strategy: SpineHall,
 			seed: 6,
-			program: &[Living, Bedroom, Bathroom, Eating],
+			program: &[Eating, Living, Bedroom, Bathroom],
 		},
 		// Large Guillotine
 		LivableRectangleExampleSpec {
@@ -3549,7 +3549,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5)],
 			strategy: GuillotineSplit,
 			seed: 7,
-			program: &[Living, Eating, Bedroom, Bathroom],
+			program: &[Eating, Living, Bedroom, Bathroom],
 		},
 		// Large CaseAttempt, 2 opposite
 		LivableRectangleExampleSpec {
@@ -3558,7 +3558,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.4), (North, 0.6)],
 			strategy: CaseAttempt,
 			seed: 8,
-			program: &[Living, Eating, Bedroom, Bedroom, Bathroom],
+			program: &[Eating, Living, Bedroom, Bedroom, Bathroom],
 		},
 		// Compact 3×4 SingleClosed
 		LivableRectangleExampleSpec {
@@ -3576,7 +3576,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5), (West, 0.5)],
 			strategy: AllOpen,
 			seed: 10,
-			program: &[Living, Sitting],
+			program: &[Eating, Living, Sitting],
 		},
 	]
 }

@@ -301,11 +301,11 @@ fn default_program(area: f32, passages: usize) -> Vec<RectQuarterKind> {
 		out.push(RectQuarterKind::Bedroom);
 		return out;
 	}
-	out.push(RectQuarterKind::Living);
-	// Compact kitchens fit from ~kitchen MIN_AREA upward.
-	if area > 10.0 {
+	// Eating before living so kitchens claim free space first when packing.
+	if area + EPS >= min_area_for(RectQuarterKind::Eating) {
 		out.push(RectQuarterKind::Eating);
 	}
+	out.push(RectQuarterKind::Living);
 	if area > 28.0 {
 		out.push(RectQuarterKind::Bedroom);
 	}
@@ -1155,12 +1155,9 @@ fn pack_open_into(
 			residual_within,
 		)?;
 	}
-	// Keep claiming open program fill until free pockets are too small.
-	let fillers = [
-		RectQuarterKind::Living,
-		RectQuarterKind::Eating,
-		RectQuarterKind::Sitting,
-	];
+	// After the program's open kinds (incl. at most one Eating) are placed,
+	// leftover pockets become living/sitting — not more kitchens.
+	let fillers = [RectQuarterKind::Living, RectQuarterKind::Sitting];
 	let mut guard = 0;
 	while guard < 12 {
 		guard += 1;
@@ -1353,22 +1350,21 @@ fn pick_largest_abutting_host(
 fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	let host_a = aabb2_area(host);
 	let want = slot_target_area(kind, host_a);
-	// Open rooms prefer generous claims so kitchens/living are not starved into
-	// thin scraps; closed rooms still carve a target pocket when the host is huge.
-	// Eating/kitchen: claim the whole pocket when near the scaled target; on large
-	// hosts take a wide share (compact mins stay via [`min_area_for`]).
+	// Open rooms prefer generous claims so living is not starved into thin scraps;
+	// closed rooms still carve a target pocket when the host is huge.
+	// Eating carves a compact kitchen pocket and leaves remainder for living/sitting.
 	let carve_threshold = match kind {
-		RectQuarterKind::Eating | RectQuarterKind::Kitchen => 1.7,
-		k if k.is_open() => 2.4,
+		RectQuarterKind::Eating | RectQuarterKind::Kitchen => 2.6,
+		k if k.is_open() => 2.2,
 		_ => 1.7,
 	};
 	if host_a < want * carve_threshold {
 		return (host, Vec::new());
 	}
 	let frac = match kind {
-		RectQuarterKind::Eating => (want / host_a).clamp(0.32, 0.72),
-		RectQuarterKind::Kitchen => (want / host_a).clamp(0.28, 0.62),
-		k if k.is_open() => (want / host_a).clamp(0.35, 0.72),
+		RectQuarterKind::Eating => (want / host_a).clamp(0.22, 0.48),
+		RectQuarterKind::Kitchen => (want / host_a).clamp(0.22, 0.45),
+		k if k.is_open() => (want / host_a).clamp(0.38, 0.75),
 		_ => (want / host_a).clamp(0.28, 0.65),
 	};
 	let min_d = min_dim_for(kind);
@@ -1398,18 +1394,18 @@ fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	}
 }
 
-/// Aspirational slot area (m²). Eating/kitchen scale with the host so compact
-/// pockets stay small while large free space can claim a roomy kitchen.
+/// Aspirational slot area (m²). Living takes a generous share; eating stays
+/// compact so one kitchen does not crowd out the living program.
 fn slot_target_area(kind: RectQuarterKind, host_a: f32) -> f32 {
 	match kind {
 		RectQuarterKind::Bedroom => 18.0,
-		RectQuarterKind::Living => (host_a * 0.35).clamp(12.0, 36.0),
-		RectQuarterKind::Eating => (host_a * 0.38).clamp(6.0, 48.0),
-		RectQuarterKind::Kitchen => (host_a * 0.28).clamp(5.0, 32.0),
-		RectQuarterKind::Dining => (host_a * 0.22).clamp(5.0, 24.0),
+		RectQuarterKind::Living => (host_a * 0.42).clamp(12.0, 42.0),
+		RectQuarterKind::Eating => (host_a * 0.24).clamp(6.0, 22.0),
+		RectQuarterKind::Kitchen => (host_a * 0.2).clamp(5.0, 16.0),
+		RectQuarterKind::Dining => (host_a * 0.18).clamp(5.0, 14.0),
 		RectQuarterKind::Bathroom => 6.5,
 		RectQuarterKind::HalfBath => 3.5,
-		RectQuarterKind::Sitting => (host_a * 0.25).clamp(6.0, 22.0),
+		RectQuarterKind::Sitting => (host_a * 0.28).clamp(6.0, 24.0),
 		RectQuarterKind::Study => 9.0,
 	}
 }
@@ -1990,7 +1986,7 @@ mod tests {
 			&confines,
 			NoiseParams { seed: 2, ..Default::default() },
 			params,
-			&[RectQuarterKind::Living, RectQuarterKind::Eating],
+			&[RectQuarterKind::Eating, RectQuarterKind::Living],
 		)
 		.unwrap();
 		assert!(normalize_ok(&area, 1.0));
@@ -2017,8 +2013,8 @@ mod tests {
 			},
 			params,
 			&[
-				RectQuarterKind::Living,
 				RectQuarterKind::Eating,
+				RectQuarterKind::Living,
 				RectQuarterKind::Bedroom,
 				RectQuarterKind::Bathroom,
 			],
