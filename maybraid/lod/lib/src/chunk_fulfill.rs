@@ -5,10 +5,13 @@
 //! [`LodChunkFulfillBudget`], then atomically swaps visibility.
 //!
 //! Pipeline (within [`crate::LodFinePassSystems::Fulfill`]):
-//! cancel stale → begin jobs from [`LodLevelSpawnRequest`] → drain budget →
-//! complete / swap.
+//! cancel stale → begin jobs → drain budget → complete / swap.
+//!
+//! Command / archetype apply cost is measured via Bevy's `system_commands`
+//! tracing spans (requires the `trace` feature) at auto-[`ApplyDeferred`] points.
 
 use std::collections::VecDeque;
+use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -39,8 +42,19 @@ pub struct LodChunkFulfillBudget {
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
-		Self { weights_per_frame: 32 }
+		Self { weights_per_frame: 4 }
 	}
+}
+
+/// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
+#[derive(Resource, Debug, Default)]
+pub struct LodChunkFulfillDiag {
+	pub last_scene_chunks_ms: f64,
+	pub last_level: Option<LodSceneLevel>,
+}
+
+fn ms(start: Instant) -> f64 {
+	start.elapsed().as_secs_f64() * 1000.0
 }
 
 /// Cancel pending roots whose level is no longer desired.
@@ -50,6 +64,8 @@ pub fn cancel_stale_chunk_fulfillments(
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	pending_roots: Query<&LodLevelRoot, With<LodLevelRootPending>>,
 ) {
+	let t0 = Instant::now();
+	let mut despawned = 0u32;
 	for (host, desired, host_children) in &hosts {
 		let Some(host_children) = host_children else {
 			continue;
@@ -73,9 +89,16 @@ pub fn cancel_stale_chunk_fulfillments(
 			};
 			if root.0 != *desired {
 				commands.entity(child).despawn();
+				despawned += 1;
 			}
 		}
 		let _ = host;
+	}
+	if despawned > 0 {
+		info!(
+			"[lod.chunk] cancel_stale: {despawned} despawned in {:.2}ms",
+			ms(t0)
+		);
 	}
 }
 
@@ -83,6 +106,7 @@ pub fn cancel_stale_chunk_fulfillments(
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Res<LodViewerState>,
+	mut diag: ResMut<LodChunkFulfillDiag>,
 	hosts: Query<
 		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
 		With<LodSceneHost>,
@@ -94,6 +118,11 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	if viewer.entity == Entity::PLACEHOLDER {
 		return;
 	}
+
+	let t_sys = Instant::now();
+	let mut jobs_started = 0u32;
+	let mut chunks_ms_total = 0.0f64;
+	let mut spawn_ms_total = 0.0f64;
 
 	for (host, scene, host_bounds, request, host_children) in &hosts {
 		let bounds = ephemeral_bounds(host_bounds);
@@ -133,8 +162,17 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			}
 		}
 
+		let t_chunks = Instant::now();
 		let chunk = scene.scene_chunks_with_level(&lod_ref, request.level);
 		let queue = chunk.into_primitives();
+		let chunks_ms = ms(t_chunks);
+		chunks_ms_total += chunks_ms;
+		let queue_len = queue.len();
+		let queue_weight: u32 = queue.iter().map(|(w, _)| *w).sum();
+		diag.last_scene_chunks_ms = chunks_ms;
+		diag.last_level = Some(request.level);
+
+		let t_spawn = Instant::now();
 		let level = request.level;
 		let level_root = bsn! {
 			template_value(LodLevelRoot(level))
@@ -146,6 +184,24 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		commands.entity(root_entity).insert(LodChunkFulfillment { queue });
 		commands.entity(roots_entity).add_child(root_entity);
 		commands.entity(host).remove::<LodLevelSpawnRequest>();
+		let spawn_ms = ms(t_spawn);
+		spawn_ms_total += spawn_ms;
+		jobs_started += 1;
+
+		info!(
+			"[lod.chunk] begin job host={host:?} level={level:?}: \
+			 scene_chunks_with_level={chunks_ms:.2}ms queue_len={queue_len} \
+			 queue_weight={queue_weight} queue_root_cmds={spawn_ms:.2}ms"
+		);
+	}
+
+	if jobs_started > 0 {
+		info!(
+			"[lod.chunk] begin_chunk_lod_fulfill: {jobs_started} jobs, \
+			 scene_chunks_with_level={chunks_ms_total:.2}ms queue_root_cmds={spawn_ms_total:.2}ms \
+			 total={:.2}ms",
+			ms(t_sys)
+		);
 	}
 }
 
@@ -158,11 +214,17 @@ pub fn drain_chunk_lod_fulfill(
 	budget: Res<LodChunkFulfillBudget>,
 	mut jobs: Query<(Entity, &mut LodChunkFulfillment), With<LodLevelRootPending>>,
 ) {
+	let t0 = Instant::now();
 	let mut remaining = budget.weights_per_frame;
+	let mut spawned = 0u32;
+	let mut weight_spent = 0u32;
+	let mut active_jobs = 0u32;
+
 	for (root, mut job) in &mut jobs {
 		if job.queue.is_empty() {
 			continue;
 		}
+		active_jobs += 1;
 		let mut spawned_this_job = false;
 		while !job.queue.is_empty() {
 			if remaining == 0 && spawned_this_job {
@@ -179,9 +241,22 @@ pub fn drain_chunk_lod_fulfill(
 			};
 			let child = commands.spawn_scene(piece).id();
 			commands.entity(root).add_child(child);
-			remaining = remaining.saturating_sub(weight.max(1));
+			let w = weight.max(1);
+			remaining = remaining.saturating_sub(w);
+			weight_spent += w;
+			spawned += 1;
 			spawned_this_job = true;
 		}
+	}
+
+	if spawned > 0 {
+		info!(
+			"[lod.chunk] drain: queued_spawns={spawned} weight_spent={weight_spent} \
+			 budget={} active_jobs={active_jobs} queue_cmds={:.2}ms \
+			 (apply cost: watch [lod.commands] system_commands)",
+			budget.weights_per_frame,
+			ms(t0)
+		);
 	}
 }
 
@@ -195,6 +270,8 @@ pub fn complete_chunk_lod_fulfill(
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
+	let t0 = Instant::now();
+	let mut completed = 0u32;
 	for (root_entity, fulfillment, child_of) in &pending {
 		if fulfillment.is_some_and(|f| !f.queue.is_empty()) {
 			continue;
@@ -203,6 +280,7 @@ pub fn complete_chunk_lod_fulfill(
 		if let Ok(mut vis) = visibilities.get_mut(root_entity) {
 			*vis = Visibility::Inherited;
 		}
+		completed += 1;
 
 		let Some(child_of) = child_of else {
 			continue;
@@ -220,6 +298,12 @@ pub fn complete_chunk_lod_fulfill(
 			}
 		}
 	}
+	if completed > 0 {
+		info!(
+			"[lod.chunk] complete: {completed} roots swapped in {:.2}ms",
+			ms(t0)
+		);
+	}
 }
 
 /// Register incremental fulfill systems for one [`LodScene`] host type.
@@ -228,16 +312,20 @@ pub fn complete_chunk_lod_fulfill(
 /// (or in place of) the fulfill half of [`crate::add_fine_pass_for`].
 pub fn add_fine_pass_chunk_for<T: Component + LodScene>(app: &mut App) {
 	crate::fine_pass::configure_fine_pass_sets(app);
-	app.init_resource::<LodChunkFulfillBudget>().add_systems(
-		Update,
-		(
-			cancel_stale_chunk_fulfillments.in_set(LodFinePassSystems::Fulfill),
-			begin_chunk_lod_fulfill::<T>.in_set(LodFinePassSystems::Fulfill),
-			drain_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
-			complete_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
-		)
-			.chain(),
-	);
+	app.init_resource::<LodChunkFulfillBudget>()
+		.init_resource::<LodChunkFulfillDiag>()
+		.add_systems(
+			Update,
+			(
+				cancel_stale_chunk_fulfillments.in_set(LodFinePassSystems::Fulfill),
+				begin_chunk_lod_fulfill::<T>.in_set(LodFinePassSystems::Fulfill),
+				drain_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
+				complete_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
+			)
+				// Auto-ApplyDeferred between steps applies Commands (measured via
+				// `system_commands` spans when the `trace` feature is enabled).
+				.chain(),
+		);
 }
 
 /// Like [`crate::add_fine_pass_for`], but uses chunk fulfill instead of eager spawn.
