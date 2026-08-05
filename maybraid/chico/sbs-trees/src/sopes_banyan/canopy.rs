@@ -8,7 +8,7 @@ use chico_sbs_geometry::{
 use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
 
 /// Medium foliage: denser azimuth × height outer samples (preserves vase pinch).
-pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Low foliage: coarser outer samples.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
