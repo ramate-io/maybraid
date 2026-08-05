@@ -517,6 +517,11 @@ fn enclosure_walls(
 			let Some((along_x, lo, hi, mid)) = shared_edge_span(cell.bounds, *hall) else {
 				continue;
 			};
+			// Skip hall-kiss nubs — same threshold as suite frontage. Tiny spans
+			// next to a real door read as pinches at the entry.
+			if hi - lo + EPS < MIN_GROUP_CONNECTIVITY {
+				continue;
+			}
 			let from = Vec2::new(
 				if along_x { 0.5 * (lo + hi) } else { mid },
 				if along_x { mid } else { 0.5 * (lo + hi) },

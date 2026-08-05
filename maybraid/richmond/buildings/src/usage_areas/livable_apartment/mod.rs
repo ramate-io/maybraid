@@ -249,8 +249,29 @@ impl LivableApartment {
 
 		let mut entry_xz = None;
 		if let Some((_id, door)) = door_opening {
-			if let Some((entry, rem)) = carve_entryway(door_cell, &door, ENTRY_DEPTH, ENTRY_WIDTH)
+			if let Some((mut entry, rem)) =
+				carve_entryway(door_cell, &door, ENTRY_DEPTH, ENTRY_WIDTH)
 			{
+				// Thin carve leftovers (door cell only ~2.5–3 m deep) get dropped by
+				// the MIN_ROOM filter below and pinch the entry off from the body.
+				// If no usable remainder remains, take the whole door cell as entry
+				// so it still shares a full edge with the next room cell.
+				let usable_rem: Vec<Aabb2d> = rem
+					.into_iter()
+					.filter(|r| {
+						let s = r.max - r.min;
+						s.x + EPS >= MIN_ROOM
+							&& s.y + EPS >= MIN_ROOM
+							&& aabb2_area(*r) > 4.0
+					})
+					.collect();
+				let rem_for_work = if usable_rem.is_empty() {
+					entry = door_cell;
+					Vec::new()
+				} else {
+					usable_rem
+				};
+
 				let entry_c = confines_from_xz(entry, y0, y1, roll, &Openings::new());
 				rooms.push(ApartmentRoom::Entryway {
 					label: label_filling_aabb(
@@ -263,12 +284,10 @@ impl LivableApartment {
 				});
 				walkways.push(entry);
 				entry_xz = Some(entry);
-				// Replace the door-cell footprint with carve remainders (do not
-				// leave the uncut cell in `work_rects`).
 				work_rects = work_rects
 					.into_iter()
 					.filter(|r| !aabb2_near_eq(*r, door_cell))
-					.chain(rem)
+					.chain(rem_for_work)
 					.filter(|r| aabb2_area(*r) > EPS * EPS)
 					.collect();
 			}
@@ -827,5 +846,61 @@ mod tests {
 		// Far private/open content should exist in the stub half (z > 6).
 		let far = apt.rooms.iter().filter_map(room_xz).any(|r| r.min.y > 5.5);
 		assert!(far, "expected packed content in far L leg");
+	}
+
+	#[test]
+	fn shallow_door_cell_entry_stays_connected() {
+		// ~2.7 m deep door cell + hinterland. Entry carve must not leave a thin
+		// remainder that pinches the entry off from the body.
+		let door = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(3.0, 3.0, 2.7)),
+				0.0,
+				{
+					let mut o = Openings::new();
+					o.insert(
+						OpeningId::new("door"),
+						Opening::new(
+							Aabb3d::from_min_max(
+								Vec3::new(0.9, 0.0, -0.15),
+								Vec3::new(2.1, 2.2, 0.15),
+							),
+							OpeningLabel::Passage,
+						),
+					);
+					o
+				},
+			),
+		);
+		let body = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 2.7), Vec3::new(6.0, 3.0, 12.0)),
+				0.0,
+				Openings::new(),
+			),
+		);
+		let (apt, _) =
+			LivableApartment::from_multi(0, &MultiConfines::new([door, body]), NoiseParams::default())
+				.unwrap();
+		let entry = apt
+			.rooms
+			.iter()
+			.find_map(|r| match r {
+				ApartmentRoom::Entryway { confines, .. } => Some(host_xz(&confines.bounds)),
+				_ => None,
+			})
+			.expect("entryway");
+		// Full door cell used as entry (no thin leftover gap).
+		assert!(
+			(entry.max.y - entry.min.y - 2.7).abs() < 0.05,
+			"expected full-depth entry, got {entry:?}"
+		);
+		let touches_body = apt.max_rects.iter().any(|r| {
+			shared_edge_span(entry, *r)
+				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= WALK_WIDTH * 0.5)
+		});
+		assert!(touches_body, "entry must share an edge with the body max-rect");
 	}
 }

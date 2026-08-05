@@ -163,16 +163,16 @@ pub fn group_cells_to_apartments(
 /// Pack hall-connected apartments against a target-area catalog (Les Halles door style).
 ///
 /// Walks `targets` in order. Each entry seeds an unassigned hall-frontage cell and
-/// grows by **well-connected** neighbors (shared edge ≥ `min_connectivity`) until
-/// the group area reaches the target (within ~15% undershoot). Pinch contacts
-/// shorter than `min_connectivity` do not join groups. Targets that cannot seed
-/// are skipped. Remaining frontage cells become force-one groups; orphans absorb
-/// into neighboring well-connected groups.
+/// grows by **pinch-safe** well-connected **landlocked** neighbors (shared edge ≥
+/// `min_connectivity`, and no shorter pinch against any existing member). Other
+/// hall-frontage cells are never grown into or absorbed — each keeps its own door
+/// seed / force-one suite. That avoids entryway "spur" apartments that only connect
+/// sideways while a partition seals the natural forward face.
 ///
-/// All input cells are considered (no min-size discard). `min_room_size` is kept
-/// for API stability but currently unused.
+/// Landlocked orphans absorb into the neighboring pinch-safe group with the
+/// longest shared contact; leftover frontage cells become force-one groups.
 ///
-/// Never emits a landlocked group (no hall frontage).
+/// Never emits a landlocked group (no hall frontage). `min_room_size` is unused.
 pub fn pack_apartments_to_targets(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
@@ -181,8 +181,6 @@ pub fn pack_apartments_to_targets(
 	min_connectivity: f32,
 ) -> Vec<Vec<u32>> {
 	let min_conn = min_connectivity.max(EPS);
-	// Keep every residual cell — discarding small scraps left gaps in group
-	// boundaries / wall runs after shaft-clearance carving.
 	let eligible: Vec<PlanCell> = cells.to_vec();
 	if eligible.is_empty() {
 		return Vec::new();
@@ -204,14 +202,14 @@ pub fn pack_apartments_to_targets(
 		let mut group = vec![seed];
 		assigned[seed] = true;
 		let mut area = eligible[seed].area();
-		// ~15% undershoot is acceptable (bay `allowed_error` analog).
 		let accept = target * 0.85;
 		while area + EPS < target {
-			let Some(next) = best_grow_candidate(&eligible, &assigned, &group, min_conn) else {
+			let Some(next) =
+				best_grow_candidate(&eligible, &assigned, &group, &frontage, min_conn)
+			else {
 				break;
 			};
 			let next_area = eligible[next].area();
-			// Stop if already in the accept band and the next cell would overshoot hard.
 			if area + EPS >= accept && area + next_area > target * 1.35 {
 				break;
 			}
@@ -222,9 +220,9 @@ pub fn pack_apartments_to_targets(
 		groups.push(group);
 	}
 
-	// Absorb orphans into a neighboring group that already has hall frontage.
+	// Landlocked orphans only — hall-frontage leftovers stay force-one seeds.
 	for i in 0..eligible.len() {
-		if assigned[i] {
+		if assigned[i] || frontage[i] {
 			continue;
 		}
 		if let Some(gi) = find_absorb_group(&eligible, &groups, i, min_conn) {
@@ -233,7 +231,6 @@ pub fn pack_apartments_to_targets(
 		}
 	}
 
-	// Force-one: leftover hall-frontage cells that never matched a catalog target.
 	for i in 0..eligible.len() {
 		if assigned[i] {
 			continue;
@@ -249,6 +246,23 @@ pub fn pack_apartments_to_targets(
 		.filter(|g| g.iter().any(|&i| frontage[i]))
 		.map(|g| g.into_iter().map(|i| eligible[i].id).collect())
 		.collect()
+}
+
+/// Join when ≥1 well-connected contact exists and no pinch against any member.
+fn can_join_group(cells: &[PlanCell], group: &[usize], candidate: usize, min_conn: f32) -> bool {
+	let cell = &cells[candidate];
+	let mut well = false;
+	for &gi in group {
+		let Some(len) = shared_edge_length(cells[gi].bounds, cell.bounds, EPS) else {
+			continue;
+		};
+		if len + EPS >= min_conn {
+			well = true;
+		} else if len > EPS {
+			return false;
+		}
+	}
+	well
 }
 
 /// Guillotine-split cells whose area exceeds `max_area`, stopping at `min_room`.
@@ -333,21 +347,17 @@ fn best_grow_candidate(
 	cells: &[PlanCell],
 	assigned: &[bool],
 	group: &[usize],
+	frontage: &[bool],
 	min_connectivity: f32,
 ) -> Option<usize> {
 	let mut best: Option<(usize, f32)> = None;
 	for (i, cell) in cells.iter().enumerate() {
-		if assigned[i] {
+		if assigned[i] || frontage[i] {
 			continue;
 		}
-		let touches = group
-			.iter()
-			.any(|&gi| cells_well_connected(&cells[gi], cell, min_connectivity, EPS));
-		if !touches {
+		if !can_join_group(cells, group, i, min_connectivity) {
 			continue;
 		}
-		// Prefer larger, less-skinny cells so groups stay walkable without a
-		// hard min-width reject.
 		let size = cell.size();
 		let aspect = size.x.max(size.y) / size.x.min(size.y).max(1e-3);
 		let score = cell.area() / aspect.sqrt();
@@ -366,22 +376,29 @@ fn find_absorb_group(
 	orphan: usize,
 	min_connectivity: f32,
 ) -> Option<usize> {
-	let mut best: Option<(usize, f32)> = None;
+	let mut best: Option<(usize, f32, f32)> = None; // gi, shared, area
 	for (gi, group) in groups.iter().enumerate() {
-		let touches = group.iter().any(|&ci| {
-			cells_well_connected(&cells[ci], &cells[orphan], min_connectivity, EPS)
-		});
-		if !touches {
+		if !can_join_group(cells, group, orphan, min_connectivity) {
 			continue;
+		}
+		let mut shared = 0.0_f32;
+		for &ci in group {
+			if let Some(len) = shared_edge_length(cells[ci].bounds, cells[orphan].bounds, EPS) {
+				if len + EPS >= min_connectivity {
+					shared = shared.max(len);
+				}
+			}
 		}
 		let area: f32 = group.iter().map(|&ci| cells[ci].area()).sum();
 		match best {
-			None => best = Some((gi, area)),
-			Some((_, ba)) if area < ba => best = Some((gi, area)),
+			None => best = Some((gi, shared, area)),
+			Some((_, bs, ba)) if shared > bs + EPS || ((shared - bs).abs() <= EPS && area < ba) => {
+				best = Some((gi, shared, area));
+			}
 			_ => {}
 		}
 	}
-	best.map(|(gi, _)| gi)
+	best.map(|(gi, _, _)| gi)
 }
 
 /// Decompose a rectilinear union of axis-aligned parts into large covering rectangles.
@@ -665,16 +682,16 @@ mod tests {
 
 	#[test]
 	fn pack_catalog_builds_multi_cell_group() {
-		// Four 3×3 cells along a hall; one 30 m² target should absorb more than one.
+		// Frontage seed + landlocked stack behind it — grow claims hinterland.
 		let rooms = vec![
-			cell(0, Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0)),
-			cell(1, Vec2::new(3.0, 0.0), Vec2::new(6.0, 3.0)),
-			cell(2, Vec2::new(6.0, 0.0), Vec2::new(9.0, 3.0)),
-			cell(3, Vec2::new(9.0, 0.0), Vec2::new(12.0, 3.0)),
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0)), // frontage
+			cell(1, Vec2::new(0.0, 3.0), Vec2::new(3.0, 6.0)),
+			cell(2, Vec2::new(0.0, 6.0), Vec2::new(3.0, 9.0)),
+			cell(3, Vec2::new(0.0, 9.0), Vec2::new(3.0, 12.0)),
 		];
 		let hall = Aabb2d {
-			min: Vec2::new(0.0, 3.0),
-			max: Vec2::new(12.0, 5.0),
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(3.0, 0.0),
 		};
 		let groups = pack_apartments_to_targets(
 			&rooms,
@@ -731,6 +748,34 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn grow_does_not_merge_side_by_side_frontage_into_spur() {
+		// Two hall-frontage cells side-by-side; landlocked stack north of the east
+		// cell. East should grow north; west stays its own door seed (no spur).
+		let rooms = vec![
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0)), // west frontage
+			cell(1, Vec2::new(3.0, 0.0), Vec2::new(6.0, 3.0)), // east frontage
+			cell(2, Vec2::new(3.0, 3.0), Vec2::new(6.0, 6.0)),
+			cell(3, Vec2::new(3.0, 6.0), Vec2::new(6.0, 9.0)),
+		];
+		let hall = Aabb2d {
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(6.0, 0.0),
+		};
+		let groups = pack_apartments_to_targets(
+			&rooms,
+			&[hall],
+			Vec2::new(2.0, 2.0),
+			&[30.0, 20.0],
+			MIN_GROUP_CONNECTIVITY,
+		);
+		let g0 = groups.iter().find(|g| g.contains(&0)).expect("cell 0 grouped");
+		assert!(
+			!g0.contains(&1),
+			"side-by-side frontage must not share a suite (spur): {groups:?}"
+		);
 	}
 
 	#[test]
