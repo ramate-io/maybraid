@@ -46,7 +46,9 @@ use richmond_buildings::{
 	IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall, LesHallesFloorPlan,
 	LesHallesFullStorey, LesHallesParameterized, LivableApartment, LivableApartments,
 	LivableApartmentsOptions, LivingRoom, MiniMart, MultiConfines, PartsStall, PublicRestroom,
-	ResidentialBathroom, ResidentialHalfBathroom, SittingRoom, SpaceKind, Study,
+	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectangularLivableAreaParameterized, passages_on_faces, ResidentialBathroom,
+	ResidentialHalfBathroom, SittingRoom, SpaceKind, Study,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -441,6 +443,8 @@ pub enum PreviewSubject {
 	LivableApartmentsExamples,
 	/// Side-by-side gallery of standalone [`LivableApartment`] layouts.
 	LivableApartmentExamples,
+	/// Side-by-side gallery of standalone [`RectangularLivableArea`] fits.
+	LivableRectanglesExamples,
 	/// HallsToShafts on a rectangular host (gizmo boxes for halls / openings / residuals).
 	HallsToShafts {
 		extent: Vec3,
@@ -977,6 +981,9 @@ impl PreviewConfig {
 			PreviewSubject::LivableApartmentExamples => {
 				"preview: livable-apartment-examples (gallery)".into()
 			}
+			PreviewSubject::LivableRectanglesExamples => {
+				"preview: livable-rectangles-examples (gallery)".into()
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -1054,6 +1061,7 @@ impl PreviewConfig {
 			}
 			PreviewSubject::LivableApartmentsExamples => livable_apartments_examples_bounds(),
 			PreviewSubject::LivableApartmentExamples => livable_apartment_examples_bounds(),
+			PreviewSubject::LivableRectanglesExamples => livable_rectangles_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
@@ -1271,6 +1279,7 @@ pub struct CachedPreview {
 	i_apartment_full_storey_examples: Vec<IApartmentFullStoreyExampleCell>,
 	livable_apartments_examples: Vec<LivableApartmentsExampleCell>,
 	livable_apartment_examples: Vec<LivableApartmentExampleCell>,
+	livable_rectangles_examples: Vec<LivableRectangleExampleCell>,
 	halls_to_shafts: Option<HallsToShaftsPreview>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
@@ -1361,6 +1370,13 @@ struct LivableApartmentExampleCell {
 	apartment: LivableApartment,
 }
 
+/// One cell in [`PreviewSubject::LivableRectanglesExamples`].
+#[derive(Clone)]
+struct LivableRectangleExampleCell {
+	offset: Vec3,
+	area: RectangularLivableArea,
+}
+
 /// One cell in [`PreviewSubject::PartsExamples`].
 #[derive(Clone)]
 struct PartsExampleCell {
@@ -1421,6 +1437,7 @@ impl CachedPreview {
 		self.i_apartment_full_storey_examples.clear();
 		self.livable_apartments_examples.clear();
 		self.livable_apartment_examples.clear();
+		self.livable_rectangles_examples.clear();
 		self.halls_to_shafts = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
@@ -1755,6 +1772,9 @@ impl CachedPreview {
 			PreviewSubject::LivableApartmentExamples => {
 				self.livable_apartment_examples = build_livable_apartment_examples();
 			}
+			PreviewSubject::LivableRectanglesExamples => {
+				self.livable_rectangles_examples = build_livable_rectangles_examples();
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -2026,6 +2046,22 @@ impl CachedPreview {
 			for cell in &self.livable_apartment_examples {
 				out.extend(
 					cell.apartment
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.livable_rectangles_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.livable_rectangles_examples {
+				out.extend(
+					cell.area
 						.label_nodes_for_level(LodSceneLevel::High)
 						.flatten()
 						.into_iter()
@@ -3356,7 +3392,6 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 	for part in apt.cells.iter() {
 		gizmos.aabb_3d(part.confines.bounds, tf, host);
 	}
-	// Walkway skeleton (unwalled circulation bands).
 	let y0 = apt
 		.cells
 		.parts
@@ -3369,6 +3404,24 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 		.first()
 		.map(|p| Vec3::from(p.confines.bounds.max).y)
 		.unwrap_or(3.0);
+	// Max-rect hosts (decomposition).
+	let max_c = Color::srgb(0.55, 0.65, 0.95);
+	for (ri, r) in apt.max_rects.iter().enumerate() {
+		let color = if ri % 2 == 0 {
+			max_c
+		} else {
+			Color::srgb(0.45, 0.55, 0.9)
+		};
+		gizmos.aabb_3d(
+			Aabb3d::from_min_max(
+				Vec3::new(r.min.x, y0, r.min.y),
+				Vec3::new(r.max.x, y1, r.max.y),
+			),
+			tf,
+			color,
+		);
+	}
+	// Walkway / open hall bands.
 	let walk = Color::srgb(0.95, 0.85, 0.25);
 	for (wi, band) in apt.walkways.iter().enumerate() {
 		let color = if wi % 2 == 0 {
@@ -3390,6 +3443,9 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 			ApartmentRoom::Entryway { confines, .. } => {
 				(confines.bounds, Color::srgb(0.25, 0.88, 0.92))
 			}
+			ApartmentRoom::OpenHall { confines, .. } => {
+				(confines.bounds, Color::srgb(0.95, 0.9, 0.35))
+			}
 			ApartmentRoom::HouseholdCloset { confines, .. } => {
 				(confines.bounds, Color::srgb(0.55, 0.55, 0.6))
 			}
@@ -3409,6 +3465,259 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 				(label_bounds(&r.room_type), Color::srgb(0.95, 0.65, 0.35))
 			}
 			ApartmentRoom::Study(r) => (label_bounds(&r.room_type), Color::srgb(0.75, 0.45, 0.85)),
+		};
+		gizmos.aabb_3d(bounds, tf, color);
+	}
+}
+
+const LIVABLE_RECT_GALLERY_COLS: usize = 4;
+const LIVABLE_RECT_GALLERY_GAP: f32 = 6.0;
+
+#[derive(Clone, Copy)]
+struct LivableRectangleExampleSpec {
+	extent: Vec2,
+	height: f32,
+	ports: &'static [(CardinalFace, f32)],
+	strategy: RectLivableStrategy,
+	seed: i32,
+	program: &'static [RectQuarterKind],
+}
+
+fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
+	use CardinalFace::*;
+	use RectLivableStrategy::*;
+	use RectQuarterKind::*;
+	vec![
+		// Small, 1 south door, SingleClosed
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(4.0, 5.0),
+			height: 3.0,
+			ports: &[(South, 0.5)],
+			strategy: SingleClosed,
+			seed: 1,
+			program: &[Bedroom],
+		},
+		// Small, CaseAttempt
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(5.0, 6.0),
+			height: 3.0,
+			ports: &[(South, 0.5)],
+			strategy: CaseAttempt,
+			seed: 2,
+			program: &[Living, Bathroom],
+		},
+		// Medium AllOpen, 1 port
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(8.0, 10.0),
+			height: 3.0,
+			ports: &[(South, 0.5)],
+			strategy: AllOpen,
+			seed: 3,
+			program: &[Living, Kitchen],
+		},
+		// Opposite ports + SpineHall
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(8.0, 10.0),
+			height: 3.0,
+			ports: &[(South, 0.5), (North, 0.5)],
+			strategy: SpineHall,
+			seed: 4,
+			program: &[Living, Bedroom, Bathroom],
+		},
+		// Adjacent (L) ports
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(9.0, 8.0),
+			height: 3.0,
+			ports: &[(South, 0.35), (East, 0.5)],
+			strategy: CaseAttempt,
+			seed: 5,
+			program: &[Living, Kitchen, Bedroom],
+		},
+		// 3 ports
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(10.0, 10.0),
+			height: 3.2,
+			ports: &[(South, 0.5), (North, 0.35), (West, 0.5)],
+			strategy: SpineHall,
+			seed: 6,
+			program: &[Living, Bedroom, Bathroom, Kitchen],
+		},
+		// Large Guillotine
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(12.0, 14.0),
+			height: 3.2,
+			ports: &[(South, 0.5)],
+			strategy: GuillotineSplit,
+			seed: 7,
+			program: &[Living, Kitchen, Bedroom, Bathroom, Dining],
+		},
+		// Large CaseAttempt, 2 opposite
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(12.0, 16.0),
+			height: 3.2,
+			ports: &[(South, 0.4), (North, 0.6)],
+			strategy: CaseAttempt,
+			seed: 8,
+			program: &[Living, Kitchen, Bedroom, Bedroom, Bathroom],
+		},
+		// Compact 3×4 SingleClosed
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(3.5, 4.5),
+			height: 3.0,
+			ports: &[(South, 0.5)],
+			strategy: SingleClosed,
+			seed: 9,
+			program: &[Bathroom],
+		},
+		// Medium AllOpen adjacent ports
+		LivableRectangleExampleSpec {
+			extent: Vec2::new(7.0, 7.0),
+			height: 3.0,
+			ports: &[(South, 0.5), (West, 0.5)],
+			strategy: AllOpen,
+			seed: 10,
+			program: &[Living, Sitting],
+		},
+	]
+}
+
+fn livable_rectangles_examples_bounds() -> Aabb3d {
+	let cells = build_livable_rectangles_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| {
+			let e = cells[i].area.confines.footprint();
+			let h = {
+				let b = cells[i].area.confines.bounds;
+				Vec3::from(b.max).y - Vec3::from(b.min).y
+			};
+			Vec3::new(e.x, h, e.y)
+		},
+		cells.len(),
+		LIVABLE_RECT_GALLERY_COLS,
+		LIVABLE_RECT_GALLERY_GAP,
+	)
+}
+
+fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
+	let specs = livable_rectangles_examples_specs();
+	let mut fitted = Vec::new();
+	for (si, spec) in specs.iter().enumerate() {
+		let host = bevy_math::bounding::Aabb2d {
+			min: Vec2::ZERO,
+			max: spec.extent,
+		};
+		let openings = passages_on_faces(host, 0.0, spec.height, spec.ports);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(
+				Vec3::ZERO,
+				Vec3::new(spec.extent.x, spec.height, spec.extent.y),
+			),
+			0.0,
+			openings,
+		);
+		let params = RectangularLivableAreaParameterized {
+			strategy: spec.strategy,
+			min_hall: 1.0,
+			closed_max_area: 36.0,
+		};
+		let noise = NoiseParams {
+			seed: spec.seed,
+			..NoiseParams::default()
+		};
+		match RectangularLivableArea::fit_with_params(&confines, noise, params, spec.program) {
+			Ok((area, _)) => fitted.push(area),
+			Err(err) => {
+				bevy::log::error!(
+					"livable-rectangles-examples[{si}] (seed={}) failed: {err}",
+					spec.seed
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(|a| {
+			let fp = a.confines.footprint();
+			let h = Vec3::from(a.confines.bounds.max).y - Vec3::from(a.confines.bounds.min).y;
+			(Vec3::ZERO, Vec3::new(fp.x, h, fp.y))
+		})
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, area)| {
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				LIVABLE_RECT_GALLERY_COLS,
+				LIVABLE_RECT_GALLERY_GAP,
+			);
+			LivableRectangleExampleCell {
+				offset: cell_origin,
+				area,
+			}
+		})
+		.collect()
+}
+
+fn draw_livable_rectangle_gizmos(
+	gizmos: &mut Gizmos,
+	area: &RectangularLivableArea,
+	tf: Transform,
+) {
+	let y0 = Vec3::from(area.confines.bounds.min).y;
+	let y1 = Vec3::from(area.confines.bounds.max).y;
+	gizmos.aabb_3d(area.confines.bounds, tf, Color::srgb(0.7, 0.7, 0.78));
+	// Passage AABBs
+	for (_, o) in area.confines.openings.iter() {
+		if matches!(o.label, OpeningLabel::Passage) {
+			gizmos.aabb_3d(o.bounds, tf, Color::srgb(0.95, 0.35, 0.35));
+		}
+	}
+	// Hall bands
+	for (wi, band) in area.walkways.iter().enumerate() {
+		let color = if wi % 2 == 0 {
+			Color::srgb(0.95, 0.85, 0.25)
+		} else {
+			Color::srgb(0.9, 0.7, 0.2)
+		};
+		gizmos.aabb_3d(
+			Aabb3d::from_min_max(
+				Vec3::new(band.min.x, y0, band.min.y),
+				Vec3::new(band.max.x, y1, band.max.y),
+			),
+			tf,
+			color,
+		);
+	}
+	for room in &area.rooms {
+		let (bounds, color) = match room {
+			RectAreaRoom::OpenBand { confines, .. } => {
+				(confines.bounds, Color::srgb(0.95, 0.9, 0.35))
+			}
+			RectAreaRoom::HouseholdCloset { confines, .. } => {
+				(confines.bounds, Color::srgb(0.55, 0.55, 0.6))
+			}
+			RectAreaRoom::Bedroom(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.35, 0.55, 0.95))
+			}
+			RectAreaRoom::Living(r) => (label_bounds(&r.room_type), Color::srgb(0.95, 0.55, 0.25)),
+			RectAreaRoom::Kitchen(r) => (label_bounds(&r.room_type), Color::srgb(0.35, 0.9, 0.45)),
+			RectAreaRoom::Dining(r) => (label_bounds(&r.room_type), Color::srgb(0.45, 0.85, 0.35)),
+			RectAreaRoom::Bathroom(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.55, 0.75, 0.95))
+			}
+			RectAreaRoom::HalfBath(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.65, 0.8, 0.95))
+			}
+			RectAreaRoom::Sitting(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.95, 0.65, 0.35))
+			}
+			RectAreaRoom::Study(r) => (label_bounds(&r.room_type), Color::srgb(0.75, 0.45, 0.85)),
 		};
 		gizmos.aabb_3d(bounds, tf, color);
 	}
@@ -4839,6 +5148,16 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::LivableRectanglesExamples => {
+			for cell in &cache.livable_rectangles_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.area).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::HallsToShafts { .. } => {
 			// Gizmo-only preview (no BuildingComponents on HallsToShafts).
 		}
@@ -5374,6 +5693,12 @@ pub fn draw_opening_plan_gizmos(
 			for cell in &cache.livable_apartment_examples {
 				let cell_tf = tf * Transform::from_translation(cell.offset);
 				draw_livable_apartment_gizmos(&mut gizmos, &cell.apartment, cell_tf);
+			}
+		}
+		PreviewSubject::LivableRectanglesExamples => {
+			for cell in &cache.livable_rectangles_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				draw_livable_rectangle_gizmos(&mut gizmos, &cell.area, cell_tf);
 			}
 		}
 		PreviewSubject::Bedroom { .. }

@@ -1,25 +1,23 @@
-//! Livable apartment: entryway → walkway skeleton → private abut / common overlap.
+//! Livable apartment: entryway → max-rect decomposition → passage tree → RLA.
 //!
 //! Layout:
-//! 1. Carve an **entryway** box at the hall door.
-//! 2. Grow unwalled **walkway** bands (≥ [`WALK_WIDTH`]) from the entry through
-//!    the footprint (identification / circulation only — no panels).
-//! 3. Map total m² to a room-count program.
-//! 4. Pack **private** quarters (bedroom / bath / study) into pockets that
-//!    *abut* walkways with ≥1 m access; doors face the walkway.
-//! 5. Pack **common** quarters (living / kitchen / dining / sitting) into the
-//!    residual that *includes* walkways so open-plan rooms overlap circulation.
-//! 6. Leftovers stay [`SpaceKind::InternalSpace`] or become a household closet.
-//!    [`crate::IApartmentFullStorey`] maps leftover InternalSpace → ClosetSpace.
+//! 1. Carve an **entryway** box at the hall door (open).
+//! 2. Map total m² to a room-count program.
+//! 3. [`decompose_max_rects`] the remaining footprint.
+//! 4. Wire rects with a **spanning tree** of passages rooted at the entry.
+//! 5. Fit each rect with [`RectangularLivableArea`] (open/closed normalize).
+//! 6. Aggregate rooms / partitions / walkways; leftover scraps → InternalSpace
+//!    or household closet. [`crate::IApartmentFullStorey`] maps leftover
+//!    InternalSpace → ClosetSpace.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use procedural_common::{aabb2_area, Aabb2dPack, NoiseConfig, NoiseParams};
+use procedural_common::{aabb2_area, NoiseConfig, NoiseParams};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::{LabelNode, LabelStyle};
-use richmond_building_components::panels::{PanelNode, PanelStyle};
+use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{
@@ -27,10 +25,7 @@ use crate::fit::{
 };
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
-use crate::paneling::rect_fit::RectInset;
-use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
-use crate::shells::ortho::{standing_face_opening, WallEdge};
 use crate::shells::RectFloor;
 use crate::usage_areas::common_bedroom::CommonBedroom;
 use crate::usage_areas::label_util::label_filling_aabb;
@@ -38,17 +33,23 @@ use crate::usage_areas::livable_quarters::{
 	DiningRoom, Kitchen, LivingRoom, ResidentialBathroom, ResidentialHalfBathroom, SittingRoom,
 	Study,
 };
-use crate::usage_areas::plan_cells::{cells_edge_adjacent, subtract_aabb2, PlanCell};
+use crate::usage_areas::plan_cells::{
+	decompose_max_rects, shared_edge_span, subtract_aabb2,
+};
+use crate::usage_areas::rectangular_livable_area::{
+	RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectangularLivableAreaParameterized, DEFAULT_MIN_HALL,
+};
 
 const EPS: f32 = 1e-3;
 const DOOR_WIDTH: f32 = 1.0;
 const ENTRY_DEPTH: f32 = 1.8;
 const ENTRY_WIDTH: f32 = 2.2;
 const MIN_ROOM: f32 = 2.2;
-/// Clear width of apartment walkway bands (m).
-const WALK_WIDTH: f32 = 1.0;
-/// Minimum shared-edge length (m) for private-room access onto a walkway.
-const MIN_HALL_ACCESS: f32 = 1.0;
+/// Clear width of apartment walkway / access (m).
+const WALK_WIDTH: f32 = DEFAULT_MIN_HALL;
+/// Minimum shared-edge length (m) for inter-rect graph edges.
+const MIN_HALL_ACCESS: f32 = DEFAULT_MIN_HALL;
 const SCOPE: &str = "livable_apartment";
 
 /// One packed space inside an apartment.
@@ -70,12 +71,19 @@ pub enum ApartmentRoom {
 	HalfBath(ResidentialHalfBathroom),
 	Sitting(SittingRoom),
 	Study(Study),
+	/// Open hall band from a rectangular livable area (no furniture).
+	OpenHall {
+		label: LabelNode,
+		confines: Confines,
+	},
 }
 
 impl ApartmentRoom {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		match self {
-			Self::Entryway { .. } | Self::HouseholdCloset { .. } => Layers::new(),
+			Self::Entryway { .. }
+			| Self::HouseholdCloset { .. }
+			| Self::OpenHall { .. } => Layers::new(),
 			Self::Bedroom(r) => r.panel_nodes_for_level(level),
 			Self::Living(r) => r.panel_nodes_for_level(level),
 			Self::Kitchen(r) => r.panel_nodes_for_level(level),
@@ -89,7 +97,9 @@ impl ApartmentRoom {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		match self {
-			Self::Entryway { .. } | Self::HouseholdCloset { .. } => Layers::new(),
+			Self::Entryway { .. }
+			| Self::HouseholdCloset { .. }
+			| Self::OpenHall { .. } => Layers::new(),
 			Self::Bedroom(r) => r.joint_nodes_for_level(level),
 			Self::Living(r) => r.joint_nodes_for_level(level),
 			Self::Kitchen(r) => r.joint_nodes_for_level(level),
@@ -103,7 +113,9 @@ impl ApartmentRoom {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		match self {
-			Self::Entryway { label, .. } | Self::HouseholdCloset { label, .. } => {
+			Self::Entryway { label, .. }
+			| Self::HouseholdCloset { label, .. }
+			| Self::OpenHall { label, .. } => {
 				let mut out = Layers::new();
 				out.push_free(label.clone());
 				out
@@ -121,7 +133,9 @@ impl ApartmentRoom {
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		match self {
-			Self::Entryway { .. } | Self::HouseholdCloset { .. } => Layers::new(),
+			Self::Entryway { .. }
+			| Self::HouseholdCloset { .. }
+			| Self::OpenHall { .. } => Layers::new(),
 			Self::Bedroom(r) => r.furniture_nodes_for_level(level),
 			Self::Living(r) => r.furniture_nodes_for_level(level),
 			Self::Kitchen(r) => r.furniture_nodes_for_level(level),
@@ -132,18 +146,25 @@ impl ApartmentRoom {
 			Self::Study(r) => r.furniture_nodes_for_level(level),
 		}
 	}
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum QuarterKind {
-	Bedroom,
-	Living,
-	Kitchen,
-	Dining,
-	Bathroom,
-	HalfBath,
-	Sitting,
-	Study,
+	fn is_closed(&self) -> bool {
+		matches!(
+			self,
+			Self::Bedroom(_) | Self::Bathroom(_) | Self::HalfBath(_) | Self::Study(_)
+		)
+	}
+
+	fn is_open_circ(&self) -> bool {
+		matches!(
+			self,
+			Self::Entryway { .. }
+				| Self::OpenHall { .. }
+				| Self::Living(_)
+				| Self::Kitchen(_)
+				| Self::Dining(_)
+				| Self::Sitting(_)
+		)
+	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -158,18 +179,20 @@ struct ProgramCounts {
 	studies: u8,
 }
 
-/// One apartment group: envelope + entryway / common / private quarters.
+/// One apartment group: envelope + entryway / rectangular livable areas.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LivableApartment {
 	pub region_id: u32,
 	/// Envelope cells that make up this apartment.
 	pub cells: MultiConfines,
-	/// Packed spaces (entryway, quarters, household closets).
+	/// Packed spaces (entryway, quarters, household closets, open halls).
 	pub rooms: Vec<ApartmentRoom>,
 	/// Unwalled circulation bands (≥ [`WALK_WIDTH`]); identification only.
 	pub walkways: Vec<Aabb2d>,
 	/// Partition strips for bedrooms / bathrooms (with connecting passages).
 	pub partitions: Vec<ClippedRectangularStrip>,
+	/// Max-rect hosts used for layout (gizmos / debug).
+	pub max_rects: Vec<Aabb2d>,
 	/// Optional envelope shell for the primary / first cell (presentation).
 	pub shell: Option<RectFloor>,
 }
@@ -227,8 +250,8 @@ impl LivableApartment {
 
 		let mut rooms = Vec::new();
 		let mut residual_within = Vec::new();
-		// `(confines, needs_apartment_walls)` — walls only for bedrooms / baths.
-		let mut filled_confines: Vec<(Confines, bool)> = Vec::new();
+		let mut walkways = Vec::new();
+		let mut partitions = Vec::new();
 
 		// --- Entryway on the door cell ------------------------------------
 		let (door_ci, mut work_rects) = collect_work_rects(cells);
@@ -236,6 +259,7 @@ impl LivableApartment {
 		let door_opening = find_entry_door(&cells.parts[door_ci].confines.openings)
 			.or_else(|| find_entry_door(&cells.parts[0].confines.openings));
 
+		let mut entry_xz = None;
 		if let Some((_id, door)) = door_opening {
 			if let Some((entry, rem)) = carve_entryway(door_cell, &door, ENTRY_DEPTH, ENTRY_WIDTH)
 			{
@@ -247,25 +271,24 @@ impl LivableApartment {
 						&entry_c.bounds,
 						roll,
 					),
-					confines: entry_c.clone(),
+					confines: entry_c,
 				});
-				// Entryway is open to the common plan — no apartment walls.
-				filled_confines.push((entry_c, false));
-				// Replace door cell in work_rects with carve remainders.
-				work_rects.retain(|r| aabb2_area(*r) > EPS * EPS);
-				// Drop the original door-cell footprint if still present.
-				work_rects.retain(|r| !aabb2_near_eq(*r, door_cell));
-				work_rects.extend(rem);
+				walkways.push(entry);
+				entry_xz = Some(entry);
+				// Replace the door-cell footprint with carve remainders (do not
+				// leave the uncut cell in `work_rects`).
+				work_rects = work_rects
+					.into_iter()
+					.filter(|r| !aabb2_near_eq(*r, door_cell))
+					.chain(rem)
+					.filter(|r| aabb2_area(*r) > EPS * EPS)
+					.collect();
 			}
 		}
 
 		work_rects.retain(|r| {
 			let s = r.max - r.min;
 			s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(*r) > 4.0
-		});
-		let entry_xz = rooms.iter().find_map(|r| match r {
-			ApartmentRoom::Entryway { confines, .. } => Some(host_xz(&confines.bounds)),
-			_ => None,
 		});
 		if work_rects.is_empty() {
 			if rooms.is_empty() {
@@ -278,8 +301,9 @@ impl LivableApartment {
 					region_id,
 					cells: cells.clone(),
 					rooms,
-					walkways: Vec::new(),
+					walkways,
 					partitions: Vec::new(),
+					max_rects: Vec::new(),
 					shell: None,
 				},
 				FillableRegions {
@@ -289,51 +313,140 @@ impl LivableApartment {
 			));
 		}
 
-		// --- Walkway skeleton (unwalled circulation) ----------------------
-		let walkways = grow_apartment_walkways(entry_xz, &work_rects);
+		// --- Max-rect decomposition ---------------------------------------
+		let mut max_rects = decompose_max_rects(&work_rects);
+		// Drop thin scraps that survived as maximal leaves (e.g. entry flanks).
+		max_rects.retain(|r| {
+			let s = r.max - r.min;
+			s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(*r) > 8.0
+		});
+		if max_rects.is_empty() {
+			return Err(FitError::TooSmall {
+				reason: "livable_no_rects",
+			});
+		}
 
-		// Private pockets: footprint minus walkways; must abut a walkway.
-		let mut private_free = subtract_walkways(&work_rects, &walkways);
-		private_free.retain(|r| rect_usable(*r, 3.0));
+		// --- Passage spanning tree ----------------------------------------
+		let root = pick_root_rect(&max_rects, entry_xz);
+		let tree_edges = spanning_tree_edges(&max_rects, root, MIN_HALL_ACCESS);
+		let mut rect_openings: Vec<Openings> = (0..max_rects.len()).map(|_| Openings::new()).collect();
 
-		pack_kinds_abutting_walkways(
-			&mut private_free,
-			&private_kind_list(program),
-			&walkways,
-			y0,
-			y1,
-			roll,
-			noise,
-			&mut rooms,
-			&mut filled_confines,
-			&mut residual_within,
-		)?;
+		// Entry → root passage when they share an edge.
+		if let Some(entry) = entry_xz {
+			if let Some((along_x, lo, hi, mid)) = shared_edge_span(entry, max_rects[root]) {
+				if hi - lo + EPS >= MIN_HALL_ACCESS {
+					if let Some((id, opening)) = connecting_passage(
+						along_x,
+						lo,
+						hi,
+						mid,
+						y0,
+						y1,
+						region_id,
+						9990,
+						root as u32,
+					) {
+						rect_openings[root].insert(id, opening);
+					}
+				}
+			}
+		}
 
-		// Common free: footprint minus packed non-entry slots (walkways stay → overlap).
-		let occupied: Vec<Aabb2d> = rooms
-			.iter()
-			.zip(filled_confines.iter())
-			.filter(|(room, _)| !matches!(room, ApartmentRoom::Entryway { .. }))
-			.map(|(_, (c, _))| host_xz(&c.bounds))
-			.collect();
-		let mut common_free = subtract_walkways(&work_rects, &occupied);
-		common_free.retain(|r| rect_usable(*r, 4.0) || aabb2_area(*r) > 6.0);
+		for &(a, b) in &tree_edges {
+			let Some((along_x, lo, hi, mid)) = shared_edge_span(max_rects[a], max_rects[b]) else {
+				continue;
+			};
+			let Some((id, opening)) = connecting_passage(
+				along_x,
+				lo,
+				hi,
+				mid,
+				y0,
+				y1,
+				region_id,
+				a as u32,
+				b as u32,
+			) else {
+				continue;
+			};
+			rect_openings[a].insert(id.clone(), opening.clone());
+			rect_openings[b].insert(id, opening);
+		}
 
-		pack_kinds_into_zone(
-			&mut common_free,
-			&common_kind_list(program),
-			y0,
-			y1,
-			roll,
-			noise,
-			&mut rooms,
-			&mut filled_confines,
-			&mut residual_within,
-		)?;
+		// Program slices by area share.
+		let kind_list = full_kind_list(program);
+		let slices = distribute_program(&kind_list, &max_rects);
 
-		for scrap in common_free.into_iter().chain(private_free) {
-			let confines = confines_from_xz(scrap, y0, y1, roll, &Openings::new());
-			push_leftover(&mut rooms, &mut residual_within, &mut filled_confines, confines);
+		for (ri, rect) in max_rects.iter().enumerate() {
+			let confines = confines_from_xz(*rect, y0, y1, roll, &rect_openings[ri]);
+			// Seed without ports still needs a synthetic lip toward root/entry
+			// so AllOpen normalize can succeed when tree edge insert failed.
+			let confines = ensure_passage_or_synthetic(
+				confines,
+				*rect,
+				entry_xz,
+				&max_rects,
+				root,
+				ri,
+				y0,
+				y1,
+				region_id,
+			);
+			let params = RectangularLivableAreaParameterized {
+				strategy: RectLivableStrategy::CaseAttempt,
+				min_hall: WALK_WIDTH,
+				closed_max_area: 36.0,
+			};
+			let cell_noise = noise_for_cell(noise, (region_id as i32).wrapping_add(ri as i32 * 17));
+			match RectangularLivableArea::fit_with_params(
+				&confines,
+				cell_noise,
+				params,
+				&slices[ri],
+			) {
+				Ok((rla, nested)) => {
+					walkways.extend(rla.walkways.iter().copied());
+					partitions.extend(rla.partitions);
+					for room in rla.rooms {
+						rooms.push(map_rla_room(room));
+					}
+					residual_within.extend(nested.within);
+				}
+				Err(FitError::TooSmall { .. }) => {
+					// Soft-fail: whole rect as open hall / residual.
+					let c = confines;
+					rooms.push(ApartmentRoom::OpenHall {
+						label: label_filling_aabb(
+							LabelStyle::Cyan,
+							"OpenHall",
+							&c.bounds,
+							roll,
+						),
+						confines: c.clone(),
+					});
+					walkways.push(*rect);
+					if aabb2_area(*rect) < 8.0 {
+						residual_within.push(FillRegion::new(SpaceKind::InternalSpace, c));
+					}
+				}
+				Err(err) => return Err(err),
+			}
+		}
+
+		// Scraps from original work not covered by max_rects (should be tiny).
+		let covered_area: f32 = max_rects.iter().map(|r| aabb2_area(*r)).sum();
+		let work_area: f32 = work_rects.iter().map(|r| aabb2_area(*r)).sum();
+		if work_area > covered_area + 1.0 {
+			for scrap in &work_rects {
+				let leftover = subtract_aabb2(*scrap, &max_rects);
+				for s in leftover {
+					if aabb2_area(s) < EPS {
+						continue;
+					}
+					let c = confines_from_xz(s, y0, y1, roll, &Openings::new());
+					push_leftover(&mut rooms, &mut residual_within, c);
+				}
+			}
 		}
 
 		if rooms.is_empty() {
@@ -342,7 +455,9 @@ impl LivableApartment {
 			});
 		}
 
-		let partitions = enclose_private_rooms(&filled_confines, region_id, &walkways);
+		// Apartment-level normalize: demote closed rooms that cannot reach entry.
+		normalize_apartment_circulation(&mut rooms, entry_xz, MIN_HALL_ACCESS);
+
 		Ok((
 			Self {
 				region_id,
@@ -350,6 +465,7 @@ impl LivableApartment {
 				rooms,
 				walkways,
 				partitions,
+				max_rects,
 				shell: None,
 			},
 			FillableRegions {
@@ -364,10 +480,26 @@ impl LivableApartment {
 	}
 }
 
+fn map_rla_room(room: RectAreaRoom) -> ApartmentRoom {
+	match room {
+		RectAreaRoom::OpenBand { label, confines } => ApartmentRoom::OpenHall { label, confines },
+		RectAreaRoom::HouseholdCloset { label, confines } => {
+			ApartmentRoom::HouseholdCloset { label, confines }
+		}
+		RectAreaRoom::Bedroom(r) => ApartmentRoom::Bedroom(r),
+		RectAreaRoom::Living(r) => ApartmentRoom::Living(r),
+		RectAreaRoom::Kitchen(r) => ApartmentRoom::Kitchen(r),
+		RectAreaRoom::Dining(r) => ApartmentRoom::Dining(r),
+		RectAreaRoom::Bathroom(r) => ApartmentRoom::Bathroom(r),
+		RectAreaRoom::HalfBath(r) => ApartmentRoom::HalfBath(r),
+		RectAreaRoom::Sitting(r) => ApartmentRoom::Sitting(r),
+		RectAreaRoom::Study(r) => ApartmentRoom::Study(r),
+	}
+}
+
 fn program_from_area(area: f32, noise: NoiseParams, center: Vec3) -> ProgramCounts {
 	let cfg = NoiseConfig::new(noise);
 	let jitter = cfg.sample_range_f32_4d(0.0, 1.0, center.x, center.y, center.z, 44.0);
-	// Counts are aspirational; greedy packing skips what will not fit.
 	if area < 36.0 {
 		ProgramCounts {
 			bedrooms: 0,
@@ -415,41 +547,71 @@ fn program_from_area(area: f32, noise: NoiseParams, center: Vec3) -> ProgramCoun
 	}
 }
 
-fn common_kind_list(p: ProgramCounts) -> Vec<QuarterKind> {
+fn full_kind_list(p: ProgramCounts) -> Vec<RectQuarterKind> {
 	let mut out = Vec::new();
 	for _ in 0..p.living {
-		out.push(QuarterKind::Living);
+		out.push(RectQuarterKind::Living);
 	}
 	for _ in 0..p.kitchens {
-		out.push(QuarterKind::Kitchen);
+		out.push(RectQuarterKind::Kitchen);
 	}
 	for _ in 0..p.dining {
-		out.push(QuarterKind::Dining);
+		out.push(RectQuarterKind::Dining);
 	}
 	for _ in 0..p.sitting {
-		out.push(QuarterKind::Sitting);
+		out.push(RectQuarterKind::Sitting);
+	}
+	for _ in 0..p.bedrooms {
+		out.push(RectQuarterKind::Bedroom);
+	}
+	for _ in 0..p.bathrooms {
+		out.push(RectQuarterKind::Bathroom);
+	}
+	for _ in 0..p.half_baths {
+		out.push(RectQuarterKind::HalfBath);
+	}
+	for _ in 0..p.studies {
+		out.push(RectQuarterKind::Study);
 	}
 	if out.is_empty() {
-		out.push(QuarterKind::Living);
+		out.push(RectQuarterKind::Living);
 	}
 	out
 }
 
-fn private_kind_list(p: ProgramCounts) -> Vec<QuarterKind> {
-	let mut out = Vec::new();
-	for _ in 0..p.bedrooms {
-		out.push(QuarterKind::Bedroom);
+fn distribute_program(kinds: &[RectQuarterKind], rects: &[Aabb2d]) -> Vec<Vec<RectQuarterKind>> {
+	let n = rects.len();
+	let mut slices = vec![Vec::new(); n];
+	if n == 0 {
+		return slices;
 	}
-	for _ in 0..p.bathrooms {
-		out.push(QuarterKind::Bathroom);
+	let areas: Vec<f32> = rects.iter().map(|r| aabb2_area(*r)).collect();
+	let total: f32 = areas.iter().sum::<f32>().max(EPS);
+	// Pack closed kinds first into the largest rects, then open kinds.
+	let mut ordered: Vec<RectQuarterKind> = kinds.to_vec();
+	ordered.sort_by_key(|k| if k.is_closed() { 0u8 } else { 1u8 });
+	let mut load = vec![0.0_f32; n];
+	let targets: Vec<f32> = areas.iter().map(|a| a / total).collect();
+	for kind in ordered {
+		let mut best = 0usize;
+		let mut best_score = f32::NEG_INFINITY;
+		for i in 0..n {
+			let closed_bonus = if kind.is_closed() { areas[i] * 0.02 } else { 0.0 };
+			let score = targets[i] - load[i] / total.max(1.0) + areas[i] * 1e-4 + closed_bonus;
+			if score > best_score {
+				best_score = score;
+				best = i;
+			}
+		}
+		slices[best].push(kind);
+		load[best] += if kind.is_closed() { 1.5 } else { 1.0 };
 	}
-	for _ in 0..p.half_baths {
-		out.push(QuarterKind::HalfBath);
+	for s in &mut slices {
+		if s.is_empty() {
+			s.push(RectQuarterKind::Living);
+		}
 	}
-	for _ in 0..p.studies {
-		out.push(QuarterKind::Study);
-	}
-	out
+	slices
 }
 
 fn collect_work_rects(cells: &MultiConfines) -> (usize, Vec<Aabb2d>) {
@@ -474,7 +636,6 @@ fn find_entry_door(openings: &Openings) -> Option<(OpeningId, Opening)> {
 		.map(|(id, o)| (id.clone(), o.clone()))
 }
 
-/// Carve a shallow entry box inward from the door contact edge.
 fn carve_entryway(
 	host: Aabb2d,
 	door: &Opening,
@@ -485,9 +646,10 @@ fn carve_entryway(
 	let dmax = Vec3::from(door.bounds.max);
 	let dc = Vec2::new(0.5 * (dmin.x + dmax.x), 0.5 * (dmin.z + dmax.z));
 	let depth = depth.clamp(1.2, 2.8);
-	let width = width.clamp(1.4, host.max.x - host.min.x - EPS).min(host.max.y - host.min.y - EPS);
+	let width = width
+		.clamp(1.4, host.max.x - host.min.x - EPS)
+		.min(host.max.y - host.min.y - EPS);
 
-	// Pick the host edge closest to the door center.
 	let dist_w = (dc.x - host.min.x).abs();
 	let dist_e = (dc.x - host.max.x).abs();
 	let dist_s = (dc.y - host.min.y).abs();
@@ -501,7 +663,6 @@ fn carve_entryway(
 	let half_w = width * 0.5;
 	let entry = match edge {
 		0 => {
-			// west (−X), inward +X
 			let y0 = (dc.y - half_w).clamp(host.min.y, host.max.y - width);
 			Aabb2d {
 				min: Vec2::new(host.min.x, y0),
@@ -530,541 +691,241 @@ fn carve_entryway(
 			}
 		}
 	};
-	if aabb2_area(entry) < 1.5 {
-		return None;
-	}
 	let rem = subtract_aabb2(host, &[entry]);
 	Some((entry, rem))
 }
 
-/// Grow ≥[`WALK_WIDTH`] corridor bands from the entry through each footprint cell.
-fn grow_apartment_walkways(entry: Option<Aabb2d>, rects: &[Aabb2d]) -> Vec<Aabb2d> {
-	let w = WALK_WIDTH;
-	if rects.is_empty() {
+fn pick_root_rect(rects: &[Aabb2d], entry: Option<Aabb2d>) -> usize {
+	if let Some(entry) = entry {
+		let mut best = 0usize;
+		let mut best_score = f32::NEG_INFINITY;
+		for (i, r) in rects.iter().enumerate() {
+			let score = shared_edge_span(entry, *r)
+				.map(|(_, lo, hi, _)| hi - lo)
+				.unwrap_or(0.0)
+				+ 1.0 / (1.0 + (entry.center() - r.center()).length());
+			if score > best_score {
+				best_score = score;
+				best = i;
+			}
+		}
+		return best;
+	}
+	0
+}
+
+fn spanning_tree_edges(rects: &[Aabb2d], root: usize, min_access: f32) -> Vec<(usize, usize)> {
+	let n = rects.len();
+	if n <= 1 {
 		return Vec::new();
 	}
-	let mut halls: Vec<Aabb2d> = Vec::new();
-	let mut visited = vec![false; rects.len()];
-	let mut queue: Vec<usize> = Vec::new();
-
-	if let Some(entry) = entry {
-		for (i, r) in rects.iter().enumerate() {
-			if let Some((along_x, lo, hi, mid)) = shared_edge_span_raw(entry, *r) {
-				if hi - lo + EPS < MIN_HALL_ACCESS {
+	let mut adj: Vec<Vec<(usize, f32)>> = vec![Vec::new(); n];
+	for i in 0..n {
+		for j in (i + 1)..n {
+			if let Some((_, lo, hi, _)) = shared_edge_span(rects[i], rects[j]) {
+				let len = hi - lo;
+				if len + EPS >= min_access {
+					adj[i].push((j, len));
+					adj[j].push((i, len));
+				}
+			}
+		}
+	}
+	// Prim from root, prefer longer shared edges.
+	let mut in_tree = vec![false; n];
+	in_tree[root] = true;
+	let mut edges = Vec::new();
+	for _ in 1..n {
+		let mut best: Option<(usize, usize, f32)> = None;
+		for i in 0..n {
+			if !in_tree[i] {
+				continue;
+			}
+			for &(j, len) in &adj[i] {
+				if in_tree[j] {
 					continue;
 				}
-				if let Some(band) = corridor_into_host(*r, along_x, lo, hi, mid, w) {
-					halls.push(band);
+				if best.map(|(_, _, l)| len > l).unwrap_or(true) {
+					best = Some((i, j, len));
 				}
-				halls.push(spine_from_contact(*r, along_x, lo, hi, w));
-				visited[i] = true;
-				queue.push(i);
+			}
+		}
+		let Some((a, b, _)) = best else {
+			// Disconnected: attach nearest by center distance with a synthetic link skip.
+			break;
+		};
+		in_tree[b] = true;
+		edges.push((a, b));
+	}
+	edges
+}
+
+fn ensure_passage_or_synthetic(
+	mut confines: Confines,
+	rect: Aabb2d,
+	entry: Option<Aabb2d>,
+	rects: &[Aabb2d],
+	root: usize,
+	ri: usize,
+	y0: f32,
+	y1: f32,
+	region_id: u32,
+) -> Confines {
+	let has = confines
+		.openings
+		.iter()
+		.any(|(_, o)| matches!(o.label, OpeningLabel::Passage));
+	if has {
+		return confines;
+	}
+	// Prefer contact with entry, else with root rect.
+	let target = entry.or_else(|| rects.get(root).copied());
+	if let Some(t) = target {
+		if let Some((along_x, lo, hi, mid)) = shared_edge_span(rect, t) {
+			if let Some((id, opening)) =
+				connecting_passage(along_x, lo, hi, mid, y0, y1, region_id, ri as u32, 8888)
+			{
+				confines.openings.insert(id, opening);
+				return confines;
 			}
 		}
 	}
-	if queue.is_empty() {
-		// No entry adjacency — spine the largest cell and BFS outward.
-		let Some((i, _)) = rects
-			.iter()
-			.enumerate()
-			.max_by(|a, b| {
-				aabb2_area(*a.1)
-					.partial_cmp(&aabb2_area(*b.1))
-					.unwrap_or(std::cmp::Ordering::Equal)
-			})
-		else {
-			return halls;
-		};
-		halls.push(spine_through(rects[i], w));
-		visited[i] = true;
-		queue.push(i);
-	}
+	// South-face synthetic door so RLA strategies have a port.
+	let door_w = DOOR_WIDTH.min(rect.max.x - rect.min.x - 0.2).max(0.7);
+	let half = door_w * 0.5;
+	let cx = 0.5 * (rect.min.x + rect.max.x);
+	let door_h = (y1 - y0).min(2.15).max(1.9);
+	confines.openings.insert(
+		OpeningId::scoped(SCOPE, "synthetic", format!("{region_id}_{ri}")),
+		Opening::new(
+			Aabb3d::from_min_max(
+				Vec3::new(cx - half, y0, rect.min.y - 0.12),
+				Vec3::new(cx + half, y0 + door_h, rect.min.y + 0.12),
+			),
+			OpeningLabel::Passage,
+		),
+	);
+	confines
+}
 
-	while let Some(i) = queue.pop() {
-		let r = rects[i];
-		for (j, other) in rects.iter().enumerate() {
-			if visited[j] {
+fn room_xz(room: &ApartmentRoom) -> Option<Aabb2d> {
+	match room {
+		ApartmentRoom::Entryway { confines, .. }
+		| ApartmentRoom::HouseholdCloset { confines, .. }
+		| ApartmentRoom::OpenHall { confines, .. } => Some(host_xz(&confines.bounds)),
+		ApartmentRoom::Bedroom(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Living(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Kitchen(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Dining(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Bathroom(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::HalfBath(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Sitting(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Study(r) => Some(label_xz(&r.room_type)),
+	}
+}
+
+fn label_xz(label: &LabelNode) -> Aabb2d {
+	let c = label.placement.translation;
+	let e = label.placement.scale;
+	Aabb2d {
+		min: Vec2::new(c.x - e.x * 0.5, c.z - e.z * 0.5),
+		max: Vec2::new(c.x + e.x * 0.5, c.z + e.z * 0.5),
+	}
+}
+
+/// Soft normalize: closed rooms must path-connect to entry via open regions.
+/// Violators become household closets / are left as-is only when already soft.
+fn normalize_apartment_circulation(
+	rooms: &mut Vec<ApartmentRoom>,
+	entry: Option<Aabb2d>,
+	min_hall: f32,
+) {
+	let Some(entry) = entry else {
+		return;
+	};
+	let open_rects: Vec<Aabb2d> = rooms
+		.iter()
+		.filter(|r| r.is_open_circ())
+		.filter_map(room_xz)
+		.chain(std::iter::once(entry))
+		.collect();
+	if open_rects.is_empty() {
+		return;
+	}
+	// BFS from entry through open rects.
+	let mut reach = vec![false; open_rects.len()];
+	let mut stack = Vec::new();
+	for (i, r) in open_rects.iter().enumerate() {
+		if aabb2_near_eq(*r, entry)
+			|| shared_edge_span(*r, entry).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.5)
+		{
+			reach[i] = true;
+			stack.push(i);
+		}
+	}
+	if stack.is_empty() {
+		reach[0] = true;
+		stack.push(0);
+	}
+	while let Some(i) = stack.pop() {
+		for j in 0..open_rects.len() {
+			if reach[j] {
 				continue;
 			}
-			let Some((along_x, lo, hi, mid)) = shared_edge_span_raw(r, *other) else {
-				continue;
+			let touch = shared_edge_span(open_rects[i], open_rects[j])
+				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.4);
+			if touch {
+				reach[j] = true;
+				stack.push(j);
+			}
+		}
+	}
+	let reachable_open: Vec<Aabb2d> = open_rects
+		.iter()
+		.zip(reach.iter())
+		.filter(|(_, r)| **r)
+		.map(|(a, _)| *a)
+		.collect();
+
+	for room in rooms.iter_mut() {
+		if !room.is_closed() {
+			continue;
+		}
+		let Some(cz) = room_xz(room) else {
+			continue;
+		};
+		let ok = reachable_open.iter().any(|o| {
+			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.5)
+		});
+		if !ok {
+			// Demote: replace with HouseholdCloset using label bounds.
+			let confines = Confines::new(
+				Aabb3d::from_min_max(
+					Vec3::new(cz.min.x, 0.0, cz.min.y),
+					Vec3::new(cz.max.x, 3.0, cz.max.y),
+				),
+				0.0,
+				Openings::new(),
+			);
+			*room = ApartmentRoom::HouseholdCloset {
+				label: label_filling_aabb(
+					LabelStyle::Gray,
+					"HouseholdCloset",
+					&confines.bounds,
+					0.0,
+				),
+				confines,
 			};
-			if hi - lo + EPS < MIN_HALL_ACCESS {
-				continue;
-			}
-			if let Some(band) = corridor_into_host(*other, along_x, lo, hi, mid, w) {
-				halls.push(band);
-			}
-			halls.push(spine_from_contact(*other, along_x, lo, hi, w));
-			visited[j] = true;
-			queue.push(j);
-		}
-	}
-	halls
-		.into_iter()
-		.filter(|h| {
-			let s = h.max - h.min;
-			s.x + EPS >= w * 0.9 && s.y + EPS >= w * 0.9 && aabb2_area(*h) > EPS
-		})
-		.collect()
-}
-
-fn shared_edge_span_raw(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
-	shared_edge_span(a, b)
-}
-
-fn corridor_into_host(
-	host: Aabb2d,
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-	w: f32,
-) -> Option<Aabb2d> {
-	let lo = lo.max(if along_x { host.min.x } else { host.min.y });
-	let hi = hi.min(if along_x { host.max.x } else { host.max.y });
-	if hi - lo + EPS < MIN_HALL_ACCESS {
-		return None;
-	}
-	if along_x {
-		// Horizontal contact (constant Z = mid).
-		let north = (host.min.y - mid).abs() < 0.08;
-		let (y0, y1) = if north {
-			(host.min.y, (host.min.y + w).min(host.max.y))
-		} else {
-			((host.max.y - w).max(host.min.y), host.max.y)
-		};
-		if y1 - y0 + EPS < w * 0.9 {
-			return None;
-		}
-		Some(Aabb2d {
-			min: Vec2::new(lo, y0),
-			max: Vec2::new(hi, y1),
-		})
-	} else {
-		let west = (host.min.x - mid).abs() < 0.08;
-		let (x0, x1) = if west {
-			(host.min.x, (host.min.x + w).min(host.max.x))
-		} else {
-			((host.max.x - w).max(host.min.x), host.max.x)
-		};
-		if x1 - x0 + EPS < w * 0.9 {
-			return None;
-		}
-		Some(Aabb2d {
-			min: Vec2::new(x0, lo),
-			max: Vec2::new(x1, hi),
-		})
-	}
-}
-
-fn spine_from_contact(host: Aabb2d, along_x: bool, lo: f32, hi: f32, w: f32) -> Aabb2d {
-	let center = 0.5 * (lo + hi);
-	if along_x {
-		// Entered from N/S — spine runs N–S (full Z), width w in X.
-		let x0 = (center - w * 0.5).clamp(host.min.x, (host.max.x - w).max(host.min.x));
-		Aabb2d {
-			min: Vec2::new(x0, host.min.y),
-			max: Vec2::new((x0 + w).min(host.max.x), host.max.y),
-		}
-	} else {
-		let y0 = (center - w * 0.5).clamp(host.min.y, (host.max.y - w).max(host.min.y));
-		Aabb2d {
-			min: Vec2::new(host.min.x, y0),
-			max: Vec2::new(host.max.x, (y0 + w).min(host.max.y)),
 		}
 	}
 }
 
-fn spine_through(host: Aabb2d, w: f32) -> Aabb2d {
-	let s = host.max - host.min;
-	if s.x >= s.y {
-		let y0 = (0.5 * (host.min.y + host.max.y) - w * 0.5)
-			.clamp(host.min.y, (host.max.y - w).max(host.min.y));
-		Aabb2d {
-			min: Vec2::new(host.min.x, y0),
-			max: Vec2::new(host.max.x, (y0 + w).min(host.max.y)),
-		}
-	} else {
-		let x0 = (0.5 * (host.min.x + host.max.x) - w * 0.5)
-			.clamp(host.min.x, (host.max.x - w).max(host.min.x));
-		Aabb2d {
-			min: Vec2::new(x0, host.min.y),
-			max: Vec2::new((x0 + w).min(host.max.x), host.max.y),
-		}
-	}
-}
-
-fn subtract_walkways(hosts: &[Aabb2d], cuts: &[Aabb2d]) -> Vec<Aabb2d> {
-	let mut out = Vec::new();
-	for host in hosts {
-		out.extend(subtract_aabb2(*host, cuts));
-	}
-	out
-}
-
-fn abuts_walkway(rect: Aabb2d, walkways: &[Aabb2d]) -> Option<(bool, f32, f32, f32)> {
-	let mut best: Option<(bool, f32, f32, f32, f32)> = None;
-	for hall in walkways {
-		let Some((along_x, lo, hi, mid)) = shared_edge_span(rect, *hall) else {
-			continue;
-		};
-		let len = hi - lo;
-		if len + EPS < MIN_HALL_ACCESS {
-			continue;
-		}
-		if best.map(|(_, _, _, _, bl)| len > bl).unwrap_or(true) {
-			best = Some((along_x, lo, hi, mid, len));
-		}
-	}
-	best.map(|(a, lo, hi, mid, _)| (a, lo, hi, mid))
-}
-
-/// Pack private quarters into pockets that share ≥[`MIN_HALL_ACCESS`] with a walkway.
-fn pack_kinds_abutting_walkways(
-	free: &mut Vec<Aabb2d>,
-	kinds: &[QuarterKind],
-	walkways: &[Aabb2d],
-	y0: f32,
-	y1: f32,
-	roll: f32,
-	noise: NoiseParams,
-	rooms: &mut Vec<ApartmentRoom>,
-	filled_confines: &mut Vec<(Confines, bool)>,
-	residual_within: &mut Vec<FillRegion>,
-) -> Result<(), FitError> {
-	for &kind in kinds {
-		let Some(host_i) = pick_abutting_host(free, walkways, kind) else {
-			continue;
-		};
-		let host = free.remove(host_i);
-		let cell_noise = noise_for_cell(noise, rooms.len() as i32);
-		let slot_id = rooms.len() as u32;
-		let (slot, rem) = take_slot_abutting(host, kind, walkways);
-		let needs_walls = kind_needs_apartment_walls(kind);
-		let openings = hall_facing_openings(slot, walkways, y0, y1, slot_id)
-			.unwrap_or_else(|| slot_passage_openings(slot, y0, y1, slot_id));
-		let confines = confines_from_xz(slot, y0, y1, roll, &openings);
-		match pack_quarter_into_cell(&confines, cell_noise, kind) {
-			Ok((room, nested)) => {
-				rooms.push(room);
-				filled_confines.push((confines, needs_walls));
-				residual_within.extend(nested.within);
-				return_remnants(free, rooms, residual_within, filled_confines, rem, y0, y1, roll);
-			}
-			Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
-				let openings = hall_facing_openings(host, walkways, y0, y1, slot_id)
-					.unwrap_or_else(|| slot_passage_openings(host, y0, y1, slot_id));
-				let confines = confines_from_xz(host, y0, y1, roll, &openings);
-				match pack_quarter_into_cell(&confines, cell_noise, kind) {
-					Ok((room, nested)) => {
-						rooms.push(room);
-						filled_confines.push((confines, needs_walls));
-						residual_within.extend(nested.within);
-					}
-					Err(FitError::TooSmall { .. }) => free.push(host),
-					Err(err) => return Err(err),
-				}
-			}
-			Err(FitError::TooSmall { .. }) => free.push(host),
-			Err(err) => return Err(err),
-		}
-	}
-	Ok(())
-}
-
-fn pick_abutting_host(free: &[Aabb2d], walkways: &[Aabb2d], kind: QuarterKind) -> Option<usize> {
-	let need = min_area_for(kind);
-	let mut best: Option<(usize, f32)> = None;
-	for (i, r) in free.iter().enumerate() {
-		if !rect_usable(*r, need) {
-			continue;
-		}
-		if abuts_walkway(*r, walkways).is_none() {
-			continue;
-		}
-		let a = aabb2_area(*r);
-		if best.map(|(_, ba)| a > ba).unwrap_or(true) {
-			best = Some((i, a));
-		}
-	}
-	best.map(|(i, _)| i)
-}
-
-fn take_slot_abutting(
-	host: Aabb2d,
-	kind: QuarterKind,
-	walkways: &[Aabb2d],
-) -> (Aabb2d, Vec<Aabb2d>) {
-	let (slot, rem) = take_slot(host, kind);
-	if abuts_walkway(slot, walkways).is_some() {
-		return (slot, rem);
-	}
-	// Prefer keeping the hall-facing side of the host intact.
-	if abuts_walkway(host, walkways).is_some() {
-		(host, Vec::new())
-	} else {
-		(slot, rem)
-	}
-}
-
-fn hall_facing_openings(
-	slot: Aabb2d,
-	walkways: &[Aabb2d],
-	y0: f32,
-	y1: f32,
-	slot_id: u32,
-) -> Option<Openings> {
-	let (along_x, lo, hi, mid) = abuts_walkway(slot, walkways)?;
-	let mut openings = Openings::new();
-	let door_w = DOOR_WIDTH.min(hi - lo - 0.1).clamp(0.7, 1.15);
-	let center = 0.5 * (lo + hi);
-	let half = door_w * 0.5;
-	let door_lo = (center - half).max(lo);
-	let door_hi = (center + half).min(hi);
-	let door_h = (y1 - y0).min(2.15).max(1.9);
-	let half_d = 0.12_f32;
-	let bounds = if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(door_lo, y0, mid - half_d),
-			Vec3::new(door_hi, y0 + door_h, mid + half_d),
-		)
-	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(mid - half_d, y0, door_lo),
-			Vec3::new(mid + half_d, y0 + door_h, door_hi),
-		)
-	};
-	openings.insert(
-		OpeningId::scoped(SCOPE, "hall_door", format!("{slot_id}")),
-		Opening::passage(bounds),
-	);
-	Some(openings)
-}
-
-/// Greedy: carve a slot for each kind from the zone free-rect pool; skip kinds
-/// that will not fit. Unconsumed free rects stay in `free` for leftover handling.
-fn pack_kinds_into_zone(
-	free: &mut Vec<Aabb2d>,
-	kinds: &[QuarterKind],
-	y0: f32,
-	y1: f32,
-	roll: f32,
-	noise: NoiseParams,
-	rooms: &mut Vec<ApartmentRoom>,
-	filled_confines: &mut Vec<(Confines, bool)>,
-	residual_within: &mut Vec<FillRegion>,
-) -> Result<(), FitError> {
-	for &kind in kinds {
-		let Some(host_i) = pick_host_index(free, kind) else {
-			continue;
-		};
-		let host = free.remove(host_i);
-		let cell_noise = noise_for_cell(noise, rooms.len() as i32);
-		let slot_id = rooms.len() as u32;
-		let (slot, rem) = take_slot(host, kind);
-		let needs_walls = kind_needs_apartment_walls(kind);
-		match try_pack_slot(slot, y0, y1, roll, cell_noise, kind, slot_id) {
-			Ok((room, confines, nested)) => {
-				rooms.push(room);
-				filled_confines.push((confines, needs_walls));
-				residual_within.extend(nested.within);
-				return_remnants(free, rooms, residual_within, filled_confines, rem, y0, y1, roll);
-			}
-			Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
-				// Carved slot was too awkward — retry the whole host.
-				match try_pack_slot(host, y0, y1, roll, cell_noise, kind, slot_id) {
-					Ok((room, confines, nested)) => {
-						rooms.push(room);
-						filled_confines.push((confines, needs_walls));
-						residual_within.extend(nested.within);
-					}
-					Err(FitError::TooSmall { .. }) => free.push(host),
-					Err(err) => return Err(err),
-				}
-			}
-			Err(FitError::TooSmall { .. }) => free.push(host),
-			Err(err) => return Err(err),
-		}
-	}
-	Ok(())
-}
-
-fn kind_needs_apartment_walls(kind: QuarterKind) -> bool {
-	matches!(
-		kind,
-		QuarterKind::Bedroom | QuarterKind::Bathroom | QuarterKind::HalfBath
-	)
-}
-
-fn try_pack_slot(
-	slot: Aabb2d,
-	y0: f32,
-	y1: f32,
-	roll: f32,
-	noise: NoiseParams,
-	kind: QuarterKind,
-	slot_id: u32,
-) -> Result<(ApartmentRoom, Confines, FillableRegions), FitError> {
-	let openings = slot_passage_openings(slot, y0, y1, slot_id);
-	let confines = confines_from_xz(slot, y0, y1, roll, &openings);
-	let (room, nested) = pack_quarter_into_cell(&confines, noise, kind)?;
-	Ok((room, confines, nested))
-}
-
-fn return_remnants(
-	free: &mut Vec<Aabb2d>,
-	rooms: &mut Vec<ApartmentRoom>,
-	residual_within: &mut Vec<FillRegion>,
-	filled_confines: &mut Vec<(Confines, bool)>,
-	rem: Vec<Aabb2d>,
-	y0: f32,
-	y1: f32,
-	roll: f32,
-) {
-	for r in rem {
-		if rect_usable(r, 4.0) {
-			free.push(r);
-		} else if aabb2_area(r) > EPS * EPS {
-			let scrap = confines_from_xz(r, y0, y1, roll, &Openings::new());
-			push_leftover(rooms, residual_within, filled_confines, scrap);
-		}
-	}
-}
-
-fn pick_host_index(free: &[Aabb2d], kind: QuarterKind) -> Option<usize> {
-	let need = min_area_for(kind);
-	let mut best: Option<(usize, f32)> = None;
-	for (i, r) in free.iter().enumerate() {
-		if !rect_usable(*r, need) {
-			continue;
-		}
-		let a = aabb2_area(*r);
-		if best.map(|(_, ba)| a > ba).unwrap_or(true) {
-			best = Some((i, a));
-		}
-	}
-	best.map(|(i, _)| i)
-}
-
-fn take_slot(host: Aabb2d, kind: QuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
-	let want = target_area_for(kind);
-	let host_a = aabb2_area(host);
-	if host_a < want * 1.7 {
-		return (host, Vec::new());
-	}
-	let frac = (want / host_a).clamp(0.28, 0.65);
-	let min_d = min_dim_for(kind);
-	// Prefer the cut that keeps the slot closer to square.
-	let candidates = [
-		host.bipartition_by_area(true, true, frac),
-		host.bipartition_by_area(false, true, frac),
-	];
-	let mut best: Option<(Aabb2d, Aabb2d, f32)> = None;
-	for (slot, rest) in candidates {
-		let ss = slot.max - slot.min;
-		if ss.x + EPS < min_d || ss.y + EPS < min_d {
-			continue;
-		}
-		let aspect = ss.x.max(ss.y) / ss.x.min(ss.y).max(1e-3);
-		if best.map(|(_, _, a)| aspect < a).unwrap_or(true) {
-			best = Some((slot, rest, aspect));
-		}
-	}
-	if let Some((slot, rest, _)) = best {
-		let mut rem = Vec::new();
-		if rect_usable(rest, 3.0) || aabb2_area(rest) > 2.0 {
-			rem.push(rest);
-		}
-		(slot, rem)
-	} else {
-		(host, Vec::new())
-	}
-}
-
-fn rect_usable(r: Aabb2d, min_area: f32) -> bool {
-	let s = r.max - r.min;
-	s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(r) + EPS >= min_area
-}
-
-fn target_area_for(kind: QuarterKind) -> f32 {
-	match kind {
-		QuarterKind::Bedroom => 18.0,
-		QuarterKind::Living => 16.0,
-		QuarterKind::Kitchen => 10.0,
-		QuarterKind::Dining => 10.0,
-		QuarterKind::Bathroom => 6.5,
-		QuarterKind::HalfBath => 3.5,
-		QuarterKind::Sitting => 10.0,
-		QuarterKind::Study => 9.0,
-	}
-}
-
-fn min_area_for(kind: QuarterKind) -> f32 {
-	match kind {
-		QuarterKind::Bedroom => 12.0,
-		QuarterKind::Living => 9.0,
-		QuarterKind::Kitchen => 5.0,
-		QuarterKind::Dining => 5.0,
-		QuarterKind::Bathroom => 4.5,
-		QuarterKind::HalfBath => 2.0,
-		QuarterKind::Sitting => 5.0,
-		QuarterKind::Study => 5.0,
-	}
-}
-
-fn min_dim_for(kind: QuarterKind) -> f32 {
-	match kind {
-		QuarterKind::Bedroom => 3.2,
-		QuarterKind::Bathroom | QuarterKind::HalfBath => 1.6,
-		_ => MIN_ROOM,
-	}
-}
-
-/// Authored passage on the longest cardinal edge so quarters can clear entry.
-fn slot_passage_openings(xz: Aabb2d, y0: f32, y1: f32, slot_id: u32) -> Openings {
-	let mut openings = Openings::new();
-	let sx = xz.max.x - xz.min.x;
-	let sz = xz.max.y - xz.min.y;
-	let door_w = DOOR_WIDTH.min(sx.max(sz) - 0.25).clamp(0.7, 1.15);
-	let half = door_w * 0.5;
-	let door_h = (y1 - y0).min(2.15).max(1.9);
-	let half_d = 0.12_f32;
-	let bounds = if sx >= sz {
-		// Prefer south (−Z / plan −Y).
-		let cx = 0.5 * (xz.min.x + xz.max.x);
-		let z = xz.min.y;
-		Aabb3d::from_min_max(
-			Vec3::new(cx - half, y0, z - half_d),
-			Vec3::new(cx + half, y0 + door_h, z + half_d),
-		)
-	} else {
-		let cz = 0.5 * (xz.min.y + xz.max.y);
-		let x = xz.min.x;
-		Aabb3d::from_min_max(
-			Vec3::new(x - half_d, y0, cz - half),
-			Vec3::new(x + half_d, y0 + door_h, cz + half),
-		)
-	};
-	openings.insert(
-		OpeningId::scoped(SCOPE, "room_door", format!("{slot_id}")),
-		Opening::passage(bounds),
-	);
-	openings
-}
-
-fn push_leftover(
-	rooms: &mut Vec<ApartmentRoom>,
-	residual_within: &mut Vec<FillRegion>,
-	filled_confines: &mut Vec<(Confines, bool)>,
-	confines: Confines,
-) {
+fn push_leftover(rooms: &mut Vec<ApartmentRoom>, residual: &mut Vec<FillRegion>, confines: Confines) {
 	let area = {
 		let fp = confines.footprint();
 		fp.x * fp.y
 	};
 	if (1.8..8.0).contains(&area) {
-		// Household closet is a room; Full* maps other InternalSpace leftovers.
 		rooms.push(ApartmentRoom::HouseholdCloset {
 			label: label_filling_aabb(
 				LabelStyle::Gray,
@@ -1072,11 +933,10 @@ fn push_leftover(
 				&confines.bounds,
 				confines.roll,
 			),
-			confines: confines.clone(),
+			confines,
 		});
-		filled_confines.push((confines, false));
 	} else {
-		residual_within.push(FillRegion::new(SpaceKind::InternalSpace, confines));
+		residual.push(FillRegion::new(SpaceKind::InternalSpace, confines));
 	}
 }
 
@@ -1084,62 +944,6 @@ fn noise_for_cell(noise: NoiseParams, cell: i32) -> NoiseParams {
 	NoiseParams {
 		seed: noise.seed.wrapping_add(cell.wrapping_mul(97)),
 		..noise
-	}
-}
-
-fn pack_quarter_into_cell(
-	confines: &Confines,
-	noise: NoiseParams,
-	preferred: QuarterKind,
-) -> Result<(ApartmentRoom, FillableRegions), FitError> {
-	let fallbacks: &[QuarterKind] = match preferred {
-		QuarterKind::Bedroom => &[QuarterKind::Bedroom, QuarterKind::Study, QuarterKind::Sitting],
-		QuarterKind::Living => &[QuarterKind::Living, QuarterKind::Sitting, QuarterKind::Dining],
-		QuarterKind::Kitchen => &[QuarterKind::Kitchen, QuarterKind::Dining],
-		QuarterKind::Dining => &[QuarterKind::Dining, QuarterKind::Kitchen, QuarterKind::Living],
-		QuarterKind::Bathroom => &[QuarterKind::Bathroom, QuarterKind::HalfBath],
-		QuarterKind::HalfBath => &[QuarterKind::HalfBath, QuarterKind::Bathroom],
-		QuarterKind::Sitting => &[QuarterKind::Sitting, QuarterKind::Living, QuarterKind::Study],
-		QuarterKind::Study => &[QuarterKind::Study, QuarterKind::Bedroom, QuarterKind::Sitting],
-	};
-	let mut last_err = FitError::TooSmall {
-		reason: "livable_quarter",
-	};
-	for &kind in fallbacks {
-		match try_fit_kind(kind, confines, noise) {
-			Ok(ok) => return Ok(ok),
-			Err(FitError::TooSmall { .. }) => continue,
-			Err(err) => {
-				last_err = err;
-				break;
-			}
-		}
-	}
-	Err(last_err)
-}
-
-fn try_fit_kind(
-	kind: QuarterKind,
-	confines: &Confines,
-	noise: NoiseParams,
-) -> Result<(ApartmentRoom, FillableRegions), FitError> {
-	match kind {
-		QuarterKind::Bedroom => CommonBedroom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Bedroom(r), n)),
-		QuarterKind::Living => LivingRoom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Living(r), n)),
-		QuarterKind::Kitchen => Kitchen::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Kitchen(r), n)),
-		QuarterKind::Dining => DiningRoom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Dining(r), n)),
-		QuarterKind::Bathroom => ResidentialBathroom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Bathroom(r), n)),
-		QuarterKind::HalfBath => ResidentialHalfBathroom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::HalfBath(r), n)),
-		QuarterKind::Sitting => SittingRoom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Sitting(r), n)),
-		QuarterKind::Study => Study::fit_to_confines(confines, noise)
-			.map(|(r, n)| (ApartmentRoom::Study(r), n)),
 	}
 }
 
@@ -1170,222 +974,6 @@ fn aabb2_near_eq(a: Aabb2d, b: Aabb2d) -> bool {
 		&& (a.max.y - b.max.y).abs() < 0.05
 }
 
-/// Partition walls only for bedrooms / bathrooms (open-plan otherwise).
-///
-/// Shared edges involving a private room get a wall (+ door when possible).
-/// Remaining private perimeter faces (against residual / open plan) are enclosed
-/// the same way; common rooms and the entryway get no apartment walls.
-fn enclose_private_rooms(
-	filled: &[(Confines, bool)],
-	apartment_id: u32,
-	walkways: &[Aabb2d],
-) -> Vec<ClippedRectangularStrip> {
-	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
-	let mut partitions = Vec::new();
-	if filled.is_empty() {
-		return partitions;
-	}
-
-	let cells: Vec<PlanCell> = filled
-		.iter()
-		.enumerate()
-		.map(|(ci, (c, _))| {
-			let min = Vec3::from(c.bounds.min);
-			let max = Vec3::from(c.bounds.max);
-			PlanCell::new(
-				ci as u32,
-				Aabb2d {
-					min: Vec2::new(min.x, min.z),
-					max: Vec2::new(max.x, max.z),
-				},
-			)
-		})
-		.collect();
-	let needs: Vec<bool> = filled.iter().map(|(_, n)| *n).collect();
-	let entry_center = filled.first().map(|(c, _)| {
-		let min = Vec3::from(c.bounds.min);
-		let max = Vec3::from(c.bounds.max);
-		Vec2::new(0.5 * (min.x + max.x), 0.5 * (min.z + max.z))
-	});
-
-	let mut door_for: Vec<bool> = vec![false; cells.len()];
-
-	// Shared edges: wall when a private room is involved.
-	for i in 0..cells.len() {
-		if !needs[i] {
-			continue;
-		}
-		for j in (i + 1)..cells.len() {
-			if !cells_edge_adjacent(&cells[i], &cells[j], EPS) {
-				continue;
-			}
-			let Some((along_x, lo, hi, mid)) =
-				shared_edge_span(cells[i].bounds, cells[j].bounds)
-			else {
-				continue;
-			};
-			let a = cells[i].id;
-			let b = cells[j].id;
-			let y0 = Vec3::from(filled[i].0.bounds.min).y;
-			let y1 = Vec3::from(filled[i].0.bounds.max).y;
-			let want_door = !door_for[i] || (needs[j] && !door_for[j]);
-			let door = if want_door {
-				connecting_passage(along_x, lo, hi, mid, y0, y1, apartment_id, a, b)
-			} else {
-				None
-			};
-			if door.is_some() {
-				door_for[i] = true;
-				if needs[j] {
-					door_for[j] = true;
-				}
-			}
-			push_private_wall(
-				&mut partitions,
-				along_x,
-				lo,
-				hi,
-				mid,
-				y0,
-				y1,
-				thickness,
-				door,
-			);
-		}
-	}
-
-	// Open / residual faces of private rooms.
-	for i in 0..cells.len() {
-		if !needs[i] {
-			continue;
-		}
-		let y0 = Vec3::from(filled[i].0.bounds.min).y;
-		let y1 = Vec3::from(filled[i].0.bounds.max).y;
-		let b = cells[i].bounds;
-		let faces = [
-			(false, b.min.x, b.min.y, b.max.y),
-			(false, b.max.x, b.min.y, b.max.y),
-			(true, b.min.y, b.min.x, b.max.x),
-			(true, b.max.y, b.min.x, b.max.x),
-		];
-
-		let face_touching_filled = |along_x: bool, mid: f32, lo: f32, hi: f32| -> bool {
-			cells.iter().enumerate().any(|(j, other)| {
-				i != j
-					&& shared_edge_span(b, other.bounds).is_some_and(|(ax, flo, fhi, fmid)| {
-						ax == along_x
-							&& (fmid - mid).abs() < 0.08
-							&& flo <= hi + EPS
-							&& fhi >= lo - EPS
-					})
-			})
-		};
-
-		let mut best_door_face: Option<usize> = None;
-		if !door_for[i] {
-			// Prefer a door on a walkway face (≥ MIN_HALL_ACCESS); else toward entry.
-			let mut best_score = f32::NEG_INFINITY;
-			for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
-				if face_touching_filled(along_x, mid, lo, hi) {
-					continue;
-				}
-				let hall_len = walkways
-					.iter()
-					.filter_map(|hall| shared_edge_span(b, *hall))
-					.filter(|(ax, flo, fhi, fmid)| {
-						*ax == along_x
-							&& (*fmid - mid).abs() < 0.08
-							&& *flo <= hi + EPS
-							&& *fhi >= lo - EPS
-					})
-					.map(|(_, flo, fhi, _)| fhi - flo)
-					.fold(0.0_f32, f32::max);
-				let face_c = if along_x {
-					Vec2::new(0.5 * (lo + hi), mid)
-				} else {
-					Vec2::new(mid, 0.5 * (lo + hi))
-				};
-				let toward_entry = entry_center
-					.map(|t| 1.0 / (1.0 + face_c.distance_squared(t)))
-					.unwrap_or(0.0);
-				let score = if hall_len + EPS >= MIN_HALL_ACCESS {
-					1000.0 + hall_len + toward_entry
-				} else {
-					toward_entry
-				};
-				if score > best_score {
-					best_score = score;
-					best_door_face = Some(fi);
-				}
-			}
-		}
-
-		for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
-			if hi - lo < EPS || face_touching_filled(along_x, mid, lo, hi) {
-				continue;
-			}
-			let door = if best_door_face == Some(fi) {
-				connecting_passage(
-					along_x,
-					lo,
-					hi,
-					mid,
-					y0,
-					y1,
-					apartment_id,
-					cells[i].id,
-					9000 + fi as u32,
-				)
-			} else {
-				None
-			};
-			if door.is_some() {
-				door_for[i] = true;
-			}
-			push_private_wall(
-				&mut partitions,
-				along_x,
-				lo,
-				hi,
-				mid,
-				y0,
-				y1,
-				thickness,
-				door,
-			);
-		}
-	}
-
-	partitions
-}
-
-fn push_private_wall(
-	partitions: &mut Vec<ClippedRectangularStrip>,
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-	y0: f32,
-	y1: f32,
-	thickness: f32,
-	door: Option<(OpeningId, Opening)>,
-) {
-	let height = (y1 - y0).max(2.0);
-	if let Some((id, opening)) = door {
-		let mut wall_openings = Openings::new();
-		wall_openings.insert(id, opening);
-		if let Some(wall) =
-			partition_strip(along_x, lo, hi, mid, y0, height, thickness, &wall_openings)
-		{
-			partitions.push(wall);
-		}
-	} else if let Some(wall) =
-		partition_strip(along_x, lo, hi, mid, y0, height, thickness, &Openings::new())
-	{
-		partitions.push(wall);
-	}
-}
-
 fn connecting_passage(
 	along_x: bool,
 	lo: f32,
@@ -1398,10 +986,10 @@ fn connecting_passage(
 	b: u32,
 ) -> Option<(OpeningId, Opening)> {
 	let shared = hi - lo;
-	if shared < DOOR_WIDTH + EPS {
+	if shared < DOOR_WIDTH * 0.7 + EPS {
 		return None;
 	}
-	let clear = DOOR_WIDTH.min(shared - 0.15);
+	let clear = DOOR_WIDTH.min(shared - 0.1).max(0.7);
 	let center = 0.5 * (lo + hi);
 	let half = clear * 0.5;
 	let door_lo = (center - half).max(lo);
@@ -1423,133 +1011,6 @@ fn connecting_passage(
 		OpeningId::scoped(SCOPE, "connect", format!("{apartment_id}_{a}_{b}")),
 		Opening::new(bounds, OpeningLabel::Passage),
 	))
-}
-
-fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
-	let touch_x = (a.max.x - b.min.x).abs() <= EPS || (b.max.x - a.min.x).abs() <= EPS;
-	if touch_x {
-		let mid = if (a.max.x - b.min.x).abs() <= EPS {
-			a.max.x
-		} else {
-			b.max.x
-		};
-		let lo = a.min.y.max(b.min.y);
-		let hi = a.max.y.min(b.max.y);
-		if hi - lo > EPS {
-			return Some((false, lo, hi, mid));
-		}
-	}
-	let touch_y = (a.max.y - b.min.y).abs() <= EPS || (b.max.y - a.min.y).abs() <= EPS;
-	if touch_y {
-		let mid = if (a.max.y - b.min.y).abs() <= EPS {
-			a.max.y
-		} else {
-			b.max.y
-		};
-		let lo = a.min.x.max(b.min.x);
-		let hi = a.max.x.min(b.max.x);
-		if hi - lo > EPS {
-			return Some((true, lo, hi, mid));
-		}
-	}
-	None
-}
-
-fn partition_strip(
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-	y0: f32,
-	height: f32,
-	thickness: f32,
-	openings: &Openings,
-) -> Option<ClippedRectangularStrip> {
-	if (hi - lo).abs() < EPS {
-		return None;
-	}
-	let (start, end) = if along_x {
-		(Vec3::new(lo, y0, mid), Vec3::new(hi, y0, mid))
-	} else {
-		(Vec3::new(mid, y0, lo), Vec3::new(mid, y0, hi))
-	};
-	let outward = if along_x { Vec2::Y } else { Vec2::X };
-	let edge = WallEdge::new(start, end, height, outward);
-	Some(wall_strip_with_openings(edge, openings, thickness))
-}
-
-fn wall_strip_with_openings(
-	edge: WallEdge,
-	openings: &Openings,
-	thickness: f32,
-) -> ClippedRectangularStrip {
-	let thickness = thickness.max(1e-4);
-	let len = edge.length();
-	let h = edge.height;
-	let tang = edge.tangent();
-	let style = PanelStyle::RoughStonework;
-
-	let mut cuts: Vec<(f32, f32, f32, f32)> = Vec::new();
-	for (_id, opening) in openings.iter() {
-		if !matches!(opening.label, OpeningLabel::Passage) {
-			continue;
-		}
-		let Some(face) = standing_face_opening(edge, &opening.bounds, thickness) else {
-			continue;
-		};
-		let s_lo = face.inset.bottom.clamp(0.0, len);
-		let s_hi = (len - face.inset.top).clamp(0.0, len);
-		if s_hi - s_lo < EPS {
-			continue;
-		}
-		cuts.push((s_lo, s_hi, face.inset.left, face.inset.right));
-	}
-	cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-
-	if cuts.is_empty() {
-		return ClippedRectangularStrip::from_nodes(
-			style,
-			[
-				RectangularStripNode::new(edge.start, h, thickness, 0.0),
-				RectangularStripNode::new(edge.end, h, thickness, 0.0),
-			],
-			[None],
-		);
-	}
-
-	let mut nodes = Vec::new();
-	let mut insets: Vec<Option<RectInset>> = Vec::new();
-	nodes.push(RectangularStripNode::new(edge.start, h, thickness, 0.0));
-	let mut cursor = 0.0_f32;
-	for (s_lo, s_hi, sill, header) in cuts {
-		if s_lo > cursor + EPS {
-			nodes.push(RectangularStripNode::new(
-				edge.start + tang * s_lo,
-				h,
-				thickness,
-				0.0,
-			));
-			insets.push(None);
-			cursor = s_lo;
-		}
-		let s_hi = s_hi.max(cursor + EPS);
-		nodes.push(RectangularStripNode::new(
-			edge.start + tang * s_hi,
-			h,
-			thickness,
-			0.0,
-		));
-		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
-		insets.push(Some(RectInset::new(sill, header, jamb, jamb)));
-		cursor = s_hi;
-	}
-	if cursor < len - EPS {
-		nodes.push(RectangularStripNode::new(edge.end, h, thickness, 0.0));
-		insets.push(None);
-	} else if let Some(last) = nodes.last_mut() {
-		last.position = edge.end;
-	}
-	ClippedRectangularStrip::from_nodes(style, nodes, insets)
 }
 
 impl Fit for LivableApartment {
@@ -1662,71 +1123,76 @@ mod tests {
 					| ApartmentRoom::Kitchen(_)
 					| ApartmentRoom::Bedroom(_)
 					| ApartmentRoom::Dining(_)
+					| ApartmentRoom::OpenHall { .. }
 			)),
-			"expected at least one common/private quarter"
+			"expected at least one common/private/open quarter"
 		);
+		assert!(!apt.max_rects.is_empty(), "expected max-rect decomposition");
 	}
 
 	#[test]
 	fn larger_apt_gets_bedroom() {
 		let confines = apt_with_door(Vec3::new(14.0, 3.0, 10.0));
-		let (apt, _) =
-			LivableApartment::from_confines(0, &confines, NoiseParams { seed: 3, ..Default::default() })
-				.unwrap();
-		assert!(
-			apt.rooms
-				.iter()
-				.any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
-			"expected a bedroom in ~140 m² apt"
-		);
-	}
-
-	#[test]
-	fn walkways_seed_and_private_abuts() {
-		let confines = apt_with_door(Vec3::new(16.0, 3.0, 12.0));
 		let (apt, _) = LivableApartment::from_confines(
 			0,
 			&confines,
 			NoiseParams {
-				seed: 11,
+				seed: 3,
 				..Default::default()
 			},
 		)
 		.unwrap();
-		assert!(!apt.walkways.is_empty(), "expected walkway skeleton");
 		assert!(
-			apt.walkways.iter().all(|w| {
-				let s = w.max - w.min;
-				s.x + 1e-3 >= WALK_WIDTH * 0.9 && s.y + 1e-3 >= WALK_WIDTH * 0.9
-			}),
-			"walkways should be ≥ {WALK_WIDTH} m clear"
+			apt.rooms
+				.iter()
+				.any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
+			"expected bedroom in larger apt"
 		);
-		let private_labels: Vec<&LabelNode> = apt
-			.rooms
-			.iter()
-			.filter_map(|r| match r {
-				ApartmentRoom::Bedroom(b) => Some(&b.room_type),
-				ApartmentRoom::Bathroom(b) => Some(&b.room_type),
-				ApartmentRoom::HalfBath(b) => Some(&b.room_type),
-				ApartmentRoom::Study(s) => Some(&s.room_type),
-				_ => None,
-			})
-			.collect();
+	}
+
+	#[test]
+	fn l_shape_reaches_entry_from_far() {
+		// L: 10×6 bar + 4×6 stub on the west, door on south of bar.
+		let bar = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(10.0, 3.0, 6.0)),
+				0.0,
+				{
+					let mut o = Openings::new();
+					o.insert(
+						OpeningId::new("door"),
+						Opening::new(
+							Aabb3d::from_min_max(
+								Vec3::new(4.0, 0.0, -0.15),
+								Vec3::new(5.0, 2.2, 0.15),
+							),
+							OpeningLabel::Passage,
+						),
+					);
+					o
+				},
+			),
+		);
+		let stub = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 6.0), Vec3::new(4.0, 3.0, 12.0)),
+				0.0,
+				Openings::new(),
+			),
+		);
+		let cells = MultiConfines::new([bar, stub]);
+		let (apt, _) =
+			LivableApartment::from_multi(0, &cells, NoiseParams::default()).unwrap();
+		assert!(apt.max_rects.len() >= 2, "L should yield ≥2 max-rects");
 		assert!(
-			!private_labels.is_empty(),
-			"expected at least one private quarter"
+			apt.rooms
+				.iter()
+				.any(|r| matches!(r, ApartmentRoom::Entryway { .. }))
 		);
-		for label in private_labels {
-			let c = label.placement.translation;
-			let e = label.placement.scale.abs() * 0.5;
-			let rect = Aabb2d {
-				min: Vec2::new(c.x - e.x, c.z - e.z),
-				max: Vec2::new(c.x + e.x, c.z + e.z),
-			};
-			assert!(
-				abuts_walkway(rect, &apt.walkways).is_some(),
-				"private quarter should abut a walkway"
-			);
-		}
+		// Far private/open content should exist in the stub half (z > 6).
+		let far = apt.rooms.iter().filter_map(room_xz).any(|r| r.min.y > 5.5);
+		assert!(far, "expected packed content in far L leg");
 	}
 }

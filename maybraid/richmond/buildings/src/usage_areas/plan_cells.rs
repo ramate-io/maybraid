@@ -367,6 +367,168 @@ fn find_absorb_group(
 	best.map(|(gi, _)| gi)
 }
 
+/// Decompose a rectilinear union of axis-aligned parts into large covering rectangles.
+///
+/// Repeatedly grows each remaining seed to a maximal rectangle still inside the
+/// union, takes the largest, and subtracts it until scraps are gone. Prefer fewer
+/// larger rects (L / T footprints stay multi-rect).
+pub fn decompose_max_rects(parts: &[Aabb2d]) -> Vec<Aabb2d> {
+	let mut remaining: Vec<Aabb2d> = parts
+		.iter()
+		.copied()
+		.filter(|r| aabb2_area(*r) > EPS * EPS)
+		.collect();
+	if remaining.is_empty() {
+		return Vec::new();
+	}
+	let mut out = Vec::new();
+	const MIN_SCRAP: f32 = 0.05;
+	while !remaining.is_empty() {
+		// Grow inside the *remaining* union so extracted rects do not overlap.
+		let Some(best) = remaining
+			.iter()
+			.map(|seed| grow_maximal_in_union(*seed, &remaining))
+			.max_by(|a, b| {
+				aabb2_area(*a)
+					.partial_cmp(&aabb2_area(*b))
+					.unwrap_or(std::cmp::Ordering::Equal)
+			})
+		else {
+			break;
+		};
+		if aabb2_area(best) <= MIN_SCRAP {
+			break;
+		}
+		out.push(best);
+		let mut next = Vec::new();
+		for r in remaining {
+			next.extend(subtract_aabb2(r, &[best]));
+		}
+		remaining = next
+			.into_iter()
+			.filter(|r| aabb2_area(*r) > MIN_SCRAP)
+			.collect();
+	}
+	out.sort_by(|a, b| {
+		aabb2_area(*b)
+			.partial_cmp(&aabb2_area(*a))
+			.unwrap_or(std::cmp::Ordering::Equal)
+	});
+	out
+}
+
+/// True when `rect` lies entirely inside the union of `parts`.
+pub fn rect_in_union(rect: Aabb2d, parts: &[Aabb2d]) -> bool {
+	if aabb2_area(rect) <= EPS * EPS {
+		return true;
+	}
+	subtract_aabb2(rect, parts).is_empty()
+}
+
+/// Expand `seed` in all four directions to a maximal AABB still ⊆ union(`parts`).
+fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
+	let mut xs = Vec::new();
+	let mut ys = Vec::new();
+	for p in parts {
+		xs.push(p.min.x);
+		xs.push(p.max.x);
+		ys.push(p.min.y);
+		ys.push(p.max.y);
+	}
+	xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+	ys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+	xs.dedup_by(|a, b| (*a - *b).abs() < EPS);
+	ys.dedup_by(|a, b| (*a - *b).abs() < EPS);
+
+	let mut r = seed;
+	// −X
+	for &x in xs.iter().rev() {
+		if x >= r.min.x - EPS {
+			continue;
+		}
+		let trial = Aabb2d {
+			min: Vec2::new(x, r.min.y),
+			max: r.max,
+		};
+		if rect_in_union(trial, parts) {
+			r = trial;
+		}
+	}
+	// +X
+	for &x in &xs {
+		if x <= r.max.x + EPS {
+			continue;
+		}
+		let trial = Aabb2d {
+			min: r.min,
+			max: Vec2::new(x, r.max.y),
+		};
+		if rect_in_union(trial, parts) {
+			r = trial;
+		}
+	}
+	// −Y
+	for &y in ys.iter().rev() {
+		if y >= r.min.y - EPS {
+			continue;
+		}
+		let trial = Aabb2d {
+			min: Vec2::new(r.min.x, y),
+			max: r.max,
+		};
+		if rect_in_union(trial, parts) {
+			r = trial;
+		}
+	}
+	// +Y
+	for &y in &ys {
+		if y <= r.max.y + EPS {
+			continue;
+		}
+		let trial = Aabb2d {
+			min: r.min,
+			max: Vec2::new(r.max.x, y),
+		};
+		if rect_in_union(trial, parts) {
+			r = trial;
+		}
+	}
+	r
+}
+
+/// Shared edge span between two AABBs: `(along_x, lo, hi, mid)`.
+///
+/// `along_x == true` ⇒ contact is horizontal (constant plan-Y / world Z = `mid`).
+pub fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
+	let touch_x = (a.max.x - b.min.x).abs() <= EPS || (b.max.x - a.min.x).abs() <= EPS;
+	if touch_x {
+		let mid = if (a.max.x - b.min.x).abs() <= EPS {
+			a.max.x
+		} else {
+			b.max.x
+		};
+		let lo = a.min.y.max(b.min.y);
+		let hi = a.max.y.min(b.max.y);
+		if hi - lo > EPS {
+			return Some((false, lo, hi, mid));
+		}
+	}
+	let touch_y = (a.max.y - b.min.y).abs() <= EPS || (b.max.y - a.min.y).abs() <= EPS;
+	if touch_y {
+		let mid = if (a.max.y - b.min.y).abs() <= EPS {
+			a.max.y
+		} else {
+			b.max.y
+		};
+		let lo = a.min.x.max(b.min.x);
+		let hi = a.max.x.min(b.max.x);
+		if hi - lo > EPS {
+			return Some((true, lo, hi, mid));
+		}
+	}
+	None
+}
+
 /// Subtract axis-aligned `cuts` from `host`, returning residual rectangles.
 ///
 /// Uses a simple guillotine difference against each cut in order.
@@ -576,5 +738,57 @@ mod tests {
 		let rem = subtract_aabb2(host, &[hall]);
 		assert!(rem.len() >= 2);
 		assert!(rem.iter().all(|r| aabb2_area(*r) > 0.0));
+	}
+
+	fn rect(min: Vec2, max: Vec2) -> Aabb2d {
+		Aabb2d { min, max }
+	}
+
+	#[test]
+	fn decompose_single_rect_unchanged() {
+		let parts = [rect(Vec2::ZERO, Vec2::new(8.0, 6.0))];
+		let out = decompose_max_rects(&parts);
+		assert_eq!(out.len(), 1);
+		assert!((aabb2_area(out[0]) - 48.0).abs() < 0.1);
+	}
+
+	#[test]
+	fn decompose_l_shape_two_rects() {
+		let parts = [
+			rect(Vec2::ZERO, Vec2::new(8.0, 4.0)),
+			rect(Vec2::new(0.0, 4.0), Vec2::new(4.0, 10.0)),
+		];
+		let input_area: f32 = parts.iter().map(|r| aabb2_area(*r)).sum();
+		let out = decompose_max_rects(&parts);
+		assert!(out.len() >= 2, "L should stay multi-rect, got {out:?}");
+		let out_area: f32 = out.iter().map(|r| aabb2_area(*r)).sum();
+		assert!(
+			(out_area - input_area).abs() < 0.5,
+			"cover area {out_area} vs input {input_area}"
+		);
+	}
+
+	#[test]
+	fn decompose_t_shape_covers_area() {
+		let parts = [
+			rect(Vec2::new(3.0, 0.0), Vec2::new(7.0, 6.0)),
+			rect(Vec2::new(0.0, 6.0), Vec2::new(10.0, 10.0)),
+		];
+		let input_area: f32 = parts.iter().map(|r| aabb2_area(*r)).sum();
+		let out = decompose_max_rects(&parts);
+		assert!(out.len() >= 2);
+		let out_area: f32 = out.iter().map(|r| aabb2_area(*r)).sum();
+		assert!((out_area - input_area).abs() < 0.5);
+	}
+
+	#[test]
+	fn decompose_merges_coaxial_pair() {
+		let parts = [
+			rect(Vec2::ZERO, Vec2::new(4.0, 3.0)),
+			rect(Vec2::new(4.0, 0.0), Vec2::new(8.0, 3.0)),
+		];
+		let out = decompose_max_rects(&parts);
+		assert_eq!(out.len(), 1, "coaxial pair should merge: {out:?}");
+		assert!((aabb2_area(out[0]) - 24.0).abs() < 0.1);
 	}
 }

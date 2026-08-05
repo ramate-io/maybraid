@@ -111,8 +111,12 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    `pack_apartments_to_targets` → **one hall door per group** →
    partition / hall-edge walls (no per-cell shells) →
    [`LivableApartment`](src/usage_areas/livable_apartment.rs) layout
-   (entryway → ≥1 m walkway skeleton → private quarters abut walkways, common
-   quarters overlap them). Apartment-level walls enclose bedrooms / bathrooms
+   (entryway → [`decompose_max_rects`](src/usage_areas/plan_cells.rs) → spanning
+   tree of passages → per-rect
+   [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) with
+   open/closed normalize). Strategies default to `CaseAttempt` (AllOpen /
+   SingleClosed ≤36 m² with one port / SpineHall / GuillotineSplit). Min hall /
+   access clear is **1.0 m**. Apartment-level walls enclose bedrooms / bathrooms
    only; entry + common stay open-plan (subtypes may wall themselves). Ungrouped
    / unfilled pockets stay [`SpaceKind::InternalSpace`](src/fit.rs); Full\* maps
    those leftovers to [`SpaceKind::ClosetSpace`](src/fit.rs).
@@ -120,7 +124,10 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
 `/show livable-apartments-examples` (standalone packs; multi-cell groups),
-`/show livable-apartment-examples` (small→large rect + L/T layouts, walkway gizmos),
+`/show livable-apartment-examples` (small→large rect + L/T layouts; max-rect /
+passage / hall gizmos),
+`/show livable-rectangles-examples` (standalone `RectangularLivableArea` cells;
+sizes, 1–3 passages, forced strategies),
 `/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan

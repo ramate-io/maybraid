@@ -21,6 +21,7 @@ pub mod livable_apartment;
 pub mod livable_apartments;
 pub mod livable_quarters;
 pub mod plan_cells;
+pub mod rectangular_livable_area;
 
 pub use clearance::{
 	abuts_clearance, approach_blocked, approach_zone, commit_door_clear,
@@ -58,7 +59,13 @@ pub use livable_quarters::{
 	RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use plan_cells::{
-	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, group_cells_to_apartments,
-	pack_apartments_to_targets, shared_edge_length, split_oversized_cells, split_toward_min_room,
-	subtract_aabb2, PlanCell, MIN_GROUP_CONNECTIVITY,
+	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, decompose_max_rects,
+	group_cells_to_apartments, pack_apartments_to_targets, rect_in_union, shared_edge_length,
+	shared_edge_span, split_oversized_cells, split_toward_min_room, subtract_aabb2, PlanCell,
+	MIN_GROUP_CONNECTIVITY,
+};
+pub use rectangular_livable_area::{
+	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectangularLivableAreaParameterized, RectangularLivableAreaPlan, SCOPE as RECT_LIVABLE_SCOPE,
+	passages_on_faces, DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
 };
