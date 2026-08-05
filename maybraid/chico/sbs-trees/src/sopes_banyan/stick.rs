@@ -27,10 +27,17 @@ impl StickLodRole {
 		}
 	}
 
-	pub(crate) fn keep_on_low(self) -> bool {
+	pub(crate) fn is_trunk(self) -> bool {
 		matches!(self, Self::Trunk)
 	}
+
+	pub(crate) fn is_descender(self) -> bool {
+		matches!(self, Self::Descender)
+	}
 }
+
+/// Keep roughly this fraction of descender sticks on Low (stable every-Nth sample).
+pub(crate) const LOW_DESCENDER_KEEP_EVERY: usize = 4;
 
 pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
 	let ray = segment.ray();
@@ -67,8 +74,21 @@ pub(crate) fn keep_stick_on_medium(
 	segment: &BallStickSegment<'_>,
 	tree_radius: f32,
 ) -> bool {
-	if matches!(role, StickLodRole::Trunk) {
+	if role.is_trunk() {
 		return true;
 	}
 	segment_horizontal_radius(segment) >= tree_radius.max(1e-4) * 0.5
+}
+
+/// Low: trunk + a thinned subset of descenders (no branch / flair sticks).
+pub(crate) fn keep_stick_on_low(role: StickLodRole, descender_index: &mut usize) -> bool {
+	if role.is_trunk() {
+		return true;
+	}
+	if !role.is_descender() {
+		return false;
+	}
+	let keep = *descender_index % LOW_DESCENDER_KEEP_EVERY == 0;
+	*descender_index += 1;
+	keep
 }

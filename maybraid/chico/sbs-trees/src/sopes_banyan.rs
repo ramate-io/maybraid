@@ -7,7 +7,7 @@
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `1.5 ×` tree radius: full sticks + full canopy
 //! - **Medium** — `1.5…8 ×` radius: silhouette — trunk + outer-half sticks/canopy
-//! - **Low** — `8…24 ×` radius: trunk only; four quadrant canopy balls
+//! - **Low** — `8…24 ×` radius: trunk + ~1/4 descenders; four filled quadrant canopy balls
 
 mod canopy;
 pub mod render_item_plugin;
@@ -23,7 +23,9 @@ use lod::gen::LodSceneLevel;
 use render_item::{CascadeChunk, RenderItem};
 
 use canopy::{foliage_node_for_terminal, four_quadrant_canopy_balls, outer_half_canopy_balls};
-use stick::{keep_stick_on_medium, stick_node_for_segment, stick_role_for_segment};
+use stick::{
+	keep_stick_on_low, keep_stick_on_medium, stick_node_for_segment, stick_role_for_segment,
+};
 
 /// Typical Sope's Banyan (geometry-only; materials are patched externally later).
 pub type SopesBanyanStd = SopesBanyan;
@@ -83,11 +85,12 @@ impl SopesBanyan {
 	}
 
 	fn stick_nodes_low(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
+		let mut descender_index = 0usize;
 		chain
 			.segments_with_hysteresis()
 			.filter_map(|(segment, parent, _)| {
 				let role = stick_role_for_segment(&segment, parent);
-				if !role.keep_on_low() {
+				if !keep_stick_on_low(role, &mut descender_index) {
 					return None;
 				}
 				stick_node_for_segment(&segment)
