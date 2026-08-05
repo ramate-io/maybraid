@@ -18,8 +18,8 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{
-	add_fine_pass_chunk_full_for, add_fine_pass_cull_for, LodChunkFulfillBudget, LodFinePassPlugin,
-	LodFinePassSystems,
+	add_fine_pass_chunk_full_for, add_fine_pass_cull_for, add_fine_pass_for, LodChunkFulfillBudget,
+	LodFinePassPlugin, LodFinePassSystems,
 };
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
@@ -27,7 +27,7 @@ use preview::{
 };
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
-	FurnitureWireframePlugin, LabelWireframePlugin, WarmAssetLodRoots,
+	FurnitureWireframePlugin, LabelWireframePlugin, PartitionNode, WarmAssetLodRoots,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 use scene_ref::SceneRefPlugin;
@@ -51,7 +51,9 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			));
 		// Wizard's Tower: incremental chunk fulfill (experiment).
 		add_fine_pass_chunk_full_for::<WizardsTower>(app);
-		// Probe updates LodSceneLevel; WarmAssetLodRoots handles spawn + cull.
+		// Partition IR hosts: lazy level roots, eager fulfill (vs warm H/M/L).
+		add_fine_pass_for::<PartitionNode>(app);
+		// Leaf GLB kits: probe updates LodSceneLevel; WarmAssetLodRoots spawn + cull.
 		add_fine_pass_cull_for::<WarmAssetLodRoots>(app);
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(

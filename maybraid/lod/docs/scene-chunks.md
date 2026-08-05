@@ -51,4 +51,5 @@ Lazy materialization of subtrees (factories evaluated only when the scheduler re
 
 - [`SceneChunk`](../lib/src/scene_chunk.rs)
 - [`chunk_fulfill`](../lib/src/chunk_fulfill.rs)
+- [Partition host warm vs lazy](partition-host-warm-vs-lazy.md)
 - [Richmond CONTRIBUTING — LodScene](../../richmond/CONTRIBUTING.md#lodscene-on-buildings)

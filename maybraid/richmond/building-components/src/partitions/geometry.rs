@@ -54,6 +54,12 @@ pub enum PartitionGeometry {
 	SliceArc(ArcSweep),
 }
 
+impl Default for PartitionGeometry {
+	fn default() -> Self {
+		Self::Linear(LinearPartition::default())
+	}
+}
+
 /// Alias for continuous partition geometry.
 pub type Partition = PartitionGeometry;
 
