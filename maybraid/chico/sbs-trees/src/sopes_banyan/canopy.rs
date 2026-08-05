@@ -1,9 +1,16 @@
 //! Terminal canopy: mix NoisyBall and PlaneSplay foliage nodes (with structural LOD filters).
 
-use bevy::prelude::Vec3;
 use chico_sbs_geometry::render::mix_seed::node_mix_seed;
-use chico_sbs_geometry::{BallStickNode, SopesBanyanChain, SopesBanyanPhase};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickNode,
+	SopesBanyanChain, SopesBanyanPhase,
+};
 use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
+
+/// Medium foliage: denser azimuth × height outer samples (preserves vase pinch).
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
+/// Low foliage: coarser outer samples.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
 /// Prefer plane splay in the rising crown; stay mostly on noisy balls along descenders.
 fn canopy_prefers_plane_splay(
@@ -50,72 +57,17 @@ pub(crate) fn foliage_node_for_terminal(
 	}
 }
 
-pub(crate) fn horizontal_radius(position: Vec3) -> f32 {
-	Vec3::new(position.x, 0.0, position.z).length()
-}
-
-/// Medium: keep canopy in the outer half of the footprint (silhouette), as noisy balls.
-pub(crate) fn outer_half_canopy_balls(
+/// Outermost High foliage per azimuth × height cell, collapsed to noisy balls.
+pub(crate) fn banded_outer_canopy_balls(
 	high_foliage: &[FoliageNode],
-	tree_radius: f32,
+	bands: AzimuthHeightBands,
 ) -> Vec<FoliageNode> {
-	let threshold = tree_radius.max(1e-4) * 0.5;
-	high_foliage
-		.iter()
-		.filter(|node| horizontal_radius(node.placement.translation) >= threshold)
-		.map(|node| FoliageNode::noisy_ball(node.placement))
-		.collect()
-}
-
-fn azimuth_sector(position: Vec3) -> Option<usize> {
-	let r = horizontal_radius(position);
-	if r < 1e-4 {
-		return None;
-	}
-	let azimuth = position.z.atan2(position.x);
-	Some(
-		(((azimuth + std::f32::consts::PI) / (std::f32::consts::FRAC_PI_2)).floor() as usize)
-			.min(3),
+	sample_max_horizontal_radius_by_azimuth_height(
+		high_foliage,
+		|node| node.placement.translation,
+		bands,
 	)
-}
-
-/// Low: four noisy balls — one per azimuth quadrant.
-///
-/// Radius is half the sector's canopy **height** (center Y span), so each ball
-/// touches the top and bottom of the would-be canopy rather than ballooning from
-/// the horizontal AABB. XZ sits at the mean of sector foliage centers.
-pub(crate) fn four_quadrant_canopy_balls(high_foliage: &[FoliageNode]) -> Vec<FoliageNode> {
-	// Per sector: sum of XZ centers, count, min/max Y of foliage centers.
-	let mut sector: [Option<(Vec3, u32, f32, f32)>; 4] = [None, None, None, None];
-	for node in high_foliage {
-		let c = node.placement.translation;
-		let Some(i) = azimuth_sector(c) else {
-			continue;
-		};
-		sector[i] = Some(match sector[i] {
-			None => (Vec3::new(c.x, 0.0, c.z), 1, c.y, c.y),
-			Some((sum_xz, n, y_min, y_max)) => (
-				sum_xz + Vec3::new(c.x, 0.0, c.z),
-				n + 1,
-				y_min.min(c.y),
-				y_max.max(c.y),
-			),
-		});
-	}
-
-	sector
-		.into_iter()
-		.flatten()
-		.map(|(sum_xz, n, y_min, y_max)| {
-			let n = n.max(1) as f32;
-			let xz = sum_xz / n;
-			let y = (y_min + y_max) * 0.5;
-			// Diameter = canopy height band → sphere touches top and bottom.
-			let radius = ((y_max - y_min) * 0.5).max(1e-3);
-			FoliageNode::noisy_ball(Placement::foliage_uniform(
-				Vec3::new(xz.x, y, xz.z),
-				radius,
-			))
-		})
-		.collect()
+	.into_iter()
+	.map(|sample| FoliageNode::noisy_ball(sample.item.placement))
+	.collect()
 }

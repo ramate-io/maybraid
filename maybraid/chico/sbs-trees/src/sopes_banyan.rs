@@ -6,8 +6,8 @@
 //!
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `3 ×` tree radius: full sticks + full canopy
-//! - **Medium** — `3…12 ×` radius: silhouette — trunk + outer-half sticks/canopy
-//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; four height-spanning canopy balls
+//! - **Medium** — `3…12 ×` radius: trunk + outer-half sticks; azimuth×height outer foliage
+//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; coarser azimuth×height foliage
 
 mod canopy;
 pub mod render_item_plugin;
@@ -22,7 +22,9 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 use render_item::{CascadeChunk, RenderItem};
 
-use canopy::{foliage_node_for_terminal, four_quadrant_canopy_balls, outer_half_canopy_balls};
+use canopy::{
+	banded_outer_canopy_balls, foliage_node_for_terminal, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+};
 use stick::{
 	keep_stick_on_low, keep_stick_on_medium, stick_node_for_segment, stick_role_for_segment,
 };
@@ -111,12 +113,12 @@ impl SopesBanyan {
 
 	fn foliage_nodes_medium(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
 		let high = self.foliage_nodes_high(chain);
-		outer_half_canopy_balls(&high, self.tree_radius(chain))
+		banded_outer_canopy_balls(&high, MEDIUM_FOLIAGE_BANDS)
 	}
 
 	fn foliage_nodes_low(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
 		let high = self.foliage_nodes_high(chain);
-		four_quadrant_canopy_balls(&high)
+		banded_outer_canopy_balls(&high, LOW_FOLIAGE_BANDS)
 	}
 }
 

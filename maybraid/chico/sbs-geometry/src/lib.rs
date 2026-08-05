@@ -1,7 +1,12 @@
 //! Stalk and ball-stick geometry for Chico vegetation.
+pub mod lod_sample;
 pub mod palm_crown;
 pub mod projection;
 pub mod vec3_args;
+pub use lod_sample::{
+	horizontal_radius_from_y_axis, sample_max_horizontal_radius_by_azimuth_height,
+	AzimuthHeightBands, AzimuthHeightSample,
+};
 pub use vec3_args::parse_vec3_csv;
 
 pub mod chain;
