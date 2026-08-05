@@ -50,29 +50,46 @@ pub(crate) fn foliage_node_for_terminal(
 	}
 }
 
-/// One noisy ball scaled to enclose the High canopy AABB (Low structural LOD).
-pub(crate) fn canopy_extents_ball(high_foliage: &[FoliageNode]) -> Option<FoliageNode> {
-	let mut min = Vec3::splat(f32::INFINITY);
-	let mut max = Vec3::splat(f32::NEG_INFINITY);
-	let mut any = false;
+pub(crate) fn horizontal_radius(position: Vec3) -> f32 {
+	Vec3::new(position.x, 0.0, position.z).length()
+}
+
+/// Medium: keep canopy in the outer half of the footprint (silhouette), as noisy balls.
+pub(crate) fn outer_half_canopy_balls(
+	high_foliage: &[FoliageNode],
+	tree_radius: f32,
+) -> Vec<FoliageNode> {
+	let threshold = tree_radius.max(1e-4) * 0.5;
+	high_foliage
+		.iter()
+		.filter(|node| horizontal_radius(node.placement.translation) >= threshold)
+		.map(|node| FoliageNode::noisy_ball(node.placement))
+		.collect()
+}
+
+/// Low: four noisy balls — outermost High terminal in each azimuth quadrant.
+pub(crate) fn four_quadrant_canopy_balls(high_foliage: &[FoliageNode]) -> Vec<FoliageNode> {
+	let mut best: [Option<(f32, Placement)>; 4] = [None, None, None, None];
 	for node in high_foliage {
-		let c = node.placement.translation;
-		let e = node
-			.placement
-			.scale
-			.x
-			.abs()
-			.max(node.placement.scale.y.abs())
-			.max(node.placement.scale.z.abs());
-		min = min.min(c - Vec3::splat(e));
-		max = max.max(c + Vec3::splat(e));
-		any = true;
+		let p = node.placement.translation;
+		let r = horizontal_radius(p);
+		if r < 1e-4 {
+			continue;
+		}
+		let azimuth = p.z.atan2(p.x);
+		let sector = (((azimuth + std::f32::consts::PI) / (std::f32::consts::FRAC_PI_2))
+			.floor() as usize)
+			.min(3);
+		let keep = match best[sector] {
+			None => true,
+			Some((prev_r, _)) => r > prev_r,
+		};
+		if keep {
+			best[sector] = Some((r, node.placement));
+		}
 	}
-	if !any {
-		return None;
-	}
-	let center = (min + max) * 0.5;
-	let half = (max - min) * 0.5;
-	let radius = half.x.max(half.y).max(half.z).max(1e-3);
-	Some(FoliageNode::noisy_ball(Placement::foliage_uniform(center, radius)))
+	best.into_iter()
+		.flatten()
+		.map(|(_, placement)| FoliageNode::noisy_ball(placement))
+		.collect()
 }

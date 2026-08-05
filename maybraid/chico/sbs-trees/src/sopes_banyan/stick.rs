@@ -1,5 +1,6 @@
 //! Stick segment → [`StickNode`] emission (with structural LOD phase filters).
 
+use bevy::prelude::Vec3;
 use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain, SopesBanyanPhase};
 use chico_vegetation_components::{Placement, StickNode};
 
@@ -26,10 +27,6 @@ impl StickLodRole {
 		}
 	}
 
-	pub(crate) fn keep_on_medium(self) -> bool {
-		matches!(self, Self::Trunk | Self::Descender | Self::BetweenNodes)
-	}
-
 	pub(crate) fn keep_on_low(self) -> bool {
 		matches!(self, Self::Trunk)
 	}
@@ -52,4 +49,26 @@ pub(crate) fn stick_role_for_segment(
 	parent: &SopesBanyanChain,
 ) -> StickLodRole {
 	StickLodRole::from_parent_phase(&parent.phase)
+}
+
+fn horizontal_radius(position: Vec3) -> f32 {
+	Vec3::new(position.x, 0.0, position.z).length()
+}
+
+/// Midpoint footprint radius of a segment (for outer-half silhouette keep).
+pub(crate) fn segment_horizontal_radius(segment: &BallStickSegment<'_>) -> f32 {
+	let mid = (segment.start.position + segment.end.position) * 0.5;
+	horizontal_radius(mid)
+}
+
+/// Medium: always keep trunk; keep other sticks only in the outer half of the footprint.
+pub(crate) fn keep_stick_on_medium(
+	role: StickLodRole,
+	segment: &BallStickSegment<'_>,
+	tree_radius: f32,
+) -> bool {
+	if matches!(role, StickLodRole::Trunk) {
+		return true;
+	}
+	segment_horizontal_radius(segment) >= tree_radius.max(1e-4) * 0.5
 }

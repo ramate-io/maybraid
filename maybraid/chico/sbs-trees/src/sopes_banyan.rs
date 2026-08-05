@@ -6,8 +6,8 @@
 //!
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `1.5 ×` tree radius: full sticks + full canopy
-//! - **Medium** — `1.5…8 ×` radius: trunk + descenders + inter-node sticks; every third canopy ball
-//! - **Low** — `8…24 ×` radius: trunk only; one ball fit to canopy extents
+//! - **Medium** — `1.5…8 ×` radius: silhouette — trunk + outer-half sticks/canopy
+//! - **Low** — `8…24 ×` radius: trunk only; four quadrant canopy balls
 
 mod canopy;
 pub mod render_item_plugin;
@@ -22,8 +22,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 use render_item::{CascadeChunk, RenderItem};
 
-use canopy::{canopy_extents_ball, foliage_node_for_terminal};
-use stick::{stick_node_for_segment, stick_role_for_segment};
+use canopy::{foliage_node_for_terminal, four_quadrant_canopy_balls, outer_half_canopy_balls};
+use stick::{keep_stick_on_medium, stick_node_for_segment, stick_role_for_segment};
 
 /// Typical Sope's Banyan (geometry-only; materials are patched externally later).
 pub type SopesBanyanStd = SopesBanyan;
@@ -69,11 +69,12 @@ impl SopesBanyan {
 	}
 
 	fn stick_nodes_medium(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
+		let tree_radius = self.tree_radius(chain);
 		chain
 			.segments_with_hysteresis()
 			.filter_map(|(segment, parent, _)| {
 				let role = stick_role_for_segment(&segment, parent);
-				if !role.keep_on_medium() {
+				if !keep_stick_on_medium(role, &segment, tree_radius) {
 					return None;
 				}
 				stick_node_for_segment(&segment)
@@ -106,23 +107,13 @@ impl SopesBanyan {
 	}
 
 	fn foliage_nodes_medium(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
-		self.foliage_nodes_high(chain)
-			.into_iter()
-			.enumerate()
-			.filter_map(|(i, node)| {
-				if i % 3 == 0 {
-					// Medium keeps canopy balls only (collapse plane-splay to noisy ball).
-					Some(FoliageNode::noisy_ball(node.placement))
-				} else {
-					None
-				}
-			})
-			.collect()
+		let high = self.foliage_nodes_high(chain);
+		outer_half_canopy_balls(&high, self.tree_radius(chain))
 	}
 
 	fn foliage_nodes_low(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
 		let high = self.foliage_nodes_high(chain);
-		canopy_extents_ball(&high).into_iter().collect()
+		four_quadrant_canopy_balls(&high)
 	}
 }
 
