@@ -45,8 +45,11 @@ pub trait LodScene {
 	/// Inactive [`crate::LodLevelRoot`]s this scene is willing to despawn.
 	///
 	/// Must be cheap — no scene build. Default keeps every root warm
-	/// ([`LodSceneCulls::None`]). Prefer explicit tight [`LodSceneCulls::AllOf`]
-	/// lists when memory matters; “not current” alone is not a cull reason.
+	/// ([`LodSceneCulls::None`]). Prefer [`crate::cull_non_adjacent_bands`] (or
+	/// [`crate::cull_offset_bands`]) when memory matters; “not current” alone is
+	/// not a cull reason. Culling the immediately adjacent band is usually a bad
+	/// idea — respawning that root on the way back is expensive; keep it warm
+	/// unless you are well into the current band.
 	///
 	/// Host GC never despawns the host's current/desired level even if listed.
 	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {

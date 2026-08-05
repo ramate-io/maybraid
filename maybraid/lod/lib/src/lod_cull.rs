@@ -1,9 +1,18 @@
 //! Despawn policy for inactive [`crate::lod_scene_host::LodLevelRoot`]s.
 //!
 //! Common helpers:
-//! - [`cull_non_adjacent_bands`] — least aggressive named-band GC
-//! - [`cull_bands_with_adjacent_depth`] — also drop the nearer adjacent band once
-//!   you are far enough into the current band
+//! - [`cull_non_adjacent_bands`] — least aggressive named-band GC (preferred default)
+//! - [`cull_offset_bands`] / [`cull_bands_with_adjacent_depth`] — also drop the
+//!   nearer adjacent band once you are far enough into the current band
+//!
+//! # Guidance
+//!
+//! Prefer keeping the **immediately adjacent** band warm. Despawning it is usually
+//! a bad trade: camera motion often re-enters that band, and rebuilding a level
+//! root (scene spawn / mesh load) is expensive compared to leaving it `Hidden`.
+//! Use [`cull_non_adjacent_bands`] unless memory pressure justifies
+//! [`cull_offset_bands`] (halfway in) or a tighter adjacent depth — and avoid
+//! `depth = 0` (cull adjacent on band entry) except for cheap roots.
 
 use crate::lod_level::LodSceneLevel;
 
@@ -39,9 +48,14 @@ impl LodSceneCull {
 
 /// Which inactive LOD level roots a [`crate::gen::LodScene`] is willing to despawn.
 ///
-/// Default [`Self::None`] keeps hidden roots warm. Prefer explicit tight
-/// [`Self::AllOf`] lists when memory matters; do not treat “not current” as
-/// an automatic cull.
+/// Default [`Self::None`] keeps hidden roots warm. Prefer
+/// [`cull_non_adjacent_bands`] (or explicit tight [`Self::AllOf`] lists) when
+/// memory matters; do not treat “not current” as an automatic cull.
+///
+/// Culling the **immediately adjacent** band is generally a bad idea: hopping
+/// back into that band forces an expensive respawn. Prefer non-adjacent GC, or
+/// [`cull_offset_bands`] so the adjacent root stays warm until you are well into
+/// the current band.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum LodSceneCulls {
 	/// Despawn nothing (default).
@@ -104,7 +118,8 @@ pub fn named_band_index(level: LodSceneLevel) -> Option<usize> {
 
 /// Least aggressive named-band GC: cull bands with index distance &gt; 1.
 ///
-/// Examples (current → culls):
+/// This is the usual choice: adjacent roots stay warm so small camera moves do
+/// not pay a respawn. Examples (current → culls):
 /// - High → Low, UltraLow (Medium stays warm)
 /// - Medium → UltraLow (High and Low stay warm)
 /// - Low → High (Medium and UltraLow stay warm)
@@ -141,10 +156,10 @@ pub const OFFSET_BAND_DEPTH: f32 = 0.5;
 /// Example: current Medium, `depth = 0.5`, `progress = 0.6` → UltraLow (non-adjacent)
 /// plus High (nearer adjacent). Early in Medium (`progress = 0.2`) High stays warm.
 ///
-/// `depth ≤ 0` culls the nearer adjacent as soon as the band is entered.
+/// **Caution:** culling the adjacent band trades memory for respawn cost. Prefer
+/// [`cull_non_adjacent_bands`] or a generous `depth` (see [`cull_offset_bands`]).
+/// `depth ≤ 0` (cull adjacent on band entry) is rarely appropriate for heavy roots.
 /// `depth > 1` never adds the adjacent (same as non-adjacent only).
-///
-/// Prefer [`cull_offset_bands`] when `depth` should be the usual halfway mark.
 pub fn cull_bands_with_adjacent_depth(
 	current: LodSceneLevel,
 	progress_into_band: f32,
@@ -162,7 +177,10 @@ pub fn cull_bands_with_adjacent_depth(
 
 /// Mid-band offset GC: [`cull_bands_with_adjacent_depth`] at [`OFFSET_BAND_DEPTH`].
 ///
-/// Keeps the nearer adjacent warm until roughly halfway through the current band.
+/// Keeps the nearer adjacent warm until roughly halfway through the current band,
+/// so brief excursions across a band edge do not thrash spawns. Still more
+/// aggressive than [`cull_non_adjacent_bands`]; use when the adjacent root is
+/// large enough that holding it for the whole band hurts.
 pub fn cull_offset_bands(current: LodSceneLevel, progress_into_band: f32) -> LodSceneCulls {
 	cull_bands_with_adjacent_depth(current, progress_into_band, OFFSET_BAND_DEPTH)
 }

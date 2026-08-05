@@ -13,9 +13,11 @@ use crate::placed::Placement;
 
 /// Despawn policy for warm High/Medium/Low mesh hosts.
 ///
-/// Pattern 2 with `depth = 0`: drop the nearer adjacent band as soon as the
-/// current band is entered (High once Medium/Low/UltraLow), plus non-adjacent
-/// bands, and refuse Distance/Resolution customs.
+/// Aggressive adjacent cull (`depth = 0`): drop the nearer adjacent band as soon
+/// as the current band is entered. Acceptable here because warm mesh roots are
+/// cheap SceneRefs; **do not copy this for heavy composite hosts** — prefer
+/// [`lod::cull_non_adjacent_bands`] or [`lod::cull_offset_bands`]. Also refuses
+/// Distance/Resolution customs.
 pub fn warm_mesh_lod_culls(level: LodSceneLevel) -> LodSceneCulls {
 	cull_bands_with_adjacent_depth(level, 1.0, 0.0).with_customs()
 }
