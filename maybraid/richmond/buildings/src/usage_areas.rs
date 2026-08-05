@@ -8,6 +8,7 @@
 //! rooms. Rectangular place-and-commit packing uses the crate-root
 //! [`crate::placer`] KindSpec trier.
 
+pub mod boundary_openings;
 pub mod clearance;
 pub mod commercial_stall_strip;
 pub mod common_bedroom;
@@ -67,9 +68,9 @@ pub use livable_quarters::{
 };
 pub use plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, decompose_max_rects,
-	group_cells_to_apartments, pack_apartments_to_targets, rect_in_union, shared_edge_length,
-	shared_edge_span, split_oversized_cells, split_toward_min_room, subtract_aabb2, PlanCell,
-	MIN_GROUP_CONNECTIVITY,
+	group_cells_to_apartments, hall_frontage_length, pack_apartments_to_targets, rect_in_union,
+	shared_edge_length, shared_edge_span, split_oversized_cells, split_toward_min_room,
+	subtract_aabb2, PlanCell, MIN_GROUP_CONNECTIVITY,
 };
 pub use plan_geom::{confines_from_xz, host_xz, DOOR_WIDTH, MIN_ROOM};
 pub use rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};

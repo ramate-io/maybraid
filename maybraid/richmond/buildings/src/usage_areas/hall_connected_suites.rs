@@ -23,6 +23,9 @@ use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
 use crate::shells::ortho::{standing_face_opening, WallEdge};
+use crate::usage_areas::boundary_openings::{
+	host_face_spans, plan_edge_excluded,
+};
 use crate::usage_areas::halls_to_shafts::{HallsToShafts, HallsToShaftsOptions};
 use crate::usage_areas::plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, pack_apartments_to_targets, shared_edge_span,
@@ -262,11 +265,14 @@ impl HallEnclosedSuites {
 				.insert(door.0, door.1);
 		}
 
+		let host = host_xz(&confines.bounds);
 		let walls = enclosure_walls(
 			&cells,
 			&hall_bands,
 			&group_of,
 			&door_openings,
+			&confines.openings,
+			host,
 			y0,
 			y1,
 		);
@@ -278,7 +284,9 @@ impl HallEnclosedSuites {
 				let Some(&ci) = cell_by_id.get(&cid) else {
 					continue;
 				};
-				let openings = cell_openings.get(&cid).cloned().unwrap_or_default();
+				let mut openings = cell_openings.get(&cid).cloned().unwrap_or_default();
+				// Inherit host Boundary/Exclusion so room enclosure skips shell faces.
+				inherit_host_boundaries(&mut openings, &confines.openings, cells[ci].bounds);
 				let bounds = aabb2_to_aabb3(cells[ci].bounds, y0, y1);
 				parts.push(FillRegion::new(
 					SpaceKind::InternalSpace,
@@ -346,7 +354,7 @@ fn group_hall_door(
 		let Some(cell) = cells.iter().find(|c| c.id == cid) else {
 			continue;
 		};
-		if !cell_has_hall_frontage(cell, halls, EPS) {
+		if !cell_has_hall_frontage(cell, halls, MIN_GROUP_CONNECTIVITY, EPS) {
 			continue;
 		}
 		for hall in halls {
@@ -404,11 +412,43 @@ struct WallSpan {
 	outward: Vec2,
 }
 
+fn inherit_host_boundaries(dst: &mut Openings, host: &Openings, cell: Aabb2d) {
+	for (id, o) in host.iter() {
+		if !matches!(
+			o.label,
+			OpeningLabel::Boundary | OpeningLabel::Exclusion
+		) {
+			continue;
+		}
+		let omin = Vec3::from(o.bounds.min);
+		let omax = Vec3::from(o.bounds.max);
+		let ox = Aabb2d {
+			min: Vec2::new(omin.x, omin.z),
+			max: Vec2::new(omax.x, omax.z),
+		};
+		// Keep if the opening overlaps this cell's inflated footprint.
+		let infl = Aabb2d {
+			min: cell.min - Vec2::splat(0.2),
+			max: cell.max + Vec2::splat(0.2),
+		};
+		if ox.max.x < infl.min.x
+			|| ox.min.x > infl.max.x
+			|| ox.max.y < infl.min.y
+			|| ox.min.y > infl.max.y
+		{
+			continue;
+		}
+		dst.insert(id.clone(), o.clone());
+	}
+}
+
 fn enclosure_walls(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
 	group_of: &HashMap<u32, usize>,
-	openings: &Openings,
+	door_openings: &Openings,
+	host_openings: &Openings,
+	host: Aabb2d,
 	y0: f32,
 	y1: f32,
 ) -> Vec<ClippedRectangularStrip> {
@@ -491,6 +531,70 @@ fn enclosure_walls(
 				outward_toward(from, toward, along_x),
 			);
 		}
+
+		// Host-perimeter boxing: wall faces on the primary-rect boundary unless
+		// Boundary/Exclusion (exterior shell or progressive sibling handoff).
+		for (along_x, mid, flo, fhi) in host_face_spans(host) {
+			let on_host = if along_x {
+				(cell.bounds.min.y - mid).abs() < 0.08 || (cell.bounds.max.y - mid).abs() < 0.08
+			} else {
+				(cell.bounds.min.x - mid).abs() < 0.08 || (cell.bounds.max.x - mid).abs() < 0.08
+			};
+			if !on_host {
+				continue;
+			}
+			let (lo, hi) = if along_x {
+				(
+					cell.bounds.min.x.max(flo),
+					cell.bounds.max.x.min(fhi),
+				)
+			} else {
+				(
+					cell.bounds.min.y.max(flo),
+					cell.bounds.max.y.min(fhi),
+				)
+			};
+			if hi - lo < EPS {
+				continue;
+			}
+			if plan_edge_excluded(host_openings, along_x, lo, hi, mid) {
+				continue;
+			}
+			// Skip spans already sealed as hall frontage.
+			let on_hall = halls.iter().any(|h| {
+				shared_edge_span(cell.bounds, *h).is_some_and(|(ax, a, b, m)| {
+					ax == along_x && (m - mid).abs() < 0.08 && b > lo + EPS && a < hi - EPS
+				})
+			});
+			if on_hall {
+				continue;
+			}
+			let from = Vec2::new(
+				if along_x { 0.5 * (lo + hi) } else { mid },
+				if along_x { mid } else { 0.5 * (lo + hi) },
+			);
+			let toward_out = if along_x {
+				Vec2::new(from.x, mid + if (mid - host.min.y).abs() < 0.08 { -1.0 } else { 1.0 })
+			} else {
+				Vec2::new(mid + if (mid - host.min.x).abs() < 0.08 { -1.0 } else { 1.0 }, from.y)
+			};
+			push_span(
+				&mut pending,
+				along_x,
+				lo,
+				hi,
+				mid,
+				outward_toward(from, toward_out, along_x),
+			);
+		}
+	}
+
+	// Hall doors + host passages (e.g. inter-rect) cut voids in enclosure walls.
+	let mut cut_openings = door_openings.clone();
+	for (id, o) in host_openings.iter() {
+		if matches!(o.label, OpeningLabel::Passage) {
+			cut_openings.insert(id.clone(), o.clone());
+		}
 	}
 
 	let mut walls = Vec::new();
@@ -503,7 +607,7 @@ fn enclosure_walls(
 				span.hi,
 				mid,
 				span.outward,
-				openings,
+				&cut_openings,
 				y0,
 				height,
 				thickness,

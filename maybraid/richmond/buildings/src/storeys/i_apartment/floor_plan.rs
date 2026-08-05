@@ -191,10 +191,30 @@ impl IApartmentFloorPlan {
 		);
 
 		let mut within = Vec::new();
-		for (i, rect) in self.primary_rects.iter().enumerate() {
-			let rect2 = rect.to_aabb2();
+		let rects2: Vec<Aabb2d> = self.primary_rects.iter().map(|r| r.to_aabb2()).collect();
+		let y0 = Vec3::from(host.min).y;
+		let y1 = Vec3::from(host.max).y;
+		for (i, _rect) in self.primary_rects.iter().enumerate() {
+			let rect2 = rects2[i];
 			let bounds = plan_to_aabb3(&host, rect2, PlanAxes::XZ);
-			let openings = openings_intersecting_xz(&self.openings, rect2);
+			let mut openings = openings_intersecting_xz(&self.openings, rect2);
+			// Shell owns true exterior; leave shared primary-rect edges free so the
+			// first progressive fill can box them, then hand Boundary to siblings.
+			let siblings: Vec<Aabb2d> = rects2
+				.iter()
+				.enumerate()
+				.filter(|(j, _)| *j != i)
+				.map(|(_, r)| *r)
+				.collect();
+			crate::usage_areas::boundary_openings::inject_exterior_boundaries(
+				rect2,
+				&siblings,
+				y0,
+				y1,
+				SCOPE,
+				&format!("rect_{i}"),
+				&mut openings,
+			);
 			within.push(FillRegion::new(
 				SpaceKind::Custom(format!("{SCOPE}_rect_{i}")),
 				Confines::new(bounds, self.roll, openings),

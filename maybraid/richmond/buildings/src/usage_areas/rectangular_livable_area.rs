@@ -1567,6 +1567,15 @@ fn enclose_closed_rooms(
 		let mut best_door: Option<usize> = None;
 		let mut best_score = f32::NEG_INFINITY;
 		for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
+			if crate::usage_areas::boundary_openings::plan_edge_excluded(
+				&c.openings,
+				along_x,
+				lo,
+				hi,
+				mid,
+			) {
+				continue;
+			}
 			let hall_len = open_bands
 				.iter()
 				.filter_map(|hall| shared_edge_span(b, *hall))
@@ -1585,6 +1594,16 @@ fn enclose_closed_rooms(
 		}
 		for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
 			if hi - lo < EPS {
+				continue;
+			}
+			// Skip faces the host already sealed (exterior shell / progressive Boundary).
+			if crate::usage_areas::boundary_openings::plan_edge_excluded(
+				&c.openings,
+				along_x,
+				lo,
+				hi,
+				mid,
+			) {
 				continue;
 			}
 			let door = if !door_placed && best_door == Some(fi) && best_score >= DOOR_WIDTH * 0.7

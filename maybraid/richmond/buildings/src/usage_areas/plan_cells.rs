@@ -75,13 +75,25 @@ pub fn shared_edge_length(a: Aabb2d, b: Aabb2d, eps: f32) -> Option<f32> {
 	None
 }
 
-fn edge_adjacent_aabb2(a: Aabb2d, b: Aabb2d, eps: f32) -> bool {
-	shared_edge_length(a, b, eps).is_some()
+/// Longest shared-edge length between `cell` and any hallway band.
+pub fn hall_frontage_length(cell: &PlanCell, halls: &[Aabb2d], eps: f32) -> f32 {
+	halls
+		.iter()
+		.filter_map(|h| shared_edge_length(cell.bounds, *h, eps))
+		.fold(0.0_f32, f32::max)
 }
 
-/// True when `cell` shares an edge with any hallway band.
-pub fn cell_has_hall_frontage(cell: &PlanCell, halls: &[Aabb2d], eps: f32) -> bool {
-	halls.iter().any(|h| edge_adjacent_aabb2(cell.bounds, *h, eps))
+/// True when `cell` shares an edge of at least `min_length` with a hallway band.
+///
+/// Same pinch rule as inter-cell [`cells_well_connected`]: a point/kiss contact
+/// is not real frontage for seeding or doors.
+pub fn cell_has_hall_frontage(
+	cell: &PlanCell,
+	halls: &[Aabb2d],
+	min_length: f32,
+	eps: f32,
+) -> bool {
+	hall_frontage_length(cell, halls, eps) + eps >= min_length.max(eps)
 }
 
 /// Guillotine-split oversized cells toward `min_room` extents.
@@ -178,7 +190,7 @@ pub fn pack_apartments_to_targets(
 
 	let frontage: Vec<bool> = eligible
 		.iter()
-		.map(|c| cell_has_hall_frontage(c, halls, EPS))
+		.map(|c| cell_has_hall_frontage(c, halls, min_conn, EPS))
 		.collect();
 
 	let mut assigned = vec![false; eligible.len()];
@@ -646,7 +658,7 @@ mod tests {
 		for g in &groups {
 			assert!(g.iter().any(|&id| {
 				let c = rooms.iter().find(|c| c.id == id).unwrap();
-				cell_has_hall_frontage(c, &[hall], EPS)
+				cell_has_hall_frontage(c, &[hall], MIN_GROUP_CONNECTIVITY, EPS)
 			}));
 		}
 	}

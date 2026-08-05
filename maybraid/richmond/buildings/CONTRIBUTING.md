@@ -110,9 +110,13 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    [`HallEnclosedSuites`](src/usage_areas/hall_connected_suites.rs)
    ([`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → split →
    [`pack_apartments_to_targets`](src/usage_areas/plan_cells.rs) with
-   [`MIN_GROUP_CONNECTIVITY`](src/usage_areas/plan_cells.rs) **2.0 m** →
-   one hall door / group + partition / hall-edge walls) →
-   [`LivableApartment`](src/usage_areas/livable_apartment/) fill per suite
+   [`MIN_GROUP_CONNECTIVITY`](src/usage_areas/plan_cells.rs) **2.0 m** for
+   both inter-cell joins and hall frontage → one hall door / group +
+   partition / hall-edge / host-perimeter walls, skipping
+   [`OpeningLabel::Boundary`](src/openings.rs)) →
+   [`LivableApartment`](src/usage_areas/livable_apartment/) fill per suite.
+   Multi-rect I plans fill primary rects **progressively** (earlier rect walls
+   shared edges, then injects Boundary onto later siblings).
    (entryway → [`RectPassageCluster`](src/usage_areas/rect_passage_cluster.rs)
    → per-rect
    [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)).
