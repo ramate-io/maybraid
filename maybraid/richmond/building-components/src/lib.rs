@@ -31,6 +31,7 @@ pub use layer::{Layer, Layers};
 pub use lod_band::{warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
+	WarmAssetLodRoots,
 };
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,

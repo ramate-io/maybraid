@@ -106,7 +106,7 @@ impl RoofLodProbe {
 	}
 }
 
-/// Probe hosts carry banding + cull policy; content lives under level roots.
+/// Probe writes [`LodSceneLevel`]; mesh spawn/cull uses [`crate::WarmAssetLodRoots`].
 impl LodScene for RoofLodProbe {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)
@@ -114,10 +114,6 @@ impl LodScene for RoofLodProbe {
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
 		self.status_for_lod_ref(lod_ref)
-	}
-
-	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
-		self.culls_for_lod_ref(lod_ref)
 	}
 
 	fn scene_with_level(

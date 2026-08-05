@@ -168,7 +168,7 @@ impl LodScene for WizardsTower {
 		}
 	}
 
-	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
 		// Offset bands: drop High once ~halfway into Medium; Low keeps Medium warm.
 		let (level, progress) = self.band_progress_for_lod_ref(lod_ref);
 		cull_offset_bands(level, progress).with_customs()

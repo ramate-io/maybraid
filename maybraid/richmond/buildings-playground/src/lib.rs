@@ -24,7 +24,7 @@ use preview::{
 };
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
-	FurnitureWireframePlugin, LabelWireframePlugin, PartitionLodProbe, RoofLodProbe,
+	FurnitureWireframePlugin, LabelWireframePlugin, WarmAssetLodRoots,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 use scene_ref::SceneRefPlugin;
@@ -44,8 +44,8 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
 		add_fine_pass_for::<WizardsTower>(app);
-		add_fine_pass_cull_for::<PartitionLodProbe>(app);
-		add_fine_pass_cull_for::<RoofLodProbe>(app);
+		// Probe updates LodSceneLevel; WarmAssetLodRoots handles spawn + cull.
+		add_fine_pass_cull_for::<WarmAssetLodRoots>(app);
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,

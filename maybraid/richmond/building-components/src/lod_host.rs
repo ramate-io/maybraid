@@ -8,13 +8,51 @@
 //!
 //! Sibling of [`lod::lod_host_scene`](lod::lod_scene_host::lod_host_scene) (lazy single root);
 //! these helpers **warm** several level roots up front.
+//!
+//! Mesh warm hosts attach [`WarmAssetLodRoots`] (`LodScene`) so Sync → Fulfill can
+//! spawn a level after Cull despawns it. Composite [`warm_content_host`] hosts omit
+//! that component (probe-only; no mesh-root `LodScene` for fulfill/cull).
 
 use bevy::prelude::{Children, Component, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::LodSceneLevel;
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel};
+use lod::lod_ref::LodRef;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use crate::assets::AssetPath;
+use crate::lod_band::warm_mesh_lod_culls;
+
+/// Per-level GLB roots for a warm mesh host (`LodScene` for fulfill + cull).
+#[derive(Debug, Clone, Component, Default)]
+pub struct WarmAssetLodRoots {
+	pub pose: Transform,
+	pub roots: Vec<(LodSceneLevel, Option<AssetPath>)>,
+}
+
+impl WarmAssetLodRoots {
+	pub fn content_for(&self, level: LodSceneLevel) -> impl Scene + 'static {
+		let asset = self
+			.roots
+			.iter()
+			.find(|(l, _)| *l == level)
+			.and_then(|(_, a)| *a);
+		posed_asset_tier(asset, self.pose)
+	}
+}
+
+impl LodScene for WarmAssetLodRoots {
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		warm_mesh_lod_culls(current)
+	}
+
+	fn scene_with_level(
+		&self,
+		_lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> impl Scene + 'static {
+		self.content_for(level)
+	}
+}
 
 /// Optional GLB under a transform (e.g. omit content at a far band).
 pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl Scene + 'static {
@@ -40,11 +78,13 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	transform: Transform,
 	roots: impl IntoIterator<Item = (LodSceneLevel, Option<AssetPath>)>,
 ) -> impl Scene + 'static {
-	let root_scenes: Vec<Box<dyn Scene>> = roots
-		.into_iter()
-		.map(|(root_level, asset)| mesh_level_root(root_level, asset, level == root_level))
+	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
+	let root_scenes: Vec<Box<dyn Scene>> = root_list
+		.iter()
+		.map(|(root_level, asset)| mesh_level_root(*root_level, *asset, level == *root_level))
 		.collect();
-	host_with_roots(level, probe, transform, root_scenes)
+	let kit = WarmAssetLodRoots { pose: transform, roots: root_list };
+	host_with_mesh_kit(level, probe, transform, root_scenes, kit)
 }
 
 /// Warm host whose level roots are arbitrary scene content (composite IR nodes).
@@ -62,7 +102,7 @@ pub fn warm_content_host<P: Component + Clone + Default + Unpin>(
 			content_level_root(root_level, content, visible)
 		})
 		.collect();
-	host_with_roots(level, probe, Transform::IDENTITY, root_scenes)
+	host_with_probe_only(level, probe, Transform::IDENTITY, root_scenes)
 }
 
 /// Convenience: warm High / Medium / Low content roots (UltraLow not yet a separate root).
@@ -84,7 +124,32 @@ pub fn warm_content_host_hsl<P: Component + Clone + Default + Unpin>(
 	)
 }
 
-fn host_with_roots<P: Component + Clone + Default + Unpin>(
+fn host_with_mesh_kit<P: Component + Clone + Default + Unpin>(
+	level: LodSceneLevel,
+	probe: P,
+	transform: Transform,
+	roots: Vec<Box<dyn Scene>>,
+	kit: WarmAssetLodRoots,
+) -> impl Scene + 'static {
+	let level_roots: Box<dyn Scene> = Box::new(bsn! {
+		LodLevelRoots
+		Transform::default()
+		Visibility::Inherited
+		Children [ {roots} ]
+	});
+	let host_children = vec![level_roots];
+	bsn! {
+		LodSceneHost
+		template_value(level)
+		template_value(probe)
+		template_value(transform)
+		template_value(kit)
+		Visibility::Inherited
+		Children [ {host_children} ]
+	}
+}
+
+fn host_with_probe_only<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,
 	probe: P,
 	transform: Transform,

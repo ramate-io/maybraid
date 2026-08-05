@@ -10,7 +10,7 @@ use crate::assets::panels::shepherds_thatch::{RECTANGLE_HIGH, RECTANGLE_LOW, REC
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::placed::Placement;
 use crate::roofs::geometry::RoofGeometry;
-use crate::roofs::lod::{leaf_scene_ref_lod, RoofLodProbe};
+use crate::roofs::lod::leaf_scene_ref_lod;
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
 use crate::roofs::{
@@ -42,10 +42,8 @@ impl LodScene for RoofNode {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
-		warm_mesh_lod_culls(RoofLodProbe::from_placement(&self.placement).level_for(
-			lod_ref.current_transform,
-		))
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: lod::gen::LodSceneLevel) -> LodSceneCulls {
+		warm_mesh_lod_culls(current)
 	}
 
 	fn scene_with_level(

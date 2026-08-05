@@ -137,8 +137,9 @@ impl LodScene for PartitionNode {
 		self.placement.partition_lod_status(lod_ref)
 	}
 
-	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
-		warm_mesh_lod_culls(self.scene_lod_level(lod_ref))
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		let _ = lod_ref;
+		warm_mesh_lod_culls(current)
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
@@ -179,10 +180,10 @@ macro_rules! impl_partition_mesh_lod_scene {
 
 			fn scene_lod_culls(
 				&self,
-				lod_ref: &::lod::lod_ref::LodRef,
+				_lod_ref: &::lod::lod_ref::LodRef,
+				current: ::lod::gen::LodSceneLevel,
 			) -> ::lod::gen::LodSceneCulls {
-				$crate::partitions::probe::PartitionLodProbe::from_aabb(lod_ref.bounds)
-					.culls_for_lod_ref(lod_ref)
+				$crate::lod_band::warm_mesh_lod_culls(current)
 			}
 
 			fn scene_with_level(

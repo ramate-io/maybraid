@@ -130,21 +130,27 @@ pub fn update_lod_host_levels<T: Component + LodScene>(
 }
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
+///
+/// Culls only despawn; this is what brings a band back when
+/// [`sync_lod_level_roots`] inserts [`LodLevelSpawnRequest`]. `LodHostBounds` is
+/// optional (probe hosts synthesize ephemeral bounds).
 pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Res<LodViewerState>,
 	hosts: Query<
-		(Entity, &T, &LodHostBounds, &LodLevelSpawnRequest, &Children),
+		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
 		With<LodSceneHost>,
 	>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+	root_keys: Query<&LodLevelRoot>,
 ) {
 	if viewer.entity == Entity::PLACEHOLDER {
 		return;
 	}
 
-	for (host, scene, bounds, request, host_children) in &hosts {
-		let lod_ref = viewer.lod_ref(&bounds.0);
+	for (host, scene, host_bounds, request, host_children) in &hosts {
+		let bounds = ephemeral_bounds(host_bounds);
+		let lod_ref = viewer.lod_ref(&bounds);
 
 		let mut roots_entity = None;
 		for child in host_children.iter() {
@@ -160,6 +166,17 @@ pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 		};
 
 		if let Ok((_, Some(root_children))) = level_roots_heads.get(roots_entity) {
+			let mut already_present = false;
+			for child in root_children.iter() {
+				if root_keys.get(child).is_ok_and(|root| root.0 == request.level) {
+					already_present = true;
+					break;
+				}
+			}
+			if already_present {
+				commands.entity(host).remove::<LodLevelSpawnRequest>();
+				continue;
+			}
 			for child in root_children.iter() {
 				commands.entity(child).insert(Visibility::Hidden);
 			}
@@ -207,7 +224,7 @@ pub fn cull_lod_level_roots<T: Component + LodScene>(
 	for (scene, host_bounds, current, host_children) in &hosts {
 		let bounds = ephemeral_bounds(host_bounds);
 		let lod_ref = viewer.lod_ref(&bounds);
-		let culls = scene.scene_lod_culls(&lod_ref);
+		let culls = scene.scene_lod_culls(&lod_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
 			continue;
 		}
@@ -272,9 +289,18 @@ pub fn add_fine_pass_for<T: Component + LodScene>(app: &mut App) {
 	);
 }
 
-/// Register cull-only fine-phase for hosts that already update levels elsewhere
-/// (e.g. partition / roof probe hosts).
+/// Register fulfill + cull for hosts that already update [`LodSceneLevel`] elsewhere
+/// (e.g. warm mesh root kits while a probe writes the level).
+///
+/// Cull despawns inactive roots; Sync requests the desired level; Fulfill builds
+/// it with [`LodScene::scene_with_level`].
 pub fn add_fine_pass_cull_for<T: Component + LodScene>(app: &mut App) {
 	configure_fine_pass_sets(app);
-	app.add_systems(Update, cull_lod_level_roots::<T>.in_set(LodFinePassSystems::Cull));
+	app.add_systems(
+		Update,
+		(
+			fulfill_lod_level_spawn::<T>.in_set(LodFinePassSystems::Fulfill),
+			cull_lod_level_roots::<T>.in_set(LodFinePassSystems::Cull),
+		),
+	);
 }

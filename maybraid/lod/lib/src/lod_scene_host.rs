@@ -118,9 +118,11 @@ pub fn sync_lod_level_roots(
 			}
 		}
 
-		// Desired level root was never spawned (lazy levels) → request it; hide pass above
-		// already hid any previously active roots.
-		if !found {
+		// Desired root present → drop any stale spawn request (e.g. left over after a
+		// prior cull). Missing → request fulfill so a culled band can come back.
+		if found {
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
+		} else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
 		}
 	}
