@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use chico_vegetation_components::VegetationProceduralAssets;
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{
@@ -65,6 +66,29 @@ fn render_tuft_standard_material() -> StandardMaterial {
 		base_color: Color::srgb(0.22, 0.62, 0.28),
 		double_sided: true,
 		..Default::default()
+	}
+}
+
+/// Replace procedural foliage [`StandardMaterial`] with [`ChicoLeafMaterial`] (discard silhouette).
+///
+/// VegetationComponents still author green `StandardMaterial`; this playground patch swaps it
+/// after spawn (noisy ball + plane-splay fulfill) so `/show` / `/render sopes-banyan` can inspect
+/// LOD against the leaf discard shader without wiring materials into IR.
+pub fn patch_vegetation_foliage_leaf_material(
+	mut commands: Commands,
+	mats: Res<RenderMaterials>,
+	candidates: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
+) {
+	let placeholder = VegetationProceduralAssets::foliage_material();
+	let leaf = mats.leaf.clone();
+	for (entity, mesh_mat) in &candidates {
+		if mesh_mat.id() != placeholder.id() {
+			continue;
+		}
+		commands
+			.entity(entity)
+			.remove::<MeshMaterial3d<StandardMaterial>>()
+			.insert(MeshMaterial3d(leaf.clone()));
 	}
 }
 

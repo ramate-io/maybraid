@@ -46,7 +46,9 @@ use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
-use render_materials::{setup_render_materials, sync_render_material_handles};
+use render_materials::{
+	patch_vegetation_foliage_leaf_material, setup_render_materials, sync_render_material_handles,
+};
 use scene_ref::SceneRefPlugin;
 
 pub struct SbsTreesPlaygroundPlugin;
@@ -111,6 +113,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
+					patch_vegetation_foliage_leaf_material
+						.after(sync_show)
+						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
