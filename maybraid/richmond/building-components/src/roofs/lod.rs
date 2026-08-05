@@ -7,13 +7,15 @@ use bevy::prelude::{Component, Query, Res, Transform, With};
 use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{LodSceneLevel, LodSceneStatus};
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 use scene_ref::SceneRef;
 
+use crate::empty_scene;
 use crate::lod_band::{
-	center_extent_from_aabb, characteristic_extent_abs, placement_center, DistanceLodBand,
+	center_extent_from_aabb, characteristic_extent_abs, placement_center, warm_mesh_lod_culls,
+	DistanceLodBand,
 };
 use crate::lod_host::warm_content_host_hsl;
 use crate::placed::Placement;
@@ -97,6 +99,33 @@ impl RoofLodProbe {
 	pub fn status_for_lod_ref(&self, lod_ref: &LodRef) -> LodSceneStatus {
 		self.band_for(lod_ref.current_transform)
 			.status_vs(self.band_for(lod_ref.previous_transform))
+	}
+
+	pub fn culls_for_lod_ref(&self, lod_ref: &LodRef) -> LodSceneCulls {
+		warm_mesh_lod_culls(self.level_for(lod_ref.current_transform))
+	}
+}
+
+/// Probe hosts carry banding + cull policy; content lives under level roots.
+impl LodScene for RoofLodProbe {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for(lod_ref.current_transform)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		self.status_for_lod_ref(lod_ref)
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
+		self.culls_for_lod_ref(lod_ref)
+	}
+
+	fn scene_with_level(
+		&self,
+		_lod_ref: &LodRef,
+		_level: LodSceneLevel,
+	) -> impl Scene + 'static {
+		bevy::scene::SceneFunction(empty_scene)
 	}
 }
 

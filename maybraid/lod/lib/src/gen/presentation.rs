@@ -11,6 +11,7 @@ pub mod tests;
 
 use crate::gen::id::Id;
 use crate::gen::spatial_index::{SpatialIndex, Version};
+use crate::lod_cull::LodSceneCulls;
 use crate::lod_level::LodSceneLevel;
 use crate::lod_ref::LodRef;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
@@ -39,6 +40,18 @@ pub trait LodScene {
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
 		let _ = lod_ref;
 		LodSceneStatus::Changed(LodSceneLevel::High)
+	}
+
+	/// Inactive [`crate::LodLevelRoot`]s this scene is willing to despawn.
+	///
+	/// Must be cheap — no scene build. Default keeps every root warm
+	/// ([`LodSceneCulls::None`]). Prefer explicit tight [`LodSceneCulls::AllOf`]
+	/// lists when memory matters; “not current” alone is not a cull reason.
+	///
+	/// Host GC never despawns the host's current/desired level even if listed.
+	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
+		let _ = lod_ref;
+		LodSceneCulls::None
 	}
 
 	/// Scene for one LOD level root (primary implementation target).

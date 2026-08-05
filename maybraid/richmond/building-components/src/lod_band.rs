@@ -5,9 +5,31 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{LodSceneLevel, LodSceneStatus};
+use lod::gen::{LodSceneCull, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 
 use crate::placed::Placement;
+
+/// Despawn policy for warm High/Medium/Low mesh hosts.
+///
+/// Keeps recently used bands warm near the camera; drops High once Medium/Low,
+/// and always refuses open-ended Distance/Resolution customs.
+pub fn warm_mesh_lod_culls(level: LodSceneLevel) -> LodSceneCulls {
+	match level {
+		LodSceneLevel::High => LodSceneCulls::AllOf(vec![
+			LodSceneCull::AllDistance,
+			LodSceneCull::AllResolution,
+		]),
+		LodSceneLevel::Medium
+		| LodSceneLevel::Low
+		| LodSceneLevel::UltraLow
+		| LodSceneLevel::Distance(_)
+		| LodSceneLevel::Resolution(_) => LodSceneCulls::AllOf(vec![
+			LodSceneCull::Level(LodSceneLevel::High),
+			LodSceneCull::AllDistance,
+			LodSceneCull::AllResolution,
+		]),
+	}
+}
 
 /// Four-way band from a distance factor (used by partition and roof probes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -78,6 +100,7 @@ pub fn placement_center(placement: &Placement) -> Vec3 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use lod::gen::LodSceneCull;
 
 	#[test]
 	fn from_factors_thresholds() -> anyhow::Result<()> {
@@ -88,6 +111,19 @@ mod tests {
 			DistanceLodBand::from_factors(501.0, 2.5, 10.0, 500.0),
 			DistanceLodBand::UltraLow
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn warm_mesh_culls_high_when_not_high() -> anyhow::Result<()> {
+		assert!(!warm_mesh_lod_culls(LodSceneLevel::High).should_cull(LodSceneLevel::High));
+		assert!(!warm_mesh_lod_culls(LodSceneLevel::High).should_cull(LodSceneLevel::Medium));
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Medium).should_cull(LodSceneLevel::High));
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Low).should_cull(LodSceneLevel::High));
+		assert!(matches!(
+			warm_mesh_lod_culls(LodSceneLevel::High),
+			LodSceneCulls::AllOf(ref v) if v.contains(&LodSceneCull::AllDistance)
+		));
 		Ok(())
 	}
 }

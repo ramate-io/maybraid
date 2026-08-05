@@ -83,12 +83,13 @@ Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](b
 
 - `scene_lod_level` — desired [`LodSceneLevel`](../lod/lib/src/lod_level.rs) (cheap).
 - `scene_lod_status` — `Unchanged` or `Changed(level)`.
+- `scene_lod_culls` — inactive [`LodLevelRoot`](../lod/lib/src/lod_scene_host.rs)s this type is willing to **despawn** ([`LodSceneCulls`](../lod/lib/src/lod_cull.rs); default `None` keeps roots warm). Prefer tight `AllOf` lists; “not current” alone is not a cull reason. Host GC never despawns the current level.
 - `scene_with_level` — primary builder for one level root.
 - `scene_with_lod` — first present via [`lod_host_scene`](../lod/lib/src/lod_scene_host.rs).
 
 Hosts flip level-root visibility / lazily spawn missing roots. Nested hosts are independent.
 
-**Fine pass:** [`LodFinePassPlugin`](../lod/lib/src/fine_pass.rs) tracks any [`LodViewer`](../lod/lib/src/fine_pass.rs) into [`LodViewerState`](../lod/lib/src/fine_pass.rs), then `add_fine_pass_for::<T>()` updates levels and fulfills [`LodLevelSpawnRequest`](../lod/lib/src/lod_scene_host.rs) via ephemeral [`LodRef`](../lod/lib/src/lod_ref.rs) + [`LodHostBounds`](../lod/lib/src/fine_pass.rs). Cameras are playground-only (`LodViewer` on the fly-cam). See also [structural LOD collectors](../lod/docs/structural-lod-collectors.md).
+**Fine pass:** [`LodFinePassPlugin`](../lod/lib/src/fine_pass.rs) tracks any [`LodViewer`](../lod/lib/src/fine_pass.rs) into [`LodViewerState`](../lod/lib/src/fine_pass.rs), then `add_fine_pass_for::<T>()` updates levels, fulfills [`LodLevelSpawnRequest`](../lod/lib/src/lod_scene_host.rs), and culls via ephemeral [`LodRef`](../lod/lib/src/lod_ref.rs) + [`LodHostBounds`](../lod/lib/src/fine_pass.rs). Probe-driven hosts use `add_fine_pass_cull_for::<T>()` alongside their own level updaters. Cameras are playground-only (`LodViewer` on the fly-cam). See also [structural LOD collectors](../lod/docs/structural-lod-collectors.md).
 
 ### `ParentConfines` (building-components only)
 

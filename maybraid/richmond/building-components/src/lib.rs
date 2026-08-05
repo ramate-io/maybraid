@@ -28,6 +28,7 @@ pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureW
 pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
+pub use lod_band::warm_mesh_lod_culls;
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
 };

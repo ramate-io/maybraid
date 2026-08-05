@@ -2,14 +2,15 @@
 
 use bevy::prelude::{Quat, Transform};
 use bevy::scene::prelude::Scene;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneCulls};
 use lod::lod_ref::LodRef;
 
 use crate::arc_kit::ArcKit;
 use crate::assets::panels::shepherds_thatch::{RECTANGLE_HIGH, RECTANGLE_LOW, RECTANGLE_MID};
+use crate::lod_band::warm_mesh_lod_culls;
 use crate::placed::Placement;
 use crate::roofs::geometry::RoofGeometry;
-use crate::roofs::lod::leaf_scene_ref_lod;
+use crate::roofs::lod::{leaf_scene_ref_lod, RoofLodProbe};
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
 use crate::roofs::{
@@ -39,6 +40,12 @@ impl RoofNode {
 impl LodScene for RoofNode {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
+		warm_mesh_lod_culls(RoofLodProbe::from_placement(&self.placement).level_for(
+			lod_ref.current_transform,
+		))
 	}
 
 	fn scene_with_level(

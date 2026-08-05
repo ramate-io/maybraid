@@ -17,14 +17,14 @@ use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
+use lod::{add_fine_pass_cull_for, add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
 	draw_opening_plan_gizmos, draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
-	FurnitureWireframePlugin, LabelWireframePlugin,
+	FurnitureWireframePlugin, LabelWireframePlugin, PartitionLodProbe, RoofLodProbe,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 use scene_ref::SceneRefPlugin;
@@ -44,6 +44,8 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
 		add_fine_pass_for::<WizardsTower>(app);
+		add_fine_pass_cull_for::<PartitionLodProbe>(app);
+		add_fine_pass_cull_for::<RoofLodProbe>(app);
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
@@ -59,7 +61,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					draw_roof_complex_gizmos.after(present_preview_lod),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					update_roof_host_levels.in_set(LodFinePassSystems::UpdateLevels),
-					apply_parent_confines.after(LodFinePassSystems::Fulfill),
+					apply_parent_confines.after(LodFinePassSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
