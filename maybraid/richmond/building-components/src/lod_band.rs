@@ -5,9 +5,32 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus,
+};
 
 use crate::placed::Placement;
+
+/// Despawn policy for warm High/Medium/Low mesh hosts.
+///
+/// Aggressive adjacent cull (`depth = 0`): drop the nearer adjacent band as soon
+/// as the current band is entered. Acceptable here because warm mesh roots are
+/// cheap SceneRefs; **do not copy this for heavy composite hosts** — prefer
+/// [`lod::cull_non_adjacent_bands`] or [`lod::cull_offset_bands`]. Also refuses
+/// Distance/Resolution customs.
+pub fn warm_mesh_lod_culls(level: LodSceneLevel) -> LodSceneCulls {
+	cull_bands_with_adjacent_depth(level, 1.0, 0.0).with_customs()
+}
+
+/// Like [`warm_mesh_lod_culls`], but only cull the nearer adjacent once
+/// `progress_into_band` ≥ `depth` (see [`lod::cull_bands_with_adjacent_depth`]).
+pub fn warm_mesh_lod_culls_at_depth(
+	level: LodSceneLevel,
+	progress_into_band: f32,
+	depth: f32,
+) -> LodSceneCulls {
+	cull_bands_with_adjacent_depth(level, progress_into_band, depth).with_customs()
+}
 
 /// Four-way band from a distance factor (used by partition and roof probes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -88,6 +111,25 @@ mod tests {
 			DistanceLodBand::from_factors(501.0, 2.5, 10.0, 500.0),
 			DistanceLodBand::UltraLow
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn warm_mesh_culls_high_when_not_high() -> anyhow::Result<()> {
+		let high = warm_mesh_lod_culls(LodSceneLevel::High);
+		assert!(!high.should_cull(LodSceneLevel::High));
+		assert!(!high.should_cull(LodSceneLevel::Medium));
+		assert!(high.should_cull(LodSceneLevel::Low));
+		assert!(high.should_cull(LodSceneLevel::Distance(lod::QuantizedDistance(1))));
+
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Medium).should_cull(LodSceneLevel::High));
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Low).should_cull(LodSceneLevel::High));
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Low).should_cull(LodSceneLevel::Medium));
+
+		let early_mid = warm_mesh_lod_culls_at_depth(LodSceneLevel::Medium, 0.2, 0.5);
+		assert!(!early_mid.should_cull(LodSceneLevel::High));
+		let deep_mid = warm_mesh_lod_culls_at_depth(LodSceneLevel::Medium, 0.6, 0.5);
+		assert!(deep_mid.should_cull(LodSceneLevel::High));
 		Ok(())
 	}
 }
