@@ -129,6 +129,9 @@ pub fn cull_non_adjacent_bands(current: LodSceneLevel) -> LodSceneCulls {
 	}
 }
 
+/// Default depth for [`cull_offset_bands`]: halfway into the current band.
+pub const OFFSET_BAND_DEPTH: f32 = 0.5;
+
 /// [`cull_non_adjacent_bands`], and also cull the **nearer** (more detailed) adjacent
 /// band once `progress_into_band` ≥ `depth`.
 ///
@@ -140,6 +143,8 @@ pub fn cull_non_adjacent_bands(current: LodSceneLevel) -> LodSceneCulls {
 ///
 /// `depth ≤ 0` culls the nearer adjacent as soon as the band is entered.
 /// `depth > 1` never adds the adjacent (same as non-adjacent only).
+///
+/// Prefer [`cull_offset_bands`] when `depth` should be the usual halfway mark.
 pub fn cull_bands_with_adjacent_depth(
 	current: LodSceneLevel,
 	progress_into_band: f32,
@@ -153,6 +158,13 @@ pub fn cull_bands_with_adjacent_depth(
 		return base;
 	}
 	base.and_level(NAMED_BANDS_NEAR_TO_FAR[i - 1])
+}
+
+/// Mid-band offset GC: [`cull_bands_with_adjacent_depth`] at [`OFFSET_BAND_DEPTH`].
+///
+/// Keeps the nearer adjacent warm until roughly halfway through the current band.
+pub fn cull_offset_bands(current: LodSceneLevel, progress_into_band: f32) -> LodSceneCulls {
+	cull_bands_with_adjacent_depth(current, progress_into_band, OFFSET_BAND_DEPTH)
 }
 
 /// Named band and 0..=1 progress through it from a distance/extent `factor`.
@@ -198,6 +210,16 @@ pub fn cull_named_from_factor(
 		None => cull_non_adjacent_bands(level),
 		Some(depth) => cull_bands_with_adjacent_depth(level, progress, depth),
 	}
+}
+
+/// [`cull_offset_bands`] from a distance/extent factor ([`OFFSET_BAND_DEPTH`]).
+pub fn cull_offset_bands_from_factor(
+	factor: f32,
+	high: f32,
+	medium: f32,
+	low: f32,
+) -> LodSceneCulls {
+	cull_named_from_factor(factor, high, medium, low, Some(OFFSET_BAND_DEPTH))
 }
 
 #[cfg(test)]
@@ -256,6 +278,18 @@ mod tests {
 		let deep = cull_bands_with_adjacent_depth(LodSceneLevel::Medium, 0.6, 0.5);
 		assert!(deep.should_cull(LodSceneLevel::High));
 		assert!(deep.should_cull(LodSceneLevel::UltraLow));
+	}
+
+	#[test]
+	fn offset_bands_uses_half_depth() {
+		let early = cull_offset_bands(LodSceneLevel::Medium, 0.49);
+		assert!(!early.should_cull(LodSceneLevel::High));
+		let mid = cull_offset_bands(LodSceneLevel::Medium, 0.5);
+		assert!(mid.should_cull(LodSceneLevel::High));
+		assert_eq!(
+			cull_offset_bands(LodSceneLevel::Medium, 0.75),
+			cull_bands_with_adjacent_depth(LodSceneLevel::Medium, 0.75, OFFSET_BAND_DEPTH)
+		);
 	}
 
 	#[test]

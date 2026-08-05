@@ -28,10 +28,7 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{
-	cull_bands_with_adjacent_depth, cull_non_adjacent_bands, LodScene, LodSceneCulls,
-	LodSceneLevel, LodSceneStatus,
-};
+use lod::gen::{cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
@@ -172,14 +169,9 @@ impl LodScene for WizardsTower {
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
-		// Drop High as soon as Medium (expensive internals); at Low keep Medium warm.
-		let level = self.level_for_lod_ref(lod_ref);
-		match level {
-			LodSceneLevel::Medium | LodSceneLevel::UltraLow => {
-				cull_bands_with_adjacent_depth(level, 1.0, 0.0).with_customs()
-			}
-			_ => cull_non_adjacent_bands(level).with_customs(),
-		}
+		// Offset bands: drop High once ~halfway into Medium; Low keeps Medium warm.
+		let (level, progress) = self.band_progress_for_lod_ref(lod_ref);
+		cull_offset_bands(level, progress).with_customs()
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {

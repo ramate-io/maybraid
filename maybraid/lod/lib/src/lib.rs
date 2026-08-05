@@ -18,7 +18,8 @@ pub use fine_pass::{
 };
 pub use lod_cull::{
 	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
-	named_band_index, named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR,
+	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
+	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
 pub use lod_level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene_host::{
