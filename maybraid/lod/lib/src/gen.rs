@@ -32,6 +32,9 @@ mod tests;
 pub use crate::lod_level::{LodSceneLevel, QuantizedDistance};
 pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
 pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
-pub use crate::lod_cull::{LodSceneCull, LodSceneCulls};
+pub use crate::lod_cull::{
+	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
+	named_band_index, named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR,
+};
 pub use presentation::{LodScene, LodSceneStatus, RegionPresenter};
 pub use spatial_index::{SpatialIndex, Version};

@@ -28,7 +28,10 @@ pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneCull, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_bands_with_adjacent_depth, cull_non_adjacent_bands, LodScene, LodSceneCulls,
+	LodSceneLevel, LodSceneStatus,
+};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
@@ -169,22 +172,13 @@ impl LodScene for WizardsTower {
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef) -> LodSceneCulls {
-		// High internals are expensive; drop once the host is on Medium/Low.
-		// Keep Medium warm under Low for cheap re-approach.
-		match self.level_for_lod_ref(lod_ref) {
-			LodSceneLevel::Medium
-			| LodSceneLevel::Low
-			| LodSceneLevel::UltraLow
-			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => LodSceneCulls::AllOf(vec![
-				LodSceneCull::Level(LodSceneLevel::High),
-				LodSceneCull::AllDistance,
-				LodSceneCull::AllResolution,
-			]),
-			LodSceneLevel::High => LodSceneCulls::AllOf(vec![
-				LodSceneCull::AllDistance,
-				LodSceneCull::AllResolution,
-			]),
+		// Drop High as soon as Medium (expensive internals); at Low keep Medium warm.
+		let level = self.level_for_lod_ref(lod_ref);
+		match level {
+			LodSceneLevel::Medium | LodSceneLevel::UltraLow => {
+				cull_bands_with_adjacent_depth(level, 1.0, 0.0).with_customs()
+			}
+			_ => cull_non_adjacent_bands(level).with_customs(),
 		}
 	}
 

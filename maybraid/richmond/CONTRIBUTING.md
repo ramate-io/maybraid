@@ -83,7 +83,7 @@ Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](b
 
 - `scene_lod_level` — desired [`LodSceneLevel`](../lod/lib/src/lod_level.rs) (cheap).
 - `scene_lod_status` — `Unchanged` or `Changed(level)`.
-- `scene_lod_culls` — inactive [`LodLevelRoot`](../lod/lib/src/lod_scene_host.rs)s this type is willing to **despawn** ([`LodSceneCulls`](../lod/lib/src/lod_cull.rs); default `None` keeps roots warm). Prefer tight `AllOf` lists; “not current” alone is not a cull reason. Host GC never despawns the current level.
+- `scene_lod_culls` — inactive [`LodLevelRoot`](../lod/lib/src/lod_scene_host.rs)s this type is willing to **despawn** ([`LodSceneCulls`](../lod/lib/src/lod_cull.rs); default `None` keeps roots warm). Prefer helpers ([`cull_non_adjacent_bands`](../lod/lib/src/lod_cull.rs), [`cull_bands_with_adjacent_depth`](../lod/lib/src/lod_cull.rs), [`cull_named_from_factor`](../lod/lib/src/lod_cull.rs)) over ad-hoc lists; “not current” alone is not a cull reason. Host GC never despawns the current level.
 - `scene_with_level` — primary builder for one level root.
 - `scene_with_lod` — first present via [`lod_host_scene`](../lod/lib/src/lod_scene_host.rs).
 

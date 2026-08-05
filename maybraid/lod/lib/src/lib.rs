@@ -16,7 +16,10 @@ pub use fine_pass::{
 	track_lod_viewer, update_lod_host_levels, LodFinePassPlugin, LodFinePassSystems,
 	LodHostBounds, LodViewer, LodViewerState,
 };
-pub use lod_cull::{LodSceneCull, LodSceneCulls};
+pub use lod_cull::{
+	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
+	named_band_index, named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR,
+};
 pub use lod_level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene_host::{
 	lod_host_scene, sync_lod_level_roots, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,

@@ -5,30 +5,29 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{LodSceneCull, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus,
+};
 
 use crate::placed::Placement;
 
 /// Despawn policy for warm High/Medium/Low mesh hosts.
 ///
-/// Keeps recently used bands warm near the camera; drops High once Medium/Low,
-/// and always refuses open-ended Distance/Resolution customs.
+/// Pattern 2 with `depth = 0`: drop the nearer adjacent band as soon as the
+/// current band is entered (High once Medium/Low/UltraLow), plus non-adjacent
+/// bands, and refuse Distance/Resolution customs.
 pub fn warm_mesh_lod_culls(level: LodSceneLevel) -> LodSceneCulls {
-	match level {
-		LodSceneLevel::High => LodSceneCulls::AllOf(vec![
-			LodSceneCull::AllDistance,
-			LodSceneCull::AllResolution,
-		]),
-		LodSceneLevel::Medium
-		| LodSceneLevel::Low
-		| LodSceneLevel::UltraLow
-		| LodSceneLevel::Distance(_)
-		| LodSceneLevel::Resolution(_) => LodSceneCulls::AllOf(vec![
-			LodSceneCull::Level(LodSceneLevel::High),
-			LodSceneCull::AllDistance,
-			LodSceneCull::AllResolution,
-		]),
-	}
+	cull_bands_with_adjacent_depth(level, 1.0, 0.0).with_customs()
+}
+
+/// Like [`warm_mesh_lod_culls`], but only cull the nearer adjacent once
+/// `progress_into_band` ≥ `depth` (see [`lod::cull_bands_with_adjacent_depth`]).
+pub fn warm_mesh_lod_culls_at_depth(
+	level: LodSceneLevel,
+	progress_into_band: f32,
+	depth: f32,
+) -> LodSceneCulls {
+	cull_bands_with_adjacent_depth(level, progress_into_band, depth).with_customs()
 }
 
 /// Four-way band from a distance factor (used by partition and roof probes).
@@ -100,7 +99,6 @@ pub fn placement_center(placement: &Placement) -> Vec3 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use lod::gen::LodSceneCull;
 
 	#[test]
 	fn from_factors_thresholds() -> anyhow::Result<()> {
@@ -116,14 +114,20 @@ mod tests {
 
 	#[test]
 	fn warm_mesh_culls_high_when_not_high() -> anyhow::Result<()> {
-		assert!(!warm_mesh_lod_culls(LodSceneLevel::High).should_cull(LodSceneLevel::High));
-		assert!(!warm_mesh_lod_culls(LodSceneLevel::High).should_cull(LodSceneLevel::Medium));
+		let high = warm_mesh_lod_culls(LodSceneLevel::High);
+		assert!(!high.should_cull(LodSceneLevel::High));
+		assert!(!high.should_cull(LodSceneLevel::Medium));
+		assert!(high.should_cull(LodSceneLevel::Low));
+		assert!(high.should_cull(LodSceneLevel::Distance(lod::QuantizedDistance(1))));
+
 		assert!(warm_mesh_lod_culls(LodSceneLevel::Medium).should_cull(LodSceneLevel::High));
 		assert!(warm_mesh_lod_culls(LodSceneLevel::Low).should_cull(LodSceneLevel::High));
-		assert!(matches!(
-			warm_mesh_lod_culls(LodSceneLevel::High),
-			LodSceneCulls::AllOf(ref v) if v.contains(&LodSceneCull::AllDistance)
-		));
+		assert!(warm_mesh_lod_culls(LodSceneLevel::Low).should_cull(LodSceneLevel::Medium));
+
+		let early_mid = warm_mesh_lod_culls_at_depth(LodSceneLevel::Medium, 0.2, 0.5);
+		assert!(!early_mid.should_cull(LodSceneLevel::High));
+		let deep_mid = warm_mesh_lod_culls_at_depth(LodSceneLevel::Medium, 0.6, 0.5);
+		assert!(deep_mid.should_cull(LodSceneLevel::High));
 		Ok(())
 	}
 }
