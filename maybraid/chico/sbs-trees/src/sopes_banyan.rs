@@ -3,6 +3,11 @@
 //! Emits [`StickNode`] / [`FoliageNode`] via [`VegetationComponents`]. Present with
 //! [`ComponentsOnly`](chico_vegetation_components::ComponentsOnly). The legacy
 //! [`RenderItem`] path is unimplemented — use the vegetation LodScene adapter or `/show`.
+//!
+//! Structural LOD (tree-radius bands):
+//! - **High** — within `1.5 ×` tree radius: full sticks + full canopy
+//! - **Medium** — `1.5…8 ×` radius: trunk + descenders + inter-node sticks; every third canopy ball
+//! - **Low** — `8…24 ×` radius: trunk only; one ball fit to canopy extents
 
 mod canopy;
 pub mod render_item_plugin;
@@ -11,14 +16,14 @@ mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents,
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use render_item::{CascadeChunk, RenderItem};
 
-use canopy::foliage_node_for_terminal;
-use stick::stick_node_for_segment;
+use canopy::{canopy_extents_ball, foliage_node_for_terminal};
+use stick::{stick_node_for_segment, stick_role_for_segment};
 
 /// Typical Sope's Banyan (geometry-only; materials are patched externally later).
 pub type SopesBanyanStd = SopesBanyan;
@@ -42,16 +47,54 @@ impl SopesBanyan {
 		self.geometry.build_chain()
 	}
 
-	fn stick_nodes(&self) -> Vec<StickNode> {
-		let chain = self.build_chain();
+	/// Footprint radius: max horizontal distance of any chain node from the trunk axis.
+	fn tree_radius(&self, chain: &BallStickChain<SopesBanyanChain>) -> f32 {
+		let mut r = self.geometry.scale.stalk_base_radius.max(1e-3);
+		for node in &chain.nodes {
+			let horiz = Vec2::new(node.position.x, node.position.z).length();
+			r = r.max(horiz);
+		}
+		r
+	}
+
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.scale.stalk_height * 0.5, 0.0)
+	}
+
+	fn stick_nodes_high(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
 		chain
 			.segments_with_hysteresis()
 			.filter_map(|(segment, _, _)| stick_node_for_segment(&segment))
 			.collect()
 	}
 
-	fn foliage_nodes(&self) -> Vec<FoliageNode> {
-		let chain = self.build_chain();
+	fn stick_nodes_medium(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
+		chain
+			.segments_with_hysteresis()
+			.filter_map(|(segment, parent, _)| {
+				let role = stick_role_for_segment(&segment, parent);
+				if !role.keep_on_medium() {
+					return None;
+				}
+				stick_node_for_segment(&segment)
+			})
+			.collect()
+	}
+
+	fn stick_nodes_low(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
+		chain
+			.segments_with_hysteresis()
+			.filter_map(|(segment, parent, _)| {
+				let role = stick_role_for_segment(&segment, parent);
+				if !role.keep_on_low() {
+					return None;
+				}
+				stick_node_for_segment(&segment)
+			})
+			.collect()
+	}
+
+	fn foliage_nodes_high(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
 		let min_height = self.geometry.crown_floor_world_y();
 		let leaf_radius_world = self.geometry.leaf_ball_size();
 		chain
@@ -61,15 +104,61 @@ impl SopesBanyan {
 			})
 			.collect()
 	}
+
+	fn foliage_nodes_medium(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
+		self.foliage_nodes_high(chain)
+			.into_iter()
+			.enumerate()
+			.filter_map(|(i, node)| {
+				if i % 3 == 0 {
+					// Medium keeps canopy balls only (collapse plane-splay to noisy ball).
+					Some(FoliageNode::noisy_ball(node.placement))
+				} else {
+					None
+				}
+			})
+			.collect()
+	}
+
+	fn foliage_nodes_low(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<FoliageNode> {
+		let high = self.foliage_nodes_high(chain);
+		canopy_extents_ball(&high).into_iter().collect()
+	}
 }
 
 impl VegetationComponents for SopesBanyan {
-	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-		Layers::from_free(self.stick_nodes())
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let chain = self.build_chain();
+		let nodes = match level {
+			LodSceneLevel::High => self.stick_nodes_high(&chain),
+			LodSceneLevel::Medium => self.stick_nodes_medium(&chain),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => self.stick_nodes_low(&chain),
+		};
+		Layers::from_free(nodes)
 	}
 
-	fn foliage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FoliageNode> {
-		Layers::from_free(self.foliage_nodes())
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let chain = self.build_chain();
+		let nodes = match level {
+			LodSceneLevel::High => self.foliage_nodes_high(&chain),
+			LodSceneLevel::Medium => self.foliage_nodes_medium(&chain),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => self.foliage_nodes_low(&chain),
+		};
+		Layers::from_free(nodes)
+	}
+
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		let chain = self.build_chain();
+		Some(VegetationStructuralLodProbe::new(
+			self.structural_center(),
+			self.tree_radius(&chain),
+		))
 	}
 }
 

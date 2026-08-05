@@ -11,6 +11,7 @@ pub mod placed;
 pub mod procedural;
 pub mod scene_children;
 pub mod sticks;
+pub mod structural_probe;
 
 pub use assets::AssetPath;
 pub use foliage::{FoliageGeometry, FoliageNode, FoliageStyle};
@@ -26,12 +27,18 @@ pub use foliage::{
 	update_foliage_host_levels, FoliageLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
 	FOLIAGE_MEDIUM_FACTOR,
 };
+pub use structural_probe::{
+	update_vegetation_structural_host_levels, VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR,
+	STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
+};
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Commands, CommandsSceneExt, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneLevel};
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+
+use crate::lod_host::warm_content_host_hsl;
 
 /// Domain IR exposed by a tree (or vegetation part) for structural composition.
 pub trait VegetationComponents {
@@ -42,6 +49,11 @@ pub trait VegetationComponents {
 	fn foliage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FoliageNode> {
 		Layers::new()
 	}
+
+	/// When set, [`ComponentsOnly`] presents a warm High/Medium/Low host driven by this probe.
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		None
+	}
 }
 
 impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
@@ -51,6 +63,10 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		(**self).foliage_nodes_for_level(level)
+	}
+
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		(**self).structural_lod_probe()
 	}
 }
 
@@ -86,15 +102,48 @@ impl<T: VegetationComponents> VegetationComponents for ComponentsOnly<T> {
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		self.0.foliage_nodes_for_level(level)
 	}
+
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		self.0.structural_lod_probe()
+	}
 }
 
 impl<T: VegetationComponents> LodScene for ComponentsOnly<T> {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.0
+			.structural_lod_probe()
+			.map(|p| p.level_for(lod_ref.current_transform))
+			.unwrap_or(LodSceneLevel::High)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		match self.0.structural_lod_probe() {
+			Some(probe) => probe.status_for_lod_ref(lod_ref),
+			None => LodSceneStatus::Unchanged,
+		}
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Keep structural H/M/L roots warm; content differs per band and respawn is expensive.
+		LodSceneCulls::None
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		component_only_scene(&self.0, lod_ref, level)
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let level = self.scene_lod_level(lod_ref);
+		match self.0.structural_lod_probe() {
+			Some(probe) => Box::new(warm_content_host_hsl(
+				level,
+				probe,
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::High),
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium),
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::Low),
+			)) as Box<dyn Scene>,
+			None => Box::new(component_only_scene(&self.0, lod_ref, level)) as Box<dyn Scene>,
+		}
 	}
 }
 
