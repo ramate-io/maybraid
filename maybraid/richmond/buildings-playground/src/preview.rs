@@ -3513,7 +3513,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5)],
 			strategy: AllOpen,
 			seed: 3,
-			program: &[Living, Kitchen],
+			program: &[Living, Eating],
 		},
 		// Opposite ports + SpineHall
 		LivableRectangleExampleSpec {
@@ -3531,7 +3531,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.35), (East, 0.5)],
 			strategy: CaseAttempt,
 			seed: 5,
-			program: &[Living, Kitchen, Bedroom],
+			program: &[Living, Eating, Bedroom],
 		},
 		// 3 ports
 		LivableRectangleExampleSpec {
@@ -3540,7 +3540,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5), (North, 0.35), (West, 0.5)],
 			strategy: SpineHall,
 			seed: 6,
-			program: &[Living, Bedroom, Bathroom, Kitchen],
+			program: &[Living, Bedroom, Bathroom, Eating],
 		},
 		// Large Guillotine
 		LivableRectangleExampleSpec {
@@ -3549,7 +3549,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.5)],
 			strategy: GuillotineSplit,
 			seed: 7,
-			program: &[Living, Kitchen, Bedroom, Bathroom, Dining],
+			program: &[Living, Eating, Bedroom, Bathroom],
 		},
 		// Large CaseAttempt, 2 opposite
 		LivableRectangleExampleSpec {
@@ -3558,7 +3558,7 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			ports: &[(South, 0.4), (North, 0.6)],
 			strategy: CaseAttempt,
 			seed: 8,
-			program: &[Living, Kitchen, Bedroom, Bedroom, Bathroom],
+			program: &[Living, Eating, Bedroom, Bedroom, Bathroom],
 		},
 		// Compact 3×4 SingleClosed
 		LivableRectangleExampleSpec {
@@ -3706,6 +3706,7 @@ fn draw_livable_rectangle_gizmos(
 				(label_bounds(&r.room_type), Color::srgb(0.35, 0.55, 0.95))
 			}
 			RectAreaRoom::Living(r) => (label_bounds(&r.room_type), Color::srgb(0.95, 0.55, 0.25)),
+			RectAreaRoom::Eating(r) => (label_bounds(&r.room_type), Color::srgb(0.4, 0.88, 0.4)),
 			RectAreaRoom::Kitchen(r) => (label_bounds(&r.room_type), Color::srgb(0.35, 0.9, 0.45)),
 			RectAreaRoom::Dining(r) => (label_bounds(&r.room_type), Color::srgb(0.45, 0.85, 0.35)),
 			RectAreaRoom::Bathroom(r) => {

@@ -50,13 +50,14 @@ pub use livable_apartments::{
 	LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized,
 };
 pub use livable_quarters::{
-	DiningRoom, DiningRoomParameterized, DiningRoomPlan, Kitchen, KitchenCounterLayout,
-	KitchenParameterized, KitchenPlan, LivingRoom, LivingRoomParameterized, LivingRoomPlan,
-	ResidentialBathroom, ResidentialBathroomParameterized, ResidentialBathroomPlan,
-	ResidentialHalfBathroom, ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan,
-	SittingRoom, SittingRoomParameterized, SittingRoomPlan, Study, StudyParameterized, StudyPlan,
-	DINING_ROOM_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE, RESIDENTIAL_BATHROOM_SCOPE,
-	RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
+	DiningRoom, DiningRoomParameterized, DiningRoomPlan, EatingArea, EatingAreaParameterized,
+	EatingAreaPlan, Kitchen, KitchenCounterLayout, KitchenParameterized, KitchenPlan, LivingRoom,
+	LivingRoomParameterized, LivingRoomPlan, ResidentialBathroom, ResidentialBathroomParameterized,
+	ResidentialBathroomPlan, ResidentialHalfBathroom, ResidentialHalfBathroomParameterized,
+	ResidentialHalfBathroomPlan, SittingRoom, SittingRoomParameterized, SittingRoomPlan, Study,
+	StudyParameterized, StudyPlan, DINING_ROOM_SCOPE, EATING_AREA_SCOPE, KITCHEN_SCOPE,
+	LIVING_ROOM_SCOPE, RESIDENTIAL_BATHROOM_SCOPE, RESIDENTIAL_HALF_BATHROOM_SCOPE,
+	SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, decompose_max_rects,

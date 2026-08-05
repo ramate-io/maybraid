@@ -408,7 +408,7 @@ impl LivableApartment {
 					walkways.extend(rla.walkways.iter().copied());
 					partitions.extend(rla.partitions);
 					for room in rla.rooms {
-						rooms.push(map_rla_room(room));
+						push_mapped_rla_room(&mut rooms, room);
 					}
 					residual_within.extend(nested.within);
 				}
@@ -480,20 +480,28 @@ impl LivableApartment {
 	}
 }
 
-fn map_rla_room(room: RectAreaRoom) -> ApartmentRoom {
+fn push_mapped_rla_room(rooms: &mut Vec<ApartmentRoom>, room: RectAreaRoom) {
 	match room {
-		RectAreaRoom::OpenBand { label, confines } => ApartmentRoom::OpenHall { label, confines },
-		RectAreaRoom::HouseholdCloset { label, confines } => {
-			ApartmentRoom::HouseholdCloset { label, confines }
+		RectAreaRoom::OpenBand { label, confines } => {
+			rooms.push(ApartmentRoom::OpenHall { label, confines });
 		}
-		RectAreaRoom::Bedroom(r) => ApartmentRoom::Bedroom(r),
-		RectAreaRoom::Living(r) => ApartmentRoom::Living(r),
-		RectAreaRoom::Kitchen(r) => ApartmentRoom::Kitchen(r),
-		RectAreaRoom::Dining(r) => ApartmentRoom::Dining(r),
-		RectAreaRoom::Bathroom(r) => ApartmentRoom::Bathroom(r),
-		RectAreaRoom::HalfBath(r) => ApartmentRoom::HalfBath(r),
-		RectAreaRoom::Sitting(r) => ApartmentRoom::Sitting(r),
-		RectAreaRoom::Study(r) => ApartmentRoom::Study(r),
+		RectAreaRoom::HouseholdCloset { label, confines } => {
+			rooms.push(ApartmentRoom::HouseholdCloset { label, confines });
+		}
+		RectAreaRoom::Bedroom(r) => rooms.push(ApartmentRoom::Bedroom(r)),
+		RectAreaRoom::Living(r) => rooms.push(ApartmentRoom::Living(r)),
+		RectAreaRoom::Eating(e) => {
+			rooms.push(ApartmentRoom::Kitchen(e.kitchen));
+			if let Some(d) = e.dining {
+				rooms.push(ApartmentRoom::Dining(d));
+			}
+		}
+		RectAreaRoom::Kitchen(r) => rooms.push(ApartmentRoom::Kitchen(r)),
+		RectAreaRoom::Dining(r) => rooms.push(ApartmentRoom::Dining(r)),
+		RectAreaRoom::Bathroom(r) => rooms.push(ApartmentRoom::Bathroom(r)),
+		RectAreaRoom::HalfBath(r) => rooms.push(ApartmentRoom::HalfBath(r)),
+		RectAreaRoom::Sitting(r) => rooms.push(ApartmentRoom::Sitting(r)),
+		RectAreaRoom::Study(r) => rooms.push(ApartmentRoom::Study(r)),
 	}
 }
 
@@ -552,11 +560,9 @@ fn full_kind_list(p: ProgramCounts) -> Vec<RectQuarterKind> {
 	for _ in 0..p.living {
 		out.push(RectQuarterKind::Living);
 	}
-	for _ in 0..p.kitchens {
-		out.push(RectQuarterKind::Kitchen);
-	}
-	for _ in 0..p.dining {
-		out.push(RectQuarterKind::Dining);
+	// One eating area covers kitchen (+ dining when space allows).
+	if p.kitchens > 0 || p.dining > 0 {
+		out.push(RectQuarterKind::Eating);
 	}
 	for _ in 0..p.sitting {
 		out.push(RectQuarterKind::Sitting);

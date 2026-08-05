@@ -105,9 +105,10 @@ pub use usage_areas::{
 	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
 	CommercialStallStripParameterized, CommercialStallStripPlan, CommonBedroom,
 	CommonBedroomParameterized, CommonBedroomPlan, DiningRoom, DiningRoomParameterized,
-	DiningRoomPlan, EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams, HallsToShafts,
-	HallsToShaftsOptions, Janitorial, Kitchen, KitchenCounterLayout, KitchenParameterized,
-	KitchenPlan, KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan,
+	DiningRoomPlan, EatingArea, EatingAreaParameterized, EatingAreaPlan, EnclosedRoom,
+	EnclosedRoomMins, EnclosedRoomParams, HallsToShafts, HallsToShaftsOptions, Janitorial, Kitchen,
+	KitchenCounterLayout, KitchenParameterized, KitchenPlan, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan,
 	LivableApartment, LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized,
 	LivingRoom, LivingRoomParameterized, LivingRoomPlan, MAX_HALL_WIDTH, MIN_HALL_WIDTH, MiniMart,
 	PASSAGE_CLEARANCE, PartsStall, PassageClearance, PlanCell, PlanHost, PublicRestroom,
@@ -118,7 +119,7 @@ pub use usage_areas::{
 	ResidentialBathroomParameterized, ResidentialBathroomPlan, ResidentialHalfBathroom,
 	ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SittingRoom,
 	SittingRoomParameterized, SittingRoomPlan, Study, StudyParameterized, StudyPlan,
-	COMMON_BEDROOM_SCOPE, DINING_ROOM_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE,
+	COMMON_BEDROOM_SCOPE, DINING_ROOM_SCOPE, EATING_AREA_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE,
 	RESIDENTIAL_BATHROOM_SCOPE, RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

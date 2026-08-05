@@ -34,8 +34,8 @@ use crate::shells::ortho::{standing_face_opening, WallEdge};
 use crate::usage_areas::common_bedroom::CommonBedroom;
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::livable_quarters::{
-	DiningRoom, Kitchen, LivingRoom, ResidentialBathroom, ResidentialHalfBathroom, SittingRoom,
-	Study,
+	DiningRoom, EatingArea, Kitchen, LivingRoom, ResidentialBathroom, ResidentialHalfBathroom,
+	SittingRoom, Study,
 };
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
 
@@ -48,7 +48,11 @@ const MIN_ROOM: f32 = 2.2;
 pub enum RectQuarterKind {
 	Bedroom,
 	Living,
+	/// Kitchen + dining side-by-side (falls back to kitchen-only).
+	Eating,
+	/// Leaf kitchen (prefer [`Eating`] in programs).
 	Kitchen,
+	/// Leaf dining (prefer [`Eating`] in programs).
 	Dining,
 	Bathroom,
 	HalfBath,
@@ -83,6 +87,7 @@ pub enum RectAreaRoom {
 	},
 	Bedroom(CommonBedroom),
 	Living(LivingRoom),
+	Eating(EatingArea),
 	Kitchen(Kitchen),
 	Dining(DiningRoom),
 	Bathroom(ResidentialBathroom),
@@ -97,6 +102,7 @@ impl RectAreaRoom {
 			Self::OpenBand { .. } | Self::HouseholdCloset { .. } => Layers::new(),
 			Self::Bedroom(r) => r.panel_nodes_for_level(level),
 			Self::Living(r) => r.panel_nodes_for_level(level),
+			Self::Eating(r) => r.panel_nodes_for_level(level),
 			Self::Kitchen(r) => r.panel_nodes_for_level(level),
 			Self::Dining(r) => r.panel_nodes_for_level(level),
 			Self::Bathroom(r) => r.panel_nodes_for_level(level),
@@ -111,6 +117,7 @@ impl RectAreaRoom {
 			Self::OpenBand { .. } | Self::HouseholdCloset { .. } => Layers::new(),
 			Self::Bedroom(r) => r.joint_nodes_for_level(level),
 			Self::Living(r) => r.joint_nodes_for_level(level),
+			Self::Eating(r) => r.joint_nodes_for_level(level),
 			Self::Kitchen(r) => r.joint_nodes_for_level(level),
 			Self::Dining(r) => r.joint_nodes_for_level(level),
 			Self::Bathroom(r) => r.joint_nodes_for_level(level),
@@ -129,6 +136,7 @@ impl RectAreaRoom {
 			}
 			Self::Bedroom(r) => r.label_nodes_for_level(level),
 			Self::Living(r) => r.label_nodes_for_level(level),
+			Self::Eating(r) => r.label_nodes_for_level(level),
 			Self::Kitchen(r) => r.label_nodes_for_level(level),
 			Self::Dining(r) => r.label_nodes_for_level(level),
 			Self::Bathroom(r) => r.label_nodes_for_level(level),
@@ -143,6 +151,7 @@ impl RectAreaRoom {
 			Self::OpenBand { .. } | Self::HouseholdCloset { .. } => Layers::new(),
 			Self::Bedroom(r) => r.furniture_nodes_for_level(level),
 			Self::Living(r) => r.furniture_nodes_for_level(level),
+			Self::Eating(r) => r.furniture_nodes_for_level(level),
 			Self::Kitchen(r) => r.furniture_nodes_for_level(level),
 			Self::Dining(r) => r.furniture_nodes_for_level(level),
 			Self::Bathroom(r) => r.furniture_nodes_for_level(level),
@@ -294,16 +303,13 @@ fn default_program(area: f32, passages: usize) -> Vec<RectQuarterKind> {
 	}
 	out.push(RectQuarterKind::Living);
 	if area > 20.0 {
-		out.push(RectQuarterKind::Kitchen);
+		out.push(RectQuarterKind::Eating);
 	}
 	if area > 28.0 {
 		out.push(RectQuarterKind::Bedroom);
 	}
 	if area > 40.0 {
 		out.push(RectQuarterKind::Bathroom);
-	}
-	if area > 55.0 {
-		out.push(RectQuarterKind::Dining);
 	}
 	out
 }
@@ -1151,8 +1157,7 @@ fn pack_open_into(
 	// Keep claiming open program fill until free pockets are too small.
 	let fillers = [
 		RectQuarterKind::Living,
-		RectQuarterKind::Kitchen,
-		RectQuarterKind::Dining,
+		RectQuarterKind::Eating,
 		RectQuarterKind::Sitting,
 	];
 	let mut guard = 0;
@@ -1389,6 +1394,7 @@ fn target_area_for(kind: RectQuarterKind) -> f32 {
 	match kind {
 		RectQuarterKind::Bedroom => 18.0,
 		RectQuarterKind::Living => 16.0,
+		RectQuarterKind::Eating => 20.0,
 		RectQuarterKind::Kitchen => 10.0,
 		RectQuarterKind::Dining => 10.0,
 		RectQuarterKind::Bathroom => 6.5,
@@ -1402,6 +1408,7 @@ fn min_area_for(kind: RectQuarterKind) -> f32 {
 	match kind {
 		RectQuarterKind::Bedroom => 12.0,
 		RectQuarterKind::Living => 9.0,
+		RectQuarterKind::Eating => 8.0,
 		RectQuarterKind::Kitchen => 5.0,
 		RectQuarterKind::Dining => 5.0,
 		RectQuarterKind::Bathroom => 4.5,
@@ -1445,10 +1452,16 @@ fn try_fit_kind(
 		RectQuarterKind::Living => &[
 			RectQuarterKind::Living,
 			RectQuarterKind::Sitting,
+			RectQuarterKind::Eating,
+		],
+		RectQuarterKind::Eating => &[RectQuarterKind::Eating, RectQuarterKind::Kitchen],
+		RectQuarterKind::Kitchen => &[
+			RectQuarterKind::Eating,
+			RectQuarterKind::Kitchen,
 			RectQuarterKind::Dining,
 		],
-		RectQuarterKind::Kitchen => &[RectQuarterKind::Kitchen, RectQuarterKind::Dining],
 		RectQuarterKind::Dining => &[
+			RectQuarterKind::Eating,
 			RectQuarterKind::Dining,
 			RectQuarterKind::Kitchen,
 			RectQuarterKind::Living,
@@ -1489,6 +1502,8 @@ fn fit_kind_exact(
 			.map(|(r, n)| (RectAreaRoom::Bedroom(r), n)),
 		RectQuarterKind::Living => LivingRoom::fit_to_confines(confines, noise)
 			.map(|(r, n)| (RectAreaRoom::Living(r), n)),
+		RectQuarterKind::Eating => EatingArea::fit_to_confines(confines, noise)
+			.map(|(r, n)| (RectAreaRoom::Eating(r), n)),
 		RectQuarterKind::Kitchen => Kitchen::fit_to_confines(confines, noise)
 			.map(|(r, n)| (RectAreaRoom::Kitchen(r), n)),
 		RectQuarterKind::Dining => DiningRoom::fit_to_confines(confines, noise)
@@ -1965,7 +1980,7 @@ mod tests {
 			&confines,
 			NoiseParams { seed: 2, ..Default::default() },
 			params,
-			&[RectQuarterKind::Living, RectQuarterKind::Kitchen],
+			&[RectQuarterKind::Living, RectQuarterKind::Eating],
 		)
 		.unwrap();
 		assert!(normalize_ok(&area, 1.0));
@@ -1993,25 +2008,26 @@ mod tests {
 			params,
 			&[
 				RectQuarterKind::Living,
-				RectQuarterKind::Kitchen,
+				RectQuarterKind::Eating,
 				RectQuarterKind::Bedroom,
 				RectQuarterKind::Bathroom,
-				RectQuarterKind::Dining,
 			],
 		)
 		.unwrap();
 		assert!(
-			area.rooms
-				.iter()
-				.any(|r| matches!(r, RectAreaRoom::Kitchen(_))),
-			"expected kitchen in large spine layout"
-		);
-		assert!(
 			area.rooms.iter().any(|r| matches!(
 				r,
-				RectAreaRoom::Living(_) | RectAreaRoom::Dining(_) | RectAreaRoom::Sitting(_)
+				RectAreaRoom::Eating(_) | RectAreaRoom::Kitchen(_)
 			)),
-			"expected living/dining/sitting"
+			"expected eating area / kitchen in large spine layout"
+		);
+		assert!(
+			area.rooms.iter().any(|r| match r {
+				RectAreaRoom::Living(_) | RectAreaRoom::Sitting(_) => true,
+				RectAreaRoom::Eating(e) => e.has_dining(),
+				_ => false,
+			}),
+			"expected living/sitting or dining-in-eating"
 		);
 		let labeled: f32 = area
 			.rooms
@@ -2032,6 +2048,9 @@ mod tests {
 					x.room_type.placement.scale.x * x.room_type.placement.scale.z
 				}
 				RectAreaRoom::Sitting(x) => {
+					x.room_type.placement.scale.x * x.room_type.placement.scale.z
+				}
+				RectAreaRoom::Eating(x) => {
 					x.room_type.placement.scale.x * x.room_type.placement.scale.z
 				}
 				RectAreaRoom::Kitchen(x) => {

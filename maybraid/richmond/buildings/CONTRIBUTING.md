@@ -231,6 +231,10 @@ keep-outs. See [`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layou
 rooms (kitchen, dining, sitting, study, living, bathrooms). Each follows
 **parameterized → plan pack → Fit + BuildingComponents**, sharing the placer
 furniture loop in [`placer::pack`](src/placer/pack.rs).
+[`EatingArea`](src/usage_areas/livable_quarters/eating_area.rs) bipartitions a
+host to place dining beside a kitchen, or falls back to kitchen-only;
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) prefers
+`RectQuarterKind::Eating` over separate kitchen/dining slots.
 [`CommonBedroom`](src/usage_areas/common_bedroom/) composes
 [`ResidentialBathroom`](src/usage_areas/livable_quarters/residential_bathroom.rs)
 into ensuite `within` residuals when fit succeeds.
