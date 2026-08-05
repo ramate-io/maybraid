@@ -213,6 +213,14 @@ pub fn pack_apartments_to_targets(
 			if area + EPS >= accept && area + next_area > target * 1.35 {
 				break;
 			}
+			// Soft stop: once near target, refuse extreme snakes (bowling alleys).
+			if area + EPS >= accept {
+				let mut probe = group.clone();
+				probe.push(next);
+				if group_aspect(&eligible, &probe) > GROW_ASPECT_SOFT {
+					break;
+				}
+			}
 			assigned[next] = true;
 			group.push(next);
 			area += next_area;
@@ -343,6 +351,24 @@ fn best_seed(
 	best.map(|(i, _)| i)
 }
 
+/// Soft aspect ceiling while growing near the catalog target (refuse snakes).
+const GROW_ASPECT_SOFT: f32 = 3.25;
+
+fn group_bounds_xz(cells: &[PlanCell], group: &[usize]) -> Aabb2d {
+	let mut b = cells[group[0]].bounds;
+	for &gi in group.iter().skip(1) {
+		b.min = b.min.min(cells[gi].bounds.min);
+		b.max = b.max.max(cells[gi].bounds.max);
+	}
+	b
+}
+
+fn group_aspect(cells: &[PlanCell], group: &[usize]) -> f32 {
+	let b = group_bounds_xz(cells, group);
+	let s = (b.max - b.min).max(Vec2::splat(EPS));
+	s.x.max(s.y) / s.x.min(s.y)
+}
+
 fn best_grow_candidate(
 	cells: &[PlanCell],
 	assigned: &[bool],
@@ -350,6 +376,8 @@ fn best_grow_candidate(
 	frontage: &[bool],
 	min_connectivity: f32,
 ) -> Option<usize> {
+	let group_area: f32 = group.iter().map(|&gi| cells[gi].area()).sum();
+	let gb = group_bounds_xz(cells, group);
 	let mut best: Option<(usize, f32)> = None;
 	for (i, cell) in cells.iter().enumerate() {
 		if assigned[i] || frontage[i] {
@@ -358,9 +386,22 @@ fn best_grow_candidate(
 		if !can_join_group(cells, group, i, min_connectivity) {
 			continue;
 		}
-		let size = cell.size();
-		let aspect = size.x.max(size.y) / size.x.min(size.y).max(1e-3);
-		let score = cell.area() / aspect.sqrt();
+		let mut max_shared = 0.0_f32;
+		for &gi in group {
+			if let Some(len) = shared_edge_length(cells[gi].bounds, cell.bounds, EPS) {
+				if len + EPS >= min_connectivity {
+					max_shared = max_shared.max(len);
+				}
+			}
+		}
+		let mut nb = gb;
+		nb.min = nb.min.min(cell.bounds.min);
+		nb.max = nb.max.max(cell.bounds.max);
+		let bbox = (nb.max - nb.min).max(Vec2::splat(EPS));
+		let new_area = group_area + cell.area();
+		let compact = new_area / (bbox.x * bbox.y).max(EPS);
+		// Prefer wide contacts and compact footprints over snake chains.
+		let score = max_shared * (0.35 + compact) * cell.area().sqrt();
 		match best {
 			None => best = Some((i, score)),
 			Some((_, bs)) if score > bs => best = Some((i, score)),
@@ -376,7 +417,10 @@ fn find_absorb_group(
 	orphan: usize,
 	min_connectivity: f32,
 ) -> Option<usize> {
-	let mut best: Option<(usize, f32, f32)> = None; // gi, shared, area
+	// Prefer longest contact, then joins that stay under soft aspect (when any
+	// exist — otherwise allow snakes so landlocked cells are not dropped),
+	// then more compact result, then smaller group.
+	let mut best: Option<(usize, f32, bool, f32, f32)> = None; // gi, shared, soft_ok, compact, area
 	for (gi, group) in groups.iter().enumerate() {
 		if !can_join_group(cells, group, orphan, min_connectivity) {
 			continue;
@@ -390,15 +434,31 @@ fn find_absorb_group(
 			}
 		}
 		let area: f32 = group.iter().map(|&ci| cells[ci].area()).sum();
-		match best {
-			None => best = Some((gi, shared, area)),
-			Some((_, bs, ba)) if shared > bs + EPS || ((shared - bs).abs() <= EPS && area < ba) => {
-				best = Some((gi, shared, area));
+		let mut probe = group.clone();
+		probe.push(orphan);
+		let soft_ok = group_aspect(cells, &probe) <= GROW_ASPECT_SOFT;
+		let nb = group_bounds_xz(cells, &probe);
+		let bbox = (nb.max - nb.min).max(Vec2::splat(EPS));
+		let compact = (area + cells[orphan].area()) / (bbox.x * bbox.y).max(EPS);
+		let better = match best {
+			None => true,
+			Some((_, bs, bsoft, bc, ba)) => {
+				shared > bs + EPS
+					|| ((shared - bs).abs() <= EPS && soft_ok && !bsoft)
+					|| ((shared - bs).abs() <= EPS
+						&& soft_ok == bsoft
+						&& compact > bc + 1e-4)
+					|| ((shared - bs).abs() <= EPS
+						&& soft_ok == bsoft
+						&& (compact - bc).abs() <= 1e-4
+						&& area < ba)
 			}
-			_ => {}
+		};
+		if better {
+			best = Some((gi, shared, soft_ok, compact, area));
 		}
 	}
-	best.map(|(gi, _, _)| gi)
+	best.map(|(gi, _, _, _, _)| gi)
 }
 
 /// Decompose a rectilinear union of axis-aligned parts into large covering rectangles.
@@ -748,6 +808,34 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn grow_prefers_compact_over_linear_snake() {
+		// Frontage + north stack + eastern wing: compact fill should claim the
+		// wing before extending the bowling alley.
+		let rooms = vec![
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(4.0, 3.0)), // frontage
+			cell(1, Vec2::new(0.0, 3.0), Vec2::new(4.0, 6.0)),
+			cell(2, Vec2::new(4.0, 3.0), Vec2::new(8.0, 6.0)), // compact wing
+			cell(3, Vec2::new(0.0, 6.0), Vec2::new(4.0, 9.0)), // snake tip
+		];
+		let hall = Aabb2d {
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(4.0, 0.0),
+		};
+		let groups = pack_apartments_to_targets(
+			&rooms,
+			&[hall],
+			Vec2::new(2.0, 2.0),
+			&[40.0],
+			MIN_GROUP_CONNECTIVITY,
+		);
+		let g0 = groups.iter().find(|g| g.contains(&0)).expect("seed group");
+		assert!(
+			g0.contains(&2),
+			"compact wing should join before/over snake tip: {groups:?}"
+		);
 	}
 
 	#[test]

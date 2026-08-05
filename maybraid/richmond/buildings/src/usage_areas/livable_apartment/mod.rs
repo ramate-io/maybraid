@@ -234,7 +234,13 @@ impl LivableApartment {
 				fp.x * fp.y
 			})
 			.sum();
-		let program = program_from_area(total_area, noise, cells.parts[0].confines.center());
+		// Diversify by region even if the caller reused parent noise for every suite.
+		let apt_noise = noise_for_cell(noise, region_id as i32);
+		let program = program_from_area(
+			total_area,
+			apt_noise,
+			cells.parts[0].confines.center(),
+		);
 
 		let mut rooms = Vec::new();
 		let mut residual_within = Vec::new();
@@ -339,7 +345,7 @@ impl LivableApartment {
 		})?;
 
 		let kind_list = full_kind_list(program);
-		let slices = distribute_program(&kind_list, &cluster.rects);
+		let slices = distribute_program(&kind_list, &cluster.rects, apt_noise);
 		let rla_params = RectangularLivableAreaParameterized {
 			strategy: RectLivableStrategy::CaseAttempt,
 			min_hall: WALK_WIDTH,
@@ -348,7 +354,8 @@ impl LivableApartment {
 
 		for (ri, rect) in cluster.rects.iter().enumerate() {
 			let confines = cluster.confines_ensured(ri, entry_xz);
-			let cell_noise = noise_for_cell(noise, (region_id as i32).wrapping_add(ri as i32 * 17));
+			let cell_noise =
+				noise_for_cell(apt_noise, (region_id as i32).wrapping_add(ri as i32 * 17));
 			match RectangularLivableArea::fit_with_params(
 				&confines,
 				cell_noise,

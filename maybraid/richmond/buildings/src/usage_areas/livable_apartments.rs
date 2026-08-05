@@ -21,6 +21,7 @@ use crate::usage_areas::hall_connected_suites::{
 use crate::usage_areas::halls_to_shafts::HallsToShafts;
 use crate::usage_areas::livable_apartment::LivableApartment;
 use crate::usage_areas::plan_cells::MIN_GROUP_CONNECTIVITY;
+use crate::usage_areas::plan_geom::noise_for_cell;
 
 const EPS: f32 = 1e-3;
 const MIN_ROOM: f32 = 2.5;
@@ -150,7 +151,10 @@ impl LivableApartments {
 		let mut apartments = Vec::new();
 		let mut apt_id = 0u32;
 		for multi in suites {
-			match LivableApartment::from_multi(apt_id, &multi, noise) {
+			// Per-suite seed — same parent noise + nearby centers otherwise
+			// correlate program_from_area / RLA choices across the flange.
+			let apt_noise = noise_for_cell(noise, apt_id as i32);
+			match LivableApartment::from_multi(apt_id, &multi, apt_noise) {
 				Ok((mut apt, nested)) => {
 					apt.shell = None;
 					apt_id = apt_id.saturating_add(1);

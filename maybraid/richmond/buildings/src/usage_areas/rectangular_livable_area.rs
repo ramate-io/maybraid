@@ -19,7 +19,7 @@ use slot_policy::{min_area_for, SlotPolicy};
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use procedural_common::{aabb2_area, Aabb2dPack, NoiseParams};
+use procedural_common::{aabb2_area, Aabb2dPack, NoiseConfig, NoiseParams};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::{LabelNode, LabelStyle};
@@ -195,7 +195,10 @@ impl RectangularLivableArea {
 				reason: "rla_footprint",
 			});
 		}
-		let strategies = strategy_order(params.strategy, program);
+		let host = host_xz(&confines.bounds);
+		let hs = (host.max - host.min).max(Vec2::splat(EPS));
+		let host_aspect = hs.x.max(hs.y) / hs.x.min(hs.y);
+		let strategies = strategy_order(params.strategy, program, host_aspect);
 		let mut last = FitError::TooSmall {
 			reason: "rla_exhausted",
 		};
@@ -273,19 +276,33 @@ impl BuildingComponents for RectangularLivableArea {
 	}
 }
 
+/// Prefer guillotine before spine on bowling-alley hosts (aspect above this).
+const HIGH_ASPECT_GUILLOTINE_FIRST: f32 = 2.25;
+
 fn strategy_order(
 	requested: RectLivableStrategy,
 	program: &[RectQuarterKind],
+	host_aspect: f32,
 ) -> Vec<RectLivableStrategy> {
 	match requested {
 		RectLivableStrategy::CaseAttempt => {
 			if program.iter().any(|k| k.is_closed()) {
-				vec![
-					RectLivableStrategy::SpineHall,
-					RectLivableStrategy::GuillotineSplit,
-					RectLivableStrategy::SingleClosed,
-					RectLivableStrategy::AllOpen,
-				]
+				// Long thin max-rects: spine halls read as repetitive corridor packs.
+				if host_aspect > HIGH_ASPECT_GUILLOTINE_FIRST {
+					vec![
+						RectLivableStrategy::GuillotineSplit,
+						RectLivableStrategy::SpineHall,
+						RectLivableStrategy::SingleClosed,
+						RectLivableStrategy::AllOpen,
+					]
+				} else {
+					vec![
+						RectLivableStrategy::SpineHall,
+						RectLivableStrategy::GuillotineSplit,
+						RectLivableStrategy::SingleClosed,
+						RectLivableStrategy::AllOpen,
+					]
+				}
 			} else {
 				vec![
 					RectLivableStrategy::AllOpen,
@@ -1086,8 +1103,11 @@ fn pack_closed_abutting(
 	filled_closed: &mut Vec<Confines>,
 	residual_within: &mut Vec<FillRegion>,
 ) -> Result<(), FitError> {
-	for &kind in kinds {
-		let Some(idx) = pick_largest_abutting_host(free, spine, min_hall, min_area_for(kind)) else {
+	let ordered = seeded_shuffle_kinds(kinds, noise, 21.0);
+	for &kind in &ordered {
+		let Some(idx) =
+			pick_noisy_abutting_host(free, spine, min_hall, min_area_for(kind), noise, rooms.len())
+		else {
 			continue;
 		};
 		let host = free.remove(idx);
@@ -1144,7 +1164,8 @@ fn pack_open_into(
 	open_confines: &mut Vec<Confines>,
 	residual_within: &mut Vec<FillRegion>,
 ) -> Result<(), FitError> {
-	for &kind in kinds {
+	let ordered = seeded_shuffle_kinds(kinds, noise, 17.0);
+	for &kind in &ordered {
 		try_pack_one_open(
 			free,
 			kind,
@@ -1160,7 +1181,11 @@ fn pack_open_into(
 	}
 	// After the program's open kinds (incl. at most one Eating) are placed,
 	// leftover pockets become living/sitting — not more kitchens.
-	let fillers = [RectQuarterKind::Living, RectQuarterKind::Sitting];
+	let fillers = seeded_shuffle_kinds(
+		&[RectQuarterKind::Living, RectQuarterKind::Sitting],
+		noise,
+		19.0,
+	);
 	let mut guard = 0;
 	while guard < 12 {
 		guard += 1;
@@ -1203,7 +1228,7 @@ fn try_pack_one_open(
 	open_confines: &mut Vec<Confines>,
 	residual_within: &mut Vec<FillRegion>,
 ) -> Result<(), FitError> {
-	let Some(idx) = pick_largest_host(free, min_area_for(kind)) else {
+	let Some(idx) = pick_noisy_host(free, min_area_for(kind), noise, rooms.len()) else {
 		return Ok(());
 	};
 	let host = free.remove(idx);
@@ -1240,18 +1265,54 @@ fn try_pack_one_open(
 	Ok(())
 }
 
-fn pick_largest_host(free: &[Aabb2d], min_area: f32) -> Option<usize> {
-	let mut best: Option<(usize, f32)> = None;
+/// Among usable pockets ≥ ~80% of the largest, pick by area + seed jitter.
+fn pick_noisy_host(
+	free: &[Aabb2d],
+	min_area: f32,
+	noise: NoiseParams,
+	salt: usize,
+) -> Option<usize> {
+	let mut cands: Vec<(usize, f32)> = Vec::new();
 	for (i, r) in free.iter().enumerate() {
-		if !rect_usable(*r, min_area) {
+		if rect_usable(*r, min_area) {
+			cands.push((i, aabb2_area(*r)));
+		}
+	}
+	let max_a = cands.iter().map(|(_, a)| *a).fold(0.0_f32, f32::max);
+	if max_a <= EPS {
+		return None;
+	}
+	let floor = max_a * 0.8;
+	let cfg = NoiseConfig::new(noise);
+	let mut best: Option<(usize, f32)> = None;
+	for (i, a) in cands {
+		if a + EPS < floor {
 			continue;
 		}
-		let a = aabb2_area(*r);
-		if best.map(|(_, ba)| a > ba).unwrap_or(true) {
-			best = Some((i, a));
+		let jitter = cfg.sample_unit_4d(i as f32, a, salt as f32, 11.0) * max_a * 0.18;
+		let score = a + jitter;
+		if best.map(|(_, bs)| score > bs).unwrap_or(true) {
+			best = Some((i, score));
 		}
 	}
 	best.map(|(i, _)| i)
+}
+
+fn seeded_shuffle_kinds(
+	kinds: &[RectQuarterKind],
+	noise: NoiseParams,
+	salt: f32,
+) -> Vec<RectQuarterKind> {
+	let mut out = kinds.to_vec();
+	if out.len() < 2 {
+		return out;
+	}
+	let cfg = NoiseConfig::new(noise);
+	for i in (1..out.len()).rev() {
+		let j = cfg.sample_range_usize_4d(0, i + 1, i as f32, salt, 3.0, 7.0);
+		out.swap(i, j);
+	}
+	out
 }
 
 fn return_open_remnants(
@@ -1327,13 +1388,15 @@ fn slot_edge_passage(xz: Aabb2d, y0: f32, y1: f32, slot_id: u32) -> Openings {
 	openings
 }
 
-fn pick_largest_abutting_host(
+fn pick_noisy_abutting_host(
 	free: &[Aabb2d],
 	spine: &[Aabb2d],
 	min_hall: f32,
 	min_area: f32,
+	noise: NoiseParams,
+	salt: usize,
 ) -> Option<usize> {
-	let mut best: Option<(usize, f32)> = None;
+	let mut cands: Vec<(usize, f32)> = Vec::new();
 	for (i, r) in free.iter().enumerate() {
 		if !rect_usable(*r, min_area) {
 			continue;
@@ -1344,9 +1407,23 @@ fn pick_largest_abutting_host(
 		if !abuts {
 			continue;
 		}
-		let a = aabb2_area(*r);
-		if best.map(|(_, ba)| a > ba).unwrap_or(true) {
-			best = Some((i, a));
+		cands.push((i, aabb2_area(*r)));
+	}
+	let max_a = cands.iter().map(|(_, a)| *a).fold(0.0_f32, f32::max);
+	if max_a <= EPS {
+		return None;
+	}
+	let floor = max_a * 0.8;
+	let cfg = NoiseConfig::new(noise);
+	let mut best: Option<(usize, f32)> = None;
+	for (i, a) in cands {
+		if a + EPS < floor {
+			continue;
+		}
+		let jitter = cfg.sample_unit_4d(i as f32, a, salt as f32, 13.0) * max_a * 0.18;
+		let score = a + jitter;
+		if best.map(|(_, bs)| score > bs).unwrap_or(true) {
+			best = Some((i, score));
 		}
 	}
 	best.map(|(i, _)| i)
@@ -1838,6 +1915,26 @@ mod tests {
 		};
 		let openings = passages_on_faces(host, 0.0, 3.0, &[(CardinalFace::South, 0.5)]);
 		confines_from_xz(host, 0.0, 3.0, 0.0, &openings)
+	}
+
+	#[test]
+	fn case_attempt_prefers_guillotine_on_high_aspect() {
+		assert_eq!(
+			strategy_order(
+				RectLivableStrategy::CaseAttempt,
+				&[RectQuarterKind::Bedroom, RectQuarterKind::Eating],
+				2.5,
+			)[0],
+			RectLivableStrategy::GuillotineSplit
+		);
+		assert_eq!(
+			strategy_order(
+				RectLivableStrategy::CaseAttempt,
+				&[RectQuarterKind::Bedroom, RectQuarterKind::Eating],
+				1.5,
+			)[0],
+			RectLivableStrategy::SpineHall
+		);
 	}
 
 	#[test]

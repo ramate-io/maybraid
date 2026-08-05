@@ -13,7 +13,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::boundary_openings::inject_shared_boundary_from;
-use crate::usage_areas::plan_geom::host_xz;
+use crate::usage_areas::plan_geom::{host_xz, noise_for_cell};
 use crate::usage_areas::{LivableApartments, LivableApartmentsOptions};
 
 use super::floor_plan::IApartmentFloorPlan;
@@ -53,8 +53,14 @@ impl IApartmentFullStorey {
 		// later siblings with Boundary so they skip those faces.
 		let mut pending: Vec<FillRegion> = regions.within;
 		for i in 0..pending.len() {
-			match LivableApartments::from_confines_with(&pending[i].confines, noise, opts.clone())
-			{
+			// Match Les Halles: diversify seed per primary rect so stem/flange
+			// packs and room programs do not clone each other.
+			let block_noise = noise_for_cell(noise, i as i32);
+			match LivableApartments::from_confines_with(
+				&pending[i].confines,
+				block_noise,
+				opts.clone(),
+			) {
 				Ok((block, nested)) => {
 					let owner = host_xz(&pending[i].confines.bounds);
 					for j in (i + 1)..pending.len() {
