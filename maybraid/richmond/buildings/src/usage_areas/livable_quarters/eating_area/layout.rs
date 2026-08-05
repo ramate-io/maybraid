@@ -10,6 +10,9 @@ use crate::usage_areas::livable_quarters::dining_room::{
 	DiningRoomParameterized, DiningRoomPlan,
 };
 use crate::usage_areas::livable_quarters::kitchen::{KitchenParameterized, KitchenPlan};
+use crate::usage_areas::plan_geom::{
+	confines_from_xz, connecting_passage, host_xz, DOOR_WIDTH,
+};
 
 use super::parameterized::{
 	EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE,
@@ -20,7 +23,6 @@ use super::parameterized::{
 /// + dining min (~4.4).
 pub const MIN_PAIR_AREA: f32 = 9.5;
 const EPS: f32 = 1e-3;
-const DOOR_WIDTH: f32 = 1.0;
 /// Allow compact galley halves (~kitchen/dining floor mins).
 const MIN_HALF_DIM: f32 = 2.0;
 const MIN_HALF_AREA: f32 = 4.0;
@@ -155,9 +157,17 @@ fn child_openings(
 	}
 	// Shared-edge door so both halves clear placer passage keep-outs.
 	if let Some((along_x, lo, hi, mid)) = shared_edge(self_xz, neighbor_xz) {
-		if let Some((oid, opening)) =
-			connecting_passage(along_x, lo, hi, mid, y0, y1, if kitchen { 0 } else { 1 })
-		{
+		if let Some((oid, opening)) = connecting_passage(
+			SCOPE,
+			"pair",
+			along_x,
+			lo,
+			hi,
+			mid,
+			y0,
+			y1,
+			format!("{}", if kitchen { 0 } else { 1 }),
+		) {
 			openings.insert(oid, opening);
 		}
 	}
@@ -202,43 +212,6 @@ fn shared_edge(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	None
 }
 
-fn connecting_passage(
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-	y0: f32,
-	y1: f32,
-	tag: u32,
-) -> Option<(OpeningId, Opening)> {
-	let shared = hi - lo;
-	if shared < DOOR_WIDTH * 0.7 + EPS {
-		return None;
-	}
-	let clear = DOOR_WIDTH.min(shared - 0.1).max(0.7);
-	let center = 0.5 * (lo + hi);
-	let half = clear * 0.5;
-	let door_lo = (center - half).max(lo);
-	let door_hi = (center + half).min(hi);
-	let half_d = 0.12_f32;
-	let door_h = (y1 - y0).min(2.2);
-	let bounds = if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(door_lo, y0, mid - half_d),
-			Vec3::new(door_hi, y0 + door_h, mid + half_d),
-		)
-	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(mid - half_d, y0, door_lo),
-			Vec3::new(mid + half_d, y0 + door_h, door_hi),
-		)
-	};
-	Some((
-		OpeningId::scoped(SCOPE, "pair", format!("{tag}")),
-		Opening::new(bounds, OpeningLabel::Passage),
-	))
-}
-
 fn edge_passage(xz: Aabb2d, y0: f32, y1: f32, tag: u32, openings: &mut Openings) {
 	let sx = xz.max.x - xz.min.x;
 	let sz = xz.max.y - xz.min.y;
@@ -267,22 +240,3 @@ fn edge_passage(xz: Aabb2d, y0: f32, y1: f32, tag: u32, openings: &mut Openings)
 	);
 }
 
-fn host_xz(bounds: &Aabb3d) -> Aabb2d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
-}
-
-fn confines_from_xz(xz: Aabb2d, y0: f32, y1: f32, roll: f32, openings: &Openings) -> Confines {
-	Confines::new(
-		Aabb3d::from_min_max(
-			Vec3::new(xz.min.x, y0, xz.min.y),
-			Vec3::new(xz.max.x, y1, xz.max.y),
-		),
-		roll,
-		openings.clone(),
-	)
-}

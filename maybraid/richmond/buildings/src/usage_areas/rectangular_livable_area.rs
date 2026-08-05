@@ -8,11 +8,13 @@
 //! Strategies: [`RectLivableStrategy`] — default [`CaseAttempt`](RectLivableStrategy::CaseAttempt).
 
 mod parameterized;
+mod slot_policy;
 
 pub use parameterized::{
 	RectLivableStrategy, RectangularLivableAreaParameterized, RectangularLivableAreaPlan, SCOPE,
 	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
 };
+use slot_policy::{min_area_for, SlotPolicy};
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
@@ -38,10 +40,12 @@ use crate::usage_areas::livable_quarters::{
 	SittingRoom, Study,
 };
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
+use crate::usage_areas::plan_geom::{
+	aabb2_near_eq, confines_from_xz, connecting_passage, host_xz, noise_for_cell, DOOR_WIDTH,
+	MIN_ROOM,
+};
 
 const EPS: f32 = 1e-3;
-const DOOR_WIDTH: f32 = 1.0;
-const MIN_ROOM: f32 = 2.2;
 
 /// Preferred quarter kinds for a program slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -679,11 +683,10 @@ fn fit_guillotine(
 			reason: "rla_guillotine_access",
 		});
 	}
-	let passage = connecting_passage(along_x, lo, hi, mid, y0, y1, 0, 0, 1).ok_or(
-		FitError::TooSmall {
+	let passage = connecting_passage(SCOPE, "connect", along_x, lo, hi, mid, y0, y1, "0_0_1")
+		.ok_or(FitError::TooSmall {
 			reason: "rla_guillotine_door",
-		},
-	)?;
+		})?;
 
 	let (open_a, open_b) = split_host_openings(confines, a, b);
 	let mut openings_a = open_a;
@@ -1282,7 +1285,9 @@ fn door_onto_spine(slot: Aabb2d, spine: &[Aabb2d], y0: f32, y1: f32, id: u32) ->
 		}
 	}
 	if let Some((along_x, lo, hi, mid, _)) = best {
-		if let Some((oid, opening)) = connecting_passage(along_x, lo, hi, mid, y0, y1, 0, id, 99) {
+		if let Some((oid, opening)) =
+			connecting_passage(SCOPE, "connect", along_x, lo, hi, mid, y0, y1, format!("0_{id}_99"))
+		{
 			openings.insert(oid, opening);
 			return openings;
 		}
@@ -1349,25 +1354,13 @@ fn pick_largest_abutting_host(
 
 fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	let host_a = aabb2_area(host);
-	let want = slot_target_area(kind, host_a);
-	// Open rooms prefer generous claims so living is not starved into thin scraps;
-	// closed rooms still carve a target pocket when the host is huge.
-	// Eating carves a compact kitchen pocket and leaves remainder for living/sitting.
-	let carve_threshold = match kind {
-		RectQuarterKind::Eating | RectQuarterKind::Kitchen => 2.6,
-		k if k.is_open() => 2.2,
-		_ => 1.7,
-	};
-	if host_a < want * carve_threshold {
+	let policy = SlotPolicy::for_kind(kind);
+	let want = policy.target_area(host_a);
+	if host_a < want * policy.carve_threshold {
 		return (host, Vec::new());
 	}
-	let frac = match kind {
-		RectQuarterKind::Eating => (want / host_a).clamp(0.22, 0.48),
-		RectQuarterKind::Kitchen => (want / host_a).clamp(0.22, 0.45),
-		k if k.is_open() => (want / host_a).clamp(0.38, 0.75),
-		_ => (want / host_a).clamp(0.28, 0.65),
-	};
-	let min_d = min_dim_for(kind);
+	let frac = policy.carve_frac(host_a);
+	let min_d = policy.min_dim;
 	let candidates = [
 		host.bipartition_by_area(true, true, frac),
 		host.bipartition_by_area(false, true, frac),
@@ -1394,54 +1387,9 @@ fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	}
 }
 
-/// Aspirational slot area (m²). Living takes a generous share; eating stays
-/// compact so one kitchen does not crowd out the living program.
-fn slot_target_area(kind: RectQuarterKind, host_a: f32) -> f32 {
-	match kind {
-		RectQuarterKind::Bedroom => 18.0,
-		RectQuarterKind::Living => (host_a * 0.42).clamp(12.0, 42.0),
-		RectQuarterKind::Eating => (host_a * 0.24).clamp(6.0, 22.0),
-		RectQuarterKind::Kitchen => (host_a * 0.2).clamp(5.0, 16.0),
-		RectQuarterKind::Dining => (host_a * 0.18).clamp(5.0, 14.0),
-		RectQuarterKind::Bathroom => 6.5,
-		RectQuarterKind::HalfBath => 3.5,
-		RectQuarterKind::Sitting => (host_a * 0.28).clamp(6.0, 24.0),
-		RectQuarterKind::Study => 9.0,
-	}
-}
-
-fn min_area_for(kind: RectQuarterKind) -> f32 {
-	match kind {
-		RectQuarterKind::Bedroom => 12.0,
-		RectQuarterKind::Living => 9.0,
-		RectQuarterKind::Eating => 5.0,
-		RectQuarterKind::Kitchen => 4.8,
-		RectQuarterKind::Dining => 4.4,
-		RectQuarterKind::Bathroom => 4.5,
-		RectQuarterKind::HalfBath => 2.0,
-		RectQuarterKind::Sitting => 5.0,
-		RectQuarterKind::Study => 5.0,
-	}
-}
-
-fn min_dim_for(kind: RectQuarterKind) -> f32 {
-	match kind {
-		RectQuarterKind::Bedroom => 3.2,
-		RectQuarterKind::Bathroom | RectQuarterKind::HalfBath => 1.6,
-		_ => MIN_ROOM,
-	}
-}
-
 fn rect_usable(r: Aabb2d, min_area: f32) -> bool {
 	let s = r.max - r.min;
 	s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(r) + EPS >= min_area
-}
-
-fn aabb2_near_eq(a: Aabb2d, b: Aabb2d) -> bool {
-	(a.min.x - b.min.x).abs() < 0.05
-		&& (a.min.y - b.min.y).abs() < 0.05
-		&& (a.max.x - b.max.x).abs() < 0.05
-		&& (a.max.y - b.max.y).abs() < 0.05
 }
 
 fn try_fit_kind(
@@ -1558,13 +1506,6 @@ fn push_leftover(rooms: &mut Vec<RectAreaRoom>, residual: &mut Vec<FillRegion>, 
 	}
 }
 
-fn noise_for_cell(noise: NoiseParams, cell: i32) -> NoiseParams {
-	NoiseParams {
-		seed: noise.seed.wrapping_add(cell.wrapping_mul(97)),
-		..noise
-	}
-}
-
 fn split_program(program: &[RectQuarterKind]) -> (Vec<RectQuarterKind>, Vec<RectQuarterKind>) {
 	let mut a = Vec::new();
 	let mut b = Vec::new();
@@ -1603,65 +1544,6 @@ fn split_host_openings(host: &Confines, a: Aabb2d, b: Aabb2d) -> (Openings, Open
 		}
 	}
 	(oa, ob)
-}
-
-fn host_xz(bounds: &Aabb3d) -> Aabb2d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
-}
-
-fn confines_from_xz(xz: Aabb2d, y0: f32, y1: f32, roll: f32, openings: &Openings) -> Confines {
-	Confines::new(
-		Aabb3d::from_min_max(
-			Vec3::new(xz.min.x, y0, xz.min.y),
-			Vec3::new(xz.max.x, y1, xz.max.y),
-		),
-		roll,
-		openings.clone(),
-	)
-}
-
-fn connecting_passage(
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-	y0: f32,
-	y1: f32,
-	area_id: u32,
-	a: u32,
-	b: u32,
-) -> Option<(OpeningId, Opening)> {
-	let shared = hi - lo;
-	if shared < DOOR_WIDTH * 0.7 + EPS {
-		return None;
-	}
-	let clear = DOOR_WIDTH.min(shared - 0.1).max(0.7);
-	let center = 0.5 * (lo + hi);
-	let half = clear * 0.5;
-	let door_lo = (center - half).max(lo);
-	let door_hi = (center + half).min(hi);
-	let half_d = (DEFAULT_PANEL_THICKNESS * 0.5 + 0.06).max(0.12);
-	let door_h = (y1 - y0).min(2.2);
-	let bounds = if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(door_lo, y0, mid - half_d),
-			Vec3::new(door_hi, y0 + door_h, mid + half_d),
-		)
-	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(mid - half_d, y0, door_lo),
-			Vec3::new(mid + half_d, y0 + door_h, door_hi),
-		)
-	};
-	Some((
-		OpeningId::scoped(SCOPE, "connect", format!("{area_id}_{a}_{b}")),
-		Opening::new(bounds, OpeningLabel::Passage),
-	))
 }
 
 fn enclose_closed_rooms(
@@ -1709,15 +1591,15 @@ fn enclose_closed_rooms(
 			{
 				door_placed = true;
 				connecting_passage(
+					SCOPE,
+					"connect",
 					along_x,
 					lo,
 					hi,
 					mid,
 					y0,
 					y1,
-					area_id,
-					i as u32,
-					9000 + fi as u32,
+					format!("{area_id}_{}_{}", i, 9000 + fi),
 				)
 			} else {
 				None

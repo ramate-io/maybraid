@@ -30,6 +30,7 @@ use crate::usage_areas::plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, pack_apartments_to_targets, split_oversized_cells,
 	split_toward_min_room, PlanCell, MIN_GROUP_CONNECTIVITY,
 };
+use crate::usage_areas::plan_geom::host_xz;
 
 const EPS: f32 = 1e-3;
 const DOOR_WIDTH: f32 = 1.1;
@@ -412,15 +413,6 @@ fn singleton_host(
 			))
 		}
 		Err(err) => Err(err),
-	}
-}
-
-fn host_xz(bounds: &Aabb3d) -> Aabb2d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
 	}
 }
 

@@ -110,16 +110,19 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → split residuals →
    `pack_apartments_to_targets` → **one hall door per group** →
    partition / hall-edge walls (no per-cell shells) →
-   [`LivableApartment`](src/usage_areas/livable_apartment.rs) layout
-   (entryway → [`decompose_max_rects`](src/usage_areas/plan_cells.rs) → spanning
-   tree of passages → per-rect
+   [`LivableApartment`](src/usage_areas/livable_apartment/) layout
+   (entryway → [`RectPassageCluster`](src/usage_areas/rect_passage_cluster.rs)
+   max-rects + spanning-tree passages → per-rect
    [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) with
-   open/closed normalize). Strategies default to `CaseAttempt` (AllOpen /
-   SingleClosed ≤36 m² with one port / SpineHall / GuillotineSplit). Min hall /
-   access clear is **1.0 m**. Apartment-level walls enclose bedrooms / bathrooms
-   only; entry + common stay open-plan (subtypes may wall themselves). Ungrouped
-   / unfilled pockets stay [`SpaceKind::InternalSpace`](src/fit.rs); Full\* maps
-   those leftovers to [`SpaceKind::ClosetSpace`](src/fit.rs).
+   open/closed normalize). Shared XZ helpers live in
+   [`plan_geom`](src/usage_areas/plan_geom.rs); RLA carve sizes in
+   [`slot_policy`](src/usage_areas/rectangular_livable_area/slot_policy.rs).
+   Strategies default to `CaseAttempt` (AllOpen / SingleClosed ≤36 m² with one
+   port / SpineHall / GuillotineSplit). Min hall / access clear is **1.0 m**.
+   Apartment-level walls enclose bedrooms / bathrooms only; entry + common stay
+   open-plan (subtypes may wall themselves). Ungrouped / unfilled pockets stay
+   [`SpaceKind::InternalSpace`](src/fit.rs); Full\* maps those leftovers to
+   [`SpaceKind::ClosetSpace`](src/fit.rs).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),

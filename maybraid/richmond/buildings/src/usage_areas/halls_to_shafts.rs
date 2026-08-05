@@ -17,6 +17,7 @@ use crate::fit::{
 };
 use crate::openings::{Opening, OpeningLabel, Openings};
 use crate::usage_areas::plan_cells::subtract_aabb2;
+use crate::usage_areas::plan_geom::host_xz;
 
 const EPS: f32 = 1e-3;
 /// Default noisy hall-width range (meters).
@@ -152,15 +153,6 @@ impl Fit for HallsToShafts {
 }
 
 // --- plan helpers -----------------------------------------------------------
-
-fn host_xz(bounds: &Aabb3d) -> Aabb2d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
-}
 
 fn opening_xz(opening: &Opening) -> Aabb2d {
 	let min = Vec3::from(opening.bounds.min);

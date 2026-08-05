@@ -21,6 +21,8 @@ pub mod livable_apartment;
 pub mod livable_apartments;
 pub mod livable_quarters;
 pub mod plan_cells;
+pub mod plan_geom;
+pub mod rect_passage_cluster;
 pub mod rectangular_livable_area;
 
 pub use clearance::{
@@ -65,6 +67,8 @@ pub use plan_cells::{
 	shared_edge_span, split_oversized_cells, split_toward_min_room, subtract_aabb2, PlanCell,
 	MIN_GROUP_CONNECTIVITY,
 };
+pub use plan_geom::{confines_from_xz, host_xz, DOOR_WIDTH, MIN_ROOM};
+pub use rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
 pub use rectangular_livable_area::{
 	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
 	RectangularLivableAreaParameterized, RectangularLivableAreaPlan, SCOPE as RECT_LIVABLE_SCOPE,
