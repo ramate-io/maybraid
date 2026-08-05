@@ -5,9 +5,9 @@
 //! [`RenderItem`] path is unimplemented — use the vegetation LodScene adapter or `/show`.
 //!
 //! Structural LOD (tree-radius bands):
-//! - **High** — within `1.5 ×` tree radius: full sticks + full canopy
-//! - **Medium** — `1.5…8 ×` radius: silhouette — trunk + outer-half sticks/canopy
-//! - **Low** — `8…24 ×` radius: trunk + ~1/4 descenders; four filled quadrant canopy balls
+//! - **High** — within `3 ×` tree radius: full sticks + full canopy
+//! - **Medium** — `3…12 ×` radius: silhouette — trunk + outer-half sticks/canopy
+//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; four height-spanning canopy balls
 
 mod canopy;
 pub mod render_item_plugin;

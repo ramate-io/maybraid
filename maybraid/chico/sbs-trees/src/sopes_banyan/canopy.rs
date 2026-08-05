@@ -79,40 +79,43 @@ fn azimuth_sector(position: Vec3) -> Option<usize> {
 	)
 }
 
-/// Slight oversize so four balls overlap and read as one crown mass.
-const LOW_CANOPY_FILL: f32 = 1.2;
-
-/// Low: four noisy balls — one per azimuth quadrant, scaled to fill that quadrant's canopy AABB.
+/// Low: four noisy balls — one per azimuth quadrant.
+///
+/// Radius is half the sector's canopy **height** (center Y span), so each ball
+/// touches the top and bottom of the would-be canopy rather than ballooning from
+/// the horizontal AABB. XZ sits at the mean of sector foliage centers.
 pub(crate) fn four_quadrant_canopy_balls(high_foliage: &[FoliageNode]) -> Vec<FoliageNode> {
-	let mut sector_aabb: [Option<(Vec3, Vec3)>; 4] = [None, None, None, None];
+	// Per sector: sum of XZ centers, count, min/max Y of foliage centers.
+	let mut sector: [Option<(Vec3, u32, f32, f32)>; 4] = [None, None, None, None];
 	for node in high_foliage {
 		let c = node.placement.translation;
-		let Some(sector) = azimuth_sector(c) else {
+		let Some(i) = azimuth_sector(c) else {
 			continue;
 		};
-		let e = node
-			.placement
-			.scale
-			.x
-			.abs()
-			.max(node.placement.scale.y.abs())
-			.max(node.placement.scale.z.abs());
-		let min = c - Vec3::splat(e);
-		let max = c + Vec3::splat(e);
-		sector_aabb[sector] = Some(match sector_aabb[sector] {
-			None => (min, max),
-			Some((prev_min, prev_max)) => (prev_min.min(min), prev_max.max(max)),
+		sector[i] = Some(match sector[i] {
+			None => (Vec3::new(c.x, 0.0, c.z), 1, c.y, c.y),
+			Some((sum_xz, n, y_min, y_max)) => (
+				sum_xz + Vec3::new(c.x, 0.0, c.z),
+				n + 1,
+				y_min.min(c.y),
+				y_max.max(c.y),
+			),
 		});
 	}
 
-	sector_aabb
+	sector
 		.into_iter()
 		.flatten()
-		.map(|(min, max)| {
-			let center = (min + max) * 0.5;
-			let half = (max - min) * 0.5;
-			let radius = half.x.max(half.y).max(half.z).max(1e-3) * LOW_CANOPY_FILL;
-			FoliageNode::noisy_ball(Placement::foliage_uniform(center, radius))
+		.map(|(sum_xz, n, y_min, y_max)| {
+			let n = n.max(1) as f32;
+			let xz = sum_xz / n;
+			let y = (y_min + y_max) * 0.5;
+			// Diameter = canopy height band → sphere touches top and bottom.
+			let radius = ((y_max - y_min) * 0.5).max(1e-3);
+			FoliageNode::noisy_ball(Placement::foliage_uniform(
+				Vec3::new(xz.x, y, xz.z),
+				radius,
+			))
 		})
 		.collect()
 }

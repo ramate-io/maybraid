@@ -8,10 +8,10 @@ use lod::lod_scene_host::LodSceneHost;
 
 use crate::lod_band::DistanceLodBand;
 
-/// High when `distance / tree_radius ≤` this (Sope default: 1.5).
-pub const STRUCTURAL_HIGH_FACTOR: f32 = 1.5;
-/// Medium when at or below this multiple of tree radius (Sope default: 8).
-pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 8.0;
+/// High when `distance / tree_radius ≤` this (Sope default: 3).
+pub const STRUCTURAL_HIGH_FACTOR: f32 = 3.0;
+/// Medium when at or below this multiple of tree radius (Sope default: 12).
+pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 /// Low when at or below this multiple of tree radius (Sope default: 24).
 pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
