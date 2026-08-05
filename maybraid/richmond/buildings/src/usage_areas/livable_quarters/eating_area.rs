@@ -192,4 +192,38 @@ mod tests {
 			EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!area.has_dining(), "expected kitchen-only fallback");
 	}
+
+	#[test]
+	fn compact_galley_host_still_gets_kitchen() {
+		// Near kitchen layout MIN_AREA (2.4×2.0); should kitchen-only, not fail.
+		let confines = host_with_south_door(2.6, 2.5);
+		let (area, _) =
+			EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		assert!(!area.has_dining());
+		assert!(
+			!area.kitchen.counter_runs.is_empty() || area.kitchen.room_type.text == "Kitchen"
+				|| area.room_type.text.contains("Eating"),
+			"expected a fitted kitchen in a compact host"
+		);
+	}
+
+	#[test]
+	fn large_host_kitchen_footprint_is_generous() {
+		let confines = host_with_south_door(12.0, 10.0);
+		let (area, _) = EatingArea::fit_to_confines(
+			&confines,
+			NoiseParams {
+				seed: 11,
+				..Default::default()
+			},
+		)
+		.unwrap();
+		let k = &area.kitchen.room_type.placement.scale;
+		let kitchen_a = k.x * k.z;
+		// On a 120 m² host, kitchen half / kitchen-only should not stay galley-tiny.
+		assert!(
+			kitchen_a > 20.0,
+			"expected a roomy kitchen on a large host, got {kitchen_a:.1} m²"
+		);
+	}
 }

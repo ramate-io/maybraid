@@ -302,7 +302,8 @@ fn default_program(area: f32, passages: usize) -> Vec<RectQuarterKind> {
 		return out;
 	}
 	out.push(RectQuarterKind::Living);
-	if area > 20.0 {
+	// Compact kitchens fit from ~kitchen MIN_AREA upward.
+	if area > 10.0 {
 		out.push(RectQuarterKind::Eating);
 	}
 	if area > 28.0 {
@@ -1350,18 +1351,25 @@ fn pick_largest_abutting_host(
 }
 
 fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
-	let want = target_area_for(kind);
 	let host_a = aabb2_area(host);
+	let want = slot_target_area(kind, host_a);
 	// Open rooms prefer generous claims so kitchens/living are not starved into
 	// thin scraps; closed rooms still carve a target pocket when the host is huge.
-	let carve_threshold = if kind.is_open() { 2.4 } else { 1.7 };
+	// Eating/kitchen: claim the whole pocket when near the scaled target; on large
+	// hosts take a wide share (compact mins stay via [`min_area_for`]).
+	let carve_threshold = match kind {
+		RectQuarterKind::Eating | RectQuarterKind::Kitchen => 1.7,
+		k if k.is_open() => 2.4,
+		_ => 1.7,
+	};
 	if host_a < want * carve_threshold {
 		return (host, Vec::new());
 	}
-	let frac = if kind.is_open() {
-		(want / host_a).clamp(0.35, 0.72)
-	} else {
-		(want / host_a).clamp(0.28, 0.65)
+	let frac = match kind {
+		RectQuarterKind::Eating => (want / host_a).clamp(0.32, 0.72),
+		RectQuarterKind::Kitchen => (want / host_a).clamp(0.28, 0.62),
+		k if k.is_open() => (want / host_a).clamp(0.35, 0.72),
+		_ => (want / host_a).clamp(0.28, 0.65),
 	};
 	let min_d = min_dim_for(kind);
 	let candidates = [
@@ -1390,16 +1398,18 @@ fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	}
 }
 
-fn target_area_for(kind: RectQuarterKind) -> f32 {
+/// Aspirational slot area (m²). Eating/kitchen scale with the host so compact
+/// pockets stay small while large free space can claim a roomy kitchen.
+fn slot_target_area(kind: RectQuarterKind, host_a: f32) -> f32 {
 	match kind {
 		RectQuarterKind::Bedroom => 18.0,
-		RectQuarterKind::Living => 16.0,
-		RectQuarterKind::Eating => 20.0,
-		RectQuarterKind::Kitchen => 10.0,
-		RectQuarterKind::Dining => 10.0,
+		RectQuarterKind::Living => (host_a * 0.35).clamp(12.0, 36.0),
+		RectQuarterKind::Eating => (host_a * 0.38).clamp(6.0, 48.0),
+		RectQuarterKind::Kitchen => (host_a * 0.28).clamp(5.0, 32.0),
+		RectQuarterKind::Dining => (host_a * 0.22).clamp(5.0, 24.0),
 		RectQuarterKind::Bathroom => 6.5,
 		RectQuarterKind::HalfBath => 3.5,
-		RectQuarterKind::Sitting => 10.0,
+		RectQuarterKind::Sitting => (host_a * 0.25).clamp(6.0, 22.0),
 		RectQuarterKind::Study => 9.0,
 	}
 }
@@ -1408,9 +1418,9 @@ fn min_area_for(kind: RectQuarterKind) -> f32 {
 	match kind {
 		RectQuarterKind::Bedroom => 12.0,
 		RectQuarterKind::Living => 9.0,
-		RectQuarterKind::Eating => 8.0,
-		RectQuarterKind::Kitchen => 5.0,
-		RectQuarterKind::Dining => 5.0,
+		RectQuarterKind::Eating => 5.0,
+		RectQuarterKind::Kitchen => 4.8,
+		RectQuarterKind::Dining => 4.4,
 		RectQuarterKind::Bathroom => 4.5,
 		RectQuarterKind::HalfBath => 2.0,
 		RectQuarterKind::Sitting => 5.0,

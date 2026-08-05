@@ -25,17 +25,25 @@ impl EatingAreaParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
+		let fp = confines.footprint();
+		let area = (fp.x * fp.y).max(1e-3);
+		// Larger hosts bias toward roomier counters / a bigger kitchen share.
+		let size_t = ((area - 8.0) / 50.0).clamp(0.0, 1.0);
+		let space_lo = 0.85 + 0.2 * size_t;
+		let space_hi = 1.35 + 0.45 * size_t;
+		let frac_lo = 0.34 + 0.08 * size_t;
+		let frac_hi = 0.52 + 0.16 * size_t;
 		Ok(Self {
 			style: LabelStyle::Yellow,
 			spaciousness: cfg
-				.sample_range_f32_4d(0.95, 1.35, c.x, c.y, c.z, 40.0)
-				.clamp(0.75, 1.75),
+				.sample_range_f32_4d(space_lo, space_hi, c.x, c.y, c.z, 40.0)
+				.clamp(0.75, 1.9),
 			occupancy: cfg
 				.sample_range_f32_4d(0.28, 0.52, c.x, c.y, c.z, 41.0)
 				.clamp(0.1, 0.75),
 			kitchen_frac: cfg
-				.sample_range_f32_4d(0.38, 0.58, c.x, c.y, c.z, 42.0)
-				.clamp(0.3, 0.7),
+				.sample_range_f32_4d(frac_lo, frac_hi, c.x, c.y, c.z, 42.0)
+				.clamp(0.3, 0.72),
 			kitchen_layout: None,
 		})
 	}

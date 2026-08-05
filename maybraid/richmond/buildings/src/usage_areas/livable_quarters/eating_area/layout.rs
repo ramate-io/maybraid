@@ -16,10 +16,14 @@ use super::parameterized::{
 };
 
 /// Minimum combined footprint for a kitchen+dining split (m²).
-pub const MIN_PAIR_AREA: f32 = 12.0;
+/// Roughly kitchen [`MIN_AREA`](crate::usage_areas::livable_quarters::kitchen::layout::MIN_AREA)
+/// + dining min (~4.4).
+pub const MIN_PAIR_AREA: f32 = 9.5;
 const EPS: f32 = 1e-3;
 const DOOR_WIDTH: f32 = 1.0;
+/// Allow compact galley halves (~kitchen/dining floor mins).
 const MIN_HALF_DIM: f32 = 2.0;
+const MIN_HALF_AREA: f32 = 4.0;
 
 impl EatingAreaPlan {
 	pub fn from_parameterized(
@@ -123,7 +127,7 @@ fn kitchen_only(
 
 fn half_usable(r: Aabb2d) -> bool {
 	let s = r.max - r.min;
-	s.x + EPS >= MIN_HALF_DIM && s.y + EPS >= MIN_HALF_DIM && aabb2_area(r) >= 4.5
+	s.x + EPS >= MIN_HALF_DIM && s.y + EPS >= MIN_HALF_DIM && aabb2_area(r) + EPS >= MIN_HALF_AREA
 }
 
 fn child_openings(
