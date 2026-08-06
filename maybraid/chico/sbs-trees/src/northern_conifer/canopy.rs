@@ -2,7 +2,7 @@
 //!
 //! Medium uses ~30% fewer band cells. Medium and Low share a thin layered proxy that
 //! stretches full canopy height (top-anchored) with reduced XZ extent. Low emits the
-//! proxy twice for extra mass.
+//! proxy twice at a 90° yaw offset for cross-layered thickness.
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
@@ -100,6 +100,7 @@ fn thin_full_height_proxy_ball(
 	candidates: &[FoliageCandidate],
 	splay_radius_world: f32,
 	chain: &BallStickChain<LiamsConiferChain>,
+	yaw: f32,
 ) -> Option<FoliageNode> {
 	if candidates.is_empty() {
 		return None;
@@ -124,7 +125,7 @@ fn thin_full_height_proxy_ball(
 	// Hold the top of the stretched proxy at the canopy tip.
 	center.y = top_y - half_extents.y;
 	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
+		Placement::new(center, yaw).with_scale(half_extents),
 	))
 }
 
@@ -139,12 +140,21 @@ fn with_proxy_and_apex(
 	chain: &BallStickChain<LiamsConiferChain>,
 	apex_spawn_fraction: f32,
 	apex_radius_world: f32,
+	// When 2+, emit proxies at 0, π/2, … for cross-layered thickness.
 	proxy_count: usize,
 ) -> Vec<FoliageNode> {
 	let mut nodes = banded_from_candidates(candidates, bands, splay_radius_world);
-	if let Some(proxy) = thin_full_height_proxy_ball(candidates, splay_radius_world, chain) {
-		for _ in 0..proxy_count {
-			nodes.push(proxy.clone());
+	let n = proxy_count.max(1);
+	for i in 0..n {
+		let yaw = if n > 1 {
+			std::f32::consts::FRAC_PI_2 * (i as f32)
+		} else {
+			0.0
+		};
+		if let Some(proxy) =
+			thin_full_height_proxy_ball(candidates, splay_radius_world, chain, yaw)
+		{
+			nodes.push(proxy);
 		}
 	}
 	if let Some(apex) = maybe_apex_ball(chain, apex_spawn_fraction, apex_radius_world) {
