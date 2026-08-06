@@ -108,7 +108,9 @@ is a single rectangle fitted with
 [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)
 (SingleClosed → Guillotine → AllOpen; courtyard `Passage` as RLA opening; no
 SpineHall). Party walls + RLA internals use the same High-only
-`internal_walls` band as [`LivableApartments`](src/usage_areas/livable_apartments.rs).
+`internal_walls` band as [`LivableApartments`](src/usage_areas/livable_apartments.rs);
+structural probe is the whole-storey outer footprint (local), with fine-phase
+viewer mapping through host `GlobalTransform` (~80 m outside → High).
 Within-strip bay cuts always wall; cross-strip shared edges wall from noise
 (~50%) so some corners stay open as L-shaped living. No
 [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs), suite packing, or

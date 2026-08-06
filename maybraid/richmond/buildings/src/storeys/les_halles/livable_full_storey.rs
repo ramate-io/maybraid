@@ -57,7 +57,7 @@ const SALT_CROSS_STRIP_WALL: f32 = 131.0;
 /// Minimum shared-edge length (m) before a cross-strip party wall is considered.
 const MIN_CROSS_STRIP_SPAN: f32 = 2.0;
 /// Bedroom enters the multi-room program from this footprint (m²).
-const BEDROOM_PROGRAM_AREA: f32 = 18.0;
+const BEDROOM_PROGRAM_AREA: f32 = 12.0;
 
 /// Full Les Halles storey with residential gallery fills.
 #[derive(Debug, Clone, PartialEq)]
@@ -207,17 +207,20 @@ fn sample_min_bay_along(confines: &Confines, noise: NoiseParams, depth: f32, alo
 		.clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
 }
 
+/// Gallery bays / Guillotine halves often exceed the RLA studio default (36 m²).
+const LES_HALLES_CLOSED_MAX_AREA: f32 = 72.0;
+
 fn rla_params(strategy: RectLivableStrategy) -> RectangularLivableAreaParameterized {
 	RectangularLivableAreaParameterized {
 		strategy,
 		min_hall: DEFAULT_WALK_CLEAR,
-		closed_max_area: DEFAULT_CLOSED_MAX_AREA,
+		closed_max_area: LES_HALLES_CLOSED_MAX_AREA.max(DEFAULT_CLOSED_MAX_AREA),
 	}
 }
 
-/// SpineHall stays off this typology — closed studios first, then guillotine.
+/// SpineHall stays off this typology — guillotine for large gallery bays.
 fn les_halles_strategies(area_m2: f32, passages: usize) -> Vec<RectLivableStrategy> {
-	if passages == 1 && area_m2 + EPS <= DEFAULT_CLOSED_MAX_AREA {
+	if passages == 1 && area_m2 + EPS <= LES_HALLES_CLOSED_MAX_AREA {
 		vec![
 			RectLivableStrategy::SingleClosed,
 			RectLivableStrategy::GuillotineSplit,
@@ -687,12 +690,15 @@ impl BuildingComponents for LesHallesLivableFullStorey {
 	}
 
 	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
-		if self.areas.is_empty() {
-			return None;
-		}
-		Some(BuildingStructuralLodProbe::new(
-			self.areas.iter().map(|a| host_xz(&a.confines.bounds)),
-		))
+		// Whole-storey outer footprint in local space; fine-phase maps the viewer
+		// through the host GlobalTransform so gallery offsets stay independent.
+		let half = self.floor_plan.outer * 0.5;
+		let c = self.floor_plan.center_xz;
+		let storey_xz = Aabb2d {
+			min: Vec2::new(c.x - half.x, c.z - half.y),
+			max: Vec2::new(c.x + half.x, c.z + half.y),
+		};
+		Some(BuildingStructuralLodProbe::new([storey_xz]))
 	}
 }
 
@@ -767,6 +773,9 @@ mod tests {
 			"Les Halles livable path must not choose SpineHall"
 		);
 	}
+
+
+
 
 	#[test]
 	fn bedrooms_appear_on_typical_seed() {

@@ -3,8 +3,11 @@
 //! Distinct from mesh-resolution probes ([`crate::panels::PanelLodProbe`], …):
 //! this selects which *layers* of authored IR a composite building emits
 //! (e.g. internal walls on High only).
+//!
+//! Footprints are authored in the host's **local** XZ. Fine-phase updates map the
+//! viewer into that local frame via [`GlobalTransform`] so gallery offsets work.
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, GlobalTransform, Query, Res, Transform, With};
 use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::{LodSceneLevel, LodSceneStatus};
@@ -16,8 +19,9 @@ pub const STRUCTURAL_HIGH_OUTSIDE_METERS: f32 = 80.0;
 
 /// Viewer distance band for whole-building structural thinning.
 ///
-/// Footprints are axis-aligned XZ rectangles (`Aabb2d` with \(y\) = world \(z\)).
-/// Distance is the planar distance outside the nearest footprint (0 inside).
+/// Footprints are axis-aligned XZ rectangles (`Aabb2d` with \(y\) = world \(z\))
+/// in the **host local** frame. Distance is planar meters outside the nearest
+/// footprint (0 inside).
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct BuildingStructuralLodProbe {
 	pub footprints: Vec<Aabb2d>,
@@ -26,7 +30,10 @@ pub struct BuildingStructuralLodProbe {
 
 impl Default for BuildingStructuralLodProbe {
 	fn default() -> Self {
-		Self { footprints: Vec::new(), high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS }
+		Self {
+			footprints: Vec::new(),
+			high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS,
+		}
 	}
 }
 
@@ -39,7 +46,10 @@ impl BuildingStructuralLodProbe {
 	}
 
 	pub fn from_aabb3d_xz(min: Vec3, max: Vec3) -> Self {
-		Self::new([Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }])
+		Self::new([Aabb2d {
+			min: Vec2::new(min.x, min.z),
+			max: Vec2::new(max.x, max.z),
+		}])
 	}
 
 	pub fn with_high_outside_meters(mut self, meters: f32) -> Self {
@@ -54,17 +64,40 @@ impl BuildingStructuralLodProbe {
 		self
 	}
 
-	/// Meters outside the nearest footprint in XZ (0 when inside any).
-	pub fn distance_outside(&self, viewer: &Transform) -> f32 {
-		distance_outside_footprints(viewer.translation, &self.footprints)
+	/// Meters outside the nearest footprint in local XZ (0 when inside any).
+	pub fn distance_outside_local(&self, viewer_local: Vec3) -> f32 {
+		distance_outside_footprints(viewer_local, &self.footprints)
 	}
 
-	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
-		if self.distance_outside(viewer) <= self.high_outside_meters {
+	/// [`distance_outside_local`] treating `viewer.translation` as already local.
+	pub fn distance_outside(&self, viewer: &Transform) -> f32 {
+		self.distance_outside_local(viewer.translation)
+	}
+
+	pub fn level_for_local(&self, viewer_local: Vec3) -> LodSceneLevel {
+		if self.distance_outside_local(viewer_local) <= self.high_outside_meters {
 			LodSceneLevel::High
 		} else {
 			LodSceneLevel::Medium
 		}
+	}
+
+	/// Level when `viewer` is in the same space as the footprints (usually local).
+	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		self.level_for_local(viewer.translation)
+	}
+
+	/// Level for a world-space viewer against local footprints on `host_global`.
+	pub fn level_for_world(
+		&self,
+		viewer_world: Vec3,
+		host_global: &GlobalTransform,
+	) -> LodSceneLevel {
+		let viewer_local = host_global
+			.affine()
+			.inverse()
+			.transform_point3(viewer_world);
+		self.level_for_local(viewer_local)
 	}
 
 	pub fn status_for_lod_ref(&self, lod_ref: &LodRef) -> LodSceneStatus {
@@ -113,16 +146,25 @@ pub fn distance_outside_footprints(p: Vec3, footprints: &[Aabb2d]) -> f32 {
 }
 
 /// Fine-phase: update structural building host levels from the LOD viewer.
+///
+/// Viewer is world-space; footprints are host-local — convert via [`GlobalTransform`].
 pub fn update_building_structural_host_levels(
 	lod_state: Res<lod::LodViewerState>,
-	mut hosts: Query<(&BuildingStructuralLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
+	mut hosts: Query<
+		(
+			&BuildingStructuralLodProbe,
+			&GlobalTransform,
+			&mut LodSceneLevel,
+		),
+		With<LodSceneHost>,
+	>,
 ) {
 	if lod_state.entity == bevy::prelude::Entity::PLACEHOLDER {
 		return;
 	}
-	let viewer = lod_state.current;
-	for (probe, mut level) in &mut hosts {
-		let next = probe.level_for(&viewer);
+	let viewer_world = lod_state.current.translation;
+	for (probe, global, mut level) in &mut hosts {
+		let next = probe.level_for_world(viewer_world, global);
 		if *level != next {
 			*level = next;
 		}
@@ -170,5 +212,24 @@ mod tests {
 		let probe = a.merge(b);
 		let near_b = Transform::from_xyz(10.0 + 5.0, 1.5, 0.0);
 		assert!((probe.distance_outside(&near_b) - 5.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn world_viewer_respects_host_translation() {
+		let probe = BuildingStructuralLodProbe::from_aabb3d_xz(
+			Vec3::new(-5.0, 0.0, -5.0),
+			Vec3::new(5.0, 3.0, 5.0),
+		)
+		.with_high_outside_meters(20.0);
+		// Building placed 200 m away; local footprint still [-5,5].
+		let host = GlobalTransform::from_translation(Vec3::new(200.0, 0.0, 0.0));
+		// World point just outside the *placed* building → High.
+		let near_world = Vec3::new(200.0 + 5.0 + 10.0, 1.5, 0.0);
+		assert_eq!(probe.level_for_world(near_world, &host), LodSceneLevel::High);
+		// Same offset from origin (no host transform) would look far from local footprint.
+		assert_eq!(
+			probe.level_for(&Transform::from_translation(near_world)),
+			LodSceneLevel::Medium
+		);
 	}
 }

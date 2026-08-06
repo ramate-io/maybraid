@@ -25,10 +25,12 @@ impl SlotPolicy {
 		match kind {
 			RectQuarterKind::Bedroom => Self {
 				target_frac: 0.0,
-				target_min: 18.0,
+				// Compact closed rooms — was 18 m² aspirational, which starved
+				// strip / guillotine halves that still have plenty of open living.
+				target_min: 12.0,
 				target_max: 18.0,
 				min_area: 12.0,
-				min_dim: 3.2,
+				min_dim: 3.0,
 				carve_threshold: 1.7,
 				carve_frac_lo: 0.28,
 				carve_frac_hi: 0.65,
