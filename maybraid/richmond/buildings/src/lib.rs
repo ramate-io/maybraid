@@ -97,8 +97,8 @@ pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };
 pub use storeys::les_halles::{
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
-	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
+	LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,

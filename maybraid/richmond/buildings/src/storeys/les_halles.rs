@@ -13,13 +13,19 @@
 //! - Remaps inbound shaft openings onto fitted slots (quadrants for corners;
 //!   N/S end bands + E/W middle bands for mid-sides). A shaft is only authored
 //!   when at least one inbound opening maps to that slot.
+//!
+//! Full\* variants share the same floor plan: commercial
+//! ([`LesHallesFullStorey`]) fills gallery strips with stalls; livable
+//! ([`LesHallesLivableFullStorey`]) fills them with [`crate::LivableApartments`].
 
 pub mod floor_plan;
 pub mod full_storey;
+pub mod livable_full_storey;
 pub mod parameterized;
 
 pub use floor_plan::LesHallesFloorPlan;
 pub use full_storey::LesHallesFullStorey;
+pub use livable_full_storey::LesHallesLivableFullStorey;
 pub use parameterized::{
 	LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor,
 };

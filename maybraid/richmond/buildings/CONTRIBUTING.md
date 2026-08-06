@@ -91,8 +91,22 @@ CommercialStallInterior (catalog first-fit)
 (optional) nested FillableRegions  e.g. MiniMart office, restroom stalls
 ```
 
-Playground: `/show les-halles-full-storey`, `/show commercial-stall-strip`,
+Playground: `/show les-halles-full-storey`, `/show les-halles-livable-full-storey`,
+`/show les-halles-livable-full-storey-examples`, `/show commercial-stall-strip`,
 and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
+
+### Livable gallery fill (Les Halles livable Full\*)
+
+[`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) shares
+the same [`LesHallesFloorPlan`](src/storeys/les_halles/floor_plan.rs) as the
+commercial Full\*. It samples deeper galleries via
+[`LesHallesParameterized::sample_livable`](src/storeys/les_halles/parameterized.rs),
+then fills each `ExternalSpace` strip with
+[`LivableApartments`](src/usage_areas/livable_apartments.rs) (independent strips —
+no progressive Boundary handoff). Abutting plan shafts are injected onto strip
+confines so [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) has terminals
+alongside balcony-facing Passage doors. Prefer larger footprints than commercial
+demos (playground default `72,4,54`) so strip depth hosts apartment packs.
 
 ### I-frame rectangularization (I-Apartment)
 
@@ -167,6 +181,12 @@ the ring. It:
    with a per-strip seed offset.
 4. On `TooSmall`, leaves the strip in residual `within` (unfilled gallery).
 5. Passes other kinds through unchanged.
+
+[`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) is the
+same loop with residential program: inject abutting shafts →
+[`LivableApartments::from_confines_with`](src/usage_areas/livable_apartments.rs)
+(storey-sampled `hall_width`). Commercial vs livable is a Full\* choice over one
+floor plan.
 
 That is the **FloorPlan → Full\*** split: the plan owns structure + residual
 confines; Full\* owns program fill.
