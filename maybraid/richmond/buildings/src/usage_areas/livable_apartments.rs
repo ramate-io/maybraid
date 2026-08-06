@@ -19,7 +19,7 @@ use crate::usage_areas::hall_connected_suites::{
 	HallEnclosedSuites, HallSuiteEncloseParams, HallSuitePackParams,
 };
 use crate::usage_areas::halls_to_shafts::HallsToShafts;
-use crate::usage_areas::livable_apartment::LivableApartment;
+use crate::usage_areas::livable_apartment::{LivableApartment, INTERNAL_WALLS_LAYER};
 use crate::usage_areas::plan_cells::MIN_GROUP_CONNECTIVITY;
 use crate::usage_areas::plan_geom::noise_for_cell;
 
@@ -198,23 +198,23 @@ impl BuildingComponents for LivableApartments {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = Layers::new();
 		for wall in &self.walls {
-			out.extend(wall.panel_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.panel_nodes_for_level(level));
 		}
 		for apt in &self.apartments {
 			out.extend(apt.panel_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = Layers::new();
 		for wall in &self.walls {
-			out.extend(wall.joint_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.joint_nodes_for_level(level));
 		}
 		for apt in &self.apartments {
 			out.extend(apt.joint_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
@@ -223,6 +223,16 @@ impl BuildingComponents for LivableApartments {
 			out.extend(apt.label_nodes_for_level(level));
 		}
 		out
+	}
+}
+
+/// High keeps suite-divider walls; coarser bands drop [`INTERNAL_WALLS_LAYER`].
+/// Nested apartments already apply the same filter on their own internals.
+fn structural_layers<T>(level: LodSceneLevel, layers: Layers<T>) -> Layers<T> {
+	if matches!(level, LodSceneLevel::High) {
+		layers
+	} else {
+		layers.except([INTERNAL_WALLS_LAYER])
 	}
 }
 
@@ -304,6 +314,7 @@ fn singleton_host(
 mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
+	use richmond_building_components::Layer;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 
 	fn host_with_shafts_and_passage() -> Confines {
@@ -397,6 +408,41 @@ mod tests {
 		assert!(
 			block.apartments.iter().any(|a| a.cells.len() >= 2),
 			"expected at least one non-rectangular / multi-cell group"
+		);
+	}
+
+	#[test]
+	fn suite_divider_walls_only_on_high_structural_band() {
+		let confines = host_with_shafts_and_passage();
+		let (block, _) = LivableApartments::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			LivableApartmentsOptions {
+				hall_width: Some(2.5),
+				targets: Some(vec![40.0, 30.0, 22.0, 18.0]),
+			},
+		)
+		.unwrap();
+		assert!(
+			!block.walls.is_empty(),
+			"fixture needs suite-divider walls to exercise LOD"
+		);
+		let high = block.panel_nodes_for_level(LodSceneLevel::High);
+		assert!(
+			high.labeled
+				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			"High should tag suite / apartment internal walls"
+		);
+		let medium = block.panel_nodes_for_level(LodSceneLevel::Medium);
+		assert!(
+			!medium
+				.labeled
+				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			"Medium should drop suite-divider and nested internal walls"
+		);
+		assert!(
+			medium.len() < high.len(),
+			"Medium should emit fewer panels than High"
 		);
 	}
 }

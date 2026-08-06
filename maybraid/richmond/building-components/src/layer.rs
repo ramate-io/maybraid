@@ -4,9 +4,10 @@
 //! type stays on the trait method (`panel_nodes_for_level`, …). Layer is a
 //! provenance record so higher-order buildings can decide what to *do* with the
 //! geometry in that bucket (e.g. treat `"closet"` partitions differently from
-//! `"envelope"` ones).
+//! `"envelope"` ones). Parents commonly filter with [`Layers::only`] /
+//! [`Layers::except`] when applying structural LOD policy.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// Provenance label for a bucket of authored geometry.
@@ -135,6 +136,15 @@ impl<T> Layers<T> {
 		self
 	}
 
+	/// Flatten `other` and append under a single provenance label.
+	pub fn extend_under(
+		&mut self,
+		layer: impl Into<Layer>,
+		other: Layers<T>,
+	) -> &mut Self {
+		self.extend_labeled(layer, other.flatten())
+	}
+
 	/// Merge another [`Layers`], appending free lists and same-named labels.
 	pub fn extend(&mut self, other: Layers<T>) -> &mut Self {
 		self.free.extend(other.free);
@@ -147,6 +157,34 @@ impl<T> Layers<T> {
 	pub fn extended(mut self, other: Layers<T>) -> Self {
 		self.extend(other);
 		self
+	}
+
+	/// Keep free nodes and drop the named labeled buckets.
+	pub fn except(self, names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+		let deny: HashSet<String> =
+			names.into_iter().map(|n| n.as_ref().to_string()).collect();
+		Self {
+			free: self.free,
+			labeled: self
+				.labeled
+				.into_iter()
+				.filter(|(layer, _)| !deny.contains(layer.as_str()))
+				.collect(),
+		}
+	}
+
+	/// Keep only the named labeled buckets (drops free and other labels).
+	pub fn only(self, names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+		let allow: HashSet<String> =
+			names.into_iter().map(|n| n.as_ref().to_string()).collect();
+		Self {
+			free: Vec::new(),
+			labeled: self
+				.labeled
+				.into_iter()
+				.filter(|(layer, _)| allow.contains(layer.as_str()))
+				.collect(),
+		}
 	}
 
 	/// Flatten free then labeled (labels sorted by name) into one list.
@@ -170,5 +208,51 @@ impl<T> FromIterator<T> for Layers<T> {
 impl<T> Extend<T> for Layers<T> {
 	fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
 		self.extend_free(iter);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn except_drops_named_labels_keeps_free() {
+		let layers = Layers::new()
+			.with_free([1, 2])
+			.with_labeled("internal_walls", [3, 4])
+			.with_labeled("envelope", [5]);
+		let kept = layers.except(["internal_walls"]);
+		assert_eq!(kept.free, vec![1, 2]);
+		assert_eq!(kept.labeled.get(&Layer::new("envelope")).unwrap(), &vec![5]);
+		assert!(!kept.labeled.contains_key(&Layer::new("internal_walls")));
+	}
+
+	#[test]
+	fn only_keeps_named_labels_drops_free() {
+		let layers = Layers::new()
+			.with_free([1])
+			.with_labeled("internal_walls", [2])
+			.with_labeled("envelope", [3]);
+		let kept = layers.only(["internal_walls"]);
+		assert!(kept.free.is_empty());
+		assert_eq!(
+			kept.labeled.get(&Layer::new("internal_walls")).unwrap(),
+			&vec![2]
+		);
+		assert!(!kept.labeled.contains_key(&Layer::new("envelope")));
+	}
+
+	#[test]
+	fn extend_under_flattens_into_label() {
+		let mut out = Layers::new();
+		let child = Layers::new()
+			.with_free([1])
+			.with_labeled("closet", [2]);
+		out.extend_under("internal_walls", child);
+		assert!(out.free.is_empty());
+		assert_eq!(
+			out.labeled.get(&Layer::new("internal_walls")).unwrap(),
+			&vec![1, 2]
+		);
 	}
 }
