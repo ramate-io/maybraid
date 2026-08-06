@@ -46,3 +46,20 @@ pub mod sticks {
 	stick_lod_triad!(standard, "standard");
 	stick_lod_triad!(standard_trunk, "standard_trunk");
 }
+
+/// Foliage GLBs under `vegetation/foliage/`.
+pub mod foliage {
+	use super::AssetPath;
+
+	/// `vegetation/foliage/standard/layered_ball_001_{high,mid,low}_res.glb`.
+	pub mod standard {
+		use super::AssetPath;
+
+		pub const LAYERED_BALL_HIGH: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/layered_ball_001_high_res.glb");
+		pub const LAYERED_BALL_MID: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/layered_ball_001_mid_res.glb");
+		pub const LAYERED_BALL_LOW: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/layered_ball_001_low_res.glb");
+	}
+}

@@ -5,6 +5,8 @@
 pub enum FoliageGeometry {
 	/// Unit sphere centered at the origin (radius 1 before placement scale).
 	UnitBall,
+	/// Layered-ball kit: unit ball before placement scale (GLB under standard style).
+	LayeredBall,
 	/// Plane-splay cluster parameters (local units before placement scale).
 	PlaneSplay {
 		icosphere_subdivisions: u32,
@@ -22,6 +24,10 @@ impl Default for FoliageGeometry {
 impl FoliageGeometry {
 	pub fn unit_ball() -> Self {
 		Self::UnitBall
+	}
+
+	pub fn layered_ball() -> Self {
+		Self::LayeredBall
 	}
 
 	pub fn plane_splay(

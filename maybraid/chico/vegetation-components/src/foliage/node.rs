@@ -9,7 +9,7 @@ use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::warm_content_host_hsl;
+use crate::lod_host::{posed_asset_tier, warm_content_host_hsl, warm_mesh_level_host};
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh};
@@ -31,34 +31,66 @@ impl FoliageNode {
 		Self::new(FoliageStyle::NoisyBall, FoliageGeometry::UnitBall, placement)
 	}
 
+	/// Layered ball using `vegetation/foliage/standard/layered_ball_001_*` GLBs.
+	pub fn layered_ball(placement: Placement) -> Self {
+		Self::new(FoliageStyle::Standard, FoliageGeometry::LayeredBall, placement)
+	}
+
+	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
+		Self::new(FoliageStyle::Standard, geometry, placement)
+	}
+
 	pub fn plane_splay(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::PlaneSplay, geometry, placement)
 	}
 
-	fn content_scene(&self) -> Box<dyn Scene> {
+	fn procedural_ball_scene(&self) -> impl Scene + 'static {
+		posed_mesh(
+			VegetationProceduralAssets::foliage_ball(),
+			VegetationProceduralAssets::foliage_material(),
+			pose(self.placement),
+		)
+	}
+
+	fn plane_splay_scene(
+		&self,
+		icosphere_subdivisions: u32,
+		core_radius: f32,
+		leaf_disc_radius: f32,
+	) -> impl Scene + 'static {
+		let pending = PendingPlaneSplay {
+			icosphere_subdivisions,
+			core_radius,
+			leaf_disc_radius,
+		};
+		let transform = pose(self.placement);
+		bsn! {
+			template_value(pending)
+			template_value(transform)
+			Visibility::default()
+		}
+	}
+
+	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
 		match (&self.style, &self.geometry) {
 			(FoliageStyle::PlaneSplay, FoliageGeometry::PlaneSplay {
 				icosphere_subdivisions,
 				core_radius,
 				leaf_disc_radius,
-			}) => {
-				let pending = PendingPlaneSplay {
-					icosphere_subdivisions: *icosphere_subdivisions,
-					core_radius: *core_radius,
-					leaf_disc_radius: *leaf_disc_radius,
-				};
-				let transform = pose(self.placement);
-				Box::new(bsn! {
-					template_value(pending)
-					template_value(transform)
-					Visibility::default()
-				})
-			}
-			_ => Box::new(posed_mesh(
-				VegetationProceduralAssets::foliage_ball(),
-				VegetationProceduralAssets::foliage_material(),
-				pose(self.placement),
+			}) => Box::new(self.plane_splay_scene(
+				*icosphere_subdivisions,
+				*core_radius,
+				*leaf_disc_radius,
 			)),
+			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
+				match self.style.layered_ball_glb_for_level(level) {
+					Some(asset) => {
+						Box::new(posed_asset_tier(Some(asset), pose(self.placement)))
+					}
+					None => Box::new(self.procedural_ball_scene()),
+				}
+			}
+			_ => Box::new(self.procedural_ball_scene()),
 		}
 	}
 }
@@ -76,19 +108,42 @@ impl LodScene for FoliageNode {
 		warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
-		self.content_scene()
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.content_for_level(level)
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
 		let probe = FoliageLodProbe::from_placement(&self.placement);
-		warm_content_host_hsl(
-			level,
-			probe,
-			self.content_scene(),
-			self.content_scene(),
-			self.content_scene(),
-		)
+		match (&self.style, &self.geometry) {
+			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
+				Box::new(warm_mesh_level_host(
+					level,
+					probe,
+					pose(self.placement),
+					[
+						(
+							LodSceneLevel::High,
+							self.style.layered_ball_glb_for_level(LodSceneLevel::High),
+						),
+						(
+							LodSceneLevel::Medium,
+							self.style.layered_ball_glb_for_level(LodSceneLevel::Medium),
+						),
+						(
+							LodSceneLevel::Low,
+							self.style.layered_ball_glb_for_level(LodSceneLevel::Low),
+						),
+					],
+				)) as Box<dyn Scene>
+			}
+			_ => Box::new(warm_content_host_hsl(
+				level,
+				probe,
+				self.content_for_level(LodSceneLevel::High),
+				self.content_for_level(LodSceneLevel::Medium),
+				self.content_for_level(LodSceneLevel::Low),
+			)) as Box<dyn Scene>,
+		}
 	}
 }
