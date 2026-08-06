@@ -55,6 +55,17 @@ impl Placement {
 		Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, self.roll)
 	}
 
+	/// Compose a child placement into this parent's space (translation scaled, rotations add).
+	pub fn compose_child(self, child: Placement) -> Placement {
+		Placement {
+			translation: self.translation + self.rotation() * (child.translation * self.scale),
+			yaw: self.yaw + child.yaw,
+			pitch: self.pitch + child.pitch,
+			roll: self.roll + child.roll,
+			scale: self.scale * child.scale,
+		}
+	}
+
 	/// Stick segment: base at `start`, \(+Y\) along `dir`, length / girth from kit space.
 	///
 	/// Kit half-extent on \(X/Z\) is [`crate::sticks::STICK_KIT_HALF`]; world radius `radius`
@@ -77,6 +88,27 @@ impl Placement {
 	/// Uniform foliage ball / splay at `center` with world radius `radius`.
 	pub fn foliage_uniform(center: Vec3, radius: f32) -> Self {
 		Self::new(center, 0.0).with_scale(Vec3::splat(radius.max(1e-4)))
+	}
+
+	/// Straight frond segment: base at `start`, \(+Y\) along `dir`, blade width along kit \(X\).
+	///
+	/// Authored kit: \(Y \in [0, 1]\), \(X \in [-\texttt{FROND\_KIT\_HALF\_X}, \texttt{FROND\_KIT\_HALF\_X}]\),
+	/// \(Z\) negligible. World full width `width` maps to
+	/// \(X\)-scale \(=\texttt{width} / (2 \cdot \texttt{FROND\_KIT\_HALF\_X})\); \(Z\)-scale matches
+	/// \(X\) so the already-flat mesh stays thin.
+	pub fn frond_segment(start: Vec3, dir: Vec3, length: f32, width: f32) -> Option<Self> {
+		let len_sq = dir.length_squared();
+		if len_sq < 1e-12 || length < 1e-6 {
+			return None;
+		}
+		let d = dir / len_sq.sqrt();
+		let rotation = Quat::from_rotation_arc(Vec3::Y, d);
+		let scale_x = (width * 0.5 / crate::FROND_KIT_HALF_X).max(1e-4);
+		Some(
+			Self::new(start, 0.0)
+				.with_rotation(rotation)
+				.with_scale(Vec3::new(scale_x, length, scale_x)),
+		)
 	}
 }
 

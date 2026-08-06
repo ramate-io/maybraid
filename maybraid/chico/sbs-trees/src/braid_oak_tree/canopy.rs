@@ -1,4 +1,9 @@
-//! Braid Oak foliage: inner balls and outer splay by node context ([#234](https://github.com/ramate-io/maybraid/issues/234)).
+//! Braid Oak foliage: legacy RenderItem inner balls and outer splay ([#234](https://github.com/ramate-io/maybraid/issues/234)).
+//!
+//! VegetationComponents foliage reuses [`crate::storybook_tree::canopy`]; this module is kept for
+//! the RenderItem path.
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;

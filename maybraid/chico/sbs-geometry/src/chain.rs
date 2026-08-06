@@ -42,6 +42,16 @@ impl BallStickNode {
 	pub fn new(position: Vec3, radius: f32) -> Self {
 		Self { position, radius }
 	}
+
+	/// Horizontal distance from the world \(Y\) axis (trunk axis for upright trees).
+	pub fn horizontal_radius(self) -> f32 {
+		horizontal_radius_from_y_axis(self.position)
+	}
+}
+
+/// Horizontal distance from the world \(Y\) axis (trunk axis for upright trees).
+pub fn horizontal_radius_from_y_axis(position: Vec3) -> f32 {
+	Vec3::new(position.x, 0.0, position.z).length()
 }
 
 /// Hysteresis state carried per chain node: minimal surface for non-builder consumers.
@@ -64,6 +74,15 @@ pub struct BallStickSegment<'a> {
 impl<'a> BallStickSegment<'a> {
 	pub fn ray(&self) -> Vec3 {
 		self.end.position - self.start.position
+	}
+
+	pub fn midpoint(&self) -> Vec3 {
+		(self.start.position + self.end.position) * 0.5
+	}
+
+	/// Horizontal distance of the segment midpoint from the world \(Y\) axis.
+	pub fn horizontal_radius(&self) -> f32 {
+		horizontal_radius_from_y_axis(self.midpoint())
 	}
 }
 
@@ -170,5 +189,15 @@ impl<H: Hysteresis> BallStickChain<H> {
 				(seg, parent_h, &self.hysteresis[*child_idx])
 			})
 		})
+	}
+
+	/// Max horizontal distance of any node from the world \(Y\) axis.
+	pub fn footprint_radius(&self) -> f32 {
+		self.nodes.iter().map(|n| n.horizontal_radius()).fold(0.0_f32, f32::max)
+	}
+
+	/// [`Self::footprint_radius`] floored to at least `min_radius`.
+	pub fn footprint_radius_at_least(&self, min_radius: f32) -> f32 {
+		self.footprint_radius().max(min_radius.max(0.0))
 	}
 }

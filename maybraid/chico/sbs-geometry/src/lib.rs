@@ -4,8 +4,7 @@ pub mod palm_crown;
 pub mod projection;
 pub mod vec3_args;
 pub use lod_sample::{
-	horizontal_radius_from_y_axis, sample_max_horizontal_radius_by_azimuth_height,
-	AzimuthHeightBands, AzimuthHeightSample,
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, AzimuthHeightSample,
 };
 pub use vec3_args::parse_vec3_csv;
 
@@ -44,7 +43,8 @@ pub use chain::storybook_tree::{
 pub use chain::vase_tree::{is_graph_terminal as vase_tree_is_graph_terminal, VaseTreeChain};
 pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
 pub use chain::{
-	BallStickChain, BallStickNode, BallStickSegment, BranchOut, DepthBudget, Hysteresis,
+	horizontal_radius_from_y_axis, BallStickChain, BallStickNode, BallStickSegment, BranchOut,
+	DepthBudget, Hysteresis,
 };
 
 pub mod anchors;

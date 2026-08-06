@@ -1,194 +1,140 @@
 //! **Braid Oak Tree** — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234), [RFC §3.1.7.13](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/13-braid-oak/README.md)).
+//!
+//! [`BraidOakTreeParams::build`] applies the braid preset, grows the ball-stick chain once into
+//! [`BraidOakTree`], which implements [`VegetationComponents`].
+//!
+//! Stick LOD: High crook-centerline polylines (3 samples / 2 segments per crook); Medium uses
+//! denser banded straight sticks (+20% vs storybook) with a layered canopy proxy; Low is stalk-only.
 
+#[allow(dead_code)]
 mod canopy;
+#[allow(dead_code)]
 pub(crate) mod joint_ball;
 pub mod render_item_plugin;
 pub(crate) mod stick;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_geometry::render::ball::BallRenderHelper;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{BallStickChain, BraidOakTreeSbs, StorybookTreeChain};
-use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
-
-use crate::skipped_mesh_material::{
-	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
 };
-use canopy::BraidOakFoliageRule;
-use joint_ball::BraidOakJointBallRule;
-use stick::BraidOakTreeStickRule;
+use clap::Args;
+use lod::gen::LodSceneLevel;
+use procedural_common::NoiseParams;
 
-/// Typical [`StandardMaterial`] braid oak with CLI-skipped handles.
-pub type BraidOakTreeStd = BraidOakTree<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedInnerLeafMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedOuterLeafMeshMaterial<StandardMaterial>,
->;
+use crate::storybook_tree::canopy::{
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium_with_proxy, HIGH_FOLIAGE_BANDS,
+	BRAID_MEDIUM_STICK_BANDS,
+};
+use crate::torch_tree::{
+	stick_nodes_banded, stick_nodes_low, structural_lod_probe, HIGH_STICK_BANDS,
+};
+use stick::stick_nodes_high_crook;
 
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Braid Oak Tree.
+#[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct BraidOakTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args,
-{
+pub struct BraidOakTreeParams {
+	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: BraidOakTreeSbs,
 
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
+	/// Stick-surface noise driving crook bend strength (High stick polylines).
 	#[arg(
 		long,
 		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
+		value_parser = procedural_common::noise_params_from_scalar_str,
 		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Stick Surface Noise"
 	)]
 	pub stick_surface_noise: NoiseParams,
-
-	#[command(flatten, next_help_heading = "Inner Leaf Material")]
-	pub inner_leaf_material: InnerLeafS,
-
-	#[command(flatten, next_help_heading = "Outer Leaf Material")]
-	pub outer_leaf_material: OuterLeafS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Inner Leaf Surface Noise"
-	)]
-	pub inner_leaf_surface_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> InnerLeafM, fn() -> OuterLeafM)>,
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS> Default
-	for BraidOakTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args + Default,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args + Default,
-{
+impl Default for BraidOakTreeParams {
 	fn default() -> Self {
 		Self {
 			geometry: BraidOakTreeSbs::default(),
-			stick_material: StickS::default(),
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			inner_leaf_material: InnerLeafS::default(),
-			outer_leaf_material: OuterLeafS::default(),
-			inner_leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
 		}
 	}
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
-	BraidOakTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args,
-{
-	pub fn geometry_for_render(&self) -> BraidOakTreeSbs {
-		let mut geometry = self.geometry.clone();
-		geometry.apply_braid_preset();
-		geometry
-	}
-
-	pub fn build_chain(&self) -> BallStickChain<StorybookTreeChain> {
-		self.geometry_for_render().build_chain()
+impl BraidOakTreeParams {
+	/// Apply braid preset and grow the ball-stick chain once.
+	pub fn build(&self) -> BraidOakTree {
+		BraidOakTree::from_params(self)
 	}
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS> RenderItem
-	for BraidOakTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	InnerLeafM: Material + Send + Sync + 'static,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args + Send + Sync + 'static + Default,
-	OuterLeafM: Material + Send + Sync + 'static,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let geometry = self.geometry_for_render();
-		let chain = geometry.build_chain();
-		let leaf_radius = geometry.leaf_radius_world();
+/// Built Braid Oak: braid-preset geometry plus a single grown [`BallStickChain`].
+#[derive(Clone)]
+pub struct BraidOakTree {
+	pub geometry: BraidOakTreeSbs,
+	pub chain: BallStickChain<StorybookTreeChain>,
+	pub stick_surface_noise: NoiseParams,
+}
 
-		let stick_rule = BraidOakTreeStickRule::<StickM, StickS> {
-			stick_surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
+impl BraidOakTree {
+	pub fn from_params(params: &BraidOakTreeParams) -> Self {
+		let mut geometry = params.geometry.clone();
+		geometry.apply_braid_preset();
+		Self {
+			chain: geometry.build_chain(),
+			geometry,
+			stick_surface_noise: params.stick_surface_noise,
+		}
+	}
+
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
+		)
+	}
+
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.height() * 0.5, 0.0)
+	}
+
+	fn leaf_radius_world(&self) -> f32 {
+		self.geometry.leaf_radius_world()
+	}
+}
+
+impl VegetationComponents for BraidOakTree {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let nodes = match level {
+			LodSceneLevel::High => stick_nodes_high_crook(
+				&self.chain,
+				self.stick_surface_noise,
+				HIGH_STICK_BANDS,
+			),
+			LodSceneLevel::Medium => stick_nodes_banded(&self.chain, BRAID_MEDIUM_STICK_BANDS),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
+		Layers::from_free(nodes)
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let leaf_r = self.leaf_radius_world();
+		let nodes = match level {
+			LodSceneLevel::High => foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r),
+			LodSceneLevel::Medium => foliage_nodes_medium_with_proxy(&self.chain, leaf_r),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r),
+		};
+		Layers::from_free(nodes)
+	}
 
-		let mut joint_ball =
-			NoiseParams::from_scalar(0.0, 1.0, 0.04, 1).build_scalar::<ChicoBall<StickM, StickS>>();
-		joint_ball.material = self.stick_material.clone();
-		let joint_rule = BraidOakJointBallRule { joint_ball };
-		BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		let mut inner_ball = self
-			.inner_leaf_surface_noise
-			.build_scalar::<chico_ball_components::chico_ball::ChicoBall<InnerLeafM, InnerLeafS>>(
-		);
-		inner_ball.material = self.inner_leaf_material.clone();
-		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
-		outer_splay.material = self.outer_leaf_material.clone();
-
-		let foliage_rule =
-			BraidOakFoliageRule { inner_ball, outer_splay, leaf_radius_world: leaf_radius };
-
-		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		Some(structural_lod_probe(
+			self.structural_center(),
+			self.footprint_radius(),
+			self.geometry.height(),
+		))
 	}
 }

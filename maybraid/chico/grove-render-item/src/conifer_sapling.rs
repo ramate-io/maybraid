@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
-use chico_sbs_trees::northern_conifer::NorthernConifer;
+use chico_sbs_trees::northern_conifer::NorthernConiferParams;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
@@ -263,30 +264,14 @@ where
 				}
 				ConiferSaplingItem::NorthernConifer(conifer) => {
 					let samples = conifer.build_with_noise(build_noise);
-					let mut tree = NorthernConifer::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = samples.geometry;
-					tree.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-					tree.splay_spawn_fraction = samples.splay_spawn_fraction;
-					tree.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = NorthernConiferParams::default();
+					params.geometry = samples.geometry;
+					params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+					params.splay_spawn_fraction = samples.splay_spawn_fraction;
+					params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 			};
 			out.extend(entities);

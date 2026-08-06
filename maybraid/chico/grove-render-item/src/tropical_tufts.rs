@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuft;
-use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::palm_bush::PalmBushParams;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -163,26 +164,32 @@ where
 					shape.noise_amplitude = self.foliage_noise.amplitude;
 					shape.noise_frequency = self.foliage_noise.frequency;
 					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
-					tuft.spawn_render_items(commands, cascade_chunk, local)
+					let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.palette_mix(),
+						noise.seed,
+						commands,
+					);
+					entities
 				}
 				TropicalTuftsItem::PalmBush(palm) => {
 					let geometry = palm.build_with_noise(noise);
-					let bush = PalmBush::new(geometry, self.leaf_material.clone());
-					bush.spawn_render_items(commands, cascade_chunk, local)
+					let mut params = PalmBushParams::default();
+					params.geometry = geometry;
+					let bush = params.build();
+					let bounds = vegetation_bounds(&bush);
+					spawn_vegetation_components(commands, &bush, local, bounds)
 				}
 				TropicalTuftsItem::Patch(patch) => {
-					let mut item = patch.build_tuft_patch(noise, self.leaf_material.clone());
-					item.shape.noise_amplitude = self.foliage_noise.amplitude;
-					item.shape.noise_frequency = self.foliage_noise.frequency;
-					item.spawn_render_items(commands, cascade_chunk, local)
+					let mut params = patch.build_tuft_patch(noise);
+					params.shape.noise_amplitude = self.foliage_noise.amplitude;
+					params.shape.noise_frequency = self.foliage_noise.frequency;
+					let built = params.build();
+					let bounds = vegetation_bounds(&built);
+					spawn_vegetation_components(commands, &built, local, bounds)
 				}
 			};
-			patch_spawned_leaf_material::<LeafM>(
-				&entities,
-				placed.variant.palette_mix(),
-				noise.seed,
-				commands,
-			);
 			out.extend(entities);
 		}
 		out

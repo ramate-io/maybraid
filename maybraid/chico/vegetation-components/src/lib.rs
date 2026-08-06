@@ -14,20 +14,22 @@ pub mod sticks;
 pub mod structural_probe;
 
 pub use assets::AssetPath;
-pub use foliage::{FoliageGeometry, FoliageNode, FoliageStyle};
+pub use foliage::{
+	update_foliage_host_levels, FoliageGeometry, FoliageNode, FoliageStyle, FrondCollection,
+	FrondKit, FrondMember, FrondRun, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR, FOLIAGE_MEDIUM_FACTOR,
+	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+};
 pub use layer::{Layer, Layers};
 pub use placed::Placement;
-pub use procedural::{VegetationProceduralAssets, VegetationProceduralPlugin, STICK_KIT_HALF};
+pub use procedural::{
+	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_KIT_HALF_X, STICK_KIT_HALF,
+};
 pub use scene_children::{pose, posed_mesh, scene_children, with_pose};
 pub use sticks::{
 	update_stick_host_levels, StickGeometry, StickLodProbe, StickNode, StickStyle, STICK_HIGH_FACTOR,
 	STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
-pub use foliage::{
-	update_foliage_host_levels, FoliageLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
-	FOLIAGE_MEDIUM_FACTOR,
-};
-pub use lod_host::VegetationFoliageAssetRoot;
+pub use lod_host::{VegetationFoliageAssetRoot, VegetationFrondAssetRoot};
 pub use structural_probe::{
 	update_vegetation_structural_host_levels, VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR,
 	STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
@@ -215,11 +217,19 @@ pub fn vegetation_bounds(vegetation: &impl VegetationComponents) -> Aabb3d {
 		any = true;
 	}
 	for node in vegetation.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
-		let c = node.placement.translation;
-		let e = crate::lod_band::characteristic_extent_abs(&node.placement);
-		min = min.min(c - Vec3::splat(e));
-		max = max.max(c + Vec3::splat(e));
-		any = true;
+		if let Some(collection) = node.geometry.as_frond_collection() {
+			if let Some((cmin, cmax)) = collection.aabb() {
+				min = min.min(cmin);
+				max = max.max(cmax);
+				any = true;
+			}
+		} else {
+			let c = node.placement.translation;
+			let e = crate::lod_band::characteristic_extent_abs(&node.placement);
+			min = min.min(c - Vec3::splat(e));
+			max = max.max(c + Vec3::splat(e));
+			any = true;
+		}
 	}
 	if !any {
 		return Aabb3d::from_min_max(Vec3::splat(-1.0), Vec3::splat(1.0));

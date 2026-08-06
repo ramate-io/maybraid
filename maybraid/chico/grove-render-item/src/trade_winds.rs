@@ -3,16 +3,12 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_trees::honu_banyan::HonuBanyan;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::honu_banyan::HonuBanyanParams;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
-use chico_sbs_trees::storybook_tree::StorybookTree;
-use chico_sbs_trees::waialea_palm::WaialeaPalm;
-use chico_sbs_trees::{
-	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
-};
-use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
-use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
+use chico_sbs_trees::storybook_tree::StorybookTreeParams;
+use chico_sbs_trees::waialea_palm::WaialeaPalmParams;
+use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -25,26 +21,15 @@ use chico_groves::trade_winds::variants::trade_winds_banyan::{
 };
 use chico_groves::trade_winds::{definition, TradeWindsCell, TradeWindsItem};
 use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
-	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+	GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-/// Honu template (material slots match playground [`RenderHonuBanyan`]).
-pub type TwHonu = HonuBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoLeafMaterial,
-	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoStickMaterial,
-	SkippedBodyMeshMaterial<ChicoStickMaterial>,
-	StandardMaterial,
-	SkippedFoliageMeshMaterial<StandardMaterial>,
->;
+/// Honu template (LodScene / VegetationComponents).
+pub type TwHonu = HonuBanyanParams;
 
 /// Sope template (LodScene / VegetationComponents).
-pub type TwSope = SopesBanyan;
+pub type TwSope = SopesBanyanParams;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Trade Winds instance.
 pub type TradeWindsStd = TradeWinds<
@@ -233,103 +218,49 @@ where
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
+		_cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
-			let foliage_noise = placement_noise(self.leaf_surface_noise, placed.position);
 			let build_noise = placement_noise(self.grove.noise, placed.position);
-			let chain_noise = placement_noise(self.tree_chain_noise, placed.position);
-			let stick_seed = chain_noise.seed as i32;
-			let canopy_seed = build_noise.seed as i32 + 31;
 
 			let entities = match placed.variant.item() {
 				TradeWindsItem::Storybook(story) => {
 					let geometry = story.build_with_noise(build_noise);
-					let mut tree = StorybookTree::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = StorybookTreeParams::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TradeWindsItem::Honu(banyan) => {
 					let samples =
 						BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
-					let mut tree = self.honu_template.clone();
-					tree.geometry = samples.geometry;
-					tree.construction.growth_spawn_fraction = samples.growth_spawn_fraction;
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.inner_leaf_surface_noise = foliage_noise;
-					tree.outer_leaf_surface_noise = foliage_noise;
-					tree.growth_body_noise = foliage_noise;
-					tree.growth_foliage_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<ChicoStickMaterial>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<ChicoLeafMaterial>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = self.honu_template.clone();
+					params.geometry = samples.geometry;
+					params.growth_spawn_fraction = samples.growth_spawn_fraction;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TradeWindsItem::Sope(banyan) => {
 					let samples =
 						BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
-					let mut tree = self.sope_template.clone();
-					tree.geometry = samples.geometry;
+					let mut params = self.sope_template.clone();
+					params.geometry = samples.geometry;
+					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
-					spawn_vegetation_components(
-						commands, &tree, local, bounds
-					)
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TradeWindsItem::WaialeaPalm(palm) => {
 					let geometry = palm.build_with_noise(build_noise);
-					let mut tree = WaialeaPalm::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.foliage_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = WaialeaPalmParams::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 			};
 			out.extend(entities);

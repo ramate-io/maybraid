@@ -1,37 +1,87 @@
-//! Small [`ChicoBall`] canopy at every graph joint (stalk and projection limbs) ([#254](https://github.com/ramate-io/maybraid/issues/254)).
+//! Joint canopy LOD: cheap balls on graph joints, with Penmarch-style banding.
+//!
+//! High / Medium / Low outer-sample only — no layered mass proxies.
 
-use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_sbs_geometry::render::ball::BallRenderRule;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
+	StorybookTreeChain,
+};
+use chico_vegetation_components::{FoliageNode, Placement};
+use bevy::prelude::Vec3;
 
-/// Slightly undersized vs node radius so crook gaps stay covered without dominating limbs.
+/// High foliage: densest azimuth × height outer samples (still drops near-duplicates).
+pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
+/// Medium foliage.
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Low foliage: coarser outer samples.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
+
+/// Slightly undersized vs node radius so limb gaps stay covered without dominating sticks.
 const JOINT_CANOPY_BALL_SCALE: f32 = 0.88;
 
-#[derive(Clone)]
-pub(crate) struct RorysHeadTrainedLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>>,
-{
-	pub leaf_ball: ChicoBall<LeafM, LeafS>,
-	pub leaf_radius_world: f32,
+#[derive(Clone, Copy)]
+struct FoliageCandidate {
+	position: Vec3,
+	radius: f32,
 }
 
-impl<LeafM, LeafS> BallRenderRule<ChicoBall<LeafM, LeafS>, StorybookTreeChain>
-	for RorysHeadTrainedLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	fn ball_render_item_for(
-		&self,
-		_node_idx: usize,
-		node: &BallStickNode,
-		_hysteresis: &StorybookTreeChain,
-		_chain: &BallStickChain<StorybookTreeChain>,
-	) -> Option<(ChicoBall<LeafM, LeafS>, f32)> {
-		let scale = (self.leaf_radius_world / node.radius.max(1e-4)) * JOINT_CANOPY_BALL_SCALE;
-		Some((self.leaf_ball.clone(), scale))
-	}
+fn world_ball_radius(c: &FoliageCandidate, leaf_radius_world: f32) -> f32 {
+	let scale = (leaf_radius_world / c.radius.max(1e-4)) * JOINT_CANOPY_BALL_SCALE;
+	c.radius * scale
+}
+
+fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> FoliageNode {
+	FoliageNode::cheap_ball(Placement::foliage_uniform(
+		c.position,
+		world_ball_radius(c, leaf_radius_world),
+	))
+}
+
+fn collect_candidates(chain: &BallStickChain<StorybookTreeChain>) -> Vec<FoliageCandidate> {
+	chain
+		.nodes()
+		.map(|node| FoliageCandidate {
+			position: node.position,
+			radius: node.radius,
+		})
+		.collect()
+}
+
+fn banded_from_candidates(
+	candidates: &[FoliageCandidate],
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	sampled
+		.into_iter()
+		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
+		.collect()
+}
+
+/// Outermost joint foliage per azimuth × height cell.
+pub(crate) fn foliage_nodes_banded(
+	chain: &BallStickChain<StorybookTreeChain>,
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let candidates = collect_candidates(chain);
+	banded_from_candidates(&candidates, bands, leaf_radius_world)
+}
+
+/// Medium outer samples (no mass proxy).
+pub(crate) fn foliage_nodes_medium(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(chain, MEDIUM_FOLIAGE_BANDS, leaf_radius_world)
+}
+
+/// Coarse outer samples (no mass proxy).
+pub(crate) fn foliage_nodes_low(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(chain, LOW_FOLIAGE_BANDS, leaf_radius_world)
 }

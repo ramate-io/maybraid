@@ -13,7 +13,7 @@ const LENGTH_LANE_BASE: u32 = 0x8000_0000;
 ///
 /// `outward_spread_radians` wobbles azimuth only; it is not added into the downward pitch (avoids
 /// the “flanged” look where high spread reads as near-horizontal emission plus steep local droop).
-pub(crate) fn crown_directions(
+pub fn crown_directions(
 	count: u32,
 	seed: i32,
 	downward_tilt_radians: f32,
@@ -37,7 +37,7 @@ pub(crate) fn crown_directions(
 }
 
 /// Per-frond length multiplier in `[min, max]` (deterministic from seed).
-pub(crate) fn length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
+pub fn length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
 	min + (max - min) * unit_jitter(seed, LENGTH_LANE_BASE | index)
 }
 

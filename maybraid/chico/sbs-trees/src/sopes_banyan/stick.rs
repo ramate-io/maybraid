@@ -1,8 +1,14 @@
 //! Stick segment → [`StickNode`] emission (with structural LOD phase filters).
 
 use bevy::prelude::Vec3;
-use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain, SopesBanyanPhase};
-use chico_vegetation_components::{Placement, StickNode};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickSegment,
+	SopesBanyanChain, SopesBanyanPhase,
+};
+use chico_vegetation_components::{StickGeometry, StickNode};
+
+/// Medium sticks: coarser azimuth × height outer samples than foliage (aggressive drop-off).
+pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StickLodRole {
@@ -34,22 +40,18 @@ impl StickLodRole {
 	pub(crate) fn is_descender(self) -> bool {
 		matches!(self, Self::Descender)
 	}
+
+	/// Trunk + descenders use trunk mesh LOD (length-biased) so they stay in frame longer.
+	pub(crate) fn stick_geometry(self) -> StickGeometry {
+		match self {
+			Self::Trunk | Self::Descender => StickGeometry::Trunk,
+			Self::BetweenNodes => StickGeometry::Segment,
+		}
+	}
 }
 
 /// Keep roughly this fraction of descender sticks on Low (stable every-Nth sample).
 pub(crate) const LOW_DESCENDER_KEEP_EVERY: usize = 4;
-
-pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
-	let ray = segment.ray();
-	let len_sq = ray.length_squared();
-	if len_sq < 1e-12 {
-		return None;
-	}
-	let length = len_sq.sqrt();
-	let placement =
-		Placement::stick_segment(segment.start.position, ray, length, segment.start.radius)?;
-	Some(StickNode::segment(placement))
-}
 
 pub(crate) fn stick_role_for_segment(
 	_segment: &BallStickSegment<'_>,
@@ -58,26 +60,65 @@ pub(crate) fn stick_role_for_segment(
 	StickLodRole::from_parent_phase(&parent.phase)
 }
 
-fn horizontal_radius(position: Vec3) -> f32 {
-	Vec3::new(position.x, 0.0, position.z).length()
-}
-
-/// Midpoint footprint radius of a segment (for outer-half silhouette keep).
-pub(crate) fn segment_horizontal_radius(segment: &BallStickSegment<'_>) -> f32 {
-	let mid = (segment.start.position + segment.end.position) * 0.5;
-	horizontal_radius(mid)
-}
-
-/// Medium: always keep trunk; keep other sticks only in the outer half of the footprint.
-pub(crate) fn keep_stick_on_medium(
-	role: StickLodRole,
+pub(crate) fn stick_node_for_segment(
 	segment: &BallStickSegment<'_>,
-	tree_radius: f32,
-) -> bool {
-	if role.is_trunk() {
-		return true;
+	parent: &SopesBanyanChain,
+) -> Option<StickNode> {
+	let role = stick_role_for_segment(segment, parent);
+	StickNode::from_segment_geometry(
+		segment.start.position,
+		segment.end.position,
+		segment.start.radius,
+		role.stick_geometry(),
+	)
+}
+
+#[derive(Clone, Copy)]
+struct StickBandCandidate {
+	mid: Vec3,
+	start: Vec3,
+	end: Vec3,
+	radius: f32,
+	geometry: StickGeometry,
+}
+
+/// Trunk always + outermost non-trunk sticks per azimuth × height cell.
+pub(crate) fn stick_nodes_medium_banded<'a, I>(segments: I) -> Vec<StickNode>
+where
+	I: IntoIterator<Item = (BallStickSegment<'a>, &'a SopesBanyanChain)>,
+{
+	let mut trunk = Vec::new();
+	let mut candidates = Vec::new();
+	for (segment, parent) in segments {
+		let role = stick_role_for_segment(&segment, parent);
+		if role.is_trunk() {
+			if let Some(node) = stick_node_for_segment(&segment, parent) {
+				trunk.push(node);
+			}
+			continue;
+		}
+		candidates.push(StickBandCandidate {
+			mid: segment.midpoint(),
+			start: segment.start.position,
+			end: segment.end.position,
+			radius: segment.start.radius,
+			geometry: role.stick_geometry(),
+		});
 	}
-	segment_horizontal_radius(segment) >= tree_radius.max(1e-4) * 0.5
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(
+		&candidates,
+		|c| c.mid,
+		MEDIUM_STICK_BANDS,
+	);
+	trunk.extend(sampled.into_iter().filter_map(|s| {
+		StickNode::from_segment_geometry(
+			s.item.start,
+			s.item.end,
+			s.item.radius,
+			s.item.geometry,
+		)
+	}));
+	trunk
 }
 
 /// Low: trunk + a thinned subset of descenders (no branch / flair sticks).

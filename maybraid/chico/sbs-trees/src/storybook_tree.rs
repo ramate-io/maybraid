@@ -1,150 +1,117 @@
 //! **Storybook Tree** — default broadleaf ball-stick assembly ([#230](https://github.com/ramate-io/maybraid/issues/230), [RFC §3.1.7.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/01-storybook-tree/README.md)).
+//!
+//! [`StorybookTreeParams::build`] grows the ball-stick chain once into [`StorybookTree`],
+//! which implements [`VegetationComponents`].
+//!
+//! Stick LOD matches Penmarch Torch (`torch_tree`) with denser Medium branch sampling;
+//! foliage uses outer / terminal cheap-ball bands and a Low full-canopy layered proxy
+//! (inset to 70% of canopy radius).
 
-//! Narrow tapered stalk, dome-profile radial limbs, and [`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay) on outer/terminal joints.
-
-mod canopy;
+pub(crate) mod canopy;
 pub mod render_item_plugin;
 pub(crate) mod stick;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_geometry::render::ball::BallRenderHelper;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{BallStickChain, StorybookTreeChain, StorybookTreeSbs};
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+};
 use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
+use lod::gen::LodSceneLevel;
 
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use canopy::StorybookTreeLeafCanopyRule;
-use stick::StorybookTreeStickRule;
+use crate::torch_tree::{
+	stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_probe,
+};
+use canopy::{
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
+	MEDIUM_STICK_BANDS,
+};
 
-/// Typical [`StandardMaterial`] tree using CLI-skipped handles.
-pub type StorybookTreeStd = StorybookTree<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
-
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Storybook Tree.
+#[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct StorybookTree<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct StorybookTreeParams {
+	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: StorybookTreeSbs,
-
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Trunk Surface Noise"
-	)]
-	pub stick_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Foliage Surface Noise"
-	)]
-	pub leaf_surface_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> LeafM)>,
 }
 
-impl<StickM, StickS, LeafM, LeafS> Default for StorybookTree<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for StorybookTreeParams {
 	fn default() -> Self {
+		Self { geometry: StorybookTreeSbs::default() }
+	}
+}
+
+impl StorybookTreeParams {
+	/// Grow the ball-stick chain once for presentation / LOD emission.
+	pub fn build(&self) -> StorybookTree {
+		StorybookTree::from_params(self)
+	}
+}
+
+/// Built Storybook Tree: params plus a single grown [`BallStickChain`].
+#[derive(Clone)]
+pub struct StorybookTree {
+	pub geometry: StorybookTreeSbs,
+	pub chain: BallStickChain<StorybookTreeChain>,
+}
+
+impl StorybookTree {
+	pub fn from_params(params: &StorybookTreeParams) -> Self {
 		Self {
-			geometry: StorybookTreeSbs::default(),
-			stick_material: StickS::default(),
-			leaf_material: LeafS::default(),
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
+			geometry: params.geometry.clone(),
+			chain: params.geometry.build_chain(),
 		}
 	}
-}
 
-impl<StickM, StickS, LeafM, LeafS> StorybookTree<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn build_chain(&self) -> BallStickChain<StorybookTreeChain> {
-		self.geometry.build_chain()
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
+		)
+	}
+
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.height() * 0.5, 0.0)
+	}
+
+	fn leaf_radius_world(&self) -> f32 {
+		self.geometry.leaf_radius_world()
 	}
 }
 
-impl<StickM, StickS, LeafM, LeafS> RenderItem for StorybookTree<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let chain = self.build_chain();
-		let stick_rule = StorybookTreeStickRule::<StickM, StickS> {
-			surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
+impl VegetationComponents for StorybookTree {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let nodes = match level {
+			LodSceneLevel::High => stick_nodes_high(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_banded(&self.chain, MEDIUM_STICK_BANDS),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
+		Layers::from_free(nodes)
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
-		leaf_splay.material = self.leaf_material.clone();
-		let leaf_rule = StorybookTreeLeafCanopyRule {
-			leaf_splay,
-			leaf_radius_world: self.geometry.leaf_radius_world(),
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let leaf_r = self.leaf_radius_world();
+		let nodes = match level {
+			LodSceneLevel::High => {
+				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
+			}
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, leaf_r),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r),
 		};
+		Layers::from_free(nodes)
+	}
 
-		BallRenderHelper::new(chain, leaf_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		Some(structural_lod_probe(
+			self.structural_center(),
+			self.footprint_radius(),
+			self.geometry.height(),
+		))
 	}
 }

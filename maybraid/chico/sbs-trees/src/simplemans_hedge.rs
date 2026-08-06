@@ -1,31 +1,25 @@
 //! **Simpleman's Hedge** — a dense, low ball-and-plane-splay mat over a small ground area
 //! ([#320](https://github.com/ramate-io/maybraid/issues/320), [RFC §3.1.7.16](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/16-simpleman-s-hedge/README.md)).
+//!
+//! [`SimplemansHedgeParams::build`] grows clump anchors once into [`SimplemansHedge`], which
+//! implements [`VegetationComponents`]: empty sticks; foliage is one layered ball plus one
+//! cheap ball (splay silhouette) per clump.
 
+#[allow(dead_code)]
 pub mod render_item_plugin;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_ball_components::plane_splay::PlaneSplay;
+use chico_vegetation_components::{
+	FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+};
 use clap::Args;
-use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams};
-use render_item::{CascadeChunk, RenderItem};
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
 
-use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
-
-/// Typical [`StandardMaterial`] Simpleman's Hedge using CLI-skipped leaf handles.
-pub type SimplemansHedgeStd =
-	SimplemansHedge<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
-
-/// A patch of low hedge clumps scattered over an XZ footprint.
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Simpleman's Hedge.
+#[derive(Component, Clone, Args, Debug, PartialEq)]
 #[command(rename_all = "kebab-case")]
-pub struct SimplemansHedge<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct SimplemansHedgeParams {
 	/// Number of ball-and-splay clumps scattered over the hedge.
 	#[arg(long, default_value_t = 9)]
 	pub clump_count: u32,
@@ -45,19 +39,9 @@ where
 	/// Deterministic surface seed.
 	#[arg(long, default_value_t = 0)]
 	pub seed: u32,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(skip)]
-	__marker: PhantomData<fn() -> LeafM>,
 }
 
-impl<LeafM, LeafS> Default for SimplemansHedge<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for SimplemansHedgeParams {
 	fn default() -> Self {
 		Self {
 			clump_count: 9,
@@ -65,32 +49,18 @@ where
 			footprint_xz: 1.2,
 			density: 0.5,
 			seed: 0,
-			leaf_material: LeafS::default(),
-			__marker: PhantomData,
 		}
 	}
 }
 
-impl<LeafM, LeafS> SimplemansHedge<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
-	pub fn new(
-		height: f32,
-		footprint_xz: f32,
-		density: f32,
-		seed: u32,
-		leaf_material: LeafS,
-	) -> Self {
+impl SimplemansHedgeParams {
+	pub fn new(height: f32, footprint_xz: f32, density: f32, seed: u32) -> Self {
 		Self {
 			clump_count: 9,
 			height,
 			footprint_xz,
 			density,
 			seed,
-			leaf_material,
-			__marker: PhantomData,
 		}
 	}
 
@@ -100,11 +70,11 @@ where
 		0.08 * self.height.max(0.1) * (0.9 + 0.35 * density)
 	}
 
-	fn clump_height(&self) -> f32 {
+	pub fn clump_height(&self) -> f32 {
 		self.height.max(0.1) * 0.42
 	}
 
-	fn clump_radius(&self) -> f32 {
+	pub fn clump_radius(&self) -> f32 {
 		let density = self.density.clamp(0.0, 1.0);
 		let footprint_radius = self.footprint_xz.max(0.1) * (0.20 + 0.08 * density);
 		footprint_radius.max(self.hedge_radius() * 2.0)
@@ -125,8 +95,8 @@ where
 			.collect()
 	}
 
-	/// Grounded [`ChicoBall`] transform for clump `index` at `anchor`.
-	fn clump_ball_transform(&self, index: u32, anchor: Vec3) -> Transform {
+	/// Grounded layered-ball transform for clump `index` at `anchor`.
+	pub fn clump_ball_transform(&self, index: u32, anchor: Vec3) -> Transform {
 		let radius = self.clump_radius();
 		let height = self.clump_height();
 		let jitter = 0.95 + 0.06 * (index % 3) as f32;
@@ -137,8 +107,11 @@ where
 		}
 	}
 
-	/// Grounded [`PlaneSplay`] transform for clump `index` at `anchor`.
-	fn clump_splay_transform(&self, index: u32, anchor: Vec3) -> Transform {
+	/// Grounded cheap-ball (splay silhouette) transform for clump `index` at `anchor`.
+	///
+	/// Scale is relative to splay core radius (`clump_radius * 0.55`); VegetationComponents
+	/// multiplies by that core when placing the cheap-ball silhouette.
+	pub fn clump_splay_transform(&self, index: u32, anchor: Vec3) -> Transform {
 		let radius = self.clump_radius();
 		let core_radius = radius * 0.55;
 		let vertical_scale = (self.clump_height() / (core_radius * 2.0)).max(0.2);
@@ -150,59 +123,115 @@ where
 		}
 	}
 
-	fn clump_ball(&self, index: u32) -> ChicoBall<LeafM, LeafS> {
-		let mut ball = ChicoBall::from_scalar(NoiseParams::from_scalar(
-			self.seed.wrapping_add((index + 1) * 131) as f32,
-			1.0,
-			0.03,
-			1,
-		));
-		ball.material = self.leaf_material.clone();
-		ball
-	}
-
-	fn clump_splay(&self, index: u32) -> PlaneSplay<LeafM, LeafS> {
-		let radius = self.clump_radius();
-		let mut splay = PlaneSplay::<LeafM, LeafS>::default();
-		splay.core_radius = radius * 0.55;
-		splay.leaf_disc_radius = radius * (0.75 + 0.05 * (index % 3) as f32);
-		splay.material = self.leaf_material.clone();
-		splay
+	/// Grow clump anchors once for presentation / LOD emission.
+	pub fn build(&self) -> SimplemansHedge {
+		SimplemansHedge::from_params(self)
 	}
 }
 
-impl<LeafM, LeafS> RenderItem for SimplemansHedge<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default + Send + Sync + 'static,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
+/// Built Simpleman's Hedge: params plus resolved clump anchors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SimplemansHedge {
+	pub clump_count: u32,
+	pub height: f32,
+	pub footprint_xz: f32,
+	pub density: f32,
+	pub seed: u32,
+	pub anchors: Vec<Vec3>,
+}
 
-		for (index, anchor) in self.clump_anchors().into_iter().enumerate() {
-			let index = index as u32;
-			self.clump_ball(index).spawn_render_items_under(
-				commands,
-				cascade_chunk,
-				self.clump_ball_transform(index, anchor),
-				Some(root),
-			);
-			self.clump_splay(index).spawn_render_items_under(
-				commands,
-				cascade_chunk,
-				self.clump_splay_transform(index, anchor),
-				Some(root),
-			);
+impl SimplemansHedge {
+	pub fn from_params(params: &SimplemansHedgeParams) -> Self {
+		Self {
+			clump_count: params.clump_count,
+			height: params.height,
+			footprint_xz: params.footprint_xz,
+			density: params.density,
+			seed: params.seed,
+			anchors: params.clump_anchors(),
 		}
+	}
 
-		vec![root]
+	fn as_params(&self) -> SimplemansHedgeParams {
+		SimplemansHedgeParams {
+			clump_count: self.clump_count,
+			height: self.height,
+			footprint_xz: self.footprint_xz,
+			density: self.density,
+			seed: self.seed,
+		}
+	}
+
+	/// RFC `hedge_radius = 0.08 * H`, widened slightly by authored density.
+	pub fn hedge_radius(&self) -> f32 {
+		self.as_params().hedge_radius()
+	}
+
+	pub fn clump_height(&self) -> f32 {
+		self.as_params().clump_height()
+	}
+
+	pub fn clump_radius(&self) -> f32 {
+		self.as_params().clump_radius()
+	}
+
+	pub fn clump_ball_transform(&self, index: u32, anchor: Vec3) -> Transform {
+		self.as_params().clump_ball_transform(index, anchor)
+	}
+
+	pub fn clump_splay_transform(&self, index: u32, anchor: Vec3) -> Transform {
+		self.as_params().clump_splay_transform(index, anchor)
+	}
+
+	fn clump_foliage_nodes(&self, index: u32, anchor: Vec3) -> [FoliageNode; 2] {
+		let ball = self.clump_ball_transform(index, anchor);
+		let splay = self.clump_splay_transform(index, anchor);
+		let core_radius = self.clump_radius() * 0.55;
+		[
+			FoliageNode::layered_ball(Placement::new(ball.translation, 0.0).with_scale(ball.scale)),
+			FoliageNode::cheap_ball(
+				Placement::new(splay.translation, 0.0).with_scale(splay.scale * core_radius),
+			),
+		]
+	}
+
+	fn foliage_nodes_all_clumps(&self) -> Vec<FoliageNode> {
+		self.anchors
+			.iter()
+			.enumerate()
+			.flat_map(|(i, anchor)| self.clump_foliage_nodes(i as u32, *anchor))
+			.collect()
+	}
+
+	/// Low: every other clump, balls only (no splay cheap-ball).
+	fn foliage_nodes_low(&self) -> Vec<FoliageNode> {
+		self.anchors
+			.iter()
+			.enumerate()
+			.filter(|(i, _)| i % 2 == 0)
+			.map(|(i, anchor)| {
+				let ball = self.clump_ball_transform(i as u32, *anchor);
+				FoliageNode::layered_ball(Placement::new(ball.translation, 0.0).with_scale(ball.scale))
+			})
+			.collect()
+	}
+}
+
+impl VegetationComponents for SimplemansHedge {
+	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+		Layers::new()
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				Layers::from_free(self.foliage_nodes_all_clumps())
+			}
+			LodSceneLevel::Low => Layers::from_free(self.foliage_nodes_low()),
+			LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => Layers::new(),
+		}
 	}
 }
 
@@ -211,13 +240,18 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 
-	fn hedge(seed: u32) -> SimplemansHedgeStd {
-		SimplemansHedgeStd { seed, ..SimplemansHedgeStd::default() }
+	fn hedge(seed: u32) -> SimplemansHedge {
+		SimplemansHedgeParams { seed, ..SimplemansHedgeParams::default() }.build()
 	}
 
 	#[test]
 	fn hedge_radius_follows_rfc() -> Result<()> {
-		let h = SimplemansHedgeStd { height: 2.0, density: 0.0, ..SimplemansHedgeStd::default() };
+		let h = SimplemansHedgeParams {
+			height: 2.0,
+			density: 0.0,
+			..SimplemansHedgeParams::default()
+		}
+		.build();
 		assert!((h.hedge_radius() - 0.144).abs() < 1e-5);
 		Ok(())
 	}
@@ -225,10 +259,9 @@ mod tests {
 	#[test]
 	fn anchors_stay_within_patch_footprint() -> Result<()> {
 		let hedge = hedge(7);
-		let anchors = hedge.clump_anchors();
-		assert_eq!(anchors.len(), hedge.clump_count as usize);
+		assert_eq!(hedge.anchors.len(), hedge.clump_count as usize);
 		let half = hedge.footprint_xz * 0.5;
-		for anchor in &anchors {
+		for anchor in &hedge.anchors {
 			assert!(anchor.x.abs() <= half);
 			assert!(anchor.z.abs() <= half);
 			assert_eq!(anchor.y, 0.0);
@@ -238,8 +271,8 @@ mod tests {
 
 	#[test]
 	fn anchors_are_deterministic_per_seed_and_scattered() -> Result<()> {
-		let anchors = hedge(7).clump_anchors();
-		assert_eq!(anchors, hedge(7).clump_anchors());
+		let anchors = hedge(7).anchors;
+		assert_eq!(anchors, hedge(7).anchors);
 		let distinct = anchors
 			.iter()
 			.enumerate()
@@ -249,13 +282,8 @@ mod tests {
 	}
 
 	#[test]
-	fn clump_shapes_vary_by_seed_and_size() -> Result<()> {
+	fn clump_shapes_vary_by_size() -> Result<()> {
 		let hedge = hedge(7);
-		let a = hedge.clump_ball(0);
-		let b = hedge.clump_ball(1);
-		assert_ne!(a.seed_scalar, b.seed_scalar);
-		assert_eq!(a.frequency, b.frequency);
-		assert_eq!(a.octaves, b.octaves);
 		assert_ne!(
 			hedge.clump_ball_transform(0, Vec3::ZERO).scale.x,
 			hedge.clump_ball_transform(1, Vec3::ZERO).scale.x
@@ -271,7 +299,8 @@ mod tests {
 		let center_y = ball.translation.y - ball.scale.y * 0.5;
 		let ball_base_y = center_y - ball.scale.y * 0.5;
 		let splay = hedge.clump_splay_transform(0, anchor);
-		let splay_base_y = splay.translation.y - hedge.clump_splay(0).core_radius * splay.scale.y;
+		let core_radius = hedge.clump_radius() * 0.55;
+		let splay_base_y = splay.translation.y - core_radius * splay.scale.y;
 		assert!(ball_base_y.abs() < 1e-4, "expected ball base at y=0, got {ball_base_y}");
 		assert!(splay_base_y.abs() < 1e-4, "expected splay base at y=0, got {splay_base_y}");
 		Ok(())
@@ -283,9 +312,11 @@ mod tests {
 		assert_eq!(hedge.clump_count, 9);
 		assert!(hedge.clump_height() < hedge.height * 0.5);
 
-		let anchors = hedge.clump_anchors();
-		let max_anchor_distance = anchors.iter().fold(0.0_f32, |max_distance, a| {
-			anchors.iter().fold(max_distance, |inner_max, b| inner_max.max(a.distance(*b)))
+		let max_anchor_distance = hedge.anchors.iter().fold(0.0_f32, |max_distance, a| {
+			hedge
+				.anchors
+				.iter()
+				.fold(max_distance, |inner_max, b| inner_max.max(a.distance(*b)))
 		});
 		let min_ball_width = (0..hedge.clump_count)
 			.map(|index| hedge.clump_ball_transform(index, Vec3::ZERO).scale.x)
@@ -294,6 +325,17 @@ mod tests {
 			max_anchor_distance < min_ball_width,
 			"expected dense overlapping hedge clumps, max anchor distance {max_anchor_distance} >= min ball width {min_ball_width}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn high_emits_ball_and_splay_per_clump() -> Result<()> {
+		let built = SimplemansHedgeParams::default().build();
+		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(high.len(), built.clump_count as usize * 2);
+		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+		assert_eq!(low.len(), (built.clump_count as usize + 1) / 2);
+		assert!(built.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten().is_empty());
 		Ok(())
 	}
 }

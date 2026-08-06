@@ -7,9 +7,20 @@ use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use crate::assets::AssetPath;
 
-/// Marks a foliage GLB [`scene_ref::SceneRefRoot`] subtree for playground material patching.
+/// Marks a foliage GLB [`scene_ref::SceneRefRoot`] subtree for playground leaf-shader patching.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct VegetationFoliageAssetRoot;
+
+/// Marks a frond GLB subtree for playground solid-green (`StandardMaterial`) patching.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct VegetationFrondAssetRoot;
+
+#[derive(Clone, Copy)]
+enum AssetRootKind {
+	Plain,
+	Foliage,
+	Frond,
+}
 
 /// Optional GLB under a transform.
 pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl Scene + 'static {
@@ -24,12 +35,21 @@ pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl 
 	}
 }
 
-fn foliage_asset_scene(asset: AssetPath) -> impl Scene + 'static {
+fn tagged_asset_scene(asset: AssetPath, kind: AssetRootKind) -> Box<dyn Scene> {
 	let scene = asset.scene_ref().scene();
-	(
-		bsn! { VegetationFoliageAssetRoot },
-		scene,
-	)
+	match kind {
+		AssetRootKind::Plain => Box::new(scene),
+		AssetRootKind::Foliage => Box::new((bsn! { VegetationFoliageAssetRoot }, scene)),
+		AssetRootKind::Frond => Box::new((bsn! { VegetationFrondAssetRoot }, scene)),
+	}
+}
+
+fn foliage_asset_scene(asset: AssetPath) -> impl Scene + 'static {
+	(bsn! { VegetationFoliageAssetRoot }, asset.scene_ref().scene())
+}
+
+fn frond_asset_scene(asset: AssetPath) -> impl Scene + 'static {
+	(bsn! { VegetationFrondAssetRoot }, asset.scene_ref().scene())
 }
 
 /// Foliage GLB under a transform, tagged with [`VegetationFoliageAssetRoot`].
@@ -39,6 +59,22 @@ pub fn posed_foliage_asset_tier(
 ) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = match asset {
 		Some(a) => vec![Box::new(foliage_asset_scene(a))],
+		None => vec![],
+	};
+	bsn! {
+		template_value(transform)
+		Visibility::Inherited
+		Children [ {children} ]
+	}
+}
+
+/// Frond GLB under a transform, tagged with [`VegetationFrondAssetRoot`].
+pub fn posed_frond_asset_tier(
+	asset: Option<AssetPath>,
+	transform: Transform,
+) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = match asset {
+		Some(a) => vec![Box::new(frond_asset_scene(a))],
 		None => vec![],
 	};
 	bsn! {
@@ -92,7 +128,9 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
-		.map(|(root_level, asset)| mesh_level_root(*root_level, *asset, level == *root_level, false))
+		.map(|(root_level, asset)| {
+			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Plain)
+		})
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }
@@ -107,7 +145,26 @@ pub fn warm_foliage_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
-		.map(|(root_level, asset)| mesh_level_root(*root_level, *asset, level == *root_level, true))
+		.map(|(root_level, asset)| {
+			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Foliage)
+		})
+		.collect();
+	host_with_probe_only(level, probe, transform, root_scenes)
+}
+
+/// Warm host for frond GLB LOD triads (roots tagged [`VegetationFrondAssetRoot`]).
+pub fn warm_frond_mesh_level_host<P: Component + Clone + Default + Unpin>(
+	level: LodSceneLevel,
+	probe: P,
+	transform: Transform,
+	roots: impl IntoIterator<Item = (LodSceneLevel, Option<AssetPath>)>,
+) -> impl Scene + 'static {
+	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
+	let root_scenes: Vec<Box<dyn Scene>> = root_list
+		.iter()
+		.map(|(root_level, asset)| {
+			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Frond)
+		})
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }
@@ -139,16 +196,10 @@ fn mesh_level_root(
 	level: LodSceneLevel,
 	asset: Option<AssetPath>,
 	visible: bool,
-	foliage: bool,
+	kind: AssetRootKind,
 ) -> Box<dyn Scene> {
 	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => {
-			if foliage {
-				vec![Box::new(foliage_asset_scene(a))]
-			} else {
-				vec![Box::new(a.scene_ref().scene())]
-			}
-		}
+		Some(a) => vec![tagged_asset_scene(a, kind)],
 		None => vec![],
 	};
 	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };

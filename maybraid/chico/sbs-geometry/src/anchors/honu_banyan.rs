@@ -25,13 +25,13 @@ pub const DEFAULT_STALK_HEIGHT_FRACTION: f32 = 0.80;
 pub const DEFAULT_STALK_RADIUS_FRACTION: f32 = 0.08;
 pub const DEFAULT_FIRST_RING_HEIGHT_FRACTION: f32 = 0.80;
 pub const DEFAULT_LAST_RING_HEIGHT_FRACTION: f32 = 0.95;
-pub const DEFAULT_PROJECTION_MIN_FRACTION: f32 = 0.45;
-pub const DEFAULT_PROJECTION_MAX_FRACTION: f32 = 0.92;
+pub const DEFAULT_PROJECTION_MIN_FRACTION: f32 = 0.55;
+pub const DEFAULT_PROJECTION_MAX_FRACTION: f32 = 1.05;
 pub const DEFAULT_PROJECTION_MIX_SCALE: f32 = 0.30;
-pub const DEFAULT_MAX_DEPTH_FIRST_RING: usize = 5;
-pub const DEFAULT_MAX_DEPTH_LAST_RING: usize = 8;
-/// Noise threshold for descender candidacy (same gate as [Sope's Banyan](super::sopes_banyan); lower ⇒ more descenders).
-pub const DEFAULT_DESCENDER_THRESHOLD: f32 = 0.06;
+pub const DEFAULT_MAX_DEPTH_FIRST_RING: usize = 3;
+pub const DEFAULT_MAX_DEPTH_LAST_RING: usize = 5;
+/// Noise threshold for descender candidacy (higher ⇒ more aerial roots).
+pub const DEFAULT_DESCENDER_THRESHOLD: f32 = 0.22;
 pub const DEFAULT_STALK_SECTION_COUNT: u32 = 6;
 
 const LIMB_RADIUS_FRACTION_LO: f32 = 0.2;
@@ -111,7 +111,7 @@ impl Default for HonuBanyanProtoAnchors {
 			first_ring_height_fraction: DEFAULT_FIRST_RING_HEIGHT_FRACTION,
 			last_ring_height_fraction: DEFAULT_LAST_RING_HEIGHT_FRACTION,
 			ring_count: 3,
-			anchors_per_ring: 7,
+			anchors_per_ring: 4,
 			projection_min_fraction: DEFAULT_PROJECTION_MIN_FRACTION,
 			projection_max_fraction: DEFAULT_PROJECTION_MAX_FRACTION,
 			projection_mix_scale: DEFAULT_PROJECTION_MIX_SCALE,
@@ -203,13 +203,15 @@ impl HonuBanyanProtoAnchors {
 							.with_ball_radius(joint_r)
 							.with_radius_range(radius_range)
 							.with_radius_range_child_scale((0.82, 0.88))
-							.with_child_count(1..4)
+							.with_child_count(1..3)
 							.with_ray_degrees_of_freedom(HONU_CANOPY_RAY_DOF),
 						remaining: max_depth,
 					}),
 				);
-				let lo = proj * 0.97;
-				let hi = proj * 1.03;
+				// Per-hop length (not the full projection) so the limb grows in even segments.
+				let hop = (proj / (max_depth as f32).max(1.0)).max(0.1);
+				let lo = hop * 0.97;
+				let hi = hop * 1.03;
 				if let HonuBanyanPhase::BranchOut(ref mut w) = &mut h.phase {
 					w.inner.length = lo..hi;
 				}
@@ -368,3 +370,4 @@ mod tests {
 		assert!(b.x.abs() > 0.85);
 	}
 }
+

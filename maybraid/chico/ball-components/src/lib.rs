@@ -11,14 +11,15 @@ pub mod plane_splay;
 pub mod tuft;
 
 pub use frond::{
-	align_frond_direction, Frond, FrondCluster, FrondCrown, FrondCrownShape, FrondCrownStd,
-	FrondElement, FrondGeometry, FrondRenderItemPlugin, ModerateLodFrondCrown,
-	ModerateLodFrondCrownShape, ModerateLodFrondCrownStd, ModerateLodPalmFrond,
-	ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
+	align_frond_direction, crown_directions, length_scale, spine_at, Frond, FrondCluster,
+	FrondCrown, FrondCrownShape, FrondCrownStd, FrondElement, FrondGeometry, FrondRachisSegment,
+	FrondRenderItemPlugin, ModerateLodFrondCrown, ModerateLodFrondCrownShape,
+	ModerateLodFrondCrownStd, ModerateLodPalmFrond, ModerateLodPalmFrondCluster,
+	ModerateLodPalmFrondElement,
 };
 pub use tuft::{
-	BellyTipProfile, BladeTuft, BladeTuftShape, BladeTuftStd, BuddhaHandCluster, BuddhaHandElement,
-	BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd, SpearCluster, SpearElement, SpearTuft,
-	SpearTuftShape, SpearTuftStd, SucculentTuft, SucculentTuftShape, SucculentTuftStd, WeepingTuft,
-	WeepingTuftShape, WeepingTuftStd,
+	BellyTipProfile, BladeFrondSegment, BladeStrand, BladeTuft, BladeTuftShape, BladeTuftStd,
+	BuddhaHandCluster, BuddhaHandElement, BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd,
+	SpearCluster, SpearElement, SpearTuft, SpearTuftShape, SpearTuftStd, SucculentTuft,
+	SucculentTuftShape, SucculentTuftStd, WeepingTuft, WeepingTuftShape, WeepingTuftStd,
 };

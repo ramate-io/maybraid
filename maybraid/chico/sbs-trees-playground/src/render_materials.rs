@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use chico_vegetation_components::{VegetationFoliageAssetRoot, VegetationProceduralAssets};
+use chico_vegetation_components::{
+	VegetationFoliageAssetRoot, VegetationFrondAssetRoot, VegetationProceduralAssets,
+};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{
@@ -75,6 +77,9 @@ fn render_tuft_standard_material() -> StandardMaterial {
 /// - procedural placeholder (`VegetationProceduralAssets::foliage_material`)
 /// - GLB meshes under [`VegetationFoliageAssetRoot`] (layered ball, etc.), once the
 ///   scene instance has spawned mesh children
+///
+/// Frond kits ([`VegetationFrondAssetRoot`]) are handled by
+/// [`patch_vegetation_frond_solid_material`] (solid green, not the leaf shader).
 pub fn patch_vegetation_foliage_leaf_material(
 	mut commands: Commands,
 	mats: Res<RenderMaterials>,
@@ -104,6 +109,32 @@ pub fn patch_vegetation_foliage_leaf_material(
 					.entity(entity)
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert(MeshMaterial3d(leaf.clone()));
+			}
+			if let Ok(kids) = children.get(entity) {
+				stack.extend(kids.iter());
+			}
+		}
+	}
+}
+
+/// Keep frond GLBs on solid green [`StandardMaterial`] (`mats.tuft`).
+///
+/// Matches frond primitives under [`VegetationFrondAssetRoot`] (straight frond segments).
+pub fn patch_vegetation_frond_solid_material(
+	mut commands: Commands,
+	mats: Res<RenderMaterials>,
+	frond_roots: Query<Entity, With<VegetationFrondAssetRoot>>,
+	children: Query<&Children>,
+	glb_meshes: Query<&MeshMaterial3d<StandardMaterial>>,
+) {
+	let tuft = mats.tuft.clone();
+	for root in &frond_roots {
+		let mut stack = vec![root];
+		while let Some(entity) = stack.pop() {
+			if glb_meshes.contains(entity) {
+				commands
+					.entity(entity)
+					.insert(MeshMaterial3d(tuft.clone()));
 			}
 			if let Ok(kids) = children.get(entity) {
 				stack.extend(kids.iter());
@@ -169,21 +200,6 @@ pub fn setup_render_materials(
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats_snapshot);
 	}
-	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-	}
-	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
-	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
-	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
 	}
@@ -192,90 +208,46 @@ pub fn setup_render_materials(
 	}
 }
 
-pub fn attach_vase_tree_materials(tree: &mut RenderVaseTree, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.braid_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
-}
+/// No-op: Vase Tree now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_vase_tree_materials(_tree: &mut RenderVaseTree, _mats: &RenderMaterials) {}
 
-pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.braid_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
-}
+/// No-op: Braid Oak now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_braid_oak_materials(_tree: &mut RenderBraidOakTree, _mats: &RenderMaterials) {}
 
+/// No-op: Jungle Storybook now uses VegetationComponents (no per-tree mesh materials).
 pub fn attach_jungle_storybook_materials(
-	tree: &mut RenderJungleStorybookTree,
-	mats: &RenderMaterials,
+	_tree: &mut RenderJungleStorybookTree,
+	_mats: &RenderMaterials,
 ) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
-	tree.growth_body_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.growth_foliage_material.mesh = MeshMaterial3d(mats.tuft.clone());
 }
 
-pub fn attach_honu_banyan_materials(tree: &mut RenderHonuBanyan, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
-	tree.growth_body_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.growth_foliage_material.mesh = MeshMaterial3d(mats.tuft.clone());
-}
+/// No-op: Honu Banyan now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_honu_banyan_materials(_tree: &mut RenderHonuBanyan, _mats: &RenderMaterials) {}
 
 fn attach_render_materials(
 	subject: &mut RenderSubject,
 	stick: &Handle<ChicoStickMaterial>,
 	conifer_stick: &Handle<ChicoStickMaterial>,
 	leaf: &Handle<ChicoLeafMaterial>,
-	northern_leaf: &Handle<ChicoLeafMaterial>,
+	_northern_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
 		RenderSubject::SopesBanyan(_tree) => {}
-		RenderSubject::LiamsConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::LiamsConifer(_tree) => {}
 		RenderSubject::FriendsConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
-		RenderSubject::NorthernConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(northern_leaf.clone());
-		}
-		RenderSubject::TemperateConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::DatePalm(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::WaialeaPalm(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::PalmBush(tree) => {
-			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::StorybookTree(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::PenmarchTorch(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::KamakuraTorch(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::RorysHeadTrained(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::NorthernConifer(_tree) => {}
+		RenderSubject::TemperateConifer(_tree) => {}
+		RenderSubject::DatePalm(_tree) => {}
+		RenderSubject::WaialeaPalm(_tree) => {}
+		RenderSubject::PalmBush(_tree) => {}
+		RenderSubject::StorybookTree(_tree) => {}
+		RenderSubject::PenmarchTorch(_tree) => {}
+		RenderSubject::KamakuraTorch(_tree) => {}
+		RenderSubject::RorysHeadTrained(_tree) => {}
 		RenderSubject::BraidOakTree(_) => {}
 		RenderSubject::VaseTree(_) => {}
 		RenderSubject::JungleStorybookTree(_) => {}
@@ -286,9 +258,7 @@ fn attach_render_materials(
 		RenderSubject::BladeTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::TuftPatch(t) => {
-			t.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TuftPatch(_t) => {}
 		RenderSubject::BraidGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -493,21 +463,6 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	}
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats);
-	}
-	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-	}
-	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
-	}
-	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
-	}
-	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);

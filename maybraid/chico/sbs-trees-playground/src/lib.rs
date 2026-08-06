@@ -22,14 +22,10 @@ use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
 use chico_sbs_trees::honu_banyan::render_item_plugin::ensure_registered as ensure_honu_banyan_render_plugins;
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
-use chico_sbs_trees::kamakura_torch::render_item_plugin::ensure_registered as ensure_kamakura_torch_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as ensure_northern_conifer_render_plugins;
 use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
-use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
-use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
 use chico_sbs_trees::simplemans_hedge::render_item_plugin::ensure_registered as ensure_simplemans_hedge_render_plugins;
-use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
 use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
 use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
@@ -48,7 +44,8 @@ use lod::LodFinePassPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
-	patch_vegetation_foliage_leaf_material, setup_render_materials, sync_render_material_handles,
+	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_solid_material,
+	setup_render_materials, sync_render_material_handles,
 };
 use scene_ref::SceneRefPlugin;
 
@@ -67,7 +64,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<LodFinePassPlugin>() {
 			app.add_plugins(LodFinePassPlugin);
 		}
-		ensure_sopes_banyan_render_plugins(app);
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
 		ensure_friends_conifer_render_plugins(app);
@@ -77,9 +73,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_palm_bush_render_plugins(app);
 		ensure_waialea_palm_render_plugins(app);
 		ensure_storybook_tree_render_plugins(app);
-		ensure_penmarch_torch_render_plugins(app);
-		ensure_kamakura_torch_render_plugins(app);
-		ensure_rorys_head_trained_render_plugins(app);
 		ensure_simplemans_hedge_render_plugins(app);
 		ensure_vase_tree_render_plugins(app);
 		ensure_braid_oak_tree_render_plugins(app);
@@ -117,7 +110,10 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
-					patch_vegetation_foliage_leaf_material
+					(
+						patch_vegetation_foliage_leaf_material,
+						patch_vegetation_frond_solid_material,
+					)
 						.after(sync_show)
 						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

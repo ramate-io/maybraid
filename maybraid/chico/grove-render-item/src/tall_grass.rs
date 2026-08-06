@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuft;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -163,10 +164,12 @@ where
 					tuft.spawn_render_items(commands, cascade_chunk, local)
 				}
 				TallGrassItem::Patch(patch) => {
-					let mut item = patch.build_tuft_patch(noise, self.leaf_material.clone());
-					item.shape.noise_amplitude = self.foliage_noise.amplitude;
-					item.shape.noise_frequency = self.foliage_noise.frequency;
-					item.spawn_render_items(commands, cascade_chunk, local)
+					let mut params = patch.build_tuft_patch(noise);
+					params.shape.noise_amplitude = self.foliage_noise.amplitude;
+					params.shape.noise_frequency = self.foliage_noise.frequency;
+					let built = params.build();
+					let bounds = vegetation_bounds(&built);
+					spawn_vegetation_components(commands, &built, local, bounds)
 				}
 			};
 			patch_spawned_leaf_material::<LeafM>(
@@ -243,10 +246,7 @@ mod tests {
 		let TallGrassItem::Patch(patch) = TallGrassCell::RiverGreenPatch.item() else {
 			anyhow::bail!("expected patch item");
 		};
-		let item = patch.build_tuft_patch::<StandardMaterial, _>(
-			noise,
-			SkippedLeafMeshMaterial::<StandardMaterial>::default(),
-		);
+		let item = patch.build_tuft_patch(noise);
 		assert!(patch.clump_count.contains(&item.clump_count));
 		assert!(item.patch_extent_xz >= patch.patch_extent_xz.start);
 		assert!(item.patch_extent_xz <= patch.patch_extent_xz.end);

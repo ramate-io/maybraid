@@ -1,10 +1,15 @@
 //! Foliage domain: style + geometry + placement → [`FoliageNode`].
 
+pub mod collection;
 pub mod geometry;
 pub mod node;
 pub mod probe;
 pub mod style;
 
+pub use collection::{
+	FrondCollection, FrondKit, FrondMember, FrondRun, FROND_COLLECTION_HIGH_FACTOR,
+	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+};
 pub use geometry::FoliageGeometry;
 pub use node::FoliageNode;
 pub use probe::{
