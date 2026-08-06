@@ -25,8 +25,8 @@ impl SlotPolicy {
 		match kind {
 			RectQuarterKind::Bedroom => Self {
 				target_frac: 0.0,
-				target_min: 18.0,
-				target_max: 18.0,
+				target_min: 12.0,
+				target_max: 12.0,
 				min_area: 12.0,
 				min_dim: 3.2,
 				carve_threshold: 1.7,

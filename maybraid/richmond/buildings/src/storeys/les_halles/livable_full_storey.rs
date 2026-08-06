@@ -57,7 +57,7 @@ const SALT_CROSS_STRIP_WALL: f32 = 131.0;
 /// Minimum shared-edge length (m) before a cross-strip party wall is considered.
 const MIN_CROSS_STRIP_SPAN: f32 = 2.0;
 /// Bedroom enters the multi-room program from this footprint (m²).
-const BEDROOM_PROGRAM_AREA: f32 = 18.0;
+const BEDROOM_PROGRAM_AREA: f32 = 12.0;
 
 /// Full Les Halles storey with residential gallery fills.
 #[derive(Debug, Clone, PartialEq)]
