@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use chico_vegetation_components::VegetationProceduralAssets;
+use chico_vegetation_components::{VegetationFoliageAssetRoot, VegetationProceduralAssets};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{
@@ -69,19 +69,24 @@ fn render_tuft_standard_material() -> StandardMaterial {
 	}
 }
 
-/// Replace procedural foliage [`StandardMaterial`] with [`ChicoLeafMaterial`] (discard silhouette).
+/// Replace foliage [`StandardMaterial`] with [`ChicoLeafMaterial`] (discard silhouette).
 ///
-/// VegetationComponents still author green `StandardMaterial`; this playground patch swaps it
-/// after spawn (noisy ball + plane-splay fulfill) so `/show` / `/render sopes-banyan` can inspect
-/// LOD against the leaf discard shader without wiring materials into IR.
+/// Covers:
+/// - procedural placeholder (`VegetationProceduralAssets::foliage_material`)
+/// - GLB meshes under [`VegetationFoliageAssetRoot`] (layered ball, etc.), once the
+///   scene instance has spawned mesh children
 pub fn patch_vegetation_foliage_leaf_material(
 	mut commands: Commands,
 	mats: Res<RenderMaterials>,
-	candidates: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
+	procedural: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
+	foliage_roots: Query<Entity, With<VegetationFoliageAssetRoot>>,
+	children: Query<&Children>,
+	glb_meshes: Query<&MeshMaterial3d<StandardMaterial>>,
 ) {
 	let placeholder = VegetationProceduralAssets::foliage_material();
 	let leaf = mats.leaf.clone();
-	for (entity, mesh_mat) in &candidates {
+
+	for (entity, mesh_mat) in &procedural {
 		if mesh_mat.id() != placeholder.id() {
 			continue;
 		}
@@ -89,6 +94,21 @@ pub fn patch_vegetation_foliage_leaf_material(
 			.entity(entity)
 			.remove::<MeshMaterial3d<StandardMaterial>>()
 			.insert(MeshMaterial3d(leaf.clone()));
+	}
+
+	for root in &foliage_roots {
+		let mut stack = vec![root];
+		while let Some(entity) = stack.pop() {
+			if glb_meshes.contains(entity) {
+				commands
+					.entity(entity)
+					.remove::<MeshMaterial3d<StandardMaterial>>()
+					.insert(MeshMaterial3d(leaf.clone()));
+			}
+			if let Ok(kids) = children.get(entity) {
+				stack.extend(kids.iter());
+			}
+		}
 	}
 }
 

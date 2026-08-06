@@ -9,7 +9,9 @@ use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::{posed_asset_tier, warm_content_host_hsl, warm_mesh_level_host};
+use crate::lod_host::{
+	posed_foliage_asset_tier, warm_content_host_hsl, warm_foliage_mesh_level_host,
+};
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh};
@@ -85,7 +87,7 @@ impl FoliageNode {
 			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
 				match self.style.layered_ball_glb_for_level(level) {
 					Some(asset) => {
-						Box::new(posed_asset_tier(Some(asset), pose(self.placement)))
+						Box::new(posed_foliage_asset_tier(Some(asset), pose(self.placement)))
 					}
 					None => Box::new(self.procedural_ball_scene()),
 				}
@@ -117,7 +119,7 @@ impl LodScene for FoliageNode {
 		let probe = FoliageLodProbe::from_placement(&self.placement);
 		match (&self.style, &self.geometry) {
 			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
-				Box::new(warm_mesh_level_host(
+				Box::new(warm_foliage_mesh_level_host(
 					level,
 					probe,
 					pose(self.placement),

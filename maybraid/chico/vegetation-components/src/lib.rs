@@ -27,6 +27,7 @@ pub use foliage::{
 	update_foliage_host_levels, FoliageLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
 	FOLIAGE_MEDIUM_FACTOR,
 };
+pub use lod_host::VegetationFoliageAssetRoot;
 pub use structural_probe::{
 	update_vegetation_structural_host_levels, VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR,
 	STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
