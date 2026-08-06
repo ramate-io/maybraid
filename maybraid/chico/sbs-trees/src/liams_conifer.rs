@@ -20,7 +20,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::northern_conifer::canopy::{
-	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
+	foliage_nodes_banded, foliage_nodes_low_single_proxy, foliage_nodes_medium_no_proxy,
+	HIGH_FOLIAGE_BANDS,
 };
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 use crate::torch_tree::structural_lod_probe;
@@ -94,17 +95,17 @@ impl VegetationComponents for LiamsConifer {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		let tuft_r = self.tuft_radius_world();
-		// No apex ball for Liam's (Northern-only); all joints get cheap-ball tuft proxies.
+		// Arid look: Medium drops density via banding only (no mass proxy); Low keeps one proxy.
 		let nodes = match level {
 			LodSceneLevel::High => {
 				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, tuft_r, 1.0, 0.0, 0.0)
 			}
-			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, tuft_r, 1.0, 0.0, 0.0),
+			LodSceneLevel::Medium => foliage_nodes_medium_no_proxy(&self.chain, tuft_r, 1.0),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				foliage_nodes_low(&self.chain, tuft_r, 1.0, 0.0, 0.0)
+				foliage_nodes_low_single_proxy(&self.chain, tuft_r, 1.0)
 			}
 		};
 		Layers::from_free(nodes)

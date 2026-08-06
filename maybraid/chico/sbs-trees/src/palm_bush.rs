@@ -116,12 +116,16 @@ mod tests {
 	use lod::gen::LodSceneLevel;
 
 	#[test]
-	fn high_emits_per_frond_collections() -> Result<()> {
+	fn high_emits_small_frond_collections() -> Result<()> {
+		use crate::palm_tree::FRONDS_PER_COLLECTION;
 		let built = PalmBushParams::default().build();
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		let expected = built.geometry.crown.ring_count * built.geometry.crown.fronds_per_ring;
-		assert_eq!(nodes.len() as u32, expected);
-		assert!(nodes[0].geometry.as_frond_collection().is_some());
+		let fronds = built.geometry.crown.ring_count * built.geometry.crown.fronds_per_ring;
+		let expected = (fronds as usize).div_ceil(FRONDS_PER_COLLECTION);
+		assert_eq!(nodes.len(), expected);
+		let collection = nodes[0].geometry.as_frond_collection().expect("collection");
+		assert!(collection.runs.len() <= FRONDS_PER_COLLECTION);
+		assert!(collection.runs[0].segments.len() >= 4, "authored rachis segments kept");
 		Ok(())
 	}
 

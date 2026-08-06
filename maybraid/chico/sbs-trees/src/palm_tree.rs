@@ -14,7 +14,11 @@ pub(crate) const PALM_STRUCTURAL_MEDIUM_FACTOR: f32 = STRUCTURAL_MEDIUM_FACTOR *
 /// Keep Low beyond Medium so band ordering stays valid.
 pub(crate) const PALM_STRUCTURAL_LOW_FACTOR: f32 = STRUCTURAL_LOW_FACTOR * 3.0;
 
-/// Bake mesh-local frond shape into world units and cap rachis tessellation for GLB emission.
+/// Target fronds (runs) per [`FrondCollection`] — small groups keep merge extent
+/// rachis-scale without the oversized UltraLow chord of a full ring.
+pub(crate) const FRONDS_PER_COLLECTION: usize = 3;
+
+/// Bake mesh-local frond shape into world units (keeps authored rachis segment count).
 pub(crate) fn world_space_frond_shape(
 	mut shape: FrondCrownShape,
 	frond_world_scale: f32,
@@ -24,16 +28,17 @@ pub(crate) fn world_space_frond_shape(
 	shape.width = (shape.width * s).max(1e-6);
 	shape.droop *= s;
 	shape.arch_lift *= s;
-	shape.spine_segments = 2;
+	shape.spine_segments = shape.spine_segments.max(1);
 	shape
 }
 
-/// One [`FrondCollection`] per frond (single run) at each ring anchor.
+/// [`FrondCollection`]s of ~[`FRONDS_PER_COLLECTION`] fronds each at every ring anchor.
 pub(crate) fn frond_collection_nodes(
 	rings: impl IntoIterator<Item = (Vec3, FrondCrownShape)>,
 ) -> Vec<FoliageNode> {
 	let mut nodes = Vec::new();
 	for (anchor, shape) in rings {
+		let mut batch: Vec<FrondRun> = Vec::with_capacity(FRONDS_PER_COLLECTION);
 		for run in shape.frond_runs_at(anchor) {
 			let placements: Vec<Placement> = run
 				.into_iter()
@@ -44,8 +49,17 @@ pub(crate) fn frond_collection_nodes(
 			if placements.is_empty() {
 				continue;
 			}
+			batch.push(FrondRun::from_placements(placements));
+			if batch.len() >= FRONDS_PER_COLLECTION {
+				nodes.push(FoliageNode::frond_collection(
+					FrondCollection::new(std::mem::take(&mut batch)),
+					Placement::IDENTITY,
+				));
+			}
+		}
+		if !batch.is_empty() {
 			nodes.push(FoliageNode::frond_collection(
-				FrondCollection::new([FrondRun::from_placements(placements)]),
+				FrondCollection::new(batch),
 				Placement::IDENTITY,
 			));
 		}

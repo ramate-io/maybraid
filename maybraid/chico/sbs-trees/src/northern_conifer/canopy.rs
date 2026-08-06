@@ -200,6 +200,22 @@ pub(crate) fn foliage_nodes_medium(
 	)
 }
 
+/// Medium banded samples only (no mass proxy) — arid / Liam thinning.
+pub(crate) fn foliage_nodes_medium_no_proxy(
+	chain: &BallStickChain<LiamsConiferChain>,
+	splay_radius_world: f32,
+	splay_spawn_fraction: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(
+		chain,
+		MEDIUM_FOLIAGE_BANDS,
+		splay_radius_world,
+		splay_spawn_fraction,
+		0.0,
+		0.0,
+	)
+}
+
 /// Coarse samples plus the same thin proxy doubled, and optional apex.
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<LiamsConiferChain>,
@@ -217,5 +233,23 @@ pub(crate) fn foliage_nodes_low(
 		apex_spawn_fraction,
 		apex_radius_world,
 		2,
+	)
+}
+
+/// Coarse samples plus a single thin full-height proxy (arid / Liam Low).
+pub(crate) fn foliage_nodes_low_single_proxy(
+	chain: &BallStickChain<LiamsConiferChain>,
+	splay_radius_world: f32,
+	splay_spawn_fraction: f32,
+) -> Vec<FoliageNode> {
+	let candidates = collect_candidates(chain, splay_spawn_fraction);
+	with_proxy_and_apex(
+		&candidates,
+		LOW_FOLIAGE_BANDS,
+		splay_radius_world,
+		chain,
+		0.0,
+		0.0,
+		1,
 	)
 }
