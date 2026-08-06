@@ -51,16 +51,16 @@ use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
-use chico_sbs_trees::northern_conifer::NorthernConifer;
+use chico_sbs_trees::northern_conifer::NorthernConiferParams;
 use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
-use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::tuft_patch::TuftPatch;
-use chico_sbs_trees::vase_tree::VaseTree;
+use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
@@ -105,12 +105,7 @@ pub type RenderFriendsConifer = FriendsConifer<
 >;
 
 /// [`NorthernConifer`] — Liam's geometry with plane-splay foliage ([#232](https://github.com/ramate-io/maybraid/issues/232)).
-pub type RenderNorthernConifer = NorthernConifer<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderNorthernConifer = NorthernConiferParams;
 
 /// [`TemperateConifer`] — Friend's log-profile conifer with joint fronds ([#238](https://github.com/ramate-io/maybraid/issues/238)).
 pub type RenderTemperateConifer = TemperateConifer<
@@ -143,12 +138,7 @@ pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<Sta
 pub type RenderTuftPatch = TuftPatch<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
-pub type RenderStorybookTree = StorybookTree<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderStorybookTree = StorybookTreeParams;
 
 /// [`PenmarchTorch`] — vase-profile upward flame tree ([#248](https://github.com/ramate-io/maybraid/issues/248)).
 pub type RenderPenmarchTorch = PenmarchTorchParams;
@@ -160,14 +150,7 @@ pub type RenderKamakuraTorch = KamakuraTorchParams;
 pub type RenderRorysHeadTrained = RorysHeadTrainedParams;
 
 /// [`VaseTree`] — upward-opening vase-profile broadleaf ([#246](https://github.com/ramate-io/maybraid/issues/246)).
-pub type RenderVaseTree = VaseTree<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoLeafMaterial,
-	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderVaseTree = VaseTreeParams;
 
 /// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
 pub type RenderBraidOakTree = BraidOakTree<
@@ -1047,12 +1030,20 @@ impl RenderSubject {
 			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LiamsConifer(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::FriendsConifer(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::NorthernConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::NorthernConifer(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::TemperateConifer(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::DatePalm(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WaialeaPalm(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::PalmBush(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::StorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::StorybookTree(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::PenmarchTorch(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
@@ -1068,7 +1059,11 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&tree);
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
-			Self::VaseTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::VaseTree(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::BraidOakTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),

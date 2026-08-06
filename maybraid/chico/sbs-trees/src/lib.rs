@@ -31,7 +31,7 @@ pub use honu_banyan::HonuBanyanStd;
 pub use jungle_storybook_tree::JungleStorybookTreeStd;
 pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::LiamsConiferStd;
-pub use northern_conifer::NorthernConiferStd;
+pub use northern_conifer::{NorthernConifer, NorthernConiferParams};
 pub use palm_bush::PalmBushStd;
 pub use penmarch_torch::{PenmarchTorch, PenmarchTorchParams};
 pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedParams};
@@ -41,8 +41,8 @@ pub use skipped_mesh_material::{
 	SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
 pub use sopes_banyan::{SopesBanyan, SopesBanyanParams};
-pub use storybook_tree::StorybookTreeStd;
+pub use storybook_tree::{StorybookTree, StorybookTreeParams};
 pub use temperate_conifer::TemperateConiferStd;
 pub use tuft_patch::TuftPatchStd;
-pub use vase_tree::VaseTreeStd;
+pub use vase_tree::{VaseTree, VaseTreeParams};
 pub use waialea_palm::WaialeaPalmStd;

@@ -8,7 +8,7 @@ use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::simplemans_hedge::SimplemansHedge;
-use chico_sbs_trees::vase_tree::VaseTree;
+use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_tree_components::HighBushShoots;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -246,32 +246,11 @@ where
 				}
 				LevantineScrubItem::VaseTree(vase) => {
 					let geometry = vase.build_with_noise(build_noise);
-					let mut tree =
-						VaseTree::<StickM, StickS, LeafM, LeafS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.inner_leaf_material = self.leaf_material.clone();
-					tree.outer_leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.inner_leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed = chain_noise.seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					if let Some(palette) = placed.variant.stick_palette_mix() {
-						patch_spawned_leaf_material::<StickM>(
-							&entities, palette, stick_seed, commands,
-						);
-					}
-					if let Some(palette) = placed.variant.canopy_palette_mix() {
-						patch_spawned_leaf_material::<LeafM>(
-							&entities,
-							palette,
-							canopy_seed,
-							commands,
-						);
-					}
-					entities
+					let mut params = VaseTreeParams::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				LevantineScrubItem::Bush(bush) => {
 					let mut shape = bush.build_with_noise(build_noise);

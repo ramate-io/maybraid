@@ -1,12 +1,21 @@
-//! Vase canopy: inner balls and outer splays on upper / outer nodes ([#246](https://github.com/ramate-io/maybraid/issues/246)).
+//! Vase canopy: outer plane-splay / inner cheap-ball on upper joints, plus stalk-tip apex ball.
+//!
+//! High / Medium / Low band joint candidates together; apex is always emitted.
 
-use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_ball_components::plane_splay::PlaneSplay;
+use bevy::prelude::Vec3;
 use chico_sbs_geometry::chain::storybook_tree::is_graph_terminal;
-use chico_sbs_geometry::render::ball::BallRenderRule;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain, StorybookTreePhase};
-use chico_tree_components::BraidOakCanopyFoliage;
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, stalk_tip_from_chain, AzimuthHeightBands,
+	BallStickChain, StorybookTreeChain, StorybookTreePhase,
+};
+use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
+
+/// High foliage: densest azimuth × height outer samples.
+pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
+/// Medium foliage.
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Low foliage: coarser outer samples.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
 
 fn qualifies_for_foliage(
 	node_idx: usize,
@@ -36,44 +45,118 @@ fn is_outer_foliage(
 			> hysteresis.outer_foliage_distance_fraction * hysteresis.projection_length.max(1e-6)
 }
 
-#[derive(Clone)]
-pub(crate) struct VaseTreeFoliageRule<InnerM, InnerS, OuterM, OuterS>
-where
-	InnerM: Material,
-	InnerS: Clone + Into<MeshMaterial3d<InnerM>>,
-	OuterM: Material,
-	OuterS: Clone + Into<MeshMaterial3d<OuterM>>,
-{
-	pub inner_ball: ChicoBall<InnerM, InnerS>,
-	pub outer_splay: PlaneSplay<OuterM, OuterS>,
-	pub leaf_radius_world: f32,
-	pub upper_foliage_ring_u: f32,
+#[derive(Clone, Copy)]
+enum FoliageKit {
+	OuterSplay,
+	InnerBall,
 }
 
-impl<InnerM, InnerS, OuterM, OuterS>
-	BallRenderRule<BraidOakCanopyFoliage<InnerM, InnerS, OuterM, OuterS>, StorybookTreeChain>
-	for VaseTreeFoliageRule<InnerM, InnerS, OuterM, OuterS>
-where
-	InnerM: Material + Send + Sync + 'static,
-	InnerS: Clone + Into<MeshMaterial3d<InnerM>> + Send + Sync + 'static,
-	OuterM: Material + Send + Sync + 'static,
-	OuterS: Clone + Into<MeshMaterial3d<OuterM>> + Send + Sync + 'static,
-{
-	fn ball_render_item_for(
-		&self,
-		node_idx: usize,
-		node: &BallStickNode,
-		hysteresis: &StorybookTreeChain,
-		chain: &BallStickChain<StorybookTreeChain>,
-	) -> Option<(BraidOakCanopyFoliage<InnerM, InnerS, OuterM, OuterS>, f32)> {
-		if !qualifies_for_foliage(node_idx, hysteresis, chain, self.upper_foliage_ring_u) {
-			return None;
+#[derive(Clone, Copy)]
+struct FoliageCandidate {
+	position: Vec3,
+	radius: f32,
+	kit: FoliageKit,
+}
+
+fn world_leaf_radius(c: &FoliageCandidate, leaf_radius_world: f32) -> f32 {
+	let scale = leaf_radius_world / c.radius.max(1e-4);
+	c.radius * scale
+}
+
+fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> FoliageNode {
+	let placement = Placement::foliage_uniform(c.position, world_leaf_radius(c, leaf_radius_world));
+	match c.kit {
+		FoliageKit::OuterSplay => {
+			FoliageNode::plane_splay(FoliageGeometry::default_plane_splay(), placement)
 		}
-		let scale = self.leaf_radius_world / node.radius.max(1e-4);
-		if is_outer_foliage(node_idx, hysteresis, chain) {
-			Some((BraidOakCanopyFoliage::OuterSplay(self.outer_splay.clone()), scale))
-		} else {
-			Some((BraidOakCanopyFoliage::InnerBall(self.inner_ball.clone()), scale))
-		}
+		FoliageKit::InnerBall => FoliageNode::cheap_ball(placement),
 	}
+}
+
+fn collect_candidates(
+	chain: &BallStickChain<StorybookTreeChain>,
+	upper_foliage_ring_u: f32,
+) -> Vec<FoliageCandidate> {
+	chain
+		.nodes_with_hysteresis_enumerated()
+		.filter_map(|(idx, node, h)| {
+			if !qualifies_for_foliage(idx, h, chain, upper_foliage_ring_u) {
+				return None;
+			}
+			let kit = if is_outer_foliage(idx, h, chain) {
+				FoliageKit::OuterSplay
+			} else {
+				FoliageKit::InnerBall
+			};
+			Some(FoliageCandidate {
+				position: node.position,
+				radius: node.radius,
+				kit,
+			})
+		})
+		.collect()
+}
+
+fn banded_from_candidates(
+	candidates: &[FoliageCandidate],
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	sampled
+		.into_iter()
+		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
+		.collect()
+}
+
+fn apex_ball(chain: &BallStickChain<StorybookTreeChain>, apex_radius_world: f32) -> FoliageNode {
+	let tip = stalk_tip_from_chain(chain);
+	FoliageNode::cheap_ball(Placement::foliage_uniform(tip.position, apex_radius_world))
+}
+
+/// Banded joint foliage plus apex ball (always).
+pub(crate) fn foliage_nodes_banded(
+	chain: &BallStickChain<StorybookTreeChain>,
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+	upper_foliage_ring_u: f32,
+	apex_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let candidates = collect_candidates(chain, upper_foliage_ring_u);
+	let mut nodes = banded_from_candidates(&candidates, bands, leaf_radius_world);
+	nodes.push(apex_ball(chain, apex_radius_world));
+	nodes
+}
+
+/// Medium outer samples plus apex (no mass proxy).
+pub(crate) fn foliage_nodes_medium(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+	upper_foliage_ring_u: f32,
+	apex_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(
+		chain,
+		MEDIUM_FOLIAGE_BANDS,
+		leaf_radius_world,
+		upper_foliage_ring_u,
+		apex_radius_world,
+	)
+}
+
+/// Coarse outer samples plus apex (no mass proxy).
+pub(crate) fn foliage_nodes_low(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+	upper_foliage_ring_u: f32,
+	apex_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(
+		chain,
+		LOW_FOLIAGE_BANDS,
+		leaf_radius_world,
+		upper_foliage_ring_u,
+		apex_radius_world,
+	)
 }

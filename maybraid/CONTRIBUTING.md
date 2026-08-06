@@ -31,6 +31,21 @@ Sometimes, particularly during early development of a model, the game object may
 > [!IMPORTANT]
 > Please update this section if increasing or different layers are consistently implemented at the `-models` level.
 
+## Chico vegetation trees (LOD)
+
+Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura torch, Rory’s Head-trained) onto [`chico-vegetation-components`](./chico/vegetation-components/) + [`chico-sbs-trees`](./chico/sbs-trees/).
+
+- **Naming:** `FooParams` = authoring / CLI; `Foo` = built instance from `params.build()` (grow the chain once). Prefer this over `*Instance` / `*Std` for new vegetation.
+- **Presentation:** trees implement `VegetationComponents` and present via `ComponentsOnly` / `spawn_vegetation_components` — same shape as Richmond’s `BuildingComponents`, not ad hoc RenderItem generics.
+- **Style vs geometry (sticks):** `StickStyle::Standard` is the kit family under `vegetation/sticks/standard/`. `StickGeometry::{Segment,Trunk}` picks `001_*` vs `trunk_001_*` and the nested mesh-LOD extent policy. Trunk is geometry, not a second style.
+- **Nested stick mesh LOD:** band on **radius/girth** for segments (`distance / radius`); trunks stay length-biased (max-axis extent). Useful default factors: High ≤ 10, Medium ≤ 25, Low ≤ 100; **UltraLow = empty scene** (do not collapse onto Low).
+- **Structural (tree) LOD:** separate probe from stick/foliage hosts. Tall torches: characteristic radius `max(footprint, half-height)` so height does not dump you to Medium while still filling the view; torch defaults High / Medium / Low ≈ 3 / 15 / 24.
+- **Silhouette sampling:** azimuth × height outer picks beat “every Nth” or global outer shells for vase / torch profiles. For sticks, sample the **outermost endpoint** (not the midpoint) — midpoints sit inward on steep limbs and lose the contest.
+- **Share what is shared:** Penmarch and Kamakura share [`torch_tree`](./chico/sbs-trees/src/torch_tree.rs) stick + canopy emission. Rory can reuse stick thinning and structural factors but keep its own foliage **candidate** policy (joints vs selective BranchOut). Layered **mass proxies** are optional per tree and LOD — tune mid vs upper placement; some trees want none (e.g. Rory).
+- **Foliage kits:** `cheap_ball` for dense banded samples; `layered_ball` for proxies / fuller near masses. High can still band (not emit every terminal) to cut near-duplicates.
+
+Preview with `chico-sbs-trees-playground` `/show <tree>` while walking LOD bands.
+
 ## Rust Style
 
 Follow the top-level [Rust Style](../CONTRIBUTING.md#rust-style) guidance: prefer methods on structs/enums over free-floating helpers, and keep **"cell"** naming for LOD cellular generation—not for generic bounded rectangles in shared procedural code (`procedural-common`, etc.).

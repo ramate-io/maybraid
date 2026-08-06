@@ -1,10 +1,19 @@
-//! Terminal canopy: [`PlaneSplay`] on outer and terminal joints per [RFC §3.1.7.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/01-storybook-tree/README.md).
+//! Terminal canopy: plane-splay on outer / terminal BranchOut joints, with torch-like LOD banding.
 
-use bevy::prelude::*;
-use chico_ball_components::plane_splay::PlaneSplay;
+use bevy::prelude::Vec3;
 use chico_sbs_geometry::chain::storybook_tree::is_graph_terminal;
-use chico_sbs_geometry::render::ball::BallRenderRule;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain, StorybookTreePhase};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
+	StorybookTreeChain, StorybookTreePhase,
+};
+use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
+
+/// High foliage: densest azimuth × height outer samples.
+pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
+/// Medium foliage.
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Low foliage: coarser outer samples.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
 
 fn should_allocate_plane_splay(
 	node_idx: usize,
@@ -23,33 +32,74 @@ fn should_allocate_plane_splay(
 	is_terminal || outer
 }
 
-#[derive(Clone)]
-pub(crate) struct StorybookTreeLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>>,
-{
-	pub leaf_splay: PlaneSplay<LeafM, LeafS>,
-	pub leaf_radius_world: f32,
+#[derive(Clone, Copy)]
+struct FoliageCandidate {
+	position: Vec3,
+	radius: f32,
 }
 
-impl<LeafM, LeafS> BallRenderRule<PlaneSplay<LeafM, LeafS>, StorybookTreeChain>
-	for StorybookTreeLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	fn ball_render_item_for(
-		&self,
-		node_idx: usize,
-		node: &BallStickNode,
-		hysteresis: &StorybookTreeChain,
-		chain: &BallStickChain<StorybookTreeChain>,
-	) -> Option<(PlaneSplay<LeafM, LeafS>, f32)> {
-		if !should_allocate_plane_splay(node_idx, hysteresis, chain) {
-			return None;
-		}
-		let scale = self.leaf_radius_world / node.radius.max(1e-4);
-		Some((self.leaf_splay.clone(), scale))
-	}
+fn world_splay_radius(c: &FoliageCandidate, leaf_radius_world: f32) -> f32 {
+	let scale = leaf_radius_world / c.radius.max(1e-4);
+	c.radius * scale
+}
+
+fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> FoliageNode {
+	FoliageNode::plane_splay(
+		FoliageGeometry::default_plane_splay(),
+		Placement::foliage_uniform(c.position, world_splay_radius(c, leaf_radius_world)),
+	)
+}
+
+fn collect_candidates(chain: &BallStickChain<StorybookTreeChain>) -> Vec<FoliageCandidate> {
+	chain
+		.nodes_with_hysteresis_enumerated()
+		.filter_map(|(idx, node, h)| {
+			if !should_allocate_plane_splay(idx, h, chain) {
+				return None;
+			}
+			Some(FoliageCandidate {
+				position: node.position,
+				radius: node.radius,
+			})
+		})
+		.collect()
+}
+
+fn banded_from_candidates(
+	candidates: &[FoliageCandidate],
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	sampled
+		.into_iter()
+		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
+		.collect()
+}
+
+/// Outermost foliage candidates per azimuth × height cell.
+pub(crate) fn foliage_nodes_banded(
+	chain: &BallStickChain<StorybookTreeChain>,
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let candidates = collect_candidates(chain);
+	banded_from_candidates(&candidates, bands, leaf_radius_world)
+}
+
+/// Medium outer samples (no mass proxy).
+pub(crate) fn foliage_nodes_medium(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(chain, MEDIUM_FOLIAGE_BANDS, leaf_radius_world)
+}
+
+/// Coarse outer samples (no mass proxy).
+pub(crate) fn foliage_nodes_low(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	foliage_nodes_banded(chain, LOW_FOLIAGE_BANDS, leaf_radius_world)
 }

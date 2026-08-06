@@ -192,11 +192,8 @@ pub fn setup_render_materials(
 	}
 }
 
-pub fn attach_vase_tree_materials(tree: &mut RenderVaseTree, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.braid_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
-}
+/// No-op: Vase Tree now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_vase_tree_materials(_tree: &mut RenderVaseTree, _mats: &RenderMaterials) {}
 
 pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMaterials) {
 	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
@@ -228,7 +225,7 @@ fn attach_render_materials(
 	stick: &Handle<ChicoStickMaterial>,
 	conifer_stick: &Handle<ChicoStickMaterial>,
 	leaf: &Handle<ChicoLeafMaterial>,
-	northern_leaf: &Handle<ChicoLeafMaterial>,
+	_northern_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
@@ -241,10 +238,7 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
-		RenderSubject::NorthernConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(northern_leaf.clone());
-		}
+		RenderSubject::NorthernConifer(_tree) => {}
 		RenderSubject::TemperateConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
@@ -260,10 +254,7 @@ fn attach_render_materials(
 		RenderSubject::PalmBush(tree) => {
 			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::StorybookTree(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::StorybookTree(_tree) => {}
 		RenderSubject::PenmarchTorch(_tree) => {}
 		RenderSubject::KamakuraTorch(_tree) => {}
 		RenderSubject::RorysHeadTrained(_tree) => {}

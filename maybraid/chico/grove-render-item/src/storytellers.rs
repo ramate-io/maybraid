@@ -8,7 +8,7 @@ use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
-use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
@@ -241,27 +241,11 @@ where
 				}
 				StorytellersItem::Storybook(story) => {
 					let geometry = story.build_with_noise(build_noise);
-					let mut tree = StorybookTree::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = StorybookTreeParams::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				StorytellersItem::PenmarchTorch(torch) => {
 					let geometry =
