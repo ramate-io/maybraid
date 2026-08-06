@@ -5,7 +5,7 @@ use bevy_math::Vec3;
 use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 
 use crate::fit::{Confines, FitError};
-use crate::usage_areas::clearance::PassageClearance;
+use crate::usage_areas::clearance::{approach_zone, PassageClearance};
 
 use super::predicates::{all_pass, PredicateCtx};
 use super::{
@@ -21,6 +21,8 @@ pub struct PackHost {
 	pub host3: Aabb3d,
 	pub host: Aabb2d,
 	pub clearances: Vec<Aabb2d>,
+	/// Passage bands only (before furniture commits) — for approach-padded excludes.
+	pub passage_bands: Vec<Aabb2d>,
 	pub room_area: f32,
 }
 
@@ -29,6 +31,16 @@ impl PackHost {
 	pub fn commit_footprint(&mut self, solid: &Aabb3d) {
 		self.clearances
 			.push(aabb3_to_plan(solid, PlanAxes::XZ));
+	}
+
+	/// Clearances plus padded door approaches — use for fillers that tend to
+	/// sit beside a passage face just outside the strict keep-out band.
+	pub fn clearances_with_approach(&self) -> Vec<Aabb2d> {
+		let mut out = self.clearances.clone();
+		for band in &self.passage_bands {
+			out.push(approach_zone(*band));
+		}
+		out
 	}
 }
 
@@ -57,12 +69,14 @@ pub fn init_host(confines: &Confines) -> Result<PackHost, FitError> {
 			reason: "passage",
 		});
 	}
-	let clearances = PassageClearance::bands_std(host, &passage_faces);
+	let passage_bands = PassageClearance::bands_std(host, &passage_faces);
+	let clearances = passage_bands.clone();
 	let room_area = aabb2_area(host).max(1e-4);
 	Ok(PackHost {
 		host3,
 		host,
 		clearances,
+		passage_bands,
 		room_area,
 	})
 }

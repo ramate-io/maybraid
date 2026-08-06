@@ -276,4 +276,38 @@ mod tests {
 			}
 		}
 	}
+
+	#[test]
+	fn seed_1337_flange_livable1_keeps_closed_rooms() {
+		use crate::usage_areas::livable_apartment::ApartmentRoom;
+		use procedural_common::aabb2_area;
+
+		let storey = storey_seed(1337);
+		let apt = storey.blocks[1]
+			.apartments
+			.iter()
+			.find(|a| a.region_id == 0)
+			.expect("Flange Livable 1");
+		let closed = apt.rooms.iter().filter(|r| r.is_closed()).count();
+		let large_open_halls = apt
+			.rooms
+			.iter()
+			.filter(|r| matches!(r, ApartmentRoom::OpenHall { .. }))
+			.filter_map(|r| match r {
+				ApartmentRoom::OpenHall { confines, .. } => {
+					Some(aabb2_area(host_xz(&confines.bounds)))
+				}
+				_ => None,
+			})
+			.filter(|&a| a > 12.0)
+			.count();
+		assert!(
+			closed > 0,
+			"SpineHall closed rooms should survive normalize (not demote to OpenHall)"
+		);
+		assert!(
+			large_open_halls <= 1,
+			"expected at most the spine hall as a large OpenHall, got {large_open_halls}"
+		);
+	}
 }

@@ -1,20 +1,19 @@
 //! Apartment fill: entry → max-rect cluster → RLA per rect → normalize.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::bounding::Aabb2d;
 use bevy_math::{Vec2, Vec3};
-use procedural_common::{aabb2_area, NoiseParams};
+use procedural_common::{aabb2_area, inflate_aabb2, NoiseParams};
 use richmond_building_components::labels::{LabelNode, LabelStyle};
 
 use crate::fit::{
 	Confines, FillRegion, FillableRegions, FitError, MultiConfines, SpaceKind,
 };
 use crate::openings::Openings;
+use crate::paneling::DEFAULT_PANEL_THICKNESS;
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
-use crate::usage_areas::plan_geom::{
-	aabb2_near_eq, confines_from_xz, host_xz, noise_for_cell,
-};
+use crate::usage_areas::plan_geom::{confines_from_xz, host_xz, noise_for_cell};
 use crate::usage_areas::rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
 use crate::usage_areas::rectangular_livable_area::{
 	RectAreaRoom, RectLivableStrategy, RectangularLivableArea, RectangularLivableAreaParameterized,
@@ -290,6 +289,11 @@ fn label_xz(label: &LabelNode) -> Aabb2d {
 /// Unreachable closed rooms become household closets only when closet-sized;
 /// larger demotions reopen as [`ApartmentRoom::OpenHall`] so normalize cannot
 /// flood an apartment with oversized "closets".
+///
+/// Closed rooms from SpineHall / similar strategies sit behind partition
+/// thickness, so adjacency uses a wall-gap inflate — exact edge touch would
+/// false-demote every walled bedroom into an empty OpenHall while leaving
+/// the enclosure panels in place.
 fn normalize_apartment_circulation(
 	rooms: &mut Vec<ApartmentRoom>,
 	entry: Option<Aabb2d>,
@@ -302,8 +306,11 @@ fn normalize_apartment_circulation(
 	let Some(entry) = entry else {
 		return;
 	};
-	let touch = access.open_touch();
 	let door = access.door_contact();
+	// Any open circ / walkway counts — not only an entry-flood component.
+	// SpineHall bedrooms sit on a spine that may not share a long edge with the
+	// entry band (door connectivity is via RLA passages), and requiring
+	// entry-reachability false-demotes those walled rooms into OpenHalls.
 	let open_rects: Vec<Aabb2d> = rooms
 		.iter()
 		.filter(|r| r.is_open_circ())
@@ -314,39 +321,6 @@ fn normalize_apartment_circulation(
 	if open_rects.is_empty() {
 		return;
 	}
-	let mut reach = vec![false; open_rects.len()];
-	let mut stack = Vec::new();
-	for (i, r) in open_rects.iter().enumerate() {
-		if aabb2_near_eq(*r, entry)
-			|| shared_edge_span(*r, entry).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
-		{
-			reach[i] = true;
-			stack.push(i);
-		}
-	}
-	if stack.is_empty() {
-		reach[0] = true;
-		stack.push(0);
-	}
-	while let Some(i) = stack.pop() {
-		for j in 0..open_rects.len() {
-			if reach[j] {
-				continue;
-			}
-			let ok = shared_edge_span(open_rects[i], open_rects[j])
-				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch * 0.8);
-			if ok {
-				reach[j] = true;
-				stack.push(j);
-			}
-		}
-	}
-	let reachable_open: Vec<Aabb2d> = open_rects
-		.iter()
-		.zip(reach.iter())
-		.filter(|(_, r)| **r)
-		.map(|(a, _)| *a)
-		.collect();
 
 	for room in rooms.iter_mut() {
 		if !room.is_closed() {
@@ -355,9 +329,9 @@ fn normalize_apartment_circulation(
 		let Some(cz) = room_xz(room) else {
 			continue;
 		};
-		let ok = reachable_open.iter().any(|o| {
-			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= door)
-		});
+		let ok = open_rects
+			.iter()
+			.any(|o| closed_reaches_open(cz, *o, door));
 		if ok {
 			continue;
 		}
@@ -386,6 +360,19 @@ fn normalize_apartment_circulation(
 			};
 		}
 	}
+}
+
+/// True when a closed room abuts open circulation, allowing a partition gap.
+fn closed_reaches_open(closed: Aabb2d, open: Aabb2d, min_len: f32) -> bool {
+	if shared_edge_span(closed, open).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_len) {
+		return true;
+	}
+	// SpineHall enclosures sit ~panel thickness off the hall band.
+	let gap = DEFAULT_PANEL_THICKNESS + 0.2;
+	let grown = inflate_aabb2(closed, gap);
+	shared_edge_span(grown, open).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_len)
+		|| shared_edge_span(closed, inflate_aabb2(open, gap))
+			.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_len)
 }
 
 fn push_leftover(

@@ -199,10 +199,13 @@ fn finalize_optional(
 	}
 
 	if packed_area_ratio(packed, host.room_area) < regions.occupancy * 0.85 {
+		// Fillers prefer walls and often land beside a door just outside the
+		// strict passage band — require padded approach clearances too.
+		let excludes = host.clearances_with_approach();
 		if let Some(f) = try_free_extent(
 			&host.host3,
 			host.host,
-			&host.clearances,
+			&excludes,
 			cfg,
 			50,
 			FreeExtentKnobs {
