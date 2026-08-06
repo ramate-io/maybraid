@@ -21,7 +21,7 @@ mod weeping;
 
 pub mod render_item_plugin;
 
-pub use blade::{BladeStrand, BladeTuft, BladeTuftShape, BladeTuftStd};
+pub use blade::{BladeFrondSegment, BladeStrand, BladeTuft, BladeTuftShape, BladeTuftStd};
 pub use buddha_hand::{
 	BuddhaHandCluster, BuddhaHandElement, BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd,
 };

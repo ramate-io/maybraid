@@ -106,13 +106,12 @@ impl TuftPatch {
 
 	fn clump_node(&self, index: usize, anchor: Vec3) -> Option<FoliageNode> {
 		let shape = self.clump_shape(index as u32);
-		let width = shape.blade_width.max(1e-4);
+		// Chained frond segments per blade (`bend_segments` + sway noise → kinks).
 		let placements: Vec<Placement> = shape
-			.strands()
+			.frond_segments_at(anchor)
 			.into_iter()
-			.filter_map(|strand| {
-				let start = anchor + strand.base_offset;
-				Placement::frond_segment(start, strand.direction, strand.length, width)
+			.filter_map(|seg| {
+				Placement::frond_segment(seg.start, seg.direction, seg.length, seg.width)
 			})
 			.collect();
 		if placements.is_empty() {
@@ -203,6 +202,7 @@ mod tests {
 			clump_count: 2,
 			shape: BladeTuftShape {
 				blade_count: 4,
+				bend_segments: 2,
 				seed: 3,
 				..BladeTuftShape::default()
 			},
@@ -212,8 +212,9 @@ mod tests {
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(nodes.len(), 2);
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection geom");
-		assert_eq!(collection.members.len(), 4);
-		assert_eq!(collection.members_for_level(LodSceneLevel::Medium).len(), 2);
+		// 4 blades × 2 bend segments.
+		assert_eq!(collection.members.len(), 8);
+		assert_eq!(collection.members_for_level(LodSceneLevel::Medium).len(), 4);
 		assert_eq!(collection.members_for_level(LodSceneLevel::UltraLow).len(), 1);
 		Ok(())
 	}

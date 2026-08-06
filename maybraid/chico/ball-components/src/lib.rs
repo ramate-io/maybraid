@@ -17,8 +17,8 @@ pub use frond::{
 	ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
 };
 pub use tuft::{
-	BellyTipProfile, BladeStrand, BladeTuft, BladeTuftShape, BladeTuftStd, BuddhaHandCluster,
-	BuddhaHandElement, BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd, SpearCluster,
-	SpearElement, SpearTuft, SpearTuftShape, SpearTuftStd, SucculentTuft, SucculentTuftShape,
-	SucculentTuftStd, WeepingTuft, WeepingTuftShape, WeepingTuftStd,
+	BellyTipProfile, BladeFrondSegment, BladeStrand, BladeTuft, BladeTuftShape, BladeTuftStd,
+	BuddhaHandCluster, BuddhaHandElement, BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd,
+	SpearCluster, SpearElement, SpearTuft, SpearTuftShape, SpearTuftStd, SucculentTuft,
+	SucculentTuftShape, SucculentTuftStd, WeepingTuft, WeepingTuftShape, WeepingTuftStd,
 };

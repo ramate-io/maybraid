@@ -3,14 +3,17 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams, NoiseType};
 use render_item::{CascadeChunk, RenderItem};
 
 use super::directions::CapDirections;
 use super::prism::{PrismaticCluster, PrismaticElement};
 use super::spawn::MergedTuft;
+use super::sway::strand_sway_at;
 
 const SIDE_COUNT: u32 = 2;
+/// Cap lateral sway as a fraction of strand length (matches prism tuft builder).
+const MAX_SWAY_FRACTION_OF_LENGTH: f32 = 0.35;
 
 /// [`StandardMaterial`] blade tuft (common default).
 pub type BladeTuftStd = BladeTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
@@ -70,8 +73,19 @@ pub struct BladeStrand {
 	pub base_offset: Vec3,
 }
 
+/// One straight frond segment along a kinked blade (for VegetationComponents GLB emission).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BladeFrondSegment {
+	pub start: Vec3,
+	pub direction: Vec3,
+	pub length: f32,
+	pub width: f32,
+}
+
 impl BladeTuftShape {
-	/// Deterministic blade strands for VegetationComponents / GLB frond emission.
+	/// Deterministic blade strands (direction / length / base scatter).
+	///
+	/// For GLB frond emission with kinks, prefer [`Self::frond_segments_at`].
 	pub fn strands(&self) -> Vec<BladeStrand> {
 		CapDirections::upward(self.blade_count, self.seed, self.max_tilt_radians)
 			.into_iter()
@@ -100,6 +114,71 @@ impl BladeTuftShape {
 				BladeStrand { direction, length, base_offset }
 			})
 			.collect()
+	}
+
+	/// Chained straight-frond segments for one clump at `origin`.
+	///
+	/// Splits each strand into [`Self::bend_segments`] pieces and applies the same
+	/// lateral sway as the prismatic mesh builder so VegetationComponents blades keep
+	/// their kinks (`noise_amplitude` / `noise_frequency`).
+	pub fn frond_segments_at(&self, origin: Vec3) -> Vec<BladeFrondSegment> {
+		let width = self.blade_width.max(1e-4);
+		let rings = self.bend_segments.max(1) as usize;
+		let mut out = Vec::new();
+
+		for (i, strand) in self.strands().into_iter().enumerate() {
+			let dir = strand.direction.normalize_or_zero();
+			if dir.length_squared() < 1e-12 {
+				continue;
+			}
+			let length = strand.length.max(1e-4);
+			let base = origin + strand.base_offset;
+			let rotation = Quat::from_rotation_arc(Vec3::Y, dir);
+			let seed = self.seed.wrapping_add(i as i32);
+			let noise = NoiseConfig::new(NoiseParams {
+				seed,
+				frequency: 1.0,
+				amplitude: 1.0,
+				octaves: 1,
+				noise_type: NoiseType::Perlin,
+				..Default::default()
+			});
+			let max_sway = length * MAX_SWAY_FRACTION_OF_LENGTH;
+			// Scale sway coord with ring count so extra bend segments see new noise features.
+			let sway_frequency = self.noise_frequency * rings as f32;
+
+			let mut points = Vec::with_capacity(rings + 1);
+			for ring in 0..=rings {
+				let t = ring as f32 / rings as f32;
+				let sway = strand_sway_at(
+					&noise,
+					seed,
+					t,
+					sway_frequency,
+					self.noise_amplitude,
+					max_sway,
+				);
+				let local = Vec3::new(sway.right, t * length, sway.forward);
+				points.push(base + rotation * local);
+			}
+
+			for seg in 0..rings {
+				let start = points[seg];
+				let end = points[seg + 1];
+				let ray = end - start;
+				let seg_len = ray.length();
+				if seg_len < 1e-6 {
+					continue;
+				}
+				out.push(BladeFrondSegment {
+					start,
+					direction: ray,
+					length: seg_len,
+					width,
+				});
+			}
+		}
+		out
 	}
 }
 
@@ -267,6 +346,42 @@ mod tests {
 		let spread = base_root_radius(BladeTuftShape { base_spread: 0.3, ..shape })?;
 		assert!(anchored < 0.05, "zero spread should root at the anchor, got {anchored}");
 		assert!(spread > 0.05, "spread blades should root away from the anchor, got {spread}");
+		Ok(())
+	}
+
+	#[test]
+	fn frond_segments_chain_by_bend_count() -> Result<()> {
+		let shape = BladeTuftShape {
+			blade_count: 3,
+			bend_segments: 1,
+			noise_amplitude: 0.0,
+			..BladeTuftShape::default()
+		};
+		assert_eq!(shape.frond_segments_at(Vec3::ZERO).len(), 3);
+		let kinked = BladeTuftShape { bend_segments: 2, ..shape };
+		assert_eq!(kinked.frond_segments_at(Vec3::ZERO).len(), 6);
+		Ok(())
+	}
+
+	#[test]
+	fn frond_segment_kinks_when_noise_nonzero() -> Result<()> {
+		let shape = BladeTuftShape {
+			blade_count: 1,
+			bend_segments: 2,
+			noise_amplitude: 0.2,
+			noise_frequency: 1.0,
+			max_tilt_radians: 0.0,
+			seed: 9,
+			..BladeTuftShape::default()
+		};
+		let segs = shape.frond_segments_at(Vec3::ZERO);
+		assert_eq!(segs.len(), 2);
+		let d0 = segs[0].direction.normalize();
+		let d1 = segs[1].direction.normalize();
+		assert!(
+			d0.dot(d1) < 0.999,
+			"expected kink between chained segments, got aligned dirs {d0:?} {d1:?}"
+		);
 		Ok(())
 	}
 }
