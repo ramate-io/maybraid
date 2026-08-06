@@ -1,8 +1,9 @@
-//! Shared Penmarch / Kamakura stick and canopy helpers.
+//! Shared Penmarch / Kamakura stick and canopy helpers (also stick + structural LOD for Rory).
 //!
 //! Both torches use [`StorybookTreeChain`](chico_sbs_geometry::StorybookTreeChain) with the
 //! same selective upper/outer cheap-ball foliage policy; this module holds that emission
-//! logic once.
+//! logic once. Rory reuses stick thinning and structural distance factors, with its own
+//! joint-canopy candidate set.
 
 mod canopy;
 mod stick;

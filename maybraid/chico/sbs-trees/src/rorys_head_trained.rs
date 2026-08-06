@@ -2,9 +2,11 @@
 //!
 //! [`RorysHeadTrainedParams::build`] grows the ball-stick chain once into [`RorysHeadTrained`],
 //! which implements [`VegetationComponents`].
+//!
+//! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage keeps joint
+//! candidates but uses the same cheap-ball banding + layered proxy policy.
 
 mod canopy;
-mod stick;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, RorysHeadTrainedSbs, StorybookTreeChain};
@@ -14,10 +16,12 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{
-	foliage_nodes_banded, foliage_nodes_high, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+use crate::torch_tree::{
+	stick_nodes_high, stick_nodes_low, stick_nodes_medium, structural_lod_probe,
 };
-use stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium_banded};
+use canopy::{
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
+};
 
 /// Authoring / CLI parameters for Rory's Head-trained.
 #[derive(Component, Clone, Args, Debug)]
@@ -80,7 +84,7 @@ impl VegetationComponents for RorysHeadTrained {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),
-			LodSceneLevel::Medium => stick_nodes_medium_banded(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_medium(&self.chain),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
@@ -92,22 +96,23 @@ impl VegetationComponents for RorysHeadTrained {
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		let leaf_r = self.leaf_radius_world();
 		let nodes = match level {
-			LodSceneLevel::High => foliage_nodes_high(&self.chain, leaf_r),
-			LodSceneLevel::Medium => foliage_nodes_banded(&self.chain, MEDIUM_FOLIAGE_BANDS, leaf_r),
+			LodSceneLevel::High => {
+				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
+			}
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, leaf_r),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				foliage_nodes_banded(&self.chain, LOW_FOLIAGE_BANDS, leaf_r)
-			}
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r),
 		};
 		Layers::from_free(nodes)
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(VegetationStructuralLodProbe::new(
+		Some(structural_lod_probe(
 			self.structural_center(),
 			self.footprint_radius(),
+			self.geometry.height(),
 		))
 	}
 }
