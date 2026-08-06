@@ -106,7 +106,9 @@ impl FrondRun {
 
 	/// Collapse the chain to a single base→tip chord (keeps connectivity as one leaf).
 	///
-	/// `width_factor` scales the resulting blade width (absorb dropped runs / segments).
+	/// `width_factor` scales blade width for absorbed **sibling runs** (from
+	/// [`merge_runs`]). Segment count is not multiplied in — collapsing a kinked
+	/// rachis must not inflate width by polyline density.
 	pub fn collapse_to_chord(&self, width_factor: f32) -> Option<FrondMember> {
 		let first = *self.segments.first()?;
 		let last = *self.segments.last()?;
@@ -117,7 +119,7 @@ impl FrondRun {
 		if length < 1e-6 {
 			return None;
 		}
-		let width = first.world_width() * width_factor * (self.segments.len() as f32).max(1.0);
+		let width = first.world_width() * width_factor.max(1e-4);
 		Placement::frond_segment(start, ray, length, width).map(FrondMember::segment)
 	}
 }
@@ -126,6 +128,10 @@ impl FrondRun {
 ///
 /// Authored as [`FrondRun`]s. Merge drops whole runs (and may collapse a kept run to a
 /// chord) so kinked blades never lose mid-chain connectivity.
+///
+/// Prefer **tight** collections (one blade / short clump). A wide fan (e.g. a full palm
+/// ring) makes the LOD extent the ring diameter, so UltraLow's single survivor reads as
+/// an oversized chord across the crown — emit one collection per frond instead.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FrondCollection {
 	pub runs: Vec<FrondRun>,
@@ -302,6 +308,19 @@ mod tests {
 		let (center, extent) = collection.center_and_extent();
 		assert!(center.x > 0.5 && center.x < 1.5);
 		assert!(extent >= 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn collapse_chord_width_ignores_segment_count() -> Result<()> {
+		let kinked = run_of([
+			segment(Vec3::ZERO, Vec3::Y, 0.5, 0.04),
+			segment(Vec3::new(0.0, 0.5, 0.0), Vec3::Y, 0.5, 0.04),
+			segment(Vec3::new(0.0, 1.0, 0.0), Vec3::Y, 0.5, 0.04),
+			segment(Vec3::new(0.0, 1.5, 0.0), Vec3::Y, 0.5, 0.04),
+		]);
+		let chord = kinked.collapse_to_chord(1.0).expect("chord");
+		assert!((chord.world_width() - 0.04).abs() < 1e-4);
 		Ok(())
 	}
 }

@@ -1,8 +1,8 @@
 //! **Palm Crown** — stacked frond rings as [`VegetationComponents`].
 //!
-//! High / Medium emit [`FrondCollection`] rachis runs (straight frond segments along the
-//! droop/arch spine). Low / UltraLow drop the fronds and keep a single layered-ball proxy
-//! fit to the High crown AABB.
+//! High / Medium emit one [`FrondCollection`] per frond (rachis as a short straight-segment
+//! run). Per-frond collections keep merge LOD on rachis-scale extents. Low / UltraLow drop
+//! the fronds and keep two rotated layered-ball proxies fit to the High crown AABB.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
 //! [`spawn`] for date / Waialea / bush trees still on RenderItem.
@@ -15,13 +15,19 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-	VegetationStructuralLodProbe,
+	VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
+	STRUCTURAL_MEDIUM_FACTOR,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 /// Per-ring seed salt (shared with [`spawn::FROND_RING_SEED_SALT`]).
 pub use spawn::FROND_RING_SEED_SALT;
+
+/// Medium outer edge: default structural Medium × 3 (200% further out).
+const PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR: f32 = STRUCTURAL_MEDIUM_FACTOR * 3.0;
+/// Keep Low beyond Medium so band ordering stays valid.
+const PALM_CROWN_STRUCTURAL_LOW_FACTOR: f32 = STRUCTURAL_LOW_FACTOR * 3.0;
 
 /// Authoring / CLI parameters for a palm crown (standalone or stacked rings).
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -45,15 +51,16 @@ impl Default for PalmCrownParams {
 			ring_count: 3,
 			ring_spacing: 0.14,
 			shape: FrondCrownShape {
-				// Slightly palmier than the single-ring mesh default.
-				frond_count: 11,
+				// Palmier than the single-ring mesh default; sparse fronds + short rachis.
+				frond_count: 5,
 				length: 1.6,
 				width: 0.16,
 				droop: 0.55,
 				arch_lift: 0.28,
 				twist: 0.55,
 				leaflet_count: 16,
-				spine_segments: 8,
+				// Two chords per frond — enough for droop without dense rachis tessellation.
+				spine_segments: 2,
 				downward_tilt_radians: 0.55,
 				outward_spread_radians: 1.4,
 				emission_lift_radians: 0.32,
@@ -116,36 +123,31 @@ impl PalmCrown {
 		}
 	}
 
-	fn ring_node(&self, index: usize, anchor: Vec3) -> Option<FoliageNode> {
-		let shape = self.ring_shape(index as u32);
-		let runs: Vec<FrondRun> = shape
-			.frond_runs_at(anchor)
-			.into_iter()
-			.filter_map(|run| {
+	/// One [`FrondCollection`] per frond (single run).
+	///
+	/// Ring-wide collections make the LOD extent the crown diameter, so UltraLow merge
+	/// collapses to an oversized chord; per-frond collections keep extent ≈ rachis length.
+	fn frond_nodes(&self) -> Vec<FoliageNode> {
+		let mut nodes = Vec::new();
+		for (index, anchor) in self.anchors.iter().enumerate() {
+			let shape = self.ring_shape(index as u32);
+			for run in shape.frond_runs_at(*anchor) {
 				let placements: Vec<Placement> = run
 					.into_iter()
 					.filter_map(|seg| {
 						Placement::frond_segment(seg.start, seg.direction, seg.length, seg.width)
 					})
 					.collect();
-				(!placements.is_empty()).then(|| FrondRun::from_placements(placements))
-			})
-			.collect();
-		if runs.is_empty() {
-			return None;
+				if placements.is_empty() {
+					continue;
+				}
+				nodes.push(FoliageNode::frond_collection(
+					FrondCollection::new([FrondRun::from_placements(placements)]),
+					Placement::IDENTITY,
+				));
+			}
 		}
-		Some(FoliageNode::frond_collection(
-			FrondCollection::new(runs),
-			Placement::IDENTITY,
-		))
-	}
-
-	fn frond_nodes(&self) -> Vec<FoliageNode> {
-		self.anchors
-			.iter()
-			.enumerate()
-			.filter_map(|(index, anchor)| self.ring_node(index, *anchor))
-			.collect()
+		nodes
 	}
 
 	/// AABB of High rachis polylines (origin + droop extents).
@@ -174,11 +176,31 @@ impl PalmCrown {
 		(min, max)
 	}
 
-	fn layered_proxy_ball(&self) -> FoliageNode {
+	/// Two layered balls with rotated pose offsets for a denser Low silhouette.
+	fn layered_proxy_balls(&self) -> Vec<FoliageNode> {
 		let (min, max) = self.crown_aabb();
 		let center = (min + max) * 0.5;
 		let half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
-		FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents))
+		// Slightly under-full AABB so the pair densifies without blowing the silhouette.
+		let scale = half_extents * 0.9;
+		let offset = Vec3::new(half_extents.x * 0.12, half_extents.y * 0.04, 0.0);
+		let yaw_b = std::f32::consts::FRAC_PI_2;
+		let center_a = center + offset;
+		let center_b = center + Quat::from_rotation_y(yaw_b) * offset;
+		vec![
+			FoliageNode::layered_ball(
+				Placement::new(center_a, 0.0)
+					.with_pitch(0.18)
+					.with_roll(-0.22)
+					.with_scale(scale),
+			),
+			FoliageNode::layered_ball(
+				Placement::new(center_b, yaw_b)
+					.with_pitch(-0.28)
+					.with_roll(0.4)
+					.with_scale(scale),
+			),
+		]
 	}
 
 	fn crown_center(&self) -> Vec3 {
@@ -203,21 +225,25 @@ impl VegetationComponents for PalmCrown {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
 				Layers::from_free(self.frond_nodes())
 			}
-			// Structural UltraLow collapses to Low content; both drop fronds for a proxy ball.
+			// Structural UltraLow collapses to Low content; both drop fronds for proxy balls.
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				Layers::from_free(vec![self.layered_proxy_ball()])
+				Layers::from_free(self.layered_proxy_balls())
 			}
 		}
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(VegetationStructuralLodProbe::new(
-			self.crown_center(),
-			self.structural_radius(),
-		))
+		Some(
+			VegetationStructuralLodProbe::new(self.crown_center(), self.structural_radius())
+				.with_factors(
+					STRUCTURAL_HIGH_FACTOR,
+					PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
+					PALM_CROWN_STRUCTURAL_LOW_FACTOR,
+				),
+		)
 	}
 }
 
@@ -255,37 +281,52 @@ mod tests {
 	}
 
 	#[test]
-	fn high_emits_one_collection_per_ring() -> Result<()> {
+	fn high_emits_one_collection_per_frond() -> Result<()> {
 		let built = crown(3).build();
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(nodes.len(), built.anchors.len());
+		// 3 rings × 6 fronds (test shape).
+		assert_eq!(nodes.len(), built.anchors.len() * 6);
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection");
-		assert_eq!(collection.runs.len(), 6);
+		assert_eq!(collection.runs.len(), 1);
 		assert_eq!(collection.runs[0].segments.len(), 4);
+		let (_, extent) = collection.center_and_extent();
+		// Per-frond extent stays on rachis scale, not the full crown diameter.
+		assert!(extent < built.shape.length * 1.5);
 		Ok(())
 	}
 
 	#[test]
-	fn medium_keeps_fronds_low_is_layered_ball_only() -> Result<()> {
+	fn medium_keeps_fronds_low_is_two_layered_balls() -> Result<()> {
 		let built = crown(5).build();
 		let medium = built.foliage_nodes_for_level(LodSceneLevel::Medium).flatten();
 		assert!(!medium.is_empty());
 		assert!(medium[0].geometry.as_frond_collection().is_some());
 
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 1);
-		assert!(low[0].geometry.is_layered_ball());
+		assert_eq!(low.len(), 2);
+		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_ne!(low[0].placement.yaw, low[1].placement.yaw);
 
 		let ultra = built.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten();
-		assert_eq!(ultra.len(), 1);
-		assert!(ultra[0].geometry.is_layered_ball());
+		assert_eq!(ultra.len(), 2);
+		assert!(ultra.iter().all(|n| n.geometry.is_layered_ball()));
 		Ok(())
 	}
 
 	#[test]
-	fn structural_probe_is_present() -> Result<()> {
+	fn structural_medium_band_is_extended() -> Result<()> {
 		let built = crown(0).build();
-		assert!(built.structural_lod_probe().is_some());
+		let probe = built.structural_lod_probe().expect("probe");
+		assert_eq!(probe.medium_factor, STRUCTURAL_MEDIUM_FACTOR * 3.0);
+		assert!(probe.low_factor > probe.medium_factor);
+		Ok(())
+	}
+
+	#[test]
+	fn default_rachis_and_frond_counts_are_sparse() -> Result<()> {
+		let shape = PalmCrownParams::default().shape;
+		assert!(shape.frond_count <= 5);
+		assert!(shape.spine_segments <= 2);
 		Ok(())
 	}
 }
