@@ -5,8 +5,8 @@
 //!
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `3 ×` tree radius: full sticks; dense azimuth×height layered canopy
-//! - **Medium** — `3…12 ×` radius: trunk + band-sampled sticks; denser layered outer foliage
-//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; coarser cheap-ball outer foliage
+//! - **Medium** — `3…12 ×` radius: trunk + band-sampled sticks; layered outer foliage + mid proxy
+//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; cheap-ball outer foliage + mid proxy
 
 mod canopy;
 mod stick;
@@ -20,8 +20,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use canopy::{
-	banded_outer_canopy_balls, CanopyBallKit, HIGH_FOLIAGE_BANDS, LOW_FOLIAGE_BANDS,
-	MEDIUM_FOLIAGE_BANDS,
+	banded_outer_canopy_balls, banded_outer_canopy_with_proxy, CanopyBallKit, HIGH_FOLIAGE_BANDS,
+	LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
@@ -113,7 +113,7 @@ impl SopesBanyan {
 	}
 
 	fn foliage_nodes_medium(&self) -> Vec<FoliageNode> {
-		banded_outer_canopy_balls(
+		banded_outer_canopy_with_proxy(
 			&self.chain,
 			MEDIUM_FOLIAGE_BANDS,
 			self.geometry.crown_floor_world_y(),
@@ -123,7 +123,7 @@ impl SopesBanyan {
 	}
 
 	fn foliage_nodes_low(&self) -> Vec<FoliageNode> {
-		banded_outer_canopy_balls(
+		banded_outer_canopy_with_proxy(
 			&self.chain,
 			LOW_FOLIAGE_BANDS,
 			self.geometry.crown_floor_world_y(),
