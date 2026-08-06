@@ -26,8 +26,8 @@ use procedural_common::NoiseParams;
 use crate::jungle_growth_vc::{jungle_growth_foliage_nodes, JungleGrowthVcParams};
 use crate::storybook_tree::canopy::HIGH_FOLIAGE_BANDS;
 
-/// Growth spawn uniform-scale center (~4/5 of legacy RenderItem `2.0`).
-pub const JUNGLE_GROWTH_RADIUS_SCALE: f32 = 1.6;
+/// Default [`crate::JungleStorybookTreeParams::jungle_growth_radius_scale`].
+pub const DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE: f32 = 4.0;
 
 /// Medium / Low foliage sample grids (High reuses storybook [`HIGH_FOLIAGE_BANDS`] for canopy).
 pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
@@ -45,10 +45,10 @@ const OUTER_SPLAY_DISTANCE_FRACTION: f32 = 0.55;
 
 const RACHIS_THICKNESS_CENTER: f32 = 0.02;
 const RACHIS_THICKNESS_SPAN: f32 = 0.004;
-const FOLIAGE_SCALE_CENTER: f32 = 1.6;
+const FOLIAGE_SCALE_CENTER: f32 = 1.2;
 const FOLIAGE_SCALE_SPAN: f32 = 0.40;
-const GROWTH_FROND_COUNT: u32 = 8;
-const RADIUS_SCALE_SPAN: f32 = 0.24;
+const GROWTH_FROND_COUNT: u32 = 6;
+const RADIUS_SCALE_SPAN: f32 = 0.50;
 const FULL_CANOPY_PROXY_RADIUS_SCALE: f32 = 0.70;
 
 /// Deterministic per-node unit interval for jitter lanes.
@@ -123,11 +123,15 @@ fn world_leaf_radius(node: &BallStickNode, leaf_radius_world: f32) -> f32 {
 	node.radius * scale
 }
 
-fn growth_params(node_idx: usize, position: Vec3) -> JungleGrowthVcParams {
+fn growth_params(
+	node_idx: usize,
+	position: Vec3,
+	jungle_growth_radius_scale: f32,
+) -> JungleGrowthVcParams {
 	JungleGrowthVcParams::from_node(
 		node_idx,
 		position,
-		JUNGLE_GROWTH_RADIUS_SCALE,
+		jungle_growth_radius_scale,
 		RADIUS_SCALE_SPAN,
 		FOLIAGE_SCALE_CENTER,
 		FOLIAGE_SCALE_SPAN,
@@ -195,21 +199,24 @@ fn full_canopy_proxy(
 	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
 	half_extents.x *= FULL_CANOPY_PROXY_RADIUS_SCALE;
 	half_extents.z *= FULL_CANOPY_PROXY_RADIUS_SCALE;
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
-	))
+	Some(FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents)))
 }
 
 /// High: every jungle-growth site + banded inner/outer canopy.
 pub(crate) fn foliage_nodes_high(
 	chain: &BallStickChain<StorybookTreeChain>,
 	growth_spawn_fraction: f32,
+	jungle_growth_radius_scale: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
 	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in &growth {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(
+			c.node_idx,
+			c.position,
+			jungle_growth_radius_scale,
+		)));
 	}
 	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
@@ -221,12 +228,17 @@ pub(crate) fn foliage_nodes_high(
 pub(crate) fn foliage_nodes_medium(
 	chain: &BallStickChain<StorybookTreeChain>,
 	growth_spawn_fraction: f32,
+	jungle_growth_radius_scale: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
 	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in banded_candidates(&growth, MEDIUM_GROWTH_BANDS) {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(
+			c.node_idx,
+			c.position,
+			jungle_growth_radius_scale,
+		)));
 	}
 	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
@@ -238,6 +250,7 @@ pub(crate) fn foliage_nodes_medium(
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<StorybookTreeChain>,
 	growth_spawn_fraction: f32,
+	_jungle_growth_radius_scale: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
 	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
@@ -279,7 +292,7 @@ where
 	shape.frond.frond_count = GROWTH_FROND_COUNT;
 
 	let radius_scale =
-		jitter(JUNGLE_GROWTH_RADIUS_SCALE, RADIUS_SCALE_SPAN, mix_unit(node_idx, pos, 37));
+		jitter(DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE, RADIUS_SCALE_SPAN, mix_unit(node_idx, pos, 37));
 
 	let mut growth = JungleGrowth::<BodyM, BodyS, FoliageM, FoliageS>::default();
 	growth.shape = shape;

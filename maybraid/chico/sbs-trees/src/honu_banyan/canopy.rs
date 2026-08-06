@@ -29,8 +29,9 @@ pub(crate) const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::n
 /// Low foliage: cheap-ball kit.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
-/// Growth spawn uniform-scale center (~4/5 of legacy RenderItem `5.0`).
-pub const HONU_GROWTH_RADIUS_SCALE: f32 = 4.0;
+/// Default [`crate::HonuBanyanParams::jungle_growth_radius_scale`].
+pub const DEFAULT_HONU_GROWTH_RADIUS_SCALE: f32 = 4.0;
+/// Jitter half-width around the authored growth radius scale.
 const RADIUS_SCALE_SPAN: f32 = 0.50;
 /// Frond scale relative to the assembly.
 const FOLIAGE_SCALE_CENTER: f32 = 1.6;
@@ -121,11 +122,15 @@ fn world_leaf_radius(node: &BallStickNode, leaf_radius_world: f32) -> f32 {
 	node.radius * scale
 }
 
-fn growth_params(node_idx: usize, position: Vec3) -> JungleGrowthVcParams {
+fn growth_params(
+	node_idx: usize,
+	position: Vec3,
+	jungle_growth_radius_scale: f32,
+) -> JungleGrowthVcParams {
 	JungleGrowthVcParams::from_node(
 		node_idx,
 		position,
-		HONU_GROWTH_RADIUS_SCALE,
+		jungle_growth_radius_scale,
 		RADIUS_SCALE_SPAN,
 		FOLIAGE_SCALE_CENTER,
 		FOLIAGE_SCALE_SPAN,
@@ -227,6 +232,7 @@ fn banded_candidates(
 pub(crate) fn foliage_nodes_high(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
+	jungle_growth_radius_scale: f32,
 	min_height: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
@@ -234,7 +240,11 @@ pub(crate) fn foliage_nodes_high(
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in &growth {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(
+			c.node_idx,
+			c.position,
+			jungle_growth_radius_scale,
+		)));
 	}
 	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
@@ -246,6 +256,7 @@ pub(crate) fn foliage_nodes_high(
 pub(crate) fn foliage_nodes_medium(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
+	jungle_growth_radius_scale: f32,
 	min_height: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
@@ -253,7 +264,11 @@ pub(crate) fn foliage_nodes_medium(
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in banded_candidates(&growth, MEDIUM_GROWTH_BANDS) {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(
+			c.node_idx,
+			c.position,
+			jungle_growth_radius_scale,
+		)));
 	}
 	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
@@ -268,6 +283,7 @@ pub(crate) fn foliage_nodes_medium(
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
+	_jungle_growth_radius_scale: f32,
 	min_height: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
@@ -313,7 +329,7 @@ where
 	shape.frond.frond_count = GROWTH_FROND_COUNT;
 
 	let radius_scale =
-		jitter(HONU_GROWTH_RADIUS_SCALE, RADIUS_SCALE_SPAN, mix_unit(node_idx, pos, 37));
+		jitter(DEFAULT_HONU_GROWTH_RADIUS_SCALE, RADIUS_SCALE_SPAN, mix_unit(node_idx, pos, 37));
 
 	let mut growth = JungleGrowth::<BodyM, BodyS, FoliageM, FoliageS>::default();
 	growth.shape = shape;
@@ -422,6 +438,7 @@ mod vc_growth_tests {
 		let nodes = foliage_nodes_high(
 			&tree.chain,
 			tree.growth_spawn_fraction,
+			tree.jungle_growth_radius_scale,
 			tree.geometry.crown_floor_world_y(),
 			tree.geometry.leaf_ball_size(),
 		);

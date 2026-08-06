@@ -12,7 +12,7 @@ use crate::palm_tree::world_space_frond_shape;
 
 /// VC-simplified palm crown (fewer leaflets / spine segments than RenderItem jungle growth).
 const VC_FROND_COUNT: u32 = 5;
-const VC_LEAFLET_COUNT: u32 = 8;
+const VC_LEAFLET_COUNT: u32 = 5;
 const VC_SPINE_SEGMENTS: u32 = 4;
 /// Upward spears approximating Buddha's-hand fingers.
 const SPEAR_COUNT: u32 = 2;

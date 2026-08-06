@@ -22,7 +22,9 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium};
+use canopy::{
+	foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium, DEFAULT_HONU_GROWTH_RADIUS_SCALE,
+};
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
@@ -36,15 +38,20 @@ pub struct HonuBanyanParams {
 	pub geometry: HonuBanyanSbs,
 
 	/// Fraction of qualifying outer-ring nodes that spawn jungle growth.
-	#[arg(long, default_value_t = 0.35)]
+	#[arg(long, default_value_t = 0.28)]
 	pub growth_spawn_fraction: f32,
+
+	/// Assembly scale for jungle-growth fronds (Honu-specific; independent of Storybook).
+	#[arg(long, default_value_t = DEFAULT_HONU_GROWTH_RADIUS_SCALE)]
+	pub jungle_growth_radius_scale: f32,
 }
 
 impl Default for HonuBanyanParams {
 	fn default() -> Self {
 		Self {
 			geometry: HonuBanyanSbs::default(),
-			growth_spawn_fraction: 0.35,
+			growth_spawn_fraction: 0.28,
+			jungle_growth_radius_scale: DEFAULT_HONU_GROWTH_RADIUS_SCALE,
 		}
 	}
 }
@@ -62,6 +69,7 @@ pub struct HonuBanyan {
 	pub geometry: HonuBanyanSbs,
 	pub chain: BallStickChain<HonuBanyanChain>,
 	pub growth_spawn_fraction: f32,
+	pub jungle_growth_radius_scale: f32,
 }
 
 impl HonuBanyan {
@@ -70,6 +78,7 @@ impl HonuBanyan {
 			geometry: params.geometry.clone(),
 			chain: params.geometry.build_chain(),
 			growth_spawn_fraction: params.growth_spawn_fraction,
+			jungle_growth_radius_scale: params.jungle_growth_radius_scale,
 		}
 	}
 
@@ -116,13 +125,16 @@ impl HonuBanyan {
 		let min_y = self.geometry.crown_floor_world_y();
 		let leaf_r = self.geometry.leaf_ball_size();
 		let g = self.growth_spawn_fraction;
+		let growth_r = self.jungle_growth_radius_scale;
 		match level {
-			LodSceneLevel::High => foliage_nodes_high(&self.chain, g, min_y, leaf_r),
-			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, g, min_y, leaf_r),
+			LodSceneLevel::High => foliage_nodes_high(&self.chain, g, growth_r, min_y, leaf_r),
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, g, growth_r, min_y, leaf_r),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, g, min_y, leaf_r),
+			| LodSceneLevel::Resolution(_) => {
+				foliage_nodes_low(&self.chain, g, growth_r, min_y, leaf_r)
+			}
 		}
 	}
 }
