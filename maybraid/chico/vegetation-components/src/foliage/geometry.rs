@@ -73,6 +73,10 @@ impl FoliageGeometry {
 		Self::plane_splay(0, 0.8, 0.9)
 	}
 
+	pub fn is_layered_ball(&self) -> bool {
+		matches!(self, Self::LayeredBall)
+	}
+
 	pub fn is_frond_kit(&self) -> bool {
 		matches!(self, Self::StraightFrond | Self::StraightFrondSegment)
 	}

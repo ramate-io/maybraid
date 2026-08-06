@@ -33,6 +33,7 @@ pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::LiamsConiferStd;
 pub use northern_conifer::{NorthernConifer, NorthernConiferParams};
 pub use palm_bush::PalmBushStd;
+pub use palm_crown::{PalmCrown, PalmCrownParams};
 pub use penmarch_torch::{PenmarchTorch, PenmarchTorchParams};
 pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedParams};
 pub use simplemans_hedge::SimplemansHedgeStd;

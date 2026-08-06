@@ -20,10 +20,10 @@ use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use config::FrondConfig;
-use crown::{crown_directions, length_scale};
 
-pub use crown::align_frond_direction;
+pub use crown::{align_frond_direction, crown_directions, length_scale};
 use spawn::MergedFrond;
+pub use spine::spine_at;
 
 pub use config::FrondConfig as FrondGeometry;
 pub use construction::{FrondCluster, FrondElement};
@@ -97,6 +97,15 @@ impl Default for FrondCrownShape {
 	}
 }
 
+/// One straight frond segment along a drooping rachis (VegetationComponents GLB emission).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FrondRachisSegment {
+	pub start: Vec3,
+	pub direction: Vec3,
+	pub length: f32,
+	pub width: f32,
+}
+
 impl FrondCrownShape {
 	pub fn frond_config(&self, scale: f32) -> FrondConfig {
 		FrondConfig {
@@ -108,6 +117,56 @@ impl FrondCrownShape {
 			twist: self.twist,
 			leaflet_count: self.leaflet_count.max(2),
 		}
+	}
+
+	/// Connected rachis runs (one chain per frond) for VegetationComponents at `origin`.
+	///
+	/// Samples the same droop / arch spine as the procedural mesh, then emits straight
+	/// frond-segment chords along that polyline (kit +Y along each chord).
+	pub fn frond_runs_at(&self, origin: Vec3) -> Vec<Vec<FrondRachisSegment>> {
+		let config = self.frond_config(1.0);
+		let rings = self.spine_segments.max(1) as usize;
+		let width = config.width.max(1e-6);
+		let directions = crown_directions(
+			self.frond_count,
+			self.seed,
+			self.downward_tilt_radians,
+			self.outward_spread_radians,
+			self.emission_lift_radians,
+		);
+
+		let mut runs = Vec::with_capacity(directions.len());
+		for (i, direction) in directions.into_iter().enumerate() {
+			let mut element_config = config;
+			element_config.length *= length_scale(i as u32, self.seed, 0.82, 1.08);
+			let rotation = align_frond_direction(direction);
+			let mut points = Vec::with_capacity(rings + 1);
+			for ring in 0..=rings {
+				let t = ring as f32 / rings as f32;
+				points.push(origin + rotation * spine_at(&element_config, t));
+			}
+
+			let mut run = Vec::with_capacity(rings);
+			for seg in 0..rings {
+				let start = points[seg];
+				let end = points[seg + 1];
+				let ray = end - start;
+				let length = ray.length();
+				if length < 1e-5 {
+					continue;
+				}
+				run.push(FrondRachisSegment {
+					start,
+					direction: ray / length,
+					length,
+					width,
+				});
+			}
+			if !run.is_empty() {
+				runs.push(run);
+			}
+		}
+		runs
 	}
 }
 

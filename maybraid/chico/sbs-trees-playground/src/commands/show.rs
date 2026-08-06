@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use chico_sbs_trees::{
-	KamakuraTorchParams, NorthernConiferParams, PenmarchTorchParams, RorysHeadTrainedParams,
-	SopesBanyanParams, StorybookTreeParams, TuftPatchParams, VaseTreeParams,
+	KamakuraTorchParams, NorthernConiferParams, PalmCrownParams, PenmarchTorchParams,
+	RorysHeadTrainedParams, SopesBanyanParams, StorybookTreeParams, TuftPatchParams,
+	VaseTreeParams,
 };
 use chico_vegetation_components::{
 	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
@@ -31,6 +32,8 @@ pub enum Show {
 	NorthernConifer(ShowNorthernConifer),
 	/// Tuft Patch via VegetationComponents / LodScene (straight frond segments).
 	TuftPatch(ShowTuftPatch),
+	/// Palm Crown via VegetationComponents / LodScene (fronds; layered ball at Low).
+	PalmCrown(ShowPalmCrown),
 }
 
 #[derive(Clone, Args)]
@@ -89,6 +92,13 @@ pub struct ShowTuftPatch {
 	pub patch: TuftPatchParams,
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowPalmCrown {
+	#[command(flatten)]
+	pub crown: PalmCrownParams,
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -100,6 +110,7 @@ impl Show {
 			Self::VaseTree(args) => ShowSubject::VaseTree(args.tree),
 			Self::NorthernConifer(args) => ShowSubject::NorthernConifer(args.tree),
 			Self::TuftPatch(args) => ShowSubject::TuftPatch(args.patch),
+			Self::PalmCrown(args) => ShowSubject::PalmCrown(args.crown),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -120,6 +131,7 @@ pub enum ShowSubject {
 	VaseTree(VaseTreeParams),
 	NorthernConifer(NorthernConiferParams),
 	TuftPatch(TuftPatchParams),
+	PalmCrown(PalmCrownParams),
 }
 
 #[derive(Component)]
@@ -167,6 +179,10 @@ pub fn sync_show(
 			"tuft-patch:{:?}|clumps={}|patch_extent_xz={}",
 			t.shape, t.clump_count, t.patch_extent_xz
 		)),
+		Some(ShowSubject::PalmCrown(t)) => Some(format!(
+			"palm-crown:{:?}|rings={}|spacing={}",
+			t.shape, t.ring_count, t.ring_spacing
+		)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -192,5 +208,6 @@ pub fn sync_show(
 		ShowSubject::VaseTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::NorthernConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::TuftPatch(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::PalmCrown(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }

@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::{FrondCrown, FrondCrownShape};
 use render_item::CascadeChunk;
 
-/// Per-ring seed salt mixed into foliage noise (shared by Date, Waialea, and Palm Bush).
+/// Per-ring seed salt mixed into foliage noise (shared by Date, Waialea, Palm Bush, and PalmCrown).
 pub const FROND_RING_SEED_SALT: i32 = 17;
 
 /// Spawn one [`FrondCrown`] mesh per ring as children of `parent`, placed at the
