@@ -4,7 +4,7 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage keeps joint
-//! candidates but uses the same cheap-ball banding + layered proxy policy.
+//! candidates with cheap-ball banding and no layered mass proxies.
 
 mod canopy;
 
