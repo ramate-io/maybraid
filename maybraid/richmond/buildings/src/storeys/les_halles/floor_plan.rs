@@ -170,11 +170,18 @@ impl LesHallesFloorPlan {
 		// so commercial strips never see boarded or oversized voids.
 		sync_connectable_openings_from_mapped(&mut openings, &gallery);
 		let balcony_floors = Self::build_balcony_floors(center_xz, gallery_inner, courtyard, y0);
-		// Mid-side shafts need radial seals in the strip. Corner shafts already
-		// sit in the cleared corner square — dual-side radials form a 2×2 wall
-		// matrix in that buffer, so skip them.
+		// Mid-side: both radial faces of each shaft. Corners: one end wall per
+		// abutting run, seated where the inner wall clear begins (end of the
+		// solid gallery wall) — not on the shaft faces (that boxed the corner).
 		let shaft_walls = match params.shaft_placement {
-			LesHallesShaftPlacement::Corners => Vec::new(),
+			LesHallesShaftPlacement::Corners => Self::build_corner_shaft_end_walls(
+				center_xz,
+				outer,
+				gallery_inner,
+				height,
+				params.corner_clear_len(),
+				&shaft_slots,
+			),
 			LesHallesShaftPlacement::MidSides => {
 				Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds)
 			}
@@ -1068,6 +1075,80 @@ impl LesHallesFloorPlan {
 		walls
 	}
 
+	/// Radial end walls at the terminus of each gallery run that abuts a corner shaft.
+	///
+	/// Placement matches [`corner_occupied_spans`]: the free inner-wall run ends
+	/// where the F2C clear starts (`±half ∓ clear`). One wall per abutting side,
+	/// spanning outer → gallery-inner depth.
+	fn build_corner_shaft_end_walls(
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_inner: Vec2,
+		height: f32,
+		clear_len: f32,
+		shaft_slots: &[usize],
+	) -> Vec<Rectangle> {
+		let y0 = center_xz.y;
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let gx0 = center_xz.x - gallery_inner.x * 0.5;
+		let gx1 = center_xz.x + gallery_inner.x * 0.5;
+		let gz0 = center_xz.z - gallery_inner.y * 0.5;
+		let gz1 = center_xz.z + gallery_inner.y * 0.5;
+		let t = DEFAULT_PANEL_THICKNESS;
+		let mut walls = Vec::new();
+
+		for &slot in shaft_slots {
+			let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
+				continue;
+			};
+			for (side, end_i) in [(side_a, end_a), (side_b, end_b)] {
+				let half = match side {
+					OrthoSide::North | OrthoSide::South => gallery_inner.x * 0.5,
+					OrthoSide::East | OrthoSide::West => gallery_inner.y * 0.5,
+				};
+				let clear = clear_len.min(half * 0.45).max(1.2);
+				// Along-coord of the solid wall terminus (inner edge of the clear).
+				let along = if end_i == 0 {
+					-half + clear
+				} else {
+					half - clear
+				};
+				let wall = match side {
+					OrthoSide::South => radial_wall(
+						Vec3::new(center_xz.x + along, y0, oz0),
+						Vec3::new(0.0, 0.0, gz0 - oz0),
+						height,
+						t,
+					),
+					OrthoSide::North => radial_wall(
+						Vec3::new(center_xz.x + along, y0, oz1),
+						Vec3::new(0.0, 0.0, gz1 - oz1),
+						height,
+						t,
+					),
+					OrthoSide::East => radial_wall(
+						Vec3::new(ox1, y0, center_xz.z + along),
+						Vec3::new(gx1 - ox1, 0.0, 0.0),
+						height,
+						t,
+					),
+					OrthoSide::West => radial_wall(
+						Vec3::new(ox0, y0, center_xz.z + along),
+						Vec3::new(gx0 - ox0, 0.0, 0.0),
+						height,
+						t,
+					),
+				};
+				walls.push(wall);
+			}
+		}
+		walls.retain(|w| w.edge.length() > EPS);
+		walls
+	}
+
 	fn build_gallery(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -1560,14 +1641,7 @@ mod tests {
 			.map(|(id, _)| id.clone())
 			.expect("outer aperture");
 		assert!(plan.gallery.mapped_opening(&outer_id).is_some());
-		if matches!(
-			plan.parameterized.shaft_placement,
-			LesHallesShaftPlacement::MidSides
-		) {
-			assert!(!plan.shaft_walls.is_empty());
-		} else {
-			assert!(plan.shaft_walls.is_empty());
-		}
+		assert!(!plan.shaft_walls.is_empty());
 	}
 
 	#[test]
@@ -1756,9 +1830,39 @@ mod tests {
 			.filter(|(id, _)| id.as_str().contains("shaft_clear_"))
 			.count();
 		assert_eq!(clears, 8, "two clears per active corner");
+		assert_eq!(
+			plan.shaft_walls.len(),
+			plan.shaft_bounds.len() * 2,
+			"one end wall per abutting gallery run (2 per corner shaft)"
+		);
+	}
+
+	#[test]
+	fn corner_end_walls_sit_at_inner_wall_terminus() {
+		let params = fixed_params(LesHallesShaftPlacement::Corners);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(
+			params.clone(),
+			&confines_with_all_shafts(&params),
+		)
+		.unwrap();
+		let half = plan.gallery_inner.x * 0.5;
+		let clear = plan
+			.parameterized
+			.corner_clear_len()
+			.min(half * 0.45)
+			.max(1.2);
+		// SE south run ends at +X = center + (half - clear).
+		let expected_x = plan.center_xz.x + half - clear;
+		let gz0 = plan.center_xz.z - plan.gallery_inner.y * 0.5;
+		let oz0 = plan.center_xz.z - plan.outer.y * 0.5;
+		let se_south = plan.shaft_walls.iter().find(|w| {
+			(w.origin.x - expected_x).abs() < 1e-3
+				&& (w.origin.z - oz0).abs() < 1e-3
+				&& (w.edge.z - (gz0 - oz0)).abs() < 1e-3
+		});
 		assert!(
-			plan.shaft_walls.is_empty(),
-			"corner shafts must not emit radial 2×2 wall matrices"
+			se_south.is_some(),
+			"SE south end wall must sit at inner-wall clear start x={expected_x}"
 		);
 	}
 
