@@ -61,7 +61,7 @@ pub struct RingAnchorParams {
 		feature = "clap",
 		arg(
 			long = "rings",
-			default_value = "3x7",
+			default_value = "3x5",
 			value_parser = parse_ring_layout,
 			value_name = "RINGSXANCHORS"
 		)
@@ -82,7 +82,7 @@ pub struct RingAnchorParams {
 impl Default for RingAnchorParams {
 	fn default() -> Self {
 		Self {
-			layout: RingLayout::new(3, 7),
+			layout: RingLayout::new(3, 5),
 			height_range: UnitRange::new(
 				DEFAULT_FIRST_RING_HEIGHT_FRACTION,
 				DEFAULT_LAST_RING_HEIGHT_FRACTION,
@@ -129,7 +129,7 @@ pub struct HonuGrowthParams {
 		feature = "clap",
 		arg(
 			long = "depth",
-			default_value = "5..8",
+			default_value = "4..6",
 			value_parser = parse_depth_range,
 			value_name = "FIRST..LAST"
 		)

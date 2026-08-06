@@ -4,9 +4,9 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Structural LOD:
-//! - **High** — trunk + descenders + banded branches; jungle-growth clusters + banded canopy
+//! - **High** — full sticks (topology already thinned vs legacy 3×7 / depth 5..8); jungle growth + banded canopy
 //! - **Medium** — trunk + banded sticks; banded growth/canopy + mid layered proxy
-//! - **Low** — trunk + ~1/4 descenders; cheap growth/canopy balls + mid proxy
+//! - **Low** — trunk + ~1/4 descenders; growth/canopy balls + mid proxy
 
 mod canopy;
 #[allow(dead_code)]
@@ -24,8 +24,7 @@ use lod::gen::LodSceneLevel;
 
 use canopy::{foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium};
 use stick::{
-	keep_stick_on_low, stick_node_for_segment, stick_nodes_high_banded, stick_nodes_medium_banded,
-	stick_role_for_segment,
+	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
 
 /// Authoring / CLI parameters for Honu Banyan.
@@ -37,7 +36,7 @@ pub struct HonuBanyanParams {
 	pub geometry: HonuBanyanSbs,
 
 	/// Fraction of qualifying outer-ring nodes that spawn jungle growth.
-	#[arg(long, default_value_t = 0.80)]
+	#[arg(long, default_value_t = 0.70)]
 	pub growth_spawn_fraction: f32,
 }
 
@@ -45,7 +44,7 @@ impl Default for HonuBanyanParams {
 	fn default() -> Self {
 		Self {
 			geometry: HonuBanyanSbs::default(),
-			growth_spawn_fraction: 0.80,
+			growth_spawn_fraction: 0.70,
 		}
 	}
 }
@@ -85,11 +84,10 @@ impl HonuBanyan {
 	}
 
 	fn stick_nodes_high(&self) -> Vec<StickNode> {
-		stick_nodes_high_banded(
-			self.chain
-				.segments_with_hysteresis()
-				.map(|(segment, parent, _)| (segment, parent)),
-		)
+		self.chain
+			.segments_with_hysteresis()
+			.filter_map(|(segment, parent, _)| stick_node_for_segment(&segment, parent))
+			.collect()
 	}
 
 	fn stick_nodes_medium(&self) -> Vec<StickNode> {

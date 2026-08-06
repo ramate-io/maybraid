@@ -15,8 +15,6 @@ use chico_stick_components::chico_stick::ChicoStick;
 use chico_vegetation_components::{StickGeometry, StickNode};
 use procedural_common::NoiseParams;
 
-/// High sticks: trunk + descenders always; band BetweenNodes (Honu High is otherwise too dense).
-pub(crate) const HIGH_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(18, 6);
 /// Medium sticks: coarser azimuth × height outer samples than foliage (aggressive drop-off).
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
@@ -128,14 +126,6 @@ where
 		)
 	}));
 	kept
-}
-
-/// High: trunk + all descenders; banded BetweenNodes.
-pub(crate) fn stick_nodes_high_banded<'a, I>(segments: I) -> Vec<StickNode>
-where
-	I: IntoIterator<Item = (BallStickSegment<'a>, &'a HonuBanyanChain)>,
-{
-	stick_nodes_banded(segments, HIGH_STICK_BANDS, true)
 }
 
 /// Medium: trunk always + outermost non-trunk sticks per cell (descenders compete in bands).

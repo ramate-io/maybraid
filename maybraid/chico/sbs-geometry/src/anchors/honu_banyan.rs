@@ -28,8 +28,8 @@ pub const DEFAULT_LAST_RING_HEIGHT_FRACTION: f32 = 0.95;
 pub const DEFAULT_PROJECTION_MIN_FRACTION: f32 = 0.45;
 pub const DEFAULT_PROJECTION_MAX_FRACTION: f32 = 0.92;
 pub const DEFAULT_PROJECTION_MIX_SCALE: f32 = 0.30;
-pub const DEFAULT_MAX_DEPTH_FIRST_RING: usize = 5;
-pub const DEFAULT_MAX_DEPTH_LAST_RING: usize = 8;
+pub const DEFAULT_MAX_DEPTH_FIRST_RING: usize = 4;
+pub const DEFAULT_MAX_DEPTH_LAST_RING: usize = 6;
 /// Noise threshold for descender candidacy (same gate as [Sope's Banyan](super::sopes_banyan); lower ⇒ more descenders).
 pub const DEFAULT_DESCENDER_THRESHOLD: f32 = 0.06;
 pub const DEFAULT_STALK_SECTION_COUNT: u32 = 6;
@@ -111,7 +111,7 @@ impl Default for HonuBanyanProtoAnchors {
 			first_ring_height_fraction: DEFAULT_FIRST_RING_HEIGHT_FRACTION,
 			last_ring_height_fraction: DEFAULT_LAST_RING_HEIGHT_FRACTION,
 			ring_count: 3,
-			anchors_per_ring: 7,
+			anchors_per_ring: 5,
 			projection_min_fraction: DEFAULT_PROJECTION_MIN_FRACTION,
 			projection_max_fraction: DEFAULT_PROJECTION_MAX_FRACTION,
 			projection_mix_scale: DEFAULT_PROJECTION_MIX_SCALE,

@@ -19,23 +19,31 @@ use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
 use procedural_common::NoiseParams;
 
 use crate::jungle_growth_vc::{
-	jungle_growth_ball_only, jungle_growth_foliage_nodes, JungleGrowthVcParams,
+	jungle_growth_ball_only, jungle_growth_foliage_nodes, JungleGrowthBallKit, JungleGrowthVcParams,
 };
 
-/// High outer / inner canopy bands (growth nodes emit separately at High).
+/// High outer / inner canopy bands.
 pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
-/// Medium foliage bands (growth + canopy compete in one sample set).
+/// Medium foliage bands (growth + canopy).
 pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(17, 4);
+/// Medium growth: keep a visible epiphyte count without matching canopy density.
+pub(crate) const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Low foliage: cheap-ball kit.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
+/// Low growth: sparse balls only.
+pub(crate) const LOW_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(4, 2);
 
-/// Growth spawn uniform-scale center (legacy `HONU_GROWTH_RADIUS_SCALE`).
-pub const HONU_GROWTH_RADIUS_SCALE: f32 = 5.0;
-const RADIUS_SCALE_SPAN: f32 = 0.30;
-const FOLIAGE_SCALE_CENTER: f32 = 5.0;
-const FOLIAGE_SCALE_SPAN: f32 = 1.4;
+/// Growth spawn uniform-scale center (~1/10 of legacy RenderItem `5.0`).
+pub const HONU_GROWTH_RADIUS_SCALE: f32 = 0.5;
+const RADIUS_SCALE_SPAN: f32 = 0.06;
+/// Frond scale relative to the (now smaller) assembly.
+const FOLIAGE_SCALE_CENTER: f32 = 1.0;
+const FOLIAGE_SCALE_SPAN: f32 = 0.28;
 
-const MIN_RING_U_FOR_GROWTH: f32 = 0.82;
+const GROWTH_BALL_KIT: JungleGrowthBallKit = JungleGrowthBallKit::Layered;
+
+/// Middle + upper rings (with 3 rings, `u ∈ {0, 0.5, 1}` — need ≤ 0.5 to see growth).
+const MIN_RING_U_FOR_GROWTH: f32 = 0.50;
 const MIN_HEIGHT_FRACTION_FOR_FOLIAGE: f32 = 0.70;
 const OUTER_SPLAY_DISTANCE_FRACTION: f32 = 0.50;
 const RACHIS_THICKNESS_CENTER: f32 = 0.02;
@@ -249,7 +257,10 @@ pub(crate) fn foliage_nodes_high(
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in &growth {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+		nodes.extend(jungle_growth_foliage_nodes(
+			growth_params(c.node_idx, c.position),
+			GROWTH_BALL_KIT,
+		));
 	}
 	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
@@ -267,8 +278,11 @@ pub(crate) fn foliage_nodes_medium(
 	let (growth, canopy) =
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
-	for c in banded_candidates(&growth, MEDIUM_FOLIAGE_BANDS) {
-		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+	for c in banded_candidates(&growth, MEDIUM_GROWTH_BANDS) {
+		nodes.extend(jungle_growth_foliage_nodes(
+			growth_params(c.node_idx, c.position),
+			GROWTH_BALL_KIT,
+		));
 	}
 	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
@@ -279,7 +293,7 @@ pub(crate) fn foliage_nodes_medium(
 	nodes
 }
 
-/// Low: banded cheap canopy / growth balls + mid proxy.
+/// Low: sparse growth balls + banded cheap canopy + mid proxy.
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
@@ -289,8 +303,11 @@ pub(crate) fn foliage_nodes_low(
 	let (growth, canopy) =
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
-	for c in banded_candidates(&growth, LOW_FOLIAGE_BANDS) {
-		nodes.push(jungle_growth_ball_only(growth_params(c.node_idx, c.position)));
+	for c in banded_candidates(&growth, LOW_GROWTH_BANDS) {
+		nodes.push(jungle_growth_ball_only(
+			growth_params(c.node_idx, c.position),
+			GROWTH_BALL_KIT,
+		));
 	}
 	for c in banded_candidates(&canopy, LOW_FOLIAGE_BANDS) {
 		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, true));

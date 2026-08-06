@@ -35,10 +35,10 @@ use crate::palm_tree::{layered_proxy_balls, world_space_frond_shape};
 use crate::torch_tree::structural_lod_probe;
 use foliage::{branch_direction, frond_shape_for_joint};
 
-/// High: denser structural joint samples before ring packing.
-const HIGH_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
-/// Medium: coarser joint samples (~half High cells).
-const MEDIUM_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
+/// High: denser structural joint samples before ring packing (~+15% vs prior 24×8).
+const HIGH_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(28, 9);
+/// Medium: ~30% denser than prior 15×4 joint samples.
+const MEDIUM_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(20, 4);
 
 /// [`FriendsConiferSbs`] with Temperate Conifer limb/ray defaults (clap `flatten` base).
 #[derive(Clone, Debug, PartialEq, Args)]
@@ -74,10 +74,10 @@ pub struct TemperateConiferParams {
 	#[arg(long, default_value_t = 1.0, help_heading = "Foliage")]
 	pub frond_world_scale: f32,
 
-	/// Fronds placed per ball-stick joint (RFC `1..2`).
+	/// Fronds placed per ball-stick joint (slightly denser than RFC `1..2`).
 	#[arg(
 		long = "fronds-per-joint",
-		default_value = "1..2",
+		default_value = "2..3",
 		value_parser = parse_unit_range,
 		value_name = "MIN..MAX",
 		help_heading = "Foliage"
@@ -108,7 +108,7 @@ impl Default for TemperateConiferParams {
 		Self {
 			geometry: TemperateConiferGeometry::default(),
 			frond_world_scale: 1.0,
-			fronds_per_joint: UnitRange::new(1.0, 2.0),
+			fronds_per_joint: UnitRange::new(2.0, 3.0),
 			frond_length_fraction: UnitRange::new(0.035, 0.07),
 			frond_spawn_fraction: 1.0,
 			apex_canopy_spawn_fraction: DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
@@ -239,7 +239,7 @@ impl TemperateConifer {
 			droop: 0.28,
 			arch_lift: 0.06,
 			twist: 0.12,
-			leaflet_count: 5,
+			leaflet_count: 6,
 			spine_segments: 3,
 			shoot_half_radius: 0.008,
 			rachis_half_thickness: 0.004,

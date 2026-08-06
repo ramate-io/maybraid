@@ -11,7 +11,7 @@ const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.010;
 const FROND_DROOP: f32 = 0.24;
 const FROND_TWIST: f32 = 0.14;
 /// VC-simplified fronds (fewer leaflets / spine segments → fewer collection members).
-const FROND_LEAFLET_COUNT: u32 = 5;
+const FROND_LEAFLET_COUNT: u32 = 6;
 const FROND_SPINE_SEGMENTS: u32 = 3;
 
 /// Deterministic frond count in `fronds_per_joint` (inclusive range).
