@@ -170,8 +170,15 @@ impl LesHallesFloorPlan {
 		// so commercial strips never see boarded or oversized voids.
 		sync_connectable_openings_from_mapped(&mut openings, &gallery);
 		let balcony_floors = Self::build_balcony_floors(center_xz, gallery_inner, courtyard, y0);
-		let shaft_walls =
-			Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds);
+		// Mid-side shafts need radial seals in the strip. Corner shafts already
+		// sit in the cleared corner square — dual-side radials form a 2×2 wall
+		// matrix in that buffer, so skip them.
+		let shaft_walls = match params.shaft_placement {
+			LesHallesShaftPlacement::Corners => Vec::new(),
+			LesHallesShaftPlacement::MidSides => {
+				Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds)
+			}
+		};
 
 		let plan = Self {
 			parameterized: params,
@@ -217,16 +224,16 @@ impl LesHallesFloorPlan {
 
 		let mut within = Vec::new();
 
-		// Commercial strips: N/S run to outer corners (unless an active corner
-		// shaft owns that square); E/W stay between gallery_inner ends.
+		// Commercial strips stop at the same shaft clears as the inner wall
+		// (corner buffer / mid-side shaft spans).
 		let sections = Self::commercial_fill_sections(
 			self.center_xz,
 			self.outer,
 			self.gallery_inner,
-			gx,
 			&self.shaft_bounds,
 			&self.shaft_slots,
 			self.parameterized.shaft_placement,
+			self.parameterized.corner_clear_len(),
 		);
 		for section in &sections {
 			let bounds = Self::gallery_strip_bounds(
@@ -794,51 +801,65 @@ impl LesHallesFloorPlan {
 		sections
 	}
 
-	/// ExternalSpace gallery strips for commercial fill.
+	/// ExternalSpace gallery strips for commercial / livable fill.
 	///
-	/// - **N/S:** along = outer free runs (corners included); active corner shafts
-	///   trim that end by `gallery_width`.
-	/// - **E/W:** along clamped to `gallery_inner` so corners are not double-covered.
+	/// - **Corners:** stop at the same clear buffer as the inner wall
+	///   (`corner_clear_len` past `gallery_inner`). N/S still use the outer
+	///   along-axis so inactive corner ends keep the outer corner square; E/W
+	///   stay on `gallery_inner` so corners are not double-covered.
+	/// - **MidSides:** N/S run the outer length with shaft AABB clears; E/W stay
+	///   on `gallery_inner`.
 	fn commercial_fill_sections(
 		center_xz: Vec3,
 		outer: Vec2,
 		gallery_inner: Vec2,
-		gallery_width: f32,
 		shaft_bounds: &[Aabb3d],
 		shaft_slots: &[usize],
 		placement: LesHallesShaftPlacement,
+		corner_clear_len: f32,
 	) -> Vec<InnerSection> {
 		let mut sections = Vec::new();
 		for side in RectRingFloorSide::all() {
-			let (half, occupied) = match side {
-				OrthoSide::North | OrthoSide::South => {
-					let half = outer.x * 0.5;
-					let mut occupied = match placement {
-						LesHallesShaftPlacement::Corners => Vec::new(),
-						LesHallesShaftPlacement::MidSides => {
-							Self::shaft_along_spans(center_xz, outer, side, shaft_bounds)
-						}
-					};
-					if matches!(placement, LesHallesShaftPlacement::Corners) {
-						occupied.extend(corner_gallery_trims(
-							side,
+			let (half, occupied) = match placement {
+				LesHallesShaftPlacement::Corners => match side {
+					OrthoSide::North | OrthoSide::South => {
+						let half = outer.x * 0.5;
+						let gi_half = gallery_inner.x * 0.5;
+						(
 							half,
-							gallery_width,
-							shaft_slots,
-						));
+							corner_strip_occupied_spans(
+								side,
+								half,
+								gi_half,
+								corner_clear_len,
+								shaft_slots,
+							),
+						)
 					}
-					(half, occupied)
-				}
-				OrthoSide::East | OrthoSide::West => {
-					let half = gallery_inner.y * 0.5;
-					let occupied = match placement {
-						LesHallesShaftPlacement::Corners => Vec::new(),
-						LesHallesShaftPlacement::MidSides => {
-							Self::shaft_along_spans(center_xz, gallery_inner, side, shaft_bounds)
-						}
-					};
-					(half, occupied)
-				}
+					OrthoSide::East | OrthoSide::West => {
+						let half = gallery_inner.y * 0.5;
+						(
+							half,
+							corner_occupied_spans(side, half, corner_clear_len, shaft_slots),
+						)
+					}
+				},
+				LesHallesShaftPlacement::MidSides => match side {
+					OrthoSide::North | OrthoSide::South => {
+						let half = outer.x * 0.5;
+						(
+							half,
+							Self::shaft_along_spans(center_xz, outer, side, shaft_bounds),
+						)
+					}
+					OrthoSide::East | OrthoSide::West => {
+						let half = gallery_inner.y * 0.5;
+						(
+							half,
+							Self::shaft_along_spans(center_xz, gallery_inner, side, shaft_bounds),
+						)
+					}
+				},
 			};
 			sections.extend(free_sections_from_occupied(side, half, &occupied));
 		}
@@ -1154,36 +1175,6 @@ fn corner_clear_ends(slot: usize) -> Option<(OrthoSide, usize, OrthoSide, usize)
 	}
 }
 
-/// Trim N/S commercial strips so active corner shafts own the corner gallery square.
-fn corner_gallery_trims(
-	side: OrthoSide,
-	half: f32,
-	gallery_width: f32,
-	shaft_slots: &[usize],
-) -> Vec<(f32, f32)> {
-	if !matches!(side, OrthoSide::North | OrthoSide::South) {
-		return Vec::new();
-	}
-	let trim = gallery_width.min(half * 0.45).max(1.0);
-	let mut occupied = Vec::new();
-	for &slot in shaft_slots {
-		let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
-			continue;
-		};
-		for (s, end_i) in [(side_a, end_a), (side_b, end_b)] {
-			if s != side {
-				continue;
-			}
-			if end_i == 0 {
-				occupied.push((-half, -half + trim));
-			} else {
-				occupied.push((half - trim, half));
-			}
-		}
-	}
-	occupied
-}
-
 fn corner_occupied_spans(
 	side: OrthoSide,
 	half: f32,
@@ -1204,6 +1195,40 @@ fn corner_occupied_spans(
 				occupied.push((-half, -half + clear));
 			} else {
 				occupied.push((half - clear, half));
+			}
+		}
+	}
+	occupied
+}
+
+/// N/S strip occupied spans for corner shafts on the **outer** along-axis.
+///
+/// Removes the corner gallery square plus the wall clear buffer
+/// (`gallery_inner` end ± `clear_len`) so residuals stop where the inner wall
+/// already opens. Inactive corners keep the outer end free.
+fn corner_strip_occupied_spans(
+	side: OrthoSide,
+	outer_half: f32,
+	gallery_inner_half: f32,
+	clear_len: f32,
+	shaft_slots: &[usize],
+) -> Vec<(f32, f32)> {
+	let clear = clear_len
+		.min(gallery_inner_half * 0.45)
+		.max(1.2);
+	let mut occupied = Vec::new();
+	for &slot in shaft_slots {
+		let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
+			continue;
+		};
+		for (s, end_i) in [(side_a, end_a), (side_b, end_b)] {
+			if s != side {
+				continue;
+			}
+			if end_i == 0 {
+				occupied.push((-outer_half, -gallery_inner_half + clear));
+			} else {
+				occupied.push((gallery_inner_half - clear, outer_half));
 			}
 		}
 	}
@@ -1535,7 +1560,14 @@ mod tests {
 			.map(|(id, _)| id.clone())
 			.expect("outer aperture");
 		assert!(plan.gallery.mapped_opening(&outer_id).is_some());
-		assert!(!plan.shaft_walls.is_empty());
+		if matches!(
+			plan.parameterized.shaft_placement,
+			LesHallesShaftPlacement::MidSides
+		) {
+			assert!(!plan.shaft_walls.is_empty());
+		} else {
+			assert!(plan.shaft_walls.is_empty());
+		}
 	}
 
 	#[test]
@@ -1724,6 +1756,62 @@ mod tests {
 			.filter(|(id, _)| id.as_str().contains("shaft_clear_"))
 			.count();
 		assert_eq!(clears, 8, "two clears per active corner");
+		assert!(
+			plan.shaft_walls.is_empty(),
+			"corner shafts must not emit radial 2×2 wall matrices"
+		);
+	}
+
+	#[test]
+	fn corner_external_strips_stop_at_shaft_clear_buffer() {
+		let params = fixed_params(LesHallesShaftPlacement::Corners);
+		let (plan, regions) = LesHallesFloorPlan::from_parameterized(
+			params.clone(),
+			&confines_with_all_shafts(&params),
+		)
+		.unwrap();
+		let clear = plan.parameterized.corner_clear_len();
+		let gi_x = plan.gallery_inner.x * 0.5;
+		let gi_y = plan.gallery_inner.y * 0.5;
+		// Just inside the south-east clear buffer (should not be ExternalSpace).
+		let in_buffer = Vec3::new(
+			plan.center_xz.x + gi_x - clear * 0.5,
+			plan.center_xz.y + 0.5,
+			plan.center_xz.z - plan.outer.y * 0.5 + plan.parameterized.gallery_width * 0.5,
+		);
+		let in_strip = regions.within.iter().any(|r| {
+			r.kind == SpaceKind::ExternalSpace && aabb_contains_xz_y(&r.confines.bounds, in_buffer)
+		});
+		assert!(
+			!in_strip,
+			"corner clear buffer must not be covered by ExternalSpace residuals"
+		);
+		// Mid-side of the south strip (should still be fillable).
+		let mid_south = Vec3::new(
+			plan.center_xz.x,
+			plan.center_xz.y + 0.5,
+			plan.center_xz.z - plan.outer.y * 0.5 + plan.parameterized.gallery_width * 0.5,
+		);
+		assert!(
+			regions.within.iter().any(|r| {
+				r.kind == SpaceKind::ExternalSpace
+					&& aabb_contains_xz_y(&r.confines.bounds, mid_south)
+			}),
+			"south strip mid must remain ExternalSpace"
+		);
+		let _ = gi_y;
+	}
+
+	#[test]
+	fn mid_side_shafts_keep_radial_walls() {
+		let params = fixed_params(LesHallesShaftPlacement::MidSides);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(
+			params.clone(),
+			&confines_with_all_shafts(&params),
+		)
+		.unwrap();
+		assert!(!plan.shaft_bounds.is_empty());
+		assert!(!plan.shaft_walls.is_empty());
 	}
 
 	#[test]

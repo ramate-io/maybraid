@@ -27,6 +27,7 @@ cargo run -p richmond-buildings-playground -- show commercial-stall-strip --exte
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --extent 48,4,36 --seed 42
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --ceiling
+cargo run -p richmond-buildings-playground -- show les-halles-floor-plan-examples
 cargo run -p richmond-buildings-playground -- show les-halles-full-storey --seed 7
 cargo run -p richmond-buildings-playground -- show les-halles-livable-full-storey
 cargo run -p richmond-buildings-playground -- show les-halles-livable-full-storey --extent 72,4,54 --seed 42
@@ -145,6 +146,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show study-examples` — gallery of Study cells (passage AABBs drawn as gizmos)
 - `show commercial-stall [--extent X,Y,Z] [--seed N]` — single commercial stall Label placeholder
 - `show commercial-stall-strip [--extent X,Y,Z] [--seed N]` — packed stall Labels along a band
+- `show les-halles-floor-plan-examples` — gallery of Les Halles floor plans (commercial + livable sampling; corner vs mid-side shafts; strip/shaft gizmos)
 - `show les-halles-full-storey` — shell plus gallery `CommercialStallStrip` Label fills (face text via gizmo patch)
 - `show les-halles-livable-full-storey [--extent X,Y,Z] [--seed N]` — shell plus lengthwise gallery `RectangularLivableArea` bays (default footprint `72,4,54`)
 - `show les-halles-livable-full-storey-examples` — gallery of livable Les Halles storeys (varied extents/seeds)

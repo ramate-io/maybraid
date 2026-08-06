@@ -66,6 +66,7 @@ pub mod i_apartment_floor_plan_examples;
 pub mod i_apartment_full_storey;
 pub mod i_apartment_full_storey_examples;
 pub mod les_halles_floor_plan;
+pub mod les_halles_floor_plan_examples;
 pub mod les_halles_full_storey;
 pub mod les_halles_livable_full_storey;
 pub mod les_halles_livable_full_storey_examples;
@@ -220,6 +221,8 @@ pub enum Show {
 	PublicRestroomExamples(public_restroom_examples::PublicRestroomExamples),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
+	/// Gallery of Les Halles floor plans (varied extents/seeds / shaft placements).
+	LesHallesFloorPlanExamples(les_halles_floor_plan_examples::LesHallesFloorPlanExamples),
 	/// Les Halles full storey (shell + commercial stall strip fills).
 	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
 	/// Les Halles livable full storey (shell + lengthwise RectangularLivableArea bays).
@@ -314,6 +317,7 @@ impl Show {
 			Self::PublicRestroom(cmd) => Ok(cmd.into_preview()),
 			Self::PublicRestroomExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
+			Self::LesHallesFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
