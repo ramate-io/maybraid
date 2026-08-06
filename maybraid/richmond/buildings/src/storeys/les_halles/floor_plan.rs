@@ -12,7 +12,11 @@ use crate::fit::{
 	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
 	Fit, FitError, SpaceKind, StackRegion,
 };
-use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
+use crate::openings::{
+	generate_stall_doors as gen_stall_doors, generate_windows as gen_windows,
+	sync_connectable_openings_from_mapped, Opening, OpeningId, OpeningLabel,
+	Openings,
+};
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
 use crate::paneling::rectangle::Rectangle;
@@ -75,81 +79,14 @@ pub struct LesHallesFloorPlan {
 }
 
 impl LesHallesFloorPlan {
-	/// Build the stall-door size catalog for [`LesHallesParameterized::doors`].
-	///
-	/// Prefers larger shop openings; noise perturbs widths / jambs slightly.
-	/// [`LesHallesParameterized::fit_doors_on_run`] walks this list in order.
+	/// Stall-door catalog — see [`crate::openings::generate_stall_doors`].
 	pub fn generate_stall_doors(cfg: &NoiseConfig, center: Vec3) -> Vec<LesHallesStallDoor> {
-		Self::generate_bay_catalog(
-			cfg,
-			center,
-			5.0,
-			&[
-				(4.2, 0.3, 0.4),
-				(3.6, 0.28, 0.35),
-				(3.2, 0.25, 0.3),
-				(2.8, 0.25, 0.3),
-				(2.4, 0.22, 0.25),
-				(2.0, 0.2, 0.25),
-				(1.7, 0.18, 0.2),
-				(1.4, 0.15, 0.2),
-			],
-		)
+		gen_stall_doors(cfg, center)
 	}
 
-	/// Exterior aperture catalog for [`LesHallesParameterized::windows`].
+	/// Exterior aperture catalog — see [`crate::openings::generate_windows`].
 	pub fn generate_windows(cfg: &NoiseConfig, center: Vec3) -> Vec<LesHallesStallDoor> {
-		Self::generate_bay_catalog(
-			cfg,
-			center,
-			6.0,
-			&[
-				(3.2, 0.35, 0.35),
-				(2.6, 0.3, 0.3),
-				(2.2, 0.28, 0.25),
-				(1.8, 0.25, 0.25),
-				(1.5, 0.22, 0.2),
-				(1.2, 0.2, 0.2),
-				(1.0, 0.18, 0.15),
-				(0.9, 0.15, 0.15),
-			],
-		)
-	}
-
-	fn generate_bay_catalog(
-		cfg: &NoiseConfig,
-		center: Vec3,
-		salt0: f32,
-		bases: &[(f32, f32, f32)],
-	) -> Vec<LesHallesStallDoor> {
-		bases
-			.iter()
-			.enumerate()
-			.map(|(i, &(w, j, e))| {
-				let salt = salt0 + i as f32;
-				let dw = cfg.sample_range_f32_4d(
-					(w - 0.25).max(0.8),
-					w + 0.35,
-					center.x,
-					center.y,
-					center.z,
-					salt,
-				);
-				let jamb = cfg.sample_range_f32_4d(
-					(j - 0.05).max(0.1),
-					j + 0.1,
-					center.x,
-					center.y,
-					center.z,
-					salt + 0.5,
-				);
-				LesHallesStallDoor {
-					door_width: dw,
-					jamb_min: jamb,
-					allowed_error: e,
-				}
-			})
-			.collect()
+		gen_windows(cfg, center)
 	}
 
 	/// Deterministic structure from already-sampled parameters (towering path).
@@ -231,7 +168,7 @@ impl LesHallesFloorPlan {
 		let gallery = Self::build_gallery(center_xz, outer, gallery_inner, height, ceiling, &openings);
 		// Drop unmapped Passage/Aperture and sync truncated AABBs from the gallery
 		// so commercial strips never see boarded or oversized voids.
-		sync_connectable_openings_from_gallery(&mut openings, &gallery);
+		sync_connectable_openings_from_mapped(&mut openings, &gallery);
 		let balcony_floors = Self::build_balcony_floors(center_xz, gallery_inner, courtyard, y0);
 		let shaft_walls =
 			Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds);
@@ -1341,17 +1278,6 @@ fn clamp_placed_door_to_run(
 	Some(door)
 }
 
-/// Drop unmapped Passage/Aperture and copy gallery AABBs (post-truncate) onto `openings`.
-fn sync_connectable_openings_from_gallery(openings: &mut Openings, gallery: &RectRingFloor) {
-	openings.openings.retain(|id, opening| match opening.label {
-		OpeningLabel::Passage | OpeningLabel::Aperture => gallery.mapped_opening(id).is_some(),
-		_ => true,
-	});
-	for (id, opening) in gallery.openings().iter() {
-		openings.insert(id.clone(), opening.clone());
-	}
-}
-
 /// Openings whose AABB intersects `bounds` (shaft volumes excluded — those stay
 /// on shaft [`SpaceKind::InternalSpace`] cells). Wall clears remain [`OpeningLabel::Passage`].
 fn subset_openings_intersecting(openings: &Openings, bounds: &Aabb3d) -> Openings {
@@ -1506,8 +1432,8 @@ mod tests {
 			shaft_placement: placement,
 			mid_shaft_side: 4.0,
 			opening_density: 0.7,
-			doors: LesHallesFloorPlan::generate_stall_doors(&cfg, Vec3::ZERO),
-			windows: LesHallesFloorPlan::generate_windows(&cfg, Vec3::ZERO),
+			doors: gen_stall_doors(&cfg, Vec3::ZERO),
+			windows: gen_windows(&cfg, Vec3::ZERO),
 		}
 	}
 

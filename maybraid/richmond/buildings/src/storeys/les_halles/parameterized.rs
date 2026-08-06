@@ -3,6 +3,9 @@
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};
+use crate::openings::{
+	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows, BaySpec, PlacedBay,
+};
 
 /// Where vertical shafts are allocated in the gallery ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -13,27 +16,10 @@ pub enum LesHallesShaftPlacement {
 	MidSides,
 }
 
-/// One bay size to try when packing along a wall run (stall doors or windows).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LesHallesStallDoor {
-	/// Preferred clear leaf / aperture width (meters).
-	pub door_width: f32,
-	/// Minimum jamb / reveal on each side of the leaf.
-	pub jamb_min: f32,
-	/// Allowed over/undershoot on the packed span (and leaf) in meters.
-	pub allowed_error: f32,
-}
-
-/// A bay placed on a straight wall run (coordinates along the run).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LesHallesPlacedDoor {
-	/// Distance from the run start to the leaf’s start edge.
-	pub along: f32,
-	/// Leaf width used.
-	pub width: f32,
-	/// Remaining truncate budget for end-of-run / corner fit (from catalog).
-	pub allowed_error: f32,
-}
+/// Typology alias for shared [`BaySpec`] (stall doors / windows).
+pub type LesHallesStallDoor = BaySpec;
+/// Typology alias for shared [`PlacedBay`].
+pub type LesHallesPlacedDoor = PlacedBay;
 
 /// Resolved Les Halles plan knobs.
 #[derive(Debug, Clone, PartialEq)]
@@ -96,8 +82,8 @@ impl LesHallesParameterized {
 	/// axis), then the remaining rim is split into stall vs balcony within
 	/// absolute min/max clamps. Mins win over the ratio when the footprint is tight.
 	///
-	/// Stall-door / window catalogs are produced by
-	/// [`crate::storeys::les_halles::LesHallesFloorPlan`].
+	/// Stall-door / window catalogs come from [`crate::openings::generate_stall_doors`]
+	/// / [`crate::openings::generate_windows`].
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let (extent_x, extent_z, height) = footprint_extents(confines)?;
 		let min_ring = MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
@@ -157,8 +143,8 @@ impl LesHallesParameterized {
 			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
-		let doors = crate::storeys::les_halles::LesHallesFloorPlan::generate_stall_doors(&cfg, c);
-		let windows = crate::storeys::les_halles::LesHallesFloorPlan::generate_windows(&cfg, c);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
 
 		Ok(Self {
 			gallery_width,
@@ -196,101 +182,12 @@ impl LesHallesParameterized {
 
 	/// Pack [`Self::doors`] along a run; always tries to place at least one.
 	pub fn fit_doors_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		Self::fit_bays_on_run(&self.doors, run_length, true)
+		fit_bays_on_run(&self.doors, run_length, true)
 	}
 
-	/// Pack exterior windows along a run.
-	///
-	/// Uses a density-scaled prefix of [`Self::windows`]; does not force a window
-	/// when nothing fits (sparse facades are allowed).
+	/// Pack exterior windows along a run (density-scaled; sparse facades allowed).
 	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		if self.windows.is_empty() || self.opening_density < 0.08 {
-			return Vec::new();
-		}
-		let n = self.windows.len();
-		let take = ((n as f32) * self.opening_density.clamp(0.15, 1.0))
-			.ceil()
-			.max(1.0) as usize;
-		let take = take.min(n);
-		Self::fit_bays_on_run(&self.windows[..take], run_length, false)
-	}
-
-	/// Pack catalog bays along a run of `run_length` meters.
-	///
-	/// Walks `bays` in order; each size is placed if the remaining run can host
-	/// `door_width + 2·jamb_min` within `allowed_error`, otherwise that size is
-	/// skipped. When `force_one`, retries with the smallest feasible size.
-	pub fn fit_bays_on_run(
-		bays: &[LesHallesStallDoor],
-		run_length: f32,
-		force_one: bool,
-	) -> Vec<LesHallesPlacedDoor> {
-		let run_length = run_length.max(0.0);
-		let mut placed = Self::pack_bays(bays, run_length);
-		if placed.is_empty() && force_one {
-			placed = Self::force_one_bay(bays, run_length);
-		}
-		placed
-	}
-
-	fn pack_bays(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		let mut cursor = 0.0_f32;
-		let mut placed = Vec::new();
-		for spec in bays {
-			let rem = run_length - cursor;
-			let Some((pack, door_w, jamb)) = pack_span(*spec, rem) else {
-				continue;
-			};
-			placed.push(LesHallesPlacedDoor {
-				along: cursor + jamb,
-				width: door_w,
-				allowed_error: spec.allowed_error,
-			});
-			cursor += pack;
-		}
-		placed
-	}
-
-	fn force_one_bay(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		let mut best: Option<LesHallesStallDoor> = None;
-		for spec in bays {
-			let min_pack =
-				(spec.door_width - spec.allowed_error).max(0.4) + 2.0 * spec.jamb_min.min(0.05);
-			if run_length + 1e-4 < min_pack {
-				continue;
-			}
-			best = Some(match best {
-				None => *spec,
-				Some(prev) => {
-					if spec.door_width < prev.door_width {
-						*spec
-					} else {
-						prev
-					}
-				}
-			});
-		}
-		let Some(spec) = best else {
-			let w = (run_length * 0.5).clamp(0.8, 2.0).min(run_length.max(0.8));
-			if run_length < 0.8 {
-				return Vec::new();
-			}
-			let jamb = ((run_length - w) * 0.5).max(0.05);
-			return vec![LesHallesPlacedDoor {
-				along: jamb,
-				width: w,
-				allowed_error: 0.25,
-			}];
-		};
-		if let Some((_pack, door_w, jamb)) = pack_span(spec, run_length) {
-			vec![LesHallesPlacedDoor {
-				along: jamb,
-				width: door_w,
-				allowed_error: spec.allowed_error,
-			}]
-		} else {
-			Vec::new()
-		}
+		fit_windows_on_run(&self.windows, self.opening_density, run_length)
 	}
 }
 
@@ -318,29 +215,6 @@ fn split_ring_budget(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), F
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
 	Ok((gallery_width, balcony_width))
-}
-
-fn pack_span(spec: LesHallesStallDoor, remaining: f32) -> Option<(f32, f32, f32)> {
-	let door_lo = (spec.door_width - spec.allowed_error).max(0.4);
-	let door_hi = spec.door_width + spec.allowed_error;
-	let jamb = spec.jamb_min.max(0.0);
-	let min_pack = door_lo + 2.0 * jamb - spec.allowed_error.max(0.0);
-	let min_pack = min_pack.max(door_lo + 0.05);
-	if remaining + 1e-4 < min_pack {
-		return None;
-	}
-	let nominal = spec.door_width + 2.0 * jamb;
-	let pack = if remaining >= nominal {
-		nominal
-	} else {
-		remaining
-	};
-	let door_w = (pack - 2.0 * jamb)
-		.clamp(door_lo, door_hi)
-		.min(pack - 0.05)
-		.max(door_lo.min(pack * 0.8));
-	let jamb_each = ((pack - door_w) * 0.5).max(0.0);
-	Some((pack, door_w, jamb_each))
 }
 
 pub(crate) fn footprint_extents(confines: &Confines) -> Result<(f32, f32, f32), FitError> {

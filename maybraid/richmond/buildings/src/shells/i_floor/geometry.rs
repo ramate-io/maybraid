@@ -6,9 +6,9 @@ use crate::shells::ortho::{PlanRect, WallEdge, EPS};
 
 use super::IFloorParams;
 
-/// Axis-aligned plan rectangle (full extents) for slabs / union.
+/// Axis-aligned plan rectangle (full extents) for slabs / union / storey packing.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct PlanAabb {
+pub struct PlanAabb {
 	pub min_x: f32,
 	pub max_x: f32,
 	pub min_z: f32,
@@ -36,6 +36,29 @@ impl PlanAabb {
 			(self.max_z - self.min_z).max(EPS),
 		)
 	}
+
+	/// Plan footprint as [`bevy_math::bounding::Aabb2d`] (\(x → X\), \(y → Z\)).
+	pub fn to_aabb2(self) -> bevy_math::bounding::Aabb2d {
+		bevy_math::bounding::Aabb2d {
+			min: Vec2::new(self.min_x, self.min_z),
+			max: Vec2::new(self.max_x, self.max_z),
+		}
+	}
+
+	pub fn width(self) -> f32 {
+		(self.max_x - self.min_x).max(0.0)
+	}
+
+	pub fn depth(self) -> f32 {
+		(self.max_z - self.min_z).max(0.0)
+	}
+
+	pub fn center_xz(self) -> Vec2 {
+		Vec2::new(
+			0.5 * (self.min_x + self.max_x),
+			0.5 * (self.min_z + self.max_z),
+		)
+	}
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,7 +79,10 @@ impl IFloorParams {
 		let d = self.central_rectangle.y.max(EPS);
 		let half_w = w * 0.5;
 		let half_d = d * 0.5;
-		let flange_t = w;
+		let flange_t = self
+			.flange_thickness
+			.map(|t| t.max(EPS))
+			.unwrap_or(w);
 
 		let tl = positive_len(self.top_left_length).unwrap_or(0.0);
 		let tr = positive_len(self.top_right_length).unwrap_or(0.0);

@@ -20,8 +20,8 @@ pub use composition::{corner_l_runs, plans_touch, try_corner_l, try_peninsula_fr
 pub use furniture::{try_free_extent, try_wall_long, FreeExtentKnobs, WallLongKnobs};
 pub use kind::{CommitEffect, KindSpec, Predicate, ProposeKnobs, SoftGoalRole};
 pub use pack::{
-	init_host, pack_kinds, propose_from_spec, soft_goal_from_placed, xz_area, PackHost, PackKnobs,
-	WALL_EPS,
+	init_host, init_host_with, pack_kinds, propose_from_spec, soft_goal_from_placed, xz_area,
+	InitHostOpts, PackHost, PackKnobs, WALL_EPS,
 };
 pub use predicates::{
 	against_wall, approach_free, clear_of_keep_outs, in_host, long_face_on_wall, PredicateCtx,

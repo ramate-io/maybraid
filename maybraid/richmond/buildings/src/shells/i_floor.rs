@@ -24,6 +24,8 @@ use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
 use crate::shells::ortho::WallEdge;
 
+pub use geometry::PlanAabb as IFloorPlanRect;
+
 /// Horizontal storey slab presentation for towering ownership.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IFloorSlab {
@@ -50,6 +52,8 @@ pub struct IFloorParams {
 	pub central_rectangle: Vec2,
 	pub bottom_left_length: Option<f32>,
 	pub bottom_right_length: Option<f32>,
+	/// Flange bar depth along ±Z. `None` ⇒ same as central width (classic I).
+	pub flange_thickness: Option<f32>,
 	pub storey_height: f32,
 	pub openings: Openings,
 	pub floor: IFloorSlab,
@@ -67,6 +71,7 @@ impl Default for IFloorParams {
 			central_rectangle: Vec2::new(2.0, 6.0),
 			bottom_left_length: Some(2.0),
 			bottom_right_length: Some(2.0),
+			flange_thickness: None,
 			storey_height: 3.0,
 			openings: Openings::new(),
 			floor: IFloorSlab::None,
@@ -107,6 +112,11 @@ impl IFloorParams {
 		self
 	}
 
+	pub fn flange_thickness(mut self, thickness: Option<f32>) -> Self {
+		self.flange_thickness = thickness;
+		self
+	}
+
 	pub fn floor(mut self, floor: IFloorSlab) -> Self {
 		self.floor = floor;
 		self
@@ -134,6 +144,16 @@ impl IFloorParams {
 
 	pub fn build(self) -> IFloor {
 		IFloor::from_params(self)
+	}
+
+	/// Primary I-plan rectangles (stem + optional flange bars) used for packing.
+	pub fn plan_rects(&self) -> Vec<IFloorPlanRect> {
+		self.resolve_geometry().slab_rects
+	}
+
+	/// Outer wall edges used for packing facade openings before build.
+	pub fn wall_edges(&self) -> Vec<WallEdge> {
+		self.resolve_geometry().edges
 	}
 }
 
@@ -222,6 +242,11 @@ impl IFloor {
 
 	pub fn has_ceiling(&self) -> bool {
 		!self.ceiling_pieces.is_empty()
+	}
+
+	/// Primary I-plan rectangles (stem + optional flange bars) used for packing.
+	pub fn plan_rects(&self) -> Vec<IFloorPlanRect> {
+		self.params.plan_rects()
 	}
 }
 

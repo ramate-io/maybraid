@@ -17,9 +17,21 @@ fn fit_to_confines(
     confines: &Confines,
     noise: NoiseParams,
 ) -> Result<(Self, FillableRegions), FitError>;
+
+// default: map fit_to_confines; keep successes; residualize TooSmall
+fn fit_to_multi_confines(
+    multi: &MultiConfines,
+    noise: NoiseParams,
+) -> Result<MultiFit<Self>, FitError>;
 ```
 
-- **`Confines`** — AABB + roll + [`Openings`](src/openings.rs) the type must honor.
+- **`Confines`** — AABB + roll + [`Openings`](src/openings.rs) the type must honor
+  (openings for a residual live on that region’s confines).
+- **`MultiConfines`** — several typed [`FillRegion`]s (L / grouped cells). Leaf
+  types keep implementing only `fit_to_confines`; joint multi-cell layouts can
+  override `fit_to_multi_confines`.
+- **`MultiFit`** — `fitted: Vec<(Self, FillableRegions)>` plus `residual` for
+  soft rejects and nested leftovers.
 - **`FillableRegions`** — residuals after a successful fit:
   - `within` — typed [`FillRegion`]s (kind + confines) for child fill.
   - `atop` — stack footprints for towering (often ignored when reusing one floor plan).
@@ -81,6 +93,48 @@ CommercialStallInterior (catalog first-fit)
 
 Playground: `/show les-halles-full-storey`, `/show commercial-stall-strip`,
 and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
+
+### I-frame rectangularization (I-Apartment)
+
+[`storeys/i_apartment`](src/storeys/i_apartment.rs) starts from the I-frame alone:
+
+1. Sample I-layout knobs from seed (I/T/L/Z arms; stem may be narrower than the
+   apartment-favoring end bars); fit an [`IFloor`](src/shells/i_floor.rs) to confines.
+2. Floor plan samples a corridor `hall_width`, emits the shell’s natural **1–3
+   primary rectangles**, packs exterior apertures, remaps inbound **shaft**
+   openings onto 3×3 pocket centroids, and authors hall-width **passages** on
+   shared edges between primary rects.
+3. Full\* fills each primary rect with [`LivableApartments`](src/usage_areas/livable_apartments.rs):
+   sample [`LivableApartmentsParameterized`](src/usage_areas/livable_apartments.rs)
+   (target m² catalog) →
+   [`HallEnclosedSuites`](src/usage_areas/hall_connected_suites.rs)
+   ([`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → split →
+   [`pack_apartments_to_targets`](src/usage_areas/plan_cells.rs) with
+   [`MIN_GROUP_CONNECTIVITY`](src/usage_areas/plan_cells.rs) **2.0 m** for
+   both inter-cell joins and hall frontage → one hall door / group +
+   partition / hall-edge / host-perimeter walls, skipping
+   [`OpeningLabel::Boundary`](src/openings.rs)) →
+   [`LivableApartment`](src/usage_areas/livable_apartment/) fill per suite.
+   Multi-rect I plans fill primary rects **progressively** (earlier rect walls
+   shared edges, then injects Boundary onto later siblings).
+   (entryway → [`RectPassageCluster`](src/usage_areas/rect_passage_cluster.rs)
+   → per-rect
+   [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)).
+   Shared XZ helpers: [`plan_geom`](src/usage_areas/plan_geom.rs); RLA carve
+   sizes: [`slot_policy`](src/usage_areas/rectangular_livable_area/slot_policy.rs).
+   Strategies default to `CaseAttempt`. Min hall clear inside apartments is
+   **1.0 m**. Bedroom / bathroom walls only at apartment level; ungrouped /
+   soft-failed pockets stay [`SpaceKind::InternalSpace`](src/fit.rs); Full\*
+   maps leftovers to [`SpaceKind::ClosetSpace`](src/fit.rs).
+
+Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
+`/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
+`/show livable-apartments-examples` (standalone packs; multi-cell groups),
+`/show livable-apartment-examples` (small→large rect + L/T layouts; max-rect /
+passage / hall gizmos),
+`/show livable-rectangles-examples` (standalone `RectangularLivableArea` cells;
+sizes, 1–3 passages, forced strategies),
+`/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan
 
@@ -183,6 +237,10 @@ keep-outs. See [`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layou
 rooms (kitchen, dining, sitting, study, living, bathrooms). Each follows
 **parameterized → plan pack → Fit + BuildingComponents**, sharing the placer
 furniture loop in [`placer::pack`](src/placer/pack.rs).
+[`EatingArea`](src/usage_areas/livable_quarters/eating_area.rs) bipartitions a
+host to place dining beside a kitchen, or falls back to kitchen-only;
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) prefers
+`RectQuarterKind::Eating` over separate kitchen/dining slots.
 [`CommonBedroom`](src/usage_areas/common_bedroom/) composes
 [`ResidentialBathroom`](src/usage_areas/livable_quarters/residential_bathroom.rs)
 into ensuite `within` residuals when fit succeeds.
@@ -256,7 +314,7 @@ the [buildings README](README.md) and
 
 - [Richmond CONTRIBUTING](../CONTRIBUTING.md) — IR nodes, LOD, `ParentConfines`
 - [buildings README](README.md) — kit taxonomy + paneling type table
-- [`fit.rs`](src/fit.rs) — `Confines` / `FillableRegions` / `SpaceKind`
+- [`fit.rs`](src/fit.rs) — `Confines` / `MultiConfines` / `MultiFit` / `FillableRegions` / `SpaceKind`
 - [`placer`](src/placer.rs) — predicate-based rectangular KindSpec layout trier
 - [`openings.rs`](src/openings.rs) — opening labels and scoped ids
 - [`paneling`](src/paneling.rs) — panel primitives used by shells and enclosures

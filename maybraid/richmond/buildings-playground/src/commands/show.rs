@@ -24,6 +24,9 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod knick_knack_examples;
 pub mod knick_knack_stall;
+	pub mod livable_apartment_examples;
+	pub mod livable_apartments_examples;
+	pub mod livable_rectangles_examples;
 pub mod public_restroom;
 pub mod public_restroom_examples;
 pub mod mini_mart;
@@ -57,6 +60,11 @@ pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod circ_ring_floor;
 pub mod i_floor;
+pub mod halls_to_shafts;
+pub mod i_apartment_floor_plan;
+pub mod i_apartment_floor_plan_examples;
+pub mod i_apartment_full_storey;
+pub mod i_apartment_full_storey_examples;
 pub mod les_halles_floor_plan;
 pub mod les_halles_full_storey;
 pub mod rect_floor;
@@ -212,6 +220,22 @@ pub enum Show {
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
 	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
+	/// I-Apartment floor plan (IFloor + primary rect residuals).
+	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
+	/// Gallery of I-Apartment floor plans via Fit (varied extents/seeds).
+	IApartmentFloorPlanExamples(i_apartment_floor_plan_examples::IApartmentFloorPlanExamples),
+	/// I-Apartment full storey (plan + LivableApartments per primary rect).
+	IApartmentFullStorey(i_apartment_full_storey::IApartmentFullStorey),
+	/// Gallery of I-Apartment full storeys (halls, groups, partition walls).
+	IApartmentFullStoreyExamples(i_apartment_full_storey_examples::IApartmentFullStoreyExamples),
+	/// Gallery of LivableApartments packs on rectangular hosts.
+	LivableApartmentsExamples(livable_apartments_examples::LivableApartmentsExamples),
+	/// Gallery of standalone LivableApartment layouts (entry + common/private).
+	LivableApartmentExamples(livable_apartment_examples::LivableApartmentExamples),
+	/// Gallery of standalone RectangularLivableArea fits (passages + strategies).
+	LivableRectanglesExamples(livable_rectangles_examples::LivableRectanglesExamples),
+	/// HallsToShafts carve demo (hall / shaft / passage / residual boxes).
+	HallsToShafts(halls_to_shafts::HallsToShafts),
 }
 
 impl Show {
@@ -283,6 +307,14 @@ impl Show {
 			Self::PublicRestroomExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
+			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
+			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
+			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
+			Self::IApartmentFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivableApartmentsExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivableApartmentExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivableRectanglesExamples(cmd) => Ok(cmd.into_preview()),
+			Self::HallsToShafts(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {

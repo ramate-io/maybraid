@@ -8,6 +8,7 @@
 mod tests;
 
 pub mod dining_room;
+pub mod eating_area;
 pub mod kitchen;
 pub mod living_room;
 pub mod residential_bathroom;
@@ -17,6 +18,9 @@ pub mod study;
 
 pub use dining_room::{
 	DiningRoom, DiningRoomParameterized, DiningRoomPlan, SCOPE as DINING_ROOM_SCOPE,
+};
+pub use eating_area::{
+	EatingArea, EatingAreaParameterized, EatingAreaPlan, SCOPE as EATING_AREA_SCOPE,
 };
 pub use kitchen::{
 	Kitchen, KitchenCounterLayout, KitchenParameterized, KitchenPlan, SCOPE as KITCHEN_SCOPE,

@@ -6,8 +6,8 @@ use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};
 use crate::placer::{
-	init_host, try_corner_l, try_free_extent, try_peninsula_from_run, try_wall_long, xz_area,
-	FreeExtentKnobs, PackHost, WallLongKnobs, WALL_EPS,
+	init_host_with, try_corner_l, try_free_extent, try_peninsula_from_run, try_wall_long, xz_area,
+	FreeExtentKnobs, InitHostOpts, PackHost, WallLongKnobs, WALL_EPS,
 };
 
 pub const MIN_AREA: f32 = 2.4 * 2.0;
@@ -44,7 +44,12 @@ pub struct KitchenRegions {
 
 impl KitchenRegions {
 	pub fn pack(&self, confines: &Confines, noise: NoiseParams) -> Result<KitchenPacked, FitError> {
-		let mut host = init_host(confines)?;
+		let mut host = init_host_with(
+			confines,
+			InitHostOpts {
+				passage_wall_lip: true,
+			},
+		)?;
 		if host.room_area + 1e-3 < MIN_AREA {
 			return Err(FitError::TooSmall {
 				reason: "kitchen",
@@ -199,10 +204,13 @@ fn finalize_optional(
 	}
 
 	if packed_area_ratio(packed, host.room_area) < regions.occupancy * 0.85 {
+		// Fillers prefer walls and often land beside a door just outside the
+		// strict passage band — require padded approach clearances too.
+		let excludes = host.clearances_with_approach();
 		if let Some(f) = try_free_extent(
 			&host.host3,
 			host.host,
-			&host.clearances,
+			&excludes,
 			cfg,
 			50,
 			FreeExtentKnobs {
