@@ -37,7 +37,7 @@ use crate::usage_areas::plan_access::DEFAULT_WALK_CLEAR;
 use crate::usage_areas::plan_cells::shared_edge_span;
 use crate::usage_areas::plan_geom::{host_xz, noise_for_cell};
 use crate::usage_areas::rectangular_livable_area::{
-	RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
 	RectangularLivableAreaParameterized, DEFAULT_CLOSED_MAX_AREA,
 };
 
@@ -711,6 +711,7 @@ fn structural_layers<T>(level: LodSceneLevel, layers: Layers<T>) -> Layers<T> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::usage_areas::rectangular_livable_area::RectAreaRoom;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
 	use lod::gen::LodSceneLevel;

@@ -38,10 +38,10 @@ impl RectRingFloorParams {
 	}
 }
 
-/// Cut all `cuts_slab` openings from a frame band, emitting one solid per residual.
+/// Cut every `cuts_slab` opening from a frame band; one solid per residual rect.
 ///
-/// Multiple holes on the same N/S band (corner shafts) each leave a gap; a single
-/// framed inset cannot express that, so residuals replace the old largest-hole merge.
+/// Multi-hole bands (e.g. two corner shafts on one N/S strip) need residual
+/// solids — a single framed inset can only express one hole.
 fn resolve_pieces(
 	style: PanelStyle,
 	plan: PlanRect,

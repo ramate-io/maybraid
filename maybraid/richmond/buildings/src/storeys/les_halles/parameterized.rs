@@ -259,9 +259,10 @@ impl LesHallesParameterized {
 		}
 	}
 
-	/// Corner stall-strip / shaft-clear length along each abutting inner wall.
+	/// Authored corner F2C clear / stall-strip buffer along each abutting wall.
 	///
-	/// Half the corner gallery square (which itself is `gallery_width` on a side).
+	/// Half the corner gallery square (`gallery_width` on a side). Consumers clamp
+	/// against the gallery-inner along-half before placing clears or end walls.
 	pub fn corner_clear_len(&self) -> f32 {
 		(self.gallery_width * 0.5).max(2.0)
 	}
