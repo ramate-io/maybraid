@@ -6,6 +6,7 @@ mod conifer_canopy_apex;
 pub mod date_palm;
 pub mod friends_conifer;
 pub mod honu_banyan;
+mod jungle_growth_vc;
 pub mod jungle_storybook_tree;
 pub mod kamakura_torch;
 pub mod liams_conifer;
@@ -25,11 +26,11 @@ pub mod tuft_patch;
 pub mod vase_tree;
 pub mod waialea_palm;
 
-pub use braid_oak_tree::BraidOakTreeStd;
+pub use braid_oak_tree::{BraidOakTree, BraidOakTreeParams};
 pub use date_palm::{DatePalm, DatePalmParams};
 pub use friends_conifer::FriendsConiferStd;
-pub use honu_banyan::HonuBanyanStd;
-pub use jungle_storybook_tree::JungleStorybookTreeStd;
+pub use honu_banyan::{HonuBanyan, HonuBanyanParams};
+pub use jungle_storybook_tree::{JungleStorybookTree, JungleStorybookTreeParams};
 pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::{LiamsConifer, LiamsConiferParams};
 pub use northern_conifer::{NorthernConifer, NorthernConiferParams};
@@ -37,14 +38,14 @@ pub use palm_bush::{PalmBush, PalmBushParams};
 pub use palm_crown::{PalmCrown, PalmCrownParams};
 pub use penmarch_torch::{PenmarchTorch, PenmarchTorchParams};
 pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedParams};
-pub use simplemans_hedge::SimplemansHedgeStd;
+pub use simplemans_hedge::{SimplemansHedge, SimplemansHedgeParams};
 pub use skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedLeafMeshMaterial, SkippedMeshMaterial,
 	SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
 pub use sopes_banyan::{SopesBanyan, SopesBanyanParams};
 pub use storybook_tree::{StorybookTree, StorybookTreeParams};
-pub use temperate_conifer::TemperateConiferStd;
+pub use temperate_conifer::{TemperateConifer, TemperateConiferParams};
 pub use tuft_patch::{TuftPatch, TuftPatchParams};
 pub use vase_tree::{VaseTree, VaseTreeParams};
 pub use waialea_palm::{WaialeaPalm, WaialeaPalmParams};

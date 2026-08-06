@@ -1,9 +1,9 @@
 //! Jungle Storybook foliage allocation ([#235](https://github.com/ramate-io/maybraid/issues/235)).
 //!
-//! One [`BallRenderRule`] drives [`JungleStorybookCanopyFoliage`] per graph node:
-//! - **Growth** — epiphyte clusters on mid/upper limbs (stochastic fraction).
-//! - **InnerBall** — dense inner canopy (lower ring-u, non-terminal limbs).
-//! - **OuterSplay** — terminal tips and far-along projections (RFC outer shell).
+//! VegetationComponents + legacy [`BallRenderRule`]:
+//! - **Growth** — epiphyte clusters (palm fronds + spears under VC).
+//! - **InnerBall** — dense inner canopy.
+//! - **OuterSplay** — terminal tips and far-along projections.
 
 use std::marker::PhantomData;
 
@@ -15,12 +15,25 @@ use chico_sbs_geometry::chain::storybook_tree::{
 };
 use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::{mix_seed_below_fraction, node_mix_seed};
-use chico_sbs_geometry::{BallStickChain, BallStickNode};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
+	BallStickNode,
+};
 use chico_tree_components::{JungleGrowth, JungleGrowthShape, JungleStorybookCanopyFoliage};
+use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
 use procedural_common::NoiseParams;
+
+use crate::jungle_growth_vc::{
+	jungle_growth_ball_only, jungle_growth_foliage_nodes, JungleGrowthVcParams,
+};
+use crate::storybook_tree::canopy::HIGH_FOLIAGE_BANDS;
 
 /// Spawn uniform scale for [`JungleStorybookCanopyFoliage::Growth`] relative to branch node radius.
 pub const JUNGLE_GROWTH_RADIUS_SCALE: f32 = 2.0;
+
+/// Medium / Low foliage sample grids (High reuses storybook [`HIGH_FOLIAGE_BANDS`] for canopy).
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
 
 /// Minimum ring parameter `u` before a node may receive jungle growth (keeps trunk base clear).
 const MIN_RING_U_FOR_GROWTH: f32 = 0.28;
@@ -37,6 +50,7 @@ const FOLIAGE_SCALE_CENTER: f32 = 5.0;
 const FOLIAGE_SCALE_SPAN: f32 = 1.4;
 const GROWTH_FROND_COUNT: u32 = 8;
 const RADIUS_SCALE_SPAN: f32 = 0.30;
+const FULL_CANOPY_PROXY_RADIUS_SCALE: f32 = 0.70;
 
 /// Deterministic per-node unit interval for jitter lanes.
 fn mix_unit(node_idx: usize, position: Vec3, lane: u32) -> f32 {
@@ -48,11 +62,20 @@ fn jitter(center: f32, span: f32, t: f32) -> f32 {
 }
 
 /// Which foliage mesh (if any) to spawn at this branch-out node.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum NodeFoliageKind {
 	None,
 	Growth,
 	InnerBall,
 	OuterSplay,
+}
+
+#[derive(Clone, Copy)]
+struct FoliageCandidate {
+	position: Vec3,
+	kind: NodeFoliageKind,
+	node_idx: usize,
+	leaf_radius: f32,
 }
 
 /// Branch-out nodes with non-zero projection that participate in the canopy pass.
@@ -96,6 +119,160 @@ fn classify_node_foliage(
 	}
 }
 
+fn world_leaf_radius(node: &BallStickNode, leaf_radius_world: f32) -> f32 {
+	let scale = leaf_radius_world / node.radius.max(1e-4);
+	node.radius * scale
+}
+
+fn growth_params(node_idx: usize, position: Vec3) -> JungleGrowthVcParams {
+	JungleGrowthVcParams::from_node(
+		node_idx,
+		position,
+		JUNGLE_GROWTH_RADIUS_SCALE,
+		RADIUS_SCALE_SPAN,
+		FOLIAGE_SCALE_CENTER,
+		FOLIAGE_SCALE_SPAN,
+	)
+}
+
+fn emit_canopy_ball(kind: NodeFoliageKind, position: Vec3, leaf_radius: f32, cheap: bool) -> FoliageNode {
+	let placement = Placement::foliage_uniform(position, leaf_radius);
+	match kind {
+		NodeFoliageKind::OuterSplay => {
+			let seed = node_mix_seed(0, position);
+			let disc = 0.18 + 0.12 * ((seed % 17) as f32 / 16.0);
+			FoliageNode::plane_splay(
+				FoliageGeometry::plane_splay(seed % 2, 0.8, disc),
+				placement,
+			)
+		}
+		_ => {
+			if cheap {
+				FoliageNode::cheap_ball(placement)
+			} else {
+				FoliageNode::layered_ball(placement)
+			}
+		}
+	}
+}
+
+fn collect_candidates(
+	chain: &BallStickChain<StorybookTreeChain>,
+	growth_spawn_fraction: f32,
+	leaf_radius_world: f32,
+) -> (Vec<FoliageCandidate>, Vec<FoliageCandidate>) {
+	let mut growth = Vec::new();
+	let mut canopy = Vec::new();
+	for (node_idx, node, h) in chain.nodes_with_hysteresis_enumerated() {
+		match classify_node_foliage(growth_spawn_fraction, node_idx, node, h, chain) {
+			NodeFoliageKind::None => {}
+			NodeFoliageKind::Growth => growth.push(FoliageCandidate {
+				position: node.position,
+				kind: NodeFoliageKind::Growth,
+				node_idx,
+				leaf_radius: world_leaf_radius(node, leaf_radius_world),
+			}),
+			kind => canopy.push(FoliageCandidate {
+				position: node.position,
+				kind,
+				node_idx,
+				leaf_radius: world_leaf_radius(node, leaf_radius_world),
+			}),
+		}
+	}
+	(growth, canopy)
+}
+
+fn banded_candidates(
+	candidates: &[FoliageCandidate],
+	bands: AzimuthHeightBands,
+) -> Vec<&FoliageCandidate> {
+	sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands)
+		.into_iter()
+		.map(|s| s.item)
+		.collect()
+}
+
+fn full_canopy_proxy(
+	growth: &[FoliageCandidate],
+	canopy: &[FoliageCandidate],
+) -> Option<FoliageNode> {
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	let mut any = false;
+	for c in growth.iter().chain(canopy.iter()) {
+		let r = c.leaf_radius;
+		min = min.min(c.position - Vec3::splat(r));
+		max = max.max(c.position + Vec3::splat(r));
+		any = true;
+	}
+	if !any {
+		return None;
+	}
+	let center = (min + max) * 0.5;
+	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
+	half_extents.x *= FULL_CANOPY_PROXY_RADIUS_SCALE;
+	half_extents.z *= FULL_CANOPY_PROXY_RADIUS_SCALE;
+	Some(FoliageNode::layered_ball(
+		Placement::new(center, 0.0).with_scale(half_extents),
+	))
+}
+
+/// High: every jungle-growth site + banded inner/outer canopy.
+pub(crate) fn foliage_nodes_high(
+	chain: &BallStickChain<StorybookTreeChain>,
+	growth_spawn_fraction: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in &growth {
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+	}
+	nodes
+}
+
+/// Medium: banded growth + banded canopy (no mass proxy).
+pub(crate) fn foliage_nodes_medium(
+	chain: &BallStickChain<StorybookTreeChain>,
+	growth_spawn_fraction: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in banded_candidates(&growth, MEDIUM_FOLIAGE_BANDS) {
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+	}
+	nodes
+}
+
+/// Low: cheap growth/canopy balls + full-canopy layered proxy.
+pub(crate) fn foliage_nodes_low(
+	chain: &BallStickChain<StorybookTreeChain>,
+	growth_spawn_fraction: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in banded_candidates(&growth, LOW_FOLIAGE_BANDS) {
+		nodes.push(jungle_growth_ball_only(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, LOW_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, true));
+	}
+	if let Some(proxy) = full_canopy_proxy(&growth, &canopy) {
+		nodes.push(proxy);
+	}
+	nodes
+}
+
+#[allow(dead_code)]
 fn build_jungle_growth<BodyM, BodyS, FoliageM, FoliageS>(
 	node_idx: usize,
 	node: &BallStickNode,
@@ -135,6 +312,7 @@ where
 }
 
 /// [`BallRenderRule`] for the unified jungle canopy enum (inner ball, outer splay, growth).
+#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct JungleStorybookFoliageRule<
 	InnerM,
@@ -168,6 +346,7 @@ pub(crate) struct JungleStorybookFoliageRule<
 	pub(crate) __marker: PhantomData<fn() -> (BodyM, FoliageM)>,
 }
 
+#[allow(dead_code)]
 impl<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
 	BallRenderRule<
 		JungleStorybookCanopyFoliage<

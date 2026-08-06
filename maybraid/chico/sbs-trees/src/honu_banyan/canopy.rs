@@ -1,9 +1,6 @@
-//! Honu Banyan foliage allocation ([#250](https://github.com/ramate-io/maybraid/issues/250)).
+//! Honu canopy: jungle-growth clusters + inner/outer balls (VegetationComponents).
 //!
-//! One [`BallRenderRule`] drives [`HonuBanyanCanopyFoliage`] per graph node:
-//! - **Growth** — epiphyte clusters on high ring-u limbs (stochastic fraction).
-//! - **InnerBall** — dense inner canopy and descender joints.
-//! - **OuterSplay** — terminal tips and far-along projections.
+//! Also retains the legacy [`BallRenderRule`] for RenderItem spawning.
 
 use std::marker::PhantomData;
 
@@ -13,30 +10,59 @@ use chico_ball_components::plane_splay::PlaneSplay;
 use chico_sbs_geometry::chain::honu_banyan::{is_graph_terminal, HonuBanyanChain};
 use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::{mix_seed_below_fraction, node_mix_seed};
-use chico_sbs_geometry::{BallStickChain, BallStickNode};
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
+	BallStickNode,
+};
 use chico_tree_components::{HonuBanyanCanopyFoliage, JungleGrowth, JungleGrowthShape};
+use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
 use procedural_common::NoiseParams;
 
-/// Spawn uniform scale for [`HonuBanyanCanopyFoliage::Growth`] relative to branch node radius.
+use crate::jungle_growth_vc::{
+	jungle_growth_ball_only, jungle_growth_foliage_nodes, JungleGrowthVcParams,
+};
+
+/// High outer / inner canopy bands (growth nodes emit separately at High).
+pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
+/// Medium foliage bands (growth + canopy compete in one sample set).
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(17, 4);
+/// Low foliage: cheap-ball kit.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
+
+/// Growth spawn uniform-scale center (legacy `HONU_GROWTH_RADIUS_SCALE`).
 pub const HONU_GROWTH_RADIUS_SCALE: f32 = 5.0;
-
-/// Minimum ring parameter `u` before a node may receive jungle growth.
-const MIN_RING_U_FOR_GROWTH: f32 = 0.82;
-
-/// Minimum height fraction of total `H` for foliage when not terminal / high branch-order.
-const MIN_HEIGHT_FRACTION_FOR_FOLIAGE: f32 = 0.70;
-
-/// Along a limb, fraction of [`HonuBanyanChain::projection_length`] past which outer splay is preferred.
-const OUTER_SPLAY_DISTANCE_FRACTION: f32 = 0.50;
-
-const RACHIS_THICKNESS_CENTER: f32 = 0.02;
-const RACHIS_THICKNESS_SPAN: f32 = 0.004;
+const RADIUS_SCALE_SPAN: f32 = 0.30;
 const FOLIAGE_SCALE_CENTER: f32 = 5.0;
 const FOLIAGE_SCALE_SPAN: f32 = 1.4;
-const GROWTH_FROND_COUNT: u32 = 8;
-const RADIUS_SCALE_SPAN: f32 = 0.30;
 
-/// Deterministic per-node unit interval for jitter lanes.
+const MIN_RING_U_FOR_GROWTH: f32 = 0.82;
+const MIN_HEIGHT_FRACTION_FOR_FOLIAGE: f32 = 0.70;
+const OUTER_SPLAY_DISTANCE_FRACTION: f32 = 0.50;
+const RACHIS_THICKNESS_CENTER: f32 = 0.02;
+const RACHIS_THICKNESS_SPAN: f32 = 0.004;
+const GROWTH_FROND_COUNT: u32 = 8;
+
+/// Crown-height window for the Medium/Low proxy (fractions of span above crown floor).
+const PROXY_CROWN_Y_START: f32 = 0.15;
+const PROXY_CROWN_Y_END: f32 = 0.80;
+const PROXY_HEIGHT_SCALE: f32 = 0.80;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NodeFoliageKind {
+	None,
+	Growth,
+	InnerBall,
+	OuterSplay,
+}
+
+#[derive(Clone, Copy)]
+struct FoliageCandidate {
+	position: Vec3,
+	kind: NodeFoliageKind,
+	node_idx: usize,
+	leaf_radius: f32,
+}
+
 fn mix_unit(node_idx: usize, position: Vec3, lane: u32) -> f32 {
 	(node_mix_seed(node_idx, position).wrapping_add(lane) as f32) / (u32::MAX as f32)
 }
@@ -45,15 +71,6 @@ fn jitter(center: f32, span: f32, t: f32) -> f32 {
 	(center + (t - 0.5) * span).max(1e-4)
 }
 
-/// Which foliage mesh (if any) to spawn at this canopy limb node.
-enum NodeFoliageKind {
-	None,
-	Growth,
-	InnerBall,
-	OuterSplay,
-}
-
-/// Canopy limb nodes with non-zero projection that participate in the foliage pass.
 fn qualifies_for_foliage(
 	hysteresis: &HonuBanyanChain,
 	chain: &BallStickChain<HonuBanyanChain>,
@@ -97,6 +114,196 @@ fn classify_node_foliage(
 	}
 }
 
+fn world_leaf_radius(node: &BallStickNode, leaf_radius_world: f32) -> f32 {
+	let scale = leaf_radius_world / node.radius.max(1e-4);
+	node.radius * scale
+}
+
+fn growth_params(node_idx: usize, position: Vec3) -> JungleGrowthVcParams {
+	JungleGrowthVcParams::from_node(
+		node_idx,
+		position,
+		HONU_GROWTH_RADIUS_SCALE,
+		RADIUS_SCALE_SPAN,
+		FOLIAGE_SCALE_CENTER,
+		FOLIAGE_SCALE_SPAN,
+	)
+}
+
+fn emit_canopy_ball(kind: NodeFoliageKind, position: Vec3, leaf_radius: f32, cheap: bool) -> FoliageNode {
+	let placement = Placement::foliage_uniform(position, leaf_radius);
+	match kind {
+		NodeFoliageKind::OuterSplay => {
+			let seed = node_mix_seed(0, position);
+			let disc = 0.20 + 0.14 * ((seed % 17) as f32 / 16.0);
+			FoliageNode::plane_splay(
+				FoliageGeometry::plane_splay(seed % 2, 0.8, disc),
+				placement,
+			)
+		}
+		_ => {
+			if cheap {
+				FoliageNode::cheap_ball(placement)
+			} else {
+				FoliageNode::layered_ball(placement)
+			}
+		}
+	}
+}
+
+fn collect_candidates(
+	chain: &BallStickChain<HonuBanyanChain>,
+	growth_spawn_fraction: f32,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> (Vec<FoliageCandidate>, Vec<FoliageCandidate>) {
+	let mut growth = Vec::new();
+	let mut canopy = Vec::new();
+	for (node_idx, node, h) in chain.nodes_with_hysteresis_enumerated() {
+		if node.position.y < min_height {
+			continue;
+		}
+		match classify_node_foliage(growth_spawn_fraction, node_idx, node, h, chain) {
+			NodeFoliageKind::None => {}
+			NodeFoliageKind::Growth => growth.push(FoliageCandidate {
+				position: node.position,
+				kind: NodeFoliageKind::Growth,
+				node_idx,
+				leaf_radius: world_leaf_radius(node, leaf_radius_world),
+			}),
+			kind => canopy.push(FoliageCandidate {
+				position: node.position,
+				kind,
+				node_idx,
+				leaf_radius: world_leaf_radius(node, leaf_radius_world),
+			}),
+		}
+	}
+	(growth, canopy)
+}
+
+fn mid_canopy_proxy_ball(
+	chain: &BallStickChain<HonuBanyanChain>,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> Option<FoliageNode> {
+	let mut y_max = min_height;
+	let mut any = false;
+	for node in chain.nodes() {
+		if node.position.y < min_height {
+			continue;
+		}
+		any = true;
+		y_max = y_max.max(node.position.y);
+	}
+	if !any {
+		return None;
+	}
+	let span = (y_max - min_height).max(1e-4);
+	let y_lo = min_height + span * PROXY_CROWN_Y_START;
+	let y_hi = min_height + span * PROXY_CROWN_Y_END;
+
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	let mut mid_any = false;
+	for node in chain.nodes() {
+		let y = node.position.y;
+		if y < y_lo || y > y_hi {
+			continue;
+		}
+		let r = world_leaf_radius(node, leaf_radius_world);
+		let p = node.position;
+		min = min.min(p - Vec3::splat(r));
+		max = max.max(p + Vec3::splat(r));
+		mid_any = true;
+	}
+	if !mid_any {
+		return None;
+	}
+	let center = (min + max) * 0.5;
+	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
+	half_extents.y *= PROXY_HEIGHT_SCALE;
+	Some(FoliageNode::layered_ball(
+		Placement::new(center, 0.0).with_scale(half_extents),
+	))
+}
+
+fn banded_candidates(
+	candidates: &[FoliageCandidate],
+	bands: AzimuthHeightBands,
+) -> Vec<&FoliageCandidate> {
+	sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands)
+		.into_iter()
+		.map(|s| s.item)
+		.collect()
+}
+
+/// High: every jungle-growth site + banded inner/outer canopy.
+pub(crate) fn foliage_nodes_high(
+	chain: &BallStickChain<HonuBanyanChain>,
+	growth_spawn_fraction: f32,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) =
+		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in &growth {
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+	}
+	nodes
+}
+
+/// Medium: banded growth (full fronds) + banded canopy + mid layered proxy.
+pub(crate) fn foliage_nodes_medium(
+	chain: &BallStickChain<HonuBanyanChain>,
+	growth_spawn_fraction: f32,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) =
+		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in banded_candidates(&growth, MEDIUM_FOLIAGE_BANDS) {
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+	}
+	if let Some(proxy) = mid_canopy_proxy_ball(chain, min_height, leaf_radius_world) {
+		nodes.push(proxy);
+	}
+	nodes
+}
+
+/// Low: banded cheap canopy / growth balls + mid proxy.
+pub(crate) fn foliage_nodes_low(
+	chain: &BallStickChain<HonuBanyanChain>,
+	growth_spawn_fraction: f32,
+	min_height: f32,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let (growth, canopy) =
+		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
+	let mut nodes = Vec::new();
+	for c in banded_candidates(&growth, LOW_FOLIAGE_BANDS) {
+		nodes.push(jungle_growth_ball_only(growth_params(c.node_idx, c.position)));
+	}
+	for c in banded_candidates(&canopy, LOW_FOLIAGE_BANDS) {
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, true));
+	}
+	if let Some(proxy) = mid_canopy_proxy_ball(chain, min_height, leaf_radius_world) {
+		nodes.push(proxy);
+	}
+	nodes
+}
+
+// --- Legacy RenderItem foliage rule ---
+
+#[allow(dead_code)]
 fn build_jungle_growth<BodyM, BodyS, FoliageM, FoliageS>(
 	node_idx: usize,
 	node: &BallStickNode,
@@ -136,6 +343,7 @@ where
 }
 
 /// [`BallRenderRule`] for the unified Honu canopy enum (inner ball, outer splay, growth).
+#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct HonuBanyanFoliageRule<
 	InnerM,
@@ -156,11 +364,9 @@ pub(crate) struct HonuBanyanFoliageRule<
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>>,
 {
-	/// Fraction of qualifying nodes that spawn [`HonuBanyanCanopyFoliage::Growth`] instead of canopy meshes.
 	pub growth_spawn_fraction: f32,
 	pub inner_ball: ChicoBall<InnerM, InnerS>,
 	pub outer_splay: PlaneSplay<OuterM, OuterS>,
-	/// Target world leaf radius from SBS [`leaf_radius_world`](chico_sbs_geometry::HonuBanyanSbs::leaf_radius_world).
 	pub leaf_radius_world: f32,
 	pub body_noise: NoiseParams,
 	pub foliage_noise: NoiseParams,
@@ -169,6 +375,7 @@ pub(crate) struct HonuBanyanFoliageRule<
 	pub(crate) __marker: PhantomData<fn() -> (BodyM, FoliageM)>,
 }
 
+#[allow(dead_code)]
 impl<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
 	BallRenderRule<
 		HonuBanyanCanopyFoliage<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>,

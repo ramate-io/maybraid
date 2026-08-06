@@ -7,11 +7,12 @@ use chico_sbs_geometry::{BallStickChain, BallStickNode, FriendsConiferChain, Fri
 use procedural_common::UnitRange;
 use render_item::CascadeChunk;
 
-const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.012;
-const FROND_DROOP: f32 = 0.28;
-const FROND_TWIST: f32 = 0.18;
-const FROND_LEAFLET_COUNT: u32 = 8;
-const FROND_SPINE_SEGMENTS: u32 = 6;
+const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.010;
+const FROND_DROOP: f32 = 0.24;
+const FROND_TWIST: f32 = 0.14;
+/// VC-simplified fronds (fewer leaflets / spine segments → fewer collection members).
+const FROND_LEAFLET_COUNT: u32 = 5;
+const FROND_SPINE_SEGMENTS: u32 = 3;
 
 /// Deterministic frond count in `fronds_per_joint` (inclusive range).
 fn frond_count_for_node(node_idx: usize, position: Vec3, fronds_per_joint: &UnitRange) -> u32 {
@@ -37,7 +38,7 @@ fn frond_length_world(
 	(frac * h / frond_world_scale.max(1e-8)).max(1e-4)
 }
 
-fn branch_direction(
+pub(crate) fn branch_direction(
 	chain: &BallStickChain<FriendsConiferChain>,
 	node_idx: usize,
 	node: &BallStickNode,
@@ -83,6 +84,7 @@ pub fn frond_shape_for_joint(
 }
 
 /// Spawn fronds at every ball-stick joint (RFC allocates all joints).
+#[allow(dead_code)]
 pub fn spawn_joint_fronds<LeafM, LeafS>(
 	geometry: &FriendsConiferSbs,
 	frond_world_scale: f32,

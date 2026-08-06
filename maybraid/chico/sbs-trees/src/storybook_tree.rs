@@ -7,7 +7,7 @@
 //! foliage uses outer / terminal cheap-ball bands and a Low full-canopy layered proxy
 //! (inset to 70% of canopy radius).
 
-mod canopy;
+pub(crate) mod canopy;
 pub mod render_item_plugin;
 pub(crate) mod stick;
 

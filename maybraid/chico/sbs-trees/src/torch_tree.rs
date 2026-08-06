@@ -14,7 +14,7 @@ pub(crate) use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 };
 pub(crate) use stick::{
-	stick_nodes_banded, stick_nodes_high, stick_nodes_low, stick_nodes_medium,
+	stick_nodes_banded, stick_nodes_high, stick_nodes_low, stick_nodes_medium, HIGH_STICK_BANDS,
 };
 
 /// Structural High / Medium / Low distance factors (multiples of characteristic radius).

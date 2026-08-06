@@ -19,6 +19,8 @@ pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new
 
 /// Medium sticks: ~20% more cells than shared torch medium (10×4 → 12×4).
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
+/// Braid Oak Medium: another ~20% denser branch samples than storybook Medium (12×4 → 15×4).
+pub(crate) const BRAID_MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(15, 4);
 
 /// Full-canopy proxy sits inside the foliage AABB at this fraction of XZ half-extents.
 const FULL_CANOPY_PROXY_RADIUS_SCALE: f32 = 0.70;
@@ -127,6 +129,19 @@ pub(crate) fn foliage_nodes_medium(
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
 	foliage_nodes_banded(chain, MEDIUM_FOLIAGE_BANDS, leaf_radius_world)
+}
+
+/// Medium outer samples plus a full-canopy layered proxy (used by Braid Oak).
+pub(crate) fn foliage_nodes_medium_with_proxy(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let candidates = collect_candidates(chain);
+	let mut nodes = banded_from_candidates(&candidates, MEDIUM_FOLIAGE_BANDS, leaf_radius_world);
+	if let Some(proxy) = full_canopy_proxy_ball(&candidates, leaf_radius_world) {
+		nodes.push(proxy);
+	}
+	nodes
 }
 
 /// Coarse outer samples plus a full-canopy layered proxy (70% inset radius).

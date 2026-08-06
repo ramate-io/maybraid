@@ -200,21 +200,6 @@ pub fn setup_render_materials(
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats_snapshot);
 	}
-	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-	}
-	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
-	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
-	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
-	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
 	}
@@ -226,30 +211,18 @@ pub fn setup_render_materials(
 /// No-op: Vase Tree now uses VegetationComponents (no per-tree mesh materials).
 pub fn attach_vase_tree_materials(_tree: &mut RenderVaseTree, _mats: &RenderMaterials) {}
 
-pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.braid_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
-}
+/// No-op: Braid Oak now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_braid_oak_materials(_tree: &mut RenderBraidOakTree, _mats: &RenderMaterials) {}
 
+/// No-op: Jungle Storybook now uses VegetationComponents (no per-tree mesh materials).
 pub fn attach_jungle_storybook_materials(
-	tree: &mut RenderJungleStorybookTree,
-	mats: &RenderMaterials,
+	_tree: &mut RenderJungleStorybookTree,
+	_mats: &RenderMaterials,
 ) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
-	tree.growth_body_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.growth_foliage_material.mesh = MeshMaterial3d(mats.tuft.clone());
 }
 
-pub fn attach_honu_banyan_materials(tree: &mut RenderHonuBanyan, mats: &RenderMaterials) {
-	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
-	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
-	tree.growth_body_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
-	tree.growth_foliage_material.mesh = MeshMaterial3d(mats.tuft.clone());
-}
+/// No-op: Honu Banyan now uses VegetationComponents (no per-tree mesh materials).
+pub fn attach_honu_banyan_materials(_tree: &mut RenderHonuBanyan, _mats: &RenderMaterials) {}
 
 fn attach_render_materials(
 	subject: &mut RenderSubject,
@@ -267,10 +240,7 @@ fn attach_render_materials(
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
 		RenderSubject::NorthernConifer(_tree) => {}
-		RenderSubject::TemperateConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::TemperateConifer(_tree) => {}
 		RenderSubject::DatePalm(_tree) => {}
 		RenderSubject::WaialeaPalm(_tree) => {}
 		RenderSubject::PalmBush(_tree) => {}
@@ -493,21 +463,6 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	}
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats);
-	}
-	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-	}
-	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
-	}
-	if let RenderSubject::JungleLowerMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
-	}
-	if let RenderSubject::JungleMassives(grove) = &mut config.subject {
-		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
-		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);

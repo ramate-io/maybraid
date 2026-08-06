@@ -3,10 +3,10 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_trees::braid_oak_tree::BraidOakTree;
+use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
-use chico_sbs_trees::temperate_conifer::TemperateConifer;
+use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -214,29 +214,13 @@ where
 			let entities = match placed.variant.item() {
 				RiparianMixItem::BraidOak(oak) => {
 					let geometry = oak.build_with_noise(build_noise);
-					let mut tree =
-						BraidOakTree::<StickM, StickS, LeafM, LeafS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.inner_leaf_material = self.leaf_material.clone();
-					tree.outer_leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
+					let mut params = BraidOakTreeParams::default();
+					params.geometry = geometry;
+					params.stick_surface_noise =
 						placement_noise(self.stick_surface_noise, placed.position);
-					tree.inner_leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				RiparianMixItem::Storybook(story) => {
 					let geometry = story.build_with_noise(build_noise);
@@ -274,32 +258,16 @@ where
 				}
 				RiparianMixItem::TemperateConifer(temperate) => {
 					let samples = temperate.build_with_noise(build_noise);
-					let mut tree = TemperateConifer::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = samples.geometry;
-					tree.frond_world_scale = samples.frond_world_scale;
-					tree.fronds_per_joint = samples.fronds_per_joint;
-					tree.frond_length_fraction = samples.frond_length_fraction;
-					tree.frond_spawn_fraction = samples.frond_spawn_fraction;
-					tree.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = TemperateConiferParams::default();
+					params.geometry = samples.geometry;
+					params.frond_world_scale = samples.frond_world_scale;
+					params.fronds_per_joint = samples.fronds_per_joint;
+					params.frond_length_fraction = samples.frond_length_fraction;
+					params.frond_spawn_fraction = samples.frond_spawn_fraction;
+					params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 			};
 			out.extend(entities);

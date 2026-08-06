@@ -1,351 +1,155 @@
 //! **Honu Banyan** — wide spreading banyan ([#250](https://github.com/ramate-io/maybraid/issues/250), [RFC §3.1.7.5](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/05-honu-banyan/README.md)).
+//!
+//! [`HonuBanyanParams::build`] grows the ball-stick chain once into [`HonuBanyan`],
+//! which implements [`VegetationComponents`].
+//!
+//! Structural LOD:
+//! - **High** — trunk + descenders + banded branches; jungle-growth clusters + banded canopy
+//! - **Medium** — trunk + banded sticks; banded growth/canopy + mid layered proxy
+//! - **Low** — trunk + ~1/4 descenders; cheap growth/canopy balls + mid proxy
 
 mod canopy;
+#[allow(dead_code)]
 mod joint_ball;
 pub mod render_item_plugin;
 mod stick;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_geometry::render::ball::BallRenderHelper;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::{BallStickChain, HonuBanyanSbs};
-use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
-use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
-
-use crate::skipped_mesh_material::{
-	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
+use chico_sbs_geometry::{BallStickChain, HonuBanyanChain, HonuBanyanSbs};
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
 };
-use canopy::HonuBanyanFoliageRule;
-use joint_ball::HonuBanyanJointBallRule;
-use stick::HonuBanyanStickRule;
+use clap::Args;
+use lod::gen::LodSceneLevel;
 
-pub type HonuBanyanStd = HonuBanyan<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedInnerLeafMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedOuterLeafMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedBodyMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedFoliageMeshMaterial<StandardMaterial>,
->;
+use canopy::{foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium};
+use stick::{
+	keep_stick_on_low, stick_node_for_segment, stick_nodes_high_banded, stick_nodes_medium_banded,
+	stick_role_for_segment,
+};
 
-#[derive(Clone, Args)]
+/// Authoring / CLI parameters for Honu Banyan.
+#[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct HonuBanyanConstructionParams {
+pub struct HonuBanyanParams {
+	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
+	#[command(flatten, next_help_heading = "Geometry")]
+	pub geometry: HonuBanyanSbs,
+
+	/// Fraction of qualifying outer-ring nodes that spawn jungle growth.
 	#[arg(long, default_value_t = 0.80)]
 	pub growth_spawn_fraction: f32,
 }
 
-impl Default for HonuBanyanConstructionParams {
-	fn default() -> Self {
-		Self { growth_spawn_fraction: 0.80 }
-	}
-}
-
-#[derive(Component, Clone, Args)]
-#[command(rename_all = "kebab-case")]
-pub struct HonuBanyan<
-	StickM,
-	StickS,
-	InnerLeafM,
-	InnerLeafS,
-	OuterLeafM,
-	OuterLeafS,
-	BodyM,
-	BodyS,
-	FoliageM,
-	FoliageS,
-> where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args,
-	BodyM: Material,
-	BodyS: Clone + Into<MeshMaterial3d<BodyM>> + Args,
-	FoliageM: Material,
-	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
-{
-	#[command(flatten, next_help_heading = "Geometry")]
-	pub geometry: HonuBanyanSbs,
-
-	#[command(flatten, next_help_heading = "Construction")]
-	pub construction: HonuBanyanConstructionParams,
-
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
-	#[command(flatten, next_help_heading = "Inner Leaf Material")]
-	pub inner_leaf_material: InnerLeafS,
-
-	#[command(flatten, next_help_heading = "Outer Leaf Material")]
-	pub outer_leaf_material: OuterLeafS,
-
-	#[command(flatten, next_help_heading = "Growth Body Material")]
-	pub growth_body_material: BodyS,
-
-	#[command(flatten, next_help_heading = "Growth Foliage Material")]
-	pub growth_foliage_material: FoliageS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.08,2",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Trunk Surface Noise"
-	)]
-	pub stick_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Inner Leaf Surface Noise"
-	)]
-	pub inner_leaf_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Outer Leaf Surface Noise"
-	)]
-	pub outer_leaf_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Growth Body Noise"
-	)]
-	pub growth_body_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Growth Foliage Noise"
-	)]
-	pub growth_foliage_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(
-		fn() -> StickM,
-		fn() -> InnerLeafM,
-		fn() -> OuterLeafM,
-		fn() -> BodyM,
-		fn() -> FoliageM,
-	)>,
-}
-
-impl<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	> Default
-	for HonuBanyan<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args + Default,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args + Default,
-	BodyM: Material,
-	BodyS: Clone + Into<MeshMaterial3d<BodyM>> + Args + Default,
-	FoliageM: Material,
-	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args + Default,
-{
+impl Default for HonuBanyanParams {
 	fn default() -> Self {
 		Self {
 			geometry: HonuBanyanSbs::default(),
-			construction: HonuBanyanConstructionParams::default(),
-			stick_material: StickS::default(),
-			inner_leaf_material: InnerLeafS::default(),
-			outer_leaf_material: OuterLeafS::default(),
-			growth_body_material: BodyS::default(),
-			growth_foliage_material: FoliageS::default(),
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.08, 2),
-			inner_leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			outer_leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			growth_body_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			growth_foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
+			growth_spawn_fraction: 0.80,
 		}
 	}
 }
 
-impl<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	>
-	HonuBanyan<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	InnerLeafM: Material,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args,
-	OuterLeafM: Material,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args,
-	BodyM: Material,
-	BodyS: Clone + Into<MeshMaterial3d<BodyM>> + Args,
-	FoliageM: Material,
-	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
-{
-	pub fn build_chain(&self) -> BallStickChain<chico_sbs_geometry::HonuBanyanChain> {
-		self.geometry.build_chain()
+impl HonuBanyanParams {
+	/// Grow the ball-stick chain once for presentation / LOD emission.
+	pub fn build(&self) -> HonuBanyan {
+		HonuBanyan::from_params(self)
 	}
 }
 
-impl<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	> RenderItem
-	for HonuBanyan<
-		StickM,
-		StickS,
-		InnerLeafM,
-		InnerLeafS,
-		OuterLeafM,
-		OuterLeafS,
-		BodyM,
-		BodyS,
-		FoliageM,
-		FoliageS,
-	>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	InnerLeafM: Material + Send + Sync + 'static,
-	InnerLeafS: Clone + Into<MeshMaterial3d<InnerLeafM>> + Args + Send + Sync + 'static + Default,
-	OuterLeafM: Material + Send + Sync + 'static,
-	OuterLeafS: Clone + Into<MeshMaterial3d<OuterLeafM>> + Args + Send + Sync + 'static + Default,
-	BodyM: Material + Send + Sync + 'static,
-	BodyS: Clone + Into<MeshMaterial3d<BodyM>> + Args + Send + Sync + 'static + Default,
-	FoliageM: Material + Send + Sync + 'static,
-	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let chain = self.build_chain();
-		let leaf_radius = self.geometry.leaf_ball_size();
+/// Built Honu Banyan: params plus a single grown [`BallStickChain`].
+#[derive(Clone)]
+pub struct HonuBanyan {
+	pub geometry: HonuBanyanSbs,
+	pub chain: BallStickChain<HonuBanyanChain>,
+	pub growth_spawn_fraction: f32,
+}
 
-		let stick_rule = HonuBanyanStickRule::<StickM, StickS> {
-			surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
+impl HonuBanyan {
+	pub fn from_params(params: &HonuBanyanParams) -> Self {
+		Self {
+			geometry: params.geometry.clone(),
+			chain: params.geometry.build_chain(),
+			growth_spawn_fraction: params.growth_spawn_fraction,
+		}
+	}
+
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.to_stalk().stalk_base_radius.max(1e-3),
+		)
+	}
+
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.scale.tree_height * 0.5, 0.0)
+	}
+
+	fn stick_nodes_high(&self) -> Vec<StickNode> {
+		stick_nodes_high_banded(
+			self.chain
+				.segments_with_hysteresis()
+				.map(|(segment, parent, _)| (segment, parent)),
+		)
+	}
+
+	fn stick_nodes_medium(&self) -> Vec<StickNode> {
+		stick_nodes_medium_banded(
+			self.chain
+				.segments_with_hysteresis()
+				.map(|(segment, parent, _)| (segment, parent)),
+		)
+	}
+
+	fn stick_nodes_low(&self) -> Vec<StickNode> {
+		let mut descender_index = 0usize;
+		self.chain
+			.segments_with_hysteresis()
+			.filter_map(|(segment, parent, _)| {
+				let role = stick_role_for_segment(&segment, parent);
+				if !keep_stick_on_low(role, &mut descender_index) {
+					return None;
+				}
+				stick_node_for_segment(&segment, parent)
+			})
+			.collect()
+	}
+
+	fn foliage_for(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
+		let min_y = self.geometry.crown_floor_world_y();
+		let leaf_r = self.geometry.leaf_ball_size();
+		let g = self.growth_spawn_fraction;
+		match level {
+			LodSceneLevel::High => foliage_nodes_high(&self.chain, g, min_y, leaf_r),
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, g, min_y, leaf_r),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, g, min_y, leaf_r),
+		}
+	}
+}
+
+impl VegetationComponents for HonuBanyan {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let nodes = match level {
+			LodSceneLevel::High => self.stick_nodes_high(),
+			LodSceneLevel::Medium => self.stick_nodes_medium(),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => self.stick_nodes_low(),
 		};
+		Layers::from_free(nodes)
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		Layers::from_free(self.foliage_for(level))
+	}
 
-		let mut joint_ball = self.stick_surface_noise.build_scalar::<ChicoBall<StickM, StickS>>();
-		joint_ball.material = self.stick_material.clone();
-		let joint_rule = HonuBanyanJointBallRule { joint_ball };
-
-		BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		let mut inner_ball = self
-			.inner_leaf_surface_noise
-			.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
-		inner_ball.material = self.inner_leaf_material.clone();
-		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
-		outer_splay.material = self.outer_leaf_material.clone();
-		let foliage_rule = HonuBanyanFoliageRule {
-			growth_spawn_fraction: self.construction.growth_spawn_fraction,
-			inner_ball,
-			outer_splay,
-			leaf_radius_world: leaf_radius,
-			body_noise: self.growth_body_noise,
-			foliage_noise: self.growth_foliage_noise,
-			body_material: self.growth_body_material.clone(),
-			foliage_material: self.growth_foliage_material.clone(),
-			__marker: PhantomData,
-		};
-
-		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		Some(VegetationStructuralLodProbe::new(
+			self.structural_center(),
+			self.footprint_radius(),
+		))
 	}
 }

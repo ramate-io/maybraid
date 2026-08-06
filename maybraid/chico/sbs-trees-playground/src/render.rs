@@ -44,11 +44,11 @@ use chico_grove_render_items::unending_jungle::UnendingJungleStd;
 use chico_grove_render_items::vineyard::VineyardStd;
 use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
 use chico_grove_render_items::wild_grass::WildGrassStd;
-use chico_sbs_trees::braid_oak_tree::BraidOakTree;
+use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
-use chico_sbs_trees::honu_banyan::HonuBanyan;
-use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
+use chico_sbs_trees::honu_banyan::HonuBanyanParams;
+use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTreeParams;
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
 use chico_sbs_trees::liams_conifer::LiamsConiferParams;
 use chico_sbs_trees::northern_conifer::NorthernConiferParams;
@@ -58,7 +58,7 @@ use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
-use chico_sbs_trees::temperate_conifer::TemperateConifer;
+use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
 use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_sbs_trees::waialea_palm::WaialeaPalmParams;
@@ -75,18 +75,7 @@ use render_item::RenderItem;
 pub type RenderSopesBanyan = SopesBanyanParams;
 
 /// [`HonuBanyan`] — wide spreading banyan ([#250](https://github.com/ramate-io/maybraid/issues/250)).
-pub type RenderHonuBanyan = HonuBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoLeafMaterial,
-	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoStickMaterial,
-	SkippedBodyMeshMaterial<ChicoStickMaterial>,
-	StandardMaterial,
-	SkippedFoliageMeshMaterial<StandardMaterial>,
->;
+pub type RenderHonuBanyan = HonuBanyanParams;
 
 /// [`LiamsConifer`] — VegetationComponents / LodScene.
 pub type RenderLiamsConifer = LiamsConiferParams;
@@ -103,12 +92,7 @@ pub type RenderFriendsConifer = FriendsConifer<
 pub type RenderNorthernConifer = NorthernConiferParams;
 
 /// [`TemperateConifer`] — Friend's log-profile conifer with joint fronds ([#238](https://github.com/ramate-io/maybraid/issues/238)).
-pub type RenderTemperateConifer = TemperateConifer<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderTemperateConifer = TemperateConiferParams;
 
 /// [`DatePalm`] — columnar trunk + stacked frond crown ([#256](https://github.com/ramate-io/maybraid/issues/256)).
 pub type RenderDatePalm = DatePalmParams;
@@ -138,30 +122,10 @@ pub type RenderRorysHeadTrained = RorysHeadTrainedParams;
 pub type RenderVaseTree = VaseTreeParams;
 
 /// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
-pub type RenderBraidOakTree = BraidOakTree<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoLeafMaterial,
-	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderBraidOakTree = BraidOakTreeParams;
 
 /// [`JungleStorybookTree`] — dense Storybook construction ([#235](https://github.com/ramate-io/maybraid/issues/235)).
-pub type RenderJungleStorybookTree = JungleStorybookTree<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoLeafMaterial,
-	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
-	ChicoStickMaterial,
-	SkippedBodyMeshMaterial<ChicoStickMaterial>,
-	StandardMaterial,
-	SkippedFoliageMeshMaterial<StandardMaterial>,
->;
-
-use chico_sbs_trees::{SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial};
+pub type RenderJungleStorybookTree = JungleStorybookTreeParams;
 
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
@@ -1012,7 +976,11 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&tree);
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
-			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::HonuBanyan(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::LiamsConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
@@ -1024,7 +992,11 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&tree);
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
-			Self::TemperateConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TemperateConifer(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::DatePalm(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
@@ -1065,8 +1037,16 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&tree);
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
-			Self::BraidOakTree(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BraidOakTree(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
+			Self::JungleStorybookTree(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TuftPatch(item) => {

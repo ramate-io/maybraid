@@ -2,9 +2,11 @@
 
 use bevy::prelude::*;
 use chico_sbs_trees::{
-	DatePalmParams, KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams,
-	PalmBushParams, PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams,
-	SopesBanyanParams, StorybookTreeParams, TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
+	BraidOakTreeParams, DatePalmParams, HonuBanyanParams, JungleStorybookTreeParams,
+	KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams, PalmBushParams,
+	PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams, SimplemansHedgeParams,
+	SopesBanyanParams, StorybookTreeParams, TemperateConiferParams, TuftPatchParams,
+	VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
 	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
@@ -32,6 +34,16 @@ pub enum Show {
 	NorthernConifer(ShowNorthernConifer),
 	/// Liam's Conifer via VegetationComponents / LodScene.
 	LiamsConifer(ShowLiamsConifer),
+	/// Temperate Conifer via VegetationComponents / LodScene.
+	TemperateConifer(ShowTemperateConifer),
+	/// Honu Banyan via VegetationComponents / LodScene.
+	HonuBanyan(ShowHonuBanyan),
+	/// Jungle Storybook Tree via VegetationComponents / LodScene.
+	JungleStorybookTree(ShowJungleStorybookTree),
+	/// Braid Oak Tree via VegetationComponents / LodScene.
+	BraidOakTree(ShowBraidOakTree),
+	/// Simpleman's Hedge via VegetationComponents / LodScene.
+	SimplemansHedge(ShowSimplemansHedge),
 	/// Tuft Patch via VegetationComponents / LodScene (straight frond segments).
 	TuftPatch(ShowTuftPatch),
 	/// Palm Crown via VegetationComponents / LodScene (fronds; layered ball at Low).
@@ -102,6 +114,41 @@ pub struct ShowLiamsConifer {
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
+pub struct ShowTemperateConifer {
+	#[command(flatten)]
+	pub tree: TemperateConiferParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowHonuBanyan {
+	#[command(flatten)]
+	pub tree: HonuBanyanParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowJungleStorybookTree {
+	#[command(flatten)]
+	pub tree: JungleStorybookTreeParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowBraidOakTree {
+	#[command(flatten)]
+	pub tree: BraidOakTreeParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowSimplemansHedge {
+	#[command(flatten)]
+	pub hedge: SimplemansHedgeParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
 pub struct ShowTuftPatch {
 	#[command(flatten)]
 	pub patch: TuftPatchParams,
@@ -146,6 +193,11 @@ impl Show {
 			Self::VaseTree(args) => ShowSubject::VaseTree(args.tree),
 			Self::NorthernConifer(args) => ShowSubject::NorthernConifer(args.tree),
 			Self::LiamsConifer(args) => ShowSubject::LiamsConifer(args.tree),
+			Self::TemperateConifer(args) => ShowSubject::TemperateConifer(args.tree),
+			Self::HonuBanyan(args) => ShowSubject::HonuBanyan(args.tree),
+			Self::JungleStorybookTree(args) => ShowSubject::JungleStorybookTree(args.tree),
+			Self::BraidOakTree(args) => ShowSubject::BraidOakTree(args.tree),
+			Self::SimplemansHedge(args) => ShowSubject::SimplemansHedge(args.hedge),
 			Self::TuftPatch(args) => ShowSubject::TuftPatch(args.patch),
 			Self::PalmCrown(args) => ShowSubject::PalmCrown(args.crown),
 			Self::DatePalm(args) => ShowSubject::DatePalm(args.tree),
@@ -171,6 +223,11 @@ pub enum ShowSubject {
 	VaseTree(VaseTreeParams),
 	NorthernConifer(NorthernConiferParams),
 	LiamsConifer(LiamsConiferParams),
+	TemperateConifer(TemperateConiferParams),
+	HonuBanyan(HonuBanyanParams),
+	JungleStorybookTree(JungleStorybookTreeParams),
+	BraidOakTree(BraidOakTreeParams),
+	SimplemansHedge(SimplemansHedgeParams),
 	TuftPatch(TuftPatchParams),
 	PalmCrown(PalmCrownParams),
 	DatePalm(DatePalmParams),
@@ -220,6 +277,29 @@ pub fn sync_show(
 			))
 		}
 		Some(ShowSubject::LiamsConifer(t)) => Some(format!("liams-conifer:{:?}", t.geometry)),
+		Some(ShowSubject::TemperateConifer(t)) => Some(format!(
+			"temperate-conifer:{:?}|fronds={:?}|len={:?}|spawn={}",
+			t.geometry.inner,
+			t.fronds_per_joint,
+			t.frond_length_fraction,
+			t.frond_spawn_fraction
+		)),
+		Some(ShowSubject::HonuBanyan(t)) => Some(format!(
+			"honu-banyan:{:?}|growth={}",
+			t.geometry, t.growth_spawn_fraction
+		)),
+		Some(ShowSubject::JungleStorybookTree(t)) => Some(format!(
+			"jungle-storybook-tree:{:?}|growth={}",
+			t.geometry, t.growth_spawn_fraction
+		)),
+		Some(ShowSubject::BraidOakTree(t)) => Some(format!(
+			"braid-oak-tree:{:?}|stick={:?}",
+			t.geometry, t.stick_surface_noise
+		)),
+		Some(ShowSubject::SimplemansHedge(t)) => Some(format!(
+			"simplemans-hedge:h={}|xz={}|d={}|seed={}|clumps={}",
+			t.height, t.footprint_xz, t.density, t.seed, t.clump_count
+		)),
 		Some(ShowSubject::TuftPatch(t)) => Some(format!(
 			"tuft-patch:{:?}|clumps={}|patch_extent_xz={}",
 			t.shape, t.clump_count, t.patch_extent_xz
@@ -256,6 +336,11 @@ pub fn sync_show(
 		ShowSubject::VaseTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::NorthernConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::LiamsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::TemperateConifer(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::HonuBanyan(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::JungleStorybookTree(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::BraidOakTree(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::SimplemansHedge(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::TuftPatch(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmCrown(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::DatePalm(params) => spawn_show_tree(&mut commands, &params.build()),

@@ -1,19 +1,44 @@
 //! **Temperate Conifer** — sparse fronded Friend's Conifer variant ([#238](https://github.com/ramate-io/maybraid/issues/238),
 //! [RFC-183 §3.1.7.15](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/15-temperate-conifer/README.md)).
 //!
-//! Geometry from [`FriendsConiferSbs`](chico_sbs_geometry::FriendsConiferSbs); joint foliage uses
-//! [`FrondCrown`](chico_ball_components::frond::FrondCrown) aligned to branch direction.
+//! [`TemperateConiferParams::build`] applies the temperate preset, grows the ball-stick chain once
+//! into [`TemperateConifer`], which implements [`VegetationComponents`]. Sticks reuse Northern /
+//! Liam banding; High/Medium foliage structurally samples joints, then packs one
+//! [`FrondCollection`] per branch ring; Low uses a dual layered-ball crown proxy.
 
 mod foliage;
+#[allow(dead_code)]
 pub mod render_item_plugin;
+#[allow(dead_code)]
 mod stick;
 
-use std::marker::PhantomData;
+use std::collections::BTreeMap;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::FriendsConiferSbs;
+use chico_ball_components::frond::{align_frond_direction, FrondCrownShape};
+use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
+use chico_sbs_geometry::{
+	liams_stalk_tip_from_chain, sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands,
+	BallStickChain, FriendsConiferChain, FriendsConiferSbs,
+};
+use chico_vegetation_components::{
+	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
+	VegetationStructuralLodProbe,
+};
 use clap::Args;
+use lod::gen::LodSceneLevel;
+use procedural_common::{parse_unit_range, UnitRange};
+
+use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
+use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+use crate::palm_tree::{layered_proxy_balls, world_space_frond_shape};
+use crate::torch_tree::structural_lod_probe;
+use foliage::{branch_direction, frond_shape_for_joint};
+
+/// High: denser structural joint samples before ring packing.
+const HIGH_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Medium: coarser joint samples (~half High cells).
+const MEDIUM_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 
 /// [`FriendsConiferSbs`] with Temperate Conifer limb/ray defaults (clap `flatten` base).
 #[derive(Clone, Debug, PartialEq, Args)]
@@ -37,43 +62,15 @@ impl std::ops::Deref for TemperateConiferGeometry {
 		&self.inner
 	}
 }
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::parse_unit_range;
-use procedural_common::{NoiseParams, UnitRange};
-use render_item::{CascadeChunk, RenderItem};
 
-use crate::conifer_canopy_apex::{spawn_apex_frond_crown, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use foliage::spawn_joint_fronds;
-use stick::TemperateConiferStickRule;
-
-/// Typical [`StandardMaterial`] tree using CLI-skipped handles for bark and foliage.
-pub type TemperateConiferStd = TemperateConifer<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
-
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Temperate Conifer.
+#[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct TemperateConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct TemperateConiferParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: TemperateConiferGeometry,
 
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	/// Uniform world scale applied to each joint [`FrondCrown`] mesh.
+	/// Uniform world scale applied to each joint [`FrondCrown`](chico_ball_components::frond::FrondCrown).
 	#[arg(long, default_value_t = 1.0, help_heading = "Foliage")]
 	pub frond_world_scale: f32,
 
@@ -104,127 +101,274 @@ where
 	/// Fraction of trees that spawn a downward frond crown at the stalk tip (noise-gated).
 	#[arg(long, default_value_t = DEFAULT_APEX_CANOPY_SPAWN_FRACTION, help_heading = "Foliage")]
 	pub apex_canopy_spawn_fraction: f32,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Surface Noise"
-	)]
-	pub stick_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Surface Noise"
-	)]
-	pub leaf_surface_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> LeafM)>,
 }
 
-impl<StickM, StickS, LeafM, LeafS> Default for TemperateConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for TemperateConiferParams {
 	fn default() -> Self {
 		Self {
 			geometry: TemperateConiferGeometry::default(),
-			stick_material: StickS::default(),
-			leaf_material: LeafS::default(),
 			frond_world_scale: 1.0,
 			fronds_per_joint: UnitRange::new(1.0, 2.0),
 			frond_length_fraction: UnitRange::new(0.035, 0.07),
 			frond_spawn_fraction: 1.0,
 			apex_canopy_spawn_fraction: DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
 		}
 	}
 }
 
-impl<StickM, StickS, LeafM, LeafS> TemperateConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn build_chain(
-		&self,
-	) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::FriendsConiferChain> {
-		let mut geometry = self.geometry.inner.clone();
-		geometry.apply_temperate_preset();
-		geometry.build_chain()
+impl TemperateConiferParams {
+	/// Grow the ball-stick chain once for presentation / LOD emission.
+	pub fn build(&self) -> TemperateConifer {
+		TemperateConifer::from_params(self)
 	}
 }
 
-impl<StickM, StickS, LeafM, LeafS> RenderItem for TemperateConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let chain = self.build_chain();
+/// Built Temperate Conifer: params plus a single grown [`BallStickChain`].
+#[derive(Clone)]
+pub struct TemperateConifer {
+	pub geometry: TemperateConiferGeometry,
+	pub chain: BallStickChain<FriendsConiferChain>,
+	pub frond_world_scale: f32,
+	pub fronds_per_joint: UnitRange,
+	pub frond_length_fraction: UnitRange,
+	pub frond_spawn_fraction: f32,
+	pub apex_canopy_spawn_fraction: f32,
+}
 
-		let stick_rule = TemperateConiferStickRule::<StickM, StickS> {
-			surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
-		};
+impl TemperateConifer {
+	pub fn from_params(params: &TemperateConiferParams) -> Self {
+		let mut geometry = params.geometry.clone();
+		geometry.inner.apply_temperate_preset();
+		Self {
+			chain: geometry.inner.build_chain(),
+			geometry,
+			frond_world_scale: params.frond_world_scale,
+			fronds_per_joint: params.fronds_per_joint,
+			frond_length_fraction: params.frond_length_fraction,
+			frond_spawn_fraction: params.frond_spawn_fraction,
+			apex_canopy_spawn_fraction: params.apex_canopy_spawn_fraction,
+		}
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
+		)
+	}
 
-		let mut geometry = self.geometry.inner.clone();
-		geometry.apply_temperate_preset();
-		spawn_joint_fronds::<LeafM, _>(
-			&geometry,
-			self.frond_world_scale,
-			&chain,
-			commands,
-			cascade_chunk,
-			root,
-			&self.fronds_per_joint,
-			&self.frond_length_fraction,
-			self.frond_spawn_fraction,
-			self.leaf_material.clone(),
-		);
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.height() * 0.5, 0.0)
+	}
 
-		spawn_apex_frond_crown::<LeafM, _>(
-			&geometry,
-			self.frond_world_scale,
-			&chain,
-			commands,
-			cascade_chunk,
-			root,
-			&self.leaf_surface_noise,
+	fn height(&self) -> f32 {
+		self.geometry.height()
+	}
+
+	fn ring_key(&self, y: f32) -> i32 {
+		let h = self.height().max(1e-6);
+		let first = self.geometry.rings.height_range.start;
+		let spacing = self.geometry.rings.spacing.max(1e-4);
+		let z_frac = (y / h).clamp(0.0, 1.0);
+		((z_frac - first) / spacing).round() as i32
+	}
+
+	/// Spawn-gated joint candidates (pre structural sample).
+	fn joint_candidates(&self) -> Vec<(usize, Vec3)> {
+		self.chain
+			.nodes_with_hysteresis_enumerated()
+			.filter_map(|(node_idx, node, _)| {
+				if !mix_seed_below_fraction(node_idx, node.position, self.frond_spawn_fraction) {
+					return None;
+				}
+				Some((node_idx, node.position))
+			})
+			.collect()
+	}
+
+	fn sampled_joints(&self, bands: AzimuthHeightBands) -> Vec<(usize, Vec3)> {
+		let candidates = self.joint_candidates();
+		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.1, bands)
+			.into_iter()
+			.map(|s| *s.item)
+			.collect()
+	}
+
+	fn rotated_frond_runs(
+		origin: Vec3,
+		rotation: Quat,
+		shape: &FrondCrownShape,
+	) -> Vec<FrondRun> {
+		shape
+			.frond_runs_at(Vec3::ZERO)
+			.into_iter()
+			.filter_map(|run| {
+				let placements: Vec<Placement> = run
+					.into_iter()
+					.filter_map(|seg| {
+						let start = origin + rotation * seg.start;
+						let dir = rotation * seg.direction;
+						Placement::frond_segment(start, dir, seg.length, seg.width)
+					})
+					.collect();
+				if placements.is_empty() {
+					None
+				} else {
+					Some(FrondRun::from_placements(placements))
+				}
+			})
+			.collect()
+	}
+
+	fn apex_frond_placement(&self) -> Option<(Vec3, Quat, FrondCrownShape)> {
+		let tip = liams_stalk_tip_from_chain(&self.chain);
+		if !sample_apex_canopy_spawn(
+			&self.geometry.canopy_noise,
+			&tip,
 			self.apex_canopy_spawn_fraction,
-			self.leaf_material.clone(),
-		);
+		) {
+			return None;
+		}
+		let h = self.height();
+		let scale = self.frond_world_scale.max(1e-8);
+		let seed = self.geometry.canopy_noise.seed.wrapping_add(0xC1A0);
+		let frond_count = 3 + ((seed as u32) % 2);
+		let local = FrondCrownShape {
+			frond_count,
+			length: (0.065 * h) / scale,
+			width: (0.012 * h) / scale,
+			droop: 0.28,
+			arch_lift: 0.06,
+			twist: 0.12,
+			leaflet_count: 5,
+			spine_segments: 3,
+			shoot_half_radius: 0.008,
+			rachis_half_thickness: 0.004,
+			leaflet_length_scale: 2.4,
+			downward_tilt_radians: 0.42,
+			outward_spread_radians: 0.55,
+			emission_lift_radians: 0.05,
+			seed,
+		};
+		Some((
+			tip.position,
+			align_frond_direction(Vec3::NEG_Y),
+			world_space_frond_shape(local, self.frond_world_scale),
+		))
+	}
 
-		vec![root]
+	/// One [`FrondCollection`] per branch ring from structurally sampled joints.
+	fn ring_frond_collections(&self, bands: AzimuthHeightBands) -> Vec<FoliageNode> {
+		let scale = self.frond_world_scale;
+		let mut rings: BTreeMap<i32, Vec<FrondRun>> = BTreeMap::new();
+		for (node_idx, position) in self.sampled_joints(bands) {
+			let Some(node) = self.chain.nodes.get(node_idx) else {
+				continue;
+			};
+			let local = frond_shape_for_joint(
+				&self.geometry.inner,
+				scale,
+				node_idx,
+				node,
+				&self.fronds_per_joint,
+				&self.frond_length_fraction,
+			);
+			let shape = world_space_frond_shape(local, scale);
+			let rotation = align_frond_direction(branch_direction(&self.chain, node_idx, node));
+			let key = self.ring_key(position.y);
+			rings
+				.entry(key)
+				.or_default()
+				.extend(Self::rotated_frond_runs(position, rotation, &shape));
+		}
+		if let Some((tip, rotation, shape)) = self.apex_frond_placement() {
+			let key = self.ring_key(tip.y).saturating_add(1);
+			rings
+				.entry(key)
+				.or_default()
+				.extend(Self::rotated_frond_runs(tip, rotation, &shape));
+		}
+		rings
+			.into_values()
+			.filter(|runs| !runs.is_empty())
+			.map(|runs| {
+				FoliageNode::frond_collection(FrondCollection::new(runs), Placement::IDENTITY)
+			})
+			.collect()
+	}
+
+	fn low_proxy_foliage(&self) -> Vec<FoliageNode> {
+		let joints = self.sampled_joints(MEDIUM_JOINT_BANDS);
+		let mut min = Vec3::splat(f32::INFINITY);
+		let mut max = Vec3::splat(f32::NEG_INFINITY);
+		let scale = self.frond_world_scale.max(1e-8);
+		let leaf = self.height() * 0.07 * scale;
+		if joints.is_empty() {
+			for (_, node, _) in self.chain.nodes_with_hysteresis_enumerated() {
+				min = min.min(node.position - Vec3::splat(leaf));
+				max = max.max(node.position + Vec3::splat(leaf));
+			}
+		} else {
+			for (node_idx, position) in &joints {
+				let Some(node) = self.chain.nodes.get(*node_idx) else {
+					continue;
+				};
+				let local = frond_shape_for_joint(
+					&self.geometry.inner,
+					self.frond_world_scale,
+					*node_idx,
+					node,
+					&self.fronds_per_joint,
+					&self.frond_length_fraction,
+				);
+				let shape = world_space_frond_shape(local, self.frond_world_scale);
+				let extent = shape.length.max(shape.width) * 1.1;
+				min = min.min(*position - Vec3::splat(extent));
+				max = max.max(*position + Vec3::splat(extent));
+			}
+			if let Some((tip, _, shape)) = self.apex_frond_placement() {
+				let extent = shape.length.max(shape.width) * 1.1;
+				min = min.min(tip - Vec3::splat(extent));
+				max = max.max(tip + Vec3::splat(extent));
+			}
+		}
+		if !min.is_finite() {
+			return Vec::new();
+		}
+		layered_proxy_balls(min, max)
+	}
+}
+
+impl VegetationComponents for TemperateConifer {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let nodes = match level {
+			LodSceneLevel::High => stick_nodes_high(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_medium(&self.chain),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
+		};
+		Layers::from_free(nodes)
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match level {
+			LodSceneLevel::High => Layers::from_free(self.ring_frond_collections(HIGH_JOINT_BANDS)),
+			LodSceneLevel::Medium => {
+				Layers::from_free(self.ring_frond_collections(MEDIUM_JOINT_BANDS))
+			}
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_proxy_foliage()),
+		}
+	}
+
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		Some(structural_lod_probe(
+			self.structural_center(),
+			self.footprint_radius(),
+			self.height(),
+		))
 	}
 }
