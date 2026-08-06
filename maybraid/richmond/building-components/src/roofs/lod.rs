@@ -21,11 +21,11 @@ use crate::lod_host::warm_content_host_hsl;
 use crate::placed::Placement;
 
 /// `distance / max_extent` out to this → High.
-pub const ROOF_HIGH_FACTOR: f32 = 2.5;
+pub const ROOF_HIGH_FACTOR: f32 = 1.2;
 /// Out to this → Medium.
-pub const ROOF_MEDIUM_FACTOR: f32 = 10.0;
+pub const ROOF_MEDIUM_FACTOR: f32 = 1.5;
 /// Out to this → Low; else UltraLow.
-pub const ROOF_LOW_FACTOR: f32 = 500.0;
+pub const ROOF_LOW_FACTOR: f32 = 2.0;
 
 /// Viewer distance band for roof mesh resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,11 +116,7 @@ impl LodScene for RoofLodProbe {
 		self.status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		bevy::scene::SceneFunction(empty_scene)
 	}
 }
