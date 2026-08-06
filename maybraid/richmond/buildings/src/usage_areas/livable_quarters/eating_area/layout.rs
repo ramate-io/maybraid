@@ -2,10 +2,11 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
-use procedural_common::{aabb2_area, Aabb2dPack, NoiseParams};
+use procedural_common::{aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseParams, PlanAxes, PlanOpeningFace};
 
 use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+use crate::usage_areas::clearance::PassageClearance;
 use crate::usage_areas::livable_quarters::dining_room::{
 	DiningRoomParameterized, DiningRoomPlan,
 };
@@ -141,9 +142,16 @@ fn child_openings(
 	kitchen: bool,
 ) -> Openings {
 	let mut openings = Openings::new();
-	// Inherit host passages that sit nearer this half.
+	let tag = if kitchen { 0 } else { 1 };
+	// Inherit host passages whose face lies on this half (centroid inherit can
+	// hand a hall door to the sibling while this half still sits on that wall).
 	for (id, o) in host.openings.iter() {
 		if !matches!(o.label, OpeningLabel::Passage) {
+			continue;
+		}
+		let plan = aabb3_to_plan(&o.bounds, PlanAxes::XZ);
+		if PlanOpeningFace::from_passage(self_xz, plan).is_some() {
+			openings.insert(id.clone(), o.clone());
 			continue;
 		}
 		let dmin = Vec3::from(o.bounds.min);
@@ -153,6 +161,32 @@ fn child_openings(
 		let d_nb = (c - neighbor_xz.center()).length_squared();
 		if d_self <= d_nb {
 			openings.insert(id.clone(), o.clone());
+		}
+	}
+	// Re-author a door-width passage on this half's span of any host passage wall.
+	let host_plan = host_xz(&host.bounds);
+	for (fi, face) in PassageClearance::collect_faces_wall_snapped(host, host_plan)
+		.into_iter()
+		.enumerate()
+	{
+		let Some((along_x, lo, hi, mid)) = half_span_on_wall(self_xz, face) else {
+			continue;
+		};
+		if hi - lo + EPS < DOOR_WIDTH * 0.7 {
+			continue;
+		}
+		if let Some((oid, opening)) = connecting_passage(
+			SCOPE,
+			"hall_wall",
+			along_x,
+			lo,
+			hi,
+			mid,
+			y0,
+			y1,
+			format!("{tag}_hw{fi}"),
+		) {
+			openings.insert(oid, opening);
 		}
 	}
 	// Shared-edge door so both halves clear placer passage keep-outs.
@@ -166,7 +200,7 @@ fn child_openings(
 			mid,
 			y0,
 			y1,
-			format!("{}", if kitchen { 0 } else { 1 }),
+			format!("{tag}"),
 		) {
 			openings.insert(oid, opening);
 		}
@@ -178,8 +212,37 @@ fn child_openings(
 		return openings;
 	}
 	// Last resort: edge door on the half itself.
-	edge_passage(self_xz, y0, y1, if kitchen { 0 } else { 1 }, &mut openings);
+	edge_passage(self_xz, y0, y1, tag, &mut openings);
 	openings
+}
+
+fn half_span_on_wall(half: Aabb2d, face: PlanOpeningFace) -> Option<(bool, f32, f32, f32)> {
+	const T: f32 = 0.12;
+	if face.thru_is_x {
+		let on_min = (half.min.x - face.thru).abs() <= T;
+		let on_max = (half.max.x - face.thru).abs() <= T;
+		if !on_min && !on_max {
+			return None;
+		}
+		Some((
+			false,
+			half.min.y,
+			half.max.y,
+			if on_min { half.min.x } else { half.max.x },
+		))
+	} else {
+		let on_min = (half.min.y - face.thru).abs() <= T;
+		let on_max = (half.max.y - face.thru).abs() <= T;
+		if !on_min && !on_max {
+			return None;
+		}
+		Some((
+			true,
+			half.min.x,
+			half.max.x,
+			if on_min { half.min.y } else { half.max.y },
+		))
+	}
 }
 
 fn shared_edge(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {

@@ -310,4 +310,133 @@ mod tests {
 			"expected at most the spine hall as a large OpenHall, got {large_open_halls}"
 		);
 	}
+
+	/// Kitchen/living furniture must not sit flush on a shared entry/hall wall
+	/// (Flange Livable 1 + 5). Checks the shallow passage-wall lip, not a full
+	/// hall inflate (open rooms may overlap spine bands by design).
+	#[test]
+	fn seed_1337_flange_livable_open_furniture_clears_halls() {
+		use bevy_math::bounding::{Aabb2d, BoundingVolume};
+		use bevy_math::Vec2;
+		use crate::usage_areas::livable_apartment::ApartmentRoom;
+		use crate::usage_areas::plan_cells::shared_edge_span;
+		use crate::usage_areas::PASSAGE_WALL_LIP;
+		use procedural_common::{intersects_aabb2, aabb2_area};
+
+		fn fill_xz(t: bevy_math::Vec3, s: bevy_math::Vec3) -> Aabb2d {
+			Aabb2d {
+				min: Vec2::new(t.x - s.x * 0.5, t.z - s.z * 0.5),
+				max: Vec2::new(t.x + s.x * 0.5, t.z + s.z * 0.5),
+			}
+		}
+
+		/// Inward lip across the shared edge span, into `room`.
+		fn shared_wall_lip(
+			room: Aabb2d,
+			along_x: bool,
+			lo: f32,
+			hi: f32,
+			mid: f32,
+			depth: f32,
+		) -> Aabb2d {
+			if along_x {
+				let inward_pos = room.center().y >= mid;
+				if inward_pos {
+					Aabb2d {
+						min: Vec2::new(lo, mid),
+						max: Vec2::new(hi, mid + depth),
+					}
+				} else {
+					Aabb2d {
+						min: Vec2::new(lo, mid - depth),
+						max: Vec2::new(hi, mid),
+					}
+				}
+			} else if room.center().x >= mid {
+				Aabb2d {
+					min: Vec2::new(mid, lo),
+					max: Vec2::new(mid + depth, hi),
+				}
+			} else {
+				Aabb2d {
+					min: Vec2::new(mid - depth, lo),
+					max: Vec2::new(mid, hi),
+				}
+			}
+		}
+
+		let storey = storey_seed(1337);
+		assert!(storey.blocks.len() >= 2, "expected stem + flange");
+		let flange = &storey.blocks[1];
+		for &rid in &[0u32, 4u32] {
+			let Some(apt) = flange.apartments.iter().find(|a| a.region_id == rid) else {
+				continue;
+			};
+			let halls: Vec<Aabb2d> = apt
+				.walkways
+				.iter()
+				.copied()
+				.chain(apt.rooms.iter().filter_map(|r| match r {
+					ApartmentRoom::Entryway { confines, .. }
+					| ApartmentRoom::OpenHall { confines, .. } => Some(host_xz(&confines.bounds)),
+					_ => None,
+				}))
+				.collect();
+			for room in &apt.rooms {
+				let mut footprints = Vec::new();
+				let room_xz = match room {
+					ApartmentRoom::Kitchen(k) => {
+						for f in k
+							.counter_runs
+							.iter()
+							.chain(k.peninsulas.iter())
+							.chain(k.islands.iter())
+							.chain(k.fillers.iter())
+						{
+							footprints.push(fill_xz(
+								f.label.placement.translation,
+								f.label.placement.scale,
+							));
+						}
+						fill_xz(k.room_type.placement.translation, k.room_type.placement.scale)
+					}
+					ApartmentRoom::Living(l) => {
+						for f in l
+							.primary_seating
+							.iter()
+							.chain(l.secondary_seating.iter())
+							.chain(l.fillers.iter())
+						{
+							footprints.push(fill_xz(
+								f.label.placement.translation,
+								f.label.placement.scale,
+							));
+						}
+						fill_xz(l.room_type.placement.translation, l.room_type.placement.scale)
+					}
+					_ => continue,
+				};
+				for hall in &halls {
+					let Some((along_x, lo, hi, mid)) = shared_edge_span(room_xz, *hall) else {
+						continue;
+					};
+					// Skip open-over-spine: room substantially overlaps the hall.
+					let overlap = Aabb2d {
+						min: Vec2::new(room_xz.min.x.max(hall.min.x), room_xz.min.y.max(hall.min.y)),
+						max: Vec2::new(room_xz.max.x.min(hall.max.x), room_xz.max.y.min(hall.max.y)),
+					};
+					if aabb2_area(overlap) > 0.25 {
+						continue;
+					}
+					let lip = shared_wall_lip(room_xz, along_x, lo, hi, mid, PASSAGE_WALL_LIP - 0.05);
+					for fp in &footprints {
+						assert!(
+							!intersects_aabb2(*fp, lip),
+							"region {rid}: open furniture flush on hall wall"
+						);
+					}
+				}
+			}
+		}
+	}
 }

@@ -158,14 +158,19 @@ pub(crate) fn fit_from_multi(
 	};
 
 	for (ri, rect) in cluster.rects.iter().enumerate() {
+		// Keep max-rect host openings for RLA normalize (tree + tip only).
+		// Entry-stem doors are injected as open-slot circulation anchors so
+		// furniture clears them without inventing inbound host passages that
+		// closed rooms cannot satisfy.
 		let confines = cluster.confines_ensured(ri, entry_xz);
 		let cell_noise =
 			noise_for_cell(apt_noise, (region_id as i32).wrapping_add(ri as i32 * 17));
-		match RectangularLivableArea::fit_with_params(
+		match RectangularLivableArea::fit_with_circulation(
 			&confines,
 			cell_noise,
 			rla_params,
 			&slices[ri],
+			&partitioned.entry_bands,
 		) {
 			Ok((rla, nested)) => {
 				walkways.extend(rla.walkways.iter().copied());

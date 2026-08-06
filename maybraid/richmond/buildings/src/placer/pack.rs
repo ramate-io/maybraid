@@ -5,7 +5,7 @@ use bevy_math::Vec3;
 use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, PlanAxes};
 
 use crate::fit::{Confines, FitError};
-use crate::usage_areas::clearance::{approach_zone, PassageClearance};
+use crate::usage_areas::clearance::{approach_zone, PassageClearance, PASSAGE_WALL_LIP};
 
 use super::predicates::{all_pass, PredicateCtx};
 use super::{
@@ -15,6 +15,13 @@ use super::{
 
 pub const WALL_EPS: f32 = 0.08;
 const PROPOSE_ATTEMPTS: u32 = 22;
+
+/// Options for [`init_host_with`].
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct InitHostOpts {
+	/// Add a shallow full-wall lip on every passage wall (open kitchens / living).
+	pub passage_wall_lip: bool,
+}
 
 /// Host plan + passage keep-outs for a furniture pack.
 pub struct PackHost {
@@ -61,15 +68,29 @@ impl PackKnobs {
 
 /// Initialize host geometry and passage clearance bands (passage required).
 pub fn init_host(confines: &Confines) -> Result<PackHost, FitError> {
+	init_host_with(confines, InitHostOpts::default())
+}
+
+/// Like [`init_host`], with open-room clearance options.
+pub fn init_host_with(confines: &Confines, opts: InitHostOpts) -> Result<PackHost, FitError> {
 	let host3 = confines.bounds;
 	let host = aabb3_to_plan(&host3, PlanAxes::XZ);
-	let passage_faces = PassageClearance::collect_faces(confines, host);
+	// Residential packs wall-snap faces so flush counters/sofas meet keep-outs
+	// that otherwise start inset at the inner door volume.
+	let passage_faces = PassageClearance::collect_faces_wall_snapped(confines, host);
 	if passage_faces.is_empty() {
 		return Err(FitError::TooSmall {
 			reason: "passage",
 		});
 	}
-	let passage_bands = PassageClearance::bands_std(host, &passage_faces);
+	let mut passage_bands = PassageClearance::bands_std(host, &passage_faces);
+	if opts.passage_wall_lip {
+		passage_bands.extend(PassageClearance::bands_wall_lip(
+			host,
+			&passage_faces,
+			PASSAGE_WALL_LIP,
+		));
+	}
 	let clearances = passage_bands.clone();
 	let room_area = aabb2_area(host).max(1e-4);
 	Ok(PackHost {

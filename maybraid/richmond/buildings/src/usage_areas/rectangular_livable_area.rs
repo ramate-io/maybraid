@@ -192,6 +192,18 @@ impl RectangularLivableArea {
 		params: RectangularLivableAreaParameterized,
 		program: &[RectQuarterKind],
 	) -> Result<(Self, FillableRegions), FitError> {
+		Self::fit_with_circulation(confines, noise, params, program, &[])
+	}
+
+	/// Like [`Self::fit_with_params`], with extra circulation bands (entry stems)
+	/// that open rooms must door onto for furniture keep-outs.
+	pub fn fit_with_circulation(
+		confines: &Confines,
+		noise: NoiseParams,
+		params: RectangularLivableAreaParameterized,
+		program: &[RectQuarterKind],
+		circulation: &[Aabb2d],
+	) -> Result<(Self, FillableRegions), FitError> {
 		let fp = confines.footprint();
 		// Footprint gate uses door clear, not hall clear — a 1.2 m deep bay can
 		// still host open/guillotine layouts; spine strategies fail on their own
@@ -209,7 +221,7 @@ impl RectangularLivableArea {
 			reason: "rla_exhausted",
 		};
 		for strategy in strategies {
-			match try_strategy(confines, noise, params, program, strategy) {
+			match try_strategy(confines, noise, params, program, strategy, circulation) {
 				Ok(ok) => return Ok(ok),
 				Err(FitError::TooSmall { reason }) => {
 					last = FitError::TooSmall { reason };
@@ -356,6 +368,7 @@ fn try_strategy(
 	params: RectangularLivableAreaParameterized,
 	program: &[RectQuarterKind],
 	strategy: RectLivableStrategy,
+	circulation: &[Aabb2d],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let (mut area, residual) = match strategy {
 		RectLivableStrategy::CaseAttempt => {
@@ -363,11 +376,15 @@ fn try_strategy(
 				reason: "rla_case_attempt_leaf",
 			});
 		}
-		RectLivableStrategy::AllOpen => fit_all_open(confines, noise, params, program)?,
+		RectLivableStrategy::AllOpen => {
+			fit_all_open(confines, noise, params, program, circulation)?
+		}
 		RectLivableStrategy::SingleClosed => fit_single_closed(confines, noise, params, program)?,
-		RectLivableStrategy::SpineHall => fit_spine_hall(confines, noise, params, program)?,
+		RectLivableStrategy::SpineHall => {
+			fit_spine_hall(confines, noise, params, program, circulation)?
+		}
 		RectLivableStrategy::GuillotineSplit => {
-			fit_guillotine(confines, noise, params, program)?
+			fit_guillotine(confines, noise, params, program, circulation)?
 		}
 	};
 	if !normalize_ok(&area, params.min_hall) {
@@ -384,6 +401,7 @@ fn fit_all_open(
 	noise: NoiseParams,
 	params: RectangularLivableAreaParameterized,
 	program: &[RectQuarterKind],
+	circulation: &[Aabb2d],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let open_kinds: Vec<_> = program.iter().copied().filter(|k| k.is_open()).collect();
 	let kinds = if open_kinds.is_empty() {
@@ -398,7 +416,8 @@ fn fit_all_open(
 
 	// Single open kind → claim the whole rect (circulation = host).
 	if kinds.len() == 1 {
-		match try_fit_kind(kinds[0], confines, noise) {
+		let single = confines_with_circulation_doors(confines, circulation, 0);
+		match try_fit_kind(kinds[0], &single, noise) {
 			Ok((room, nested)) => {
 				return Ok((
 					RectangularLivableArea {
@@ -412,7 +431,7 @@ fn fit_all_open(
 							hall_bands: vec![host],
 						},
 						closed_confines: Vec::new(),
-						open_confines: vec![confines.clone()],
+						open_confines: vec![single],
 					},
 					nested,
 				));
@@ -432,6 +451,7 @@ fn fit_all_open(
 		&mut free,
 		&kinds,
 		None,
+		circulation,
 		confines,
 		y0,
 		y1,
@@ -567,6 +587,7 @@ fn fit_spine_hall(
 	noise: NoiseParams,
 	params: RectangularLivableAreaParameterized,
 	program: &[RectQuarterKind],
+	circulation: &[Aabb2d],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let host = host_xz(&confines.bounds);
 	let y0 = Vec3::from(confines.bounds.min).y;
@@ -633,6 +654,7 @@ fn fit_spine_hall(
 		&mut common_free,
 		&open_kinds,
 		Some(&spine),
+		circulation,
 		confines,
 		y0,
 		y1,
@@ -675,6 +697,7 @@ fn fit_guillotine(
 	noise: NoiseParams,
 	params: RectangularLivableAreaParameterized,
 	program: &[RectQuarterKind],
+	circulation: &[Aabb2d],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let host = host_xz(&confines.bounds);
 	let size = host.max - host.min;
@@ -728,17 +751,19 @@ fn fit_guillotine(
 		strategy: RectLivableStrategy::CaseAttempt,
 		..params
 	};
-	let (child_a, res_a) = RectangularLivableArea::fit_with_params(
+	let (child_a, res_a) = RectangularLivableArea::fit_with_circulation(
 		&confines_a,
 		noise_for_cell(noise, 11),
 		child_params,
 		&prog_a,
+		circulation,
 	)?;
-	let (child_b, res_b) = RectangularLivableArea::fit_with_params(
+	let (child_b, res_b) = RectangularLivableArea::fit_with_circulation(
 		&confines_b,
 		noise_for_cell(noise, 29),
 		child_params,
 		&prog_b,
+		circulation,
 	)?;
 
 	let mut rooms = child_a.rooms;
@@ -1180,6 +1205,7 @@ fn pack_open_into(
 	free: &mut Vec<Aabb2d>,
 	kinds: &[RectQuarterKind],
 	spine: Option<&[Aabb2d]>,
+	circulation: &[Aabb2d],
 	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
@@ -1195,6 +1221,7 @@ fn pack_open_into(
 			free,
 			kind,
 			spine,
+			circulation,
 			host_confines,
 			y0,
 			y1,
@@ -1222,6 +1249,7 @@ fn pack_open_into(
 				free,
 				kind,
 				spine,
+				circulation,
 				host_confines,
 				y0,
 				y1,
@@ -1247,6 +1275,7 @@ fn try_pack_one_open(
 	free: &mut Vec<Aabb2d>,
 	kind: RectQuarterKind,
 	spine: Option<&[Aabb2d]>,
+	circulation: &[Aabb2d],
 	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
@@ -1263,12 +1292,13 @@ fn try_pack_one_open(
 	let cell_noise = noise_for_cell(noise, rooms.len() as i32);
 	let (slot, rem) = take_slot(host, kind);
 	let try_slot = |slot: Aabb2d, rem: &[Aabb2d]| {
-		// Prefer passages toward spine / remnants / already-packed open siblings,
+		// Prefer passages toward spine / entry stems / remnants / open siblings,
 		// and inherit host doors that sit on this slot — not an arbitrary long edge.
 		let mut anchors = rem.to_vec();
 		if let Some(bands) = spine {
 			anchors.extend_from_slice(bands);
 		}
+		anchors.extend_from_slice(circulation);
 		for c in open_confines.iter() {
 			anchors.push(host_xz(&c.bounds));
 		}
@@ -1403,30 +1433,76 @@ fn passage_onto_anchors(
 	y1: f32,
 	id: u32,
 ) -> Option<(OpeningId, Opening)> {
-	let mut best: Option<(bool, f32, f32, f32, f32)> = None;
-	for s in anchors {
-		if let Some((along_x, lo, hi, mid)) = shared_edge_span(slot, *s) {
-			let len = hi - lo;
-			if best.map(|(_, _, _, _, l)| len > l).unwrap_or(true) {
-				best = Some((along_x, lo, hi, mid, len));
-			}
-		}
-	}
-	let (along_x, lo, hi, mid, _) = best?;
-	connecting_passage(
-		SCOPE,
-		"connect",
-		along_x,
-		lo,
-		hi,
-		mid,
-		y0,
-		y1,
-		format!("0_{id}_99"),
-	)
+	passages_onto_anchors(slot, anchors, y0, y1, id)
+		.into_iter()
+		.next()
 }
 
-/// Host passages on this slot + a door toward circulation anchors.
+/// One door-width passage per distinct shared wall onto circulation anchors.
+///
+/// A single "longest edge" door is not enough: kitchen↔living often shares a
+/// longer wall than kitchen↔spine, so the spine/entry wall never got a keep-out.
+fn passages_onto_anchors(
+	slot: Aabb2d,
+	anchors: &[Aabb2d],
+	y0: f32,
+	y1: f32,
+	id: u32,
+) -> Vec<(OpeningId, Opening)> {
+	let mut walls: Vec<(bool, f32, f32, f32)> = Vec::new();
+	for s in anchors {
+		let Some((along_x, lo, hi, mid)) = shared_edge_span(slot, *s) else {
+			continue;
+		};
+		if hi - lo + EPS < DOOR_WIDTH * 0.7 {
+			continue;
+		}
+		if let Some((_, wlo, whi, _)) = walls
+			.iter_mut()
+			.find(|(ax, _, _, m)| *ax == along_x && (*m - mid).abs() < 0.05)
+		{
+			*wlo = (*wlo).min(lo);
+			*whi = (*whi).max(hi);
+		} else {
+			walls.push((along_x, lo, hi, mid));
+		}
+	}
+	let mut out = Vec::new();
+	for (wi, (along_x, lo, hi, mid)) in walls.into_iter().enumerate() {
+		if let Some(pair) = connecting_passage(
+			SCOPE,
+			"connect",
+			along_x,
+			lo,
+			hi,
+			mid,
+			y0,
+			y1,
+			format!("0_{id}_a{wi}"),
+		) {
+			out.push(pair);
+		}
+	}
+	out
+}
+
+/// Clone `host` openings and add door-width passages onto abutting `circulation`.
+fn confines_with_circulation_doors(
+	host: &Confines,
+	circulation: &[Aabb2d],
+	id: u32,
+) -> Confines {
+	let xz = host_xz(&host.bounds);
+	let y0 = Vec3::from(host.bounds.min).y;
+	let y1 = Vec3::from(host.bounds.max).y;
+	let mut openings = host.openings.clone();
+	for (oid, opening) in passages_onto_anchors(xz, circulation, y0, y1, id) {
+		openings.insert(oid, opening);
+	}
+	Confines::new(host.bounds, host.roll, openings)
+}
+
+/// Host passages on this slot + doors toward every distinct circulation wall.
 fn openings_for_open_slot(
 	slot: Aabb2d,
 	anchors: &[Aabb2d],
@@ -1436,7 +1512,11 @@ fn openings_for_open_slot(
 	id: u32,
 ) -> Openings {
 	let mut openings = passages_facing_rect(host, slot);
-	if let Some((oid, opening)) = passage_onto_anchors(slot, anchors, y0, y1, id) {
+	// A single centered host door on a long entry wall often misses this
+	// sub-slot's along-span — re-author a door on the slot's portion of every
+	// host passage wall it sits on.
+	ensure_doors_on_host_passage_walls(&mut openings, slot, host, y0, y1, id);
+	for (oid, opening) in passages_onto_anchors(slot, anchors, y0, y1, id) {
 		openings.insert(oid, opening);
 	}
 	if !openings
@@ -1449,6 +1529,101 @@ fn openings_for_open_slot(
 		}
 	}
 	openings
+}
+
+/// Door-width passages on `slot`'s span of each host passage wall.
+fn ensure_doors_on_host_passage_walls(
+	openings: &mut Openings,
+	slot: Aabb2d,
+	host: &Confines,
+	y0: f32,
+	y1: f32,
+	id: u32,
+) {
+	let host_plan = host_xz(&host.bounds);
+	let faces = crate::usage_areas::PassageClearance::collect_faces_wall_snapped(host, host_plan);
+	for (fi, face) in faces.into_iter().enumerate() {
+		let Some((along_x, lo, hi, mid)) = slot_span_on_passage_wall(slot, face) else {
+			continue;
+		};
+		if hi - lo + EPS < DOOR_WIDTH * 0.7 {
+			continue;
+		}
+		if openings_wall_has_passage(openings, slot, along_x, mid) {
+			continue;
+		}
+		if let Some((oid, opening)) = connecting_passage(
+			SCOPE,
+			"host_wall",
+			along_x,
+			lo,
+			hi,
+			mid,
+			y0,
+			y1,
+			format!("0_{id}_hw{fi}"),
+		) {
+			openings.insert(oid, opening);
+		}
+	}
+}
+
+fn slot_span_on_passage_wall(
+	slot: Aabb2d,
+	face: PlanOpeningFace,
+) -> Option<(bool, f32, f32, f32)> {
+	const T: f32 = 0.12;
+	if face.thru_is_x {
+		let on_min = (slot.min.x - face.thru).abs() <= T;
+		let on_max = (slot.max.x - face.thru).abs() <= T;
+		if !on_min && !on_max {
+			return None;
+		}
+		Some((
+			false,
+			slot.min.y,
+			slot.max.y,
+			if on_min { slot.min.x } else { slot.max.x },
+		))
+	} else {
+		let on_min = (slot.min.y - face.thru).abs() <= T;
+		let on_max = (slot.max.y - face.thru).abs() <= T;
+		if !on_min && !on_max {
+			return None;
+		}
+		Some((
+			true,
+			slot.min.x,
+			slot.max.x,
+			if on_min { slot.min.y } else { slot.max.y },
+		))
+	}
+}
+
+fn openings_wall_has_passage(
+	openings: &Openings,
+	slot: Aabb2d,
+	along_x: bool,
+	mid: f32,
+) -> bool {
+	for (_, o) in openings.iter() {
+		if !matches!(o.label, OpeningLabel::Passage) {
+			continue;
+		}
+		let plan = aabb3_to_plan(&o.bounds, PlanAxes::XZ);
+		let Some(face) = PlanOpeningFace::from_passage(slot, plan) else {
+			continue;
+		};
+		let on_wall = if along_x {
+			!face.thru_is_x && (face.thru - mid).abs() < 0.25
+		} else {
+			face.thru_is_x && (face.thru - mid).abs() < 0.25
+		};
+		if on_wall {
+			return true;
+		}
+	}
+	false
 }
 
 /// Inherit host [`OpeningLabel::Passage`] openings whose face sits on `rect`.

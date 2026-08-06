@@ -31,7 +31,8 @@ pub mod rectangular_livable_area;
 pub use clearance::{
 	abuts_clearance, approach_blocked, approach_zone, commit_door_clear,
 	max_empty_abutting_clearance, max_empty_abutting_clearance_sized, pack_abutting_clearance,
-	PassageClearance, PlanHost, PASSAGE_APPROACH_PAD, PASSAGE_CLEARANCE,
+	snap_face_to_host_wall, PassageClearance, PlanHost, PASSAGE_APPROACH_PAD, PASSAGE_CLEARANCE,
+	PASSAGE_WALL_LIP,
 };
 pub use commercial_stall_strip::commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
