@@ -55,6 +55,17 @@ impl Placement {
 		Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, self.roll)
 	}
 
+	/// Compose a child placement into this parent's space (translation scaled, rotations add).
+	pub fn compose_child(self, child: Placement) -> Placement {
+		Placement {
+			translation: self.translation + self.rotation() * (child.translation * self.scale),
+			yaw: self.yaw + child.yaw,
+			pitch: self.pitch + child.pitch,
+			roll: self.roll + child.roll,
+			scale: self.scale * child.scale,
+		}
+	}
+
 	/// Stick segment: base at `start`, \(+Y\) along `dir`, length / girth from kit space.
 	///
 	/// Kit half-extent on \(X/Z\) is [`crate::sticks::STICK_KIT_HALF`]; world radius `radius`

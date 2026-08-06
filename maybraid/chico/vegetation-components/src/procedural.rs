@@ -27,7 +27,6 @@ impl Plugin for VegetationProceduralPlugin {
 				crate::update_vegetation_structural_host_levels,
 				crate::update_stick_host_levels,
 				crate::update_foliage_host_levels,
-				crate::update_frond_collection_host_levels,
 			),
 		);
 	}

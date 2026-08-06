@@ -7,8 +7,8 @@ pub mod probe;
 pub mod style;
 
 pub use collection::{
-	update_frond_collection_host_levels, FrondCollection, FrondCollectionLodProbe,
-	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
+	FrondCollection, FrondKit, FrondMember, FROND_COLLECTION_HIGH_FACTOR,
+	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
 };
 pub use geometry::FoliageGeometry;
 pub use node::FoliageNode;

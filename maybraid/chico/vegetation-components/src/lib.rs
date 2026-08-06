@@ -15,10 +15,9 @@ pub mod structural_probe;
 
 pub use assets::AssetPath;
 pub use foliage::{
-	update_foliage_host_levels, update_frond_collection_host_levels, FoliageGeometry, FoliageNode,
-	FoliageStyle, FrondCollection, FrondCollectionLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
-	FOLIAGE_MEDIUM_FACTOR, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR,
-	FROND_COLLECTION_MEDIUM_FACTOR,
+	update_foliage_host_levels, FoliageGeometry, FoliageNode, FoliageStyle, FrondCollection,
+	FrondKit, FrondMember, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR, FOLIAGE_MEDIUM_FACTOR,
+	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
 };
 pub use layer::{Layer, Layers};
 pub use placed::Placement;
@@ -54,11 +53,6 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
-	/// Frond collections (merge LOD by collection max extent). Prefer over free frond nodes.
-	fn frond_collections_for_level(&self, _level: LodSceneLevel) -> Layers<FrondCollection> {
-		Layers::new()
-	}
-
 	/// When set, [`ComponentsOnly`] presents a warm High/Medium/Low host driven by this probe.
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
 		None
@@ -72,10 +66,6 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		(**self).foliage_nodes_for_level(level)
-	}
-
-	fn frond_collections_for_level(&self, level: LodSceneLevel) -> Layers<FrondCollection> {
-		(**self).frond_collections_for_level(level)
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
@@ -114,10 +104,6 @@ impl<T: VegetationComponents> VegetationComponents for ComponentsOnly<T> {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		self.0.foliage_nodes_for_level(level)
-	}
-
-	fn frond_collections_for_level(&self, level: LodSceneLevel) -> Layers<FrondCollection> {
-		self.0.frond_collections_for_level(level)
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
@@ -177,9 +163,6 @@ pub fn append_component_scenes(
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for collection in vegetation.frond_collections_for_level(level).flatten() {
-		children.push(Box::new(collection.scene_with_lod(lod_ref)));
-	}
 }
 
 pub fn component_only_scene(
@@ -234,16 +217,17 @@ pub fn vegetation_bounds(vegetation: &impl VegetationComponents) -> Aabb3d {
 		any = true;
 	}
 	for node in vegetation.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
-		let c = node.placement.translation;
-		let e = crate::lod_band::characteristic_extent_abs(&node.placement);
-		min = min.min(c - Vec3::splat(e));
-		max = max.max(c + Vec3::splat(e));
-		any = true;
-	}
-	for collection in vegetation.frond_collections_for_level(LodSceneLevel::High).flatten() {
-		if let Some((cmin, cmax)) = collection.aabb() {
-			min = min.min(cmin);
-			max = max.max(cmax);
+		if let Some(collection) = node.geometry.as_frond_collection() {
+			if let Some((cmin, cmax)) = collection.aabb() {
+				min = min.min(cmin);
+				max = max.max(cmax);
+				any = true;
+			}
+		} else {
+			let c = node.placement.translation;
+			let e = crate::lod_band::characteristic_extent_abs(&node.placement);
+			min = min.min(c - Vec3::splat(e));
+			max = max.max(c + Vec3::splat(e));
 			any = true;
 		}
 	}
