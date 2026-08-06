@@ -1,7 +1,9 @@
 //! Livable apartment: entry → body cluster → RLA per max-rect.
 //!
-//! Stages: (1) carve/claim entry bands, (2) program from m², (3) max-rect
-//! passage cluster on body, (4) RLA per rect, (5) scraps → closet / residual.
+//! Pipeline and apartment-specific policy live in the `layout` module — start
+//! there when designing similar multi-cell residential fills. Stages in brief:
+//! entry carve, max-rect passage cluster, program slices → RLA, scrap reclaim,
+//! soft normalize.
 
 mod entry;
 mod layout;
