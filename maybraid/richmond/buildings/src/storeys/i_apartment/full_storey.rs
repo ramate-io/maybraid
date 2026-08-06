@@ -9,7 +9,7 @@ use procedural_common::NoiseParams;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::boundary_openings::inject_shared_boundary_from;
@@ -138,13 +138,29 @@ impl BuildingComponents for IApartmentFullStorey {
 		}
 		out
 	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		let mut probe: Option<BuildingStructuralLodProbe> = None;
+		for block in &self.blocks {
+			let Some(block_probe) = block.structural_lod_probe() else {
+				continue;
+			};
+			probe = Some(match probe {
+				Some(acc) => acc.merge(block_probe),
+				None => block_probe,
+			});
+		}
+		probe
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::prelude::Transform;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use richmond_building_components::STRUCTURAL_HIGH_OUTSIDE_METERS;
 	use crate::openings::OpeningLabel;
 	use crate::storeys::i_apartment::{IApartmentFloorPlan, IApartmentParameterized};
 	use crate::usage_areas::plan_cells::{hall_frontage_length, PlanCell, MIN_GROUP_CONNECTIVITY};
@@ -183,6 +199,28 @@ mod tests {
 		assert!(!storey
 			.panel_nodes_for_level(LodSceneLevel::High)
 			.is_empty());
+	}
+
+	#[test]
+	fn structural_probe_high_within_20m_of_composed_perimeter() {
+		let storey = storey_seed(0);
+		let probe = storey
+			.structural_lod_probe()
+			.expect("composed LivableApartments footprints");
+		assert!(!probe.footprints.is_empty());
+		assert_eq!(probe.high_outside_meters, STRUCTURAL_HIGH_OUTSIDE_METERS);
+
+		let inside = Transform::from_xyz(0.0, 1.5, 0.0);
+		assert_eq!(probe.level_for(&inside), LodSceneLevel::High);
+
+		// Far beyond every composed footprint → Medium (no interior walls).
+		let far = Transform::from_xyz(200.0, 1.5, 200.0);
+		assert!(probe.distance_outside(&far) > STRUCTURAL_HIGH_OUTSIDE_METERS);
+		assert_eq!(probe.level_for(&far), LodSceneLevel::Medium);
+
+		let high_n = storey.panel_nodes_for_level(LodSceneLevel::High).len();
+		let mid_n = storey.panel_nodes_for_level(LodSceneLevel::Medium).len();
+		assert!(mid_n < high_n, "Medium should drop internal apartment walls");
 	}
 
 	#[test]

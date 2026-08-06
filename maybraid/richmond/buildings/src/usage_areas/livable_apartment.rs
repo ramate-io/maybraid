@@ -23,13 +23,14 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::{LabelNode, LabelStyle};
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::fit::{
 	Confines, FillRegion, FillableRegions, Fit, FitError, MultiConfines, SpaceKind,
 };
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::shells::RectFloor;
+use crate::usage_areas::plan_geom::host_xz;
 
 pub(crate) const EPS: f32 = 1e-3;
 pub(crate) const SCOPE: &str = "livable_apartment";
@@ -146,6 +147,15 @@ impl BuildingComponents for LivableApartment {
 			out.extend(room.furniture_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		if self.cells.is_empty() {
+			return None;
+		}
+		Some(BuildingStructuralLodProbe::new(
+			self.cells.iter().map(|part| host_xz(&part.confines.bounds)),
+		))
 	}
 }
 

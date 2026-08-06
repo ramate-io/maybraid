@@ -9,7 +9,7 @@ use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::fit::{
 	aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
@@ -21,7 +21,7 @@ use crate::usage_areas::hall_connected_suites::{
 use crate::usage_areas::halls_to_shafts::HallsToShafts;
 use crate::usage_areas::livable_apartment::{LivableApartment, INTERNAL_WALLS_LAYER};
 use crate::usage_areas::plan_cells::MIN_GROUP_CONNECTIVITY;
-use crate::usage_areas::plan_geom::noise_for_cell;
+use crate::usage_areas::plan_geom::{host_xz, noise_for_cell};
 
 const EPS: f32 = 1e-3;
 const MIN_ROOM: f32 = 2.5;
@@ -223,6 +223,18 @@ impl BuildingComponents for LivableApartments {
 			out.extend(apt.label_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		// Host footprint, then merge nested apartment cells so parents can compose
+		// multi-block perimeters (e.g. IApartmentFullStorey).
+		let mut probe = BuildingStructuralLodProbe::new([host_xz(&self.confines.bounds)]);
+		for apt in &self.apartments {
+			if let Some(nested) = apt.structural_lod_probe() {
+				probe = probe.merge(nested);
+			}
+		}
+		Some(probe)
 	}
 }
 
