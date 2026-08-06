@@ -57,7 +57,7 @@ const SALT_CROSS_STRIP_WALL: f32 = 131.0;
 /// Minimum shared-edge length (m) before a cross-strip party wall is considered.
 const MIN_CROSS_STRIP_SPAN: f32 = 2.0;
 /// Bedroom enters the multi-room program from this footprint (m²).
-const BEDROOM_PROGRAM_AREA: f32 = 12.0;
+const BEDROOM_PROGRAM_AREA: f32 = 18.0;
 
 /// Full Les Halles storey with residential gallery fills.
 #[derive(Debug, Clone, PartialEq)]
@@ -207,20 +207,17 @@ fn sample_min_bay_along(confines: &Confines, noise: NoiseParams, depth: f32, alo
 		.clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
 }
 
-/// Gallery bays / Guillotine halves often exceed the RLA studio default (36 m²).
-const LES_HALLES_CLOSED_MAX_AREA: f32 = 72.0;
-
 fn rla_params(strategy: RectLivableStrategy) -> RectangularLivableAreaParameterized {
 	RectangularLivableAreaParameterized {
 		strategy,
 		min_hall: DEFAULT_WALK_CLEAR,
-		closed_max_area: LES_HALLES_CLOSED_MAX_AREA.max(DEFAULT_CLOSED_MAX_AREA),
+		closed_max_area: DEFAULT_CLOSED_MAX_AREA,
 	}
 }
 
-/// SpineHall stays off this typology — guillotine for large gallery bays.
+/// SpineHall stays off this typology — closed studios first, then guillotine.
 fn les_halles_strategies(area_m2: f32, passages: usize) -> Vec<RectLivableStrategy> {
-	if passages == 1 && area_m2 + EPS <= LES_HALLES_CLOSED_MAX_AREA {
+	if passages == 1 && area_m2 + EPS <= DEFAULT_CLOSED_MAX_AREA {
 		vec![
 			RectLivableStrategy::SingleClosed,
 			RectLivableStrategy::GuillotineSplit,
@@ -773,9 +770,6 @@ mod tests {
 			"Les Halles livable path must not choose SpineHall"
 		);
 	}
-
-
-
 
 	#[test]
 	fn bedrooms_appear_on_typical_seed() {
