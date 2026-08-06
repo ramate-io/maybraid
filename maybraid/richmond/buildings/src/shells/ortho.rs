@@ -1,6 +1,6 @@
 //! Shared helpers for orthonormal storey shells (positioned opening fit).
 
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 
 use crate::openings::{MappedOpening, MappedOpeningQuad};
@@ -360,6 +360,10 @@ pub fn horizontal_slab_inset(
 }
 
 /// Merge several slab-cutting insets: keep the largest-area hole, or remove if any removes.
+///
+/// Prefer [`subtract_aabb2d`] + residual solids when a band may host multiple
+/// holes (e.g. two corner shafts on one N/S gallery strip). This helper remains
+/// for shells that still author a single framed inset per piece.
 pub fn merge_slab_insets(
 	plan: PlanRect,
 	openings: impl Iterator<Item = Aabb3d>,
@@ -382,6 +386,117 @@ pub fn merge_slab_insets(
 		}
 	}
 	best.map(Some)
+}
+
+/// Plan footprint of [`PlanRect`] as XZ → [`Aabb2d`] (`y` = world Z).
+pub fn plan_rect_aabb2(plan: PlanRect) -> Aabb2d {
+	Aabb2d {
+		min: plan.min_xz(),
+		max: plan.max_xz(),
+	}
+}
+
+/// Intersection of a 3D opening with the slab volume, as an XZ cut rectangle.
+pub fn horizontal_slab_cut_xz(plan: PlanRect, bounds: &Aabb3d) -> Option<Aabb2d> {
+	let slab = plan.volume_aabb();
+	let inter = aabb_intersection(bounds, &slab)?;
+	let imin = Vec3::from(inter.min);
+	let imax = Vec3::from(inter.max);
+	let pmin = plan.min_xz();
+	let pmax = plan.max_xz();
+	let x0 = imin.x.clamp(pmin.x, pmax.x);
+	let x1 = imax.x.clamp(pmin.x, pmax.x);
+	let z0 = imin.z.clamp(pmin.y, pmax.y);
+	let z1 = imax.z.clamp(pmin.y, pmax.y);
+	if x1 - x0 < EPS || z1 - z0 < EPS {
+		return None;
+	}
+	Some(Aabb2d {
+		min: Vec2::new(x0, z0),
+		max: Vec2::new(x1, z1),
+	})
+}
+
+fn aabb2_area(r: Aabb2d) -> f32 {
+	(r.max.x - r.min.x).max(0.0) * (r.max.y - r.min.y).max(0.0)
+}
+
+fn aabb2_covers(host: Aabb2d, cut: Aabb2d) -> bool {
+	cut.min.x <= host.min.x + EPS
+		&& cut.min.y <= host.min.y + EPS
+		&& cut.max.x + EPS >= host.max.x
+		&& cut.max.y + EPS >= host.max.y
+}
+
+/// Subtract axis-aligned `cuts` from `host`, returning residual rectangles.
+///
+/// Guillotine difference against each cut in order (same approach as plan-cell
+/// carving). Empty when any cut fully covers the host.
+pub fn subtract_aabb2d(host: Aabb2d, cuts: &[Aabb2d]) -> Vec<Aabb2d> {
+	if cuts.iter().any(|c| aabb2_covers(host, *c)) {
+		return Vec::new();
+	}
+	let mut regions = vec![host];
+	for cut in cuts {
+		let mut next = Vec::new();
+		for r in regions {
+			next.extend(subtract_aabb2d_one(r, *cut));
+		}
+		regions = next;
+	}
+	regions
+		.into_iter()
+		.filter(|r| aabb2_area(*r) > EPS * EPS)
+		.collect()
+}
+
+fn subtract_aabb2d_one(host: Aabb2d, cut: Aabb2d) -> Vec<Aabb2d> {
+	let x0 = host.min.x.max(cut.min.x);
+	let x1 = host.max.x.min(cut.max.x);
+	let y0 = host.min.y.max(cut.min.y);
+	let y1 = host.max.y.min(cut.max.y);
+	if x1 - x0 <= EPS || y1 - y0 <= EPS {
+		return vec![host];
+	}
+	let mut out = Vec::new();
+	if x0 - host.min.x > EPS {
+		out.push(Aabb2d {
+			min: host.min,
+			max: Vec2::new(x0, host.max.y),
+		});
+	}
+	if host.max.x - x1 > EPS {
+		out.push(Aabb2d {
+			min: Vec2::new(x1, host.min.y),
+			max: host.max,
+		});
+	}
+	if y0 - host.min.y > EPS {
+		out.push(Aabb2d {
+			min: Vec2::new(x0, host.min.y),
+			max: Vec2::new(x1, y0),
+		});
+	}
+	if host.max.y - y1 > EPS {
+		out.push(Aabb2d {
+			min: Vec2::new(x0, y1),
+			max: Vec2::new(x1, host.max.y),
+		});
+	}
+	out
+}
+
+/// Rebuild a [`PlanRect`] at elevation `y` from an XZ residual (`Aabb2d.y` = Z).
+pub fn plan_rect_from_aabb2(y: f32, region: Aabb2d) -> PlanRect {
+	PlanRect::new(
+		Vec3::new(
+			0.5 * (region.min.x + region.max.x),
+			y,
+			0.5 * (region.min.y + region.max.y),
+		),
+		(region.max.x - region.min.x).max(EPS),
+		(region.max.y - region.min.y).max(EPS),
+	)
 }
 
 pub fn aabb_intersection(a: &Aabb3d, b: &Aabb3d) -> Option<Aabb3d> {
@@ -447,5 +562,28 @@ mod tests {
 		};
 		assert!(inset.left > inset.right, "hole on +X side");
 		assert!(inset.bottom < inset.top, "hole on -Z side");
+	}
+
+	#[test]
+	fn subtract_aabb2d_keeps_both_side_holes() {
+		let host = Aabb2d {
+			min: Vec2::new(-4.0, -3.0),
+			max: Vec2::new(4.0, -1.5),
+		};
+		let cuts = [
+			Aabb2d {
+				min: Vec2::new(-4.0, -3.0),
+				max: Vec2::new(-2.0, -1.5),
+			},
+			Aabb2d {
+				min: Vec2::new(2.0, -3.0),
+				max: Vec2::new(4.0, -1.5),
+			},
+		];
+		let residuals = subtract_aabb2d(host, &cuts);
+		assert_eq!(residuals.len(), 1);
+		let mid = residuals[0];
+		assert!((mid.min.x - (-2.0)).abs() < 1e-4);
+		assert!((mid.max.x - 2.0).abs() < 1e-4);
 	}
 }

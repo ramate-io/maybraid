@@ -237,3 +237,47 @@ fn cuts_slab_can_remove_a_frame_band() {
 		cut.floor_band_count()
 	);
 }
+
+#[test]
+fn two_corner_shafts_both_cut_south_floor_band() {
+	// Default outer 8×6, inner 4×3 → south band z∈[-3,-1.5], x∈[-4,4].
+	// Two equal corner shafts on that band must each leave a floor void
+	// (largest-hole merge used to keep only one).
+	let mut openings = Openings::new();
+	openings.insert(
+		"sw",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(-4.0, -0.5, -3.0),
+				Vec3::new(-2.0, 0.5, -1.5),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	openings.insert(
+		"se",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(2.0, -0.5, -3.0),
+				Vec3::new(4.0, 0.5, -1.5),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	let cut = RectRingFloorParams::default()
+		.floor(RectRingFloorSlab::Solid)
+		.openings(openings)
+		.build();
+	assert!(
+		!cut.floor_covers_xz(-3.0, -2.25),
+		"SW shaft footprint must not retain gallery floor"
+	);
+	assert!(
+		!cut.floor_covers_xz(3.0, -2.25),
+		"SE shaft footprint must not retain gallery floor"
+	);
+	assert!(
+		cut.floor_covers_xz(0.0, -2.25),
+		"mid-south gallery between shafts should keep floor"
+	);
+}

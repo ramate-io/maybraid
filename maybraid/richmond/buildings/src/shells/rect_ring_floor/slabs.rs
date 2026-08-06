@@ -3,10 +3,11 @@
 use richmond_building_components::panels::PanelStyle;
 
 use crate::openings::Openings;
-use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
+use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::PanelPoint;
-use crate::paneling::RectInset;
-use crate::shells::ortho::{merge_slab_insets, PlanRect};
+use crate::shells::ortho::{
+	horizontal_slab_cut_xz, plan_rect_aabb2, plan_rect_from_aabb2, subtract_aabb2d, PlanRect,
+};
 
 use super::geometry::PlanAabb;
 use super::{RectRingFloorParams, RectRingFloorSlab, RingSlabPiece};
@@ -24,11 +25,12 @@ impl RectRingFloorParams {
 				let mut out = Vec::new();
 				for r in rects {
 					let plan = r.to_plan_rect(y);
-					if let Some(piece) =
-						resolve_piece(self.style, plan, &self.openings, self.joint_thickness)
-					{
-						out.push(piece);
-					}
+					out.extend(resolve_pieces(
+						self.style,
+						plan,
+						&self.openings,
+						self.joint_thickness,
+					));
 				}
 				out
 			}
@@ -36,24 +38,34 @@ impl RectRingFloorParams {
 	}
 }
 
-fn resolve_piece(
+/// Cut all `cuts_slab` openings from a frame band, emitting one solid per residual.
+///
+/// Multiple holes on the same N/S band (corner shafts) each leave a gap; a single
+/// framed inset cannot express that, so residuals replace the old largest-hole merge.
+fn resolve_pieces(
 	style: PanelStyle,
 	plan: PlanRect,
 	openings: &Openings,
 	thickness: f32,
-) -> Option<RingSlabPiece> {
-	let cutting = openings.iter().filter_map(|(_id, o)| {
-		if o.label.cuts_slab() {
-			Some(o.bounds)
-		} else {
-			None
-		}
-	});
-	match merge_slab_insets(plan, cutting) {
-		None => Some(RingSlabPiece::Solid(solid(style, plan, thickness))),
-		Some(None) => None,
-		Some(Some(inset)) => Some(RingSlabPiece::Clipped(clipped(style, plan, thickness, inset))),
+) -> Vec<RingSlabPiece> {
+	let host = plan_rect_aabb2(plan);
+	let cuts: Vec<_> = openings
+		.iter()
+		.filter_map(|(_id, o)| {
+			if o.label.cuts_slab() {
+				horizontal_slab_cut_xz(plan, &o.bounds)
+			} else {
+				None
+			}
+		})
+		.collect();
+	if cuts.is_empty() {
+		return vec![RingSlabPiece(solid(style, plan, thickness))];
 	}
+	subtract_aabb2d(host, &cuts)
+		.into_iter()
+		.map(|region| RingSlabPiece(solid(style, plan_rect_from_aabb2(plan.y, region), thickness)))
+		.collect()
 }
 
 fn corners(plan: PlanRect, thickness: f32) -> [PanelPoint; 4] {
@@ -69,14 +81,4 @@ fn corners(plan: PlanRect, thickness: f32) -> [PanelPoint; 4] {
 fn solid(style: PanelStyle, plan: PlanRect, thickness: f32) -> FittedRectangle {
 	let [sw, se, nw, ne] = corners(plan, thickness);
 	FittedRectangle::new(style, sw, se, nw, ne)
-}
-
-fn clipped(
-	style: PanelStyle,
-	plan: PlanRect,
-	thickness: f32,
-	inset: RectInset,
-) -> ClippedFittedRectangle {
-	let [sw, se, nw, ne] = corners(plan, thickness);
-	ClippedFittedRectangle::new(style, sw, se, nw, ne, inset)
 }

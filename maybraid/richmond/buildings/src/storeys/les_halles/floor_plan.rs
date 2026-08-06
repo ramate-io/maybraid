@@ -1763,6 +1763,26 @@ mod tests {
 	}
 
 	#[test]
+	fn corner_shafts_cut_gallery_floor_at_every_slot() {
+		let params = fixed_params(LesHallesShaftPlacement::Corners);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(
+			params.clone(),
+			&confines_with_all_shafts(&params),
+		)
+		.unwrap();
+		assert_eq!(plan.shaft_bounds.len(), 4);
+		for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
+			let mid = Vec3::from((shaft.min + shaft.max) * 0.5);
+			assert!(
+				!plan.gallery.floor_covers_xz(mid.x, mid.z),
+				"shaft {i} center ({}, {}) must be a floor cutout",
+				mid.x,
+				mid.z
+			);
+		}
+	}
+
+	#[test]
 	fn corner_external_strips_stop_at_shaft_clear_buffer() {
 		let params = fixed_params(LesHallesShaftPlacement::Corners);
 		let (plan, regions) = LesHallesFloorPlan::from_parameterized(

@@ -30,7 +30,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
-use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
+use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
 use crate::shells::ortho::WallEdge;
@@ -143,17 +143,34 @@ pub struct RectRingFloor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum RingSlabPiece {
-	Solid(FittedRectangle),
-	Clipped(ClippedFittedRectangle),
-}
+pub(crate) struct RingSlabPiece(FittedRectangle);
 
 impl RingSlabPiece {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		match self {
-			Self::Solid(r) => r.panel_nodes_for_level(level),
-			Self::Clipped(r) => r.panel_nodes_for_level(level),
-		}
+		self.0.panel_nodes_for_level(level)
+	}
+
+	/// Axis-aligned XZ footprint of a floor / ceiling residual.
+	fn xz_bounds(&self) -> (f32, f32, f32, f32) {
+		let r = &self.0;
+		let xs = [
+			r.a0.position.x,
+			r.a1.position.x,
+			r.b0.position.x,
+			r.b1.position.x,
+		];
+		let zs = [
+			r.a0.position.z,
+			r.a1.position.z,
+			r.b0.position.z,
+			r.b1.position.z,
+		];
+		(
+			xs.into_iter().fold(f32::INFINITY, f32::min),
+			xs.into_iter().fold(f32::NEG_INFINITY, f32::max),
+			zs.into_iter().fold(f32::INFINITY, f32::min),
+			zs.into_iter().fold(f32::NEG_INFINITY, f32::max),
+		)
 	}
 }
 
@@ -214,6 +231,15 @@ impl RectRingFloor {
 	/// Number of frame floor band pieces (after shaft / cut subdivision).
 	pub fn floor_band_count(&self) -> usize {
 		self.floor_pieces.len()
+	}
+
+	/// Whether any solid floor residual covers the plan point `(x, z)`.
+	pub fn floor_covers_xz(&self, x: f32, z: f32) -> bool {
+		const EPS: f32 = 1e-3;
+		self.floor_pieces.iter().any(|p| {
+			let (x0, x1, z0, z1) = p.xz_bounds();
+			x >= x0 - EPS && x <= x1 + EPS && z >= z0 - EPS && z <= z1 + EPS
+		})
 	}
 
 	pub fn has_ceiling(&self) -> bool {
