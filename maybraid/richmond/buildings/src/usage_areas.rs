@@ -22,6 +22,7 @@ pub mod label_util;
 pub mod livable_apartment;
 pub mod livable_apartments;
 pub mod livable_quarters;
+pub mod plan_access;
 pub mod plan_cells;
 pub mod plan_geom;
 pub mod rect_passage_cluster;
@@ -66,13 +67,17 @@ pub use livable_quarters::{
 	LIVING_ROOM_SCOPE, RESIDENTIAL_BATHROOM_SCOPE, RESIDENTIAL_HALF_BATHROOM_SCOPE,
 	SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
+pub use plan_access::{
+	GroupFootprint, PlanAccessParams, DEFAULT_SOFT_ASPECT, DEFAULT_WALK_CLEAR, DOOR_WIDTH,
+	MIN_GROUP_CONNECTIVITY, MIN_ROOM,
+};
 pub use plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, decompose_max_rects,
 	group_cells_to_apartments, hall_frontage_length, pack_apartments_to_targets, rect_in_union,
 	shared_edge_length, shared_edge_span, split_oversized_cells, split_toward_min_room,
-	subtract_aabb2, PlanCell, MIN_GROUP_CONNECTIVITY,
+	subtract_aabb2, PlanCell,
 };
-pub use plan_geom::{confines_from_xz, host_xz, DOOR_WIDTH, MIN_ROOM};
+pub use plan_geom::{confines_from_xz, host_xz};
 pub use rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
 pub use rectangular_livable_area::{
 	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,

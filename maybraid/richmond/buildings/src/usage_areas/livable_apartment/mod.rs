@@ -1,14 +1,7 @@
-//! Livable apartment: entryway → [`RectPassageCluster`] → RLA per rect.
+//! Livable apartment: entry → body cluster → RLA per max-rect.
 //!
-//! Layout:
-//! 1. Carve an **entryway** box at the hall door (open).
-//! 2. Map total m² to a room-count [`program`].
-//! 3. Cluster remaining footprint with [`RectPassageCluster`] (max-rects +
-//!    spanning-tree passages).
-//! 4. Fit each rect with [`RectangularLivableArea`] (open/closed normalize).
-//! 5. Aggregate rooms / partitions / walkways; leftover scraps → InternalSpace
-//!    or household closet. [`crate::IApartmentFullStorey`] maps leftover
-//!    InternalSpace → ClosetSpace.
+//! Stages: (1) carve/claim entry bands, (2) program from m², (3) max-rect
+//! passage cluster on body, (4) RLA per rect, (5) scraps → closet / residual.
 
 mod program;
 
@@ -34,23 +27,26 @@ use crate::usage_areas::livable_quarters::{
 	DiningRoom, Kitchen, LivingRoom, ResidentialBathroom, ResidentialHalfBathroom, SittingRoom,
 	Study,
 };
+use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
 use crate::usage_areas::plan_geom::{
-	aabb2_near_eq, confines_from_xz, host_xz, noise_for_cell, MIN_ROOM,
+	aabb2_near_eq, confines_from_xz, host_xz, noise_for_cell,
 };
 use crate::usage_areas::rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
 use crate::usage_areas::rectangular_livable_area::{
 	RectAreaRoom, RectLivableStrategy, RectangularLivableArea, RectangularLivableAreaParameterized,
-	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
+	DEFAULT_CLOSED_MAX_AREA,
 };
 use program::{distribute_program, full_kind_list, program_from_area};
 
 const EPS: f32 = 1e-3;
 const ENTRY_DEPTH: f32 = 1.8;
 const ENTRY_WIDTH: f32 = 2.2;
-/// Clear width of apartment walkway / access (m).
-const WALK_WIDTH: f32 = DEFAULT_MIN_HALL;
 const SCOPE: &str = "livable_apartment";
+
+fn residential_access() -> PlanAccessParams {
+	PlanAccessParams::residential()
+}
 
 /// One packed space inside an apartment.
 #[derive(Debug, Clone, PartialEq)]
@@ -175,7 +171,7 @@ pub struct LivableApartment {
 	pub cells: MultiConfines,
 	/// Packed spaces (entryway, quarters, household closets, open halls).
 	pub rooms: Vec<ApartmentRoom>,
-	/// Unwalled circulation bands (≥ [`WALK_WIDTH`]); identification only.
+	/// Unwalled circulation bands (≥ walk clear); identification only.
 	pub walkways: Vec<Aabb2d>,
 	/// Partition strips for bedrooms / bathrooms (with connecting passages).
 	pub partitions: Vec<ClippedRectangularStrip>,
@@ -208,18 +204,18 @@ impl LivableApartment {
 				reason: "livable_empty",
 			});
 		}
-		// Body cells need room scale; corridor stems only need walk clear.
+		let access = residential_access();
 		let mut has_body = false;
 		for part in cells.iter() {
-			let fp = part.confines.footprint();
 			let height =
 				(part.confines.bounds.max.y - part.confines.bounds.min.y).max(0.0);
-			if fp.x + EPS < WALK_WIDTH || fp.y + EPS < WALK_WIDTH {
+			let xz = host_xz(&part.confines.bounds);
+			if !access.is_walkable(xz) {
 				return Err(FitError::TooSmall {
 					reason: "livable_footprint",
 				});
 			}
-			if fp.x + EPS >= MIN_ROOM && fp.y + EPS >= MIN_ROOM {
+			if access.is_room_rect(xz) {
 				has_body = true;
 			}
 			if height < 2.0 {
@@ -244,7 +240,6 @@ impl LivableApartment {
 				fp.x * fp.y
 			})
 			.sum();
-		// Diversify by region even if the caller reused parent noise for every suite.
 		let apt_noise = noise_for_cell(noise, region_id as i32);
 		let program = program_from_area(
 			total_area,
@@ -257,99 +252,26 @@ impl LivableApartment {
 		let mut walkways = Vec::new();
 		let mut partitions = Vec::new();
 
-		// --- Entryway on the door cell ------------------------------------
-		let (door_ci, mut work_rects) = collect_work_rects(cells);
+		let (door_ci, work_rects) = collect_work_rects(cells);
 		let door_cell = host_xz(&cells.parts[door_ci].confines.bounds);
 		let door_opening = find_entry_door(&cells.parts[door_ci].confines.openings)
 			.or_else(|| find_entry_door(&cells.parts[0].confines.openings));
 
-		let mut entry_xz = None;
-		let mut entry_bands: Vec<Aabb2d> = Vec::new();
-		if let Some((_id, door)) = door_opening {
-			if let Some((mut entry, rem)) =
-				carve_entryway(door_cell, &door, ENTRY_DEPTH, ENTRY_WIDTH)
-			{
-				// Thin carve leftovers (door cell only ~2.5–3 m deep) get dropped by
-				// the MIN_ROOM filter below and pinch the entry off from the body.
-				// If no usable remainder remains, take the whole door cell as entry
-				// so it still shares a full edge with the next room cell.
-				let usable_rem: Vec<Aabb2d> = rem
-					.into_iter()
-					.filter(|r| {
-						let s = r.max - r.min;
-						s.x + EPS >= MIN_ROOM
-							&& s.y + EPS >= MIN_ROOM
-							&& aabb2_area(*r) > 4.0
-					})
-					.collect();
-				let rem_for_work = if usable_rem.is_empty() {
-					entry = door_cell;
-					Vec::new()
-				} else {
-					usable_rem
-				};
-
-				push_entryway(&mut rooms, &mut walkways, entry, y0, y1, roll);
-				entry_bands.push(entry);
-				entry_xz = Some(entry);
-				work_rects = work_rects
-					.into_iter()
-					.filter(|r| !aabb2_near_eq(*r, door_cell))
-					.chain(rem_for_work)
-					.filter(|r| aabb2_area(*r) > EPS * EPS)
-					.collect();
-			}
-		}
-
-		// Thin door-side stems: claim as entry hall instead of dropping (silent
-		// unfilled) or failing the body cluster.
-		claim_entry_corridors(
-			&mut work_rects,
-			&mut entry_bands,
-			&mut rooms,
-			&mut walkways,
-			y0,
-			y1,
-			roll,
+		let partitioned = partition_entry_and_body(
+			work_rects,
+			door_cell,
+			door_opening.as_ref().map(|(_, d)| d),
+			access,
 		);
-		if entry_xz.is_none() {
-			entry_xz = entry_bands.first().copied();
+		for band in &partitioned.entry_bands {
+			push_entryway(&mut rooms, &mut walkways, *band, y0, y1, roll);
 		}
-
-		// Body rooms vs access stems. Stems that touch the entry *or* the body
-		// become entry/open hall — not silent drops (empty residual next to the apt).
-		let mut kept = Vec::new();
-		let mut pending = Vec::new();
-		for r in work_rects.drain(..) {
-			let s = r.max - r.min;
-			if s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(r) > 4.0 {
-				kept.push(r);
-			} else {
-				pending.push(r);
-			}
+		for scrap in partitioned.scraps {
+			let c = confines_from_xz(scrap, y0, y1, roll, &Openings::new());
+			push_leftover(&mut rooms, &mut residual_within, c);
 		}
-		let min_touch = WALK_WIDTH * 0.5;
-		let mut guard = 0;
-		while guard < pending.len().saturating_mul(2).max(4) {
-			guard += 1;
-			let Some(idx) = pending.iter().position(|r| {
-				is_access_corridor(*r)
-					&& (touches_any(*r, &entry_bands, min_touch)
-						|| touches_any(*r, &kept, min_touch))
-			}) else {
-				break;
-			};
-			let band = pending.remove(idx);
-			push_entryway(&mut rooms, &mut walkways, band, y0, y1, roll);
-			entry_bands.push(band);
-		}
-		for r in pending {
-			if aabb2_area(r) > EPS {
-				let scrap = confines_from_xz(r, y0, y1, roll, &Openings::new());
-				push_leftover(&mut rooms, &mut residual_within, scrap);
-			}
-		}
-		work_rects = kept;
+		let entry_xz = partitioned.entry_bands.first().copied();
+		let work_rects = partitioned.body;
 		if work_rects.is_empty() {
 			if rooms.is_empty() {
 				return Err(FitError::TooSmall {
@@ -381,9 +303,9 @@ impl LivableApartment {
 			roll,
 			region_id,
 			RectPassageClusterParams {
-				min_room: MIN_ROOM,
+				min_room: access.room_min,
 				min_rect_area: 8.0,
-				min_access: WALK_WIDTH,
+				min_access: access.walk_clear,
 				scope: SCOPE,
 			},
 		)
@@ -395,7 +317,7 @@ impl LivableApartment {
 		let slices = distribute_program(&kind_list, &cluster.rects, apt_noise);
 		let rla_params = RectangularLivableAreaParameterized {
 			strategy: RectLivableStrategy::CaseAttempt,
-			min_hall: WALK_WIDTH,
+			min_hall: access.walk_clear,
 			closed_max_area: DEFAULT_CLOSED_MAX_AREA,
 		};
 
@@ -457,7 +379,7 @@ impl LivableApartment {
 			});
 		}
 
-		normalize_apartment_circulation(&mut rooms, entry_xz, WALK_WIDTH);
+		normalize_apartment_circulation(&mut rooms, entry_xz, access);
 
 		Ok((
 			Self {
@@ -544,46 +466,78 @@ fn push_entryway(
 	walkways.push(entry);
 }
 
-/// Long-thin access stem: clear for walking but below room min extent.
-fn is_access_corridor(r: Aabb2d) -> bool {
-	let s = (r.max - r.min).max(Vec2::splat(EPS));
-	let min_e = s.x.min(s.y);
-	let max_e = s.x.max(s.y);
-	min_e + EPS >= WALK_WIDTH && min_e + EPS < MIN_ROOM && max_e + EPS >= MIN_ROOM
+struct EntryBodyPartition {
+	entry_bands: Vec<Aabb2d>,
+	body: Vec<Aabb2d>,
+	scraps: Vec<Aabb2d>,
 }
 
-fn touches_any(r: Aabb2d, bands: &[Aabb2d], min_touch: f32) -> bool {
+fn touches_access(r: Aabb2d, bands: &[Aabb2d], access: PlanAccessParams) -> bool {
+	let touch = access.open_touch();
 	bands.iter().any(|b| {
-		shared_edge_span(r, *b).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_touch)
-			|| aabb2_near_eq(r, *b)
+		aabb2_near_eq(r, *b)
+			|| shared_edge_span(r, *b).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
 	})
 }
 
-/// Flood-claim corridor stems abutting the entry so they are not dropped unfilled.
-fn claim_entry_corridors(
-	work: &mut Vec<Aabb2d>,
-	entry_bands: &mut Vec<Aabb2d>,
-	rooms: &mut Vec<ApartmentRoom>,
-	walkways: &mut Vec<Aabb2d>,
-	y0: f32,
-	y1: f32,
-	roll: f32,
-) {
-	if entry_bands.is_empty() {
-		return;
+/// Carve door entry, flood-claim corridor stems, split body vs scraps.
+fn partition_entry_and_body(
+	work: Vec<Aabb2d>,
+	door_cell: Aabb2d,
+	door: Option<&Opening>,
+	access: PlanAccessParams,
+) -> EntryBodyPartition {
+	let mut entry_bands = Vec::new();
+	let mut pending: Vec<Aabb2d> = work
+		.into_iter()
+		.filter(|r| aabb2_area(*r) > EPS * EPS)
+		.collect();
+
+	if let Some(door) = door {
+		if let Some((mut entry, rem)) =
+			carve_entryway(door_cell, door, ENTRY_DEPTH, ENTRY_WIDTH)
+		{
+			let usable_rem: Vec<Aabb2d> = rem
+				.into_iter()
+				.filter(|r| access.is_room_rect(*r))
+				.collect();
+			if usable_rem.is_empty() {
+				entry = door_cell;
+			}
+			entry_bands.push(entry);
+			pending.retain(|r| !aabb2_near_eq(*r, door_cell));
+			pending.extend(usable_rem);
+		}
 	}
-	let min_touch = WALK_WIDTH * 0.5;
+
+	let mut body = Vec::new();
+	let mut rest = Vec::new();
+	for r in pending {
+		if access.is_room_rect(r) {
+			body.push(r);
+		} else {
+			rest.push(r);
+		}
+	}
+
+	// Flood-claim access corridors that touch entry or body.
 	let mut guard = 0;
-	while guard < work.len().saturating_mul(2).max(4) {
+	while guard < rest.len().saturating_mul(2).max(4) {
 		guard += 1;
-		let Some(idx) = work.iter().position(|r| {
-			is_access_corridor(*r) && touches_any(*r, entry_bands, min_touch)
+		let Some(idx) = rest.iter().position(|r| {
+			access.is_access_corridor(*r)
+				&& (touches_access(*r, &entry_bands, access)
+					|| touches_access(*r, &body, access))
 		}) else {
 			break;
 		};
-		let band = work.remove(idx);
-		push_entryway(rooms, walkways, band, y0, y1, roll);
-		entry_bands.push(band);
+		entry_bands.push(rest.remove(idx));
+	}
+
+	EntryBodyPartition {
+		entry_bands,
+		body,
+		scraps: rest,
 	}
 }
 
@@ -676,11 +630,12 @@ fn label_xz(label: &LabelNode) -> Aabb2d {
 fn normalize_apartment_circulation(
 	rooms: &mut Vec<ApartmentRoom>,
 	entry: Option<Aabb2d>,
-	min_hall: f32,
+	access: PlanAccessParams,
 ) {
 	let Some(entry) = entry else {
 		return;
 	};
+	let touch = access.open_touch();
 	let open_rects: Vec<Aabb2d> = rooms
 		.iter()
 		.filter(|r| r.is_open_circ())
@@ -690,12 +645,11 @@ fn normalize_apartment_circulation(
 	if open_rects.is_empty() {
 		return;
 	}
-	// BFS from entry through open rects.
 	let mut reach = vec![false; open_rects.len()];
 	let mut stack = Vec::new();
 	for (i, r) in open_rects.iter().enumerate() {
 		if aabb2_near_eq(*r, entry)
-			|| shared_edge_span(*r, entry).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.5)
+			|| shared_edge_span(*r, entry).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
 		{
 			reach[i] = true;
 			stack.push(i);
@@ -710,9 +664,9 @@ fn normalize_apartment_circulation(
 			if reach[j] {
 				continue;
 			}
-			let touch = shared_edge_span(open_rects[i], open_rects[j])
-				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.4);
-			if touch {
+			let ok = shared_edge_span(open_rects[i], open_rects[j])
+				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch * 0.8);
+			if ok {
 				reach[j] = true;
 				stack.push(j);
 			}
@@ -733,7 +687,7 @@ fn normalize_apartment_circulation(
 			continue;
 		};
 		let ok = reachable_open.iter().any(|o| {
-			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall * 0.5)
+			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
 		});
 		if !ok {
 			// Demote: replace with HouseholdCloset using label bounds.
@@ -1012,7 +966,7 @@ mod tests {
 		);
 		let touches_body = apt.max_rects.iter().any(|r| {
 			shared_edge_span(entry, *r)
-				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= WALK_WIDTH * 0.5)
+				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= residential_access().open_touch())
 		});
 		assert!(touches_body, "entry must share an edge with the body max-rect");
 		assert!(

@@ -27,6 +27,7 @@ use crate::usage_areas::boundary_openings::{
 	host_face_spans, plan_edge_excluded,
 };
 use crate::usage_areas::halls_to_shafts::{HallsToShafts, HallsToShaftsOptions};
+use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, pack_apartments_to_targets, shared_edge_span,
 	split_oversized_cells, split_toward_min_room, PlanCell, MIN_GROUP_CONNECTIVITY,
@@ -55,6 +56,15 @@ impl Default for HallSuitePackParams {
 			min_room: DEFAULT_MIN_ROOM,
 			min_connectivity: MIN_GROUP_CONNECTIVITY,
 		}
+	}
+}
+
+impl HallSuitePackParams {
+	/// Access metrics for split / pack (override room + join from these knobs).
+	pub fn access(&self) -> PlanAccessParams {
+		PlanAccessParams::residential()
+			.with_room_min(self.min_room)
+			.with_group_connect(self.min_connectivity)
 	}
 }
 
@@ -168,9 +178,8 @@ impl HallConnectedGroups {
 		let mut groups = pack_apartments_to_targets(
 			&cells,
 			&hall_bands,
-			min_room_v,
 			&params.targets,
-			params.min_connectivity,
+			params.access(),
 		);
 		if groups.is_empty() {
 			groups = cells.iter().map(|c| vec![c.id]).collect();

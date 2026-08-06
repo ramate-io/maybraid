@@ -40,6 +40,7 @@ use crate::usage_areas::livable_quarters::{
 	SittingRoom, Study,
 };
 use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
+use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_geom::{
 	aabb2_near_eq, confines_from_xz, connecting_passage, host_xz, noise_for_cell, DOOR_WIDTH,
 	MIN_ROOM,
@@ -766,11 +767,10 @@ fn fit_guillotine(
 	))
 }
 
-/// Door-face contact on open circulation. Hall clear (`min_hall`) can exceed
-/// authored [`DOOR_WIDTH`]; requiring overlap ≥ `min_hall` empties every layout
-/// that only punches a 1 m door onto open.
 fn min_door_contact(min_hall: f32) -> f32 {
-	DOOR_WIDTH.min(min_hall).max(0.7)
+	PlanAccessParams::residential()
+		.with_walk_clear(min_hall)
+		.door_contact()
 }
 
 /// Normalize: passages on open ≥ door contact; open connected; closed doors onto open.
@@ -1279,19 +1279,13 @@ fn try_pack_one_open(
 	Ok(())
 }
 
-/// Among usable pockets ≥ ~80% of the largest, pick by area + seed jitter.
-fn pick_noisy_host(
-	free: &[Aabb2d],
-	min_area: f32,
+/// Among candidates ≥ ~80% of the largest area, pick by area + seed jitter.
+fn pick_noisy_among(
+	cands: &[(usize, f32)],
 	noise: NoiseParams,
-	salt: usize,
+	salt: f32,
+	channel: f32,
 ) -> Option<usize> {
-	let mut cands: Vec<(usize, f32)> = Vec::new();
-	for (i, r) in free.iter().enumerate() {
-		if rect_usable(*r, min_area) {
-			cands.push((i, aabb2_area(*r)));
-		}
-	}
 	let max_a = cands.iter().map(|(_, a)| *a).fold(0.0_f32, f32::max);
 	if max_a <= EPS {
 		return None;
@@ -1299,17 +1293,32 @@ fn pick_noisy_host(
 	let floor = max_a * 0.8;
 	let cfg = NoiseConfig::new(noise);
 	let mut best: Option<(usize, f32)> = None;
-	for (i, a) in cands {
+	for &(i, a) in cands {
 		if a + EPS < floor {
 			continue;
 		}
-		let jitter = cfg.sample_unit_4d(i as f32, a, salt as f32, 11.0) * max_a * 0.18;
+		let jitter = cfg.sample_unit_4d(i as f32, a, salt, channel) * max_a * 0.18;
 		let score = a + jitter;
 		if best.map(|(_, bs)| score > bs).unwrap_or(true) {
 			best = Some((i, score));
 		}
 	}
 	best.map(|(i, _)| i)
+}
+
+fn pick_noisy_host(
+	free: &[Aabb2d],
+	min_area: f32,
+	noise: NoiseParams,
+	salt: usize,
+) -> Option<usize> {
+	let cands: Vec<(usize, f32)> = free
+		.iter()
+		.enumerate()
+		.filter(|(_, r)| rect_usable(**r, min_area))
+		.map(|(i, r)| (i, aabb2_area(*r)))
+		.collect();
+	pick_noisy_among(&cands, noise, salt as f32, 11.0)
 }
 
 fn seeded_shuffle_kinds(
@@ -1410,37 +1419,19 @@ fn pick_noisy_abutting_host(
 	noise: NoiseParams,
 	salt: usize,
 ) -> Option<usize> {
-	let mut cands: Vec<(usize, f32)> = Vec::new();
-	for (i, r) in free.iter().enumerate() {
-		if !rect_usable(*r, min_area) {
-			continue;
-		}
-		let abuts = spine.iter().any(|s| {
-			shared_edge_span(*r, *s).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall)
-		});
-		if !abuts {
-			continue;
-		}
-		cands.push((i, aabb2_area(*r)));
-	}
-	let max_a = cands.iter().map(|(_, a)| *a).fold(0.0_f32, f32::max);
-	if max_a <= EPS {
-		return None;
-	}
-	let floor = max_a * 0.8;
-	let cfg = NoiseConfig::new(noise);
-	let mut best: Option<(usize, f32)> = None;
-	for (i, a) in cands {
-		if a + EPS < floor {
-			continue;
-		}
-		let jitter = cfg.sample_unit_4d(i as f32, a, salt as f32, 13.0) * max_a * 0.18;
-		let score = a + jitter;
-		if best.map(|(_, bs)| score > bs).unwrap_or(true) {
-			best = Some((i, score));
-		}
-	}
-	best.map(|(i, _)| i)
+	let cands: Vec<(usize, f32)> = free
+		.iter()
+		.enumerate()
+		.filter(|(_, r)| {
+			rect_usable(**r, min_area)
+				&& spine.iter().any(|s| {
+					shared_edge_span(**r, *s)
+						.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_hall)
+				})
+		})
+		.map(|(i, r)| (i, aabb2_area(*r)))
+		.collect();
+	pick_noisy_among(&cands, noise, salt as f32, 13.0)
 }
 
 fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {

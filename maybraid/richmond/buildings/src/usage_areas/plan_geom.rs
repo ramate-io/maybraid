@@ -9,10 +9,9 @@ use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
 
 const EPS: f32 = 1e-3;
-/// Nominal clear door / passage width (m).
-pub const DOOR_WIDTH: f32 = 1.0;
-/// Minimum usable room edge (m) for plan scraps.
-pub const MIN_ROOM: f32 = 2.2;
+
+// Re-export residential defaults — canonical defs live in [`super::plan_access`].
+pub use super::plan_access::{DOOR_WIDTH, MIN_ROOM};
 
 /// Floor XZ of an axis-aligned 3D AABB (`y` up).
 pub fn host_xz(bounds: &Aabb3d) -> Aabb2d {

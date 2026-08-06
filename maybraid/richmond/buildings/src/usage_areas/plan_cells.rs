@@ -7,14 +7,12 @@ use bevy_math::bounding::Aabb2d;
 use bevy_math::Vec2;
 use procedural_common::{aabb2_area, Aabb2dPack};
 
+use crate::usage_areas::plan_access::{GroupFootprint, PlanAccessParams};
+
 const EPS: f32 = 1e-3;
 
-/// Default minimum shared-edge length (m) for grouping cells into one suite.
-///
-/// Shorter contacts are treated as pinches — adjacent for walls, but not for
-/// suite connectivity / grow / absorb. ~2 m avoids door-width pinches joining
-/// separate rooms.
-pub const MIN_GROUP_CONNECTIVITY: f32 = 2.0;
+/// Re-export residential suite-join default (canonical: [`PlanAccessParams`]).
+pub use crate::usage_areas::plan_access::MIN_GROUP_CONNECTIVITY;
 
 /// One axis-aligned plan cell (`Aabb2d` uses \(x → X\), \(y → Z\)).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -143,49 +141,34 @@ pub fn split_toward_min_room(
 
 /// Group room cells into edge-connected apartments that touch a hallway.
 ///
-/// Convenience wrapper around [`pack_apartments_to_targets`] with one target and
-/// [`MIN_GROUP_CONNECTIVITY`].
+/// Convenience wrapper around [`pack_apartments_to_targets`] with one target.
 pub fn group_cells_to_apartments(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
 	min_room_size: Vec2,
 	target_apartment_area: f32,
 ) -> Vec<Vec<u32>> {
+	let access = PlanAccessParams::residential().with_room_min(min_room_size.x.min(min_room_size.y));
 	pack_apartments_to_targets(
 		cells,
 		halls,
-		min_room_size,
 		&[target_apartment_area.max(EPS)],
-		MIN_GROUP_CONNECTIVITY,
+		access,
 	)
 }
 
-/// Pack hall-connected apartments against a target-area catalog (Les Halles door style).
+/// Pack hall-connected apartments against a target-area catalog.
 ///
-/// Walks `targets` in order. Each entry seeds an unassigned hall-frontage cell and
-/// grows by **pinch-safe** well-connected **landlocked** neighbors (shared edge ≥
-/// `min_connectivity`, and no shorter pinch against any existing member). Other
-/// hall-frontage cells are never grown into or absorbed — each keeps its own door
-/// seed / force-one suite. That avoids entryway "spur" apartments that only connect
-/// sideways while a partition seals the natural forward face.
-///
-/// Landlocked orphans absorb into the neighboring pinch-safe group with the
-/// longest shared contact; leftover frontage cells become force-one groups.
-///
-/// Never emits a landlocked group (no hall frontage).
-///
-/// After force-one frontage leftovers, a post-pass merges **degenerate**
-/// remnants (thin / high-aspect / tiny) into a pinch-safe neighbor when contact
-/// is good — keeps normal side-by-side door seeds separate.
+/// Stages: seed/grow (landlocked only, pinch-safe) → absorb orphans → force-one
+/// frontage leftovers → post-pass merge of degenerate remnants. See
+/// [`PlanAccessParams`] for join / aspect / room thresholds.
 pub fn pack_apartments_to_targets(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
-	min_room_size: Vec2,
 	targets: &[f32],
-	min_connectivity: f32,
+	access: PlanAccessParams,
 ) -> Vec<Vec<u32>> {
-	let min_conn = min_connectivity.max(EPS);
-	let min_room = Vec2::new(min_room_size.x.max(EPS), min_room_size.y.max(EPS));
+	let min_conn = access.group_connect.max(EPS);
 	let eligible: Vec<PlanCell> = cells.to_vec();
 	if eligible.is_empty() {
 		return Vec::new();
@@ -218,11 +201,10 @@ pub fn pack_apartments_to_targets(
 			if area + EPS >= accept && area + next_area > target * 1.35 {
 				break;
 			}
-			// Soft stop: once near target, refuse extreme snakes (bowling alleys).
 			if area + EPS >= accept {
 				let mut probe = group.clone();
 				probe.push(next);
-				if group_aspect(&eligible, &probe) > GROW_ASPECT_SOFT {
+				if cell_group_footprint(&eligible, &probe).aspect > access.soft_aspect {
 					break;
 				}
 			}
@@ -233,12 +215,11 @@ pub fn pack_apartments_to_targets(
 		groups.push(group);
 	}
 
-	// Landlocked orphans only — hall-frontage leftovers stay force-one seeds.
 	for i in 0..eligible.len() {
 		if assigned[i] || frontage[i] {
 			continue;
 		}
-		if let Some(gi) = find_absorb_group(&eligible, &groups, i, min_conn) {
+		if let Some(gi) = find_absorb_group(&eligible, &groups, i, access) {
 			groups[gi].push(i);
 			assigned[i] = true;
 		}
@@ -254,30 +235,13 @@ pub fn pack_apartments_to_targets(
 		}
 	}
 
-	merge_degenerate_frontage_groups(&eligible, &mut groups, min_conn, min_room);
+	merge_degenerate_frontage_groups(&eligible, &mut groups, access);
 
 	groups
 		.into_iter()
 		.filter(|g| g.iter().any(|&i| frontage[i]))
 		.map(|g| g.into_iter().map(|i| eligible[i].id).collect())
 		.collect()
-}
-
-/// Join when ≥1 well-connected contact exists and no pinch against any member.
-fn can_join_group(cells: &[PlanCell], group: &[usize], candidate: usize, min_conn: f32) -> bool {
-	let cell = &cells[candidate];
-	let mut well = false;
-	for &gi in group {
-		let Some(len) = shared_edge_length(cells[gi].bounds, cell.bounds, EPS) else {
-			continue;
-		};
-		if len + EPS >= min_conn {
-			well = true;
-		} else if len > EPS {
-			return false;
-		}
-	}
-	well
 }
 
 /// Guillotine-split cells whose area exceeds `max_area`, stopping at `min_room`.
@@ -358,83 +322,41 @@ fn best_seed(
 	best.map(|(i, _)| i)
 }
 
-/// Soft aspect ceiling while growing near the catalog target (refuse snakes).
-const GROW_ASPECT_SOFT: f32 = 3.25;
-
-fn group_bounds_xz(cells: &[PlanCell], group: &[usize]) -> Aabb2d {
+fn cell_group_footprint(cells: &[PlanCell], group: &[usize]) -> GroupFootprint {
 	let mut b = cells[group[0]].bounds;
-	for &gi in group.iter().skip(1) {
+	let mut area = 0.0_f32;
+	for &gi in group {
 		b.min = b.min.min(cells[gi].bounds.min);
 		b.max = b.max.max(cells[gi].bounds.max);
+		area += cells[gi].area();
 	}
-	b
+	GroupFootprint::from_bounds(b, area)
 }
 
-fn group_aspect(cells: &[PlanCell], group: &[usize]) -> f32 {
-	let b = group_bounds_xz(cells, group);
-	let s = (b.max - b.min).max(Vec2::splat(EPS));
-	s.x.max(s.y) / s.x.min(s.y)
-}
-
-fn best_grow_candidate(
+/// Max well-connected shared length between `cell` and `group`, or `None` if any pinch.
+fn max_pinch_safe_shared(
 	cells: &[PlanCell],
-	assigned: &[bool],
 	group: &[usize],
-	frontage: &[bool],
-	min_connectivity: f32,
-) -> Option<usize> {
-	let group_area: f32 = group.iter().map(|&gi| cells[gi].area()).sum();
-	let gb = group_bounds_xz(cells, group);
-	let mut best: Option<(usize, f32)> = None;
-	for (i, cell) in cells.iter().enumerate() {
-		if assigned[i] || frontage[i] {
+	cell: usize,
+	min_conn: f32,
+) -> Option<f32> {
+	let bounds = cells[cell].bounds;
+	let mut shared = 0.0_f32;
+	let mut well = false;
+	for &gi in group {
+		let Some(len) = shared_edge_length(cells[gi].bounds, bounds, EPS) else {
 			continue;
-		}
-		if !can_join_group(cells, group, i, min_connectivity) {
-			continue;
-		}
-		let mut max_shared = 0.0_f32;
-		for &gi in group {
-			if let Some(len) = shared_edge_length(cells[gi].bounds, cell.bounds, EPS) {
-				if len + EPS >= min_connectivity {
-					max_shared = max_shared.max(len);
-				}
-			}
-		}
-		let mut nb = gb;
-		nb.min = nb.min.min(cell.bounds.min);
-		nb.max = nb.max.max(cell.bounds.max);
-		let bbox = (nb.max - nb.min).max(Vec2::splat(EPS));
-		let new_area = group_area + cell.area();
-		let compact = new_area / (bbox.x * bbox.y).max(EPS);
-		// Prefer wide contacts and compact footprints over snake chains.
-		let score = max_shared * (0.35 + compact) * cell.area().sqrt();
-		match best {
-			None => best = Some((i, score)),
-			Some((_, bs)) if score > bs => best = Some((i, score)),
-			_ => {}
+		};
+		if len + EPS >= min_conn {
+			well = true;
+			shared = shared.max(len);
+		} else if len > EPS {
+			return None;
 		}
 	}
-	best.map(|(i, _)| i)
+	well.then_some(shared)
 }
 
-/// Thin, snaky, or tiny force-one remnants that should prefer a neighbor.
-fn group_is_degenerate(cells: &[PlanCell], group: &[usize], min_room: Vec2) -> bool {
-	if group.is_empty() {
-		return false;
-	}
-	let area: f32 = group.iter().map(|&i| cells[i].area()).sum();
-	let b = group_bounds_xz(cells, group);
-	let s = (b.max - b.min).max(Vec2::splat(EPS));
-	let min_ext = s.x.min(s.y);
-	let aspect = s.x.max(s.y) / s.x.min(s.y);
-	let min_dim = min_room.x.min(min_room.y);
-	aspect > GROW_ASPECT_SOFT
-		|| min_ext + EPS < min_dim
-		|| area + EPS < min_dim * min_dim * 1.5
-}
-
-/// Pinch-safe contact between two groups (any member pair well-connected, no pinch).
 fn groups_can_merge(
 	cells: &[PlanCell],
 	a: &[usize],
@@ -459,29 +381,59 @@ fn groups_can_merge(
 	well.then_some(shared)
 }
 
-/// Merge degenerate frontage remnants into pinch-safe neighbors when possible.
+fn best_grow_candidate(
+	cells: &[PlanCell],
+	assigned: &[bool],
+	group: &[usize],
+	frontage: &[bool],
+	min_connectivity: f32,
+) -> Option<usize> {
+	let fp = cell_group_footprint(cells, group);
+	let mut best: Option<(usize, f32)> = None;
+	for (i, cell) in cells.iter().enumerate() {
+		if assigned[i] || frontage[i] {
+			continue;
+		}
+		let Some(max_shared) = max_pinch_safe_shared(cells, group, i, min_connectivity) else {
+			continue;
+		};
+		let mut nb = fp.bounds;
+		nb.min = nb.min.min(cell.bounds.min);
+		nb.max = nb.max.max(cell.bounds.max);
+		let probe = GroupFootprint::from_bounds(nb, fp.area + cell.area());
+		let score = max_shared * (0.35 + probe.compact) * cell.area().sqrt();
+		match best {
+			None => best = Some((i, score)),
+			Some((_, bs)) if score > bs => best = Some((i, score)),
+			_ => {}
+		}
+	}
+	best.map(|(i, _)| i)
+}
+
 fn merge_degenerate_frontage_groups(
 	cells: &[PlanCell],
 	groups: &mut Vec<Vec<usize>>,
-	min_conn: f32,
-	min_room: Vec2,
+	access: PlanAccessParams,
 ) {
+	let min_conn = access.group_connect;
 	let mut guard = 0;
 	while guard < groups.len().saturating_mul(2).max(4) {
 		guard += 1;
 		let mut order: Vec<usize> = (0..groups.len()).collect();
-		// Smallest / skinniest first so fat suites absorb remnants.
 		order.sort_by(|&a, &b| {
-			let aa: f32 = groups[a].iter().map(|&i| cells[i].area()).sum();
-			let ab: f32 = groups[b].iter().map(|&i| cells[i].area()).sum();
+			let aa = cell_group_footprint(cells, &groups[a]).area;
+			let ab = cell_group_footprint(cells, &groups[b]).area;
 			aa.partial_cmp(&ab).unwrap_or(std::cmp::Ordering::Equal)
 		});
 		let mut did = false;
 		for gi in order {
-			if gi >= groups.len() || !group_is_degenerate(cells, &groups[gi], min_room) {
+			if gi >= groups.len()
+				|| !cell_group_footprint(cells, &groups[gi]).is_degenerate(access)
+			{
 				continue;
 			}
-			let mut best: Option<(usize, f32, f32)> = None; // tj, shared, aspect_after
+			let mut best: Option<(usize, f32, f32)> = None;
 			for tj in 0..groups.len() {
 				if tj == gi {
 					continue;
@@ -493,7 +445,7 @@ fn merge_degenerate_frontage_groups(
 				};
 				let mut probe = groups[tj].clone();
 				probe.extend_from_slice(&groups[gi]);
-				let aspect = group_aspect(cells, &probe);
+				let aspect = cell_group_footprint(cells, &probe).aspect;
 				let better = match best {
 					None => true,
 					Some((_, bs, ba)) => {
@@ -524,31 +476,18 @@ fn find_absorb_group(
 	cells: &[PlanCell],
 	groups: &[Vec<usize>],
 	orphan: usize,
-	min_connectivity: f32,
+	access: PlanAccessParams,
 ) -> Option<usize> {
-	// Prefer longest contact, then joins that stay under soft aspect (when any
-	// exist — otherwise allow snakes so landlocked cells are not dropped),
-	// then more compact result, then smaller group.
-	let mut best: Option<(usize, f32, bool, f32, f32)> = None; // gi, shared, soft_ok, compact, area
+	let min_conn = access.group_connect;
+	let mut best: Option<(usize, f32, bool, f32, f32)> = None;
 	for (gi, group) in groups.iter().enumerate() {
-		if !can_join_group(cells, group, orphan, min_connectivity) {
+		let Some(shared) = max_pinch_safe_shared(cells, group, orphan, min_conn) else {
 			continue;
-		}
-		let mut shared = 0.0_f32;
-		for &ci in group {
-			if let Some(len) = shared_edge_length(cells[ci].bounds, cells[orphan].bounds, EPS) {
-				if len + EPS >= min_connectivity {
-					shared = shared.max(len);
-				}
-			}
-		}
-		let area: f32 = group.iter().map(|&ci| cells[ci].area()).sum();
+		};
 		let mut probe = group.clone();
 		probe.push(orphan);
-		let soft_ok = group_aspect(cells, &probe) <= GROW_ASPECT_SOFT;
-		let nb = group_bounds_xz(cells, &probe);
-		let bbox = (nb.max - nb.min).max(Vec2::splat(EPS));
-		let compact = (area + cells[orphan].area()) / (bbox.x * bbox.y).max(EPS);
+		let fp = cell_group_footprint(cells, &probe);
+		let soft_ok = fp.aspect <= access.soft_aspect;
 		let better = match best {
 			None => true,
 			Some((_, bs, bsoft, bc, ba)) => {
@@ -556,15 +495,15 @@ fn find_absorb_group(
 					|| ((shared - bs).abs() <= EPS && soft_ok && !bsoft)
 					|| ((shared - bs).abs() <= EPS
 						&& soft_ok == bsoft
-						&& compact > bc + 1e-4)
+						&& fp.compact > bc + 1e-4)
 					|| ((shared - bs).abs() <= EPS
 						&& soft_ok == bsoft
-						&& (compact - bc).abs() <= 1e-4
-						&& area < ba)
+						&& (fp.compact - bc).abs() <= 1e-4
+						&& fp.area < ba)
 			}
 		};
 		if better {
-			best = Some((gi, shared, soft_ok, compact, area));
+			best = Some((gi, shared, soft_ok, fp.compact, fp.area));
 		}
 	}
 	best.map(|(gi, _, _, _, _)| gi)
@@ -865,9 +804,8 @@ mod tests {
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
-			Vec2::new(2.0, 2.0),
 			&[30.0, 20.0],
-			MIN_GROUP_CONNECTIVITY,
+			PlanAccessParams::residential().with_room_min(2.0),
 		);
 		assert!(
 			groups.iter().any(|g| g.len() >= 2),
@@ -904,9 +842,8 @@ mod tests {
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
-			Vec2::new(2.0, 2.0),
 			&[40.0],
-			MIN_GROUP_CONNECTIVITY,
+			PlanAccessParams::residential().with_room_min(2.0),
 		);
 		// Cell 0+1 may group; cell 2 must not join via the pinch alone.
 		for g in &groups {
@@ -936,9 +873,8 @@ mod tests {
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
-			Vec2::new(2.5, 2.5),
 			&[45.0],
-			MIN_GROUP_CONNECTIVITY,
+			PlanAccessParams::residential().with_room_min(2.5),
 		);
 		let g_fat = groups.iter().find(|g| g.contains(&0));
 		assert!(
@@ -964,9 +900,8 @@ mod tests {
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
-			Vec2::new(2.0, 2.0),
 			&[40.0],
-			MIN_GROUP_CONNECTIVITY,
+			PlanAccessParams::residential().with_room_min(2.0),
 		);
 		let g0 = groups.iter().find(|g| g.contains(&0)).expect("seed group");
 		assert!(
@@ -992,9 +927,8 @@ mod tests {
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
-			Vec2::new(2.0, 2.0),
 			&[30.0, 20.0],
-			MIN_GROUP_CONNECTIVITY,
+			PlanAccessParams::residential().with_room_min(2.0),
 		);
 		let g0 = groups.iter().find(|g| g.contains(&0)).expect("cell 0 grouped");
 		assert!(
