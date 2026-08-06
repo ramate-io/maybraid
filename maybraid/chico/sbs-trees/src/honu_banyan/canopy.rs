@@ -15,12 +15,10 @@ use chico_sbs_geometry::{
 	BallStickNode,
 };
 use chico_tree_components::{HonuBanyanCanopyFoliage, JungleGrowth, JungleGrowthShape};
-use chico_vegetation_components::{FoliageGeometry, FoliageNode, Placement};
+use chico_vegetation_components::{FoliageNode, Placement};
 use procedural_common::NoiseParams;
 
-use crate::jungle_growth_vc::{
-	jungle_growth_ball_only, jungle_growth_foliage_nodes, JungleGrowthBallKit, JungleGrowthVcParams,
-};
+use crate::jungle_growth_vc::{jungle_growth_foliage_nodes, JungleGrowthVcParams};
 
 /// High outer / inner canopy bands.
 pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
@@ -30,20 +28,16 @@ pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::
 pub(crate) const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Low foliage: cheap-ball kit.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
-/// Low growth: sparse balls only.
-pub(crate) const LOW_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(4, 2);
 
-/// Growth spawn uniform-scale center (~1/10 of legacy RenderItem `5.0`).
-pub const HONU_GROWTH_RADIUS_SCALE: f32 = 0.5;
-const RADIUS_SCALE_SPAN: f32 = 0.06;
-/// Frond scale relative to the (now smaller) assembly.
-const FOLIAGE_SCALE_CENTER: f32 = 1.0;
-const FOLIAGE_SCALE_SPAN: f32 = 0.28;
+/// Growth spawn uniform-scale center (~4/5 of legacy RenderItem `5.0`).
+pub const HONU_GROWTH_RADIUS_SCALE: f32 = 4.0;
+const RADIUS_SCALE_SPAN: f32 = 0.50;
+/// Frond scale relative to the assembly.
+const FOLIAGE_SCALE_CENTER: f32 = 1.6;
+const FOLIAGE_SCALE_SPAN: f32 = 0.40;
 
-const GROWTH_BALL_KIT: JungleGrowthBallKit = JungleGrowthBallKit::Layered;
-
-/// Middle + upper rings (with 3 rings, `u ∈ {0, 0.5, 1}` — need ≤ 0.5 to see growth).
-const MIN_RING_U_FOR_GROWTH: f32 = 0.50;
+/// Any canopy ring may host growth (spawn fraction still gates density).
+const MIN_RING_U_FOR_GROWTH: f32 = 0.0;
 const MIN_HEIGHT_FRACTION_FOR_FOLIAGE: f32 = 0.70;
 const OUTER_SPLAY_DISTANCE_FRACTION: f32 = 0.50;
 const RACHIS_THICKNESS_CENTER: f32 = 0.02;
@@ -138,25 +132,8 @@ fn growth_params(node_idx: usize, position: Vec3) -> JungleGrowthVcParams {
 	)
 }
 
-fn emit_canopy_ball(kind: NodeFoliageKind, position: Vec3, leaf_radius: f32, cheap: bool) -> FoliageNode {
-	let placement = Placement::foliage_uniform(position, leaf_radius);
-	match kind {
-		NodeFoliageKind::OuterSplay => {
-			let seed = node_mix_seed(0, position);
-			let disc = 0.20 + 0.14 * ((seed % 17) as f32 / 16.0);
-			FoliageNode::plane_splay(
-				FoliageGeometry::plane_splay(seed % 2, 0.8, disc),
-				placement,
-			)
-		}
-		_ => {
-			if cheap {
-				FoliageNode::cheap_ball(placement)
-			} else {
-				FoliageNode::layered_ball(placement)
-			}
-		}
-	}
+fn emit_canopy_ball(_kind: NodeFoliageKind, position: Vec3, leaf_radius: f32) -> FoliageNode {
+	FoliageNode::cheap_ball(Placement::foliage_uniform(position, leaf_radius))
 }
 
 fn collect_candidates(
@@ -257,18 +234,15 @@ pub(crate) fn foliage_nodes_high(
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in &growth {
-		nodes.extend(jungle_growth_foliage_nodes(
-			growth_params(c.node_idx, c.position),
-			GROWTH_BALL_KIT,
-		));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
 	}
 	for c in banded_candidates(&canopy, HIGH_FOLIAGE_BANDS) {
-		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
 	}
 	nodes
 }
 
-/// Medium: banded growth (full fronds) + banded canopy + mid layered proxy.
+/// Medium: banded growth (fronds only) + banded cheap canopy + mid layered proxy.
 pub(crate) fn foliage_nodes_medium(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
@@ -279,13 +253,10 @@ pub(crate) fn foliage_nodes_medium(
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
 	for c in banded_candidates(&growth, MEDIUM_GROWTH_BANDS) {
-		nodes.extend(jungle_growth_foliage_nodes(
-			growth_params(c.node_idx, c.position),
-			GROWTH_BALL_KIT,
-		));
+		nodes.extend(jungle_growth_foliage_nodes(growth_params(c.node_idx, c.position)));
 	}
 	for c in banded_candidates(&canopy, MEDIUM_FOLIAGE_BANDS) {
-		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, false));
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
 	}
 	if let Some(proxy) = mid_canopy_proxy_ball(chain, min_height, leaf_radius_world) {
 		nodes.push(proxy);
@@ -293,24 +264,18 @@ pub(crate) fn foliage_nodes_medium(
 	nodes
 }
 
-/// Low: sparse growth balls + banded cheap canopy + mid proxy.
+/// Low: banded cheap canopy + mid proxy (no growth balls).
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<HonuBanyanChain>,
 	growth_spawn_fraction: f32,
 	min_height: f32,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let (growth, canopy) =
+	let (_growth, canopy) =
 		collect_candidates(chain, growth_spawn_fraction, min_height, leaf_radius_world);
 	let mut nodes = Vec::new();
-	for c in banded_candidates(&growth, LOW_GROWTH_BANDS) {
-		nodes.push(jungle_growth_ball_only(
-			growth_params(c.node_idx, c.position),
-			GROWTH_BALL_KIT,
-		));
-	}
 	for c in banded_candidates(&canopy, LOW_FOLIAGE_BANDS) {
-		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius, true));
+		nodes.push(emit_canopy_ball(c.kind, c.position, c.leaf_radius));
 	}
 	if let Some(proxy) = mid_canopy_proxy_ball(chain, min_height, leaf_radius_world) {
 		nodes.push(proxy);
@@ -443,5 +408,28 @@ where
 				Some((HonuBanyanCanopyFoliage::OuterSplay(splay), scale))
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod vc_growth_tests {
+	use super::*;
+	use crate::HonuBanyanParams;
+
+	#[test]
+	fn high_emits_jungle_growth_nodes() {
+		let tree = HonuBanyanParams::default().build();
+		let nodes = foliage_nodes_high(
+			&tree.chain,
+			tree.growth_spawn_fraction,
+			tree.geometry.crown_floor_world_y(),
+			tree.geometry.leaf_ball_size(),
+		);
+		let fronds = nodes.iter().filter(|n| n.geometry.is_frond_collection()).count();
+		assert!(
+			fronds > 0,
+			"expected jungle-growth frond collections, got {} foliage nodes",
+			nodes.len()
+		);
 	}
 }

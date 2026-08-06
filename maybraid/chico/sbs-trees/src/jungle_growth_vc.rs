@@ -1,7 +1,7 @@
-//! VegetationComponents emission for jungle growth clusters (inner ball + palm fronds + spears).
+//! VegetationComponents emission for jungle growth clusters (palm fronds + spears, no ball mass).
 //!
-//! Approximates legacy [`JungleGrowth`](chico_tree_components::JungleGrowth): inner mass,
-//! a short palm-frond crown, and a couple upward spear fronds in place of Buddha's-hand.
+//! Approximates legacy [`JungleGrowth`](chico_tree_components::JungleGrowth) foliage without the
+//! inner dirt/wood ball: a short palm-frond crown plus a couple upward spear fronds.
 
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
@@ -19,17 +19,9 @@ const SPEAR_COUNT: u32 = 2;
 
 const FROND_CROWN_Y_FRACTION: f32 = 0.7;
 const SPEAR_Y_FRACTION: f32 = 0.6;
+/// Anchor offsets still track the legacy inner-ball radius fraction.
 const INNER_BALL_SCALE: f32 = 0.72;
 const BUDDHA_HAND_SCALE: f32 = 0.8;
-
-/// Which ball kit to use for the growth inner mass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JungleGrowthBallKit {
-	/// Honu — richer near-field mass.
-	Layered,
-	/// Jungle Storybook — cheaper outer canopy look.
-	Cheap,
-}
 
 fn mix_unit(node_idx: usize, position: Vec3, lane: u32) -> f32 {
 	(node_mix_seed(node_idx, position).wrapping_add(lane) as f32) / (u32::MAX as f32)
@@ -44,7 +36,7 @@ fn jitter(center: f32, span: f32, t: f32) -> f32 {
 pub(crate) struct JungleGrowthVcParams {
 	pub node_idx: usize,
 	pub position: Vec3,
-	/// Spawn uniform scale (Honu ~0.5, Jungle Storybook ~0.2).
+	/// Spawn uniform scale driving frond size (Honu / Jungle Storybook radius centers).
 	pub radius_scale: f32,
 	pub foliage_scale: f32,
 	pub seed: i32,
@@ -81,10 +73,6 @@ impl JungleGrowthVcParams {
 
 	fn assembly_scale(self) -> f32 {
 		self.radius_scale.max(1e-4)
-	}
-
-	fn inner_ball_radius(self) -> f32 {
-		self.assembly_scale() * INNER_BALL_SCALE
 	}
 
 	fn foliage_world_scale(self) -> f32 {
@@ -156,38 +144,17 @@ fn spear_frond_runs(params: JungleGrowthVcParams) -> Vec<FrondRun> {
 	runs
 }
 
-fn ball_node(params: JungleGrowthVcParams, kit: JungleGrowthBallKit) -> FoliageNode {
-	let placement = Placement::foliage_uniform(params.position, params.inner_ball_radius());
-	match kit {
-		JungleGrowthBallKit::Layered => FoliageNode::layered_ball(placement),
-		JungleGrowthBallKit::Cheap => FoliageNode::cheap_ball(placement),
-	}
-}
-
-/// Inner ball (kit) + one frond collection (palm crown + upward spears).
-pub(crate) fn jungle_growth_foliage_nodes(
-	params: JungleGrowthVcParams,
-	kit: JungleGrowthBallKit,
-) -> Vec<FoliageNode> {
-	let mut nodes = vec![ball_node(params, kit)];
-
+/// Frond collection only (palm crown + upward spears) — no growth inner ball.
+pub(crate) fn jungle_growth_foliage_nodes(params: JungleGrowthVcParams) -> Vec<FoliageNode> {
 	let frond_origin = params.position
 		+ Vec3::Y * (params.assembly_scale() * INNER_BALL_SCALE * FROND_CROWN_Y_FRACTION);
 	let mut runs = frond_runs_to_collection_runs(palm_frond_shape(params).frond_runs_at(frond_origin));
 	runs.extend(spear_frond_runs(params));
-	if !runs.is_empty() {
-		nodes.push(FoliageNode::frond_collection(
-			FrondCollection::new(runs),
-			Placement::IDENTITY,
-		));
+	if runs.is_empty() {
+		return Vec::new();
 	}
-	nodes
-}
-
-/// Low LOD: inner mass only (no frond collections), same ball kit as High/Medium.
-pub(crate) fn jungle_growth_ball_only(
-	params: JungleGrowthVcParams,
-	kit: JungleGrowthBallKit,
-) -> FoliageNode {
-	ball_node(params, kit)
+	vec![FoliageNode::frond_collection(
+		FrondCollection::new(runs),
+		Placement::IDENTITY,
+	)]
 }

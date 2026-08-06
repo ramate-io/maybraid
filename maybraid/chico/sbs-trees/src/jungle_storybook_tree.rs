@@ -29,7 +29,7 @@ pub struct JungleStorybookTreeParams {
 	pub geometry: JungleStorybookTreeSbs,
 
 	/// Share of foliage-eligible nodes that spawn jungle growth.
-	#[arg(long, default_value_t = 0.55)]
+	#[arg(long, default_value_t = 0.275)]
 	pub growth_spawn_fraction: f32,
 }
 
@@ -37,7 +37,7 @@ impl Default for JungleStorybookTreeParams {
 	fn default() -> Self {
 		Self {
 			geometry: JungleStorybookTreeSbs::default(),
-			growth_spawn_fraction: 0.55,
+			growth_spawn_fraction: 0.275,
 		}
 	}
 }

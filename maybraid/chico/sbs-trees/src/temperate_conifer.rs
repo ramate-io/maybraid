@@ -3,8 +3,8 @@
 //!
 //! [`TemperateConiferParams::build`] applies the temperate preset, grows the ball-stick chain once
 //! into [`TemperateConifer`], which implements [`VegetationComponents`]. Sticks reuse Northern /
-//! Liam banding; High/Medium foliage structurally samples joints, then packs one
-//! [`FrondCollection`] per branch ring; Low uses a dual layered-ball crown proxy.
+//! Liam banding; High/Medium/Low foliage structurally samples joints, then packs one
+//! [`FrondCollection`] per branch ring (collections scale out — no mass proxy).
 
 mod foliage;
 #[allow(dead_code)]
@@ -31,7 +31,7 @@ use procedural_common::{parse_unit_range, UnitRange};
 
 use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
-use crate::palm_tree::{layered_proxy_balls, world_space_frond_shape};
+use crate::palm_tree::world_space_frond_shape;
 use crate::torch_tree::structural_lod_probe;
 use foliage::{branch_direction, frond_shape_for_joint};
 
@@ -39,6 +39,8 @@ use foliage::{branch_direction, frond_shape_for_joint};
 const HIGH_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(28, 9);
 /// Medium: ~30% denser than prior 15×4 joint samples.
 const MEDIUM_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(20, 4);
+/// Low: coarser joint samples; frond collections scale out (no mass proxy).
+const LOW_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(10, 3);
 
 /// [`FriendsConiferSbs`] with Temperate Conifer limb/ray defaults (clap `flatten` base).
 #[derive(Clone, Debug, PartialEq, Args)]
@@ -296,46 +298,6 @@ impl TemperateConifer {
 			.collect()
 	}
 
-	fn low_proxy_foliage(&self) -> Vec<FoliageNode> {
-		let joints = self.sampled_joints(MEDIUM_JOINT_BANDS);
-		let mut min = Vec3::splat(f32::INFINITY);
-		let mut max = Vec3::splat(f32::NEG_INFINITY);
-		let scale = self.frond_world_scale.max(1e-8);
-		let leaf = self.height() * 0.07 * scale;
-		if joints.is_empty() {
-			for (_, node, _) in self.chain.nodes_with_hysteresis_enumerated() {
-				min = min.min(node.position - Vec3::splat(leaf));
-				max = max.max(node.position + Vec3::splat(leaf));
-			}
-		} else {
-			for (node_idx, position) in &joints {
-				let Some(node) = self.chain.nodes.get(*node_idx) else {
-					continue;
-				};
-				let local = frond_shape_for_joint(
-					&self.geometry.inner,
-					self.frond_world_scale,
-					*node_idx,
-					node,
-					&self.fronds_per_joint,
-					&self.frond_length_fraction,
-				);
-				let shape = world_space_frond_shape(local, self.frond_world_scale);
-				let extent = shape.length.max(shape.width) * 1.1;
-				min = min.min(*position - Vec3::splat(extent));
-				max = max.max(*position + Vec3::splat(extent));
-			}
-			if let Some((tip, _, shape)) = self.apex_frond_placement() {
-				let extent = shape.length.max(shape.width) * 1.1;
-				min = min.min(tip - Vec3::splat(extent));
-				max = max.max(tip + Vec3::splat(extent));
-			}
-		}
-		if !min.is_finite() {
-			return Vec::new();
-		}
-		layered_proxy_balls(min, max)
-	}
 }
 
 impl VegetationComponents for TemperateConifer {
@@ -352,16 +314,15 @@ impl VegetationComponents for TemperateConifer {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-		match level {
-			LodSceneLevel::High => Layers::from_free(self.ring_frond_collections(HIGH_JOINT_BANDS)),
-			LodSceneLevel::Medium => {
-				Layers::from_free(self.ring_frond_collections(MEDIUM_JOINT_BANDS))
-			}
+		let bands = match level {
+			LodSceneLevel::High => HIGH_JOINT_BANDS,
+			LodSceneLevel::Medium => MEDIUM_JOINT_BANDS,
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_proxy_foliage()),
-		}
+			| LodSceneLevel::Resolution(_) => LOW_JOINT_BANDS,
+		};
+		Layers::from_free(self.ring_frond_collections(bands))
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {

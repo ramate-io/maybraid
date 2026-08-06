@@ -242,7 +242,8 @@ impl Hysteresis for HonuBanyanChain {
 }
 
 /// Canopy limb ray freedom (art-directed; see [`HonuBanyanPhase`] / anchor seeds).
-pub const HONU_CANOPY_ANGLE_TOLERANCE_DEGREES: f32 = 60.0;
+/// Canopy limb ray freedom (art-directed; see [`HonuBanyanPhase`] / anchor seeds).
+pub const HONU_CANOPY_ANGLE_TOLERANCE_DEGREES: f32 = 70.0;
 pub const HONU_CANOPY_RAY_DOF: f32 = HONU_CANOPY_ANGLE_TOLERANCE_DEGREES.to_radians();
 
 pub const HONU_DESCENDER_ANGLE_TOLERANCE_DEGREES: f32 = 2.0;

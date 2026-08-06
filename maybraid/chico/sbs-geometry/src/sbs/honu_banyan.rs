@@ -61,7 +61,7 @@ pub struct RingAnchorParams {
 		feature = "clap",
 		arg(
 			long = "rings",
-			default_value = "3x5",
+			default_value = "3x4",
 			value_parser = parse_ring_layout,
 			value_name = "RINGSXANCHORS"
 		)
@@ -82,7 +82,7 @@ pub struct RingAnchorParams {
 impl Default for RingAnchorParams {
 	fn default() -> Self {
 		Self {
-			layout: RingLayout::new(3, 5),
+			layout: RingLayout::new(3, 4),
 			height_range: UnitRange::new(
 				DEFAULT_FIRST_RING_HEIGHT_FRACTION,
 				DEFAULT_LAST_RING_HEIGHT_FRACTION,
@@ -99,7 +99,7 @@ pub struct HonuProjectionParams {
 		feature = "clap",
 		arg(
 			long = "projection",
-			default_value = "0.45..0.92",
+			default_value = "0.55..1.05",
 			value_parser = parse_unit_range,
 			value_name = "MIN..MAX"
 		)
@@ -129,7 +129,7 @@ pub struct HonuGrowthParams {
 		feature = "clap",
 		arg(
 			long = "depth",
-			default_value = "4..6",
+			default_value = "3..5",
 			value_parser = parse_depth_range,
 			value_name = "FIRST..LAST"
 		)
@@ -339,5 +339,26 @@ mod tests {
 		let mut sbs = HonuBanyanSbs::default();
 		sbs.apply_mini_honu_preset();
 		assert_eq!(sbs.scale.tree_height, 3.0);
+	}
+
+	#[test]
+	fn default_chain_emits_descenders() {
+		use crate::chain::honu_banyan::HonuBanyanPhase;
+
+		let chain = HonuBanyanSbs::default().build_chain();
+		let descenders = chain
+			.nodes_with_hysteresis_enumerated()
+			.filter(|(_, _, h)| {
+				matches!(
+					h.phase,
+					HonuBanyanPhase::StartDescender(_) | HonuBanyanPhase::EndDescender(_)
+				)
+			})
+			.count();
+		assert!(
+			descenders > 0,
+			"expected descender phases in default Honu chain (nodes={})",
+			chain.nodes.len()
+		);
 	}
 }

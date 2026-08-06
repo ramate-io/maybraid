@@ -4,7 +4,7 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Structural LOD:
-//! - **High** — full sticks (topology already thinned vs legacy 3×7 / depth 5..8); jungle growth + banded canopy
+//! - **High** — full sticks (3×4 rings, depth 3..5, child 1..3, ±70° ray, longer hops); jungle growth + banded canopy
 //! - **Medium** — trunk + banded sticks; banded growth/canopy + mid layered proxy
 //! - **Low** — trunk + ~1/4 descenders; growth/canopy balls + mid proxy
 
@@ -36,7 +36,7 @@ pub struct HonuBanyanParams {
 	pub geometry: HonuBanyanSbs,
 
 	/// Fraction of qualifying outer-ring nodes that spawn jungle growth.
-	#[arg(long, default_value_t = 0.70)]
+	#[arg(long, default_value_t = 0.35)]
 	pub growth_spawn_fraction: f32,
 }
 
@@ -44,7 +44,7 @@ impl Default for HonuBanyanParams {
 	fn default() -> Self {
 		Self {
 			geometry: HonuBanyanSbs::default(),
-			growth_spawn_fraction: 0.70,
+			growth_spawn_fraction: 0.35,
 		}
 	}
 }

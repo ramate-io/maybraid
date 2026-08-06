@@ -15,8 +15,8 @@ use chico_stick_components::chico_stick::ChicoStick;
 use chico_vegetation_components::{StickGeometry, StickNode};
 use procedural_common::NoiseParams;
 
-/// Medium sticks: coarser azimuth × height outer samples than foliage (aggressive drop-off).
-pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
+/// Medium sticks: ~30% denser than prior 6×2 outer samples.
+pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StickLodRole {
