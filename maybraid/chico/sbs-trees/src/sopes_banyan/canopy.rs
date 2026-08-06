@@ -1,9 +1,6 @@
 //! Terminal canopy: layered-ball foliage nodes (with structural LOD filters).
 
-use chico_sbs_geometry::{
-	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickNode,
-	SopesBanyanChain,
-};
+use chico_sbs_geometry::{AzimuthHeightBands, BallStickChain, BallStickNode, SopesBanyanChain};
 use chico_vegetation_components::{FoliageNode, Placement};
 
 /// Medium foliage: denser azimuth × height outer samples (preserves vase pinch).
@@ -12,9 +9,7 @@ pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
 pub(crate) fn foliage_node_for_terminal(
-	_node_idx: usize,
 	node: &BallStickNode,
-	_hysteresis: &SopesBanyanChain,
 	min_height: f32,
 	leaf_radius_world: f32,
 ) -> Option<FoliageNode> {
@@ -27,17 +22,18 @@ pub(crate) fn foliage_node_for_terminal(
 	Some(FoliageNode::layered_ball(placement))
 }
 
-/// Outermost High foliage per azimuth × height cell, collapsed to layered balls.
+/// Outermost chain nodes per azimuth × height cell → layered balls (crown floor filtered).
 pub(crate) fn banded_outer_canopy_balls(
-	high_foliage: &[FoliageNode],
+	chain: &BallStickChain<SopesBanyanChain>,
 	bands: AzimuthHeightBands,
+	min_height: f32,
+	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	sample_max_horizontal_radius_by_azimuth_height(
-		high_foliage,
-		|node| node.placement.translation,
-		bands,
-	)
-	.into_iter()
-	.map(|sample| FoliageNode::layered_ball(sample.item.placement))
-	.collect()
+	chain
+		.sample_radius_azimuth(bands)
+		.into_iter()
+		.filter_map(|sample| {
+			foliage_node_for_terminal(sample.item, min_height, leaf_radius_world)
+		})
+		.collect()
 }

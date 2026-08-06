@@ -74,10 +74,11 @@ pub fn sync_show(
 	}
 
 	match subject {
-		ShowSubject::SopesBanyan(tree) => {
-			let bounds = vegetation_bounds(tree);
+		ShowSubject::SopesBanyan(params) => {
+			let tree = params.build();
+			let bounds = vegetation_bounds(&tree);
 			let entities =
-				spawn_vegetation_components(&mut commands, tree, Transform::IDENTITY, bounds);
+				spawn_vegetation_components(&mut commands, &tree, Transform::IDENTITY, bounds);
 			for entity in entities {
 				commands.entity(entity).insert(ShowRoot);
 			}

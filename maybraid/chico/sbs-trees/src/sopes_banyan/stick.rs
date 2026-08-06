@@ -1,6 +1,14 @@
 //! Stick segment → [`StickNode`] emission (with structural LOD phase filters).
 
-use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain, SopesBanyanPhase};
+use bevy::prelude::Vec3;
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickSegment,
+	SopesBanyanChain, SopesBanyanPhase,
+};
+use chico_vegetation_components::StickNode;
+
+/// Medium sticks: coarser azimuth × height outer samples than foliage (aggressive drop-off).
+pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StickLodRole {
@@ -44,16 +52,49 @@ pub(crate) fn stick_role_for_segment(
 	StickLodRole::from_parent_phase(&parent.phase)
 }
 
-/// Medium: always keep trunk; keep other sticks only in the outer half of the footprint.
-pub(crate) fn keep_stick_on_medium(
-	role: StickLodRole,
-	segment: &BallStickSegment<'_>,
-	tree_radius: f32,
-) -> bool {
-	if role.is_trunk() {
-		return true;
+#[derive(Clone, Copy)]
+struct StickBandCandidate {
+	mid: Vec3,
+	start: Vec3,
+	end: Vec3,
+	radius: f32,
+}
+
+/// Trunk always + outermost non-trunk sticks per azimuth × height cell.
+pub(crate) fn stick_nodes_medium_banded<'a, I>(segments: I) -> Vec<StickNode>
+where
+	I: IntoIterator<Item = (BallStickSegment<'a>, &'a SopesBanyanChain)>,
+{
+	let mut trunk = Vec::new();
+	let mut candidates = Vec::new();
+	for (segment, parent) in segments {
+		let role = stick_role_for_segment(&segment, parent);
+		if role.is_trunk() {
+			if let Some(node) = StickNode::from_segment(
+				segment.start.position,
+				segment.end.position,
+				segment.start.radius,
+			) {
+				trunk.push(node);
+			}
+			continue;
+		}
+		candidates.push(StickBandCandidate {
+			mid: segment.midpoint(),
+			start: segment.start.position,
+			end: segment.end.position,
+			radius: segment.start.radius,
+		});
 	}
-	segment.horizontal_radius() >= tree_radius.max(1e-4) * 0.5
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(
+		&candidates,
+		|c| c.mid,
+		MEDIUM_STICK_BANDS,
+	);
+	trunk.extend(sampled.into_iter().filter_map(|s| {
+		StickNode::from_segment(s.item.start, s.item.end, s.item.radius)
+	}));
+	trunk
 }
 
 /// Low: trunk + a thinned subset of descenders (no branch / flair sticks).

@@ -1055,10 +1055,9 @@ impl RenderSubject {
 	) -> Vec<Entity> {
 		match self {
 			Self::SopesBanyan(item) => {
-				let bounds = vegetation_bounds(item);
-				spawn_vegetation_components(
-					commands, item, transform, bounds,
-				)
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
 			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LiamsConifer(item) => item.spawn_render_items(commands, chunk, transform),

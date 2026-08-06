@@ -29,7 +29,6 @@ use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_
 use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
 use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
 use chico_sbs_trees::simplemans_hedge::render_item_plugin::ensure_registered as ensure_simplemans_hedge_render_plugins;
-use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
 use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
 use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
@@ -67,7 +66,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<LodFinePassPlugin>() {
 			app.add_plugins(LodFinePassPlugin);
 		}
-		ensure_sopes_banyan_render_plugins(app);
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
 		ensure_friends_conifer_render_plugins(app);

@@ -190,4 +190,14 @@ impl<H: Hysteresis> BallStickChain<H> {
 			})
 		})
 	}
+
+	/// Max horizontal distance of any node from the world \(Y\) axis.
+	pub fn footprint_radius(&self) -> f32 {
+		self.nodes.iter().map(|n| n.horizontal_radius()).fold(0.0_f32, f32::max)
+	}
+
+	/// [`Self::footprint_radius`] floored to at least `min_radius`.
+	pub fn footprint_radius_at_least(&self, min_radius: f32) -> f32 {
+		self.footprint_radius().max(min_radius.max(0.0))
+	}
 }

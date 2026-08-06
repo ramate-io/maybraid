@@ -252,12 +252,11 @@ where
 				}
 				WanderingAcaciaItem::Sope(banyan) => {
 					let samples = banyan.build_with_noise(build_noise);
-					let mut tree = self.sope_template.clone();
-					tree.geometry = samples.geometry;
+					let mut params = self.sope_template.clone();
+					params.geometry = samples.geometry;
+					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
-					spawn_vegetation_components(
-						commands, &tree, local, bounds
-					)
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				WanderingAcaciaItem::VaseTree(vase) => {
 					let geometry = vase.build_with_noise(build_noise);
