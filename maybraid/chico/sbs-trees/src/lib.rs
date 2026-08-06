@@ -29,18 +29,18 @@ pub use date_palm::DatePalmStd;
 pub use friends_conifer::FriendsConiferStd;
 pub use honu_banyan::HonuBanyanStd;
 pub use jungle_storybook_tree::JungleStorybookTreeStd;
-pub use kamakura_torch::{KamakuraTorch, KamakuraTorchInstance, KamakuraTorchStd};
+pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::LiamsConiferStd;
 pub use northern_conifer::NorthernConiferStd;
 pub use palm_bush::PalmBushStd;
-pub use penmarch_torch::{PenmarchTorch, PenmarchTorchInstance, PenmarchTorchStd};
-pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedInstance, RorysHeadTrainedStd};
+pub use penmarch_torch::{PenmarchTorch, PenmarchTorchParams};
+pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedParams};
 pub use simplemans_hedge::SimplemansHedgeStd;
 pub use skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedLeafMeshMaterial, SkippedMeshMaterial,
 	SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
-pub use sopes_banyan::{SopesBanyan, SopesBanyanInstance, SopesBanyanStd};
+pub use sopes_banyan::{SopesBanyan, SopesBanyanParams};
 pub use storybook_tree::StorybookTreeStd;
 pub use temperate_conifer::TemperateConiferStd;
 pub use tuft_patch::TuftPatchStd;

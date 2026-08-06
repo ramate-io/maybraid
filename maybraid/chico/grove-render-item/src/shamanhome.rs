@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -22,7 +22,7 @@ use chico_groves::{
 };
 
 /// Sope template for banyan placements (LodScene / VegetationComponents).
-pub type ShamanhomeSope = SopesBanyan;
+pub type ShamanhomeSope = SopesBanyanParams;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Shamanhome instance.
 pub type ShamanhomeStd = Shamanhome<

@@ -1,7 +1,7 @@
 //! **Kamakura Torch** — near-vertical flame variant (linear 48°→70° crown); same vase profile as Penmarch.
 //!
-//! [`KamakuraTorch`] is authored params; [`KamakuraTorch::build`] grows the ball-stick
-//! chain once into [`KamakuraTorchInstance`], which implements [`VegetationComponents`].
+//! [`KamakuraTorchParams::build`] grows the ball-stick chain once into [`KamakuraTorch`],
+//! which implements [`VegetationComponents`].
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, KamakuraTorchChain, KamakuraTorchSbs};
@@ -16,40 +16,37 @@ use crate::torch_tree::{
 	stick_nodes_medium_banded, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
 
-/// Typical Kamakura Torch params (geometry-only; materials are patched externally later).
-pub type KamakuraTorchStd = KamakuraTorch;
-
 /// Authoring / CLI parameters for Kamakura Torch.
 #[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct KamakuraTorch {
+pub struct KamakuraTorchParams {
 	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: KamakuraTorchSbs,
 }
 
-impl Default for KamakuraTorch {
+impl Default for KamakuraTorchParams {
 	fn default() -> Self {
 		Self { geometry: KamakuraTorchSbs::default() }
 	}
 }
 
-impl KamakuraTorch {
+impl KamakuraTorchParams {
 	/// Grow the ball-stick chain once for presentation / LOD emission.
-	pub fn build(&self) -> KamakuraTorchInstance {
-		KamakuraTorchInstance::from_params(self)
+	pub fn build(&self) -> KamakuraTorch {
+		KamakuraTorch::from_params(self)
 	}
 }
 
 /// Built Kamakura Torch: params plus a single grown [`BallStickChain`].
 #[derive(Clone)]
-pub struct KamakuraTorchInstance {
+pub struct KamakuraTorch {
 	pub geometry: KamakuraTorchSbs,
 	pub chain: BallStickChain<KamakuraTorchChain>,
 }
 
-impl KamakuraTorchInstance {
-	pub fn from_params(params: &KamakuraTorch) -> Self {
+impl KamakuraTorch {
+	pub fn from_params(params: &KamakuraTorchParams) -> Self {
 		Self {
 			geometry: params.geometry.clone(),
 			chain: params.geometry.build_chain(),
@@ -71,7 +68,7 @@ impl KamakuraTorchInstance {
 	}
 }
 
-impl VegetationComponents for KamakuraTorchInstance {
+impl VegetationComponents for KamakuraTorch {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),

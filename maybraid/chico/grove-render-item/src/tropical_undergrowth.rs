@@ -6,10 +6,10 @@ use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_ball_components::tuft::BladeTuft;
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
 use chico_sbs_trees::palm_bush::PalmBush;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
@@ -255,7 +255,7 @@ where
 				TropicalUndergrowthItem::RoryHead(rory) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry = rory.build_with_noise(build_noise);
-					let mut params = RorysHeadTrained::default();
+					let mut params = RorysHeadTrainedParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -323,7 +323,7 @@ where
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -333,7 +333,7 @@ where
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = KamakuraTorch::default();
+					let mut params = KamakuraTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -343,7 +343,7 @@ where
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

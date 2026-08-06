@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
+use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -266,7 +266,7 @@ where
 				StorytellersItem::PenmarchTorch(torch) => {
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -275,7 +275,7 @@ where
 				StorytellersItem::KamakuraTorch(torch) => {
 					let geometry =
 						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = KamakuraTorch::default();
+					let mut params = KamakuraTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -284,7 +284,7 @@ where
 				StorytellersItem::TorchTree(torch) => {
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

@@ -1,5 +1,7 @@
-//! Shared stick / foliage emission for Penmarch and Kamakura torch trees
-//! (same [`StorybookTreeChain`] topology; selective upper/outer canopy).
+//! Shared Penmarch / Kamakura stick and canopy helpers.
+//!
+//! Both torches use [`StorybookTreeChain`](chico_sbs_geometry::StorybookTreeChain) with the
+//! same selective upper/outer foliage policy; this module holds that emission logic once.
 
 mod canopy;
 mod stick;

@@ -1,7 +1,7 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
 use bevy::prelude::*;
-use chico_sbs_trees::SopesBanyan;
+use chico_sbs_trees::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use clap::{Args, Subcommand};
 
@@ -18,7 +18,7 @@ pub enum Show {
 #[command(rename_all = "kebab-case")]
 pub struct ShowSopesBanyan {
 	#[command(flatten)]
-	pub tree: SopesBanyan,
+	pub tree: SopesBanyanParams,
 }
 
 impl Show {
@@ -40,7 +40,7 @@ pub struct ShowConfig {
 
 #[derive(Clone, Debug)]
 pub enum ShowSubject {
-	SopesBanyan(SopesBanyan),
+	SopesBanyan(SopesBanyanParams),
 }
 
 #[derive(Component)]

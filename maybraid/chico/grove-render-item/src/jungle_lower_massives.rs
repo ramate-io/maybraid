@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::{
@@ -47,7 +47,7 @@ pub type JlmHonu = HonuBanyan<
 >;
 
 /// Sope template (LodScene / VegetationComponents).
-pub type JlmSope = SopesBanyan;
+pub type JlmSope = SopesBanyanParams;
 
 /// Jungle Storybook template (material slots match playground [`RenderJungleStorybookTree`]).
 pub type JlmJungleStorybook = JungleStorybookTree<

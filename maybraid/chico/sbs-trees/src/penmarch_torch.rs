@@ -1,7 +1,7 @@
 //! **Penmarch Torch** — vase-profile upward flame tree ([#248](https://github.com/ramate-io/maybraid/issues/248), [RFC §3.1.7.4](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/04-penmarch-torch/README.md)).
 //!
-//! [`PenmarchTorch`] is authored params; [`PenmarchTorch::build`] grows the ball-stick
-//! chain once into [`PenmarchTorchInstance`], which implements [`VegetationComponents`].
+//! [`PenmarchTorchParams::build`] grows the ball-stick chain once into [`PenmarchTorch`],
+//! which implements [`VegetationComponents`].
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, PenmarchTorchChain, PenmarchTorchSbs};
@@ -16,40 +16,37 @@ use crate::torch_tree::{
 	stick_nodes_medium_banded, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
 
-/// Typical Penmarch Torch params (geometry-only; materials are patched externally later).
-pub type PenmarchTorchStd = PenmarchTorch;
-
 /// Authoring / CLI parameters for Penmarch Torch.
 #[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct PenmarchTorch {
+pub struct PenmarchTorchParams {
 	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: PenmarchTorchSbs,
 }
 
-impl Default for PenmarchTorch {
+impl Default for PenmarchTorchParams {
 	fn default() -> Self {
 		Self { geometry: PenmarchTorchSbs::default() }
 	}
 }
 
-impl PenmarchTorch {
+impl PenmarchTorchParams {
 	/// Grow the ball-stick chain once for presentation / LOD emission.
-	pub fn build(&self) -> PenmarchTorchInstance {
-		PenmarchTorchInstance::from_params(self)
+	pub fn build(&self) -> PenmarchTorch {
+		PenmarchTorch::from_params(self)
 	}
 }
 
 /// Built Penmarch Torch: params plus a single grown [`BallStickChain`].
 #[derive(Clone)]
-pub struct PenmarchTorchInstance {
+pub struct PenmarchTorch {
 	pub geometry: PenmarchTorchSbs,
 	pub chain: BallStickChain<PenmarchTorchChain>,
 }
 
-impl PenmarchTorchInstance {
-	pub fn from_params(params: &PenmarchTorch) -> Self {
+impl PenmarchTorch {
+	pub fn from_params(params: &PenmarchTorchParams) -> Self {
 		Self {
 			geometry: params.geometry.clone(),
 			chain: params.geometry.build_chain(),
@@ -71,7 +68,7 @@ impl PenmarchTorchInstance {
 	}
 }
 
-impl VegetationComponents for PenmarchTorchInstance {
+impl VegetationComponents for PenmarchTorch {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),

@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_tree_components::HighBushShoots;
@@ -26,7 +26,7 @@ use chico_groves::{
 };
 
 /// Sope template (LodScene / VegetationComponents).
-pub type WaSope = SopesBanyan;
+pub type WaSope = SopesBanyanParams;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Wandering Acacia instance.
 pub type WanderingAcaciaStd = WanderingAcacia<
@@ -287,7 +287,7 @@ where
 				WanderingAcaciaItem::PenmarchTorch(torch) => {
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -296,7 +296,7 @@ where
 				WanderingAcaciaItem::KamakuraTorch(torch) => {
 					let geometry =
 						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-					let mut params = KamakuraTorch::default();
+					let mut params = KamakuraTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

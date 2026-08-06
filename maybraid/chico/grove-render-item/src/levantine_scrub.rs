@@ -5,8 +5,8 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::simplemans_hedge::SimplemansHedge;
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_tree_components::HighBushShoots;
@@ -238,7 +238,7 @@ where
 			let entities = match placed.variant.item() {
 				LevantineScrubItem::RoryHead(rory) => {
 					let geometry = rory.build_with_noise(build_noise);
-					let mut params = RorysHeadTrained::default();
+					let mut params = RorysHeadTrainedParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);
@@ -305,7 +305,7 @@ where
 				}
 				LevantineScrubItem::PenmarchTorch(torch) => {
 					let geometry = torch.build_with_noise(build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

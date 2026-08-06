@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::date_palm::DatePalm;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -235,7 +235,7 @@ where
 				}
 				StrangeOasisItem::Torch(torch) => {
 					let geometry = torch.build_with_noise(build_noise);
-					let mut params = PenmarchTorch::default();
+					let mut params = PenmarchTorchParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
@@ -43,7 +43,7 @@ pub type JmHonu = HonuBanyan<
 >;
 
 /// Sope template (LodScene / VegetationComponents).
-pub type JmSope = SopesBanyan;
+pub type JmSope = SopesBanyanParams;
 
 /// Jungle Storybook template (material slots match playground [`RenderJungleStorybookTree`]).
 pub type JmJungleStorybook = JungleStorybookTree<

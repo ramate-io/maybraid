@@ -1,7 +1,7 @@
 //! **Sope's Banyan** — end-to-end tree assembly for Chico ([RFC-183 §3.1.7.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/06-sope-s-banyan/README.md), [#252](https://github.com/ramate-io/maybraid/issues/252)).
 //!
-//! [`SopesBanyan`] is authored params; [`SopesBanyan::build`] grows the ball-stick
-//! chain once into [`SopesBanyanInstance`], which implements [`VegetationComponents`].
+//! [`SopesBanyanParams::build`] grows the ball-stick chain once into [`SopesBanyan`],
+//! which implements [`VegetationComponents`].
 //!
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `3 ×` tree radius: full sticks + full canopy
@@ -24,40 +24,37 @@ use canopy::{
 };
 use stick::{keep_stick_on_low, stick_nodes_medium_banded, stick_role_for_segment};
 
-/// Typical Sope's Banyan params (geometry-only; materials are patched externally later).
-pub type SopesBanyanStd = SopesBanyan;
-
 /// Authoring / CLI parameters for Sope's Banyan.
 #[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct SopesBanyan {
+pub struct SopesBanyanParams {
 	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: SopesBanyanSbs,
 }
 
-impl Default for SopesBanyan {
+impl Default for SopesBanyanParams {
 	fn default() -> Self {
 		Self { geometry: SopesBanyanSbs::default() }
 	}
 }
 
-impl SopesBanyan {
+impl SopesBanyanParams {
 	/// Grow the ball-stick chain once for presentation / LOD emission.
-	pub fn build(&self) -> SopesBanyanInstance {
-		SopesBanyanInstance::from_params(self)
+	pub fn build(&self) -> SopesBanyan {
+		SopesBanyan::from_params(self)
 	}
 }
 
 /// Built Sope's Banyan: params plus a single grown [`BallStickChain`].
 #[derive(Clone)]
-pub struct SopesBanyanInstance {
+pub struct SopesBanyan {
 	pub geometry: SopesBanyanSbs,
 	pub chain: BallStickChain<SopesBanyanChain>,
 }
 
-impl SopesBanyanInstance {
-	pub fn from_params(params: &SopesBanyan) -> Self {
+impl SopesBanyan {
+	pub fn from_params(params: &SopesBanyanParams) -> Self {
 		Self {
 			geometry: params.geometry.clone(),
 			chain: params.geometry.build_chain(),
@@ -140,7 +137,7 @@ impl SopesBanyanInstance {
 	}
 }
 
-impl VegetationComponents for SopesBanyanInstance {
+impl VegetationComponents for SopesBanyan {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => self.stick_nodes_high(),

@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -266,7 +266,7 @@ where
 				}
 				TemperateLowerMassivesItem::Rory(rory) => {
 					let geometry = rory.build_with_noise(build_noise);
-					let mut params = RorysHeadTrained::default();
+					let mut params = RorysHeadTrainedParams::default();
 					params.geometry = geometry;
 					let tree = params.build();
 					let bounds = vegetation_bounds(&tree);

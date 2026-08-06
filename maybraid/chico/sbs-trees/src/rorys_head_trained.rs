@@ -1,7 +1,7 @@
 //! **Rory's Head-trained** — top-heavy trained tree with a single horizontal canopy ring ([#254](https://github.com/ramate-io/maybraid/issues/254), [RFC §3.1.7.7](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/07-rory-s-head-trained/README.md)).
 //!
-//! [`RorysHeadTrained`] is authored params; [`RorysHeadTrained::build`] grows the ball-stick
-//! chain once into [`RorysHeadTrainedInstance`], which implements [`VegetationComponents`].
+//! [`RorysHeadTrainedParams::build`] grows the ball-stick chain once into [`RorysHeadTrained`],
+//! which implements [`VegetationComponents`].
 
 mod canopy;
 mod stick;
@@ -19,28 +19,25 @@ use canopy::{
 };
 use stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium_banded};
 
-/// Typical Rory's Head-trained params (geometry-only; materials are patched externally later).
-pub type RorysHeadTrainedStd = RorysHeadTrained;
-
 /// Authoring / CLI parameters for Rory's Head-trained.
 #[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct RorysHeadTrained {
+pub struct RorysHeadTrainedParams {
 	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: RorysHeadTrainedSbs,
 }
 
-impl Default for RorysHeadTrained {
+impl Default for RorysHeadTrainedParams {
 	fn default() -> Self {
 		Self { geometry: RorysHeadTrainedSbs::default() }
 	}
 }
 
-impl RorysHeadTrained {
+impl RorysHeadTrainedParams {
 	/// Grow the ball-stick chain once for presentation / LOD emission.
-	pub fn build(&self) -> RorysHeadTrainedInstance {
-		RorysHeadTrainedInstance::from_params(self)
+	pub fn build(&self) -> RorysHeadTrained {
+		RorysHeadTrained::from_params(self)
 	}
 
 	/// RFC bush / grape-vine preset (shorter stalk, `0.60 * H` spread).
@@ -51,13 +48,13 @@ impl RorysHeadTrained {
 
 /// Built Rory's Head-trained: params plus a single grown [`BallStickChain`].
 #[derive(Clone)]
-pub struct RorysHeadTrainedInstance {
+pub struct RorysHeadTrained {
 	pub geometry: RorysHeadTrainedSbs,
 	pub chain: BallStickChain<StorybookTreeChain>,
 }
 
-impl RorysHeadTrainedInstance {
-	pub fn from_params(params: &RorysHeadTrained) -> Self {
+impl RorysHeadTrained {
+	pub fn from_params(params: &RorysHeadTrainedParams) -> Self {
 		Self {
 			geometry: params.geometry.clone(),
 			chain: params.geometry.build_chain(),
@@ -79,7 +76,7 @@ impl RorysHeadTrainedInstance {
 	}
 }
 
-impl VegetationComponents for RorysHeadTrainedInstance {
+impl VegetationComponents for RorysHeadTrained {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),

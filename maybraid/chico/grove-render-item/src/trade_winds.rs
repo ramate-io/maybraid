@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
@@ -44,7 +44,7 @@ pub type TwHonu = HonuBanyan<
 >;
 
 /// Sope template (LodScene / VegetationComponents).
-pub type TwSope = SopesBanyan;
+pub type TwSope = SopesBanyanParams;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Trade Winds instance.
 pub type TradeWindsStd = TradeWinds<

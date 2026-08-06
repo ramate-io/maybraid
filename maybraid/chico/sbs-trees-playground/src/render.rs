@@ -49,13 +49,13 @@ use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::northern_conifer::NorthernConifer;
 use chico_sbs_trees::palm_bush::PalmBush;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
+use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
@@ -72,7 +72,7 @@ use chunk::cascade::CascadeChunk;
 use render_item::RenderItem;
 
 /// [`SopesBanyan`] configured for this playground (LodScene / VegetationComponents).
-pub type RenderSopesBanyan = SopesBanyan;
+pub type RenderSopesBanyan = SopesBanyanParams;
 
 /// [`HonuBanyan`] — wide spreading banyan ([#250](https://github.com/ramate-io/maybraid/issues/250)).
 pub type RenderHonuBanyan = HonuBanyan<
@@ -151,13 +151,13 @@ pub type RenderStorybookTree = StorybookTree<
 >;
 
 /// [`PenmarchTorch`] — vase-profile upward flame tree ([#248](https://github.com/ramate-io/maybraid/issues/248)).
-pub type RenderPenmarchTorch = PenmarchTorch;
+pub type RenderPenmarchTorch = PenmarchTorchParams;
 
 /// [`KamakuraTorch`] — stashed near-vertical flame (linear crown bias).
-pub type RenderKamakuraTorch = KamakuraTorch;
+pub type RenderKamakuraTorch = KamakuraTorchParams;
 
 /// [`RorysHeadTrained`] — single high horizontal canopy ring ([#254](https://github.com/ramate-io/maybraid/issues/254)).
-pub type RenderRorysHeadTrained = RorysHeadTrained;
+pub type RenderRorysHeadTrained = RorysHeadTrainedParams;
 
 /// [`VaseTree`] — upward-opening vase-profile broadleaf ([#246](https://github.com/ramate-io/maybraid/issues/246)).
 pub type RenderVaseTree = VaseTree<
