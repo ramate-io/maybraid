@@ -6,6 +6,8 @@
 
 use bevy_math::Vec3;
 
+use crate::chain::{BallStickChain, BallStickNode, Hysteresis};
+
 /// Grid resolution for [`sample_max_horizontal_radius_by_azimuth_height`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AzimuthHeightBands {
@@ -132,9 +134,24 @@ pub fn sample_max_horizontal_radius_by_azimuth_height<'a, T>(
 		.collect()
 }
 
+impl<H: Hysteresis> BallStickChain<H> {
+	/// Outermost graph nodes per azimuth × height cell ([`sample_max_horizontal_radius_by_azimuth_height`]).
+	pub fn sample_radius_azimuth(
+		&self,
+		bands: AzimuthHeightBands,
+	) -> Vec<AzimuthHeightSample<&BallStickNode>> {
+		sample_max_horizontal_radius_by_azimuth_height(
+			self.nodes.iter(),
+			|node| node.position,
+			bands,
+		)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::chain::Hysteresis;
 
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	struct Pt(Vec3);
@@ -178,6 +195,40 @@ mod tests {
 			AzimuthHeightBands::new(4, 2),
 		)
 		.is_empty());
+		Ok(())
+	}
+
+	#[derive(Clone)]
+	struct LeafH(BallStickNode);
+
+	impl Hysteresis for LeafH {
+		fn ball_stick_node(&self) -> BallStickNode {
+			self.0
+		}
+
+		fn next_hysteresis(&self) -> Vec<Self> {
+			Vec::new()
+		}
+	}
+
+	#[test]
+	fn chain_sample_radius_azimuth_matches_free_fn() -> anyhow::Result<()> {
+		let chain = BallStickChain::build(vec![
+			LeafH(BallStickNode::new(Vec3::new(1.0, 0.0, 0.0), 0.1)),
+			LeafH(BallStickNode::new(Vec3::new(0.5, 0.0, 0.0), 0.1)),
+			LeafH(BallStickNode::new(Vec3::new(3.0, 10.0, 0.0), 0.1)),
+			LeafH(BallStickNode::new(Vec3::new(2.0, 10.0, 0.0), 0.1)),
+		]);
+		let bands = AzimuthHeightBands::new(4, 2);
+		let from_chain = chain.sample_radius_azimuth(bands);
+		let from_free = sample_max_horizontal_radius_by_azimuth_height(
+			chain.nodes.iter(),
+			|n| n.position,
+			bands,
+		);
+		assert_eq!(from_chain.len(), from_free.len());
+		assert!(from_chain.iter().any(|s| (s.horizontal_radius - 1.0).abs() < 1e-4));
+		assert!(from_chain.iter().any(|s| (s.horizontal_radius - 3.0).abs() < 1e-4));
 		Ok(())
 	}
 }

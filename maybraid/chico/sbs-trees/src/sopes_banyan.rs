@@ -25,9 +25,7 @@ use render_item::{CascadeChunk, RenderItem};
 use canopy::{
 	banded_outer_canopy_balls, foliage_node_for_terminal, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
-use stick::{
-	keep_stick_on_low, keep_stick_on_medium, stick_node_for_segment, stick_role_for_segment,
-};
+use stick::{keep_stick_on_low, keep_stick_on_medium, stick_role_for_segment};
 
 /// Typical Sope's Banyan (geometry-only; materials are patched externally later).
 pub type SopesBanyanStd = SopesBanyan;
@@ -68,7 +66,13 @@ impl SopesBanyan {
 	fn stick_nodes_high(&self, chain: &BallStickChain<SopesBanyanChain>) -> Vec<StickNode> {
 		chain
 			.segments_with_hysteresis()
-			.filter_map(|(segment, _, _)| stick_node_for_segment(&segment))
+			.filter_map(|(segment, _, _)| {
+				StickNode::from_segment(
+					segment.start.position,
+					segment.end.position,
+					segment.start.radius,
+				)
+			})
 			.collect()
 	}
 
@@ -81,7 +85,11 @@ impl SopesBanyan {
 				if !keep_stick_on_medium(role, &segment, tree_radius) {
 					return None;
 				}
-				stick_node_for_segment(&segment)
+				StickNode::from_segment(
+					segment.start.position,
+					segment.end.position,
+					segment.start.radius,
+				)
 			})
 			.collect()
 	}
@@ -95,7 +103,11 @@ impl SopesBanyan {
 				if !keep_stick_on_low(role, &mut descender_index) {
 					return None;
 				}
-				stick_node_for_segment(&segment)
+				StickNode::from_segment(
+					segment.start.position,
+					segment.end.position,
+					segment.start.radius,
+				)
 			})
 			.collect()
 	}

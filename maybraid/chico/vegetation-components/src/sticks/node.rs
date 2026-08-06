@@ -1,5 +1,6 @@
 //! Stick IR node: style + geometry + placement.
 
+use bevy::prelude::Vec3;
 use bevy::scene::prelude::Scene;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -33,6 +34,21 @@ impl StickNode {
 	/// Branch / connector segment using `vegetation/sticks/standard/` GLBs.
 	pub fn segment(placement: Placement) -> Self {
 		Self::new(StickStyle::Standard, StickGeometry::Segment, placement)
+	}
+
+	/// Standard stick from a directed segment (base at `start`, along `start → end`).
+	///
+	/// Girth uses `radius` at the segment start. Degenerate (near-zero length) edges
+	/// return [`None`].
+	pub fn from_segment(start: Vec3, end: Vec3, radius: f32) -> Option<Self> {
+		let ray = end - start;
+		let len_sq = ray.length_squared();
+		if len_sq < 1e-12 {
+			return None;
+		}
+		let length = len_sq.sqrt();
+		let placement = Placement::stick_segment(start, ray, length, radius)?;
+		Some(Self::segment(placement))
 	}
 
 	/// Trunk segment using `vegetation/sticks/standard_trunk/` GLBs.

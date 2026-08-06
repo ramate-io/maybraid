@@ -2,7 +2,6 @@
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain, SopesBanyanPhase};
-use chico_vegetation_components::{Placement, StickNode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StickLodRole {
@@ -38,18 +37,6 @@ impl StickLodRole {
 
 /// Keep roughly this fraction of descender sticks on Low (stable every-Nth sample).
 pub(crate) const LOW_DESCENDER_KEEP_EVERY: usize = 4;
-
-pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
-	let ray = segment.ray();
-	let len_sq = ray.length_squared();
-	if len_sq < 1e-12 {
-		return None;
-	}
-	let length = len_sq.sqrt();
-	let placement =
-		Placement::stick_segment(segment.start.position, ray, length, segment.start.radius)?;
-	Some(StickNode::segment(placement))
-}
 
 pub(crate) fn stick_role_for_segment(
 	_segment: &BallStickSegment<'_>,
