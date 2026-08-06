@@ -146,7 +146,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show commercial-stall [--extent X,Y,Z] [--seed N]` — single commercial stall Label placeholder
 - `show commercial-stall-strip [--extent X,Y,Z] [--seed N]` — packed stall Labels along a band
 - `show les-halles-full-storey` — shell plus gallery `CommercialStallStrip` Label fills (face text via gizmo patch)
-- `show les-halles-livable-full-storey [--extent X,Y,Z] [--seed N]` — shell plus gallery `LivableApartments` fills (default footprint `72,4,54`)
+- `show les-halles-livable-full-storey [--extent X,Y,Z] [--seed N]` — shell plus lengthwise gallery `RectangularLivableArea` bays (default footprint `72,4,54`)
 - `show les-halles-livable-full-storey-examples` — gallery of livable Les Halles storeys (varied extents/seeds)
 
 WASD / Space / Shift + mouse look.

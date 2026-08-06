@@ -1,4 +1,4 @@
-//! `/show les-halles-livable-full-storey` — ring shell + LivableApartments gallery fills.
+//! `/show les-halles-livable-full-storey` — ring shell + lengthwise RLA gallery bays.
 
 use bevy::prelude::*;
 use clap::Args;

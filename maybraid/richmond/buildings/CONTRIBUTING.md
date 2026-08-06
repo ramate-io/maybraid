@@ -101,12 +101,16 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
 the same [`LesHallesFloorPlan`](src/storeys/les_halles/floor_plan.rs) as the
 commercial Full\*. It samples deeper galleries via
 [`LesHallesParameterized::sample_livable`](src/storeys/les_halles/parameterized.rs),
-then fills each `ExternalSpace` strip with
-[`LivableApartments`](src/usage_areas/livable_apartments.rs) (independent strips —
-no progressive Boundary handoff). Abutting plan shafts are injected onto strip
-confines so [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) has terminals
-alongside balcony-facing Passage doors. Prefer larger footprints than commercial
-demos (playground default `72,4,54`) so strip depth hosts apartment packs.
+then fills each `ExternalSpace` strip with **lengthwise passage bays** (voronoi
+along the strip, merge undersized cells — same idea as
+[`CommercialStallStrip`](src/usage_areas/commercial_stall_strip.rs)). Each bay
+is a single rectangle fitted with
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)
+(`GuillotineSplit`; courtyard `Passage` as RLA opening). No
+[`HallsToShafts`](src/usage_areas/halls_to_shafts.rs), suite packing, or
+[`LivableApartment`](src/usage_areas/livable_apartment/) entry carve on this
+path. Prefer larger footprints than commercial demos (playground default
+`72,4,54`) so strip depth hosts livable bays.
 
 ### I-frame rectangularization (I-Apartment)
 
@@ -183,10 +187,10 @@ the ring. It:
 5. Passes other kinds through unchanged.
 
 [`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) is the
-same loop with residential program: inject abutting shafts →
-[`LivableApartments::from_confines_with`](src/usage_areas/livable_apartments.rs)
-(storey-sampled `hall_width`). Commercial vs livable is a Full\* choice over one
-floor plan.
+same loop with residential program: passage-bay split →
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) per bay
+(Guillotine) + party walls on bay cuts. Commercial vs livable is a Full\* choice
+over one floor plan.
 
 That is the **FloorPlan → Full\*** split: the plan owns structure + residual
 confines; Full\* owns program fill.

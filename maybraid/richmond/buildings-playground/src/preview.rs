@@ -428,7 +428,7 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
 		openings: Vec<PreviewOpening>,
 	},
-	/// Side-by-side gallery of `LesHallesLivableFullStorey` (LivableApartments packs).
+	/// Side-by-side gallery of `LesHallesLivableFullStorey` (lengthwise RLA bays).
 	LesHallesLivableFullStoreyExamples,
 	IApartmentFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).

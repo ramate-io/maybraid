@@ -222,7 +222,7 @@ pub enum Show {
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
 	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
-	/// Les Halles livable full storey (shell + LivableApartments gallery fills).
+	/// Les Halles livable full storey (shell + lengthwise RectangularLivableArea bays).
 	LesHallesLivableFullStorey(les_halles_livable_full_storey::LesHallesLivableFullStorey),
 	/// Gallery of livable Les Halles full storeys (varied extents/seeds).
 	LesHallesLivableFullStoreyExamples(

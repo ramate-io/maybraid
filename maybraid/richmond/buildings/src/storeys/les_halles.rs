@@ -16,7 +16,8 @@
 //!
 //! Full\* variants share the same floor plan: commercial
 //! ([`LesHallesFullStorey`]) fills gallery strips with stalls; livable
-//! ([`LesHallesLivableFullStorey`]) fills them with [`crate::LivableApartments`].
+//! ([`LesHallesLivableFullStorey`]) fills them with lengthwise
+//! [`crate::RectangularLivableArea`] bays.
 
 pub mod floor_plan;
 pub mod full_storey;

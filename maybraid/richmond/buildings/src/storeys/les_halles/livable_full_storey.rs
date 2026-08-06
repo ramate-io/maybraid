@@ -1,49 +1,62 @@
-//! Les Halles livable full storey: ring floor plan + gallery [`LivableApartments`].
+//! Les Halles livable full storey: ring floor plan + lengthwise gallery bays.
 //!
 //! Reuses [`LesHallesFloorPlan`] (same shell / strip residuals as the commercial
-//! Full\*). Each [`SpaceKind::ExternalSpace`] gallery strip is an independent
-//! rectangle along the ring — no progressive [`OpeningLabel::Boundary`] handoff
-//! (strips do not share living walls; shafts own the corners).
+//! Full\*). Each [`SpaceKind::ExternalSpace`] gallery strip is split **along its
+//! long axis** into passage-owned bays (same voronoi idea as
+//! [`crate::CommercialStallStrip`]), then each bay is filled with
+//! [`RectangularLivableArea`] directly.
 //!
-//! Before fill, abutting plan shafts are injected onto the strip confines so
-//! [`HallsToShafts`] has terminals alongside balcony-facing Passage doors.
+//! Courtyard / balcony [`OpeningLabel::Passage`] doors are the RLA passages —
+//! no [`crate::HallsToShafts`], no suite packing, no [`crate::LivableApartment`]
+//! entry carve. Strategy is
+//! [`RectLivableStrategy::GuillotineSplit`] so SpineHall stays off this path.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
-use richmond_building_components::panels::PanelNode;
+use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
-use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
-use crate::openings::{Opening, OpeningId, OpeningLabel};
+use crate::fit::{
+	aabb_xz_extent, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError,
+	SpaceKind,
+};
+use crate::openings::{OpeningId, OpeningLabel, Openings};
+use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
+use crate::paneling::rectangular_strip::RectangularStripNode;
+use crate::paneling::DEFAULT_PANEL_THICKNESS;
+use crate::usage_areas::plan_access::DEFAULT_WALK_CLEAR;
 use crate::usage_areas::plan_geom::{host_xz, noise_for_cell};
-use crate::usage_areas::{
-	LivableApartments, LivableApartmentsOptions, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
+use crate::usage_areas::rectangular_livable_area::{
+	RectLivableStrategy, RectangularLivableArea, RectangularLivableAreaParameterized,
+	DEFAULT_CLOSED_MAX_AREA,
 };
 
 use super::floor_plan::LesHallesFloorPlan;
 use super::parameterized::LesHallesParameterized;
-use super::SCOPE;
 
 const EPS: f32 = 1e-3;
-/// How far a shaft stub reaches into a strip when they only share an edge.
-const SHAFT_STUB_DEPTH: f32 = 0.5;
-/// Plan-space touch tolerance when matching shafts to gallery strips.
-const ABUT_EPS: f32 = 0.05;
-const SALT_HALL_WIDTH: f32 = 120.0;
+/// Soft-fail strips shorter than this along the long axis.
+const MIN_STRIP_ALONG: f32 = 3.5;
+/// Prefer livable bays at least this long (m) before merging voronoi cells.
+const MIN_BAY_ALONG: f32 = 5.0;
+const MAX_BAY_ALONG: f32 = 14.0;
+/// Area used when converting strip depth → preferred along length (m²).
+const TARGET_BAY_AREA: f32 = 28.0;
+const SALT_BAY_ALONG: f32 = 121.0;
 
 /// Full Les Halles storey with residential gallery fills.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LesHallesLivableFullStorey {
 	pub floor_plan: LesHallesFloorPlan,
-	/// One [`LivableApartments`] pack per filled gallery strip.
-	pub blocks: Vec<LivableApartments>,
-	/// Corridor clear width passed into each strip pack.
-	pub hall_width: f32,
+	/// One RLA per filled gallery bay (all strips flattened).
+	pub areas: Vec<RectangularLivableArea>,
+	/// Solid party walls on shared bay cuts within each strip.
+	pub party_walls: Vec<ClippedRectangularStrip>,
 }
 
 impl LesHallesLivableFullStorey {
@@ -61,39 +74,28 @@ impl LesHallesLivableFullStorey {
 		regions: FillableRegions,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let hall_width = sample_hall_width(&floor_plan, noise);
-		let opts = LivableApartmentsOptions {
-			hall_width: Some(hall_width),
-			targets: None,
-		};
-
-		let mut blocks = Vec::new();
+		let mut areas = Vec::new();
+		let mut party_walls = Vec::new();
 		let mut residual_within = Vec::new();
 		let mut strip_i = 0i32;
+
 		for region in regions.within {
 			if region.kind != SpaceKind::ExternalSpace {
 				residual_within.push(region);
 				continue;
 			}
-			let mut strip_confines = region.confines;
-			inject_abutting_shafts(
-				&mut strip_confines,
-				&floor_plan.shaft_bounds,
-				&floor_plan.shaft_slots,
-			);
-			let block_noise = noise_for_cell(noise, strip_i);
+			let strip_noise = noise_for_cell(noise, strip_i);
 			strip_i += 1;
-			match LivableApartments::from_confines_with(&strip_confines, block_noise, opts.clone())
-			{
-				Ok((block, nested)) => {
-					blocks.push(block);
+			match fill_strip_bays(&region.confines, strip_noise) {
+				Ok((filled, walls, nested)) => {
+					areas.extend(filled);
+					party_walls.extend(walls);
 					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
 				Err(FitError::TooSmall { .. }) => {
-					// Leave unfilled if the strip is too narrow after shaft clears.
 					residual_within.push(FillRegion::new(
 						SpaceKind::ExternalSpace,
-						strip_confines,
+						region.confines,
 					));
 				}
 				Err(err) => return Err(err),
@@ -103,8 +105,8 @@ impl LesHallesLivableFullStorey {
 		Ok((
 			Self {
 				floor_plan,
-				blocks,
-				hall_width,
+				areas,
+				party_walls,
 			},
 			FillableRegions {
 				within: residual_within,
@@ -114,20 +116,6 @@ impl LesHallesLivableFullStorey {
 	}
 }
 
-fn sample_hall_width(floor_plan: &LesHallesFloorPlan, noise: NoiseParams) -> f32 {
-	let cfg = NoiseConfig::new(noise);
-	let c = floor_plan.center_xz;
-	cfg.sample_range_f32_4d(
-		MIN_HALL_WIDTH,
-		MAX_HALL_WIDTH,
-		c.x,
-		c.y,
-		c.z,
-		SALT_HALL_WIDTH,
-	)
-	.clamp(MIN_HALL_WIDTH * 0.5, MAX_HALL_WIDTH * 1.5)
-}
-
 fn as_closet_if_internal(region: FillRegion) -> FillRegion {
 	match region.kind {
 		SpaceKind::InternalSpace => FillRegion::new(SpaceKind::ClosetSpace, region.confines),
@@ -135,95 +123,396 @@ fn as_closet_if_internal(region: FillRegion) -> FillRegion {
 	}
 }
 
-/// Inject scoped shaft openings for plan shafts that abut the strip.
-fn inject_abutting_shafts(
-	strip: &mut Confines,
-	shaft_bounds: &[Aabb3d],
-	shaft_slots: &[usize],
-) {
-	let strip_xz = host_xz(&strip.bounds);
-	let y0 = Vec3::from(strip.bounds.min).y;
-	let y1 = Vec3::from(strip.bounds.max).y;
-	for (i, shaft) in shaft_bounds.iter().enumerate() {
-		let Some(stub_xz) = shaft_stub_into_strip(host_xz(shaft), strip_xz) else {
-			continue;
-		};
-		let slot = shaft_slots.get(i).copied().unwrap_or(i);
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(stub_xz.min.x, y0, stub_xz.min.y),
-			Vec3::new(stub_xz.max.x, y1, stub_xz.max.y),
-		);
-		strip.openings.insert(
-			OpeningId::scoped(SCOPE, "strip_shaft", slot.to_string()),
-			Opening::new(bounds, OpeningLabel::Shaft),
-		);
+#[derive(Debug, Clone)]
+struct PassageAlong {
+	id: OpeningId,
+	center: f32,
+}
+
+#[derive(Debug, Clone)]
+struct LivableBay {
+	along0: f32,
+	along1: f32,
+	passage_ids: Vec<OpeningId>,
+}
+
+impl LivableBay {
+	fn merge_with(&mut self, other: LivableBay) {
+		self.along0 = self.along0.min(other.along0);
+		self.along1 = self.along1.max(other.along1);
+		self.passage_ids.extend(other.passage_ids);
 	}
 }
 
-/// Plan stub of a shaft that reaches into `strip` (overlap or edge abutment).
-fn shaft_stub_into_strip(shaft: Aabb2d, strip: Aabb2d) -> Option<Aabb2d> {
-	if !aabb2_touches(shaft, strip, ABUT_EPS) {
+fn fill_strip_bays(
+	confines: &Confines,
+	noise: NoiseParams,
+) -> Result<(Vec<RectangularLivableArea>, Vec<ClippedRectangularStrip>, FillableRegions), FitError>
+{
+	let min = Vec3::from(confines.bounds.min);
+	let max = Vec3::from(confines.bounds.max);
+	let extent = aabb_xz_extent(&confines.bounds);
+	let height = (max.y - min.y).max(1e-4);
+	if height < 2.0 {
+		return Err(FitError::TooSmall { reason: "height" });
+	}
+	let along_x = extent.x >= extent.y;
+	let along = if along_x { extent.x } else { extent.y };
+	let depth = if along_x { extent.y } else { extent.x };
+	if along < MIN_STRIP_ALONG || depth < 2.5 {
+		return Err(FitError::TooSmall { reason: "strip" });
+	}
+
+	let passages = collect_passages_along(&confines.openings, along_x, min, along);
+	if passages.is_empty() {
+		return Err(FitError::TooSmall {
+			reason: "no passage",
+		});
+	}
+
+	let min_bay = sample_min_bay_along(confines, noise, depth, along);
+	let bays = partition_bays_for_passages(&passages, along, min_bay);
+	fit_areas_covering_strip(confines, along_x, min, max, &bays, noise)
+}
+
+fn sample_min_bay_along(confines: &Confines, noise: NoiseParams, depth: f32, along: f32) -> f32 {
+	let area_driven = (TARGET_BAY_AREA / depth.max(EPS)).clamp(MIN_BAY_ALONG, MAX_BAY_ALONG);
+	let cfg = NoiseConfig::new(noise);
+	let c = confines.center();
+	let sampled = cfg.sample_range_f32_4d(
+		MIN_BAY_ALONG,
+		MAX_BAY_ALONG,
+		c.x,
+		c.y,
+		c.z,
+		SALT_BAY_ALONG,
+	);
+	sampled
+		.max(area_driven)
+		.clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
+}
+
+fn rla_params() -> RectangularLivableAreaParameterized {
+	RectangularLivableAreaParameterized {
+		strategy: RectLivableStrategy::GuillotineSplit,
+		min_hall: DEFAULT_WALK_CLEAR,
+		closed_max_area: DEFAULT_CLOSED_MAX_AREA,
+	}
+}
+
+fn fit_areas_covering_strip(
+	confines: &Confines,
+	along_x: bool,
+	strip_min: Vec3,
+	strip_max: Vec3,
+	bays: &[LivableBay],
+	noise: NoiseParams,
+) -> Result<(Vec<RectangularLivableArea>, Vec<ClippedRectangularStrip>, FillableRegions), FitError>
+{
+	debug_assert!(!bays.is_empty());
+
+	let mut fitted: Vec<(LivableBay, RectangularLivableArea)> = Vec::new();
+	let mut residual_within = Vec::new();
+	let mut carry: Option<LivableBay> = None;
+	let params = rla_params();
+
+	for (i, bay) in bays.iter().cloned().enumerate() {
+		let bay = match carry.take() {
+			Some(mut pending) => {
+				pending.merge_with(bay);
+				pending
+			}
+			None => bay,
+		};
+
+		match fit_rla_bay(confines, along_x, strip_min, strip_max, &bay, noise, i, params) {
+			Ok((area, nested)) => {
+				residual_within.extend(nested.within);
+				fitted.push((bay, area));
+			}
+			Err(FitError::TooSmall { .. }) => {
+				if let Some((prev_bay, prev_area)) = fitted.last_mut() {
+					prev_bay.merge_with(bay);
+					let (area, nested) = fit_rla_bay(
+						confines,
+						along_x,
+						strip_min,
+						strip_max,
+						prev_bay,
+						noise,
+						i,
+						params,
+					)
+					.map_err(|_| FitError::TooSmall {
+						reason: "areas cover",
+					})?;
+					residual_within.extend(nested.within);
+					*prev_area = area;
+				} else {
+					carry = Some(bay);
+				}
+			}
+			Err(err) => return Err(err),
+		}
+	}
+
+	if let Some(tail) = carry {
+		if let Some((prev_bay, prev_area)) = fitted.last_mut() {
+			prev_bay.merge_with(tail);
+			let (area, nested) = fit_rla_bay(
+				confines,
+				along_x,
+				strip_min,
+				strip_max,
+				prev_bay,
+				noise,
+				0,
+				params,
+			)
+			.map_err(|_| FitError::TooSmall {
+				reason: "areas cover",
+			})?;
+			residual_within.extend(nested.within);
+			*prev_area = area;
+		} else {
+			let (area, nested) =
+				fit_rla_bay(confines, along_x, strip_min, strip_max, &tail, noise, 0, params)?;
+			residual_within.extend(nested.within);
+			fitted.push((tail, area));
+		}
+	}
+
+	if fitted.is_empty() {
+		return Err(FitError::TooSmall { reason: "areas" });
+	}
+
+	let mut party_walls = Vec::new();
+	for window in fitted.windows(2) {
+		let cut = window[0].0.along1;
+		if let Some(wall) = party_wall_at_cut(along_x, cut, strip_min, strip_max) {
+			party_walls.push(wall);
+		}
+	}
+
+	Ok((
+		fitted.into_iter().map(|(_, area)| area).collect(),
+		party_walls,
+		FillableRegions {
+			within: residual_within,
+			atop: Vec::new(),
+		},
+	))
+}
+
+fn fit_rla_bay(
+	confines: &Confines,
+	along_x: bool,
+	strip_min: Vec3,
+	strip_max: Vec3,
+	bay: &LivableBay,
+	noise: NoiseParams,
+	seed_i: usize,
+	params: RectangularLivableAreaParameterized,
+) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
+	let (smin, smax) = if along_x {
+		(
+			Vec3::new(strip_min.x + bay.along0, strip_min.y, strip_min.z),
+			Vec3::new(strip_min.x + bay.along1, strip_max.y, strip_max.z),
+		)
+	} else {
+		(
+			Vec3::new(strip_min.x, strip_min.y, strip_min.z + bay.along0),
+			Vec3::new(strip_max.x, strip_max.y, strip_min.z + bay.along1),
+		)
+	};
+	let bay_bounds = Aabb3d::from_min_max(smin, smax);
+	let cell = Confines::new(
+		bay_bounds,
+		confines.roll,
+		openings_for_bay(&confines.openings, &bay_bounds, &bay.passage_ids),
+	);
+	let mut bay_noise = noise;
+	bay_noise.seed = noise.seed.wrapping_add(seed_i as i32 * 17);
+	let area_m2 = {
+		let fp = cell.footprint();
+		fp.x * fp.y
+	};
+	let program = default_bay_program(area_m2, bay.passage_ids.len());
+	RectangularLivableArea::fit_with_params(&cell, bay_noise, params, &program)
+}
+
+fn default_bay_program(
+	area: f32,
+	passages: usize,
+) -> Vec<crate::usage_areas::rectangular_livable_area::RectQuarterKind> {
+	use crate::usage_areas::rectangular_livable_area::RectQuarterKind;
+	let mut out = Vec::new();
+	if passages == 1 && area <= DEFAULT_CLOSED_MAX_AREA {
+		out.push(RectQuarterKind::Bedroom);
+		return out;
+	}
+	if area + EPS >= 12.0 {
+		out.push(RectQuarterKind::Eating);
+	}
+	out.push(RectQuarterKind::Living);
+	if area > 28.0 {
+		out.push(RectQuarterKind::Bedroom);
+	}
+	if area > 40.0 {
+		out.push(RectQuarterKind::Bathroom);
+	}
+	out
+}
+
+fn collect_passages_along(
+	openings: &Openings,
+	along_x: bool,
+	strip_min: Vec3,
+	along: f32,
+) -> Vec<PassageAlong> {
+	let origin = if along_x { strip_min.x } else { strip_min.z };
+	let mut out = Vec::new();
+	for (id, opening) in openings.iter() {
+		if !matches!(opening.label, OpeningLabel::Passage) {
+			continue;
+		}
+		let omin = Vec3::from(opening.bounds.min);
+		let omax = Vec3::from(opening.bounds.max);
+		let c = if along_x {
+			(omin.x + omax.x) * 0.5 - origin
+		} else {
+			(omin.z + omax.z) * 0.5 - origin
+		};
+		if c < -0.5 || c > along + 0.5 {
+			continue;
+		}
+		out.push(PassageAlong {
+			id: id.clone(),
+			center: c.clamp(0.0, along),
+		});
+	}
+	out.sort_by(|a, b| {
+		a.center
+			.partial_cmp(&b.center)
+			.unwrap_or(std::cmp::Ordering::Equal)
+			.then_with(|| a.id.as_str().cmp(b.id.as_str()))
+	});
+	out
+}
+
+/// Voronoi partition of `[0, along]` by passage centers, then merge short cells.
+fn partition_bays_for_passages(
+	passages: &[PassageAlong],
+	along: f32,
+	min_bay: f32,
+) -> Vec<LivableBay> {
+	debug_assert!(!passages.is_empty());
+	let n = passages.len();
+	let mut edges = Vec::with_capacity(n + 1);
+	edges.push(0.0);
+	for i in 0..n.saturating_sub(1) {
+		edges.push((passages[i].center + passages[i + 1].center) * 0.5);
+	}
+	edges.push(along);
+
+	let mut bays: Vec<LivableBay> = (0..n)
+		.map(|i| LivableBay {
+			along0: edges[i],
+			along1: edges[i + 1],
+			passage_ids: vec![passages[i].id.clone()],
+		})
+		.collect();
+
+	let mut i = 0;
+	while i < bays.len() {
+		let w = bays[i].along1 - bays[i].along0;
+		if w + 1e-4 >= min_bay || bays.len() == 1 {
+			i += 1;
+			continue;
+		}
+		if i + 1 < bays.len() {
+			let right = bays.remove(i + 1);
+			bays[i].along1 = right.along1;
+			bays[i].passage_ids.extend(right.passage_ids);
+		} else if i > 0 {
+			let cur = bays.remove(i);
+			let prev = &mut bays[i - 1];
+			prev.along1 = cur.along1;
+			prev.passage_ids.extend(cur.passage_ids);
+		} else {
+			break;
+		}
+	}
+	bays
+}
+
+fn openings_for_bay(
+	openings: &Openings,
+	bounds: &Aabb3d,
+	owned_passages: &[OpeningId],
+) -> Openings {
+	let region = Aabb2d {
+		min: Vec2::new(Vec3::from(bounds.min).x, Vec3::from(bounds.min).z),
+		max: Vec2::new(Vec3::from(bounds.max).x, Vec3::from(bounds.max).z),
+	};
+	let y0 = Vec3::from(bounds.min).y;
+	let y1 = Vec3::from(bounds.max).y;
+	let mut out = Openings::new();
+	for id in owned_passages {
+		if let Some(opening) = openings.get(id) {
+			out.insert(id.clone(), opening.clone());
+		}
+	}
+	for (id, opening) in openings.iter() {
+		if matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Shaft) {
+			continue;
+		}
+		if aabb_xz_overlap_area(&opening.bounds, &region) <= 1e-4 {
+			continue;
+		}
+		let omin = Vec3::from(opening.bounds.min);
+		let omax = Vec3::from(opening.bounds.max);
+		if omax.y < y0 - 1e-3 || omin.y > y1 + 1e-3 {
+			continue;
+		}
+		out.insert(id.clone(), opening.clone());
+	}
+	out
+}
+
+fn party_wall_at_cut(
+	along_x: bool,
+	cut: f32,
+	strip_min: Vec3,
+	strip_max: Vec3,
+) -> Option<ClippedRectangularStrip> {
+	let height = strip_max.y - strip_min.y;
+	if height < EPS {
 		return None;
 	}
-	let overlap = Aabb2d {
-		min: Vec2::new(shaft.min.x.max(strip.min.x), shaft.min.y.max(strip.min.y)),
-		max: Vec2::new(shaft.max.x.min(strip.max.x), shaft.max.y.min(strip.max.y)),
-	};
-	let ow = overlap.max.x - overlap.min.x;
-	let oh = overlap.max.y - overlap.min.y;
-	if ow > EPS && oh > EPS {
-		return Some(overlap);
-	}
-
-	// Edge abutment: push a thin stub from the shared edge into the strip.
-	let depth = SHAFT_STUB_DEPTH;
-	let stub = if ow > EPS && oh <= EPS {
-		// Shared edge parallel to X.
-		let mid_z = overlap.min.y.clamp(strip.min.y, strip.max.y);
-		let into_pos = strip.center().y >= mid_z;
-		let (z0, z1) = if into_pos {
-			(mid_z, (mid_z + depth).min(strip.max.y))
-		} else {
-			((mid_z - depth).max(strip.min.y), mid_z)
-		};
-		Aabb2d {
-			min: Vec2::new(overlap.min.x, z0),
-			max: Vec2::new(overlap.max.x, z1),
-		}
-	} else if oh > EPS && ow <= EPS {
-		// Shared edge parallel to Z.
-		let mid_x = overlap.min.x.clamp(strip.min.x, strip.max.x);
-		let into_pos = strip.center().x >= mid_x;
-		let (x0, x1) = if into_pos {
-			(mid_x, (mid_x + depth).min(strip.max.x))
-		} else {
-			((mid_x - depth).max(strip.min.x), mid_x)
-		};
-		Aabb2d {
-			min: Vec2::new(x0, overlap.min.y),
-			max: Vec2::new(x1, overlap.max.y),
-		}
+	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
+	let (start, end) = if along_x {
+		(
+			Vec3::new(strip_min.x + cut, strip_min.y, strip_min.z),
+			Vec3::new(strip_min.x + cut, strip_min.y, strip_max.z),
+		)
 	} else {
-		// Corner touch: take a small square at the nearest strip corner toward shaft.
-		let cx = shaft.center().x.clamp(strip.min.x, strip.max.x);
-		let cz = shaft.center().y.clamp(strip.min.y, strip.max.y);
-		let half = depth * 0.5;
-		Aabb2d {
-			min: Vec2::new((cx - half).max(strip.min.x), (cz - half).max(strip.min.y)),
-			max: Vec2::new((cx + half).min(strip.max.x), (cz + half).min(strip.max.y)),
-		}
+		(
+			Vec3::new(strip_min.x, strip_min.y, strip_min.z + cut),
+			Vec3::new(strip_max.x, strip_min.y, strip_min.z + cut),
+		)
 	};
-	if stub.max.x - stub.min.x > EPS && stub.max.y - stub.min.y > EPS {
-		Some(stub)
-	} else {
-		None
+	if start.distance(end) < EPS {
+		return None;
 	}
-}
-
-fn aabb2_touches(a: Aabb2d, b: Aabb2d, eps: f32) -> bool {
-	let x_overlap = a.min.x < b.max.x + eps && a.max.x > b.min.x - eps;
-	let y_overlap = a.min.y < b.max.y + eps && a.max.y > b.min.y - eps;
-	x_overlap && y_overlap
+	Some(ClippedRectangularStrip::from_nodes(
+		PanelStyle::RoughStonework,
+		[
+			RectangularStripNode::new(start, height, thickness, 0.0),
+			RectangularStripNode::new(end, height, thickness, 0.0),
+		],
+		[None],
+	))
 }
 
 impl Fit for LesHallesLivableFullStorey {
@@ -240,50 +529,49 @@ impl Fit for LesHallesLivableFullStorey {
 impl BuildingComponents for LesHallesLivableFullStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = self.floor_plan.panel_nodes_for_level(level);
-		for block in &self.blocks {
-			out.extend(block.panel_nodes_for_level(level));
+		for wall in &self.party_walls {
+			out.extend(wall.panel_nodes_for_level(level));
+		}
+		for area in &self.areas {
+			out.extend(area.panel_nodes_for_level(level));
 		}
 		out
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = self.floor_plan.joint_nodes_for_level(level);
-		for block in &self.blocks {
-			out.extend(block.joint_nodes_for_level(level));
+		for wall in &self.party_walls {
+			out.extend(wall.joint_nodes_for_level(level));
+		}
+		for area in &self.areas {
+			out.extend(area.joint_nodes_for_level(level));
 		}
 		out
 	}
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
-		for block in &self.blocks {
-			for apt in &block.apartments {
-				out.extend(apt.furniture_nodes_for_level(level));
-			}
+		for area in &self.areas {
+			out.extend(area.furniture_nodes_for_level(level));
 		}
 		out
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut out = self.floor_plan.label_nodes_for_level(level);
-		for block in &self.blocks {
-			out.extend(block.label_nodes_for_level(level));
+		for area in &self.areas {
+			out.extend(area.label_nodes_for_level(level));
 		}
 		out
 	}
 
 	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
-		let mut probe: Option<BuildingStructuralLodProbe> = None;
-		for block in &self.blocks {
-			let Some(block_probe) = block.structural_lod_probe() else {
-				continue;
-			};
-			probe = Some(match probe {
-				Some(acc) => acc.merge(block_probe),
-				None => block_probe,
-			});
+		if self.areas.is_empty() {
+			return None;
 		}
-		probe
+		Some(BuildingStructuralLodProbe::new(
+			self.areas.iter().map(|a| host_xz(&a.confines.bounds)),
+		))
 	}
 }
 
@@ -320,8 +608,7 @@ mod tests {
 	#[test]
 	fn livable_full_storey_fills_external_strips() {
 		let (storey, regions) = storey_with_shafts(1337);
-		assert!(!storey.blocks.is_empty());
-		assert!(storey.hall_width + 1e-3 >= MIN_HALL_WIDTH * 0.5);
+		assert!(!storey.areas.is_empty());
 		assert!(regions
 			.within
 			.iter()
@@ -339,37 +626,42 @@ mod tests {
 	}
 
 	#[test]
-	fn livable_blocks_have_halls_or_apartments() {
+	fn livable_bays_use_guillotine() {
 		let (storey, _) = storey_with_shafts(7);
+		assert!(storey.areas.iter().any(|a| !a.rooms.is_empty()));
 		assert!(
-			storey.blocks.iter().any(|b| !b.apartments.is_empty())
-				|| storey.blocks.iter().any(|b| !b.halls.hall_bands.is_empty()),
-			"expected apartments or carved halls in at least one strip"
+			storey
+				.areas
+				.iter()
+				.all(|a| a.plan.chosen == RectLivableStrategy::GuillotineSplit),
+			"Les Halles livable path forces GuillotineSplit (no SpineHall)"
 		);
 	}
 
 	#[test]
-	fn inject_abutting_shafts_adds_stub_on_shared_edge() {
-		let mut strip = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(20.0, 3.0, 8.0),
-		));
-		let shaft = Aabb3d::from_min_max(
-			Vec3::new(20.0, 0.0, 0.0),
-			Vec3::new(26.0, 3.0, 6.0),
-		);
-		inject_abutting_shafts(&mut strip, &[shaft], &[2]);
-		let id = OpeningId::scoped(SCOPE, "strip_shaft", "2");
-		let opening = strip.openings.get(&id).expect("injected shaft");
-		assert!(matches!(opening.label, OpeningLabel::Shaft));
-		let stub = host_xz(&opening.bounds);
-		assert!(stub.min.x + EPS < 20.0, "stub should enter the strip");
-		assert!(stub.max.x <= 20.0 + EPS);
+	fn partition_merges_short_voronoi_cells() {
+		let passages = vec![
+			PassageAlong {
+				id: OpeningId::new("a"),
+				center: 2.0,
+			},
+			PassageAlong {
+				id: OpeningId::new("b"),
+				center: 4.0,
+			},
+			PassageAlong {
+				id: OpeningId::new("c"),
+				center: 12.0,
+			},
+		];
+		let bays = partition_bays_for_passages(&passages, 16.0, 5.0);
+		assert!(bays.len() < 3);
+		assert!((bays.first().unwrap().along0).abs() < EPS);
+		assert!((bays.last().unwrap().along1 - 16.0).abs() < EPS);
 	}
 
 	#[test]
 	fn too_small_strip_left_as_external_residual() {
-		// Tiny host cannot pack LivableApartments; fill path should not hard-fail.
 		let floor_plan = {
 			let bounds = large_bounds();
 			let empty = Confines::from_bounds(bounds);
@@ -392,7 +684,7 @@ mod tests {
 		let (storey, residual) =
 			LesHallesLivableFullStorey::fill_from_regions(floor_plan, regions, NoiseParams::default())
 				.unwrap();
-		assert!(storey.blocks.is_empty());
+		assert!(storey.areas.is_empty());
 		assert!(residual
 			.within
 			.iter()
