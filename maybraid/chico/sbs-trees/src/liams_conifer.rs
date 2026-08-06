@@ -23,7 +23,9 @@ use crate::northern_conifer::canopy::{
 	foliage_nodes_banded, foliage_nodes_low_single_proxy, foliage_nodes_medium_no_proxy,
 	HIGH_FOLIAGE_BANDS,
 };
-use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+use crate::northern_conifer::stick::{
+	stick_nodes_high, stick_nodes_low, stick_nodes_medium_liams,
+};
 use crate::torch_tree::structural_lod_probe;
 
 /// Authoring / CLI parameters for Liam's Conifer.
@@ -84,7 +86,7 @@ impl VegetationComponents for LiamsConifer {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),
-			LodSceneLevel::Medium => stick_nodes_medium(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_medium_liams(&self.chain),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)

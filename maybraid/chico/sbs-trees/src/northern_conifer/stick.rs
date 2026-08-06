@@ -17,6 +17,8 @@ use chico_vegetation_components::{Placement, StickNode};
 pub(crate) const HIGH_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
 /// Medium sticks: another ~40% fewer cells than 13×5 (10×4).
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(10, 4);
+/// Liam's Medium branch samples: Northern Medium × 1.3 (10×4 → 13×4).
+pub(crate) const LIAMS_MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(13, 4);
 
 fn is_stalk(parent: &LiamsConiferChain) -> bool {
 	matches!(parent.phase, LiamsConiferPhase::Stalk(_))
@@ -98,6 +100,13 @@ fn stick_nodes_banded(
 
 pub(crate) fn stick_nodes_medium(chain: &BallStickChain<LiamsConiferChain>) -> Vec<StickNode> {
 	stick_nodes_banded(chain, MEDIUM_STICK_BANDS)
+}
+
+/// Liam's Medium: denser branch silhouette sampling for arid trees.
+pub(crate) fn stick_nodes_medium_liams(
+	chain: &BallStickChain<LiamsConiferChain>,
+) -> Vec<StickNode> {
+	stick_nodes_banded(chain, LIAMS_MEDIUM_STICK_BANDS)
 }
 
 /// Stalk / trunk segments only (no branch sticks).

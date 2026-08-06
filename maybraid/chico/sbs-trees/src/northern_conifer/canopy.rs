@@ -26,6 +26,11 @@ pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::
 /// Low foliage: coarser outer samples.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(8, 3);
 
+/// Liam's Medium foliage: Northern Medium cell count × ~1.1 (17×8 → 19×8).
+pub(crate) const LIAMS_MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(19, 8);
+/// Liam's Low foliage: Northern Low cell count × ~1.1 (8×3 → 9×3).
+pub(crate) const LIAMS_LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(9, 3);
+
 /// Horizontal (XZ) scale of the thin full-height canopy proxy.
 const THIN_PROXY_XZ_SCALE: f32 = 0.40;
 /// Extra vertical stretch beyond the candidate AABB (top held at canopy tip).
@@ -208,7 +213,7 @@ pub(crate) fn foliage_nodes_medium_no_proxy(
 ) -> Vec<FoliageNode> {
 	foliage_nodes_banded(
 		chain,
-		MEDIUM_FOLIAGE_BANDS,
+		LIAMS_MEDIUM_FOLIAGE_BANDS,
 		splay_radius_world,
 		splay_spawn_fraction,
 		0.0,
@@ -245,7 +250,7 @@ pub(crate) fn foliage_nodes_low_single_proxy(
 	let candidates = collect_candidates(chain, splay_spawn_fraction);
 	with_proxy_and_apex(
 		&candidates,
-		LOW_FOLIAGE_BANDS,
+		LIAMS_LOW_FOLIAGE_BANDS,
 		splay_radius_world,
 		chain,
 		0.0,
