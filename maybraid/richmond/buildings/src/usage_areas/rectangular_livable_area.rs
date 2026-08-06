@@ -452,6 +452,7 @@ fn fit_all_open(
 		&kinds,
 		None,
 		circulation,
+		&[],
 		confines,
 		y0,
 		y1,
@@ -655,6 +656,7 @@ fn fit_spine_hall(
 		&open_kinds,
 		Some(&spine),
 		circulation,
+		&filled_closed,
 		confines,
 		y0,
 		y1,
@@ -1206,6 +1208,7 @@ fn pack_open_into(
 	kinds: &[RectQuarterKind],
 	spine: Option<&[Aabb2d]>,
 	circulation: &[Aabb2d],
+	closed_siblings: &[Confines],
 	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
@@ -1222,6 +1225,7 @@ fn pack_open_into(
 			kind,
 			spine,
 			circulation,
+			closed_siblings,
 			host_confines,
 			y0,
 			y1,
@@ -1250,6 +1254,7 @@ fn pack_open_into(
 				kind,
 				spine,
 				circulation,
+				closed_siblings,
 				host_confines,
 				y0,
 				y1,
@@ -1276,6 +1281,7 @@ fn try_pack_one_open(
 	kind: RectQuarterKind,
 	spine: Option<&[Aabb2d]>,
 	circulation: &[Aabb2d],
+	closed_siblings: &[Confines],
 	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
@@ -1292,13 +1298,16 @@ fn try_pack_one_open(
 	let cell_noise = noise_for_cell(noise, rooms.len() as i32);
 	let (slot, rem) = take_slot(host, kind);
 	let try_slot = |slot: Aabb2d, rem: &[Aabb2d]| {
-		// Prefer passages toward spine / entry stems / remnants / open siblings,
-		// and inherit host doors that sit on this slot — not an arbitrary long edge.
+		// Prefer passages toward spine / entry / closed siblings / remnants /
+		// open siblings, and inherit doors that already sit on this slot.
 		let mut anchors = rem.to_vec();
 		if let Some(bands) = spine {
 			anchors.extend_from_slice(bands);
 		}
 		anchors.extend_from_slice(circulation);
+		for c in closed_siblings {
+			anchors.push(host_xz(&c.bounds));
+		}
 		for c in open_confines.iter() {
 			anchors.push(host_xz(&c.bounds));
 		}
@@ -1306,6 +1315,7 @@ fn try_pack_one_open(
 			slot,
 			&anchors,
 			host_confines,
+			closed_siblings,
 			y0,
 			y1,
 			rooms.len() as u32,
@@ -1502,16 +1512,24 @@ fn confines_with_circulation_doors(
 	Confines::new(host.bounds, host.roll, openings)
 }
 
-/// Host passages on this slot + doors toward every distinct circulation wall.
+/// Host / closed-sibling passages on this slot + doors toward circulation walls.
 fn openings_for_open_slot(
 	slot: Aabb2d,
 	anchors: &[Aabb2d],
 	host: &Confines,
+	closed_siblings: &[Confines],
 	y0: f32,
 	y1: f32,
 	id: u32,
 ) -> Openings {
 	let mut openings = passages_facing_rect(host, slot);
+	// Closed rooms are packed before open fill; mirror their authored doors so
+	// a kitchen counter cannot sit in front of a bedroom door on a shared face.
+	for closed in closed_siblings {
+		for (oid, opening) in passages_facing_rect(closed, slot).iter() {
+			openings.insert(oid.clone(), opening.clone());
+		}
+	}
 	// A single centered host door on a long entry wall often misses this
 	// sub-slot's along-span — re-author a door on the slot's portion of every
 	// host passage wall it sits on.
@@ -2341,6 +2359,68 @@ mod tests {
 		assert!(
 			labeled > 12.0 * 14.0 * 0.55,
 			"expected most of host labeled, got {labeled}"
+		);
+	}
+
+	#[test]
+	fn open_slot_mirrors_closed_sibling_passage() {
+		use crate::placer::{init_host_with, InitHostOpts};
+		use procedural_common::intersects_aabb2;
+
+		// Bedroom west, open kitchen east — door on the shared edge at x=3.
+		let closed_xz = Aabb2d {
+			min: Vec2::new(0.0, 0.0),
+			max: Vec2::new(3.0, 4.0),
+		};
+		let open_xz = Aabb2d {
+			min: Vec2::new(3.0, 0.0),
+			max: Vec2::new(8.0, 5.0),
+		};
+		let (oid, door) = connecting_passage(
+			SCOPE,
+			"connect",
+			false,
+			1.0,
+			2.0,
+			3.0,
+			0.0,
+			3.0,
+			"bed",
+		)
+		.expect("door");
+		let mut closed_openings = Openings::new();
+		closed_openings.insert(oid.clone(), door);
+		let closed = confines_from_xz(closed_xz, 0.0, 3.0, 0.0, &closed_openings);
+		let host = confines_from_xz(open_xz, 0.0, 3.0, 0.0, &Openings::new());
+		let openings = openings_for_open_slot(
+			open_xz,
+			&[closed_xz],
+			&host,
+			&[closed],
+			0.0,
+			3.0,
+			0,
+		);
+		assert!(
+			openings.get(&oid).is_some(),
+			"open slot must inherit closed sibling door"
+		);
+		let open_conf = confines_from_xz(open_xz, 0.0, 3.0, 0.0, &openings);
+		let pack = init_host_with(
+			&open_conf,
+			InitHostOpts {
+				passage_wall_lip: true,
+			},
+		)
+		.expect("pack host");
+		// Flush counter on the shared wall at the door along-span.
+		let flush = Aabb2d {
+			min: Vec2::new(3.0, 1.0),
+			max: Vec2::new(3.55, 2.0),
+		};
+		assert!(
+			pack.clearances.iter().any(|c| intersects_aabb2(flush, *c)),
+			"mirrored sibling door must keep out wall-flush furniture"
 		);
 	}
 }
