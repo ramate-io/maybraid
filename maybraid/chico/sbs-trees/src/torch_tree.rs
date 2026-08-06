@@ -1,7 +1,7 @@
 //! Shared Penmarch / Kamakura stick and canopy helpers.
 //!
 //! Both torches use [`StorybookTreeChain`](chico_sbs_geometry::StorybookTreeChain) with the
-//! same selective upper/outer layered-ball foliage policy; this module holds that emission
+//! same selective upper/outer cheap-ball foliage policy; this module holds that emission
 //! logic once.
 
 mod canopy;

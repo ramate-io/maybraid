@@ -51,7 +51,7 @@ pub mod sticks {
 pub mod foliage {
 	use super::AssetPath;
 
-	/// `vegetation/foliage/standard/layered_ball_001_{high,mid,low}_res.glb`.
+	/// Kits under `vegetation/foliage/standard/`.
 	pub mod standard {
 		use super::AssetPath;
 
@@ -61,5 +61,12 @@ pub mod foliage {
 			AssetPath::new("vegetation/foliage/standard/layered_ball_001_mid_res.glb");
 		pub const LAYERED_BALL_LOW: AssetPath =
 			AssetPath::new("vegetation/foliage/standard/layered_ball_001_low_res.glb");
+
+		pub const CHEAP_BALL_HIGH: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/cheap_ball_001_high_res.glb");
+		pub const CHEAP_BALL_MID: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/cheap_ball_001_mid_res.glb");
+		pub const CHEAP_BALL_LOW: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/cheap_ball_001_low_res.glb");
 	}
 }

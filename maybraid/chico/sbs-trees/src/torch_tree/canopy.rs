@@ -1,4 +1,4 @@
-//! Selective torch canopy: layered balls on upper/outer BranchOut nodes.
+//! Selective torch canopy: cheap balls on upper/outer BranchOut nodes.
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::{
@@ -39,7 +39,7 @@ struct FoliageCandidate {
 fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> FoliageNode {
 	let scale = leaf_radius_world / c.radius.max(1e-4);
 	let world_radius = c.radius * scale;
-	FoliageNode::layered_ball(Placement::foliage_uniform(c.position, world_radius))
+	FoliageNode::cheap_ball(Placement::foliage_uniform(c.position, world_radius))
 }
 
 fn collect_high_candidates(

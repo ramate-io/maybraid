@@ -5,6 +5,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
+use crate::assets::AssetPath;
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
@@ -38,12 +39,27 @@ impl FoliageNode {
 		Self::new(FoliageStyle::Standard, FoliageGeometry::LayeredBall, placement)
 	}
 
+	/// Cheap ball using `vegetation/foliage/standard/cheap_ball_001_*` GLBs.
+	///
+	/// Prefer for dense packed clusters where silhouette comes from density.
+	pub fn cheap_ball(placement: Placement) -> Self {
+		Self::new(FoliageStyle::Standard, FoliageGeometry::CheapBall, placement)
+	}
+
 	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, geometry, placement)
 	}
 
 	pub fn plane_splay(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::PlaneSplay, geometry, placement)
+	}
+
+	fn standard_ball_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self.geometry {
+			FoliageGeometry::LayeredBall => self.style.layered_ball_glb_for_level(level),
+			FoliageGeometry::CheapBall => self.style.cheap_ball_glb_for_level(level),
+			_ => None,
+		}
 	}
 
 	fn procedural_ball_scene(&self) -> impl Scene + 'static {
@@ -84,8 +100,8 @@ impl FoliageNode {
 				*core_radius,
 				*leaf_disc_radius,
 			)),
-			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
-				match self.style.layered_ball_glb_for_level(level) {
+			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
+				match self.standard_ball_glb_for_level(level) {
 					Some(asset) => {
 						Box::new(posed_foliage_asset_tier(Some(asset), pose(self.placement)))
 					}
@@ -118,7 +134,7 @@ impl LodScene for FoliageNode {
 		let level = self.scene_lod_level(lod_ref);
 		let probe = FoliageLodProbe::from_placement(&self.placement);
 		match (&self.style, &self.geometry) {
-			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
+			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
 				Box::new(warm_foliage_mesh_level_host(
 					level,
 					probe,
@@ -126,15 +142,15 @@ impl LodScene for FoliageNode {
 					[
 						(
 							LodSceneLevel::High,
-							self.style.layered_ball_glb_for_level(LodSceneLevel::High),
+							self.standard_ball_glb_for_level(LodSceneLevel::High),
 						),
 						(
 							LodSceneLevel::Medium,
-							self.style.layered_ball_glb_for_level(LodSceneLevel::Medium),
+							self.standard_ball_glb_for_level(LodSceneLevel::Medium),
 						),
 						(
 							LodSceneLevel::Low,
-							self.style.layered_ball_glb_for_level(LodSceneLevel::Low),
+							self.standard_ball_glb_for_level(LodSceneLevel::Low),
 						),
 					],
 				)) as Box<dyn Scene>

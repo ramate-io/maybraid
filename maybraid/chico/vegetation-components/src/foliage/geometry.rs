@@ -7,6 +7,8 @@ pub enum FoliageGeometry {
 	UnitBall,
 	/// Layered-ball kit: unit ball before placement scale (GLB under standard style).
 	LayeredBall,
+	/// Cheap-ball kit: lower-poly unit ball for dense packed clusters.
+	CheapBall,
 	/// Plane-splay cluster parameters (local units before placement scale).
 	PlaneSplay {
 		icosphere_subdivisions: u32,
@@ -28,6 +30,10 @@ impl FoliageGeometry {
 
 	pub fn layered_ball() -> Self {
 		Self::LayeredBall
+	}
+
+	pub fn cheap_ball() -> Self {
+		Self::CheapBall
 	}
 
 	pub fn plane_splay(

@@ -18,18 +18,45 @@ pub enum FoliageStyle {
 }
 
 impl FoliageStyle {
+	fn standard_triad_for_level(
+		level: LodSceneLevel,
+		high: AssetPath,
+		mid: AssetPath,
+		low: AssetPath,
+	) -> AssetPath {
+		match level {
+			LodSceneLevel::High => high,
+			LodSceneLevel::Medium => mid,
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => low,
+		}
+	}
+
 	/// Layered-ball GLB for `self` at `level`, when this style is asset-backed.
 	pub fn layered_ball_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
 			Self::NoisyBall | Self::PlaneSplay => None,
-			Self::Standard => Some(match level {
-				LodSceneLevel::High => foliage_assets::standard::LAYERED_BALL_HIGH,
-				LodSceneLevel::Medium => foliage_assets::standard::LAYERED_BALL_MID,
-				LodSceneLevel::Low
-				| LodSceneLevel::UltraLow
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => foliage_assets::standard::LAYERED_BALL_LOW,
-			}),
+			Self::Standard => Some(Self::standard_triad_for_level(
+				level,
+				foliage_assets::standard::LAYERED_BALL_HIGH,
+				foliage_assets::standard::LAYERED_BALL_MID,
+				foliage_assets::standard::LAYERED_BALL_LOW,
+			)),
+		}
+	}
+
+	/// Cheap-ball GLB for `self` at `level`, when this style is asset-backed.
+	pub fn cheap_ball_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self {
+			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::Standard => Some(Self::standard_triad_for_level(
+				level,
+				foliage_assets::standard::CHEAP_BALL_HIGH,
+				foliage_assets::standard::CHEAP_BALL_MID,
+				foliage_assets::standard::CHEAP_BALL_LOW,
+			)),
 		}
 	}
 }
