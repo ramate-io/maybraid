@@ -8,8 +8,11 @@
 //!
 //! Courtyard / balcony [`OpeningLabel::Passage`] doors are the RLA passages —
 //! no [`crate::HallsToShafts`], no suite packing, no [`crate::LivableApartment`]
-//! entry carve. Strategy is
-//! [`RectLivableStrategy::GuillotineSplit`] so SpineHall stays off this path.
+//! entry carve. SpineHall stays off this path (SingleClosed → Guillotine →
+//! AllOpen). Party walls and RLA internals use the same
+//! [`INTERNAL_WALLS_LAYER`] High-only band as [`crate::LivableApartments`].
+//! Cross-strip shared edges are optionally walled from noise so some corners
+//! stay open as L-shaped living.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
@@ -29,11 +32,13 @@ use crate::openings::{OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
+use crate::usage_areas::livable_apartment::INTERNAL_WALLS_LAYER;
 use crate::usage_areas::plan_access::DEFAULT_WALK_CLEAR;
+use crate::usage_areas::plan_cells::shared_edge_span;
 use crate::usage_areas::plan_geom::{host_xz, noise_for_cell};
 use crate::usage_areas::rectangular_livable_area::{
-	RectLivableStrategy, RectangularLivableArea, RectangularLivableAreaParameterized,
-	DEFAULT_CLOSED_MAX_AREA,
+	RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectangularLivableAreaParameterized, DEFAULT_CLOSED_MAX_AREA,
 };
 
 use super::floor_plan::LesHallesFloorPlan;
@@ -46,8 +51,13 @@ const MIN_STRIP_ALONG: f32 = 3.5;
 const MIN_BAY_ALONG: f32 = 5.0;
 const MAX_BAY_ALONG: f32 = 14.0;
 /// Area used when converting strip depth → preferred along length (m²).
-const TARGET_BAY_AREA: f32 = 28.0;
+const TARGET_BAY_AREA: f32 = 32.0;
 const SALT_BAY_ALONG: f32 = 121.0;
+const SALT_CROSS_STRIP_WALL: f32 = 131.0;
+/// Minimum shared-edge length (m) before a cross-strip party wall is considered.
+const MIN_CROSS_STRIP_SPAN: f32 = 2.0;
+/// Bedroom enters the multi-room program from this footprint (m²).
+const BEDROOM_PROGRAM_AREA: f32 = 18.0;
 
 /// Full Les Halles storey with residential gallery fills.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,7 +65,7 @@ pub struct LesHallesLivableFullStorey {
 	pub floor_plan: LesHallesFloorPlan,
 	/// One RLA per filled gallery bay (all strips flattened).
 	pub areas: Vec<RectangularLivableArea>,
-	/// Solid party walls on shared bay cuts within each strip.
+	/// Within-strip bay cuts + noisy cross-strip shared edges.
 	pub party_walls: Vec<ClippedRectangularStrip>,
 }
 
@@ -74,7 +84,7 @@ impl LesHallesLivableFullStorey {
 		regions: FillableRegions,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let mut areas = Vec::new();
+		let mut tagged: Vec<(i32, RectangularLivableArea)> = Vec::new();
 		let mut party_walls = Vec::new();
 		let mut residual_within = Vec::new();
 		let mut strip_i = 0i32;
@@ -85,10 +95,11 @@ impl LesHallesLivableFullStorey {
 				continue;
 			}
 			let strip_noise = noise_for_cell(noise, strip_i);
-			strip_i += 1;
 			match fill_strip_bays(&region.confines, strip_noise) {
 				Ok((filled, walls, nested)) => {
-					areas.extend(filled);
+					for area in filled {
+						tagged.push((strip_i, area));
+					}
 					party_walls.extend(walls);
 					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
@@ -100,7 +111,11 @@ impl LesHallesLivableFullStorey {
 				}
 				Err(err) => return Err(err),
 			}
+			strip_i += 1;
 		}
+
+		party_walls.extend(noisy_cross_strip_party_walls(&tagged, noise));
+		let areas = tagged.into_iter().map(|(_, a)| a).collect();
 
 		Ok((
 			Self {
@@ -192,11 +207,28 @@ fn sample_min_bay_along(confines: &Confines, noise: NoiseParams, depth: f32, alo
 		.clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
 }
 
-fn rla_params() -> RectangularLivableAreaParameterized {
+fn rla_params(strategy: RectLivableStrategy) -> RectangularLivableAreaParameterized {
 	RectangularLivableAreaParameterized {
-		strategy: RectLivableStrategy::GuillotineSplit,
+		strategy,
 		min_hall: DEFAULT_WALK_CLEAR,
 		closed_max_area: DEFAULT_CLOSED_MAX_AREA,
+	}
+}
+
+/// SpineHall stays off this typology — closed studios first, then guillotine.
+fn les_halles_strategies(area_m2: f32, passages: usize) -> Vec<RectLivableStrategy> {
+	if passages == 1 && area_m2 + EPS <= DEFAULT_CLOSED_MAX_AREA {
+		vec![
+			RectLivableStrategy::SingleClosed,
+			RectLivableStrategy::GuillotineSplit,
+			RectLivableStrategy::AllOpen,
+		]
+	} else {
+		vec![
+			RectLivableStrategy::GuillotineSplit,
+			RectLivableStrategy::SingleClosed,
+			RectLivableStrategy::AllOpen,
+		]
 	}
 }
 
@@ -214,7 +246,6 @@ fn fit_areas_covering_strip(
 	let mut fitted: Vec<(LivableBay, RectangularLivableArea)> = Vec::new();
 	let mut residual_within = Vec::new();
 	let mut carry: Option<LivableBay> = None;
-	let params = rla_params();
 
 	for (i, bay) in bays.iter().cloned().enumerate() {
 		let bay = match carry.take() {
@@ -225,7 +256,7 @@ fn fit_areas_covering_strip(
 			None => bay,
 		};
 
-		match fit_rla_bay(confines, along_x, strip_min, strip_max, &bay, noise, i, params) {
+		match fit_rla_bay(confines, along_x, strip_min, strip_max, &bay, noise, i) {
 			Ok((area, nested)) => {
 				residual_within.extend(nested.within);
 				fitted.push((bay, area));
@@ -241,7 +272,6 @@ fn fit_areas_covering_strip(
 						prev_bay,
 						noise,
 						i,
-						params,
 					)
 					.map_err(|_| FitError::TooSmall {
 						reason: "areas cover",
@@ -267,7 +297,6 @@ fn fit_areas_covering_strip(
 				prev_bay,
 				noise,
 				0,
-				params,
 			)
 			.map_err(|_| FitError::TooSmall {
 				reason: "areas cover",
@@ -276,7 +305,7 @@ fn fit_areas_covering_strip(
 			*prev_area = area;
 		} else {
 			let (area, nested) =
-				fit_rla_bay(confines, along_x, strip_min, strip_max, &tail, noise, 0, params)?;
+				fit_rla_bay(confines, along_x, strip_min, strip_max, &tail, noise, 0)?;
 			residual_within.extend(nested.within);
 			fitted.push((tail, area));
 		}
@@ -312,7 +341,6 @@ fn fit_rla_bay(
 	bay: &LivableBay,
 	noise: NoiseParams,
 	seed_i: usize,
-	params: RectangularLivableAreaParameterized,
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let (smin, smax) = if along_x {
 		(
@@ -337,27 +365,50 @@ fn fit_rla_bay(
 		let fp = cell.footprint();
 		fp.x * fp.y
 	};
-	let program = default_bay_program(area_m2, bay.passage_ids.len());
-	RectangularLivableArea::fit_with_params(&cell, bay_noise, params, &program)
+	let passages = bay.passage_ids.len();
+	let mut last = FitError::TooSmall {
+		reason: "rla_bay_exhausted",
+	};
+	for strategy in les_halles_strategies(area_m2, passages) {
+		let program = bay_program_for_strategy(area_m2, passages, strategy);
+		match RectangularLivableArea::fit_with_params(
+			&cell,
+			bay_noise,
+			rla_params(strategy),
+			&program,
+		) {
+			Ok(ok) => return Ok(ok),
+			Err(FitError::TooSmall { reason }) => {
+				last = FitError::TooSmall { reason };
+			}
+			Err(err) => return Err(err),
+		}
+	}
+	Err(last)
 }
 
-fn default_bay_program(
+/// Studio closed-only for SingleClosed; otherwise bedroom-first multi-room.
+///
+/// Bedroom used to require `area > 28` while target bay area was ~28 m², so most
+/// multi-room programs omitted it. Guillotine-only also failed many closed-only
+/// studio programs that SingleClosed handles.
+fn bay_program_for_strategy(
 	area: f32,
-	passages: usize,
-) -> Vec<crate::usage_areas::rectangular_livable_area::RectQuarterKind> {
-	use crate::usage_areas::rectangular_livable_area::RectQuarterKind;
+	_passages: usize,
+	strategy: RectLivableStrategy,
+) -> Vec<RectQuarterKind> {
+	if matches!(strategy, RectLivableStrategy::SingleClosed) {
+		return vec![RectQuarterKind::Bedroom];
+	}
 	let mut out = Vec::new();
-	if passages == 1 && area <= DEFAULT_CLOSED_MAX_AREA {
+	// Bedroom first so Guillotine's alternating split lands a closed cell early.
+	if area + EPS >= BEDROOM_PROGRAM_AREA {
 		out.push(RectQuarterKind::Bedroom);
-		return out;
 	}
 	if area + EPS >= 12.0 {
 		out.push(RectQuarterKind::Eating);
 	}
 	out.push(RectQuarterKind::Living);
-	if area > 28.0 {
-		out.push(RectQuarterKind::Bedroom);
-	}
 	if area > 40.0 {
 		out.push(RectQuarterKind::Bathroom);
 	}
@@ -490,7 +541,6 @@ fn party_wall_at_cut(
 	if height < EPS {
 		return None;
 	}
-	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	let (start, end) = if along_x {
 		(
 			Vec3::new(strip_min.x + cut, strip_min.y, strip_min.z),
@@ -502,9 +552,79 @@ fn party_wall_at_cut(
 			Vec3::new(strip_max.x, strip_min.y, strip_min.z + cut),
 		)
 	};
-	if start.distance(end) < EPS {
+	solid_party_wall(start, end, height)
+}
+
+/// Optional party walls on shared edges between bays from different strips.
+///
+/// Leaving a boundary open yields L-shaped living across the corner; walling
+/// it separates the units. Choice is per shared span from spatial noise.
+fn noisy_cross_strip_party_walls(
+	tagged: &[(i32, RectangularLivableArea)],
+	noise: NoiseParams,
+) -> Vec<ClippedRectangularStrip> {
+	let cfg = NoiseConfig::new(noise);
+	let mut walls = Vec::new();
+	for i in 0..tagged.len() {
+		for j in (i + 1)..tagged.len() {
+			let (si, a) = &tagged[i];
+			let (sj, b) = &tagged[j];
+			if si == sj {
+				continue;
+			}
+			let a_xz = host_xz(&a.confines.bounds);
+			let b_xz = host_xz(&b.confines.bounds);
+			let Some((along_x, lo, hi, mid)) = shared_edge_span(a_xz, b_xz) else {
+				continue;
+			};
+			if hi - lo + EPS < MIN_CROSS_STRIP_SPAN {
+				continue;
+			}
+			let y0 = a
+				.confines
+				.bounds
+				.min
+				.y
+				.max(b.confines.bounds.min.y);
+			let y1 = a
+				.confines
+				.bounds
+				.max
+				.y
+				.min(b.confines.bounds.max.y);
+			let height = y1 - y0;
+			if height < EPS {
+				continue;
+			}
+			let sample = cfg.sample_range_f32_4d(
+				0.0,
+				1.0,
+				mid,
+				0.5 * (lo + hi),
+				y0,
+				SALT_CROSS_STRIP_WALL + (*si as f32) * 3.0 + *sj as f32,
+			);
+			if sample >= 0.5 {
+				continue;
+			}
+			let (start, end) = if along_x {
+				(Vec3::new(lo, y0, mid), Vec3::new(hi, y0, mid))
+			} else {
+				(Vec3::new(mid, y0, lo), Vec3::new(mid, y0, hi))
+			};
+			if let Some(wall) = solid_party_wall(start, end, height) {
+				walls.push(wall);
+			}
+		}
+	}
+	walls
+}
+
+fn solid_party_wall(start: Vec3, end: Vec3, height: f32) -> Option<ClippedRectangularStrip> {
+	if start.distance(end) < EPS || height < EPS {
 		return None;
 	}
+	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	Some(ClippedRectangularStrip::from_nodes(
 		PanelStyle::RoughStonework,
 		[
@@ -530,23 +650,24 @@ impl BuildingComponents for LesHallesLivableFullStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = self.floor_plan.panel_nodes_for_level(level);
 		for wall in &self.party_walls {
-			out.extend(wall.panel_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.panel_nodes_for_level(level));
 		}
 		for area in &self.areas {
-			out.extend(area.panel_nodes_for_level(level));
+			// RLA emits partitions + room panels on the free layer; retag like apartments.
+			out.extend_under(INTERNAL_WALLS_LAYER, area.panel_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = self.floor_plan.joint_nodes_for_level(level);
 		for wall in &self.party_walls {
-			out.extend(wall.joint_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.joint_nodes_for_level(level));
 		}
 		for area in &self.areas {
-			out.extend(area.joint_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, area.joint_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
@@ -575,6 +696,15 @@ impl BuildingComponents for LesHallesLivableFullStorey {
 	}
 }
 
+/// High keeps tagged internals; coarser bands drop [`INTERNAL_WALLS_LAYER`].
+fn structural_layers<T>(level: LodSceneLevel, layers: Layers<T>) -> Layers<T> {
+	if matches!(level, LodSceneLevel::High) {
+		layers
+	} else {
+		layers.except([INTERNAL_WALLS_LAYER])
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -582,7 +712,7 @@ mod tests {
 	use bevy_math::Vec3;
 	use lod::gen::LodSceneLevel;
 	use procedural_common::NoiseParams;
-	use richmond_building_components::BuildingComponents;
+	use richmond_building_components::{BuildingComponents, Layer};
 
 	fn large_bounds() -> Aabb3d {
 		Aabb3d::from_min_max(
@@ -626,15 +756,47 @@ mod tests {
 	}
 
 	#[test]
-	fn livable_bays_use_guillotine() {
+	fn livable_bays_skip_spine_hall() {
 		let (storey, _) = storey_with_shafts(7);
 		assert!(storey.areas.iter().any(|a| !a.rooms.is_empty()));
 		assert!(
 			storey
 				.areas
 				.iter()
-				.all(|a| a.plan.chosen == RectLivableStrategy::GuillotineSplit),
-			"Les Halles livable path forces GuillotineSplit (no SpineHall)"
+				.all(|a| a.plan.chosen != RectLivableStrategy::SpineHall),
+			"Les Halles livable path must not choose SpineHall"
+		);
+	}
+
+	#[test]
+	fn bedrooms_appear_on_typical_seed() {
+		let (storey, _) = storey_with_shafts(1337);
+		let bedrooms = storey
+			.areas
+			.iter()
+			.flat_map(|a| a.rooms.iter())
+			.filter(|r| matches!(r, RectAreaRoom::Bedroom(_)))
+			.count();
+		assert!(
+			bedrooms >= 2,
+			"expected several bedrooms after SingleClosed/bedroom-first program; got {bedrooms}"
+		);
+	}
+
+	#[test]
+	fn internal_walls_only_on_high_structural_band() {
+		let (storey, _) = storey_with_shafts(1337);
+		let high = storey.panel_nodes_for_level(LodSceneLevel::High);
+		assert!(
+			high.labeled
+				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			"High should keep internal_walls"
+		);
+		let mid = storey.panel_nodes_for_level(LodSceneLevel::Medium);
+		assert!(
+			!mid.labeled
+				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			"Medium should drop internal_walls"
 		);
 	}
 

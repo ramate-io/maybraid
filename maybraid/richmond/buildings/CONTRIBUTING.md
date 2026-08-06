@@ -106,7 +106,11 @@ along the strip, merge undersized cells — same idea as
 [`CommercialStallStrip`](src/usage_areas/commercial_stall_strip.rs)). Each bay
 is a single rectangle fitted with
 [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)
-(`GuillotineSplit`; courtyard `Passage` as RLA opening). No
+(SingleClosed → Guillotine → AllOpen; courtyard `Passage` as RLA opening; no
+SpineHall). Party walls + RLA internals use the same High-only
+`internal_walls` band as [`LivableApartments`](src/usage_areas/livable_apartments.rs).
+Within-strip bay cuts always wall; cross-strip shared edges wall from noise
+(~50%) so some corners stay open as L-shaped living. No
 [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs), suite packing, or
 [`LivableApartment`](src/usage_areas/livable_apartment/) entry carve on this
 path. Prefer larger footprints than commercial demos (playground default
@@ -189,8 +193,8 @@ the ring. It:
 [`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) is the
 same loop with residential program: passage-bay split →
 [`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) per bay
-(Guillotine) + party walls on bay cuts. Commercial vs livable is a Full\* choice
-over one floor plan.
++ within-strip party walls + noisy cross-strip walls. Commercial vs livable is a
+Full\* choice over one floor plan.
 
 That is the **FloorPlan → Full\*** split: the plan owns structure + residual
 confines; Full\* owns program fill.
