@@ -13,7 +13,9 @@ use chico_vegetation_components::VegetationStructuralLodProbe;
 pub(crate) use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 };
-pub(crate) use stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+pub(crate) use stick::{
+	stick_nodes_banded, stick_nodes_high, stick_nodes_low, stick_nodes_medium,
+};
 
 /// Structural High / Medium / Low distance factors (multiples of characteristic radius).
 /// Medium outer edge is +25% vs the shared vegetation default (12 → 15).

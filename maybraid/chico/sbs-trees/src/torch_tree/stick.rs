@@ -67,7 +67,7 @@ struct StickBandCandidate {
 }
 
 /// Stalk always + outermost non-stalk sticks per azimuth × height cell.
-fn stick_nodes_banded(
+pub(crate) fn stick_nodes_banded(
 	chain: &BallStickChain<StorybookTreeChain>,
 	bands: AzimuthHeightBands,
 ) -> Vec<StickNode> {

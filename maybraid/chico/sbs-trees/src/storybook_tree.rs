@@ -3,8 +3,8 @@
 //! [`StorybookTreeParams::build`] grows the ball-stick chain once into [`StorybookTree`],
 //! which implements [`VegetationComponents`].
 //!
-//! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage keeps outer /
-//! terminal plane-splay candidates with torch-like banding and no mass proxies.
+//! Stick LOD matches Penmarch Torch (`torch_tree`) with denser Medium branch sampling;
+//! foliage keeps outer / terminal plane-splay bands and a Low mid-canopy layered proxy.
 
 mod canopy;
 pub mod render_item_plugin;
@@ -19,10 +19,11 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
-	stick_nodes_high, stick_nodes_low, stick_nodes_medium, structural_lod_probe,
+	stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_probe,
 };
 use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
+	MEDIUM_STICK_BANDS,
 };
 
 /// Authoring / CLI parameters for Storybook Tree.
@@ -81,7 +82,7 @@ impl VegetationComponents for StorybookTree {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
 			LodSceneLevel::High => stick_nodes_high(&self.chain),
-			LodSceneLevel::Medium => stick_nodes_medium(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_banded(&self.chain, MEDIUM_STICK_BANDS),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)

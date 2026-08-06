@@ -3,6 +3,9 @@
 //!
 //! [`NorthernConiferParams::build`] applies the Northern preset, grows the ball-stick chain once
 //! into [`NorthernConifer`], which implements [`VegetationComponents`].
+//!
+//! Foliage uses cheap-ball banding; Medium is ~30% fewer cells; Medium/Low share a thin
+//! full-height layered canopy proxy.
 
 mod canopy;
 pub mod render_item_plugin;

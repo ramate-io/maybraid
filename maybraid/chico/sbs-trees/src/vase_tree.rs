@@ -3,8 +3,8 @@
 //! [`VaseTreeParams::build`] grows the ball-stick chain once into [`VaseTree`],
 //! which implements [`VegetationComponents`].
 //!
-//! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage keeps outer
-//! plane-splay / inner cheap-ball candidates with torch-like banding, plus a stalk-tip apex.
+//! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage uses cheap-ball
+//! banding on upper / outer joints, a stalk-tip apex, and a Low mid-canopy layered proxy.
 
 mod canopy;
 pub mod render_item_plugin;
