@@ -15,6 +15,8 @@ pub struct RoughStonePanelRectangle;
 
 impl RoughStonePanelRectangle {
 	/// LOD host for panel leaves (style triad + flat UltraLow).
+	///
+	/// Unit-kit preview: probe the subject AABB.
 	pub fn scene_with_lod(lod_ref: &LodRef) -> impl Scene + 'static {
 		leaf_panel_scene_ref_lod(
 			RECTANGLE_HIGH.scene_ref(),
@@ -22,6 +24,7 @@ impl RoughStonePanelRectangle {
 			RECTANGLE_LOW.scene_ref(),
 			PANEL_ULTRA_LOW_RECTANGLE.scene_ref(),
 			lod_ref,
+			PanelLodProbe::from_aabb(lod_ref.bounds),
 		)
 	}
 }

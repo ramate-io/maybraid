@@ -12,7 +12,7 @@ use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
 /// High while the viewer is at most this many meters outside the XZ perimeter.
-pub const STRUCTURAL_HIGH_OUTSIDE_METERS: f32 = 20.0;
+pub const STRUCTURAL_HIGH_OUTSIDE_METERS: f32 = 80.0;
 
 /// Viewer distance band for whole-building structural thinning.
 ///
@@ -26,10 +26,7 @@ pub struct BuildingStructuralLodProbe {
 
 impl Default for BuildingStructuralLodProbe {
 	fn default() -> Self {
-		Self {
-			footprints: Vec::new(),
-			high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS,
-		}
+		Self { footprints: Vec::new(), high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS }
 	}
 }
 
@@ -42,10 +39,7 @@ impl BuildingStructuralLodProbe {
 	}
 
 	pub fn from_aabb3d_xz(min: Vec3, max: Vec3) -> Self {
-		Self::new([Aabb2d {
-			min: Vec2::new(min.x, min.z),
-			max: Vec2::new(max.x, max.z),
-		}])
+		Self::new([Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }])
 	}
 
 	pub fn with_high_outside_meters(mut self, meters: f32) -> Self {

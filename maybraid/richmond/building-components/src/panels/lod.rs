@@ -133,15 +133,19 @@ impl LodScene for PanelLodProbe {
 	}
 }
 
-/// Identity-placement LOD host: style high/mid/low + shared flat UltraLow.
+/// Warm High/Medium/Low/UltraLow panel host driven by an explicit probe.
+///
+/// Composite buildings should pass [`PanelLodProbe::from_placement`] for each kit so
+/// panels band independently. Unit-kit previews may use [`PanelLodProbe::from_aabb`]
+/// on the subject bounds.
 pub fn leaf_panel_scene_ref_lod(
 	high: SceneRef,
 	mid: SceneRef,
 	low: SceneRef,
 	ultra_low: SceneRef,
 	lod_ref: &LodRef,
+	probe: PanelLodProbe,
 ) -> impl Scene + 'static {
-	let probe = PanelLodProbe::from_aabb(lod_ref.bounds);
 	let level = probe.level_for(lod_ref.current_transform);
 	warm_content_host_hslu(
 		level,

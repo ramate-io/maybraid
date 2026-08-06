@@ -8,7 +8,8 @@ use scene_ref::MirrorAxis;
 use crate::assets::AssetPath;
 use crate::panels::geometry::{PanelGeometry, Rectangle, RightTriangle};
 use crate::panels::lod::{
-	leaf_panel_scene_ref_lod, PANEL_ULTRA_LOW_RECTANGLE, PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
+	leaf_panel_scene_ref_lod, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE,
+	PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 };
 use crate::panels::style::PanelStyle;
 use crate::placed::Placement;
@@ -42,6 +43,7 @@ fn lod_quad_scene(
 	low: AssetPath,
 	ultra_low: AssetPath,
 	lod_ref: &LodRef,
+	placement: &Placement,
 	mirror: Option<MirrorAxis>,
 ) -> impl Scene + 'static {
 	leaf_panel_scene_ref_lod(
@@ -50,6 +52,7 @@ fn lod_quad_scene(
 		low.scene_ref().with_mirror(mirror),
 		ultra_low.scene_ref().with_mirror(mirror),
 		lod_ref,
+		PanelLodProbe::from_placement(placement),
 	)
 }
 
@@ -71,6 +74,8 @@ impl LodScene for PanelNode {
 				// Transform multiply (not euler-add compose_child) so parent pitch/roll
 				// compose correctly with in-plane kit yaw.
 				let transform = pose(self.placement) * pose(piece.placement);
+				// Probe uses composed placement so each kit bands on its own footprint.
+				let world_placement = self.placement.compose_child(piece.placement);
 				match piece.geom {
 					PanelGeometry::Rectangle(Rectangle) => {
 						let (high, mid, low) = self.style.rectangle_lod()?;
@@ -82,6 +87,7 @@ impl LodScene for PanelNode {
 								low,
 								PANEL_ULTRA_LOW_RECTANGLE,
 								lod_ref,
+								&world_placement,
 								None,
 							),
 						)) as Box<dyn Scene>)
@@ -96,6 +102,7 @@ impl LodScene for PanelNode {
 								low,
 								PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 								lod_ref,
+								&world_placement,
 								mirror,
 							),
 						)) as Box<dyn Scene>)

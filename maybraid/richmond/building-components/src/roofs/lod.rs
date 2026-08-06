@@ -21,11 +21,11 @@ use crate::lod_host::warm_content_host_hsl;
 use crate::placed::Placement;
 
 /// `distance / max_extent` out to this → High.
-pub const ROOF_HIGH_FACTOR: f32 = 1.2;
+pub const ROOF_HIGH_FACTOR: f32 = 2.0;
 /// Out to this → Medium.
-pub const ROOF_MEDIUM_FACTOR: f32 = 1.5;
+pub const ROOF_MEDIUM_FACTOR: f32 = 3.0;
 /// Out to this → Low; else UltraLow.
-pub const ROOF_LOW_FACTOR: f32 = 2.0;
+pub const ROOF_LOW_FACTOR: f32 = 8.0;
 
 /// Viewer distance band for roof mesh resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

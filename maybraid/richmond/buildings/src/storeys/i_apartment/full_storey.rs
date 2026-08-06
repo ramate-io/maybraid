@@ -202,7 +202,7 @@ mod tests {
 	}
 
 	#[test]
-	fn structural_probe_high_within_20m_of_composed_perimeter() {
+	fn structural_probe_high_within_perimeter_cutoff() {
 		let storey = storey_seed(0);
 		let probe = storey
 			.structural_lod_probe()
@@ -214,7 +214,7 @@ mod tests {
 		assert_eq!(probe.level_for(&inside), LodSceneLevel::High);
 
 		// Far beyond every composed footprint → Medium (no interior walls).
-		let far = Transform::from_xyz(200.0, 1.5, 200.0);
+		let far = Transform::from_xyz(500.0, 1.5, 500.0);
 		assert!(probe.distance_outside(&far) > STRUCTURAL_HIGH_OUTSIDE_METERS);
 		assert_eq!(probe.level_for(&far), LodSceneLevel::Medium);
 
