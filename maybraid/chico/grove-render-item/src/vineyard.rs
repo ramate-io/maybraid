@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -14,8 +15,8 @@ use crate::skipped_mesh_material::{
 };
 use chico_groves::vineyard::{definition, VineyardCell, VineyardItem};
 use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
-	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+	GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Vineyard instance.
@@ -195,40 +196,20 @@ where
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
+		_cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
-			let foliage_noise = placement_noise(self.leaf_surface_noise, placed.position);
 			let build_noise = placement_noise(self.grove.noise, placed.position);
-			let chain_noise = placement_noise(self.tree_chain_noise, placed.position);
-			let stick_seed = chain_noise.seed as i32;
-			let canopy_seed = build_noise.seed as i32 + 31;
-
 			let VineyardItem::Rory(vine) = placed.variant.item();
 			let geometry = vine.build_with_noise(build_noise);
-			let mut tree = RorysHeadTrained::<StickM, StickS, LeafM, LeafS>::default();
-			tree.geometry = geometry;
-			tree.stick_material = self.stick_material.clone();
-			tree.leaf_material = self.leaf_material.clone();
-			tree.stick_surface_noise = placement_noise(self.stick_surface_noise, placed.position);
-			tree.leaf_surface_noise = foliage_noise;
-			let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-			patch_spawned_leaf_material::<StickM>(
-				&entities,
-				placed.variant.stick_palette_mix(),
-				stick_seed,
-				commands,
-			);
-			patch_spawned_leaf_material::<LeafM>(
-				&entities,
-				placed.variant.canopy_palette_mix(),
-				canopy_seed,
-				commands,
-			);
-			out.extend(entities);
+			let mut params = RorysHeadTrained::default();
+			params.geometry = geometry;
+			let tree = params.build();
+			let bounds = vegetation_bounds(&tree);
+			out.extend(spawn_vegetation_components(commands, &tree, local, bounds));
 		}
 		out
 	}

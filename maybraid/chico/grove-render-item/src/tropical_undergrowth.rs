@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_ball_components::tuft::BladeTuft;
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
@@ -254,30 +255,11 @@ where
 				TropicalUndergrowthItem::RoryHead(rory) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry = rory.build_with_noise(build_noise);
-					let mut tree = RorysHeadTrained::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed =
-						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = RorysHeadTrained::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TropicalUndergrowthItem::VaseTree(vase) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);
@@ -341,88 +323,31 @@ where
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed =
-						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = PenmarchTorch::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TropicalUndergrowthItem::KamakuraTorch(torch) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-					let mut tree = KamakuraTorch::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed =
-						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = KamakuraTorch::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				TropicalUndergrowthItem::TorchTree(torch) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);
 					let geometry =
 						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed =
-						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = PenmarchTorch::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 			};
 			out.extend(entities);

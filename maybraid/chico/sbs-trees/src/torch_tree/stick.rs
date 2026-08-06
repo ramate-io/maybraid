@@ -1,4 +1,4 @@
-//! Rory stick → [`StickNode`] emission (standard / trunk kits; crook bend deferred).
+//! Storybook / torch stick → [`StickNode`] emission (with structural LOD filters).
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::{
@@ -17,7 +17,7 @@ fn is_stalk(parent: &StorybookTreeChain) -> bool {
 	matches!(parent.phase, StorybookTreePhase::Stalk(_))
 }
 
-fn stick_node_for_segment(
+pub(crate) fn stick_node_for_segment(
 	segment: &BallStickSegment<'_>,
 	parent: &StorybookTreeChain,
 ) -> Option<StickNode> {
@@ -53,6 +53,7 @@ struct StickBandCandidate {
 	radius: f32,
 }
 
+/// Stalk always + outermost non-stalk sticks per azimuth × height cell.
 pub(crate) fn stick_nodes_medium_banded(
 	chain: &BallStickChain<StorybookTreeChain>,
 ) -> Vec<StickNode> {
@@ -83,17 +84,22 @@ pub(crate) fn stick_nodes_medium_banded(
 	trunk
 }
 
+/// Low: stalk + a thinned subset of branch sticks.
+pub(crate) fn keep_branch_on_low(is_stalk_seg: bool, branch_index: &mut usize) -> bool {
+	if is_stalk_seg {
+		return true;
+	}
+	let keep = *branch_index % LOW_BRANCH_KEEP_EVERY == 0;
+	*branch_index += 1;
+	keep
+}
+
 pub(crate) fn stick_nodes_low(chain: &BallStickChain<StorybookTreeChain>) -> Vec<StickNode> {
 	let mut branch_index = 0usize;
 	chain
 		.segments_with_hysteresis()
 		.filter_map(|(segment, parent, _)| {
-			if is_stalk(parent) {
-				return stick_node_for_segment(&segment, parent);
-			}
-			let keep = branch_index % LOW_BRANCH_KEEP_EVERY == 0;
-			branch_index += 1;
-			if !keep {
+			if !keep_branch_on_low(is_stalk(parent), &mut branch_index) {
 				return None;
 			}
 			stick_node_for_segment(&segment, parent)

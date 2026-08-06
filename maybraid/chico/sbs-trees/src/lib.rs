@@ -8,8 +8,8 @@ pub mod friends_conifer;
 pub mod honu_banyan;
 pub mod jungle_storybook_tree;
 pub mod kamakura_torch;
-pub mod layered_canopy;
 pub mod liams_conifer;
+mod torch_tree;
 pub mod northern_conifer;
 pub mod palm_bush;
 pub mod palm_crown;
@@ -29,12 +29,12 @@ pub use date_palm::DatePalmStd;
 pub use friends_conifer::FriendsConiferStd;
 pub use honu_banyan::HonuBanyanStd;
 pub use jungle_storybook_tree::JungleStorybookTreeStd;
-pub use kamakura_torch::KamakuraTorchStd;
+pub use kamakura_torch::{KamakuraTorch, KamakuraTorchInstance, KamakuraTorchStd};
 pub use liams_conifer::LiamsConiferStd;
 pub use northern_conifer::NorthernConiferStd;
 pub use palm_bush::PalmBushStd;
-pub use penmarch_torch::PenmarchTorchStd;
-pub use rorys_head_trained::RorysHeadTrainedStd;
+pub use penmarch_torch::{PenmarchTorch, PenmarchTorchInstance, PenmarchTorchStd};
+pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedInstance, RorysHeadTrainedStd};
 pub use simplemans_hedge::SimplemansHedgeStd;
 pub use skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedLeafMeshMaterial, SkippedMeshMaterial,

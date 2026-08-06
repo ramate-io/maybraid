@@ -1,37 +1,60 @@
-//! Small [`ChicoBall`] canopy at every graph joint (stalk and projection limbs) ([#254](https://github.com/ramate-io/maybraid/issues/254)).
+//! Small layered-ball canopy at every graph joint (stalk and projection limbs).
 
-use bevy::prelude::*;
-use chico_ball_components::chico_ball::ChicoBall;
-use chico_sbs_geometry::render::ball::BallRenderRule;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain};
+use bevy::prelude::Vec3;
+use chico_sbs_geometry::{
+	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
+	BallStickNode, StorybookTreeChain,
+};
+use chico_vegetation_components::{FoliageNode, Placement};
 
-/// Slightly undersized vs node radius so crook gaps stay covered without dominating limbs.
+/// Medium foliage: denser azimuth × height outer samples.
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
+/// Low foliage: coarser outer samples.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
+
+/// Slightly undersized vs node radius so limb gaps stay covered without dominating sticks.
 const JOINT_CANOPY_BALL_SCALE: f32 = 0.88;
 
-#[derive(Clone)]
-pub(crate) struct RorysHeadTrainedLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>>,
-{
-	pub leaf_ball: ChicoBall<LeafM, LeafS>,
-	pub leaf_radius_world: f32,
+fn foliage_node_for_joint(node: &BallStickNode, leaf_radius_world: f32) -> FoliageNode {
+	let scale = (leaf_radius_world / node.radius.max(1e-4)) * JOINT_CANOPY_BALL_SCALE;
+	let world_radius = node.radius * scale;
+	FoliageNode::layered_ball(Placement::foliage_uniform(node.position, world_radius))
 }
 
-impl<LeafM, LeafS> BallRenderRule<ChicoBall<LeafM, LeafS>, StorybookTreeChain>
-	for RorysHeadTrainedLeafCanopyRule<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	fn ball_render_item_for(
-		&self,
-		_node_idx: usize,
-		node: &BallStickNode,
-		_hysteresis: &StorybookTreeChain,
-		_chain: &BallStickChain<StorybookTreeChain>,
-	) -> Option<(ChicoBall<LeafM, LeafS>, f32)> {
-		let scale = (self.leaf_radius_world / node.radius.max(1e-4)) * JOINT_CANOPY_BALL_SCALE;
-		Some((self.leaf_ball.clone(), scale))
-	}
+pub(crate) fn foliage_nodes_high(
+	chain: &BallStickChain<StorybookTreeChain>,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	chain
+		.nodes()
+		.map(|node| foliage_node_for_joint(node, leaf_radius_world))
+		.collect()
+}
+
+#[derive(Clone, Copy)]
+struct JointCandidate {
+	position: Vec3,
+	radius: f32,
+}
+
+/// Outermost joints per azimuth × height cell → layered balls.
+pub(crate) fn foliage_nodes_banded(
+	chain: &BallStickChain<StorybookTreeChain>,
+	bands: AzimuthHeightBands,
+	leaf_radius_world: f32,
+) -> Vec<FoliageNode> {
+	let candidates: Vec<JointCandidate> = chain
+		.nodes()
+		.map(|node| JointCandidate { position: node.position, radius: node.radius })
+		.collect();
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.position, bands);
+	sampled
+		.into_iter()
+		.map(|s| {
+			let scale = (leaf_radius_world / s.item.radius.max(1e-4)) * JOINT_CANOPY_BALL_SCALE;
+			let world_radius = s.item.radius * scale;
+			FoliageNode::layered_ball(Placement::foliage_uniform(s.item.position, world_radius))
+		})
+		.collect()
 }

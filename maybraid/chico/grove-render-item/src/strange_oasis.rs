@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::storybook_tree::StorybookTree;
@@ -234,27 +235,11 @@ where
 				}
 				StrangeOasisItem::Torch(torch) => {
 					let geometry = torch.build_with_noise(build_noise);
-					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = PenmarchTorch::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				StrangeOasisItem::Storybook(story) => {
 					let geometry = story.build_with_noise(build_noise);

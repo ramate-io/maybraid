@@ -151,28 +151,13 @@ pub type RenderStorybookTree = StorybookTree<
 >;
 
 /// [`PenmarchTorch`] — vase-profile upward flame tree ([#248](https://github.com/ramate-io/maybraid/issues/248)).
-pub type RenderPenmarchTorch = PenmarchTorch<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderPenmarchTorch = PenmarchTorch;
 
 /// [`KamakuraTorch`] — stashed near-vertical flame (linear crown bias).
-pub type RenderKamakuraTorch = KamakuraTorch<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderKamakuraTorch = KamakuraTorch;
 
 /// [`RorysHeadTrained`] — single high horizontal canopy ring ([#254](https://github.com/ramate-io/maybraid/issues/254)).
-pub type RenderRorysHeadTrained = RorysHeadTrained<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderRorysHeadTrained = RorysHeadTrained;
 
 /// [`VaseTree`] — upward-opening vase-profile broadleaf ([#246](https://github.com/ramate-io/maybraid/issues/246)).
 pub type RenderVaseTree = VaseTree<
@@ -1068,9 +1053,21 @@ impl RenderSubject {
 			Self::WaialeaPalm(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::PalmBush(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::StorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::PenmarchTorch(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::KamakuraTorch(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RorysHeadTrained(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::PenmarchTorch(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
+			Self::KamakuraTorch(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
+			Self::RorysHeadTrained(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::VaseTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BraidOakTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),

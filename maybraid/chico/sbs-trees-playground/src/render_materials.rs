@@ -264,18 +264,9 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
-		RenderSubject::PenmarchTorch(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::KamakuraTorch(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::RorysHeadTrained(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::PenmarchTorch(_tree) => {}
+		RenderSubject::KamakuraTorch(_tree) => {}
+		RenderSubject::RorysHeadTrained(_tree) => {}
 		RenderSubject::BraidOakTree(_) => {}
 		RenderSubject::VaseTree(_) => {}
 		RenderSubject::JungleStorybookTree(_) => {}
