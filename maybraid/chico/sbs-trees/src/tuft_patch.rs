@@ -11,7 +11,7 @@
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuftShape;
 use chico_vegetation_components::{
-	FoliageNode, FrondCollection, Layers, Placement, StickNode, VegetationComponents,
+	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -106,19 +106,25 @@ impl TuftPatch {
 
 	fn clump_node(&self, index: usize, anchor: Vec3) -> Option<FoliageNode> {
 		let shape = self.clump_shape(index as u32);
-		// Chained frond segments per blade (`bend_segments` + sway noise → kinks).
-		let placements: Vec<Placement> = shape
-			.frond_segments_at(anchor)
+		// One FrondRun per blade; chained segments keep kink connectivity under merge LOD.
+		let runs: Vec<FrondRun> = shape
+			.frond_runs_at(anchor)
 			.into_iter()
-			.filter_map(|seg| {
-				Placement::frond_segment(seg.start, seg.direction, seg.length, seg.width)
+			.filter_map(|run| {
+				let placements: Vec<Placement> = run
+					.into_iter()
+					.filter_map(|seg| {
+						Placement::frond_segment(seg.start, seg.direction, seg.length, seg.width)
+					})
+					.collect();
+				(!placements.is_empty()).then(|| FrondRun::from_placements(placements))
 			})
 			.collect();
-		if placements.is_empty() {
+		if runs.is_empty() {
 			return None;
 		}
 		Some(FoliageNode::frond_collection(
-			FrondCollection::segments(placements),
+			FrondCollection::new(runs),
 			Placement::IDENTITY,
 		))
 	}
@@ -212,10 +218,15 @@ mod tests {
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(nodes.len(), 2);
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection geom");
-		// 4 blades × 2 bend segments.
-		assert_eq!(collection.members.len(), 8);
-		assert_eq!(collection.members_for_level(LodSceneLevel::Medium).len(), 4);
-		assert_eq!(collection.members_for_level(LodSceneLevel::UltraLow).len(), 1);
+		// 4 blades (runs), each with 2 bend segments.
+		assert_eq!(collection.runs.len(), 4);
+		assert_eq!(collection.runs[0].segments.len(), 2);
+		let medium = collection.runs_for_level(LodSceneLevel::Medium);
+		assert_eq!(medium.len(), 2);
+		assert_eq!(medium[0].segments.len(), 2, "Medium keeps full kink chains");
+		let ultra = collection.runs_for_level(LodSceneLevel::UltraLow);
+		assert_eq!(ultra.len(), 1);
+		assert_eq!(ultra[0].segments.len(), 1, "UltraLow collapses to one chord");
 		Ok(())
 	}
 }

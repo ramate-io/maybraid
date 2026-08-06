@@ -16,7 +16,7 @@ pub mod structural_probe;
 pub use assets::AssetPath;
 pub use foliage::{
 	update_foliage_host_levels, FoliageGeometry, FoliageNode, FoliageStyle, FrondCollection,
-	FrondKit, FrondMember, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR, FOLIAGE_MEDIUM_FACTOR,
+	FrondKit, FrondMember, FrondRun, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR, FOLIAGE_MEDIUM_FACTOR,
 	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
 };
 pub use layer::{Layer, Layers};

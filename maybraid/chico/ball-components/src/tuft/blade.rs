@@ -116,15 +116,15 @@ impl BladeTuftShape {
 			.collect()
 	}
 
-	/// Chained straight-frond segments for one clump at `origin`.
+	/// Connected frond runs (one chain per blade) for one clump at `origin`.
 	///
 	/// Splits each strand into [`Self::bend_segments`] pieces and applies the same
 	/// lateral sway as the prismatic mesh builder so VegetationComponents blades keep
 	/// their kinks (`noise_amplitude` / `noise_frequency`).
-	pub fn frond_segments_at(&self, origin: Vec3) -> Vec<BladeFrondSegment> {
+	pub fn frond_runs_at(&self, origin: Vec3) -> Vec<Vec<BladeFrondSegment>> {
 		let width = self.blade_width.max(1e-4);
 		let rings = self.bend_segments.max(1) as usize;
-		let mut out = Vec::new();
+		let mut runs = Vec::new();
 
 		for (i, strand) in self.strands().into_iter().enumerate() {
 			let dir = strand.direction.normalize_or_zero();
@@ -162,6 +162,7 @@ impl BladeTuftShape {
 				points.push(base + rotation * local);
 			}
 
+			let mut run = Vec::with_capacity(rings);
 			for seg in 0..rings {
 				let start = points[seg];
 				let end = points[seg + 1];
@@ -170,15 +171,23 @@ impl BladeTuftShape {
 				if seg_len < 1e-6 {
 					continue;
 				}
-				out.push(BladeFrondSegment {
+				run.push(BladeFrondSegment {
 					start,
 					direction: ray,
 					length: seg_len,
 					width,
 				});
 			}
+			if !run.is_empty() {
+				runs.push(run);
+			}
 		}
-		out
+		runs
+	}
+
+	/// Flattened chained segments (loses run grouping — prefer [`Self::frond_runs_at`]).
+	pub fn frond_segments_at(&self, origin: Vec3) -> Vec<BladeFrondSegment> {
+		self.frond_runs_at(origin).into_iter().flatten().collect()
 	}
 }
 

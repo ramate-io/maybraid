@@ -7,7 +7,7 @@ pub mod probe;
 pub mod style;
 
 pub use collection::{
-	FrondCollection, FrondKit, FrondMember, FROND_COLLECTION_HIGH_FACTOR,
+	FrondCollection, FrondKit, FrondMember, FrondRun, FROND_COLLECTION_HIGH_FACTOR,
 	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
 };
 pub use geometry::FoliageGeometry;
