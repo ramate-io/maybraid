@@ -1,12 +1,12 @@
 //! Stick IR node: style + geometry + placement.
 
-use bevy::prelude::Vec3;
-use bevy::scene::prelude::Scene;
+use bevy::prelude::{Visibility, Vec3};
+use bevy::scene::prelude::{bsn, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::{posed_asset_tier, warm_content_host_hsl, warm_mesh_level_host};
+use crate::lod_host::{posed_asset_tier, warm_content_host, warm_mesh_level_host};
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh};
@@ -64,6 +64,10 @@ impl StickNode {
 		Self::new(StickStyle::StandardTrunk, geometry, placement)
 	}
 
+	fn probe(&self) -> StickLodProbe {
+		StickLodProbe::from_stick(&self.placement, self.geometry)
+	}
+
 	fn procedural_scene(&self) -> impl Scene + 'static {
 		posed_mesh(
 			VegetationProceduralAssets::stick_cylinder(),
@@ -72,23 +76,32 @@ impl StickNode {
 		)
 	}
 
+	fn empty_scene() -> impl Scene + 'static {
+		bsn! {
+			Visibility::Inherited
+		}
+	}
+
 	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
-		match self.style.glb_for_level(level) {
-			Some(asset) => {
-				Box::new(posed_asset_tier(Some(asset), pose(self.placement))) as Box<dyn Scene>
-			}
-			None => Box::new(self.procedural_scene()) as Box<dyn Scene>,
+		match level {
+			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()) as Box<dyn Scene>,
+			_ => match self.style.glb_for_level(level) {
+				Some(asset) => {
+					Box::new(posed_asset_tier(Some(asset), pose(self.placement))) as Box<dyn Scene>
+				}
+				None => Box::new(self.procedural_scene()) as Box<dyn Scene>,
+			},
 		}
 	}
 }
 
 impl LodScene for StickNode {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		StickLodProbe::from_placement(&self.placement).level_for(lod_ref.current_transform)
+		self.probe().level_for(lod_ref.current_transform)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		StickLodProbe::from_placement(&self.placement).status_for_lod_ref(lod_ref)
+		self.probe().status_for_lod_ref(lod_ref)
 	}
 
 	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
@@ -101,14 +114,17 @@ impl LodScene for StickNode {
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		let probe = StickLodProbe::from_placement(&self.placement);
+		let probe = self.probe();
 		match self.style {
-			StickStyle::NoisyCylinder => Box::new(warm_content_host_hsl(
+			StickStyle::NoisyCylinder => Box::new(warm_content_host(
 				level,
 				probe,
-				self.procedural_scene(),
-				self.procedural_scene(),
-				self.procedural_scene(),
+				[
+					(LodSceneLevel::High, Box::new(self.procedural_scene()) as Box<dyn Scene>),
+					(LodSceneLevel::Medium, Box::new(self.procedural_scene()) as Box<dyn Scene>),
+					(LodSceneLevel::Low, Box::new(self.procedural_scene()) as Box<dyn Scene>),
+					(LodSceneLevel::UltraLow, Box::new(Self::empty_scene()) as Box<dyn Scene>),
+				],
 			)) as Box<dyn Scene>,
 			StickStyle::Standard | StickStyle::StandardTrunk => Box::new(warm_mesh_level_host(
 				level,
@@ -118,6 +134,7 @@ impl LodScene for StickNode {
 					(LodSceneLevel::High, self.style.glb_for_level(LodSceneLevel::High)),
 					(LodSceneLevel::Medium, self.style.glb_for_level(LodSceneLevel::Medium)),
 					(LodSceneLevel::Low, self.style.glb_for_level(LodSceneLevel::Low)),
+					(LodSceneLevel::UltraLow, None),
 				],
 			)) as Box<dyn Scene>,
 		}

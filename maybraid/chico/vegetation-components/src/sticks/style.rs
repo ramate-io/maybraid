@@ -21,22 +21,23 @@ impl StickStyle {
 	pub fn glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
 			Self::NoisyCylinder => None,
-			Self::Standard => Some(match level {
-				LodSceneLevel::High => stick_assets::standard::HIGH,
-				LodSceneLevel::Medium => stick_assets::standard::MID,
+			Self::Standard => match level {
+				LodSceneLevel::High => Some(stick_assets::standard::HIGH),
+				LodSceneLevel::Medium => Some(stick_assets::standard::MID),
 				LodSceneLevel::Low
-				| LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => stick_assets::standard::LOW,
-			}),
-			Self::StandardTrunk => Some(match level {
-				LodSceneLevel::High => stick_assets::standard_trunk::HIGH,
-				LodSceneLevel::Medium => stick_assets::standard_trunk::MID,
+				| LodSceneLevel::Resolution(_) => Some(stick_assets::standard::LOW),
+				// Stick mesh UltraLow is authored as an empty scene.
+				LodSceneLevel::UltraLow => None,
+			},
+			Self::StandardTrunk => match level {
+				LodSceneLevel::High => Some(stick_assets::standard_trunk::HIGH),
+				LodSceneLevel::Medium => Some(stick_assets::standard_trunk::MID),
 				LodSceneLevel::Low
-				| LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => stick_assets::standard_trunk::LOW,
-			}),
+				| LodSceneLevel::Resolution(_) => Some(stick_assets::standard_trunk::LOW),
+				LodSceneLevel::UltraLow => None,
+			},
 		}
 	}
 }
