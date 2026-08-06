@@ -133,9 +133,9 @@ Roof kits use the same distance / extent probe shape ([`RoofLodProbe`](building-
 
 | Band | Factor |
 |------|--------|
-| High | ≤ [`ROOF_HIGH_FACTOR`](building-components/src/roofs/lod.rs) (2.5) |
-| Medium | ≤ [`ROOF_MEDIUM_FACTOR`](building-components/src/roofs/lod.rs) (10) |
-| Low | ≤ [`ROOF_LOW_FACTOR`](building-components/src/roofs/lod.rs) (500) |
+| High | ≤ [`ROOF_HIGH_FACTOR`](building-components/src/roofs/lod.rs) (2) |
+| Medium | ≤ [`ROOF_MEDIUM_FACTOR`](building-components/src/roofs/lod.rs) (3) |
+| Low | ≤ [`ROOF_LOW_FACTOR`](building-components/src/roofs/lod.rs) (8) |
 | UltraLow | elsewhere (shares low mesh for now) |
 
 ### Panel mesh resolution
