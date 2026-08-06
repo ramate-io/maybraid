@@ -555,6 +555,8 @@ pub enum Render {
 
 impl Render {
 	pub fn react(self, commands: &mut Commands) {
+		// Prefer `/render` over `/show` when both would be active.
+		commands.insert_resource(crate::commands::show::ShowConfig::default());
 		let config = self.into_render_config();
 		commands.queue(move |world: &mut World| {
 			*world.resource_mut::<RenderConfig>() = config;

@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::{
@@ -42,13 +43,8 @@ pub type TwHonu = HonuBanyan<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-/// Sope template (material slots match playground [`RenderSopesBanyan`]).
-pub type TwSope = SopesBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// Sope template (LodScene / VegetationComponents).
+pub type TwSope = SopesBanyan;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Trade Winds instance.
 pub type TradeWindsStd = TradeWinds<
@@ -306,23 +302,10 @@ where
 						BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<ChicoStickMaterial>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<ChicoLeafMaterial>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(
+						commands, &tree, local, bounds
+					)
 				}
 				TradeWindsItem::WaialeaPalm(palm) => {
 					let geometry = palm.build_with_noise(build_noise);

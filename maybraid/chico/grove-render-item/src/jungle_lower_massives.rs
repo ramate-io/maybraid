@@ -7,6 +7,7 @@ use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
@@ -45,13 +46,8 @@ pub type JlmHonu = HonuBanyan<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-/// Sope template (material slots match playground [`RenderSopesBanyan`]).
-pub type JlmSope = SopesBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// Sope template (LodScene / VegetationComponents).
+pub type JlmSope = SopesBanyan;
 
 /// Jungle Storybook template (material slots match playground [`RenderJungleStorybookTree`]).
 pub type JlmJungleStorybook = JungleStorybookTree<
@@ -305,23 +301,10 @@ where
 						BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<ChicoStickMaterial>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<ChicoLeafMaterial>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(
+						commands, &tree, local, bounds
+					)
 				}
 				JungleLowerMassivesItem::JungleStorybook(jungle) => {
 					let samples = jungle.build_with_noise(build_noise);

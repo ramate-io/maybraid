@@ -32,9 +32,13 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 /render common-high-bush --height 10
 /render moderate-lod-frond-crown --translate 0,2,0
 /render sopes-banyan
+/show sopes-banyan
 /render honu-banyan
 /help
 ```
+
+`/show sopes-banyan` presents via [`VegetationComponents`](../vegetation-components/) / `LodScene`.
+`/render sopes-banyan` uses the same LodScene adapter for now (legacy `RenderItem` is unimplemented).
 
 Startup argv uses the same `chico-sbs` CLI (no leading slash):
 

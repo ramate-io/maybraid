@@ -1,11 +1,13 @@
 //! In-game clap command hierarchy.
 
 pub mod render;
+pub mod show;
 
 use bevy::prelude::*;
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
 pub use render::Render;
+pub use show::Show;
 
 pub const PLAYGROUND_CLI_NAME: &str = "chico-sbs";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -23,6 +25,9 @@ pub enum PlaygroundCommand {
 	Script(Script),
 	#[command(subcommand)]
 	Render(Render),
+	/// LodScene / VegetationComponents presentation (migrated trees).
+	#[command(subcommand)]
+	Show(Show),
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
@@ -58,6 +63,7 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Render(r) => r.react(commands),
+			PlaygroundCommand::Show(s) => s.react(commands),
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}

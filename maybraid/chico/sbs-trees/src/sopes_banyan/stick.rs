@@ -1,41 +1,94 @@
-use std::marker::PhantomData;
+//! Stick segment → [`StickNode`] emission (with structural LOD phase filters).
 
-use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderRule;
-use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain};
-use chico_stick_components::chico_stick::ChicoStick;
-use procedural_common::NoiseParams;
+use bevy::prelude::Vec3;
+use chico_sbs_geometry::{BallStickSegment, SopesBanyanChain, SopesBanyanPhase};
+use chico_vegetation_components::{Placement, StickNode};
 
-#[derive(Clone)]
-pub(crate) struct SopesBanyanStickRule<StickM, StickS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>>,
-{
-	pub surface_noise: NoiseParams,
-	pub stick_material: StickS,
-	pub(crate) __marker: PhantomData<fn() -> StickM>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StickLodRole {
+	/// Strict stalk / trunk.
+	Trunk,
+	/// Descender aerial roots.
+	Descender,
+	/// Branch-out / flair sticks that connect successive ball-stick nodes.
+	BetweenNodes,
 }
 
-impl<StickM, StickS> StickRenderRule<ChicoStick<StickM, StickS>, SopesBanyanChain>
-	for SopesBanyanStickRule<StickM, StickS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Default + Send + Sync + 'static,
-{
-	fn stick_render_item_for(
-		&self,
-		segment: &BallStickSegment<'_>,
-		_parent_hysteresis: &SopesBanyanChain,
-		_child_hysteresis: &SopesBanyanChain,
-	) -> Option<ChicoStick<StickM, StickS>> {
-		let seed = self.surface_noise.seed
-			+ segment.start.position.length() as i32
-			+ segment.end.position.length() as i32;
-
-		let mut stick =
-			self.surface_noise.with_seed(seed).build_scalar::<ChicoStick<StickM, StickS>>();
-		stick.material = self.stick_material.clone();
-		Some(stick)
+impl StickLodRole {
+	pub(crate) fn from_parent_phase(phase: &SopesBanyanPhase) -> Self {
+		match phase {
+			SopesBanyanPhase::Stalk(_) => Self::Trunk,
+			SopesBanyanPhase::StartDescender(_) | SopesBanyanPhase::EndDescender(_) => {
+				Self::Descender
+			}
+			SopesBanyanPhase::BranchOut(_)
+			| SopesBanyanPhase::StartFlairUp(_)
+			| SopesBanyanPhase::EndFlairUp(_) => Self::BetweenNodes,
+		}
 	}
+
+	pub(crate) fn is_trunk(self) -> bool {
+		matches!(self, Self::Trunk)
+	}
+
+	pub(crate) fn is_descender(self) -> bool {
+		matches!(self, Self::Descender)
+	}
+}
+
+/// Keep roughly this fraction of descender sticks on Low (stable every-Nth sample).
+pub(crate) const LOW_DESCENDER_KEEP_EVERY: usize = 4;
+
+pub(crate) fn stick_node_for_segment(segment: &BallStickSegment<'_>) -> Option<StickNode> {
+	let ray = segment.ray();
+	let len_sq = ray.length_squared();
+	if len_sq < 1e-12 {
+		return None;
+	}
+	let length = len_sq.sqrt();
+	let placement =
+		Placement::stick_segment(segment.start.position, ray, length, segment.start.radius)?;
+	Some(StickNode::segment(placement))
+}
+
+pub(crate) fn stick_role_for_segment(
+	_segment: &BallStickSegment<'_>,
+	parent: &SopesBanyanChain,
+) -> StickLodRole {
+	StickLodRole::from_parent_phase(&parent.phase)
+}
+
+fn horizontal_radius(position: Vec3) -> f32 {
+	Vec3::new(position.x, 0.0, position.z).length()
+}
+
+/// Midpoint footprint radius of a segment (for outer-half silhouette keep).
+pub(crate) fn segment_horizontal_radius(segment: &BallStickSegment<'_>) -> f32 {
+	let mid = (segment.start.position + segment.end.position) * 0.5;
+	horizontal_radius(mid)
+}
+
+/// Medium: always keep trunk; keep other sticks only in the outer half of the footprint.
+pub(crate) fn keep_stick_on_medium(
+	role: StickLodRole,
+	segment: &BallStickSegment<'_>,
+	tree_radius: f32,
+) -> bool {
+	if role.is_trunk() {
+		return true;
+	}
+	segment_horizontal_radius(segment) >= tree_radius.max(1e-4) * 0.5
+}
+
+/// Low: trunk + a thinned subset of descenders (no branch / flair sticks).
+pub(crate) fn keep_stick_on_low(role: StickLodRole, descender_index: &mut usize) -> bool {
+	if role.is_trunk() {
+		return true;
+	}
+	if !role.is_descender() {
+		return false;
+	}
+	let keep = *descender_index % LOW_DESCENDER_KEEP_EVERY == 0;
+	*descender_index += 1;
+	keep
 }

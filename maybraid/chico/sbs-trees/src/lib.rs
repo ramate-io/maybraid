@@ -40,7 +40,7 @@ pub use skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedLeafMeshMaterial, SkippedMeshMaterial,
 	SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
-pub use sopes_banyan::SopesBanyanStd;
+pub use sopes_banyan::{SopesBanyan, SopesBanyanStd};
 pub use storybook_tree::StorybookTreeStd;
 pub use temperate_conifer::TemperateConiferStd;
 pub use tuft_patch::TuftPatchStd;

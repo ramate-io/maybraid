@@ -7,10 +7,10 @@ use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::vase_tree::VaseTree;
-use chico_sbs_trees::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use chico_tree_components::HighBushShoots;
-use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
+use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -25,13 +25,8 @@ use chico_groves::{
 	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-/// Sope template (material slots match playground [`RenderSopesBanyan`]).
-pub type WaSope = SopesBanyan<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// Sope template (LodScene / VegetationComponents).
+pub type WaSope = SopesBanyan;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Wandering Acacia instance.
 pub type WanderingAcaciaStd = WanderingAcacia<
@@ -259,23 +254,10 @@ where
 					let samples = banyan.build_with_noise(build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<ChicoStickMaterial>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<ChicoLeafMaterial>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(
+						commands, &tree, local, bounds
+					)
 				}
 				WanderingAcaciaItem::VaseTree(vase) => {
 					let geometry = vase.build_with_noise(build_noise);
