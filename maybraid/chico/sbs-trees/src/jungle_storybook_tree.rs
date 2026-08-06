@@ -1,7 +1,7 @@
 //! **Jungle Storybook Tree** — dense Storybook construction ([#235](https://github.com/ramate-io/maybraid/issues/235), [RFC §3.1.7.13](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/13-jungle-storybook-tree/README.md)).
 //!
 //! Same [`StorybookTreeChain`] geometry as [#230](https://github.com/ramate-io/maybraid/issues/230);
-//! VegetationComponents emits jungle-growth clusters (palm fronds + spears) plus inner/outer canopy.
+//! VegetationComponents emits jungle-growth clusters (palm fronds + spears) plus cheap canopy balls.
 
 mod canopy;
 #[allow(dead_code)]
@@ -15,10 +15,7 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{
-	foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium,
-	DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE,
-};
+use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
 use crate::storybook_tree::canopy::MEDIUM_STICK_BANDS;
 use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_probe};
 
@@ -111,18 +108,13 @@ impl VegetationComponents for JungleStorybookTree {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-		let leaf_r = self.leaf_radius_world();
-		let g = self.growth_spawn_fraction;
-		let growth_r = self.jungle_growth_radius_scale;
-		let nodes = match level {
-			LodSceneLevel::High => foliage_nodes_high(&self.chain, g, growth_r, leaf_r),
-			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, g, growth_r, leaf_r),
-			LodSceneLevel::Low
-			| LodSceneLevel::UltraLow
-			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, g, growth_r, leaf_r),
-		};
-		Layers::from_free(nodes)
+		Layers::from_free(foliage_nodes_for_level(
+			&self.chain,
+			level,
+			self.growth_spawn_fraction,
+			self.jungle_growth_radius_scale,
+			self.leaf_radius_world(),
+		))
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {

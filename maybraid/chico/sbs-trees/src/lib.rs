@@ -6,6 +6,7 @@ mod conifer_canopy_apex;
 pub mod date_palm;
 pub mod friends_conifer;
 pub mod honu_banyan;
+mod jungle_canopy_vc;
 mod jungle_growth_vc;
 pub mod jungle_storybook_tree;
 pub mod kamakura_torch;

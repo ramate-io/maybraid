@@ -6,11 +6,9 @@
 //! Structural LOD:
 //! - **High** — full sticks (3×4 rings, depth 3..5, child 1..3, ±70° ray, longer hops); jungle growth + banded canopy
 //! - **Medium** — trunk + banded sticks; banded growth/canopy + mid layered proxy
-//! - **Low** — trunk + ~1/4 descenders; growth/canopy balls + mid proxy
+//! - **Low** — trunk + ~1/4 descenders; cheap canopy balls + mid proxy
 
 mod canopy;
-#[allow(dead_code)]
-mod joint_ball;
 pub mod render_item_plugin;
 mod stick;
 
@@ -22,9 +20,7 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{
-	foliage_nodes_high, foliage_nodes_low, foliage_nodes_medium, DEFAULT_HONU_GROWTH_RADIUS_SCALE,
-};
+use canopy::{foliage_nodes_for_level, DEFAULT_HONU_GROWTH_RADIUS_SCALE};
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
@@ -122,20 +118,14 @@ impl HonuBanyan {
 	}
 
 	fn foliage_for(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
-		let min_y = self.geometry.crown_floor_world_y();
-		let leaf_r = self.geometry.leaf_ball_size();
-		let g = self.growth_spawn_fraction;
-		let growth_r = self.jungle_growth_radius_scale;
-		match level {
-			LodSceneLevel::High => foliage_nodes_high(&self.chain, g, growth_r, min_y, leaf_r),
-			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, g, growth_r, min_y, leaf_r),
-			LodSceneLevel::Low
-			| LodSceneLevel::UltraLow
-			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				foliage_nodes_low(&self.chain, g, growth_r, min_y, leaf_r)
-			}
-		}
+		foliage_nodes_for_level(
+			&self.chain,
+			level,
+			self.growth_spawn_fraction,
+			self.jungle_growth_radius_scale,
+			self.geometry.crown_floor_world_y(),
+			self.geometry.leaf_ball_size(),
+		)
 	}
 }
 
