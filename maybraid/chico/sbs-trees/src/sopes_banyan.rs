@@ -4,9 +4,9 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Structural LOD (tree-radius bands):
-//! - **High** — within `3 ×` tree radius: full sticks + full canopy
-//! - **Medium** — `3…12 ×` radius: trunk + band-sampled sticks; azimuth×height outer foliage
-//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; coarser azimuth×height foliage
+//! - **High** — within `3 ×` tree radius: full sticks; dense azimuth×height layered canopy
+//! - **Medium** — `3…12 ×` radius: trunk + band-sampled sticks; denser layered outer foliage
+//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; coarser cheap-ball outer foliage
 
 mod canopy;
 mod stick;
@@ -20,7 +20,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use canopy::{
-	banded_outer_canopy_balls, foliage_node_for_terminal, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+	banded_outer_canopy_balls, CanopyBallKit, HIGH_FOLIAGE_BANDS, LOW_FOLIAGE_BANDS,
+	MEDIUM_FOLIAGE_BANDS,
 };
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
@@ -102,12 +103,13 @@ impl SopesBanyan {
 	}
 
 	fn foliage_nodes_high(&self) -> Vec<FoliageNode> {
-		let min_height = self.geometry.crown_floor_world_y();
-		let leaf_radius_world = self.geometry.leaf_ball_size();
-		self.chain
-			.nodes()
-			.filter_map(|node| foliage_node_for_terminal(node, min_height, leaf_radius_world))
-			.collect()
+		banded_outer_canopy_balls(
+			&self.chain,
+			HIGH_FOLIAGE_BANDS,
+			self.geometry.crown_floor_world_y(),
+			self.geometry.leaf_ball_size(),
+			CanopyBallKit::Layered,
+		)
 	}
 
 	fn foliage_nodes_medium(&self) -> Vec<FoliageNode> {
@@ -116,6 +118,7 @@ impl SopesBanyan {
 			MEDIUM_FOLIAGE_BANDS,
 			self.geometry.crown_floor_world_y(),
 			self.geometry.leaf_ball_size(),
+			CanopyBallKit::Layered,
 		)
 	}
 
@@ -125,6 +128,7 @@ impl SopesBanyan {
 			LOW_FOLIAGE_BANDS,
 			self.geometry.crown_floor_world_y(),
 			self.geometry.leaf_ball_size(),
+			CanopyBallKit::Cheap,
 		)
 	}
 }
