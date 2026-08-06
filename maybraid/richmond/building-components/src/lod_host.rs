@@ -89,7 +89,8 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 
 /// Warm host whose level roots are arbitrary scene content (composite IR nodes).
 ///
-/// Pass High / Medium / Low today; add UltraLow when domain content needs a distinct far root.
+/// Pass High / Medium / Low, and UltraLow when the domain has a distinct far root
+/// (panels use flat low-res via [`warm_content_host_hslu`]).
 pub fn warm_content_host<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,
 	probe: P,
@@ -120,6 +121,27 @@ pub fn warm_content_host_hsl<P: Component + Clone + Default + Unpin>(
 			(LodSceneLevel::High, Box::new(high) as Box<dyn Scene>),
 			(LodSceneLevel::Medium, Box::new(mid) as Box<dyn Scene>),
 			(LodSceneLevel::Low, Box::new(low) as Box<dyn Scene>),
+		],
+	)
+}
+
+/// Convenience: warm High / Medium / Low / UltraLow content roots.
+pub fn warm_content_host_hslu<P: Component + Clone + Default + Unpin>(
+	level: LodSceneLevel,
+	probe: P,
+	high: impl Scene + 'static,
+	mid: impl Scene + 'static,
+	low: impl Scene + 'static,
+	ultra_low: impl Scene + 'static,
+) -> impl Scene + 'static {
+	warm_content_host(
+		level,
+		probe,
+		[
+			(LodSceneLevel::High, Box::new(high) as Box<dyn Scene>),
+			(LodSceneLevel::Medium, Box::new(mid) as Box<dyn Scene>),
+			(LodSceneLevel::Low, Box::new(low) as Box<dyn Scene>),
+			(LodSceneLevel::UltraLow, Box::new(ultra_low) as Box<dyn Scene>),
 		],
 	)
 }

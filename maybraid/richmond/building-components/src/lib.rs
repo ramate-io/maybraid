@@ -30,14 +30,16 @@ pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
 pub use lod_band::{warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
 pub use lod_host::{
-	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
-	WarmAssetLodRoots,
+	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_content_host_hslu,
+	warm_mesh_level_host, WarmAssetLodRoots,
 };
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
-	with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelNode, PanelStyle,
-	Rectangle as PanelRectangle, RightTriangle as PanelRightTriangle, TessellatedTriangle,
-	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,
+	PanelLodProbe, PanelNode, PanelStyle, Rectangle as PanelRectangle,
+	RightTriangle as PanelRightTriangle, TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE,
+	DEFAULT_TILE_WIDTH, PANEL_HIGH_FACTOR, PANEL_LOW_FACTOR, PANEL_MEDIUM_FACTOR,
+	PANEL_ULTRA_LOW_RECTANGLE, PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 };
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,

@@ -23,8 +23,8 @@ use preview::{
 	draw_opening_plan_gizmos, draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
-	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
-	FurnitureWireframePlugin, LabelWireframePlugin, WarmAssetLodRoots,
+	apply_parent_confines, update_panel_host_levels, update_partition_host_levels,
+	update_roof_host_levels, FurnitureWireframePlugin, LabelWireframePlugin, WarmAssetLodRoots,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 use scene_ref::SceneRefPlugin;
@@ -60,6 +60,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					draw_label_text_gizmos.after(present_preview_lod),
 					draw_roof_complex_gizmos.after(present_preview_lod),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
+					update_panel_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					update_roof_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					apply_parent_confines.after(LodFinePassSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

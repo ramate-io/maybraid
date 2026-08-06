@@ -7,9 +7,11 @@ use scene_ref::MirrorAxis;
 
 use crate::assets::AssetPath;
 use crate::panels::geometry::{PanelGeometry, Rectangle, RightTriangle};
+use crate::panels::lod::{
+	leaf_panel_scene_ref_lod, PANEL_ULTRA_LOW_RECTANGLE, PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
+};
 use crate::panels::style::PanelStyle;
 use crate::placed::Placement;
-use crate::roofs::lod::leaf_scene_ref_lod;
 use crate::scene_children::{pose, scene_children, with_pose};
 
 /// Authoring IR for a shared panel feature (rectangle / triangle tessellation).
@@ -34,17 +36,19 @@ impl PanelNode {
 	}
 }
 
-fn lod_triad_scene(
+fn lod_quad_scene(
 	high: AssetPath,
 	mid: AssetPath,
 	low: AssetPath,
+	ultra_low: AssetPath,
 	lod_ref: &LodRef,
 	mirror: Option<MirrorAxis>,
 ) -> impl Scene + 'static {
-	leaf_scene_ref_lod(
+	leaf_panel_scene_ref_lod(
 		high.scene_ref().with_mirror(mirror),
 		mid.scene_ref().with_mirror(mirror),
 		low.scene_ref().with_mirror(mirror),
+		ultra_low.scene_ref().with_mirror(mirror),
 		lod_ref,
 	)
 }
@@ -72,14 +76,28 @@ impl LodScene for PanelNode {
 						let (high, mid, low) = self.style.rectangle_lod()?;
 						Some(Box::new(with_pose(
 							transform,
-							lod_triad_scene(high, mid, low, lod_ref, None),
+							lod_quad_scene(
+								high,
+								mid,
+								low,
+								PANEL_ULTRA_LOW_RECTANGLE,
+								lod_ref,
+								None,
+							),
 						)) as Box<dyn Scene>)
 					}
 					PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 						let (high, mid, low) = self.style.right_triangle_lod()?;
 						Some(Box::new(with_pose(
 							transform,
-							lod_triad_scene(high, mid, low, lod_ref, mirror),
+							lod_quad_scene(
+								high,
+								mid,
+								low,
+								PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
+								lod_ref,
+								mirror,
+							),
 						)) as Box<dyn Scene>)
 					}
 					_ => None,
