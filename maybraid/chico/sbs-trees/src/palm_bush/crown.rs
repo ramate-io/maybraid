@@ -49,6 +49,7 @@ pub fn frond_shape_for_ring(
 	}
 }
 
+#[allow(dead_code)]
 pub fn spawn_crown_rings<LeafM, LeafS>(
 	geometry: &PalmBushSbs,
 	commands: &mut Commands,

@@ -1,111 +1,136 @@
 //! **Palm Bush** — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231), [RFC §3.1.7.10](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/10-palm-bush/README.md)).
+//!
+//! [`PalmBushParams::build`] resolves ring anchors into [`PalmBush`], which implements
+//! [`VegetationComponents`]: per-frond collections at High/Medium; dual layered-ball proxy
+//! at Low/UltraLow (no sticks).
 
 mod crown;
 pub mod render_item_plugin;
+#[allow(dead_code)]
 mod tuft;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
+use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::PalmBushSbs;
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+};
 use clap::Args;
-use render_item::{CascadeChunk, RenderItem};
+use lod::gen::LodSceneLevel;
 
-use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
-use crown::spawn_crown_rings;
-use tuft::spawn_crown_tuft;
+use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_tree::{
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_probe,
+	world_space_frond_shape,
+};
+use crown::frond_shape_for_ring;
 
-/// Typical [`StandardMaterial`] Palm Bush using CLI-skipped leaf handles.
-pub type PalmBushStd = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
-
-/// Foliage noise (seed, surface frequency / amplitude) lives on
-/// [`PalmBushSbs::foliage_noise`]; hoist per-instance noise in with
-/// [`PalmBushSbs::with_noise_params`].
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Palm Bush.
+#[derive(Component, Clone, Args, Debug, PartialEq)]
 #[command(rename_all = "kebab-case")]
-pub struct PalmBush<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct PalmBushParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: PalmBushSbs,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(skip)]
-	__marker: PhantomData<fn() -> LeafM>,
 }
 
-impl<LeafM, LeafS> Default for PalmBush<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for PalmBushParams {
 	fn default() -> Self {
-		Self {
-			geometry: PalmBushSbs::default(),
-			leaf_material: LeafS::default(),
-			__marker: PhantomData,
+		Self { geometry: PalmBushSbs::default() }
+	}
+}
+
+impl PalmBushParams {
+	pub fn new(geometry: PalmBushSbs) -> Self {
+		Self { geometry }
+	}
+
+	pub fn build(&self) -> PalmBush {
+		PalmBush::from_params(self)
+	}
+}
+
+/// Built Palm Bush: geometry (ring anchors are derived on demand).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PalmBush {
+	pub geometry: PalmBushSbs,
+}
+
+impl PalmBush {
+	pub fn from_params(params: &PalmBushParams) -> Self {
+		Self { geometry: params.geometry.clone() }
+	}
+
+	fn foliage_seed(&self) -> i32 {
+		self.geometry.foliage_noise.seed
+	}
+
+	fn ring_shapes(&self) -> Vec<(Vec3, FrondCrownShape)> {
+		let seed = self.foliage_seed();
+		let scale = self.geometry.frond_world_scale;
+		(0..self.geometry.crown.ring_count)
+			.map(|ring| {
+				let anchor = self.geometry.crown_ring_position(ring);
+				let local = frond_shape_for_ring(
+					&self.geometry,
+					ring,
+					seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT),
+				);
+				(anchor, world_space_frond_shape(local, scale))
+			})
+			.collect()
+	}
+}
+
+impl VegetationComponents for PalmBush {
+	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+		Layers::new()
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				Layers::from_free(frond_collection_nodes(self.ring_shapes()))
+			}
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => {
+				let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+				Layers::from_free(layered_proxy_balls(min, max))
+			}
 		}
 	}
-}
 
-impl<LeafM, LeafS> PalmBush<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn new(geometry: PalmBushSbs, leaf_material: LeafS) -> Self {
-		Self { geometry, leaf_material, __marker: PhantomData }
-	}
-}
-
-impl<LeafM, LeafS> RenderItem for PalmBush<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-
-		spawn_crown_rings::<LeafM, LeafS>(
-			&self.geometry,
-			commands,
-			cascade_chunk,
-			root,
-			self.leaf_material.clone(),
-		);
-
-		spawn_crown_tuft::<LeafM, LeafS>(
-			&self.geometry,
-			commands,
-			cascade_chunk,
-			root,
-			self.leaf_material.clone(),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+		let center = (min + max) * 0.5;
+		let radius = ((max - min) * 0.5).max_element().max(1e-3);
+		Some(palm_structural_probe(center, radius))
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use anyhow::Result;
+	use lod::gen::LodSceneLevel;
 
 	#[test]
-	fn default_geometry_ring_count_matches_crown_params() {
-		let bush =
-			PalmBush::<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>::default();
-		assert_eq!(bush.geometry.crown.ring_count, 8);
-		assert_eq!(bush.geometry.crown.fronds_per_ring, 12);
+	fn high_emits_per_frond_collections() -> Result<()> {
+		let built = PalmBushParams::default().build();
+		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		let expected = built.geometry.crown.ring_count * built.geometry.crown.fronds_per_ring;
+		assert_eq!(nodes.len() as u32, expected);
+		assert!(nodes[0].geometry.as_frond_collection().is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn low_is_two_layered_balls() -> Result<()> {
+		let built = PalmBushParams::default().build();
+		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+		assert_eq!(low.len(), 2);
+		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
 	}
 }

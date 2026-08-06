@@ -261,10 +261,7 @@ fn attach_render_materials(
 ) {
 	match subject {
 		RenderSubject::SopesBanyan(_tree) => {}
-		RenderSubject::LiamsConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::LiamsConifer(_tree) => {}
 		RenderSubject::FriendsConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
@@ -274,17 +271,9 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
-		RenderSubject::DatePalm(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::WaialeaPalm(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
-		RenderSubject::PalmBush(tree) => {
-			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::DatePalm(_tree) => {}
+		RenderSubject::WaialeaPalm(_tree) => {}
+		RenderSubject::PalmBush(_tree) => {}
 		RenderSubject::StorybookTree(_tree) => {}
 		RenderSubject::PenmarchTorch(_tree) => {}
 		RenderSubject::KamakuraTorch(_tree) => {}

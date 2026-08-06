@@ -45,14 +45,14 @@ use chico_grove_render_items::vineyard::VineyardStd;
 use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
 use chico_grove_render_items::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::date_palm::DatePalm;
+use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
-use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::liams_conifer::LiamsConiferParams;
 use chico_sbs_trees::northern_conifer::NorthernConiferParams;
-use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::palm_bush::PalmBushParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
@@ -61,7 +61,7 @@ use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
 use chico_sbs_trees::vase_tree::VaseTreeParams;
-use chico_sbs_trees::waialea_palm::WaialeaPalm;
+use chico_sbs_trees::waialea_palm::WaialeaPalmParams;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
@@ -88,13 +88,8 @@ pub type RenderHonuBanyan = HonuBanyan<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-/// [`LiamsConifer`] configured for this playground (green [`StandardMaterial`] tufts for shape debugging).
-pub type RenderLiamsConifer = LiamsConifer<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
+/// [`LiamsConifer`] — VegetationComponents / LodScene.
+pub type RenderLiamsConifer = LiamsConiferParams;
 
 /// [`FriendsConifer`] — log-profile conifer with plane-splay foliage ([#236](https://github.com/ramate-io/maybraid/issues/236)).
 pub type RenderFriendsConifer = FriendsConifer<
@@ -116,23 +111,13 @@ pub type RenderTemperateConifer = TemperateConifer<
 >;
 
 /// [`DatePalm`] — columnar trunk + stacked frond crown ([#256](https://github.com/ramate-io/maybraid/issues/256)).
-pub type RenderDatePalm = DatePalm<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderDatePalm = DatePalmParams;
 
 /// [`WaialeaPalm`] — arched trunk + light upward frond crown ([#255](https://github.com/ramate-io/maybraid/issues/255)).
-pub type RenderWaialeaPalm = WaialeaPalm<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+pub type RenderWaialeaPalm = WaialeaPalmParams;
 
 /// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
-pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderPalmBush = PalmBushParams;
 
 /// [`TuftPatch`] — blade tufts scattered over a small ground area (VegetationComponents).
 pub type RenderTuftPatch = TuftPatchParams;
@@ -1028,7 +1013,11 @@ impl RenderSubject {
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
 			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::LiamsConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::LiamsConifer(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::FriendsConifer(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::NorthernConifer(item) => {
 				let tree = item.build();
@@ -1036,9 +1025,21 @@ impl RenderSubject {
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
 			Self::TemperateConifer(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::DatePalm(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::WaialeaPalm(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::PalmBush(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::DatePalm(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
+			Self::WaialeaPalm(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
+			Self::PalmBush(item) => {
+				let bush = item.build();
+				let bounds = vegetation_bounds(&bush);
+				spawn_vegetation_components(commands, &bush, transform, bounds)
+			}
 			Self::StorybookTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);

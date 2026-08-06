@@ -4,7 +4,8 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
-use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::palm_bush::PalmBushParams;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
@@ -229,15 +230,11 @@ where
 			let entities = match placed.variant.item() {
 				TropicalThicketItem::Palm(palm) => {
 					let geometry = palm.build_with_noise(foliage_noise);
-					let bush = PalmBush::new(geometry, self.leaf_material.clone());
-					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						foliage_noise.seed,
-						commands,
-					);
-					entities
+					let mut params = PalmBushParams::default();
+					params.geometry = geometry;
+					let bush = params.build();
+					let bounds = vegetation_bounds(&bush);
+					spawn_vegetation_components(commands, &bush, local, bounds)
 				}
 				TropicalThicketItem::Bush(bush) => {
 					let chain_noise = placement_noise(self.bush_chain_noise, placed.position);

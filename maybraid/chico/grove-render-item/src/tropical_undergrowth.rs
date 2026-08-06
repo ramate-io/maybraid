@@ -7,7 +7,7 @@ use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds
 use chico_ball_components::tuft::BladeTuft;
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
-use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::palm_bush::PalmBushParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
@@ -236,15 +236,11 @@ where
 				}
 				TropicalUndergrowthItem::PalmBush(palm) => {
 					let geometry = palm.build_with_noise(foliage_noise);
-					let bush = PalmBush::new(geometry, self.leaf_material.clone());
-					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						foliage_noise.seed,
-						commands,
-					);
-					entities
+					let mut params = PalmBushParams::default();
+					params.geometry = geometry;
+					let bush = params.build();
+					let bounds = vegetation_bounds(&bush);
+					spawn_vegetation_components(commands, &bush, local, bounds)
 				}
 				TropicalUndergrowthItem::RoryHead(rory) => {
 					let build_noise = placement_noise(self.grove.noise, placed.position);

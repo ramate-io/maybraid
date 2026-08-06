@@ -1,162 +1,121 @@
 //! **Waialea Palm** — arched trunk + light upward frond crown ([#255](https://github.com/ramate-io/maybraid/issues/255), [RFC §3.1.7.8](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/08-waialea-palm/README.md)).
-
-//! # Intent
 //!
-//! Gently arched [`WaialeaPalmChain`](chico_sbs_geometry::WaialeaPalmChain) trunk via [`ArchTrunk`](chico_sbs_geometry::ArchTrunk);
-//! upward-stacked [`FrondCrown`](chico_ball_components::frond::FrondCrown) rings and optional concealment tuft at the tip.
+//! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
+//! implements [`VegetationComponents`]: trunk sticks; per-frond collections at High/Medium;
+//! dual layered-ball crown proxy at Low/UltraLow.
 
 mod crown;
 pub mod render_item_plugin;
+#[allow(dead_code)]
 mod stick;
+#[allow(dead_code)]
 mod tuft;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::WaialeaPalmSbs;
+use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::{BallStickChain, WaialeaPalmChain, WaialeaPalmSbs};
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+};
 use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
+use lod::gen::LodSceneLevel;
 
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use crown::spawn_crown_rings;
-use stick::WaialeaPalmStickRule;
-use tuft::spawn_crown_tuft;
+use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_tree::{
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_probe,
+	trunk_stick_nodes, world_space_frond_shape,
+};
+use crate::torch_tree::structural_tree_radius;
+use crown::frond_shape_for_ring;
 
-/// Typical [`StandardMaterial`] Waialea Palm using CLI-skipped handles.
-pub type WaialeaPalmStd = WaialeaPalm<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
-
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Waialea Palm.
+#[derive(Component, Clone, Args, Debug, PartialEq)]
 #[command(rename_all = "kebab-case")]
-pub struct WaialeaPalm<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct WaialeaPalmParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: WaialeaPalmSbs,
-
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Trunk Surface Noise"
-	)]
-	pub stick_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Foliage Surface Noise"
-	)]
-	pub foliage_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> LeafM)>,
 }
 
-impl<StickM, StickS, LeafM, LeafS> Default for WaialeaPalm<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for WaialeaPalmParams {
 	fn default() -> Self {
+		Self { geometry: WaialeaPalmSbs::default() }
+	}
+}
+
+impl WaialeaPalmParams {
+	pub fn build(&self) -> WaialeaPalm {
+		WaialeaPalm::from_params(self)
+	}
+}
+
+/// Built Waialea Palm: geometry plus a single grown arched trunk chain.
+#[derive(Clone)]
+pub struct WaialeaPalm {
+	pub geometry: WaialeaPalmSbs,
+	pub chain: BallStickChain<WaialeaPalmChain>,
+}
+
+impl WaialeaPalm {
+	pub fn from_params(params: &WaialeaPalmParams) -> Self {
 		Self {
-			geometry: WaialeaPalmSbs::default(),
-			stick_material: StickS::default(),
-			leaf_material: LeafS::default(),
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
+			geometry: params.geometry.clone(),
+			chain: params.geometry.build_chain(),
 		}
 	}
-}
 
-impl<StickM, StickS, LeafM, LeafS> WaialeaPalm<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn build_chain(
-		&self,
-	) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::WaialeaPalmChain> {
-		self.geometry.build_chain()
+	fn foliage_seed(&self) -> i32 {
+		self.geometry.trunk_noise.seed
+	}
+
+	fn ring_shapes(&self) -> Vec<(Vec3, FrondCrownShape)> {
+		let seed = self.foliage_seed();
+		let scale = self.geometry.frond_world_scale;
+		(0..self.geometry.crown.ring_count)
+			.map(|ring| {
+				let anchor = self.geometry.crown_ring_position(&self.chain, ring);
+				let local = frond_shape_for_ring(
+					&self.geometry,
+					ring,
+					seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT),
+				);
+				(anchor, world_space_frond_shape(local, scale))
+			})
+			.collect()
+	}
+
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
+		)
 	}
 }
 
-impl<StickM, StickS, LeafM, LeafS> RenderItem for WaialeaPalm<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let chain = self.build_chain();
+impl VegetationComponents for WaialeaPalm {
+	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+		Layers::from_free(trunk_stick_nodes(&self.chain))
+	}
 
-		let stick_rule = WaialeaPalmStickRule::<StickM, StickS> {
-			surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
-		};
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				Layers::from_free(frond_collection_nodes(self.ring_shapes()))
+			}
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => {
+				let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+				Layers::from_free(layered_proxy_balls(min, max))
+			}
+		}
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		spawn_crown_rings(
-			&self.geometry,
-			&chain,
-			commands,
-			cascade_chunk,
-			root,
-			&self.foliage_noise,
-			self.leaf_material.clone(),
-		);
-
-		spawn_crown_tuft(
-			&self.geometry,
-			&chain,
-			commands,
-			cascade_chunk,
-			root,
-			&self.foliage_noise,
-			self.leaf_material.clone(),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+		let crown_center = (min + max) * 0.5;
+		let crown_r = ((max - min) * 0.5).max_element();
+		let radius = structural_tree_radius(self.footprint_radius(), self.geometry.height())
+			.max(crown_r);
+		Some(palm_structural_probe(crown_center, radius))
 	}
 }

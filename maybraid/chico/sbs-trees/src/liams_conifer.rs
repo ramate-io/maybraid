@@ -1,157 +1,120 @@
-//! **Liam's Conifer** — sparse dry conifer assembly for Chico ([RFC-183 §3.1.7.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/02-liam-s-conifer/README.md), [#244](https://github.com/ramate-io/maybraid/issues/244)).
+//! **Liam's Conifer** — sparse dry conifer ([RFC-183 §3.1.7.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/02-liam-s-conifer/README.md), [#244](https://github.com/ramate-io/maybraid/issues/244)).
 //!
-//! # Intent
-//!
-//! Narrow vertical stalk plus dense anchor rings and three-segment sparse canopy chains from [`chico_sbs_geometry`](chico_sbs_geometry). Segment meshes use [`ChicoStick`](chico_stick_components::chico_stick::ChicoStick); [`SucculentTuft`](chico_ball_components::tuft::SucculentTuft) at every ball-stick joint.
-//!
-//! # Rendering split
-//!
-//! - **Stick material** — all graph segments.
-//! - **Leaf material** — 2–3 tufts per joint at [`LiamsConiferSbs::tuft_world_scale`].
+//! [`LiamsConiferParams::build`] grows the ball-stick chain once into [`LiamsConifer`], which
+//! implements [`VegetationComponents`]. Sticks reuse Northern / Liam banding; foliage uses
+//! cheap-ball joint clusters sized by [`LiamsConiferSbs::tuft_world_scale`] (no SucculentTuft
+//! mesh under VegetationComponents).
 
 pub mod render_item_plugin;
+#[allow(dead_code)]
 pub mod stick;
+#[allow(dead_code)]
 mod tuft;
 
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
-use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::render::tuft::TuftRenderHelper;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
+use chico_vegetation_components::{
+	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+};
 use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
+use lod::gen::LodSceneLevel;
 
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use stick::LiamsConiferStickRule;
-use tuft::LiamsConiferTuftRule;
+use crate::northern_conifer::canopy::{
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
+};
+use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+use crate::torch_tree::structural_lod_probe;
 
-/// Typical [`StandardMaterial`] tree using CLI-skipped handles for bark and foliage.
-pub type LiamsConiferStd = LiamsConifer<
-	StandardMaterial,
-	SkippedStickMeshMaterial<StandardMaterial>,
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
-
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for Liam's Conifer.
+#[derive(Component, Clone, Args, Debug)]
 #[command(rename_all = "kebab-case")]
-pub struct LiamsConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct LiamsConiferParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: LiamsConiferSbs,
-
-	#[command(flatten, next_help_heading = "Stick Material")]
-	pub stick_material: StickS,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.05,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Surface Noise"
-	)]
-	pub stick_surface_noise: NoiseParams,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-		help_heading = "Surface Noise"
-	)]
-	pub leaf_surface_noise: NoiseParams,
-
-	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> LeafM)>,
 }
 
-impl<StickM, StickS, LeafM, LeafS> Default for LiamsConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for LiamsConiferParams {
 	fn default() -> Self {
+		Self { geometry: LiamsConiferSbs::default() }
+	}
+}
+
+impl LiamsConiferParams {
+	pub fn build(&self) -> LiamsConifer {
+		LiamsConifer::from_params(self)
+	}
+}
+
+/// Built Liam's Conifer: params plus a single grown [`BallStickChain`].
+#[derive(Clone)]
+pub struct LiamsConifer {
+	pub geometry: LiamsConiferSbs,
+	pub chain: BallStickChain<LiamsConiferChain>,
+}
+
+impl LiamsConifer {
+	pub fn from_params(params: &LiamsConiferParams) -> Self {
 		Self {
-			geometry: LiamsConiferSbs::default(),
-			stick_material: StickS::default(),
-			leaf_material: LeafS::default(),
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			__marker: PhantomData,
+			geometry: params.geometry.clone(),
+			chain: params.geometry.build_chain(),
 		}
 	}
-}
 
-impl<StickM, StickS, LeafM, LeafS> LiamsConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn build_chain(&self) -> BallStickChain<LiamsConiferChain> {
-		self.geometry.build_chain()
+	fn footprint_radius(&self) -> f32 {
+		self.chain.footprint_radius_at_least(
+			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
+		)
+	}
+
+	fn structural_center(&self) -> Vec3 {
+		Vec3::new(0.0, self.geometry.scale.stalk_height * 0.5, 0.0)
+	}
+
+	fn height(&self) -> f32 {
+		self.geometry.scale.stalk_height.max(1e-6)
+	}
+
+	fn tuft_radius_world(&self) -> f32 {
+		self.geometry.tuft_world_scale()
 	}
 }
 
-impl<StickM, StickS, LeafM, LeafS> RenderItem for LiamsConifer<StickM, StickS, LeafM, LeafS>
-where
-	StickM: Material + Send + Sync + 'static,
-	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-		let chain = self.build_chain();
-
-		let stick_rule = LiamsConiferStickRule::<StickM, StickS> {
-			surface_noise: self.stick_surface_noise,
-			stick_material: self.stick_material.clone(),
-			__marker: PhantomData,
+impl VegetationComponents for LiamsConifer {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		let nodes = match level {
+			LodSceneLevel::High => stick_nodes_high(&self.chain),
+			LodSceneLevel::Medium => stick_nodes_medium(&self.chain),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
+		Layers::from_free(nodes)
+	}
 
-		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		let tuft_rule = LiamsConiferTuftRule::<LeafM, LeafS> {
-			tuft_world_scale: self.geometry.tuft_world_scale(),
-			leaf_surface_noise: self.leaf_surface_noise,
-			leaf_material: self.leaf_material.clone(),
-			__marker: PhantomData,
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let tuft_r = self.tuft_radius_world();
+		// No apex ball for Liam's (Northern-only); all joints get cheap-ball tuft proxies.
+		let nodes = match level {
+			LodSceneLevel::High => {
+				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, tuft_r, 1.0, 0.0, 0.0)
+			}
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, tuft_r, 1.0, 0.0, 0.0),
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => {
+				foliage_nodes_low(&self.chain, tuft_r, 1.0, 0.0, 0.0)
+			}
 		};
+		Layers::from_free(nodes)
+	}
 
-		TuftRenderHelper::new(chain, tuft_rule).spawn_render_items_under(
-			commands,
-			cascade_chunk,
-			Transform::IDENTITY,
-			Some(root),
-		);
-
-		vec![root]
+	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		Some(structural_lod_probe(
+			self.structural_center(),
+			self.footprint_radius(),
+			self.height(),
+		))
 	}
 }

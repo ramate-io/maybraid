@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
-use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::liams_conifer::LiamsConiferParams;
 use chico_sbs_trees::northern_conifer::NorthernConiferParams;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
@@ -251,27 +251,11 @@ where
 				}
 				ConiferMassivesItem::LiamsConifer(conifer) => {
 					let geometry = conifer.build_with_noise(build_noise);
-					let mut tree = LiamsConifer::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = geometry;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = LiamsConiferParams::default();
+					params.geometry = geometry;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 				ConiferMassivesItem::TemperateConifer(temperate) => {
 					let samples = temperate.build_with_noise(build_noise);

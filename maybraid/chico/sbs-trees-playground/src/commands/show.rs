@@ -2,9 +2,9 @@
 
 use bevy::prelude::*;
 use chico_sbs_trees::{
-	KamakuraTorchParams, NorthernConiferParams, PalmCrownParams, PenmarchTorchParams,
-	RorysHeadTrainedParams, SopesBanyanParams, StorybookTreeParams, TuftPatchParams,
-	VaseTreeParams,
+	DatePalmParams, KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams,
+	PalmBushParams, PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams,
+	SopesBanyanParams, StorybookTreeParams, TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
 	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
@@ -30,10 +30,18 @@ pub enum Show {
 	VaseTree(ShowVaseTree),
 	/// Northern Conifer via VegetationComponents / LodScene.
 	NorthernConifer(ShowNorthernConifer),
+	/// Liam's Conifer via VegetationComponents / LodScene.
+	LiamsConifer(ShowLiamsConifer),
 	/// Tuft Patch via VegetationComponents / LodScene (straight frond segments).
 	TuftPatch(ShowTuftPatch),
 	/// Palm Crown via VegetationComponents / LodScene (fronds; layered ball at Low).
 	PalmCrown(ShowPalmCrown),
+	/// Date Palm via VegetationComponents / LodScene.
+	DatePalm(ShowDatePalm),
+	/// Waialea Palm via VegetationComponents / LodScene.
+	WaialeaPalm(ShowWaialeaPalm),
+	/// Palm Bush via VegetationComponents / LodScene.
+	PalmBush(ShowPalmBush),
 }
 
 #[derive(Clone, Args)]
@@ -87,6 +95,13 @@ pub struct ShowNorthernConifer {
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
+pub struct ShowLiamsConifer {
+	#[command(flatten)]
+	pub tree: LiamsConiferParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
 pub struct ShowTuftPatch {
 	#[command(flatten)]
 	pub patch: TuftPatchParams,
@@ -99,6 +114,27 @@ pub struct ShowPalmCrown {
 	pub crown: PalmCrownParams,
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowDatePalm {
+	#[command(flatten)]
+	pub tree: DatePalmParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowWaialeaPalm {
+	#[command(flatten)]
+	pub tree: WaialeaPalmParams,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowPalmBush {
+	#[command(flatten)]
+	pub bush: PalmBushParams,
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -109,8 +145,12 @@ impl Show {
 			Self::StorybookTree(args) => ShowSubject::StorybookTree(args.tree),
 			Self::VaseTree(args) => ShowSubject::VaseTree(args.tree),
 			Self::NorthernConifer(args) => ShowSubject::NorthernConifer(args.tree),
+			Self::LiamsConifer(args) => ShowSubject::LiamsConifer(args.tree),
 			Self::TuftPatch(args) => ShowSubject::TuftPatch(args.patch),
 			Self::PalmCrown(args) => ShowSubject::PalmCrown(args.crown),
+			Self::DatePalm(args) => ShowSubject::DatePalm(args.tree),
+			Self::WaialeaPalm(args) => ShowSubject::WaialeaPalm(args.tree),
+			Self::PalmBush(args) => ShowSubject::PalmBush(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -130,8 +170,12 @@ pub enum ShowSubject {
 	StorybookTree(StorybookTreeParams),
 	VaseTree(VaseTreeParams),
 	NorthernConifer(NorthernConiferParams),
+	LiamsConifer(LiamsConiferParams),
 	TuftPatch(TuftPatchParams),
 	PalmCrown(PalmCrownParams),
+	DatePalm(DatePalmParams),
+	WaialeaPalm(WaialeaPalmParams),
+	PalmBush(PalmBushParams),
 }
 
 #[derive(Component)]
@@ -175,6 +219,7 @@ pub fn sync_show(
 				t.apex_canopy_spawn_fraction
 			))
 		}
+		Some(ShowSubject::LiamsConifer(t)) => Some(format!("liams-conifer:{:?}", t.geometry)),
 		Some(ShowSubject::TuftPatch(t)) => Some(format!(
 			"tuft-patch:{:?}|clumps={}|patch_extent_xz={}",
 			t.shape, t.clump_count, t.patch_extent_xz
@@ -183,6 +228,9 @@ pub fn sync_show(
 			"palm-crown:{:?}|rings={}|spacing={}",
 			t.shape, t.ring_count, t.ring_spacing
 		)),
+		Some(ShowSubject::DatePalm(t)) => Some(format!("date-palm:{:?}", t.geometry)),
+		Some(ShowSubject::WaialeaPalm(t)) => Some(format!("waialea-palm:{:?}", t.geometry)),
+		Some(ShowSubject::PalmBush(t)) => Some(format!("palm-bush:{:?}", t.geometry)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -207,7 +255,11 @@ pub fn sync_show(
 		ShowSubject::StorybookTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::VaseTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::NorthernConifer(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::LiamsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::TuftPatch(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmCrown(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::DatePalm(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::WaialeaPalm(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::PalmBush(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }

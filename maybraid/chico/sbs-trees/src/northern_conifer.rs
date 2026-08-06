@@ -7,9 +7,9 @@
 //! Foliage uses cheap-ball banding; Medium is ~30% fewer cells; Medium/Low share a thin
 //! top-anchored full-height layered canopy proxy (Low emits it twice).
 
-mod canopy;
+pub(crate) mod canopy;
 pub mod render_item_plugin;
-mod stick;
+pub(crate) mod stick;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
