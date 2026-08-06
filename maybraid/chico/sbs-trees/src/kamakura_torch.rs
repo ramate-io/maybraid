@@ -13,7 +13,7 @@ use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
 	foliage_nodes_banded, foliage_nodes_low, stick_nodes_high, stick_nodes_low,
-	stick_nodes_medium, HIGH_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+	stick_nodes_medium, structural_lod_probe, HIGH_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
 
 /// Authoring / CLI parameters for Kamakura Torch.
@@ -99,9 +99,10 @@ impl VegetationComponents for KamakuraTorch {
 	}
 
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(VegetationStructuralLodProbe::new(
+		Some(structural_lod_probe(
 			self.structural_center(),
 			self.footprint_radius(),
+			self.geometry.height(),
 		))
 	}
 }
