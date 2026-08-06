@@ -43,6 +43,7 @@ Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura 
 - **Silhouette sampling:** azimuth × height outer picks beat “every Nth” or global outer shells for vase / torch profiles. For sticks, sample the **outermost endpoint** (not the midpoint) — midpoints sit inward on steep limbs and lose the contest.
 - **Share what is shared:** Penmarch and Kamakura share [`torch_tree`](./chico/sbs-trees/src/torch_tree.rs) stick + canopy emission. Rory can reuse stick thinning and structural factors but keep its own foliage **candidate** policy (joints vs selective BranchOut). Layered **mass proxies** are optional per tree and LOD — tune mid vs upper placement; some trees want none (e.g. Rory).
 - **Foliage kits:** `cheap_ball` for dense banded samples; `layered_ball` for proxies / fuller near masses. High can still band (not emit every terminal) to cut near-duplicates.
+- **Fronds:** authored \(Y \in [0,1]\), \(X \in [-0.1,0.1]\), \(Z\) negligible. Prefer [`FrondCollection`](./chico/vegetation-components/) over free frond nodes: band on the collection’s **max AABB extent**; High = all strands, Medium ≈ half (widen survivors), Low ≈ quarter, UltraLow = one marker frond (real UltraLow tier, like sticks).
 
 Preview with `chico-sbs-trees-playground` `/show <tree>` while walking LOD bands.
 

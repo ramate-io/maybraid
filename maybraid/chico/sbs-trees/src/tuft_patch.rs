@@ -5,12 +5,13 @@
 //! at each, reading as one loose clump of grass rather than a fountain.
 //!
 //! [`TuftPatchParams::build`] grows clump anchors once into [`TuftPatch`], which implements
-//! [`VegetationComponents`] via straight frond segment GLBs (solid-green in the playground).
+//! [`VegetationComponents`] via one [`FrondCollection`] per clump (straight frond segments,
+//! solid-green in the playground).
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuftShape;
 use chico_vegetation_components::{
-	FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+	FoliageNode, FrondCollection, Layers, Placement, StickNode, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -103,22 +104,28 @@ impl TuftPatch {
 		}
 	}
 
-	fn frond_nodes(&self) -> Vec<FoliageNode> {
-		let mut nodes = Vec::new();
-		for (index, anchor) in self.anchors.iter().enumerate() {
-			let shape = self.clump_shape(index as u32);
-			let width = shape.blade_width.max(1e-4);
-			for strand in shape.strands() {
-				let start = *anchor + strand.base_offset;
-				let Some(placement) =
-					Placement::frond_segment(start, strand.direction, strand.length, width)
-				else {
-					continue;
-				};
-				nodes.push(FoliageNode::straight_frond_segment(placement));
-			}
-		}
-		nodes
+	fn clump_collection(&self, index: usize, anchor: Vec3) -> FrondCollection {
+		let shape = self.clump_shape(index as u32);
+		let width = shape.blade_width.max(1e-4);
+		let fronds: Vec<FoliageNode> = shape
+			.strands()
+			.into_iter()
+			.filter_map(|strand| {
+				let start = anchor + strand.base_offset;
+				Placement::frond_segment(start, strand.direction, strand.length, width)
+					.map(FoliageNode::straight_frond_segment)
+			})
+			.collect();
+		FrondCollection::new(fronds)
+	}
+
+	fn collections(&self) -> Vec<FrondCollection> {
+		self.anchors
+			.iter()
+			.enumerate()
+			.map(|(index, anchor)| self.clump_collection(index, *anchor))
+			.filter(|c| !c.is_empty())
+			.collect()
 	}
 }
 
@@ -127,10 +134,15 @@ impl VegetationComponents for TuftPatch {
 		Layers::new()
 	}
 
-	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+	fn foliage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FoliageNode> {
+		Layers::new()
+	}
+
+	fn frond_collections_for_level(&self, level: LodSceneLevel) -> Layers<FrondCollection> {
 		match level {
+			// Collections keep an UltraLow marker themselves; structural UltraLow drops them.
 			LodSceneLevel::UltraLow => Layers::new(),
-			_ => Layers::from_free(self.frond_nodes()),
+			_ => Layers::from_free(self.collections()),
 		}
 	}
 }
@@ -185,7 +197,7 @@ mod tests {
 	}
 
 	#[test]
-	fn build_emits_one_frond_per_blade() -> Result<()> {
+	fn build_emits_one_collection_per_clump() -> Result<()> {
 		let params = TuftPatchParams {
 			clump_count: 2,
 			shape: BladeTuftShape {
@@ -196,8 +208,17 @@ mod tests {
 			..TuftPatchParams::default()
 		};
 		let built = params.build();
-		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(nodes.len(), 8);
+		let collections = built.frond_collections_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(collections.len(), 2);
+		assert_eq!(collections[0].fronds.len(), 4);
+		assert_eq!(
+			collections[0].fronds_for_level(LodSceneLevel::Medium).len(),
+			2
+		);
+		assert_eq!(
+			collections[0].fronds_for_level(LodSceneLevel::UltraLow).len(),
+			1
+		);
 		Ok(())
 	}
 }

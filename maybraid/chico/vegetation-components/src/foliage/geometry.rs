@@ -11,7 +11,8 @@ pub enum FoliageGeometry {
 	CheapBall,
 	/// Point tip kit (`straight_frond_001_*`); prefer [`Self::StraightFrondSegment`] for strands.
 	StraightFrond,
-	/// Square-ended frond segment (`straight_frond_segment_001_*`), \(Y \in [0, 1]\).
+	/// Square-ended frond segment (`straight_frond_segment_001_*`):
+	/// \(Y \in [0, 1]\), \(X \in [-0.1, 0.1]\), \(Z\) negligible.
 	StraightFrondSegment,
 	/// Plane-splay cluster parameters (local units before placement scale).
 	PlaneSplay {

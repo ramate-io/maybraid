@@ -83,7 +83,7 @@ pub mod foliage {
 		pub const STRAIGHT_FROND_LOW: AssetPath =
 			AssetPath::new("vegetation/foliage/standard/straight_frond_001_low_res.glb");
 
-		/// Square-ended segment along \(Y \in [0, 1]\), unit square \(X/Z\) footprint.
+		/// Square-ended segment: \(Y \in [0, 1]\), \(X \in [-0.1, 0.1]\), \(Z\) negligible.
 		pub const STRAIGHT_FROND_SEGMENT_HIGH: AssetPath = AssetPath::new(
 			"vegetation/foliage/standard/straight_frond_segment_001_high_res.glb",
 		);

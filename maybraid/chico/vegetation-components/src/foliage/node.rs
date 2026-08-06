@@ -77,13 +77,21 @@ impl FoliageNode {
 		}
 	}
 
-	fn standard_frond_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
+	pub(crate) fn standard_frond_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self.geometry {
 			FoliageGeometry::StraightFrond => self.style.straight_frond_glb_for_level(level),
 			FoliageGeometry::StraightFrondSegment => {
 				self.style.straight_frond_segment_glb_for_level(level)
 			}
 			_ => None,
+		}
+	}
+
+	/// Posed frond mesh for a collection host (no nested per-frond LOD host).
+	pub(crate) fn collection_leaf_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		match self.standard_frond_glb_for_level(level) {
+			Some(asset) => Box::new(posed_frond_asset_tier(Some(asset), pose(self.placement))),
+			None => Box::new(self.procedural_frond_scene()),
 		}
 	}
 

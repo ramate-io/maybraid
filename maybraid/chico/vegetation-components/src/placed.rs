@@ -79,10 +79,12 @@ impl Placement {
 		Self::new(center, 0.0).with_scale(Vec3::splat(radius.max(1e-4)))
 	}
 
-	/// Straight frond segment: base at `start`, \(+Y\) along `dir`, square girth from `width`.
+	/// Straight frond segment: base at `start`, \(+Y\) along `dir`, blade width along kit \(X\).
 	///
-	/// Kit half-extent on \(X/Z\) is [`crate::FROND_SEGMENT_KIT_HALF`]; world full width
-	/// `width` maps to scale \(=\texttt{width} / (2 \cdot \texttt{FROND\_SEGMENT\_KIT\_HALF})\).
+	/// Authored kit: \(Y \in [0, 1]\), \(X \in [-\texttt{FROND\_KIT\_HALF\_X}, \texttt{FROND\_KIT\_HALF\_X}]\),
+	/// \(Z\) negligible. World full width `width` maps to
+	/// \(X\)-scale \(=\texttt{width} / (2 \cdot \texttt{FROND\_KIT\_HALF\_X})\); \(Z\)-scale matches
+	/// \(X\) so the already-flat mesh stays thin.
 	pub fn frond_segment(start: Vec3, dir: Vec3, length: f32, width: f32) -> Option<Self> {
 		let len_sq = dir.length_squared();
 		if len_sq < 1e-12 || length < 1e-6 {
@@ -90,11 +92,11 @@ impl Placement {
 		}
 		let d = dir / len_sq.sqrt();
 		let rotation = Quat::from_rotation_arc(Vec3::Y, d);
-		let girth = (width * 0.5 / crate::FROND_SEGMENT_KIT_HALF).max(1e-4);
+		let scale_x = (width * 0.5 / crate::FROND_KIT_HALF_X).max(1e-4);
 		Some(
 			Self::new(start, 0.0)
 				.with_rotation(rotation)
-				.with_scale(Vec3::new(girth, length, girth)),
+				.with_scale(Vec3::new(scale_x, length, scale_x)),
 		)
 	}
 }

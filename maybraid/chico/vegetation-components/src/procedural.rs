@@ -11,9 +11,9 @@ use bevy::prelude::*;
 /// Half-extent of stick kit on \(X/Z\) (\(X = Z \in [-\texttt{STICK\_KIT\_HALF}, \texttt{STICK\_KIT\_HALF}]\)).
 pub const STICK_KIT_HALF: f32 = 0.2;
 
-/// Half-extent of straight frond segment kit on \(X/Z\) (unit square, square endings).
-/// Kit length is \(Y \in [0, 1]\).
-pub const FROND_SEGMENT_KIT_HALF: f32 = 0.5;
+/// Half-extent of straight frond kit on \(X\) (\(X \in [-\texttt{FROND\_KIT\_HALF\_X}, \texttt{FROND\_KIT\_HALF\_X}]\)).
+/// Kit length is \(Y \in [0, 1]\); \(Z\) is authored negligible (flat blade).
+pub const FROND_KIT_HALF_X: f32 = 0.1;
 
 /// Registers shared procedural meshes / materials and fulfills [`PendingPlaneSplay`].
 pub struct VegetationProceduralPlugin;
@@ -27,6 +27,7 @@ impl Plugin for VegetationProceduralPlugin {
 				crate::update_vegetation_structural_host_levels,
 				crate::update_stick_host_levels,
 				crate::update_foliage_host_levels,
+				crate::update_frond_collection_host_levels,
 			),
 		);
 	}
