@@ -1,7 +1,7 @@
 //! Storybook / torch stick → [`StickNode`] emission (with structural LOD filters).
 //!
-//! Medium / Low keep the stalk plus outermost branch sticks per azimuth × height
-//! cell — denser bands at Medium, coarser at Low.
+//! High / Medium / Low keep the stalk plus outermost branch sticks per azimuth ×
+//! height cell (High densest).
 //!
 //! Sample position is the segment endpoint with larger horizontal radius (not the
 //! midpoint). Steep / high-elevation sticks flare out along their length; midpoints
@@ -14,9 +14,11 @@ use chico_sbs_geometry::{
 };
 use chico_vegetation_components::{Placement, StickNode};
 
-/// Medium sticks: dense azimuth × height outer samples.
+/// High sticks: densest azimuth × height outer samples.
+pub(crate) const HIGH_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
+/// Medium sticks.
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
-/// Low sticks: former Medium density (silhouette still readable at range).
+/// Low sticks.
 pub(crate) const LOW_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 
 fn is_stalk(parent: &StorybookTreeChain) -> bool {
@@ -54,10 +56,7 @@ pub(crate) fn stick_node_for_segment(
 }
 
 pub(crate) fn stick_nodes_high(chain: &BallStickChain<StorybookTreeChain>) -> Vec<StickNode> {
-	chain
-		.segments_with_hysteresis()
-		.filter_map(|(segment, parent, _)| stick_node_for_segment(&segment, parent))
-		.collect()
+	stick_nodes_banded(chain, HIGH_STICK_BANDS)
 }
 
 #[derive(Clone, Copy)]

@@ -1,4 +1,6 @@
 //! Selective torch canopy: cheap balls on upper/outer BranchOut nodes.
+//!
+//! All structural LOD levels outer-sample the same candidate set; High is densest.
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::{
@@ -7,9 +9,11 @@ use chico_sbs_geometry::{
 };
 use chico_vegetation_components::{FoliageNode, Placement};
 
-/// Medium foliage: dense azimuth × height outer samples.
+/// High foliage: densest azimuth × height outer samples (still drops near-duplicates).
+pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
+/// Medium foliage.
 pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
-/// Low foliage: former Medium density.
+/// Low foliage.
 pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 
 /// RFC §3.1.7.4 ball selection: terminal, upper belt, or far along limb.
@@ -42,9 +46,7 @@ fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> 
 	FoliageNode::cheap_ball(Placement::foliage_uniform(c.position, world_radius))
 }
 
-fn collect_high_candidates(
-	chain: &BallStickChain<StorybookTreeChain>,
-) -> Vec<FoliageCandidate> {
+fn collect_candidates(chain: &BallStickChain<StorybookTreeChain>) -> Vec<FoliageCandidate> {
 	chain
 		.nodes_with_hysteresis_enumerated()
 		.filter_map(|(idx, node, h)| {
@@ -56,23 +58,13 @@ fn collect_high_candidates(
 		.collect()
 }
 
-pub(crate) fn foliage_nodes_high(
-	chain: &BallStickChain<StorybookTreeChain>,
-	leaf_radius_world: f32,
-) -> Vec<FoliageNode> {
-	collect_high_candidates(chain)
-		.iter()
-		.map(|c| foliage_node_from_candidate(c, leaf_radius_world))
-		.collect()
-}
-
-/// Outermost high-policy foliage candidates per azimuth × height cell.
+/// Outermost foliage candidates per azimuth × height cell.
 pub(crate) fn foliage_nodes_banded(
 	chain: &BallStickChain<StorybookTreeChain>,
 	bands: AzimuthHeightBands,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let candidates = collect_high_candidates(chain);
+	let candidates = collect_candidates(chain);
 	let sampled =
 		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.position, bands);
 	sampled
