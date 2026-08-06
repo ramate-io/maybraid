@@ -6,7 +6,9 @@
 
 use bevy_math::Vec3;
 
-use crate::chain::{BallStickChain, BallStickNode, Hysteresis};
+use crate::chain::{
+	horizontal_radius_from_y_axis, BallStickChain, BallStickNode, Hysteresis,
+};
 
 /// Grid resolution for [`sample_max_horizontal_radius_by_azimuth_height`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,11 +35,6 @@ pub struct AzimuthHeightSample<T> {
 	pub horizontal_radius: f32,
 	pub azimuth_bin: usize,
 	pub height_bin: usize,
-}
-
-/// Horizontal distance from the world \(Y\) axis (trunk axis for upright trees).
-pub fn horizontal_radius_from_y_axis(position: Vec3) -> f32 {
-	Vec3::new(position.x, 0.0, position.z).length()
 }
 
 fn azimuth_bin(position: Vec3, azimuth_bins: usize) -> Option<usize> {
