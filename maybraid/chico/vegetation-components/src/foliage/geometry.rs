@@ -9,6 +9,10 @@ pub enum FoliageGeometry {
 	LayeredBall,
 	/// Cheap-ball kit: lower-poly unit ball for dense packed clusters.
 	CheapBall,
+	/// Point tip kit (`straight_frond_001_*`); prefer [`Self::StraightFrondSegment`] for strands.
+	StraightFrond,
+	/// Square-ended frond segment (`straight_frond_segment_001_*`), \(Y \in [0, 1]\).
+	StraightFrondSegment,
 	/// Plane-splay cluster parameters (local units before placement scale).
 	PlaneSplay {
 		icosphere_subdivisions: u32,
@@ -36,6 +40,14 @@ impl FoliageGeometry {
 		Self::CheapBall
 	}
 
+	pub fn straight_frond() -> Self {
+		Self::StraightFrond
+	}
+
+	pub fn straight_frond_segment() -> Self {
+		Self::StraightFrondSegment
+	}
+
 	pub fn plane_splay(
 		icosphere_subdivisions: u32,
 		core_radius: f32,
@@ -46,5 +58,9 @@ impl FoliageGeometry {
 
 	pub fn default_plane_splay() -> Self {
 		Self::plane_splay(0, 0.8, 0.9)
+	}
+
+	pub fn is_frond_kit(self) -> bool {
+		matches!(self, Self::StraightFrond | Self::StraightFrondSegment)
 	}
 }

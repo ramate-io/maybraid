@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use chico_sbs_trees::{
 	KamakuraTorchParams, NorthernConiferParams, PenmarchTorchParams, RorysHeadTrainedParams,
-	SopesBanyanParams, StorybookTreeParams, VaseTreeParams,
+	SopesBanyanParams, StorybookTreeParams, TuftPatchParams, VaseTreeParams,
 };
 use chico_vegetation_components::{
 	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
@@ -29,6 +29,8 @@ pub enum Show {
 	VaseTree(ShowVaseTree),
 	/// Northern Conifer via VegetationComponents / LodScene.
 	NorthernConifer(ShowNorthernConifer),
+	/// Tuft Patch via VegetationComponents / LodScene (straight frond segments).
+	TuftPatch(ShowTuftPatch),
 }
 
 #[derive(Clone, Args)]
@@ -80,6 +82,13 @@ pub struct ShowNorthernConifer {
 	pub tree: NorthernConiferParams,
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowTuftPatch {
+	#[command(flatten)]
+	pub patch: TuftPatchParams,
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -90,6 +99,7 @@ impl Show {
 			Self::StorybookTree(args) => ShowSubject::StorybookTree(args.tree),
 			Self::VaseTree(args) => ShowSubject::VaseTree(args.tree),
 			Self::NorthernConifer(args) => ShowSubject::NorthernConifer(args.tree),
+			Self::TuftPatch(args) => ShowSubject::TuftPatch(args.patch),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -109,6 +119,7 @@ pub enum ShowSubject {
 	StorybookTree(StorybookTreeParams),
 	VaseTree(VaseTreeParams),
 	NorthernConifer(NorthernConiferParams),
+	TuftPatch(TuftPatchParams),
 }
 
 #[derive(Component)]
@@ -152,6 +163,10 @@ pub fn sync_show(
 				t.apex_canopy_spawn_fraction
 			))
 		}
+		Some(ShowSubject::TuftPatch(t)) => Some(format!(
+			"tuft-patch:{:?}|clumps={}|patch_extent_xz={}",
+			t.shape, t.clump_count, t.patch_extent_xz
+		)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -176,5 +191,6 @@ pub fn sync_show(
 		ShowSubject::StorybookTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::VaseTree(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::NorthernConifer(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::TuftPatch(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }

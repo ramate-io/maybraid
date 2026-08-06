@@ -74,5 +74,24 @@ pub mod foliage {
 			AssetPath::new("vegetation/foliage/standard/cheap_ball_001_mid_res.glb");
 		pub const CHEAP_BALL_LOW: AssetPath =
 			AssetPath::new("vegetation/foliage/standard/cheap_ball_001_low_res.glb");
+
+		/// Point tip (degenerate length); prefer [`STRAIGHT_FROND_SEGMENT_*`] for strands.
+		pub const STRAIGHT_FROND_HIGH: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_001_high_res.glb");
+		pub const STRAIGHT_FROND_MID: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_001_mid_res.glb");
+		pub const STRAIGHT_FROND_LOW: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_001_low_res.glb");
+
+		/// Square-ended segment along \(Y \in [0, 1]\), unit square \(X/Z\) footprint.
+		pub const STRAIGHT_FROND_SEGMENT_HIGH: AssetPath = AssetPath::new(
+			"vegetation/foliage/standard/straight_frond_segment_001_high_res.glb",
+		);
+		pub const STRAIGHT_FROND_SEGMENT_MID: AssetPath = AssetPath::new(
+			"vegetation/foliage/standard/straight_frond_segment_001_mid_res.glb",
+		);
+		pub const STRAIGHT_FROND_SEGMENT_LOW: AssetPath = AssetPath::new(
+			"vegetation/foliage/standard/straight_frond_segment_001_low_res.glb",
+		);
 	}
 }

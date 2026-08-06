@@ -59,4 +59,30 @@ impl FoliageStyle {
 			)),
 		}
 	}
+
+	/// Point-tip straight frond GLB (`straight_frond_001_*`); prefer segment kit for strands.
+	pub fn straight_frond_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self {
+			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::Standard => Some(Self::standard_triad_for_level(
+				level,
+				foliage_assets::standard::STRAIGHT_FROND_HIGH,
+				foliage_assets::standard::STRAIGHT_FROND_MID,
+				foliage_assets::standard::STRAIGHT_FROND_LOW,
+			)),
+		}
+	}
+
+	/// Square-ended straight frond segment GLB (`straight_frond_segment_001_*`).
+	pub fn straight_frond_segment_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self {
+			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::Standard => Some(Self::standard_triad_for_level(
+				level,
+				foliage_assets::standard::STRAIGHT_FROND_SEGMENT_HIGH,
+				foliage_assets::standard::STRAIGHT_FROND_SEGMENT_MID,
+				foliage_assets::standard::STRAIGHT_FROND_SEGMENT_LOW,
+			)),
+		}
+	}
 }

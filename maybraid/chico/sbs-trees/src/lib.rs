@@ -43,6 +43,6 @@ pub use skipped_mesh_material::{
 pub use sopes_banyan::{SopesBanyan, SopesBanyanParams};
 pub use storybook_tree::{StorybookTree, StorybookTreeParams};
 pub use temperate_conifer::TemperateConiferStd;
-pub use tuft_patch::TuftPatchStd;
+pub use tuft_patch::{TuftPatch, TuftPatchParams};
 pub use vase_tree::{VaseTree, VaseTreeParams};
 pub use waialea_palm::WaialeaPalmStd;

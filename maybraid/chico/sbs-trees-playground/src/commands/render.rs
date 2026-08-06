@@ -2965,10 +2965,10 @@ mod tests {
 		assert!((helper.inner.patch_extent_xz - 2.5).abs() < 1e-5);
 		assert_eq!(helper.inner.shape.blade_count, 6);
 		let cfg = Render::TuftPatch(helper).into_render_config();
-		let RenderSubject::TuftPatch(patch) = cfg.subject else {
+		let RenderSubject::TuftPatch(params) = cfg.subject else {
 			anyhow::bail!("expected tuft patch subject");
 		};
-		assert_eq!(patch.clump_anchors().len(), 7);
+		assert_eq!(params.clump_anchors().len(), 7);
 		Ok(())
 	}
 

@@ -11,6 +11,10 @@ use bevy::prelude::*;
 /// Half-extent of stick kit on \(X/Z\) (\(X = Z \in [-\texttt{STICK\_KIT\_HALF}, \texttt{STICK\_KIT\_HALF}]\)).
 pub const STICK_KIT_HALF: f32 = 0.2;
 
+/// Half-extent of straight frond segment kit on \(X/Z\) (unit square, square endings).
+/// Kit length is \(Y \in [0, 1]\).
+pub const FROND_SEGMENT_KIT_HALF: f32 = 0.5;
+
 /// Registers shared procedural meshes / materials and fulfills [`PendingPlaneSplay`].
 pub struct VegetationProceduralPlugin;
 

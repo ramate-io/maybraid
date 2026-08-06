@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuft;
 use chico_tree_components::HighBushShoots;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
@@ -217,18 +218,12 @@ where
 					entities
 				}
 				BushScrubItem::Patch(patch) => {
-					let mut item =
-						patch.build_tuft_patch(foliage_noise, self.leaf_material.clone());
-					item.shape.noise_amplitude = self.leaf_surface_noise.amplitude;
-					item.shape.noise_frequency = self.leaf_surface_noise.frequency;
-					let entities = item.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.palette_mix(),
-						foliage_noise.seed,
-						commands,
-					);
-					entities
+					let mut params = patch.build_tuft_patch(foliage_noise);
+					params.shape.noise_amplitude = self.leaf_surface_noise.amplitude;
+					params.shape.noise_frequency = self.leaf_surface_noise.frequency;
+					let built = params.build();
+					let bounds = vegetation_bounds(&built);
+					spawn_vegetation_components(commands, &built, local, bounds)
 				}
 				BushScrubItem::Bush(bush) => {
 					let chain_noise = placement_noise(self.bush_chain_noise, placed.position);
@@ -369,10 +364,7 @@ mod tests {
 		let BushScrubItem::Patch(patch) = BushScrubCell::DryTuftPatch.item() else {
 			anyhow::bail!("expected patch item");
 		};
-		let item = patch.build_tuft_patch::<StandardMaterial, _>(
-			noise,
-			SkippedLeafMeshMaterial::<StandardMaterial>::default(),
-		);
+		let item = patch.build_tuft_patch(noise);
 		assert!(patch.clump_count.contains(&item.clump_count));
 		assert!(item.patch_extent_xz >= patch.patch_extent_xz.start);
 		assert!(item.patch_extent_xz <= patch.patch_extent_xz.end);

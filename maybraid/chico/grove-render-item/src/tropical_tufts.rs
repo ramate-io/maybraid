@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuft;
 use chico_sbs_trees::palm_bush::PalmBush;
+use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -171,10 +172,12 @@ where
 					bush.spawn_render_items(commands, cascade_chunk, local)
 				}
 				TropicalTuftsItem::Patch(patch) => {
-					let mut item = patch.build_tuft_patch(noise, self.leaf_material.clone());
-					item.shape.noise_amplitude = self.foliage_noise.amplitude;
-					item.shape.noise_frequency = self.foliage_noise.frequency;
-					item.spawn_render_items(commands, cascade_chunk, local)
+					let mut params = patch.build_tuft_patch(noise);
+					params.shape.noise_amplitude = self.foliage_noise.amplitude;
+					params.shape.noise_frequency = self.foliage_noise.frequency;
+					let built = params.build();
+					let bounds = vegetation_bounds(&built);
+					spawn_vegetation_components(commands, &built, local, bounds)
 				}
 			};
 			patch_spawned_leaf_material::<LeafM>(

@@ -59,7 +59,7 @@ use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
-use chico_sbs_trees::tuft_patch::TuftPatch;
+use chico_sbs_trees::tuft_patch::TuftPatchParams;
 use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
@@ -134,8 +134,8 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 /// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
 pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
-/// [`TuftPatch`] — blade tufts scattered over a small ground area.
-pub type RenderTuftPatch = TuftPatch<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+/// [`TuftPatch`] — blade tufts scattered over a small ground area (VegetationComponents).
+pub type RenderTuftPatch = TuftPatchParams;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
 pub type RenderStorybookTree = StorybookTreeParams;
@@ -1068,7 +1068,11 @@ impl RenderSubject {
 			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TuftPatch(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TuftPatch(item) => {
+				let patch = item.build();
+				let bounds = vegetation_bounds(&patch);
+				spawn_vegetation_components(commands, &patch, transform, bounds)
+			}
 			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),

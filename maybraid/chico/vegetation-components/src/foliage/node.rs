@@ -11,7 +11,8 @@ use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{
-	posed_foliage_asset_tier, warm_content_host_hsl, warm_foliage_mesh_level_host,
+	posed_foliage_asset_tier, posed_frond_asset_tier, warm_content_host_hsl,
+	warm_foliage_mesh_level_host, warm_frond_mesh_level_host,
 };
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
@@ -46,6 +47,20 @@ impl FoliageNode {
 		Self::new(FoliageStyle::Standard, FoliageGeometry::CheapBall, placement)
 	}
 
+	/// Square-ended straight frond segment (`straight_frond_segment_001_*`).
+	pub fn straight_frond_segment(placement: Placement) -> Self {
+		Self::new(
+			FoliageStyle::Standard,
+			FoliageGeometry::StraightFrondSegment,
+			placement,
+		)
+	}
+
+	/// Point-tip straight frond (`straight_frond_001_*`); prefer [`Self::straight_frond_segment`].
+	pub fn straight_frond(placement: Placement) -> Self {
+		Self::new(FoliageStyle::Standard, FoliageGeometry::StraightFrond, placement)
+	}
+
 	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, geometry, placement)
 	}
@@ -62,9 +77,48 @@ impl FoliageNode {
 		}
 	}
 
+	fn standard_frond_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self.geometry {
+			FoliageGeometry::StraightFrond => self.style.straight_frond_glb_for_level(level),
+			FoliageGeometry::StraightFrondSegment => {
+				self.style.straight_frond_segment_glb_for_level(level)
+			}
+			_ => None,
+		}
+	}
+
+	fn is_standard_ball(&self) -> bool {
+		matches!(
+			(&self.style, &self.geometry),
+			(
+				FoliageStyle::Standard,
+				FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall
+			)
+		)
+	}
+
+	fn is_standard_frond(&self) -> bool {
+		matches!(
+			(&self.style, &self.geometry),
+			(
+				FoliageStyle::Standard,
+				FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment
+			)
+		)
+	}
+
 	fn procedural_ball_scene(&self) -> impl Scene + 'static {
 		posed_mesh(
 			VegetationProceduralAssets::foliage_ball(),
+			VegetationProceduralAssets::foliage_material(),
+			pose(self.placement),
+		)
+	}
+
+	/// Stick-cylinder stand-in when a frond GLB is missing (same \(Y \in [0, 1]\) kit axis).
+	fn procedural_frond_scene(&self) -> impl Scene + 'static {
+		posed_mesh(
+			VegetationProceduralAssets::stick_cylinder(),
 			VegetationProceduralAssets::foliage_material(),
 			pose(self.placement),
 		)
@@ -108,6 +162,13 @@ impl FoliageNode {
 					None => Box::new(self.procedural_ball_scene()),
 				}
 			}
+			(
+				FoliageStyle::Standard,
+				FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment,
+			) => match self.standard_frond_glb_for_level(level) {
+				Some(asset) => Box::new(posed_frond_asset_tier(Some(asset), pose(self.placement))),
+				None => Box::new(self.procedural_frond_scene()),
+			},
 			_ => Box::new(self.procedural_ball_scene()),
 		}
 	}
@@ -133,35 +194,54 @@ impl LodScene for FoliageNode {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
 		let probe = FoliageLodProbe::from_placement(&self.placement);
-		match (&self.style, &self.geometry) {
-			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
-				Box::new(warm_foliage_mesh_level_host(
-					level,
-					probe,
-					pose(self.placement),
-					[
-						(
-							LodSceneLevel::High,
-							self.standard_ball_glb_for_level(LodSceneLevel::High),
-						),
-						(
-							LodSceneLevel::Medium,
-							self.standard_ball_glb_for_level(LodSceneLevel::Medium),
-						),
-						(
-							LodSceneLevel::Low,
-							self.standard_ball_glb_for_level(LodSceneLevel::Low),
-						),
-					],
-				)) as Box<dyn Scene>
-			}
-			_ => Box::new(warm_content_host_hsl(
+		if self.is_standard_ball() {
+			Box::new(warm_foliage_mesh_level_host(
+				level,
+				probe,
+				pose(self.placement),
+				[
+					(
+						LodSceneLevel::High,
+						self.standard_ball_glb_for_level(LodSceneLevel::High),
+					),
+					(
+						LodSceneLevel::Medium,
+						self.standard_ball_glb_for_level(LodSceneLevel::Medium),
+					),
+					(
+						LodSceneLevel::Low,
+						self.standard_ball_glb_for_level(LodSceneLevel::Low),
+					),
+				],
+			)) as Box<dyn Scene>
+		} else if self.is_standard_frond() {
+			Box::new(warm_frond_mesh_level_host(
+				level,
+				probe,
+				pose(self.placement),
+				[
+					(
+						LodSceneLevel::High,
+						self.standard_frond_glb_for_level(LodSceneLevel::High),
+					),
+					(
+						LodSceneLevel::Medium,
+						self.standard_frond_glb_for_level(LodSceneLevel::Medium),
+					),
+					(
+						LodSceneLevel::Low,
+						self.standard_frond_glb_for_level(LodSceneLevel::Low),
+					),
+				],
+			)) as Box<dyn Scene>
+		} else {
+			Box::new(warm_content_host_hsl(
 				level,
 				probe,
 				self.content_for_level(LodSceneLevel::High),
 				self.content_for_level(LodSceneLevel::Medium),
 				self.content_for_level(LodSceneLevel::Low),
-			)) as Box<dyn Scene>,
+			)) as Box<dyn Scene>
 		}
 	}
 }

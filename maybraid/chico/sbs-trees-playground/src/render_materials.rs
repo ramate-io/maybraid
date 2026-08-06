@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 
-use chico_vegetation_components::{VegetationFoliageAssetRoot, VegetationProceduralAssets};
+use chico_vegetation_components::{
+	VegetationFoliageAssetRoot, VegetationFrondAssetRoot, VegetationProceduralAssets,
+};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{
@@ -75,6 +77,9 @@ fn render_tuft_standard_material() -> StandardMaterial {
 /// - procedural placeholder (`VegetationProceduralAssets::foliage_material`)
 /// - GLB meshes under [`VegetationFoliageAssetRoot`] (layered ball, etc.), once the
 ///   scene instance has spawned mesh children
+///
+/// Frond kits ([`VegetationFrondAssetRoot`]) are handled by
+/// [`patch_vegetation_frond_solid_material`] (solid green, not the leaf shader).
 pub fn patch_vegetation_foliage_leaf_material(
 	mut commands: Commands,
 	mats: Res<RenderMaterials>,
@@ -104,6 +109,32 @@ pub fn patch_vegetation_foliage_leaf_material(
 					.entity(entity)
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert(MeshMaterial3d(leaf.clone()));
+			}
+			if let Ok(kids) = children.get(entity) {
+				stack.extend(kids.iter());
+			}
+		}
+	}
+}
+
+/// Keep frond GLBs on solid green [`StandardMaterial`] (`mats.tuft`).
+///
+/// Matches frond primitives under [`VegetationFrondAssetRoot`] (straight frond segments).
+pub fn patch_vegetation_frond_solid_material(
+	mut commands: Commands,
+	mats: Res<RenderMaterials>,
+	frond_roots: Query<Entity, With<VegetationFrondAssetRoot>>,
+	children: Query<&Children>,
+	glb_meshes: Query<&MeshMaterial3d<StandardMaterial>>,
+) {
+	let tuft = mats.tuft.clone();
+	for root in &frond_roots {
+		let mut stack = vec![root];
+		while let Some(entity) = stack.pop() {
+			if glb_meshes.contains(entity) {
+				commands
+					.entity(entity)
+					.insert(MeshMaterial3d(tuft.clone()));
 			}
 			if let Ok(kids) = children.get(entity) {
 				stack.extend(kids.iter());
@@ -268,9 +299,7 @@ fn attach_render_materials(
 		RenderSubject::BladeTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::TuftPatch(t) => {
-			t.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TuftPatch(_t) => {}
 		RenderSubject::BraidGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}

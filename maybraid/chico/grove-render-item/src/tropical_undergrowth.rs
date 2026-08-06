@@ -227,18 +227,12 @@ where
 					entities
 				}
 				TropicalUndergrowthItem::Patch(patch) => {
-					let mut item =
-						patch.build_tuft_patch(foliage_noise, self.leaf_material.clone());
-					item.shape.noise_amplitude = self.leaf_surface_noise.amplitude;
-					item.shape.noise_frequency = self.leaf_surface_noise.frequency;
-					let entities = item.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.palette_mix(),
-						foliage_noise.seed,
-						commands,
-					);
-					entities
+					let mut params = patch.build_tuft_patch(foliage_noise);
+					params.shape.noise_amplitude = self.leaf_surface_noise.amplitude;
+					params.shape.noise_frequency = self.leaf_surface_noise.frequency;
+					let built = params.build();
+					let bounds = vegetation_bounds(&built);
+					spawn_vegetation_components(commands, &built, local, bounds)
 				}
 				TropicalUndergrowthItem::PalmBush(palm) => {
 					let geometry = palm.build_with_noise(foliage_noise);

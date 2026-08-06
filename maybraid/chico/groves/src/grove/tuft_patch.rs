@@ -5,11 +5,9 @@ use std::ops::RangeInclusive;
 use procedural_common::UnitRange;
 
 #[cfg(feature = "render")]
-use bevy::prelude::{Material, MeshMaterial3d};
-#[cfg(feature = "render")]
 use chico_ball_components::tuft::BladeTuftShape;
 #[cfg(feature = "render")]
-use chico_sbs_trees::tuft_patch::TuftPatch;
+use chico_sbs_trees::tuft_patch::TuftPatchParams;
 #[cfg(feature = "render")]
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams};
 
@@ -32,18 +30,10 @@ impl<C> GroveTuftPatch<C>
 where
 	C: BuildWithNoise<BladeTuftShape>,
 {
-	/// Build the [`TuftPatch`] render item for one placement: layout sampled from `noise`
+	/// Build [`TuftPatchParams`] for one placement: layout sampled from `noise`
 	/// (salt lanes `6`–`8`, past the wrapped clump's geometry lanes), blade shape from the
 	/// wrapped clump with the authored base spread applied.
-	pub fn build_tuft_patch<LeafM, LeafS>(
-		&self,
-		noise: NoiseParams,
-		leaf_material: LeafS,
-	) -> TuftPatch<LeafM, LeafS>
-	where
-		LeafM: Material,
-		LeafS: Clone + Into<MeshMaterial3d<LeafM>> + clap::Args,
-	{
+	pub fn build_tuft_patch(&self, noise: NoiseParams) -> TuftPatchParams {
 		let config = NoiseConfig::new(noise);
 		let clump_count = {
 			let lo = *self.clump_count.start() as usize;
@@ -67,6 +57,6 @@ where
 			0.0,
 			8.0,
 		);
-		TuftPatch::new(clump_count, patch_extent_xz, shape, leaf_material)
+		TuftPatchParams::new(clump_count, patch_extent_xz, shape)
 	}
 }

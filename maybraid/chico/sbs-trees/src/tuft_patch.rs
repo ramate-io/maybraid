@@ -3,31 +3,23 @@
 //! Unlike the single-anchor tufts, which radiate every blade from one point, a tuft patch
 //! deterministically picks a few anchor points within an XZ footprint and grows a blade tuft
 //! at each, reading as one loose clump of grass rather than a fountain.
-
-use std::marker::PhantomData;
+//!
+//! [`TuftPatchParams::build`] grows clump anchors once into [`TuftPatch`], which implements
+//! [`VegetationComponents`] via straight frond segment GLBs (solid-green in the playground).
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
+use chico_ball_components::tuft::BladeTuftShape;
+use chico_vegetation_components::{
+	FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+};
 use clap::Args;
+use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
-use render_item::{CascadeChunk, RenderItem};
 
-use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
-
-/// Typical [`StandardMaterial`] Tuft Patch using CLI-skipped leaf handles.
-pub type TuftPatchStd = TuftPatch<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
-
-/// A patch of blade tufts scattered over an XZ footprint.
-///
-/// Anchor points and per-clump shape variation both derive deterministically from
-/// [`BladeTuftShape::seed`]; placement structures vary instances by changing the seed.
-#[derive(Component, Clone, Args)]
+/// Authoring / CLI parameters for a tuft patch.
+#[derive(Component, Clone, Args, Debug, PartialEq)]
 #[command(rename_all = "kebab-case")]
-pub struct TuftPatch<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
+pub struct TuftPatchParams {
 	/// Number of tuft clumps scattered over the patch.
 	#[arg(long, default_value_t = 5)]
 	pub clump_count: u32,
@@ -38,42 +30,21 @@ where
 
 	#[command(flatten, next_help_heading = "Blade Tuft")]
 	pub shape: BladeTuftShape,
-
-	#[command(flatten, next_help_heading = "Leaf Material")]
-	pub leaf_material: LeafS,
-
-	#[arg(skip)]
-	__marker: PhantomData<fn() -> LeafM>,
 }
 
-impl<LeafM, LeafS> Default for TuftPatch<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
-{
+impl Default for TuftPatchParams {
 	fn default() -> Self {
 		Self {
 			clump_count: 5,
 			patch_extent_xz: 1.5,
 			shape: BladeTuftShape::default(),
-			leaf_material: LeafS::default(),
-			__marker: PhantomData,
 		}
 	}
 }
 
-impl<LeafM, LeafS> TuftPatch<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
-{
-	pub fn new(
-		clump_count: u32,
-		patch_extent_xz: f32,
-		shape: BladeTuftShape,
-		leaf_material: LeafS,
-	) -> Self {
-		Self { clump_count, patch_extent_xz, shape, leaf_material, __marker: PhantomData }
+impl TuftPatchParams {
+	pub fn new(clump_count: u32, patch_extent_xz: f32, shape: BladeTuftShape) -> Self {
+		Self { clump_count, patch_extent_xz, shape }
 	}
 
 	/// Deterministic patch-local clump anchors, scattered within the XZ footprint.
@@ -93,41 +64,74 @@ where
 	}
 
 	/// The authored shape re-seeded for clump `index`, so clumps differ in blade layout.
+	pub fn clump_shape(&self, index: u32) -> BladeTuftShape {
+		BladeTuftShape {
+			seed: self.shape.seed.wrapping_add((index as i32 + 1) * 131),
+			..self.shape.clone()
+		}
+	}
+
+	/// Grow clump anchors once for presentation / LOD emission.
+	pub fn build(&self) -> TuftPatch {
+		TuftPatch::from_params(self)
+	}
+}
+
+/// Built tuft patch: params plus resolved clump anchors.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TuftPatch {
+	pub clump_count: u32,
+	pub patch_extent_xz: f32,
+	pub shape: BladeTuftShape,
+	pub anchors: Vec<Vec3>,
+}
+
+impl TuftPatch {
+	pub fn from_params(params: &TuftPatchParams) -> Self {
+		Self {
+			clump_count: params.clump_count,
+			patch_extent_xz: params.patch_extent_xz,
+			shape: params.shape.clone(),
+			anchors: params.clump_anchors(),
+		}
+	}
+
 	fn clump_shape(&self, index: u32) -> BladeTuftShape {
 		BladeTuftShape {
 			seed: self.shape.seed.wrapping_add((index as i32 + 1) * 131),
 			..self.shape.clone()
 		}
 	}
+
+	fn frond_nodes(&self) -> Vec<FoliageNode> {
+		let mut nodes = Vec::new();
+		for (index, anchor) in self.anchors.iter().enumerate() {
+			let shape = self.clump_shape(index as u32);
+			let width = shape.blade_width.max(1e-4);
+			for strand in shape.strands() {
+				let start = *anchor + strand.base_offset;
+				let Some(placement) =
+					Placement::frond_segment(start, strand.direction, strand.length, width)
+				else {
+					continue;
+				};
+				nodes.push(FoliageNode::straight_frond_segment(placement));
+			}
+		}
+		nodes
+	}
 }
 
-impl<LeafM, LeafS> RenderItem for TuftPatch<LeafM, LeafS>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
+impl VegetationComponents for TuftPatch {
+	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+		Layers::new()
+	}
 
-		for (index, anchor) in self.clump_anchors().into_iter().enumerate() {
-			let tuft =
-				BladeTuft::from_shape(self.clump_shape(index as u32), self.leaf_material.clone());
-			tuft.spawn_render_items_under(
-				commands,
-				cascade_chunk,
-				Transform::from_translation(anchor),
-				Some(root),
-			);
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		match level {
+			LodSceneLevel::UltraLow => Layers::new(),
+			_ => Layers::from_free(self.frond_nodes()),
 		}
-
-		vec![root]
 	}
 }
 
@@ -136,10 +140,10 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 
-	fn patch(seed: i32) -> TuftPatchStd {
-		TuftPatchStd {
+	fn patch(seed: i32) -> TuftPatchParams {
+		TuftPatchParams {
 			shape: BladeTuftShape { seed, ..BladeTuftShape::default() },
-			..TuftPatchStd::default()
+			..TuftPatchParams::default()
 		}
 	}
 
@@ -177,6 +181,23 @@ mod tests {
 		assert_ne!(a.seed, b.seed);
 		assert_eq!(a.blade_count, b.blade_count);
 		assert_eq!(a.blade_length, b.blade_length);
+		Ok(())
+	}
+
+	#[test]
+	fn build_emits_one_frond_per_blade() -> Result<()> {
+		let params = TuftPatchParams {
+			clump_count: 2,
+			shape: BladeTuftShape {
+				blade_count: 4,
+				seed: 3,
+				..BladeTuftShape::default()
+			},
+			..TuftPatchParams::default()
+		};
+		let built = params.build();
+		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(nodes.len(), 8);
 		Ok(())
 	}
 }

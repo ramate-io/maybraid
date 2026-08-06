@@ -17,7 +17,9 @@ pub use assets::AssetPath;
 pub use foliage::{FoliageGeometry, FoliageNode, FoliageStyle};
 pub use layer::{Layer, Layers};
 pub use placed::Placement;
-pub use procedural::{VegetationProceduralAssets, VegetationProceduralPlugin, STICK_KIT_HALF};
+pub use procedural::{
+	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_SEGMENT_KIT_HALF, STICK_KIT_HALF,
+};
 pub use scene_children::{pose, posed_mesh, scene_children, with_pose};
 pub use sticks::{
 	update_stick_host_levels, StickGeometry, StickLodProbe, StickNode, StickStyle, STICK_HIGH_FACTOR,
@@ -27,7 +29,7 @@ pub use foliage::{
 	update_foliage_host_levels, FoliageLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
 	FOLIAGE_MEDIUM_FACTOR,
 };
-pub use lod_host::VegetationFoliageAssetRoot;
+pub use lod_host::{VegetationFoliageAssetRoot, VegetationFrondAssetRoot};
 pub use structural_probe::{
 	update_vegetation_structural_host_levels, VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR,
 	STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,

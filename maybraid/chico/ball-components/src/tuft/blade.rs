@@ -62,6 +62,47 @@ impl Default for BladeTuftShape {
 	}
 }
 
+/// One blade strand: direction from the clump, length, and optional base scatter.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BladeStrand {
+	pub direction: Vec3,
+	pub length: f32,
+	pub base_offset: Vec3,
+}
+
+impl BladeTuftShape {
+	/// Deterministic blade strands for VegetationComponents / GLB frond emission.
+	pub fn strands(&self) -> Vec<BladeStrand> {
+		CapDirections::upward(self.blade_count, self.seed, self.max_tilt_radians)
+			.into_iter()
+			.enumerate()
+			.map(|(i, direction)| {
+				let index = i as u32;
+				let length = (self.blade_length
+					* CapDirections::length_scale(index, self.seed, 0.78, 1.0))
+					.max(1e-4);
+				let base_offset = {
+					let spread = self.base_spread;
+					if spread <= 0.0 {
+						Vec3::ZERO
+					} else {
+						let outward =
+							Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
+						let radius = CapDirections::length_scale(
+							index,
+							self.seed.wrapping_add(17),
+							0.2,
+							1.0,
+						);
+						outward * (spread * radius)
+					}
+				};
+				BladeStrand { direction, length, base_offset }
+			})
+			.collect()
+	}
+}
+
 /// Thin flat blades radiating from a shared anchor (sketch implementation via ribbon prisms).
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct BladeTuft<M: Material, S>

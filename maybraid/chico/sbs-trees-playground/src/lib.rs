@@ -44,7 +44,8 @@ use lod::LodFinePassPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
-	patch_vegetation_foliage_leaf_material, setup_render_materials, sync_render_material_handles,
+	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_solid_material,
+	setup_render_materials, sync_render_material_handles,
 };
 use scene_ref::SceneRefPlugin;
 
@@ -109,7 +110,10 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
-					patch_vegetation_foliage_leaf_material
+					(
+						patch_vegetation_foliage_leaf_material,
+						patch_vegetation_frond_solid_material,
+					)
 						.after(sync_show)
 						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
