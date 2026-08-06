@@ -1,0 +1,395 @@
+//! Apartment fill: entry → max-rect cluster → RLA per rect → normalize.
+
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::{Vec2, Vec3};
+use procedural_common::{aabb2_area, NoiseParams};
+use richmond_building_components::labels::{LabelNode, LabelStyle};
+
+use crate::fit::{
+	Confines, FillRegion, FillableRegions, FitError, MultiConfines, SpaceKind,
+};
+use crate::openings::Openings;
+use crate::usage_areas::label_util::label_filling_aabb;
+use crate::usage_areas::plan_access::PlanAccessParams;
+use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
+use crate::usage_areas::plan_geom::{
+	aabb2_near_eq, confines_from_xz, host_xz, noise_for_cell,
+};
+use crate::usage_areas::rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
+use crate::usage_areas::rectangular_livable_area::{
+	RectAreaRoom, RectLivableStrategy, RectangularLivableArea, RectangularLivableAreaParameterized,
+	DEFAULT_CLOSED_MAX_AREA,
+};
+
+use super::entry::{
+	collect_work_rects, find_entry_door, partition_entry_and_body, push_entryway,
+};
+use super::program::{distribute_program, full_kind_list, program_from_area};
+use super::room::ApartmentRoom;
+use super::{LivableApartment, EPS, SCOPE};
+
+pub(crate) fn residential_access() -> PlanAccessParams {
+	PlanAccessParams::residential()
+}
+
+pub(crate) fn fit_from_multi(
+	region_id: u32,
+	cells: &MultiConfines,
+	noise: NoiseParams,
+) -> Result<(LivableApartment, FillableRegions), FitError> {
+	if cells.is_empty() {
+		return Err(FitError::TooSmall {
+			reason: "livable_empty",
+		});
+	}
+	let access = residential_access();
+	let mut has_body = false;
+	for part in cells.iter() {
+		let height = (part.confines.bounds.max.y - part.confines.bounds.min.y).max(0.0);
+		let xz = host_xz(&part.confines.bounds);
+		if !access.is_walkable(xz) {
+			return Err(FitError::TooSmall {
+				reason: "livable_footprint",
+			});
+		}
+		if access.is_room_rect(xz) {
+			has_body = true;
+		}
+		if height < 2.0 {
+			return Err(FitError::TooSmall {
+				reason: "livable_height",
+			});
+		}
+	}
+	if !has_body {
+		return Err(FitError::TooSmall {
+			reason: "livable_no_body_cell",
+		});
+	}
+
+	let y0 = Vec3::from(cells.parts[0].confines.bounds.min).y;
+	let y1 = Vec3::from(cells.parts[0].confines.bounds.max).y;
+	let roll = cells.parts[0].confines.roll;
+	let total_area: f32 = cells
+		.iter()
+		.map(|p| {
+			let fp = p.confines.footprint();
+			fp.x * fp.y
+		})
+		.sum();
+	let apt_noise = noise_for_cell(noise, region_id as i32);
+	let program = program_from_area(
+		total_area,
+		apt_noise,
+		cells.parts[0].confines.center(),
+	);
+
+	let mut rooms = Vec::new();
+	let mut residual_within = Vec::new();
+	let mut walkways = Vec::new();
+	let mut partitions = Vec::new();
+
+	let (door_ci, work_rects) = collect_work_rects(cells);
+	let door_cell = host_xz(&cells.parts[door_ci].confines.bounds);
+	let door_opening = find_entry_door(&cells.parts[door_ci].confines.openings)
+		.or_else(|| find_entry_door(&cells.parts[0].confines.openings));
+
+	let partitioned = partition_entry_and_body(
+		work_rects,
+		door_cell,
+		door_opening.as_ref().map(|(_, d)| d),
+		access,
+	);
+	for band in &partitioned.entry_bands {
+		push_entryway(&mut rooms, &mut walkways, *band, y0, y1, roll);
+	}
+	for scrap in partitioned.scraps {
+		let c = confines_from_xz(scrap, y0, y1, roll, &Openings::new());
+		push_leftover(&mut rooms, &mut residual_within, c);
+	}
+	let entry_xz = partitioned.entry_bands.first().copied();
+	let work_rects = partitioned.body;
+	if work_rects.is_empty() {
+		if rooms.is_empty() {
+			return Err(FitError::TooSmall {
+				reason: "livable_no_body",
+			});
+		}
+		return Ok((
+			LivableApartment {
+				region_id,
+				cells: cells.clone(),
+				rooms,
+				walkways,
+				partitions: Vec::new(),
+				max_rects: Vec::new(),
+				shell: None,
+			},
+			FillableRegions {
+				within: residual_within,
+				atop: Vec::new(),
+			},
+		));
+	}
+
+	let cluster = RectPassageCluster::from_parts(
+		&work_rects,
+		entry_xz,
+		y0,
+		y1,
+		roll,
+		region_id,
+		RectPassageClusterParams {
+			min_room: access.room_min,
+			min_rect_area: 8.0,
+			min_access: access.walk_clear,
+			scope: SCOPE,
+		},
+	)
+	.ok_or(FitError::TooSmall {
+		reason: "livable_no_rects",
+	})?;
+
+	let kind_list = full_kind_list(program);
+	let slices = distribute_program(&kind_list, &cluster.rects, apt_noise);
+	let rla_params = RectangularLivableAreaParameterized {
+		strategy: RectLivableStrategy::CaseAttempt,
+		min_hall: access.walk_clear,
+		closed_max_area: DEFAULT_CLOSED_MAX_AREA,
+	};
+
+	for (ri, rect) in cluster.rects.iter().enumerate() {
+		let confines = cluster.confines_ensured(ri, entry_xz);
+		let cell_noise =
+			noise_for_cell(apt_noise, (region_id as i32).wrapping_add(ri as i32 * 17));
+		match RectangularLivableArea::fit_with_params(
+			&confines,
+			cell_noise,
+			rla_params,
+			&slices[ri],
+		) {
+			Ok((rla, nested)) => {
+				walkways.extend(rla.walkways.iter().copied());
+				partitions.extend(rla.partitions);
+				for room in rla.rooms {
+					push_mapped_rla_room(&mut rooms, room);
+				}
+				residual_within.extend(nested.within);
+			}
+			Err(FitError::TooSmall { .. }) => {
+				rooms.push(ApartmentRoom::OpenHall {
+					label: label_filling_aabb(
+						LabelStyle::Cyan,
+						"OpenHall",
+						&confines.bounds,
+						roll,
+					),
+					confines: confines.clone(),
+				});
+				walkways.push(*rect);
+				if aabb2_area(*rect) < 8.0 {
+					residual_within.push(FillRegion::new(SpaceKind::InternalSpace, confines));
+				}
+			}
+			Err(err) => return Err(err),
+		}
+	}
+
+	let covered_area: f32 = cluster.rects.iter().map(|r| aabb2_area(*r)).sum();
+	let work_area: f32 = work_rects.iter().map(|r| aabb2_area(*r)).sum();
+	if work_area > covered_area + 1.0 {
+		for scrap in &work_rects {
+			let leftover = subtract_aabb2(*scrap, &cluster.rects);
+			for s in leftover {
+				if aabb2_area(s) < EPS {
+					continue;
+				}
+				let c = confines_from_xz(s, y0, y1, roll, &Openings::new());
+				push_leftover(&mut rooms, &mut residual_within, c);
+			}
+		}
+	}
+
+	if rooms.is_empty() {
+		return Err(FitError::TooSmall {
+			reason: "livable_no_quarters",
+		});
+	}
+
+	normalize_apartment_circulation(&mut rooms, entry_xz, access);
+
+	Ok((
+		LivableApartment {
+			region_id,
+			cells: cells.clone(),
+			rooms,
+			walkways,
+			partitions,
+			max_rects: cluster.rects,
+			shell: None,
+		},
+		FillableRegions {
+			within: residual_within,
+			atop: Vec::new(),
+		},
+	))
+}
+
+fn push_mapped_rla_room(rooms: &mut Vec<ApartmentRoom>, room: RectAreaRoom) {
+	match room {
+		RectAreaRoom::OpenBand { label, confines } => {
+			rooms.push(ApartmentRoom::OpenHall { label, confines });
+		}
+		RectAreaRoom::HouseholdCloset { label, confines } => {
+			rooms.push(ApartmentRoom::HouseholdCloset { label, confines });
+		}
+		RectAreaRoom::Bedroom(r) => rooms.push(ApartmentRoom::Bedroom(r)),
+		RectAreaRoom::Living(r) => rooms.push(ApartmentRoom::Living(r)),
+		RectAreaRoom::Eating(e) => {
+			rooms.push(ApartmentRoom::Kitchen(e.kitchen));
+			if let Some(d) = e.dining {
+				rooms.push(ApartmentRoom::Dining(d));
+			}
+		}
+		RectAreaRoom::Kitchen(r) => rooms.push(ApartmentRoom::Kitchen(r)),
+		RectAreaRoom::Dining(r) => rooms.push(ApartmentRoom::Dining(r)),
+		RectAreaRoom::Bathroom(r) => rooms.push(ApartmentRoom::Bathroom(r)),
+		RectAreaRoom::HalfBath(r) => rooms.push(ApartmentRoom::HalfBath(r)),
+		RectAreaRoom::Sitting(r) => rooms.push(ApartmentRoom::Sitting(r)),
+		RectAreaRoom::Study(r) => rooms.push(ApartmentRoom::Study(r)),
+	}
+}
+
+pub(crate) fn room_xz(room: &ApartmentRoom) -> Option<Aabb2d> {
+	match room {
+		ApartmentRoom::Entryway { confines, .. }
+		| ApartmentRoom::HouseholdCloset { confines, .. }
+		| ApartmentRoom::OpenHall { confines, .. } => Some(host_xz(&confines.bounds)),
+		ApartmentRoom::Bedroom(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Living(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Kitchen(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Dining(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Bathroom(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::HalfBath(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Sitting(r) => Some(label_xz(&r.room_type)),
+		ApartmentRoom::Study(r) => Some(label_xz(&r.room_type)),
+	}
+}
+
+fn label_xz(label: &LabelNode) -> Aabb2d {
+	let c = label.placement.translation;
+	let e = label.placement.scale;
+	Aabb2d {
+		min: Vec2::new(c.x - e.x * 0.5, c.z - e.z * 0.5),
+		max: Vec2::new(c.x + e.x * 0.5, c.z + e.z * 0.5),
+	}
+}
+
+/// Soft normalize: closed rooms must path-connect to entry via open regions.
+fn normalize_apartment_circulation(
+	rooms: &mut Vec<ApartmentRoom>,
+	entry: Option<Aabb2d>,
+	access: PlanAccessParams,
+) {
+	let Some(entry) = entry else {
+		return;
+	};
+	let touch = access.open_touch();
+	let open_rects: Vec<Aabb2d> = rooms
+		.iter()
+		.filter(|r| r.is_open_circ())
+		.filter_map(room_xz)
+		.chain(std::iter::once(entry))
+		.collect();
+	if open_rects.is_empty() {
+		return;
+	}
+	let mut reach = vec![false; open_rects.len()];
+	let mut stack = Vec::new();
+	for (i, r) in open_rects.iter().enumerate() {
+		if aabb2_near_eq(*r, entry)
+			|| shared_edge_span(*r, entry).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
+		{
+			reach[i] = true;
+			stack.push(i);
+		}
+	}
+	if stack.is_empty() {
+		reach[0] = true;
+		stack.push(0);
+	}
+	while let Some(i) = stack.pop() {
+		for j in 0..open_rects.len() {
+			if reach[j] {
+				continue;
+			}
+			let ok = shared_edge_span(open_rects[i], open_rects[j])
+				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch * 0.8);
+			if ok {
+				reach[j] = true;
+				stack.push(j);
+			}
+		}
+	}
+	let reachable_open: Vec<Aabb2d> = open_rects
+		.iter()
+		.zip(reach.iter())
+		.filter(|(_, r)| **r)
+		.map(|(a, _)| *a)
+		.collect();
+
+	for room in rooms.iter_mut() {
+		if !room.is_closed() {
+			continue;
+		}
+		let Some(cz) = room_xz(room) else {
+			continue;
+		};
+		let ok = reachable_open.iter().any(|o| {
+			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
+		});
+		if !ok {
+			let confines = Confines::new(
+				Aabb3d::from_min_max(
+					Vec3::new(cz.min.x, 0.0, cz.min.y),
+					Vec3::new(cz.max.x, 3.0, cz.max.y),
+				),
+				0.0,
+				Openings::new(),
+			);
+			*room = ApartmentRoom::HouseholdCloset {
+				label: label_filling_aabb(
+					LabelStyle::Gray,
+					"HouseholdCloset",
+					&confines.bounds,
+					0.0,
+				),
+				confines,
+			};
+		}
+	}
+}
+
+fn push_leftover(
+	rooms: &mut Vec<ApartmentRoom>,
+	residual: &mut Vec<FillRegion>,
+	confines: Confines,
+) {
+	let area = {
+		let fp = confines.footprint();
+		fp.x * fp.y
+	};
+	if (1.8..8.0).contains(&area) {
+		rooms.push(ApartmentRoom::HouseholdCloset {
+			label: label_filling_aabb(
+				LabelStyle::Gray,
+				"HouseholdCloset",
+				&confines.bounds,
+				confines.roll,
+			),
+			confines,
+		});
+	} else {
+		residual.push(FillRegion::new(SpaceKind::InternalSpace, confines));
+	}
+}
