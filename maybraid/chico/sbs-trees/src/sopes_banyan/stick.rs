@@ -5,7 +5,7 @@ use chico_sbs_geometry::{
 	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickSegment,
 	SopesBanyanChain, SopesBanyanPhase,
 };
-use chico_vegetation_components::StickNode;
+use chico_vegetation_components::{StickGeometry, StickNode};
 
 /// Medium sticks: coarser azimuth × height outer samples than foliage (aggressive drop-off).
 pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
@@ -40,6 +40,14 @@ impl StickLodRole {
 	pub(crate) fn is_descender(self) -> bool {
 		matches!(self, Self::Descender)
 	}
+
+	/// Trunk + descenders use trunk mesh LOD (length-biased) so they stay in frame longer.
+	pub(crate) fn stick_geometry(self) -> StickGeometry {
+		match self {
+			Self::Trunk | Self::Descender => StickGeometry::Trunk,
+			Self::BetweenNodes => StickGeometry::Segment,
+		}
+	}
 }
 
 /// Keep roughly this fraction of descender sticks on Low (stable every-Nth sample).
@@ -52,12 +60,26 @@ pub(crate) fn stick_role_for_segment(
 	StickLodRole::from_parent_phase(&parent.phase)
 }
 
+pub(crate) fn stick_node_for_segment(
+	segment: &BallStickSegment<'_>,
+	parent: &SopesBanyanChain,
+) -> Option<StickNode> {
+	let role = stick_role_for_segment(segment, parent);
+	StickNode::from_segment_geometry(
+		segment.start.position,
+		segment.end.position,
+		segment.start.radius,
+		role.stick_geometry(),
+	)
+}
+
 #[derive(Clone, Copy)]
 struct StickBandCandidate {
 	mid: Vec3,
 	start: Vec3,
 	end: Vec3,
 	radius: f32,
+	geometry: StickGeometry,
 }
 
 /// Trunk always + outermost non-trunk sticks per azimuth × height cell.
@@ -70,11 +92,7 @@ where
 	for (segment, parent) in segments {
 		let role = stick_role_for_segment(&segment, parent);
 		if role.is_trunk() {
-			if let Some(node) = StickNode::from_segment(
-				segment.start.position,
-				segment.end.position,
-				segment.start.radius,
-			) {
+			if let Some(node) = stick_node_for_segment(&segment, parent) {
 				trunk.push(node);
 			}
 			continue;
@@ -84,6 +102,7 @@ where
 			start: segment.start.position,
 			end: segment.end.position,
 			radius: segment.start.radius,
+			geometry: role.stick_geometry(),
 		});
 	}
 	let sampled = sample_max_horizontal_radius_by_azimuth_height(
@@ -92,7 +111,12 @@ where
 		MEDIUM_STICK_BANDS,
 	);
 	trunk.extend(sampled.into_iter().filter_map(|s| {
-		StickNode::from_segment(s.item.start, s.item.end, s.item.radius)
+		StickNode::from_segment_geometry(
+			s.item.start,
+			s.item.end,
+			s.item.radius,
+			s.item.geometry,
+		)
 	}));
 	trunk
 }

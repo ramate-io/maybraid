@@ -5,6 +5,7 @@ use bevy::scene::prelude::{bsn, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
+use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{posed_asset_tier, warm_content_host, warm_mesh_level_host};
 use crate::placed::Placement;
@@ -31,7 +32,7 @@ impl StickNode {
 		Self::new(StickStyle::NoisyCylinder, geometry, placement)
 	}
 
-	/// Branch / connector segment using `vegetation/sticks/standard/` GLBs.
+	/// Branch / connector segment using `vegetation/sticks/standard/001_*` GLBs.
 	pub fn segment(placement: Placement) -> Self {
 		Self::new(StickStyle::Standard, StickGeometry::Segment, placement)
 	}
@@ -39,8 +40,18 @@ impl StickNode {
 	/// Standard stick from a directed segment (base at `start`, along `start → end`).
 	///
 	/// Girth uses `radius` at the segment start. Degenerate (near-zero length) edges
-	/// return [`None`].
+	/// return [`None`]. Defaults to [`StickGeometry::Segment`].
 	pub fn from_segment(start: Vec3, end: Vec3, radius: f32) -> Option<Self> {
+		Self::from_segment_geometry(start, end, radius, StickGeometry::Segment)
+	}
+
+	/// Like [`Self::from_segment`], with an explicit geometry (segment vs trunk kit).
+	pub fn from_segment_geometry(
+		start: Vec3,
+		end: Vec3,
+		radius: f32,
+		geometry: StickGeometry,
+	) -> Option<Self> {
 		let ray = end - start;
 		let len_sq = ray.length_squared();
 		if len_sq < 1e-12 {
@@ -48,24 +59,27 @@ impl StickNode {
 		}
 		let length = len_sq.sqrt();
 		let placement = Placement::stick_segment(start, ray, length, radius)?;
-		Some(Self::segment(placement))
+		Some(Self::standard(geometry, placement))
 	}
 
-	/// Trunk segment using `vegetation/sticks/standard_trunk/` GLBs.
+	/// Trunk geometry using `vegetation/sticks/standard/trunk_001_*` GLBs.
 	pub fn trunk(placement: Placement) -> Self {
-		Self::new(StickStyle::StandardTrunk, StickGeometry::Trunk, placement)
+		Self::new(StickStyle::Standard, StickGeometry::Trunk, placement)
 	}
 
 	pub fn standard(geometry: StickGeometry, placement: Placement) -> Self {
 		Self::new(StickStyle::Standard, geometry, placement)
 	}
 
-	pub fn standard_trunk(geometry: StickGeometry, placement: Placement) -> Self {
-		Self::new(StickStyle::StandardTrunk, geometry, placement)
-	}
-
 	fn probe(&self) -> StickLodProbe {
 		StickLodProbe::from_stick(&self.placement, self.geometry)
+	}
+
+	fn glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
+		match self.style {
+			StickStyle::NoisyCylinder => None,
+			StickStyle::Standard => self.geometry.standard_glb_for_level(level),
+		}
 	}
 
 	fn procedural_scene(&self) -> impl Scene + 'static {
@@ -85,7 +99,7 @@ impl StickNode {
 	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
 		match level {
 			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()) as Box<dyn Scene>,
-			_ => match self.style.glb_for_level(level) {
+			_ => match self.glb_for_level(level) {
 				Some(asset) => {
 					Box::new(posed_asset_tier(Some(asset), pose(self.placement))) as Box<dyn Scene>
 				}
@@ -126,14 +140,14 @@ impl LodScene for StickNode {
 					(LodSceneLevel::UltraLow, Box::new(Self::empty_scene()) as Box<dyn Scene>),
 				],
 			)) as Box<dyn Scene>,
-			StickStyle::Standard | StickStyle::StandardTrunk => Box::new(warm_mesh_level_host(
+			StickStyle::Standard => Box::new(warm_mesh_level_host(
 				level,
 				probe,
 				pose(self.placement),
 				[
-					(LodSceneLevel::High, self.style.glb_for_level(LodSceneLevel::High)),
-					(LodSceneLevel::Medium, self.style.glb_for_level(LodSceneLevel::Medium)),
-					(LodSceneLevel::Low, self.style.glb_for_level(LodSceneLevel::Low)),
+					(LodSceneLevel::High, self.glb_for_level(LodSceneLevel::High)),
+					(LodSceneLevel::Medium, self.glb_for_level(LodSceneLevel::Medium)),
+					(LodSceneLevel::Low, self.glb_for_level(LodSceneLevel::Low)),
 					(LodSceneLevel::UltraLow, None),
 				],
 			)) as Box<dyn Scene>,

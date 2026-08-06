@@ -22,7 +22,9 @@ use lod::gen::LodSceneLevel;
 use canopy::{
 	banded_outer_canopy_balls, foliage_node_for_terminal, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
-use stick::{keep_stick_on_low, stick_nodes_medium_banded, stick_role_for_segment};
+use stick::{
+	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
+};
 
 /// Authoring / CLI parameters for Sope's Banyan.
 #[derive(Component, Clone, Args, Debug)]
@@ -73,13 +75,7 @@ impl SopesBanyan {
 	fn stick_nodes_high(&self) -> Vec<StickNode> {
 		self.chain
 			.segments_with_hysteresis()
-			.filter_map(|(segment, _, _)| {
-				StickNode::from_segment(
-					segment.start.position,
-					segment.end.position,
-					segment.start.radius,
-				)
-			})
+			.filter_map(|(segment, parent, _)| stick_node_for_segment(&segment, parent))
 			.collect()
 	}
 
@@ -100,11 +96,7 @@ impl SopesBanyan {
 				if !keep_stick_on_low(role, &mut descender_index) {
 					return None;
 				}
-				StickNode::from_segment(
-					segment.start.position,
-					segment.end.position,
-					segment.start.radius,
-				)
+				stick_node_for_segment(&segment, parent)
 			})
 			.collect()
 	}

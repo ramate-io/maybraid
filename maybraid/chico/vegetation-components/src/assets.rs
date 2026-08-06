@@ -28,23 +28,29 @@ impl std::fmt::Display for AssetPath {
 pub mod sticks {
 	use super::AssetPath;
 
-	macro_rules! stick_lod_triad {
-		($mod:ident, $dir:literal) => {
-			pub mod $mod {
-				use super::AssetPath;
+	/// Kits under `vegetation/sticks/standard/`.
+	pub mod standard {
+		use super::AssetPath;
 
-				pub const HIGH: AssetPath =
-					AssetPath::new(concat!("vegetation/sticks/", $dir, "/001_high_res.glb"));
-				pub const MID: AssetPath =
-					AssetPath::new(concat!("vegetation/sticks/", $dir, "/001_mid_res.glb"));
-				pub const LOW: AssetPath =
-					AssetPath::new(concat!("vegetation/sticks/", $dir, "/001_low_res.glb"));
-			}
-		};
+		pub const HIGH: AssetPath =
+			AssetPath::new("vegetation/sticks/standard/001_high_res.glb");
+		pub const MID: AssetPath =
+			AssetPath::new("vegetation/sticks/standard/001_mid_res.glb");
+		pub const LOW: AssetPath =
+			AssetPath::new("vegetation/sticks/standard/001_low_res.glb");
+
+		/// Trunk geometry variant (`trunk_001_*`) — same style kit, longer mesh-LOD lifetime.
+		pub mod trunk {
+			use super::AssetPath;
+
+			pub const HIGH: AssetPath =
+				AssetPath::new("vegetation/sticks/standard/trunk_001_high_res.glb");
+			pub const MID: AssetPath =
+				AssetPath::new("vegetation/sticks/standard/trunk_001_mid_res.glb");
+			pub const LOW: AssetPath =
+				AssetPath::new("vegetation/sticks/standard/trunk_001_low_res.glb");
+		}
 	}
-
-	stick_lod_triad!(standard, "standard");
-	stick_lod_triad!(standard_trunk, "standard_trunk");
 }
 
 /// Foliage GLBs under `vegetation/foliage/`.
