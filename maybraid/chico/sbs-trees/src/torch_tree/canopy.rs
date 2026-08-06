@@ -7,10 +7,10 @@ use chico_sbs_geometry::{
 };
 use chico_vegetation_components::{FoliageNode, Placement};
 
-/// Medium foliage: denser azimuth × height outer samples.
-pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
-/// Low foliage: coarser outer samples.
-pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
+/// Medium foliage: dense azimuth × height outer samples.
+pub(crate) const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Low foliage: former Medium density.
+pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 
 /// RFC §3.1.7.4 ball selection: terminal, upper belt, or far along limb.
 fn should_allocate_foliage(

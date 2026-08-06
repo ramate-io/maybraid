@@ -1,21 +1,35 @@
 //! Storybook / torch stick → [`StickNode`] emission (with structural LOD filters).
 //!
-//! Torch limbs are near-vertical, so azimuth×height outer-radius banding (good for
-//! wide canopies) drops most mid-band sticks. Thinning is therefore every-Nth along
-//! segment order — Medium keeps every 2nd branch, Low every 4th — so Low ⊆ Medium.
+//! Medium / Low keep the stalk plus outermost branch sticks per azimuth × height
+//! cell — denser bands at Medium, coarser at Low.
+//!
+//! Sample position is the segment endpoint with larger horizontal radius (not the
+//! midpoint). Steep / high-elevation sticks flare out along their length; midpoints
+//! sit inward and lose the outer-radius contest.
 
+use bevy::prelude::Vec3;
 use chico_sbs_geometry::{
-	BallStickChain, BallStickSegment, StorybookTreeChain, StorybookTreePhase,
+	horizontal_radius_from_y_axis, sample_max_horizontal_radius_by_azimuth_height,
+	AzimuthHeightBands, BallStickChain, BallStickSegment, StorybookTreeChain, StorybookTreePhase,
 };
 use chico_vegetation_components::{Placement, StickNode};
 
-/// Medium: keep roughly half of branch sticks (stable every-Nth sample).
-pub(crate) const MEDIUM_BRANCH_KEEP_EVERY: usize = 2;
-/// Low: keep roughly a quarter of branch sticks (strict thinning of Medium).
-pub(crate) const LOW_BRANCH_KEEP_EVERY: usize = 4;
+/// Medium sticks: dense azimuth × height outer samples.
+pub(crate) const MEDIUM_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(24, 8);
+/// Low sticks: former Medium density (silhouette still readable at range).
+pub(crate) const LOW_STICK_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 
 fn is_stalk(parent: &StorybookTreeChain) -> bool {
 	matches!(parent.phase, StorybookTreePhase::Stalk(_))
+}
+
+/// Point on the segment that contributes the silhouette (farther from the Y axis).
+fn outermost_horizontal_point(start: Vec3, end: Vec3) -> Vec3 {
+	if horizontal_radius_from_y_axis(end) >= horizontal_radius_from_y_axis(start) {
+		end
+	} else {
+		start
+	}
 }
 
 pub(crate) fn stick_node_for_segment(
@@ -46,34 +60,50 @@ pub(crate) fn stick_nodes_high(chain: &BallStickChain<StorybookTreeChain>) -> Ve
 		.collect()
 }
 
-fn stick_nodes_thinned(
+#[derive(Clone, Copy)]
+struct StickBandCandidate {
+	/// Endpoint with larger horizontal radius — used for azimuth × height binning.
+	sample_at: Vec3,
+	start: Vec3,
+	end: Vec3,
+	radius: f32,
+}
+
+/// Stalk always + outermost non-stalk sticks per azimuth × height cell.
+fn stick_nodes_banded(
 	chain: &BallStickChain<StorybookTreeChain>,
-	keep_every: usize,
+	bands: AzimuthHeightBands,
 ) -> Vec<StickNode> {
-	let keep_every = keep_every.max(1);
-	let mut branch_index = 0usize;
-	chain
-		.segments_with_hysteresis()
-		.filter_map(|(segment, parent, _)| {
-			if is_stalk(parent) {
-				return stick_node_for_segment(&segment, parent);
+	let mut trunk = Vec::new();
+	let mut candidates = Vec::new();
+	for (segment, parent, _) in chain.segments_with_hysteresis() {
+		if is_stalk(parent) {
+			if let Some(node) = stick_node_for_segment(&segment, parent) {
+				trunk.push(node);
 			}
-			let keep = branch_index % keep_every == 0;
-			branch_index += 1;
-			if !keep {
-				return None;
-			}
-			stick_node_for_segment(&segment, parent)
-		})
-		.collect()
+			continue;
+		}
+		let start = segment.start.position;
+		let end = segment.end.position;
+		candidates.push(StickBandCandidate {
+			sample_at: outermost_horizontal_point(start, end),
+			start,
+			end,
+			radius: segment.start.radius,
+		});
+	}
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.sample_at, bands);
+	trunk.extend(sampled.into_iter().filter_map(|s| {
+		StickNode::from_segment(s.item.start, s.item.end, s.item.radius)
+	}));
+	trunk
 }
 
-/// Stalk always + every other branch stick.
 pub(crate) fn stick_nodes_medium(chain: &BallStickChain<StorybookTreeChain>) -> Vec<StickNode> {
-	stick_nodes_thinned(chain, MEDIUM_BRANCH_KEEP_EVERY)
+	stick_nodes_banded(chain, MEDIUM_STICK_BANDS)
 }
 
-/// Stalk always + every fourth branch stick (subset of Medium).
 pub(crate) fn stick_nodes_low(chain: &BallStickChain<StorybookTreeChain>) -> Vec<StickNode> {
-	stick_nodes_thinned(chain, LOW_BRANCH_KEEP_EVERY)
+	stick_nodes_banded(chain, LOW_STICK_BANDS)
 }
