@@ -339,6 +339,10 @@ fn aabb2_to_aabb3(a: Aabb2d, y0: f32, y1: f32) -> Aabb3d {
 }
 
 /// One hall door for the whole group, authored on the best frontage cell.
+///
+/// Prefer the **least skinny** frontage cell (largest min extent, then area)
+/// over longest hall edge — a merged bowling-alley strip often has a longer
+/// hall contact but is a bad door host.
 fn group_hall_door(
 	group: &[u32],
 	cells: &[PlanCell],
@@ -349,7 +353,8 @@ fn group_hall_door(
 	scope: &str,
 	door_width: f32,
 ) -> Option<(OpeningId, Opening, u32)> {
-	let mut best: Option<(u32, bool, f32, f32, f32, f32)> = None;
+	// (cid, along_x, lo, hi, mid, min_ext, area, shared_len)
+	let mut best: Option<(u32, bool, f32, f32, f32, f32, f32, f32)> = None;
 	for &cid in group {
 		let Some(cell) = cells.iter().find(|c| c.id == cid) else {
 			continue;
@@ -357,20 +362,32 @@ fn group_hall_door(
 		if !cell_has_hall_frontage(cell, halls, MIN_GROUP_CONNECTIVITY, EPS) {
 			continue;
 		}
+		let area = cell.area();
+		let size = cell.size();
+		let min_ext = size.x.min(size.y);
 		for hall in halls {
 			if let Some(span) = shared_edge_span(cell.bounds, *hall) {
 				let len = span.2 - span.1;
-				match best {
-					None => best = Some((cid, span.0, span.1, span.2, span.3, len)),
-					Some((_, _, _, _, _, bl)) if len > bl => {
-						best = Some((cid, span.0, span.1, span.2, span.3, len));
+				if len + EPS < door_width {
+					continue;
+				}
+				let better = match best {
+					None => true,
+					Some((_, _, _, _, _, be, ba, bl)) => {
+						min_ext > be + EPS
+							|| ((min_ext - be).abs() <= EPS && area > ba + EPS)
+							|| ((min_ext - be).abs() <= EPS
+								&& (area - ba).abs() <= EPS
+								&& len > bl)
 					}
-					_ => {}
+				};
+				if better {
+					best = Some((cid, span.0, span.1, span.2, span.3, min_ext, area, len));
 				}
 			}
 		}
 	}
-	let (cell_id, along_x, lo, hi, mid, shared_len) = best?;
+	let (cell_id, along_x, lo, hi, mid, _min_ext, _area, shared_len) = best?;
 	if shared_len < door_width + EPS {
 		return None;
 	}
@@ -758,4 +775,40 @@ fn wall_strip_with_openings(
 		last.position = edge.end;
 	}
 	ClippedRectangularStrip::from_nodes(style, nodes, insets)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::Vec2;
+	use crate::usage_areas::plan_cells::PlanCell;
+
+	#[test]
+	fn hall_door_prefers_fatter_frontage_cell() {
+		// Fat seed + thin long strip both touch the hall. Door must land on the
+		// fat cell even though the strip has a longer hall edge.
+		let cells = vec![
+			PlanCell::new(
+				0,
+				Aabb2d {
+					min: Vec2::new(0.0, 0.0),
+					max: Vec2::new(6.0, 5.0),
+				},
+			),
+			PlanCell::new(
+				1,
+				Aabb2d {
+					min: Vec2::new(6.0, 0.0),
+					max: Vec2::new(8.0, 9.0),
+				},
+			),
+		];
+		let halls = [Aabb2d {
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(8.0, 0.0),
+		}];
+		let door = group_hall_door(&[0, 1], &cells, &halls, 0, 0.0, 3.0, "test", 1.0)
+			.expect("door");
+		assert_eq!(door.2, 0, "door should prefer deep cell 0, got cell {}", door.2);
+	}
 }

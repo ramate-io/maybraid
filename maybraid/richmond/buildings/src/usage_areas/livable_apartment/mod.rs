@@ -208,20 +208,30 @@ impl LivableApartment {
 				reason: "livable_empty",
 			});
 		}
+		// Body cells need room scale; corridor stems only need walk clear.
+		let mut has_body = false;
 		for part in cells.iter() {
 			let fp = part.confines.footprint();
 			let height =
 				(part.confines.bounds.max.y - part.confines.bounds.min.y).max(0.0);
-			if fp.x < 2.0 || fp.y < 2.0 {
+			if fp.x + EPS < WALK_WIDTH || fp.y + EPS < WALK_WIDTH {
 				return Err(FitError::TooSmall {
 					reason: "livable_footprint",
 				});
+			}
+			if fp.x + EPS >= MIN_ROOM && fp.y + EPS >= MIN_ROOM {
+				has_body = true;
 			}
 			if height < 2.0 {
 				return Err(FitError::TooSmall {
 					reason: "livable_height",
 				});
 			}
+		}
+		if !has_body {
+			return Err(FitError::TooSmall {
+				reason: "livable_no_body_cell",
+			});
 		}
 
 		let y0 = Vec3::from(cells.parts[0].confines.bounds.min).y;
@@ -254,6 +264,7 @@ impl LivableApartment {
 			.or_else(|| find_entry_door(&cells.parts[0].confines.openings));
 
 		let mut entry_xz = None;
+		let mut entry_bands: Vec<Aabb2d> = Vec::new();
 		if let Some((_id, door)) = door_opening {
 			if let Some((mut entry, rem)) =
 				carve_entryway(door_cell, &door, ENTRY_DEPTH, ENTRY_WIDTH)
@@ -278,17 +289,8 @@ impl LivableApartment {
 					usable_rem
 				};
 
-				let entry_c = confines_from_xz(entry, y0, y1, roll, &Openings::new());
-				rooms.push(ApartmentRoom::Entryway {
-					label: label_filling_aabb(
-						LabelStyle::Cyan,
-						"Entryway",
-						&entry_c.bounds,
-						roll,
-					),
-					confines: entry_c,
-				});
-				walkways.push(entry);
+				push_entryway(&mut rooms, &mut walkways, entry, y0, y1, roll);
+				entry_bands.push(entry);
 				entry_xz = Some(entry);
 				work_rects = work_rects
 					.into_iter()
@@ -299,10 +301,55 @@ impl LivableApartment {
 			}
 		}
 
-		work_rects.retain(|r| {
+		// Thin door-side stems: claim as entry hall instead of dropping (silent
+		// unfilled) or failing the body cluster.
+		claim_entry_corridors(
+			&mut work_rects,
+			&mut entry_bands,
+			&mut rooms,
+			&mut walkways,
+			y0,
+			y1,
+			roll,
+		);
+		if entry_xz.is_none() {
+			entry_xz = entry_bands.first().copied();
+		}
+
+		// Body rooms vs access stems. Stems that touch the entry *or* the body
+		// become entry/open hall — not silent drops (empty residual next to the apt).
+		let mut kept = Vec::new();
+		let mut pending = Vec::new();
+		for r in work_rects.drain(..) {
 			let s = r.max - r.min;
-			s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(*r) > 4.0
-		});
+			if s.x + EPS >= MIN_ROOM && s.y + EPS >= MIN_ROOM && aabb2_area(r) > 4.0 {
+				kept.push(r);
+			} else {
+				pending.push(r);
+			}
+		}
+		let min_touch = WALK_WIDTH * 0.5;
+		let mut guard = 0;
+		while guard < pending.len().saturating_mul(2).max(4) {
+			guard += 1;
+			let Some(idx) = pending.iter().position(|r| {
+				is_access_corridor(*r)
+					&& (touches_any(*r, &entry_bands, min_touch)
+						|| touches_any(*r, &kept, min_touch))
+			}) else {
+				break;
+			};
+			let band = pending.remove(idx);
+			push_entryway(&mut rooms, &mut walkways, band, y0, y1, roll);
+			entry_bands.push(band);
+		}
+		for r in pending {
+			if aabb2_area(r) > EPS {
+				let scrap = confines_from_xz(r, y0, y1, roll, &Openings::new());
+				push_leftover(&mut rooms, &mut residual_within, scrap);
+			}
+		}
+		work_rects = kept;
 		if work_rects.is_empty() {
 			if rooms.is_empty() {
 				return Err(FitError::TooSmall {
@@ -479,6 +526,65 @@ fn find_entry_door(openings: &Openings) -> Option<(OpeningId, Opening)> {
 		.iter()
 		.find(|(_, o)| matches!(o.label, OpeningLabel::Passage))
 		.map(|(id, o)| (id.clone(), o.clone()))
+}
+
+fn push_entryway(
+	rooms: &mut Vec<ApartmentRoom>,
+	walkways: &mut Vec<Aabb2d>,
+	entry: Aabb2d,
+	y0: f32,
+	y1: f32,
+	roll: f32,
+) {
+	let entry_c = confines_from_xz(entry, y0, y1, roll, &Openings::new());
+	rooms.push(ApartmentRoom::Entryway {
+		label: label_filling_aabb(LabelStyle::Cyan, "Entryway", &entry_c.bounds, roll),
+		confines: entry_c,
+	});
+	walkways.push(entry);
+}
+
+/// Long-thin access stem: clear for walking but below room min extent.
+fn is_access_corridor(r: Aabb2d) -> bool {
+	let s = (r.max - r.min).max(Vec2::splat(EPS));
+	let min_e = s.x.min(s.y);
+	let max_e = s.x.max(s.y);
+	min_e + EPS >= WALK_WIDTH && min_e + EPS < MIN_ROOM && max_e + EPS >= MIN_ROOM
+}
+
+fn touches_any(r: Aabb2d, bands: &[Aabb2d], min_touch: f32) -> bool {
+	bands.iter().any(|b| {
+		shared_edge_span(r, *b).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= min_touch)
+			|| aabb2_near_eq(r, *b)
+	})
+}
+
+/// Flood-claim corridor stems abutting the entry so they are not dropped unfilled.
+fn claim_entry_corridors(
+	work: &mut Vec<Aabb2d>,
+	entry_bands: &mut Vec<Aabb2d>,
+	rooms: &mut Vec<ApartmentRoom>,
+	walkways: &mut Vec<Aabb2d>,
+	y0: f32,
+	y1: f32,
+	roll: f32,
+) {
+	if entry_bands.is_empty() {
+		return;
+	}
+	let min_touch = WALK_WIDTH * 0.5;
+	let mut guard = 0;
+	while guard < work.len().saturating_mul(2).max(4) {
+		guard += 1;
+		let Some(idx) = work.iter().position(|r| {
+			is_access_corridor(*r) && touches_any(*r, entry_bands, min_touch)
+		}) else {
+			break;
+		};
+		let band = work.remove(idx);
+		push_entryway(rooms, walkways, band, y0, y1, roll);
+		entry_bands.push(band);
+	}
 }
 
 fn carve_entryway(
@@ -909,5 +1015,78 @@ mod tests {
 				.is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= WALK_WIDTH * 0.5)
 		});
 		assert!(touches_body, "entry must share an edge with the body max-rect");
+		assert!(
+			!apt.max_rects.is_empty()
+				|| apt.rooms.iter().any(|r| matches!(
+					r,
+					ApartmentRoom::Living(_)
+						| ApartmentRoom::Kitchen(_)
+						| ApartmentRoom::Bedroom(_)
+						| ApartmentRoom::OpenHall { .. }
+				)),
+			"body should pack"
+		);
+	}
+
+	#[test]
+	fn thin_entry_corridor_claimed_not_dropped() {
+		// Door on a long thin stem; fat body behind. Stem must become entry hall
+		// so the body still packs (not an empty residual beside the apt).
+		let stem = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.8, 3.0, 8.0)),
+				0.0,
+				{
+					let mut o = Openings::new();
+					o.insert(
+						OpeningId::new("door"),
+						Opening::new(
+							Aabb3d::from_min_max(
+								Vec3::new(0.4, 0.0, -0.15),
+								Vec3::new(1.4, 2.2, 0.15),
+							),
+							OpeningLabel::Passage,
+						),
+					);
+					o
+				},
+			),
+		);
+		let body = FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(
+				Aabb3d::from_min_max(Vec3::new(1.8, 0.0, 0.0), Vec3::new(8.0, 3.0, 8.0)),
+				0.0,
+				Openings::new(),
+			),
+		);
+		let (apt, residual) =
+			LivableApartment::from_multi(0, &MultiConfines::new([stem, body]), NoiseParams::default())
+				.unwrap();
+		assert!(
+			apt.rooms
+				.iter()
+				.any(|r| matches!(r, ApartmentRoom::Entryway { .. })),
+			"expected entry on stem"
+		);
+		assert!(
+			apt.rooms.iter().any(|r| matches!(
+				r,
+				ApartmentRoom::Living(_)
+					| ApartmentRoom::Kitchen(_)
+					| ApartmentRoom::Bedroom(_)
+					| ApartmentRoom::Dining(_)
+					| ApartmentRoom::OpenHall { .. }
+			)),
+			"body should pack, rooms={:?}",
+			apt.rooms.len()
+		);
+		// Stem must not remain an unfilled host residual.
+		let stem_left = residual.within.iter().any(|f| {
+			let xz = host_xz(&f.confines.bounds);
+			xz.max.x - xz.min.x < 2.0 && aabb2_area(xz) > 5.0
+		});
+		assert!(!stem_left, "thin stem should be claimed as entry, not residual");
 	}
 }
