@@ -252,4 +252,28 @@ mod tests {
 			"stem block should wall its claimed interfaces"
 		);
 	}
+
+	#[test]
+	fn seed_1337_flange_livable1_no_oversized_closets() {
+		use crate::usage_areas::livable_apartment::ApartmentRoom;
+		use procedural_common::aabb2_area;
+
+		let storey = storey_seed(1337);
+		assert!(storey.blocks.len() >= 2, "expected stem + flange");
+		let flange = &storey.blocks[1];
+		let livable1 = flange
+			.apartments
+			.iter()
+			.find(|a| a.region_id == 0)
+			.expect("Flange Livable 1");
+		for room in &livable1.rooms {
+			if let ApartmentRoom::HouseholdCloset { confines, .. } = room {
+				let area = aabb2_area(host_xz(&confines.bounds));
+				assert!(
+					area < 8.0,
+					"HouseholdCloset area {area:.2} ≥ 8 — normalize should reopen large demotions"
+				);
+			}
+		}
+	}
 }

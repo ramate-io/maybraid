@@ -216,7 +216,7 @@ pub(crate) fn fit_from_multi(
 		});
 	}
 
-	normalize_apartment_circulation(&mut rooms, entry_xz, access);
+	normalize_apartment_circulation(&mut rooms, entry_xz, access, &walkways, y0, y1, roll);
 
 	Ok((
 		LivableApartment {
@@ -286,20 +286,30 @@ fn label_xz(label: &LabelNode) -> Aabb2d {
 }
 
 /// Soft normalize: closed rooms must path-connect to entry via open regions.
+///
+/// Unreachable closed rooms become household closets only when closet-sized;
+/// larger demotions reopen as [`ApartmentRoom::OpenHall`] so normalize cannot
+/// flood an apartment with oversized "closets".
 fn normalize_apartment_circulation(
 	rooms: &mut Vec<ApartmentRoom>,
 	entry: Option<Aabb2d>,
 	access: PlanAccessParams,
+	walkways: &[Aabb2d],
+	y0: f32,
+	y1: f32,
+	roll: f32,
 ) {
 	let Some(entry) = entry else {
 		return;
 	};
 	let touch = access.open_touch();
+	let door = access.door_contact();
 	let open_rects: Vec<Aabb2d> = rooms
 		.iter()
 		.filter(|r| r.is_open_circ())
 		.filter_map(room_xz)
 		.chain(std::iter::once(entry))
+		.chain(walkways.iter().copied())
 		.collect();
 	if open_rects.is_empty() {
 		return;
@@ -346,23 +356,31 @@ fn normalize_apartment_circulation(
 			continue;
 		};
 		let ok = reachable_open.iter().any(|o| {
-			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= touch)
+			shared_edge_span(cz, *o).is_some_and(|(_, lo, hi, _)| hi - lo + EPS >= door)
 		});
-		if !ok {
-			let confines = Confines::new(
-				Aabb3d::from_min_max(
-					Vec3::new(cz.min.x, 0.0, cz.min.y),
-					Vec3::new(cz.max.x, 3.0, cz.max.y),
-				),
-				0.0,
-				Openings::new(),
-			);
+		if ok {
+			continue;
+		}
+		let area = aabb2_area(cz);
+		let confines = confines_from_xz(cz, y0, y1, roll, &Openings::new());
+		// Closet band matches [`push_leftover`]; larger pockets reopen as halls.
+		if (1.8..8.0).contains(&area) {
 			*room = ApartmentRoom::HouseholdCloset {
 				label: label_filling_aabb(
 					LabelStyle::Gray,
 					"HouseholdCloset",
 					&confines.bounds,
-					0.0,
+					roll,
+				),
+				confines,
+			};
+		} else {
+			*room = ApartmentRoom::OpenHall {
+				label: label_filling_aabb(
+					LabelStyle::Cyan,
+					"OpenHall",
+					&confines.bounds,
+					roll,
 				),
 				confines,
 			};

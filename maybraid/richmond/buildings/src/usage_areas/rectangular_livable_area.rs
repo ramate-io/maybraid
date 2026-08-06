@@ -19,7 +19,9 @@ use slot_policy::{min_area_for, SlotPolicy};
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use procedural_common::{aabb2_area, Aabb2dPack, NoiseConfig, NoiseParams};
+use procedural_common::{
+	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseConfig, NoiseParams, PlanAxes, PlanOpeningFace,
+};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::{LabelNode, LabelStyle};
@@ -430,6 +432,7 @@ fn fit_all_open(
 		&mut free,
 		&kinds,
 		None,
+		confines,
 		y0,
 		y1,
 		roll,
@@ -609,6 +612,7 @@ fn fit_spine_hall(
 		&mut private_free,
 		&closed_kinds,
 		&spine,
+		confines,
 		min_hall,
 		y0,
 		y1,
@@ -629,6 +633,7 @@ fn fit_spine_hall(
 		&mut common_free,
 		&open_kinds,
 		Some(&spine),
+		confines,
 		y0,
 		y1,
 		roll,
@@ -1107,6 +1112,7 @@ fn pack_closed_abutting(
 	free: &mut Vec<Aabb2d>,
 	kinds: &[RectQuarterKind],
 	spine: &[Aabb2d],
+	host_confines: &Confines,
 	min_hall: f32,
 	y0: f32,
 	y1: f32,
@@ -1128,7 +1134,11 @@ fn pack_closed_abutting(
 		let cell_noise = noise_for_cell(noise, rooms.len() as i32);
 		let (slot, rem) = take_slot(host, kind);
 		let try_slot = |slot: Aabb2d| {
-			let openings = door_onto_spine(slot, spine, y0, y1, rooms.len() as u32);
+			let mut openings = passages_facing_rect(host_confines, slot);
+			let spine_door = door_onto_spine(slot, spine, y0, y1, rooms.len() as u32);
+			for (oid, o) in spine_door.iter() {
+				openings.insert(oid.clone(), o.clone());
+			}
 			let confines = confines_from_xz(slot, y0, y1, roll, &openings);
 			try_fit_kind(kind, &confines, cell_noise).map(|(room, nested)| (room, nested, confines))
 		};
@@ -1170,6 +1180,7 @@ fn pack_open_into(
 	free: &mut Vec<Aabb2d>,
 	kinds: &[RectQuarterKind],
 	spine: Option<&[Aabb2d]>,
+	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
 	roll: f32,
@@ -1184,6 +1195,7 @@ fn pack_open_into(
 			free,
 			kind,
 			spine,
+			host_confines,
 			y0,
 			y1,
 			roll,
@@ -1210,6 +1222,7 @@ fn pack_open_into(
 				free,
 				kind,
 				spine,
+				host_confines,
 				y0,
 				y1,
 				roll,
@@ -1234,6 +1247,7 @@ fn try_pack_one_open(
 	free: &mut Vec<Aabb2d>,
 	kind: RectQuarterKind,
 	spine: Option<&[Aabb2d]>,
+	host_confines: &Confines,
 	y0: f32,
 	y1: f32,
 	roll: f32,
@@ -1248,31 +1262,45 @@ fn try_pack_one_open(
 	let host = free.remove(idx);
 	let cell_noise = noise_for_cell(noise, rooms.len() as i32);
 	let (slot, rem) = take_slot(host, kind);
-	let try_slot = |slot: Aabb2d| {
-		// Quarters require a passage for placer keep-outs (`reason: "passage"`).
-		let openings = match spine {
-			Some(bands) => door_onto_spine(slot, bands, y0, y1, rooms.len() as u32),
-			None => slot_edge_passage(slot, y0, y1, rooms.len() as u32),
-		};
+	let try_slot = |slot: Aabb2d, rem: &[Aabb2d]| {
+		// Prefer passages toward spine / remnants / already-packed open siblings,
+		// and inherit host doors that sit on this slot — not an arbitrary long edge.
+		let mut anchors = rem.to_vec();
+		if let Some(bands) = spine {
+			anchors.extend_from_slice(bands);
+		}
+		for c in open_confines.iter() {
+			anchors.push(host_xz(&c.bounds));
+		}
+		let openings = openings_for_open_slot(
+			slot,
+			&anchors,
+			host_confines,
+			y0,
+			y1,
+			rooms.len() as u32,
+		);
 		let confines = confines_from_xz(slot, y0, y1, roll, &openings);
 		try_fit_kind(kind, &confines, cell_noise).map(|(room, nested)| (room, nested, confines))
 	};
-	match try_slot(slot) {
+	match try_slot(slot, &rem) {
 		Ok((room, nested, confines)) => {
 			rooms.push(room);
 			open_confines.push(confines);
 			residual_within.extend(nested.within);
 			return_open_remnants(free, rooms, residual_within, rem, y0, y1, roll);
 		}
-		Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => match try_slot(host) {
-			Ok((room, nested, confines)) => {
-				rooms.push(room);
-				open_confines.push(confines);
-				residual_within.extend(nested.within);
+		Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
+			match try_slot(host, &[]) {
+				Ok((room, nested, confines)) => {
+					rooms.push(room);
+					open_confines.push(confines);
+					residual_within.extend(nested.within);
+				}
+				Err(FitError::TooSmall { .. }) => free.push(host),
+				Err(err) => return Err(err),
 			}
-			Err(FitError::TooSmall { .. }) => free.push(host),
-			Err(err) => return Err(err),
-		},
+		}
 		Err(FitError::TooSmall { .. }) => free.push(host),
 		Err(err) => return Err(err),
 	}
@@ -1359,8 +1387,24 @@ fn return_open_remnants(
 
 fn door_onto_spine(slot: Aabb2d, spine: &[Aabb2d], y0: f32, y1: f32, id: u32) -> Openings {
 	let mut openings = Openings::new();
+	if let Some((oid, opening)) = passage_onto_anchors(slot, spine, y0, y1, id) {
+		openings.insert(oid, opening);
+		return openings;
+	}
+	// Slot may overlap the spine (open rooms) without a clean shared edge.
+	slot_edge_passage(slot, y0, y1, id)
+}
+
+/// Best shared-edge passage from `slot` onto any anchor rect (spine, remnant, sibling).
+fn passage_onto_anchors(
+	slot: Aabb2d,
+	anchors: &[Aabb2d],
+	y0: f32,
+	y1: f32,
+	id: u32,
+) -> Option<(OpeningId, Opening)> {
 	let mut best: Option<(bool, f32, f32, f32, f32)> = None;
-	for s in spine {
+	for s in anchors {
 		if let Some((along_x, lo, hi, mid)) = shared_edge_span(slot, *s) {
 			let len = hi - lo;
 			if best.map(|(_, _, _, _, l)| len > l).unwrap_or(true) {
@@ -1368,16 +1412,58 @@ fn door_onto_spine(slot: Aabb2d, spine: &[Aabb2d], y0: f32, y1: f32, id: u32) ->
 			}
 		}
 	}
-	if let Some((along_x, lo, hi, mid, _)) = best {
-		if let Some((oid, opening)) =
-			connecting_passage(SCOPE, "connect", along_x, lo, hi, mid, y0, y1, format!("0_{id}_99"))
-		{
-			openings.insert(oid, opening);
-			return openings;
+	let (along_x, lo, hi, mid, _) = best?;
+	connecting_passage(
+		SCOPE,
+		"connect",
+		along_x,
+		lo,
+		hi,
+		mid,
+		y0,
+		y1,
+		format!("0_{id}_99"),
+	)
+}
+
+/// Host passages on this slot + a door toward circulation anchors.
+fn openings_for_open_slot(
+	slot: Aabb2d,
+	anchors: &[Aabb2d],
+	host: &Confines,
+	y0: f32,
+	y1: f32,
+	id: u32,
+) -> Openings {
+	let mut openings = passages_facing_rect(host, slot);
+	if let Some((oid, opening)) = passage_onto_anchors(slot, anchors, y0, y1, id) {
+		openings.insert(oid, opening);
+	}
+	if !openings
+		.iter()
+		.any(|(_, o)| matches!(o.label, OpeningLabel::Passage))
+	{
+		let edge = slot_edge_passage(slot, y0, y1, id);
+		for (oid, o) in edge.iter() {
+			openings.insert(oid.clone(), o.clone());
 		}
 	}
-	// Slot may overlap the spine (open rooms) without a clean shared edge.
-	slot_edge_passage(slot, y0, y1, id)
+	openings
+}
+
+/// Inherit host [`OpeningLabel::Passage`] openings whose face sits on `rect`.
+fn passages_facing_rect(host: &Confines, rect: Aabb2d) -> Openings {
+	let mut out = Openings::new();
+	for (id, o) in host.openings.iter() {
+		if !matches!(o.label, OpeningLabel::Passage) {
+			continue;
+		}
+		let plan = aabb3_to_plan(&o.bounds, PlanAxes::XZ);
+		if PlanOpeningFace::from_passage(rect, plan).is_some() {
+			out.insert(id.clone(), o.clone());
+		}
+	}
+	out
 }
 
 /// Synthetic door on the longest cardinal edge so quarter placers can clear entry.
