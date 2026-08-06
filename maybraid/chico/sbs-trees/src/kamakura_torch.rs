@@ -12,8 +12,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
-	foliage_nodes_banded, foliage_nodes_low, stick_nodes_high, stick_nodes_low,
-	stick_nodes_medium, structural_lod_probe, HIGH_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, stick_nodes_high,
+	stick_nodes_low, stick_nodes_medium, structural_lod_probe, HIGH_FOLIAGE_BANDS,
 };
 
 /// Authoring / CLI parameters for Kamakura Torch.
@@ -87,9 +87,7 @@ impl VegetationComponents for KamakuraTorch {
 			LodSceneLevel::High => {
 				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
 			}
-			LodSceneLevel::Medium => {
-				foliage_nodes_banded(&self.chain, MEDIUM_FOLIAGE_BANDS, leaf_r)
-			}
+			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, leaf_r),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)

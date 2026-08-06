@@ -10,7 +10,7 @@ mod stick;
 use chico_vegetation_components::VegetationStructuralLodProbe;
 
 pub(crate) use canopy::{
-	foliage_nodes_banded, foliage_nodes_low, HIGH_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 };
 pub(crate) use stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 
