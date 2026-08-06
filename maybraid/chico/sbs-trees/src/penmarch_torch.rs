@@ -12,8 +12,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
-	foliage_nodes_banded, stick_nodes_high, stick_nodes_low, stick_nodes_medium,
-	HIGH_FOLIAGE_BANDS, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
+	foliage_nodes_banded, foliage_nodes_low, stick_nodes_high, stick_nodes_low,
+	stick_nodes_medium, HIGH_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
 };
 
 /// Authoring / CLI parameters for Penmarch Torch.
@@ -83,15 +83,18 @@ impl VegetationComponents for PenmarchTorch {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		let leaf_r = self.leaf_radius_world();
-		let bands = match level {
-			LodSceneLevel::High => HIGH_FOLIAGE_BANDS,
-			LodSceneLevel::Medium => MEDIUM_FOLIAGE_BANDS,
+		let nodes = match level {
+			LodSceneLevel::High => {
+				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
+			}
+			LodSceneLevel::Medium => {
+				foliage_nodes_banded(&self.chain, MEDIUM_FOLIAGE_BANDS, leaf_r)
+			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => LOW_FOLIAGE_BANDS,
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r),
 		};
-		let nodes = foliage_nodes_banded(&self.chain, bands, leaf_r);
 		Layers::from_free(nodes)
 	}
 
