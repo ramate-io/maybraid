@@ -4,7 +4,8 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Stick LOD matches Penmarch Torch (`torch_tree`) with denser Medium branch sampling;
-//! foliage keeps outer / terminal plane-splay bands and a Low mid-canopy layered proxy.
+//! foliage uses outer / terminal cheap-ball bands and a Low full-canopy layered proxy
+//! (inset to 70% of canopy radius).
 
 mod canopy;
 pub mod render_item_plugin;

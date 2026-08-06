@@ -1,7 +1,8 @@
 //! Cheap-ball joint canopy plus optional stalk-tip apex ([#232](https://github.com/ramate-io/maybraid/issues/232)).
 //!
 //! Medium uses ~30% fewer band cells. Medium and Low share a thin layered proxy that
-//! spans the full canopy height (top-to-bottom) with reduced XZ extent.
+//! stretches full canopy height (top-anchored) with reduced XZ extent. Low emits the
+//! proxy twice for extra mass.
 
 use bevy::prelude::Vec3;
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
@@ -27,6 +28,8 @@ pub(crate) const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new
 
 /// Horizontal (XZ) scale of the thin full-height canopy proxy.
 const THIN_PROXY_XZ_SCALE: f32 = 0.40;
+/// Extra vertical stretch beyond the candidate AABB (top held at canopy tip).
+const PROXY_HEIGHT_STRETCH: f32 = 1.20;
 
 #[derive(Clone, Copy)]
 struct FoliageCandidate {
@@ -92,14 +95,16 @@ fn maybe_apex_ball(
 	)))
 }
 
-/// Thin layered proxy spanning full canopy height (reduced XZ footprint).
+/// Thin layered proxy: full canopy height (top-anchored at stalk tip), reduced XZ.
 fn thin_full_height_proxy_ball(
 	candidates: &[FoliageCandidate],
 	splay_radius_world: f32,
+	chain: &BallStickChain<LiamsConiferChain>,
 ) -> Option<FoliageNode> {
 	if candidates.is_empty() {
 		return None;
 	}
+	let tip = liams_stalk_tip_from_chain(chain);
 	let mut min = Vec3::splat(f32::INFINITY);
 	let mut max = Vec3::splat(f32::NEG_INFINITY);
 	for c in candidates {
@@ -108,13 +113,23 @@ fn thin_full_height_proxy_ball(
 		min = min.min(p - Vec3::splat(r));
 		max = max.max(p + Vec3::splat(r));
 	}
-	let center = (min + max) * 0.5;
+	// Ensure the proxy envelope includes the crown tip.
+	max.y = max.y.max(tip.position.y + apex_pad(splay_radius_world));
+	let top_y = max.y;
 	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
 	half_extents.x *= THIN_PROXY_XZ_SCALE;
 	half_extents.z *= THIN_PROXY_XZ_SCALE;
+	half_extents.y *= PROXY_HEIGHT_STRETCH;
+	let mut center = (min + max) * 0.5;
+	// Hold the top of the stretched proxy at the canopy tip.
+	center.y = top_y - half_extents.y;
 	Some(FoliageNode::layered_ball(
 		Placement::new(center, 0.0).with_scale(half_extents),
 	))
+}
+
+fn apex_pad(splay_radius_world: f32) -> f32 {
+	splay_radius_world.max(1e-4) * 0.25
 }
 
 fn with_proxy_and_apex(
@@ -124,10 +139,13 @@ fn with_proxy_and_apex(
 	chain: &BallStickChain<LiamsConiferChain>,
 	apex_spawn_fraction: f32,
 	apex_radius_world: f32,
+	proxy_count: usize,
 ) -> Vec<FoliageNode> {
 	let mut nodes = banded_from_candidates(candidates, bands, splay_radius_world);
-	if let Some(proxy) = thin_full_height_proxy_ball(candidates, splay_radius_world) {
-		nodes.push(proxy);
+	if let Some(proxy) = thin_full_height_proxy_ball(candidates, splay_radius_world, chain) {
+		for _ in 0..proxy_count {
+			nodes.push(proxy.clone());
+		}
 	}
 	if let Some(apex) = maybe_apex_ball(chain, apex_spawn_fraction, apex_radius_world) {
 		nodes.push(apex);
@@ -152,7 +170,7 @@ pub(crate) fn foliage_nodes_banded(
 	nodes
 }
 
-/// Medium samples (~30% fewer cells) plus thin full-height proxy and optional apex.
+/// Medium samples (~30% fewer cells) plus thin top-anchored proxy and optional apex.
 pub(crate) fn foliage_nodes_medium(
 	chain: &BallStickChain<LiamsConiferChain>,
 	splay_radius_world: f32,
@@ -168,10 +186,11 @@ pub(crate) fn foliage_nodes_medium(
 		chain,
 		apex_spawn_fraction,
 		apex_radius_world,
+		1,
 	)
 }
 
-/// Coarse samples plus the same thin full-height proxy and optional apex.
+/// Coarse samples plus the same thin proxy doubled, and optional apex.
 pub(crate) fn foliage_nodes_low(
 	chain: &BallStickChain<LiamsConiferChain>,
 	splay_radius_world: f32,
@@ -187,5 +206,6 @@ pub(crate) fn foliage_nodes_low(
 		chain,
 		apex_spawn_fraction,
 		apex_radius_world,
+		2,
 	)
 }

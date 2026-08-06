@@ -5,7 +5,7 @@
 //! into [`NorthernConifer`], which implements [`VegetationComponents`].
 //!
 //! Foliage uses cheap-ball banding; Medium is ~30% fewer cells; Medium/Low share a thin
-//! full-height layered canopy proxy.
+//! top-anchored full-height layered canopy proxy (Low emits it twice).
 
 mod canopy;
 pub mod render_item_plugin;
