@@ -3,7 +3,7 @@
 pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
-mod diagnostics;
+pub mod diagnostics;
 mod ground;
 mod render;
 mod render_materials;
