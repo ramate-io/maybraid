@@ -75,12 +75,29 @@ pub const MAX_LIVABLE_GALLERY_WIDTH: f32 = 16.0;
 pub const MIN_LIVABLE_STALL_RING_SHARE: f32 = 0.70;
 pub const MAX_LIVABLE_STALL_RING_SHARE: f32 = 0.85;
 
+/// Minimum gallery depth for [`LesHallesParameterized::sample_monotower`].
+pub const MIN_MONOTOWER_GALLERY_WIDTH: f32 = 7.0;
+/// Soft max gallery depth for mixed-use monotower shells.
+pub const MAX_MONOTOWER_GALLERY_WIDTH: f32 = 14.0;
+/// Stall-ring share for monotower — between commercial and livable.
+pub const MIN_MONOTOWER_STALL_RING_SHARE: f32 = 0.62;
+pub const MAX_MONOTOWER_STALL_RING_SHARE: f32 = 0.78;
+/// Hard courtyard floor for monotower (expects larger footprints than commercial).
+pub const MIN_MONOTOWER_COURTYARD: f32 = 8.0;
+/// Storey height range for Les Halles monotowers (meters).
+pub const MIN_MONOTOWER_STOREY_HEIGHT: f32 = 3.0;
+pub const MAX_MONOTOWER_STOREY_HEIGHT: f32 = 5.0;
+
 /// Salt lanes for spatial sampling at the confines center.
 const SALT_COURTYARD: f32 = 1.0;
 const SALT_STALL_SHARE: f32 = 2.0;
 const SALT_SHAFT: f32 = 3.0;
 const SALT_MID_SHAFT: f32 = 3.5;
 const SALT_OPENINGS: f32 = 4.0;
+const SALT_STOREY_HEIGHT: f32 = 5.0;
+const SALT_COMMERCIAL_COUNT: f32 = 6.0;
+const SALT_SHAFT_COUNT: f32 = 7.0;
+const SALT_SHAFT_PICK: f32 = 7.5;
 
 impl LesHallesParameterized {
 	/// Sample knobs at the confines center. Rejects footprints that cannot host
@@ -244,6 +261,147 @@ impl LesHallesParameterized {
 		})
 	}
 
+	/// Shared shell knobs for mixed-use monotowers: gallery depth between
+	/// commercial and livable, with a larger courtyard floor so apartments and
+	/// stalls both fit on big footprints.
+	///
+	/// Spatial noise uses the plan-center with \(y = 0\) so slicing the tower
+	/// AABB into storeys does not change the shared shell knobs.
+	pub fn sample_monotower(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let (extent_x, extent_z, height) = footprint_extents(confines)?;
+		let min_ring = MIN_MONOTOWER_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
+		let min_outer = 2.0 * min_ring + MIN_MONOTOWER_COURTYARD;
+		if extent_x < min_outer || extent_z < min_outer {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+		if height < MIN_MONOTOWER_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		let extent_min = extent_x.min(extent_z);
+
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_COURTYARD_FRACTION,
+			MAX_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
+
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_MONOTOWER_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_MONOTOWER_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
+
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_MONOTOWER_STALL_RING_SHARE,
+			MAX_MONOTOWER_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) =
+			split_ring_budget_monotower(ring_budget, stall_share)?;
+
+		let ring = gallery_width + balcony_width;
+		if extent_x < 2.0 * ring + MIN_MONOTOWER_COURTYARD
+			|| extent_z < 2.0 * ring + MIN_MONOTOWER_COURTYARD
+		{
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+
+		let shaft_i = cfg.sample_range_usize_4d(0, 2, c.x, c.y, c.z, SALT_SHAFT);
+		let shaft_placement = if shaft_i == 0 {
+			LesHallesShaftPlacement::Corners
+		} else {
+			LesHallesShaftPlacement::MidSides
+		};
+
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side =
+			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
+
+		Ok(Self {
+			gallery_width,
+			balcony_width,
+			courtyard_fraction,
+			shaft_placement,
+			mid_shaft_side,
+			opening_density,
+			doors,
+			windows,
+		})
+	}
+
+	/// Sample a storey height in `[MIN_MONOTOWER_STOREY_HEIGHT, MAX_MONOTOWER_STOREY_HEIGHT]`.
+	pub fn sample_monotower_storey_height(confines: &Confines, noise: NoiseParams) -> f32 {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		cfg.sample_range_f32_4d(
+			MIN_MONOTOWER_STOREY_HEIGHT,
+			MAX_MONOTOWER_STOREY_HEIGHT,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STOREY_HEIGHT,
+		)
+	}
+
+	/// Number of commercial storeys from the ground up (`1…n_storeys`, or `1…n-1`
+	/// when `n_storeys ≥ 2` so at least one floor stays residential).
+	pub fn sample_monotower_commercial_count(
+		confines: &Confines,
+		noise: NoiseParams,
+		n_storeys: usize,
+	) -> usize {
+		let n = n_storeys.max(1);
+		if n == 1 {
+			return 1;
+		}
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		// Inclusive sample of 1..=(n-1).
+		1 + cfg.sample_range_usize_4d(0, n - 1, c.x, c.y, c.z, SALT_COMMERCIAL_COUNT)
+	}
+
+	/// How many shaft slots to activate when none (or few) are inbound (`1…4`).
+	pub fn sample_monotower_shaft_count(confines: &Confines, noise: NoiseParams) -> usize {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		1 + cfg.sample_range_usize_4d(0, 4, c.x, c.y, c.z, SALT_SHAFT_COUNT)
+	}
+
+	/// Deterministic pick of `count` distinct slot indices in `0…3`.
+	pub fn sample_monotower_shaft_slots(
+		confines: &Confines,
+		noise: NoiseParams,
+		count: usize,
+	) -> Vec<usize> {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		let want = count.clamp(1, 4);
+		let mut slots = Vec::new();
+		let mut salt = SALT_SHAFT_PICK;
+		while slots.len() < want {
+			let s = cfg.sample_range_usize_4d(0, 4, c.x, c.y, c.z, salt);
+			salt += 0.17;
+			if !slots.contains(&s) {
+				slots.push(s);
+			}
+		}
+		slots.sort_unstable();
+		slots
+	}
+
 	pub fn ring_width(&self) -> f32 {
 		self.gallery_width + self.balcony_width
 	}
@@ -298,6 +456,15 @@ fn split_ring_budget_livable(ring_budget: f32, stall_share: f32) -> Result<(f32,
 	)
 }
 
+fn split_ring_budget_monotower(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_MONOTOWER_GALLERY_WIDTH,
+		MAX_MONOTOWER_GALLERY_WIDTH.min(MAX_GALLERY_WIDTH),
+	)
+}
+
 fn split_ring_budget_with(
 	ring_budget: f32,
 	stall_share: f32,
@@ -324,6 +491,12 @@ fn split_ring_budget_with(
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
 	Ok((gallery_width, balcony_width))
+}
+
+/// Plan-center with \(y = 0\) so tower AABB slices share monotower noise lanes.
+fn monotower_noise_center(confines: &Confines) -> bevy_math::Vec3 {
+	let c = confines.center();
+	bevy_math::Vec3::new(c.x, 0.0, c.z)
 }
 
 pub(crate) fn footprint_extents(confines: &Confines) -> Result<(f32, f32, f32), FitError> {

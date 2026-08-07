@@ -23,12 +23,16 @@ pub mod floor_plan;
 pub mod full_storey;
 pub mod livable_full_storey;
 pub mod parameterized;
+pub mod usage_plan;
 
 pub use floor_plan::LesHallesFloorPlan;
 pub use full_storey::LesHallesFullStorey;
 pub use livable_full_storey::LesHallesLivableFullStorey;
 pub use parameterized::{
 	LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor,
+};
+pub use usage_plan::{
+	LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan,
 };
 
 /// Scope prefix for [`crate::OpeningId::scoped`] openings authored by this typology.
