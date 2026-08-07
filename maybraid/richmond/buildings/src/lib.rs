@@ -20,6 +20,7 @@ pub mod paneling;
 pub mod placer;
 pub mod portals;
 pub mod shells;
+pub mod monotower;
 pub mod stacked_rings;
 pub mod storeys;
 pub mod usage_areas;
@@ -92,13 +93,15 @@ pub use shells::{
 	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab,
 	Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
 };
+pub use monotower::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };
 pub use storeys::les_halles::{
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
-	LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
+	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesFullStorey, LesHallesLivableFullStorey,
+	LesHallesLivableUsage, LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement,
+	LesHallesStallDoor, LesHallesUsagePlan, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,

@@ -471,6 +471,15 @@ impl LesHallesFloorPlan {
 		params: &LesHallesParameterized,
 		confines: &Confines,
 	) -> Openings {
+		Self::shaft_requests_for_slots(params, confines, &[0, 1, 2, 3])
+	}
+
+	/// Small [`OpeningLabel::Shaft`] requests for the given placement slots (`0…3`).
+	pub fn shaft_requests_for_slots(
+		params: &LesHallesParameterized,
+		confines: &Confines,
+		slots: &[usize],
+	) -> Openings {
 		let (extent_x, extent_z, height) = match footprint_extents(confines) {
 			Ok(v) => v,
 			Err(_) => return Openings::new(),
@@ -488,7 +497,10 @@ impl LesHallesFloorPlan {
 			params.mid_shaft_side,
 		);
 		let mut openings = Openings::new();
-		for (slot, shaft) in candidates.iter().enumerate() {
+		for &slot in slots {
+			let Some(shaft) = candidates.get(slot) else {
+				continue;
+			};
 			let mid = Vec3::from((shaft.min + shaft.max) * 0.5);
 			let half = 0.4_f32;
 			openings.insert(

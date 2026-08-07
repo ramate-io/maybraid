@@ -1,0 +1,371 @@
+//! Mixed-use Les Halles monotower: commercial gallery storeys below, livable above.
+//!
+//! One shared [`LesHallesParameterized`] shell is replayed per storey. Shaft slots
+//! merge inbound [`OpeningLabel::Shaft`] openings with a sampled 1…4 complement.
+//! Stairs are deferred — shafts remain [`SpaceKind::InternalSpace`] residuals.
+//! Roof / ground-floor special cases are owned by the tower consumer.
+
+use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
+use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::furniture::FurnitureNode;
+use richmond_building_components::joints::JointNode;
+use richmond_building_components::labels::LabelNode;
+use richmond_building_components::panels::PanelNode;
+use richmond_building_components::{BuildingComponents, Layers};
+
+use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::openings::{OpeningLabel, Openings};
+use crate::storeys::les_halles::parameterized::{
+	footprint_extents, MIN_MONOTOWER_STOREY_HEIGHT,
+};
+use crate::storeys::les_halles::{
+	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage, LesHallesParameterized,
+	LesHallesUsagePlan,
+};
+
+const SALT_FLOOR: f32 = 11.0;
+
+/// One storey in a [`MixedUseLesHallesMonotower`]: shared shell + painted usage.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MixedUseLesHallesStorey {
+	Commercial {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesCommercialUsage,
+	},
+	Livable {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesLivableUsage,
+	},
+}
+
+impl MixedUseLesHallesStorey {
+	pub fn floor_plan(&self) -> &LesHallesFloorPlan {
+		match self {
+			Self::Commercial { floor_plan, .. } | Self::Livable { floor_plan, .. } => floor_plan,
+		}
+	}
+
+	pub fn is_commercial(&self) -> bool {
+		matches!(self, Self::Commercial { .. })
+	}
+}
+
+/// Commercial-below / livable-above stack of Les Halles storeys.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MixedUseLesHallesMonotower {
+	pub parameterized: LesHallesParameterized,
+	pub storey_height: f32,
+	/// Count of commercial storeys from the ground (`floors[0..n_commercial]`).
+	pub n_commercial: usize,
+	/// Active shaft placement slots (`0…3`), frozen for the tower.
+	pub shaft_slots: Vec<usize>,
+	pub floors: Vec<MixedUseLesHallesStorey>,
+}
+
+impl MixedUseLesHallesMonotower {
+	pub fn floor_count(&self) -> usize {
+		self.floors.len()
+	}
+}
+
+impl Fit for MixedUseLesHallesMonotower {
+	fn fit_to_confines(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		let (_, _, total_h) = footprint_extents(confines)?;
+		let storey_height =
+			LesHallesParameterized::sample_monotower_storey_height(confines, noise)
+				.clamp(MIN_MONOTOWER_STOREY_HEIGHT, total_h.max(MIN_MONOTOWER_STOREY_HEIGHT));
+		let n_storeys = ((total_h / storey_height).floor() as usize).max(1);
+		let used_h = n_storeys as f32 * storey_height;
+		if used_h + 1e-3 < MIN_MONOTOWER_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		// Shell sampling uses a representative single-storey slice.
+		let y0 = confines.bounds.min.y;
+		let shell_confines = slice_confines(confines, y0, storey_height, Openings::new());
+		let params = LesHallesParameterized::sample_monotower(&shell_confines, noise)?;
+
+		let shaft_slots = resolve_shaft_slots(&params, confines, noise);
+		let n_commercial =
+			LesHallesParameterized::sample_monotower_commercial_count(confines, noise, n_storeys);
+
+		let mut floors = Vec::with_capacity(n_storeys);
+		for i in 0..n_storeys {
+			let fy0 = y0 + i as f32 * storey_height;
+			let storey_openings =
+				LesHallesFloorPlan::shaft_requests_for_slots(&params, confines, &shaft_slots);
+			// Re-home requests onto this storey's Y band.
+			let storey_openings = rebase_openings_y(storey_openings, fy0, storey_height);
+			let inbound = rebase_openings_y(
+				inbound_shaft_openings(confines),
+				fy0,
+				storey_height,
+			);
+			let mut openings = storey_openings;
+			for (id, opening) in inbound.iter() {
+				openings.insert(id.clone(), opening.clone());
+			}
+			let storey_confines = slice_confines(confines, fy0, storey_height, openings);
+			let (floor_plan, regions) =
+				LesHallesFloorPlan::from_parameterized(params.clone(), &storey_confines)?;
+			let floor_noise = floor_noise(noise, i);
+			let storey = if i < n_commercial {
+				let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
+				MixedUseLesHallesStorey::Commercial { floor_plan, usage }
+			} else {
+				let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
+				MixedUseLesHallesStorey::Livable { floor_plan, usage }
+			};
+			floors.push(storey);
+		}
+
+		let tower = Self {
+			parameterized: params,
+			storey_height,
+			n_commercial,
+			shaft_slots,
+			floors,
+		};
+		// Residuals: stack footprint atop the used height (consumer authors roof).
+		let residual = FillableRegions {
+			within: Vec::new(),
+			atop: tower
+				.floors
+				.first()
+				.map(|f| f.floor_plan().fillable_regions().atop)
+				.unwrap_or_default(),
+		};
+		let _ = used_h;
+		Ok((tower, residual))
+	}
+}
+
+impl BuildingComponents for MixedUseLesHallesMonotower {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = Layers::new();
+		for floor in &self.floors {
+			match floor {
+				MixedUseLesHallesStorey::Commercial { floor_plan, usage } => {
+					out.extend(floor_plan.panel_nodes_for_level(level));
+					out.extend(usage.panel_nodes_for_level(level));
+				}
+				MixedUseLesHallesStorey::Livable { floor_plan, usage } => {
+					out.extend(floor_plan.panel_nodes_for_level(level));
+					out.extend(usage.panel_nodes_for_level(level));
+				}
+			}
+		}
+		out
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		let mut out = Layers::new();
+		for floor in &self.floors {
+			out.extend(floor.floor_plan().joint_nodes_for_level(level));
+			if let MixedUseLesHallesStorey::Livable { usage, .. } = floor {
+				out.extend(usage.joint_nodes_for_level(level));
+			}
+		}
+		out
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = Layers::new();
+		for floor in &self.floors {
+			if let MixedUseLesHallesStorey::Livable { usage, .. } = floor {
+				out.extend(usage.furniture_nodes_for_level(level));
+			}
+		}
+		out
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		let mut out = Layers::new();
+		for floor in &self.floors {
+			match floor {
+				MixedUseLesHallesStorey::Commercial { usage, .. } => {
+					out.extend(usage.label_nodes_for_level(level));
+				}
+				MixedUseLesHallesStorey::Livable { usage, .. } => {
+					out.extend(usage.label_nodes_for_level(level));
+				}
+			}
+		}
+		out
+	}
+}
+
+fn slice_confines(base: &Confines, y0: f32, height: f32, openings: Openings) -> Confines {
+	let min = Vec3::from(base.bounds.min);
+	let max = Vec3::from(base.bounds.max);
+	let bounds = Aabb3d::from_min_max(
+		Vec3::new(min.x, y0, min.z),
+		Vec3::new(max.x, y0 + height, max.z),
+	);
+	Confines::new(bounds, base.roll, openings)
+}
+
+fn inbound_shaft_openings(confines: &Confines) -> Openings {
+	let mut out = Openings::new();
+	for (id, opening) in confines.openings.iter() {
+		if matches!(opening.label, OpeningLabel::Shaft) {
+			out.insert(id.clone(), opening.clone());
+		}
+	}
+	out
+}
+
+fn rebase_openings_y(openings: Openings, y0: f32, height: f32) -> Openings {
+	let mut out = Openings::new();
+	for (id, mut opening) in openings.openings.into_iter() {
+		let omin = Vec3::from(opening.bounds.min);
+		let omax = Vec3::from(opening.bounds.max);
+		opening.bounds = Aabb3d::from_min_max(
+			Vec3::new(omin.x, y0, omin.z),
+			Vec3::new(omax.x, y0 + height.min((omax.y - omin.y).max(1.0)), omax.z),
+		);
+		out.insert(id, opening);
+	}
+	out
+}
+
+fn resolve_shaft_slots(
+	params: &LesHallesParameterized,
+	confines: &Confines,
+	noise: NoiseParams,
+) -> Vec<usize> {
+	let y0 = confines.bounds.min.y;
+	let h = LesHallesParameterized::sample_monotower_storey_height(confines, noise)
+		.max(MIN_MONOTOWER_STOREY_HEIGHT);
+
+	// Map only inbound shafts first so authored slots are preserved.
+	let mut slots = Vec::new();
+	let inbound = inbound_shaft_openings(confines);
+	if !inbound.openings.is_empty() {
+		let probe = slice_confines(
+			confines,
+			y0,
+			h,
+			rebase_openings_y(inbound, y0, h),
+		);
+		if let Ok((plan, _)) = LesHallesFloorPlan::from_parameterized(params.clone(), &probe) {
+			slots = plan.shaft_slots;
+		}
+	}
+
+	let want = LesHallesParameterized::sample_monotower_shaft_count(confines, noise)
+		.max(slots.len())
+		.clamp(1, 4);
+	if slots.len() < want {
+		for s in LesHallesParameterized::sample_monotower_shaft_slots(confines, noise, want) {
+			if !slots.contains(&s) {
+				slots.push(s);
+			}
+			if slots.len() >= want {
+				break;
+			}
+		}
+	}
+	if slots.is_empty() {
+		slots = LesHallesParameterized::sample_monotower_shaft_slots(confines, noise, want);
+	}
+	slots.sort_unstable();
+	slots.dedup();
+	slots
+}
+
+fn floor_noise(noise: NoiseParams, floor_i: usize) -> NoiseParams {
+	let mut n = noise;
+	n.seed = noise.seed.wrapping_add(floor_i as i32 * 97);
+	// Touch salt lane so spatial samples diverge even with same seed math.
+	let _ = NoiseConfig::new(n).sample_unit_4d(0.0, floor_i as f32, 0.0, SALT_FLOOR);
+	n
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
+
+	fn large_tower_bounds() -> Aabb3d {
+		// ~72×54 footprint, ~16 m tall → several 3–5 m storeys.
+		Aabb3d::from_min_max(
+			Vec3::new(-36.0, 0.0, -27.0),
+			Vec3::new(36.0, 16.0, 27.0),
+		)
+	}
+
+	#[test]
+	fn mixed_use_stacks_commercial_then_livable() {
+		let confines = Confines::from_bounds(large_tower_bounds());
+		let noise = NoiseParams {
+			seed: 42,
+			..NoiseParams::default()
+		};
+		let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
+		assert!(tower.floor_count() >= 2);
+		assert!(tower.n_commercial >= 1);
+		assert!(tower.n_commercial < tower.floor_count());
+		assert!(!tower.shaft_slots.is_empty());
+		assert!(tower.shaft_slots.len() <= 4);
+		for (i, floor) in tower.floors.iter().enumerate() {
+			if i < tower.n_commercial {
+				assert!(floor.is_commercial(), "floor {i} should be commercial");
+			} else {
+				assert!(!floor.is_commercial(), "floor {i} should be livable");
+			}
+			assert!(
+				(floor.floor_plan().parameterized.gallery_width
+					- tower.parameterized.gallery_width)
+					.abs() < 1e-4,
+				"shared shell gallery depth"
+			);
+		}
+	}
+
+	#[test]
+	fn inbound_shafts_are_preserved_in_slots() {
+		let bounds = large_tower_bounds();
+		let empty = Confines::from_bounds(bounds);
+		let noise = NoiseParams {
+			seed: 7,
+			..NoiseParams::default()
+		};
+		let params = LesHallesParameterized::sample_monotower(&empty, noise).unwrap();
+		// Seed two requests; remap onto a storey-height probe to learn the slots
+		// the floor plan will claim for those AABBs under this placement.
+		let mut openings = LesHallesFloorPlan::shaft_requests_for_slots(&params, &empty, &[1, 3]);
+		let h = 4.0_f32;
+		openings = rebase_openings_y(openings, bounds.min.y, h);
+		let probe = Confines::new(
+			Aabb3d::from_min_max(
+				Vec3::new(bounds.min.x, bounds.min.y, bounds.min.z),
+				Vec3::new(bounds.max.x, bounds.min.y + h, bounds.max.z),
+			),
+			0.0,
+			openings.clone(),
+		);
+		let (probe_plan, _) =
+			LesHallesFloorPlan::from_parameterized(params.clone(), &probe).unwrap();
+		assert_eq!(probe_plan.shaft_slots.len(), 2);
+		let expected = probe_plan.shaft_slots.clone();
+
+		// Full-height inbound for the tower fit.
+		let tower_openings = rebase_openings_y(openings, bounds.min.y, bounds.max.y - bounds.min.y);
+		let confines = Confines::new(bounds, 0.0, tower_openings);
+		let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
+		for slot in &expected {
+			assert!(
+				tower.shaft_slots.contains(slot),
+				"expected inbound slot {slot} in {:?}",
+				tower.shaft_slots
+			);
+		}
+	}
+}

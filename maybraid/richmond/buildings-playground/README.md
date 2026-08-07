@@ -32,6 +32,8 @@ cargo run -p richmond-buildings-playground -- show les-halles-full-storey --seed
 cargo run -p richmond-buildings-playground -- show les-halles-livable-full-storey
 cargo run -p richmond-buildings-playground -- show les-halles-livable-full-storey --extent 72,4,54 --seed 42
 cargo run -p richmond-buildings-playground -- show les-halles-livable-full-storey-examples
+cargo run -p richmond-buildings-playground -- show mixed-use-les-halles-monotower
+cargo run -p richmond-buildings-playground -- show mixed-use-les-halles-monotower --extent 72,16,54 --seed 42
 # Request specific shaft openings (cyan/amber = request, magenta = fitted shaft):
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --seed 42 \
   --opening 'se:shaft:8,0,-14:12,3.5,-10' \
@@ -150,5 +152,6 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show les-halles-full-storey` — shell plus gallery `CommercialStallStrip` Label fills (face text via gizmo patch)
 - `show les-halles-livable-full-storey [--extent X,Y,Z] [--seed N]` — shell plus lengthwise gallery `RectangularLivableArea` bays (default footprint `72,4,54`)
 - `show les-halles-livable-full-storey-examples` — gallery of livable Les Halles storeys (varied extents/seeds)
+- `show mixed-use-les-halles-monotower [--extent X,Y,Z] [--seed N]` — commercial-below / livable-above Les Halles monotower (default `72,16,54`)
 
 WASD / Space / Shift + mouse look.
