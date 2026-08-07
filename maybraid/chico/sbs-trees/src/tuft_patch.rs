@@ -159,6 +159,8 @@ impl TuftPatch {
 	///
 	/// Each input placement is baked into that patch's runs before merging. Result patches use
 	/// identity placement (geometry already in the shared parent frame).
+	///
+	/// `target_count == 0` means **no fold**: one output patch per input, with placement baked in.
 	pub fn merge_placed(
 		patches: impl IntoIterator<Item = (Placement, TuftPatch)>,
 		target_count: usize,
@@ -167,7 +169,15 @@ impl TuftPatch {
 		if remaining.is_empty() {
 			return Vec::new();
 		}
-		let target = target_count.max(1);
+		if target_count == 0 {
+			return remaining
+				.into_iter()
+				.map(|(placement, mut patch)| {
+					patch.apply_placement(placement);
+					patch
+				})
+				.collect();
+		}
 		remaining.sort_by(|a, b| {
 			a.0
 				.translation
@@ -175,8 +185,8 @@ impl TuftPatch {
 				.total_cmp(&b.0.translation.x)
 				.then(a.0.translation.z.total_cmp(&b.0.translation.z))
 		});
-		let chunk_len = remaining.len().div_ceil(target);
-		let mut out = Vec::with_capacity(target.min(remaining.len()));
+		let chunk_len = remaining.len().div_ceil(target_count);
+		let mut out = Vec::with_capacity(target_count.min(remaining.len()));
 		while !remaining.is_empty() {
 			let take = chunk_len.min(remaining.len());
 			let chunk: Vec<(Placement, TuftPatch)> = remaining.drain(..take).collect();
@@ -336,6 +346,30 @@ mod tests {
 			first_base.x.abs() < 1.0 || (first_base.x - 10.0).abs() < 1.0,
 			"expected baked world X near a placement, got {first_base:?}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn merge_placed_zero_keeps_one_patch_per_input() -> Result<()> {
+		let patches = (0..4).map(|i| {
+			(
+				Placement::new(Vec3::new(i as f32 * 5.0, 0.0, 0.0), 0.0),
+				TuftPatchParams {
+					clump_count: 1,
+					patch_extent_xz: 0.0,
+					shape: BladeTuftShape {
+						blade_count: 1,
+						bend_segments: 1,
+						seed: i,
+						..BladeTuftShape::default()
+					},
+				}
+				.build(),
+			)
+		});
+		let out = TuftPatch::merge_placed(patches, 0);
+		assert_eq!(out.len(), 4);
+		assert!((out[2].frond_runs()[0].segments[0].placement.translation.x - 10.0).abs() < 1.0);
 		Ok(())
 	}
 }

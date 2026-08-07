@@ -391,7 +391,7 @@ mod tests {
 	#[test]
 	fn show_monster_grass_configures_extent_and_builds() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"show monster-grass --elevation 0.35 --grove-extent-xz 25",
+			"show monster-grass --elevation 0.35 --grove-extent-xz 25 --merge-collections 100",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Show(Show::MonsterGrass(args)) = cmd else {

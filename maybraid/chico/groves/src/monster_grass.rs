@@ -5,9 +5,10 @@
 //! Dense 2–6 m understory blades for jungle, swamp, and elder-tree floors — structurally
 //! Braid Grass at monster scale. Authored cells resolve to [`GroveTuftPatch`] (single-clump
 //! cells use `clump_count = 1`). Under `render`, [`MonsterGrassParams::build`] grows
-//! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants, then
-//! [`TuftPatch::merge_placed`](chico_sbs_trees::TuftPatch::merge_placed) folds them down to
-//! [`MonsterGrassParams::merge_collections`] (default 100) so foliage LOD probes stay bounded.
+//! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants. Optional
+//! [`TuftPatch::merge_placed`](chico_sbs_trees::TuftPatch::merge_placed) fold via
+//! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
+//! compare a folded probe budget).
 //! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
 //! color ranges.
 
@@ -272,8 +273,8 @@ mod vc {
 		#[command(flatten, next_help_heading = "Terrain")]
 		pub terrain: FlatTerrainSample,
 
-		/// Cap foliage LOD collections / probes after growing placements (merge nearby patches).
-		#[arg(long, default_value_t = 100)]
+		/// Cap foliage LOD collections after growing placements (`0` = no fold, one per placement).
+		#[arg(long, default_value_t = 0)]
 		pub merge_collections: usize,
 
 		#[arg(skip)]
@@ -290,7 +291,7 @@ mod vc {
 					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
 				),
 				terrain: FlatTerrainSample::default(),
-				merge_collections: 100,
+				merge_collections: 0,
 				resolved_placements: None,
 			}
 		}
@@ -311,7 +312,7 @@ mod vc {
 					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
 				),
 				terrain,
-				merge_collections: 100,
+				merge_collections: 0,
 				resolved_placements: Some(resolved_placements),
 			}
 		}
@@ -369,7 +370,7 @@ mod vc {
 	}
 
 	impl MonsterGrass {
-		/// Grow every placement into a [`TuftPatch`], then merge down to `merge_collections`.
+		/// Grow every placement into a [`TuftPatch`]; fold when `merge_collections > 0`.
 		pub fn from_placements(
 			placements: &[GroveCellVariant<MonsterGrassCell>],
 			foliage_noise: NoiseParams,
@@ -387,6 +388,7 @@ mod vc {
 					params.build(),
 				)
 			});
+			// Fold path bakes placements into runs; unmerged keeps one plant per placement.
 			let plants = TuftPatch::merge_placed(grown, merge_collections)
 				.into_iter()
 				.map(|patch| MonsterGrassPlant {
@@ -663,11 +665,34 @@ mod tests {
 			.build();
 			assert_eq!(grove.plants.len(), 1);
 			assert_eq!(grove.plants[0].patch.clump_count, 1);
-			// Placement is baked into frond runs when merging.
+			// Default merge_collections=0 still bakes placement into runs (identity plant pose).
 			let base = grove.plants[0].patch.frond_runs()[0].segments[0]
 				.placement
 				.translation;
 			assert!((base.x - 1.0).abs() < 0.5 && (base.z - 2.0).abs() < 0.5);
+			Ok(())
+		}
+
+		#[test]
+		fn build_without_fold_keeps_one_plant_per_placement() -> Result<()> {
+			use crate::grove::GroveCellVariant;
+
+			let placements: Vec<_> = (0..12)
+				.map(|i| {
+					GroveCellVariant::new(
+						MonsterGrassCell::GiantWetBlade,
+						Vec3::new(i as f32, 0.0, 0.0),
+						1.0,
+					)
+				})
+				.collect();
+			let grove = MonsterGrassParams::with_resolved_placements(
+				placements,
+				FlatTerrainSample::default(),
+				NoiseParams::default(),
+			)
+			.build();
+			assert_eq!(grove.plants.len(), 12);
 			Ok(())
 		}
 
