@@ -13,4 +13,9 @@
 //! residuals per storey (commercial / livable / …). Stairs in shafts are filled
 //! by the monotower once the stack is in place.
 //!
-//! Concrete towers live under [`crate::monotowers`].
+//! Concrete towers live under [`crate::monotower`] submodules (e.g.
+//! [`les_halles`](crate::monotower::les_halles)).
+
+pub mod les_halles;
+
+pub use les_halles::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};

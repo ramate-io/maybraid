@@ -5,7 +5,8 @@
 //! especially [`SpaceKind::ExternalSpace`] gallery strips. A usage plan consumes
 //! those regions and returns presentable fill plus leftovers (walkways, shafts, …).
 //!
-//! Full\* storeys and monotowers keep the plan separately and call [`LesHallesUsagePlan::paint`].
+//! Full\* storeys and [`crate::monotower`] stacks keep the plan separately and
+//! call [`LesHallesUsagePlan::paint`].
 
 mod livable;
 
