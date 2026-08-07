@@ -11,6 +11,7 @@ pub mod lod_cull;
 pub mod lod_level;
 pub mod lod_ref;
 pub mod lod_scene_host;
+pub mod region_index;
 pub mod scene_chunk;
 
 pub use chunk_fulfill::{
@@ -33,4 +34,5 @@ pub use lod_scene_host::{
 	lod_host_scene, sync_lod_level_roots, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,
 	LodSceneHost, LodSceneHostPlugin,
 };
+pub use region_index::LodSceneRegionIndex;
 pub use scene_chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};

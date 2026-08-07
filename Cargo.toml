@@ -19,6 +19,7 @@ members = [
   "maybraid/durham/marazion",
 
   "maybraid/lod/lib",
+  "maybraid/lod/avian",
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
 
@@ -196,6 +197,7 @@ scene-ref = { path = "maybraid/scene-ref" }
 avian3d = "0.7"
 
 lod = { path = "maybraid/lod/lib" }
+lod-avian = { path = "maybraid/lod/avian" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 
