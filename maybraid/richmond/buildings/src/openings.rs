@@ -12,6 +12,17 @@
 //! confine opening ids unchanged; only generated openings use scoped ids.
 //! Full\* / towers should reuse FloorPlan-emitted shaft ids when lifting
 //! openings storey-to-storey (Y-translate bounds, keep the same id).
+//!
+//! ## Façade bays
+//!
+//! Shared door/window packing lives in [`facade_bays`] ([`BaySpec`], [`PlacedBay`]).
+
+pub mod facade_bays;
+
+pub use facade_bays::{
+	fit_bays_on_run, fit_windows_on_run, generate_bay_catalog, generate_stall_doors,
+	generate_windows, BaySpec, PlacedBay,
+};
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
@@ -305,6 +316,23 @@ pub trait MapsOpenings {
 	fn openings(&self) -> &Openings;
 
 	fn mapped_opening(&self, id: &OpeningId) -> Option<&MappedOpening>;
+}
+
+/// Drop unmapped Passage/Aperture and copy shell AABBs (post-truncate) onto `openings`.
+///
+/// Shaft / Exclusion / other labels are kept as authored. Wall-mapped connectables
+/// from `shell` overwrite plan entries so truncated leaves match the geometry.
+pub fn sync_connectable_openings_from_mapped(
+	openings: &mut Openings,
+	shell: &impl MapsOpenings,
+) {
+	openings.openings.retain(|id, opening| match opening.label {
+		OpeningLabel::Passage | OpeningLabel::Aperture => shell.mapped_opening(id).is_some(),
+		_ => true,
+	});
+	for (id, opening) in shell.openings().iter() {
+		openings.insert(id.clone(), opening.clone());
+	}
 }
 
 fn normalize_xz(v: Vec2) -> Option<Vec2> {

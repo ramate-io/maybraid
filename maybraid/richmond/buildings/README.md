@@ -32,9 +32,9 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 | [`openings`](src/openings.rs) | Opening plans / shell records / mapped contact geometry |
 | [`shells`](src/shells.rs) | Envelope shells (`ArcFloor`, `Trazaloid`, `ConnectingHall`, …) |
-| [`storeys`](src/storeys.rs) | Storey typologies (e.g. Les Halles floor plan / full storey) |
+| [`storeys`](src/storeys.rs) | Storey typologies (Les Halles commercial / livable full storey, I-Apartment) |
 | [`placer`](src/placer.rs) | Predicate-based rectangular layout trier (`KindSpec` catalogs) |
-| [`usage_areas`](src/usage_areas.rs) | Program fill for residual confines (commercial stalls, [`common_bedroom`](src/usage_areas/common_bedroom/), [`livable_quarters`](src/usage_areas/livable_quarters.rs), …) |
+| [`usage_areas`](src/usage_areas.rs) | Program fill for residual confines (commercial stalls, [`common_bedroom`](src/usage_areas/common_bedroom/), [`livable_quarters`](src/usage_areas/livable_quarters.rs), LivableApartments, …) |
 | [`fit`](src/fit.rs) | `Confines` / `Fit` / `FillableRegions` |
 
 **Livable quarters** (under [`usage_areas/livable_quarters`](src/usage_areas/livable_quarters.rs)): `Kitchen`, `DiningRoom`, `LivingRoom`, `SittingRoom`, `Study`, `ResidentialBathroom`, `ResidentialHalfBathroom`. Shared layout substrate: [`placer`](src/placer.rs) (KindSpec trier) + [`clearance`](src/usage_areas/clearance.rs) door approach. Playground: `/show kitchen-examples`, `/show dining-room-examples`, `/show living-room-examples`, `/show sitting-room-examples`, `/show study-examples`, `/show residential-bathroom`, `/show residential-half-bathroom`, `/show residential-bathroom-examples`.

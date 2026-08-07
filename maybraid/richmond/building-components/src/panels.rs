@@ -7,6 +7,9 @@
 //!
 //! IR: [`PanelStyle`] + [`PanelGeometry`] + [`Placement`] → [`PanelNode`] (`LodScene`).
 //!
+//! LOD: High / Medium / Low keep the style triad; **UltraLow** always uses the shared
+//! flat low-res kit ([`PANEL_ULTRA_LOW_RECTANGLE`] / [`PANEL_ULTRA_LOW_RIGHT_TRIANGLE`]).
+//!
 //! ```text
 //! TessellatedTriangle.decompose() → Placed<RightTriangle>
 //! PanelGeometry::flatten(caps)    → Placed<Rectangle | RightTriangle>
@@ -15,6 +18,7 @@
 //! Crease / kink fillers are the separate [`crate::joints`] domain (`JointNode`), not panel geometry.
 mod geometry;
 mod kit_space;
+mod lod;
 mod node;
 mod placement;
 mod rough_stonework;
@@ -26,6 +30,11 @@ pub use geometry::{
 	fitted_tile_count, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle, DEFAULT_TILE_WIDTH,
 };
 pub use kit_space::{to_centered_rect_placement, with_wall_standup_pitch};
+pub use lod::{
+	leaf_panel_scene_ref_lod, update_panel_host_levels, PanelLodBand, PanelLodProbe,
+	PANEL_HIGH_FACTOR, PANEL_LOW_FACTOR, PANEL_MEDIUM_FACTOR, PANEL_ULTRA_LOW_RECTANGLE,
+	PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
+};
 pub use node::PanelNode;
 pub use placement::{roll_along_slope, yaw_along_xz, DEFAULT_MIN_JOINT_ANGLE};
 pub use rough_stonework::RoughStonePanelRectangle;

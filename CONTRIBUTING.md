@@ -153,7 +153,25 @@ Prefer **methods on types** over free-floating functions. If logic is about cons
 
 Reserve generation **"cell"** terminology for LOD / cellular generation (`OriginCell`, `GenerationScheme`, cell layouts). Bounded rectangles used by shared procedural walks should use names like `Bounds2`, not `*Cell`.
 
-Do not use `mod.rs`; use the modern Rust module system (`foo.rs` + `foo/` for submodules).
+### Modules: never `mod.rs` (hard rule)
+
+> [!CAUTION]
+> **Never use `mod.rs`.** Not for new modules, not when splitting a file, not “temporarily.” Every `foo/mod.rs` in this repository is a style bug. The only accepted layout is `foo.rs` next to a `foo/` directory of children.
+
+Agents re-introduce `mod.rs` often — stop and rewrite before continuing. Same rule in nested crates (e.g. Richmond buildings): `monotower.rs` + `monotower/les_halles.rs`, never `monotowers/mod.rs`.
+
+| Wrong | Right |
+|-------|--------|
+| `foo/mod.rs` + `foo/bar.rs` | `foo.rs` + `foo/bar.rs` |
+| `monotowers/mod.rs` + `monotowers/mixed_use_les_halles.rs` | `monotower.rs` + `monotower/les_halles.rs` |
+| `usage_plan/mod.rs` + `usage_plan/livable.rs` | `usage_plan.rs` + `usage_plan/livable.rs` |
+
+Rules:
+
+1. The module root is always a **sibling `.rs` file** next to its subdirectory (`foo.rs` declares `pub mod bar;` and lives beside `foo/`).
+2. Submodules live **inside** that directory (`foo/bar.rs`, `foo/baz.rs`) — never as `foo/mod.rs`.
+3. If you are about to write `mod.rs`, stop and rename: move the contents to `foo.rs` and keep children under `foo/`.
+4. Reviewers / agents: treat any new `**/mod.rs` as a **merge-blocking** style violation.
 
 Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** chains unless there is a compelling reason (e.g., deliberate coupling to an immediate parent in a macro-heavy submodule).
 

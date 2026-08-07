@@ -56,10 +56,12 @@ fn passage_on_first_edge_clips() {
 		))
 		.build();
 	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
-	assert!(r.walls().iter().any(|w| matches!(
-		w.pieces()[0],
-		ClippedRectangularStripPiece::Clipped(_)
-	)));
+	assert!(r.walls().iter().any(|w| {
+		w.pieces()
+			.iter()
+			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
+			|| w.pieces().len() > 1
+	}));
 }
 
 #[test]

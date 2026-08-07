@@ -21,11 +21,11 @@ use crate::lod_host::warm_content_host_hsl;
 use crate::placed::Placement;
 
 /// `distance / max_extent` out to this → High.
-pub const ROOF_HIGH_FACTOR: f32 = 2.5;
+pub const ROOF_HIGH_FACTOR: f32 = 2.0;
 /// Out to this → Medium.
-pub const ROOF_MEDIUM_FACTOR: f32 = 10.0;
+pub const ROOF_MEDIUM_FACTOR: f32 = 3.0;
 /// Out to this → Low; else UltraLow.
-pub const ROOF_LOW_FACTOR: f32 = 500.0;
+pub const ROOF_LOW_FACTOR: f32 = 8.0;
 
 /// Viewer distance band for roof mesh resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,11 +116,7 @@ impl LodScene for RoofLodProbe {
 		self.status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		bevy::scene::SceneFunction(empty_scene)
 	}
 }
@@ -159,10 +155,17 @@ mod tests {
 
 	#[test]
 	fn roof_factors_are_tighter_than_partition_linear() -> anyhow::Result<()> {
+		use crate::partitions::geometry::LINEAR_HIGH_FACTOR;
+
 		assert_eq!(RoofLodBand::from_distance_factor(ROOF_HIGH_FACTOR), RoofLodBand::High);
 		assert_eq!(RoofLodBand::from_distance_factor(ROOF_MEDIUM_FACTOR), RoofLodBand::Medium);
-		// Same factor that is still High for walls (5) is already Medium for roofs.
-		assert_eq!(RoofLodBand::from_distance_factor(5.0), RoofLodBand::Medium);
+		assert!(ROOF_HIGH_FACTOR < LINEAR_HIGH_FACTOR);
+		assert!(ROOF_MEDIUM_FACTOR < LINEAR_HIGH_FACTOR);
+		// Wall High cutoff is already past roof Medium → Low for roofs.
+		assert_eq!(
+			RoofLodBand::from_distance_factor(LINEAR_HIGH_FACTOR),
+			RoofLodBand::Low
+		);
 		assert_eq!(RoofLodBand::from_distance_factor(ROOF_LOW_FACTOR + 1.0), RoofLodBand::UltraLow);
 		Ok(())
 	}

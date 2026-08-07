@@ -5,8 +5,8 @@ use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};
 use crate::placer::{
-	init_host, pack_kinds, CommitEffect, KindSpec, PackKnobs, Predicate, ProgramTier, ProposeKnobs,
-	SoftGoalRole,
+	init_host_with, pack_kinds, CommitEffect, InitHostOpts, KindSpec, PackKnobs, Predicate,
+	ProgramTier, ProposeKnobs, SoftGoalRole,
 };
 
 pub const MIN_AREA: f32 = 2.2 * 2.2;
@@ -103,7 +103,12 @@ impl SittingRoomRegions {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<SittingRoomPacked, FitError> {
-		let mut host = init_host(confines)?;
+		let mut host = init_host_with(
+			confines,
+			InitHostOpts {
+				passage_wall_lip: true,
+			},
+		)?;
 		if host.room_area + 1e-3 < MIN_AREA {
 			return Err(FitError::TooSmall {
 				reason: "sitting room",

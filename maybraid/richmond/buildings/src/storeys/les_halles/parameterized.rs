@@ -3,6 +3,9 @@
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{Confines, FitError};
+use crate::openings::{
+	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows, BaySpec, PlacedBay,
+};
 
 /// Where vertical shafts are allocated in the gallery ring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -13,27 +16,10 @@ pub enum LesHallesShaftPlacement {
 	MidSides,
 }
 
-/// One bay size to try when packing along a wall run (stall doors or windows).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LesHallesStallDoor {
-	/// Preferred clear leaf / aperture width (meters).
-	pub door_width: f32,
-	/// Minimum jamb / reveal on each side of the leaf.
-	pub jamb_min: f32,
-	/// Allowed over/undershoot on the packed span (and leaf) in meters.
-	pub allowed_error: f32,
-}
-
-/// A bay placed on a straight wall run (coordinates along the run).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct LesHallesPlacedDoor {
-	/// Distance from the run start to the leaf’s start edge.
-	pub along: f32,
-	/// Leaf width used.
-	pub width: f32,
-	/// Remaining truncate budget for end-of-run / corner fit (from catalog).
-	pub allowed_error: f32,
-}
+/// Typology alias for shared [`BaySpec`] (stall doors / windows).
+pub type LesHallesStallDoor = BaySpec;
+/// Typology alias for shared [`PlacedBay`].
+pub type LesHallesPlacedDoor = PlacedBay;
 
 /// Resolved Les Halles plan knobs.
 #[derive(Debug, Clone, PartialEq)]
@@ -81,12 +67,37 @@ pub const MAX_COURTYARD_FRACTION: f32 = 0.60;
 pub const MIN_STALL_RING_SHARE: f32 = 0.55;
 pub const MAX_STALL_RING_SHARE: f32 = 0.75;
 
+/// Minimum gallery depth for [`LesHallesParameterized::sample_livable`].
+pub const MIN_LIVABLE_GALLERY_WIDTH: f32 = 8.0;
+/// Soft max gallery depth preferred by livable sampling (still clamped by footprint).
+pub const MAX_LIVABLE_GALLERY_WIDTH: f32 = 16.0;
+/// Stall-ring share range for livable gallery bias (deeper apartment band).
+pub const MIN_LIVABLE_STALL_RING_SHARE: f32 = 0.70;
+pub const MAX_LIVABLE_STALL_RING_SHARE: f32 = 0.85;
+
+/// Minimum gallery depth for [`LesHallesParameterized::sample_monotower`].
+pub const MIN_MONOTOWER_GALLERY_WIDTH: f32 = 7.0;
+/// Soft max gallery depth for mixed-use monotower shells.
+pub const MAX_MONOTOWER_GALLERY_WIDTH: f32 = 14.0;
+/// Stall-ring share for monotower — between commercial and livable.
+pub const MIN_MONOTOWER_STALL_RING_SHARE: f32 = 0.62;
+pub const MAX_MONOTOWER_STALL_RING_SHARE: f32 = 0.78;
+/// Hard courtyard floor for monotower (expects larger footprints than commercial).
+pub const MIN_MONOTOWER_COURTYARD: f32 = 8.0;
+/// Storey height range for Les Halles monotowers (meters).
+pub const MIN_MONOTOWER_STOREY_HEIGHT: f32 = 3.0;
+pub const MAX_MONOTOWER_STOREY_HEIGHT: f32 = 5.0;
+
 /// Salt lanes for spatial sampling at the confines center.
 const SALT_COURTYARD: f32 = 1.0;
 const SALT_STALL_SHARE: f32 = 2.0;
 const SALT_SHAFT: f32 = 3.0;
 const SALT_MID_SHAFT: f32 = 3.5;
 const SALT_OPENINGS: f32 = 4.0;
+const SALT_STOREY_HEIGHT: f32 = 5.0;
+const SALT_COMMERCIAL_COUNT: f32 = 6.0;
+const SALT_SHAFT_COUNT: f32 = 7.0;
+const SALT_SHAFT_PICK: f32 = 7.5;
 
 impl LesHallesParameterized {
 	/// Sample knobs at the confines center. Rejects footprints that cannot host
@@ -96,8 +107,8 @@ impl LesHallesParameterized {
 	/// axis), then the remaining rim is split into stall vs balcony within
 	/// absolute min/max clamps. Mins win over the ratio when the footprint is tight.
 	///
-	/// Stall-door / window catalogs are produced by
-	/// [`crate::storeys::les_halles::LesHallesFloorPlan`].
+	/// Stall-door / window catalogs come from [`crate::openings::generate_stall_doors`]
+	/// / [`crate::openings::generate_windows`].
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let (extent_x, extent_z, height) = footprint_extents(confines)?;
 		let min_ring = MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
@@ -157,8 +168,8 @@ impl LesHallesParameterized {
 			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
-		let doors = crate::storeys::les_halles::LesHallesFloorPlan::generate_stall_doors(&cfg, c);
-		let windows = crate::storeys::les_halles::LesHallesFloorPlan::generate_windows(&cfg, c);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
 
 		Ok(Self {
 			gallery_width,
@@ -170,6 +181,225 @@ impl LesHallesParameterized {
 			doors,
 			windows,
 		})
+	}
+
+	/// Like [`Self::sample`], but biases the gallery toward apartment-friendly
+	/// depths (~8–16 m) via a higher stall-ring share.
+	///
+	/// Used by [`super::LesHallesLivableFullStorey`]; commercial
+	/// [`Self::sample`] is unchanged.
+	pub fn sample_livable(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let (extent_x, extent_z, height) = footprint_extents(confines)?;
+		let min_ring = MIN_LIVABLE_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
+		let min_outer = 2.0 * min_ring + MIN_COURTYARD;
+		if extent_x < min_outer || extent_z < min_outer {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+		if height < MIN_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		let cfg = NoiseConfig::new(noise);
+		let c = confines.center();
+		let extent_min = extent_x.min(extent_z);
+
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_COURTYARD_FRACTION,
+			MAX_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
+
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_LIVABLE_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
+
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_LIVABLE_STALL_RING_SHARE,
+			MAX_LIVABLE_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) =
+			split_ring_budget_livable(ring_budget, stall_share)?;
+
+		let ring = gallery_width + balcony_width;
+		if extent_x < 2.0 * ring + MIN_COURTYARD || extent_z < 2.0 * ring + MIN_COURTYARD {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+
+		let shaft_i = cfg.sample_range_usize_4d(0, 2, c.x, c.y, c.z, SALT_SHAFT);
+		let shaft_placement = if shaft_i == 0 {
+			LesHallesShaftPlacement::Corners
+		} else {
+			LesHallesShaftPlacement::MidSides
+		};
+
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side =
+			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
+
+		Ok(Self {
+			gallery_width,
+			balcony_width,
+			courtyard_fraction,
+			shaft_placement,
+			mid_shaft_side,
+			opening_density,
+			doors,
+			windows,
+		})
+	}
+
+	/// Shared shell knobs for mixed-use monotowers: gallery depth between
+	/// commercial and livable, with a larger courtyard floor so apartments and
+	/// stalls both fit on big footprints.
+	///
+	/// Spatial noise uses the plan-center with \(y = 0\) so slicing the tower
+	/// AABB into storeys does not change the shared shell knobs.
+	pub fn sample_monotower(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let (extent_x, extent_z, height) = footprint_extents(confines)?;
+		let min_ring = MIN_MONOTOWER_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
+		let min_outer = 2.0 * min_ring + MIN_MONOTOWER_COURTYARD;
+		if extent_x < min_outer || extent_z < min_outer {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+		if height < MIN_MONOTOWER_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		let extent_min = extent_x.min(extent_z);
+
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_COURTYARD_FRACTION,
+			MAX_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
+
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_MONOTOWER_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_MONOTOWER_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
+
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_MONOTOWER_STALL_RING_SHARE,
+			MAX_MONOTOWER_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) =
+			split_ring_budget_monotower(ring_budget, stall_share)?;
+
+		let ring = gallery_width + balcony_width;
+		if extent_x < 2.0 * ring + MIN_MONOTOWER_COURTYARD
+			|| extent_z < 2.0 * ring + MIN_MONOTOWER_COURTYARD
+		{
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+
+		let shaft_i = cfg.sample_range_usize_4d(0, 2, c.x, c.y, c.z, SALT_SHAFT);
+		let shaft_placement = if shaft_i == 0 {
+			LesHallesShaftPlacement::Corners
+		} else {
+			LesHallesShaftPlacement::MidSides
+		};
+
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side =
+			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
+
+		Ok(Self {
+			gallery_width,
+			balcony_width,
+			courtyard_fraction,
+			shaft_placement,
+			mid_shaft_side,
+			opening_density,
+			doors,
+			windows,
+		})
+	}
+
+	/// Sample a storey height in `[MIN_MONOTOWER_STOREY_HEIGHT, MAX_MONOTOWER_STOREY_HEIGHT]`.
+	pub fn sample_monotower_storey_height(confines: &Confines, noise: NoiseParams) -> f32 {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		cfg.sample_range_f32_4d(
+			MIN_MONOTOWER_STOREY_HEIGHT,
+			MAX_MONOTOWER_STOREY_HEIGHT,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STOREY_HEIGHT,
+		)
+	}
+
+	/// Number of commercial storeys from the ground up (`1…n_storeys`, or `1…n-1`
+	/// when `n_storeys ≥ 2` so at least one floor stays residential).
+	pub fn sample_monotower_commercial_count(
+		confines: &Confines,
+		noise: NoiseParams,
+		n_storeys: usize,
+	) -> usize {
+		let n = n_storeys.max(1);
+		if n == 1 {
+			return 1;
+		}
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		// Inclusive sample of 1..=(n-1).
+		1 + cfg.sample_range_usize_4d(0, n - 1, c.x, c.y, c.z, SALT_COMMERCIAL_COUNT)
+	}
+
+	/// How many shaft slots to activate when none (or few) are inbound (`1…4`).
+	pub fn sample_monotower_shaft_count(confines: &Confines, noise: NoiseParams) -> usize {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		1 + cfg.sample_range_usize_4d(0, 4, c.x, c.y, c.z, SALT_SHAFT_COUNT)
+	}
+
+	/// Deterministic pick of `count` distinct slot indices in `0…3`.
+	pub fn sample_monotower_shaft_slots(
+		confines: &Confines,
+		noise: NoiseParams,
+		count: usize,
+	) -> Vec<usize> {
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		let want = count.clamp(1, 4);
+		let mut slots = Vec::new();
+		let mut salt = SALT_SHAFT_PICK;
+		while slots.len() < want {
+			let s = cfg.sample_range_usize_4d(0, 4, c.x, c.y, c.z, salt);
+			salt += 0.17;
+			if !slots.contains(&s) {
+				slots.push(s);
+			}
+		}
+		slots.sort_unstable();
+		slots
 	}
 
 	pub fn ring_width(&self) -> f32 {
@@ -187,160 +417,86 @@ impl LesHallesParameterized {
 		}
 	}
 
-	/// Corner stall-strip / shaft-clear length along each abutting inner wall.
+	/// Authored corner F2C clear / stall-strip buffer along each abutting wall.
 	///
-	/// Half the corner gallery square (which itself is `gallery_width` on a side).
+	/// Half the corner gallery square (`gallery_width` on a side). Consumers clamp
+	/// against the gallery-inner along-half before placing clears or end walls.
 	pub fn corner_clear_len(&self) -> f32 {
 		(self.gallery_width * 0.5).max(2.0)
 	}
 
 	/// Pack [`Self::doors`] along a run; always tries to place at least one.
 	pub fn fit_doors_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		Self::fit_bays_on_run(&self.doors, run_length, true)
+		fit_bays_on_run(&self.doors, run_length, true)
 	}
 
-	/// Pack exterior windows along a run.
-	///
-	/// Uses a density-scaled prefix of [`Self::windows`]; does not force a window
-	/// when nothing fits (sparse facades are allowed).
+	/// Pack exterior windows along a run (density-scaled; sparse facades allowed).
 	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		if self.windows.is_empty() || self.opening_density < 0.08 {
-			return Vec::new();
-		}
-		let n = self.windows.len();
-		let take = ((n as f32) * self.opening_density.clamp(0.15, 1.0))
-			.ceil()
-			.max(1.0) as usize;
-		let take = take.min(n);
-		Self::fit_bays_on_run(&self.windows[..take], run_length, false)
-	}
-
-	/// Pack catalog bays along a run of `run_length` meters.
-	///
-	/// Walks `bays` in order; each size is placed if the remaining run can host
-	/// `door_width + 2·jamb_min` within `allowed_error`, otherwise that size is
-	/// skipped. When `force_one`, retries with the smallest feasible size.
-	pub fn fit_bays_on_run(
-		bays: &[LesHallesStallDoor],
-		run_length: f32,
-		force_one: bool,
-	) -> Vec<LesHallesPlacedDoor> {
-		let run_length = run_length.max(0.0);
-		let mut placed = Self::pack_bays(bays, run_length);
-		if placed.is_empty() && force_one {
-			placed = Self::force_one_bay(bays, run_length);
-		}
-		placed
-	}
-
-	fn pack_bays(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		let mut cursor = 0.0_f32;
-		let mut placed = Vec::new();
-		for spec in bays {
-			let rem = run_length - cursor;
-			let Some((pack, door_w, jamb)) = pack_span(*spec, rem) else {
-				continue;
-			};
-			placed.push(LesHallesPlacedDoor {
-				along: cursor + jamb,
-				width: door_w,
-				allowed_error: spec.allowed_error,
-			});
-			cursor += pack;
-		}
-		placed
-	}
-
-	fn force_one_bay(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		let mut best: Option<LesHallesStallDoor> = None;
-		for spec in bays {
-			let min_pack =
-				(spec.door_width - spec.allowed_error).max(0.4) + 2.0 * spec.jamb_min.min(0.05);
-			if run_length + 1e-4 < min_pack {
-				continue;
-			}
-			best = Some(match best {
-				None => *spec,
-				Some(prev) => {
-					if spec.door_width < prev.door_width {
-						*spec
-					} else {
-						prev
-					}
-				}
-			});
-		}
-		let Some(spec) = best else {
-			let w = (run_length * 0.5).clamp(0.8, 2.0).min(run_length.max(0.8));
-			if run_length < 0.8 {
-				return Vec::new();
-			}
-			let jamb = ((run_length - w) * 0.5).max(0.05);
-			return vec![LesHallesPlacedDoor {
-				along: jamb,
-				width: w,
-				allowed_error: 0.25,
-			}];
-		};
-		if let Some((_pack, door_w, jamb)) = pack_span(spec, run_length) {
-			vec![LesHallesPlacedDoor {
-				along: jamb,
-				width: door_w,
-				allowed_error: spec.allowed_error,
-			}]
-		} else {
-			Vec::new()
-		}
+		fit_windows_on_run(&self.windows, self.opening_density, run_length)
 	}
 }
 
 /// Split a rim budget into gallery + balcony using `stall_share`, then clamp to
 /// absolute min/max depths while staying inside `ring_budget`.
 fn split_ring_budget(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
-	if ring_budget + 1e-4 < MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_GALLERY_WIDTH,
+		MAX_GALLERY_WIDTH,
+	)
+}
+
+fn split_ring_budget_livable(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_LIVABLE_GALLERY_WIDTH,
+		MAX_LIVABLE_GALLERY_WIDTH.min(MAX_GALLERY_WIDTH),
+	)
+}
+
+fn split_ring_budget_monotower(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_MONOTOWER_GALLERY_WIDTH,
+		MAX_MONOTOWER_GALLERY_WIDTH.min(MAX_GALLERY_WIDTH),
+	)
+}
+
+fn split_ring_budget_with(
+	ring_budget: f32,
+	stall_share: f32,
+	min_gallery: f32,
+	max_gallery_abs: f32,
+) -> Result<(f32, f32), FitError> {
+	if ring_budget + 1e-4 < min_gallery + MIN_BALCONY_WIDTH {
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
-	let max_gallery = MAX_GALLERY_WIDTH
+	let max_gallery = max_gallery_abs
 		.min(ring_budget - MIN_BALCONY_WIDTH)
-		.max(MIN_GALLERY_WIDTH);
-	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(MIN_GALLERY_WIDTH, max_gallery);
+		.max(min_gallery);
+	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(min_gallery, max_gallery);
 	let rem = (ring_budget - target_gallery).max(0.0);
 	let max_balcony = MAX_BALCONY_WIDTH.min(rem).max(MIN_BALCONY_WIDTH);
 	let balcony_width = rem.clamp(MIN_BALCONY_WIDTH, max_balcony);
-	let gallery_width = (ring_budget - balcony_width)
-		.clamp(MIN_GALLERY_WIDTH, max_gallery);
+	let gallery_width = (ring_budget - balcony_width).clamp(min_gallery, max_gallery);
 	// Re-fit balcony after gallery clamp so the pair still sums to the budget when possible.
 	let balcony_width = (ring_budget - gallery_width)
-		.clamp(MIN_BALCONY_WIDTH, MAX_BALCONY_WIDTH.min(ring_budget - MIN_GALLERY_WIDTH));
+		.clamp(MIN_BALCONY_WIDTH, MAX_BALCONY_WIDTH.min(ring_budget - min_gallery));
 	let gallery_width = (ring_budget - balcony_width)
-		.clamp(MIN_GALLERY_WIDTH, MAX_GALLERY_WIDTH.min(ring_budget - MIN_BALCONY_WIDTH));
+		.clamp(min_gallery, max_gallery_abs.min(ring_budget - MIN_BALCONY_WIDTH));
 	if gallery_width + balcony_width > ring_budget + 1e-3 {
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
 	Ok((gallery_width, balcony_width))
 }
 
-fn pack_span(spec: LesHallesStallDoor, remaining: f32) -> Option<(f32, f32, f32)> {
-	let door_lo = (spec.door_width - spec.allowed_error).max(0.4);
-	let door_hi = spec.door_width + spec.allowed_error;
-	let jamb = spec.jamb_min.max(0.0);
-	let min_pack = door_lo + 2.0 * jamb - spec.allowed_error.max(0.0);
-	let min_pack = min_pack.max(door_lo + 0.05);
-	if remaining + 1e-4 < min_pack {
-		return None;
-	}
-	let nominal = spec.door_width + 2.0 * jamb;
-	let pack = if remaining >= nominal {
-		nominal
-	} else {
-		remaining
-	};
-	let door_w = (pack - 2.0 * jamb)
-		.clamp(door_lo, door_hi)
-		.min(pack - 0.05)
-		.max(door_lo.min(pack * 0.8));
-	let jamb_each = ((pack - door_w) * 0.5).max(0.0);
-	Some((pack, door_w, jamb_each))
+/// Plan-center with \(y = 0\) so tower AABB slices share monotower noise lanes.
+fn monotower_noise_center(confines: &Confines) -> bevy_math::Vec3 {
+	let c = confines.center();
+	bevy_math::Vec3::new(c.x, 0.0, c.z)
 }
 
 pub(crate) fn footprint_extents(confines: &Confines) -> Result<(f32, f32, f32), FitError> {
@@ -473,5 +629,31 @@ mod tests {
 			windows: doors_catalog(),
 		};
 		assert!(params.fit_windows_on_run(20.0).is_empty());
+	}
+
+	#[test]
+	fn sample_livable_biases_gallery_depth() {
+		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
+			bevy_math::Vec3::new(36.0, 4.0, 27.0),
+		));
+		let params = LesHallesParameterized::sample_livable(
+			&confines,
+			NoiseParams {
+				seed: 42,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		assert!(
+			params.gallery_width + 1e-3 >= MIN_LIVABLE_GALLERY_WIDTH,
+			"gallery {:.2} < livable min",
+			params.gallery_width
+		);
+		assert!(
+			params.gallery_width <= MAX_LIVABLE_GALLERY_WIDTH + 1e-3,
+			"gallery {:.2} > livable soft max",
+			params.gallery_width
+		);
 	}
 }

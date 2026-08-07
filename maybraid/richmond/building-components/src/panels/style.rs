@@ -11,6 +11,9 @@ use crate::panels::geometry::PanelKitCaps;
 ///
 /// Variant names match `urban/panels/<snake_case>/` kit folders from art/assets
 /// (see [PR #568](https://github.com/ramate-io/maybraid/pull/568)).
+/// High / mid / low use each style's triad; UltraLow always uses the shared flat
+/// low-res kit ([`crate::panels::PANEL_ULTRA_LOW_RECTANGLE`] /
+/// [`crate::panels::PANEL_ULTRA_LOW_RIGHT_TRIANGLE`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum PanelStyle {
 	#[default]
