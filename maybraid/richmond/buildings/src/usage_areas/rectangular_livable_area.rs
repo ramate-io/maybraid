@@ -345,7 +345,7 @@ fn default_program(area: f32, passages: usize) -> Vec<RectQuarterKind> {
 		out.push(RectQuarterKind::Eating);
 	}
 	out.push(RectQuarterKind::Living);
-	if area > 28.0 {
+	if area + EPS >= min_area_for(RectQuarterKind::Bedroom) {
 		out.push(RectQuarterKind::Bedroom);
 	}
 	if area > 40.0 {

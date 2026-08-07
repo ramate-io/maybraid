@@ -19,6 +19,7 @@ pub mod placed;
 pub mod roofs;
 pub mod scene_children;
 pub mod stairs;
+pub mod structural_probe;
 
 pub use arc_kit::{arc_ring_dir, arc_ring_dir_deg, decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
@@ -30,14 +31,16 @@ pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
 pub use lod_band::{warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
 pub use lod_host::{
-	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
-	WarmAssetLodRoots,
+	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_content_host_hslu,
+	warm_mesh_level_host, WarmAssetLodRoots,
 };
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
-	with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelNode, PanelStyle,
-	Rectangle as PanelRectangle, RightTriangle as PanelRightTriangle, TessellatedTriangle,
-	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,
+	PanelLodProbe, PanelNode, PanelStyle, Rectangle as PanelRectangle,
+	RightTriangle as PanelRightTriangle, TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE,
+	DEFAULT_TILE_WIDTH, PANEL_HIGH_FACTOR, PANEL_LOW_FACTOR, PANEL_MEDIUM_FACTOR,
+	PANEL_ULTRA_LOW_RECTANGLE, PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 };
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,
@@ -57,9 +60,14 @@ pub use scene_children::{
 	pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose,
 };
 pub use stairs::StairNode;
+pub use structural_probe::{
+	distance_outside_aabb2d_xz, distance_outside_footprints,
+	update_building_structural_host_levels, BuildingStructuralLodProbe,
+	STRUCTURAL_HIGH_OUTSIDE_METERS,
+};
 
 use bevy::scene::{ResolveContext, ResolvedScene, Scene};
-use lod::gen::{LodScene, LodSceneLevel};
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
 /// Domain IR exposed by a building (or building part) for structural composition.
@@ -104,6 +112,11 @@ pub trait BuildingComponents {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::new()
 	}
+
+	/// When set, [`ComponentsOnly`] presents a warm High/Medium host driven by this probe.
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		None
+	}
 }
 
 impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
@@ -141,6 +154,10 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		(**self).label_nodes_for_level(level)
+	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		(**self).structural_lod_probe()
 	}
 }
 
@@ -219,15 +236,52 @@ impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		self.0.label_nodes_for_level(level)
 	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		self.0.structural_lod_probe()
+	}
 }
 
 impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.0
+			.structural_lod_probe()
+			.map(|p| p.level_for(lod_ref.current_transform))
+			.unwrap_or(LodSceneLevel::High)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		match self.0.structural_lod_probe() {
+			Some(probe) => probe.status_for_lod_ref(lod_ref),
+			None => LodSceneStatus::Unchanged,
+		}
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Keep structural H/M/L roots warm; content differs per band and respawn is expensive.
+		LodSceneCulls::None
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		component_only_scene(&self.0, lod_ref, level)
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let level = self.scene_lod_level(lod_ref);
+		match self.0.structural_lod_probe() {
+			Some(probe) => {
+				// Medium and Low share shell-only content for this banding policy.
+				let mid = component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium);
+				Box::new(warm_content_host_hsl(
+					level,
+					probe,
+					component_only_scene(&self.0, lod_ref, LodSceneLevel::High),
+					mid,
+					component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium),
+				)) as Box<dyn Scene>
+			}
+			None => Box::new(component_only_scene(&self.0, lod_ref, level)) as Box<dyn Scene>,
+		}
 	}
 }
 

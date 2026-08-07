@@ -67,6 +67,14 @@ pub const MAX_COURTYARD_FRACTION: f32 = 0.60;
 pub const MIN_STALL_RING_SHARE: f32 = 0.55;
 pub const MAX_STALL_RING_SHARE: f32 = 0.75;
 
+/// Minimum gallery depth for [`LesHallesParameterized::sample_livable`].
+pub const MIN_LIVABLE_GALLERY_WIDTH: f32 = 8.0;
+/// Soft max gallery depth preferred by livable sampling (still clamped by footprint).
+pub const MAX_LIVABLE_GALLERY_WIDTH: f32 = 16.0;
+/// Stall-ring share range for livable gallery bias (deeper apartment band).
+pub const MIN_LIVABLE_STALL_RING_SHARE: f32 = 0.70;
+pub const MAX_LIVABLE_STALL_RING_SHARE: f32 = 0.85;
+
 /// Salt lanes for spatial sampling at the confines center.
 const SALT_COURTYARD: f32 = 1.0;
 const SALT_STALL_SHARE: f32 = 2.0;
@@ -158,6 +166,84 @@ impl LesHallesParameterized {
 		})
 	}
 
+	/// Like [`Self::sample`], but biases the gallery toward apartment-friendly
+	/// depths (~8–16 m) via a higher stall-ring share.
+	///
+	/// Used by [`super::LesHallesLivableFullStorey`]; commercial
+	/// [`Self::sample`] is unchanged.
+	pub fn sample_livable(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let (extent_x, extent_z, height) = footprint_extents(confines)?;
+		let min_ring = MIN_LIVABLE_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
+		let min_outer = 2.0 * min_ring + MIN_COURTYARD;
+		if extent_x < min_outer || extent_z < min_outer {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+		if height < MIN_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		let cfg = NoiseConfig::new(noise);
+		let c = confines.center();
+		let extent_min = extent_x.min(extent_z);
+
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_COURTYARD_FRACTION,
+			MAX_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
+
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_LIVABLE_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
+
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_LIVABLE_STALL_RING_SHARE,
+			MAX_LIVABLE_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) =
+			split_ring_budget_livable(ring_budget, stall_share)?;
+
+		let ring = gallery_width + balcony_width;
+		if extent_x < 2.0 * ring + MIN_COURTYARD || extent_z < 2.0 * ring + MIN_COURTYARD {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+
+		let shaft_i = cfg.sample_range_usize_4d(0, 2, c.x, c.y, c.z, SALT_SHAFT);
+		let shaft_placement = if shaft_i == 0 {
+			LesHallesShaftPlacement::Corners
+		} else {
+			LesHallesShaftPlacement::MidSides
+		};
+
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side =
+			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
+
+		Ok(Self {
+			gallery_width,
+			balcony_width,
+			courtyard_fraction,
+			shaft_placement,
+			mid_shaft_side,
+			opening_density,
+			doors,
+			windows,
+		})
+	}
+
 	pub fn ring_width(&self) -> f32 {
 		self.gallery_width + self.balcony_width
 	}
@@ -173,9 +259,10 @@ impl LesHallesParameterized {
 		}
 	}
 
-	/// Corner stall-strip / shaft-clear length along each abutting inner wall.
+	/// Authored corner F2C clear / stall-strip buffer along each abutting wall.
 	///
-	/// Half the corner gallery square (which itself is `gallery_width` on a side).
+	/// Half the corner gallery square (`gallery_width` on a side). Consumers clamp
+	/// against the gallery-inner along-half before placing clears or end walls.
 	pub fn corner_clear_len(&self) -> f32 {
 		(self.gallery_width * 0.5).max(2.0)
 	}
@@ -194,23 +281,45 @@ impl LesHallesParameterized {
 /// Split a rim budget into gallery + balcony using `stall_share`, then clamp to
 /// absolute min/max depths while staying inside `ring_budget`.
 fn split_ring_budget(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
-	if ring_budget + 1e-4 < MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_GALLERY_WIDTH,
+		MAX_GALLERY_WIDTH,
+	)
+}
+
+fn split_ring_budget_livable(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_LIVABLE_GALLERY_WIDTH,
+		MAX_LIVABLE_GALLERY_WIDTH.min(MAX_GALLERY_WIDTH),
+	)
+}
+
+fn split_ring_budget_with(
+	ring_budget: f32,
+	stall_share: f32,
+	min_gallery: f32,
+	max_gallery_abs: f32,
+) -> Result<(f32, f32), FitError> {
+	if ring_budget + 1e-4 < min_gallery + MIN_BALCONY_WIDTH {
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
-	let max_gallery = MAX_GALLERY_WIDTH
+	let max_gallery = max_gallery_abs
 		.min(ring_budget - MIN_BALCONY_WIDTH)
-		.max(MIN_GALLERY_WIDTH);
-	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(MIN_GALLERY_WIDTH, max_gallery);
+		.max(min_gallery);
+	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(min_gallery, max_gallery);
 	let rem = (ring_budget - target_gallery).max(0.0);
 	let max_balcony = MAX_BALCONY_WIDTH.min(rem).max(MIN_BALCONY_WIDTH);
 	let balcony_width = rem.clamp(MIN_BALCONY_WIDTH, max_balcony);
-	let gallery_width = (ring_budget - balcony_width)
-		.clamp(MIN_GALLERY_WIDTH, max_gallery);
+	let gallery_width = (ring_budget - balcony_width).clamp(min_gallery, max_gallery);
 	// Re-fit balcony after gallery clamp so the pair still sums to the budget when possible.
 	let balcony_width = (ring_budget - gallery_width)
-		.clamp(MIN_BALCONY_WIDTH, MAX_BALCONY_WIDTH.min(ring_budget - MIN_GALLERY_WIDTH));
+		.clamp(MIN_BALCONY_WIDTH, MAX_BALCONY_WIDTH.min(ring_budget - min_gallery));
 	let gallery_width = (ring_budget - balcony_width)
-		.clamp(MIN_GALLERY_WIDTH, MAX_GALLERY_WIDTH.min(ring_budget - MIN_BALCONY_WIDTH));
+		.clamp(min_gallery, max_gallery_abs.min(ring_budget - MIN_BALCONY_WIDTH));
 	if gallery_width + balcony_width > ring_budget + 1e-3 {
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
@@ -347,5 +456,31 @@ mod tests {
 			windows: doors_catalog(),
 		};
 		assert!(params.fit_windows_on_run(20.0).is_empty());
+	}
+
+	#[test]
+	fn sample_livable_biases_gallery_depth() {
+		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
+			bevy_math::Vec3::new(36.0, 4.0, 27.0),
+		));
+		let params = LesHallesParameterized::sample_livable(
+			&confines,
+			NoiseParams {
+				seed: 42,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		assert!(
+			params.gallery_width + 1e-3 >= MIN_LIVABLE_GALLERY_WIDTH,
+			"gallery {:.2} < livable min",
+			params.gallery_width
+		);
+		assert!(
+			params.gallery_width <= MAX_LIVABLE_GALLERY_WIDTH + 1e-3,
+			"gallery {:.2} > livable soft max",
+			params.gallery_width
+		);
 	}
 }

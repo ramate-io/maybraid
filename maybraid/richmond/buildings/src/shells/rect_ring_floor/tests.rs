@@ -53,9 +53,7 @@ fn passage_on_outer_south_maps() {
 		.build();
 	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
 	assert!(r.walls().iter().any(|w| {
-		w.pieces()
-			.iter()
-			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
+		w.pieces().iter().any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
 	}));
 }
 
@@ -96,14 +94,9 @@ fn corner_depth_nibble_loses_to_true_face_span() {
 	let r = RectRingFloorParams::default()
 		.openings(Openings::new().with("se_door", door))
 		.build();
-	let mapped = r
-		.mapped_opening(&OpeningId::new("se_door"))
-		.expect("door must map");
+	let mapped = r.mapped_opening(&OpeningId::new("se_door")).expect("door must map");
 	let cut_w = mapped.face.lower_left.distance(mapped.face.lower_right);
-	assert!(
-		cut_w > 1.0,
-		"expected full leaf span, not corner nibble; cut_w={cut_w}"
-	);
+	assert!(cut_w > 1.0, "expected full leaf span, not corner nibble; cut_w={cut_w}");
 }
 
 #[test]
@@ -191,9 +184,7 @@ fn wide_passage_authors_broad_side_omission() {
 
 #[test]
 fn solid_floor_has_frame_pieces() {
-	let r = RectRingFloorParams::default()
-		.floor(RectRingFloorSlab::Solid)
-		.build();
+	let r = RectRingFloorParams::default().floor(RectRingFloorSlab::Solid).build();
 	assert!(r.has_floor());
 	let panels = r.panel_nodes_for_level(LodSceneLevel::High);
 	assert!(panels.len() > r.wall_count());
@@ -213,9 +204,7 @@ fn cuts_slab_can_remove_a_frame_band() {
 			OpeningLabel::Shaft,
 		),
 	);
-	let solid = RectRingFloorParams::default()
-		.floor(RectRingFloorSlab::Solid)
-		.build();
+	let solid = RectRingFloorParams::default().floor(RectRingFloorSlab::Solid).build();
 	let cut = RectRingFloorParams::default()
 		.floor(RectRingFloorSlab::Solid)
 		.openings(openings)
@@ -236,4 +225,38 @@ fn cuts_slab_can_remove_a_frame_band() {
 		solid.floor_band_count(),
 		cut.floor_band_count()
 	);
+}
+
+#[test]
+fn two_corner_shafts_both_cut_south_floor_band() {
+	// Default outer 8×6, inner 4×3 → south band z∈[-3,-1.5], x∈[-4,4].
+	// Two equal corner shafts on that band must each leave a floor void.
+	let mut openings = Openings::new();
+	openings.insert(
+		"sw",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(-4.0, -0.5, -3.0),
+				Vec3::new(-2.0, 0.5, -1.5),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	openings.insert(
+		"se",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(2.0, -0.5, -3.0),
+				Vec3::new(4.0, 0.5, -1.5),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	let cut = RectRingFloorParams::default()
+		.floor(RectRingFloorSlab::Solid)
+		.openings(openings)
+		.build();
+	assert!(!cut.floor_covers_xz(-3.0, -2.25), "SW shaft footprint must not retain gallery floor");
+	assert!(!cut.floor_covers_xz(3.0, -2.25), "SE shaft footprint must not retain gallery floor");
+	assert!(cut.floor_covers_xz(0.0, -2.25), "mid-south gallery between shafts should keep floor");
 }

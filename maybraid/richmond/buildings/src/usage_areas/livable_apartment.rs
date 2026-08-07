@@ -23,16 +23,19 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::{LabelNode, LabelStyle};
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::fit::{
 	Confines, FillRegion, FillableRegions, Fit, FitError, MultiConfines, SpaceKind,
 };
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::shells::RectFloor;
+use crate::usage_areas::plan_geom::host_xz;
 
 pub(crate) const EPS: f32 = 1e-3;
 pub(crate) const SCOPE: &str = "livable_apartment";
+/// Provenance for in-apartment partition / room walls (High structural band only).
+pub(crate) const INTERNAL_WALLS_LAYER: &str = "internal_walls";
 
 /// One apartment group: envelope + entryway / rectangular livable areas.
 #[derive(Debug, Clone, PartialEq)]
@@ -94,12 +97,12 @@ impl BuildingComponents for LivableApartment {
 			out.extend(shell.panel_nodes_for_level(level));
 		}
 		for wall in &self.partitions {
-			out.extend(wall.panel_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.panel_nodes_for_level(level));
 		}
 		for room in &self.rooms {
-			out.extend(room.panel_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, room.panel_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
@@ -108,12 +111,12 @@ impl BuildingComponents for LivableApartment {
 			out.extend(shell.joint_nodes_for_level(level));
 		}
 		for wall in &self.partitions {
-			out.extend(wall.joint_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, wall.joint_nodes_for_level(level));
 		}
 		for room in &self.rooms {
-			out.extend(room.joint_nodes_for_level(level));
+			out.extend_under(INTERNAL_WALLS_LAYER, room.joint_nodes_for_level(level));
 		}
-		out
+		structural_layers(level, out)
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
@@ -144,5 +147,23 @@ impl BuildingComponents for LivableApartment {
 			out.extend(room.furniture_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+		if self.cells.is_empty() {
+			return None;
+		}
+		Some(BuildingStructuralLodProbe::new(
+			self.cells.iter().map(|part| host_xz(&part.confines.bounds)),
+		))
+	}
+}
+
+/// High keeps tagged internals; coarser bands drop [`INTERNAL_WALLS_LAYER`].
+fn structural_layers<T>(level: LodSceneLevel, layers: Layers<T>) -> Layers<T> {
+	if matches!(level, LodSceneLevel::High) {
+		layers
+	} else {
+		layers.except([INTERNAL_WALLS_LAYER])
 	}
 }

@@ -1,6 +1,6 @@
 //! Shared helpers for orthonormal storey shells (positioned opening fit).
 
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 
 use crate::openings::{MappedOpening, MappedOpeningQuad};
@@ -130,12 +130,7 @@ pub struct WallEdge {
 
 impl WallEdge {
 	pub fn new(start: Vec3, end: Vec3, height: f32, outward: Vec2) -> Self {
-		Self {
-			start,
-			end,
-			height: height.max(EPS),
-			outward,
-		}
+		Self { start, end, height: height.max(EPS), outward }
 	}
 
 	pub fn length(self) -> f32 {
@@ -172,7 +167,11 @@ pub struct FaceOpening {
 /// Project opening AABB onto a standing strip edge → positioned inset + mapped quad.
 ///
 /// Returns [`None`] when the opening does not intersect the wall volume meaningfully.
-pub fn standing_face_opening(edge: WallEdge, bounds: &Aabb3d, thickness: f32) -> Option<FaceOpening> {
+pub fn standing_face_opening(
+	edge: WallEdge,
+	bounds: &Aabb3d,
+	thickness: f32,
+) -> Option<FaceOpening> {
 	let len = edge.length();
 	let h = edge.height;
 	let tang = edge.tangent();
@@ -239,10 +238,7 @@ pub fn standing_face_opening(edge: WallEdge, bounds: &Aabb3d, thickness: f32) ->
 	let tl = edge.start + tang * s_lo + Vec3::Y * (y1 - edge.start.y);
 	let tr = edge.start + tang * s_hi + Vec3::Y * (y1 - edge.start.y);
 	// Looking out: lower-left / lower-right with outward normal.
-	let mapped = MappedOpening::new(
-		MappedOpeningQuad::new(br, bl, tr, tl),
-		edge.outward,
-	);
+	let mapped = MappedOpening::new(MappedOpeningQuad::new(br, bl, tr, tl), edge.outward);
 
 	Some(FaceOpening { inset, mapped })
 }
@@ -276,10 +272,7 @@ pub fn ntube_face_opening(
 		standing.inset.left,
 		standing.inset.right,
 	);
-	Some(FaceOpening {
-		inset,
-		mapped: standing.mapped,
-	})
+	Some(FaceOpening { inset, mapped: standing.mapped })
 }
 
 /// Face-aligned extent score (width × height on the face).
@@ -292,22 +285,10 @@ pub fn face_extent_score(bounds: &Aabb3d, along_horizontal: bool) -> f32 {
 pub fn best_side_for_bounds(bounds: &Aabb3d, plan: PlanRect) -> OrthoSide {
 	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
 	let candidates = [
-		(
-			OrthoSide::South,
-			Vec3::new(plan.center.x, mid.y, plan.center.z - plan.half_z),
-		),
-		(
-			OrthoSide::East,
-			Vec3::new(plan.center.x + plan.half_x, mid.y, plan.center.z),
-		),
-		(
-			OrthoSide::North,
-			Vec3::new(plan.center.x, mid.y, plan.center.z + plan.half_z),
-		),
-		(
-			OrthoSide::West,
-			Vec3::new(plan.center.x - plan.half_x, mid.y, plan.center.z),
-		),
+		(OrthoSide::South, Vec3::new(plan.center.x, mid.y, plan.center.z - plan.half_z)),
+		(OrthoSide::East, Vec3::new(plan.center.x + plan.half_x, mid.y, plan.center.z)),
+		(OrthoSide::North, Vec3::new(plan.center.x, mid.y, plan.center.z + plan.half_z)),
+		(OrthoSide::West, Vec3::new(plan.center.x - plan.half_x, mid.y, plan.center.z)),
 	];
 	candidates
 		.into_iter()
@@ -324,25 +305,16 @@ pub fn best_side_for_bounds(bounds: &Aabb3d, plan: PlanRect) -> OrthoSide {
 ///
 /// Returns [`None`] when the opening misses the slab; `Some(None)` when it covers the slab
 /// (caller should omit the piece); `Some(Some(inset))` for a positioned hole.
-pub fn horizontal_slab_inset(
-	plan: PlanRect,
-	bounds: &Aabb3d,
-) -> Option<Option<RectInset>> {
-	let slab = plan.volume_aabb();
-	let inter = aabb_intersection(bounds, &slab)?;
-	let imin = Vec3::from(inter.min);
-	let imax = Vec3::from(inter.max);
+pub fn horizontal_slab_inset(plan: PlanRect, bounds: &Aabb3d) -> Option<Option<RectInset>> {
+	let cut = horizontal_slab_cut_xz(plan, bounds)?;
 	let pmin = plan.min_xz();
 	let pmax = plan.max_xz();
-	let x0 = imin.x.clamp(pmin.x, pmax.x);
-	let x1 = imax.x.clamp(pmin.x, pmax.x);
-	let z0 = imin.z.clamp(pmin.y, pmax.y);
-	let z1 = imax.z.clamp(pmin.y, pmax.y);
-	if x1 - x0 < EPS || z1 - z0 < EPS {
-		return None;
-	}
 	let full_x = plan.full_x();
 	let full_z = plan.full_z();
+	let x0 = cut.min.x;
+	let x1 = cut.max.x;
+	let z0 = cut.min.y;
+	let z1 = cut.max.y;
 	// Coverage: hole ate the fill.
 	if (x1 - x0) + EPS >= full_x && (z1 - z0) + EPS >= full_z {
 		return Some(None);
@@ -360,6 +332,10 @@ pub fn horizontal_slab_inset(
 }
 
 /// Merge several slab-cutting insets: keep the largest-area hole, or remove if any removes.
+///
+/// Prefer [`subtract_aabb2d`] + residual solids when a band may host multiple
+/// holes (e.g. two corner shafts on one N/S gallery strip). This helper remains
+/// for shells that still author a single framed inset per piece.
 pub fn merge_slab_insets(
 	plan: PlanRect,
 	openings: impl Iterator<Item = Aabb3d>,
@@ -382,6 +358,93 @@ pub fn merge_slab_insets(
 		}
 	}
 	best.map(Some)
+}
+
+/// Plan footprint of [`PlanRect`] as XZ → [`Aabb2d`] (`y` = world Z).
+pub fn plan_rect_aabb2(plan: PlanRect) -> Aabb2d {
+	Aabb2d { min: plan.min_xz(), max: plan.max_xz() }
+}
+
+/// Intersection of a 3D opening with the slab volume, as an XZ cut rectangle.
+pub fn horizontal_slab_cut_xz(plan: PlanRect, bounds: &Aabb3d) -> Option<Aabb2d> {
+	let slab = plan.volume_aabb();
+	let inter = aabb_intersection(bounds, &slab)?;
+	let imin = Vec3::from(inter.min);
+	let imax = Vec3::from(inter.max);
+	let pmin = plan.min_xz();
+	let pmax = plan.max_xz();
+	let x0 = imin.x.clamp(pmin.x, pmax.x);
+	let x1 = imax.x.clamp(pmin.x, pmax.x);
+	let z0 = imin.z.clamp(pmin.y, pmax.y);
+	let z1 = imax.z.clamp(pmin.y, pmax.y);
+	if x1 - x0 < EPS || z1 - z0 < EPS {
+		return None;
+	}
+	Some(Aabb2d { min: Vec2::new(x0, z0), max: Vec2::new(x1, z1) })
+}
+
+fn aabb2_area(r: Aabb2d) -> f32 {
+	(r.max.x - r.min.x).max(0.0) * (r.max.y - r.min.y).max(0.0)
+}
+
+fn aabb2_covers(host: Aabb2d, cut: Aabb2d) -> bool {
+	cut.min.x <= host.min.x + EPS
+		&& cut.min.y <= host.min.y + EPS
+		&& cut.max.x + EPS >= host.max.x
+		&& cut.max.y + EPS >= host.max.y
+}
+
+/// Subtract axis-aligned `cuts` from `host`, returning residual rectangles.
+///
+/// Guillotine difference against each cut in order — same idea as
+/// `usage_areas::plan_cells::subtract_aabb2`, kept local so shells do not depend
+/// on usage areas. Early-outs when any cut fully covers the host.
+pub fn subtract_aabb2d(host: Aabb2d, cuts: &[Aabb2d]) -> Vec<Aabb2d> {
+	if cuts.iter().any(|c| aabb2_covers(host, *c)) {
+		return Vec::new();
+	}
+	let mut regions = vec![host];
+	for cut in cuts {
+		let mut next = Vec::new();
+		for r in regions {
+			next.extend(subtract_aabb2d_one(r, *cut));
+		}
+		regions = next;
+	}
+	regions.into_iter().filter(|r| aabb2_area(*r) > EPS * EPS).collect()
+}
+
+fn subtract_aabb2d_one(host: Aabb2d, cut: Aabb2d) -> Vec<Aabb2d> {
+	let x0 = host.min.x.max(cut.min.x);
+	let x1 = host.max.x.min(cut.max.x);
+	let y0 = host.min.y.max(cut.min.y);
+	let y1 = host.max.y.min(cut.max.y);
+	if x1 - x0 <= EPS || y1 - y0 <= EPS {
+		return vec![host];
+	}
+	let mut out = Vec::new();
+	if x0 - host.min.x > EPS {
+		out.push(Aabb2d { min: host.min, max: Vec2::new(x0, host.max.y) });
+	}
+	if host.max.x - x1 > EPS {
+		out.push(Aabb2d { min: Vec2::new(x1, host.min.y), max: host.max });
+	}
+	if y0 - host.min.y > EPS {
+		out.push(Aabb2d { min: Vec2::new(x0, host.min.y), max: Vec2::new(x1, y0) });
+	}
+	if host.max.y - y1 > EPS {
+		out.push(Aabb2d { min: Vec2::new(x0, y1), max: Vec2::new(x1, host.max.y) });
+	}
+	out
+}
+
+/// Rebuild a [`PlanRect`] at elevation `y` from an XZ residual (`Aabb2d.y` = Z).
+pub fn plan_rect_from_aabb2(y: f32, region: Aabb2d) -> PlanRect {
+	PlanRect::new(
+		Vec3::new(0.5 * (region.min.x + region.max.x), y, 0.5 * (region.min.y + region.max.y)),
+		(region.max.x - region.min.x).max(EPS),
+		(region.max.y - region.min.y).max(EPS),
+	)
 }
 
 pub fn aabb_intersection(a: &Aabb3d, b: &Aabb3d) -> Option<Aabb3d> {
@@ -424,10 +487,7 @@ mod tests {
 			Vec2::new(0.0, -1.0),
 		);
 		// Door toward +X side, ground to 2.0.
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(1.0, 0.0, -3.2),
-			Vec3::new(2.5, 2.0, -2.8),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(1.0, 0.0, -3.2), Vec3::new(2.5, 2.0, -2.8));
 		let face = standing_face_opening(edge, &bounds, 0.75).unwrap();
 		assert!(face.inset.left < 0.05, "ground door left={}", face.inset.left);
 		assert!((face.inset.right - 1.0).abs() < 0.15);
@@ -438,14 +498,25 @@ mod tests {
 	#[test]
 	fn slab_inset_is_positioned_not_centered() {
 		let plan = PlanRect::new(Vec3::ZERO, 8.0, 6.0);
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(1.0, -0.2, -2.0),
-			Vec3::new(3.0, 0.2, -0.5),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(1.0, -0.2, -2.0), Vec3::new(3.0, 0.2, -0.5));
 		let Some(Some(inset)) = horizontal_slab_inset(plan, &bounds) else {
 			panic!("expected positioned hole");
 		};
 		assert!(inset.left > inset.right, "hole on +X side");
 		assert!(inset.bottom < inset.top, "hole on -Z side");
+	}
+
+	#[test]
+	fn subtract_aabb2d_keeps_both_side_holes() {
+		let host = Aabb2d { min: Vec2::new(-4.0, -3.0), max: Vec2::new(4.0, -1.5) };
+		let cuts = [
+			Aabb2d { min: Vec2::new(-4.0, -3.0), max: Vec2::new(-2.0, -1.5) },
+			Aabb2d { min: Vec2::new(2.0, -3.0), max: Vec2::new(4.0, -1.5) },
+		];
+		let residuals = subtract_aabb2d(host, &cuts);
+		assert_eq!(residuals.len(), 1);
+		let mid = residuals[0];
+		assert!((mid.min.x - (-2.0)).abs() < 1e-4);
+		assert!((mid.max.x - 2.0).abs() < 1e-4);
 	}
 }

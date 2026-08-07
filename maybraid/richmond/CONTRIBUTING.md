@@ -133,12 +133,21 @@ Roof kits use the same distance / extent probe shape ([`RoofLodProbe`](building-
 
 | Band | Factor |
 |------|--------|
-| High | ≤ [`ROOF_HIGH_FACTOR`](building-components/src/roofs/lod.rs) (2.5) |
-| Medium | ≤ [`ROOF_MEDIUM_FACTOR`](building-components/src/roofs/lod.rs) (10) |
-| Low | ≤ [`ROOF_LOW_FACTOR`](building-components/src/roofs/lod.rs) (500) |
+| High | ≤ [`ROOF_HIGH_FACTOR`](building-components/src/roofs/lod.rs) (2) |
+| Medium | ≤ [`ROOF_MEDIUM_FACTOR`](building-components/src/roofs/lod.rs) (3) |
+| Low | ≤ [`ROOF_LOW_FACTOR`](building-components/src/roofs/lod.rs) (8) |
 | UltraLow | elsewhere (shares low mesh for now) |
 
-Shared mapping lives in [`lod_band`](building-components/src/lod_band.rs); fine-phase updates run `update_partition_host_levels` and `update_roof_host_levels` separately.
+### Panel mesh resolution
+
+Panel kits reuse the roof distance factors ([`PANEL_*_FACTOR`](building-components/src/panels/lod.rs)) but treat UltraLow as a **dedicated** host root: every style swaps to the shared flat low-res rectangle / right-triangle GLB (`urban/panels/flat/…_low_res.glb`).
+
+| Band | Content |
+|------|---------|
+| High / Medium / Low | Style triad (`*_high_res` / `*_mid_res` / `*_low_res`) |
+| UltraLow | Flat low-res ([`PANEL_ULTRA_LOW_RECTANGLE`](building-components/src/panels/lod.rs) / [`PANEL_ULTRA_LOW_RIGHT_TRIANGLE`](building-components/src/panels/lod.rs)) |
+
+Shared mapping lives in [`lod_band`](building-components/src/lod_band.rs); fine-phase updates run `update_partition_host_levels`, `update_panel_host_levels`, and `update_roof_host_levels` separately.
 
 ## Internal vs external emission
 

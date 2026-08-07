@@ -1,7 +1,8 @@
-//! Roof mesh-resolution LOD (distance / extent banding).
+//! Panel mesh-resolution LOD (distance / extent banding).
 //!
-//! Distinct from partition linear factors — roofs stay on tighter High / Medium
-//! thresholds so pitched kits drop resolution sooner for the same extent.
+//! Reuses roof High / Medium / Low distance factors (panels previously hosted under
+//! [`crate::roofs::lod::RoofLodProbe`]). Unlike roofs and partitions, **UltraLow is a
+//! distinct [`LodSceneLevel`]**: every style drops to the shared flat low-res kit.
 
 use bevy::prelude::{Component, Query, Res, Transform, With};
 use bevy::scene::prelude::Scene;
@@ -12,37 +13,43 @@ use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 use scene_ref::SceneRef;
 
+use crate::assets::panels::flat;
+use crate::assets::AssetPath;
 use crate::empty_scene;
 use crate::lod_band::{
 	center_extent_from_aabb, characteristic_extent_abs, placement_center, warm_mesh_lod_culls,
 	DistanceLodBand,
 };
-use crate::lod_host::warm_content_host_hsl;
+use crate::lod_host::warm_content_host_hslu;
 use crate::placed::Placement;
+use crate::roofs::lod::{ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR};
 
-/// `distance / max_extent` out to this → High.
-pub const ROOF_HIGH_FACTOR: f32 = 2.0;
-/// Out to this → Medium.
-pub const ROOF_MEDIUM_FACTOR: f32 = 3.0;
-/// Out to this → Low; else UltraLow.
-pub const ROOF_LOW_FACTOR: f32 = 8.0;
+/// Same thresholds as [`crate::roofs::lod`] (panels shared that probe historically).
+pub const PANEL_HIGH_FACTOR: f32 = ROOF_HIGH_FACTOR;
+pub const PANEL_MEDIUM_FACTOR: f32 = ROOF_MEDIUM_FACTOR;
+pub const PANEL_LOW_FACTOR: f32 = ROOF_LOW_FACTOR;
 
-/// Viewer distance band for roof mesh resolution.
+/// Shared UltraLow rectangle kit for every [`crate::panels::PanelStyle`].
+pub const PANEL_ULTRA_LOW_RECTANGLE: AssetPath = flat::RECTANGLE_LOW;
+/// Shared UltraLow right-triangle kit for every [`crate::panels::PanelStyle`].
+pub const PANEL_ULTRA_LOW_RIGHT_TRIANGLE: AssetPath = flat::RIGHT_TRIANGLE_LOW;
+
+/// Viewer distance band for panel mesh resolution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum RoofLodBand {
+pub enum PanelLodBand {
 	UltraLow,
 	Low,
 	Medium,
 	High,
 }
 
-impl RoofLodBand {
+impl PanelLodBand {
 	pub fn from_distance_factor(factor: f32) -> Self {
 		match DistanceLodBand::from_factors(
 			factor,
-			ROOF_HIGH_FACTOR,
-			ROOF_MEDIUM_FACTOR,
-			ROOF_LOW_FACTOR,
+			PANEL_HIGH_FACTOR,
+			PANEL_MEDIUM_FACTOR,
+			PANEL_LOW_FACTOR,
 		) {
 			DistanceLodBand::High => Self::High,
 			DistanceLodBand::Medium => Self::Medium,
@@ -51,11 +58,13 @@ impl RoofLodBand {
 		}
 	}
 
+	/// UltraLow is a real host root (flat low-res), not collapsed onto Low.
 	pub fn to_lod_scene_level(self) -> LodSceneLevel {
 		match self {
 			Self::High => LodSceneLevel::High,
 			Self::Medium => LodSceneLevel::Medium,
-			Self::UltraLow | Self::Low => LodSceneLevel::Low,
+			Self::Low => LodSceneLevel::Low,
+			Self::UltraLow => LodSceneLevel::UltraLow,
 		}
 	}
 
@@ -70,14 +79,14 @@ impl RoofLodBand {
 	}
 }
 
-/// Fine-phase probe for roof mesh hosts (center + characteristic extent).
+/// Fine-phase probe for panel mesh hosts (center + characteristic extent).
 #[derive(Debug, Clone, Copy, Component, Default)]
-pub struct RoofLodProbe {
+pub struct PanelLodProbe {
 	pub center: Vec3,
 	pub extent: f32,
 }
 
-impl RoofLodProbe {
+impl PanelLodProbe {
 	pub fn from_placement(placement: &Placement) -> Self {
 		Self { center: placement_center(placement), extent: characteristic_extent_abs(placement) }
 	}
@@ -87,9 +96,9 @@ impl RoofLodProbe {
 		Self { center, extent }
 	}
 
-	pub fn band_for(&self, viewer: &Transform) -> RoofLodBand {
+	pub fn band_for(&self, viewer: &Transform) -> PanelLodBand {
 		let factor = viewer.translation.distance(self.center) / self.extent.max(1e-4);
-		RoofLodBand::from_distance_factor(factor)
+		PanelLodBand::from_distance_factor(factor)
 	}
 
 	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
@@ -106,8 +115,7 @@ impl RoofLodProbe {
 	}
 }
 
-/// Probe writes [`LodSceneLevel`]; mesh spawn/cull uses [`crate::WarmAssetLodRoots`].
-impl LodScene for RoofLodProbe {
+impl LodScene for PanelLodProbe {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)
 	}
@@ -116,27 +124,43 @@ impl LodScene for RoofLodProbe {
 		self.status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+	fn scene_with_level(
+		&self,
+		_lod_ref: &LodRef,
+		_level: LodSceneLevel,
+	) -> impl Scene + 'static {
 		bevy::scene::SceneFunction(empty_scene)
 	}
 }
 
-/// Identity-placement LOD host from explicit high/mid/low [`SceneRef`]s (optional mirror).
-pub fn leaf_scene_ref_lod(
+/// Warm High/Medium/Low/UltraLow panel host driven by an explicit probe.
+///
+/// Composite buildings should pass [`PanelLodProbe::from_placement`] for each kit so
+/// panels band independently. Unit-kit previews may use [`PanelLodProbe::from_aabb`]
+/// on the subject bounds.
+pub fn leaf_panel_scene_ref_lod(
 	high: SceneRef,
 	mid: SceneRef,
 	low: SceneRef,
+	ultra_low: SceneRef,
 	lod_ref: &LodRef,
+	probe: PanelLodProbe,
 ) -> impl Scene + 'static {
-	let probe = RoofLodProbe::from_aabb(lod_ref.bounds);
 	let level = probe.level_for(lod_ref.current_transform);
-	warm_content_host_hsl(level, probe, high.scene(), mid.scene(), low.scene())
+	warm_content_host_hslu(
+		level,
+		probe,
+		high.scene(),
+		mid.scene(),
+		low.scene(),
+		ultra_low.scene(),
+	)
 }
 
-/// Fine-phase: update roof host levels from [`lod::LodViewerState`].
-pub fn update_roof_host_levels(
+/// Fine-phase: update panel host levels from [`lod::LodViewerState`].
+pub fn update_panel_host_levels(
 	viewer: Res<lod::LodViewerState>,
-	mut hosts: Query<(&RoofLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
+	mut hosts: Query<(&PanelLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
 	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
 		return;
@@ -154,19 +178,17 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn roof_factors_are_tighter_than_partition_linear() -> anyhow::Result<()> {
-		use crate::partitions::geometry::LINEAR_HIGH_FACTOR;
-
-		assert_eq!(RoofLodBand::from_distance_factor(ROOF_HIGH_FACTOR), RoofLodBand::High);
-		assert_eq!(RoofLodBand::from_distance_factor(ROOF_MEDIUM_FACTOR), RoofLodBand::Medium);
-		assert!(ROOF_HIGH_FACTOR < LINEAR_HIGH_FACTOR);
-		assert!(ROOF_MEDIUM_FACTOR < LINEAR_HIGH_FACTOR);
-		// Wall High cutoff is already past roof Medium → Low for roofs.
+	fn ultra_low_is_distinct_from_low() -> anyhow::Result<()> {
 		assert_eq!(
-			RoofLodBand::from_distance_factor(LINEAR_HIGH_FACTOR),
-			RoofLodBand::Low
+			PanelLodBand::from_distance_factor(PANEL_LOW_FACTOR).to_lod_scene_level(),
+			LodSceneLevel::Low
 		);
-		assert_eq!(RoofLodBand::from_distance_factor(ROOF_LOW_FACTOR + 1.0), RoofLodBand::UltraLow);
+		assert_eq!(
+			PanelLodBand::from_distance_factor(PANEL_LOW_FACTOR + 1.0).to_lod_scene_level(),
+			LodSceneLevel::UltraLow
+		);
+		assert_eq!(PANEL_ULTRA_LOW_RECTANGLE, flat::RECTANGLE_LOW);
+		assert_eq!(PANEL_ULTRA_LOW_RIGHT_TRIANGLE, flat::RIGHT_TRIANGLE_LOW);
 		Ok(())
 	}
 }

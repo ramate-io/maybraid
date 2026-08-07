@@ -44,7 +44,8 @@ use richmond_buildings::{
 	CommonBedroom, Confines, DiningRoom, FillableRegions, FillRegion, Fit, FitError,
 	HallsToShafts as HallsToShaftsFit, HallsToShaftsOptions, IApartmentFloorPlan,
 	IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall, LesHallesFloorPlan,
-	LesHallesFullStorey, LesHallesParameterized, LivableApartment, LivableApartments,
+	LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
+	LesHallesShaftPlacement, LivableApartment, LivableApartments,
 	LivableApartmentsOptions, LivingRoom, MiniMart, MultiConfines, PartsStall, PublicRestroom,
 	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
 	RectangularLivableAreaParameterized, passages_on_faces, ResidentialBathroom,
@@ -411,6 +412,8 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
 		openings: Vec<PreviewOpening>,
 	},
+	/// Side-by-side gallery of `LesHallesFloorPlan` (corner vs mid-side shafts).
+	LesHallesFloorPlanExamples,
 	LesHallesFullStorey {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -419,6 +422,16 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
 		openings: Vec<PreviewOpening>,
 	},
+	LesHallesLivableFullStorey {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
+	/// Side-by-side gallery of `LesHallesLivableFullStorey` (lengthwise RLA bays).
+	LesHallesLivableFullStoreyExamples,
 	IApartmentFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -955,6 +968,26 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::LesHallesLivableFullStorey {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
+				format!(
+					"preview: les-halles-livable-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
+			PreviewSubject::LesHallesFloorPlanExamples => {
+				"preview: les-halles-floor-plan-examples (gallery)".into()
+			}
+			PreviewSubject::LesHallesLivableFullStoreyExamples => {
+				"preview: les-halles-livable-full-storey-examples (gallery)".into()
+			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
 				seed,
@@ -1059,11 +1092,16 @@ impl PreviewConfig {
 			PreviewSubject::IApartmentFullStoreyExamples => {
 				i_apartment_full_storey_examples_bounds()
 			}
+			PreviewSubject::LesHallesFloorPlanExamples => les_halles_floor_plan_examples_bounds(),
+			PreviewSubject::LesHallesLivableFullStoreyExamples => {
+				les_halles_livable_full_storey_examples_bounds()
+			}
 			PreviewSubject::LivableApartmentsExamples => livable_apartments_examples_bounds(),
 			PreviewSubject::LivableApartmentExamples => livable_apartment_examples_bounds(),
 			PreviewSubject::LivableRectanglesExamples => livable_rectangles_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
+			| PreviewSubject::LesHallesLivableFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
 			| PreviewSubject::IApartmentFullStorey { extent, .. }
 			| PreviewSubject::HallsToShafts { extent, .. } => {
@@ -1272,7 +1310,10 @@ pub struct CachedPreview {
 	bedroom: Option<CommonBedroom>,
 	noisy_wall: Option<NoisyRectangularWall>,
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
+	les_halles_floor_plan_examples: Vec<LesHallesFloorPlanExampleCell>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
+	les_halles_livable_full_storey: Option<LesHallesLivableFullStorey>,
+	les_halles_livable_full_storey_examples: Vec<LesHallesLivableFullStoreyExampleCell>,
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
@@ -1356,6 +1397,20 @@ struct IApartmentFullStoreyExampleCell {
 	storey: IApartmentFullStorey,
 }
 
+/// One cell in [`PreviewSubject::LesHallesFloorPlanExamples`].
+#[derive(Clone)]
+struct LesHallesFloorPlanExampleCell {
+	offset: Vec3,
+	plan: LesHallesFloorPlan,
+}
+
+/// One cell in [`PreviewSubject::LesHallesLivableFullStoreyExamples`].
+#[derive(Clone)]
+struct LesHallesLivableFullStoreyExampleCell {
+	offset: Vec3,
+	storey: LesHallesLivableFullStorey,
+}
+
 /// One cell in [`PreviewSubject::LivableApartmentsExamples`].
 #[derive(Clone)]
 struct LivableApartmentsExampleCell {
@@ -1430,7 +1485,10 @@ impl CachedPreview {
 		self.bedroom = None;
 		self.noisy_wall = None;
 		self.les_halles_floor_plan = None;
+		self.les_halles_floor_plan_examples.clear();
 		self.les_halles_full_storey = None;
+		self.les_halles_livable_full_storey = None;
+		self.les_halles_livable_full_storey_examples.clear();
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
@@ -1723,6 +1781,9 @@ impl CachedPreview {
 					}
 				}
 			}
+			PreviewSubject::LesHallesFloorPlanExamples => {
+				self.les_halles_floor_plan_examples = build_les_halles_floor_plan_examples();
+			}
 			PreviewSubject::LesHallesFullStorey {
 				extent,
 				seed,
@@ -1746,6 +1807,36 @@ impl CachedPreview {
 						bevy::log::error!("les-halles-full-storey fit failed: {err}");
 					}
 				}
+			}
+			PreviewSubject::LesHallesLivableFullStorey {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_les_halles_livable_floor_plan(*extent, *seed, *ceiling, openings) {
+					Ok(plan) => {
+						let noise = NoiseParams {
+							seed: *seed,
+							..NoiseParams::default()
+						};
+						match LesHallesLivableFullStorey::from_floor_plan(plan, noise) {
+							Ok((storey, _)) => self.les_halles_livable_full_storey = Some(storey),
+							Err(err) => {
+								bevy::log::error!(
+									"les-halles-livable-full-storey fill failed: {err}"
+								);
+							}
+						}
+					}
+					Err(err) => {
+						bevy::log::error!("les-halles-livable-full-storey fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::LesHallesLivableFullStoreyExamples => {
+				self.les_halles_livable_full_storey_examples =
+					build_les_halles_livable_full_storey_examples();
 			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
@@ -1984,8 +2075,46 @@ impl CachedPreview {
 			}
 			return out;
 		}
+		if let Some(plan) = self.les_halles_floor_plan.as_ref() {
+			return plan.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.les_halles_floor_plan_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.les_halles_floor_plan_examples {
+				out.extend(
+					cell.plan
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(storey) = self.les_halles_livable_full_storey.as_ref() {
+			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.les_halles_livable_full_storey_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.les_halles_livable_full_storey_examples {
+				out.extend(
+					cell.storey
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
 		}
 		if !self.i_apartment_floor_plan_examples.is_empty() {
 			let mut out = Vec::new();
@@ -2776,13 +2905,31 @@ fn fit_les_halles_floor_plan(
 	ceiling: bool,
 	openings: &[PreviewOpening],
 ) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
+	fit_les_halles_floor_plan_sampled(extent, seed, ceiling, openings, false, None)
+}
+
+fn fit_les_halles_floor_plan_sampled(
+	extent: Vec3,
+	seed: i32,
+	ceiling: bool,
+	openings: &[PreviewOpening],
+	livable: bool,
+	force_placement: Option<LesHallesShaftPlacement>,
+) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
 	let bounds = les_halles_confines_bounds(extent);
 	let empty = Confines::from_bounds(bounds);
 	let noise = NoiseParams {
 		seed,
 		..NoiseParams::default()
 	};
-	let params = LesHallesParameterized::sample(&empty, noise)?;
+	let mut params = if livable {
+		LesHallesParameterized::sample_livable(&empty, noise)?
+	} else {
+		LesHallesParameterized::sample(&empty, noise)?
+	};
+	if let Some(placement) = force_placement {
+		params.shaft_placement = placement;
+	}
 	let inbound = if openings.is_empty() {
 		// Demo default: request all placement slots so shafts remain visible.
 		LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty)
@@ -2797,6 +2944,221 @@ fn fit_les_halles_floor_plan(
 	};
 	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
+}
+
+const LES_HALLES_FLOOR_PLAN_GALLERY_COLS: usize = 3;
+const LES_HALLES_FLOOR_PLAN_GALLERY_GAP: f32 = 14.0;
+
+/// `(extent, seed, livable_sample, forced shaft placement)`.
+fn les_halles_floor_plan_examples_specs(
+) -> Vec<(Vec3, i32, bool, Option<LesHallesShaftPlacement>)> {
+	vec![
+		// Commercial sampling, natural shaft placement.
+		(Vec3::new(48.0, 4.0, 36.0), 1337, false, None),
+		(Vec3::new(48.0, 4.0, 36.0), 7, false, None),
+		(Vec3::new(56.0, 4.0, 40.0), 42, false, None),
+		(Vec3::new(40.0, 4.0, 40.0), 3, false, None),
+		// Same footprint, forced corner vs mid-side (strip topology contrast).
+		(
+			Vec3::new(72.0, 4.0, 54.0),
+			11,
+			true,
+			Some(LesHallesShaftPlacement::Corners),
+		),
+		(
+			Vec3::new(72.0, 4.0, 54.0),
+			11,
+			true,
+			Some(LesHallesShaftPlacement::MidSides),
+		),
+		(
+			Vec3::new(64.0, 4.0, 64.0),
+			19,
+			true,
+			Some(LesHallesShaftPlacement::Corners),
+		),
+		(
+			Vec3::new(64.0, 4.0, 64.0),
+			19,
+			true,
+			Some(LesHallesShaftPlacement::MidSides),
+		),
+		// Extra livable natural samples.
+		(Vec3::new(80.0, 4.0, 60.0), 5, true, None),
+		(Vec3::new(88.0, 4.0, 56.0), 23, true, None),
+		(Vec3::new(72.0, 4.0, 48.0), 31, true, None),
+		(Vec3::new(60.0, 4.0, 60.0), 17, true, None),
+	]
+}
+
+fn les_halles_floor_plan_examples_bounds() -> Aabb3d {
+	let cells = build_les_halles_floor_plan_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| les_halles_plan_footprint_aabb(&cells[i].plan).1,
+		cells.len(),
+		LES_HALLES_FLOOR_PLAN_GALLERY_COLS,
+		LES_HALLES_FLOOR_PLAN_GALLERY_GAP,
+	)
+}
+
+fn build_les_halles_floor_plan_examples() -> Vec<LesHallesFloorPlanExampleCell> {
+	let specs = les_halles_floor_plan_examples_specs();
+	let mut fitted = Vec::new();
+	for (extent, seed, livable, placement) in &specs {
+		match fit_les_halles_floor_plan_sampled(
+			*extent,
+			*seed,
+			false,
+			&[],
+			*livable,
+			*placement,
+		) {
+			Ok(plan) => fitted.push(plan),
+			Err(err) => {
+				bevy::log::error!(
+					"les-halles-floor-plan-examples ({extent:?} seed={seed} livable={livable} placement={placement:?}) failed: {err}"
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(les_halles_plan_footprint_aabb)
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, plan)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				LES_HALLES_FLOOR_PLAN_GALLERY_COLS,
+				LES_HALLES_FLOOR_PLAN_GALLERY_GAP,
+			);
+			let offset = cell_origin - local_min;
+			LesHallesFloorPlanExampleCell { offset, plan }
+		})
+		.collect()
+}
+
+fn fit_les_halles_livable_floor_plan(
+	extent: Vec3,
+	seed: i32,
+	ceiling: bool,
+	openings: &[PreviewOpening],
+) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
+	let bounds = les_halles_confines_bounds(extent);
+	let empty = Confines::from_bounds(bounds);
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	let params = LesHallesParameterized::sample_livable(&empty, noise)?;
+	let inbound = if openings.is_empty() {
+		LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty)
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let ceiling = if ceiling {
+		RectRingFloorSlab::Solid
+	} else {
+		RectRingFloorSlab::None
+	};
+	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
+		.map(|(plan, _)| plan)
+}
+
+const LES_HALLES_LIVABLE_GALLERY_COLS: usize = 3;
+const LES_HALLES_LIVABLE_GALLERY_GAP: f32 = 16.0;
+
+fn les_halles_livable_full_storey_examples_specs() -> Vec<(Vec3, i32)> {
+	vec![
+		(Vec3::new(72.0, 4.0, 54.0), 1337),
+		(Vec3::new(72.0, 4.0, 54.0), 7),
+		(Vec3::new(80.0, 4.0, 60.0), 42),
+		(Vec3::new(64.0, 4.0, 64.0), 3),
+		(Vec3::new(88.0, 4.0, 56.0), 19),
+		(Vec3::new(72.0, 4.0, 48.0), 11),
+	]
+}
+
+fn les_halles_plan_footprint_aabb(plan: &LesHallesFloorPlan) -> (Vec3, Vec3) {
+	let hx = plan.outer.x * 0.5;
+	let hz = plan.outer.y * 0.5;
+	let min = Vec3::new(plan.center_xz.x - hx, 0.0, plan.center_xz.z - hz);
+	let extent = Vec3::new(
+		plan.outer.x.max(1.0),
+		plan.storey_height.max(1.0),
+		plan.outer.y.max(1.0),
+	);
+	(min, extent)
+}
+
+fn les_halles_livable_full_storey_examples_bounds() -> Aabb3d {
+	let cells = build_les_halles_livable_full_storey_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| les_halles_plan_footprint_aabb(&cells[i].storey.floor_plan).1,
+		cells.len(),
+		LES_HALLES_LIVABLE_GALLERY_COLS,
+		LES_HALLES_LIVABLE_GALLERY_GAP,
+	)
+}
+
+fn build_les_halles_livable_full_storey_examples() -> Vec<LesHallesLivableFullStoreyExampleCell> {
+	let specs = les_halles_livable_full_storey_examples_specs();
+	let mut fitted = Vec::new();
+	for (extent, seed) in &specs {
+		match fit_les_halles_livable_floor_plan(*extent, *seed, false, &[]) {
+			Ok(plan) => {
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match LesHallesLivableFullStorey::from_floor_plan(plan, noise) {
+					Ok((storey, _)) => fitted.push(storey),
+					Err(err) => {
+						bevy::log::error!(
+							"les-halles-livable-full-storey-examples ({extent:?} seed={seed}) fill failed: {err}"
+						);
+					}
+				}
+			}
+			Err(err) => {
+				bevy::log::error!(
+					"les-halles-livable-full-storey-examples ({extent:?} seed={seed}) fit failed: {err}"
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(|s| les_halles_plan_footprint_aabb(&s.floor_plan))
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, storey)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				LES_HALLES_LIVABLE_GALLERY_COLS,
+				LES_HALLES_LIVABLE_GALLERY_GAP,
+			);
+			let offset = cell_origin - local_min;
+			LesHallesLivableFullStoreyExampleCell { offset, storey }
+		})
+		.collect()
 }
 
 fn fit_i_apartment_floor_plan(
@@ -5082,12 +5444,41 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::LesHallesFloorPlanExamples => {
+			for cell in &cache.les_halles_floor_plan_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.plan).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::LesHallesFullStorey { .. } => {
 			if let Some(storey) = cache.les_halles_full_storey.as_ref() {
 				spawn_preview(
 					&mut commands,
 					transform,
 					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LesHallesLivableFullStorey { .. } => {
+			if let Some(storey) = cache.les_halles_livable_full_storey.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LesHallesLivableFullStoreyExamples => {
+			for cell in &cache.les_halles_livable_full_storey_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.storey).scene_with_lod(&lod_ref),
 				);
 			}
 		}
@@ -5534,13 +5925,23 @@ pub fn draw_opening_plan_gizmos(
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		PreviewSubject::LesHallesFloorPlan { openings, .. }
-		| PreviewSubject::LesHallesFullStorey { openings, .. } => {
-			let plan = cache.les_halles_floor_plan.as_ref().or_else(|| {
-				cache
-					.les_halles_full_storey
-					.as_ref()
-					.map(|s| &s.floor_plan)
-			});
+		| PreviewSubject::LesHallesFullStorey { openings, .. }
+		| PreviewSubject::LesHallesLivableFullStorey { openings, .. } => {
+			let plan = cache
+				.les_halles_floor_plan
+				.as_ref()
+				.or_else(|| {
+					cache
+						.les_halles_full_storey
+						.as_ref()
+						.map(|s| &s.floor_plan)
+				})
+				.or_else(|| {
+					cache
+						.les_halles_livable_full_storey
+						.as_ref()
+						.map(|s| &s.floor_plan)
+				});
 			let red = Color::srgb(0.95, 0.2, 0.2);
 			// Inbound preview openings (accepted → cyan/amber, rejected → red).
 			for (i, opening) in openings.iter().enumerate() {
@@ -5575,6 +5976,43 @@ pub fn draw_opening_plan_gizmos(
 						Color::srgb(0.75, 0.35, 1.0)
 					};
 					gizmos.aabb_3d(*shaft, tf, color);
+				}
+			}
+		}
+		PreviewSubject::LesHallesFloorPlanExamples => {
+			let lime = Color::srgb(0.35, 0.9, 0.4);
+			let strip_alt = Color::srgb(0.2, 0.7, 0.85);
+			for cell in &cache.les_halles_floor_plan_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				let mut strip_i = 0usize;
+				for region in cell.plan.fillable_regions().within {
+					if region.kind != SpaceKind::ExternalSpace {
+						continue;
+					}
+					let color = if strip_i % 2 == 0 { lime } else { strip_alt };
+					gizmos.aabb_3d(region.confines.bounds, cell_tf, color);
+					strip_i += 1;
+				}
+				for (i, shaft) in cell.plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, cell_tf, color);
+				}
+			}
+		}
+		PreviewSubject::LesHallesLivableFullStoreyExamples => {
+			for cell in &cache.les_halles_livable_full_storey_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				for (i, shaft) in cell.storey.floor_plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
 			}
 		}

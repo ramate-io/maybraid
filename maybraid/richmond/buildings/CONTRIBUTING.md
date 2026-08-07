@@ -91,8 +91,32 @@ CommercialStallInterior (catalog first-fit)
 (optional) nested FillableRegions  e.g. MiniMart office, restroom stalls
 ```
 
-Playground: `/show les-halles-full-storey`, `/show commercial-stall-strip`,
+Playground: `/show les-halles-full-storey`, `/show les-halles-livable-full-storey`,
+`/show les-halles-livable-full-storey-examples`, `/show commercial-stall-strip`,
 and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
+
+### Livable gallery fill (Les Halles livable Full\*)
+
+[`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) shares
+the same [`LesHallesFloorPlan`](src/storeys/les_halles/floor_plan.rs) as the
+commercial Full\*. It samples deeper galleries via
+[`LesHallesParameterized::sample_livable`](src/storeys/les_halles/parameterized.rs),
+then fills each `ExternalSpace` strip with **lengthwise passage bays** (voronoi
+along the strip, merge undersized cells — same idea as
+[`CommercialStallStrip`](src/usage_areas/commercial_stall_strip.rs)). Each bay
+is a single rectangle fitted with
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs)
+(SingleClosed → Guillotine → AllOpen; courtyard `Passage` as RLA opening; no
+SpineHall). Party walls + RLA internals use the same High-only
+`internal_walls` band as [`LivableApartments`](src/usage_areas/livable_apartments.rs);
+structural probe is the whole-storey outer footprint (local), with fine-phase
+viewer mapping through host `GlobalTransform` (~80 m outside → High).
+Within-strip bay cuts always wall; cross-strip shared edges wall from noise
+(~50%) so some corners stay open as L-shaped living. No
+[`HallsToShafts`](src/usage_areas/halls_to_shafts.rs), suite packing, or
+[`LivableApartment`](src/usage_areas/livable_apartment/) entry carve on this
+path. Prefer larger footprints than commercial demos (playground default
+`72,4,54`) so strip depth hosts livable bays.
 
 ### I-frame rectangularization (I-Apartment)
 
@@ -167,6 +191,12 @@ the ring. It:
    with a per-strip seed offset.
 4. On `TooSmall`, leaves the strip in residual `within` (unfilled gallery).
 5. Passes other kinds through unchanged.
+
+[`LesHallesLivableFullStorey`](src/storeys/les_halles/livable_full_storey.rs) is the
+same loop with residential program: passage-bay split →
+[`RectangularLivableArea`](src/usage_areas/rectangular_livable_area.rs) per bay
++ within-strip party walls + noisy cross-strip walls. Commercial vs livable is a
+Full\* choice over one floor plan.
 
 That is the **FloorPlan → Full\*** split: the plan owns structure + residual
 confines; Full\* owns program fill.

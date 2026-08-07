@@ -2,7 +2,9 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
 use procedural_common::{aabb2_area, NoiseParams};
+use richmond_building_components::{BuildingComponents, Layer};
 
 use crate::fit::{Confines, FillRegion, MultiConfines, SpaceKind};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
@@ -11,7 +13,7 @@ use crate::usage_areas::plan_geom::host_xz;
 
 use super::layout::{residential_access, room_xz};
 use super::room::ApartmentRoom;
-use super::{LivableApartment, EPS};
+use super::{LivableApartment, EPS, INTERNAL_WALLS_LAYER};
 
 fn apt_with_door(extent: Vec3) -> Confines {
 	let mut openings = Openings::new();
@@ -74,6 +76,45 @@ fn larger_apt_gets_bedroom() {
 			.iter()
 			.any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
 		"expected bedroom in larger apt"
+	);
+}
+
+#[test]
+fn internal_walls_only_on_high_structural_band() {
+	let confines = apt_with_door(Vec3::new(14.0, 3.0, 10.0));
+	let (apt, _) = LivableApartment::from_confines(
+		0,
+		&confines,
+		NoiseParams {
+			seed: 3,
+			..Default::default()
+		},
+	)
+	.unwrap();
+	assert!(
+		!apt.partitions.is_empty()
+			|| apt
+				.rooms
+				.iter()
+				.any(|r| !r.panel_nodes_for_level(LodSceneLevel::High).is_empty()),
+		"fixture needs internal panels to exercise LOD"
+	);
+	let high = apt.panel_nodes_for_level(LodSceneLevel::High);
+	assert!(
+		high.labeled
+			.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+		"High should tag internal walls"
+	);
+	let medium = apt.panel_nodes_for_level(LodSceneLevel::Medium);
+	assert!(
+		!medium
+			.labeled
+			.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+		"Medium should drop internal walls"
+	);
+	assert!(
+		medium.len() < high.len(),
+		"Medium should emit fewer panels than High"
 	);
 }
 
