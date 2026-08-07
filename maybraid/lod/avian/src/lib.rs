@@ -22,21 +22,10 @@ pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + LodScene + 'static> {
 impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 	for AvianLodSceneRegionIndex<'_, '_, T>
 {
-	fn hosts_in_region<'a>(
-		&'a self,
-		region: Aabb3d,
-	) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
-		let hit: HashSet<Entity> = self
-			.spatial
-			.aabb_intersections_with_aabb(region_to_collider_aabb(region))
-			.into_iter()
-			.collect();
-		self.hosts
-			.iter()
-			.filter(move |(entity, _)| hit.contains(entity))
+	fn hosts_in_region<'a>(&'a self, region: Aabb3d) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
+		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
+		let hit: HashSet<Entity> =
+			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
+		self.hosts.iter().filter(move |(entity, _)| hit.contains(entity))
 	}
-}
-
-fn region_to_collider_aabb(region: Aabb3d) -> ColliderAabb {
-	ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max))
 }
