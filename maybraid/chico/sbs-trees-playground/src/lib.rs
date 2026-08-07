@@ -43,7 +43,7 @@ use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{LodFinePassPlugin, LodSceneHost};
+use lod::{LodRefreshPlugin, LodSceneHost};
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
@@ -64,8 +64,8 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
 			app.add_plugins(VegetationProceduralPlugin);
 		}
-		if !app.is_plugin_added::<LodFinePassPlugin>() {
-			app.add_plugins(LodFinePassPlugin);
+		if !app.is_plugin_added::<LodRefreshPlugin>() {
+			app.add_plugins(LodRefreshPlugin);
 		}
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);

@@ -10,7 +10,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
-use lod::{add_lod_scene_refresh_for, LodSceneHost, LodSceneRegionIndex};
+use lod::{add_lod_refresh_for, LodSceneHost, LodSceneRegionIndex};
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 #[derive(SystemParam)]
@@ -30,9 +30,14 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 	}
 }
 
-/// Register [`add_lod_scene_refresh_for`] with [`AvianLodSceneRegionIndex`].
+/// Register [`add_lod_refresh_for`] with [`AvianLodSceneRegionIndex`].
 ///
-/// Still requires [`lod::LodFinePassPlugin`] for viewer track + root sync.
-pub fn add_avian_lod_scene_refresh_for<T: Component + LodScene + 'static>(app: &mut App) {
-	add_lod_scene_refresh_for::<T, AvianLodSceneRegionIndex<'_, '_, T>>(app);
+/// `T` listens for [`lod::LodSceneRefreshRegions`] on entities marked `M`.
+/// Still requires [`lod::LodRefreshPlugin`] for viewer track + root sync.
+pub fn add_avian_lod_refresh_for<T, M>(app: &mut App)
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+{
+	add_lod_refresh_for::<T, M, AvianLodSceneRegionIndex<'_, '_, T>>(app);
 }

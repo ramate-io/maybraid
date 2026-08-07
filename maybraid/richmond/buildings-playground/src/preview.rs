@@ -1,4 +1,4 @@
-//! Preview subject sync. Viewer tracking lives in [`lod::LodFinePassPlugin`].
+//! Preview subject sync. Viewer tracking lives in [`lod::LodRefreshPlugin`].
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
@@ -4233,7 +4233,7 @@ fn draw_i_apartment_primary_rect_gizmos(
 }
 
 /// Spawn preview when the subject changes. LOD flips update host levels in-place
-/// ([`lod::LodFinePassPlugin`] + domain fine-phase systems).
+/// ([`lod::LodRefreshPlugin`] + domain refresh-pass systems).
 pub fn present_preview_lod(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,

@@ -45,7 +45,7 @@ pub fn lod_host_scene(
 		Children [ {level_roots_children} ]
 	});
 	let host_children: Vec<Box<dyn Scene>> = vec![roots];
-	let host_bounds = crate::fine_pass::LodHostBounds(bounds);
+	let host_bounds = crate::refresh::LodHostBounds(bounds);
 	bsn! {
 		LodSceneHost
 		template_value(level)
@@ -143,13 +143,13 @@ pub fn sync_lod_level_roots(
 	}
 	if n > 0 {
 		info!(
-			"[lod.fine] sync_lod_level_roots: hosts={n} spawn_requests={requested} in {:.2}ms",
+			"[lod.refresh] sync_lod_level_roots: hosts={n} spawn_requests={requested} in {:.2}ms",
 			t0.elapsed().as_secs_f64() * 1000.0
 		);
 	}
 }
 
-/// Plugin: marker types only. Prefer [`crate::LodFinePassPlugin`] for runtime systems
+/// Plugin: marker types only. Prefer [`crate::LodRefreshPlugin`] for runtime systems
 /// (track / sync / fulfill ordering).
 pub struct LodSceneHostPlugin;
 

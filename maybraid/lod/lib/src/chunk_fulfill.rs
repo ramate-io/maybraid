@@ -4,7 +4,7 @@
 //! builds a hidden pending root, drains weighted primitives under
 //! [`LodChunkFulfillBudget`], then atomically swaps visibility.
 //!
-//! Pipeline (within [`crate::LodFinePassSystems::Fulfill`]):
+//! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
 //! cancel stale → begin jobs → drain budget → complete / swap.
 //!
 //! Command / archetype apply cost is measured via Bevy's `system_commands`
@@ -16,7 +16,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
-use crate::fine_pass::{ephemeral_bounds, LodFinePassSystems, LodHostBounds, LodViewerState};
+use crate::refresh::{ephemeral_bounds, LodHostBounds, LodRefreshSystems, LodViewerState};
 use crate::gen::LodScene;
 use crate::lod_level::LodSceneLevel;
 use crate::lod_scene_host::{
@@ -309,18 +309,18 @@ pub fn complete_chunk_lod_fulfill(
 /// Register incremental fulfill systems for one [`LodScene`] host type.
 ///
 /// Does **not** register eager [`crate::fulfill_lod_level_spawn`]. Use instead of
-/// (or in place of) the fulfill half of [`crate::add_fine_pass_for`].
-pub fn add_fine_pass_chunk_for<T: Component + LodScene>(app: &mut App) {
-	crate::fine_pass::configure_fine_pass_sets(app);
+/// (or in place of) the fulfill half of [`crate::add_lod_refresh_all_for`].
+pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
+	crate::refresh::configure_refresh_sets(app);
 	app.init_resource::<LodChunkFulfillBudget>()
 		.init_resource::<LodChunkFulfillDiag>()
 		.add_systems(
 			Update,
 			(
-				cancel_stale_chunk_fulfillments.in_set(LodFinePassSystems::Fulfill),
-				begin_chunk_lod_fulfill::<T>.in_set(LodFinePassSystems::Fulfill),
-				drain_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
-				complete_chunk_lod_fulfill.in_set(LodFinePassSystems::Fulfill),
+				cancel_stale_chunk_fulfillments.in_set(LodRefreshSystems::Fulfill),
+				begin_chunk_lod_fulfill::<T>.in_set(LodRefreshSystems::Fulfill),
+				drain_chunk_lod_fulfill.in_set(LodRefreshSystems::Fulfill),
+				complete_chunk_lod_fulfill.in_set(LodRefreshSystems::Fulfill),
 			)
 				// Auto-ApplyDeferred between steps applies Commands (measured via
 				// `system_commands` spans when the `trace` feature is enabled).
@@ -328,15 +328,16 @@ pub fn add_fine_pass_chunk_for<T: Component + LodScene>(app: &mut App) {
 		);
 }
 
-/// Like [`crate::add_fine_pass_for`], but uses chunk fulfill instead of eager spawn.
-pub fn add_fine_pass_chunk_full_for<T: Component + LodScene>(app: &mut App) {
-	crate::fine_pass::configure_fine_pass_sets(app);
+/// Like [`crate::add_lod_refresh_all_for`], but uses chunk fulfill instead of eager spawn.
+pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
+	crate::refresh::configure_refresh_sets(app);
 	app.add_systems(
 		Update,
 		(
-			crate::fine_pass::update_lod_host_levels::<T>.in_set(LodFinePassSystems::UpdateLevels),
-			crate::fine_pass::cull_lod_level_roots::<T>.in_set(LodFinePassSystems::Cull),
+			crate::refresh::update_lod_host_levels::<T, ()>
+				.in_set(LodRefreshSystems::UpdateLevels),
+			crate::refresh::cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
 		),
 	);
-	add_fine_pass_chunk_for::<T>(app);
+	add_lod_refresh_chunk_for::<T>(app);
 }

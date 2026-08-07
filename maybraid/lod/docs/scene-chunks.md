@@ -1,6 +1,6 @@
 # Incremental LOD scene chunks
 
-Backwards-compatible alternative to eager [`fulfill_lod_level_spawn`](../lib/src/fine_pass.rs): amortize spawning a level root across frames under a weight budget.
+Backwards-compatible alternative to eager [`fulfill_lod_level_spawn`](../lib/src/refresh.rs): amortize spawning a level root across frames under a weight budget.
 
 ## API
 
@@ -31,12 +31,12 @@ Cancel: if the desired level changes, pending roots for other levels are despawn
 ## Registration
 
 ```rust
-add_fine_pass_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
+add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 // or
-add_fine_pass_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
+add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
 ```
 
-Eager `add_fine_pass_for` remains the default path for hosts that do not need amortization.
+Eager `add_lod_refresh_all_for` remains the unscoped path for hosts that do not need amortization.
 
 ## Future: coalescing and compaction
 

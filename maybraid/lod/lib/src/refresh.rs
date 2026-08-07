@@ -1,228 +1,103 @@
-//! Region-driven LOD refresh: stamp [`LodRefresh`] from [`LodSceneRefreshRegions`],
-//! then run the fine-pass sync pipeline only on marked hosts.
+//! LOD refresh pass: viewer track → region mark → update → sync → fulfill → cull.
 //!
-//! - [`LodRefresh::Fine`]: ongoing (kept after the pass).
-//! - [`LodRefresh::Coarse`]: one-shot (cleared after Cull).
+//! Higher-order cascade / producers write [`LodSceneRefreshRegions`]; this pass
+//! stamps [`LodRefresh`] and runs level sync / fulfill / cull on the marked set.
 //!
-//! Region lookup is generic over [`LodSceneRegionIndex`] implementers via
-//! [`StaticSystemParam`] so plugins can plug Avian (or another broadphase).
+//! Pipeline (no camera types here):
+//! [`LodViewer`] → [`LodViewerState`] → [`mark::mark_lod_refresh_from_regions`] →
+//! [`update_lod_host_levels`] → [`crate::sync_lod_level_roots`] →
+//! [`fulfill_lod_level_spawn`] → [`cull_lod_level_roots`] →
+//! [`mark::clear_coarse_lod_refresh`].
+//!
+//! Construct [`crate::LodRef`] ephemerally from [`LodViewerState`] + [`LodHostBounds`].
 
-use std::collections::HashSet;
+mod bounds;
+mod cull;
+mod fulfill;
+mod mark;
+mod update;
+mod viewer;
 
-use bevy::ecs::system::{StaticSystemParam, SystemParam};
-use bevy::math::bounding::Aabb3d;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::fine_pass::{
-	configure_fine_pass_sets, ephemeral_bounds, fulfill_lod_level_spawn, LodFinePassSystems,
-	LodHostBounds, LodViewerState,
-};
 use crate::gen::LodScene;
-use crate::lod_cull::LodSceneCulls;
-use crate::lod_level::LodSceneLevel;
-use crate::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::lod_scene_host::sync_lod_level_roots;
 use crate::region_index::LodSceneRegionIndex;
 
-/// Cascade / producer output: AABBs that should participate in LOD refresh.
-#[derive(Debug, Clone, Default, Component)]
-pub struct LodSceneRefreshRegions {
-	pub fine: Vec<Aabb3d>,
-	pub coarse: Vec<Aabb3d>,
-}
+pub use bounds::LodHostBounds;
+pub(crate) use bounds::ephemeral_bounds;
+pub use cull::cull_lod_level_roots;
+pub use fulfill::fulfill_lod_level_spawn;
+pub use mark::{
+	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
+};
+pub use update::update_lod_host_levels;
+pub use viewer::{track_lod_viewer, LodViewer, LodViewerState};
 
-/// Behavioral marker: host is in the refresh work set for this pass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Component)]
-pub enum LodRefresh {
-	/// Inner ring — keep after the sync pass (re-evaluate every frame).
-	Fine,
-	/// Outer / tile reload — clear after the sync pass (one-shot).
-	Coarse,
-}
-
-/// Extra fine-pass steps for region-driven refresh.
+/// System set ordering for the refresh pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodRefreshSystems {
-	/// Stamp [`LodRefresh`] from [`LodSceneRefreshRegions`] (on change).
+	/// Copy [`LodViewer`] transforms into [`LodViewerState`].
+	Track,
+	/// Stamp [`LodRefresh`] from marker-scoped [`LodSceneRefreshRegions`].
 	Mark,
+	/// Write desired [`crate::LodSceneLevel`] on hosts.
+	UpdateLevels,
+	/// Show/hide roots and enqueue [`crate::LodLevelSpawnRequest`].
+	SyncRoots,
+	/// Spawn missing level-root content for hosts with a spawn request.
+	Fulfill,
+	/// Despawn inactive level roots per [`LodScene::scene_lod_culls`].
+	Cull,
 	/// Drop [`LodRefresh::Coarse`] after Cull.
 	ClearCoarse,
 }
 
 pub(crate) fn configure_refresh_sets(app: &mut App) {
-	configure_fine_pass_sets(app);
 	app.configure_sets(
 		Update,
-		LodRefreshSystems::Mark
-			.after(LodFinePassSystems::Track)
-			.before(LodFinePassSystems::UpdateLevels),
-	);
-	app.configure_sets(
-		Update,
-		LodRefreshSystems::ClearCoarse.after(LodFinePassSystems::Cull),
+		(
+			LodRefreshSystems::Track,
+			LodRefreshSystems::Mark,
+			LodRefreshSystems::UpdateLevels,
+			LodRefreshSystems::SyncRoots,
+			LodRefreshSystems::Fulfill,
+			LodRefreshSystems::Cull,
+			LodRefreshSystems::ClearCoarse,
+		)
+			.chain(),
 	);
 }
 
-/// On [`Changed<LodSceneRefreshRegions>`], assign [`LodRefresh`] from region hits.
+/// Initializes [`LodViewerState`], tracks [`LodViewer`], and schedules root sync.
 ///
-/// Fine wins over coarse when an entity appears in both. Hosts of type `T` that
-/// leave all listed regions lose their marker.
-pub fn mark_lod_refresh_from_regions<T, I>(
-	index: StaticSystemParam<I>,
-	regions_q: Query<&LodSceneRefreshRegions, Changed<LodSceneRefreshRegions>>,
-	mut commands: Commands,
-	existing: Query<(Entity, Option<&LodRefresh>), (With<LodSceneHost>, With<T>)>,
-) where
-	T: Component + LodScene + 'static,
-	I: SystemParam + 'static,
-	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
-{
-	let index = index.into_inner();
-	for regions in &regions_q {
-		let mut fine: HashSet<Entity> = HashSet::new();
-		let mut coarse: HashSet<Entity> = HashSet::new();
+/// Register per-type work with [`add_lod_refresh_for`], [`add_lod_refresh_all_for`],
+/// or [`add_lod_refresh_cull_for`].
+pub struct LodRefreshPlugin;
 
-		for region in &regions.fine {
-			for (entity, _) in index.hosts_in_region(*region) {
-				fine.insert(entity);
-			}
-		}
-		for region in &regions.coarse {
-			for (entity, _) in index.hosts_in_region(*region) {
-				if !fine.contains(&entity) {
-					coarse.insert(entity);
-				}
-			}
-		}
-
-		for (entity, prev) in &existing {
-			if fine.contains(&entity) {
-				if !matches!(prev, Some(LodRefresh::Fine)) {
-					commands.entity(entity).insert(LodRefresh::Fine);
-				}
-			} else if coarse.contains(&entity) {
-				if !matches!(prev, Some(LodRefresh::Coarse)) {
-					commands.entity(entity).insert(LodRefresh::Coarse);
-				}
-			} else if prev.is_some() {
-				commands.entity(entity).remove::<LodRefresh>();
-			}
-		}
-	}
-}
-
-/// Like [`crate::update_lod_host_levels`], but only hosts with [`LodRefresh`].
-pub fn update_lod_host_levels_refresh<T: Component + LodScene>(
-	viewer: Res<LodViewerState>,
-	mut hosts: Query<
-		(&T, &LodHostBounds, &mut LodSceneLevel),
-		(With<LodSceneHost>, With<LodRefresh>),
-	>,
-) {
-	if viewer.entity == Entity::PLACEHOLDER {
-		return;
-	}
-	let t0 = std::time::Instant::now();
-	let mut changed = 0u32;
-	let mut n = 0u32;
-	for (scene, bounds, mut level) in &mut hosts {
-		n += 1;
-		let lod_ref = viewer.lod_ref(&bounds.0);
-		let desired = scene.scene_lod_level(&lod_ref);
-		if *level != desired {
-			*level = desired;
-			changed += 1;
-		}
-	}
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if changed > 0 || elapsed_ms >= 0.5 {
-		info!(
-			"[lod.refresh] update_lod_host_levels: hosts={n} changed={changed} in {elapsed_ms:.2}ms"
+impl Plugin for LodRefreshPlugin {
+	fn build(&self, app: &mut App) {
+		configure_refresh_sets(app);
+		app.init_resource::<LodViewerState>().add_systems(
+			Update,
+			(
+				track_lod_viewer.in_set(LodRefreshSystems::Track),
+				sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
+			),
 		);
 	}
 }
 
-/// Like [`crate::cull_lod_level_roots`], but only hosts with [`LodRefresh`].
-pub fn cull_lod_level_roots_refresh<T: Component + LodScene>(
-	viewer: Res<LodViewerState>,
-	mut commands: Commands,
-	hosts: Query<
-		(&T, Option<&LodHostBounds>, &LodSceneLevel, &Children),
-		(With<LodSceneHost>, With<LodRefresh>),
-	>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-) {
-	if viewer.entity == Entity::PLACEHOLDER {
-		return;
-	}
-
-	let t0 = std::time::Instant::now();
-	let mut despawned = 0u32;
-
-	for (scene, host_bounds, current, host_children) in &hosts {
-		let bounds = ephemeral_bounds(host_bounds);
-		let lod_ref = viewer.lod_ref(&bounds);
-		let culls = scene.scene_lod_culls(&lod_ref, *current);
-		if matches!(culls, LodSceneCulls::None) {
-			continue;
-		}
-
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-		let Some(roots_entity) = roots_entity else {
-			continue;
-		};
-		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
-			continue;
-		};
-
-		for child in root_children.iter() {
-			let Ok(root) = root_keys.get(child) else {
-				continue;
-			};
-			if root.0 == *current {
-				continue;
-			}
-			if culls.should_cull(root.0) {
-				commands.entity(child).despawn();
-				despawned += 1;
-			}
-		}
-	}
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if despawned > 0 || elapsed_ms >= 0.5 {
-		info!(
-			"[lod.refresh] cull_lod_level_roots: despawned={despawned} in {elapsed_ms:.2}ms"
-		);
-	}
-}
-
-/// Remove one-shot [`LodRefresh::Coarse`] after the sync pass completes.
-pub fn clear_coarse_lod_refresh<T: Component + LodScene>(
-	mut commands: Commands,
-	hosts: Query<(Entity, &LodRefresh), (With<LodSceneHost>, With<T>)>,
-) {
-	for (entity, refresh) in &hosts {
-		if matches!(refresh, LodRefresh::Coarse) {
-			commands.entity(entity).remove::<LodRefresh>();
-		}
-	}
-}
-
-/// Register region-driven refresh + fine-pass sync for one host type and index param.
+/// Region-scoped refresh for host `T` listening to [`LodSceneRefreshRegions`] on `M`.
 ///
-/// `I` is a [`SystemParam`] whose item implements [`LodSceneRegionIndex<T>`]
-/// (e.g. `AvianLodSceneRegionIndex<'_, '_, T>`).
-///
-/// Still requires [`crate::LodFinePassPlugin`] for viewer track + root sync.
-pub fn add_lod_scene_refresh_for<T, I>(app: &mut App)
+/// `I` is a [`SystemParam`] whose item implements [`LodSceneRegionIndex<T>`].
+/// Update / fulfill / cull run only on hosts with [`LodRefresh`]; coarse markers
+/// clear after Cull, fine markers stay.
+pub fn add_lod_refresh_for<T, M, I>(app: &mut App)
 where
 	T: Component + LodScene + 'static,
+	M: Component + 'static,
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
 {
@@ -230,11 +105,38 @@ where
 	app.add_systems(
 		Update,
 		(
-			mark_lod_refresh_from_regions::<T, I>.in_set(LodRefreshSystems::Mark),
-			update_lod_host_levels_refresh::<T>.in_set(LodFinePassSystems::UpdateLevels),
-			fulfill_lod_level_spawn::<T>.in_set(LodFinePassSystems::Fulfill),
-			cull_lod_level_roots_refresh::<T>.in_set(LodFinePassSystems::Cull),
+			mark_lod_refresh_from_regions::<T, M, I>.in_set(LodRefreshSystems::Mark),
+			update_lod_host_levels::<T, With<LodRefresh>>.in_set(LodRefreshSystems::UpdateLevels),
+			fulfill_lod_level_spawn::<T, With<LodRefresh>>.in_set(LodRefreshSystems::Fulfill),
+			cull_lod_level_roots::<T, With<LodRefresh>>.in_set(LodRefreshSystems::Cull),
 			clear_coarse_lod_refresh::<T>.in_set(LodRefreshSystems::ClearCoarse),
+		),
+	);
+}
+
+/// Unscoped refresh: update + fulfill + cull for all hosts of type `T`.
+///
+/// Prefer [`add_lod_refresh_for`] once a region producer is wired.
+pub fn add_lod_refresh_all_for<T: Component + LodScene>(app: &mut App) {
+	configure_refresh_sets(app);
+	app.add_systems(
+		Update,
+		(
+			update_lod_host_levels::<T, ()>.in_set(LodRefreshSystems::UpdateLevels),
+			fulfill_lod_level_spawn::<T, ()>.in_set(LodRefreshSystems::Fulfill),
+			cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
+		),
+	);
+}
+
+/// Fulfill + cull for hosts that already update [`crate::LodSceneLevel`] elsewhere.
+pub fn add_lod_refresh_cull_for<T: Component + LodScene>(app: &mut App) {
+	configure_refresh_sets(app);
+	app.add_systems(
+		Update,
+		(
+			fulfill_lod_level_spawn::<T, ()>.in_set(LodRefreshSystems::Fulfill),
+			cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
 		),
 	);
 }
