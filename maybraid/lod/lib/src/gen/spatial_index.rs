@@ -2,7 +2,7 @@
 //! [`Id`]. It never generates and never presents.
 
 use crate::gen::id::{Id, StorageStatus, TrackedId};
-use crate::scene::lod_ref::LodRef;
+use crate::lod_ref::LodRef;
 use bevy::math::bounding::Aabb3d;
 
 /// Monotonic per-index storage version.

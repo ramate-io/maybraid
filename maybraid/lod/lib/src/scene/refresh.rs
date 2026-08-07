@@ -6,14 +6,14 @@
 //! - [`LodFinePhasePlugin<T, F>`] — update/fulfill/cull `(T, LodRefresh)` vs nodes `F`
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — compose Core + Broad + Fine
 //!
-//! Ephemeral [`crate::scene::LodRef`]s are built from [`LodNode`] / [`LodNodePose`] +
-//! [`LodHostBounds`]. [`LodViewerState`] remains a probe compatibility mirror.
+//! Ephemeral [`crate::lod_ref::LodRef`]s are built from [`crate::lod_ref::LodNode`] /
+//! [`crate::lod_ref::LodNodePose`] + [`LodHostBounds`]. [`LodViewerState`] remains a
+//! probe compatibility mirror.
 
 mod bounds;
 mod cull;
 mod fulfill;
 mod mark;
-mod node;
 mod update;
 mod viewer;
 
@@ -23,9 +23,10 @@ use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::scene::LodScene;
+use crate::lod_ref::track_lod_nodes;
 use crate::scene::host::sync_lod_level_roots;
 use crate::scene::region_index::LodSceneRegionIndex;
+use crate::scene::LodScene;
 
 pub use bounds::LodHostBounds;
 pub(crate) use bounds::ephemeral_bounds;
@@ -34,14 +35,10 @@ pub use fulfill::fulfill_lod_level_spawn;
 pub use mark::{
 	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
 };
-pub use node::{
-	collect_node_snapshots, dominant_lod_ref, lod_refs_for_bounds, track_lod_nodes, LodNode,
-	LodNodePose, LodNodeSnapshot,
-};
-pub use update::update_lod_host_levels;
+pub use update::{dominant_lod_ref, update_lod_host_levels};
 pub use viewer::{LodViewer, LodViewerState};
 
-use node::sync_lod_viewer_state;
+use viewer::sync_lod_viewer_state;
 
 /// System set ordering for the refresh pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]

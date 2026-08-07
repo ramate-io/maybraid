@@ -3,12 +3,22 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
-use crate::scene::LodScene;
-use crate::scene::level::LodSceneLevel;
+use crate::lod_ref::{
+	collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose, LodRef,
+};
 use crate::scene::host::LodSceneHost;
+use crate::scene::level::LodSceneLevel;
+use crate::scene::LodScene;
 
 use super::bounds::LodHostBounds;
-use super::node::{collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose};
+
+/// Pick the driver ref that votes for the highest [`LodSceneLevel`].
+pub fn dominant_lod_ref<'a, T: LodScene>(
+	scene: &T,
+	refs: &'a [LodRef<'a>],
+) -> Option<&'a LodRef<'a>> {
+	refs.iter().max_by_key(|lod_ref| scene.scene_lod_level(lod_ref))
+}
 
 /// Set host [`LodSceneLevel`] from `FNode`-filtered [`LodNode`]s + [`LodHostBounds`].
 ///

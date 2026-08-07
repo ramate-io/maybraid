@@ -8,7 +8,7 @@ mod tests;
 
 use crate::gen::id::{Id, OriginalId, StorageStatus};
 use crate::gen::spatial_index::SpatialIndex;
-use crate::scene::lod_ref::LodRef;
+use crate::lod_ref::LodRef;
 use bevy::math::bounding::Aabb3d;
 use std::collections::HashSet;
 

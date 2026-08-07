@@ -2,7 +2,7 @@ use crate::gen::{
 	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, RegionPresenter,
 	SpatialIndex, StorageStatus, TrackedId, Version,
 };
-use crate::scene::lod_ref::LodRef;
+use crate::lod_ref::LodRef;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene, SceneFunction};
 use bevy::{math::Vec3, prelude::Entity};

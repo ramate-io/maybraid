@@ -1,11 +1,9 @@
-//! [`LodViewer`] marker (a [`super::node::LodNode`] that also feeds [`LodViewerState`]).
+//! [`LodViewer`] marker (a [`LodNode`] that also feeds [`LodViewerState`]).
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::scene::lod_ref::LodRef;
-
-use super::node::LodNode;
+use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 
 /// Marker: this [`LodNode`] is the primary viewer for [`LodViewerState`] probes.
 #[derive(Debug, Clone, Copy, Default, Component)]
@@ -46,4 +44,20 @@ impl LodViewerState {
 			bounds,
 		}
 	}
+}
+
+/// Mirror the primary [`LodViewer`] node into [`LodViewerState`] (probe compat).
+pub fn sync_lod_viewer_state(
+	viewers: Query<(Entity, &LodNodePose), (With<LodNode>, With<LodViewer>)>,
+	mut state: ResMut<LodViewerState>,
+) {
+	state.translated = false;
+	let Ok((entity, pose)) = viewers.single() else {
+		return;
+	};
+	state.previous = pose.previous;
+	state.current = pose.current;
+	state.entity = entity;
+	state.translated =
+		(state.previous.translation - state.current.translation).length_squared() > 1e-8;
 }

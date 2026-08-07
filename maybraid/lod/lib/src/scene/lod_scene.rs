@@ -2,10 +2,11 @@
 
 use bevy::scene::Scene;
 
+use crate::lod_ref::LodRef;
+
 use super::chunk::SceneChunk;
 use super::cull::LodSceneCulls;
 use super::level::LodSceneLevel;
-use super::lod_ref::LodRef;
 
 /// Whether the presented LOD selection should be updated for this [`LodRef`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -23,7 +24,7 @@ pub trait LodScene {
 		LodSceneLevel::High
 	}
 
-	/// Desired level from multiple driver [`LodRef`]s (e.g. several [`crate::scene::LodNode`]s).
+	/// Desired level from multiple driver [`LodRef`]s (e.g. several [`crate::lod_ref::LodNode`]s).
 	///
 	/// Default: max of [`Self::scene_lod_level`] over `lod_refs`. Empty input means
 	/// no driver this frame → [`LodSceneLevel::UltraLow`].

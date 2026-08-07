@@ -1,16 +1,17 @@
 //! LOD scene runtime: hosts, levels, refresh, chunks.
 //!
 //! - [`LodScene`] — how a host type selects and builds LOD content
-//! - [`refresh`] — broadphase mark + finephase reload from [`LodNode`]s
+//! - [`refresh`] — broadphase mark + finephase reload from [`crate::lod_ref::LodNode`]s
 //! - [`host`] — ECS hosts / level roots / sync
 //! - [`chunk`] / [`chunk_fulfill`] — amortized level-root spawn
+//!
+//! Driver refs live in [`crate::lod_ref`] (not scene-specific).
 
 pub mod chunk;
 pub mod chunk_fulfill;
 pub mod cull;
 pub mod host;
 pub mod level;
-pub mod lod_ref;
 pub mod lod_scene;
 pub mod refresh;
 pub mod region_index;
@@ -31,13 +32,12 @@ pub use host::{
 	LodSceneHost, LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
-pub use lod_ref::{FineLod, LodRef, LodRequest};
 pub use lod_scene::{LodScene, LodSceneStatus};
 pub use refresh::{
 	add_lod_refresh_all_for, add_lod_refresh_cull_for, cull_lod_level_roots,
-	fulfill_lod_level_spawn, track_lod_nodes, update_lod_host_levels, LodBroadPhasePlugin,
-	LodFinePhaseAllPlugin, LodFinePhasePlugin, LodHostBounds, LodNode, LodNodePose, LodRefresh,
-	LodRefreshCorePlugin, LodRefreshCullPlugin, LodRefreshSystems, LodSceneRefreshPlugin,
-	LodSceneRefreshRegions, LodViewer, LodViewerState,
+	dominant_lod_ref, fulfill_lod_level_spawn, update_lod_host_levels, LodBroadPhasePlugin,
+	LodFinePhaseAllPlugin, LodFinePhasePlugin, LodHostBounds, LodRefresh, LodRefreshCorePlugin,
+	LodRefreshCullPlugin, LodRefreshSystems, LodSceneRefreshPlugin, LodSceneRefreshRegions,
+	LodViewer, LodViewerState,
 };
 pub use region_index::LodSceneRegionIndex;

@@ -1,12 +1,9 @@
-//! [`LodNode`] drivers that produce ephemeral [`crate::scene::LodRef`]s.
+//! [`LodNode`] drivers that produce ephemeral [`super::LodRef`]s.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::scene::LodScene;
-use crate::scene::lod_ref::LodRef;
-
-use super::viewer::LodViewerState;
+use super::LodRef;
 
 /// Marker: this entity is an LOD driver (camera, probe, cascade track, …).
 ///
@@ -48,22 +45,6 @@ pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<Lod
 	}
 }
 
-/// Mirror the primary [`crate::scene::LodViewer`] node into [`LodViewerState`] (probe compat).
-pub fn sync_lod_viewer_state(
-	viewers: Query<(Entity, &LodNodePose), (With<LodNode>, With<super::viewer::LodViewer>)>,
-	mut state: ResMut<LodViewerState>,
-) {
-	state.translated = false;
-	let Ok((entity, pose)) = viewers.single() else {
-		return;
-	};
-	state.previous = pose.previous;
-	state.current = pose.current;
-	state.entity = entity;
-	state.translated =
-		(state.previous.translation - state.current.translation).length_squared() > 1e-8;
-}
-
 /// Collect node poses for `F`-filtered [`LodNode`]s.
 pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
 	nodes: &Query<(Entity, &LodNodePose), (With<LodNode>, F)>,
@@ -92,12 +73,4 @@ pub fn lod_refs_for_bounds<'a>(
 			bounds,
 		})
 		.collect()
-}
-
-/// Pick the driver ref that votes for the highest [`crate::LodSceneLevel`].
-pub fn dominant_lod_ref<'a, T: LodScene>(
-	scene: &T,
-	refs: &'a [LodRef<'a>],
-) -> Option<&'a LodRef<'a>> {
-	refs.iter().max_by_key(|lod_ref| scene.scene_lod_level(lod_ref))
 }

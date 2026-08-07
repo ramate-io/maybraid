@@ -12,7 +12,8 @@
 pub mod tests;
 
 use crate::gen::{Id, SpatialIndex, Version};
-use crate::scene::{LodSceneLevel, LodRef};
+use crate::lod_ref::LodRef;
+use crate::scene::LodSceneLevel;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
 

@@ -4,19 +4,20 @@ use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
-use crate::scene::LodScene;
+use crate::lod_ref::{
+	collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose,
+};
 use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
+use crate::scene::LodScene;
 
 use super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::node::{
-	collect_node_snapshots, dominant_lod_ref, lod_refs_for_bounds, LodNode, LodNodePose,
-};
+use super::update::dominant_lod_ref;
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
 ///
-/// Uses the dominant [`crate::scene::LodRef`] among `FNode`-filtered [`LodNode`]s for
+/// Uses the dominant [`crate::lod_ref::LodRef`] among `FNode`-filtered [`LodNode`]s for
 /// [`LodScene::scene_with_level`].
 pub fn fulfill_lod_level_spawn<T, FHost, FNode>(
 	mut commands: Commands,
