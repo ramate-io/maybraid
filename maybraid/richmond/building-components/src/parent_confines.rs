@@ -100,12 +100,21 @@ pub fn apply_parent_confines(
 	let Ok(viewer_tf) = viewer.single() else {
 		return;
 	};
+	let t0 = std::time::Instant::now();
+	let mut n = 0u32;
 	for (confines, mut visibility) in &mut hosts {
+		n += 1;
 		*visibility = if confines.viewer_allowed(viewer_tf) {
 			Visibility::Inherited
 		} else {
 			Visibility::Hidden
 		};
+	}
+	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+	if elapsed_ms >= 0.5 {
+		bevy::log::info!(
+			"[lod.confines] apply_parent_confines: hosts={n} in {elapsed_ms:.2}ms"
+		);
 	}
 }
 

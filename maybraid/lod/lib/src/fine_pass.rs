@@ -120,12 +120,23 @@ pub fn update_lod_host_levels<T: Component + LodScene>(
 	if viewer.entity == Entity::PLACEHOLDER {
 		return;
 	}
+	let t0 = std::time::Instant::now();
+	let mut changed = 0u32;
+	let mut n = 0u32;
 	for (scene, bounds, mut level) in &mut hosts {
+		n += 1;
 		let lod_ref = viewer.lod_ref(&bounds.0);
 		let desired = scene.scene_lod_level(&lod_ref);
 		if *level != desired {
 			*level = desired;
+			changed += 1;
 		}
+	}
+	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+	if changed > 0 || elapsed_ms >= 0.5 {
+		info!(
+			"[lod.fine] update_lod_host_levels: hosts={n} changed={changed} in {elapsed_ms:.2}ms"
+		);
 	}
 }
 
@@ -221,6 +232,9 @@ pub fn cull_lod_level_roots<T: Component + LodScene>(
 		return;
 	}
 
+	let t0 = std::time::Instant::now();
+	let mut despawned = 0u32;
+
 	for (scene, host_bounds, current, host_children) in &hosts {
 		let bounds = ephemeral_bounds(host_bounds);
 		let lod_ref = viewer.lod_ref(&bounds);
@@ -253,8 +267,15 @@ pub fn cull_lod_level_roots<T: Component + LodScene>(
 			}
 			if culls.should_cull(root.0) {
 				commands.entity(child).despawn();
+				despawned += 1;
 			}
 		}
+	}
+	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+	if despawned > 0 || elapsed_ms >= 0.5 {
+		info!(
+			"[lod.fine] cull_lod_level_roots: despawned={despawned} in {elapsed_ms:.2}ms"
+		);
 	}
 }
 
