@@ -2,7 +2,6 @@
 
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
-use chico_ball_components::frond::{align_frond_direction, FrondCrown, FrondCrownShape};
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use chico_sbs_geometry::{
 	liams_stalk_tip_from_chain, BallStickChain, BallStickNode, FriendsConiferChain,
@@ -124,56 +123,6 @@ where
 		apex_ball_radius_fraction,
 		leaf_material,
 	)
-}
-
-/// Optional downward [`FrondCrown`] at the stalk crown ([#238](https://github.com/ramate-io/maybraid/issues/238)).
-pub fn spawn_apex_frond_crown<LeafM, LeafS>(
-	geometry: &FriendsConiferSbs,
-	frond_world_scale: f32,
-	chain: &BallStickChain<FriendsConiferChain>,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	parent: Entity,
-	leaf_noise: &NoiseParams,
-	apex_spawn_fraction: f32,
-	leaf_material: LeafS,
-) -> Vec<Entity>
-where
-	LeafM: Material + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	let tip = liams_stalk_tip_from_chain(chain);
-	if !sample_apex_canopy_spawn(leaf_noise, &tip, apex_spawn_fraction) {
-		return Vec::new();
-	}
-
-	let h = geometry.height();
-	let scale = frond_world_scale.max(1e-8);
-	let seed = leaf_noise.seed.wrapping_add(0xC1A0);
-	let frond_count = 4 + ((seed as u32) % 3);
-
-	let shape = FrondCrownShape {
-		frond_count,
-		length: (0.065 * h) / scale,
-		width: (0.014 * h) / scale,
-		droop: 0.32,
-		arch_lift: 0.08,
-		twist: 0.15,
-		leaflet_count: 10,
-		spine_segments: 8,
-		shoot_half_radius: 0.008,
-		rachis_half_thickness: 0.004,
-		leaflet_length_scale: 2.8,
-		downward_tilt_radians: 0.42,
-		outward_spread_radians: 0.55,
-		emission_lift_radians: 0.05,
-		seed,
-	};
-
-	let crown = FrondCrown::from_shape(shape, leaf_material);
-	let transform =
-		local_transform_at_tip(&tip, frond_world_scale, align_frond_direction(Vec3::NEG_Y));
-	crown.spawn_render_items_under(commands, cascade_chunk, transform, Some(parent))
 }
 
 #[cfg(test)]

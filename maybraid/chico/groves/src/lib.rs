@@ -99,7 +99,9 @@ pub use levantine_scrub::{
 	LevantineScrubItem, LevantineScrubRoryHead, LevantineScrubTorch, LevantineScrubVaseTree,
 };
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
-pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
+pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
+#[cfg(feature = "render")]
+pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
 pub use palm_shade::{PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm};
 pub use riparian_general::{

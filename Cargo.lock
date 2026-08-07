@@ -2230,9 +2230,11 @@ dependencies = [
  "chico-sbs-geometry",
  "chico-sbs-trees",
  "chico-tree-components",
+ "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
  "gimme-gen",
+ "lod",
  "log",
  "procedural-common",
 ]

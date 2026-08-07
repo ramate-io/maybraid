@@ -22,8 +22,8 @@ use chico_grove_render_items::jungle_massives::JungleMassivesStd;
 use chico_grove_render_items::leeward::LeewardStd;
 use chico_grove_render_items::levantine_scrub::LevantineScrubStd;
 use chico_grove_render_items::low_bush::LowBushStd;
-use chico_grove_render_items::monster_grass::MonsterGrassStd;
 use chico_grove_render_items::orchard::OrchardStd;
+use chico_groves::MonsterGrassParams;
 use chico_grove_render_items::palm_shade::PalmShadeStd;
 use chico_grove_render_items::riparian_general::RiparianGeneralStd;
 use chico_grove_render_items::riparian_mix::RiparianMixStd;
@@ -185,8 +185,8 @@ pub type RenderTallGrass = TallGrassStd;
 /// [`WildGrassStd`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
 pub type RenderWildGrass = WildGrassStd;
 
-/// [`MonsterGrassStd`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
-pub type RenderMonsterGrass = MonsterGrassStd;
+/// [`MonsterGrassParams`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
+pub type RenderMonsterGrass = MonsterGrassParams;
 
 /// [`RiverineGreenStd`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
 pub type RenderRiverineGreen = RiverineGreenStd;
@@ -1064,7 +1064,11 @@ impl RenderSubject {
 			Self::LevantineScrub(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::MonsterGrass(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::MonsterGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LowBush(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),

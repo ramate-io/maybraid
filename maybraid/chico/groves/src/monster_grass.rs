@@ -3,8 +3,11 @@
 //! [#308](https://github.com/ramate-io/maybraid/issues/308)).
 //!
 //! Dense 2–6 m understory blades for jungle, swamp, and elder-tree floors — structurally
-//! Braid Grass at monster scale. RFC `droop` maps to `max_tilt_radians` on upward-biased blade
-//! tufts; true downward sag remains a follow-up.
+//! Braid Grass at monster scale. Authored cells resolve to [`GroveTuftPatch`] (single-clump
+//! cells use `clump_count = 1`). Under `render`, [`MonsterGrassParams::build`] grows
+//! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants into [`MonsterGrass`]
+//! ([`VegetationComponents`](chico_vegetation_components::VegetationComponents)). Leaf materials
+//! are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored color ranges.
 
 use std::ops::RangeInclusive;
 
@@ -46,13 +49,6 @@ pub enum MonsterGrassCell {
 	RedRibbedBladePatch,
 }
 
-/// Typed authored geometry for one monster-grass varietal.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum MonsterGrassItem {
-	Clump(&'static MonsterGrassClump),
-	Patch(&'static GroveTuftPatch<MonsterGrassClump>),
-}
-
 /// Authored geometry ranges for one monster-grass blade clump.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MonsterGrassClump {
@@ -69,10 +65,13 @@ pub struct MonsterGrassClump {
 /// Shared blade thickness band: ~2.5–4.5 % of blade length — broader than Braid Grass for the
 /// heavy, wall-like read at 2–6 m.
 const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.025, 0.045);
+/// Match default [`chico_sbs_trees::TuftPatch`] kink budget (1–3 segments, not a tall polyline).
+const BEND_SEGMENTS: RangeInclusive<u32> = 1..=3;
+const SINGLE: RangeInclusive<u32> = 1..=1;
+const NO_EXTENT: UnitRange = UnitRange::new(0.0, 0.0);
+const NO_SPREAD: UnitRange = UnitRange::new(0.0, 0.0);
 
-const BEND_SEGMENTS: RangeInclusive<u32> = 4..=12;
-
-const GIANT_WET_BLADE: MonsterGrassClump = MonsterGrassClump {
+const GIANT_WET_BLADE_CLUMP: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.00, 6.00),
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 10..=28,
@@ -80,7 +79,7 @@ const GIANT_WET_BLADE: MonsterGrassClump = MonsterGrassClump {
 	max_tilt_radians: UnitRange::new(0.25, 0.70),
 };
 
-const BROAD_JUNGLE_BLADE: MonsterGrassClump = MonsterGrassClump {
+const BROAD_JUNGLE_BLADE_CLUMP: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.50, 5.00),
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 8..=24,
@@ -88,7 +87,7 @@ const BROAD_JUNGLE_BLADE: MonsterGrassClump = MonsterGrassClump {
 	max_tilt_radians: UnitRange::new(0.35, 0.85),
 };
 
-const PALE_GIANT_REED: MonsterGrassClump = MonsterGrassClump {
+const PALE_GIANT_REED_CLUMP: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.00, 4.50),
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 8..=22,
@@ -96,7 +95,7 @@ const PALE_GIANT_REED: MonsterGrassClump = MonsterGrassClump {
 	max_tilt_radians: UnitRange::new(0.15, 0.50),
 };
 
-const RED_RIBBED_BLADE: MonsterGrassClump = MonsterGrassClump {
+const RED_RIBBED_BLADE_CLUMP: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.20, 4.20),
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 10..=24,
@@ -104,32 +103,57 @@ const RED_RIBBED_BLADE: MonsterGrassClump = MonsterGrassClump {
 	max_tilt_radians: UnitRange::new(0.20, 0.65),
 };
 
-// Patch varietals scatter tall blade clumps as loose mounds — Braid Grass geometry scaled up,
-// with enough clumps per patch to read as dense understory rather than isolated walls.
+const GIANT_WET_BLADE: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
+	clump: GIANT_WET_BLADE_CLUMP,
+	clump_count: SINGLE,
+	patch_extent_xz: NO_EXTENT,
+	base_spread: NO_SPREAD,
+};
+
+const BROAD_JUNGLE_BLADE: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
+	clump: BROAD_JUNGLE_BLADE_CLUMP,
+	clump_count: SINGLE,
+	patch_extent_xz: NO_EXTENT,
+	base_spread: NO_SPREAD,
+};
+
+const PALE_GIANT_REED: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
+	clump: PALE_GIANT_REED_CLUMP,
+	clump_count: SINGLE,
+	patch_extent_xz: NO_EXTENT,
+	base_spread: NO_SPREAD,
+};
+
+const RED_RIBBED_BLADE: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
+	clump: RED_RIBBED_BLADE_CLUMP,
+	clump_count: SINGLE,
+	patch_extent_xz: NO_EXTENT,
+	base_spread: NO_SPREAD,
+};
 
 const GIANT_WET_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
-	clump: GIANT_WET_BLADE,
+	clump: GIANT_WET_BLADE_CLUMP,
 	clump_count: 3..=5,
 	patch_extent_xz: UnitRange::new(1.8, 4.4),
 	base_spread: UnitRange::new(0.25, 0.50),
 };
 
 const BROAD_JUNGLE_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
-	clump: BROAD_JUNGLE_BLADE,
+	clump: BROAD_JUNGLE_BLADE_CLUMP,
 	clump_count: 3..=6,
 	patch_extent_xz: UnitRange::new(1.6, 4.8),
 	base_spread: UnitRange::new(0.30, 0.55),
 };
 
 const PALE_GIANT_REED_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
-	clump: PALE_GIANT_REED,
+	clump: PALE_GIANT_REED_CLUMP,
 	clump_count: 3..=5,
 	patch_extent_xz: UnitRange::new(2.0, 2.8),
 	base_spread: UnitRange::new(0.20, 0.45),
 };
 
 const RED_RIBBED_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
-	clump: RED_RIBBED_BLADE,
+	clump: RED_RIBBED_BLADE_CLUMP,
 	clump_count: 2..=5,
 	patch_extent_xz: UnitRange::new(1.8, 4.4),
 	base_spread: UnitRange::new(0.25, 0.50),
@@ -139,9 +163,8 @@ impl MonsterGrassCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
 	/// Placed weights total `4.6` (RFC relative proportions); the `None` weight of `1.5` puts
-	/// the placed share at `4.6 / 6.1 ≈ 0.75`, matching the dense understory read of Braid
-	/// Grass. Patches carry `3.68` of the placed weight; single-anchor clumps share the
-	/// remaining `0.92`.
+	/// the placed share at `4.6 / 6.1 ≈ 0.75`. Patches carry `3.68` of the placed weight;
+	/// single-anchor clumps share the remaining `0.92`.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let low_wet =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.75), UnitRange::new(0.0, 0.50));
@@ -160,21 +183,24 @@ impl MonsterGrassCell {
 		])
 	}
 
-	/// Authored geometry for this varietal.
-	pub fn item(self) -> MonsterGrassItem {
+	/// Authored tuft-patch layout for this varietal (single-clump cells use `clump_count = 1`).
+	pub fn patch(self) -> &'static GroveTuftPatch<MonsterGrassClump> {
 		match self {
-			Self::GiantWetBlade => MonsterGrassItem::Clump(&GIANT_WET_BLADE),
-			Self::BroadJungleBlade => MonsterGrassItem::Clump(&BROAD_JUNGLE_BLADE),
-			Self::PaleGiantReed => MonsterGrassItem::Clump(&PALE_GIANT_REED),
-			Self::RedRibbedBlade => MonsterGrassItem::Clump(&RED_RIBBED_BLADE),
-			Self::GiantWetBladePatch => MonsterGrassItem::Patch(&GIANT_WET_BLADE_PATCH),
-			Self::BroadJungleBladePatch => MonsterGrassItem::Patch(&BROAD_JUNGLE_BLADE_PATCH),
-			Self::PaleGiantReedPatch => MonsterGrassItem::Patch(&PALE_GIANT_REED_PATCH),
-			Self::RedRibbedBladePatch => MonsterGrassItem::Patch(&RED_RIBBED_BLADE_PATCH),
+			Self::GiantWetBlade => &GIANT_WET_BLADE,
+			Self::BroadJungleBlade => &BROAD_JUNGLE_BLADE,
+			Self::PaleGiantReed => &PALE_GIANT_REED,
+			Self::RedRibbedBlade => &RED_RIBBED_BLADE,
+			Self::GiantWetBladePatch => &GIANT_WET_BLADE_PATCH,
+			Self::BroadJungleBladePatch => &BROAD_JUNGLE_BLADE_PATCH,
+			Self::PaleGiantReedPatch => &PALE_GIANT_REED_PATCH,
+			Self::RedRibbedBladePatch => &RED_RIBBED_BLADE_PATCH,
 		}
 	}
 
 	/// Authored palette ranges for this varietal.
+	///
+	/// Not applied while VegetationComponents presentation uses procedural frond kits; kept as
+	/// the reference for restoring leaf materials / `WithPalette` later.
 	pub fn palette_mix(self) -> PaletteMix {
 		const GIANT_WET_MIX: PaletteMix = PaletteMix::new(&[
 			PaletteSlot::new("deep_green", "wet_green"),
@@ -205,6 +231,190 @@ impl MonsterGrassCell {
 	}
 }
 
+#[cfg(feature = "render")]
+mod vc {
+	use bevy::prelude::*;
+	use chico_sbs_trees::TuftPatch;
+	use chico_vegetation_components::{
+		FoliageNode, Layers, Placement, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	};
+	use clap::Args;
+	use lod::gen::LodSceneLevel;
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+
+	use super::{definition, MonsterGrassCell};
+	use crate::grove::{
+		placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ,
+	};
+
+	/// Authoring / CLI parameters for Monster Grass.
+	#[derive(Clone, Debug, Args)]
+	#[command(rename_all = "kebab-case")]
+	pub struct MonsterGrassParams {
+		#[command(flatten, next_help_heading = "Grove")]
+		pub grove: GroveFrontend,
+
+		#[arg(
+			long,
+			default_value = "0,1,0.20,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Foliage Surface Noise",
+		)]
+		pub foliage_noise: NoiseParams,
+
+		#[arg(skip)]
+		pub extent: GroveExtent,
+
+		#[command(flatten, next_help_heading = "Terrain")]
+		pub terrain: FlatTerrainSample,
+
+		#[arg(skip)]
+		resolved_placements: Option<Vec<GroveCellVariant<MonsterGrassCell>>>,
+	}
+
+	impl Default for MonsterGrassParams {
+		fn default() -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.20, 1),
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain: FlatTerrainSample::default(),
+				resolved_placements: None,
+			}
+		}
+	}
+
+	impl MonsterGrassParams {
+		/// Render precomputed placements instead of selecting live from the grove frontend.
+		pub fn with_resolved_placements(
+			resolved_placements: Vec<GroveCellVariant<MonsterGrassCell>>,
+			terrain: FlatTerrainSample,
+			foliage_noise: NoiseParams,
+		) -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				foliage_noise,
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain,
+				resolved_placements: Some(resolved_placements),
+			}
+		}
+
+		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
+			self.extent = extent;
+			self
+		}
+
+		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
+			self.terrain = terrain;
+			self
+		}
+
+		/// Effective vegetation cell footprint (frontend override or authored).
+		pub fn cell_extent_xz(&self) -> Vec2 {
+			self.grove.definition(definition()).cell_extent_xz
+		}
+
+		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+			self.extent.subdivide_xz(self.cell_extent_xz())
+		}
+
+		pub fn placements(&self) -> Vec<GroveCellVariant<MonsterGrassCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+		}
+
+		/// Grow placements into the VegetationComponents grove.
+		pub fn build(&self) -> MonsterGrass {
+			MonsterGrass::from_placements(&self.placements(), self.foliage_noise, &self.extent)
+		}
+	}
+
+	/// One placed [`TuftPatch`] in grove-local space.
+	#[derive(Clone, Debug)]
+	pub struct MonsterGrassPlant {
+		pub placement: Placement,
+		pub patch: TuftPatch,
+	}
+
+	/// Built Monster Grass grove: composed [`TuftPatch`] plants for VegetationComponents.
+	#[derive(Clone, Debug)]
+	pub struct MonsterGrass {
+		pub plants: Vec<MonsterGrassPlant>,
+		pub structural_center: Vec3,
+		pub footprint_radius: f32,
+	}
+
+	impl MonsterGrass {
+		/// Grow every placement into a [`TuftPatch`] and compose them into one grove.
+		pub fn from_placements(
+			placements: &[GroveCellVariant<MonsterGrassCell>],
+			foliage_noise: NoiseParams,
+			extent: &GroveExtent,
+		) -> Self {
+			let plants = placements
+				.iter()
+				.map(|placed| {
+					let noise = placement_noise(foliage_noise, placed.position);
+					let mut params = placed.variant.patch().build_tuft_patch(noise);
+					params.shape.noise_amplitude = foliage_noise.amplitude;
+					params.shape.noise_frequency = foliage_noise.frequency;
+					MonsterGrassPlant {
+						placement: Placement::new(placed.position, 0.0)
+							.with_scale(Vec3::splat(placed.scale.max(1e-4))),
+						patch: params.build(),
+					}
+				})
+				.collect();
+			let span = extent.max() - extent.min();
+			let half = span * 0.5;
+			let footprint_radius = half.x.max(half.z).max(1.0);
+			Self {
+				plants,
+				structural_center: extent.min() + Vec3::new(half.x, half.y.max(1.0), half.z),
+				footprint_radius,
+			}
+		}
+	}
+
+	impl VegetationComponents for MonsterGrass {
+		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+			Layers::new()
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			let mut nodes = Vec::new();
+			for plant in &self.plants {
+				for mut node in plant.patch.foliage_nodes_for_level(level).flatten() {
+					node.placement = plant.placement.compose_child(node.placement);
+					nodes.push(node);
+				}
+			}
+			Layers::from_free(nodes)
+		}
+
+		fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+			Some(VegetationStructuralLodProbe::new(
+				self.structural_center,
+				self.footprint_radius,
+			))
+		}
+	}
+}
+
+#[cfg(feature = "render")]
+pub use vc::{MonsterGrass, MonsterGrassParams, MonsterGrassPlant};
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -224,18 +434,8 @@ mod tests {
 		assert_eq!(dist.buckets[0].weight, 1.5);
 		assert_eq!(dist.buckets[1].item, Some(MonsterGrassCell::GiantWetBlade));
 		assert_eq!(dist.buckets[1].weight, 0.40);
-		assert_eq!(dist.buckets[2].item, Some(MonsterGrassCell::BroadJungleBlade));
-		assert_eq!(dist.buckets[2].weight, 0.30);
-		assert_eq!(dist.buckets[3].item, Some(MonsterGrassCell::PaleGiantReed));
-		assert_eq!(dist.buckets[3].weight, 0.15);
-		assert_eq!(dist.buckets[4].item, Some(MonsterGrassCell::RedRibbedBlade));
-		assert_eq!(dist.buckets[4].weight, 0.07);
 		assert_eq!(dist.buckets[5].item, Some(MonsterGrassCell::GiantWetBladePatch));
 		assert_eq!(dist.buckets[5].weight, 1.60);
-		assert_eq!(dist.buckets[6].item, Some(MonsterGrassCell::BroadJungleBladePatch));
-		assert_eq!(dist.buckets[6].weight, 1.20);
-		assert_eq!(dist.buckets[7].item, Some(MonsterGrassCell::PaleGiantReedPatch));
-		assert_eq!(dist.buckets[7].weight, 0.60);
 		assert_eq!(dist.buckets[8].item, Some(MonsterGrassCell::RedRibbedBladePatch));
 		assert_eq!(dist.buckets[8].weight, 0.28);
 		Ok(())
@@ -256,13 +456,14 @@ mod tests {
 
 	#[test]
 	fn patches_outweigh_single_clumps() -> Result<()> {
-		let placed_weight = |patch: bool| -> f32 {
+		let placed_weight = |multi: bool| -> f32 {
 			MonsterGrassCell::distribution()
 				.buckets
 				.iter()
 				.filter(|b| {
 					b.item.is_some_and(|cell| {
-						matches!(cell.item(), MonsterGrassItem::Patch(_)) == patch
+						let patch = cell.patch();
+						(*patch.clump_count.end() > 1) == multi
 					})
 				})
 				.map(|b| b.weight)
@@ -270,36 +471,67 @@ mod tests {
 		};
 		assert!(
 			placed_weight(true) > 2.0 * placed_weight(false),
-			"patches should dominate placed weight"
+			"multi-clump patches should dominate placed weight"
 		);
 		Ok(())
 	}
 
 	#[test]
-	fn clump_geometry_follows_authored_bands() -> Result<()> {
+	fn palette_mix_keeps_authored_color_slots() -> Result<()> {
+		for cell in [
+			MonsterGrassCell::GiantWetBlade,
+			MonsterGrassCell::BroadJungleBlade,
+			MonsterGrassCell::PaleGiantReed,
+			MonsterGrassCell::RedRibbedBlade,
+			MonsterGrassCell::GiantWetBladePatch,
+		] {
+			let palette = cell.palette_mix();
+			assert!(!palette.slots.is_empty(), "expected palette slots for {cell:?}");
+			for slot in palette.slots {
+				assert!(!slot.start.0.is_empty(), "empty start token for {cell:?}");
+				assert!(!slot.end.0.is_empty(), "empty end token for {cell:?}");
+			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn bend_segments_match_tuft_patch_budget() -> Result<()> {
+		for cell in [
+			MonsterGrassCell::GiantWetBlade,
+			MonsterGrassCell::BroadJungleBlade,
+			MonsterGrassCell::PaleGiantReed,
+			MonsterGrassCell::RedRibbedBlade,
+			MonsterGrassCell::GiantWetBladePatch,
+		] {
+			let segs = &cell.patch().clump.bend_segments;
+			assert!(*segs.start() >= 1);
+			assert!(*segs.end() <= 3, "{cell:?} bend_segments {segs:?} exceeds 1..=3");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn single_cells_are_one_clump_patches() -> Result<()> {
 		for cell in [
 			MonsterGrassCell::GiantWetBlade,
 			MonsterGrassCell::BroadJungleBlade,
 			MonsterGrassCell::PaleGiantReed,
 			MonsterGrassCell::RedRibbedBlade,
 		] {
-			let MonsterGrassItem::Clump(clump) = cell.item() else {
-				anyhow::bail!("expected clump item for {cell:?}");
-			};
-			assert!(clump.height.start >= 2.0);
-			assert!(clump.height.end <= 6.0);
-			assert!(clump.width_factor.start >= 0.025);
-			assert!(clump.width_factor.end <= 0.05);
+			let patch = cell.patch();
+			assert_eq!(*patch.clump_count.start(), 1);
+			assert_eq!(*patch.clump_count.end(), 1);
+			assert!(patch.clump.height.start >= 2.0);
+			assert!(patch.clump.height.end <= 6.0);
 		}
 		Ok(())
 	}
 
 	#[test]
 	fn patch_wraps_giant_wet_blade_clump() -> Result<()> {
-		let MonsterGrassItem::Patch(patch) = MonsterGrassCell::GiantWetBladePatch.item() else {
-			anyhow::bail!("expected patch item");
-		};
-		assert_eq!(patch.clump, GIANT_WET_BLADE);
+		let patch = MonsterGrassCell::GiantWetBladePatch.patch();
+		assert_eq!(patch.clump, GIANT_WET_BLADE_CLUMP);
 		assert!(*patch.clump_count.start() >= 3);
 		assert!(patch.patch_extent_xz.start >= 1.2);
 		Ok(())
@@ -307,8 +539,6 @@ mod tests {
 
 	#[test]
 	fn constraint_first_fit_fallback() -> Result<()> {
-		// PaleGiantReed (index 3) rejects steepness 0.55; first-fit falls to RedRibbedBlade
-		// (index 4), which allows steepness up to 0.60.
 		let prepared =
 			MonsterGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.55 };
@@ -369,5 +599,79 @@ mod tests {
 		assert_eq!(a, b);
 		assert!(!a.is_empty());
 		Ok(())
+	}
+
+	#[cfg(feature = "render")]
+	mod render_tests {
+		use super::*;
+		use crate::grove::placement_noise;
+		use crate::monster_grass::MonsterGrassParams;
+
+		#[test]
+		fn clump_geometry_builds_within_authored_ranges() -> Result<()> {
+			let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
+			for cell in [
+				MonsterGrassCell::GiantWetBlade,
+				MonsterGrassCell::BroadJungleBlade,
+				MonsterGrassCell::PaleGiantReed,
+				MonsterGrassCell::RedRibbedBlade,
+			] {
+				let patch = cell.patch();
+				let clump = &patch.clump;
+				let item = patch.build_tuft_patch(noise);
+				assert_eq!(item.clump_count, 1);
+				assert!(item.shape.blade_length >= clump.height.start.min(clump.height.end));
+				assert!(item.shape.blade_length <= clump.height.start.max(clump.height.end));
+				assert!(clump.bend_segments.contains(&item.shape.bend_segments));
+				assert!(item.shape.bend_segments <= 3);
+			}
+			Ok(())
+		}
+
+		#[test]
+		fn build_composes_tuft_patches() -> Result<()> {
+			use crate::grove::GroveCellVariant;
+
+			let placement = GroveCellVariant::new(
+				MonsterGrassCell::GiantWetBlade,
+				Vec3::new(1.0, 0.0, 2.0),
+				1.0,
+			);
+			let grove = MonsterGrassParams::with_resolved_placements(
+				vec![placement],
+				FlatTerrainSample::default(),
+				NoiseParams::default(),
+			)
+			.build();
+			assert_eq!(grove.plants.len(), 1);
+			assert_eq!(grove.plants[0].patch.clump_count, 1);
+			Ok(())
+		}
+
+		#[test]
+		fn palette_resolves_to_authored_color() -> Result<()> {
+			use bevy::prelude::StandardMaterial;
+			use crate::grove::WithPalette;
+
+			for cell in [
+				MonsterGrassCell::GiantWetBlade,
+				MonsterGrassCell::BroadJungleBlade,
+				MonsterGrassCell::PaleGiantReed,
+				MonsterGrassCell::RedRibbedBlade,
+				MonsterGrassCell::GiantWetBladePatch,
+			] {
+				let palette = cell.palette_mix();
+				let mut allowed = Vec::new();
+				for slot in palette.slots {
+					allowed.extend(slot.start.resolve());
+					allowed.extend(slot.end.resolve());
+				}
+				assert!(!allowed.is_empty(), "unresolved palette tokens for {cell:?}");
+				let material =
+					StandardMaterial::with_palette(StandardMaterial::default(), palette, 7);
+				assert!(allowed.contains(&material.base_color));
+			}
+			Ok(())
+		}
 	}
 }

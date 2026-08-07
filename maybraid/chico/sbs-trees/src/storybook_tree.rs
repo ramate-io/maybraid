@@ -9,7 +9,6 @@
 
 pub(crate) mod canopy;
 pub mod render_item_plugin;
-pub(crate) mod stick;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, StorybookTreeChain, StorybookTreeSbs};

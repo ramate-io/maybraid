@@ -7,10 +7,7 @@ use chico_vegetation_components::{
 };
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
-use crate::render::{
-	RenderBraidOakTree, RenderConfig, RenderHonuBanyan, RenderJungleStorybookTree, RenderSubject,
-	RenderVaseTree,
-};
+use crate::render::{RenderConfig, RenderSubject};
 
 /// Stable bark / foliage materials reused whenever [`RenderConfig::subject`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
@@ -18,12 +15,6 @@ pub struct RenderMaterials {
 	pub stick: Handle<ChicoStickMaterial>,
 	pub conifer_stick: Handle<ChicoStickMaterial>,
 	pub leaf: Handle<ChicoLeafMaterial>,
-	pub northern_leaf: Handle<ChicoLeafMaterial>,
-	pub jungle_inner_leaf: Handle<ChicoLeafMaterial>,
-	pub jungle_outer_leaf: Handle<ChicoLeafMaterial>,
-	pub braid_inner_leaf: Handle<ChicoLeafMaterial>,
-	pub braid_outer_leaf: Handle<ChicoLeafMaterial>,
-	pub jungle_stick: Handle<ChicoStickMaterial>,
 	pub tuft: Handle<StandardMaterial>,
 }
 
@@ -33,30 +24,6 @@ fn render_stick_colors() -> ChicoStickMaterial {
 
 fn render_leaf_colors() -> ChicoLeafMaterial {
 	ChicoLeafMaterial { base_color: Vec4::new(0.22, 0.5, 0.29, 1.0) }
-}
-
-fn render_northern_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial { base_color: Vec4::new(0.14, 0.38, 0.34, 1.0) }
-}
-
-fn render_jungle_inner_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial { base_color: Vec4::new(0.12, 0.28, 0.16, 1.0) }
-}
-
-fn render_jungle_outer_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial { base_color: Vec4::new(0.18, 0.58, 0.32, 1.0) }
-}
-
-fn render_braid_inner_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial { base_color: Vec4::new(0.14, 0.32, 0.18, 1.0) }
-}
-
-fn render_braid_outer_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial { base_color: Vec4::new(0.20, 0.52, 0.28, 1.0) }
-}
-
-fn render_jungle_stick_colors() -> ChicoStickMaterial {
-	ChicoStickMaterial { base_color: Vec4::new(0.09, 0.06, 0.04, 1.0) }
 }
 
 fn render_conifer_stick_colors() -> ChicoStickMaterial {
@@ -153,83 +120,29 @@ pub fn setup_render_materials(
 	let stick = stick_assets.add(render_stick_colors());
 	let conifer_stick = stick_assets.add(render_conifer_stick_colors());
 	let leaf = leaf_assets.add(render_leaf_colors());
-	let northern_leaf = leaf_assets.add(render_northern_leaf_colors());
-	let jungle_inner_leaf = leaf_assets.add(render_jungle_inner_leaf_colors());
-	let jungle_outer_leaf = leaf_assets.add(render_jungle_outer_leaf_colors());
-	let braid_inner_leaf = leaf_assets.add(render_braid_inner_leaf_colors());
-	let braid_outer_leaf = leaf_assets.add(render_braid_outer_leaf_colors());
-	let jungle_stick = stick_assets.add(render_jungle_stick_colors());
 	let tuft = standard_assets.add(render_tuft_standard_material());
 
 	commands.insert_resource(RenderMaterials {
 		stick: stick.clone(),
 		conifer_stick: conifer_stick.clone(),
 		leaf: leaf.clone(),
-		northern_leaf: northern_leaf.clone(),
-		jungle_inner_leaf: jungle_inner_leaf.clone(),
-		jungle_outer_leaf: jungle_outer_leaf.clone(),
-		braid_inner_leaf: braid_inner_leaf.clone(),
-		braid_outer_leaf: braid_outer_leaf.clone(),
-		jungle_stick: jungle_stick.clone(),
 		tuft: tuft.clone(),
 	});
 
-	let mats_snapshot = RenderMaterials {
-		stick: stick.clone(),
-		conifer_stick: conifer_stick.clone(),
-		leaf: leaf.clone(),
-		northern_leaf: northern_leaf.clone(),
-		jungle_inner_leaf: jungle_inner_leaf.clone(),
-		jungle_outer_leaf: jungle_outer_leaf.clone(),
-		braid_inner_leaf: braid_inner_leaf.clone(),
-		braid_outer_leaf: braid_outer_leaf.clone(),
-		jungle_stick: jungle_stick.clone(),
-		tuft: tuft.clone(),
-	};
 	attach_render_materials(
 		&mut config.subject,
 		&stick,
 		&conifer_stick,
 		&leaf,
-		&northern_leaf,
 		&tuft,
 	);
-	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
-		attach_jungle_storybook_materials(tree, &mats_snapshot);
-	}
-	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
-		attach_honu_banyan_materials(tree, &mats_snapshot);
-	}
-	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
-		attach_braid_oak_materials(tree, &mats_snapshot);
-	}
-	if let RenderSubject::VaseTree(tree) = &mut config.subject {
-		attach_vase_tree_materials(tree, &mats_snapshot);
-	}
 }
-
-/// No-op: Vase Tree now uses VegetationComponents (no per-tree mesh materials).
-pub fn attach_vase_tree_materials(_tree: &mut RenderVaseTree, _mats: &RenderMaterials) {}
-
-/// No-op: Braid Oak now uses VegetationComponents (no per-tree mesh materials).
-pub fn attach_braid_oak_materials(_tree: &mut RenderBraidOakTree, _mats: &RenderMaterials) {}
-
-/// No-op: Jungle Storybook now uses VegetationComponents (no per-tree mesh materials).
-pub fn attach_jungle_storybook_materials(
-	_tree: &mut RenderJungleStorybookTree,
-	_mats: &RenderMaterials,
-) {
-}
-
-/// No-op: Honu Banyan now uses VegetationComponents (no per-tree mesh materials).
-pub fn attach_honu_banyan_materials(_tree: &mut RenderHonuBanyan, _mats: &RenderMaterials) {}
 
 fn attach_render_materials(
 	subject: &mut RenderSubject,
 	stick: &Handle<ChicoStickMaterial>,
 	conifer_stick: &Handle<ChicoStickMaterial>,
 	leaf: &Handle<ChicoLeafMaterial>,
-	_northern_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
@@ -294,9 +207,7 @@ fn attach_render_materials(
 		RenderSubject::WildGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::MonsterGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::MonsterGrass(_) => {}
 		RenderSubject::RiverineGreen(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
@@ -448,26 +359,6 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	let stick = mats.stick.clone();
 	let conifer_stick = mats.conifer_stick.clone();
 	let leaf = mats.leaf.clone();
-	let northern_leaf = mats.northern_leaf.clone();
 	let tuft = mats.tuft.clone();
-	attach_render_materials(
-		&mut config.subject,
-		&stick,
-		&conifer_stick,
-		&leaf,
-		&northern_leaf,
-		&tuft,
-	);
-	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
-		attach_jungle_storybook_materials(tree, &mats);
-	}
-	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
-		attach_honu_banyan_materials(tree, &mats);
-	}
-	if let RenderSubject::VaseTree(tree) = &mut config.subject {
-		attach_vase_tree_materials(tree, &mats);
-	}
-	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
-		attach_braid_oak_materials(tree, &mats);
-	}
+	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
 }
