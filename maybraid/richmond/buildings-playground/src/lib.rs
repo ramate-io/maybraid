@@ -17,7 +17,10 @@ use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{add_fine_pass_cull_for, add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
+use lod::{
+	add_fine_pass_chunk_full_for, add_fine_pass_cull_for, LodChunkFulfillBudget, LodFinePassPlugin,
+	LodFinePassSystems,
+};
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
 	draw_opening_plan_gizmos, draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
@@ -35,6 +38,9 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<CachedPreview>()
+			.insert_resource(LodChunkFulfillBudget {
+				weights_per_frame: 1,
+			})
 			.add_plugins((
 				SceneRefPlugin,
 				FurnitureWireframePlugin,
@@ -43,7 +49,8 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				LodFinePassPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
-		add_fine_pass_for::<WizardsTower>(app);
+		// Wizard's Tower: incremental chunk fulfill (experiment).
+		add_fine_pass_chunk_full_for::<WizardsTower>(app);
 		// Probe updates LodSceneLevel; WarmAssetLodRoots handles spawn + cull.
 		add_fine_pass_cull_for::<WarmAssetLodRoots>(app);
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))

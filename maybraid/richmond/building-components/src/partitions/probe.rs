@@ -149,11 +149,22 @@ pub fn update_partition_host_levels(
 	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
 		return;
 	}
+	let t0 = std::time::Instant::now();
+	let mut n = 0u32;
+	let mut changed = 0u32;
 	for (probe, mut level) in &mut hosts {
+		n += 1;
 		let desired = probe.level_for(&viewer.current);
 		if *level != desired {
 			*level = desired;
+			changed += 1;
 		}
+	}
+	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+	if changed > 0 || elapsed_ms >= 0.5 {
+		bevy::log::info!(
+			"[lod.partition] update_partition_host_levels: hosts={n} changed={changed} in {elapsed_ms:.2}ms"
+		);
 	}
 }
 

@@ -14,7 +14,8 @@ name = "richmond-buildings-playground"
 path = "src/main.rs"
 
 [dependencies]
-bevy = { workspace = true }
+# `trace` enables bevy_ecs `system_commands` spans used to time command apply.
+bevy = { workspace = true, features = ["trace"] }
 bevy_math = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
