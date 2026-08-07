@@ -10,7 +10,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
-use lod::{LodSceneHost, LodSceneRegionIndex};
+use lod::{add_lod_scene_refresh_for, LodSceneHost, LodSceneRegionIndex};
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 #[derive(SystemParam)]
@@ -28,4 +28,11 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
 		self.hosts.iter().filter(move |(entity, _)| hit.contains(entity))
 	}
+}
+
+/// Register [`add_lod_scene_refresh_for`] with [`AvianLodSceneRegionIndex`].
+///
+/// Still requires [`lod::LodFinePassPlugin`] for viewer track + root sync.
+pub fn add_avian_lod_scene_refresh_for<T: Component + LodScene + 'static>(app: &mut App) {
+	add_lod_scene_refresh_for::<T, AvianLodSceneRegionIndex<'_, '_, T>>(app);
 }

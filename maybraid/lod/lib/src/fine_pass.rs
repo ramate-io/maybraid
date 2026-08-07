@@ -5,6 +5,9 @@
 //! [`crate::sync_lod_level_roots`] → [`fulfill_lod_level_spawn`] →
 //! [`cull_lod_level_roots`].
 //!
+//! Region-driven refresh ([`crate::refresh`]) stamps [`crate::LodRefresh`] and
+//! runs the same SyncRoots / Fulfill / Cull chain on the marked subset.
+//!
 //! Construct [`LodRef`] ephemerally from [`LodViewerState`] + [`LodHostBounds`]
 //! (no owned `LodRef` component).
 
