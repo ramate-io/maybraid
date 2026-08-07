@@ -37,5 +37,6 @@ pub use crate::lod_cull::{
 	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
 	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
+pub use crate::scene_chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use presentation::{LodScene, LodSceneStatus, RegionPresenter};
 pub use spatial_index::{SpatialIndex, Version};

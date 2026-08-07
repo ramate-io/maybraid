@@ -60,8 +60,11 @@ pub fn lod_host_scene(
 ///
 /// Flow per host:
 /// 1. Find the [`LodLevelRoots`] child (or request a spawn if the host/roots bag is missing).
-/// 2. Show the root matching the desired level; hide the rest.
+/// 2. Show a **ready** root matching the desired level; keep pending roots Hidden.
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`] so a system can build it.
+///
+/// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
+/// requests but stay Hidden until chunk fulfill completes.
 pub fn sync_lod_level_roots(
 	mut commands: Commands,
 	hosts: Query<
@@ -70,6 +73,7 @@ pub fn sync_lod_level_roots(
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
+	pending: Query<(), With<crate::LodLevelRootPending>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
 	for (host, level, host_children) in &hosts {
@@ -100,7 +104,7 @@ pub fn sync_lod_level_roots(
 			continue;
 		};
 
-		// Flip visibility: Inherited for the desired level, Hidden for every other level root.
+		// Ready desired → Inherited; pending desired stays Hidden; others Hidden.
 		let child_ids: Vec<Entity> = root_children.iter().collect();
 		let mut found = false;
 		for child in child_ids {
@@ -112,14 +116,18 @@ pub fn sync_lod_level_roots(
 			};
 			if root.0 == desired {
 				found = true;
-				*visibility = Visibility::Inherited;
+				if pending.contains(child) {
+					*visibility = Visibility::Hidden;
+				} else {
+					*visibility = Visibility::Inherited;
+				}
 			} else {
 				*visibility = Visibility::Hidden;
 			}
 		}
 
-		// Desired root present → drop any stale spawn request (e.g. left over after a
-		// prior cull). Missing → request fulfill so a culled band can come back.
+		// Desired root present (ready or pending) → drop stale spawn request.
+		// Missing → request fulfill so a culled band can come back.
 		if found {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 		} else {

@@ -199,7 +199,7 @@ pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 }
 
 /// Placeholder bounds when a host has no [`LodHostBounds`] (probe-driven hosts).
-fn ephemeral_bounds(host_bounds: Option<&LodHostBounds>) -> Aabb3d {
+pub(crate) fn ephemeral_bounds(host_bounds: Option<&LodHostBounds>) -> Aabb3d {
 	host_bounds.map(|b| b.0).unwrap_or_else(|| Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE))
 }
 
@@ -247,6 +247,7 @@ pub fn cull_lod_level_roots<T: Component + LodScene>(
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
+			// Never cull the desired level (ready or in-progress pending).
 			if root.0 == *current {
 				continue;
 			}
