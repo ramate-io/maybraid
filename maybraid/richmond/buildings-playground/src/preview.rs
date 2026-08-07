@@ -46,6 +46,7 @@ use richmond_buildings::{
 	IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall, LesHallesFloorPlan,
 	LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
 	LesHallesShaftPlacement, LivableApartment, LivableApartments,
+	MixedUseLesHallesMonotower,
 	LivableApartmentsOptions, LivingRoom, MiniMart, MultiConfines, PartsStall, PublicRestroom,
 	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
 	RectangularLivableAreaParameterized, passages_on_faces, ResidentialBathroom,
@@ -432,6 +433,14 @@ pub enum PreviewSubject {
 	},
 	/// Side-by-side gallery of `LesHallesLivableFullStorey` (lengthwise RLA bays).
 	LesHallesLivableFullStoreyExamples,
+	/// Commercial-below / livable-above Les Halles monotower stack.
+	MixedUseLesHallesMonotower {
+		/// Confines size (XZ centered at origin; Y from 0). Tall ⇒ several storeys.
+		extent: Vec3,
+		seed: i32,
+		/// Inbound openings (`--opening`). Empty ⇒ monotower samples shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
 	IApartmentFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -988,6 +997,19 @@ impl PreviewConfig {
 			PreviewSubject::LesHallesLivableFullStoreyExamples => {
 				"preview: les-halles-livable-full-storey-examples (gallery)".into()
 			}
+			PreviewSubject::MixedUseLesHallesMonotower {
+				extent,
+				seed,
+				ref openings,
+			} => {
+				format!(
+					"preview: mixed-use-les-halles-monotower (extent={:.1},{:.1},{:.1} seed={seed} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
 				seed,
@@ -1102,6 +1124,7 @@ impl PreviewConfig {
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::LesHallesLivableFullStorey { extent, .. }
+			| PreviewSubject::MixedUseLesHallesMonotower { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
 			| PreviewSubject::IApartmentFullStorey { extent, .. }
 			| PreviewSubject::HallsToShafts { extent, .. } => {
@@ -1314,6 +1337,7 @@ pub struct CachedPreview {
 	les_halles_full_storey: Option<LesHallesFullStorey>,
 	les_halles_livable_full_storey: Option<LesHallesLivableFullStorey>,
 	les_halles_livable_full_storey_examples: Vec<LesHallesLivableFullStoreyExampleCell>,
+	mixed_use_les_halles_monotower: Option<MixedUseLesHallesMonotower>,
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
@@ -1489,6 +1513,7 @@ impl CachedPreview {
 		self.les_halles_full_storey = None;
 		self.les_halles_livable_full_storey = None;
 		self.les_halles_livable_full_storey_examples.clear();
+		self.mixed_use_les_halles_monotower = None;
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
@@ -1838,6 +1863,18 @@ impl CachedPreview {
 				self.les_halles_livable_full_storey_examples =
 					build_les_halles_livable_full_storey_examples();
 			}
+			PreviewSubject::MixedUseLesHallesMonotower {
+				extent,
+				seed,
+				openings,
+			} => {
+				match fit_mixed_use_les_halles_monotower(*extent, *seed, openings) {
+					Ok(tower) => self.mixed_use_les_halles_monotower = Some(tower),
+					Err(err) => {
+						bevy::log::error!("mixed-use-les-halles-monotower fit failed: {err}");
+					}
+				}
+			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
 				seed,
@@ -2099,6 +2136,9 @@ impl CachedPreview {
 		}
 		if let Some(storey) = self.les_halles_livable_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(tower) = self.mixed_use_les_halles_monotower.as_ref() {
+			return tower.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
 		if !self.les_halles_livable_full_storey_examples.is_empty() {
 			let mut out = Vec::new();
@@ -2897,6 +2937,25 @@ fn demo_commercial_stall_strip_confines(extent: Vec3, seed: i32) -> Confines {
 		);
 	}
 	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
+}
+
+fn fit_mixed_use_les_halles_monotower(
+	extent: Vec3,
+	seed: i32,
+	openings: &[PreviewOpening],
+) -> Result<MixedUseLesHallesMonotower, richmond_buildings::FitError> {
+	let bounds = les_halles_confines_bounds(extent);
+	let inbound = if openings.is_empty() {
+		Openings::new()
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).map(|(tower, _)| tower)
 }
 
 fn fit_les_halles_floor_plan(
@@ -5472,6 +5531,15 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::MixedUseLesHallesMonotower { .. } => {
+			if let Some(tower) = cache.mixed_use_les_halles_monotower.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(tower).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::LesHallesLivableFullStoreyExamples => {
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
@@ -5926,7 +5994,8 @@ pub fn draw_opening_plan_gizmos(
 		}
 		PreviewSubject::LesHallesFloorPlan { openings, .. }
 		| PreviewSubject::LesHallesFullStorey { openings, .. }
-		| PreviewSubject::LesHallesLivableFullStorey { openings, .. } => {
+		| PreviewSubject::LesHallesLivableFullStorey { openings, .. }
+		| PreviewSubject::MixedUseLesHallesMonotower { openings, .. } => {
 			let plan = cache
 				.les_halles_floor_plan
 				.as_ref()
@@ -5941,6 +6010,13 @@ pub fn draw_opening_plan_gizmos(
 						.les_halles_livable_full_storey
 						.as_ref()
 						.map(|s| &s.floor_plan)
+				})
+				.or_else(|| {
+					cache
+						.mixed_use_les_halles_monotower
+						.as_ref()
+						.and_then(|t| t.floors.first())
+						.map(|f| f.floor_plan())
 				});
 			let red = Color::srgb(0.95, 0.2, 0.2);
 			// Inbound preview openings (accepted → cyan/amber, rejected → red).

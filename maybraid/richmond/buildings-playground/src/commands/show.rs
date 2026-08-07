@@ -70,6 +70,7 @@ pub mod les_halles_floor_plan_examples;
 pub mod les_halles_full_storey;
 pub mod les_halles_livable_full_storey;
 pub mod les_halles_livable_full_storey_examples;
+pub mod mixed_use_les_halles_monotower;
 pub mod rect_floor;
 pub mod rect_ring_floor;
 pub mod rounded_rect_floor;
@@ -231,6 +232,8 @@ pub enum Show {
 	LesHallesLivableFullStoreyExamples(
 		les_halles_livable_full_storey_examples::LesHallesLivableFullStoreyExamples,
 	),
+	/// Mixed-use Les Halles monotower (commercial storeys below, livable above).
+	MixedUseLesHallesMonotower(mixed_use_les_halles_monotower::MixedUseLesHallesMonotower),
 	/// I-Apartment floor plan (IFloor + primary rect residuals).
 	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
 	/// Gallery of I-Apartment floor plans via Fit (varied extents/seeds).
@@ -321,6 +324,7 @@ impl Show {
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
+			Self::MixedUseLesHallesMonotower(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),

@@ -92,8 +92,9 @@ CommercialStallInterior (catalog first-fit)
 ```
 
 Playground: `/show les-halles-full-storey`, `/show les-halles-livable-full-storey`,
-`/show les-halles-livable-full-storey-examples`, `/show commercial-stall-strip`,
-and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
+`/show les-halles-livable-full-storey-examples`, `/show mixed-use-les-halles-monotower`,
+`/show commercial-stall-strip`, and the per-interior galleries
+(`mini-mart-examples`, `public-restroom-examples`, …).
 
 ### Livable gallery fill (Les Halles livable Full\*)
 
