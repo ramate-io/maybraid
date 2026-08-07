@@ -1,6 +1,6 @@
 # Incremental LOD scene chunks
 
-Backwards-compatible alternative to eager [`fulfill_lod_level_spawn`](../lib/src/refresh.rs): amortize spawning a level root across frames under a weight budget.
+Backwards-compatible alternative to eager [`fulfill_lod_level_spawn`](../lib/src/scene/refresh.rs): amortize spawning a level root across frames under a weight budget.
 
 ## API
 
@@ -22,7 +22,7 @@ Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit,
 
 1. Sync inserts `LodLevelSpawnRequest` when the desired root is missing.
 2. **Begin** creates a hidden `LodLevelRoot` + `LodLevelRootPending` and flattens the chunk tree into `LodChunkFulfillment`.
-3. **Drain** spawns primitives under [`LodChunkFulfillBudget::weights_per_frame`](../lib/src/chunk_fulfill.rs).
+3. **Drain** spawns primitives under [`LodChunkFulfillBudget::weights_per_frame`](../lib/src/scene/chunk_fulfill.rs).
 4. **Complete** removes pending, sets the root `Inherited`, hides sibling roots.
 5. Cull/GC may despawn non-desired ready roots as today; the desired level (including in-progress pending) is never culled.
 
@@ -36,7 +36,7 @@ add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
 ```
 
-Unscoped [`LodFinePhaseAllPlugin`](../lib/src/refresh.rs) remains the path for hosts that do not need amortization.
+Unscoped [`LodFinePhaseAllPlugin`](../lib/src/scene/refresh.rs) remains the path for hosts that do not need amortization.
 
 ## Future: coalescing and compaction
 

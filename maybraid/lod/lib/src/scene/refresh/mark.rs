@@ -6,14 +6,14 @@ use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::gen::LodScene;
-use crate::lod_scene_host::LodSceneHost;
-use crate::region_index::LodSceneRegionIndex;
+use crate::scene::LodScene;
+use crate::scene::host::LodSceneHost;
+use crate::scene::region_index::LodSceneRegionIndex;
 
 /// Cascade / producer output: AABBs that should participate in LOD refresh.
 ///
 /// Tag the producer entity with marker `M`; host type `T` listens via
-/// [`crate::LodBroadPhasePlugin`] / [`crate::LodSceneRefreshPlugin`].
+/// [`crate::LodBroadPhasePlugin`] / [`crate::scene::LodSceneRefreshPlugin`].
 #[derive(Debug, Clone, Default, Component)]
 pub struct LodSceneRefreshRegions {
 	pub fine: Vec<Aabb3d>,

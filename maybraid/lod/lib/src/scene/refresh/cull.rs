@@ -3,10 +3,10 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
-use crate::gen::LodScene;
-use crate::lod_cull::LodSceneCulls;
-use crate::lod_level::LodSceneLevel;
-use crate::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::LodScene;
+use crate::scene::cull::LodSceneCulls;
+use crate::scene::level::LodSceneLevel;
+use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use super::bounds::{ephemeral_bounds, LodHostBounds};
 use super::node::{

@@ -1,4 +1,4 @@
-//! Despawn policy for inactive [`crate::lod_scene_host::LodLevelRoot`]s.
+//! Despawn policy for inactive [`crate::scene::host::LodLevelRoot`]s.
 //!
 //! Common helpers:
 //! - [`cull_non_adjacent_bands`] — least aggressive named-band GC (preferred default)
@@ -14,7 +14,7 @@
 //! [`cull_offset_bands`] (halfway in) or a tighter adjacent depth — and avoid
 //! `depth = 0` (cull adjacent on band entry) except for cheap roots.
 
-use crate::lod_level::LodSceneLevel;
+use crate::scene::level::LodSceneLevel;
 
 /// Named presentation bands ordered **near → far** (detail → silhouette).
 pub const NAMED_BANDS_NEAR_TO_FAR: [LodSceneLevel; 4] = [
@@ -46,7 +46,7 @@ impl LodSceneCull {
 	}
 }
 
-/// Which inactive LOD level roots a [`crate::gen::LodScene`] is willing to despawn.
+/// Which inactive LOD level roots a [`crate::scene::LodScene`] is willing to despawn.
 ///
 /// Default [`Self::None`] keeps hidden roots warm. Prefer
 /// [`cull_non_adjacent_bands`] (or explicit tight [`Self::AllOf`] lists) when
@@ -243,7 +243,7 @@ pub fn cull_offset_bands_from_factor(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::lod_level::QuantizedDistance;
+	use crate::scene::level::QuantizedDistance;
 
 	#[test]
 	fn none_culls_nothing() {

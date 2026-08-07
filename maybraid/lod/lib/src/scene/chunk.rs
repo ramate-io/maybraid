@@ -2,7 +2,7 @@
 //!
 //! A chunk tree is a **scheduling** representation only: it does not change
 //! scene semantics. Fulfillment flattens to weighted primitives and drains them
-//! under a per-frame weight budget (see [`crate::chunk_fulfill`]).
+//! under a per-frame weight budget (see [`crate::scene::chunk_fulfill`]).
 //!
 //! # Future work: coalescing and compaction
 //!

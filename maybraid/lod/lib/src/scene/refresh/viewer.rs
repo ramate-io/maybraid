@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::lod_ref::LodRef;
+use crate::scene::lod_ref::LodRef;
 
 use super::node::LodNode;
 

@@ -5,94 +5,18 @@
 //! against the index, so correctness does not depend on each asset's local
 //! opinion about its scene, and no commit phase is needed between generation
 //! and presentation.
+//!
+//! Scene construction / LOD selection lives in [`crate::scene::LodScene`].
 
 #[cfg(test)]
 pub mod tests;
 
-use crate::gen::id::Id;
-use crate::gen::spatial_index::{SpatialIndex, Version};
-use crate::lod_cull::LodSceneCulls;
-use crate::lod_level::LodSceneLevel;
-use crate::lod_ref::LodRef;
-use crate::scene_chunk::SceneChunk;
+use crate::gen::{Id, SpatialIndex, Version};
+use crate::scene::{LodSceneLevel, LodRef};
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
 
-/// Whether the presented LOD selection should be updated for this [`LodRef`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LodSceneStatus {
-	/// Desired level changed; payload is the new level.
-	Changed(LodSceneLevel),
-	Unchanged,
-}
-
-pub trait LodScene {
-	/// Desired presentation level for `lod_ref.current_*`. Must be cheap — no scene build.
-	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		let _ = lod_ref;
-		LodSceneLevel::High
-	}
-
-	/// Desired level from multiple driver [`LodRef`]s (e.g. several [`crate::LodNode`]s).
-	///
-	/// Default: max of [`Self::scene_lod_level`] over `lod_refs`. Empty input means
-	/// no driver this frame → [`LodSceneLevel::UltraLow`].
-	fn scene_lod_level_from_levels(&self, lod_refs: &[&LodRef]) -> LodSceneLevel {
-		lod_refs
-			.iter()
-			.map(|lod_ref| self.scene_lod_level(lod_ref))
-			.max()
-			.unwrap_or(LodSceneLevel::UltraLow)
-	}
-
-	/// Whether the presented LOD selection should change for this [`LodRef`].
-	///
-	/// Must be cheap — no scene build. Implementors that care about camera motion
-	/// should compare their own previous/current banding here. Default always
-	/// reports a change to [`LodSceneLevel::High`].
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		let _ = lod_ref;
-		LodSceneStatus::Changed(LodSceneLevel::High)
-	}
-
-	/// Inactive [`crate::LodLevelRoot`]s this scene is willing to despawn.
-	///
-	/// Must be cheap — no scene build. `current` is the host's desired
-	/// [`LodSceneLevel`]. Default keeps every root warm ([`LodSceneCulls::None`]).
-	/// Prefer [`crate::cull_non_adjacent_bands`] (or [`crate::cull_offset_bands`])
-	/// when memory matters; “not current” alone is not a cull reason. Culling the
-	/// immediately adjacent band is usually a bad idea — respawning that root on
-	/// the way back is expensive; keep it warm unless you are well into the
-	/// current band.
-	///
-	/// Host GC never despawns the host's current/desired level even if listed.
-	/// After a despawn, Sync + Fulfill spawn the desired level again via
-	/// [`Self::scene_with_level`] — there is no separate rebuild path.
-	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
-		let _ = (lod_ref, current);
-		LodSceneCulls::None
-	}
-
-	/// Scene for one LOD level root (primary implementation target).
-	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static;
-
-	/// Incremental composition for one LOD level root.
-	///
-	/// Default wraps [`Self::scene_with_level`] as a single
-	/// [`SceneChunk::primitive`]. Override to split expensive levels into
-	/// weighted sub-chunks for [`crate::chunk_fulfill`] drain.
-	///
-	/// Note: the default still builds the full scene up front; hitch reduction
-	/// requires an override (or future lazy chunk nodes).
-	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
-	}
-
-	/// Scene for the **current** LOD selection only (first present / non-host path).
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		self.scene_with_level(lod_ref, self.scene_lod_level(lod_ref))
-	}
-}
+pub use crate::scene::{LodScene, LodSceneStatus};
 
 /// Presents one layer (`T`) of a spatial index over a region.
 ///

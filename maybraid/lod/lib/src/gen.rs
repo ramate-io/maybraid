@@ -1,6 +1,6 @@
-//! LOD spatial generation and presentation.
+//! LOD spatial generation (storage + materialization).
 //!
-//! Three phases, three submodules:
+//! Two phases, two submodules:
 //!
 //! - [`spatial_index`]: storage truth. Values, bounds, and [`Version`] stamps
 //!   by [`Id`]. Never generates, never presents.
@@ -8,35 +8,25 @@
 //!   origins, building, and descendants per type; the single blanket lift to
 //!   [`GeneratingSpatialIndex`] recurses the whole tree with no scene
 //!   side effects.
-//! - [`presentation`]: a separate pass after generation. [`RegionPresenter`]
-//!   diffs storage versions against what it has presented, handles new or
-//!   changed ids, then removes stale ones.
 //!
-//! Pitfalls avoided:
-//!
-//! - Spawning from `insert()` or from inside generation is too implicit; it
-//!   couples visual effects to data recursion and can present descendants
-//!   that were only meant to be indexed.
-//! - Transient "created" events between the phases would need a commit
-//!   protocol (who drains, when, how many consumers). Version stamps carry
-//!   the same information as plain data.
+//! Presentation is [`crate::presentation`]; scene / refresh runtime is
+//! [`crate::scene`]. Compatibility re-exports of scene/presentation types are
+//! kept here for existing `lod::gen::…` call sites.
 
 mod generation;
 mod id;
-mod presentation;
 mod spatial_index;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
-pub use crate::lod_level::{LodSceneLevel, QuantizedDistance};
-pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
-pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
-pub use crate::lod_cull::{
+pub use crate::presentation::{LodScene, LodSceneStatus, RegionPresenter};
+pub use crate::scene::{
 	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
 	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
-	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
+	LodSceneCull, LodSceneCulls, LodSceneLevel, QuantizedDistance, SceneChunk,
+	DEFAULT_CHUNK_WEIGHT, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
-pub use crate::scene_chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
-pub use presentation::{LodScene, LodSceneStatus, RegionPresenter};
+pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
+pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
 pub use spatial_index::{SpatialIndex, Version};

@@ -1,5 +1,6 @@
 use crate::gen::tests::test_utils::*;
-use crate::gen::{GeneratingSpatialIndex, Id, RegionPresenter, SpatialIndex};
+use crate::gen::{GeneratingSpatialIndex, Id, SpatialIndex};
+use crate::presentation::RegionPresenter;
 use anyhow::{anyhow, Result};
 
 #[test]

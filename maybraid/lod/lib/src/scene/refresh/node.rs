@@ -1,10 +1,10 @@
-//! [`LodNode`] drivers that produce ephemeral [`crate::LodRef`]s.
+//! [`LodNode`] drivers that produce ephemeral [`crate::scene::LodRef`]s.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::gen::LodScene;
-use crate::lod_ref::LodRef;
+use crate::scene::LodScene;
+use crate::scene::lod_ref::LodRef;
 
 use super::viewer::LodViewerState;
 
@@ -48,7 +48,7 @@ pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<Lod
 	}
 }
 
-/// Mirror the primary [`crate::LodViewer`] node into [`LodViewerState`] (probe compat).
+/// Mirror the primary [`crate::scene::LodViewer`] node into [`LodViewerState`] (probe compat).
 pub fn sync_lod_viewer_state(
 	viewers: Query<(Entity, &LodNodePose), (With<LodNode>, With<super::viewer::LodViewer>)>,
 	mut state: ResMut<LodViewerState>,

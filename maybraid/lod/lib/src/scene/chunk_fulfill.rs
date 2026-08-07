@@ -16,10 +16,10 @@ use std::time::Instant;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
-use crate::refresh::{ephemeral_bounds, LodHostBounds, LodRefreshSystems, LodViewerState};
-use crate::gen::LodScene;
-use crate::lod_level::LodSceneLevel;
-use crate::lod_scene_host::{
+use crate::scene::refresh::{ephemeral_bounds, LodHostBounds, LodRefreshSystems, LodViewerState};
+use crate::scene::LodScene;
+use crate::scene::level::LodSceneLevel;
+use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
 
@@ -311,7 +311,7 @@ pub fn complete_chunk_lod_fulfill(
 /// Does **not** register eager [`crate::fulfill_lod_level_spawn`]. Use instead of
 /// (or in place of) the fulfill half of [`crate::add_lod_refresh_all_for`].
 pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
-	crate::refresh::configure_refresh_sets(app);
+	crate::scene::refresh::configure_refresh_sets(app);
 	app.init_resource::<LodChunkFulfillBudget>()
 		.init_resource::<LodChunkFulfillDiag>()
 		.add_systems(
@@ -330,16 +330,16 @@ pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
 
 /// Like [`crate::LodFinePhaseAllPlugin`], but uses chunk fulfill instead of eager spawn.
 pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
-	crate::refresh::configure_refresh_sets(app);
+	crate::scene::refresh::configure_refresh_sets(app);
 	if !app.is_plugin_added::<crate::LodRefreshCorePlugin>() {
 		app.add_plugins(crate::LodRefreshCorePlugin);
 	}
 	app.add_systems(
 		Update,
 		(
-			crate::refresh::update_lod_host_levels::<T, (), With<crate::LodViewer>>
+			crate::scene::refresh::update_lod_host_levels::<T, (), With<crate::scene::LodViewer>>
 				.in_set(LodRefreshSystems::UpdateLevels),
-			crate::refresh::cull_lod_level_roots::<T, (), With<crate::LodViewer>>
+			crate::scene::refresh::cull_lod_level_roots::<T, (), With<crate::scene::LodViewer>>
 				.in_set(LodRefreshSystems::Cull),
 		),
 	);

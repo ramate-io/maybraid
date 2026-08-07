@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use crate::lod_level::LodSceneLevel;
+use crate::scene::level::LodSceneLevel;
 
 /// Marker: this entity owns LOD level roots and a current [`LodSceneLevel`].
 #[derive(Debug, Clone, Copy, Default, Component)]
@@ -45,7 +45,7 @@ pub fn lod_host_scene(
 		Children [ {level_roots_children} ]
 	});
 	let host_children: Vec<Box<dyn Scene>> = vec![roots];
-	let host_bounds = crate::refresh::LodHostBounds(bounds);
+	let host_bounds = crate::scene::refresh::LodHostBounds(bounds);
 	bsn! {
 		LodSceneHost
 		template_value(level)

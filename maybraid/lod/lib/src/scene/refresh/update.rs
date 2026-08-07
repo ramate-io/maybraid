@@ -3,9 +3,9 @@
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
-use crate::gen::LodScene;
-use crate::lod_level::LodSceneLevel;
-use crate::lod_scene_host::LodSceneHost;
+use crate::scene::LodScene;
+use crate::scene::level::LodSceneLevel;
+use crate::scene::host::LodSceneHost;
 
 use super::bounds::LodHostBounds;
 use super::node::{collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose};

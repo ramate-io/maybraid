@@ -21,10 +21,10 @@ impl QuantizedDistance {
 	}
 }
 
-/// Presentation LOD selection for a [`crate::gen::LodScene`] host.
+/// Presentation LOD selection for a [`crate::scene::LodScene`] host.
 ///
 /// [`Ord`] follows variant order (UltraLow … High, then Distance / Resolution).
-/// Used by [`crate::gen::LodScene::scene_lod_level_from_levels`] defaults.
+/// Used by [`crate::scene::LodScene::scene_lod_level_from_levels`] defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Component, Default)]
 pub enum LodSceneLevel {
 	UltraLow,

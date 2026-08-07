@@ -7,7 +7,7 @@ use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
 use bevy::math::bounding::Aabb3d;
 
-use crate::gen::LodScene;
+use crate::scene::LodScene;
 
 /// Broadphase lookup of [`LodScene`] hosts whose colliders / bounds hit `region`.
 ///

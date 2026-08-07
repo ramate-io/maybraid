@@ -6,7 +6,7 @@
 //! - [`LodFinePhasePlugin<T, F>`] — update/fulfill/cull `(T, LodRefresh)` vs nodes `F`
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — compose Core + Broad + Fine
 //!
-//! Ephemeral [`crate::LodRef`]s are built from [`LodNode`] / [`LodNodePose`] +
+//! Ephemeral [`crate::scene::LodRef`]s are built from [`LodNode`] / [`LodNodePose`] +
 //! [`LodHostBounds`]. [`LodViewerState`] remains a probe compatibility mirror.
 
 mod bounds;
@@ -23,9 +23,9 @@ use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::gen::LodScene;
-use crate::lod_scene_host::sync_lod_level_roots;
-use crate::region_index::LodSceneRegionIndex;
+use crate::scene::LodScene;
+use crate::scene::host::sync_lod_level_roots;
+use crate::scene::region_index::LodSceneRegionIndex;
 
 pub use bounds::LodHostBounds;
 pub(crate) use bounds::ephemeral_bounds;
