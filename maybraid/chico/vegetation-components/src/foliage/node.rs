@@ -1,6 +1,6 @@
 //! Foliage IR node: style + geometry + placement.
 
-use bevy::prelude::Visibility;
+use bevy::prelude::{Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -13,7 +13,7 @@ use crate::foliage::style::FoliageStyle;
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{
 	posed_foliage_asset_tier, posed_frond_asset_tier, warm_content_host, warm_content_host_hsl,
-	warm_foliage_mesh_level_host, warm_frond_mesh_level_host,
+	warm_foliage_mesh_level_host, warm_frond_mesh_level_host, VegetationFrondAssetRoot,
 };
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
@@ -153,12 +153,20 @@ impl FoliageNode {
 	}
 
 	/// Stick-cylinder stand-in when a frond GLB is missing (same \(Y \in [0, 1]\) kit axis).
+	///
+	/// Tagged with [`VegetationFrondAssetRoot`] on the mesh entity so playground material
+	/// patching can match `Added` leaves without walking the whole hierarchy every frame.
 	fn procedural_frond_scene_at(&self, placement: Placement) -> impl Scene + 'static {
-		posed_mesh(
-			VegetationProceduralAssets::stick_cylinder(),
-			VegetationProceduralAssets::foliage_material(),
-			pose(placement),
-		)
+		let mesh = VegetationProceduralAssets::stick_cylinder();
+		let material = VegetationProceduralAssets::foliage_material();
+		let transform = pose(placement);
+		bsn! {
+			VegetationFrondAssetRoot
+			Mesh3d({mesh})
+			MeshMaterial3d::<StandardMaterial>({material})
+			template_value(transform)
+			Visibility::default()
+		}
 	}
 
 	fn member_leaf_scene(&self, member: FrondMember, level: LodSceneLevel) -> Box<dyn Scene> {
@@ -241,7 +249,13 @@ impl LodScene for FoliageNode {
 	}
 
 	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
-		warm_mesh_lod_culls(current)
+		// Frond collections: keep all warm bands resident for now (cull/respawn of
+		// per-segment Mesh3d trees was thrashing ApplyDeferred on dense grass).
+		if self.is_frond_collection() {
+			LodSceneCulls::None
+		} else {
+			warm_mesh_lod_culls(current)
+		}
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {

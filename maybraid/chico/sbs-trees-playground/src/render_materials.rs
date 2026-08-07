@@ -9,6 +9,23 @@ use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{RenderConfig, RenderSubject};
 
+/// True when `entity` is (or is under) a node tagged with `M`.
+fn under_marker<M: Component>(
+	mut entity: Entity,
+	parents: &Query<&ChildOf>,
+	markers: &Query<(), With<M>>,
+) -> bool {
+	loop {
+		if markers.contains(entity) {
+			return true;
+		}
+		let Ok(child_of) = parents.get(entity) else {
+			return false;
+		};
+		entity = child_of.parent();
+	}
+}
+
 /// Stable bark / foliage materials reused whenever [`RenderConfig::subject`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
 pub struct RenderMaterials {
@@ -40,26 +57,30 @@ fn render_tuft_standard_material() -> StandardMaterial {
 
 /// Replace foliage [`StandardMaterial`] with [`ChicoLeafMaterial`] (discard silhouette).
 ///
-/// Covers:
+/// Runs only for [`Added<MeshMaterial3d<StandardMaterial>>`]:
 /// - procedural placeholder (`VegetationProceduralAssets::foliage_material`)
-/// - GLB meshes under [`VegetationFoliageAssetRoot`] (layered ball, etc.), once the
-///   scene instance has spawned mesh children
+/// - GLB / tagged meshes under [`VegetationFoliageAssetRoot`]
 ///
 /// Frond kits ([`VegetationFrondAssetRoot`]) are handled by
 /// [`patch_vegetation_frond_solid_material`] (solid green, not the leaf shader).
 pub fn patch_vegetation_foliage_leaf_material(
 	mut commands: Commands,
 	mats: Res<RenderMaterials>,
-	procedural: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
-	foliage_roots: Query<Entity, With<VegetationFoliageAssetRoot>>,
-	children: Query<&Children>,
-	glb_meshes: Query<&MeshMaterial3d<StandardMaterial>>,
+	added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
+	parents: Query<&ChildOf>,
+	foliage_roots: Query<(), With<VegetationFoliageAssetRoot>>,
+	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
 ) {
 	let placeholder = VegetationProceduralAssets::foliage_material();
 	let leaf = mats.leaf.clone();
 
-	for (entity, mesh_mat) in &procedural {
-		if mesh_mat.id() != placeholder.id() {
+	for (entity, mesh_mat) in &added {
+		// Fronds get the solid-green path, not the leaf shader.
+		if under_marker(entity, &parents, &frond_roots) {
+			continue;
+		}
+		let under_foliage = under_marker(entity, &parents, &foliage_roots);
+		if mesh_mat.id() != placeholder.id() && !under_foliage {
 			continue;
 		}
 		commands
@@ -67,46 +88,29 @@ pub fn patch_vegetation_foliage_leaf_material(
 			.remove::<MeshMaterial3d<StandardMaterial>>()
 			.insert(MeshMaterial3d(leaf.clone()));
 	}
-
-	for root in &foliage_roots {
-		let mut stack = vec![root];
-		while let Some(entity) = stack.pop() {
-			if glb_meshes.contains(entity) {
-				commands
-					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(leaf.clone()));
-			}
-			if let Ok(kids) = children.get(entity) {
-				stack.extend(kids.iter());
-			}
-		}
-	}
 }
 
-/// Keep frond GLBs on solid green [`StandardMaterial`] (`mats.tuft`).
+/// Keep frond kits on solid green [`StandardMaterial`] (`mats.tuft`).
 ///
-/// Matches frond primitives under [`VegetationFrondAssetRoot`] (straight frond segments).
+/// Matches [`Added<MeshMaterial3d<StandardMaterial>>`] on (or under)
+/// [`VegetationFrondAssetRoot`] — including procedural collection leaves that carry the
+/// marker on the mesh entity itself.
 pub fn patch_vegetation_frond_solid_material(
 	mut commands: Commands,
 	mats: Res<RenderMaterials>,
-	frond_roots: Query<Entity, With<VegetationFrondAssetRoot>>,
-	children: Query<&Children>,
-	glb_meshes: Query<&MeshMaterial3d<StandardMaterial>>,
+	added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
+	parents: Query<&ChildOf>,
+	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
 ) {
 	let tuft = mats.tuft.clone();
-	for root in &frond_roots {
-		let mut stack = vec![root];
-		while let Some(entity) = stack.pop() {
-			if glb_meshes.contains(entity) {
-				commands
-					.entity(entity)
-					.insert(MeshMaterial3d(tuft.clone()));
-			}
-			if let Ok(kids) = children.get(entity) {
-				stack.extend(kids.iter());
-			}
+	for (entity, mesh_mat) in &added {
+		if mesh_mat.id() == tuft.id() {
+			continue;
 		}
+		if !under_marker(entity, &parents, &frond_roots) {
+			continue;
+		}
+		commands.entity(entity).insert(MeshMaterial3d(tuft.clone()));
 	}
 }
 

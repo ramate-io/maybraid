@@ -3,6 +3,7 @@
 pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
+mod diagnostics;
 mod ground;
 mod render;
 mod render_materials;
@@ -34,13 +35,15 @@ use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
-use chico_vegetation_components::VegetationProceduralPlugin;
+use chico_vegetation_components::{
+	FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin, VegetationStructuralLodProbe,
+};
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::LodFinePassPlugin;
+use lod::{LodFinePassPlugin, LodSceneHost};
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
@@ -91,7 +94,8 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
-		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		app.add_plugins(diagnostics::PlaygroundTimingPlugin)
+			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
@@ -123,13 +127,17 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 	}
 }
 
-/// Count total vs view-visible mesh triangles (`ViewVisibility`).
+/// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.
 fn apply_mesh_stats(
 	mut commands: Commands,
 	mut status: ResMut<GameCommandStatusText>,
 	mesh_assets: Res<Assets<Mesh>>,
 	requests: Query<Entity, With<RequestMeshStats>>,
 	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
+	foliage_probes: Query<(), With<FoliageLodProbe>>,
+	stick_probes: Query<(), With<StickLodProbe>>,
+	structural_probes: Query<(), With<VegetationStructuralLodProbe>>,
+	lod_hosts: Query<(), With<LodSceneHost>>,
 ) {
 	for entity in &requests {
 		let mut total_entities = 0usize;
@@ -158,8 +166,14 @@ fn apply_mesh_stats(
 			}
 		}
 
+		let foliage_probes = foliage_probes.iter().count();
+		let stick_probes = stick_probes.iter().count();
+		let structural_probes = structural_probes.iter().count();
+		let lod_hosts = lod_hosts.iter().count();
+		let probes_total = foliage_probes + stick_probes + structural_probes;
+
 		status.0 = format!(
-			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}",
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} structural={structural_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
 			unique_handles.len(),
 			visible_unique_handles.len(),
 		);

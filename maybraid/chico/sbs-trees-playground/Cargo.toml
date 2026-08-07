@@ -10,7 +10,9 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-bevy = { workspace = true }
+# `trace` enables bevy_ecs `system_commands` spans used to time command apply
+# (see main.rs `[lod.commands]`; same as richmond-buildings-playground / PR #595).
+bevy = { workspace = true, features = ["trace"] }
 chunk = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
