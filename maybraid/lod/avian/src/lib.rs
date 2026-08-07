@@ -4,13 +4,17 @@
 //! tests) and a `T: Component + LodScene` on a [`LodSceneHost`](lod::LodSceneHost).
 
 use std::collections::HashSet;
+use std::marker::PhantomData;
 
 use avian3d::prelude::{ColliderAabb, SpatialQuery};
+use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
-use lod::{add_lod_refresh_for, LodSceneHost, LodSceneRegionIndex};
+use lod::{
+	LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin, LodViewer,
+};
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 #[derive(SystemParam)]
@@ -30,14 +34,44 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 	}
 }
 
-/// Register [`add_lod_refresh_for`] with [`AvianLodSceneRegionIndex`].
+/// [`LodSceneRefreshPlugin`] with [`AvianLodSceneRegionIndex`].
 ///
-/// `T` listens for [`lod::LodSceneRefreshRegions`] on entities marked `M`.
-/// Still requires [`lod::LodRefreshPlugin`] for viewer track + root sync.
-pub fn add_avian_lod_refresh_for<T, M>(app: &mut App)
+/// `T` listens for [`lod::LodSceneRefreshRegions`] on `M`; finephase uses [`LodNode`]s
+/// filtered by `F` (default: [`LodViewer`]).
+pub struct AvianLodSceneRefreshPlugin<T, M, F = With<LodViewer>>
 where
 	T: Component + LodScene + 'static,
 	M: Component + 'static,
+	F: QueryFilter + 'static,
 {
-	add_lod_refresh_for::<T, M, AvianLodSceneRegionIndex<'_, '_, T>>(app);
+	_marker: PhantomData<fn() -> (T, M, F)>,
+}
+
+impl<T, M, F> Default for AvianLodSceneRefreshPlugin<T, M, F>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, F> Plugin for AvianLodSceneRefreshPlugin<T, M, F>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	F: QueryFilter + 'static,
+{
+	fn build(&self, app: &mut App) {
+		app.add_plugins(LodSceneRefreshPlugin::<
+			T,
+			M,
+			AvianLodSceneRegionIndex<'_, '_, T>,
+			F,
+		>::default());
+	}
 }

@@ -10,29 +10,39 @@ use crate::lod_scene_host::{
 };
 
 use super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::viewer::LodViewerState;
+use super::node::{
+	collect_node_snapshots, dominant_lod_ref, lod_refs_for_bounds, LodNode, LodNodePose,
+};
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
 ///
-/// Culls only despawn; this is what brings a band back when
-/// [`crate::sync_lod_level_roots`] inserts [`LodLevelSpawnRequest`].
-pub fn fulfill_lod_level_spawn<T: Component + LodScene, F: QueryFilter + 'static>(
+/// Uses the dominant [`crate::LodRef`] among `FNode`-filtered [`LodNode`]s for
+/// [`LodScene::scene_with_level`].
+pub fn fulfill_lod_level_spawn<T, FHost, FNode>(
 	mut commands: Commands,
-	viewer: Res<LodViewerState>,
+	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, FNode)>,
 	hosts: Query<
 		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
-		(With<LodSceneHost>, F),
+		(With<LodSceneHost>, FHost),
 	>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
-) {
-	if viewer.entity == Entity::PLACEHOLDER {
+) where
+	T: Component + LodScene,
+	FHost: QueryFilter + 'static,
+	FNode: QueryFilter + 'static,
+{
+	let snapshots = collect_node_snapshots(&nodes);
+	if snapshots.is_empty() {
 		return;
 	}
 
 	for (host, scene, host_bounds, request, host_children) in &hosts {
 		let bounds = ephemeral_bounds(host_bounds);
-		let lod_ref = viewer.lod_ref(&bounds);
+		let refs = lod_refs_for_bounds(&snapshots, &bounds);
+		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
+			continue;
+		};
 
 		let mut roots_entity = None;
 		for child in host_children.iter() {
@@ -65,7 +75,7 @@ pub fn fulfill_lod_level_spawn<T: Component + LodScene, F: QueryFilter + 'static
 		}
 
 		let content: Box<dyn bevy::scene::Scene> =
-			Box::new(scene.scene_with_level(&lod_ref, request.level));
+			Box::new(scene.scene_with_level(lod_ref, request.level));
 		let children = vec![content];
 		let level = request.level;
 		let level_root = bsn! {

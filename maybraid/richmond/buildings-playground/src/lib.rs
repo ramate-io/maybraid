@@ -19,7 +19,7 @@ use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{
 	add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for, LodChunkFulfillBudget,
-	LodRefreshPlugin, LodRefreshSystems,
+	LodRefreshCorePlugin, LodRefreshSystems,
 };
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
@@ -47,7 +47,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				FurnitureWireframePlugin,
 				LabelWireframePlugin,
 				TowerSilhouettePlugin,
-				LodRefreshPlugin,
+				LodRefreshCorePlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
 		// Wizard's Tower: incremental chunk fulfill (experiment).

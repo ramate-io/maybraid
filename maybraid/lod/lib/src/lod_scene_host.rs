@@ -149,7 +149,7 @@ pub fn sync_lod_level_roots(
 	}
 }
 
-/// Plugin: marker types only. Prefer [`crate::LodRefreshPlugin`] for runtime systems
+/// Plugin: marker types only. Prefer [`crate::LodRefreshCorePlugin`] for runtime systems
 /// (track / sync / fulfill ordering).
 pub struct LodSceneHostPlugin;
 

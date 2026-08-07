@@ -12,8 +12,8 @@ use crate::region_index::LodSceneRegionIndex;
 
 /// Cascade / producer output: AABBs that should participate in LOD refresh.
 ///
-/// Tag the producer entity with marker `M`; host type `T` registers to listen
-/// via [`crate::add_lod_refresh_for`].
+/// Tag the producer entity with marker `M`; host type `T` listens via
+/// [`crate::LodBroadPhasePlugin`] / [`crate::LodSceneRefreshPlugin`].
 #[derive(Debug, Clone, Default, Component)]
 pub struct LodSceneRefreshRegions {
 	pub fine: Vec<Aabb3d>,

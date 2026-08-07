@@ -36,7 +36,7 @@ add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
 ```
 
-Eager `add_lod_refresh_all_for` remains the unscoped path for hosts that do not need amortization.
+Unscoped [`LodFinePhaseAllPlugin`](../lib/src/refresh.rs) remains the path for hosts that do not need amortization.
 
 ## Future: coalescing and compaction
 

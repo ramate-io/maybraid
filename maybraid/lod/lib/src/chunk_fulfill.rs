@@ -328,15 +328,19 @@ pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
 		);
 }
 
-/// Like [`crate::add_lod_refresh_all_for`], but uses chunk fulfill instead of eager spawn.
+/// Like [`crate::LodFinePhaseAllPlugin`], but uses chunk fulfill instead of eager spawn.
 pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
 	crate::refresh::configure_refresh_sets(app);
+	if !app.is_plugin_added::<crate::LodRefreshCorePlugin>() {
+		app.add_plugins(crate::LodRefreshCorePlugin);
+	}
 	app.add_systems(
 		Update,
 		(
-			crate::refresh::update_lod_host_levels::<T, ()>
+			crate::refresh::update_lod_host_levels::<T, (), With<crate::LodViewer>>
 				.in_set(LodRefreshSystems::UpdateLevels),
-			crate::refresh::cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
+			crate::refresh::cull_lod_level_roots::<T, (), With<crate::LodViewer>>
+				.in_set(LodRefreshSystems::Cull),
 		),
 	);
 	add_lod_refresh_chunk_for::<T>(app);

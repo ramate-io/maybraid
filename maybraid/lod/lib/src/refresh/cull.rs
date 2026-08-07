@@ -9,23 +9,30 @@ use crate::lod_level::LodSceneLevel;
 use crate::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::viewer::LodViewerState;
+use super::node::{
+	collect_node_snapshots, dominant_lod_ref, lod_refs_for_bounds, LodNode, LodNodePose,
+};
 
 /// Despawn inactive [`LodLevelRoot`]s listed by [`LodScene::scene_lod_culls`].
 ///
 /// Never despawns the host's current [`LodSceneLevel`]. Hidden roots not listed
 /// stay warm for cheap band flips.
-pub fn cull_lod_level_roots<T: Component + LodScene, F: QueryFilter + 'static>(
-	viewer: Res<LodViewerState>,
+pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
+	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, FNode)>,
 	hosts: Query<
 		(&T, Option<&LodHostBounds>, &LodSceneLevel, &Children),
-		(With<LodSceneHost>, F),
+		(With<LodSceneHost>, FHost),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
-) {
-	if viewer.entity == Entity::PLACEHOLDER {
+) where
+	T: Component + LodScene,
+	FHost: QueryFilter + 'static,
+	FNode: QueryFilter + 'static,
+{
+	let snapshots = collect_node_snapshots(&nodes);
+	if snapshots.is_empty() {
 		return;
 	}
 
@@ -34,8 +41,11 @@ pub fn cull_lod_level_roots<T: Component + LodScene, F: QueryFilter + 'static>(
 
 	for (scene, host_bounds, current, host_children) in &hosts {
 		let bounds = ephemeral_bounds(host_bounds);
-		let lod_ref = viewer.lod_ref(&bounds);
-		let culls = scene.scene_lod_culls(&lod_ref, *current);
+		let refs = lod_refs_for_bounds(&snapshots, &bounds);
+		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
+			continue;
+		};
+		let culls = scene.scene_lod_culls(lod_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
 			continue;
 		}

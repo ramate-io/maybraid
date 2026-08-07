@@ -33,6 +33,18 @@ pub trait LodScene {
 		LodSceneLevel::High
 	}
 
+	/// Desired level from multiple driver [`LodRef`]s (e.g. several [`crate::LodNode`]s).
+	///
+	/// Default: max of [`Self::scene_lod_level`] over `lod_refs`. Empty input means
+	/// no driver this frame → [`LodSceneLevel::UltraLow`].
+	fn scene_lod_level_from_levels(&self, lod_refs: &[&LodRef]) -> LodSceneLevel {
+		lod_refs
+			.iter()
+			.map(|lod_ref| self.scene_lod_level(lod_ref))
+			.max()
+			.unwrap_or(LodSceneLevel::UltraLow)
+	}
+
 	/// Whether the presented LOD selection should change for this [`LodRef`].
 	///
 	/// Must be cheap — no scene build. Implementors that care about camera motion

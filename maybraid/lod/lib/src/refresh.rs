@@ -1,23 +1,25 @@
-//! LOD refresh pass: viewer track → region mark → update → sync → fulfill → cull.
+//! LOD refresh: broadphase region mark + finephase host reload from [`LodNode`]s.
 //!
-//! Higher-order cascade / producers write [`LodSceneRefreshRegions`]; this pass
-//! stamps [`LodRefresh`] and runs level sync / fulfill / cull on the marked set.
+//! Plugin layers:
+//! - [`LodRefreshCorePlugin`] — sets, node track, root sync (untyped, once)
+//! - [`LodBroadPhasePlugin<T, M, I>`] — stamp [`LodRefresh`] from regions on `M`
+//! - [`LodFinePhasePlugin<T, F>`] — update/fulfill/cull `(T, LodRefresh)` vs nodes `F`
+//! - [`LodSceneRefreshPlugin<T, M, I, F>`] — compose Core + Broad + Fine
 //!
-//! Pipeline (no camera types here):
-//! [`LodViewer`] → [`LodViewerState`] → [`mark::mark_lod_refresh_from_regions`] →
-//! [`update_lod_host_levels`] → [`crate::sync_lod_level_roots`] →
-//! [`fulfill_lod_level_spawn`] → [`cull_lod_level_roots`] →
-//! [`mark::clear_coarse_lod_refresh`].
-//!
-//! Construct [`crate::LodRef`] ephemerally from [`LodViewerState`] + [`LodHostBounds`].
+//! Ephemeral [`crate::LodRef`]s are built from [`LodNode`] / [`LodNodePose`] +
+//! [`LodHostBounds`]. [`LodViewerState`] remains a probe compatibility mirror.
 
 mod bounds;
 mod cull;
 mod fulfill;
 mod mark;
+mod node;
 mod update;
 mod viewer;
 
+use std::marker::PhantomData;
+
+use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -32,13 +34,19 @@ pub use fulfill::fulfill_lod_level_spawn;
 pub use mark::{
 	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
 };
+pub use node::{
+	collect_node_snapshots, dominant_lod_ref, lod_refs_for_bounds, track_lod_nodes, LodNode,
+	LodNodePose, LodNodeSnapshot,
+};
 pub use update::update_lod_host_levels;
-pub use viewer::{track_lod_viewer, LodViewer, LodViewerState};
+pub use viewer::{LodViewer, LodViewerState};
+
+use node::sync_lod_viewer_state;
 
 /// System set ordering for the refresh pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodRefreshSystems {
-	/// Copy [`LodViewer`] transforms into [`LodViewerState`].
+	/// Advance [`LodNodePose`] / mirror [`LodViewerState`].
 	Track,
 	/// Stamp [`LodRefresh`] from marker-scoped [`LodSceneRefreshRegions`].
 	Mark,
@@ -70,73 +78,243 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 	);
 }
 
-/// Initializes [`LodViewerState`], tracks [`LodViewer`], and schedules root sync.
-///
-/// Register per-type work with [`add_lod_refresh_for`], [`add_lod_refresh_all_for`],
-/// or [`add_lod_refresh_cull_for`].
-pub struct LodRefreshPlugin;
+fn ensure_refresh_core(app: &mut App) {
+	if !app.is_plugin_added::<LodRefreshCorePlugin>() {
+		app.add_plugins(LodRefreshCorePlugin);
+	}
+}
 
-impl Plugin for LodRefreshPlugin {
+/// Untyped refresh infrastructure: sets, node tracking, root sync.
+pub struct LodRefreshCorePlugin;
+
+impl Plugin for LodRefreshCorePlugin {
 	fn build(&self, app: &mut App) {
 		configure_refresh_sets(app);
 		app.init_resource::<LodViewerState>().add_systems(
 			Update,
 			(
-				track_lod_viewer.in_set(LodRefreshSystems::Track),
+				track_lod_nodes.in_set(LodRefreshSystems::Track),
+				sync_lod_viewer_state.in_set(LodRefreshSystems::Track),
 				sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
 			),
 		);
 	}
 }
 
-/// Region-scoped refresh for host `T` listening to [`LodSceneRefreshRegions`] on `M`.
-///
-/// `I` is a [`SystemParam`] whose item implements [`LodSceneRegionIndex<T>`].
-/// Update / fulfill / cull run only on hosts with [`LodRefresh`]; coarse markers
-/// clear after Cull, fine markers stay.
-pub fn add_lod_refresh_for<T, M, I>(app: &mut App)
+/// Broadphase: stamp [`LodRefresh`] on hosts `T` from [`LodSceneRefreshRegions`] on `M`.
+pub struct LodBroadPhasePlugin<T, M, I>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	I: SystemParam + 'static,
+{
+	_marker: PhantomData<fn() -> (T, M, I)>,
+}
+
+impl<T, M, I> Default for LodBroadPhasePlugin<T, M, I>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	I: SystemParam + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, I> Plugin for LodBroadPhasePlugin<T, M, I>
 where
 	T: Component + LodScene + 'static,
 	M: Component + 'static,
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
 {
-	configure_refresh_sets(app);
-	app.add_systems(
-		Update,
-		(
-			mark_lod_refresh_from_regions::<T, M, I>.in_set(LodRefreshSystems::Mark),
-			update_lod_host_levels::<T, With<LodRefresh>>.in_set(LodRefreshSystems::UpdateLevels),
-			fulfill_lod_level_spawn::<T, With<LodRefresh>>.in_set(LodRefreshSystems::Fulfill),
-			cull_lod_level_roots::<T, With<LodRefresh>>.in_set(LodRefreshSystems::Cull),
-			clear_coarse_lod_refresh::<T>.in_set(LodRefreshSystems::ClearCoarse),
-		),
-	);
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.add_systems(
+			Update,
+			(
+				mark_lod_refresh_from_regions::<T, M, I>.in_set(LodRefreshSystems::Mark),
+				clear_coarse_lod_refresh::<T>.in_set(LodRefreshSystems::ClearCoarse),
+			),
+		);
+	}
 }
 
-/// Unscoped refresh: update + fulfill + cull for all hosts of type `T`.
-///
-/// Prefer [`add_lod_refresh_for`] once a region producer is wired.
+/// Finephase: reload hosts `(T, LodRefresh)` from [`LodNode`]s filtered by `F`.
+pub struct LodFinePhasePlugin<T, F = With<LodViewer>>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	_marker: PhantomData<fn() -> (T, F)>,
+}
+
+impl<T, F> Default for LodFinePhasePlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, F> Plugin for LodFinePhasePlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.add_systems(
+			Update,
+			(
+				update_lod_host_levels::<T, With<LodRefresh>, F>
+					.in_set(LodRefreshSystems::UpdateLevels),
+				fulfill_lod_level_spawn::<T, With<LodRefresh>, F>
+					.in_set(LodRefreshSystems::Fulfill),
+				cull_lod_level_roots::<T, With<LodRefresh>, F>.in_set(LodRefreshSystems::Cull),
+			),
+		);
+	}
+}
+
+/// Compose Core + BroadPhase + FinePhase for one host / region / node binding.
+pub struct LodSceneRefreshPlugin<T, M, I, F = With<LodViewer>>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	I: SystemParam + 'static,
+	F: QueryFilter + 'static,
+{
+	_marker: PhantomData<fn() -> (T, M, I, F)>,
+}
+
+impl<T, M, I, F> Default for LodSceneRefreshPlugin<T, M, I, F>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	I: SystemParam + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, I, F> Plugin for LodSceneRefreshPlugin<T, M, I, F>
+where
+	T: Component + LodScene + 'static,
+	M: Component + 'static,
+	I: SystemParam + 'static,
+	F: QueryFilter + 'static,
+	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
+{
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		if !app.is_plugin_added::<LodBroadPhasePlugin<T, M, I>>() {
+			app.add_plugins(LodBroadPhasePlugin::<T, M, I>::default());
+		}
+		if !app.is_plugin_added::<LodFinePhasePlugin<T, F>>() {
+			app.add_plugins(LodFinePhasePlugin::<T, F>::default());
+		}
+	}
+}
+
+/// Unscoped finephase: all hosts `T`, driven by `F`-filtered [`LodNode`]s (no [`LodRefresh`]).
+pub struct LodFinePhaseAllPlugin<T, F = With<LodViewer>>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	_marker: PhantomData<fn() -> (T, F)>,
+}
+
+impl<T, F> Default for LodFinePhaseAllPlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, F> Plugin for LodFinePhaseAllPlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.add_systems(
+			Update,
+			(
+				update_lod_host_levels::<T, (), F>.in_set(LodRefreshSystems::UpdateLevels),
+				fulfill_lod_level_spawn::<T, (), F>.in_set(LodRefreshSystems::Fulfill),
+				cull_lod_level_roots::<T, (), F>.in_set(LodRefreshSystems::Cull),
+			),
+		);
+	}
+}
+
+/// Fulfill + cull only (probe / external level writers), driven by `F` nodes.
+pub struct LodRefreshCullPlugin<T, F = With<LodViewer>>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	_marker: PhantomData<fn() -> (T, F)>,
+}
+
+impl<T, F> Default for LodRefreshCullPlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, F> Plugin for LodRefreshCullPlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.add_systems(
+			Update,
+			(
+				fulfill_lod_level_spawn::<T, (), F>.in_set(LodRefreshSystems::Fulfill),
+				cull_lod_level_roots::<T, (), F>.in_set(LodRefreshSystems::Cull),
+			),
+		);
+	}
+}
+
+/// Register unscoped update + fulfill + cull (prefer [`LodFinePhaseAllPlugin`]).
 pub fn add_lod_refresh_all_for<T: Component + LodScene>(app: &mut App) {
-	configure_refresh_sets(app);
-	app.add_systems(
-		Update,
-		(
-			update_lod_host_levels::<T, ()>.in_set(LodRefreshSystems::UpdateLevels),
-			fulfill_lod_level_spawn::<T, ()>.in_set(LodRefreshSystems::Fulfill),
-			cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
-		),
-	);
+	if !app.is_plugin_added::<LodFinePhaseAllPlugin<T>>() {
+		app.add_plugins(LodFinePhaseAllPlugin::<T>::default());
+	}
 }
 
-/// Fulfill + cull for hosts that already update [`crate::LodSceneLevel`] elsewhere.
+/// Register fulfill + cull only (prefer [`LodRefreshCullPlugin`]).
 pub fn add_lod_refresh_cull_for<T: Component + LodScene>(app: &mut App) {
-	configure_refresh_sets(app);
-	app.add_systems(
-		Update,
-		(
-			fulfill_lod_level_spawn::<T, ()>.in_set(LodRefreshSystems::Fulfill),
-			cull_lod_level_roots::<T, ()>.in_set(LodRefreshSystems::Cull),
-		),
-	);
+	if !app.is_plugin_added::<LodRefreshCullPlugin<T>>() {
+		app.add_plugins(LodRefreshCullPlugin::<T>::default());
+	}
 }
