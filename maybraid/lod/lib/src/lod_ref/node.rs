@@ -57,13 +57,14 @@ pub struct LodNodeSnapshot {
 	pub bounds: Aabb3d,
 }
 
-/// Advance [`LodNodePose`] from each node's [`Transform`].
+/// Advance [`LodNodePose`] when the node's [`Transform`] changes.
 ///
-/// Runs every frame (not [`Changed<Transform>`]): `previous`/`current` are a
-/// one-frame sliding window. Filtering to changed transforms would leave
-/// `previous != current` after motion stops, so region strategies that key off
-/// that delta would keep firing.
-pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<LodNode>>) {
+/// `previous`/`current` are only updated on motion, so they may disagree while
+/// the node is at rest. Region production keys off [`Changed<LodNodePose>`]
+/// instead of requiring an every-frame collapse of that window.
+pub fn track_lod_nodes(
+	mut nodes: Query<(&Transform, &mut LodNodePose), (With<LodNode>, Changed<Transform>)>,
+) {
 	for (transform, mut pose) in &mut nodes {
 		pose.previous = pose.current;
 		pose.current = *transform;
@@ -75,9 +76,9 @@ pub fn point_bounds(translation: Vec3) -> Aabb3d {
 	Aabb3d::from_min_max(translation, translation)
 }
 
-/// Collect node poses/bounds for `F`-filtered [`LodNode`]s.
+/// Collect node poses/bounds from a query of drivers.
 pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
-	nodes: &Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: &Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), F>,
 ) -> Vec<LodNodeSnapshot> {
 	nodes
 		.iter()

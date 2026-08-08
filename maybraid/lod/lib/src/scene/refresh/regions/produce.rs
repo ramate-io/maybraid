@@ -87,16 +87,27 @@ fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
 	Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max))
 }
 
-/// Read `F`-filtered [`LodNode`]s, compute a region via `P`, write [`LodSceneRefreshRegion<M>`].
+/// Read `F`-filtered [`LodNode`]s whose pose changed, compute a region via `P`,
+/// write [`LodSceneRefreshRegion<M>`].
+///
+/// Only drivers with [`Changed<LodNodePose>`] (after [`crate::track_lod_nodes`])
+/// participate. Strategies may still return [`LodRefreshRegionsStatus::Unchanged`]
+/// for sub-threshold motion (e.g. same lattice cell).
 pub fn produce_lod_refresh_regions<P, F, M>(
 	producer: Res<P>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	nodes: Query<
+		(Entity, &LodNodePose, Option<&LodNodeBounds>),
+		(With<LodNode>, Changed<LodNodePose>, F),
+	>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
+	if nodes.is_empty() {
+		return;
+	}
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let ref_refs: Vec<&LodRef> = refs.iter().collect();
