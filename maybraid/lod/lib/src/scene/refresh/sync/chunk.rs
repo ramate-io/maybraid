@@ -24,8 +24,9 @@ use crate::scene::host::{
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
-use super::super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::super::viewer::{LodViewer, LodViewerState};
+use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
+
+use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 use super::cull::cull_lod_level_roots;
 
@@ -113,29 +114,27 @@ pub fn cancel_stale_chunk_fulfillments(
 /// Start a hidden pending root + queue from [`LodLevelSpawnRequest`].
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
-	viewer: Res<LodViewerState>,
+	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 	mut diag: ResMut<LodChunkFulfillDiag>,
-	hosts: Query<
-		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
-		With<LodSceneHost>,
-	>,
+	hosts: Query<(Entity, &T, &LodLevelSpawnRequest, &Children), With<LodSceneHost>>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
 ) {
-	if viewer.entity == Entity::PLACEHOLDER {
+	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
 		return;
-	}
+	};
+	let driver_bounds = viewer_bounds
+		.map(|b| b.0)
+		.unwrap_or_else(|| point_bounds(pose.current.translation));
+	let lod_ref = pose.as_lod_ref(viewer_entity, &driver_bounds);
 
 	let t_sys = Instant::now();
 	let mut jobs_started = 0u32;
 	let mut chunks_ms_total = 0.0f64;
 	let mut spawn_ms_total = 0.0f64;
 
-	for (host, scene, host_bounds, request, host_children) in &hosts {
-		let bounds = ephemeral_bounds(host_bounds);
-		let lod_ref = viewer.lod_ref(&bounds);
-
+	for (host, scene, request, host_children) in &hosts {
 		let mut roots_entity = None;
 		for child in host_children.iter() {
 			if level_roots_heads.contains(child) {

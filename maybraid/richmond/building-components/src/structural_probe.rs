@@ -145,11 +145,11 @@ pub fn distance_outside_footprints(p: Vec3, footprints: &[Aabb2d]) -> f32 {
 		.fold(f32::INFINITY, f32::min)
 }
 
-/// Fine-phase: update structural building host levels from the LOD viewer.
+/// Update structural building host levels from the [`lod::LodViewer`] pose.
 ///
 /// Viewer is world-space; footprints are host-local — convert via [`GlobalTransform`].
 pub fn update_building_structural_host_levels(
-	lod_state: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<
 		(
 			&BuildingStructuralLodProbe,
@@ -159,10 +159,10 @@ pub fn update_building_structural_host_levels(
 		With<LodSceneHost>,
 	>,
 ) {
-	if lod_state.entity == bevy::prelude::Entity::PLACEHOLDER {
+	let Ok(pose) = viewer.single() else {
 		return;
-	}
-	let viewer_world = lod_state.current.translation;
+	};
+	let viewer_world = pose.current.translation;
 	for (probe, global, mut level) in &mut hosts {
 		let next = probe.level_for_world(viewer_world, global);
 		if *level != next {

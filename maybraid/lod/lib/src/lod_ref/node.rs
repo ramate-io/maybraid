@@ -35,6 +35,18 @@ impl Default for LodNodePose {
 	}
 }
 
+impl LodNodePose {
+	/// Borrowed [`LodRef`] for this pose + driver `bounds`.
+	pub fn as_lod_ref<'a>(&'a self, entity: Entity, bounds: &'a Aabb3d) -> LodRef<'a> {
+		LodRef {
+			entity,
+			previous_transform: &self.previous,
+			current_transform: &self.current,
+			bounds,
+		}
+	}
+}
+
 /// Owned pose + bounds snapshot for building [`LodRef`]s inside a system.
 #[derive(Debug, Clone, Copy)]
 pub struct LodNodeSnapshot {
@@ -46,6 +58,11 @@ pub struct LodNodeSnapshot {
 }
 
 /// Advance [`LodNodePose`] from each node's [`Transform`].
+///
+/// Runs every frame (not [`Changed<Transform>`]): `previous`/`current` are a
+/// one-frame sliding window. Filtering to changed transforms would leave
+/// `previous != current` after motion stops, so region strategies that key off
+/// that delta would keep firing.
 pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<LodNode>>) {
 	for (transform, mut pose) in &mut nodes {
 		pose.previous = pose.current;
@@ -53,7 +70,8 @@ pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<Lod
 	}
 }
 
-fn point_bounds(translation: Vec3) -> Aabb3d {
+/// Pointlike driver AABB at `translation`.
+pub fn point_bounds(translation: Vec3) -> Aabb3d {
 	Aabb3d::from_min_max(translation, translation)
 }
 

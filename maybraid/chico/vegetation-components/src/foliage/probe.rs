@@ -113,10 +113,13 @@ impl FoliageLodProbe {
 }
 
 pub fn update_foliage_host_levels(
-	lod_state: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&FoliageLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let viewer = lod_state.current;
+	let Ok(pose) = viewer.single() else {
+		return;
+	};
+	let viewer = pose.current;
 	for (probe, mut level) in &mut hosts {
 		let next = probe.level_for(&viewer);
 		if *level != next {

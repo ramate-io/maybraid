@@ -42,6 +42,5 @@ pub use refresh::{
 	LodRefreshRegionsStatus, LodRefreshSystems, LodSceneRefreshEagerSyncPlugin,
 	LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
 	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
-	LodViewerState,
 };
 pub use region_index::LodSceneRegionIndex;

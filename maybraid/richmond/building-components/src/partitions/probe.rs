@@ -141,20 +141,20 @@ impl Placement {
 	}
 }
 
-/// Fine-phase: update partition host levels from [`lod::LodViewerState`].
+/// Update partition host levels from the [`lod::LodViewer`] pose.
 pub fn update_partition_host_levels(
-	viewer: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&PartitionLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
+	let Ok(pose) = viewer.single() else {
 		return;
-	}
+	};
 	let t0 = std::time::Instant::now();
 	let mut n = 0u32;
 	let mut changed = 0u32;
 	for (probe, mut level) in &mut hosts {
 		n += 1;
-		let desired = probe.level_for(&viewer.current);
+		let desired = probe.level_for(&pose.current);
 		if *level != desired {
 			*level = desired;
 			changed += 1;

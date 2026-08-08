@@ -49,14 +49,12 @@ pub use sync::{
 	LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending, LodRefreshCullPlugin,
 	LodSceneRefreshChunkPlugin, LodSceneRefreshEagerSyncPlugin, LodSceneRefreshSyncPlugin,
 };
-pub use viewer::{LodViewer, LodViewerState};
-
-use viewer::sync_lod_viewer_state;
+pub use viewer::LodViewer;
 
 /// System set ordering for refresh + sync.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodRefreshSystems {
-	/// Advance [`crate::lod_ref::LodNodePose`] / mirror [`LodViewerState`].
+	/// Advance [`crate::lod_ref::LodNodePose`] from [`Transform`].
 	Track,
 	/// Produce [`LodSceneRefreshRegion`] messages.
 	ProduceRegions,
@@ -100,11 +98,10 @@ pub struct LodRefreshCorePlugin;
 impl Plugin for LodRefreshCorePlugin {
 	fn build(&self, app: &mut App) {
 		configure_refresh_sets(app);
-		app.init_resource::<LodViewerState>().add_systems(
+		app.add_systems(
 			Update,
 			(
 				track_lod_nodes.in_set(LodRefreshSystems::Track),
-				sync_lod_viewer_state.in_set(LodRefreshSystems::Track),
 				sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
 			),
 		);

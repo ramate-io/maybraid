@@ -111,15 +111,15 @@ impl VegetationStructuralLodProbe {
 	}
 }
 
-/// Fine-phase: update structural vegetation host levels from the LOD viewer.
+/// Update structural vegetation host levels from the [`lod::LodViewer`] pose.
 pub fn update_vegetation_structural_host_levels(
-	lod_state: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&VegetationStructuralLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	if lod_state.entity == bevy::prelude::Entity::PLACEHOLDER {
+	let Ok(pose) = viewer.single() else {
 		return;
-	}
-	let viewer = lod_state.current;
+	};
+	let viewer = pose.current;
 	for (probe, mut level) in &mut hosts {
 		let next = probe.level_for(&viewer);
 		if *level != next {

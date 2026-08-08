@@ -20,8 +20,8 @@ pub use scene::refresh;
 pub use scene::region_index;
 
 pub use lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, track_lod_nodes, FineLod, LodNode,
-	LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, LodRequest,
+	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
+	LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, LodRequest,
 };
 pub use presentation::RegionPresenter;
 pub use scene::{
@@ -39,6 +39,6 @@ pub use scene::{
 	LodSceneLevel, LodSceneRefreshEagerSyncPlugin, LodSceneRefreshEntitiesPlugin,
 	LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
 	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRefreshSyncPlugin,
-	LodSceneRegionIndex, LodSceneStatus, LodViewer, LodViewerState, QuantizedDistance, SceneChunk,
+	LodSceneRegionIndex, LodSceneStatus, LodViewer, QuantizedDistance, SceneChunk,
 	DEFAULT_CHUNK_WEIGHT, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };

@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use lod_cascade::Aabb3d;
 
 pub use node::{
-	collect_node_snapshots, lod_refs_from_snapshots, track_lod_nodes, LodNode, LodNodeBounds,
-	LodNodePose, LodNodeSnapshot,
+	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, LodNode,
+	LodNodeBounds, LodNodePose, LodNodeSnapshot,
 };
 
 /// A component type to mark fine LOD.

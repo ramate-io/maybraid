@@ -5,7 +5,7 @@ use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
-use lod::LodViewerState;
+use lod::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef, LodViewer};
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use richmond_building_components::panels::{PanelGeometry, PanelNode, TessellatedTriangle};
 use richmond_building_components::partitions::rough_stonework::{
@@ -4237,7 +4237,7 @@ fn draw_i_apartment_primary_rect_gizmos(
 pub fn present_preview_lod(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
-	lod_state: Res<LodViewerState>,
+	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 	mut cache: ResMut<CachedPreview>,
 	roots: Query<Entity, With<PreviewRoot>>,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -4274,8 +4274,13 @@ pub fn present_preview_lod(
 	}
 	*last_subject = Some(subject_key);
 
-	let bounds = config.subject_bounds();
-	let lod_ref = lod_state.lod_ref(&bounds);
+	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
+		return;
+	};
+	let driver_bounds = viewer_bounds
+		.map(|b| b.0)
+		.unwrap_or_else(|| point_bounds(pose.current.translation));
+	let lod_ref: LodRef = pose.as_lod_ref(viewer_entity, &driver_bounds);
 
 	let transform = config.transform;
 	match &config.subject {
