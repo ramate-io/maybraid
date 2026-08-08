@@ -51,7 +51,8 @@ use vegetation_lod::VegetationLodRefreshPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
-	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_solid_material,
+	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_not_shadow_caster,
+	patch_vegetation_frond_solid_material,
 	setup_render_materials, sync_render_material_handles,
 };
 use scene_ref::SceneRefPlugin;
@@ -121,6 +122,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					(
 						patch_vegetation_foliage_leaf_material,
 						patch_vegetation_frond_solid_material,
+						patch_vegetation_frond_not_shadow_caster,
 					)
 						.after(sync_show)
 						.after(sync_render),

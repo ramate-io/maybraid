@@ -1,5 +1,6 @@
 //! Foliage IR node: style + geometry + placement.
 
+use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -136,6 +137,7 @@ impl FoliageNode {
 		let transform = pose(placement);
 		bsn! {
 			VegetationFrondAssetRoot
+			NotShadowCaster
 			Mesh3d({mesh})
 			MeshMaterial3d::<StandardMaterial>({material})
 			template_value(transform)

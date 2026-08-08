@@ -1,5 +1,6 @@
 //! Render-scene vegetation [`Material`] handles (embedded WGSL from `chico-vegetation-shaders`).
 
+use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use chico_vegetation_components::{
@@ -111,6 +112,24 @@ pub fn patch_vegetation_frond_solid_material(
 			continue;
 		}
 		commands.entity(entity).insert(MeshMaterial3d(tuft.clone()));
+	}
+}
+
+/// Drop frond meshes from the directional shadow caster set (GLB children + any kit mesh).
+///
+/// Procedural leaves also stamp [`NotShadowCaster`] at spawn; this covers spawned GLB
+/// `Mesh3d` entities under [`VegetationFrondAssetRoot`].
+pub fn patch_vegetation_frond_not_shadow_caster(
+	mut commands: Commands,
+	added: Query<Entity, (Added<Mesh3d>, Without<NotShadowCaster>)>,
+	parents: Query<&ChildOf>,
+	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
+) {
+	for entity in &added {
+		if !under_marker(entity, &parents, &frond_roots) {
+			continue;
+		}
+		commands.entity(entity).insert(NotShadowCaster);
 	}
 }
 
