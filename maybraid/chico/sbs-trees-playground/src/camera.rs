@@ -48,15 +48,21 @@ pub fn camera_controller(
 		mouse_delta += event.delta;
 	}
 
-	controller.yaw -= mouse_delta.x * controller.sensitivity;
-	controller.pitch -= mouse_delta.y * controller.sensitivity;
-	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+	let mut dirty = false;
 
-	let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
-	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
-	transform.rotation = yaw_quat * pitch_quat;
+	if mouse_delta != Vec2::ZERO {
+		controller.yaw -= mouse_delta.x * controller.sensitivity;
+		controller.pitch -= mouse_delta.y * controller.sensitivity;
+		controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+		dirty = true;
+	}
 
 	if text_focus.0 {
+		if dirty {
+			let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
+			let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
+			transform.rotation = yaw_quat * pitch_quat;
+		}
 		return;
 	}
 
@@ -83,5 +89,12 @@ pub fn camera_controller(
 	if movement.length_squared() > 0.0 {
 		movement = movement.normalize() * controller.speed * time.delta_secs();
 		transform.translation += movement;
+		dirty = true;
+	}
+
+	if dirty {
+		let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
+		let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
+		transform.rotation = yaw_quat * pitch_quat;
 	}
 }
