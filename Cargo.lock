@@ -2281,6 +2281,7 @@ name = "chico-sbs-trees-playground"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "chico-ball-components",
  "chico-grove-render-items",
@@ -2296,6 +2297,7 @@ dependencies = [
  "clap",
  "game-commands",
  "lod",
+ "lod-avian",
  "log",
  "procedural-common",
  "render-item",

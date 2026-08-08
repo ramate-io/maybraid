@@ -1,7 +1,7 @@
 //! Avian-backed region index for LOD refresh ([`LodSceneRegionIndex`](lod::LodSceneRegionIndex)).
 //!
-//! Hosts must carry an Avian collider (so they appear in [`SpatialQuery`] AABB
-//! tests) and a `T: Component + LodScene` on a [`LodSceneHost`](lod::LodSceneHost).
+//! Hosts must carry an Avian collider (on the host or a direct child) and a
+//! `T: Component + LodScene` on a [`LodSceneHost`](lod::LodSceneHost).
 
 use std::collections::HashSet;
 use std::marker::PhantomData;
@@ -18,7 +18,7 @@ use lod::{LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin, LodViewer};
 #[derive(SystemParam)]
 pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + LodScene + 'static> {
 	spatial: SpatialQuery<'w, 's>,
-	hosts: Query<'w, 's, (Entity, &'static T), With<LodSceneHost>>,
+	hosts: Query<'w, 's, (Entity, &'static T, Option<&'static Children>), With<LodSceneHost>>,
 }
 
 impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
@@ -28,7 +28,15 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
 		let hit: HashSet<Entity> =
 			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
-		self.hosts.iter().filter(move |(entity, _)| hit.contains(entity))
+		self.hosts.iter().filter(move |(entity, _, children)| {
+			if hit.contains(entity) {
+				return true;
+			}
+			children
+				.map(|c| c.iter().any(|child| hit.contains(&child)))
+				.unwrap_or(false)
+		})
+		.map(|(entity, scene, _)| (entity, scene))
 	}
 }
 

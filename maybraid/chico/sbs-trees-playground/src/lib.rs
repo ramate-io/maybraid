@@ -46,7 +46,7 @@ use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{LodRefreshCorePlugin, LodSceneHost};
+use lod::LodSceneHost;
 use vegetation_lod::VegetationLodRefreshPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -67,9 +67,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		}
 		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
 			app.add_plugins(VegetationProceduralPlugin);
-		}
-		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
-			app.add_plugins(LodRefreshCorePlugin);
 		}
 		if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
 			app.add_plugins(VegetationLodRefreshPlugin);

@@ -1,8 +1,9 @@
 //! Tree-level structural LOD probe (distance / tree-radius bands).
 
-use bevy::prelude::{Component, Query, Transform, With};
+use bevy::prelude::{Component, Query, Transform, Visibility, With};
+use bevy::scene::prelude::{bsn, Scene};
 use bevy_math::Vec3;
-use lod::gen::{LodSceneLevel, LodSceneStatus};
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
@@ -16,6 +17,9 @@ pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Viewer distance band for whole-tree structural thinning.
+///
+/// On a [`LodSceneHost`], this is the [`LodScene`] driver for message-based refresh
+/// (warm level roots are already present; [`Self::scene_with_level`] is a fallback).
 #[derive(Debug, Clone, Copy, Component)]
 pub struct VegetationStructuralLodProbe {
 	pub center: Vec3,
@@ -109,9 +113,39 @@ impl VegetationStructuralLodProbe {
 			LodSceneStatus::Changed(curr)
 		}
 	}
+
+	/// Local AABB covering the structural footprint (for colliders / indexing).
+	pub fn footprint_aabb(self) -> bevy_math::bounding::Aabb3d {
+		let r = self.tree_radius.max(1.0);
+		let half = Vec3::new(r, r.max(2.0), r);
+		bevy_math::bounding::Aabb3d::from_min_max(self.center - half, self.center + half)
+	}
 }
 
-/// Update structural vegetation host levels from the [`lod::LodViewer`] pose.
+impl LodScene for VegetationStructuralLodProbe {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for(lod_ref.current_transform)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		self.status_for_lod_ref(lod_ref)
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Warm H/M/L(/UL) roots — keep them; respawn is expensive.
+		LodSceneCulls::None
+	}
+
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		// Structural hosts are presented warm; this is only a fulfill fallback.
+		bsn! {
+			Transform::default()
+			Visibility::Inherited
+		}
+	}
+}
+
+/// Legacy every-frame structural level writer (prefer region → level messages).
 pub fn update_vegetation_structural_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&VegetationStructuralLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,

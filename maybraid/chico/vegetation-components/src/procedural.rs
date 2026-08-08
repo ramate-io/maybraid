@@ -20,15 +20,10 @@ pub struct VegetationProceduralPlugin;
 
 impl Plugin for VegetationProceduralPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Startup, init_procedural_assets).add_systems(
-			Update,
-			(
-				fulfill_plane_splay,
-				crate::update_vegetation_structural_host_levels,
-				crate::update_stick_host_levels,
-				crate::update_foliage_host_levels,
-			),
-		);
+		// Level updates are owned by lod refresh (region → level → sync). This plugin
+		// only registers procedural assets and plane-splay fulfill.
+		app.add_systems(Startup, init_procedural_assets)
+			.add_systems(Update, fulfill_plane_splay);
 	}
 }
 
