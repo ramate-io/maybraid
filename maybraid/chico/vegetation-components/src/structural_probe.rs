@@ -143,6 +143,10 @@ impl LodScene for VegetationStructuralLodProbe {
 			Visibility::Inherited
 		}
 	}
+
+	fn scene_bounds(&self) -> bevy_math::bounding::Aabb3d {
+		self.footprint_aabb()
+	}
 }
 
 /// Legacy every-frame structural level writer (prefer region → level messages).

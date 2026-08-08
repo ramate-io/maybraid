@@ -152,15 +152,17 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 		vegetation_scene_chunks(&self.0, lod_ref, level)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let level = self.scene_lod_level(lod_ref);
-		let bounds = self
-			.0
+	fn scene_bounds(&self) -> Aabb3d {
+		self.0
 			.structural_lod_probe()
 			.map(|p| p.footprint_aabb())
-			.unwrap_or_else(|| Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE));
+			.unwrap_or_else(|| vegetation_bounds(&self.0))
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let level = self.scene_lod_level(lod_ref);
 		// Pending host: chunk fulfill streams [`Self::scene_chunks_with_level`].
-		lod_host_scene_pending(level, bounds)
+		lod_host_scene_pending(level, self.scene_bounds())
 	}
 }
 

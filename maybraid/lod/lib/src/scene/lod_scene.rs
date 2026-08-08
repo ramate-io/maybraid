@@ -1,5 +1,7 @@
 //! [`LodScene`] — how a host builds and selects LOD presentation.
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
 use bevy::scene::Scene;
 
 use crate::lod_ref::LodRef;
@@ -82,5 +84,14 @@ pub trait LodScene {
 	/// Scene for the **current** LOD selection only (first present / non-host path).
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		self.scene_with_level(lod_ref, self.scene_lod_level(lod_ref))
+	}
+
+	/// Local-space structural AABB for this host (indexing / volume materialization).
+	///
+	/// Relative to the host [`bevy::prelude::Transform`]. Cached on the host as
+	/// [`crate::LodHostBounds`] by [`crate::PatchSceneBounds`]. Default is a
+	/// unit box at the local origin.
+	fn scene_bounds(&self) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)
 	}
 }

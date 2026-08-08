@@ -7,6 +7,7 @@
 //!
 //! Driver refs live in [`crate::lod_ref`] (not scene-specific).
 
+pub mod bounds_patch;
 pub mod chunk;
 pub mod chunk_fulfill;
 pub mod cull;
@@ -16,6 +17,7 @@ pub mod lod_scene;
 pub mod refresh;
 pub mod region_index;
 
+pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
 pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,

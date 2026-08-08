@@ -248,8 +248,7 @@ impl LodScene for FoliageNode {
 		}
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let level = self.scene_lod_level(lod_ref);
+	fn scene_bounds(&self) -> Aabb3d {
 		let (center, extent) = match &self.geometry {
 			FoliageGeometry::FrondCollection(collection) => collection.center_and_extent(),
 			_ => (
@@ -258,7 +257,10 @@ impl LodScene for FoliageNode {
 			),
 		};
 		let half = bevy::math::Vec3::splat(extent);
-		let bounds = Aabb3d::from_min_max(center - half, center + half);
-		lod_host_scene_pending(level, bounds)
+		Aabb3d::from_min_max(center - half, center + half)
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
 	}
 }
