@@ -4151,6 +4151,7 @@ dependencies = [
  "bevy",
  "lod-cascade",
  "lod-cascade-system",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

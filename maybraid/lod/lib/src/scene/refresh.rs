@@ -38,8 +38,8 @@ pub use mark::{
 	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
 };
 pub use regions::{
-	produce_lod_refresh_regions, LodRefreshRegions, LodRefreshRegionsOutlet,
-	LodRefreshRegionsStatus,
+	produce_lod_refresh_regions, LodRefreshRegions, LodRefreshRegionsError,
+	LodRefreshRegionsOutlet, LodRefreshRegionsStatus,
 };
 pub use update::{dominant_lod_ref, update_lod_host_levels};
 pub use viewer::{LodViewer, LodViewerState};

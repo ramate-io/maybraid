@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use bevy::ecs::query::QueryFilter;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use thiserror::Error;
 
 use crate::lod_ref::{collect_node_snapshots, LodNode, LodNodePose, LodNodeSnapshot, LodRef};
 
@@ -23,6 +24,14 @@ pub enum LodRefreshRegionsStatus {
 	Changed(LodSceneRefreshRegions),
 }
 
+/// Errors from [`LodRefreshRegions::lod_refresh_regions_for`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum LodRefreshRegionsError {
+	/// No driver [`LodRef`]s were provided.
+	#[error("lod_refresh_regions_for called with no LodRefs")]
+	Empty,
+}
+
 /// How to produce [`LodSceneRefreshRegions`] from driver [`LodRef`]s.
 ///
 /// Implementors are typically registered as a [`Resource`] and driven by
@@ -35,11 +44,14 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 	///
 	/// Default: merge unique fine/coarse AABBs from each
 	/// [`Self::lod_refresh_regions`]. All [`LodRefreshRegionsStatus::Unchanged`]
-	/// → [`LodRefreshRegionsStatus::Unchanged`]. No drivers → empty
-	/// [`LodRefreshRegionsStatus::Changed`] so consumers can clear marks.
-	fn lod_refresh_regions_for(&self, lod_refs: &[&LodRef]) -> LodRefreshRegionsStatus {
+	/// → [`LodRefreshRegionsStatus::Unchanged`]. No drivers →
+	/// [`LodRefreshRegionsError::Empty`] (no spurious [`Changed`]).
+	fn lod_refresh_regions_for(
+		&self,
+		lod_refs: &[&LodRef],
+	) -> Result<LodRefreshRegionsStatus, LodRefreshRegionsError> {
 		if lod_refs.is_empty() {
-			return LodRefreshRegionsStatus::Changed(LodSceneRefreshRegions::default());
+			return Err(LodRefreshRegionsError::Empty);
 		}
 
 		let mut any_changed = false;
@@ -61,11 +73,11 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			}
 		}
 
-		if any_changed {
+		Ok(if any_changed {
 			LodRefreshRegionsStatus::Changed(LodSceneRefreshRegions { fine, coarse })
 		} else {
 			LodRefreshRegionsStatus::Unchanged
-		}
+		})
 	}
 }
 
@@ -143,8 +155,10 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 		.collect();
 	let ref_refs: Vec<&LodRef> = refs.iter().collect();
 
-	let LodRefreshRegionsStatus::Changed(regions) = producer.lod_refresh_regions_for(&ref_refs)
+	let Ok(LodRefreshRegionsStatus::Changed(regions)) =
+		producer.lod_refresh_regions_for(&ref_refs)
 	else {
+		// `Empty` / `Unchanged`: leave the outlet alone (no spurious Changed).
 		return;
 	};
 
