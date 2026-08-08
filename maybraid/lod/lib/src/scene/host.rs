@@ -91,7 +91,8 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
-/// requests. Warm-swap reveal is owned by chunk fulfill completion.
+/// requests. Roots with [`crate::LodWantsCull`] count as absent (dying).
+/// Warm-swap reveal is owned by chunk fulfill completion.
 pub fn sync_lod_level_roots(
 	mut commands: Commands,
 	hosts: Query<
@@ -101,6 +102,7 @@ pub fn sync_lod_level_roots(
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<crate::LodLevelRootPending>>,
+	wants_cull: Query<(), With<crate::LodWantsCull>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
 	let t0 = std::time::Instant::now();
@@ -145,6 +147,9 @@ pub fn sync_lod_level_roots(
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
+			if wants_cull.contains(child) {
+				continue;
+			}
 			let is_pending = pending.contains(child);
 			if !is_pending {
 				has_ready_any = true;
@@ -169,6 +174,10 @@ pub fn sync_lod_level_roots(
 			let Ok(mut visibility) = visibilities.get_mut(child) else {
 				continue;
 			};
+			if wants_cull.contains(child) {
+				*visibility = Visibility::Hidden;
+				continue;
+			}
 			let is_pending = pending.contains(child);
 			let show = if root.0 == desired && !is_pending {
 				// Ready desired.

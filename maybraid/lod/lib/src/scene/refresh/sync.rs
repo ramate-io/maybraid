@@ -12,16 +12,19 @@ use bevy::prelude::*;
 use crate::scene::LodScene;
 
 use super::viewer::LodViewer;
-use super::{ensure_refresh_core, LodRefreshSystems};
+use super::LodRefreshSystems;
 
 pub use chunk::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
 	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
+	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
 	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending,
 	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	LodSceneRefreshSyncPlugin, LodWantsCull,
 };
-pub use cull::cull_lod_level_roots;
+pub use cull::{
+	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullEntity,
+};
 pub use eager::fulfill_lod_level_spawn;
 
 /// Optional eager fulfill + cull (not the default sync path).
@@ -51,12 +54,16 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_refresh_core(app);
+		if !app.is_plugin_added::<LodChunkBudgetPlugin>() {
+			app.add_plugins(LodChunkBudgetPlugin);
+		}
 		app.add_systems(
 			Update,
 			(
-				fulfill_lod_level_spawn::<T, (), F>.in_set(LodRefreshSystems::Fulfill),
-				cull_lod_level_roots::<T, (), F>.in_set(LodRefreshSystems::Cull),
+				fulfill_lod_level_spawn::<T, (), F>
+					.in_set(LodRefreshSystems::Fulfill)
+					.after(reset_lod_chunk_budget),
+				cull_lod_level_roots::<T, (), F>.in_set(LodChunkCullSystems::Enqueue),
 			),
 		);
 	}
@@ -89,12 +96,16 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_refresh_core(app);
+		if !app.is_plugin_added::<LodChunkBudgetPlugin>() {
+			app.add_plugins(LodChunkBudgetPlugin);
+		}
 		app.add_systems(
 			Update,
 			(
-				fulfill_lod_level_spawn::<T, (), F>.in_set(LodRefreshSystems::Fulfill),
-				cull_lod_level_roots::<T, (), F>.in_set(LodRefreshSystems::Cull),
+				fulfill_lod_level_spawn::<T, (), F>
+					.in_set(LodRefreshSystems::Fulfill)
+					.after(reset_lod_chunk_budget),
+				cull_lod_level_roots::<T, (), F>.in_set(LodChunkCullSystems::Enqueue),
 			),
 		);
 	}

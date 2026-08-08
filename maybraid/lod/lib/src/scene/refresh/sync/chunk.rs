@@ -13,7 +13,8 @@
 //!   swap.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
-//! cancel stale → begin jobs → drain budget → complete / swap.
+//! reset budget → cancel/sticky → begin jobs → drain spawn → complete / swap.
+//! Teardown uses the same budget via [`super::cull::drain_lod_cull`] in Cull.
 //!
 //! Command / archetype apply cost is measured via Bevy's `system_commands`
 //! tracing spans (requires the `trace` feature) at auto-[`ApplyDeferred`] points.
@@ -36,7 +37,9 @@ use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
-use super::cull::cull_lod_level_roots;
+use super::cull::{
+	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullEntity,
+};
 
 /// Marker: this [`LodLevelRoot`] is still awaiting warm-swap completion.
 ///
@@ -57,7 +60,21 @@ pub struct LodLevelRootStreamed;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHostStreamed;
 
+/// Entity is tearing down under [`super::cull::drain_lod_cull`].
+///
+/// Frozen fulfill plans stay until [`Self::started`] so sticky desired-level
+/// resume can continue the same job. Once teardown spends budget, the plan is
+/// dropped and sticky no longer applies.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct LodWantsCull {
+	/// True after the first teardown step (plan cleared / child despawned).
+	pub started: bool,
+}
+
 /// Remaining weighted primitives for a pending level root.
+///
+/// Frozen at [`begin_chunk_lod_fulfill`]: host mutability does not rewrite this
+/// queue mid-job.
 #[derive(Component)]
 pub struct LodChunkFulfillment {
 	pub queue: VecDeque<(u32, Box<dyn bevy::scene::Scene>)>,
@@ -72,7 +89,7 @@ impl LodChunkFulfillment {
 	}
 }
 
-/// Per-frame weight budget for draining all chunk fulfillments.
+/// Per-frame weight budget for spawn **and** cull drains.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct LodChunkFulfillBudget {
 	/// Relative weight units drained across all jobs each frame.
@@ -87,6 +104,12 @@ impl Default for LodChunkFulfillBudget {
 	}
 }
 
+/// Remaining weight for the current frame (spawn drain then cull drain).
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct LodChunkBudgetClock {
+	pub remaining: u32,
+}
+
 /// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
 #[derive(Resource, Debug, Default)]
 pub struct LodChunkFulfillDiag {
@@ -96,6 +119,14 @@ pub struct LodChunkFulfillDiag {
 
 fn ms(start: Instant) -> f64 {
 	start.elapsed().as_secs_f64() * 1000.0
+}
+
+/// Reset [`LodChunkBudgetClock`] from [`LodChunkFulfillBudget`] each frame.
+pub fn reset_lod_chunk_budget(
+	budget: Res<LodChunkFulfillBudget>,
+	mut clock: ResMut<LodChunkBudgetClock>,
+) {
+	clock.remaining = budget.weights_per_frame;
 }
 
 fn roots_bag_entity(
@@ -114,9 +145,13 @@ fn has_ready_root(
 	root_children: &Children,
 	root_keys: &Query<&LodLevelRoot>,
 	pending: &Query<(), With<LodLevelRootPending>>,
+	wants_cull: &Query<(), With<LodWantsCull>>,
 ) -> bool {
 	for child in root_children.iter() {
 		if root_keys.get(child).is_err() {
+			continue;
+		}
+		if wants_cull.contains(child) {
 			continue;
 		}
 		if !pending.contains(child) {
@@ -155,16 +190,21 @@ fn nested_hosts_streamed(
 	nested.iter().all(|host| streamed_hosts.contains(*host))
 }
 
-/// Cancel pending roots whose level is no longer desired.
+/// Enqueue cull for pending roots whose level is no longer desired; sticky-resume
+/// desired pending roots that have not started teardown (keeps frozen plan).
 pub fn cancel_stale_chunk_fulfillments(
 	mut commands: Commands,
+	mut cull_writer: MessageWriter<LodCullEntity>,
 	hosts: Query<(Entity, &LodSceneLevel, Option<&Children>), With<LodSceneHost>>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	pending_roots: Query<&LodLevelRoot, With<LodLevelRootPending>>,
+	wants_cull: Query<&LodWantsCull>,
+	wants_cull_marker: Query<(), With<LodWantsCull>>,
 ) {
 	let t0 = Instant::now();
-	let mut despawned = 0u32;
-	for (host, desired, host_children) in &hosts {
+	let mut enqueued = 0u32;
+	let mut resumed = 0u32;
+	for (_host, desired, host_children) in &hosts {
 		let Some(host_children) = host_children else {
 			continue;
 		};
@@ -185,16 +225,30 @@ pub fn cancel_stale_chunk_fulfillments(
 			let Ok(root) = pending_roots.get(child) else {
 				continue;
 			};
-			if root.0 != *desired {
-				commands.entity(child).despawn();
-				despawned += 1;
+			if root.0 == *desired {
+				if let Ok(cull) = wants_cull.get(child) {
+					if !cull.started {
+						commands.entity(child).remove::<LodWantsCull>();
+						resumed += 1;
+					}
+				}
+				continue;
 			}
+			if wants_cull_marker.contains(child) {
+				continue;
+			}
+			enqueue_lod_cull(
+				&mut commands,
+				&mut cull_writer,
+				child,
+				&wants_cull_marker,
+			);
+			enqueued += 1;
 		}
-		let _ = host;
 	}
-	if despawned > 0 {
+	if enqueued > 0 || resumed > 0 {
 		info!(
-			"[lod.chunk] cancel_stale: {despawned} despawned in {:.2}ms",
+			"[lod.chunk] cancel_stale: enqueued={enqueued} sticky_resumed={resumed} in {:.2}ms",
 			ms(t0)
 		);
 	}
@@ -204,6 +258,9 @@ pub fn cancel_stale_chunk_fulfillments(
 ///
 /// Cold start (no ready root): pending root is visible so chunks stream on-screen.
 /// Warm switch: pending root stays Hidden until [`complete_chunk_lod_fulfill`].
+///
+/// Roots with [`LodWantsCull`] count as absent (dying); a new job may begin for
+/// the same level once sticky resume is no longer possible.
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
@@ -212,6 +269,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
+	wants_cull: Query<(), With<LodWantsCull>>,
 ) {
 	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
 		return;
@@ -240,6 +298,9 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 				let Ok(root) = root_keys.get(child) else {
 					continue;
 				};
+				if wants_cull.contains(child) {
+					continue;
+				}
 				if root.0 != request.level {
 					continue;
 				}
@@ -253,7 +314,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 				commands.entity(host).remove::<LodLevelSpawnRequest>();
 				continue;
 			}
-			cold = !has_ready_root(root_children, &root_keys, &pending);
+			cold = !has_ready_root(root_children, &root_keys, &pending, &wants_cull);
 		}
 
 		let t_chunks = Instant::now();
@@ -312,18 +373,23 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	}
 }
 
-/// Drain weighted primitives under [`LodChunkFulfillBudget`].
+/// Drain weighted primitives under [`LodChunkBudgetClock`].
 ///
 /// Always spawns at least one primitive per active job when the queue is
 /// non-empty, even if that primitive's weight exceeds the remaining budget.
 /// Marks [`LodLevelRootStreamed`] when `spawned == expected`.
+/// Skips roots with [`LodWantsCull`].
 pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
+	mut clock: ResMut<LodChunkBudgetClock>,
 	budget: Res<LodChunkFulfillBudget>,
-	mut jobs: Query<(Entity, &mut LodChunkFulfillment), With<LodLevelRootPending>>,
+	mut jobs: Query<
+		(Entity, &mut LodChunkFulfillment),
+		(With<LodLevelRootPending>, Without<LodWantsCull>),
+	>,
 ) {
 	let t0 = Instant::now();
-	let mut remaining = budget.weights_per_frame;
+	let mut remaining = clock.remaining;
 	let mut spawned = 0u32;
 	let mut weight_spent = 0u32;
 	let mut active_jobs = 0u32;
@@ -363,6 +429,8 @@ pub fn drain_chunk_lod_fulfill(
 		}
 	}
 
+	clock.remaining = remaining;
+
 	if spawned > 0 || newly_streamed > 0 {
 		info!(
 			"[lod.chunk] drain: queued_spawns={spawned} weight_spent={weight_spent} \
@@ -388,7 +456,7 @@ pub fn complete_chunk_lod_fulfill(
 			Option<&ChildOf>,
 			Has<LodLevelRootStreamed>,
 		),
-		With<LodLevelRootPending>,
+		(With<LodLevelRootPending>, Without<LodWantsCull>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	children_q: Query<&Children>,
@@ -481,38 +549,86 @@ where
 	}
 }
 
+/// Substeps within [`LodRefreshSystems::Cull`] (order against these, not system types).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum LodChunkCullSystems {
+	/// Mark unwanted roots / hosts ([`cull_lod_level_roots`], cancel already ran in Fulfill).
+	Enqueue,
+	/// Apply [`LodCullEntity`] → [`LodWantsCull`].
+	Apply,
+	/// Budgeted leaf-first despawn.
+	Drain,
+}
+
+/// Shared chunk budget clock, cull messages, and one-shot drain registration.
+pub struct LodChunkBudgetPlugin;
+
+impl Plugin for LodChunkBudgetPlugin {
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.init_resource::<LodChunkFulfillBudget>()
+			.init_resource::<LodChunkBudgetClock>()
+			.init_resource::<LodChunkFulfillDiag>()
+			.add_message::<LodCullEntity>()
+			.configure_sets(
+				Update,
+				(
+					LodChunkCullSystems::Enqueue,
+					LodChunkCullSystems::Apply,
+					LodChunkCullSystems::Drain,
+				)
+					.chain()
+					.in_set(LodRefreshSystems::Cull),
+			)
+			.add_systems(
+				Update,
+				(
+					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
+					apply_lod_cull_requests.in_set(LodChunkCullSystems::Apply),
+					drain_lod_cull.in_set(LodChunkCullSystems::Drain),
+				),
+			);
+	}
+}
+
+fn ensure_chunk_budget(app: &mut App) {
+	if !app.is_plugin_added::<LodChunkBudgetPlugin>() {
+		app.add_plugins(LodChunkBudgetPlugin);
+	}
+}
+
 impl<T> Plugin for LodSceneRefreshChunkPlugin<T>
 where
 	T: Component + LodScene + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_refresh_core(app);
-		app.init_resource::<LodChunkFulfillBudget>()
-			.init_resource::<LodChunkFulfillDiag>()
-			.add_systems(
-				Update,
-				(
-					cancel_stale_chunk_fulfillments.in_set(LodRefreshSystems::Fulfill),
-					begin_chunk_lod_fulfill::<T>.in_set(LodRefreshSystems::Fulfill),
-					drain_chunk_lod_fulfill.in_set(LodRefreshSystems::Fulfill),
-					complete_chunk_lod_fulfill.in_set(LodRefreshSystems::Fulfill),
-				)
-					// Auto-ApplyDeferred between steps applies Commands (measured via
-					// `system_commands` spans when the `trace` feature is enabled).
-					.chain(),
-			);
+		ensure_chunk_budget(app);
+		// Cancel inserts [`LodWantsCull`] directly (no second `apply_lod_cull_requests`
+		// here — duplicate SystemTypeSets break `.before(apply_…)` ordering).
+		app.add_systems(
+			Update,
+			(
+				cancel_stale_chunk_fulfillments,
+				begin_chunk_lod_fulfill::<T>,
+				drain_chunk_lod_fulfill,
+				complete_chunk_lod_fulfill,
+			)
+				.chain()
+				.in_set(LodRefreshSystems::Fulfill)
+				.after(reset_lod_chunk_budget),
+		);
 	}
 }
 
 /// Probe-style levels + chunk fulfill + cull (no region message pipeline).
 pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
-	ensure_refresh_core(app);
+	ensure_chunk_budget(app);
 	app.add_systems(
 		Update,
 		(
 			crate::scene::refresh::update_lod_host_levels::<T, (), With<LodViewer>>
 				.in_set(LodRefreshSystems::UpdateLevels),
-			cull_lod_level_roots::<T, (), With<LodViewer>>.in_set(LodRefreshSystems::Cull),
+			cull_lod_level_roots::<T, (), With<LodViewer>>.in_set(LodChunkCullSystems::Enqueue),
 		),
 	);
 	add_lod_refresh_chunk_for::<T>(app);
@@ -545,13 +661,13 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		ensure_refresh_core(app);
+		ensure_chunk_budget(app);
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<T>::default());
 		}
 		app.add_systems(
 			Update,
-			cull_lod_level_roots::<T, (), F>.in_set(LodRefreshSystems::Cull),
+			cull_lod_level_roots::<T, (), F>.in_set(LodChunkCullSystems::Enqueue),
 		);
 	}
 }

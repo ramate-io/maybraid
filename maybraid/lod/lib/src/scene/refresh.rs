@@ -44,11 +44,14 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill,
-	cull_lod_level_roots, drain_chunk_lod_fulfill, fulfill_lod_level_spawn, LodChunkFulfillBudget,
-	LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending, LodLevelRootStreamed,
-	LodRefreshCullPlugin, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshEagerSyncPlugin, LodSceneRefreshSyncPlugin,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments,
+	complete_chunk_lod_fulfill, cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull,
+	enqueue_lod_cull, fulfill_lod_level_spawn, reset_lod_chunk_budget, LodChunkBudgetClock,
+	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillDiag,
+	LodChunkFulfillment,
+	LodCullEntity, LodLevelRootPending, LodLevelRootStreamed, LodRefreshCullPlugin,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshEagerSyncPlugin,
+	LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use viewer::LodViewer;
 
@@ -67,7 +70,7 @@ pub enum LodRefreshSystems {
 	SyncRoots,
 	/// Spawn missing level-root content (chunk default / eager optional).
 	Fulfill,
-	/// Despawn inactive level roots per [`LodScene::scene_lod_culls`].
+	/// Enqueue + budgeted teardown of inactive level roots.
 	Cull,
 }
 

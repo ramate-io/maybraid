@@ -20,11 +20,13 @@ pub mod region_index;
 pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
 pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
-	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
-	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending, LodLevelRootStreamed,
-	LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
+	begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill,
+	drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull, reset_lod_chunk_budget,
+	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget,
+	LodChunkFulfillment,
+	LodCullEntity, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use cull::{
 	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
