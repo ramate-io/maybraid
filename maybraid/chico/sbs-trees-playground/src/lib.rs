@@ -39,7 +39,7 @@ use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
 use chico_vegetation_components::{
-	FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin, VegetationStructuralLodProbe,
+	FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin,
 };
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
@@ -140,7 +140,6 @@ fn apply_mesh_stats(
 	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
 	foliage_probes: Query<(), With<FoliageLodProbe>>,
 	stick_probes: Query<(), With<StickLodProbe>>,
-	structural_probes: Query<(), With<VegetationStructuralLodProbe>>,
 	lod_hosts: Query<(), With<LodSceneHost>>,
 ) {
 	for entity in &requests {
@@ -172,12 +171,11 @@ fn apply_mesh_stats(
 
 		let foliage_probes = foliage_probes.iter().count();
 		let stick_probes = stick_probes.iter().count();
-		let structural_probes = structural_probes.iter().count();
 		let lod_hosts = lod_hosts.iter().count();
-		let probes_total = foliage_probes + stick_probes + structural_probes;
+		let probes_total = foliage_probes + stick_probes;
 
 		status.0 = format!(
-			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} structural={structural_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
 			unique_handles.len(),
 			visible_unique_handles.len(),
 		);

@@ -86,7 +86,7 @@ impl BuildingComponents for LesHallesLivableFullStorey {
 		self.usage.label_nodes_for_level(level)
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		// Whole-storey outer footprint in local space; fine-phase maps the viewer
 		// through the host GlobalTransform so gallery offsets stay independent.
 		let half = self.floor_plan.outer * 0.5;

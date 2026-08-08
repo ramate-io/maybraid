@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-	VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
+	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
 	STRUCTURAL_MEDIUM_FACTOR,
 };
 use clap::Args;
@@ -235,9 +235,9 @@ impl VegetationComponents for PalmCrown {
 		}
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<StructuralLod> {
 		Some(
-			VegetationStructuralLodProbe::new(self.crown_center(), self.structural_radius())
+			StructuralLod::new(self.crown_center(), self.structural_radius())
 				.with_factors(
 					STRUCTURAL_HIGH_FACTOR,
 					PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
@@ -316,7 +316,7 @@ mod tests {
 	#[test]
 	fn structural_medium_band_is_extended() -> Result<()> {
 		let built = crown(0).build();
-		let probe = built.structural_lod_probe().expect("probe");
+		let probe = built.structural_lod().expect("probe");
 		assert_eq!(probe.medium_factor, STRUCTURAL_MEDIUM_FACTOR * 3.0);
 		assert!(probe.low_factor > probe.medium_factor);
 		Ok(())

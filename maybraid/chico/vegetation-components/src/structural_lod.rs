@@ -1,11 +1,13 @@
-//! Tree-level structural LOD probe (distance / tree-radius bands).
+//! Tree-level structural LOD banding (distance / tree-radius factors).
+//!
+//! Plain data returned from [`crate::VegetationComponents::structural_lod`] — not an
+//! ECS component. Host presentation uses [`crate::ComponentsOnly`] as the [`lod::LodScene`].
 
-use bevy::prelude::{Component, Query, Transform, Visibility, With};
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::prelude::Transform;
+use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::lod_scene_host::LodSceneHost;
 
 use crate::lod_band::DistanceLodBand;
 
@@ -17,11 +19,8 @@ pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Viewer distance band for whole-tree structural thinning.
-///
-/// Stored on structural hosts so [`crate::ComponentsOnly`] can band levels / culls.
-/// Message-based refresh is registered on the parent [`crate::LodScene`] type, not this probe.
-#[derive(Debug, Clone, Copy, Component)]
-pub struct VegetationStructuralLodProbe {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StructuralLod {
 	pub center: Vec3,
 	/// Characteristic footprint / canopy radius used as the distance unit.
 	pub tree_radius: f32,
@@ -32,7 +31,7 @@ pub struct VegetationStructuralLodProbe {
 	pub preserve_ultra_low: bool,
 }
 
-impl Default for VegetationStructuralLodProbe {
+impl Default for StructuralLod {
 	fn default() -> Self {
 		Self {
 			center: Vec3::ZERO,
@@ -45,7 +44,7 @@ impl Default for VegetationStructuralLodProbe {
 	}
 }
 
-impl VegetationStructuralLodProbe {
+impl StructuralLod {
 	pub fn new(center: Vec3, tree_radius: f32) -> Self {
 		Self {
 			center,
@@ -114,54 +113,10 @@ impl VegetationStructuralLodProbe {
 		}
 	}
 
-	/// Local AABB covering the structural footprint (for colliders / indexing).
-	pub fn footprint_aabb(self) -> bevy_math::bounding::Aabb3d {
+	/// Local AABB covering the structural footprint (for indexing volumes).
+	pub fn footprint_aabb(self) -> Aabb3d {
 		let r = self.tree_radius.max(1.0);
 		let half = Vec3::new(r, r.max(2.0), r);
-		bevy_math::bounding::Aabb3d::from_min_max(self.center - half, self.center + half)
-	}
-}
-
-impl LodScene for VegetationStructuralLodProbe {
-	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		self.level_for(lod_ref.current_transform)
-	}
-
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		self.status_for_lod_ref(lod_ref)
-	}
-
-	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-		// Warm H/M/L(/UL) roots — keep them; respawn is expensive.
-		LodSceneCulls::None
-	}
-
-	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
-		// Structural hosts are presented warm; this is only a fulfill fallback.
-		bsn! {
-			Transform::default()
-			Visibility::Inherited
-		}
-	}
-
-	fn scene_bounds(&self) -> bevy_math::bounding::Aabb3d {
-		self.footprint_aabb()
-	}
-}
-
-/// Legacy every-frame structural level writer (prefer region → level messages).
-pub fn update_vegetation_structural_host_levels(
-	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
-	mut hosts: Query<(&VegetationStructuralLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
-) {
-	let Ok(pose) = viewer.single() else {
-		return;
-	};
-	let viewer = pose.current;
-	for (probe, mut level) in &mut hosts {
-		let next = probe.level_for(&viewer);
-		if *level != next {
-			*level = next;
-		}
+		Aabb3d::from_min_max(self.center - half, self.center + half)
 	}
 }

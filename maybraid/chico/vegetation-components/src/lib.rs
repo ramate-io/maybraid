@@ -11,7 +11,7 @@ pub mod placed;
 pub mod procedural;
 pub mod scene_children;
 pub mod sticks;
-pub mod structural_probe;
+pub mod structural_lod;
 
 pub use assets::AssetPath;
 pub use foliage::{
@@ -31,9 +31,8 @@ pub use sticks::{
 	STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
 pub use lod_host::{VegetationFoliageAssetRoot, VegetationFrondAssetRoot};
-pub use structural_probe::{
-	update_vegetation_structural_host_levels, VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR,
-	STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
+pub use structural_lod::{
+	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
 
 use bevy::math::bounding::Aabb3d;
@@ -55,8 +54,8 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
-	/// When set, drives structural [`LodScene`] banding for [`ComponentsOnly`].
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+	/// When set, drives structural [`LodScene`] banding / bounds for [`ComponentsOnly`].
+	fn structural_lod(&self) -> Option<StructuralLod> {
 		None
 	}
 }
@@ -70,8 +69,8 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 		(**self).foliage_nodes_for_level(level)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		(**self).structural_lod_probe()
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		(**self).structural_lod()
 	}
 }
 
@@ -108,36 +107,36 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for C
 		self.0.foliage_nodes_for_level(level)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		self.0.structural_lod_probe()
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		self.0.structural_lod()
 	}
 }
 
 impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnly<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.0
-			.structural_lod_probe()
+			.structural_lod()
 			.map(|p| p.level_for(lod_ref.current_transform))
 			.unwrap_or(LodSceneLevel::High)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		match self.0.structural_lod_probe() {
-			Some(probe) => probe.status_for_lod_ref(lod_ref),
+		match self.0.structural_lod() {
+			Some(band) => band.status_for_lod_ref(lod_ref),
 			None => LodSceneStatus::Unchanged,
 		}
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-		match self.0.structural_lod_probe() {
-			Some(probe) => {
-				let factor = lod_ref.current_transform.translation.distance(probe.center)
-					/ probe.tree_radius.max(1e-4);
+		match self.0.structural_lod() {
+			Some(band) => {
+				let factor = lod_ref.current_transform.translation.distance(band.center)
+					/ band.tree_radius.max(1e-4);
 				cull_offset_bands_from_factor(
 					factor,
-					probe.high_factor,
-					probe.medium_factor,
-					probe.low_factor,
+					band.high_factor,
+					band.medium_factor,
+					band.low_factor,
 				)
 			}
 			None => LodSceneCulls::None,
@@ -154,7 +153,7 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 
 	fn scene_bounds(&self) -> Aabb3d {
 		self.0
-			.structural_lod_probe()
+			.structural_lod()
 			.map(|p| p.footprint_aabb())
 			.unwrap_or_else(|| vegetation_bounds(&self.0))
 	}
@@ -231,7 +230,6 @@ where
 	let host = ComponentsOnly(vegetation.clone());
 	let level = host.scene_lod_level(&lod_ref);
 	let pending = lod_host_scene_pending(level, bounds);
-	let probe = vegetation.structural_lod_probe();
 	let entity = commands
 		.spawn_scene((
 			pending,
@@ -241,14 +239,7 @@ where
 			},
 		))
 		.id();
-	match probe {
-		Some(probe) => {
-			commands.entity(entity).insert((host, probe));
-		}
-		None => {
-			commands.entity(entity).insert(host);
-		}
-	}
+	commands.entity(entity).insert(host);
 	vec![entity]
 }
 

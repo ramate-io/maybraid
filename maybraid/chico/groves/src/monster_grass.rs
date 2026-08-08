@@ -243,7 +243,7 @@ mod vc {
 	use chico_sbs_trees::TuftPatch;
 	use chico_vegetation_components::{
 		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-		VegetationStructuralLodProbe,
+		StructuralLod,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
@@ -562,9 +562,9 @@ mod vc {
 			Layers::from_free(nodes)
 		}
 
-		fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+		fn structural_lod(&self) -> Option<StructuralLod> {
 			Some(
-				VegetationStructuralLodProbe::new(self.structural_center, self.footprint_radius)
+				StructuralLod::new(self.structural_center, self.footprint_radius)
 					.with_factors(
 						MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR,
 						MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
@@ -952,7 +952,7 @@ mod tests {
 				.unwrap_or(0);
 			assert_eq!(ultra_runs, 4);
 
-			let probe = grove.structural_lod_probe().expect("probe");
+			let probe = grove.structural_lod().expect("probe");
 			assert!((probe.high_factor - MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR).abs() < 1e-5);
 			assert!((probe.medium_factor - MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR).abs() < 1e-5);
 			assert!((probe.low_factor - MONSTER_GRASS_STRUCTURAL_LOW_FACTOR).abs() < 1e-5);

@@ -23,7 +23,7 @@ use chico_sbs_geometry::{
 };
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-	VegetationStructuralLodProbe,
+	StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -32,7 +32,7 @@ use procedural_common::{parse_unit_range, UnitRange};
 use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 use crate::palm_tree::world_space_frond_shape;
-use crate::torch_tree::structural_lod_probe;
+use crate::torch_tree::structural_lod_for;
 use foliage::{branch_direction, frond_shape_for_joint};
 
 /// High: denser structural joint samples before ring packing (~+15% vs prior 24×8).
@@ -325,8 +325,8 @@ impl VegetationComponents for TemperateConifer {
 		Layers::from_free(self.ring_frond_collections(bands))
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.height(),

@@ -15,7 +15,7 @@ mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, HonuBanyanChain, HonuBanyanSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -146,8 +146,8 @@ impl VegetationComponents for HonuBanyan {
 		Layers::from_free(self.foliage_for(level))
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(VegetationStructuralLodProbe::new(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(StructuralLod::new(
 			self.structural_center(),
 			self.footprint_radius(),
 		))

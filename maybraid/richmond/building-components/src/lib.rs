@@ -114,7 +114,7 @@ pub trait BuildingComponents {
 	}
 
 	/// When set, [`ComponentsOnly`] presents a warm High/Medium host driven by this probe.
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		None
 	}
 }
@@ -156,8 +156,8 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 		(**self).label_nodes_for_level(level)
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
-		(**self).structural_lod_probe()
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		(**self).structural_lod()
 	}
 }
 
@@ -237,21 +237,21 @@ impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
 		self.0.label_nodes_for_level(level)
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
-		self.0.structural_lod_probe()
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		self.0.structural_lod()
 	}
 }
 
 impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.0
-			.structural_lod_probe()
+			.structural_lod()
 			.map(|p| p.level_for(lod_ref.current_transform))
 			.unwrap_or(LodSceneLevel::High)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		match self.0.structural_lod_probe() {
+		match self.0.structural_lod() {
 			Some(probe) => probe.status_for_lod_ref(lod_ref),
 			None => LodSceneStatus::Unchanged,
 		}
@@ -268,7 +268,7 @@ impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		match self.0.structural_lod_probe() {
+		match self.0.structural_lod() {
 			Some(probe) => {
 				// Medium and Low share shell-only content for this banding policy.
 				let mid = component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium);

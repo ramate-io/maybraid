@@ -14,13 +14,13 @@ use chico_sbs_geometry::{
 	BallStickChain, StorybookTreeChain, VaseTreeSbs, DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 };
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
-	stick_nodes_high, stick_nodes_low, stick_nodes_medium, structural_lod_probe,
+	stick_nodes_high, stick_nodes_low, stick_nodes_medium, structural_lod_for,
 };
 use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
@@ -143,8 +143,8 @@ impl VegetationComponents for VaseTree {
 		Layers::from_free(nodes)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.geometry.height(),

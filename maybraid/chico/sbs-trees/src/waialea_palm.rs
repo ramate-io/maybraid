@@ -15,14 +15,14 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, WaialeaPalmChain, WaialeaPalmSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::FROND_RING_SEED_SALT;
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_probe,
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
 	trunk_stick_nodes, world_space_frond_shape,
 };
 use crate::torch_tree::structural_tree_radius;
@@ -110,12 +110,12 @@ impl VegetationComponents for WaialeaPalm {
 		}
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<StructuralLod> {
 		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
 		let crown_center = (min + max) * 0.5;
 		let crown_r = ((max - min) * 0.5).max_element();
 		let radius = structural_tree_radius(self.footprint_radius(), self.geometry.height())
 			.max(crown_r);
-		Some(palm_structural_probe(crown_center, radius))
+		Some(palm_structural_lod(crown_center, radius))
 	}
 }

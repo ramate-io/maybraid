@@ -139,10 +139,10 @@ impl BuildingComponents for IApartmentFullStorey {
 		out
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		let mut probe: Option<BuildingStructuralLodProbe> = None;
 		for block in &self.blocks {
-			let Some(block_probe) = block.structural_lod_probe() else {
+			let Some(block_probe) = block.structural_lod() else {
 				continue;
 			};
 			probe = Some(match probe {
@@ -205,7 +205,7 @@ mod tests {
 	fn structural_probe_high_within_perimeter_cutoff() {
 		let storey = storey_seed(0);
 		let probe = storey
-			.structural_lod_probe()
+			.structural_lod()
 			.expect("composed LivableApartments footprints");
 		assert!(!probe.footprints.is_empty());
 		assert_eq!(probe.high_outside_meters, STRUCTURAL_HIGH_OUTSIDE_METERS);

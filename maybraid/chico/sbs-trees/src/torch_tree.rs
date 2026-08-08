@@ -8,7 +8,7 @@
 mod canopy;
 mod stick;
 
-use chico_vegetation_components::VegetationStructuralLodProbe;
+use chico_vegetation_components::StructuralLod;
 
 pub(crate) use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
@@ -29,12 +29,12 @@ pub(crate) fn structural_tree_radius(footprint_radius: f32, height: f32) -> f32 
 	footprint_radius.max(height * 0.5).max(1e-3)
 }
 
-pub(crate) fn structural_lod_probe(
+pub(crate) fn structural_lod_for(
 	center: bevy::prelude::Vec3,
 	footprint_radius: f32,
 	height: f32,
-) -> VegetationStructuralLodProbe {
-	VegetationStructuralLodProbe::new(center, structural_tree_radius(footprint_radius, height))
+) -> StructuralLod {
+	StructuralLod::new(center, structural_tree_radius(footprint_radius, height))
 		.with_factors(
 			TORCH_STRUCTURAL_HIGH_FACTOR,
 			TORCH_STRUCTURAL_MEDIUM_FACTOR,
