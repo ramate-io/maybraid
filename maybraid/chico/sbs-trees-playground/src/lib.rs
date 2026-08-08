@@ -8,6 +8,7 @@ mod ground;
 mod render;
 mod render_materials;
 mod ui;
+mod vegetation_lod;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -44,6 +45,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{LodRefreshCorePlugin, LodSceneHost};
+use vegetation_lod::VegetationLodRefreshPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
@@ -66,6 +68,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		}
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
+		}
+		if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
+			app.add_plugins(VegetationLodRefreshPlugin);
 		}
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);

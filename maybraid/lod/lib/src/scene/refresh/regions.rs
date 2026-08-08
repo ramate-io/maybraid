@@ -35,7 +35,7 @@ pub enum LodRefreshRegionsError {
 /// How to produce [`LodSceneRefreshRegions`] from driver [`LodRef`]s.
 ///
 /// Implementors are typically registered as a [`Resource`] and driven by
-/// [`LodRefreshRegionsPlugin`].
+/// [`super::LodRefreshProductionPlugin`].
 pub trait LodRefreshRegions: Send + Sync + 'static {
 	/// Regions for a single driver. Must be cheap — no scene build.
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus;

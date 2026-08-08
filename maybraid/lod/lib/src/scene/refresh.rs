@@ -2,7 +2,7 @@
 //!
 //! Plugin layers:
 //! - [`LodRefreshCorePlugin`] — sets, node track, root sync (untyped, once)
-//! - [`LodRefreshRegionsPlugin<P, F, M>`] — produce regions from nodes `F` → outlet `M`
+//! - [`LodRefreshProductionPlugin<P, F, M>`] — produce regions from nodes `F` → outlet `M`
 //! - [`LodBroadPhasePlugin<T, M, I>`] — stamp [`LodRefresh`] from regions on `M`
 //! - [`LodFinePhasePlugin<T, F>`] — update/fulfill/cull `(T, LodRefresh)` vs nodes `F`
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — compose Core + Broad + Fine
@@ -14,6 +14,7 @@
 mod bounds;
 mod cull;
 mod fulfill;
+mod inner_outer_lattice;
 mod mark;
 mod regions;
 mod update;
@@ -37,6 +38,7 @@ pub use fulfill::fulfill_lod_level_spawn;
 pub use mark::{
 	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
 };
+pub use inner_outer_lattice::InnerOuterLattice;
 pub use regions::{
 	produce_lod_refresh_regions, LodRefreshRegions, LodRefreshRegionsError,
 	LodRefreshRegionsOutlet, LodRefreshRegionsStatus,
@@ -110,7 +112,7 @@ impl Plugin for LodRefreshCorePlugin {
 /// Produce [`LodSceneRefreshRegions`] on a stable `M` outlet from `F`-filtered [`LodNode`]s.
 ///
 /// `P` is a [`Resource`] implementing [`LodRefreshRegions`] (`init_resource` on add).
-pub struct LodRefreshRegionsPlugin<P, F, M>
+pub struct LodRefreshProductionPlugin<P, F, M>
 where
 	P: Resource + LodRefreshRegions + Default,
 	F: QueryFilter + 'static,
@@ -119,7 +121,7 @@ where
 	_marker: PhantomData<fn() -> (P, F, M)>,
 }
 
-impl<P, F, M> Default for LodRefreshRegionsPlugin<P, F, M>
+impl<P, F, M> Default for LodRefreshProductionPlugin<P, F, M>
 where
 	P: Resource + LodRefreshRegions + Default,
 	F: QueryFilter + 'static,
@@ -132,7 +134,7 @@ where
 	}
 }
 
-impl<P, F, M> Plugin for LodRefreshRegionsPlugin<P, F, M>
+impl<P, F, M> Plugin for LodRefreshProductionPlugin<P, F, M>
 where
 	P: Resource + LodRefreshRegions + Default,
 	F: QueryFilter + 'static,
