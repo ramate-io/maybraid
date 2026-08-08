@@ -7,7 +7,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use thiserror::Error;
 
-use crate::lod_ref::{collect_node_snapshots, LodNode, LodNodePose, LodNodeSnapshot, LodRef};
+use crate::lod_ref::{
+	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
+};
 
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 
@@ -85,16 +87,10 @@ fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
 	Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max))
 }
 
-/// Point AABB at a node's current translation (drivers have no host bounds).
-fn snapshot_bounds(snapshot: &LodNodeSnapshot) -> Aabb3d {
-	let p = snapshot.current.translation;
-	Aabb3d::from_min_max(p, p)
-}
-
 /// Read `F`-filtered [`LodNode`]s, compute a region via `P`, write [`LodSceneRefreshRegion<M>`].
 pub fn produce_lod_refresh_regions<P, F, M>(
 	producer: Res<P>,
-	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, F)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
 ) where
 	P: Resource + LodRefreshRegions,
@@ -102,17 +98,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 	M: Send + Sync + 'static,
 {
 	let snapshots = collect_node_snapshots(&nodes);
-	let bounds: Vec<Aabb3d> = snapshots.iter().map(snapshot_bounds).collect();
-	let refs: Vec<LodRef> = snapshots
-		.iter()
-		.zip(bounds.iter())
-		.map(|(snap, bounds)| LodRef {
-			entity: snap.entity,
-			previous_transform: &snap.previous,
-			current_transform: &snap.current,
-			bounds,
-		})
-		.collect();
+	let refs = lod_refs_from_snapshots(&snapshots);
 	let ref_refs: Vec<&LodRef> = refs.iter().collect();
 
 	let Ok(LodRefreshRegionsStatus::Changed(region)) =

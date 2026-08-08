@@ -5,14 +5,13 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
 use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose,
+	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
 use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
 use crate::scene::LodScene;
 
-use super::super::bounds::{ephemeral_bounds, LodHostBounds};
 use super::super::entities::dominant_lod_ref;
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
@@ -21,9 +20,9 @@ use super::super::entities::dominant_lod_ref;
 /// [`LodScene::scene_with_level`].
 pub fn fulfill_lod_level_spawn<T, FHost, FNode>(
 	mut commands: Commands,
-	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, FNode)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
 	hosts: Query<
-		(Entity, &T, Option<&LodHostBounds>, &LodLevelSpawnRequest, &Children),
+		(Entity, &T, &LodLevelSpawnRequest, &Children),
 		(With<LodSceneHost>, FHost),
 	>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
@@ -37,10 +36,9 @@ pub fn fulfill_lod_level_spawn<T, FHost, FNode>(
 	if snapshots.is_empty() {
 		return;
 	}
+	let refs = lod_refs_from_snapshots(&snapshots);
 
-	for (host, scene, host_bounds, request, host_children) in &hosts {
-		let bounds = ephemeral_bounds(host_bounds);
-		let refs = lod_refs_for_bounds(&snapshots, &bounds);
+	for (host, scene, request, host_children) in &hosts {
 		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
 			continue;
 		};

@@ -4,14 +4,13 @@ use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
 use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose,
+	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
-use super::super::bounds::{ephemeral_bounds, LodHostBounds};
 use super::super::entities::dominant_lod_ref;
 
 /// Despawn inactive [`LodLevelRoot`]s listed by [`LodScene::scene_lod_culls`].
@@ -20,11 +19,8 @@ use super::super::entities::dominant_lod_ref;
 /// stay warm for cheap band flips.
 pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
-	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, FNode)>,
-	hosts: Query<
-		(&T, Option<&LodHostBounds>, &LodSceneLevel, &Children),
-		(With<LodSceneHost>, FHost),
-	>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
+	hosts: Query<(&T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 ) where
@@ -36,13 +32,12 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	if snapshots.is_empty() {
 		return;
 	}
+	let refs = lod_refs_from_snapshots(&snapshots);
 
 	let t0 = std::time::Instant::now();
 	let mut despawned = 0u32;
 
-	for (scene, host_bounds, current, host_children) in &hosts {
-		let bounds = ephemeral_bounds(host_bounds);
-		let refs = lod_refs_for_bounds(&snapshots, &bounds);
+	for (scene, current, host_children) in &hosts {
 		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
 			continue;
 		};

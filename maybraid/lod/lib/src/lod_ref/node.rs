@@ -7,11 +7,17 @@ use super::LodRef;
 
 /// Marker: this entity is an LOD driver (camera, probe, cascade track, …).
 ///
-/// Pose history lives on [`LodNodePose`]. Filter with `F` in fine-phase systems
+/// Pose history lives on [`LodNodePose`]. Filter with `F` in refresh systems
 /// to select which nodes contribute [`LodRef`]s.
 #[derive(Debug, Clone, Copy, Default, Component)]
 #[require(LodNodePose)]
 pub struct LodNode;
+
+/// Driver extents for [`LodRef::bounds`].
+///
+/// If absent, the node is treated as pointlike at [`LodNodePose::current`] translation.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct LodNodeBounds(pub Aabb3d);
 
 /// Previous / current transform for a [`LodNode`] (for ephemeral [`LodRef`]s).
 #[derive(Debug, Clone, Copy, Component)]
@@ -29,12 +35,14 @@ impl Default for LodNodePose {
 	}
 }
 
-/// Owned pose snapshot for building [`LodRef`]s inside a system.
+/// Owned pose + bounds snapshot for building [`LodRef`]s inside a system.
 #[derive(Debug, Clone, Copy)]
 pub struct LodNodeSnapshot {
 	pub entity: Entity,
 	pub previous: Transform,
 	pub current: Transform,
+	/// Driver extents (from [`LodNodeBounds`], or a point at `current.translation`).
+	pub bounds: Aabb3d,
 }
 
 /// Advance [`LodNodePose`] from each node's [`Transform`].
@@ -45,32 +53,36 @@ pub fn track_lod_nodes(mut nodes: Query<(&Transform, &mut LodNodePose), With<Lod
 	}
 }
 
-/// Collect node poses for `F`-filtered [`LodNode`]s.
+fn point_bounds(translation: Vec3) -> Aabb3d {
+	Aabb3d::from_min_max(translation, translation)
+}
+
+/// Collect node poses/bounds for `F`-filtered [`LodNode`]s.
 pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
-	nodes: &Query<(Entity, &LodNodePose), (With<LodNode>, F)>,
+	nodes: &Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 ) -> Vec<LodNodeSnapshot> {
 	nodes
 		.iter()
-		.map(|(entity, pose)| LodNodeSnapshot {
+		.map(|(entity, pose, bounds)| LodNodeSnapshot {
 			entity,
 			previous: pose.previous,
 			current: pose.current,
+			bounds: bounds
+				.map(|b| b.0)
+				.unwrap_or_else(|| point_bounds(pose.current.translation)),
 		})
 		.collect()
 }
 
-/// Build host-bounds [`LodRef`]s from node snapshots (borrows snapshot transforms).
-pub fn lod_refs_for_bounds<'a>(
-	snapshots: &'a [LodNodeSnapshot],
-	bounds: &'a Aabb3d,
-) -> Vec<LodRef<'a>> {
+/// Build one [`LodRef`] per snapshot (driver pose + that driver's bounds).
+pub fn lod_refs_from_snapshots<'a>(snapshots: &'a [LodNodeSnapshot]) -> Vec<LodRef<'a>> {
 	snapshots
 		.iter()
 		.map(|snap| LodRef {
 			entity: snap.entity,
 			previous_transform: &snap.previous,
 			current_transform: &snap.current,
-			bounds,
+			bounds: &snap.bounds,
 		})
 		.collect()
 }

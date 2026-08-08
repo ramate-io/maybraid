@@ -7,14 +7,12 @@ use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::*;
 
 use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_for_bounds, LodNode, LodNodePose,
+	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
-use crate::scene::host::LodSceneHost;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
 
-use super::super::bounds::{ephemeral_bounds, LodHostBounds};
 use super::super::regions::LodSceneRefreshRegion;
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
@@ -28,11 +26,13 @@ pub struct LodSceneRefreshLevel {
 
 /// For each [`LodSceneRefreshRegion<M>`], query hosts `T` via `I` and emit levels
 /// from `F`-filtered [`LodNode`]s.
+///
+/// [`LodRef`] bounds come from each node's [`LodNodeBounds`] (or a point), not from
+/// the host.
 pub fn produce_lod_refresh_levels<I, M, T, F>(
 	mut regions: MessageReader<LodSceneRefreshRegion<M>>,
 	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, F)>,
-	host_bounds: Query<&LodHostBounds, (With<LodSceneHost>, With<T>)>,
+	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
 ) where
 	I: SystemParam + 'static,
@@ -45,13 +45,12 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	if snapshots.is_empty() {
 		return;
 	}
+	let refs = lod_refs_from_snapshots(&snapshots);
+	let ref_refs: Vec<_> = refs.iter().collect();
 
 	let index = index.into_inner();
 	for region_msg in regions.read() {
 		for (entity, scene) in index.hosts_in_region(region_msg.region) {
-			let bounds = ephemeral_bounds(host_bounds.get(entity).ok());
-			let refs = lod_refs_for_bounds(&snapshots, &bounds);
-			let ref_refs: Vec<_> = refs.iter().collect();
 			let level = scene.scene_lod_level_from_levels(&ref_refs);
 			levels.write(LodSceneRefreshLevel { entity, level });
 		}

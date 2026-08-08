@@ -20,8 +20,8 @@ pub use scene::refresh;
 pub use scene::region_index;
 
 pub use lod_ref::{
-	collect_node_snapshots, lod_refs_for_bounds, track_lod_nodes, FineLod, LodNode, LodNodePose,
-	LodNodeSnapshot, LodRef, LodRequest,
+	collect_node_snapshots, lod_refs_from_snapshots, track_lod_nodes, FineLod, LodNode,
+	LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, LodRequest,
 };
 pub use presentation::RegionPresenter;
 pub use scene::{

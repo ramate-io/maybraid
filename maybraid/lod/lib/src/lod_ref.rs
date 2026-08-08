@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use lod_cascade::Aabb3d;
 
 pub use node::{
-	collect_node_snapshots, lod_refs_for_bounds, track_lod_nodes, LodNode, LodNodePose,
-	LodNodeSnapshot,
+	collect_node_snapshots, lod_refs_from_snapshots, track_lod_nodes, LodNode, LodNodeBounds,
+	LodNodePose, LodNodeSnapshot,
 };
 
 /// A component type to mark fine LOD.
@@ -27,7 +27,7 @@ pub enum LodRequest {
 	Warm,
 }
 
-/// Borrowed view of a driver pose + host bounds for LOD trait methods.
+/// Borrowed view of a driver ([`LodNode`]) pose + that driver's extents.
 #[derive(Debug, Clone)]
 pub struct LodRef<'a> {
 	/// The entity that triggered the LOD change.
@@ -40,6 +40,8 @@ pub struct LodRef<'a> {
 	pub previous_transform: &'a Transform,
 	/// The transform of the entity that triggered the LOD change.
 	pub current_transform: &'a Transform,
-	/// The bounds of the entity that triggered the LOD change.
+	/// Extents of the driver ([`LodNodeBounds`], or a point if the node is pointlike).
+	///
+	/// Not the host / scene AABB — host geometry is separate ([`crate::LodHostBounds`]).
 	pub bounds: &'a Aabb3d,
 }
