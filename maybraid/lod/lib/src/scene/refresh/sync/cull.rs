@@ -11,8 +11,8 @@ use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
-use super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::update::dominant_lod_ref;
+use super::super::bounds::{ephemeral_bounds, LodHostBounds};
+use super::super::entities::dominant_lod_ref;
 
 /// Despawn inactive [`LodLevelRoot`]s listed by [`LodScene::scene_lod_culls`].
 ///

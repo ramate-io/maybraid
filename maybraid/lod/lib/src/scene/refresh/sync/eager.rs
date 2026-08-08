@@ -12,8 +12,8 @@ use crate::scene::host::{
 };
 use crate::scene::LodScene;
 
-use super::bounds::{ephemeral_bounds, LodHostBounds};
-use super::update::dominant_lod_ref;
+use super::super::bounds::{ephemeral_bounds, LodHostBounds};
+use super::super::entities::dominant_lod_ref;
 
 /// Spawn a missing level root under [`LodLevelRoots`], then clear the request.
 ///

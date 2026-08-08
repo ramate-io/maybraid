@@ -36,7 +36,7 @@ add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
 ```
 
-Unscoped [`LodFinePhaseAllPlugin`](../lib/src/scene/refresh.rs) remains the path for hosts that do not need amortization.
+Optional eager fulfill ([`LodSceneRefreshEagerSyncPlugin`](../lib/src/scene/refresh.rs)) remains available for hosts that do not need amortization; chunk fulfill is the default sync path.
 
 ## Future: coalescing and compaction
 

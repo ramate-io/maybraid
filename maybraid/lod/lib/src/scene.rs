@@ -1,7 +1,7 @@
 //! LOD scene runtime: hosts, levels, refresh, chunks.
 //!
 //! - [`LodScene`] — how a host type selects and builds LOD content
-//! - [`refresh`] — broadphase mark + finephase reload from [`crate::lod_ref::LodNode`]s
+//! - [`refresh`] — region / level messages → host levels → sync
 //! - [`host`] — ECS hosts / level roots / sync
 //! - [`chunk`] / [`chunk_fulfill`] — amortized level-root spawn
 //!
@@ -20,7 +20,8 @@ pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
 	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
 	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
@@ -34,11 +35,13 @@ pub use host::{
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus};
 pub use refresh::{
-	add_lod_refresh_all_for, add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref,
-	fulfill_lod_level_spawn, produce_lod_refresh_regions, update_lod_host_levels,
-	InnerOuterLattice, LodBroadPhasePlugin, LodFinePhaseAllPlugin, LodFinePhasePlugin,
-	LodHostBounds, LodRefresh, LodRefreshCorePlugin, LodRefreshCullPlugin, LodRefreshProductionPlugin,
-	LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsOutlet, LodRefreshRegionsStatus,
-	LodRefreshSystems, LodSceneRefreshPlugin, LodSceneRefreshRegions, LodViewer, LodViewerState,
+	add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref, fulfill_lod_level_spawn,
+	produce_lod_refresh_levels, produce_lod_refresh_regions, refresh_lod_host_levels,
+	update_lod_host_levels, InnerOuterLattice, LodHostBounds, LodRefreshCorePlugin,
+	LodRefreshCullPlugin, LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError,
+	LodRefreshRegionsStatus, LodRefreshSystems, LodSceneRefreshEagerSyncPlugin,
+	LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
+	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
+	LodViewerState,
 };
 pub use region_index::LodSceneRegionIndex;

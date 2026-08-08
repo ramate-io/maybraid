@@ -10,7 +10,7 @@ use crate::scene::host::LodSceneHost;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
-use super::bounds::LodHostBounds;
+use super::super::bounds::LodHostBounds;
 
 /// Pick the driver ref that votes for the highest [`LodSceneLevel`].
 pub fn dominant_lod_ref<'a, T: LodScene>(
@@ -22,7 +22,7 @@ pub fn dominant_lod_ref<'a, T: LodScene>(
 
 /// Set host [`LodSceneLevel`] from `FNode`-filtered [`LodNode`]s + [`LodHostBounds`].
 ///
-/// `FHost` scopes hosts (`()` = all; `With<LodRefresh>` for marked refresh).
+/// Probe / unscoped path (no region messages). `FHost` scopes hosts (`()` = all).
 pub fn update_lod_host_levels<T, FHost, FNode>(
 	nodes: Query<(Entity, &LodNodePose), (With<LodNode>, FNode)>,
 	mut hosts: Query<

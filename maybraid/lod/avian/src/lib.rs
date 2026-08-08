@@ -12,9 +12,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
-use lod::{
-	LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin, LodViewer,
-};
+use lod::{LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin, LodViewer};
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 #[derive(SystemParam)]
@@ -36,12 +34,12 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 
 /// [`LodSceneRefreshPlugin`] with [`AvianLodSceneRegionIndex`].
 ///
-/// `T` listens for [`lod::LodSceneRefreshRegions`] on `M`; finephase uses [`LodNode`]s
-/// filtered by `F` (default: [`LodViewer`]).
+/// `T` listens for [`lod::LodSceneRefreshRegion`] on channel `M`; levels use
+/// [`LodNode`]s filtered by `F` (default: [`LodViewer`]).
 pub struct AvianLodSceneRefreshPlugin<T, M, F = With<LodViewer>>
 where
 	T: Component + LodScene + 'static,
-	M: Component + 'static,
+	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
 	_marker: PhantomData<fn() -> (T, M, F)>,
@@ -50,7 +48,7 @@ where
 impl<T, M, F> Default for AvianLodSceneRefreshPlugin<T, M, F>
 where
 	T: Component + LodScene + 'static,
-	M: Component + 'static,
+	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
@@ -63,7 +61,7 @@ where
 impl<T, M, F> Plugin for AvianLodSceneRefreshPlugin<T, M, F>
 where
 	T: Component + LodScene + 'static,
-	M: Component + 'static,
+	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
