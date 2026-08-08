@@ -45,4 +45,8 @@ Startup argv uses the same `chico-sbs` CLI (no leading slash):
 ```bash
 cargo run -p chico-sbs-trees-playground -- render frond-crown --translate 0,2,0
 cargo run -p chico-sbs-trees-playground -- render liams-conifer --stalk-height 35
-``` 
+cargo run -p chico-sbs-trees-playground -- show monster-grass-plains
+```
+
+`/show monster-grass-plains` tiles a centered 3×3 of default 100 m Monster Grass groves
+and sets vegetation `InnerOuterLattice` `ring_radius` to 3. 

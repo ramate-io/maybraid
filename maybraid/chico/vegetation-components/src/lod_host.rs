@@ -118,6 +118,27 @@ pub fn warm_content_host_hsl<P: Component + Clone + Default + Unpin>(
 	)
 }
 
+/// Warm High / Medium / Low / UltraLow content roots (structural UltraLow tier).
+pub fn warm_content_host_hslu<P: Component + Clone + Default + Unpin>(
+	level: LodSceneLevel,
+	probe: P,
+	high: impl Scene + 'static,
+	mid: impl Scene + 'static,
+	low: impl Scene + 'static,
+	ultra: impl Scene + 'static,
+) -> impl Scene + 'static {
+	warm_content_host(
+		level,
+		probe,
+		[
+			(LodSceneLevel::High, Box::new(high) as Box<dyn Scene>),
+			(LodSceneLevel::Medium, Box::new(mid) as Box<dyn Scene>),
+			(LodSceneLevel::Low, Box::new(low) as Box<dyn Scene>),
+			(LodSceneLevel::UltraLow, Box::new(ultra) as Box<dyn Scene>),
+		],
+	)
+}
+
 /// Warm host with optional per-level mesh assets.
 pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,

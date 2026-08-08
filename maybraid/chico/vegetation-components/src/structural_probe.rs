@@ -16,7 +16,7 @@ pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Viewer distance band for whole-tree structural thinning.
-#[derive(Debug, Clone, Copy, Component, Default)]
+#[derive(Debug, Clone, Copy, Component)]
 pub struct VegetationStructuralLodProbe {
 	pub center: Vec3,
 	/// Characteristic footprint / canopy radius used as the distance unit.
@@ -24,6 +24,21 @@ pub struct VegetationStructuralLodProbe {
 	pub high_factor: f32,
 	pub medium_factor: f32,
 	pub low_factor: f32,
+	/// When true, band UltraLow maps to [`LodSceneLevel::UltraLow`].
+	pub preserve_ultra_low: bool,
+}
+
+impl Default for VegetationStructuralLodProbe {
+	fn default() -> Self {
+		Self {
+			center: Vec3::ZERO,
+			tree_radius: 1.0,
+			high_factor: STRUCTURAL_HIGH_FACTOR,
+			medium_factor: STRUCTURAL_MEDIUM_FACTOR,
+			low_factor: STRUCTURAL_LOW_FACTOR,
+			preserve_ultra_low: false,
+		}
+	}
 }
 
 impl VegetationStructuralLodProbe {
@@ -34,6 +49,7 @@ impl VegetationStructuralLodProbe {
 			high_factor: STRUCTURAL_HIGH_FACTOR,
 			medium_factor: STRUCTURAL_MEDIUM_FACTOR,
 			low_factor: STRUCTURAL_LOW_FACTOR,
+			preserve_ultra_low: false,
 		}
 	}
 
@@ -44,36 +60,54 @@ impl VegetationStructuralLodProbe {
 		self
 	}
 
+	pub fn with_preserve_ultra_low(mut self, preserve: bool) -> Self {
+		self.preserve_ultra_low = preserve;
+		self
+	}
+
 	fn factor_for(self, viewer: &Transform) -> f32 {
 		viewer.translation.distance(self.center) / self.tree_radius.max(1e-4)
 	}
 
+	fn band_to_level(self, band: DistanceLodBand) -> LodSceneLevel {
+		match band {
+			DistanceLodBand::High => LodSceneLevel::High,
+			DistanceLodBand::Medium => LodSceneLevel::Medium,
+			DistanceLodBand::Low => LodSceneLevel::Low,
+			DistanceLodBand::UltraLow if self.preserve_ultra_low => LodSceneLevel::UltraLow,
+			DistanceLodBand::UltraLow => LodSceneLevel::Low,
+		}
+	}
+
 	pub fn level_for(self, viewer: &Transform) -> LodSceneLevel {
-		DistanceLodBand::from_factors(
+		self.band_to_level(DistanceLodBand::from_factors(
 			self.factor_for(viewer),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,
-		)
-		.to_lod_scene_level()
+		))
 	}
 
 	pub fn status_for_lod_ref(self, lod_ref: &LodRef) -> LodSceneStatus {
-		let prev = DistanceLodBand::from_factors(
+		let prev = self.band_to_level(DistanceLodBand::from_factors(
 			lod_ref.previous_transform.translation.distance(self.center)
 				/ self.tree_radius.max(1e-4),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,
-		);
-		let curr = DistanceLodBand::from_factors(
+		));
+		let curr = self.band_to_level(DistanceLodBand::from_factors(
 			lod_ref.current_transform.translation.distance(self.center)
 				/ self.tree_radius.max(1e-4),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,
-		);
-		curr.status_vs(prev)
+		));
+		if prev == curr {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(curr)
+		}
 	}
 }
 

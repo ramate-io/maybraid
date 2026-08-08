@@ -9,6 +9,9 @@
 //! [`TuftPatch::merge_placed`](chico_sbs_trees::TuftPatch::merge_placed) fold via
 //! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
 //! compare a folded probe budget).
+//!
+//! Structural LOD (× grove footprint): High ≤1.5 (full clumps), Medium ≤5.0 (one upright
+//! proxy per clump), Low ≤10.0 (10×10 grid), UltraLow beyond (2×2 horizontal proxies).
 //! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
 //! color ranges.
 
@@ -239,7 +242,8 @@ mod vc {
 	use bevy::prelude::*;
 	use chico_sbs_trees::TuftPatch;
 	use chico_vegetation_components::{
-		FoliageNode, Layers, Placement, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
+		VegetationStructuralLodProbe,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
@@ -361,12 +365,26 @@ mod vc {
 		pub patch: TuftPatch,
 	}
 
+	/// Structural High band (× footprint): full authored clumps.
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 1.5;
+	/// Structural Medium band (× footprint): one upright proxy segment per clump.
+	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	/// Structural Low band (× footprint): 1/10-extent grid proxies; beyond → UltraLow.
+	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 10.0;
+
+	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
+	const PROXY_HEIGHT_LOW: f32 = 4.5;
+	const PROXY_HEIGHT_ULTRA: f32 = 2.0;
+	const LOW_GRID: u32 = 10;
+	const ULTRA_GRID: u32 = 2;
+
 	/// Built Monster Grass grove: composed [`TuftPatch`] plants for VegetationComponents.
 	#[derive(Clone, Debug)]
 	pub struct MonsterGrass {
 		pub plants: Vec<MonsterGrassPlant>,
 		pub structural_center: Vec3,
 		pub footprint_radius: f32,
+		pub extent: GroveExtent,
 	}
 
 	impl MonsterGrass {
@@ -403,8 +421,128 @@ mod vc {
 				plants,
 				structural_center: extent.min() + Vec3::new(half.x, half.y.max(1.0), half.z),
 				footprint_radius,
+				extent: *extent,
 			}
 		}
+
+		fn foliage_high(&self) -> Vec<FoliageNode> {
+			let mut nodes = Vec::new();
+			for plant in &self.plants {
+				for mut node in plant.patch.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
+					node.placement = plant.placement.compose_child(node.placement);
+					nodes.push(node);
+				}
+			}
+			nodes
+		}
+
+		/// One upright frond segment per clump, width covering the clump footprint.
+		fn foliage_medium(&self) -> Vec<FoliageNode> {
+			let mut runs = Vec::new();
+			for plant in &self.plants {
+				let patch = &plant.patch;
+				let width = clump_proxy_width(patch);
+				for anchor in &patch.anchors {
+					let world = plant
+						.placement
+						.compose_child(Placement::new(*anchor, 0.0))
+						.translation;
+					if let Some(run) = upright_proxy_run(world, width, PROXY_HEIGHT_MEDIUM) {
+						runs.push(run);
+					}
+				}
+			}
+			collection_nodes(runs)
+		}
+
+		/// One upright proxy per cell of a 10×10 subdivision of the grove extent.
+		fn foliage_low(&self) -> Vec<FoliageNode> {
+			collection_nodes(grid_proxy_runs(
+				&self.extent,
+				LOW_GRID,
+				PROXY_HEIGHT_LOW,
+				GridProxyOrient::Upright,
+			))
+		}
+
+		/// Four horizontal proxies covering a 2×2 subdivision of the grove extent.
+		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
+			collection_nodes(grid_proxy_runs(
+				&self.extent,
+				ULTRA_GRID,
+				PROXY_HEIGHT_ULTRA,
+				GridProxyOrient::Horizontal,
+			))
+		}
+	}
+
+	fn clump_proxy_width(patch: &TuftPatch) -> f32 {
+		let n = patch.clump_count.max(1) as f32;
+		if patch.patch_extent_xz > 1e-3 {
+			(patch.patch_extent_xz / n.sqrt()).max(0.5)
+		} else {
+			1.2
+		}
+	}
+
+	fn upright_proxy_run(base: Vec3, width: f32, height: f32) -> Option<FrondRun> {
+		let start = Vec3::new(base.x, 0.0, base.z);
+		Placement::frond_segment(start, Vec3::Y, height, width.max(1e-3))
+			.map(|p| FrondRun::from_placements([p]))
+	}
+
+	enum GridProxyOrient {
+		Upright,
+		Horizontal,
+	}
+
+	fn grid_proxy_runs(
+		extent: &GroveExtent,
+		divisions: u32,
+		height: f32,
+		orient: GridProxyOrient,
+	) -> Vec<FrondRun> {
+		let divisions = divisions.max(1);
+		let min = extent.min();
+		let max = extent.max();
+		let span = max - min;
+		let cell_x = (span.x / divisions as f32).max(1e-3);
+		let cell_z = (span.z / divisions as f32).max(1e-3);
+		let mut runs = Vec::with_capacity((divisions * divisions) as usize);
+		for ix in 0..divisions {
+			for iz in 0..divisions {
+				let x0 = min.x + ix as f32 * cell_x;
+				let z0 = min.z + iz as f32 * cell_z;
+				let cx = x0 + cell_x * 0.5;
+				let cz = z0 + cell_z * 0.5;
+				let run = match orient {
+					GridProxyOrient::Upright => {
+						upright_proxy_run(Vec3::new(cx, 0.0, cz), cell_x.max(cell_z), height)
+					}
+					GridProxyOrient::Horizontal => Placement::frond_segment(
+						Vec3::new(x0, height * 0.5, cz),
+						Vec3::X,
+						cell_x,
+						cell_z,
+					)
+					.map(|p| FrondRun::from_placements([p])),
+				};
+				if let Some(run) = run {
+					runs.push(run);
+				}
+			}
+		}
+		runs
+	}
+
+	fn collection_nodes(runs: Vec<FrondRun>) -> Vec<FoliageNode> {
+		if runs.is_empty() {
+			return Vec::new();
+		}
+		vec![FoliageNode::frond_collection(
+			FrondCollection::new(runs),
+			Placement::IDENTITY,
+		)]
 	}
 
 	impl VegetationComponents for MonsterGrass {
@@ -413,27 +551,36 @@ mod vc {
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-			let mut nodes = Vec::new();
-			for plant in &self.plants {
-				for mut node in plant.patch.foliage_nodes_for_level(level).flatten() {
-					node.placement = plant.placement.compose_child(node.placement);
-					nodes.push(node);
-				}
-			}
+			let nodes = match level {
+				LodSceneLevel::High => self.foliage_high(),
+				LodSceneLevel::Medium => self.foliage_medium(),
+				LodSceneLevel::Low => self.foliage_low(),
+				LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => self.foliage_ultra_low(),
+			};
 			Layers::from_free(nodes)
 		}
 
 		fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-			Some(VegetationStructuralLodProbe::new(
-				self.structural_center,
-				self.footprint_radius,
-			))
+			Some(
+				VegetationStructuralLodProbe::new(self.structural_center, self.footprint_radius)
+					.with_factors(
+						MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR,
+						MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
+						MONSTER_GRASS_STRUCTURAL_LOW_FACTOR,
+					)
+					.with_preserve_ultra_low(true),
+			)
 		}
 	}
 }
 
 #[cfg(feature = "render")]
-pub use vc::{MonsterGrass, MonsterGrassParams, MonsterGrassPlant};
+pub use vc::{
+	MonsterGrass, MonsterGrassParams, MonsterGrassPlant, MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR,
+	MONSTER_GRASS_STRUCTURAL_LOW_FACTOR, MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
+};
 
 #[cfg(test)]
 mod tests {
@@ -743,6 +890,73 @@ mod tests {
 					StandardMaterial::with_palette(StandardMaterial::default(), palette, 7);
 				assert!(allowed.contains(&material.base_color));
 			}
+			Ok(())
+		}
+
+		#[test]
+		fn structural_lod_thins_to_proxy_grids() -> Result<()> {
+			use chico_vegetation_components::VegetationComponents;
+			use crate::grove::{GroveCellVariant, DEFAULT_GROVE_EXTENT_XZ};
+			use crate::monster_grass::{
+				MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR, MONSTER_GRASS_STRUCTURAL_LOW_FACTOR,
+				MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
+			};
+			use lod::gen::LodSceneLevel;
+
+			let placements: Vec<_> = (0..8)
+				.map(|i| {
+					GroveCellVariant::new(
+						MonsterGrassCell::GiantWetBlade,
+						Vec3::new((i % 4) as f32 * 5.0, 0.0, (i / 4) as f32 * 5.0),
+						1.0,
+					)
+				})
+				.collect();
+			let grove = MonsterGrassParams::with_resolved_placements(
+				placements,
+				FlatTerrainSample::default(),
+				NoiseParams::default(),
+			)
+			.with_extent(GroveExtent::new(
+				Vec3::ZERO,
+				Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+			))
+			.build();
+
+			assert!(grove.foliage_nodes_for_level(LodSceneLevel::High).len() >= 1);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 1);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Low).len(), 1);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len(), 1);
+
+			let medium_runs = grove
+				.foliage_nodes_for_level(LodSceneLevel::Medium)
+				.flatten()
+				.first()
+				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
+				.unwrap_or(0);
+			assert_eq!(medium_runs, 8);
+
+			let low_runs = grove
+				.foliage_nodes_for_level(LodSceneLevel::Low)
+				.flatten()
+				.first()
+				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
+				.unwrap_or(0);
+			assert_eq!(low_runs, 100);
+
+			let ultra_runs = grove
+				.foliage_nodes_for_level(LodSceneLevel::UltraLow)
+				.flatten()
+				.first()
+				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
+				.unwrap_or(0);
+			assert_eq!(ultra_runs, 4);
+
+			let probe = grove.structural_lod_probe().expect("probe");
+			assert!((probe.high_factor - MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR).abs() < 1e-5);
+			assert!((probe.medium_factor - MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR).abs() < 1e-5);
+			assert!((probe.low_factor - MONSTER_GRASS_STRUCTURAL_LOW_FACTOR).abs() < 1e-5);
+			assert!(probe.preserve_ultra_low);
 			Ok(())
 		}
 	}

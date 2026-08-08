@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use chico_groves::{GroveExtent, MonsterGrassParams, DEFAULT_GROVE_EXTENT_XZ};
+use crate::monster_grass_plain::{plain_inner_outer_lattice, spawn_monster_grass_plain};
 use chico_sbs_trees::{
 	BraidOakTreeParams, DatePalmParams, HonuBanyanParams, JungleStorybookTreeParams,
 	KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams, PalmBushParams,
@@ -57,6 +58,8 @@ pub enum Show {
 	PalmBush(ShowPalmBush),
 	/// Monster Grass grove via VegetationComponents / LodScene.
 	MonsterGrass(ShowMonsterGrass),
+	/// Centered 3×3 of default Monster Grass groves; vegetation LOD ring radius 3.
+	MonsterGrassPlains,
 }
 
 #[derive(Clone, Args)]
@@ -208,6 +211,7 @@ impl ShowMonsterGrass {
 
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
+		let plains = matches!(self, Self::MonsterGrassPlains);
 		let subject = match self {
 			Self::SopesBanyan(args) => ShowSubject::SopesBanyan(args.tree),
 			Self::PenmarchTorch(args) => ShowSubject::PenmarchTorch(args.tree),
@@ -228,7 +232,11 @@ impl Show {
 			Self::WaialeaPalm(args) => ShowSubject::WaialeaPalm(args.tree),
 			Self::PalmBush(args) => ShowSubject::PalmBush(args.bush),
 			Self::MonsterGrass(args) => ShowSubject::MonsterGrass(args.configured()),
+			Self::MonsterGrassPlains => ShowSubject::MonsterGrassPlains,
 		};
+		if plains {
+			commands.insert_resource(plain_inner_outer_lattice());
+		}
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
 }
@@ -259,6 +267,7 @@ pub enum ShowSubject {
 	WaialeaPalm(WaialeaPalmParams),
 	PalmBush(PalmBushParams),
 	MonsterGrass(MonsterGrassParams),
+	MonsterGrassPlains,
 }
 
 #[derive(Component)]
@@ -344,6 +353,7 @@ pub fn sync_show(
 			g.terrain,
 			g.foliage_noise
 		)),
+		Some(ShowSubject::MonsterGrassPlains) => Some("monster-grass-plains".into()),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -380,6 +390,11 @@ pub fn sync_show(
 		ShowSubject::WaialeaPalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmBush(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::MonsterGrass(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::MonsterGrassPlains => {
+			for entity in spawn_monster_grass_plain(&mut commands, Transform::IDENTITY) {
+				commands.entity(entity).insert(ShowRoot);
+			}
+		}
 	}
 }
 
@@ -402,6 +417,17 @@ mod tests {
 		assert!((grass.terrain.elevation - 0.35).abs() < 1e-5);
 		assert!(!grass.placements().is_empty());
 		assert!(!grass.build().plants.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn show_monster_grass_plains_parses() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show monster-grass-plains")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert!(matches!(
+			cmd,
+			crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)
+		));
 		Ok(())
 	}
 }

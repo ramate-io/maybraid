@@ -5,6 +5,7 @@ pub mod checkerboard_material;
 pub mod commands;
 pub mod diagnostics;
 mod ground;
+mod monster_grass_plain;
 mod render;
 mod render_materials;
 mod ui;
@@ -13,6 +14,7 @@ mod vegetation_lod;
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use monster_grass_plain::{plain_inner_outer_lattice, PLAIN_GROVES_PER_AXIS};
 pub use render::{RenderConfig, RenderSubject};
 
 use bevy::camera::visibility::VisibilitySystems;

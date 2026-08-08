@@ -42,7 +42,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
-use crate::lod_host::warm_content_host_hsl;
+use crate::lod_host::{warm_content_host_hsl, warm_content_host_hslu};
 
 /// Domain IR exposed by a tree (or vegetation part) for structural composition.
 pub trait VegetationComponents {
@@ -54,7 +54,7 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
-	/// When set, [`ComponentsOnly`] presents a warm High/Medium/Low host driven by this probe.
+	/// When set, [`ComponentsOnly`] presents a warm structural host driven by this probe.
 	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
 		None
 	}
@@ -139,6 +139,14 @@ impl<T: VegetationComponents> LodScene for ComponentsOnly<T> {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
 		match self.0.structural_lod_probe() {
+			Some(probe) if probe.preserve_ultra_low => Box::new(warm_content_host_hslu(
+				level,
+				probe,
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::High),
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium),
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::Low),
+				component_only_scene(&self.0, lod_ref, LodSceneLevel::UltraLow),
+			)) as Box<dyn Scene>,
 			Some(probe) => Box::new(warm_content_host_hsl(
 				level,
 				probe,
