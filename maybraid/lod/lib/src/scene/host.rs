@@ -83,11 +83,14 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 ///
 /// Flow per host:
 /// 1. Find the [`LodLevelRoots`] child (or request a spawn if the host/roots bag is missing).
-/// 2. Show a **ready** root matching the desired level; keep pending roots Hidden.
-/// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`] so a system can build it.
+/// 2. Visibility:
+///    - ready desired → show it
+///    - pending desired + **cold** (no ready root yet) → show pending (stream in)
+///    - pending desired + **warm** (some ready root exists) → keep ready visible, hide pending
+/// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
-/// requests but stay Hidden until chunk fulfill completes.
+/// requests. Warm-swap reveal is owned by chunk fulfill completion.
 pub fn sync_lod_level_roots(
 	mut commands: Commands,
 	hosts: Query<
@@ -133,9 +136,28 @@ pub fn sync_lod_level_roots(
 			continue;
 		};
 
-		// Ready desired → Inherited; pending desired stays Hidden; others Hidden.
 		let child_ids: Vec<Entity> = root_children.iter().collect();
-		let mut found = false;
+		let mut found_desired = false;
+		let mut has_ready_any = false;
+		let mut has_ready_desired = false;
+		let mut has_pending_desired = false;
+		for &child in &child_ids {
+			let Ok(root) = root_keys.get(child) else {
+				continue;
+			};
+			let is_pending = pending.contains(child);
+			if !is_pending {
+				has_ready_any = true;
+				if root.0 == desired {
+					has_ready_desired = true;
+					found_desired = true;
+				}
+			} else if root.0 == desired {
+				has_pending_desired = true;
+				found_desired = true;
+			}
+		}
+
 		for child in child_ids {
 			let Ok(root) = root_keys.get(child) else {
 				continue;
@@ -143,21 +165,29 @@ pub fn sync_lod_level_roots(
 			let Ok(mut visibility) = visibilities.get_mut(child) else {
 				continue;
 			};
-			if root.0 == desired {
-				found = true;
-				if pending.contains(child) {
-					*visibility = Visibility::Hidden;
-				} else {
-					*visibility = Visibility::Inherited;
-				}
+			let is_pending = pending.contains(child);
+			let show = if root.0 == desired && !is_pending {
+				// Ready desired.
+				true
+			} else if root.0 == desired && is_pending && !has_ready_any {
+				// Cold: stream the pending desired root.
+				true
+			} else if !is_pending && has_pending_desired && !has_ready_desired {
+				// Warm hold: keep prior ready root while desired is still pending.
+				true
 			} else {
-				*visibility = Visibility::Hidden;
-			}
+				false
+			};
+			*visibility = if show {
+				Visibility::Inherited
+			} else {
+				Visibility::Hidden
+			};
 		}
 
 		// Desired root present (ready or pending) → drop stale spawn request.
 		// Missing → request fulfill so a culled band can come back.
-		if found {
+		if found_desired {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 		} else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });

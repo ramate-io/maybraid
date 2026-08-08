@@ -1,8 +1,16 @@
 //! Incremental LOD level-root fulfillment via [`crate::SceneChunk`].
 //!
 //! Default sync path (vs optional eager [`super::eager::fulfill_lod_level_spawn`]):
-//! builds a hidden pending root, drains weighted primitives under
-//! [`LodChunkFulfillBudget`], then atomically swaps visibility.
+//! builds a pending root, drains weighted primitives under
+//! [`LodChunkFulfillBudget`], marks content [`LodLevelRootStreamed`], then
+//! completes when nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].
+//!
+//! Visibility policy:
+//! - **Cold** (no ready level root yet): show the pending desired root while
+//!   chunks stream in.
+//! - **Warm** (a ready root already exists): keep that root visible until the
+//!   incoming root is streamed and nested hosts are present (Streamed), then
+//!   swap.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
 //! cancel stale → begin jobs → drain budget → complete / swap.
@@ -30,14 +38,38 @@ use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 use super::cull::cull_lod_level_roots;
 
-/// Marker: this [`LodLevelRoot`] is still receiving chunk primitives (keep Hidden).
+/// Marker: this [`LodLevelRoot`] is still awaiting warm-swap completion.
+///
+/// Content may already be [`LodLevelRootStreamed`] while nested hosts catch up.
+/// Cold-start roots may be visible while pending.
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodLevelRootPending;
+
+/// This level root's chunk plan is fully spawned (full scene representation).
+#[derive(Debug, Clone, Copy, Default, Component)]
+pub struct LodLevelRootStreamed;
+
+/// This [`LodSceneHost`] has a full scene representation available (Streamed).
+///
+/// Means at least one level root finished content streaming and nested hosts
+/// under that root were Streamed. Does **not** require the host to be at its
+/// current desired [`LodSceneLevel`].
+#[derive(Debug, Clone, Copy, Default, Component)]
+pub struct LodSceneHostStreamed;
 
 /// Remaining weighted primitives for a pending level root.
 #[derive(Component)]
 pub struct LodChunkFulfillment {
 	pub queue: VecDeque<(u32, Box<dyn bevy::scene::Scene>)>,
+	/// Primitive count at job begin (Streamed when `spawned == expected`).
+	pub expected: usize,
+	pub spawned: usize,
+}
+
+impl LodChunkFulfillment {
+	fn is_content_complete(&self) -> bool {
+		self.queue.is_empty() && self.spawned >= self.expected
+	}
 }
 
 /// Per-frame weight budget for draining all chunk fulfillments.
@@ -64,6 +96,63 @@ pub struct LodChunkFulfillDiag {
 
 fn ms(start: Instant) -> f64 {
 	start.elapsed().as_secs_f64() * 1000.0
+}
+
+fn roots_bag_entity(
+	host_children: &Children,
+	level_roots_heads: &Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+) -> Option<Entity> {
+	for child in host_children.iter() {
+		if level_roots_heads.contains(child) {
+			return Some(child);
+		}
+	}
+	None
+}
+
+fn has_ready_root(
+	root_children: &Children,
+	root_keys: &Query<&LodLevelRoot>,
+	pending: &Query<(), With<LodLevelRootPending>>,
+) -> bool {
+	for child in root_children.iter() {
+		if root_keys.get(child).is_err() {
+			continue;
+		}
+		if !pending.contains(child) {
+			return true;
+		}
+	}
+	false
+}
+
+/// Depth-first collect of nested [`LodSceneHost`] entities under `root`.
+fn collect_nested_hosts(
+	root: Entity,
+	children_q: &Query<&Children>,
+	hosts: &Query<(), With<LodSceneHost>>,
+	out: &mut Vec<Entity>,
+) {
+	let Ok(children) = children_q.get(root) else {
+		return;
+	};
+	for child in children.iter() {
+		if hosts.contains(child) {
+			out.push(child);
+		}
+		collect_nested_hosts(child, children_q, hosts, out);
+	}
+}
+
+fn nested_hosts_streamed(
+	root: Entity,
+	children_q: &Query<&Children>,
+	hosts: &Query<(), With<LodSceneHost>>,
+	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
+) -> bool {
+	let mut nested = Vec::new();
+	collect_nested_hosts(root, children_q, hosts, &mut nested);
+	nested.iter().all(|host| streamed_hosts.contains(*host))
 }
 
 /// Cancel pending roots whose level is no longer desired.
@@ -111,7 +200,10 @@ pub fn cancel_stale_chunk_fulfillments(
 	}
 }
 
-/// Start a hidden pending root + queue from [`LodLevelSpawnRequest`].
+/// Start a pending root + queue from [`LodLevelSpawnRequest`].
+///
+/// Cold start (no ready root): pending root is visible so chunks stream on-screen.
+/// Warm switch: pending root stays Hidden until [`complete_chunk_lod_fulfill`].
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
@@ -135,18 +227,12 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	let mut spawn_ms_total = 0.0f64;
 
 	for (host, scene, request, host_children) in &hosts {
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-		let Some(roots_entity) = roots_entity else {
+		let Some(roots_entity) = roots_bag_entity(host_children, &level_roots_heads) else {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		};
 
+		let mut cold = true;
 		if let Ok((_, Some(root_children))) = level_roots_heads.get(roots_entity) {
 			let mut already_ready = false;
 			let mut already_pending = false;
@@ -167,6 +253,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 				commands.entity(host).remove::<LodLevelSpawnRequest>();
 				continue;
 			}
+			cold = !has_ready_root(root_children, &root_keys, &pending);
 		}
 
 		let t_chunks = Instant::now();
@@ -174,21 +261,34 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		let queue = chunk.into_primitives();
 		let chunks_ms = ms(t_chunks);
 		chunks_ms_total += chunks_ms;
-		let queue_len = queue.len();
+		let expected = queue.len();
 		let queue_weight: u32 = queue.iter().map(|(w, _)| *w).sum();
 		diag.last_scene_chunks_ms = chunks_ms;
 		diag.last_level = Some(request.level);
 
 		let t_spawn = Instant::now();
 		let level = request.level;
+		let initial_vis = if cold {
+			Visibility::Inherited
+		} else {
+			Visibility::Hidden
+		};
 		let level_root = bsn! {
 			template_value(LodLevelRoot(level))
 			LodLevelRootPending
 			Transform::default()
-			Visibility::Hidden
+			template_value(initial_vis)
 		};
 		let root_entity = commands.spawn_scene(level_root).id();
-		commands.entity(root_entity).insert(LodChunkFulfillment { queue });
+		let fulfillment = LodChunkFulfillment {
+			queue,
+			expected,
+			spawned: 0,
+		};
+		if fulfillment.is_content_complete() {
+			commands.entity(root_entity).insert(LodLevelRootStreamed);
+		}
+		commands.entity(root_entity).insert(fulfillment);
 		commands.entity(roots_entity).add_child(root_entity);
 		commands.entity(host).remove::<LodLevelSpawnRequest>();
 		let spawn_ms = ms(t_spawn);
@@ -196,8 +296,8 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		jobs_started += 1;
 
 		info!(
-			"[lod.chunk] begin job host={host:?} level={level:?}: \
-			 scene_chunks_with_level={chunks_ms:.2}ms queue_len={queue_len} \
+			"[lod.chunk] begin job host={host:?} level={level:?} cold={cold}: \
+			 scene_chunks_with_level={chunks_ms:.2}ms expected={expected} \
 			 queue_weight={queue_weight} queue_root_cmds={spawn_ms:.2}ms"
 		);
 	}
@@ -216,6 +316,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 ///
 /// Always spawns at least one primitive per active job when the queue is
 /// non-empty, even if that primitive's weight exceeds the remaining budget.
+/// Marks [`LodLevelRootStreamed`] when `spawned == expected`.
 pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
 	budget: Res<LodChunkFulfillBudget>,
@@ -226,6 +327,7 @@ pub fn drain_chunk_lod_fulfill(
 	let mut spawned = 0u32;
 	let mut weight_spent = 0u32;
 	let mut active_jobs = 0u32;
+	let mut newly_streamed = 0u32;
 
 	for (root, mut job) in &mut jobs {
 		if job.queue.is_empty() {
@@ -252,62 +354,102 @@ pub fn drain_chunk_lod_fulfill(
 			remaining = remaining.saturating_sub(w);
 			weight_spent += w;
 			spawned += 1;
+			job.spawned += 1;
 			spawned_this_job = true;
+		}
+		if job.is_content_complete() {
+			commands.entity(root).insert(LodLevelRootStreamed);
+			newly_streamed += 1;
 		}
 	}
 
-	if spawned > 0 {
+	if spawned > 0 || newly_streamed > 0 {
 		info!(
 			"[lod.chunk] drain: queued_spawns={spawned} weight_spent={weight_spent} \
-			 budget={} active_jobs={active_jobs} queue_cmds={:.2}ms \
-			 (apply cost: watch [lod.commands] system_commands)",
+			 budget={} active_jobs={active_jobs} newly_streamed={newly_streamed} \
+			 queue_cmds={:.2}ms (apply cost: watch [lod.commands] system_commands)",
 			budget.weights_per_frame,
 			ms(t0)
 		);
 	}
 }
 
-/// When a pending root's queue is empty: clear pending and show it; hide siblings.
+/// Finish pending roots that are content-[`LodLevelRootStreamed`] and whose nested
+/// hosts are [`LodSceneHostStreamed`]: clear pending, show root, hide siblings.
+///
+/// Warm switches wait here so parents do not reveal empty shells. Cold starts
+/// may already be visible; this still clears pending once nested hosts present.
 pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	pending: Query<
-		(Entity, Option<&LodChunkFulfillment>, Option<&ChildOf>),
+		(
+			Entity,
+			Option<&LodChunkFulfillment>,
+			Option<&ChildOf>,
+			Has<LodLevelRootStreamed>,
+		),
 		With<LodLevelRootPending>,
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
+	children_q: Query<&Children>,
+	nested_hosts: Query<(), With<LodSceneHost>>,
+	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
+	root_keys: Query<&LodLevelRoot>,
+	pending_marker: Query<(), With<LodLevelRootPending>>,
+	child_of: Query<&ChildOf>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
 	let t0 = Instant::now();
 	let mut completed = 0u32;
-	for (root_entity, fulfillment, child_of) in &pending {
-		if fulfillment.is_some_and(|f| !f.queue.is_empty()) {
+	let mut waiting_nested = 0u32;
+	for (root_entity, fulfillment, root_child_of, content_streamed) in &pending {
+		if fulfillment.is_some_and(|f| !f.is_content_complete()) {
 			continue;
 		}
-		commands.entity(root_entity).remove::<LodChunkFulfillment>().remove::<LodLevelRootPending>();
+		if !content_streamed {
+			commands.entity(root_entity).insert(LodLevelRootStreamed);
+		}
+		if !nested_hosts_streamed(root_entity, &children_q, &nested_hosts, &streamed_hosts) {
+			waiting_nested += 1;
+			continue;
+		}
+
+		commands
+			.entity(root_entity)
+			.remove::<LodChunkFulfillment>()
+			.remove::<LodLevelRootPending>();
 		if let Ok(mut vis) = visibilities.get_mut(root_entity) {
 			*vis = Visibility::Inherited;
 		}
 		completed += 1;
 
-		let Some(child_of) = child_of else {
+		let Some(root_child_of) = root_child_of else {
 			continue;
 		};
-		let parent = child_of.0;
-		let Ok(siblings) = level_roots_heads.get(parent) else {
+		let roots_bag = root_child_of.0;
+		if let Ok(host_of) = child_of.get(roots_bag) {
+			commands.entity(host_of.0).insert(LodSceneHostStreamed);
+		}
+
+		let Ok(siblings) = level_roots_heads.get(roots_bag) else {
 			continue;
 		};
 		for sibling in siblings.iter() {
 			if sibling == root_entity {
 				continue;
 			}
-			if let Ok(mut vis) = visibilities.get_mut(sibling) {
-				*vis = Visibility::Hidden;
+			// Only hide other roots (ready or pending); keep structure intact.
+			if root_keys.contains(sibling) || pending_marker.contains(sibling) {
+				if let Ok(mut vis) = visibilities.get_mut(sibling) {
+					*vis = Visibility::Hidden;
+				}
 			}
 		}
 	}
-	if completed > 0 {
+	if completed > 0 || waiting_nested > 0 {
 		info!(
-			"[lod.chunk] complete: {completed} roots swapped in {:.2}ms",
+			"[lod.chunk] complete: {completed} roots swapped, {waiting_nested} waiting nested \
+			 in {:.2}ms",
 			ms(t0)
 		);
 	}

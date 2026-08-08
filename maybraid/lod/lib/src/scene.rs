@@ -22,7 +22,8 @@ pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
 	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending, LodSceneRefreshChunkPlugin,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
