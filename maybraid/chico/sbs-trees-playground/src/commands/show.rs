@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_groves::{GroveExtent, MonsterGrassParams, DEFAULT_GROVE_EXTENT_XZ};
-use crate::monster_grass_plain::{plain_inner_outer_lattice, spawn_monster_grass_plain};
+use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
 	BraidOakTreeParams, DatePalmParams, HonuBanyanParams, JungleStorybookTreeParams,
 	KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams, PalmBushParams,
@@ -211,7 +211,6 @@ impl ShowMonsterGrass {
 
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
-		let plains = matches!(self, Self::MonsterGrassPlains);
 		let subject = match self {
 			Self::SopesBanyan(args) => ShowSubject::SopesBanyan(args.tree),
 			Self::PenmarchTorch(args) => ShowSubject::PenmarchTorch(args.tree),
@@ -234,9 +233,6 @@ impl Show {
 			Self::MonsterGrass(args) => ShowSubject::MonsterGrass(args.configured()),
 			Self::MonsterGrassPlains => ShowSubject::MonsterGrassPlains,
 		};
-		if plains {
-			commands.insert_resource(plain_inner_outer_lattice());
-		}
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
 }

@@ -31,7 +31,7 @@ pub use scene::{
 	cull_non_adjacent_bands, cull_offset_bands, cull_offset_bands_from_factor, dominant_lod_ref,
 	drain_chunk_lod_fulfill, fulfill_lod_level_spawn, lod_host_scene, named_band_index,
 	named_band_progress, produce_lod_refresh_levels, produce_lod_refresh_regions,
-	refresh_lod_host_levels, sync_lod_level_roots, update_lod_host_levels, InnerOuterLattice,
+	refresh_lod_host_levels, sync_lod_level_roots, update_lod_host_levels, Bullseye,
 	LodChunkFulfillBudget, LodChunkFulfillment, LodHostBounds, LodLevelRoot, LodLevelRootPending,
 	LodLevelRoots, LodLevelSpawnRequest, LodRefreshCorePlugin, LodRefreshCullPlugin,
 	LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsStatus,
@@ -39,6 +39,6 @@ pub use scene::{
 	LodSceneLevel, LodSceneRefreshEagerSyncPlugin, LodSceneRefreshEntitiesPlugin,
 	LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
 	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRefreshSyncPlugin,
-	LodSceneRegionIndex, LodSceneStatus, LodViewer, QuantizedDistance, SceneChunk,
+	LodSceneRegionIndex, LodSceneStatus, LodViewer, QuantizedDistance, SceneChunk, Spotlight,
 	DEFAULT_CHUNK_WEIGHT, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };

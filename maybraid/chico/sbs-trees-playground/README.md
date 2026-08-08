@@ -48,5 +48,5 @@ cargo run -p chico-sbs-trees-playground -- render liams-conifer --stalk-height 3
 cargo run -p chico-sbs-trees-playground -- show monster-grass-plains
 ```
 
-`/show monster-grass-plains` tiles a centered 3×3 of default 100 m Monster Grass groves
-and sets vegetation `InnerOuterLattice` `ring_radius` to 3. 
+`/show monster-grass-plains` tiles a centered 3×3 of default 100 m Monster Grass groves.
+Vegetation refresh production uses a bullseye pass (50 m / 500 m) and a spotlight pass (20 m).

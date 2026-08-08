@@ -1,6 +1,6 @@
 //! Tree-level structural LOD probe (distance / tree-radius bands).
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, Query, Transform, With};
 use bevy_math::Vec3;
 use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;

@@ -37,10 +37,11 @@ pub use lod_scene::{LodScene, LodSceneStatus};
 pub use refresh::{
 	add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref, fulfill_lod_level_spawn,
 	produce_lod_refresh_levels, produce_lod_refresh_regions, refresh_lod_host_levels,
-	update_lod_host_levels, InnerOuterLattice, LodHostBounds, LodRefreshCorePlugin,
+	update_lod_host_levels, Bullseye, LodHostBounds, LodRefreshCorePlugin,
 	LodRefreshCullPlugin, LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError,
 	LodRefreshRegionsStatus, LodRefreshSystems, LodSceneRefreshEagerSyncPlugin,
 	LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
 	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
+	Spotlight,
 };
 pub use region_index::LodSceneRegionIndex;
