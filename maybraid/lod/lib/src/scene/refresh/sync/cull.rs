@@ -12,17 +12,20 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
 use super::super::entities::dominant_lod_ref;
+use super::chunk::LodLevelRootPending;
 
 /// Despawn inactive [`LodLevelRoot`]s listed by [`LodScene::scene_lod_culls`].
 ///
 /// Never despawns the host's current [`LodSceneLevel`]. Hidden roots not listed
-/// stay warm for cheap band flips.
+/// stay warm for cheap band flips. Skips the host entirely while any level root
+/// is still [`LodLevelRootPending`] so warm-hold roots are not GC'd mid-swap.
 pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
 	hosts: Query<(&T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
+	pending: Query<(), With<LodLevelRootPending>>,
 ) where
 	T: Component + LodScene,
 	FHost: QueryFilter + 'static,
@@ -59,6 +62,11 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
 			continue;
 		};
+
+		// Warm swap in progress: keep non-current ready roots for hold/display.
+		if root_children.iter().any(|child| pending.contains(child)) {
+			continue;
+		}
 
 		for child in root_children.iter() {
 			let Ok(root) = root_keys.get(child) else {

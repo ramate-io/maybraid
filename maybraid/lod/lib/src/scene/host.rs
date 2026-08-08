@@ -86,7 +86,8 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 /// 2. Visibility:
 ///    - ready desired → show it
 ///    - pending desired + **cold** (no ready root yet) → show pending (stream in)
-///    - pending desired + **warm** (some ready root exists) → keep ready visible, hide pending
+///    - desired not ready yet + **warm** (some other ready root exists) → keep ready
+///      visible (including the frame *before* fulfill creates the pending desired root)
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
@@ -140,7 +141,6 @@ pub fn sync_lod_level_roots(
 		let mut found_desired = false;
 		let mut has_ready_any = false;
 		let mut has_ready_desired = false;
-		let mut has_pending_desired = false;
 		for &child in &child_ids {
 			let Ok(root) = root_keys.get(child) else {
 				continue;
@@ -153,10 +153,14 @@ pub fn sync_lod_level_roots(
 					found_desired = true;
 				}
 			} else if root.0 == desired {
-				has_pending_desired = true;
 				found_desired = true;
 			}
 		}
+
+		// Warm hold while desired is pending *or* not spawned yet (SyncRoots runs
+		// before Fulfill begin — requiring an existing pending root hid the prior
+		// ready root for a frame and caused empty swaps).
+		let warm_hold = has_ready_any && !has_ready_desired;
 
 		for child in child_ids {
 			let Ok(root) = root_keys.get(child) else {
@@ -172,8 +176,8 @@ pub fn sync_lod_level_roots(
 			} else if root.0 == desired && is_pending && !has_ready_any {
 				// Cold: stream the pending desired root.
 				true
-			} else if !is_pending && has_pending_desired && !has_ready_desired {
-				// Warm hold: keep prior ready root while desired is still pending.
+			} else if !is_pending && warm_hold {
+				// Warm hold: keep prior ready root until desired is ready.
 				true
 			} else {
 				false
