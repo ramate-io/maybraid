@@ -269,10 +269,10 @@ pub enum ShowSubject {
 #[derive(Component)]
 pub struct ShowRoot;
 
-fn spawn_show_tree(
-	commands: &mut Commands,
-	tree: &impl VegetationComponents,
-) {
+fn spawn_show_tree<T>(commands: &mut Commands, tree: &T)
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
 	let bounds = vegetation_bounds(tree);
 	let entities = spawn_vegetation_components(commands, tree, Transform::IDENTITY, bounds);
 	for entity in entities {

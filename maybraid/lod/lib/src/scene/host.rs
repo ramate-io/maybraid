@@ -19,7 +19,7 @@ pub struct LodLevelRoots;
 pub struct LodLevelRoot(pub LodSceneLevel);
 
 /// Request that a missing level root be spawned for this host.
-#[derive(Debug, Clone, Copy, Component)]
+#[derive(Debug, Clone, Copy, Component, Default)]
 pub struct LodLevelSpawnRequest {
 	pub level: LodSceneLevel,
 }
@@ -50,6 +50,29 @@ pub fn lod_host_scene(
 		LodSceneHost
 		template_value(level)
 		template_value(host_bounds)
+		Transform::default()
+		Visibility::Inherited
+		Children [ {host_children} ]
+	}
+}
+
+/// Host with an empty [`LodLevelRoots`] bag and a spawn request for `level`.
+///
+/// Chunk fulfill streams [`crate::LodScene::scene_chunks_with_level`] into the
+/// pending root — used when skipping warm multi-root prewarm.
+pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scene + 'static {
+	let roots: Box<dyn Scene> = Box::new(bsn! {
+		LodLevelRoots
+		Transform::default()
+		Visibility::Inherited
+	});
+	let host_children: Vec<Box<dyn Scene>> = vec![roots];
+	let host_bounds = crate::scene::refresh::LodHostBounds(bounds);
+	bsn! {
+		LodSceneHost
+		template_value(level)
+		template_value(host_bounds)
+		template_value(LodLevelSpawnRequest { level })
 		Transform::default()
 		Visibility::Inherited
 		Children [ {host_children} ]

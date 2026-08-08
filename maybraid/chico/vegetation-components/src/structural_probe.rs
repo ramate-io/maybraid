@@ -18,8 +18,8 @@ pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Viewer distance band for whole-tree structural thinning.
 ///
-/// On a [`LodSceneHost`], this is the [`LodScene`] driver for message-based refresh
-/// (warm level roots are already present; [`Self::scene_with_level`] is a fallback).
+/// Stored on structural hosts so [`crate::ComponentsOnly`] can band levels / culls.
+/// Message-based refresh is registered on the parent [`crate::LodScene`] type, not this probe.
 #[derive(Debug, Clone, Copy, Component)]
 pub struct VegetationStructuralLodProbe {
 	pub center: Vec3,

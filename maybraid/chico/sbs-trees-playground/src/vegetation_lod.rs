@@ -2,7 +2,8 @@
 
 use avian3d::prelude::{Collider, PhysicsPlugins, RigidBody};
 use bevy::prelude::*;
-use chico_vegetation_components::VegetationStructuralLodProbe;
+use chico_groves::MonsterGrass;
+use chico_vegetation_components::{ComponentsOnly, VegetationStructuralLodProbe};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodRefreshCorePlugin, LodSceneHost,
 	LodSceneRefreshRegionPlugin, Spotlight,
@@ -24,7 +25,7 @@ struct VegetationStructuralCollider;
 /// Full modern refresh stack for structural vegetation hosts.
 ///
 /// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages  
-/// 2. Avian region index → level messages for [`VegetationStructuralLodProbe`]  
+/// 2. Avian region index → level messages for [`ComponentsOnly<MonsterGrass>`]  
 /// 3. Entity refresh (max fold) + chunk sync / cull
 pub struct VegetationLodRefreshPlugin;
 
@@ -47,12 +48,12 @@ impl Plugin for VegetationLodRefreshPlugin {
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),
 			AvianLodSceneRefreshPlugin::<
-				VegetationStructuralLodProbe,
+				ComponentsOnly<MonsterGrass>,
 				VegetationBullseye,
 				With<Camera>,
 			>::default(),
 			AvianLodSceneRefreshPlugin::<
-				VegetationStructuralLodProbe,
+				ComponentsOnly<MonsterGrass>,
 				VegetationSpotlight,
 				With<Camera>,
 			>::default(),
