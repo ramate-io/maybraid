@@ -2,6 +2,7 @@
 //!
 //! Plugin layers:
 //! - [`LodRefreshCorePlugin`] — sets, node track, root sync (untyped, once)
+//! - [`LodRefreshRegionsPlugin<P, F, M>`] — produce regions from nodes `F` → outlet `M`
 //! - [`LodBroadPhasePlugin<T, M, I>`] — stamp [`LodRefresh`] from regions on `M`
 //! - [`LodFinePhasePlugin<T, F>`] — update/fulfill/cull `(T, LodRefresh)` vs nodes `F`
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — compose Core + Broad + Fine
@@ -14,6 +15,7 @@ mod bounds;
 mod cull;
 mod fulfill;
 mod mark;
+mod regions;
 mod update;
 mod viewer;
 
@@ -35,6 +37,10 @@ pub use fulfill::fulfill_lod_level_spawn;
 pub use mark::{
 	clear_coarse_lod_refresh, mark_lod_refresh_from_regions, LodRefresh, LodSceneRefreshRegions,
 };
+pub use regions::{
+	produce_lod_refresh_regions, LodRefreshRegions, LodRefreshRegionsOutlet,
+	LodRefreshRegionsStatus,
+};
 pub use update::{dominant_lod_ref, update_lod_host_levels};
 pub use viewer::{LodViewer, LodViewerState};
 
@@ -45,6 +51,8 @@ use viewer::sync_lod_viewer_state;
 pub enum LodRefreshSystems {
 	/// Advance [`LodNodePose`] / mirror [`LodViewerState`].
 	Track,
+	/// Produce [`LodSceneRefreshRegions`] on marker-scoped outlets.
+	ProduceRegions,
 	/// Stamp [`LodRefresh`] from marker-scoped [`LodSceneRefreshRegions`].
 	Mark,
 	/// Write desired [`crate::LodSceneLevel`] on hosts.
@@ -64,6 +72,7 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 		Update,
 		(
 			LodRefreshSystems::Track,
+			LodRefreshSystems::ProduceRegions,
 			LodRefreshSystems::Mark,
 			LodRefreshSystems::UpdateLevels,
 			LodRefreshSystems::SyncRoots,
@@ -94,6 +103,46 @@ impl Plugin for LodRefreshCorePlugin {
 				sync_lod_viewer_state.in_set(LodRefreshSystems::Track),
 				sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
 			),
+		);
+	}
+}
+
+/// Produce [`LodSceneRefreshRegions`] on a stable `M` outlet from `F`-filtered [`LodNode`]s.
+///
+/// `P` is a [`Resource`] implementing [`LodRefreshRegions`] (`init_resource` on add).
+pub struct LodRefreshRegionsPlugin<P, F, M>
+where
+	P: Resource + LodRefreshRegions + Default,
+	F: QueryFilter + 'static,
+	M: Component + Default + 'static,
+{
+	_marker: PhantomData<fn() -> (P, F, M)>,
+}
+
+impl<P, F, M> Default for LodRefreshRegionsPlugin<P, F, M>
+where
+	P: Resource + LodRefreshRegions + Default,
+	F: QueryFilter + 'static,
+	M: Component + Default + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<P, F, M> Plugin for LodRefreshRegionsPlugin<P, F, M>
+where
+	P: Resource + LodRefreshRegions + Default,
+	F: QueryFilter + 'static,
+	M: Component + Default + 'static,
+{
+	fn build(&self, app: &mut App) {
+		ensure_refresh_core(app);
+		app.init_resource::<P>().add_systems(
+			Update,
+			produce_lod_refresh_regions::<P, F, M>.in_set(LodRefreshSystems::ProduceRegions),
 		);
 	}
 }

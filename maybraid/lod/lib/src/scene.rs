@@ -34,10 +34,11 @@ pub use host::{
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus};
 pub use refresh::{
-	add_lod_refresh_all_for, add_lod_refresh_cull_for, cull_lod_level_roots,
-	dominant_lod_ref, fulfill_lod_level_spawn, update_lod_host_levels, LodBroadPhasePlugin,
-	LodFinePhaseAllPlugin, LodFinePhasePlugin, LodHostBounds, LodRefresh, LodRefreshCorePlugin,
-	LodRefreshCullPlugin, LodRefreshSystems, LodSceneRefreshPlugin, LodSceneRefreshRegions,
-	LodViewer, LodViewerState,
+	add_lod_refresh_all_for, add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref,
+	fulfill_lod_level_spawn, produce_lod_refresh_regions, update_lod_host_levels,
+	LodBroadPhasePlugin, LodFinePhaseAllPlugin, LodFinePhasePlugin, LodHostBounds, LodRefresh,
+	LodRefreshCorePlugin, LodRefreshCullPlugin, LodRefreshRegions, LodRefreshRegionsOutlet,
+	LodRefreshRegionsPlugin, LodRefreshRegionsStatus, LodRefreshSystems, LodSceneRefreshPlugin,
+	LodSceneRefreshRegions, LodViewer, LodViewerState,
 };
 pub use region_index::LodSceneRegionIndex;
