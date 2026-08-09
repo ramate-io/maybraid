@@ -47,7 +47,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 			inner: 50.0,
 			outer: 500.0,
 		})
-		.insert_resource(Spotlight { extent: 20.0 })
+		.insert_resource(Spotlight { extent: 50.0 })
 		.insert_resource(OpenLattice {
 			exclude_extent: 1000.0,
 			outer_extent: 5000.0,
@@ -55,8 +55,8 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
-			spawn_weights_per_frame: 512,
-			cull_weights_per_frame: 64,
+			spawn_weights_per_frame: 256,
+			cull_weights_per_frame: 128,
 			begins_per_frame: 48,
 		})
 		.add_plugins((
