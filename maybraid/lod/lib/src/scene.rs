@@ -29,9 +29,9 @@ pub use chunk_fulfill::{
 	LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use cull::{
-	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
-	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
-	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
+	closest_available_lod_level, cull_bands_with_adjacent_depth, cull_named_from_factor,
+	cull_non_adjacent_bands, cull_offset_bands, cull_offset_bands_from_factor, named_band_index,
+	named_band_progress, LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
 pub use host::{
 	lod_host_scene, lod_host_scene_pending, nested_host_parent_allows_refresh,

@@ -27,8 +27,8 @@ pub use presentation::RegionPresenter;
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
 	apply_lod_cull_requests, begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments,
-	complete_chunk_lod_fulfill, cull_bands_with_adjacent_depth, cull_lod_level_roots,
-	cull_named_from_factor, cull_non_adjacent_bands, cull_offset_bands,
+	closest_available_lod_level, complete_chunk_lod_fulfill, cull_bands_with_adjacent_depth,
+	cull_lod_level_roots, cull_named_from_factor, cull_non_adjacent_bands, cull_offset_bands,
 	cull_offset_bands_from_factor, dominant_lod_ref, drain_chunk_lod_fulfill, drain_lod_cull,
 	enqueue_lod_cull, fulfill_lod_level_spawn, lod_host_scene, lod_host_scene_pending,
 	named_band_index, named_band_progress, nested_host_parent_allows_refresh,

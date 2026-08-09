@@ -4,6 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
+use crate::scene::cull::closest_available_lod_level;
 use crate::scene::level::LodSceneLevel;
 
 /// Marker: this entity owns LOD level roots and a current [`LodSceneLevel`].
@@ -114,8 +115,9 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 /// 2. Visibility:
 ///    - ready desired → show it
 ///    - pending desired + **cold** (no ready root yet) → show pending (stream in)
-///    - desired not ready yet + **warm** (some other ready root exists) → keep ready
-///      visible (including the frame *before* fulfill creates the pending desired root)
+///    - desired not ready yet + **warm** (some other ready root exists) → show the
+///      single ready root [`closest_available_lod_level`] to desired (not every warm
+///      root), including the frame *before* fulfill creates the pending desired root
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
@@ -169,8 +171,8 @@ pub fn sync_lod_level_roots(
 
 		let child_ids: Vec<Entity> = root_children.iter().collect();
 		let mut found_desired = false;
-		let mut has_ready_any = false;
 		let mut has_ready_desired = false;
+		let mut ready_levels: Vec<LodSceneLevel> = Vec::new();
 		for &child in &child_ids {
 			let Ok(root) = root_keys.get(child) else {
 				continue;
@@ -180,7 +182,7 @@ pub fn sync_lod_level_roots(
 			}
 			let is_pending = pending.contains(child);
 			if !is_pending {
-				has_ready_any = true;
+				ready_levels.push(root.0);
 				if root.0 == desired {
 					has_ready_desired = true;
 					found_desired = true;
@@ -193,7 +195,12 @@ pub fn sync_lod_level_roots(
 		// Warm hold while desired is pending *or* not spawned yet (SyncRoots runs
 		// before Fulfill begin — requiring an existing pending root hid the prior
 		// ready root for a frame and caused empty swaps).
-		let warm_hold = has_ready_any && !has_ready_desired;
+		let warm_hold_level = if !has_ready_desired {
+			closest_available_lod_level(desired, ready_levels.iter().copied())
+		} else {
+			None
+		};
+		let has_ready_any = !ready_levels.is_empty();
 
 		for child in child_ids {
 			let Ok(root) = root_keys.get(child) else {
@@ -213,8 +220,8 @@ pub fn sync_lod_level_roots(
 			} else if root.0 == desired && is_pending && !has_ready_any {
 				// Cold: stream the pending desired root.
 				true
-			} else if !is_pending && warm_hold {
-				// Warm hold: keep prior ready root until desired is ready.
+			} else if !is_pending && warm_hold_level == Some(root.0) {
+				// Warm hold: single closest ready band until desired is ready.
 				true
 			} else {
 				false

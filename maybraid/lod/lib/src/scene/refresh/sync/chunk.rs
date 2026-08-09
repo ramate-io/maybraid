@@ -9,9 +9,9 @@
 //! Visibility policy:
 //! - **Cold** (no ready level root yet): show the pending desired root while
 //!   chunks stream in.
-//! - **Warm** (a ready root already exists): keep that root visible until the
-//!   incoming root is streamed and nested hosts are present (Streamed), then
-//!   swap.
+//! - **Warm** (a ready root already exists): show the
+//!   [`crate::closest_available_lod_level`] ready root until the incoming root
+//!   is streamed and nested hosts are present (Streamed), then swap.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
 //! reset budget → cancel/sticky → begin jobs (per `T`) → **one** drain → **one** complete.
