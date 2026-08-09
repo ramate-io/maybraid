@@ -2,15 +2,17 @@
 //!
 //! Structural hosts ([`ComponentsOnly<MonsterGrass>`]) nest fine-phase
 //! [`FoliageNode`] / [`StickNode`] hosts; both layers listen on the same region channels.
+//! Cull uses a rotating [`OpenLattice`] annulus (not a full-host scan).
 
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::MonsterGrass;
 use chico_vegetation_components::{ComponentsOnly, FoliageNode, StickNode};
 use lod::{
-	Bullseye, LodChunkFulfillBudget, LodRefreshCorePlugin, LodSceneRefreshRegionPlugin, Spotlight,
+	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
+	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
-use lod_avian::AvianLodSceneRefreshPlugin;
+use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -20,13 +22,18 @@ pub struct VegetationBullseye;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VegetationSpotlight;
 
+/// Channel marker for OpenLattice [`lod::LodSceneCullRegion`] messages.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VegetationCull;
+
 /// Full modern refresh stack for structural + fine-phase vegetation hosts.
 ///
 /// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages  
 /// 2. [`PatchSceneBounds`](lod::PatchSceneBounds) stamps host Avian volumes from
 ///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)  
 /// 3. Avian region index → level messages for structural and child component hosts  
-/// 4. Entity refresh (max fold) + chunk sync / cull
+/// 4. Entity refresh (max fold) + chunk sync  
+/// 5. [`OpenLattice`] cull regions → Avian index → budgeted root teardown
 pub struct VegetationLodRefreshPlugin;
 
 impl Plugin for VegetationLodRefreshPlugin {
@@ -41,6 +48,12 @@ impl Plugin for VegetationLodRefreshPlugin {
 			outer: 500.0,
 		})
 		.insert_resource(Spotlight { extent: 20.0 })
+		.insert_resource(OpenLattice {
+			exclude_extent: 1000.0,
+			outer_extent: 5000.0,
+			tile_size: 500.0,
+		})
+		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
 			spawn_weights_per_frame: 512,
 			cull_weights_per_frame: 64,
@@ -49,22 +62,26 @@ impl Plugin for VegetationLodRefreshPlugin {
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),
-			// Structural grove hosts.
+			LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, VegetationCull>::default(),
+			// Structural grove hosts (levels + chunk; cull via lattice below).
 			AvianLodSceneRefreshPlugin::<
 				ComponentsOnly<MonsterGrass>,
 				VegetationBullseye,
 				With<Camera>,
-			>::default(),
+			>::without_full_scan_cull(),
 			AvianLodSceneRefreshPlugin::<
 				ComponentsOnly<MonsterGrass>,
 				VegetationSpotlight,
 				With<Camera>,
-			>::default(),
+			>::without_full_scan_cull(),
+			AvianLodSceneCullPlugin::<ComponentsOnly<MonsterGrass>, VegetationCull, With<Camera>>::default(),
 			// Fine-phase stick / foliage hosts nested under structural roots.
-			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationBullseye, With<Camera>>::default(),
-			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationSpotlight, With<Camera>>::default(),
-			AvianLodSceneRefreshPlugin::<StickNode, VegetationBullseye, With<Camera>>::default(),
-			AvianLodSceneRefreshPlugin::<StickNode, VegetationSpotlight, With<Camera>>::default(),
+			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneCullPlugin::<FoliageNode, VegetationCull, With<Camera>>::default(),
+			AvianLodSceneRefreshPlugin::<StickNode, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneRefreshPlugin::<StickNode, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneCullPlugin::<StickNode, VegetationCull, With<Camera>>::default(),
 		));
 	}
 }

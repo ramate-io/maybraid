@@ -2,6 +2,7 @@
 //!
 //! Submodules:
 //! - [`regions`] — strategy `P` + nodes `F` → [`LodSceneRefreshRegion<M>`]
+//! - [`cull_regions`] — rotating cull lattice → [`LodSceneCullRegion<M>`] + enqueue
 //! - [`levels`] — region + index → [`LodSceneRefreshLevel`]
 //! - [`entities`] — fold max level → write [`crate::LodSceneLevel`]
 //! - [`sync`] — root sync, chunk fulfill (default), optional eager fulfill, cull
@@ -9,11 +10,14 @@
 //! Plugins:
 //! - [`LodRefreshCorePlugin`] — sets, node track, root sync (once)
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
+//! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
 //! - [`LodSceneRefreshLevelsPlugin<I, M, T, F>`] — level production (+ entities)
-//! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + cull
+//! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
+//! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — index-scoped cull enqueue
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — levels + entities + sync (region separate)
 
 mod bounds;
+pub mod cull_regions;
 pub mod entities;
 pub mod levels;
 pub mod regions;
@@ -32,6 +36,13 @@ use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
 
 pub use bounds::LodHostBounds;
+pub use cull_regions::{
+	produce_lod_cull_for_region, produce_lod_cull_regions, sync_cullable_roots_marker,
+	sync_nested_refresh_allowed, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
+	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
+	LodNestedRefreshBlocked, LodSceneCullRegion,
+	LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
+};
 pub use entities::{
 	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels, LodSceneRefreshEntitiesPlugin,
 };
@@ -114,6 +125,8 @@ impl Plugin for LodRefreshCorePlugin {
 /// Levels + entities + chunk sync for host `T` listening on region channel `M`.
 ///
 /// Add [`LodSceneRefreshRegionPlugin`] separately for region production.
+/// Use [`Self::without_full_scan_cull`] with [`LodSceneRegionCullPlugin`] for
+/// lattice-scoped cull enqueue.
 pub struct LodSceneRefreshPlugin<T, M, I, F = With<LodViewer>>
 where
 	T: Component + LodScene + 'static,
@@ -121,6 +134,7 @@ where
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,
 {
+	full_scan_cull: bool,
 	_marker: PhantomData<fn() -> (T, M, I, F)>,
 }
 
@@ -133,6 +147,22 @@ where
 {
 	fn default() -> Self {
 		Self {
+			full_scan_cull: true,
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, I, F> LodSceneRefreshPlugin<T, M, I, F>
+where
+	T: Component + LodScene + 'static,
+	M: Send + Sync + 'static,
+	I: SystemParam + 'static,
+	F: QueryFilter + 'static,
+{
+	pub fn without_full_scan_cull() -> Self {
+		Self {
+			full_scan_cull: false,
 			_marker: PhantomData,
 		}
 	}
@@ -152,7 +182,11 @@ where
 			app.add_plugins(LodSceneRefreshLevelsPlugin::<I, M, T, F>::default());
 		}
 		if !app.is_plugin_added::<LodSceneRefreshSyncPlugin<T, F>>() {
-			app.add_plugins(LodSceneRefreshSyncPlugin::<T, F>::default());
+			if self.full_scan_cull {
+				app.add_plugins(LodSceneRefreshSyncPlugin::<T, F>::default());
+			} else {
+				app.add_plugins(LodSceneRefreshSyncPlugin::<T, F>::without_full_scan_cull());
+			}
 		}
 	}
 }

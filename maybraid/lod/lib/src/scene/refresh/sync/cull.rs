@@ -19,7 +19,6 @@ use crate::scene::host::{
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
-use super::super::entities::dominant_lod_ref;
 use super::chunk::{
 	LodChunkBudgetClock, LodChunkFulfillment, LodLevelRootPending, LodWantsCull,
 };
@@ -107,7 +106,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			parent_skip += 1;
 			continue;
 		}
-		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
+		// Viewer-only ref (no per-host dominant level vote).
+		let Some(lod_ref) = refs.first() else {
 			continue;
 		};
 		let culls = scene.scene_lod_culls(lod_ref, *current);
@@ -155,7 +155,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		}
 	}
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if enqueued > 0 || elapsed_ms >= crate::lod_log_min_ms() {
+	// Activity-gated: duration alone was spamming every frame on large host sets.
+	if enqueued > 0 {
 		info!(
 			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} parent_skip={parent_skip} \
 			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"

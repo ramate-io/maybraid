@@ -173,12 +173,16 @@ pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
 	add_lod_refresh_chunk_for::<T>(app);
 }
 
-/// Default sync for message-driven refresh: chunk fulfill + cull.
+/// Default sync for message-driven refresh: chunk fulfill + optional full-scan cull.
+///
+/// Prefer [`Self::without_full_scan_cull`] when using
+/// [`crate::scene::refresh::cull_regions::LodSceneRegionCullPlugin`].
 pub struct LodSceneRefreshSyncPlugin<T, F = With<LodViewer>>
 where
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
 {
+	full_scan_cull: bool,
 	_marker: PhantomData<fn() -> (T, F)>,
 }
 
@@ -188,7 +192,24 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self { _marker: PhantomData }
+		Self {
+			full_scan_cull: true,
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, F> LodSceneRefreshSyncPlugin<T, F>
+where
+	T: Component + LodScene + 'static,
+	F: QueryFilter + 'static,
+{
+	/// Chunk fulfill only — region cull plugins own enqueue.
+	pub fn without_full_scan_cull() -> Self {
+		Self {
+			full_scan_cull: false,
+			_marker: PhantomData,
+		}
 	}
 }
 
@@ -202,9 +223,11 @@ where
 		if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<T>>() {
 			app.add_plugins(LodSceneRefreshChunkPlugin::<T>::default());
 		}
-		app.add_systems(
-			Update,
-			cull_lod_level_roots::<T, (), F>.in_set(LodChunkCullSystems::Enqueue),
-		);
+		if self.full_scan_cull {
+			app.add_systems(
+				Update,
+				cull_lod_level_roots::<T, (), F>.in_set(LodChunkCullSystems::Enqueue),
+			);
+		}
 	}
 }

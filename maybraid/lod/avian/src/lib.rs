@@ -142,12 +142,16 @@ impl Plugin for AvianLodSpatialDiagPlugin {
 ///
 /// `T` listens for [`lod::LodSceneRefreshRegion`] on channel `M`; levels use
 /// [`LodNode`]s filtered by `F` (default: [`LodViewer`]).
+///
+/// Use [`Self::without_full_scan_cull`] with [`AvianLodSceneCullPlugin`] for
+/// OpenLattice (or other) region-scoped cull enqueue.
 pub struct AvianLodSceneRefreshPlugin<T, M, F = With<LodViewer>>
 where
 	T: Component + LodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
+	full_scan_cull: bool,
 	_marker: PhantomData<fn() -> (T, M, F)>,
 }
 
@@ -159,6 +163,21 @@ where
 {
 	fn default() -> Self {
 		Self {
+			full_scan_cull: true,
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, F> AvianLodSceneRefreshPlugin<T, M, F>
+where
+	T: Component + LodScene + 'static,
+	M: Send + Sync + 'static,
+	F: QueryFilter + 'static,
+{
+	pub fn without_full_scan_cull() -> Self {
+		Self {
+			full_scan_cull: false,
 			_marker: PhantomData,
 		}
 	}
@@ -177,10 +196,64 @@ where
 		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
 			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
 		}
-		app.add_plugins(LodSceneRefreshPlugin::<
-			T,
-			M,
+		if self.full_scan_cull {
+			app.add_plugins(LodSceneRefreshPlugin::<
+				T,
+				M,
+				AvianLodSceneRegionIndex<'_, '_, T>,
+				F,
+			>::default());
+		} else {
+			app.add_plugins(LodSceneRefreshPlugin::<
+				T,
+				M,
+				AvianLodSceneRegionIndex<'_, '_, T>,
+				F,
+			>::without_full_scan_cull());
+		}
+	}
+}
+
+/// Region-scoped cull enqueue for host `T` on cull channel `M` (Avian index).
+pub struct AvianLodSceneCullPlugin<T, M, F = With<LodViewer>>
+where
+	T: Component + LodScene + 'static,
+	M: Send + Sync + 'static,
+	F: QueryFilter + 'static,
+{
+	_marker: PhantomData<fn() -> (T, M, F)>,
+}
+
+impl<T, M, F> Default for AvianLodSceneCullPlugin<T, M, F>
+where
+	T: Component + LodScene + 'static,
+	M: Send + Sync + 'static,
+	F: QueryFilter + 'static,
+{
+	fn default() -> Self {
+		Self {
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T, M, F> Plugin for AvianLodSceneCullPlugin<T, M, F>
+where
+	T: Component + LodScene + 'static,
+	M: Send + Sync + 'static,
+	F: QueryFilter + 'static,
+{
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<AvianLodSpatialDiagPlugin>() {
+			app.add_plugins(AvianLodSpatialDiagPlugin);
+		}
+		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
+			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
+		}
+		app.add_plugins(lod::LodSceneRegionCullPlugin::<
 			AvianLodSceneRegionIndex<'_, '_, T>,
+			M,
+			T,
 			F,
 		>::default());
 	}
