@@ -142,7 +142,8 @@ impl PalmCrown {
 					continue;
 				}
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new([FrondRun::from_placements(placements)]),
+					FrondCollection::new([FrondRun::from_placements(placements)])
+						.bake_bounds_from_runs(),
 					Placement::IDENTITY,
 				));
 			}

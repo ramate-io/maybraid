@@ -475,27 +475,35 @@ mod vc {
 					runs.push(run);
 				}
 			}
-			collection_nodes(runs)
+			collection_nodes(runs, self.structural_center, self.footprint_radius)
 		}
 
 		/// One upright proxy per cell of a 10×10 subdivision of the grove extent.
 		fn foliage_low(&self) -> Vec<FoliageNode> {
-			collection_nodes(grid_proxy_runs(
-				&self.extent,
-				LOW_GRID,
-				PROXY_HEIGHT_LOW,
-				GridProxyOrient::Upright,
-			))
+			collection_nodes(
+				grid_proxy_runs(
+					&self.extent,
+					LOW_GRID,
+					PROXY_HEIGHT_LOW,
+					GridProxyOrient::Upright,
+				),
+				self.structural_center,
+				self.footprint_radius,
+			)
 		}
 
 		/// Four horizontal proxies covering a 2×2 subdivision of the grove extent.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
-			collection_nodes(grid_proxy_runs(
-				&self.extent,
-				ULTRA_GRID,
-				PROXY_HEIGHT_ULTRA,
-				GridProxyOrient::Horizontal,
-			))
+			collection_nodes(
+				grid_proxy_runs(
+					&self.extent,
+					ULTRA_GRID,
+					PROXY_HEIGHT_ULTRA,
+					GridProxyOrient::Horizontal,
+				),
+				self.structural_center,
+				self.footprint_radius,
+			)
 		}
 	}
 
@@ -558,11 +566,18 @@ mod vc {
 		runs
 	}
 
-	fn collection_nodes(runs: Vec<FrondRun>) -> Vec<FoliageNode> {
+	fn collection_nodes(
+		runs: Vec<FrondRun>,
+		center: Vec3,
+		radius: f32,
+	) -> Vec<FoliageNode> {
 		if runs.is_empty() {
 			return Vec::new();
 		}
-		vec![FoliageNode::frond_collection(FrondCollection::new(runs), Placement::IDENTITY)]
+		vec![FoliageNode::frond_collection(
+			FrondCollection::new(runs).with_probe(center, radius),
+			Placement::IDENTITY,
+		)]
 	}
 
 	impl VegetationComponents for MonsterGrass {

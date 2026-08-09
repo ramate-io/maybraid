@@ -293,7 +293,10 @@ impl TemperateConifer {
 			.into_values()
 			.filter(|runs| !runs.is_empty())
 			.map(|runs| {
-				FoliageNode::frond_collection(FrondCollection::new(runs), Placement::IDENTITY)
+				FoliageNode::frond_collection(
+					FrondCollection::new(runs).bake_bounds_from_runs(),
+					Placement::IDENTITY,
+				)
 			})
 			.collect()
 	}

@@ -154,7 +154,7 @@ pub(crate) fn jungle_growth_foliage_nodes(params: JungleGrowthVcParams) -> Vec<F
 		return Vec::new();
 	}
 	vec![FoliageNode::frond_collection(
-		FrondCollection::new(runs),
+		FrondCollection::new(runs).bake_bounds_from_runs(),
 		Placement::IDENTITY,
 	)]
 }

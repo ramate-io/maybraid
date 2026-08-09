@@ -202,13 +202,30 @@ impl TuftPatch {
 		out
 	}
 
+	/// Cheap LOD probe from anchors + footprint / blade length (no frond walk).
+	fn lod_probe(&self) -> (Vec3, f32) {
+		let blade = self.shape.blade_length.max(1e-4);
+		let footprint = (self.patch_extent_xz * 0.5 * std::f32::consts::SQRT_2).max(blade);
+		if self.anchors.is_empty() {
+			return (Vec3::ZERO, footprint);
+		}
+		let n = self.anchors.len() as f32;
+		let center = self.anchors.iter().fold(Vec3::ZERO, |acc, a| acc + *a) / n;
+		let mut radius = footprint;
+		for anchor in &self.anchors {
+			radius = radius.max(anchor.distance(center) + blade);
+		}
+		(center, radius.max(1e-4))
+	}
+
 	/// One frond collection for the whole patch (one LOD probe).
 	fn foliage_nodes(&self) -> Vec<FoliageNode> {
 		if self.runs.is_empty() {
 			return Vec::new();
 		}
+		let (center, radius) = self.lod_probe();
 		vec![FoliageNode::frond_collection(
-			FrondCollection::new(self.runs.clone()),
+			FrondCollection::new(self.runs.clone()).with_probe(center, radius),
 			Placement::IDENTITY,
 		)]
 	}

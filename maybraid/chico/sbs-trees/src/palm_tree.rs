@@ -52,14 +52,14 @@ pub(crate) fn frond_collection_nodes(
 			batch.push(FrondRun::from_placements(placements));
 			if batch.len() >= FRONDS_PER_COLLECTION {
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new(std::mem::take(&mut batch)),
+					FrondCollection::new(std::mem::take(&mut batch)).bake_bounds_from_runs(),
 					Placement::IDENTITY,
 				));
 			}
 		}
 		if !batch.is_empty() {
 			nodes.push(FoliageNode::frond_collection(
-				FrondCollection::new(batch),
+				FrondCollection::new(batch).bake_bounds_from_runs(),
 				Placement::IDENTITY,
 			));
 		}

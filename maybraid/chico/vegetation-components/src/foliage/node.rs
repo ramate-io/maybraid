@@ -4,7 +4,9 @@ use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,
+};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
@@ -13,7 +15,6 @@ use crate::foliage::collection::{FrondCollection, FrondKit, FrondMember};
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
-use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{
 	posed_foliage_asset_tier, posed_frond_asset_tier, VegetationFrondAssetRoot,
 };
@@ -224,8 +225,21 @@ impl LodScene for FoliageNode {
 		self.probe().status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
-		warm_mesh_lod_culls(current)
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		let probe = self.probe();
+		let factor = probe.band_metric(lod_ref.current_transform.translation);
+		// Keep all warm roots while still in High (e.g. frond collections ≤ 500m).
+		// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
+		// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
+		if factor <= probe.high_factor {
+			return LodSceneCulls::None;
+		}
+		cull_offset_bands_from_factor(
+			factor,
+			probe.high_factor,
+			probe.medium_factor,
+			probe.low_factor,
+		)
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {

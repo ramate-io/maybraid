@@ -18,7 +18,9 @@ pub fn spawn_monster_grass_plain(commands: &mut Commands, transform: Transform) 
 		for iz in -half..=half {
 			let min = Vec3::new(ix as f32 * tile, 0.0, iz as f32 * tile);
 			let max = min + Vec3::new(tile, 1.0, tile);
-			let params = MonsterGrassParams::default().with_extent(GroveExtent::new(min, max));
+			let mut params = MonsterGrassParams::default().with_extent(GroveExtent::new(min, max));
+			// Fold placements into fewer FrondCollection hosts (probe/cull budget).
+			params.merge_collections = 100;
 			let grove = params.build();
 			let bounds = vegetation_bounds(&grove);
 			entities.extend(spawn_vegetation_components(

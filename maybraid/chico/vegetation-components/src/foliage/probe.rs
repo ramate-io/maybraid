@@ -57,7 +57,7 @@ impl FoliageLodProbe {
 		}
 	}
 
-	/// Probe for a frond collection: center + absolute-meter band thresholds.
+	/// Probe for a frond collection: authored center/radius + absolute-meter bands.
 	///
 	/// Band constants: [`FROND_COLLECTION_HIGH_METERS`], [`FROND_COLLECTION_MEDIUM_METERS`],
 	/// [`FROND_COLLECTION_LOW_METERS`] in [`crate::foliage::collection`].
@@ -83,7 +83,8 @@ impl FoliageLodProbe {
 		}
 	}
 
-	fn band_metric(self, viewer_translation: Vec3) -> f32 {
+	/// Distance (frond collections) or distance/extent (kits) — same metric as level bands.
+	pub fn band_metric(self, viewer_translation: Vec3) -> f32 {
 		let distance = viewer_translation.distance(self.center);
 		if self.preserve_ultra_low {
 			distance

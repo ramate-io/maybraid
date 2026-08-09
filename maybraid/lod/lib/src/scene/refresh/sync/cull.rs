@@ -92,13 +92,18 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 
 	let t0 = std::time::Instant::now();
 	let mut enqueued = 0u32;
+	let mut hosts_scanned = 0u32;
+	let mut culls_none = 0u32;
+	let mut roots_seen = 0u32;
 
 	for (scene, current, host_children) in &hosts {
+		hosts_scanned += 1;
 		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
 			continue;
 		};
 		let culls = scene.scene_lod_culls(lod_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
+			culls_none += 1;
 			continue;
 		}
 
@@ -127,6 +132,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
+			roots_seen += 1;
 			if root.0 == *current {
 				continue;
 			}
@@ -142,7 +148,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
 	if enqueued > 0 || elapsed_ms >= 0.5 {
 		info!(
-			"[lod.refresh] cull_lod_level_roots: enqueued={enqueued} in {elapsed_ms:.2}ms"
+			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} culls_none={culls_none} \
+			 roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
 		);
 	}
 }
