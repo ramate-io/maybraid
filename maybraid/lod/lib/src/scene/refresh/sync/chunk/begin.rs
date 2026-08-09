@@ -17,7 +17,7 @@ use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, LevelBand};
 use super::types::{
 	LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending,
-	LodLevelRootStreamed, LodWantsCull,
+	LodLevelRootStreamed, LodCullInFlight,
 };
 use super::util::{has_ready_root, ms, roots_bag_entity};
 
@@ -75,7 +75,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
-	wants_cull: Query<(), With<LodWantsCull>>,
+	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 ) {
@@ -214,7 +214,7 @@ fn run_begin_pass<T: Component + LodScene>(
 	level_roots_heads: &Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 	root_keys: &Query<&LodLevelRoot>,
 	pending: &Query<(), With<LodLevelRootPending>>,
-	wants_cull: &Query<(), With<LodWantsCull>>,
+	wants_cull: &Query<(), With<LodCullInFlight>>,
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
 	stats: &mut BeginStats,
@@ -224,6 +224,15 @@ fn run_begin_pass<T: Component + LodScene>(
 	}
 
 	for (host, scene, request, host_children) in hosts.iter() {
+		let Ok(desired) = host_levels.get(host) else {
+			continue;
+		};
+		// Only begin jobs for the host's current desired level (stale requests drop).
+		if request.level != *desired {
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
+			continue;
+		}
+
 		let Some(roots_entity) = roots_bag_entity(host_children, level_roots_heads) else {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;

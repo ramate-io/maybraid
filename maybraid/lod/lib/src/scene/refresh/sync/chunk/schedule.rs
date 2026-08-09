@@ -1,7 +1,7 @@
 //! Presence vs Level admission and drain ordering.
 //!
-//! Under saturation, budget is split ~⅓ Presence (cold / empty→something) and
-//! ~⅔ Level (warm upgrades, High→… buckets). Frame parity swaps which policy
+//! Under saturation, budget is split ~⅛ Presence (cold / empty→something) and
+//! ~⅞ Level (warm upgrades, High→… buckets). Frame parity swaps which policy
 //! runs first. Round-robin cursors avoid stable ECS-order starvation.
 
 use bevy::prelude::*;
@@ -39,12 +39,12 @@ impl LevelBand {
 	}
 }
 
-/// Integer split: presence gets ⌊total/3⌋ (0 when total is 0); level gets the rest.
+/// Integer split: presence gets ⌊total/8⌋ (0 when total is 0); level gets the rest.
 pub(super) fn split_presence_level(total: u32) -> (u32, u32) {
 	if total == 0 {
 		return (0, 0);
 	}
-	let presence = total / 3;
+	let presence = total / 8;
 	(presence, total - presence)
 }
 
@@ -103,10 +103,10 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn split_thirds() {
+	fn split_eighths() {
 		assert_eq!(split_presence_level(0), (0, 0));
 		assert_eq!(split_presence_level(1), (0, 1));
-		assert_eq!(split_presence_level(3), (1, 2));
-		assert_eq!(split_presence_level(48), (16, 32));
+		assert_eq!(split_presence_level(8), (1, 7));
+		assert_eq!(split_presence_level(48), (6, 42));
 	}
 }

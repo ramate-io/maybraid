@@ -1,19 +1,23 @@
 //! Global weighted drain with Presence / Level priority and round-robin fairness.
+//!
+//! Only **desired** pending roots receive spawn budget (`root.level == host level`).
+//! Not-desired jobs keep their [`LodChunkFulfillment`] queue (paused) until desired
+//! again or a real [`super::super::cull::LodCullRequest`] tears them down.
 
 use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 
-use crate::scene::host::LodLevelRoot;
+use crate::scene::host::{LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{for_each_rr, split_presence_level, LevelBand};
 use super::types::{
 	LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget, LodChunkFulfillment,
-	LodLevelRootPending, LodLevelRootStreamed, LodWantsCull,
+	LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
 };
-use super::util::ms;
+use super::util::{host_desired_for_root, ms};
 
 #[derive(Default)]
 struct JobBuckets {
@@ -46,22 +50,31 @@ struct DrainStats {
 	weight_spent: u32,
 	newly_streamed: u32,
 	jobs_touched: u32,
+	paused_skipped: u32,
 }
+
+type DrainJobs<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static LodLevelRoot, &'static mut LodChunkFulfillment),
+	(With<LodLevelRootPending>, Without<LodCullInFlight>),
+>;
 
 /// Drain weighted primitives under [`LodChunkBudgetClock`].
 ///
-/// Budget is split ~⅓ Presence (cold jobs) / ~⅔ Level (warm, High→far). Frame
+/// Budget is split ~⅛ Presence (cold jobs) / ~⅞ Level (warm, High→far). Frame
 /// parity chooses which class runs first; leftovers roll into the second class.
 /// Within each list, a round-robin cursor avoids ECS-order pinning.
+///
+/// Not-desired pending roots are skipped (paused); their queues are left intact.
 pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
 	budget: Res<LodChunkFulfillBudget>,
 	mut cursor: ResMut<LodChunkDrainCursor>,
-	mut jobs: Query<
-		(Entity, &LodLevelRoot, &mut LodChunkFulfillment),
-		(With<LodLevelRootPending>, Without<LodWantsCull>),
-	>,
+	mut jobs: DrainJobs,
+	child_of: Query<&ChildOf>,
+	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 ) {
 	let t0 = Instant::now();
 	let total = clock.spawn_remaining;
@@ -70,8 +83,17 @@ pub fn drain_chunk_lod_fulfill(
 	}
 
 	let mut buckets = JobBuckets::default();
+	let mut paused_skipped = 0u32;
 	for (entity, root, job) in &jobs {
 		if job.queue.is_empty() {
+			continue;
+		}
+		let Some(desired) = host_desired_for_root(entity, &child_of, &host_levels) else {
+			paused_skipped += 1;
+			continue;
+		};
+		if root.0 != desired {
+			paused_skipped += 1;
 			continue;
 		}
 		buckets.push(entity, job.cold, root.0);
@@ -84,6 +106,7 @@ pub fn drain_chunk_lod_fulfill(
 		weight_spent: 0,
 		newly_streamed: 0,
 		jobs_touched: 0,
+		paused_skipped,
 	};
 
 	let mut remaining = if presence_first {
@@ -135,13 +158,14 @@ pub fn drain_chunk_lod_fulfill(
 	if stats.spawned > 0 || stats.newly_streamed > 0 {
 		info!(
 			"[lod.chunk] drain: queued_spawns={} weight_spent={} budget={} \
-			 jobs_touched={} newly_streamed={} presence_first={presence_first} \
+			 jobs_touched={} newly_streamed={} paused_skipped={} presence_first={presence_first} \
 			 queue_cmds={:.2}ms (rest={remaining})",
 			stats.spawned,
 			stats.weight_spent,
 			budget.spawn_weights_per_frame,
 			stats.jobs_touched,
 			stats.newly_streamed,
+			stats.paused_skipped,
 			ms(t0),
 		);
 	}
@@ -149,10 +173,7 @@ pub fn drain_chunk_lod_fulfill(
 
 fn drain_presence(
 	commands: &mut Commands,
-	jobs: &mut Query<
-		(Entity, &LodLevelRoot, &mut LodChunkFulfillment),
-		(With<LodLevelRootPending>, Without<LodWantsCull>),
-	>,
+	jobs: &mut DrainJobs,
 	presence: &[Entity],
 	cursor: &mut u32,
 	remaining: &mut u32,
@@ -165,10 +186,7 @@ fn drain_presence(
 
 fn drain_level_bands(
 	commands: &mut Commands,
-	jobs: &mut Query<
-		(Entity, &LodLevelRoot, &mut LodChunkFulfillment),
-		(With<LodLevelRootPending>, Without<LodWantsCull>),
-	>,
+	jobs: &mut DrainJobs,
 	buckets: &JobBuckets,
 	cursor: &mut LodChunkDrainCursor,
 	remaining: &mut u32,
@@ -209,10 +227,7 @@ fn drain_level_bands(
 /// Drain one job while budget remains. Returns `false` when the frame budget is empty.
 fn drain_one(
 	commands: &mut Commands,
-	jobs: &mut Query<
-		(Entity, &LodLevelRoot, &mut LodChunkFulfillment),
-		(With<LodLevelRootPending>, Without<LodWantsCull>),
-	>,
+	jobs: &mut DrainJobs,
 	entity: Entity,
 	remaining: &mut u32,
 	stats: &mut DrainStats,

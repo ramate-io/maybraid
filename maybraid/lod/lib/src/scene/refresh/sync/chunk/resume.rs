@@ -1,4 +1,8 @@
-//! Cancel stale pending roots; sticky-resume desired jobs mid-teardown.
+//! Resume pending roots that are desired again after a cull request was applied
+//! but teardown has not started.
+//!
+//! Not-desired fulfill jobs are **paused** by drain/begin (desired check) — they are
+//! not marked for cull here. Queue and `LodChunkFulfillment` stay intact.
 
 use std::time::Instant;
 
@@ -7,23 +11,19 @@ use bevy::prelude::*;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
-use super::super::cull::{enqueue_lod_cull, LodCullEntity};
-use super::types::{LodLevelRootPending, LodWantsCull};
+use super::types::{LodCullInFlight, LodLevelRootPending};
 use super::util::ms;
 
-/// Enqueue cull for pending roots whose level is no longer desired; sticky-resume
-/// desired pending roots that have not started teardown (keeps frozen plan).
-pub fn cancel_stale_chunk_fulfillments(
+/// If a pending root is desired again and cull teardown has not started, clear
+/// [`LodCullInFlight`] so spawn drain may continue the frozen fulfill queue.
+pub fn resume_desired_pending_roots(
 	mut commands: Commands,
-	mut cull_writer: MessageWriter<LodCullEntity>,
 	hosts: Query<(Entity, &LodSceneLevel, Option<&Children>), With<LodSceneHost>>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	pending_roots: Query<&LodLevelRoot, With<LodLevelRootPending>>,
-	wants_cull: Query<&LodWantsCull>,
-	wants_cull_marker: Query<(), With<LodWantsCull>>,
+	cull_inflight: Query<&LodCullInFlight>,
 ) {
 	let t0 = Instant::now();
-	let mut enqueued = 0u32;
 	let mut resumed = 0u32;
 	for (_host, desired, host_children) in &hosts {
 		let Some(host_children) = host_children else {
@@ -46,25 +46,22 @@ pub fn cancel_stale_chunk_fulfillments(
 			let Ok(root) = pending_roots.get(child) else {
 				continue;
 			};
-			if root.0 == *desired {
-				if let Ok(cull) = wants_cull.get(child) {
-					if !cull.started {
-						commands.entity(child).remove::<LodWantsCull>();
-						resumed += 1;
-					}
-				}
+			if root.0 != *desired {
 				continue;
 			}
-			if wants_cull_marker.contains(child) {
+			let Ok(cull) = cull_inflight.get(child) else {
+				continue;
+			};
+			if cull.started {
 				continue;
 			}
-			enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull_marker);
-			enqueued += 1;
+			commands.entity(child).remove::<LodCullInFlight>();
+			resumed += 1;
 		}
 	}
-	if enqueued > 0 || resumed > 0 {
+	if resumed > 0 {
 		info!(
-			"[lod.chunk] cancel_stale: enqueued={enqueued} sticky_resumed={resumed} in {:.2}ms",
+			"[lod.chunk] resume_desired: resumed={resumed} in {:.2}ms",
 			ms(t0)
 		);
 	}

@@ -1,6 +1,6 @@
 //! Budgeted level-root / host teardown per [`LodScene::scene_lod_culls`].
 //!
-//! Unwanted roots are enqueued via [`LodCullEntity`] + [`LodWantsCull`] (not
+//! Unwanted roots are enqueued via [`LodCullRequest`] + [`LodCullInFlight`] (not
 //! hard-despawned). [`drain_lod_cull`] tears down leaf-first under the shared
 //! [`super::chunk::LodChunkBudgetClock`]: nested [`LodSceneHost`]s must finish
 //! before a parent despawns chunks, then itself.
@@ -20,31 +20,31 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
 use super::chunk::{
-	LodChunkBudgetClock, LodChunkFulfillment, LodLevelRootPending, LodWantsCull,
+	LodChunkBudgetClock, LodChunkFulfillment, LodLevelRootPending, LodCullInFlight,
 };
 
-/// Request that `entity` enter budgeted cull ([`LodWantsCull`]).
+/// Impulse: tear down `entity` under budgeted cull ([`LodCullInFlight`]).
 ///
-/// Applied by [`apply_lod_cull_requests`]. Cancel / cull helpers may also insert
-/// [`LodWantsCull`] directly so the next chained system sees it after
-/// `ApplyDeferred`.
+/// Applied by [`apply_lod_cull_requests`]. Enqueue helpers may also insert
+/// [`LodCullInFlight`] directly so the next chained system sees it after
+/// `ApplyDeferred`. Not used for pausing not-desired fulfill jobs.
 #[derive(Message, Debug, Clone, Copy)]
-pub struct LodCullEntity {
+pub struct LodCullRequest {
 	pub entity: Entity,
 }
 
-/// Insert [`LodWantsCull`] from [`LodCullEntity`] messages (idempotent).
+/// Insert [`LodCullInFlight`] from [`LodCullRequest`] messages (idempotent).
 pub fn apply_lod_cull_requests(
 	mut commands: Commands,
-	mut reader: MessageReader<LodCullEntity>,
-	existing: Query<(), With<LodWantsCull>>,
+	mut reader: MessageReader<LodCullRequest>,
+	existing: Query<(), With<LodCullInFlight>>,
 ) {
-	for LodCullEntity { entity } in reader.read() {
+	for LodCullRequest { entity } in reader.read() {
 		if existing.contains(*entity) {
 			continue;
 		}
 		if let Ok(mut entity_commands) = commands.get_entity(*entity) {
-			entity_commands.insert((LodWantsCull { started: false }, Visibility::Hidden));
+			entity_commands.insert((LodCullInFlight { started: false }, Visibility::Hidden));
 		}
 	}
 }
@@ -52,17 +52,17 @@ pub fn apply_lod_cull_requests(
 /// Enqueue budgeted cull: message + component (hidden).
 pub fn enqueue_lod_cull(
 	commands: &mut Commands,
-	writer: &mut MessageWriter<LodCullEntity>,
+	writer: &mut MessageWriter<LodCullRequest>,
 	entity: Entity,
-	already: &Query<(), With<LodWantsCull>>,
+	already: &Query<(), With<LodCullInFlight>>,
 ) {
 	if already.contains(entity) {
 		return;
 	}
-	writer.write(LodCullEntity { entity });
+	writer.write(LodCullRequest { entity });
 	commands
 		.entity(entity)
-		.insert((LodWantsCull { started: false }, Visibility::Hidden));
+		.insert((LodCullInFlight { started: false }, Visibility::Hidden));
 }
 
 /// Mark inactive [`LodLevelRoot`]s for budgeted cull per [`LodScene::scene_lod_culls`].
@@ -73,13 +73,13 @@ pub fn enqueue_lod_cull(
 /// roots are not GC'd mid-swap.
 pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
-	mut cull_writer: MessageWriter<LodCullEntity>,
+	mut cull_writer: MessageWriter<LodCullRequest>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
 	hosts: Query<(Entity, &T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
-	wants_cull: Query<(), With<LodWantsCull>>,
+	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 ) where
@@ -198,7 +198,7 @@ fn collect_level_roots(
 	}
 }
 
-/// Budgeted leaf-first teardown for [`LodWantsCull`] entities.
+/// Budgeted leaf-first teardown for [`LodCullInFlight`] entities.
 ///
 /// - If the subtree still has nested [`LodSceneHost`]s, enqueue those hosts and wait.
 /// - [`LodSceneHost`]: enqueue all nested [`LodLevelRoot`]s; when none remain, despawn
@@ -219,13 +219,13 @@ fn entity_depth(entity: Entity, child_of: &Query<&ChildOf>) -> u32 {
 pub fn drain_lod_cull(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
-	mut cull_writer: MessageWriter<LodCullEntity>,
-	mut culling: Query<(Entity, &mut LodWantsCull, Option<&mut LodChunkFulfillment>)>,
+	mut cull_writer: MessageWriter<LodCullRequest>,
+	mut culling: Query<(Entity, &mut LodCullInFlight, Option<&mut LodChunkFulfillment>)>,
 	children_q: Query<&Children>,
 	child_of: Query<&ChildOf>,
 	hosts: Query<(), With<LodSceneHost>>,
 	level_roots: Query<(), With<LodLevelRoot>>,
-	wants_cull: Query<(), With<LodWantsCull>>,
+	wants_cull: Query<(), With<LodCullInFlight>>,
 ) {
 	if clock.cull_remaining == 0 {
 		return;

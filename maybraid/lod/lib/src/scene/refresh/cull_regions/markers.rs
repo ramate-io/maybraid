@@ -7,7 +7,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 
-use super::super::sync::LodWantsCull;
+use super::super::sync::LodCullInFlight;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Nested host may participate in fine-phase refresh / region cull.
@@ -118,7 +118,7 @@ fn host_has_cullable_roots(
 	host_children: &Children,
 	level_roots_heads: &Query<&Children, With<LodLevelRoots>>,
 	root_keys: &Query<&LodLevelRoot>,
-	wants_cull: &Query<(), With<LodWantsCull>>,
+	wants_cull: &Query<(), With<LodCullInFlight>>,
 ) -> bool {
 	let mut roots_entity = None;
 	for child in host_children.iter() {
@@ -170,7 +170,7 @@ pub fn sync_cullable_roots_marker(
 	changed_bags: Query<&ChildOf, (With<LodLevelRoots>, Changed<Children>)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
-	wants_cull: Query<(), With<LodWantsCull>>,
+	wants_cull: Query<(), With<LodCullInFlight>>,
 	marked: Query<(), With<LodHostHasCullableRoots>>,
 ) {
 	let mut dirty: Vec<Entity> = changed_hosts.iter().collect();

@@ -21,12 +21,12 @@ pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
 pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
-	begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill,
-	drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull, reset_lod_chunk_budget,
-	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget,
-	LodChunkFulfillSystems, LodChunkFulfillment, LodCullEntity, LodLevelRootPending,
+	begin_chunk_lod_fulfill, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, drain_lod_cull,
+	enqueue_lod_cull, reset_lod_chunk_budget, resume_desired_pending_roots, LodChunkBudgetClock,
+	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillSystems,
+	LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLevelRootPending,
 	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin, LodWantsCull,
+	LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
 	closest_available_lod_level, cull_bands_with_adjacent_depth, cull_named_from_factor,
@@ -47,11 +47,11 @@ pub use refresh::{
 	sync_nested_refresh_allowed, update_lod_host_levels, Bullseye, LodCullMarkerPlugin,
 	LodCullRegionCursor, LodCullRegions, LodCullRegionsStatus, LodHostBounds,
 	LodHostHasCullableRoots, LodNestedRefreshAllowed, LodNestedRefreshBlocked,
-	LodRefreshCorePlugin, LodRefreshCullPlugin,
-	LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsStatus,
-	LodRefreshSystems, LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRefreshEagerSyncPlugin,
-	LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
-	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin,
-	LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
+	LodRefreshCorePlugin, LodRefreshCullPlugin, LodRefreshProductionPlugin, LodRefreshRegions,
+	LodRefreshRegionsError, LodRefreshRegionsStatus, LodRefreshSystems, LodSceneCullRegion,
+	LodSceneCullRegionPlugin, LodSceneRefreshEagerSyncPlugin, LodSceneRefreshEntitiesPlugin,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
+	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer,
+	OpenLattice, Spotlight,
 };
 pub use region_index::LodSceneRegionIndex;

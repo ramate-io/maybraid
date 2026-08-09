@@ -25,13 +25,13 @@ pub struct LodLevelRootStreamed;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHostStreamed;
 
-/// Entity is tearing down under [`super::super::cull::drain_lod_cull`].
+/// Entity is in budgeted teardown under [`super::super::cull::drain_lod_cull`].
 ///
-/// Frozen fulfill plans stay until [`Self::started`] so sticky desired-level
-/// resume can continue the same job. Once teardown spends budget, the plan is
-/// dropped and sticky no longer applies.
+/// Inserted when a [`super::super::cull::LodCullRequest`] is applied — **not** when a
+/// fulfill job is merely not desired (those stay pending with their queue paused).
+/// Once [`Self::started`], the fulfill plan is dropped and cannot resume.
 #[derive(Debug, Clone, Copy, Component)]
-pub struct LodWantsCull {
+pub struct LodCullInFlight {
 	/// True after the first teardown step (plan cleared / child despawned).
 	pub started: bool,
 }

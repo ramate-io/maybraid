@@ -121,7 +121,7 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
-/// requests. Roots with [`crate::LodWantsCull`] count as absent (dying).
+/// requests. Roots with [`crate::LodCullInFlight`] count as absent (dying).
 /// Warm-swap reveal is owned by chunk fulfill completion.
 pub fn sync_lod_level_roots(
 	mut commands: Commands,
@@ -132,7 +132,7 @@ pub fn sync_lod_level_roots(
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<crate::LodLevelRootPending>>,
-	wants_cull: Query<(), With<crate::LodWantsCull>>,
+	wants_cull: Query<(), With<crate::LodCullInFlight>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
 	let t0 = std::time::Instant::now();

@@ -6,18 +6,19 @@
 //! completes when next-level nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].
 //!
 //! Scheduling (begin + drain):
-//! - **Presence** (~⅓ budget): cold jobs (no ready root yet).
-//! - **Level** (~⅔ budget): warm upgrades, High → Medium → Low → UltraLow.
+//! - **Presence** (~⅛ budget): cold jobs (no ready root yet).
+//! - **Level** (~⅞ budget): warm upgrades, High → Medium → Low → UltraLow.
 //! Frame parity swaps which class runs first; leftovers roll into the other.
-//! Drain round-robins within each list for fairness.
+//! Only **desired** pending roots (`root.level == host level`) receive spawn budget;
+//! not-desired jobs keep their fulfill queue (paused) until desired again or culled.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
-//! reset budget → cancel/sticky → begin jobs (per `T`) → **one** drain → **one** complete.
+//! reset budget → resume desired cull-inflight → begin (per `T`) → drain → complete.
 
 mod begin;
-mod cancel;
 mod complete;
 mod drain;
+mod resume;
 mod schedule;
 mod types;
 mod util;
@@ -31,17 +32,19 @@ use crate::scene::LodScene;
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
-use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, LodCullEntity};
+use super::cull::{
+	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, LodCullRequest,
+};
 
 pub use begin::begin_chunk_lod_fulfill;
-pub use cancel::cancel_stale_chunk_fulfillments;
 pub use complete::complete_chunk_lod_fulfill;
 pub use drain::drain_chunk_lod_fulfill;
+pub use resume::resume_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
 	LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
-	LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending, LodLevelRootStreamed,
-	LodSceneHostStreamed, LodWantsCull,
+	LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`LodScene`] host type.
@@ -71,9 +74,9 @@ where
 /// Substeps within [`LodRefreshSystems::Cull`] (order against these, not system types).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodChunkCullSystems {
-	/// Mark unwanted roots / hosts ([`cull_lod_level_roots`], cancel already ran in Fulfill).
+	/// Mark unwanted roots / hosts ([`cull_lod_level_roots`] / region cull).
 	Enqueue,
-	/// Apply [`LodCullEntity`] → [`LodWantsCull`].
+	/// Apply [`LodCullRequest`] → [`LodCullInFlight`].
 	Apply,
 	/// Budgeted leaf-first despawn.
 	Drain,
@@ -85,11 +88,11 @@ pub enum LodChunkCullSystems {
 /// plugins only add [`begin_chunk_lod_fulfill`] into [`Self::Begin`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodChunkFulfillSystems {
-	/// Cancel stale pending roots / sticky resume.
-	Cancel,
+	/// Resume desired pending roots that had a cull request before teardown started.
+	Resume,
 	/// Per-`T` [`begin_chunk_lod_fulfill`].
 	Begin,
-	/// Shared weighted spawn drain.
+	/// Shared weighted spawn drain (desired jobs only).
 	Drain,
 	/// Shared warm-swap complete.
 	Complete,
@@ -106,7 +109,7 @@ impl Plugin for LodChunkBudgetPlugin {
 			.init_resource::<LodChunkBeginClock>()
 			.init_resource::<LodChunkDrainCursor>()
 			.init_resource::<LodChunkFulfillDiag>()
-			.add_message::<LodCullEntity>()
+			.add_message::<LodCullRequest>()
 			.configure_sets(
 				Update,
 				(
@@ -120,7 +123,7 @@ impl Plugin for LodChunkBudgetPlugin {
 			.configure_sets(
 				Update,
 				(
-					LodChunkFulfillSystems::Cancel,
+					LodChunkFulfillSystems::Resume,
 					LodChunkFulfillSystems::Begin,
 					LodChunkFulfillSystems::Drain,
 					LodChunkFulfillSystems::Complete,
@@ -133,7 +136,7 @@ impl Plugin for LodChunkBudgetPlugin {
 				Update,
 				(
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
-					cancel_stale_chunk_fulfillments.in_set(LodChunkFulfillSystems::Cancel),
+					resume_desired_pending_roots.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
 					complete_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Complete),
 					apply_lod_cull_requests.in_set(LodChunkCullSystems::Apply),

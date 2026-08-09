@@ -17,8 +17,8 @@ use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
 
 use super::super::sync::{
-	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullEntity,
-	LodLevelRootPending, LodWantsCull,
+	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullRequest,
+	LodLevelRootPending, LodCullInFlight,
 };
 use super::super::viewer::LodViewer;
 use super::super::ensure_refresh_core;
@@ -31,7 +31,7 @@ use super::produce::LodSceneCullRegion;
 /// [`LodNestedRefreshAllowed`] + [`LodHostHasCullableRoots`].
 pub fn produce_lod_cull_for_region<I, M, T, F>(
 	mut commands: Commands,
-	mut cull_writer: MessageWriter<LodCullEntity>,
+	mut cull_writer: MessageWriter<LodCullRequest>,
 	mut regions: MessageReader<LodSceneCullRegion<M>>,
 	index: StaticSystemParam<I>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
@@ -46,7 +46,7 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
-	wants_cull: Query<(), With<LodWantsCull>>,
+	wants_cull: Query<(), With<LodCullInFlight>>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,

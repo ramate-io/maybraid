@@ -8,7 +8,7 @@ use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use super::types::{
 	LodChunkFulfillment, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
-	LodWantsCull,
+	LodCullInFlight,
 };
 use super::util::{ms, nested_hosts_streamed};
 
@@ -18,7 +18,7 @@ pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	pending: Query<
 		(Entity, Option<&LodChunkFulfillment>, Option<&ChildOf>, Has<LodLevelRootStreamed>),
-		(With<LodLevelRootPending>, Without<LodWantsCull>),
+		(With<LodLevelRootPending>, Without<LodCullInFlight>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	children_q: Query<&Children>,

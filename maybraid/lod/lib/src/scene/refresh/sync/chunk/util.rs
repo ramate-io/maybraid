@@ -5,8 +5,9 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::level::LodSceneLevel;
 
-use super::types::{LodLevelRootPending, LodSceneHostStreamed, LodWantsCull};
+use super::types::{LodCullInFlight, LodLevelRootPending, LodSceneHostStreamed};
 
 pub(super) fn ms(start: Instant) -> f64 {
 	start.elapsed().as_secs_f64() * 1000.0
@@ -28,13 +29,13 @@ pub(super) fn has_ready_root(
 	root_children: &Children,
 	root_keys: &Query<&LodLevelRoot>,
 	pending: &Query<(), With<LodLevelRootPending>>,
-	wants_cull: &Query<(), With<LodWantsCull>>,
+	cull_inflight: &Query<(), With<LodCullInFlight>>,
 ) -> bool {
 	for child in root_children.iter() {
 		if root_keys.get(child).is_err() {
 			continue;
 		}
-		if wants_cull.contains(child) {
+		if cull_inflight.contains(child) {
 			continue;
 		}
 		if !pending.contains(child) {
@@ -42,6 +43,17 @@ pub(super) fn has_ready_root(
 		}
 	}
 	false
+}
+
+/// Host [`LodSceneLevel`] for a level-root entity (`root → LodLevelRoots → host`).
+pub(super) fn host_desired_for_root(
+	root: Entity,
+	child_of: &Query<&ChildOf>,
+	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+) -> Option<LodSceneLevel> {
+	let bag = child_of.get(root).ok()?.parent();
+	let host = child_of.get(bag).ok()?.parent();
+	host_levels.get(host).ok().copied()
 }
 
 /// Whether `entity` is a [`LodSceneHost`], or wraps one as a direct child.

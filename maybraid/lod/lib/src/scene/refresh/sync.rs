@@ -16,14 +16,15 @@ use super::LodRefreshSystems;
 
 pub use chunk::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
-	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
-	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillSystems, LodChunkFulfillment,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin, LodWantsCull,
+	complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, reset_lod_chunk_budget,
+	resume_desired_pending_roots, LodChunkBeginClock, LodChunkBudgetClock, LodChunkBudgetPlugin,
+	LodChunkCullSystems, LodChunkDrainCursor, LodChunkFulfillBudget, LodChunkFulfillDiag,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
-	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullEntity,
+	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullRequest,
 };
 pub use eager::fulfill_lod_level_spawn;
 
