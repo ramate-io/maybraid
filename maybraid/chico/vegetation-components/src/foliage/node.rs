@@ -11,7 +11,10 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
 use crate::assets::AssetPath;
-use crate::foliage::collection::{FrondCollection, FrondKit, FrondMember};
+use crate::foliage::collection::{
+	FrondCollection, FrondKit, FrondMember, FROND_COLLECTION_HIGH_METERS,
+	FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
+};
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
@@ -226,11 +229,26 @@ impl LodScene for FoliageNode {
 	}
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Frond collections: absolute-meter warm-root cull (independent of radius-relative spawn).
+		if let FoliageGeometry::FrondCollection(collection) = &self.geometry {
+			let (center, _) = collection.center_and_extent();
+			let distance = lod_ref.current_transform.translation.distance(center);
+			// Keep all warm roots while still inside the High cull band (~500 m).
+			// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
+			// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
+			if distance <= FROND_COLLECTION_HIGH_METERS {
+				return LodSceneCulls::None;
+			}
+			return cull_offset_bands_from_factor(
+				distance,
+				FROND_COLLECTION_HIGH_METERS,
+				FROND_COLLECTION_MEDIUM_METERS,
+				FROND_COLLECTION_LOW_METERS,
+			);
+		}
+
 		let probe = self.probe();
 		let factor = probe.band_metric(lod_ref.current_transform.translation);
-		// Keep all warm roots while still in High (e.g. frond collections ≤ 500m).
-		// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
-		// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
 		if factor <= probe.high_factor {
 			return LodSceneCulls::None;
 		}

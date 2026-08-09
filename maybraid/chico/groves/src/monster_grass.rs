@@ -366,11 +366,11 @@ mod vc {
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
-	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 2.5;
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
 	/// Structural Medium band (× footprint): one upright proxy per ~4 placement cells.
-	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
+	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
 	/// Structural Low band (× footprint): 1/10-extent grid proxies; beyond → UltraLow.
-	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
@@ -481,12 +481,7 @@ mod vc {
 		/// One upright proxy per cell of a 10×10 subdivision of the grove extent.
 		fn foliage_low(&self) -> Vec<FoliageNode> {
 			collection_nodes(
-				grid_proxy_runs(
-					&self.extent,
-					LOW_GRID,
-					PROXY_HEIGHT_LOW,
-					GridProxyOrient::Upright,
-				),
+				grid_proxy_runs(&self.extent, LOW_GRID, PROXY_HEIGHT_LOW, GridProxyOrient::Upright),
 				self.structural_center,
 				self.footprint_radius,
 			)
@@ -566,11 +561,7 @@ mod vc {
 		runs
 	}
 
-	fn collection_nodes(
-		runs: Vec<FrondRun>,
-		center: Vec3,
-		radius: f32,
-	) -> Vec<FoliageNode> {
+	fn collection_nodes(runs: Vec<FrondRun>, center: Vec3, radius: f32) -> Vec<FoliageNode> {
 		if runs.is_empty() {
 			return Vec::new();
 		}
