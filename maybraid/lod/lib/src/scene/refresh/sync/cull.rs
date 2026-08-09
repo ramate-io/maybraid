@@ -155,7 +155,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		}
 	}
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if enqueued > 0 || elapsed_ms >= 0.5 {
+	if enqueued > 0 || elapsed_ms >= crate::lod_log_min_ms() {
 		info!(
 			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} parent_skip={parent_skip} \
 			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"

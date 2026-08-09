@@ -69,7 +69,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		}
 	}
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if changed > 0 || elapsed_ms >= 0.5 {
+	if changed > 0 || elapsed_ms >= crate::lod_log_min_ms() {
 		info!(
 			"[lod.refresh] update_lod_host_levels: hosts={n} nodes={} changed={changed} in {elapsed_ms:.2}ms",
 			snapshots.len()

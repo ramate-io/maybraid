@@ -26,7 +26,7 @@ fn main() {
 
 	let diag = PlaygroundDiag::from_env();
 	println!(
-		"Diagnostics: {} (set CHICO_SBS_DIAG=fps|commands|render|lod|all).",
+		"Diagnostics: {} (CHICO_SBS_DIAG=fps|commands|render|lod|all|ms=<f64>; CHICO_SBS_DIAG_MS).",
 		diag.summary()
 	);
 

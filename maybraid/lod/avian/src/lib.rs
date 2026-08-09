@@ -19,8 +19,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
 use lod::{
-	LodSceneBoundsMarshaller, LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin,
-	LodViewer, PatchSceneBounds,
+	lod_log_min_ms, LodSceneBoundsMarshaller, LodSceneHost, LodSceneRegionIndex,
+	LodSceneRefreshPlugin, LodViewer, PatchSceneBounds,
 };
 
 /// Frame-aggregated timing for Avian `aabb_intersections_with_aabb` in LOD refresh.
@@ -97,7 +97,7 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
 		let query_ms = t0.elapsed().as_secs_f64() * 1000.0;
 		self.diag.record(query_ms, hit.len());
-		if query_ms >= 0.25 {
+		if query_ms >= lod_log_min_ms() {
 			info!(
 				"[lod.refresh] spatial.query: host={} hits={} aabb_ms={query_ms:.2}",
 				type_name::<T>(),
@@ -116,7 +116,7 @@ fn log_avian_spatial_query_diag(mut diag: ResMut<AvianLodSpatialQueryDiag>) {
 	if queries == 0 {
 		return;
 	}
-	if total_ms >= 0.25 || queries > 1 {
+	if total_ms >= lod_log_min_ms() || queries > 1 {
 		let avg = total_ms / f64::from(queries.max(1));
 		info!(
 			"[lod.refresh] spatial.frame: queries={queries} hits={hits} \

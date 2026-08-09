@@ -102,10 +102,7 @@ pub struct LodChunkFulfillBudget {
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
-		Self {
-			spawn_weights_per_frame: 512,
-			cull_weights_per_frame: 64,
-		}
+		Self { spawn_weights_per_frame: 512, cull_weights_per_frame: 64 }
 	}
 }
 
@@ -212,8 +209,7 @@ fn nested_hosts_streamed(
 	let mut streamed = 0usize;
 	let mut saw_host = false;
 	for child in children.iter() {
-		let Some(is_streamed) =
-			next_level_host_streamed(child, children_q, hosts, streamed_hosts)
+		let Some(is_streamed) = next_level_host_streamed(child, children_q, hosts, streamed_hosts)
 		else {
 			continue;
 		};
@@ -276,12 +272,7 @@ pub fn cancel_stale_chunk_fulfillments(
 			if wants_cull_marker.contains(child) {
 				continue;
 			}
-			enqueue_lod_cull(
-				&mut commands,
-				&mut cull_writer,
-				child,
-				&wants_cull_marker,
-			);
+			enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull_marker);
 			enqueued += 1;
 		}
 	}
@@ -331,18 +322,17 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			continue;
 		};
 
-		let root_children = level_roots_heads
-			.get(roots_entity)
-			.ok()
-			.and_then(|(_, children)| children);
+		let root_children =
+			level_roots_heads.get(roots_entity).ok().and_then(|(_, children)| children);
 		let has_any_level_root = root_children.is_some_and(|children| {
-			children.iter().any(|child| root_keys.contains(child) && !wants_cull.contains(child))
+			children
+				.iter()
+				.any(|child| root_keys.contains(child) && !wants_cull.contains(child))
 		});
 
 		// Parent-High gates *refresh* only. Empty hosts (no level roots yet) still fill —
 		// e.g. Medium/Low structural proxies that nest foliage hosts.
-		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels) && has_any_level_root
-		{
+		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels) && has_any_level_root {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		}
@@ -386,11 +376,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 
 		let t_spawn = Instant::now();
 		let level = request.level;
-		let initial_vis = if cold {
-			Visibility::Inherited
-		} else {
-			Visibility::Hidden
-		};
+		let initial_vis = if cold { Visibility::Inherited } else { Visibility::Hidden };
 		let level_root = bsn! {
 			template_value(LodLevelRoot(level))
 			LodLevelRootPending
@@ -398,11 +384,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			template_value(initial_vis)
 		};
 		let root_entity = commands.spawn_scene(level_root).id();
-		let fulfillment = LodChunkFulfillment {
-			queue,
-			expected,
-			spawned: 0,
-		};
+		let fulfillment = LodChunkFulfillment { queue, expected, spawned: 0 };
 		if fulfillment.is_content_complete() {
 			commands.entity(root_entity).insert(LodLevelRootStreamed);
 		}
@@ -457,9 +439,8 @@ pub fn drain_chunk_lod_fulfill(
 			continue;
 		}
 		active_jobs += 1;
-		let mut spawned_this_job = false;
 		while !job.queue.is_empty() {
-			if remaining == 0 && spawned_this_job {
+			if remaining == 0 {
 				break;
 			}
 			let Some((weight, scene)) = job.queue.pop_front() else {
@@ -478,7 +459,6 @@ pub fn drain_chunk_lod_fulfill(
 			weight_spent += w;
 			spawned += 1;
 			job.spawned += 1;
-			spawned_this_job = true;
 		}
 		if job.is_content_complete() {
 			commands.entity(root).insert(LodLevelRootStreamed);
@@ -507,12 +487,7 @@ pub fn drain_chunk_lod_fulfill(
 pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	pending: Query<
-		(
-			Entity,
-			Option<&LodChunkFulfillment>,
-			Option<&ChildOf>,
-			Has<LodLevelRootStreamed>,
-		),
+		(Entity, Option<&LodChunkFulfillment>, Option<&ChildOf>, Has<LodLevelRootStreamed>),
 		(With<LodLevelRootPending>, Without<LodWantsCull>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
@@ -608,9 +583,7 @@ where
 	T: Component + LodScene + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
@@ -699,10 +672,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_chunk_budget(app);
-		app.add_systems(
-			Update,
-			begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin),
-		);
+		app.add_systems(Update, begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin));
 	}
 }
 
@@ -735,9 +705,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
