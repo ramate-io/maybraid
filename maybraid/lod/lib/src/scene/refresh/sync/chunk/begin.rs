@@ -285,7 +285,9 @@ fn run_begin_pass<T: Component + LodScene>(
 		});
 
 		// Parent-High gates *refresh* only. Empty hosts still fill.
-		if !nested_host_parent_allows_refresh(host, child_of, host_levels) && has_any_level_root {
+		if !nested_host_parent_allows_refresh(host, child_of, host_levels, root_keys)
+			&& has_any_level_root
+		{
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		}

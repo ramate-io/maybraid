@@ -94,21 +94,28 @@ pub struct LodChunkBeginClock {
 	pub presence_first: bool,
 }
 
-/// Round-robin cursors for High → far drain bands.
-#[derive(Debug, Clone, Copy, Default)]
+/// Number of `(parent_band, self_band)` drain slots (5×5 High→Other).
+pub const LOD_CHUNK_TUPLE_BAND_COUNT: usize = 25;
+
+/// Round-robin cursors for `(parent, self)` drain tuple bands.
+#[derive(Debug, Clone, Copy)]
 pub struct LodChunkBandCursors {
-	pub high: u32,
-	pub medium: u32,
-	pub low: u32,
-	pub ultra: u32,
-	pub other: u32,
+	pub bands: [u32; LOD_CHUNK_TUPLE_BAND_COUNT],
+}
+
+impl Default for LodChunkBandCursors {
+	fn default() -> Self {
+		Self {
+			bands: [0; LOD_CHUNK_TUPLE_BAND_COUNT],
+		}
+	}
 }
 
 /// Round-robin cursors + frame parity for drain scheduling.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct LodChunkDrainCursor {
 	pub frame: u64,
-	/// Presence (cold) band cursors — drained High → far, same as Level.
+	/// Presence (cold) tuple cursors — same `(parent, self)` order as Level.
 	pub presence: LodChunkBandCursors,
 	pub level: LodChunkBandCursors,
 }

@@ -102,7 +102,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 
 	for (host, scene, current, host_children) in &hosts {
 		hosts_scanned += 1;
-		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels) {
+		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels, &root_keys) {
 			parent_skip += 1;
 			continue;
 		}

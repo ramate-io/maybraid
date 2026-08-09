@@ -9,49 +9,57 @@ use std::time::Instant;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 
-use crate::scene::host::{LodLevelRoot, LodSceneHost};
+use crate::scene::host::{parent_host_desired_or_high, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{for_each_rr, split_presence_level, LevelBand};
 use super::types::{
 	LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
 	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
+	LOD_CHUNK_TUPLE_BAND_COUNT,
 };
-use super::util::{host_desired_for_root, ms};
+use super::util::{host_desired_for_root, host_entity_for_root, ms};
 
-#[derive(Default)]
-struct LevelBuckets {
-	high: Vec<Entity>,
-	medium: Vec<Entity>,
-	low: Vec<Entity>,
-	ultra: Vec<Entity>,
-	other: Vec<Entity>,
+struct TupleBuckets {
+	bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
 }
 
-impl LevelBuckets {
-	fn push(&mut self, entity: Entity, level: LodSceneLevel) {
-		match LevelBand::from_level(level) {
-			LevelBand::High => self.high.push(entity),
-			LevelBand::Medium => self.medium.push(entity),
-			LevelBand::Low => self.low.push(entity),
-			LevelBand::UltraLow => self.ultra.push(entity),
-			LevelBand::Other => self.other.push(entity),
+impl Default for TupleBuckets {
+	fn default() -> Self {
+		Self {
+			bands: std::array::from_fn(|_| Vec::new()),
 		}
+	}
+}
+
+impl TupleBuckets {
+	fn push(&mut self, entity: Entity, parent: LodSceneLevel, self_level: LodSceneLevel) {
+		let rank = LevelBand::tuple_rank(
+			LevelBand::from_level(parent),
+			LevelBand::from_level(self_level),
+		);
+		self.bands[rank].push(entity);
 	}
 }
 
 #[derive(Default)]
 struct JobBuckets {
-	presence: LevelBuckets,
-	level: LevelBuckets,
+	presence: TupleBuckets,
+	level: TupleBuckets,
 }
 
 impl JobBuckets {
-	fn push(&mut self, entity: Entity, cold: bool, level: LodSceneLevel) {
+	fn push(
+		&mut self,
+		entity: Entity,
+		cold: bool,
+		parent: LodSceneLevel,
+		self_level: LodSceneLevel,
+	) {
 		if cold {
-			self.presence.push(entity, level);
+			self.presence.push(entity, parent, self_level);
 		} else {
-			self.level.push(entity, level);
+			self.level.push(entity, parent, self_level);
 		}
 	}
 }
@@ -75,7 +83,8 @@ type DrainJobs<'w, 's> = Query<
 ///
 /// Budget is split ~⅛ Presence (cold jobs) / ~⅞ Level (warm). Frame parity chooses
 /// which class runs first; leftovers roll into the second class. Within each class,
-/// bands drain High → Medium → Low → UltraLow (RR inside each band).
+/// jobs drain by `(parent_desired, self_level)` High→… (missing parent = High; RR
+/// inside each tuple band).
 ///
 /// Not-desired pending roots are skipped (paused); their queues are left intact.
 pub fn drain_chunk_lod_fulfill(
@@ -107,7 +116,12 @@ pub fn drain_chunk_lod_fulfill(
 			paused_skipped += 1;
 			continue;
 		}
-		buckets.push(entity, job.cold, root.0);
+		let Some(host) = host_entity_for_root(entity, &child_of) else {
+			paused_skipped += 1;
+			continue;
+		};
+		let parent = parent_host_desired_or_high(host, &child_of, &host_levels);
+		buckets.push(entity, job.cold, parent, root.0);
 	}
 
 	let (presence_share, level_share) = split_presence_level(total);
@@ -127,7 +141,7 @@ pub fn drain_chunk_lod_fulfill(
 	};
 
 	if presence_first {
-		drain_level_bands(
+		drain_tuple_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.presence,
@@ -136,7 +150,7 @@ pub fn drain_chunk_lod_fulfill(
 			&mut stats,
 		);
 		remaining = remaining.saturating_add(level_share);
-		drain_level_bands(
+		drain_tuple_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.level,
@@ -145,7 +159,7 @@ pub fn drain_chunk_lod_fulfill(
 			&mut stats,
 		);
 	} else {
-		drain_level_bands(
+		drain_tuple_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.level,
@@ -154,7 +168,7 @@ pub fn drain_chunk_lod_fulfill(
 			&mut stats,
 		);
 		remaining = remaining.saturating_add(presence_share);
-		drain_level_bands(
+		drain_tuple_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.presence,
@@ -182,44 +196,22 @@ pub fn drain_chunk_lod_fulfill(
 	}
 }
 
-fn drain_level_bands(
+fn drain_tuple_bands(
 	commands: &mut Commands,
 	jobs: &mut DrainJobs,
-	buckets: &LevelBuckets,
+	buckets: &TupleBuckets,
 	cursors: &mut LodChunkBandCursors,
 	remaining: &mut u32,
 	stats: &mut DrainStats,
 ) {
-	if *remaining == 0 {
-		return;
+	for rank in 0..LOD_CHUNK_TUPLE_BAND_COUNT {
+		if *remaining == 0 {
+			return;
+		}
+		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
+			drain_one(commands, jobs, entity, remaining, stats)
+		});
 	}
-	for_each_rr(&buckets.high, &mut cursors.high, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
-	if *remaining == 0 {
-		return;
-	}
-	for_each_rr(&buckets.medium, &mut cursors.medium, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
-	if *remaining == 0 {
-		return;
-	}
-	for_each_rr(&buckets.low, &mut cursors.low, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
-	if *remaining == 0 {
-		return;
-	}
-	for_each_rr(&buckets.ultra, &mut cursors.ultra, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
-	if *remaining == 0 {
-		return;
-	}
-	for_each_rr(&buckets.other, &mut cursors.other, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
 }
 
 /// Drain one job while budget remains. Returns `false` when the frame budget is empty.

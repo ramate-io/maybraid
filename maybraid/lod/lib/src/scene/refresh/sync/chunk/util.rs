@@ -47,14 +47,19 @@ pub(super) fn has_present_root(
 	false
 }
 
+/// Host entity for a level-root (`root → LodLevelRoots → host`).
+pub(super) fn host_entity_for_root(root: Entity, child_of: &Query<&ChildOf>) -> Option<Entity> {
+	let bag = child_of.get(root).ok()?.parent();
+	Some(child_of.get(bag).ok()?.parent())
+}
+
 /// Host [`LodSceneLevel`] for a level-root entity (`root → LodLevelRoots → host`).
 pub(super) fn host_desired_for_root(
 	root: Entity,
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
 ) -> Option<LodSceneLevel> {
-	let bag = child_of.get(root).ok()?.parent();
-	let host = child_of.get(bag).ok()?.parent();
+	let host = host_entity_for_root(root, child_of)?;
 	host_levels.get(host).ok().copied()
 }
 

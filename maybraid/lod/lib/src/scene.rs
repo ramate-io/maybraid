@@ -35,8 +35,8 @@ pub use cull::{
 };
 pub use host::{
 	lod_host_scene, lod_host_scene_pending, nested_host_parent_allows_refresh,
-	sync_lod_level_roots, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
-	LodSceneHostPlugin,
+	parent_host_desired_or_high, sync_lod_level_roots, LodLevelRoot, LodLevelRoots,
+	LodLevelSpawnRequest, LodSceneHost, LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus};

@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
-use crate::scene::host::{nested_host_parent_allows_refresh, LodSceneHost};
+use crate::scene::host::{nested_host_parent_allows_refresh, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
@@ -37,6 +37,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	mut levels: MessageWriter<LodSceneRefreshLevel>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	level_roots: Query<&LodLevelRoot>,
 ) where
 	I: SystemParam + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
@@ -54,7 +55,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	let mut index = index.into_inner();
 	for region_msg in regions.read() {
 		for (entity, scene) in index.hosts_in_region(region_msg.region) {
-			if !nested_host_parent_allows_refresh(entity, &child_of, &host_levels) {
+			if !nested_host_parent_allows_refresh(entity, &child_of, &host_levels, &level_roots) {
 				continue;
 			}
 			let level = scene.scene_lod_level_from_levels(&ref_refs);

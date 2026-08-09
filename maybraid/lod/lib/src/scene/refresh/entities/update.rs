@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
 };
-use crate::scene::host::{nested_host_parent_allows_refresh, LodSceneHost};
+use crate::scene::host::{nested_host_parent_allows_refresh, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
@@ -22,10 +22,11 @@ pub fn dominant_lod_ref<'a, T: LodScene>(
 ///
 /// Probe / unscoped path (no region messages). `FHost` scopes hosts (`()` = all).
 /// [`LodRef`] bounds come from each node's [`LodNodeBounds`] (or a point).
-/// Nested hosts under a non-[`LodSceneLevel::High`] parent host are skipped.
+/// Nested hosts not under their parent's desired [`LodLevelRoot`] are skipped.
 pub fn update_lod_host_levels<T, FHost, FNode>(
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
 	child_of: Query<&ChildOf>,
+	level_roots: Query<&LodLevelRoot>,
 	mut sets: ParamSet<(
 		(
 			Query<&'static LodSceneLevel, With<LodSceneHost>>,
@@ -48,7 +49,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		hosts
 			.iter()
 			.filter(|(entity, _)| {
-				nested_host_parent_allows_refresh(*entity, &child_of, &host_levels)
+				nested_host_parent_allows_refresh(*entity, &child_of, &host_levels, &level_roots)
 			})
 			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&ref_refs)))
 			.collect()

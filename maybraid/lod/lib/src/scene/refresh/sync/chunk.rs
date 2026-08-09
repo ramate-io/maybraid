@@ -8,8 +8,8 @@
 //! Scheduling (begin + drain):
 //! - **Presence** (~⅛ budget): cold jobs (no present root yet — empty host).
 //! - **Level** (~⅞ budget): warm upgrades (any sibling root, including pending).
-//! Both classes drain / begin High → Medium → Low → UltraLow (RR within each band).
-//! Frame parity swaps which class runs first; leftovers roll into the other.
+//! Drain ranks `(parent_desired, self_level)` High→… (missing parent = High).
+//! Begin still bands by self level (Near/Far). Frame parity swaps classes; leftovers roll.
 //! Only **desired** pending roots (`root.level == host level`) receive spawn budget;
 //! not-desired jobs keep their fulfill queue (paused) until desired again or culled.
 //!

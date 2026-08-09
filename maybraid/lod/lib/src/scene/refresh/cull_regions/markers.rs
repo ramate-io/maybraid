@@ -12,13 +12,15 @@ use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Nested host may participate in fine-phase refresh / region cull.
 ///
-/// Maintained from parent [`LodSceneLevel`] changes (and on host add) so hot paths
-/// can filter with `With<LodNestedRefreshAllowed>` instead of walking ancestors.
+/// Allowed when under the parent host's **desired** [`LodLevelRoot`]. Maintained
+/// from parent [`LodSceneLevel`] changes (and on host add) so hot paths can filter
+/// with `With<LodNestedRefreshAllowed>` instead of walking ancestors.
 /// Mutually exclusive with [`LodNestedRefreshBlocked`].
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodNestedRefreshAllowed;
 
-/// Nested host is gated off (parent host not High). See [`LodNestedRefreshAllowed`].
+/// Nested host is gated off (not under parent's desired level root).
+/// See [`LodNestedRefreshAllowed`].
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodNestedRefreshBlocked;
 
@@ -31,10 +33,11 @@ fn set_nested_refresh_gate(
 	entity: Entity,
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+	level_roots: &Query<&LodLevelRoot>,
 	allowed: &Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: &Query<(), With<LodNestedRefreshBlocked>>,
 ) {
-	let want = nested_host_parent_allows_refresh(entity, child_of, host_levels);
+	let want = nested_host_parent_allows_refresh(entity, child_of, host_levels, level_roots);
 	let has_allowed = allowed.contains(entity);
 	let has_blocked = blocked.contains(entity);
 	if want {
@@ -88,6 +91,7 @@ pub fn sync_nested_refresh_allowed(
 	hosts: Query<(), With<LodSceneHost>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	level_roots: Query<&LodLevelRoot>,
 	allowed: Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: Query<(), With<LodNestedRefreshBlocked>>,
 ) {
@@ -107,6 +111,7 @@ pub fn sync_nested_refresh_allowed(
 			entity,
 			&child_of,
 			&host_levels,
+			&level_roots,
 			&allowed,
 			&blocked,
 		);

@@ -2,8 +2,9 @@
 //!
 //! Under saturation, budget is split ~⅛ Presence (cold / empty→something) and
 //! ~⅞ Level (warm upgrades, including when a pending sibling already exists).
-//! Both classes use High→… buckets. Frame parity swaps which policy runs first.
-//! Round-robin cursors avoid stable ECS-order starvation within a band.
+//! Drain ranks by `(parent_desired, self_level)` High→… lexicographic (missing
+//! parent counts as High). Frame parity swaps Presence vs Level first.
+//! Round-robin cursors avoid stable ECS-order starvation within a tuple band.
 
 use bevy::prelude::*;
 
@@ -11,6 +12,7 @@ use crate::scene::level::LodSceneLevel;
 
 use super::types::{
 	LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
+	LOD_CHUNK_TUPLE_BAND_COUNT,
 };
 
 /// Named drain / begin band (near → far).
@@ -24,6 +26,8 @@ pub(super) enum LevelBand {
 }
 
 impl LevelBand {
+	pub(super) const COUNT: usize = 5;
+
 	pub(super) fn from_level(level: LodSceneLevel) -> Self {
 		match level {
 			LodSceneLevel::High => Self::High,
@@ -32,6 +36,22 @@ impl LevelBand {
 			LodSceneLevel::UltraLow => Self::UltraLow,
 			LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => Self::Other,
 		}
+	}
+
+	pub(super) fn index(self) -> usize {
+		match self {
+			Self::High => 0,
+			Self::Medium => 1,
+			Self::Low => 2,
+			Self::UltraLow => 3,
+			Self::Other => 4,
+		}
+	}
+
+	/// Lexicographic `(parent, self)` rank: `(High, High) = 0` … far/far last.
+	pub(super) fn tuple_rank(parent: Self, self_band: Self) -> usize {
+		debug_assert_eq!(Self::COUNT * Self::COUNT, LOD_CHUNK_TUPLE_BAND_COUNT);
+		parent.index() * Self::COUNT + self_band.index()
 	}
 
 	/// High / Medium — preferred in the Level begin pass before Low / UltraLow.
@@ -109,5 +129,25 @@ mod tests {
 		assert_eq!(split_presence_level(1), (0, 1));
 		assert_eq!(split_presence_level(8), (1, 7));
 		assert_eq!(split_presence_level(48), (6, 42));
+	}
+
+	#[test]
+	fn tuple_rank_high_high_first() {
+		assert_eq!(
+			LevelBand::tuple_rank(LevelBand::High, LevelBand::High),
+			0
+		);
+		assert_eq!(
+			LevelBand::tuple_rank(LevelBand::High, LevelBand::Medium),
+			1
+		);
+		assert_eq!(
+			LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High),
+			LevelBand::COUNT
+		);
+		assert!(
+			LevelBand::tuple_rank(LevelBand::High, LevelBand::UltraLow)
+				< LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High)
+		);
 	}
 }

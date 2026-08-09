@@ -13,27 +13,64 @@ pub struct LodSceneHost;
 
 /// Whether a nested host may run fine-phase **refresh** (level produce / cull / probe update).
 ///
-/// Walks ancestors for the nearest [`LodSceneHost`] with [`LodSceneLevel`] (skipping
-/// `entity` itself). No such ancestor → top-level → allowed. Otherwise allowed only
-/// when that parent's level is [`LodSceneLevel::High`].
+/// Walks ancestors (skipping `entity` itself) and records the nearest enclosing
+/// [`LodLevelRoot`]. When a parent [`LodSceneHost`] is found, refresh is allowed iff
+/// that root's level equals the parent's desired [`LodSceneLevel`]. No parent host →
+/// top-level → allowed. Under a parent host but not under any level root → allowed
+/// (cold scaffolding).
 ///
-/// Initial chunk fulfill (empty level-roots bag) is **not** gated by this — hosts under
-/// Medium/Low parents still need their first leaves filled.
+/// Initial chunk fulfill (empty level-roots bag) is **not** gated by this — begin still
+/// admits empty nested hosts; upgrades require this gate once any root exists.
 pub fn nested_host_parent_allows_refresh(
 	entity: Entity,
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+	level_roots: &Query<&LodLevelRoot>,
 ) -> bool {
 	let Ok(parent) = child_of.get(entity) else {
 		return true;
 	};
 	let mut current = parent.parent();
+	let mut enclosing_root: Option<LodSceneLevel> = None;
 	loop {
-		if let Ok(level) = host_levels.get(current) {
-			return *level == LodSceneLevel::High;
+		if enclosing_root.is_none() {
+			if let Ok(root) = level_roots.get(current) {
+				enclosing_root = Some(root.0);
+			}
+		}
+		if let Ok(desired) = host_levels.get(current) {
+			return match enclosing_root {
+				Some(root_level) => root_level == *desired,
+				None => true,
+			};
 		}
 		let Ok(next) = child_of.get(current) else {
 			return true;
+		};
+		current = next.parent();
+	}
+}
+
+/// Desired [`LodSceneLevel`] of the nearest ancestor [`LodSceneHost`], or
+/// [`LodSceneLevel::High`] when there is none (top-level ranking).
+///
+/// `host` is skipped — walk starts at its parent. Used for fulfill drain priority
+/// `(parent_level, self_level)`.
+pub fn parent_host_desired_or_high(
+	host: Entity,
+	child_of: &Query<&ChildOf>,
+	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+) -> LodSceneLevel {
+	let Ok(parent) = child_of.get(host) else {
+		return LodSceneLevel::High;
+	};
+	let mut current = parent.parent();
+	loop {
+		if let Ok(level) = host_levels.get(current) {
+			return *level;
+		}
+		let Ok(next) = child_of.get(current) else {
+			return LodSceneLevel::High;
 		};
 		current = next.parent();
 	}
