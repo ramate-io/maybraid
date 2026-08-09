@@ -14,14 +14,13 @@ use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{for_each_rr, split_presence_level, LevelBand};
 use super::types::{
-	LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget, LodChunkFulfillment,
-	LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
+	LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
+	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
 };
 use super::util::{host_desired_for_root, ms};
 
 #[derive(Default)]
-struct JobBuckets {
-	presence: Vec<Entity>,
+struct LevelBuckets {
 	high: Vec<Entity>,
 	medium: Vec<Entity>,
 	low: Vec<Entity>,
@@ -29,18 +28,30 @@ struct JobBuckets {
 	other: Vec<Entity>,
 }
 
-impl JobBuckets {
-	fn push(&mut self, entity: Entity, cold: bool, level: LodSceneLevel) {
-		if cold {
-			self.presence.push(entity);
-			return;
-		}
+impl LevelBuckets {
+	fn push(&mut self, entity: Entity, level: LodSceneLevel) {
 		match LevelBand::from_level(level) {
 			LevelBand::High => self.high.push(entity),
 			LevelBand::Medium => self.medium.push(entity),
 			LevelBand::Low => self.low.push(entity),
 			LevelBand::UltraLow => self.ultra.push(entity),
 			LevelBand::Other => self.other.push(entity),
+		}
+	}
+}
+
+#[derive(Default)]
+struct JobBuckets {
+	presence: LevelBuckets,
+	level: LevelBuckets,
+}
+
+impl JobBuckets {
+	fn push(&mut self, entity: Entity, cold: bool, level: LodSceneLevel) {
+		if cold {
+			self.presence.push(entity, level);
+		} else {
+			self.level.push(entity, level);
 		}
 	}
 }
@@ -62,9 +73,9 @@ type DrainJobs<'w, 's> = Query<
 
 /// Drain weighted primitives under [`LodChunkBudgetClock`].
 ///
-/// Budget is split ~⅛ Presence (cold jobs) / ~⅞ Level (warm, High→far). Frame
-/// parity chooses which class runs first; leftovers roll into the second class.
-/// Within each list, a round-robin cursor avoids ECS-order pinning.
+/// Budget is split ~⅛ Presence (cold jobs) / ~⅞ Level (warm). Frame parity chooses
+/// which class runs first; leftovers roll into the second class. Within each class,
+/// bands drain High → Medium → Low → UltraLow (RR inside each band).
 ///
 /// Not-desired pending roots are skipped (paused); their queues are left intact.
 pub fn drain_chunk_lod_fulfill(
@@ -116,7 +127,7 @@ pub fn drain_chunk_lod_fulfill(
 	};
 
 	if presence_first {
-		drain_presence(
+		drain_level_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.presence,
@@ -128,8 +139,8 @@ pub fn drain_chunk_lod_fulfill(
 		drain_level_bands(
 			&mut commands,
 			&mut jobs,
-			&buckets,
-			&mut cursor,
+			&buckets.level,
+			&mut cursor.level,
 			&mut remaining,
 			&mut stats,
 		);
@@ -137,13 +148,13 @@ pub fn drain_chunk_lod_fulfill(
 		drain_level_bands(
 			&mut commands,
 			&mut jobs,
-			&buckets,
-			&mut cursor,
+			&buckets.level,
+			&mut cursor.level,
 			&mut remaining,
 			&mut stats,
 		);
 		remaining = remaining.saturating_add(presence_share);
-		drain_presence(
+		drain_level_bands(
 			&mut commands,
 			&mut jobs,
 			&buckets.presence,
@@ -171,55 +182,42 @@ pub fn drain_chunk_lod_fulfill(
 	}
 }
 
-fn drain_presence(
-	commands: &mut Commands,
-	jobs: &mut DrainJobs,
-	presence: &[Entity],
-	cursor: &mut u32,
-	remaining: &mut u32,
-	stats: &mut DrainStats,
-) {
-	for_each_rr(presence, cursor, |&entity| {
-		drain_one(commands, jobs, entity, remaining, stats)
-	});
-}
-
 fn drain_level_bands(
 	commands: &mut Commands,
 	jobs: &mut DrainJobs,
-	buckets: &JobBuckets,
-	cursor: &mut LodChunkDrainCursor,
+	buckets: &LevelBuckets,
+	cursors: &mut LodChunkBandCursors,
 	remaining: &mut u32,
 	stats: &mut DrainStats,
 ) {
 	if *remaining == 0 {
 		return;
 	}
-	for_each_rr(&buckets.high, &mut cursor.high, |&entity| {
+	for_each_rr(&buckets.high, &mut cursors.high, |&entity| {
 		drain_one(commands, jobs, entity, remaining, stats)
 	});
 	if *remaining == 0 {
 		return;
 	}
-	for_each_rr(&buckets.medium, &mut cursor.medium, |&entity| {
+	for_each_rr(&buckets.medium, &mut cursors.medium, |&entity| {
 		drain_one(commands, jobs, entity, remaining, stats)
 	});
 	if *remaining == 0 {
 		return;
 	}
-	for_each_rr(&buckets.low, &mut cursor.low, |&entity| {
+	for_each_rr(&buckets.low, &mut cursors.low, |&entity| {
 		drain_one(commands, jobs, entity, remaining, stats)
 	});
 	if *remaining == 0 {
 		return;
 	}
-	for_each_rr(&buckets.ultra, &mut cursor.ultra, |&entity| {
+	for_each_rr(&buckets.ultra, &mut cursors.ultra, |&entity| {
 		drain_one(commands, jobs, entity, remaining, stats)
 	});
 	if *remaining == 0 {
 		return;
 	}
-	for_each_rr(&buckets.other, &mut cursor.other, |&entity| {
+	for_each_rr(&buckets.other, &mut cursors.other, |&entity| {
 		drain_one(commands, jobs, entity, remaining, stats)
 	});
 }

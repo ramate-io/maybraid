@@ -1,8 +1,9 @@
 //! Presence vs Level admission and drain ordering.
 //!
 //! Under saturation, budget is split ~⅛ Presence (cold / empty→something) and
-//! ~⅞ Level (warm upgrades, High→… buckets). Frame parity swaps which policy
-//! runs first. Round-robin cursors avoid stable ECS-order starvation.
+//! ~⅞ Level (warm upgrades, including when a pending sibling already exists).
+//! Both classes use High→… buckets. Frame parity swaps which policy runs first.
+//! Round-robin cursors avoid stable ECS-order starvation within a band.
 
 use bevy::prelude::*;
 

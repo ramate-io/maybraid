@@ -16,16 +16,18 @@ use crate::scene::LodScene;
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, LevelBand};
 use super::types::{
-	LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending,
-	LodLevelRootStreamed, LodCullInFlight,
+	LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodLevelRootPending, LodLevelRootStreamed,
 };
-use super::util::{has_ready_root, ms, roots_bag_entity};
+use super::util::{has_present_root, ms, roots_bag_entity};
 
 /// Which hosts a begin pass may admit.
 #[derive(Clone, Copy)]
 enum BeginPass {
-	/// Cold hosts only (empty → something).
-	Presence,
+	/// Cold hosts, High / Medium desired (empty → something near).
+	PresenceNear,
+	/// Cold hosts, Low / UltraLow / other desired.
+	PresenceFar,
 	/// Warm upgrades: High / Medium first.
 	LevelNear,
 	/// Warm upgrades: Low / UltraLow / other.
@@ -36,10 +38,15 @@ impl BeginPass {
 	fn allows(self, cold: bool, level: LodSceneLevel) -> bool {
 		let band = LevelBand::from_level(level);
 		match self {
-			Self::Presence => cold,
+			Self::PresenceNear => cold && band.is_near(),
+			Self::PresenceFar => cold && !band.is_near(),
 			Self::LevelNear => !cold && band.is_near(),
 			Self::LevelFar => !cold && !band.is_near(),
 		}
+	}
+
+	fn is_presence(self) -> bool {
+		matches!(self, Self::PresenceNear | Self::PresenceFar)
 	}
 }
 
@@ -61,11 +68,12 @@ struct BeginStats {
 
 /// Start a pending root + queue from [`LodLevelSpawnRequest`].
 ///
-/// Cold start (no ready root): pending root is visible so chunks stream on-screen.
+/// Cold start (no present root): pending root is visible so chunks stream on-screen.
 /// Warm switch: pending root stays Hidden until complete. Admission is capped by
 /// [`LodChunkBeginClock`] (Presence vs Level); skipped hosts keep their spawn request.
 ///
 /// Same leftover policy as drain: first class runs, unused quota rolls into the other.
+/// Within Presence, Near (High/Medium) admits before Far (Low/UltraLow).
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
@@ -97,7 +105,22 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 
 	if presence_first {
 		run_begin_pass(
-			BeginPass::Presence,
+			BeginPass::PresenceNear,
+			&mut commands,
+			&lod_ref,
+			&mut diag,
+			&mut begin_clock,
+			&hosts,
+			&level_roots_heads,
+			&root_keys,
+			&pending,
+			&wants_cull,
+			&child_of,
+			&host_levels,
+			&mut stats,
+		);
+		run_begin_pass(
+			BeginPass::PresenceFar,
 			&mut commands,
 			&lod_ref,
 			&mut diag,
@@ -175,7 +198,22 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		);
 		roll_level_into_presence(&mut begin_clock);
 		run_begin_pass(
-			BeginPass::Presence,
+			BeginPass::PresenceNear,
+			&mut commands,
+			&lod_ref,
+			&mut diag,
+			&mut begin_clock,
+			&hosts,
+			&level_roots_heads,
+			&root_keys,
+			&pending,
+			&wants_cull,
+			&child_of,
+			&host_levels,
+			&mut stats,
+		);
+		run_begin_pass(
+			BeginPass::PresenceFar,
 			&mut commands,
 			&lod_ref,
 			&mut diag,
@@ -276,7 +314,8 @@ fn run_begin_pass<T: Component + LodScene>(
 				commands.entity(host).remove::<LodLevelSpawnRequest>();
 				continue;
 			}
-			cold = !has_ready_root(root_children, root_keys, pending, wants_cull);
+			// Pending siblings count as present → warm Level upgrade path.
+			cold = !has_present_root(root_children, root_keys, wants_cull);
 		}
 
 		if !pass.allows(cold, request.level) {
@@ -285,6 +324,7 @@ fn run_begin_pass<T: Component + LodScene>(
 		if !admit_begin(begin_clock, cold) {
 			continue;
 		}
+		debug_assert_eq!(pass.is_presence(), cold);
 
 		let t_chunks = Instant::now();
 		let chunk = scene.scene_chunks_with_level(lod_ref, request.level);

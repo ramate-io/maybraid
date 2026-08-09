@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
-use super::types::{LodCullInFlight, LodLevelRootPending, LodSceneHostStreamed};
+use super::types::{LodCullInFlight, LodSceneHostStreamed};
 
 pub(super) fn ms(start: Instant) -> f64 {
 	start.elapsed().as_secs_f64() * 1000.0
@@ -25,10 +25,14 @@ pub(super) fn roots_bag_entity(
 	None
 }
 
-pub(super) fn has_ready_root(
+/// True when the host already has any non-culling level root (ready **or** pending).
+///
+/// Pending siblings count as present so Medium→High (and similar) upgrades are
+/// classified **warm** / Level rather than Presence — otherwise a paused mid-fill
+/// Medium root would push High into the cold Presence queue and starve it.
+pub(super) fn has_present_root(
 	root_children: &Children,
 	root_keys: &Query<&LodLevelRoot>,
-	pending: &Query<(), With<LodLevelRootPending>>,
 	cull_inflight: &Query<(), With<LodCullInFlight>>,
 ) -> bool {
 	for child in root_children.iter() {
@@ -38,9 +42,7 @@ pub(super) fn has_ready_root(
 		if cull_inflight.contains(child) {
 			continue;
 		}
-		if !pending.contains(child) {
-			return true;
-		}
+		return true;
 	}
 	false
 }

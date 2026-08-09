@@ -45,7 +45,9 @@ pub struct LodChunkFulfillment {
 	/// Primitive count at job begin (Streamed when `spawned == expected`).
 	pub expected: usize,
 	pub spawned: usize,
-	/// No ready sibling root when the job began (cold / presence work).
+	/// No present sibling root when the job began (cold / presence work).
+	///
+	/// "Present" includes pending roots — only a truly empty host is cold.
 	pub cold: bool,
 }
 
@@ -92,16 +94,23 @@ pub struct LodChunkBeginClock {
 	pub presence_first: bool,
 }
 
-/// Round-robin cursors + frame parity for drain scheduling.
-#[derive(Resource, Debug, Clone, Copy, Default)]
-pub struct LodChunkDrainCursor {
-	pub frame: u64,
-	pub presence: u32,
+/// Round-robin cursors for High → far drain bands.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LodChunkBandCursors {
 	pub high: u32,
 	pub medium: u32,
 	pub low: u32,
 	pub ultra: u32,
 	pub other: u32,
+}
+
+/// Round-robin cursors + frame parity for drain scheduling.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct LodChunkDrainCursor {
+	pub frame: u64,
+	/// Presence (cold) band cursors — drained High → far, same as Level.
+	pub presence: LodChunkBandCursors,
+	pub level: LodChunkBandCursors,
 }
 
 /// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
