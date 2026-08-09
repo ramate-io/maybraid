@@ -10,8 +10,8 @@
 //! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
 //! compare a folded probe budget).
 //!
-//! Structural LOD (× grove footprint): High = full clumps; Medium ≈ one upright proxy per
-//! ~2 placement cells; Low ≈ one per ~8 cells; UltraLow = 2×2 horizontal proxies.
+//! Structural LOD (× grove footprint): High out to 10× (full clumps); Medium ≈ one upright
+//! proxy per ~2 placement cells; Low ≈ one per ~8 cells; UltraLow = 2×2 horizontal proxies.
 //! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
 //! color ranges.
 
@@ -366,11 +366,12 @@ mod vc {
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
-	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
 	/// Structural Medium band (× footprint): one upright proxy per ~2 placement cells.
-	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
+	/// Kept above High so the Medium ring stays non-empty after High moved to 10×.
+	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
 	/// Structural Low band (× footprint): one upright proxy per ~8 placement cells; beyond → UltraLow.
-	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 40.0;
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
