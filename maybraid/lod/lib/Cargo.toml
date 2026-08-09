@@ -9,6 +9,11 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+default = []
+## Verbose `[lod.chunk]` begin/drain/complete `info!` lines (also `LOD_CHUNK_TRACE=1`).
+chunk-trace = []
+
 [dependencies]
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }

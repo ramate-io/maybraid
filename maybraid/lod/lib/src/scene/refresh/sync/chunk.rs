@@ -38,7 +38,7 @@ use super::cull::{
 };
 
 pub use begin::begin_chunk_lod_fulfill;
-pub use complete::complete_chunk_lod_fulfill;
+pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
 pub use drain::drain_chunk_lod_fulfill;
 pub use resume::resume_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
@@ -139,6 +139,9 @@ impl Plugin for LodChunkBudgetPlugin {
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
 					resume_desired_pending_roots.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
+					bump_nested_streamed_progress
+						.in_set(LodChunkFulfillSystems::Complete)
+						.before(complete_chunk_lod_fulfill),
 					complete_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Complete),
 					apply_lod_cull_requests.in_set(LodChunkCullSystems::Apply),
 					drain_lod_cull.in_set(LodChunkCullSystems::Drain),

@@ -11,7 +11,7 @@ pub mod log_thresh;
 pub mod presentation;
 pub mod scene;
 
-pub use log_thresh::lod_log_min_ms;
+pub use log_thresh::{lod_chunk_trace, lod_log_min_ms};
 
 /// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
 pub use scene::chunk as scene_chunk;

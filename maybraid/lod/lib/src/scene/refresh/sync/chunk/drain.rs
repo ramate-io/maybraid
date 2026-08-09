@@ -5,26 +5,26 @@
 //! - **Active**: warm jobs on a **shown** (non-Hidden) root that is not desired —
 //!   warm-hold continuation while an upgrade builds.
 //!
+//! Classification uses frozen `host` / `parent_desired` on [`LodChunkFulfillment`].
 //! Budget ~¼ / ~⅜ / ~⅜ with leftovers cascading. Within each class, jobs drain by
-//! `(parent_desired, self_level)` High→… (missing parent = High; RR per tuple).
+//! `(parent_desired, self_level)` High→… (RR per tuple).
 
 use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 
-use crate::scene::host::{
-	lod_root_is_shown, parent_host_desired_or_high, LodLevelRoot, LodSceneHost,
-};
+use crate::lod_chunk_trace;
+use crate::scene::host::{lod_root_is_shown, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor,
 	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
-	LodLevelRootStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
+	LodLevelRootStreamed, LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
-use super::util::{host_desired_for_root, host_entity_for_root, ms};
+use super::util::{count_nested_hosts, ms};
 
 struct TupleBuckets {
 	bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
@@ -95,9 +95,11 @@ pub fn drain_chunk_lod_fulfill(
 	budget: Res<LodChunkFulfillBudget>,
 	mut cursor: ResMut<LodChunkDrainCursor>,
 	mut jobs: DrainJobs,
-	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 	visibilities: Query<&Visibility>,
+	children_q: Query<&Children>,
+	nested_hosts: Query<(), With<LodSceneHost>>,
+	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
 ) {
 	let t0 = Instant::now();
 	let total = clock.spawn_remaining;
@@ -111,11 +113,7 @@ pub fn drain_chunk_lod_fulfill(
 		if job.queue.is_empty() {
 			continue;
 		}
-		let Some(desired) = host_desired_for_root(entity, &child_of, &host_levels) else {
-			paused_skipped += 1;
-			continue;
-		};
-		let Some(host) = host_entity_for_root(entity, &child_of) else {
+		let Ok(desired) = host_levels.get(job.host) else {
 			paused_skipped += 1;
 			continue;
 		};
@@ -124,12 +122,12 @@ pub fn drain_chunk_lod_fulfill(
 			.ok()
 			.is_some_and(|v| lod_root_is_shown(*v));
 		let class = if job.cold {
-			if root.0 != desired {
+			if root.0 != *desired {
 				paused_skipped += 1;
 				continue;
 			}
 			FulfillClass::Presence
-		} else if root.0 == desired {
+		} else if root.0 == *desired {
 			FulfillClass::Desired
 		} else if shown {
 			FulfillClass::Active
@@ -137,10 +135,9 @@ pub fn drain_chunk_lod_fulfill(
 			paused_skipped += 1;
 			continue;
 		};
-		let parent = parent_host_desired_or_high(host, &child_of, &host_levels);
 		buckets
 			.for_class_mut(class)
-			.push(entity, parent, root.0);
+			.push(entity, job.parent_desired, root.0);
 	}
 
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
@@ -160,7 +157,7 @@ pub fn drain_chunk_lod_fulfill(
 	};
 
 	let mut remaining = 0u32;
-	for (i, class) in order.into_iter().enumerate() {
+	for class in order {
 		remaining = remaining.saturating_add(share(class));
 		let cursors = match class {
 			FulfillClass::Presence => &mut cursor.presence,
@@ -174,15 +171,15 @@ pub fn drain_chunk_lod_fulfill(
 			cursors,
 			&mut remaining,
 			&mut stats,
+			&children_q,
+			&nested_hosts,
+			&streamed_hosts,
 		);
-		if i + 1 < order.len() && remaining == 0 {
-			// leftovers already 0; next class still gets its share via saturating_add
-		}
 	}
 
 	clock.spawn_remaining = remaining;
 
-	if stats.spawned > 0 || stats.newly_streamed > 0 {
+	if lod_chunk_trace() && (stats.spawned > 0 || stats.newly_streamed > 0) {
 		info!(
 			"[lod.chunk] drain: queued_spawns={} weight_spent={} budget={} \
 			 jobs_touched={} newly_streamed={} paused_skipped={} first={:?} \
@@ -206,13 +203,25 @@ fn drain_tuple_bands(
 	cursors: &mut LodChunkBandCursors,
 	remaining: &mut u32,
 	stats: &mut DrainStats,
+	children_q: &Query<&Children>,
+	nested_hosts: &Query<(), With<LodSceneHost>>,
+	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
 ) {
 	for rank in 0..LOD_CHUNK_TUPLE_BAND_COUNT {
 		if *remaining == 0 {
 			return;
 		}
 		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
-			drain_one(commands, jobs, entity, remaining, stats)
+			drain_one(
+				commands,
+				jobs,
+				entity,
+				remaining,
+				stats,
+				children_q,
+				nested_hosts,
+				streamed_hosts,
+			)
 		});
 	}
 }
@@ -223,6 +232,9 @@ fn drain_one(
 	entity: Entity,
 	remaining: &mut u32,
 	stats: &mut DrainStats,
+	children_q: &Query<&Children>,
+	nested_hosts: &Query<(), With<LodSceneHost>>,
+	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
 ) -> bool {
 	if *remaining == 0 {
 		return false;
@@ -258,6 +270,12 @@ fn drain_one(
 	if job.is_content_complete() {
 		commands.entity(entity).insert(LodLevelRootStreamed);
 		stats.newly_streamed += 1;
+		if job.nested_required.is_none() {
+			let (required, streamed) =
+				count_nested_hosts(entity, children_q, nested_hosts, streamed_hosts);
+			job.nested_required = Some(required);
+			job.nested_streamed = job.nested_streamed.max(streamed);
+		}
 	}
 	*remaining > 0
 }

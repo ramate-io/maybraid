@@ -42,18 +42,35 @@ pub struct LodCullInFlight {
 #[derive(Component)]
 pub struct LodChunkFulfillment {
 	pub queue: VecDeque<(u32, Box<dyn bevy::scene::Scene>)>,
-	/// Primitive count at job begin (Streamed when `spawned == expected`).
+	/// Primitive count at job begin (content-Streamed when `spawned == expected`).
 	pub expected: usize,
 	pub spawned: usize,
 	/// No present sibling root when the job began (cold / presence work).
 	///
 	/// "Present" includes pending roots — only a truly empty host is cold.
 	pub cold: bool,
+	/// Owning [`crate::LodSceneHost`] (`root → LodLevelRoots → host`), frozen at begin.
+	pub host: Entity,
+	/// Nearest ancestor host desired at begin ([`LodSceneLevel::High`] if top-level).
+	/// Used for drain `(parent, self)` ranking only.
+	pub parent_desired: LodSceneLevel,
+	/// Nested [`LodSceneHost`]s under this root that are [`LodSceneHostStreamed`].
+	pub nested_streamed: usize,
+	/// Nested host count required for warm-swap; set once when content completes.
+	/// `None` until the first content-complete observation.
+	pub nested_required: Option<usize>,
 }
 
 impl LodChunkFulfillment {
 	pub(super) fn is_content_complete(&self) -> bool {
 		self.queue.is_empty() && self.spawned >= self.expected
+	}
+
+	pub(super) fn nested_ready(&self) -> bool {
+		match self.nested_required {
+			Some(required) => self.nested_streamed >= required,
+			None => false,
+		}
 	}
 }
 

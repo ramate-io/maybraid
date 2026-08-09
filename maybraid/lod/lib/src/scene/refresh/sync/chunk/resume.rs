@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
+use crate::lod_chunk_trace;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
@@ -59,7 +60,7 @@ pub fn resume_desired_pending_roots(
 			resumed += 1;
 		}
 	}
-	if resumed > 0 {
+	if lod_chunk_trace() && resumed > 0 {
 		info!(
 			"[lod.chunk] resume_desired: resumed={resumed} in {:.2}ms",
 			ms(t0)
