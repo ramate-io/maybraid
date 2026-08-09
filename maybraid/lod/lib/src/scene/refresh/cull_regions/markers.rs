@@ -12,14 +12,14 @@ use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Nested host may participate in fine-phase refresh / region cull.
 ///
-/// Allowed when under the parent host's **desired** [`LodLevelRoot`]. Maintained
-/// from parent [`LodSceneLevel`] changes (and on host add) so hot paths can filter
-/// with `With<LodNestedRefreshAllowed>` instead of walking ancestors.
+/// Allowed when under the parent host's **desired** or **shown** (warm-hold)
+/// [`LodLevelRoot`]. Maintained from parent [`LodSceneLevel`] changes (and on host
+/// add) so hot paths can filter with `With<LodNestedRefreshAllowed>`.
 /// Mutually exclusive with [`LodNestedRefreshBlocked`].
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodNestedRefreshAllowed;
 
-/// Nested host is gated off (not under parent's desired level root).
+/// Nested host is gated off (not under parent's desired or shown level root).
 /// See [`LodNestedRefreshAllowed`].
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodNestedRefreshBlocked;
@@ -34,10 +34,21 @@ fn set_nested_refresh_gate(
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
 	level_roots: &Query<&LodLevelRoot>,
+	children_q: &Query<&Children>,
+	level_roots_bags: &Query<(), With<LodLevelRoots>>,
+	visibilities: &Query<&Visibility>,
 	allowed: &Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: &Query<(), With<LodNestedRefreshBlocked>>,
 ) {
-	let want = nested_host_parent_allows_refresh(entity, child_of, host_levels, level_roots);
+	let want = nested_host_parent_allows_refresh(
+		entity,
+		child_of,
+		host_levels,
+		level_roots,
+		children_q,
+		level_roots_bags,
+		visibilities,
+	);
 	let has_allowed = allowed.contains(entity);
 	let has_blocked = blocked.contains(entity);
 	if want {
@@ -74,7 +85,7 @@ fn collect_descendant_hosts(
 	}
 }
 
-/// On new / ungated hosts + when any host level changes, refresh gate markers.
+/// On new / ungated hosts + when any host level or root visibility changes, refresh gate markers.
 pub fn sync_nested_refresh_allowed(
 	mut commands: Commands,
 	added: Query<Entity, Added<LodSceneHost>>,
@@ -87,11 +98,14 @@ pub fn sync_nested_refresh_allowed(
 		),
 	>,
 	changed_levels: Query<Entity, (With<LodSceneHost>, Changed<LodSceneLevel>)>,
+	changed_root_vis: Query<&ChildOf, (With<LodLevelRoot>, Changed<Visibility>)>,
 	children_q: Query<&Children>,
 	hosts: Query<(), With<LodSceneHost>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 	level_roots: Query<&LodLevelRoot>,
+	level_roots_bags: Query<(), With<LodLevelRoots>>,
+	visibilities: Query<&Visibility>,
 	allowed: Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: Query<(), With<LodNestedRefreshBlocked>>,
 ) {
@@ -99,6 +113,18 @@ pub fn sync_nested_refresh_allowed(
 	for entity in &changed_levels {
 		dirty.push(entity);
 		collect_descendant_hosts(entity, &children_q, &hosts, &mut dirty);
+	}
+	// Warm-hold / complete flips root Visibility — re-gate nested hosts under that host.
+	for root_of in &changed_root_vis {
+		let bag = root_of.parent();
+		let Ok(bag_of) = child_of.get(bag) else {
+			continue;
+		};
+		let host = bag_of.parent();
+		if hosts.contains(host) {
+			dirty.push(host);
+			collect_descendant_hosts(host, &children_q, &hosts, &mut dirty);
+		}
 	}
 	if dirty.is_empty() {
 		return;
@@ -112,6 +138,9 @@ pub fn sync_nested_refresh_allowed(
 			&child_of,
 			&host_levels,
 			&level_roots,
+			&children_q,
+			&level_roots_bags,
+			&visibilities,
 			&allowed,
 			&blocked,
 		);

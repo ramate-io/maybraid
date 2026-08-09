@@ -85,13 +85,24 @@ pub struct LodChunkBudgetClock {
 	pub cull_remaining: u32,
 }
 
+/// Fulfill budget class: cold fill, desired upgrade, or shown warm-hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FulfillClass {
+	#[default]
+	Presence,
+	Desired,
+	Active,
+}
+
 /// Shared begin admission quotas for the current frame (all host `T`s).
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct LodChunkBeginClock {
 	pub presence_remaining: u32,
-	pub level_remaining: u32,
-	/// When true, begin systems prefer cold (presence) hosts first.
-	pub presence_first: bool,
+	pub desired_remaining: u32,
+	/// Reserved for symmetry with drain; begin rolls this into Desired.
+	pub active_remaining: u32,
+	/// Which class the begin systems try first this frame.
+	pub first_class: FulfillClass,
 }
 
 /// Number of `(parent_band, self_band)` drain slots (5×5 High→Other).
@@ -115,9 +126,9 @@ impl Default for LodChunkBandCursors {
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct LodChunkDrainCursor {
 	pub frame: u64,
-	/// Presence (cold) tuple cursors — same `(parent, self)` order as Level.
 	pub presence: LodChunkBandCursors,
-	pub level: LodChunkBandCursors,
+	pub desired: LodChunkBandCursors,
+	pub active: LodChunkBandCursors,
 }
 
 /// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).

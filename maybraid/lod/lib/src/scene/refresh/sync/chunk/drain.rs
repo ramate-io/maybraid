@@ -1,22 +1,28 @@
-//! Global weighted drain with Presence / Level priority and round-robin fairness.
+//! Global weighted drain with Presence / Desired / Active priority.
 //!
-//! Only **desired** pending roots receive spawn budget (`root.level == host level`).
-//! Not-desired jobs keep their [`LodChunkFulfillment`] queue (paused) until desired
-//! again or a real [`super::super::cull::LodCullRequest`] tears them down.
+//! - **Presence**: cold jobs (`job.cold`, empty→something).
+//! - **Desired**: warm jobs for the host's desired level root.
+//! - **Active**: warm jobs on a **shown** (non-Hidden) root that is not desired —
+//!   warm-hold continuation while an upgrade builds.
+//!
+//! Budget ~¼ / ~⅜ / ~⅜ with leftovers cascading. Within each class, jobs drain by
+//! `(parent_desired, self_level)` High→… (missing parent = High; RR per tuple).
 
 use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 
-use crate::scene::host::{parent_host_desired_or_high, LodLevelRoot, LodSceneHost};
+use crate::scene::host::{
+	lod_root_is_shown, parent_host_desired_or_high, LodLevelRoot, LodSceneHost,
+};
 use crate::scene::level::LodSceneLevel;
 
-use super::schedule::{for_each_rr, split_presence_level, LevelBand};
+use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
-	LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
-	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
-	LOD_CHUNK_TUPLE_BAND_COUNT,
+	FulfillClass, LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
 use super::util::{host_desired_for_root, host_entity_for_root, ms};
 
@@ -45,21 +51,24 @@ impl TupleBuckets {
 #[derive(Default)]
 struct JobBuckets {
 	presence: TupleBuckets,
-	level: TupleBuckets,
+	desired: TupleBuckets,
+	active: TupleBuckets,
 }
 
 impl JobBuckets {
-	fn push(
-		&mut self,
-		entity: Entity,
-		cold: bool,
-		parent: LodSceneLevel,
-		self_level: LodSceneLevel,
-	) {
-		if cold {
-			self.presence.push(entity, parent, self_level);
-		} else {
-			self.level.push(entity, parent, self_level);
+	fn for_class_mut(&mut self, class: FulfillClass) -> &mut TupleBuckets {
+		match class {
+			FulfillClass::Presence => &mut self.presence,
+			FulfillClass::Desired => &mut self.desired,
+			FulfillClass::Active => &mut self.active,
+		}
+	}
+
+	fn for_class(&self, class: FulfillClass) -> &TupleBuckets {
+		match class {
+			FulfillClass::Presence => &self.presence,
+			FulfillClass::Desired => &self.desired,
+			FulfillClass::Active => &self.active,
 		}
 	}
 }
@@ -80,13 +89,6 @@ type DrainJobs<'w, 's> = Query<
 >;
 
 /// Drain weighted primitives under [`LodChunkBudgetClock`].
-///
-/// Budget is split ~⅛ Presence (cold jobs) / ~⅞ Level (warm). Frame parity chooses
-/// which class runs first; leftovers roll into the second class. Within each class,
-/// jobs drain by `(parent_desired, self_level)` High→… (missing parent = High; RR
-/// inside each tuple band).
-///
-/// Not-desired pending roots are skipped (paused); their queues are left intact.
 pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
@@ -95,6 +97,7 @@ pub fn drain_chunk_lod_fulfill(
 	mut jobs: DrainJobs,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	visibilities: Query<&Visibility>,
 ) {
 	let t0 = Instant::now();
 	let total = clock.spawn_remaining;
@@ -112,20 +115,36 @@ pub fn drain_chunk_lod_fulfill(
 			paused_skipped += 1;
 			continue;
 		};
-		if root.0 != desired {
-			paused_skipped += 1;
-			continue;
-		}
 		let Some(host) = host_entity_for_root(entity, &child_of) else {
 			paused_skipped += 1;
 			continue;
 		};
+		let shown = visibilities
+			.get(entity)
+			.ok()
+			.is_some_and(|v| lod_root_is_shown(*v));
+		let class = if job.cold {
+			if root.0 != desired {
+				paused_skipped += 1;
+				continue;
+			}
+			FulfillClass::Presence
+		} else if root.0 == desired {
+			FulfillClass::Desired
+		} else if shown {
+			FulfillClass::Active
+		} else {
+			paused_skipped += 1;
+			continue;
+		};
 		let parent = parent_host_desired_or_high(host, &child_of, &host_levels);
-		buckets.push(entity, job.cold, parent, root.0);
+		buckets
+			.for_class_mut(class)
+			.push(entity, parent, root.0);
 	}
 
-	let (presence_share, level_share) = split_presence_level(total);
-	let presence_first = cursor.frame % 2 == 0;
+	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
+	let order = class_order(cursor.frame);
 	let mut stats = DrainStats {
 		spawned: 0,
 		weight_spent: 0,
@@ -134,48 +153,31 @@ pub fn drain_chunk_lod_fulfill(
 		paused_skipped,
 	};
 
-	let mut remaining = if presence_first {
-		presence_share
-	} else {
-		level_share
+	let share = |c: FulfillClass| match c {
+		FulfillClass::Presence => presence_share,
+		FulfillClass::Desired => desired_share,
+		FulfillClass::Active => active_share,
 	};
 
-	if presence_first {
+	let mut remaining = 0u32;
+	for (i, class) in order.into_iter().enumerate() {
+		remaining = remaining.saturating_add(share(class));
+		let cursors = match class {
+			FulfillClass::Presence => &mut cursor.presence,
+			FulfillClass::Desired => &mut cursor.desired,
+			FulfillClass::Active => &mut cursor.active,
+		};
 		drain_tuple_bands(
 			&mut commands,
 			&mut jobs,
-			&buckets.presence,
-			&mut cursor.presence,
+			buckets.for_class(class),
+			cursors,
 			&mut remaining,
 			&mut stats,
 		);
-		remaining = remaining.saturating_add(level_share);
-		drain_tuple_bands(
-			&mut commands,
-			&mut jobs,
-			&buckets.level,
-			&mut cursor.level,
-			&mut remaining,
-			&mut stats,
-		);
-	} else {
-		drain_tuple_bands(
-			&mut commands,
-			&mut jobs,
-			&buckets.level,
-			&mut cursor.level,
-			&mut remaining,
-			&mut stats,
-		);
-		remaining = remaining.saturating_add(presence_share);
-		drain_tuple_bands(
-			&mut commands,
-			&mut jobs,
-			&buckets.presence,
-			&mut cursor.presence,
-			&mut remaining,
-			&mut stats,
-		);
+		if i + 1 < order.len() && remaining == 0 {
+			// leftovers already 0; next class still gets its share via saturating_add
+		}
 	}
 
 	clock.spawn_remaining = remaining;
@@ -183,7 +185,7 @@ pub fn drain_chunk_lod_fulfill(
 	if stats.spawned > 0 || stats.newly_streamed > 0 {
 		info!(
 			"[lod.chunk] drain: queued_spawns={} weight_spent={} budget={} \
-			 jobs_touched={} newly_streamed={} paused_skipped={} presence_first={presence_first} \
+			 jobs_touched={} newly_streamed={} paused_skipped={} first={:?} \
 			 queue_cmds={:.2}ms (rest={remaining})",
 			stats.spawned,
 			stats.weight_spent,
@@ -191,6 +193,7 @@ pub fn drain_chunk_lod_fulfill(
 			stats.jobs_touched,
 			stats.newly_streamed,
 			stats.paused_skipped,
+			order[0],
 			ms(t0),
 		);
 	}
@@ -214,7 +217,6 @@ fn drain_tuple_bands(
 	}
 }
 
-/// Drain one job while budget remains. Returns `false` when the frame budget is empty.
 fn drain_one(
 	commands: &mut Commands,
 	jobs: &mut DrainJobs,

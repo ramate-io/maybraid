@@ -75,13 +75,15 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
-	hosts: Query<(Entity, &T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
+	hosts: Query<(Entity, &T, &LodSceneLevel), (With<LodSceneHost>, FHost)>,
+	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	children_q: Query<&Children>,
+	visibilities: Query<&Visibility>,
 ) where
 	T: Component + LodScene,
 	FHost: QueryFilter + 'static,
@@ -100,9 +102,17 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let mut culls_none = 0u32;
 	let mut roots_seen = 0u32;
 
-	for (host, scene, current, host_children) in &hosts {
+	for (host, scene, current) in &hosts {
 		hosts_scanned += 1;
-		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels, &root_keys) {
+		if !nested_host_parent_allows_refresh(
+			host,
+			&child_of,
+			&host_levels,
+			&root_keys,
+			&children_q,
+			&level_roots_bags,
+			&visibilities,
+		) {
 			parent_skip += 1;
 			continue;
 		}
@@ -116,9 +126,12 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			continue;
 		}
 
+		let Ok(host_children) = children_q.get(host) else {
+			continue;
+		};
 		let mut roots_entity = None;
 		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
+			if level_roots_bags.contains(child) {
 				roots_entity = Some(child);
 				break;
 			}
@@ -126,7 +139,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		let Some(roots_entity) = roots_entity else {
 			continue;
 		};
-		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+		let Ok(root_children) = children_q.get(roots_entity) else {
 			continue;
 		};
 

@@ -10,8 +10,8 @@
 //! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
 //! compare a folded probe budget).
 //!
-//! Structural LOD (× grove footprint): High out to 10× (full clumps); Medium ≈ one upright
-//! proxy per ~2 placement cells; Low ≈ one per ~8 cells; UltraLow = 2×2 horizontal proxies.
+//! Structural LOD (× grove footprint): High (full clumps); Medium = ~¼ of High tufts
+//! (same geometry, thinned); Low ≈ one upright proxy per ~8 cells; UltraLow = 2×2 carpets.
 //! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
 //! color ranges.
 
@@ -367,21 +367,20 @@ mod vc {
 
 	/// Structural High band (× footprint): full authored clumps.
 	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	/// Structural Medium band (× footprint): one upright proxy per ~2 placement cells.
-	/// Kept above High so the Medium ring stays non-empty after High moved to 10×.
+	/// Structural Medium band (× footprint): ~¼ of High tufts (same blade geometry).
 	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
 	/// Structural Low band (× footprint): one upright proxy per ~8 placement cells; beyond → UltraLow.
 	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
-	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
+	/// Keep every Nth plant for Medium (¼ density).
+	const MEDIUM_TUFT_STRIDE: usize = 4;
+
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
 	/// Carpet float height (world Y); kept small — this is not blade length.
 	const PROXY_HEIGHT_ULTRA: f32 = 0.6;
 	/// World-space vertical thickness for UltraLow XZ carpets (local Z → up).
 	const ULTRA_CARPET_THICKNESS: f32 = 0.35;
 	const ULTRA_GRID: u32 = 2;
-	/// Square bin side in placement-cell units so area ≈ 2 cells (`√2 × √2`).
-	const MEDIUM_CELL_STRIDE: f32 = std::f32::consts::SQRT_2;
 	/// Square bin side in placement-cell units so area ≈ 8 cells (`√8 × √8` = `2√2`).
 	const LOW_CELL_STRIDE: f32 = 2.0 * std::f32::consts::SQRT_2;
 
@@ -442,9 +441,19 @@ mod vc {
 			nodes
 		}
 
-		/// One upright proxy per ~2 placement cells, blending anchors in each bin.
+		/// Same High tuft geometry, keeping ~¼ of plants for a denser→proxy transition.
 		fn foliage_medium(&self) -> Vec<FoliageNode> {
-			self.foliage_cell_proxies(MEDIUM_CELL_STRIDE, PROXY_HEIGHT_MEDIUM)
+			let mut nodes = Vec::new();
+			for (i, plant) in self.plants.iter().enumerate() {
+				if i % MEDIUM_TUFT_STRIDE != 0 {
+					continue;
+				}
+				for mut node in plant.patch.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
+					node.placement = plant.placement.compose_child(node.placement);
+					nodes.push(node);
+				}
+			}
+			nodes
 		}
 
 		/// One upright proxy per ~8 placement cells, blending anchors in each bin.
@@ -944,19 +953,13 @@ mod tests {
 			))
 			.build();
 
-			assert!(grove.foliage_nodes_for_level(LodSceneLevel::High).len() >= 1);
-			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 1);
+			let high_n = grove.foliage_nodes_for_level(LodSceneLevel::High).len();
+			let medium_n = grove.foliage_nodes_for_level(LodSceneLevel::Medium).len();
+			assert!(high_n >= 1);
+			// Medium keeps every 4th plant (~¼ of High tufts).
+			assert_eq!(medium_n, high_n.div_ceil(4));
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Low).len(), 1);
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len(), 4);
-
-			let medium_runs = grove
-				.foliage_nodes_for_level(LodSceneLevel::Medium)
-				.flatten()
-				.first()
-				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
-				.unwrap_or(0);
-			// 8 clumps on a 5 m lattice; Medium bins (~√2 cells) keep one proxy per clump.
-			assert_eq!(medium_runs, 8);
 
 			let low_runs = grove
 				.foliage_nodes_for_level(LodSceneLevel::Low)
@@ -976,12 +979,11 @@ mod tests {
 		}
 
 		#[test]
-		fn medium_blends_about_two_placement_cells() -> Result<()> {
+		fn medium_keeps_quarter_of_high_tufts() -> Result<()> {
 			use crate::grove::GroveCellVariant;
 			use chico_vegetation_components::VegetationComponents;
 			use lod::gen::LodSceneLevel;
 
-			// 4×4 grid on 2.5 m cells → 16 clumps → ~√2-cell medium bins → 9 proxies.
 			let placements: Vec<_> = (0..16)
 				.map(|i| {
 					let ix = i % 4;
@@ -1001,13 +1003,10 @@ mod tests {
 			.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0)))
 			.build();
 
-			let medium_runs = grove
-				.foliage_nodes_for_level(LodSceneLevel::Medium)
-				.flatten()
-				.first()
-				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
-				.unwrap_or(0);
-			assert_eq!(medium_runs, 9);
+			let high_n = grove.foliage_nodes_for_level(LodSceneLevel::High).len();
+			let medium_n = grove.foliage_nodes_for_level(LodSceneLevel::Medium).len();
+			assert_eq!(high_n, 16);
+			assert_eq!(medium_n, 4);
 			Ok(())
 		}
 	}

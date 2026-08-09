@@ -1,9 +1,9 @@
-//! Presence vs Level admission and drain ordering.
+//! Presence / Desired / Active admission and drain ordering.
 //!
-//! Under saturation, budget is split ~⅛ Presence (cold / empty→something) and
-//! ~⅞ Level (warm upgrades, including when a pending sibling already exists).
-//! Drain ranks by `(parent_desired, self_level)` High→… lexicographic (missing
-//! parent counts as High). Frame parity swaps Presence vs Level first.
+//! Under saturation, budget is split ~¼ Presence / ~⅜ Desired / ~⅜ Active.
+//! Drain ranks by `(parent_desired, self_level)` High→… within each class
+//! (missing parent counts as High). Frame parity rotates which class runs first;
+//! leftovers cascade into the remaining classes.
 //! Round-robin cursors avoid stable ECS-order starvation within a tuple band.
 
 use bevy::prelude::*;
@@ -11,8 +11,8 @@ use bevy::prelude::*;
 use crate::scene::level::LodSceneLevel;
 
 use super::types::{
-	LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
-	LOD_CHUNK_TUPLE_BAND_COUNT,
+	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
+	LodChunkFulfillBudget, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
 
 /// Named drain / begin band (near → far).
@@ -54,19 +54,30 @@ impl LevelBand {
 		parent.index() * Self::COUNT + self_band.index()
 	}
 
-	/// High / Medium — preferred in the Level begin pass before Low / UltraLow.
+	/// High / Medium — preferred in the Desired begin pass before Low / UltraLow.
 	pub(super) fn is_near(self) -> bool {
 		matches!(self, Self::High | Self::Medium)
 	}
 }
 
-/// Integer split: presence gets ⌊total/8⌋ (0 when total is 0); level gets the rest.
-pub(super) fn split_presence_level(total: u32) -> (u32, u32) {
+/// Split total into Presence / Desired / Active (~¼ / ~⅜ / ~⅜).
+pub(super) fn split_presence_desired_active(total: u32) -> (u32, u32, u32) {
 	if total == 0 {
-		return (0, 0);
+		return (0, 0, 0);
 	}
-	let presence = total / 8;
-	(presence, total - presence)
+	let active = (total * 3) / 8;
+	let desired = (total * 3) / 8;
+	let presence = total - active - desired;
+	(presence, desired, active)
+}
+
+/// Class drain / begin order for this frame (`frame % 3`).
+pub(super) fn class_order(frame: u64) -> [FulfillClass; 3] {
+	match frame % 3 {
+		0 => [FulfillClass::Presence, FulfillClass::Desired, FulfillClass::Active],
+		1 => [FulfillClass::Desired, FulfillClass::Active, FulfillClass::Presence],
+		_ => [FulfillClass::Active, FulfillClass::Presence, FulfillClass::Desired],
+	}
 }
 
 /// Reset spawn/cull/begin clocks and advance drain frame parity.
@@ -79,23 +90,22 @@ pub fn reset_lod_chunk_budget(
 	spawn_clock.spawn_remaining = budget.spawn_weights_per_frame;
 	spawn_clock.cull_remaining = budget.cull_weights_per_frame;
 
-	let (presence, level) = split_presence_level(budget.begins_per_frame);
+	let (presence, desired, active) = split_presence_desired_active(budget.begins_per_frame);
 	drain_cursor.frame = drain_cursor.frame.wrapping_add(1);
-	let presence_first = drain_cursor.frame % 2 == 0;
 	*begin_clock = LodChunkBeginClock {
 		presence_remaining: presence,
-		level_remaining: level,
-		presence_first,
+		desired_remaining: desired,
+		active_remaining: active,
+		first_class: class_order(drain_cursor.frame)[0],
 	};
 }
 
-/// Try to admit one begin. Returns false if that class's quota is exhausted
-/// (`LodLevelSpawnRequest` should stay for a later frame).
-pub(super) fn admit_begin(clock: &mut LodChunkBeginClock, cold: bool) -> bool {
-	let slot = if cold {
-		&mut clock.presence_remaining
-	} else {
-		&mut clock.level_remaining
+/// Try to admit one begin into `class`. Returns false if that class's quota is empty.
+pub(super) fn admit_begin(clock: &mut LodChunkBeginClock, class: FulfillClass) -> bool {
+	let slot = match class {
+		FulfillClass::Presence => &mut clock.presence_remaining,
+		FulfillClass::Desired => &mut clock.desired_remaining,
+		FulfillClass::Active => &mut clock.active_remaining,
 	};
 	if *slot == 0 {
 		return false;
@@ -124,11 +134,11 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn split_eighths() {
-		assert_eq!(split_presence_level(0), (0, 0));
-		assert_eq!(split_presence_level(1), (0, 1));
-		assert_eq!(split_presence_level(8), (1, 7));
-		assert_eq!(split_presence_level(48), (6, 42));
+	fn split_three_way() {
+		assert_eq!(split_presence_desired_active(0), (0, 0, 0));
+		assert_eq!(split_presence_desired_active(8), (2, 3, 3));
+		assert_eq!(split_presence_desired_active(1), (1, 0, 0));
+		assert_eq!(split_presence_desired_active(48), (12, 18, 18));
 	}
 
 	#[test]

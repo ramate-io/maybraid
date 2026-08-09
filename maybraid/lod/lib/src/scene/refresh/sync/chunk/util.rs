@@ -15,10 +15,10 @@ pub(super) fn ms(start: Instant) -> f64 {
 
 pub(super) fn roots_bag_entity(
 	host_children: &Children,
-	level_roots_heads: &Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+	level_roots_bags: &Query<(), With<LodLevelRoots>>,
 ) -> Option<Entity> {
 	for child in host_children.iter() {
-		if level_roots_heads.contains(child) {
+		if level_roots_bags.contains(child) {
 			return Some(child);
 		}
 	}

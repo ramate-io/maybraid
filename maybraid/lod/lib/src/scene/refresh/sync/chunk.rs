@@ -6,12 +6,12 @@
 //! completes when next-level nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].
 //!
 //! Scheduling (begin + drain):
-//! - **Presence** (~⅛ budget): cold jobs (no present root yet — empty host).
-//! - **Level** (~⅞ budget): warm upgrades (any sibling root, including pending).
-//! Drain ranks `(parent_desired, self_level)` High→… (missing parent = High).
-//! Begin still bands by self level (Near/Far). Frame parity swaps classes; leftovers roll.
-//! Only **desired** pending roots (`root.level == host level`) receive spawn budget;
-//! not-desired jobs keep their fulfill queue (paused) until desired again or culled.
+//! - **Presence** (~¼): cold jobs (empty → something).
+//! - **Desired** (~⅜): warm jobs for the host's desired level root.
+//! - **Active** (~⅜): warm jobs on a shown (non-Hidden) non-desired root — warm-hold.
+//! Drain ranks `(parent_desired, self_level)` High→… within each class.
+//! Begin uses Presence + Desired (Active begin quota folds into Desired).
+//! Frame parity rotates class order; leftovers cascade.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
 //! reset budget → resume desired cull-inflight → begin (per `T`) → drain → complete.
@@ -43,9 +43,9 @@ pub use drain::drain_chunk_lod_fulfill;
 pub use resume::resume_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
-	LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor, LodChunkFulfillBudget,
-	LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed,
+	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
+	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`LodScene`] host type.

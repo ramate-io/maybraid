@@ -1,4 +1,7 @@
-//! Per-`T` job begin with shared Presence / Level admission.
+//! Per-`T` job begin with shared Presence / Desired admission.
+//!
+//! Active begin quota is rolled into Desired (begins only start desired-level jobs;
+//! Active spend is a drain concern for warm-hold queues).
 
 use std::time::Instant;
 
@@ -16,7 +19,7 @@ use crate::scene::LodScene;
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, LevelBand};
 use super::types::{
-	LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	FulfillClass, LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed,
 };
 use super::util::{has_present_root, ms, roots_bag_entity};
@@ -24,14 +27,10 @@ use super::util::{has_present_root, ms, roots_bag_entity};
 /// Which hosts a begin pass may admit.
 #[derive(Clone, Copy)]
 enum BeginPass {
-	/// Cold hosts, High / Medium desired (empty → something near).
 	PresenceNear,
-	/// Cold hosts, Low / UltraLow / other desired.
 	PresenceFar,
-	/// Warm upgrades: High / Medium first.
-	LevelNear,
-	/// Warm upgrades: Low / UltraLow / other.
-	LevelFar,
+	DesiredNear,
+	DesiredFar,
 }
 
 impl BeginPass {
@@ -40,24 +39,38 @@ impl BeginPass {
 		match self {
 			Self::PresenceNear => cold && band.is_near(),
 			Self::PresenceFar => cold && !band.is_near(),
-			Self::LevelNear => !cold && band.is_near(),
-			Self::LevelFar => !cold && !band.is_near(),
+			Self::DesiredNear => !cold && band.is_near(),
+			Self::DesiredFar => !cold && !band.is_near(),
 		}
 	}
 
-	fn is_presence(self) -> bool {
-		matches!(self, Self::PresenceNear | Self::PresenceFar)
+	fn class(self) -> FulfillClass {
+		match self {
+			Self::PresenceNear | Self::PresenceFar => FulfillClass::Presence,
+			Self::DesiredNear | Self::DesiredFar => FulfillClass::Desired,
+		}
 	}
 }
 
-fn roll_presence_into_level(clock: &mut LodChunkBeginClock) {
-	clock.level_remaining = clock.level_remaining.saturating_add(clock.presence_remaining);
+fn roll_active_into_desired(clock: &mut LodChunkBeginClock) {
+	clock.desired_remaining = clock
+		.desired_remaining
+		.saturating_add(clock.active_remaining);
+	clock.active_remaining = 0;
+}
+
+fn roll_presence_into_desired(clock: &mut LodChunkBeginClock) {
+	clock.desired_remaining = clock
+		.desired_remaining
+		.saturating_add(clock.presence_remaining);
 	clock.presence_remaining = 0;
 }
 
-fn roll_level_into_presence(clock: &mut LodChunkBeginClock) {
-	clock.presence_remaining = clock.presence_remaining.saturating_add(clock.level_remaining);
-	clock.level_remaining = 0;
+fn roll_desired_into_presence(clock: &mut LodChunkBeginClock) {
+	clock.presence_remaining = clock
+		.presence_remaining
+		.saturating_add(clock.desired_remaining);
+	clock.desired_remaining = 0;
 }
 
 struct BeginStats {
@@ -67,25 +80,20 @@ struct BeginStats {
 }
 
 /// Start a pending root + queue from [`LodLevelSpawnRequest`].
-///
-/// Cold start (no present root): pending root is visible so chunks stream on-screen.
-/// Warm switch: pending root stays Hidden until complete. Admission is capped by
-/// [`LodChunkBeginClock`] (Presence vs Level); skipped hosts keep their spawn request.
-///
-/// Same leftover policy as drain: first class runs, unused quota rolls into the other.
-/// Within Presence, Near (High/Medium) admits before Far (Low/UltraLow).
 pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 	mut diag: ResMut<LodChunkFulfillDiag>,
 	mut begin_clock: ResMut<LodChunkBeginClock>,
-	hosts: Query<(Entity, &T, &LodLevelSpawnRequest, &Children), With<LodSceneHost>>,
-	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+	hosts: Query<(Entity, &T, &LodLevelSpawnRequest), With<LodSceneHost>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	children_q: Query<&Children>,
+	level_roots_bags: Query<(), With<LodLevelRoots>>,
+	visibilities: Query<&Visibility>,
 ) {
 	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
 		return;
@@ -101,132 +109,90 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		chunks_ms_total: 0.0,
 		spawn_ms_total: 0.0,
 	};
-	let presence_first = begin_clock.presence_first;
+
+	roll_active_into_desired(&mut begin_clock);
+	let presence_first = matches!(begin_clock.first_class, FulfillClass::Presence);
 
 	if presence_first {
-		run_begin_pass(
-			BeginPass::PresenceNear,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		run_begin_pass(
-			BeginPass::PresenceFar,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		roll_presence_into_level(&mut begin_clock);
-		run_begin_pass(
-			BeginPass::LevelNear,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		run_begin_pass(
-			BeginPass::LevelFar,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
+		for pass in [BeginPass::PresenceNear, BeginPass::PresenceFar] {
+			run_begin_pass(
+				pass,
+				&mut commands,
+				&lod_ref,
+				&mut diag,
+				&mut begin_clock,
+				&hosts,
+				&root_keys,
+				&pending,
+				&wants_cull,
+				&child_of,
+				&host_levels,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+				&mut stats,
+			);
+		}
+		roll_presence_into_desired(&mut begin_clock);
+		for pass in [BeginPass::DesiredNear, BeginPass::DesiredFar] {
+			run_begin_pass(
+				pass,
+				&mut commands,
+				&lod_ref,
+				&mut diag,
+				&mut begin_clock,
+				&hosts,
+				&root_keys,
+				&pending,
+				&wants_cull,
+				&child_of,
+				&host_levels,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+				&mut stats,
+			);
+		}
 	} else {
-		run_begin_pass(
-			BeginPass::LevelNear,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		run_begin_pass(
-			BeginPass::LevelFar,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		roll_level_into_presence(&mut begin_clock);
-		run_begin_pass(
-			BeginPass::PresenceNear,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
-		run_begin_pass(
-			BeginPass::PresenceFar,
-			&mut commands,
-			&lod_ref,
-			&mut diag,
-			&mut begin_clock,
-			&hosts,
-			&level_roots_heads,
-			&root_keys,
-			&pending,
-			&wants_cull,
-			&child_of,
-			&host_levels,
-			&mut stats,
-		);
+		for pass in [BeginPass::DesiredNear, BeginPass::DesiredFar] {
+			run_begin_pass(
+				pass,
+				&mut commands,
+				&lod_ref,
+				&mut diag,
+				&mut begin_clock,
+				&hosts,
+				&root_keys,
+				&pending,
+				&wants_cull,
+				&child_of,
+				&host_levels,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+				&mut stats,
+			);
+		}
+		roll_desired_into_presence(&mut begin_clock);
+		for pass in [BeginPass::PresenceNear, BeginPass::PresenceFar] {
+			run_begin_pass(
+				pass,
+				&mut commands,
+				&lod_ref,
+				&mut diag,
+				&mut begin_clock,
+				&hosts,
+				&root_keys,
+				&pending,
+				&wants_cull,
+				&child_of,
+				&host_levels,
+				&children_q,
+				&level_roots_bags,
+				&visibilities,
+				&mut stats,
+			);
+		}
 	}
 
 	if stats.jobs_started > 0 {
@@ -248,45 +214,55 @@ fn run_begin_pass<T: Component + LodScene>(
 	lod_ref: &LodRef,
 	diag: &mut LodChunkFulfillDiag,
 	begin_clock: &mut LodChunkBeginClock,
-	hosts: &Query<(Entity, &T, &LodLevelSpawnRequest, &Children), With<LodSceneHost>>,
-	level_roots_heads: &Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
+	hosts: &Query<(Entity, &T, &LodLevelSpawnRequest), With<LodSceneHost>>,
 	root_keys: &Query<&LodLevelRoot>,
 	pending: &Query<(), With<LodLevelRootPending>>,
 	wants_cull: &Query<(), With<LodCullInFlight>>,
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+	children_q: &Query<&Children>,
+	level_roots_bags: &Query<(), With<LodLevelRoots>>,
+	visibilities: &Query<&Visibility>,
 	stats: &mut BeginStats,
 ) {
-	if begin_clock.presence_remaining == 0 && begin_clock.level_remaining == 0 {
+	if begin_clock.presence_remaining == 0 && begin_clock.desired_remaining == 0 {
 		return;
 	}
 
-	for (host, scene, request, host_children) in hosts.iter() {
+	for (host, scene, request) in hosts.iter() {
 		let Ok(desired) = host_levels.get(host) else {
 			continue;
 		};
-		// Only begin jobs for the host's current desired level (stale requests drop).
 		if request.level != *desired {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		}
 
-		let Some(roots_entity) = roots_bag_entity(host_children, level_roots_heads) else {
+		let Ok(host_children) = children_q.get(host) else {
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
+			continue;
+		};
+		let Some(roots_entity) = roots_bag_entity(host_children, level_roots_bags) else {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		};
 
-		let root_children =
-			level_roots_heads.get(roots_entity).ok().and_then(|(_, children)| children);
+		let root_children = children_q.get(roots_entity).ok();
 		let has_any_level_root = root_children.is_some_and(|children| {
 			children
 				.iter()
 				.any(|child| root_keys.contains(child) && !wants_cull.contains(child))
 		});
 
-		// Parent-High gates *refresh* only. Empty hosts still fill.
-		if !nested_host_parent_allows_refresh(host, child_of, host_levels, root_keys)
-			&& has_any_level_root
+		if !nested_host_parent_allows_refresh(
+			host,
+			child_of,
+			host_levels,
+			root_keys,
+			children_q,
+			level_roots_bags,
+			visibilities,
+		) && has_any_level_root
 		{
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
@@ -316,17 +292,15 @@ fn run_begin_pass<T: Component + LodScene>(
 				commands.entity(host).remove::<LodLevelSpawnRequest>();
 				continue;
 			}
-			// Pending siblings count as present → warm Level upgrade path.
 			cold = !has_present_root(root_children, root_keys, wants_cull);
 		}
 
 		if !pass.allows(cold, request.level) {
 			continue;
 		}
-		if !admit_begin(begin_clock, cold) {
+		if !admit_begin(begin_clock, pass.class()) {
 			continue;
 		}
-		debug_assert_eq!(pass.is_presence(), cold);
 
 		let t_chunks = Instant::now();
 		let chunk = scene.scene_chunks_with_level(lod_ref, request.level);

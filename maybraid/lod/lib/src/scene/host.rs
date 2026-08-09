@@ -11,13 +11,56 @@ use crate::scene::level::LodSceneLevel;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHost;
 
+/// Whether a visibility value counts as on-screen (warm-hold / cold-fill).
+#[inline]
+pub fn lod_root_is_shown(visibility: Visibility) -> bool {
+	!matches!(visibility, Visibility::Hidden)
+}
+
+/// Whether `host` currently shows a [`LodLevelRoot`] at `level` (not Hidden).
+pub fn host_shows_level_root(
+	host: Entity,
+	level: LodSceneLevel,
+	children_q: &Query<&Children>,
+	level_roots_bags: &Query<(), With<LodLevelRoots>>,
+	root_keys: &Query<&LodLevelRoot>,
+	visibilities: &Query<&Visibility>,
+) -> bool {
+	let Ok(host_kids) = children_q.get(host) else {
+		return false;
+	};
+	for kid in host_kids.iter() {
+		if !level_roots_bags.contains(kid) {
+			continue;
+		}
+		let Ok(root_kids) = children_q.get(kid) else {
+			continue;
+		};
+		for root_e in root_kids.iter() {
+			let Ok(root) = root_keys.get(root_e) else {
+				continue;
+			};
+			if root.0 != level {
+				continue;
+			}
+			let Ok(vis) = visibilities.get(root_e) else {
+				continue;
+			};
+			if lod_root_is_shown(*vis) {
+				return true;
+			}
+		}
+	}
+	false
+}
+
 /// Whether a nested host may run fine-phase **refresh** (level produce / cull / probe update).
 ///
 /// Walks ancestors (skipping `entity` itself) and records the nearest enclosing
-/// [`LodLevelRoot`]. When a parent [`LodSceneHost`] is found, refresh is allowed iff
-/// that root's level equals the parent's desired [`LodSceneLevel`]. No parent host →
-/// top-level → allowed. Under a parent host but not under any level root → allowed
-/// (cold scaffolding).
+/// [`LodLevelRoot`]. When a parent [`LodSceneHost`] is found, refresh is allowed when
+/// that root matches the parent's **desired** level **or** is currently **shown**
+/// (Inherited/Visible warm-hold). No parent host → top-level → allowed. Under a parent
+/// host but not under any level root → allowed (cold scaffolding).
 ///
 /// Initial chunk fulfill (empty level-roots bag) is **not** gated by this — begin still
 /// admits empty nested hosts; upgrades require this gate once any root exists.
@@ -26,6 +69,9 @@ pub fn nested_host_parent_allows_refresh(
 	child_of: &Query<&ChildOf>,
 	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
 	level_roots: &Query<&LodLevelRoot>,
+	children_q: &Query<&Children>,
+	level_roots_bags: &Query<(), With<LodLevelRoots>>,
+	visibilities: &Query<&Visibility>,
 ) -> bool {
 	let Ok(parent) = child_of.get(entity) else {
 		return true;
@@ -40,7 +86,17 @@ pub fn nested_host_parent_allows_refresh(
 		}
 		if let Ok(desired) = host_levels.get(current) {
 			return match enclosing_root {
-				Some(root_level) => root_level == *desired,
+				Some(root_level) => {
+					root_level == *desired
+						|| host_shows_level_root(
+							current,
+							root_level,
+							children_q,
+							level_roots_bags,
+							level_roots,
+							visibilities,
+						)
+				}
 				None => true,
 			};
 		}
