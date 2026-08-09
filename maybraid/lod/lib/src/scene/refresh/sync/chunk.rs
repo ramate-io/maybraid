@@ -3,7 +3,8 @@
 //! Default sync path (vs optional eager [`super::eager::fulfill_lod_level_spawn`]):
 //! builds a pending root, drains weighted primitives under
 //! [`LodChunkFulfillBudget`], marks content [`LodLevelRootStreamed`], then
-//! completes when nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].
+//! completes when next-level nested [`LodSceneHost`]s are [`LodSceneHostStreamed`]
+//! (`streamed_count >= LodChunkFulfillment::expected`).
 //!
 //! Visibility policy:
 //! - **Cold** (no ready level root yet): show the pending desired root while
@@ -54,8 +55,8 @@ pub struct LodLevelRootStreamed;
 
 /// This [`LodSceneHost`] has a full scene representation available (Streamed).
 ///
-/// Means at least one level root finished content streaming and nested hosts
-/// under that root were Streamed. Does **not** require the host to be at its
+/// Means at least one level root finished content streaming and its next-level
+/// nested hosts were Streamed. Does **not** require the host to be at its
 /// current desired [`LodSceneLevel`].
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHostStreamed;
@@ -166,33 +167,65 @@ fn has_ready_root(
 	false
 }
 
-/// Depth-first collect of nested [`LodSceneHost`] entities under `root`.
-fn collect_nested_hosts(
-	root: Entity,
+/// Whether `entity` is a [`LodSceneHost`], or wraps one as a direct child (drain
+/// spawn wrapper). Does not recurse into the host.
+///
+/// Returns `Some(streamed)` when a next-level host is found.
+fn next_level_host_streamed(
+	entity: Entity,
 	children_q: &Query<&Children>,
 	hosts: &Query<(), With<LodSceneHost>>,
-	out: &mut Vec<Entity>,
-) {
-	let Ok(children) = children_q.get(root) else {
-		return;
-	};
-	for child in children.iter() {
-		if hosts.contains(child) {
-			out.push(child);
-		}
-		collect_nested_hosts(child, children_q, hosts, out);
+	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
+) -> Option<bool> {
+	if hosts.contains(entity) {
+		return Some(streamed_hosts.contains(entity));
 	}
+	let Ok(kids) = children_q.get(entity) else {
+		return None;
+	};
+	for kid in kids.iter() {
+		if hosts.contains(kid) {
+			return Some(streamed_hosts.contains(kid));
+		}
+	}
+	None
 }
 
+/// Next-level nested hosts under a level root are ready when the fulfill plan's
+/// `expected` primitive count of streamed hosts is present.
+///
+/// Drain attaches each primitive as a direct child of the root (often a thin
+/// wrapper around a nested [`LodSceneHost`]). Mesh-only roots have no next-level
+/// hosts and complete immediately.
 fn nested_hosts_streamed(
 	root: Entity,
+	expected: usize,
 	children_q: &Query<&Children>,
 	hosts: &Query<(), With<LodSceneHost>>,
 	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
 ) -> bool {
-	let mut nested = Vec::new();
-	collect_nested_hosts(root, children_q, hosts, &mut nested);
-	nested.iter().all(|host| streamed_hosts.contains(*host))
+	let Ok(children) = children_q.get(root) else {
+		return expected == 0;
+	};
+
+	let mut streamed = 0usize;
+	let mut saw_host = false;
+	for child in children.iter() {
+		let Some(is_streamed) =
+			next_level_host_streamed(child, children_q, hosts, streamed_hosts)
+		else {
+			continue;
+		};
+		saw_host = true;
+		if is_streamed {
+			streamed += 1;
+		}
+	}
+
+	if !saw_host {
+		return true;
+	}
+	streamed >= expected
 }
 
 /// Enqueue cull for pending roots whose level is no longer desired; sticky-resume
@@ -476,13 +509,21 @@ pub fn complete_chunk_lod_fulfill(
 	let mut completed = 0u32;
 	let mut waiting_nested = 0u32;
 	for (root_entity, fulfillment, root_child_of, content_streamed) in &pending {
-		if fulfillment.is_some_and(|f| !f.is_content_complete()) {
-			continue;
-		}
+		let expected = match fulfillment {
+			Some(f) if !f.is_content_complete() => continue,
+			Some(f) => f.expected,
+			None => 0,
+		};
 		if !content_streamed {
 			commands.entity(root_entity).insert(LodLevelRootStreamed);
 		}
-		if !nested_hosts_streamed(root_entity, &children_q, &nested_hosts, &streamed_hosts) {
+		if !nested_hosts_streamed(
+			root_entity,
+			expected,
+			&children_q,
+			&nested_hosts,
+			&streamed_hosts,
+		) {
 			waiting_nested += 1;
 			continue;
 		}

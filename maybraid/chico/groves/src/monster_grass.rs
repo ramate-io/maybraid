@@ -366,7 +366,7 @@ mod vc {
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
-	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 2.5;
 	/// Structural Medium band (× footprint): one upright proxy per ~4 placement cells.
 	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	/// Structural Low band (× footprint): 1/10-extent grid proxies; beyond → UltraLow.

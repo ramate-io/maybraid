@@ -1,13 +1,15 @@
 //! [`LodScene`] — how a host builds and selects LOD presentation.
 
+use bevy::ecs::component::Component;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use bevy::scene::Scene;
+use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use crate::lod_ref::LodRef;
 
 use super::chunk::SceneChunk;
 use super::cull::LodSceneCulls;
+use super::host::lod_host_scene_pending;
 use super::level::LodSceneLevel;
 
 /// Whether the presented LOD selection should be updated for this [`LodRef`].
@@ -82,8 +84,31 @@ pub trait LodScene {
 	}
 
 	/// Scene for the **current** LOD selection only (first present / non-host path).
+	///
+	/// Default builds level content only. Typed ECS hosts that nest under a parent
+	/// should prefer [`Self::host`] (pending [`super::host::LodSceneHost`] + `Self`).
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		self.scene_with_level(lod_ref, self.scene_lod_level(lod_ref))
+	}
+
+	/// Spawn this value as a pending [`super::host::LodSceneHost`] carrying `Self`.
+	///
+	/// Used when nesting fine-phase hosts under a structural parent: the returned
+	/// scene is an empty level-roots bag + [`super::host::LodLevelSpawnRequest`],
+	/// with `Self` stamped as the typed host component for chunk fulfill / refresh.
+	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	where
+		Self: Component + Clone + Default + Unpin + Sized,
+	{
+		let level = self.scene_lod_level(lod_ref);
+		let bounds = self.scene_bounds();
+		let host = self.clone();
+		(
+			lod_host_scene_pending(level, bounds),
+			bsn! {
+				template_value(host)
+			},
+		)
 	}
 
 	/// Local-space structural AABB for this host (indexing / volume materialization).

@@ -2,11 +2,11 @@
 
 use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
+use bevy::prelude::{Component, Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 
 use crate::assets::AssetPath;
 use crate::foliage::collection::{FrondCollection, FrondKit, FrondMember};
@@ -21,8 +21,8 @@ use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh, scene_children};
 
-/// Authoring IR for a foliage cluster.
-#[derive(Debug, Clone, PartialEq)]
+/// Authoring IR for a foliage cluster — also the fine-phase [`LodScene`] host component.
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct FoliageNode {
 	pub style: FoliageStyle,
 	pub geometry: FoliageGeometry,
@@ -260,9 +260,5 @@ impl LodScene for FoliageNode {
 		};
 		let half = bevy::math::Vec3::splat(extent);
 		Aabb3d::from_min_max(center - half, center + half)
-	}
-
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
 	}
 }

@@ -48,7 +48,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let ref_refs: Vec<_> = refs.iter().collect();
 
-	let index = index.into_inner();
+	let mut index = index.into_inner();
 	for region_msg in regions.read() {
 		for (entity, scene) in index.hosts_in_region(region_msg.region) {
 			let level = scene.scene_lod_level_from_levels(&ref_refs);

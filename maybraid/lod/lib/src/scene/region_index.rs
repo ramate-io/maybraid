@@ -16,7 +16,7 @@ use crate::scene::LodScene;
 /// [`crate::PatchSceneBounds`] from [`crate::LodScene::scene_bounds`].
 pub trait LodSceneRegionIndex<T: Component + LodScene> {
 	fn hosts_in_region<'a>(
-		&'a self,
+		&'a mut self,
 		region: Aabb3d,
 	) -> impl Iterator<Item = (Entity, &'a T)> + 'a;
 }

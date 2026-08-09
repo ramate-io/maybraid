@@ -1,11 +1,11 @@
 //! Stick IR node: style + geometry + placement.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Visibility, Vec3};
+use bevy::prelude::{Component, Visibility, Vec3};
 use bevy::scene::prelude::{bsn, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
@@ -17,8 +17,8 @@ use crate::sticks::geometry::StickGeometry;
 use crate::sticks::probe::StickLodProbe;
 use crate::sticks::style::StickStyle;
 
-/// Authoring IR for a stick / trunk segment.
-#[derive(Debug, Clone, PartialEq)]
+/// Authoring IR for a stick / trunk segment — also the fine-phase [`LodScene`] host component.
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct StickNode {
 	pub style: StickStyle,
 	pub geometry: StickGeometry,
@@ -137,9 +137,5 @@ impl LodScene for StickNode {
 		let extent = crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0);
 		let half = Vec3::splat(extent);
 		Aabb3d::from_min_max(center - half, center + half)
-	}
-
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
 	}
 }

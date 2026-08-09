@@ -161,12 +161,12 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		// Pending host: chunk fulfill streams [`Self::scene_chunks_with_level`].
+		// Pending structural host: chunks nest fine-phase stick/foliage hosts.
 		lod_host_scene_pending(level, self.scene_bounds())
 	}
 }
 
-/// Weighted chunks for one structural level (stick/foliage primitives + collections).
+/// Weighted chunks for one structural level: each stick/foliage node is a nested LOD host.
 pub fn vegetation_scene_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
@@ -174,10 +174,10 @@ pub fn vegetation_scene_chunks(
 ) -> SceneChunk {
 	let mut chunks = Vec::new();
 	for node in vegetation.stick_nodes_for_level(level).flatten() {
-		chunks.push(node.scene_chunks_with_level(lod_ref, level));
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
-		chunks.push(node.scene_chunks_with_level(lod_ref, level));
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
 	if chunks.is_empty() {
 		SceneChunk::primitive(scene_children(Vec::new()))
@@ -186,7 +186,9 @@ pub fn vegetation_scene_chunks(
 	}
 }
 
-/// Append every domain node from `vegetation` at `level` as flat content (no nested hosts).
+/// Append every domain node from `vegetation` at `level` as nested [`LodScene`] hosts.
+///
+/// Each child is embedded via [`LodScene::host`] (pending host + typed component).
 pub fn append_component_scenes(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
@@ -194,13 +196,14 @@ pub fn append_component_scenes(
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
 	for node in vegetation.stick_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_level(lod_ref, level)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_level(lod_ref, level)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 }
 
+/// Scene whose children are nested stick/foliage [`LodScene`] hosts at `level`.
 pub fn component_only_scene(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
