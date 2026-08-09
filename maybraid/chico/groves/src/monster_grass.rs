@@ -374,7 +374,10 @@ mod vc {
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
-	const PROXY_HEIGHT_ULTRA: f32 = 2.0;
+	/// Carpet float height (world Y); kept small — this is not blade length.
+	const PROXY_HEIGHT_ULTRA: f32 = 0.6;
+	/// World-space vertical thickness for UltraLow XZ carpets (local Z → up).
+	const ULTRA_CARPET_THICKNESS: f32 = 0.35;
 	const ULTRA_GRID: u32 = 2;
 	/// Square bin side in placement-cell units so area ≈ 2 cells (`√2 × √2`).
 	const MEDIUM_CELL_STRIDE: f32 = std::f32::consts::SQRT_2;
@@ -489,13 +492,16 @@ mod vc {
 			collection_nodes(runs, self.structural_center, self.footprint_radius)
 		}
 
-		/// Four horizontal proxies covering a 2×2 subdivision of the grove extent.
+		/// Four flat XZ carpet segments covering a 2×2 subdivision of the grove extent.
+		///
+		/// Emitted as separate frond nodes (not one [`FrondCollection`]): collection
+		/// Low/UltraLow merge rebuilds via [`Placement::frond_segment`], which maps a
+		/// large “width” onto world up and turns carpets into walls.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
-			collection_nodes(
-				horizontal_grid_proxy_runs(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA),
-				self.structural_center,
-				self.footprint_radius,
-			)
+			horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA)
+				.into_iter()
+				.map(FoliageNode::straight_frond_segment)
+				.collect()
 		}
 	}
 
@@ -514,39 +520,41 @@ mod vc {
 			.map(|p| FrondRun::from_placements([p]))
 	}
 
-	/// Flat XZ carpet tiles: rachis along +X, blade width along ±Z (not world up).
+	/// Flat XZ carpet tiles: rachis along +X, blade width along ±Z, thin on world up.
 	///
-	/// [`Placement::frond_segment`] with `dir = X` and a large `width` is wrong here —
-	/// `from_rotation_arc(Y, X)` leaves kit‑X (width) near world‑Y, so a 50 m “width”
-	/// reads as a 50 m tall wall.
-	fn horizontal_grid_proxy_runs(
+	/// Do not use [`Placement::frond_segment`] with `dir = X` and cell-sized `width` —
+	/// that path leaves kit width near world up. Also keep `scale.z` small: after this
+	/// basis, local Z is vertical, so matching Z to the width scale builds walls.
+	fn horizontal_grid_proxy_placements(
 		extent: &GroveExtent,
 		divisions: u32,
 		height: f32,
-	) -> Vec<FrondRun> {
+	) -> Vec<Placement> {
 		let divisions = divisions.max(1);
 		let min = extent.min();
 		let max = extent.max();
 		let span = max - min;
 		let cell_x = (span.x / divisions as f32).max(1e-3);
 		let cell_z = (span.z / divisions as f32).max(1e-3);
-		// local X → world Z (width), local Y → world X (length), local Z → world Y (thin).
+		// local X → world Z (width), local Y → world X (length), local Z → world Y (thickness).
 		let rotation = Quat::from_mat3(&Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y));
 		let scale_x = (cell_z * 0.5 / FROND_KIT_HALF_X).max(1e-4);
+		let scale_z = (ULTRA_CARPET_THICKNESS / FROND_KIT_HALF_X).max(1e-4);
 		let y = height * 0.5;
-		let mut runs = Vec::with_capacity((divisions * divisions) as usize);
+		let mut out = Vec::with_capacity((divisions * divisions) as usize);
 		for ix in 0..divisions {
 			for iz in 0..divisions {
 				let x0 = min.x + ix as f32 * cell_x;
 				let z0 = min.z + iz as f32 * cell_z;
 				let cz = z0 + cell_z * 0.5;
-				let placement = Placement::new(Vec3::new(x0, y, cz), 0.0)
-					.with_rotation(rotation)
-					.with_scale(Vec3::new(scale_x, cell_x, scale_x));
-				runs.push(FrondRun::from_placements([placement]));
+				out.push(
+					Placement::new(Vec3::new(x0, y, cz), 0.0)
+						.with_rotation(rotation)
+						.with_scale(Vec3::new(scale_x, cell_x, scale_z)),
+				);
 			}
 		}
-		runs
+		out
 	}
 
 	fn collection_nodes(runs: Vec<FrondRun>, center: Vec3, radius: f32) -> Vec<FoliageNode> {
@@ -938,7 +946,7 @@ mod tests {
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::High).len() >= 1);
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 1);
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Low).len(), 1);
-			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len(), 1);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len(), 4);
 
 			let medium_runs = grove
 				.foliage_nodes_for_level(LodSceneLevel::Medium)
@@ -957,14 +965,6 @@ mod tests {
 				.unwrap_or(0);
 			// Low bins (~√8 cells ≈ 7.1 m) merge the 5 m lattice → 3 occupied bins.
 			assert_eq!(low_runs, 3);
-
-			let ultra_runs = grove
-				.foliage_nodes_for_level(LodSceneLevel::UltraLow)
-				.flatten()
-				.first()
-				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
-				.unwrap_or(0);
-			assert_eq!(ultra_runs, 4);
 
 			let probe = grove.structural_lod().expect("probe");
 			assert!((probe.high_factor - MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR).abs() < 1e-5);
