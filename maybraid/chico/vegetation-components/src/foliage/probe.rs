@@ -7,8 +7,8 @@ use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
 use crate::foliage::collection::{
-	FrondCollection, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR,
-	FROND_COLLECTION_MEDIUM_FACTOR,
+	FrondCollection, FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_METERS,
+	FROND_COLLECTION_MEDIUM_METERS,
 };
 use crate::lod_band::{characteristic_extent_abs, DistanceLodBand};
 use crate::placed::Placement;
@@ -19,9 +19,10 @@ pub const FOLIAGE_LOW_FACTOR: f32 = 500.0;
 
 /// Fine-phase probe for foliage / frond-collection hosts (center + characteristic extent).
 ///
-/// Ball / single-kit foliage uses [`FOLIAGE_*`](FOLIAGE_HIGH_FACTOR) factors and collapses
-/// UltraLow onto Low. Frond collections use [`FROND_COLLECTION_*`](FROND_COLLECTION_HIGH_FACTOR)
-/// (defined in [`crate::foliage::collection`]) with a real UltraLow tier.
+/// Ball / single-kit foliage uses [`FOLIAGE_*`](FOLIAGE_HIGH_FACTOR) **extent-relative**
+/// factors and collapses UltraLow onto Low. Frond collections use absolute meters
+/// ([`FROND_COLLECTION_HIGH_METERS`](crate::foliage::collection::FROND_COLLECTION_HIGH_METERS))
+/// with a real UltraLow tier (`preserve_ultra_low`).
 #[derive(Debug, Clone, Copy, Component)]
 pub struct FoliageLodProbe {
 	pub center: Vec3,
@@ -29,7 +30,8 @@ pub struct FoliageLodProbe {
 	pub high_factor: f32,
 	pub medium_factor: f32,
 	pub low_factor: f32,
-	/// When true, band UltraLow maps to [`LodSceneLevel::UltraLow`] (frond collections).
+	/// When true, band UltraLow maps to [`LodSceneLevel::UltraLow`] (frond collections)
+	/// and `*_factor` fields are interpreted as **world meters** (extent ignored).
 	pub preserve_ultra_low: bool,
 }
 
@@ -55,18 +57,18 @@ impl FoliageLodProbe {
 		}
 	}
 
-	/// Probe for a frond collection: max AABB extent + collection band factors.
+	/// Probe for a frond collection: center + absolute-meter band thresholds.
 	///
-	/// Band constants: [`FROND_COLLECTION_HIGH_FACTOR`], [`FROND_COLLECTION_MEDIUM_FACTOR`],
-	/// [`FROND_COLLECTION_LOW_FACTOR`] in [`crate::foliage::collection`].
+	/// Band constants: [`FROND_COLLECTION_HIGH_METERS`], [`FROND_COLLECTION_MEDIUM_METERS`],
+	/// [`FROND_COLLECTION_LOW_METERS`] in [`crate::foliage::collection`].
 	pub fn for_frond_collection(collection: &FrondCollection) -> Self {
 		let (center, extent) = collection.center_and_extent();
 		Self {
 			center,
 			extent,
-			high_factor: FROND_COLLECTION_HIGH_FACTOR,
-			medium_factor: FROND_COLLECTION_MEDIUM_FACTOR,
-			low_factor: FROND_COLLECTION_LOW_FACTOR,
+			high_factor: FROND_COLLECTION_HIGH_METERS,
+			medium_factor: FROND_COLLECTION_MEDIUM_METERS,
+			low_factor: FROND_COLLECTION_LOW_METERS,
 			preserve_ultra_low: true,
 		}
 	}
@@ -81,10 +83,18 @@ impl FoliageLodProbe {
 		}
 	}
 
+	fn band_metric(self, viewer_translation: Vec3) -> f32 {
+		let distance = viewer_translation.distance(self.center);
+		if self.preserve_ultra_low {
+			distance
+		} else {
+			distance / self.extent.max(1e-4)
+		}
+	}
+
 	pub fn level_for(self, viewer: &Transform) -> LodSceneLevel {
-		let factor = viewer.translation.distance(self.center) / self.extent.max(1e-4);
 		self.band_to_level(DistanceLodBand::from_factors(
-			factor,
+			self.band_metric(viewer.translation),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,
@@ -93,13 +103,13 @@ impl FoliageLodProbe {
 
 	pub fn status_for_lod_ref(self, lod_ref: &LodRef) -> LodSceneStatus {
 		let prev = self.band_to_level(DistanceLodBand::from_factors(
-			lod_ref.previous_transform.translation.distance(self.center) / self.extent.max(1e-4),
+			self.band_metric(lod_ref.previous_transform.translation),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,
 		));
 		let curr = self.band_to_level(DistanceLodBand::from_factors(
-			lod_ref.current_transform.translation.distance(self.center) / self.extent.max(1e-4),
+			self.band_metric(lod_ref.current_transform.translation),
 			self.high_factor,
 			self.medium_factor,
 			self.low_factor,

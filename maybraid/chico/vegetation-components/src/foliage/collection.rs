@@ -13,18 +13,27 @@ use lod::gen::LodSceneLevel;
 use crate::placed::Placement;
 use crate::procedural::FROND_KIT_HALF_X;
 
-/// Collection LOD bands: `distance / collection_max_extent`.
+/// Collection LOD bands in **world meters** (viewer↔collection center).
 ///
-/// Defined here (used by [`crate::FoliageLodProbe::for_frond_collection`]):
-/// - High when factor ≤ [`FROND_COLLECTION_HIGH_FACTOR`]
-/// - Medium when factor ≤ [`FROND_COLLECTION_MEDIUM_FACTOR`] (keep ≈ half **runs**, full chains)
-/// - Low when factor ≤ [`FROND_COLLECTION_LOW_FACTOR`] (keep ≈ quarter runs, collapse each to a chord)
+/// Used by [`crate::FoliageLodProbe::for_frond_collection`] (absolute distance, not
+/// extent-relative):
+/// - High when distance ≤ [`FROND_COLLECTION_HIGH_METERS`]
+/// - Medium when distance ≤ [`FROND_COLLECTION_MEDIUM_METERS`] (keep ≈ half **runs**, full chains)
+/// - Low when distance ≤ [`FROND_COLLECTION_LOW_METERS`] (keep ≈ quarter runs, collapse each to a chord)
 /// - UltraLow beyond that (one marker chord; real [`LodSceneLevel::UltraLow`] tier)
-pub const FROND_COLLECTION_HIGH_FACTOR: f32 = 5.0;
-/// See [`FROND_COLLECTION_HIGH_FACTOR`].
-pub const FROND_COLLECTION_MEDIUM_FACTOR: f32 = 36.0;
-/// See [`FROND_COLLECTION_HIGH_FACTOR`].
-pub const FROND_COLLECTION_LOW_FACTOR: f32 = 90.0;
+pub const FROND_COLLECTION_HIGH_METERS: f32 = 500.0;
+/// See [`FROND_COLLECTION_HIGH_METERS`].
+pub const FROND_COLLECTION_MEDIUM_METERS: f32 = 750.0;
+/// See [`FROND_COLLECTION_HIGH_METERS`].
+pub const FROND_COLLECTION_LOW_METERS: f32 = 1000.0;
+
+/// Compatibility aliases for the absolute-meter frond-collection bands.
+#[doc(hidden)]
+pub const FROND_COLLECTION_HIGH_FACTOR: f32 = FROND_COLLECTION_HIGH_METERS;
+#[doc(hidden)]
+pub const FROND_COLLECTION_MEDIUM_FACTOR: f32 = FROND_COLLECTION_MEDIUM_METERS;
+#[doc(hidden)]
+pub const FROND_COLLECTION_LOW_FACTOR: f32 = FROND_COLLECTION_LOW_METERS;
 
 /// Which straight-frond kit a collection member instances.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

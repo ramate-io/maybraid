@@ -39,7 +39,8 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(Spotlight { extent: 20.0 })
 		.insert_resource(LodChunkFulfillBudget {
-			weights_per_frame: 256,
+			spawn_weights_per_frame: 512,
+			cull_weights_per_frame: 64,
 		})
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),

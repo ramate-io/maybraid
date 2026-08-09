@@ -242,8 +242,8 @@ mod vc {
 	use bevy::prelude::*;
 	use chico_sbs_trees::TuftPatch;
 	use chico_vegetation_components::{
-		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-		StructuralLod,
+		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
@@ -366,17 +366,19 @@ mod vc {
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
-	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 1.5;
-	/// Structural Medium band (× footprint): one upright proxy segment per clump.
-	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	/// Structural Medium band (× footprint): one upright proxy per ~4 placement cells.
+	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	/// Structural Low band (× footprint): 1/10-extent grid proxies; beyond → UltraLow.
-	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 10.0;
+	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
 	const PROXY_HEIGHT_ULTRA: f32 = 2.0;
 	const LOW_GRID: u32 = 10;
 	const ULTRA_GRID: u32 = 2;
+	/// Medium proxies merge a 2×2 block of authored placement cells (~every four cells).
+	const MEDIUM_CELL_STRIDE: f32 = 2.0;
 
 	/// Built Monster Grass grove: composed [`TuftPatch`] plants for VegetationComponents.
 	#[derive(Clone, Debug)]
@@ -385,6 +387,7 @@ mod vc {
 		pub structural_center: Vec3,
 		pub footprint_radius: f32,
 		pub extent: GroveExtent,
+		pub cell_extent_xz: Vec2,
 	}
 
 	impl MonsterGrass {
@@ -409,10 +412,7 @@ mod vc {
 			// Fold path bakes placements into runs; unmerged keeps one plant per placement.
 			let plants = TuftPatch::merge_placed(grown, merge_collections)
 				.into_iter()
-				.map(|patch| MonsterGrassPlant {
-					placement: Placement::IDENTITY,
-					patch,
-				})
+				.map(|patch| MonsterGrassPlant { placement: Placement::IDENTITY, patch })
 				.collect();
 			let span = extent.max() - extent.min();
 			let half = span * 0.5;
@@ -422,6 +422,7 @@ mod vc {
 				structural_center: extent.min() + Vec3::new(half.x, half.y.max(1.0), half.z),
 				footprint_radius,
 				extent: *extent,
+				cell_extent_xz: definition().cell_extent_xz,
 			}
 		}
 
@@ -436,20 +437,42 @@ mod vc {
 			nodes
 		}
 
-		/// One upright frond segment per clump, width covering the clump footprint.
+		/// One upright proxy per ~2×2 placement cells, blending anchors in each bin.
 		fn foliage_medium(&self) -> Vec<FoliageNode> {
-			let mut runs = Vec::new();
+			use std::collections::HashMap;
+
+			let bin_x = (self.cell_extent_xz.x * MEDIUM_CELL_STRIDE).max(1e-3);
+			let bin_z = (self.cell_extent_xz.y * MEDIUM_CELL_STRIDE).max(1e-3);
+			let origin = self.extent.min();
+			let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
+
 			for plant in &self.plants {
 				let patch = &plant.patch;
 				let width = clump_proxy_width(patch);
 				for anchor in &patch.anchors {
-					let world = plant
-						.placement
-						.compose_child(Placement::new(*anchor, 0.0))
-						.translation;
-					if let Some(run) = upright_proxy_run(world, width, PROXY_HEIGHT_MEDIUM) {
-						runs.push(run);
-					}
+					let world =
+						plant.placement.compose_child(Placement::new(*anchor, 0.0)).translation;
+					let ix = ((world.x - origin.x) / bin_x).floor() as i32;
+					let iz = ((world.z - origin.z) / bin_z).floor() as i32;
+					let entry = bins.entry((ix, iz)).or_insert((Vec3::ZERO, 0.0, 0));
+					entry.0 += world;
+					entry.1 += width;
+					entry.2 = entry.2.saturating_add(1);
+				}
+			}
+
+			let mut runs = Vec::with_capacity(bins.len());
+			for ((ix, iz), (sum_pos, sum_width, count)) in bins {
+				let n = (count as f32).max(1.0);
+				let mean = sum_pos / n;
+				// Cover the 2×2 cell footprint while preserving blended blade width.
+				let width = (sum_width / n).max(bin_x.max(bin_z) * 0.5) * n.sqrt();
+				let cx = origin.x + (ix as f32 + 0.5) * bin_x;
+				let cz = origin.z + (iz as f32 + 0.5) * bin_z;
+				// Prefer bin center so proxies sit on the coarse grid; pull slightly toward mass.
+				let base = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
+				if let Some(run) = upright_proxy_run(base, width, PROXY_HEIGHT_MEDIUM) {
+					runs.push(run);
 				}
 			}
 			collection_nodes(runs)
@@ -539,10 +562,7 @@ mod vc {
 		if runs.is_empty() {
 			return Vec::new();
 		}
-		vec![FoliageNode::frond_collection(
-			FrondCollection::new(runs),
-			Placement::IDENTITY,
-		)]
+		vec![FoliageNode::frond_collection(FrondCollection::new(runs), Placement::IDENTITY)]
 	}
 
 	impl VegetationComponents for MonsterGrass {
@@ -813,9 +833,7 @@ mod tests {
 			assert_eq!(grove.plants.len(), 1);
 			assert_eq!(grove.plants[0].patch.clump_count, 1);
 			// Default merge_collections=0 still bakes placement into runs (identity plant pose).
-			let base = grove.plants[0].patch.frond_runs()[0].segments[0]
-				.placement
-				.translation;
+			let base = grove.plants[0].patch.frond_runs()[0].segments[0].placement.translation;
 			assert!((base.x - 1.0).abs() < 0.5 && (base.z - 2.0).abs() < 0.5);
 			Ok(())
 		}
@@ -869,8 +887,8 @@ mod tests {
 
 		#[test]
 		fn palette_resolves_to_authored_color() -> Result<()> {
-			use bevy::prelude::StandardMaterial;
 			use crate::grove::WithPalette;
+			use bevy::prelude::StandardMaterial;
 
 			for cell in [
 				MonsterGrassCell::GiantWetBlade,
@@ -895,12 +913,12 @@ mod tests {
 
 		#[test]
 		fn structural_lod_thins_to_proxy_grids() -> Result<()> {
-			use chico_vegetation_components::VegetationComponents;
 			use crate::grove::{GroveCellVariant, DEFAULT_GROVE_EXTENT_XZ};
 			use crate::monster_grass::{
 				MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR, MONSTER_GRASS_STRUCTURAL_LOW_FACTOR,
 				MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR,
 			};
+			use chico_vegetation_components::VegetationComponents;
 			use lod::gen::LodSceneLevel;
 
 			let placements: Vec<_> = (0..8)
@@ -934,6 +952,7 @@ mod tests {
 				.first()
 				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
 				.unwrap_or(0);
+			// 8 clumps on a 5 m lattice with 2.5 m cells → 2×2 bins → one proxy per clump.
 			assert_eq!(medium_runs, 8);
 
 			let low_runs = grove
@@ -957,6 +976,42 @@ mod tests {
 			assert!((probe.medium_factor - MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR).abs() < 1e-5);
 			assert!((probe.low_factor - MONSTER_GRASS_STRUCTURAL_LOW_FACTOR).abs() < 1e-5);
 			assert!(probe.preserve_ultra_low);
+			Ok(())
+		}
+
+		#[test]
+		fn medium_blends_four_placement_cells() -> Result<()> {
+			use crate::grove::GroveCellVariant;
+			use chico_vegetation_components::VegetationComponents;
+			use lod::gen::LodSceneLevel;
+
+			// 4×4 grid on 2.5 m cells → 16 clumps → 2×2 medium bins → 4 proxies.
+			let placements: Vec<_> = (0..16)
+				.map(|i| {
+					let ix = i % 4;
+					let iz = i / 4;
+					GroveCellVariant::new(
+						MonsterGrassCell::GiantWetBlade,
+						Vec3::new(ix as f32 * 2.5 + 1.25, 0.0, iz as f32 * 2.5 + 1.25),
+						1.0,
+					)
+				})
+				.collect();
+			let grove = MonsterGrassParams::with_resolved_placements(
+				placements,
+				FlatTerrainSample::default(),
+				NoiseParams::default(),
+			)
+			.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0)))
+			.build();
+
+			let medium_runs = grove
+				.foliage_nodes_for_level(LodSceneLevel::Medium)
+				.flatten()
+				.first()
+				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
+				.unwrap_or(0);
+			assert_eq!(medium_runs, 4);
 			Ok(())
 		}
 	}

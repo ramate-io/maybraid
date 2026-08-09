@@ -89,25 +89,29 @@ impl LodChunkFulfillment {
 	}
 }
 
-/// Per-frame weight budget for spawn **and** cull drains.
+/// Per-frame weight budgets for spawn vs cull drains (independent clocks).
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct LodChunkFulfillBudget {
-	/// Relative weight units drained across all jobs each frame.
-	pub weights_per_frame: u32,
+	/// Relative weight units for [`drain_chunk_lod_fulfill`] each frame.
+	pub spawn_weights_per_frame: u32,
+	/// Relative weight units for [`super::cull::drain_lod_cull`] each frame.
+	pub cull_weights_per_frame: u32,
 }
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
 		Self {
-			weights_per_frame: 512,
+			spawn_weights_per_frame: 512,
+			cull_weights_per_frame: 64,
 		}
 	}
 }
 
-/// Remaining weight for the current frame (spawn drain then cull drain).
+/// Remaining spawn / cull weight for the current frame.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct LodChunkBudgetClock {
-	pub remaining: u32,
+	pub spawn_remaining: u32,
+	pub cull_remaining: u32,
 }
 
 /// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
@@ -126,7 +130,8 @@ pub fn reset_lod_chunk_budget(
 	budget: Res<LodChunkFulfillBudget>,
 	mut clock: ResMut<LodChunkBudgetClock>,
 ) {
-	clock.remaining = budget.weights_per_frame;
+	clock.spawn_remaining = budget.spawn_weights_per_frame;
+	clock.cull_remaining = budget.cull_weights_per_frame;
 }
 
 fn roots_bag_entity(
@@ -389,7 +394,7 @@ pub fn drain_chunk_lod_fulfill(
 	>,
 ) {
 	let t0 = Instant::now();
-	let mut remaining = clock.remaining;
+	let mut remaining = clock.spawn_remaining;
 	let mut spawned = 0u32;
 	let mut weight_spent = 0u32;
 	let mut active_jobs = 0u32;
@@ -429,14 +434,14 @@ pub fn drain_chunk_lod_fulfill(
 		}
 	}
 
-	clock.remaining = remaining;
+	clock.spawn_remaining = remaining;
 
 	if spawned > 0 || newly_streamed > 0 {
 		info!(
 			"[lod.chunk] drain: queued_spawns={spawned} weight_spent={weight_spent} \
 			 budget={} active_jobs={active_jobs} newly_streamed={newly_streamed} \
 			 queue_cmds={:.2}ms (apply cost: watch [lod.commands] system_commands)",
-			budget.weights_per_frame,
+			budget.spawn_weights_per_frame,
 			ms(t0)
 		);
 	}

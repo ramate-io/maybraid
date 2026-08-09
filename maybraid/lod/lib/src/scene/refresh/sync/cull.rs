@@ -210,7 +210,7 @@ pub fn drain_lod_cull(
 	level_roots: Query<(), With<LodLevelRoot>>,
 	wants_cull: Query<(), With<LodWantsCull>>,
 ) {
-	if clock.remaining == 0 {
+	if clock.cull_remaining == 0 {
 		return;
 	}
 
@@ -226,7 +226,7 @@ pub fn drain_lod_cull(
 	targets.sort_by_key(|(_, depth)| std::cmp::Reverse(*depth));
 
 	for (entity, _) in targets {
-		if clock.remaining == 0 {
+		if clock.cull_remaining == 0 {
 			break;
 		}
 		let Ok((_, mut cull, fulfillment)) = culling.get_mut(entity) else {
@@ -277,7 +277,7 @@ pub fn drain_lod_cull(
 		if child_ids.is_empty() {
 			let w = DEFAULT_CHUNK_WEIGHT.max(1);
 			commands.entity(entity).despawn();
-			clock.remaining = clock.remaining.saturating_sub(w);
+			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
 			weight_spent += w;
 			despawned += 1;
 			continue;
@@ -285,12 +285,12 @@ pub fn drain_lod_cull(
 
 		let mut despawned_this = false;
 		for child in child_ids {
-			if clock.remaining == 0 && despawned_this {
+			if clock.cull_remaining == 0 && despawned_this {
 				break;
 			}
 			let w = DEFAULT_CHUNK_WEIGHT.max(1);
 			commands.entity(child).despawn();
-			clock.remaining = clock.remaining.saturating_sub(w);
+			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
 			weight_spent += w;
 			despawned += 1;
 			despawned_this = true;
@@ -303,7 +303,7 @@ pub fn drain_lod_cull(
 			"[lod.chunk] drain_cull: despawned={despawned} weight_spent={weight_spent} \
 			 waiting_nested={waiting_nested} budget_left={} queue_cmds={elapsed_ms:.2}ms \
 			 (apply cost: watch [lod.commands] system_commands)",
-			clock.remaining
+			clock.cull_remaining
 		);
 	}
 }
