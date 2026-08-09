@@ -8,7 +8,7 @@ use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds
 pub const PLAIN_GROVE_RADIUS: i32 = 10;
 
 /// Plains tile span on XZ (half the default grove preview extent).
-pub const PLAIN_GROVE_EXTENT_XZ: f32 = DEFAULT_GROVE_EXTENT_XZ * 0.5;
+pub const PLAIN_GROVE_EXTENT_XZ: f32 = DEFAULT_GROVE_EXTENT_XZ * 1.0;
 
 /// Spawn a centered `(2 × [`PLAIN_GROVE_RADIUS`] + 1)²` tile of default monster-grass groves.
 pub fn spawn_monster_grass_plain(commands: &mut Commands, transform: Transform) -> Vec<Entity> {
