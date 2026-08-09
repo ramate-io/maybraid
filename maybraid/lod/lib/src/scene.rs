@@ -24,9 +24,9 @@ pub use chunk_fulfill::{
 	begin_chunk_lod_fulfill, cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill,
 	drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull, reset_lod_chunk_budget,
 	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget,
-	LodChunkFulfillment,
-	LodCullEntity, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin, LodWantsCull,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullEntity, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use cull::{
 	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
@@ -34,8 +34,9 @@ pub use cull::{
 	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
 pub use host::{
-	lod_host_scene, lod_host_scene_pending, sync_lod_level_roots, LodLevelRoot, LodLevelRoots,
-	LodLevelSpawnRequest, LodSceneHost, LodSceneHostPlugin,
+	lod_host_scene, lod_host_scene_pending, nested_host_parent_allows_refresh,
+	sync_lod_level_roots, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
+	LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus};

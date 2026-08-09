@@ -14,7 +14,7 @@
 //!   swap.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
-//! reset budget → cancel/sticky → begin jobs → drain spawn → complete / swap.
+//! reset budget → cancel/sticky → begin jobs (per `T`) → **one** drain → **one** complete.
 //! Teardown uses the same budget via [`super::cull::drain_lod_cull`] in Cull.
 //!
 //! Command / archetype apply cost is measured via Bevy's `system_commands`
@@ -29,7 +29,8 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
 use crate::scene::host::{
-	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
+	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,
+	LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
@@ -308,6 +309,8 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodWantsCull>>,
+	child_of: Query<&ChildOf>,
+	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 ) {
 	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
 		return;
@@ -328,8 +331,24 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			continue;
 		};
 
+		let root_children = level_roots_heads
+			.get(roots_entity)
+			.ok()
+			.and_then(|(_, children)| children);
+		let has_any_level_root = root_children.is_some_and(|children| {
+			children.iter().any(|child| root_keys.contains(child) && !wants_cull.contains(child))
+		});
+
+		// Parent-High gates *refresh* only. Empty hosts (no level roots yet) still fill —
+		// e.g. Medium/Low structural proxies that nest foliage hosts.
+		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels) && has_any_level_root
+		{
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
+			continue;
+		}
+
 		let mut cold = true;
-		if let Ok((_, Some(root_children))) = level_roots_heads.get(roots_entity) {
+		if let Some(root_children) = root_children {
 			let mut already_ready = false;
 			let mut already_pending = false;
 			for child in root_children.iter() {
@@ -606,7 +625,23 @@ pub enum LodChunkCullSystems {
 	Drain,
 }
 
-/// Shared chunk budget clock, cull messages, and one-shot drain registration.
+/// Substeps within [`LodRefreshSystems::Fulfill`] after budget reset.
+///
+/// [`Self::Drain`] / [`Self::Complete`] are registered **once** (shared). Per-host-type
+/// plugins only add [`begin_chunk_lod_fulfill`] into [`Self::Begin`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum LodChunkFulfillSystems {
+	/// Cancel stale pending roots / sticky resume.
+	Cancel,
+	/// Per-`T` [`begin_chunk_lod_fulfill`].
+	Begin,
+	/// Shared weighted spawn drain.
+	Drain,
+	/// Shared warm-swap complete.
+	Complete,
+}
+
+/// Shared chunk budget clock, cull messages, and one-shot drain/complete registration.
 pub struct LodChunkBudgetPlugin;
 
 impl Plugin for LodChunkBudgetPlugin {
@@ -626,10 +661,25 @@ impl Plugin for LodChunkBudgetPlugin {
 					.chain()
 					.in_set(LodRefreshSystems::Cull),
 			)
+			.configure_sets(
+				Update,
+				(
+					LodChunkFulfillSystems::Cancel,
+					LodChunkFulfillSystems::Begin,
+					LodChunkFulfillSystems::Drain,
+					LodChunkFulfillSystems::Complete,
+				)
+					.chain()
+					.in_set(LodRefreshSystems::Fulfill)
+					.after(reset_lod_chunk_budget),
+			)
 			.add_systems(
 				Update,
 				(
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
+					cancel_stale_chunk_fulfillments.in_set(LodChunkFulfillSystems::Cancel),
+					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
+					complete_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Complete),
 					apply_lod_cull_requests.in_set(LodChunkCullSystems::Apply),
 					drain_lod_cull.in_set(LodChunkCullSystems::Drain),
 				),
@@ -649,19 +699,9 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_chunk_budget(app);
-		// Cancel inserts [`LodWantsCull`] directly (no second `apply_lod_cull_requests`
-		// here — duplicate SystemTypeSets break `.before(apply_…)` ordering).
 		app.add_systems(
 			Update,
-			(
-				cancel_stale_chunk_fulfillments,
-				begin_chunk_lod_fulfill::<T>,
-				drain_chunk_lod_fulfill,
-				complete_chunk_lod_fulfill,
-			)
-				.chain()
-				.in_set(LodRefreshSystems::Fulfill)
-				.after(reset_lod_chunk_budget),
+			begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin),
 		);
 	}
 }

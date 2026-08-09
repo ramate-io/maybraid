@@ -48,10 +48,9 @@ pub use sync::{
 	complete_chunk_lod_fulfill, cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull,
 	enqueue_lod_cull, fulfill_lod_level_spawn, reset_lod_chunk_budget, LodChunkBudgetClock,
 	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillDiag,
-	LodChunkFulfillment,
-	LodCullEntity, LodLevelRootPending, LodLevelRootStreamed, LodRefreshCullPlugin,
-	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshEagerSyncPlugin,
-	LodSceneRefreshSyncPlugin, LodWantsCull,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullEntity, LodLevelRootPending,
+	LodLevelRootStreamed, LodRefreshCullPlugin, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshEagerSyncPlugin, LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use viewer::LodViewer;
 

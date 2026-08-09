@@ -18,8 +18,8 @@ pub use chunk::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
 	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
 	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillSystems, LodChunkFulfillment,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshSyncPlugin, LodWantsCull,
 };
 pub use cull::{

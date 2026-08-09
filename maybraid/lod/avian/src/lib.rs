@@ -97,9 +97,9 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
 		let query_ms = t0.elapsed().as_secs_f64() * 1000.0;
 		self.diag.record(query_ms, hit.len());
-		if query_ms >= 0.5 {
+		if query_ms >= 0.25 {
 			info!(
-				"[lod.refresh] spatial: type={} hits={} in {query_ms:.2}ms",
+				"[lod.refresh] spatial.query: host={} hits={} aabb_ms={query_ms:.2}",
 				type_name::<T>(),
 				hit.len()
 			);
@@ -116,8 +116,13 @@ fn log_avian_spatial_query_diag(mut diag: ResMut<AvianLodSpatialQueryDiag>) {
 	if queries == 0 {
 		return;
 	}
-	if total_ms >= 0.5 || queries > 1 {
-		info!("[lod.refresh] spatial: queries={queries} hits={hits} in {total_ms:.2}ms");
+	if total_ms >= 0.25 || queries > 1 {
+		let avg = total_ms / f64::from(queries.max(1));
+		info!(
+			"[lod.refresh] spatial.frame: queries={queries} hits={hits} \
+			 total_ms={total_ms:.2} avg_ms={avg:.2} last_ms={:.2}",
+			diag.last_query_ms
+		);
 	}
 }
 

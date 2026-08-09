@@ -13,7 +13,9 @@ use crate::lod_ref::{
 };
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{
+	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
@@ -74,11 +76,13 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullEntity>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
-	hosts: Query<(&T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
+	hosts: Query<(Entity, &T, &LodSceneLevel, &Children), (With<LodSceneHost>, FHost)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodWantsCull>>,
+	child_of: Query<&ChildOf>,
+	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 ) where
 	T: Component + LodScene,
 	FHost: QueryFilter + 'static,
@@ -93,11 +97,16 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let t0 = std::time::Instant::now();
 	let mut enqueued = 0u32;
 	let mut hosts_scanned = 0u32;
+	let mut parent_skip = 0u32;
 	let mut culls_none = 0u32;
 	let mut roots_seen = 0u32;
 
-	for (scene, current, host_children) in &hosts {
+	for (host, scene, current, host_children) in &hosts {
 		hosts_scanned += 1;
+		if !nested_host_parent_allows_refresh(host, &child_of, &host_levels) {
+			parent_skip += 1;
+			continue;
+		}
 		let Some(lod_ref) = dominant_lod_ref(scene, &refs) else {
 			continue;
 		};
@@ -148,8 +157,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
 	if enqueued > 0 || elapsed_ms >= 0.5 {
 		info!(
-			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} culls_none={culls_none} \
-			 roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
+			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} parent_skip={parent_skip} \
+			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
 		);
 	}
 }

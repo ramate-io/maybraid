@@ -10,6 +10,34 @@ use crate::scene::level::LodSceneLevel;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodSceneHost;
 
+/// Whether a nested host may run fine-phase **refresh** (level produce / cull / probe update).
+///
+/// Walks ancestors for the nearest [`LodSceneHost`] with [`LodSceneLevel`] (skipping
+/// `entity` itself). No such ancestor → top-level → allowed. Otherwise allowed only
+/// when that parent's level is [`LodSceneLevel::High`].
+///
+/// Initial chunk fulfill (empty level-roots bag) is **not** gated by this — hosts under
+/// Medium/Low parents still need their first leaves filled.
+pub fn nested_host_parent_allows_refresh(
+	entity: Entity,
+	child_of: &Query<&ChildOf>,
+	host_levels: &Query<&LodSceneLevel, With<LodSceneHost>>,
+) -> bool {
+	let Ok(parent) = child_of.get(entity) else {
+		return true;
+	};
+	let mut current = parent.parent();
+	loop {
+		if let Ok(level) = host_levels.get(current) {
+			return *level == LodSceneLevel::High;
+		}
+		let Ok(next) = child_of.get(current) else {
+			return true;
+		};
+		current = next.parent();
+	}
+}
+
 /// Parent of level-root children (keeps level variants out of the structural child bag).
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodLevelRoots;
