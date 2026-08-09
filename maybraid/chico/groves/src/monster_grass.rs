@@ -10,8 +10,8 @@
 //! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
 //! compare a folded probe budget).
 //!
-//! Structural LOD (× grove footprint): High ≤1.5 (full clumps), Medium ≤5.0 (one upright
-//! proxy per clump), Low ≤10.0 (10×10 grid), UltraLow beyond (2×2 horizontal proxies).
+//! Structural LOD (× grove footprint): High = full clumps; Medium ≈ one upright proxy per
+//! ~2 placement cells; Low ≈ one per ~8 cells; UltraLow = 2×2 horizontal proxies.
 //! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
 //! color ranges.
 
@@ -366,19 +366,20 @@ mod vc {
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
-	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-	/// Structural Medium band (× footprint): one upright proxy per ~4 placement cells.
+	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	/// Structural Medium band (× footprint): one upright proxy per ~2 placement cells.
 	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
-	/// Structural Low band (× footprint): 1/10-extent grid proxies; beyond → UltraLow.
+	/// Structural Low band (× footprint): one upright proxy per ~8 placement cells; beyond → UltraLow.
 	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
 	const PROXY_HEIGHT_ULTRA: f32 = 2.0;
-	const LOW_GRID: u32 = 10;
 	const ULTRA_GRID: u32 = 2;
-	/// Medium proxies merge a 2×2 block of authored placement cells (~every four cells).
-	const MEDIUM_CELL_STRIDE: f32 = 2.0;
+	/// Square bin side in placement-cell units so area ≈ 2 cells (`√2 × √2`).
+	const MEDIUM_CELL_STRIDE: f32 = std::f32::consts::SQRT_2;
+	/// Square bin side in placement-cell units so area ≈ 8 cells (`√8 × √8` = `2√2`).
+	const LOW_CELL_STRIDE: f32 = 2.0 * std::f32::consts::SQRT_2;
 
 	/// Built Monster Grass grove: composed [`TuftPatch`] plants for VegetationComponents.
 	#[derive(Clone, Debug)]
@@ -437,12 +438,22 @@ mod vc {
 			nodes
 		}
 
-		/// One upright proxy per ~2×2 placement cells, blending anchors in each bin.
+		/// One upright proxy per ~2 placement cells, blending anchors in each bin.
 		fn foliage_medium(&self) -> Vec<FoliageNode> {
+			self.foliage_cell_proxies(MEDIUM_CELL_STRIDE, PROXY_HEIGHT_MEDIUM)
+		}
+
+		/// One upright proxy per ~8 placement cells, blending anchors in each bin.
+		fn foliage_low(&self) -> Vec<FoliageNode> {
+			self.foliage_cell_proxies(LOW_CELL_STRIDE, PROXY_HEIGHT_LOW)
+		}
+
+		/// Upright proxies from occupied placement-cell bins of side `cell_stride` cells.
+		fn foliage_cell_proxies(&self, cell_stride: f32, height: f32) -> Vec<FoliageNode> {
 			use std::collections::HashMap;
 
-			let bin_x = (self.cell_extent_xz.x * MEDIUM_CELL_STRIDE).max(1e-3);
-			let bin_z = (self.cell_extent_xz.y * MEDIUM_CELL_STRIDE).max(1e-3);
+			let bin_x = (self.cell_extent_xz.x * cell_stride).max(1e-3);
+			let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 			let origin = self.extent.min();
 			let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
 
@@ -465,37 +476,23 @@ mod vc {
 			for ((ix, iz), (sum_pos, sum_width, count)) in bins {
 				let n = (count as f32).max(1.0);
 				let mean = sum_pos / n;
-				// Cover the 2×2 cell footprint while preserving blended blade width.
+				// Cover the bin footprint while preserving blended blade width.
 				let width = (sum_width / n).max(bin_x.max(bin_z) * 0.5) * n.sqrt();
 				let cx = origin.x + (ix as f32 + 0.5) * bin_x;
 				let cz = origin.z + (iz as f32 + 0.5) * bin_z;
 				// Prefer bin center so proxies sit on the coarse grid; pull slightly toward mass.
 				let base = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
-				if let Some(run) = upright_proxy_run(base, width, PROXY_HEIGHT_MEDIUM) {
+				if let Some(run) = upright_proxy_run(base, width, height) {
 					runs.push(run);
 				}
 			}
 			collection_nodes(runs, self.structural_center, self.footprint_radius)
 		}
 
-		/// One upright proxy per cell of a 10×10 subdivision of the grove extent.
-		fn foliage_low(&self) -> Vec<FoliageNode> {
-			collection_nodes(
-				grid_proxy_runs(&self.extent, LOW_GRID, PROXY_HEIGHT_LOW, GridProxyOrient::Upright),
-				self.structural_center,
-				self.footprint_radius,
-			)
-		}
-
 		/// Four horizontal proxies covering a 2×2 subdivision of the grove extent.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 			collection_nodes(
-				grid_proxy_runs(
-					&self.extent,
-					ULTRA_GRID,
-					PROXY_HEIGHT_ULTRA,
-					GridProxyOrient::Horizontal,
-				),
+				horizontal_grid_proxy_runs(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA),
 				self.structural_center,
 				self.footprint_radius,
 			)
@@ -517,17 +514,7 @@ mod vc {
 			.map(|p| FrondRun::from_placements([p]))
 	}
 
-	enum GridProxyOrient {
-		Upright,
-		Horizontal,
-	}
-
-	fn grid_proxy_runs(
-		extent: &GroveExtent,
-		divisions: u32,
-		height: f32,
-		orient: GridProxyOrient,
-	) -> Vec<FrondRun> {
+	fn horizontal_grid_proxy_runs(extent: &GroveExtent, divisions: u32, height: f32) -> Vec<FrondRun> {
 		let divisions = divisions.max(1);
 		let min = extent.min();
 		let max = extent.max();
@@ -539,21 +526,15 @@ mod vc {
 			for iz in 0..divisions {
 				let x0 = min.x + ix as f32 * cell_x;
 				let z0 = min.z + iz as f32 * cell_z;
-				let cx = x0 + cell_x * 0.5;
 				let cz = z0 + cell_z * 0.5;
-				let run = match orient {
-					GridProxyOrient::Upright => {
-						upright_proxy_run(Vec3::new(cx, 0.0, cz), cell_x.max(cell_z), height)
-					}
-					GridProxyOrient::Horizontal => Placement::frond_segment(
-						Vec3::new(x0, height * 0.5, cz),
-						Vec3::X,
-						cell_x,
-						cell_z,
-					)
-					.map(|p| FrondRun::from_placements([p])),
-				};
-				if let Some(run) = run {
+				if let Some(run) = Placement::frond_segment(
+					Vec3::new(x0, height * 0.5, cz),
+					Vec3::X,
+					cell_x,
+					cell_z,
+				)
+				.map(|p| FrondRun::from_placements([p]))
+				{
 					runs.push(run);
 				}
 			}
@@ -958,7 +939,7 @@ mod tests {
 				.first()
 				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
 				.unwrap_or(0);
-			// 8 clumps on a 5 m lattice with 2.5 m cells → 2×2 bins → one proxy per clump.
+			// 8 clumps on a 5 m lattice; Medium bins (~√2 cells) keep one proxy per clump.
 			assert_eq!(medium_runs, 8);
 
 			let low_runs = grove
@@ -967,7 +948,8 @@ mod tests {
 				.first()
 				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
 				.unwrap_or(0);
-			assert_eq!(low_runs, 100);
+			// Low bins (~√8 cells ≈ 7.1 m) merge the 5 m lattice → 3 occupied bins.
+			assert_eq!(low_runs, 3);
 
 			let ultra_runs = grove
 				.foliage_nodes_for_level(LodSceneLevel::UltraLow)
@@ -986,12 +968,12 @@ mod tests {
 		}
 
 		#[test]
-		fn medium_blends_four_placement_cells() -> Result<()> {
+		fn medium_blends_about_two_placement_cells() -> Result<()> {
 			use crate::grove::GroveCellVariant;
 			use chico_vegetation_components::VegetationComponents;
 			use lod::gen::LodSceneLevel;
 
-			// 4×4 grid on 2.5 m cells → 16 clumps → 2×2 medium bins → 4 proxies.
+			// 4×4 grid on 2.5 m cells → 16 clumps → ~√2-cell medium bins → 9 proxies.
 			let placements: Vec<_> = (0..16)
 				.map(|i| {
 					let ix = i % 4;
@@ -1017,7 +999,7 @@ mod tests {
 				.first()
 				.and_then(|n| n.geometry.as_frond_collection().map(|c| c.runs.len()))
 				.unwrap_or(0);
-			assert_eq!(medium_runs, 4);
+			assert_eq!(medium_runs, 9);
 			Ok(())
 		}
 	}

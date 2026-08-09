@@ -14,7 +14,7 @@ mod vegetation_lod;
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
-pub use monster_grass_plain::PLAIN_GROVES_PER_AXIS;
+pub use monster_grass_plain::PLAIN_GROVE_RADIUS;
 pub use render::{RenderConfig, RenderSubject};
 
 use bevy::camera::visibility::VisibilitySystems;

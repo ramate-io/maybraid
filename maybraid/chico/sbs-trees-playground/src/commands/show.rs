@@ -58,7 +58,7 @@ pub enum Show {
 	PalmBush(ShowPalmBush),
 	/// Monster Grass grove via VegetationComponents / LodScene.
 	MonsterGrass(ShowMonsterGrass),
-	/// Centered 3×3 of default Monster Grass groves; vegetation LOD ring radius 3.
+	/// Centered radius-10 tile of default Monster Grass groves (21×21).
 	MonsterGrassPlains,
 }
 

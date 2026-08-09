@@ -25,7 +25,7 @@ pub const FROND_COLLECTION_HIGH_FACTOR: f32 = 5.0;
 /// See [`FROND_COLLECTION_HIGH_FACTOR`].
 pub const FROND_COLLECTION_MEDIUM_FACTOR: f32 = 10.0;
 /// See [`FROND_COLLECTION_HIGH_FACTOR`].
-pub const FROND_COLLECTION_LOW_FACTOR: f32 = 25.0;
+pub const FROND_COLLECTION_LOW_FACTOR: f32 = 50.0;
 
 /// Absolute-meter warm-root cull bands (viewer↔collection center).
 ///
@@ -156,11 +156,7 @@ impl FrondCollection {
 	/// Runs only; probe defaults to origin / unit radius — call [`Self::with_probe`] (or
 	/// [`Self::bake_bounds_from_runs`] once at construction) before LOD use.
 	pub fn new(runs: impl IntoIterator<Item = FrondRun>) -> Self {
-		Self {
-			runs: runs.into_iter().collect(),
-			center: Vec3::ZERO,
-			radius: 1.0,
-		}
+		Self { runs: runs.into_iter().collect(), center: Vec3::ZERO, radius: 1.0 }
 	}
 
 	/// Set authored LOD probe center and radius (cheap; no run walk).
