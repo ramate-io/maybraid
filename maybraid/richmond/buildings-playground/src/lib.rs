@@ -42,6 +42,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			.insert_resource(LodChunkFulfillBudget {
 				spawn_weights_per_frame: 1,
 				cull_weights_per_frame: 1,
+				begins_per_frame: 1,
 			})
 			.add_plugins((
 				SceneRefPlugin,
