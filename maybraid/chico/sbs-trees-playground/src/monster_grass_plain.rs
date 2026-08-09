@@ -11,8 +11,7 @@ pub const PLAIN_GROVES_PER_AXIS: i32 = 3;
 pub fn spawn_monster_grass_plain(commands: &mut Commands, transform: Transform) -> Vec<Entity> {
 	let tile = DEFAULT_GROVE_EXTENT_XZ;
 	let half = PLAIN_GROVES_PER_AXIS / 2;
-	let mut entities =
-		Vec::with_capacity((PLAIN_GROVES_PER_AXIS * PLAIN_GROVES_PER_AXIS) as usize);
+	let mut entities = Vec::with_capacity((PLAIN_GROVES_PER_AXIS * PLAIN_GROVES_PER_AXIS) as usize);
 
 	for ix in -half..=half {
 		for iz in -half..=half {
@@ -20,15 +19,10 @@ pub fn spawn_monster_grass_plain(commands: &mut Commands, transform: Transform) 
 			let max = min + Vec3::new(tile, 1.0, tile);
 			let mut params = MonsterGrassParams::default().with_extent(GroveExtent::new(min, max));
 			// Fold placements into fewer FrondCollection hosts (probe/cull budget).
-			params.merge_collections = 100;
+			params.merge_collections = 0;
 			let grove = params.build();
 			let bounds = vegetation_bounds(&grove);
-			entities.extend(spawn_vegetation_components(
-				commands,
-				&grove,
-				transform,
-				bounds,
-			));
+			entities.extend(spawn_vegetation_components(commands, &grove, transform, bounds));
 		}
 	}
 
