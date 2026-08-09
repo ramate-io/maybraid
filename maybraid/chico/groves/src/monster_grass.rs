@@ -243,7 +243,7 @@ mod vc {
 	use chico_sbs_trees::TuftPatch;
 	use chico_vegetation_components::{
 		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
-		VegetationComponents,
+		VegetationComponents, FROND_KIT_HALF_X,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
@@ -368,9 +368,9 @@ mod vc {
 	/// Structural High band (× footprint): full authored clumps.
 	pub const MONSTER_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
 	/// Structural Medium band (× footprint): one upright proxy per ~2 placement cells.
-	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+	pub const MONSTER_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	/// Structural Low band (× footprint): one upright proxy per ~8 placement cells; beyond → UltraLow.
-	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
+	pub const MONSTER_GRASS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	const PROXY_HEIGHT_MEDIUM: f32 = 3.5;
 	const PROXY_HEIGHT_LOW: f32 = 4.5;
@@ -514,29 +514,36 @@ mod vc {
 			.map(|p| FrondRun::from_placements([p]))
 	}
 
-	fn horizontal_grid_proxy_runs(extent: &GroveExtent, divisions: u32, height: f32) -> Vec<FrondRun> {
+	/// Flat XZ carpet tiles: rachis along +X, blade width along ±Z (not world up).
+	///
+	/// [`Placement::frond_segment`] with `dir = X` and a large `width` is wrong here —
+	/// `from_rotation_arc(Y, X)` leaves kit‑X (width) near world‑Y, so a 50 m “width”
+	/// reads as a 50 m tall wall.
+	fn horizontal_grid_proxy_runs(
+		extent: &GroveExtent,
+		divisions: u32,
+		height: f32,
+	) -> Vec<FrondRun> {
 		let divisions = divisions.max(1);
 		let min = extent.min();
 		let max = extent.max();
 		let span = max - min;
 		let cell_x = (span.x / divisions as f32).max(1e-3);
 		let cell_z = (span.z / divisions as f32).max(1e-3);
+		// local X → world Z (width), local Y → world X (length), local Z → world Y (thin).
+		let rotation = Quat::from_mat3(&Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y));
+		let scale_x = (cell_z * 0.5 / FROND_KIT_HALF_X).max(1e-4);
+		let y = height * 0.5;
 		let mut runs = Vec::with_capacity((divisions * divisions) as usize);
 		for ix in 0..divisions {
 			for iz in 0..divisions {
 				let x0 = min.x + ix as f32 * cell_x;
 				let z0 = min.z + iz as f32 * cell_z;
 				let cz = z0 + cell_z * 0.5;
-				if let Some(run) = Placement::frond_segment(
-					Vec3::new(x0, height * 0.5, cz),
-					Vec3::X,
-					cell_x,
-					cell_z,
-				)
-				.map(|p| FrondRun::from_placements([p]))
-				{
-					runs.push(run);
-				}
+				let placement = Placement::new(Vec3::new(x0, y, cz), 0.0)
+					.with_rotation(rotation)
+					.with_scale(Vec3::new(scale_x, cell_x, scale_x));
+				runs.push(FrondRun::from_placements([placement]));
 			}
 		}
 		runs
