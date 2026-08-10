@@ -39,6 +39,6 @@ mod tests {
 	fn plain_is_radius_ten_centered() {
 		assert_eq!(PLAIN_GROVE_RADIUS, 10);
 		assert_eq!((-PLAIN_GROVE_RADIUS..=PLAIN_GROVE_RADIUS).count(), 21);
-		assert!((PLAIN_GROVE_EXTENT_XZ - DEFAULT_GROVE_EXTENT_XZ * 0.5).abs() < 1e-5);
+		assert!((PLAIN_GROVE_EXTENT_XZ - DEFAULT_GROVE_EXTENT_XZ * 1.0).abs() < 1e-5);
 	}
 }
