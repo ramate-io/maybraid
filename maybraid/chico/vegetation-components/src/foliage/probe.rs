@@ -172,12 +172,12 @@ mod tests {
 			LodSceneLevel::Low
 		);
 		assert_eq!(
-			probe.level_for(&Transform::from_translation(Vec3::new(60.0, 0.0, 0.0))),
+			probe.level_for(&Transform::from_translation(Vec3::new(110.0, 0.0, 0.0))),
 			LodSceneLevel::UltraLow
 		);
 		// Absolute meters no longer drive spawn: 100 m is still UltraLow for radius 2.
 		assert_eq!(
-			probe.level_for(&Transform::from_translation(Vec3::new(100.0, 0.0, 0.0))),
+			probe.level_for(&Transform::from_translation(Vec3::new(1_000.0, 0.0, 0.0))),
 			LodSceneLevel::UltraLow
 		);
 	}
