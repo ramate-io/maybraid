@@ -11,7 +11,6 @@ use material_ref::MaterialRef;
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::posed_material_asset_tier;
-use crate::materials::chico_stick_material_ref;
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh_material_ref};
@@ -25,7 +24,8 @@ pub struct StickNode {
 	pub style: StickStyle,
 	pub geometry: StickGeometry,
 	pub placement: Placement,
-	/// Deferred material (`MaterialRef::default()` = green standard; stick constructors use stick).
+	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
+	/// higher-order types set stick / palette as needed.
 	pub material: MaterialRef,
 }
 
@@ -35,7 +35,7 @@ impl StickNode {
 			style,
 			geometry,
 			placement,
-			material: chico_stick_material_ref(),
+			material: MaterialRef::default(),
 		}
 	}
 

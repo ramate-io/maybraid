@@ -67,7 +67,9 @@ impl MaterialLib for ChicoMaterialLib<'_> {
 					.insert(MeshMaterial3d(handle));
 			}
 			_ => {
+				// Grass / frond kits and other defaults: green standard, no shadow casting.
 				self.standard.fulfill(entity, material_ref, commands);
+				commands.entity(entity).insert(NotShadowCaster);
 			}
 		}
 	}

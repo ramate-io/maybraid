@@ -22,7 +22,6 @@ use crate::foliage::style::FoliageStyle;
 use crate::lod_host::{
 	posed_foliage_asset_tier, posed_frond_asset_tier, posed_frond_multi_scene_merge,
 };
-use crate::materials::chico_leaf_material_ref;
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
@@ -34,7 +33,8 @@ pub struct FoliageNode {
 	pub style: FoliageStyle,
 	pub geometry: FoliageGeometry,
 	pub placement: Placement,
-	/// Deferred material (`MaterialRef::default()` = green standard; canopy constructors use leaf).
+	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
+	/// higher-order types set leaf / palette as needed.
 	pub material: MaterialRef,
 }
 
@@ -44,7 +44,7 @@ impl FoliageNode {
 			style,
 			geometry,
 			placement,
-			material: chico_leaf_material_ref(),
+			material: MaterialRef::default(),
 		}
 	}
 

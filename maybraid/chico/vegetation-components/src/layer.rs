@@ -98,6 +98,18 @@ impl<T> Layers<T> {
 		}
 		out
 	}
+
+	/// Map every free and labeled node.
+	pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> Layers<U> {
+		Layers {
+			free: self.free.into_iter().map(&mut f).collect(),
+			labeled: self
+				.labeled
+				.into_iter()
+				.map(|(layer, nodes)| (layer, nodes.into_iter().map(&mut f).collect()))
+				.collect(),
+		}
+	}
 }
 
 impl<T> FromIterator<T> for Layers<T> {
