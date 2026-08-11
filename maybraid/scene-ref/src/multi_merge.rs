@@ -14,10 +14,11 @@ use bevy::world_serialization::WorldAsset;
 
 use crate::handles::SceneRefHandles;
 use crate::scene_ref::SceneRef;
+use crate::world_asset::world_asset_from_mesh;
 
 pub use transform_key::TransformKey;
 
-use mesh::{merge_meshes, merge_world_asset_meshes, world_asset_from_mesh};
+use mesh::{merge_meshes, merge_world_asset_meshes};
 
 /// One input scene and its local transform in the merged multi-scene.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

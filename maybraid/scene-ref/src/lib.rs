@@ -15,6 +15,7 @@ mod handles;
 mod mirror;
 mod multi_merge;
 mod scene_ref;
+mod world_asset;
 
 use bevy::prelude::{App, Plugin, Update};
 

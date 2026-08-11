@@ -1,6 +1,5 @@
 //! Bake per-entity + per-part transforms and concatenate meshes.
 
-use bevy::asset::Handle;
 use bevy::mesh::{Mesh, MeshVertexAttributeId, VertexAttributeValues};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::{Assets, ChildOf, Entity, Mesh3d, Transform, World};
@@ -116,13 +115,6 @@ fn retain_common_attributes(meshes: &mut [Mesh]) {
 			mesh.remove_attribute(id);
 		}
 	}
-}
-
-/// Build a single-entity [`WorldAsset`] owning `mesh_handle`.
-pub(crate) fn world_asset_from_mesh(mesh_handle: Handle<Mesh>) -> WorldAsset {
-	let mut world = World::new();
-	world.spawn((Mesh3d(mesh_handle), Transform::IDENTITY));
-	WorldAsset::new(world)
 }
 
 #[cfg(test)]
