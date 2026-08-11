@@ -4,6 +4,7 @@ use bevy::prelude::{Children, Component, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::LodSceneLevel;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use scene_ref::MultiSceneMerge;
 
 use crate::assets::AssetPath;
 
@@ -82,6 +83,21 @@ pub fn posed_frond_asset_tier(
 		Visibility::Inherited
 		Children [ {children} ]
 	}
+}
+
+/// Merged frond collection posed as one unit, tagged with [`VegetationFrondAssetRoot`].
+///
+/// `merge` parts must already be collection-/unit-local. `transform` is applied on the
+/// same entity as [`scene_ref::MultiSceneMergeRoot`] so the whole merged mesh is placed
+/// once (not as a parent of an identity child).
+pub fn posed_frond_multi_scene_merge(
+	merge: MultiSceneMerge,
+	transform: Transform,
+) -> impl Scene + 'static {
+	(
+		bsn! { VegetationFrondAssetRoot },
+		merge.scene_at(transform),
+	)
 }
 
 /// Warm host whose level roots are arbitrary scene content.

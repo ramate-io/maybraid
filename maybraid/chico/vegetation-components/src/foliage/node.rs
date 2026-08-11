@@ -19,11 +19,13 @@ use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_host::{
-	posed_foliage_asset_tier, posed_frond_asset_tier, VegetationFrondAssetRoot,
+	posed_foliage_asset_tier, posed_frond_asset_tier, posed_frond_multi_scene_merge,
+	VegetationFrondAssetRoot,
 };
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh, scene_children};
+use scene_ref::{MultiSceneMerge, MultiScenePart};
 
 /// Authoring IR for a foliage cluster — also the fine-phase [`LodScene`] host component.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
@@ -90,7 +92,17 @@ impl FoliageNode {
 	fn probe(&self) -> FoliageLodProbe {
 		match &self.geometry {
 			FoliageGeometry::FrondCollection(collection) => {
-				FoliageLodProbe::for_frond_collection(collection)
+				// Collection center/radius stay unit-/collection-local; compose plant pose.
+				let (local_center, local_radius) = collection.center_and_extent();
+				let world_center = self
+					.placement
+					.compose_child(Placement::new(local_center, 0.0))
+					.translation;
+				let scale = self.placement.scale.abs().max_element().max(1e-4);
+				let mut probe = FoliageLodProbe::for_frond_collection(collection);
+				probe.center = world_center;
+				probe.extent = local_radius * scale;
+				probe
 			}
 			_ => FoliageLodProbe::from_placement(&self.placement),
 		}
@@ -157,7 +169,29 @@ impl FoliageNode {
 		}
 	}
 
+	/// Collection-local [`MultiSceneMerge`] (member poses only — parent transform separate).
+	fn collection_multi_scene_merge(
+		&self,
+		collection: &FrondCollection,
+		level: LodSceneLevel,
+	) -> Option<MultiSceneMerge> {
+		let members = collection.members_for_level(level);
+		if members.is_empty() {
+			return None;
+		}
+		let mut parts = Vec::with_capacity(members.len());
+		for member in members {
+			let asset = self.frond_glb_for_kit(member.kit, level)?;
+			parts.push(MultiScenePart::new(asset.scene_ref(), pose(member.placement)));
+		}
+		Some(MultiSceneMerge::new(parts))
+	}
+
 	fn collection_content(&self, collection: &FrondCollection, level: LodSceneLevel) -> Box<dyn Scene> {
+		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
+			return Box::new(posed_frond_multi_scene_merge(merge, pose(self.placement)));
+		}
+		// Procedural / missing-GLB fallback: per-member children (world-composed).
 		let children: Vec<Box<dyn Scene>> = collection
 			.members_for_level(level)
 			.into_iter()
@@ -230,9 +264,9 @@ impl LodScene for FoliageNode {
 
 	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
 		// Frond collections: absolute-meter warm-root cull (independent of radius-relative spawn).
-		if let FoliageGeometry::FrondCollection(collection) = &self.geometry {
-			let (center, _) = collection.center_and_extent();
-			let distance = lod_ref.current_transform.translation.distance(center);
+		if let FoliageGeometry::FrondCollection(_) = &self.geometry {
+			let probe = self.probe();
+			let distance = lod_ref.current_transform.translation.distance(probe.center);
 			// Keep all warm roots while still inside the High cull band (~500 m).
 			// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
 			// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
@@ -267,16 +301,9 @@ impl LodScene for FoliageNode {
 	fn scene_chunks_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		match &self.geometry {
 			FoliageGeometry::FrondCollection(collection) => {
-				let chunks: Vec<SceneChunk> = collection
-					.members_for_level(level)
-					.into_iter()
-					.map(|member| SceneChunk::weighted(1, self.member_leaf_scene(member, level)))
-					.collect();
-				if chunks.is_empty() {
-					SceneChunk::primitive(scene_children(Vec::new()))
-				} else {
-					SceneChunk::chunks(chunks)
-				}
+				// One chunk: merged mesh (or empty). Avoid per-leaf chunks so fulfill
+				// schedules the archetypal MultiSceneMerge as a unit.
+				SceneChunk::primitive(self.collection_content(collection, level))
 			}
 			_ => SceneChunk::primitive(self.content_for_level(level)),
 		}
@@ -284,7 +311,10 @@ impl LodScene for FoliageNode {
 
 	fn scene_bounds(&self) -> Aabb3d {
 		let (center, extent) = match &self.geometry {
-			FoliageGeometry::FrondCollection(collection) => collection.center_and_extent(),
+			FoliageGeometry::FrondCollection(_) => {
+				let probe = self.probe();
+				(probe.center, probe.extent.max(1.0))
+			}
 			_ => (
 				crate::lod_band::placement_center(&self.placement),
 				crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0),

@@ -3,7 +3,7 @@
 use bevy::asset::AssetServer;
 use bevy::ecs::reflect::AppTypeRegistry;
 use bevy::mesh::Mesh;
-use bevy::prelude::{Assets, Commands, Entity, Query, Res, ResMut, Without};
+use bevy::prelude::{Assets, Commands, Entity, Query, Res, ResMut, StandardMaterial, Without};
 use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 
 use crate::handles::SceneRefHandles;
@@ -40,6 +40,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 	asset_server: Res<AssetServer>,
 	mut world_assets: ResMut<Assets<WorldAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
 	type_registry: Res<AppTypeRegistry>,
 ) {
 	for (entity, root) in &query {
@@ -49,6 +50,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 			&asset_server,
 			&mut world_assets,
 			&mut meshes,
+			&mut materials,
 			&type_registry,
 		) {
 			commands.entity(entity).insert(WorldAssetRoot(handle));

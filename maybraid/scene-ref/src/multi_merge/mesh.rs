@@ -16,21 +16,24 @@ pub(crate) fn merge_world_asset_meshes(
 	meshes: &Assets<Mesh>,
 ) -> Option<Mesh> {
 	let mut prepared = Vec::new();
+	let mut saw_mesh3d = false;
 
 	for entity_ref in source.world.iter_entities() {
 		let Some(mesh3d) = entity_ref.get::<Mesh3d>() else {
 			continue;
 		};
+		saw_mesh3d = true;
 		// Same mesh asset may appear on multiple entities with different transforms;
-		// each instance must be baked separately.
-		let Some(mesh) = meshes.get(&mesh3d.0) else {
-			continue;
-		};
+		// each instance must be baked separately. Missing mesh bytes → retry later.
+		let mesh = meshes.get(&mesh3d.0)?;
 		let entity_tf = entity_transform_in_world(&source.world, entity_ref.id());
 		let baked = part_transform.mul_transform(entity_tf);
 		prepared.push(bake_mesh(mesh, baked));
 	}
 
+	if !saw_mesh3d {
+		return None;
+	}
 	merge_meshes(prepared)
 }
 

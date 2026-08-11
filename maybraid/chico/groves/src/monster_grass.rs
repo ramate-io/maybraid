@@ -5,10 +5,12 @@
 //! Dense 2–6 m understory blades for jungle, swamp, and elder-tree floors — structurally
 //! Braid Grass at monster scale. Authored cells resolve to [`GroveTuftPatch`] (single-clump
 //! cells use `clump_count = 1`). Under `render`, [`MonsterGrassParams::build`] grows
-//! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants. Optional
+//! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants quantized through
+//! [`TuftPatchParams::into_unit_from_num`](chico_sbs_trees::TuftPatchParams::into_unit_from_num)
+//! (`patch_variants`, default `100`) so High/Medium share archetypal MultiSceneMerge meshes.
+//! Optional
 //! [`TuftPatch::merge_placed`](chico_sbs_trees::TuftPatch::merge_placed) fold via
-//! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement; try `100` to
-//! compare a folded probe budget).
+//! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement).
 //!
 //! Structural LOD (× grove footprint): High (full clumps); Medium = ~¼ of High tufts
 //! (same geometry, thinned); Low ≈ one upright proxy per ~8 cells; UltraLow = 2×2 carpets.
@@ -251,8 +253,7 @@ mod vc {
 
 	use super::{definition, MonsterGrassCell};
 	use crate::grove::{
-		placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	/// Authoring / CLI parameters for Monster Grass.
@@ -281,6 +282,11 @@ mod vc {
 		#[arg(long, default_value_t = 0)]
 		pub merge_collections: usize,
 
+		/// Number of unit-scale tuft-patch archetypes (`unit_from_num(0..n)`). Caps unique
+		/// merged-mesh handles for High/Medium.
+		#[arg(long, default_value_t = 100)]
+		pub patch_variants: u32,
+
 		#[arg(skip)]
 		resolved_placements: Option<Vec<GroveCellVariant<MonsterGrassCell>>>,
 	}
@@ -296,6 +302,7 @@ mod vc {
 				),
 				terrain: FlatTerrainSample::default(),
 				merge_collections: 0,
+				patch_variants: 100,
 				resolved_placements: None,
 			}
 		}
@@ -317,6 +324,7 @@ mod vc {
 				),
 				terrain,
 				merge_collections: 0,
+				patch_variants: 100,
 				resolved_placements: Some(resolved_placements),
 			}
 		}
@@ -354,7 +362,27 @@ mod vc {
 				self.foliage_noise,
 				&self.extent,
 				self.merge_collections,
+				self.patch_variants,
 			)
+		}
+	}
+
+	/// Stable archetype index in `0..variants` from world XZ.
+	fn patch_variant_index(position: Vec3, variants: u32) -> u32 {
+		let variants = variants.max(1);
+		let h = position
+			.x
+			.to_bits()
+			.wrapping_mul(0x9e3779b9)
+			.wrapping_add(position.z.to_bits().wrapping_mul(0x85ebca77));
+		h % variants
+	}
+
+	/// Noise keyed by variant id (not world position) so the same archetype rebuilds identically.
+	fn variant_noise(base: NoiseParams, variant: u32) -> NoiseParams {
+		NoiseParams {
+			seed: base.seed ^ (variant as i32).wrapping_mul(0x45d9f3b),
+			..base
 		}
 	}
 
@@ -395,29 +423,38 @@ mod vc {
 	}
 
 	impl MonsterGrass {
-		/// Grow every placement into a [`TuftPatch`]; fold when `merge_collections > 0`.
+		/// Grow every placement into a unit [`TuftPatch`] archetype; fold when
+		/// `merge_collections > 0`.
 		pub fn from_placements(
 			placements: &[GroveCellVariant<MonsterGrassCell>],
 			foliage_noise: NoiseParams,
 			extent: &GroveExtent,
 			merge_collections: usize,
+			patch_variants: u32,
 		) -> Self {
+			let variants = patch_variants.max(1);
 			let grown = placements.iter().map(|placed| {
-				let noise = placement_noise(foliage_noise, placed.position);
+				let variant = patch_variant_index(placed.position, variants);
+				let noise = variant_noise(foliage_noise, variant);
 				let mut params = placed.variant.patch().build_tuft_patch(noise);
 				params.shape.noise_amplitude = foliage_noise.amplitude;
 				params.shape.noise_frequency = foliage_noise.frequency;
-				(
-					Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat(placed.scale.max(1e-4))),
-					params.build(),
-				)
+				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
+				(placement, unit_params.build())
 			});
-			// Fold path bakes placements into runs; unmerged keeps one plant per placement.
-			let plants = TuftPatch::merge_placed(grown, merge_collections)
-				.into_iter()
-				.map(|patch| MonsterGrassPlant { placement: Placement::IDENTITY, patch })
-				.collect();
+			// Unmerged: keep plant placement (unit runs). Fold: bake placements into runs.
+			let plants = if merge_collections == 0 {
+				grown
+					.map(|(placement, patch)| MonsterGrassPlant { placement, patch })
+					.collect()
+			} else {
+				TuftPatch::merge_placed(grown, merge_collections)
+					.into_iter()
+					.map(|patch| MonsterGrassPlant { placement: Placement::IDENTITY, patch })
+					.collect()
+			};
 			let span = extent.max() - extent.min();
 			let half = span * 0.5;
 			let footprint_radius = half.x.max(half.z).max(1.0);
@@ -430,30 +467,35 @@ mod vc {
 			}
 		}
 
+		/// Emit foliage nodes: unit-local collection geometry + plant pose on the node.
+		///
+		/// [`FoliageNode`] composes the plant pose for LOD probe / bounds; merge parts stay
+		/// unit-local so MultiSceneMerge cache keys are shared across placements.
+		fn foliage_nodes_for_plant(
+			plant: &MonsterGrassPlant,
+			level: LodSceneLevel,
+		) -> impl Iterator<Item = FoliageNode> + '_ {
+			plant.patch.foliage_nodes_for_level(level).flatten().into_iter().map(|mut node| {
+				node.placement = plant.placement.compose_child(node.placement);
+				node
+			})
+		}
+
 		fn foliage_high(&self) -> Vec<FoliageNode> {
-			let mut nodes = Vec::new();
-			for plant in &self.plants {
-				for mut node in plant.patch.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
-					node.placement = plant.placement.compose_child(node.placement);
-					nodes.push(node);
-				}
-			}
-			nodes
+			self.plants
+				.iter()
+				.flat_map(|plant| Self::foliage_nodes_for_plant(plant, LodSceneLevel::High))
+				.collect()
 		}
 
 		/// Same High tuft geometry, keeping ~¼ of plants for a denser→proxy transition.
 		fn foliage_medium(&self) -> Vec<FoliageNode> {
-			let mut nodes = Vec::new();
-			for (i, plant) in self.plants.iter().enumerate() {
-				if i % MEDIUM_TUFT_STRIDE != 0 {
-					continue;
-				}
-				for mut node in plant.patch.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
-					node.placement = plant.placement.compose_child(node.placement);
-					nodes.push(node);
-				}
-			}
-			nodes
+			self.plants
+				.iter()
+				.enumerate()
+				.filter(|(i, _)| i % MEDIUM_TUFT_STRIDE == 0)
+				.flat_map(|(_, plant)| Self::foliage_nodes_for_plant(plant, LodSceneLevel::High))
+				.collect()
 		}
 
 		/// One upright proxy per ~8 placement cells, blending anchors in each bin.
@@ -844,9 +886,47 @@ mod tests {
 			.build();
 			assert_eq!(grove.plants.len(), 1);
 			assert_eq!(grove.plants[0].patch.clump_count, 1);
-			// Default merge_collections=0 still bakes placement into runs (identity plant pose).
+			// Unit archetypes keep runs patch-local; world pose lives on the plant placement.
+			assert!(
+				(grove.plants[0].placement.translation - Vec3::new(1.0, 0.0, 2.0)).length() < 1e-4
+			);
+			assert!(grove.plants[0].patch.patch_extent_xz <= 1.0 + 1e-4);
 			let base = grove.plants[0].patch.frond_runs()[0].segments[0].placement.translation;
-			assert!((base.x - 1.0).abs() < 0.5 && (base.z - 2.0).abs() < 0.5);
+			assert!(
+				base.x.abs() < 2.0 && base.z.abs() < 2.0,
+				"unit-local blade base should stay near patch origin, got {base:?}"
+			);
+			Ok(())
+		}
+
+		#[test]
+		fn patch_variants_quantize_archetypes() -> Result<()> {
+			use crate::grove::GroveCellVariant;
+			use std::collections::HashSet;
+
+			let placements: Vec<_> = (0..40)
+				.map(|i| {
+					GroveCellVariant::new(
+						MonsterGrassCell::GiantWetBlade,
+						Vec3::new(i as f32 * 3.0, 0.0, (i % 5) as f32),
+						1.0,
+					)
+				})
+				.collect();
+			let mut params = MonsterGrassParams::with_resolved_placements(
+				placements,
+				FlatTerrainSample::default(),
+				NoiseParams::default(),
+			);
+			params.patch_variants = 4;
+			let grove = params.build();
+			let seeds: HashSet<i32> =
+				grove.plants.iter().map(|p| p.patch.shape.seed).collect();
+			assert!(
+				seeds.len() <= 4,
+				"expected ≤4 unique unit seeds, got {}",
+				seeds.len()
+			);
 			Ok(())
 		}
 

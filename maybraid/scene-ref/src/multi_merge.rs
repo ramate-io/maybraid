@@ -4,10 +4,11 @@ mod mesh;
 mod transform_key;
 
 use bevy::asset::{AssetServer, Handle};
+use bevy::color::Color;
 use bevy::ecs::reflect::AppTypeRegistry;
 use bevy::mesh::Mesh;
 use bevy::platform::collections::HashMap;
-use bevy::prelude::{Assets, Component, Resource, Transform};
+use bevy::prelude::{Assets, Component, Resource, StandardMaterial, Transform};
 use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::Scene;
 use bevy::world_serialization::WorldAsset;
@@ -63,12 +64,25 @@ impl MultiSceneMerge {
 			template_value(MultiSceneMergeRoot(self))
 		}
 	}
+
+	/// Same as [`Self::scene`], with a local pose on the merge root entity.
+	///
+	/// Part transforms stay collection-/unit-local; `transform` places the whole merge.
+	pub fn scene_at(self, transform: Transform) -> impl Scene + 'static {
+		bsn! {
+			template_value(MultiSceneMergeRoot(self))
+			template_value(transform)
+			bevy::prelude::Visibility::Inherited
+		}
+	}
 }
 
 /// Memoized merged [`Handle<WorldAsset>`]s keyed by [`MultiSceneMerge`].
 #[derive(Resource, Default)]
 pub struct MultiSceneMergeHandles {
 	cache: HashMap<MultiSceneMerge, Handle<WorldAsset>>,
+	/// Shared placeholder material so merged meshes enter the PBR pipeline.
+	default_material: Option<Handle<StandardMaterial>>,
 }
 
 impl MultiSceneMergeHandles {
@@ -77,6 +91,22 @@ impl MultiSceneMergeHandles {
 	/// Returns [`None`] until all part [`SceneRef`]s resolve and their mesh
 	/// dependencies are loaded. Pipelines through [`SceneRefHandles`] so mirrors
 	/// rebuild before merge.
+	fn default_material(
+		&mut self,
+		materials: &mut Assets<StandardMaterial>,
+	) -> Handle<StandardMaterial> {
+		if let Some(handle) = &self.default_material {
+			return handle.clone();
+		}
+		let handle = materials.add(StandardMaterial {
+			base_color: Color::srgb(0.25, 0.55, 0.28),
+			perceptual_roughness: 0.85,
+			..Default::default()
+		});
+		self.default_material = Some(handle.clone());
+		handle
+	}
+
 	pub fn try_resolve(
 		&mut self,
 		merge: &MultiSceneMerge,
@@ -84,6 +114,7 @@ impl MultiSceneMergeHandles {
 		asset_server: &AssetServer,
 		world_assets: &mut Assets<WorldAsset>,
 		meshes: &mut Assets<Mesh>,
+		materials: &mut Assets<StandardMaterial>,
 		type_registry: &AppTypeRegistry,
 	) -> Option<Handle<WorldAsset>> {
 		if let Some(handle) = self.cache.get(merge) {
@@ -108,25 +139,15 @@ impl MultiSceneMergeHandles {
 		let mut prepared = Vec::new();
 		for (handle, part_transform) in &part_handles {
 			let source = world_assets.get(handle)?;
-			if let Some(part_mesh) = merge_world_asset_meshes(source, *part_transform, meshes) {
-				prepared.push(part_mesh);
-			}
+			// Missing Mesh3d bytes → retry next frame (do not cache an empty mesh).
+			let part_mesh = merge_world_asset_meshes(source, *part_transform, meshes)?;
+			prepared.push(part_mesh);
 		}
 
-		// Empty merge (no Mesh3d in any part) still caches so fulfill does not spin.
-		let merged_mesh = match merge_meshes(prepared) {
-			Some(mesh) => mesh,
-			None => {
-				use bevy::asset::RenderAssetUsages;
-				use bevy::mesh::PrimitiveTopology;
-				Mesh::new(
-					PrimitiveTopology::TriangleList,
-					RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-				)
-			}
-		};
+		let merged_mesh = merge_meshes(prepared)?;
 		let mesh_handle = meshes.add(merged_mesh);
-		let world_asset = world_asset_from_mesh(mesh_handle);
+		let material = self.default_material(materials);
+		let world_asset = world_asset_from_mesh(mesh_handle, material);
 		let handle = world_assets.add(world_asset);
 		self.cache.insert(merge.clone(), handle.clone());
 		Some(handle)
