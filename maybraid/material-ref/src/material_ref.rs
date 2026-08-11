@@ -58,6 +58,15 @@ impl MaterialRef {
 #[derive(Component, Debug, Clone, PartialEq, Default)]
 pub struct MaterialRefRoot(pub MaterialRef);
 
-/// Marker: [`MaterialRefRoot`] has been fulfilled (material component inserted).
+/// Opt-in: apply this root’s [`MaterialRef`] to `Mesh3d` entities under it (and to self if
+/// the root also has `Mesh3d`).
+///
+/// Without this marker, fulfill inserts the material only on the [`MaterialRefRoot`] entity.
+/// Use for `WorldAsset` / GLB instances whose meshes spawn as descendants.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct PropagateToDescendants;
+
+/// Marker: [`MaterialRefRoot`] has been fulfilled (material component inserted), or a
+/// propagating root has been registered / a descendant mesh has been fulfilled.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct MaterialRefApplied;

@@ -29,4 +29,16 @@ impl ReferenceMaterial for StandardMaterial {
 		// Standard PBR has no noise uniforms; abiding custom materials override.
 		self
 	}
+
+	fn from_material_ref(material_ref: &MaterialRef) -> Self {
+		let mut mat = Self::default()
+			.with_palette(&material_ref.palette)
+			.with_noise_params(&material_ref.noise);
+		// Library default: solid green when no palette was authored.
+		if material_ref.palette.is_empty() {
+			mat.base_color = Color::srgb(0.22, 0.62, 0.28);
+			mat.double_sided = true;
+		}
+		mat
+	}
 }

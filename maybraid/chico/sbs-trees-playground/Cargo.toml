@@ -32,6 +32,7 @@ chico-vegetation-shaders = { workspace = true }
 avian3d = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+material-ref = { workspace = true }
 scene-ref = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 

@@ -6,13 +6,15 @@ use bevy::scene::prelude::{bsn, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
+use material_ref::MaterialRef;
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::posed_asset_tier;
+use crate::lod_host::posed_material_asset_tier;
+use crate::materials::chico_stick_material_ref;
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
-use crate::scene_children::{pose, posed_mesh};
+use crate::scene_children::{pose, posed_mesh_material_ref};
 use crate::sticks::geometry::StickGeometry;
 use crate::sticks::probe::StickLodProbe;
 use crate::sticks::style::StickStyle;
@@ -23,11 +25,23 @@ pub struct StickNode {
 	pub style: StickStyle,
 	pub geometry: StickGeometry,
 	pub placement: Placement,
+	/// Deferred material (`MaterialRef::default()` = green standard; stick constructors use stick).
+	pub material: MaterialRef,
 }
 
 impl StickNode {
 	pub fn new(style: StickStyle, geometry: StickGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement }
+		Self {
+			style,
+			geometry,
+			placement,
+			material: chico_stick_material_ref(),
+		}
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = material;
+		self
 	}
 
 	pub fn noisy_cylinder(geometry: StickGeometry, placement: Placement) -> Self {
@@ -85,9 +99,10 @@ impl StickNode {
 	}
 
 	fn procedural_scene(&self) -> impl Scene + 'static {
-		posed_mesh(
+		posed_mesh_material_ref(
 			VegetationProceduralAssets::stick_cylinder(),
 			VegetationProceduralAssets::stick_material(),
+			self.material.clone(),
 			pose(self.placement),
 		)
 	}
@@ -102,9 +117,11 @@ impl StickNode {
 		match level {
 			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()) as Box<dyn Scene>,
 			_ => match self.glb_for_level(level) {
-				Some(asset) => {
-					Box::new(posed_asset_tier(Some(asset), pose(self.placement))) as Box<dyn Scene>
-				}
+				Some(asset) => Box::new(posed_material_asset_tier(
+					Some(asset),
+					pose(self.placement),
+					Some(self.material.clone()),
+				)) as Box<dyn Scene>,
 				None => Box::new(self.procedural_scene()) as Box<dyn Scene>,
 			},
 		}

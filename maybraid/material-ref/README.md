@@ -17,6 +17,13 @@ commands.spawn((
     Mesh3d(mesh),
     MaterialRefRoot(MaterialRef::named("tuft").with_palette([Color::srgb(0.2, 0.5, 0.2)])),
 ));
+
+// WorldAsset / GLB: opt into applying the ref to Mesh3d descendants
+commands.spawn((
+    MaterialRefRoot(MaterialRef::default()),
+    PropagateToDescendants,
+    // SceneRefRoot / WorldAssetRoot …
+));
 ```
 
 ### Custom multi-type lib

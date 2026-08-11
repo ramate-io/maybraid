@@ -17,10 +17,14 @@ mod material_ref;
 mod reference;
 mod standard;
 
-pub use fulfill::{fulfill_material_ref_roots, MaterialRefPlugin};
+pub use fulfill::{
+	fulfill_material_ref_descendants, fulfill_material_ref_roots, MaterialRefPlugin,
+};
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
-pub use material_ref::{MaterialId, MaterialRef, MaterialRefApplied, MaterialRefRoot};
+pub use material_ref::{
+	MaterialId, MaterialRef, MaterialRefApplied, MaterialRefRoot, PropagateToDescendants,
+};
 pub use reference::ReferenceMaterial;
 pub use standard::{StandardMaterialLib, StandardMaterialRefCache, StandardMaterialRefPlugin};
 
@@ -78,6 +82,39 @@ mod tests {
 		app.update();
 		assert!(app.world().get::<MaterialRefApplied>(entity2).is_some());
 		assert_eq!(app.world().resource::<StandardMaterialRefCache>().len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn propagate_fulfills_mesh_descendants() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.init_resource::<StandardMaterialRefCache>()
+			.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default());
+
+		let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Mesh::from(
+			bevy::prelude::Cuboid::from_length(1.0),
+		));
+		let root = app
+			.world_mut()
+			.spawn((
+				MaterialRefRoot(MaterialRef::named("tuft")),
+				PropagateToDescendants,
+			))
+			.id();
+		app.update();
+		assert!(app.world().get::<MaterialRefApplied>(root).is_some());
+		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(root).is_none());
+
+		let child = app
+			.world_mut()
+			.spawn((Mesh3d(mesh), ChildOf(root)))
+			.id();
+		app.update();
+		assert!(app.world().get::<MaterialRefApplied>(child).is_some());
+		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(child).is_some());
 		Ok(())
 	}
 }

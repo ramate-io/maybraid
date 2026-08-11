@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 bevy_math = { workspace = true }
 lod = { workspace = true }
+material-ref = { workspace = true }
 scene-ref = { workspace = true }
 
 [dev-dependencies]

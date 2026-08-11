@@ -2299,6 +2299,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "log",
+ "material-ref",
  "procedural-common",
  "render-item",
  "scene-ref",
@@ -2346,6 +2347,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "scene-ref",
 ]
 
