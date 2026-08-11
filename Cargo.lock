@@ -4246,6 +4246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "material-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "procedural-common",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
