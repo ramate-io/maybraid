@@ -14,13 +14,13 @@ pub(crate) mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::conifer_canopy_apex::NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
-use crate::torch_tree::structural_lod_probe;
+use crate::torch_tree::structural_lod_for;
 use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 };
@@ -174,8 +174,8 @@ impl VegetationComponents for NorthernConifer {
 		Layers::from_free(nodes)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.geometry.height(),

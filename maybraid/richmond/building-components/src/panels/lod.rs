@@ -157,16 +157,16 @@ pub fn leaf_panel_scene_ref_lod(
 	)
 }
 
-/// Fine-phase: update panel host levels from [`lod::LodViewerState`].
+/// Update panel host levels from the [`lod::LodViewer`] pose.
 pub fn update_panel_host_levels(
-	viewer: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&PanelLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
+	let Ok(pose) = viewer.single() else {
 		return;
-	}
+	};
 	for (probe, mut level) in &mut hosts {
-		let desired = probe.level_for(&viewer.current);
+		let desired = probe.level_for(&pose.current);
 		if *level != desired {
 			*level = desired;
 		}

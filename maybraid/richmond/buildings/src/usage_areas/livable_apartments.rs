@@ -225,12 +225,12 @@ impl BuildingComponents for LivableApartments {
 		out
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		// Host footprint, then merge nested apartment cells so parents can compose
 		// multi-block perimeters (e.g. IApartmentFullStorey).
 		let mut probe = BuildingStructuralLodProbe::new([host_xz(&self.confines.bounds)]);
 		for apt in &self.apartments {
-			if let Some(nested) = apt.structural_lod_probe() {
+			if let Some(nested) = apt.structural_lod() {
 				probe = probe.merge(nested);
 			}
 		}

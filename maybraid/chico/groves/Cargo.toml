@@ -19,8 +19,10 @@ chico-tree-components = { workspace = true }
 bevy = { workspace = true, optional = true }
 chico-ball-components = { workspace = true, optional = true }
 chico-sbs-trees = { workspace = true, optional = true }
+chico-vegetation-components = { workspace = true, optional = true }
 chico-vegetation-shaders = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+lod = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -28,8 +30,10 @@ render = [
 	"dep:bevy",
 	"dep:chico-ball-components",
 	"dep:chico-sbs-trees",
+	"dep:chico-vegetation-components",
 	"dep:chico-vegetation-shaders",
 	"dep:clap",
+	"dep:lod",
 	"procedural-common/clap",
 ]
 clap = ["render"]

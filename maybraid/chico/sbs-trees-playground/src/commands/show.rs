@@ -1,6 +1,8 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
 use bevy::prelude::*;
+use chico_groves::{GroveExtent, MonsterGrassParams, DEFAULT_GROVE_EXTENT_XZ};
+use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
 	BraidOakTreeParams, DatePalmParams, HonuBanyanParams, JungleStorybookTreeParams,
 	KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams, PalmBushParams,
@@ -54,6 +56,10 @@ pub enum Show {
 	WaialeaPalm(ShowWaialeaPalm),
 	/// Palm Bush via VegetationComponents / LodScene.
 	PalmBush(ShowPalmBush),
+	/// Monster Grass grove via VegetationComponents / LodScene.
+	MonsterGrass(ShowMonsterGrass),
+	/// Centered radius-10 tile of default Monster Grass groves (21×21).
+	MonsterGrassPlains,
 }
 
 #[derive(Clone, Args)]
@@ -182,6 +188,27 @@ pub struct ShowPalmBush {
 	pub bush: PalmBushParams,
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowMonsterGrass {
+	#[command(flatten)]
+	pub grass: MonsterGrassParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowMonsterGrass {
+	fn configured(self) -> MonsterGrassParams {
+		let mut grass = self.grass;
+		let cell = grass.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grass.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grass
+	}
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -203,6 +230,8 @@ impl Show {
 			Self::DatePalm(args) => ShowSubject::DatePalm(args.tree),
 			Self::WaialeaPalm(args) => ShowSubject::WaialeaPalm(args.tree),
 			Self::PalmBush(args) => ShowSubject::PalmBush(args.bush),
+			Self::MonsterGrass(args) => ShowSubject::MonsterGrass(args.configured()),
+			Self::MonsterGrassPlains => ShowSubject::MonsterGrassPlains,
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -233,15 +262,17 @@ pub enum ShowSubject {
 	DatePalm(DatePalmParams),
 	WaialeaPalm(WaialeaPalmParams),
 	PalmBush(PalmBushParams),
+	MonsterGrass(MonsterGrassParams),
+	MonsterGrassPlains,
 }
 
 #[derive(Component)]
 pub struct ShowRoot;
 
-fn spawn_show_tree(
-	commands: &mut Commands,
-	tree: &impl VegetationComponents,
-) {
+fn spawn_show_tree<T>(commands: &mut Commands, tree: &T)
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
 	let bounds = vegetation_bounds(tree);
 	let entities = spawn_vegetation_components(commands, tree, Transform::IDENTITY, bounds);
 	for entity in entities {
@@ -311,6 +342,14 @@ pub fn sync_show(
 		Some(ShowSubject::DatePalm(t)) => Some(format!("date-palm:{:?}", t.geometry)),
 		Some(ShowSubject::WaialeaPalm(t)) => Some(format!("waialea-palm:{:?}", t.geometry)),
 		Some(ShowSubject::PalmBush(t)) => Some(format!("palm-bush:{:?}", t.geometry)),
+		Some(ShowSubject::MonsterGrass(g)) => Some(format!(
+			"monster-grass:extent={:?}|cell={:?}|terrain={:?}|foliage={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain,
+			g.foliage_noise
+		)),
+		Some(ShowSubject::MonsterGrassPlains) => Some("monster-grass-plains".into()),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -346,5 +385,45 @@ pub fn sync_show(
 		ShowSubject::DatePalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::WaialeaPalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmBush(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::MonsterGrass(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::MonsterGrassPlains => {
+			for entity in spawn_monster_grass_plain(&mut commands, Transform::IDENTITY) {
+				commands.entity(entity).insert(ShowRoot);
+			}
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn show_monster_grass_configures_extent_and_builds() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"show monster-grass --elevation 0.35 --grove-extent-xz 25 --merge-collections 100",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::MonsterGrass(args)) = cmd else {
+			anyhow::bail!("expected show monster-grass command");
+		};
+		assert!((args.grove_extent_xz - 25.0).abs() < 1e-5);
+		let grass = args.configured();
+		assert!((grass.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grass.placements().is_empty());
+		assert!(!grass.build().plants.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn show_monster_grass_plains_parses() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show monster-grass-plains")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert!(matches!(
+			cmd,
+			crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)
+		));
+		Ok(())
 	}
 }

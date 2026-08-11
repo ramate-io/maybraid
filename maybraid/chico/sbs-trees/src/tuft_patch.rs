@@ -5,8 +5,10 @@
 //! at each, reading as one loose clump of grass rather than a fountain.
 //!
 //! [`TuftPatchParams::build`] grows clump anchors once into [`TuftPatch`], which implements
-//! [`VegetationComponents`] via one [`FoliageNode`] with [`FrondCollection`] geometry per
-//! clump (straight frond segments, solid-green in the playground).
+//! [`VegetationComponents`] via one [`FoliageNode`] / [`FrondCollection`] for the whole patch
+//! (all clump blades merged — one LOD probe). Use [`TuftPatch::merge`] /
+//! [`TuftPatch::merge_placed`] to fold many patches into fewer collections when probe count
+//! matters (e.g. grove authorship).
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::BladeTuftShape;
@@ -78,36 +80,39 @@ impl TuftPatchParams {
 	}
 }
 
-/// Built tuft patch: params plus resolved clump anchors.
+/// Built tuft patch: params, resolved clump anchors, and baked frond runs (one LOD collection).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TuftPatch {
 	pub clump_count: u32,
 	pub patch_extent_xz: f32,
 	pub shape: BladeTuftShape,
 	pub anchors: Vec<Vec3>,
+	/// Patch-local frond runs (all clumps). Source of truth for emission / merge.
+	runs: Vec<FrondRun>,
 }
 
 impl TuftPatch {
 	pub fn from_params(params: &TuftPatchParams) -> Self {
+		let anchors = params.clump_anchors();
+		let mut runs = Vec::new();
+		for (index, anchor) in anchors.iter().enumerate() {
+			runs.extend(Self::clump_runs_from(
+				&params.clump_shape(index as u32),
+				*anchor,
+			));
+		}
 		Self {
 			clump_count: params.clump_count,
 			patch_extent_xz: params.patch_extent_xz,
 			shape: params.shape.clone(),
-			anchors: params.clump_anchors(),
+			anchors,
+			runs,
 		}
 	}
 
-	fn clump_shape(&self, index: u32) -> BladeTuftShape {
-		BladeTuftShape {
-			seed: self.shape.seed.wrapping_add((index as i32 + 1) * 131),
-			..self.shape.clone()
-		}
-	}
-
-	fn clump_node(&self, index: usize, anchor: Vec3) -> Option<FoliageNode> {
-		let shape = self.clump_shape(index as u32);
+	fn clump_runs_from(shape: &BladeTuftShape, anchor: Vec3) -> Vec<FrondRun> {
 		// One FrondRun per blade; chained segments keep kink connectivity under merge LOD.
-		let runs: Vec<FrondRun> = shape
+		shape
 			.frond_runs_at(anchor)
 			.into_iter()
 			.filter_map(|run| {
@@ -119,22 +124,110 @@ impl TuftPatch {
 					.collect();
 				(!placements.is_empty()).then(|| FrondRun::from_placements(placements))
 			})
-			.collect();
-		if runs.is_empty() {
-			return None;
-		}
-		Some(FoliageNode::frond_collection(
-			FrondCollection::new(runs),
-			Placement::IDENTITY,
-		))
+			.collect()
 	}
 
+	/// Patch-local frond runs (all clumps).
+	pub fn frond_runs(&self) -> &[FrondRun] {
+		&self.runs
+	}
+
+	/// Bake `placement` into every frond segment (compose as parent of each member).
+	pub fn apply_placement(&mut self, placement: Placement) {
+		if placement == Placement::IDENTITY {
+			return;
+		}
+		for run in &mut self.runs {
+			for member in &mut run.segments {
+				member.placement = placement.compose_child(member.placement);
+			}
+		}
+		for anchor in &mut self.anchors {
+			*anchor = placement.compose_child(Placement::new(*anchor, 0.0)).translation;
+		}
+	}
+
+	/// Append another patch's frond runs (same local frame — bake placements first).
+	pub fn merge(&mut self, other: TuftPatch) {
+		self.clump_count = self.clump_count.saturating_add(other.clump_count);
+		self.patch_extent_xz = self.patch_extent_xz.max(other.patch_extent_xz);
+		self.anchors.extend(other.anchors);
+		self.runs.extend(other.runs);
+	}
+
+	/// Fold placed patches into at most `target_count` patches (spatially sorted chunks).
+	///
+	/// Each input placement is baked into that patch's runs before merging. Result patches use
+	/// identity placement (geometry already in the shared parent frame).
+	///
+	/// `target_count == 0` means **no fold**: one output patch per input, with placement baked in.
+	pub fn merge_placed(
+		patches: impl IntoIterator<Item = (Placement, TuftPatch)>,
+		target_count: usize,
+	) -> Vec<TuftPatch> {
+		let mut remaining: Vec<(Placement, TuftPatch)> = patches.into_iter().collect();
+		if remaining.is_empty() {
+			return Vec::new();
+		}
+		if target_count == 0 {
+			return remaining
+				.into_iter()
+				.map(|(placement, mut patch)| {
+					patch.apply_placement(placement);
+					patch
+				})
+				.collect();
+		}
+		remaining.sort_by(|a, b| {
+			a.0
+				.translation
+				.x
+				.total_cmp(&b.0.translation.x)
+				.then(a.0.translation.z.total_cmp(&b.0.translation.z))
+		});
+		let chunk_len = remaining.len().div_ceil(target_count);
+		let mut out = Vec::with_capacity(target_count.min(remaining.len()));
+		while !remaining.is_empty() {
+			let take = chunk_len.min(remaining.len());
+			let chunk: Vec<(Placement, TuftPatch)> = remaining.drain(..take).collect();
+			let mut iter = chunk.into_iter();
+			let (placement, mut merged) = iter.next().expect("chunk non-empty");
+			merged.apply_placement(placement);
+			for (placement, mut next) in iter {
+				next.apply_placement(placement);
+				merged.merge(next);
+			}
+			out.push(merged);
+		}
+		out
+	}
+
+	/// Cheap LOD probe from anchors + footprint / blade length (no frond walk).
+	fn lod_probe(&self) -> (Vec3, f32) {
+		let blade = self.shape.blade_length.max(1e-4);
+		let footprint = (self.patch_extent_xz * 0.5 * std::f32::consts::SQRT_2).max(blade);
+		if self.anchors.is_empty() {
+			return (Vec3::ZERO, footprint);
+		}
+		let n = self.anchors.len() as f32;
+		let center = self.anchors.iter().fold(Vec3::ZERO, |acc, a| acc + *a) / n;
+		let mut radius = footprint;
+		for anchor in &self.anchors {
+			radius = radius.max(anchor.distance(center) + blade);
+		}
+		(center, radius.max(1e-4))
+	}
+
+	/// One frond collection for the whole patch (one LOD probe).
 	fn foliage_nodes(&self) -> Vec<FoliageNode> {
-		self.anchors
-			.iter()
-			.enumerate()
-			.filter_map(|(index, anchor)| self.clump_node(index, *anchor))
-			.collect()
+		if self.runs.is_empty() {
+			return Vec::new();
+		}
+		let (center, radius) = self.lod_probe();
+		vec![FoliageNode::frond_collection(
+			FrondCollection::new(self.runs.clone()).with_probe(center, radius),
+			Placement::IDENTITY,
+		)]
 	}
 }
 
@@ -203,7 +296,7 @@ mod tests {
 	}
 
 	#[test]
-	fn build_emits_one_collection_node_per_clump() -> Result<()> {
+	fn build_emits_one_collection_for_the_patch() -> Result<()> {
 		let params = TuftPatchParams {
 			clump_count: 2,
 			shape: BladeTuftShape {
@@ -216,17 +309,84 @@ mod tests {
 		};
 		let built = params.build();
 		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(nodes.len(), 2);
+		assert_eq!(nodes.len(), 1, "one collection / LOD probe per patch");
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection geom");
-		// 4 blades (runs), each with 2 bend segments.
-		assert_eq!(collection.runs.len(), 4);
+		// 2 clumps × 4 blades (runs), each with 2 bend segments.
+		assert_eq!(collection.runs.len(), 8);
 		assert_eq!(collection.runs[0].segments.len(), 2);
 		let medium = collection.runs_for_level(LodSceneLevel::Medium);
-		assert_eq!(medium.len(), 2);
+		assert_eq!(medium.len(), 4);
 		assert_eq!(medium[0].segments.len(), 2, "Medium keeps full kink chains");
 		let ultra = collection.runs_for_level(LodSceneLevel::UltraLow);
 		assert_eq!(ultra.len(), 1);
 		assert_eq!(ultra[0].segments.len(), 1, "UltraLow collapses to one chord");
+		Ok(())
+	}
+
+	#[test]
+	fn merge_concatenates_runs() -> Result<()> {
+		let a = patch(1).build();
+		let b = patch(2).build();
+		let runs_a = a.frond_runs().len();
+		let runs_b = b.frond_runs().len();
+		let mut merged = a;
+		merged.merge(b);
+		assert_eq!(merged.frond_runs().len(), runs_a + runs_b);
+		assert_eq!(merged.clump_count, TuftPatchParams::default().clump_count * 2);
+		Ok(())
+	}
+
+	#[test]
+	fn merge_placed_caps_patch_count_and_bakes_translation() -> Result<()> {
+		let patches = (0..10).map(|i| {
+			let placement = Placement::new(Vec3::new(i as f32 * 10.0, 0.0, 0.0), 0.0);
+			let patch = TuftPatchParams {
+				clump_count: 1,
+				patch_extent_xz: 0.0,
+				shape: BladeTuftShape {
+					blade_count: 2,
+					bend_segments: 1,
+					seed: i,
+					..BladeTuftShape::default()
+				},
+			}
+			.build();
+			(placement, patch)
+		});
+		let merged = TuftPatch::merge_placed(patches, 3);
+		assert_eq!(merged.len(), 3);
+		let total_runs: usize = merged.iter().map(|p| p.frond_runs().len()).sum();
+		assert_eq!(total_runs, 20, "10 patches × 2 blades");
+		// First chunk owns x=0..30; a blade base should sit near a placement translation.
+		let first_base = merged[0].frond_runs()[0].segments[0].placement.translation;
+		assert!(
+			first_base.x.abs() < 1.0 || (first_base.x - 10.0).abs() < 1.0,
+			"expected baked world X near a placement, got {first_base:?}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn merge_placed_zero_keeps_one_patch_per_input() -> Result<()> {
+		let patches = (0..4).map(|i| {
+			(
+				Placement::new(Vec3::new(i as f32 * 5.0, 0.0, 0.0), 0.0),
+				TuftPatchParams {
+					clump_count: 1,
+					patch_extent_xz: 0.0,
+					shape: BladeTuftShape {
+						blade_count: 1,
+						bend_segments: 1,
+						seed: i,
+						..BladeTuftShape::default()
+					},
+				}
+				.build(),
+			)
+		});
+		let out = TuftPatch::merge_placed(patches, 0);
+		assert_eq!(out.len(), 4);
+		assert!((out[2].frond_runs()[0].segments[0].placement.translation.x - 10.0).abs() < 1.0);
 		Ok(())
 	}
 }

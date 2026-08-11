@@ -1,26 +1,32 @@
 //! Foliage IR node: style + geometry + placement.
 
-use bevy::prelude::Visibility;
+use bevy::light::NotShadowCaster;
+use bevy::math::bounding::Aabb3d;
+use bevy::prelude::{Component, Mesh3d, MeshMaterial3d, StandardMaterial, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,
+};
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 
 use crate::assets::AssetPath;
-use crate::foliage::collection::{FrondCollection, FrondKit, FrondMember};
+use crate::foliage::collection::{
+	FrondCollection, FrondKit, FrondMember, FROND_COLLECTION_HIGH_METERS,
+	FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
+};
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
-use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{
-	posed_foliage_asset_tier, posed_frond_asset_tier, warm_content_host, warm_content_host_hsl,
-	warm_foliage_mesh_level_host, warm_frond_mesh_level_host,
+	posed_foliage_asset_tier, posed_frond_asset_tier, VegetationFrondAssetRoot,
 };
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
 use crate::scene_children::{pose, posed_mesh, scene_children};
 
-/// Authoring IR for a foliage cluster.
-#[derive(Debug, Clone, PartialEq)]
+/// Authoring IR for a foliage cluster — also the fine-phase [`LodScene`] host component.
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct FoliageNode {
 	pub style: FoliageStyle,
 	pub geometry: FoliageGeometry,
@@ -117,33 +123,6 @@ impl FoliageNode {
 		}
 	}
 
-	fn is_standard_ball(&self) -> bool {
-		matches!(
-			(&self.style, &self.geometry),
-			(
-				FoliageStyle::Standard,
-				FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall
-			)
-		)
-	}
-
-	fn is_standard_frond(&self) -> bool {
-		matches!(
-			(&self.style, &self.geometry),
-			(
-				FoliageStyle::Standard,
-				FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment
-			)
-		)
-	}
-
-	fn is_frond_collection(&self) -> bool {
-		matches!(
-			(&self.style, &self.geometry),
-			(FoliageStyle::Standard, FoliageGeometry::FrondCollection(_))
-		)
-	}
-
 	fn procedural_ball_scene(&self) -> impl Scene + 'static {
 		posed_mesh(
 			VegetationProceduralAssets::foliage_ball(),
@@ -153,12 +132,21 @@ impl FoliageNode {
 	}
 
 	/// Stick-cylinder stand-in when a frond GLB is missing (same \(Y \in [0, 1]\) kit axis).
+	///
+	/// Tagged with [`VegetationFrondAssetRoot`] on the mesh entity so playground material
+	/// patching can match `Added` leaves without walking the whole hierarchy every frame.
 	fn procedural_frond_scene_at(&self, placement: Placement) -> impl Scene + 'static {
-		posed_mesh(
-			VegetationProceduralAssets::stick_cylinder(),
-			VegetationProceduralAssets::foliage_material(),
-			pose(placement),
-		)
+		let mesh = VegetationProceduralAssets::stick_cylinder();
+		let material = VegetationProceduralAssets::foliage_material();
+		let transform = pose(placement);
+		bsn! {
+			VegetationFrondAssetRoot
+			NotShadowCaster
+			Mesh3d({mesh})
+			MeshMaterial3d::<StandardMaterial>({material})
+			template_value(transform)
+			Visibility::default()
+		}
 	}
 
 	fn member_leaf_scene(&self, member: FrondMember, level: LodSceneLevel) -> Box<dyn Scene> {
@@ -240,82 +228,69 @@ impl LodScene for FoliageNode {
 		self.probe().status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
-		warm_mesh_lod_culls(current)
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		// Frond collections: absolute-meter warm-root cull (independent of radius-relative spawn).
+		if let FoliageGeometry::FrondCollection(collection) = &self.geometry {
+			let (center, _) = collection.center_and_extent();
+			let distance = lod_ref.current_transform.translation.distance(center);
+			// Keep all warm roots while still inside the High cull band (~500 m).
+			// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
+			// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
+			if distance <= FROND_COLLECTION_HIGH_METERS {
+				return LodSceneCulls::None;
+			}
+			return cull_offset_bands_from_factor(
+				distance,
+				FROND_COLLECTION_HIGH_METERS,
+				FROND_COLLECTION_MEDIUM_METERS,
+				FROND_COLLECTION_LOW_METERS,
+			);
+		}
+
+		let probe = self.probe();
+		let factor = probe.band_metric(lod_ref.current_transform.translation);
+		if factor <= probe.high_factor {
+			return LodSceneCulls::None;
+		}
+		cull_offset_bands_from_factor(
+			factor,
+			probe.high_factor,
+			probe.medium_factor,
+			probe.low_factor,
+		)
 	}
 
 	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		self.content_for_level(level)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let level = self.scene_lod_level(lod_ref);
-		let probe = self.probe();
-		if self.is_standard_ball() {
-			Box::new(warm_foliage_mesh_level_host(
-				level,
-				probe,
-				pose(self.placement),
-				[
-					(
-						LodSceneLevel::High,
-						self.standard_ball_glb_for_level(LodSceneLevel::High),
-					),
-					(
-						LodSceneLevel::Medium,
-						self.standard_ball_glb_for_level(LodSceneLevel::Medium),
-					),
-					(
-						LodSceneLevel::Low,
-						self.standard_ball_glb_for_level(LodSceneLevel::Low),
-					),
-				],
-			)) as Box<dyn Scene>
-		} else if self.is_standard_frond() {
-			Box::new(warm_frond_mesh_level_host(
-				level,
-				probe,
-				pose(self.placement),
-				[
-					(
-						LodSceneLevel::High,
-						self.standard_frond_glb_for_level(LodSceneLevel::High),
-					),
-					(
-						LodSceneLevel::Medium,
-						self.standard_frond_glb_for_level(LodSceneLevel::Medium),
-					),
-					(
-						LodSceneLevel::Low,
-						self.standard_frond_glb_for_level(LodSceneLevel::Low),
-					),
-				],
-			)) as Box<dyn Scene>
-		} else if self.is_frond_collection() {
-			Box::new(warm_content_host(
-				level,
-				probe,
-				[
-					(LodSceneLevel::High, self.content_for_level(LodSceneLevel::High)),
-					(
-						LodSceneLevel::Medium,
-						self.content_for_level(LodSceneLevel::Medium),
-					),
-					(LodSceneLevel::Low, self.content_for_level(LodSceneLevel::Low)),
-					(
-						LodSceneLevel::UltraLow,
-						self.content_for_level(LodSceneLevel::UltraLow),
-					),
-				],
-			)) as Box<dyn Scene>
-		} else {
-			Box::new(warm_content_host_hsl(
-				level,
-				probe,
-				self.content_for_level(LodSceneLevel::High),
-				self.content_for_level(LodSceneLevel::Medium),
-				self.content_for_level(LodSceneLevel::Low),
-			)) as Box<dyn Scene>
+	fn scene_chunks_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		match &self.geometry {
+			FoliageGeometry::FrondCollection(collection) => {
+				let chunks: Vec<SceneChunk> = collection
+					.members_for_level(level)
+					.into_iter()
+					.map(|member| SceneChunk::weighted(1, self.member_leaf_scene(member, level)))
+					.collect();
+				if chunks.is_empty() {
+					SceneChunk::primitive(scene_children(Vec::new()))
+				} else {
+					SceneChunk::chunks(chunks)
+				}
+			}
+			_ => SceneChunk::primitive(self.content_for_level(level)),
 		}
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		let (center, extent) = match &self.geometry {
+			FoliageGeometry::FrondCollection(collection) => collection.center_and_extent(),
+			_ => (
+				crate::lod_band::placement_center(&self.placement),
+				crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0),
+			),
+		};
+		let half = bevy::math::Vec3::splat(extent);
+		Aabb3d::from_min_max(center - half, center + half)
 	}
 }

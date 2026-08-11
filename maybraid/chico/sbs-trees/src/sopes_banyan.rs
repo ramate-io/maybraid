@@ -14,7 +14,7 @@ mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -158,8 +158,8 @@ impl VegetationComponents for SopesBanyan {
 		Layers::from_free(nodes)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(VegetationStructuralLodProbe::new(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(StructuralLod::new(
 			self.structural_center(),
 			self.footprint_radius(),
 		))

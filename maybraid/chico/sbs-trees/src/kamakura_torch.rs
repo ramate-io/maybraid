@@ -6,14 +6,14 @@
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, KamakuraTorchChain, KamakuraTorchSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::torch_tree::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, stick_nodes_high,
-	stick_nodes_low, stick_nodes_medium, structural_lod_probe, HIGH_FOLIAGE_BANDS,
+	stick_nodes_low, stick_nodes_medium, structural_lod_for, HIGH_FOLIAGE_BANDS,
 };
 
 /// Authoring / CLI parameters for Kamakura Torch.
@@ -96,8 +96,8 @@ impl VegetationComponents for KamakuraTorch {
 		Layers::from_free(nodes)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.geometry.height(),

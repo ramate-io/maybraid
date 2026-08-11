@@ -1,13 +1,15 @@
 //! Stick IR node: style + geometry + placement.
 
-use bevy::prelude::{Visibility, Vec3};
+use bevy::math::bounding::Aabb3d;
+use bevy::prelude::{Component, Visibility, Vec3};
 use bevy::scene::prelude::{bsn, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::{posed_asset_tier, warm_content_host, warm_mesh_level_host};
+use crate::lod_host::posed_asset_tier;
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh};
@@ -15,8 +17,8 @@ use crate::sticks::geometry::StickGeometry;
 use crate::sticks::probe::StickLodProbe;
 use crate::sticks::style::StickStyle;
 
-/// Authoring IR for a stick / trunk segment.
-#[derive(Debug, Clone, PartialEq)]
+/// Authoring IR for a stick / trunk segment — also the fine-phase [`LodScene`] host component.
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct StickNode {
 	pub style: StickStyle,
 	pub geometry: StickGeometry,
@@ -126,31 +128,14 @@ impl LodScene for StickNode {
 		self.content_for_level(level)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let level = self.scene_lod_level(lod_ref);
-		let probe = self.probe();
-		match self.style {
-			StickStyle::NoisyCylinder => Box::new(warm_content_host(
-				level,
-				probe,
-				[
-					(LodSceneLevel::High, Box::new(self.procedural_scene()) as Box<dyn Scene>),
-					(LodSceneLevel::Medium, Box::new(self.procedural_scene()) as Box<dyn Scene>),
-					(LodSceneLevel::Low, Box::new(self.procedural_scene()) as Box<dyn Scene>),
-					(LodSceneLevel::UltraLow, Box::new(Self::empty_scene()) as Box<dyn Scene>),
-				],
-			)) as Box<dyn Scene>,
-			StickStyle::Standard => Box::new(warm_mesh_level_host(
-				level,
-				probe,
-				pose(self.placement),
-				[
-					(LodSceneLevel::High, self.glb_for_level(LodSceneLevel::High)),
-					(LodSceneLevel::Medium, self.glb_for_level(LodSceneLevel::Medium)),
-					(LodSceneLevel::Low, self.glb_for_level(LodSceneLevel::Low)),
-					(LodSceneLevel::UltraLow, None),
-				],
-			)) as Box<dyn Scene>,
-		}
+	fn scene_chunks_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		SceneChunk::primitive(self.content_for_level(level))
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		let center = crate::lod_band::placement_center(&self.placement);
+		let extent = crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0);
+		let half = Vec3::splat(extent);
+		Aabb3d::from_min_max(center - half, center + half)
 	}
 }

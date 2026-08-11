@@ -36,7 +36,7 @@ pub enum PlaygroundCommand {
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Stats {
-	/// Sum vertex / index / triangle counts from spawned `Mesh3d` assets.
+	/// Mesh triangle counts plus foliage / stick / structural LOD probe hosts.
 	Mesh,
 }
 

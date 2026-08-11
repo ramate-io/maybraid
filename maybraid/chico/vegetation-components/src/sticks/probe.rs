@@ -1,6 +1,6 @@
 //! Distance / extent probe for stick LOD hosts.
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, Query, Transform, With};
 use bevy_math::Vec3;
 use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -78,12 +78,15 @@ impl StickLodProbe {
 	}
 }
 
-/// Fine-phase: update stick host levels from viewer transform.
+/// Update stick host levels from the [`lod::LodViewer`] pose.
 pub fn update_stick_host_levels(
-	lod_state: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&StickLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	let viewer = lod_state.current;
+	let Ok(pose) = viewer.single() else {
+		return;
+	};
+	let viewer = pose.current;
 	for (probe, mut level) in &mut hosts {
 		let next = probe.level_for(&viewer);
 		if *level != next {

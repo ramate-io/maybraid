@@ -3,14 +3,18 @@
 pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
+pub mod diagnostics;
 mod ground;
+mod monster_grass_plain;
 mod render;
 mod render_materials;
 mod ui;
+mod vegetation_lod;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use monster_grass_plain::PLAIN_GROVE_RADIUS;
 pub use render::{RenderConfig, RenderSubject};
 
 use bevy::camera::visibility::VisibilitySystems;
@@ -34,17 +38,21 @@ use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
-use chico_vegetation_components::VegetationProceduralPlugin;
+use chico_vegetation_components::{
+	FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin,
+};
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::LodFinePassPlugin;
+use lod::LodSceneHost;
+use vegetation_lod::VegetationLodRefreshPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{
-	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_solid_material,
+	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_not_shadow_caster,
+	patch_vegetation_frond_solid_material,
 	setup_render_materials, sync_render_material_handles,
 };
 use scene_ref::SceneRefPlugin;
@@ -61,8 +69,8 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
 			app.add_plugins(VegetationProceduralPlugin);
 		}
-		if !app.is_plugin_added::<LodFinePassPlugin>() {
-			app.add_plugins(LodFinePassPlugin);
+		if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
+			app.add_plugins(VegetationLodRefreshPlugin);
 		}
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
@@ -91,7 +99,8 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
-		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		app.add_plugins(diagnostics::PlaygroundTimingPlugin)
+			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
@@ -113,6 +122,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					(
 						patch_vegetation_foliage_leaf_material,
 						patch_vegetation_frond_solid_material,
+						patch_vegetation_frond_not_shadow_caster,
 					)
 						.after(sync_show)
 						.after(sync_render),
@@ -123,13 +133,16 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 	}
 }
 
-/// Count total vs view-visible mesh triangles (`ViewVisibility`).
+/// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.
 fn apply_mesh_stats(
 	mut commands: Commands,
 	mut status: ResMut<GameCommandStatusText>,
 	mesh_assets: Res<Assets<Mesh>>,
 	requests: Query<Entity, With<RequestMeshStats>>,
 	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
+	foliage_probes: Query<(), With<FoliageLodProbe>>,
+	stick_probes: Query<(), With<StickLodProbe>>,
+	lod_hosts: Query<(), With<LodSceneHost>>,
 ) {
 	for entity in &requests {
 		let mut total_entities = 0usize;
@@ -158,8 +171,13 @@ fn apply_mesh_stats(
 			}
 		}
 
+		let foliage_probes = foliage_probes.iter().count();
+		let stick_probes = stick_probes.iter().count();
+		let lod_hosts = lod_hosts.iter().count();
+		let probes_total = foliage_probes + stick_probes;
+
 		status.0 = format!(
-			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}",
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
 			unique_handles.len(),
 			visible_unique_handles.len(),
 		);

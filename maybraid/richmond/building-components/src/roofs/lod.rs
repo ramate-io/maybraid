@@ -133,16 +133,16 @@ pub fn leaf_scene_ref_lod(
 	warm_content_host_hsl(level, probe, high.scene(), mid.scene(), low.scene())
 }
 
-/// Fine-phase: update roof host levels from [`lod::LodViewerState`].
+/// Update roof host levels from the [`lod::LodViewer`] pose.
 pub fn update_roof_host_levels(
-	viewer: Res<lod::LodViewerState>,
+	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<(&RoofLodProbe, &mut LodSceneLevel), With<LodSceneHost>>,
 ) {
-	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
+	let Ok(pose) = viewer.single() else {
 		return;
-	}
+	};
 	for (probe, mut level) in &mut hosts {
-		let desired = probe.level_for(&viewer.current);
+		let desired = probe.level_for(&pose.current);
 		if *level != desired {
 			*level = desired;
 		}

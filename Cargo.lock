@@ -471,6 +471,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "950238d3049d81006a6fd6b898a34cfc01bb5462a7668795a54d640aed19fd0a"
 dependencies = [
  "bevy_internal",
+ "tracing",
 ]
 
 [[package]]
@@ -587,6 +588,7 @@ dependencies = [
  "downcast-rs 2.0.2",
  "log",
  "thiserror 2.0.16",
+ "tracing",
  "variadics_please",
  "wasm-bindgen",
  "web-sys",
@@ -835,6 +837,7 @@ dependencies = [
  "slotmap",
  "smallvec",
  "thiserror 2.0.16",
+ "tracing",
  "variadics_please",
 ]
 
@@ -1192,6 +1195,7 @@ dependencies = [
  "bevy_platform",
  "bevy_utils",
  "tracing",
+ "tracing-error",
  "tracing-log",
  "tracing-oslog",
  "tracing-subscriber",
@@ -1505,6 +1509,7 @@ dependencies = [
  "naga",
  "nonmax",
  "offset-allocator",
+ "profiling",
  "send_wrapper",
  "smallvec",
  "thiserror 2.0.16",
@@ -2230,9 +2235,11 @@ dependencies = [
  "chico-sbs-geometry",
  "chico-sbs-trees",
  "chico-tree-components",
+ "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
  "gimme-gen",
+ "lod",
  "log",
  "procedural-common",
 ]
@@ -2274,6 +2281,7 @@ name = "chico-sbs-trees-playground"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "chico-ball-components",
  "chico-grove-render-items",
@@ -2289,6 +2297,7 @@ dependencies = [
  "clap",
  "game-commands",
  "lod",
+ "lod-avian",
  "log",
  "procedural-common",
  "render-item",
@@ -4144,6 +4153,16 @@ dependencies = [
  "bevy",
  "lod-cascade",
  "lod-cascade-system",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "lod-avian"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "lod",
 ]
 
 [[package]]
@@ -5294,6 +5313,20 @@ name = "profiling"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eb8486b569e12e2c32ad3e204dbaba5e4b5b216e9367044f25f1dba42341773"
+dependencies = [
+ "profiling-procmacros",
+ "tracing",
+]
+
+[[package]]
+name = "profiling-procmacros"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
+dependencies = [
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "pxfm"
@@ -6343,6 +6376,16 @@ checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-error"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b1581020d7a273442f5b45074a6a57d5757ad0a47dac0e9f0bd57b81936f3db"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

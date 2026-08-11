@@ -25,7 +25,6 @@ pub mod jungle_massives;
 pub mod leeward;
 pub mod levantine_scrub;
 pub mod low_bush;
-pub mod monster_grass;
 pub mod orchard;
 pub mod palm_shade;
 pub mod riparian_general;

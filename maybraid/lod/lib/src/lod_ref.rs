@@ -1,5 +1,16 @@
+//! Driver entities ([`LodNode`]) and ephemeral [`LodRef`] views.
+//!
+//! Not scene-specific: generation, presentation, and refresh all consume these.
+
+mod node;
+
 use bevy::prelude::*;
 use lod_cascade::Aabb3d;
+
+pub use node::{
+	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, LodNode,
+	LodNodeBounds, LodNodePose, LodNodeSnapshot,
+};
 
 /// A component type to mark fine LOD.
 /// This enables archetype filtering to ignore a lot of entities.
@@ -16,6 +27,7 @@ pub enum LodRequest {
 	Warm,
 }
 
+/// Borrowed view of a driver ([`LodNode`]) pose + that driver's extents.
 #[derive(Debug, Clone)]
 pub struct LodRef<'a> {
 	/// The entity that triggered the LOD change.
@@ -28,6 +40,8 @@ pub struct LodRef<'a> {
 	pub previous_transform: &'a Transform,
 	/// The transform of the entity that triggered the LOD change.
 	pub current_transform: &'a Transform,
-	/// The bounds of the entity that triggered the LOD change.
+	/// Extents of the driver ([`LodNodeBounds`], or a point if the node is pointlike).
+	///
+	/// Not the host / scene AABB — host geometry is separate ([`crate::LodHostBounds`]).
 	pub bounds: &'a Aabb3d,
 }

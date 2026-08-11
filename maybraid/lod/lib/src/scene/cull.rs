@@ -1,4 +1,4 @@
-//! Despawn policy for inactive [`crate::lod_scene_host::LodLevelRoot`]s.
+//! Despawn policy for inactive [`crate::scene::host::LodLevelRoot`]s.
 //!
 //! Common helpers:
 //! - [`cull_non_adjacent_bands`] — least aggressive named-band GC (preferred default)
@@ -14,7 +14,7 @@
 //! [`cull_offset_bands`] (halfway in) or a tighter adjacent depth — and avoid
 //! `depth = 0` (cull adjacent on band entry) except for cheap roots.
 
-use crate::lod_level::LodSceneLevel;
+use crate::scene::level::LodSceneLevel;
 
 /// Named presentation bands ordered **near → far** (detail → silhouette).
 pub const NAMED_BANDS_NEAR_TO_FAR: [LodSceneLevel; 4] = [
@@ -46,7 +46,7 @@ impl LodSceneCull {
 	}
 }
 
-/// Which inactive LOD level roots a [`crate::gen::LodScene`] is willing to despawn.
+/// Which inactive LOD level roots a [`crate::scene::LodScene`] is willing to despawn.
 ///
 /// Default [`Self::None`] keeps hidden roots warm. Prefer
 /// [`cull_non_adjacent_bands`] (or explicit tight [`Self::AllOf`] lists) when
@@ -114,6 +114,51 @@ pub fn named_band_index(level: LodSceneLevel) -> Option<usize> {
 		LodSceneLevel::UltraLow => Some(3),
 		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => None,
 	}
+}
+
+/// Among ready levels, pick the one closest to `desired` for warm-hold visibility.
+///
+/// Named bands use index distance on [`NAMED_BANDS_NEAR_TO_FAR`]. Ties prefer higher
+/// detail (smaller index). Exact `desired` is distance 0 when present. Non-named
+/// customs only compete when no named candidate exists (exact match preferred, else
+/// first remaining).
+pub fn closest_available_lod_level(
+	desired: LodSceneLevel,
+	ready: impl IntoIterator<Item = LodSceneLevel>,
+) -> Option<LodSceneLevel> {
+	let ready: Vec<LodSceneLevel> = ready.into_iter().collect();
+	if ready.is_empty() {
+		return None;
+	}
+	if ready.iter().any(|&l| l == desired) {
+		return Some(desired);
+	}
+
+	let desired_idx = named_band_index(desired);
+	let mut best_named: Option<(usize, usize, LodSceneLevel)> = None;
+	for &level in &ready {
+		let Some(ready_idx) = named_band_index(level) else {
+			continue;
+		};
+		let Some(desired_idx) = desired_idx else {
+			continue;
+		};
+		let dist = desired_idx.abs_diff(ready_idx);
+		let candidate = (dist, ready_idx, level);
+		best_named = Some(match best_named {
+			None => candidate,
+			Some(prev) if candidate.0 < prev.0 || (candidate.0 == prev.0 && candidate.1 < prev.1) => {
+				candidate
+			}
+			Some(prev) => prev,
+		});
+	}
+	if let Some((_, _, level)) = best_named {
+		return Some(level);
+	}
+
+	// Desired is non-named, or only non-named ready roots remain.
+	ready.into_iter().next()
 }
 
 /// Least aggressive named-band GC: cull bands with index distance &gt; 1.
@@ -243,7 +288,7 @@ pub fn cull_offset_bands_from_factor(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::lod_level::QuantizedDistance;
+	use crate::scene::level::QuantizedDistance;
 
 	#[test]
 	fn none_culls_nothing() {
@@ -337,5 +382,53 @@ mod tests {
 		assert!(culls.should_cull(LodSceneLevel::High));
 		assert!(culls.should_cull(LodSceneLevel::Distance(QuantizedDistance(1))));
 		assert!(culls.should_cull(LodSceneLevel::Resolution(8)));
+	}
+
+	#[test]
+	fn closest_available_prefers_nearest_named_band() {
+		assert_eq!(
+			closest_available_lod_level(
+				LodSceneLevel::High,
+				[LodSceneLevel::Medium, LodSceneLevel::Low, LodSceneLevel::UltraLow],
+			),
+			Some(LodSceneLevel::Medium)
+		);
+		assert_eq!(
+			closest_available_lod_level(
+				LodSceneLevel::High,
+				[LodSceneLevel::Low, LodSceneLevel::UltraLow],
+			),
+			Some(LodSceneLevel::Low)
+		);
+		assert_eq!(
+			closest_available_lod_level(
+				LodSceneLevel::UltraLow,
+				[LodSceneLevel::High, LodSceneLevel::Medium, LodSceneLevel::Low],
+			),
+			Some(LodSceneLevel::Low)
+		);
+	}
+
+	#[test]
+	fn closest_available_tie_breaks_toward_higher_detail() {
+		// Medium is equidistant from High and Low — prefer High.
+		assert_eq!(
+			closest_available_lod_level(
+				LodSceneLevel::Medium,
+				[LodSceneLevel::Low, LodSceneLevel::High],
+			),
+			Some(LodSceneLevel::High)
+		);
+	}
+
+	#[test]
+	fn closest_available_returns_desired_when_ready() {
+		assert_eq!(
+			closest_available_lod_level(
+				LodSceneLevel::High,
+				[LodSceneLevel::Low, LodSceneLevel::High],
+			),
+			Some(LodSceneLevel::High)
+		);
 	}
 }

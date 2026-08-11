@@ -5,7 +5,7 @@ use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
 	FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry, StickNode,
-	VegetationStructuralLodProbe, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
+	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
 	STRUCTURAL_MEDIUM_FACTOR,
 };
 
@@ -52,14 +52,14 @@ pub(crate) fn frond_collection_nodes(
 			batch.push(FrondRun::from_placements(placements));
 			if batch.len() >= FRONDS_PER_COLLECTION {
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new(std::mem::take(&mut batch)),
+					FrondCollection::new(std::mem::take(&mut batch)).bake_bounds_from_runs(),
 					Placement::IDENTITY,
 				));
 			}
 		}
 		if !batch.is_empty() {
 			nodes.push(FoliageNode::frond_collection(
-				FrondCollection::new(batch),
+				FrondCollection::new(batch).bake_bounds_from_runs(),
 				Placement::IDENTITY,
 			));
 		}
@@ -118,11 +118,11 @@ pub(crate) fn layered_proxy_balls(min: Vec3, max: Vec3) -> Vec<FoliageNode> {
 	]
 }
 
-pub(crate) fn palm_structural_probe(
+pub(crate) fn palm_structural_lod(
 	center: Vec3,
 	tree_radius: f32,
-) -> VegetationStructuralLodProbe {
-	VegetationStructuralLodProbe::new(center, tree_radius.max(1e-3)).with_factors(
+) -> StructuralLod {
+	StructuralLod::new(center, tree_radius.max(1e-3)).with_factors(
 		STRUCTURAL_HIGH_FACTOR,
 		PALM_STRUCTURAL_MEDIUM_FACTOR,
 		PALM_STRUCTURAL_LOW_FACTOR,

@@ -16,7 +16,7 @@ pub(crate) mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, BraidOakTreeSbs, StorybookTreeChain};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -27,7 +27,7 @@ use crate::storybook_tree::canopy::{
 	BRAID_MEDIUM_STICK_BANDS,
 };
 use crate::torch_tree::{
-	stick_nodes_banded, stick_nodes_low, structural_lod_probe, HIGH_STICK_BANDS,
+	stick_nodes_banded, stick_nodes_low, structural_lod_for, HIGH_STICK_BANDS,
 };
 use stick::stick_nodes_high_crook;
 
@@ -130,8 +130,8 @@ impl VegetationComponents for BraidOakTree {
 		Layers::from_free(nodes)
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.geometry.height(),

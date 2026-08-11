@@ -4,33 +4,55 @@
 
 pub use lod_cascade as cascade;
 pub use lod_cascade_system as cascade_system;
-pub mod chunk_fulfill;
-pub mod fine_pass;
-pub mod gen;
-pub mod lod_cull;
-pub mod lod_level;
-pub mod lod_ref;
-pub mod lod_scene_host;
-pub mod scene_chunk;
 
-pub use chunk_fulfill::{
-	add_fine_pass_chunk_for, add_fine_pass_chunk_full_for, begin_chunk_lod_fulfill,
-	cancel_stale_chunk_fulfillments, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodLevelRootPending,
+pub mod gen;
+pub mod lod_ref;
+pub mod log_thresh;
+pub mod presentation;
+pub mod scene;
+
+pub use log_thresh::{lod_chunk_trace, lod_log_min_ms};
+
+/// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
+pub use scene::chunk as scene_chunk;
+pub use scene::chunk_fulfill;
+pub use scene::cull as lod_cull;
+pub use scene::host as lod_scene_host;
+pub use scene::level as lod_level;
+pub use scene::refresh;
+pub use scene::region_index;
+
+pub use lod_ref::{
+	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
+	LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, LodRequest,
 };
-pub use fine_pass::{
-	add_fine_pass_cull_for, add_fine_pass_for, cull_lod_level_roots, fulfill_lod_level_spawn,
-	track_lod_viewer, update_lod_host_levels, LodFinePassPlugin, LodFinePassSystems,
-	LodHostBounds, LodViewer, LodViewerState,
+pub use presentation::RegionPresenter;
+pub use scene::{
+	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill, closest_available_lod_level,
+	complete_chunk_lod_fulfill, cull_bands_with_adjacent_depth, cull_lod_level_roots,
+	cull_named_from_factor, cull_non_adjacent_bands, cull_offset_bands, cull_offset_bands_from_factor,
+	dominant_lod_ref, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
+	fulfill_lod_level_spawn, lod_host_scene, lod_host_scene_pending, named_band_index,
+	host_shows_level_root, lod_root_is_shown, named_band_progress,
+	nested_host_parent_allows_refresh, parent_host_desired_or_high,
+	produce_lod_cull_for_region,
+	produce_lod_cull_regions, produce_lod_refresh_levels, produce_lod_refresh_regions,
+	refresh_lod_host_levels, reset_lod_chunk_budget, resume_desired_pending_roots,
+	sync_cullable_roots_marker, sync_lod_level_roots, sync_nested_refresh_allowed,
+	update_lod_host_levels, Bullseye, LodChunkBudgetClock, LodChunkBudgetPlugin,
+	LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment,
+	LodCullInFlight, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
+	LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots, LodLevelRoot,
+	LodLevelRootPending, LodLevelRootStreamed, LodLevelRoots, LodLevelSpawnRequest,
+	LodNestedRefreshAllowed, LodNestedRefreshBlocked, LodRefreshCorePlugin, LodRefreshCullPlugin,
+	LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsStatus,
+	LodRefreshSystems, LodScene, LodSceneBoundsMarshaller, LodSceneCull, LodSceneCullRegion,
+	LodSceneCullRegionPlugin, LodSceneCulls, LodSceneHost, LodSceneHostPlugin,
+	LodSceneHostStreamed, LodSceneLevel, LodSceneRefreshEagerSyncPlugin,
+	LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
+	LodSceneRefreshPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin,
+	LodSceneRefreshSyncPlugin, LodSceneRegionCullPlugin, LodSceneRegionIndex, LodSceneStatus,
+	LodViewer, OpenLattice, PatchSceneBounds, QuantizedDistance, SceneChunk, Spotlight,
+	DEFAULT_CHUNK_WEIGHT, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };
-pub use lod_cull::{
-	cull_bands_with_adjacent_depth, cull_named_from_factor, cull_non_adjacent_bands,
-	cull_offset_bands, cull_offset_bands_from_factor, named_band_index, named_band_progress,
-	LodSceneCull, LodSceneCulls, NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
-};
-pub use lod_level::{LodSceneLevel, QuantizedDistance};
-pub use lod_scene_host::{
-	lod_host_scene, sync_lod_level_roots, LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest,
-	LodSceneHost, LodSceneHostPlugin,
-};
-pub use scene_chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};

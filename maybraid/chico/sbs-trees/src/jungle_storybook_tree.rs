@@ -10,14 +10,14 @@ pub mod render_item_plugin;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
 use crate::storybook_tree::canopy::MEDIUM_STICK_BANDS;
-use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_probe};
+use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_for};
 
 /// Authoring / CLI parameters for Jungle Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -117,8 +117,8 @@ impl VegetationComponents for JungleStorybookTree {
 		))
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
-		Some(structural_lod_probe(
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(structural_lod_for(
 			self.structural_center(),
 			self.footprint_radius(),
 			self.height(),

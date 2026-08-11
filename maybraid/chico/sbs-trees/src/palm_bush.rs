@@ -13,14 +13,14 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::PalmBushSbs;
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, VegetationStructuralLodProbe,
+	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::FROND_RING_SEED_SALT;
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_probe,
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
 	world_space_frond_shape,
 };
 use crown::frond_shape_for_ring;
@@ -101,11 +101,11 @@ impl VegetationComponents for PalmBush {
 		}
 	}
 
-	fn structural_lod_probe(&self) -> Option<VegetationStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<StructuralLod> {
 		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
 		let center = (min + max) * 0.5;
 		let radius = ((max - min) * 0.5).max_element().max(1e-3);
-		Some(palm_structural_probe(center, radius))
+		Some(palm_structural_lod(center, radius))
 	}
 }
 

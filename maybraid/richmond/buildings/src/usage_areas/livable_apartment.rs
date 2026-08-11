@@ -149,7 +149,7 @@ impl BuildingComponents for LivableApartment {
 		out
 	}
 
-	fn structural_lod_probe(&self) -> Option<BuildingStructuralLodProbe> {
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		if self.cells.is_empty() {
 			return None;
 		}
