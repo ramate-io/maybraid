@@ -31,7 +31,9 @@ pub use sticks::{
 	update_stick_host_levels, StickGeometry, StickLodProbe, StickNode, StickStyle, STICK_HIGH_FACTOR,
 	STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
-pub use lod_host::{VegetationFoliageAssetRoot, VegetationFrondAssetRoot};
+pub use lod_host::{
+	posed_frond_multi_scene_merge, VegetationFoliageAssetRoot, VegetationFrondAssetRoot,
+};
 pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
