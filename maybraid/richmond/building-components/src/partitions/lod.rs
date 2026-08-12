@@ -1,6 +1,6 @@
 //! Partition LOD re-exports.
 //!
-//! Host scaffolding: [`crate::lod_host`]. Partition GLB→host wiring: [`crate::partitions::host`].
+//! Posed content: [`crate::LodHostHelper`]. Partition GLB→level wiring: [`crate::partitions::host`].
 
 pub use crate::partitions::geometry::{
 	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,

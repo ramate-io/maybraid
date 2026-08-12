@@ -3,7 +3,7 @@
 //! Distinct from partition linear factors — roofs stay on tighter High / Medium
 //! thresholds so pitched kits drop resolution sooner for the same extent.
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, Query, Transform, With};
 use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -17,7 +17,6 @@ use crate::lod_band::{
 	center_extent_from_aabb, characteristic_extent_abs, placement_center, warm_mesh_lod_culls,
 	DistanceLodBand,
 };
-use crate::lod_host::warm_content_host_hsl;
 use crate::placed::Placement;
 
 /// `distance / max_extent` out to this → High.
@@ -106,7 +105,7 @@ impl RoofLodProbe {
 	}
 }
 
-/// Probe writes [`LodSceneLevel`]; mesh spawn/cull uses [`crate::WarmAssetLodRoots`].
+/// Probe writes [`LodSceneLevel`]; mesh hosts fulfill via chunk sync on domain nodes.
 impl LodScene for RoofLodProbe {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)
@@ -121,16 +120,20 @@ impl LodScene for RoofLodProbe {
 	}
 }
 
-/// Identity-placement LOD host from explicit high/mid/low [`SceneRef`]s (optional mirror).
-pub fn leaf_scene_ref_lod(
+/// Posed roof kit content for one [`LodSceneLevel`] (no host scaffolding).
+pub fn roof_scene_ref_for_level(
 	high: SceneRef,
 	mid: SceneRef,
 	low: SceneRef,
-	lod_ref: &LodRef,
+	level: LodSceneLevel,
 ) -> impl Scene + 'static {
-	let probe = RoofLodProbe::from_aabb(lod_ref.bounds);
-	let level = probe.level_for(lod_ref.current_transform);
-	warm_content_host_hsl(level, probe, high.scene(), mid.scene(), low.scene())
+	let scene = match level {
+		LodSceneLevel::High => high,
+		LodSceneLevel::Medium => mid,
+		LodSceneLevel::Low | LodSceneLevel::UltraLow => low,
+		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
+	};
+	scene.scene()
 }
 
 /// Update roof host levels from the [`lod::LodViewer`] pose.

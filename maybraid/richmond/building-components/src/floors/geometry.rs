@@ -13,6 +13,12 @@ pub enum FloorGeometry {
 	TessellatedTriangle(TessellatedTriangle),
 }
 
+impl Default for FloorGeometry {
+	fn default() -> Self {
+		Self::rectangle()
+	}
+}
+
 impl FloorGeometry {
 	pub fn rectangle() -> Self {
 		Self::Rectangle(RectangleFloor)

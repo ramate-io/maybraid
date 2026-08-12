@@ -1,10 +1,14 @@
-//! Stair IR node: style + geometry + placement.
+//! Stair IR node: style + geometry + placement — fine-phase [`LodScene`] host.
 
+use bevy::math::bounding::Aabb3d;
+use bevy::prelude::Component;
 use bevy::scene::prelude::Scene;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 
 use crate::assets::stairs::rough_stonework::TREAD;
+use crate::lod_band::placement_bounds;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
@@ -14,7 +18,7 @@ use crate::stairs::tessellate::StairKit;
 use crate::stairs::{RoughStoneSpiralStair, RoughStoneStraightStair, WoodStraightStair};
 
 /// Authoring IR for a stair feature.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct StairNode {
 	pub style: StairStyle,
 	pub geometry: StairGeometry,
@@ -43,14 +47,18 @@ impl StairNode {
 }
 
 impl LodScene for StairNode {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
+		LodSceneStatus::Unchanged
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		LodSceneCulls::None
 	}
 
 	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
+		level: LodSceneLevel,
 	) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
@@ -63,20 +71,20 @@ impl LodScene for StairNode {
 						StairKit::Tread => Box::new(posed_glb(TREAD, transform)) as Box<dyn Scene>,
 						StairKit::Spiral => Box::new(with_pose(
 							transform,
-							RoughStoneSpiralStair.scene_with_lod(lod_ref),
+							RoughStoneSpiralStair.scene_with_level(lod_ref, level),
 						)) as Box<dyn Scene>,
 						StairKit::Straight => Box::new(with_pose(
 							transform,
-							RoughStoneStraightStair.scene_with_lod(lod_ref),
+							RoughStoneStraightStair.scene_with_level(lod_ref, level),
 						)) as Box<dyn Scene>,
 					},
 					StairStyle::Wood => {
 						let child: Box<dyn Scene> = match piece.geom {
 							StairKit::Tread | StairKit::Spiral => {
-								Box::new(RoughStoneSpiralStair.scene_with_lod(lod_ref))
+								Box::new(RoughStoneSpiralStair.scene_with_level(lod_ref, level))
 							}
 							StairKit::Straight => {
-								Box::new(WoodStraightStair.scene_with_lod(lod_ref))
+								Box::new(WoodStraightStair.scene_with_level(lod_ref, level))
 							}
 						};
 						Box::new(with_pose(transform, child)) as Box<dyn Scene>
@@ -85,5 +93,13 @@ impl LodScene for StairNode {
 			})
 			.collect();
 		confined_scene(self.confines, scene_children(children))
+	}
+
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		placement_bounds(&self.placement)
 	}
 }

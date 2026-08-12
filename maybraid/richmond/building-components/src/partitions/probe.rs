@@ -1,6 +1,6 @@
 //! Distance / extent probe shared by partition LOD hosts.
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, Query, Transform, With};
 use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -112,7 +112,7 @@ impl PartitionLodProbe {
 	}
 }
 
-/// Probe writes [`LodSceneLevel`]; mesh spawn/cull uses [`crate::WarmAssetLodRoots`].
+/// Probe writes [`LodSceneLevel`]; mesh hosts fulfill via chunk sync on domain nodes.
 impl LodScene for PartitionLodProbe {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.level_for(lod_ref.current_transform)

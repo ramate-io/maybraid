@@ -31,7 +31,7 @@ pub use geometry::{
 };
 pub use kit_space::{to_centered_rect_placement, with_wall_standup_pitch};
 pub use lod::{
-	leaf_panel_scene_ref_lod, update_panel_host_levels, PanelLodBand, PanelLodProbe,
+	panel_scene_ref_for_level, update_panel_host_levels, PanelLodBand, PanelLodProbe,
 	PANEL_HIGH_FACTOR, PANEL_LOW_FACTOR, PANEL_MEDIUM_FACTOR, PANEL_ULTRA_LOW_RECTANGLE,
 	PANEL_ULTRA_LOW_RIGHT_TRIANGLE,
 };

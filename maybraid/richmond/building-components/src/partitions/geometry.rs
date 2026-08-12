@@ -57,6 +57,12 @@ pub enum PartitionGeometry {
 /// Alias for continuous partition geometry.
 pub type Partition = PartitionGeometry;
 
+impl Default for PartitionGeometry {
+	fn default() -> Self {
+		Self::linear()
+	}
+}
+
 impl PartitionGeometry {
 	pub fn linear() -> Self {
 		Self::Linear(LinearPartition::default())

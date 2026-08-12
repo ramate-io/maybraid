@@ -5,7 +5,7 @@ use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
 
 /// Quarter-ring wall sweep on local \(+X\) toward \(+Z\) (see [`crate::arc_ring_dir`]).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, bevy::prelude::Component)]
 pub struct RoughStonework90;
 
 impl_partition_mesh_lod_scene!(

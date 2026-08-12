@@ -1,30 +1,26 @@
-//! Partition IR node: style + geometry + placement.
+//! Partition IR node: style + geometry + placement — fine-phase [`LodScene`] host.
 //!
 //! Covers both **direct** component mappings (e.g. a single linear / arc kit) and
 //! **tessellated** concepts (polyline / continuous arc → many tiles under **one** LOD
-//! parent host). Leaf style types still expose per-mesh hosts for playground previews.
+//! parent host).
 
+use bevy::math::bounding::Aabb3d;
+use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 
-use crate::floors::RoughStoneFloorRightTriangle;
-use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::warm_content_host_hsl;
+use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
-use crate::partitions::probe::PartitionLodProbe;
-use crate::partitions::rough_stonework::{
-	RoughStoneworkJoint, RoughStoneworkLinearSliceSubsegment, RoughStoneworkLinearSubsegment,
-	RoughStoneworkSlice180,
-};
 use crate::partitions::style::PartitionStyle;
 use crate::placed::Placement;
-use crate::scene_children::{pose, scene_children, with_pose};
+use crate::scene_children::{pose, scene_children};
 
 /// Authoring IR for a partition feature (primitive — no portals).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct PartitionNode {
 	pub style: PartitionStyle,
 	pub geometry: PartitionGeometry,
@@ -60,7 +56,7 @@ impl PartitionNode {
 		node.scene_lod_status(lod_ref)
 	}
 
-	fn kit_scenes_for_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<Box<dyn Scene>> {
+	fn kit_scenes_for_level(&self, level: LodSceneLevel) -> Vec<Box<dyn Scene>> {
 		self.geometry
 			.placed_tiles_for_style(self.style, self.placement)
 			.into_iter()
@@ -74,19 +70,28 @@ impl PartitionNode {
 							}
 							Some(Box::new(JointLod::posed_tier(transform, level)) as Box<dyn Scene>)
 						}
-						PartitionTile::RightTriangle { mirror } => Some(Box::new(with_pose(
-							transform,
-							RoughStoneFloorRightTriangle::scene_with_lod_mirrored(lod_ref, mirror),
-						)) as Box<dyn Scene>),
+						PartitionTile::RightTriangle { mirror } => {
+							use crate::assets::panels::rough_stonework::{
+								RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_LOW, RIGHT_TRIANGLE_MID,
+							};
+							use crate::partitions::mesh_set::PartitionMeshSet;
+							Some(Box::new(LinearLod::posed_mirrored_tier(
+								PartitionMeshSet::new(
+									RIGHT_TRIANGLE_HIGH,
+									RIGHT_TRIANGLE_MID,
+									RIGHT_TRIANGLE_LOW,
+								),
+								transform,
+								level,
+								mirror,
+							)) as Box<dyn Scene>)
+						}
 						tile => {
 							if let Some(meshes) = tile.mesh_set() {
 								Some(Box::new(LinearLod::posed_tier(meshes, transform, level))
 									as Box<dyn Scene>)
 							} else {
-								Some(Box::new(with_pose(
-									transform,
-									placeholder_tile_scene(tile, lod_ref),
-								)) as Box<dyn Scene>)
+								None
 							}
 						}
 					},
@@ -96,33 +101,15 @@ impl PartitionNode {
 	}
 }
 
-fn placeholder_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
+/// Door-frame / empty leaf tiles that lack a mesh set — posed content for `level`.
+pub(crate) fn partition_tile_scene(tile: PartitionTile, level: LodSceneLevel) -> Box<dyn Scene> {
 	match tile {
-		PartitionTile::LinearSubsegment => {
-			Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref))
-		}
-		PartitionTile::LinearSliceSubsegment => {
-			Box::new(RoughStoneworkLinearSliceSubsegment.scene_with_lod(lod_ref))
-		}
-		PartitionTile::SliceArc180 => Box::new(RoughStoneworkSlice180.scene_with_lod(lod_ref)),
-		PartitionTile::Joint => Box::new(RoughStoneworkJoint.scene_with_lod(lod_ref)),
-		_ => Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref)),
-	}
-}
-
-/// Door-frame / empty leaf tiles that lack a mesh set.
-pub(crate) fn partition_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
-	match tile {
-		PartitionTile::LinearSubsegment
-		| PartitionTile::LinearSliceSubsegment
-		| PartitionTile::SliceArc180
-		| PartitionTile::Joint => placeholder_tile_scene(tile, lod_ref),
+		PartitionTile::Joint => Box::new(JointLod::posed_tier(Transform::IDENTITY, level)),
 		other => {
-			// Asset tiles: leaf style types for doors that still route here.
 			if let Some(meshes) = other.mesh_set() {
-				Box::new(LinearLod::leaf_host(meshes, lod_ref))
+				Box::new(LinearLod::posed_tier(meshes, Transform::IDENTITY, level))
 			} else {
-				placeholder_tile_scene(PartitionTile::LinearSubsegment, lod_ref)
+				Box::new(JointLod::posed_tier(Transform::IDENTITY, LodSceneLevel::Low))
 			}
 		}
 	}
@@ -142,20 +129,16 @@ impl LodScene for PartitionNode {
 		warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		confined_scene(self.confines, scene_children(self.kit_scenes_for_level(lod_ref, level)))
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		confined_scene(self.confines, scene_children(self.kit_scenes_for_level(level)))
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let level = self.scene_lod_level(lod_ref);
-		let probe = PartitionLodProbe::from_placement(&self.placement);
-		warm_content_host_hsl(
-			level,
-			probe,
-			self.scene_with_level(lod_ref, LodSceneLevel::High),
-			self.scene_with_level(lod_ref, LodSceneLevel::Medium),
-			self.scene_with_level(lod_ref, LodSceneLevel::Low),
-		)
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		placement_bounds(&self.placement)
 	}
 }
 
@@ -198,11 +181,19 @@ macro_rules! impl_partition_mesh_lod_scene {
 				)
 			}
 
-			fn scene_with_lod(
+			fn scene_chunks_with_level(
 				&self,
 				lod_ref: &::lod::lod_ref::LodRef,
-			) -> impl ::bevy::scene::Scene + 'static {
-				$crate::partitions::geometry::LinearLod::leaf_host($meshes, lod_ref)
+				level: ::lod::gen::LodSceneLevel,
+			) -> ::lod::SceneChunk {
+				::lod::SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+			}
+
+			fn scene_bounds(&self) -> ::bevy::math::bounding::Aabb3d {
+				::bevy::math::bounding::Aabb3d::from_min_max(
+					::bevy::math::Vec3::new(0.0, 0.0, 0.0),
+					::bevy::math::Vec3::new(1.0, 1.0, 1.0),
+				)
 			}
 		}
 	};

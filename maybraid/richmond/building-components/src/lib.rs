@@ -11,7 +11,7 @@ pub mod joints;
 pub mod labels;
 pub mod layer;
 pub mod lod_band;
-pub mod lod_host;
+pub mod lod_host_helper;
 pub mod panels;
 pub mod parent_confines;
 pub mod partitions;
@@ -29,11 +29,8 @@ pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureW
 pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
-pub use lod_band::{warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
-pub use lod_host::{
-	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_content_host_hslu,
-	warm_mesh_level_host, WarmAssetLodRoots,
-};
+pub use lod_band::{placement_bounds, warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
+pub use lod_host_helper::LodHostHelper;
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
 	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,
@@ -66,9 +63,14 @@ pub use structural_probe::{
 	STRUCTURAL_HIGH_OUTSIDE_METERS,
 };
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
+use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
+use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::{lod_host_scene_pending, SceneChunk};
 
 /// Domain IR exposed by a building (or building part) for structural composition.
 ///
@@ -113,7 +115,7 @@ pub trait BuildingComponents {
 		Layers::new()
 	}
 
-	/// When set, [`ComponentsOnly`] presents a warm High/Medium host driven by this probe.
+	/// When set, [`ComponentsOnly`] bands High/Medium via this probe (pending host + chunks).
 	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
 		None
 	}
@@ -161,32 +163,31 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 	}
 }
 
-/// Newtype: present a [`BuildingComponents`] value as an [`LodScene`] whose children are
-/// exactly that building's domain nodes.
+/// Newtype: present a [`BuildingComponents`] value as a structural [`LodScene`] host.
 ///
-/// Prefer this over a custom `LodScene` when the building has no host banding, silhouette,
-/// lights, or other non-node extras. Orphan rules prevent a blanket `LodScene` for all
-/// `BuildingComponents` implementors; wrapping in this local type is the coherent path.
+/// Prefer this over a custom `LodScene` when the building has no silhouette, lights, or
+/// other non-node extras. Chunk fulfill nests fine-phase domain nodes via
+/// [`LodScene::host`].
 ///
 /// ```ignore
-/// ComponentsOnly(&bedroom).scene_with_lod(lod_ref)
+/// spawn_building_components(commands, &bedroom, transform, bounds);
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ComponentsOnly<T>(pub T);
+#[derive(Debug, Clone, PartialEq, Component)]
+pub struct ComponentsOnly<T: Send + Sync + 'static>(pub T);
 
-impl<T> ComponentsOnly<T> {
+impl<T: Send + Sync + 'static> ComponentsOnly<T> {
 	pub fn into_inner(self) -> T {
 		self.0
 	}
 }
 
-impl<T> From<T> for ComponentsOnly<T> {
+impl<T: Send + Sync + 'static> From<T> for ComponentsOnly<T> {
 	fn from(value: T) -> Self {
 		Self(value)
 	}
 }
 
-impl<T> std::ops::Deref for ComponentsOnly<T> {
+impl<T: Send + Sync + 'static> std::ops::Deref for ComponentsOnly<T> {
 	type Target = T;
 
 	fn deref(&self) -> &T {
@@ -194,13 +195,13 @@ impl<T> std::ops::Deref for ComponentsOnly<T> {
 	}
 }
 
-impl<T> std::ops::DerefMut for ComponentsOnly<T> {
+impl<T: Send + Sync + 'static> std::ops::DerefMut for ComponentsOnly<T> {
 	fn deref_mut(&mut self) -> &mut T {
 		&mut self.0
 	}
 }
 
-impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
+impl<T: BuildingComponents + Send + Sync + 'static> BuildingComponents for ComponentsOnly<T> {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		self.0.panel_nodes_for_level(level)
 	}
@@ -242,7 +243,7 @@ impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
 	}
 }
 
-impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
+impl<T: BuildingComponents + Send + Sync + 'static> LodScene for ComponentsOnly<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.0
 			.structural_lod()
@@ -258,7 +259,8 @@ impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
 	}
 
 	fn scene_lod_culls(&self, _lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-		// Keep structural H/M/L roots warm; content differs per band and respawn is expensive.
+		// Structural band content differs; prefer keeping the inactive root until GC policy
+		// is tuned per building. Fine-phase mesh hosts cull via warm_mesh_lod_culls.
 		LodSceneCulls::None
 	}
 
@@ -266,29 +268,69 @@ impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
 		component_only_scene(&self.0, lod_ref, level)
 	}
 
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		building_scene_chunks(&self.0, lod_ref, level)
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		self.0
+			.structural_lod()
+			.map(|p| p.footprint_aabb())
+			.unwrap_or_else(|| building_bounds(&self.0))
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		match self.0.structural_lod() {
-			Some(probe) => {
-				// Medium and Low share shell-only content for this banding policy.
-				let mid = component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium);
-				Box::new(warm_content_host_hsl(
-					level,
-					probe,
-					component_only_scene(&self.0, lod_ref, LodSceneLevel::High),
-					mid,
-					component_only_scene(&self.0, lod_ref, LodSceneLevel::Medium),
-				)) as Box<dyn Scene>
-			}
-			None => Box::new(component_only_scene(&self.0, lod_ref, level)) as Box<dyn Scene>,
-		}
+		// Pending structural host: chunks nest fine-phase domain hosts.
+		lod_host_scene_pending(level, self.scene_bounds())
 	}
 }
 
-/// Append every domain node from `building` at `level` as nested [`LodScene`] children.
+/// Weighted chunks for one structural level: each domain node is a nested LOD host.
+pub fn building_scene_chunks(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> SceneChunk {
+	let mut chunks = Vec::new();
+	for node in building.panel_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.partition_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.floor_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.roof_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.stair_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.door_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.joint_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.furniture_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	for node in building.label_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
+	if chunks.is_empty() {
+		SceneChunk::primitive(scene_children(Vec::new()))
+	} else {
+		SceneChunk::chunks(chunks)
+	}
+}
+
+/// Append every domain node from `building` at `level` as nested [`LodScene`] hosts.
 ///
-/// Provenance is flattened away ([`Layers::flatten`]) for presentation today; parents
-/// that need layer policy should read [`BuildingComponents`] maps before this step.
+/// Each child is embedded via [`LodScene::host`] (pending host + typed component).
+/// Provenance is flattened away ([`Layers::flatten`]) for presentation today.
 pub fn append_component_scenes(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
@@ -296,35 +338,35 @@ pub fn append_component_scenes(
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
 	for node in building.panel_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.partition_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.floor_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.roof_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.stair_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.door_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.joint_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.furniture_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in building.label_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.scene_with_lod(lod_ref)));
+		children.push(Box::new(node.host(lod_ref)));
 	}
 }
 
-/// Scene whose children are exactly the [`BuildingComponents`] nodes at `level`.
+/// Scene whose children are nested domain [`LodScene`] hosts at `level`.
 pub fn component_only_scene(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
@@ -333,6 +375,83 @@ pub fn component_only_scene(
 	let mut children: Vec<Box<dyn Scene>> = Vec::new();
 	append_component_scenes(building, lod_ref, level, &mut children);
 	scene_children(children)
+}
+
+/// Spawn a [`ComponentsOnly`] building host; chunk fulfill streams the first level.
+pub fn spawn_building_components<T>(
+	commands: &mut Commands,
+	building: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+) -> Vec<Entity>
+where
+	T: BuildingComponents + Clone + Send + Sync + 'static,
+{
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let host = ComponentsOnly(building.clone());
+	let level = host.scene_lod_level(&lod_ref);
+	let pending = lod_host_scene_pending(level, bounds);
+	let entity = commands
+		.spawn_scene((
+			pending,
+			bsn! {
+				template_value(transform)
+				Visibility::default()
+			},
+		))
+		.id();
+	commands.entity(entity).insert(host);
+	vec![entity]
+}
+
+/// Approximate AABB from domain node placements at High (for adapter LodRef bounds).
+pub fn building_bounds(building: &impl BuildingComponents) -> Aabb3d {
+	let mut min = bevy::math::Vec3::splat(f32::INFINITY);
+	let mut max = bevy::math::Vec3::splat(f32::NEG_INFINITY);
+	let mut any = false;
+	let mut absorb = |bounds: Aabb3d| {
+		min = min.min(Vec3::from(bounds.min));
+		max = max.max(Vec3::from(bounds.max));
+		any = true;
+	};
+	for node in building.panel_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.partition_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.floor_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.roof_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.stair_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.door_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.joint_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.furniture_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	for node in building.label_nodes_for_level(LodSceneLevel::High).flatten() {
+		absorb(node.scene_bounds());
+	}
+	if any {
+		Aabb3d::from_min_max(min, max)
+	} else {
+		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
+	}
 }
 
 pub(crate) fn empty_scene(_: &mut ResolveContext, _: &mut ResolvedScene) {}
