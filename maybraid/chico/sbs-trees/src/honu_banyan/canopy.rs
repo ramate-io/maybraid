@@ -12,12 +12,8 @@ use crate::jungle_canopy_vc::{
 	JungleGrowthScaleParams,
 };
 
-/// High outer / inner canopy bands.
+/// High / Medium outer / inner canopy bands.
 const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
-/// Medium foliage bands (growth + canopy).
-const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(17, 4);
-/// Medium growth: keep a visible epiphyte count without matching canopy density.
-const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Low foliage: cheap-ball kit.
 const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
@@ -165,15 +161,11 @@ fn mid_canopy_proxy_ball(
 
 fn lod_plan(level: LodSceneLevel) -> JungleCanopyLodPlan {
 	match level {
-		LodSceneLevel::High => JungleCanopyLodPlan {
+		// Medium keeps High growth/canopy topology; FrondCollection fine-phase merge thins.
+		LodSceneLevel::High | LodSceneLevel::Medium => JungleCanopyLodPlan {
 			growth: JungleGrowthEmitMode::All,
 			canopy_bands: HIGH_FOLIAGE_BANDS,
 			include_proxy: false,
-		},
-		LodSceneLevel::Medium => JungleCanopyLodPlan {
-			growth: JungleGrowthEmitMode::Banded(MEDIUM_GROWTH_BANDS),
-			canopy_bands: MEDIUM_FOLIAGE_BANDS,
-			include_proxy: true,
 		},
 		LodSceneLevel::Low
 		| LodSceneLevel::UltraLow

@@ -25,9 +25,10 @@ pub(crate) struct JungleFoliageCandidate {
 /// How High / Medium / Low should emit jungle-growth fronds.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum JungleGrowthEmitMode {
-	/// Every growth candidate (High).
+	/// Every growth candidate (High / Medium).
 	All,
-	/// Band-sampled growth (Medium).
+	/// Band-sampled growth (kept for callers that still want Medium thinning).
+	#[allow(dead_code)]
 	Banded(AzimuthHeightBands),
 	/// Skip growth fronds (Low); candidates may still feed a proxy AABB.
 	None,

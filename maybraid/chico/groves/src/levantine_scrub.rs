@@ -333,10 +333,12 @@ mod vc {
 
 	use super::{definition, LevantineScrubCell, LevantineScrubItem};
 	use crate::grove::{
-		canopy_ball_material_from_palette, flatten_foliage_nodes, flatten_stick_nodes,
-		frond_material_from_palette, grove_structural_footprint, layers_from_nodes, placement_noise,
-		stick_material_from_palette, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		canopy_ball_material_from_palette, canopy_proxy_site, flatten_foliage_nodes,
+		flatten_stick_nodes, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
+		frond_material_from_palette, grove_detail_level, grove_structural_footprint,
+		layers_from_nodes, placement_noise, stick_material_from_palette, CanopyProxySite,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Structural High band (× footprint).
@@ -610,6 +612,35 @@ mod vc {
 			}
 			out
 		}
+
+		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
+			self.plants
+				.iter()
+				.filter_map(|plant| {
+					let material = &plant.ball_material;
+					match &plant.kind {
+						LevantineScrubKind::Rory(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						LevantineScrubKind::Vase(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						LevantineScrubKind::Bush(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						LevantineScrubKind::Torch(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						LevantineScrubKind::Oak(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						LevantineScrubKind::Hedge(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+					}
+				})
+				.collect()
+		}
 	}
 
 	fn grow_plant(
@@ -688,11 +719,26 @@ mod vc {
 
 	impl VegetationComponents for LevantineScrub {
 		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
-			layers_from_nodes(self.stick_nodes(level))
+			match grove_detail_level(level) {
+				Some(detail) => layers_from_nodes(self.stick_nodes(detail)),
+				None => Layers::new(),
+			}
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-			layers_from_nodes(self.foliage_nodes(level))
+			match level {
+				LodSceneLevel::High | LodSceneLevel::Medium => {
+					layers_from_nodes(self.foliage_nodes(level))
+				}
+				LodSceneLevel::Low => {
+					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
+				}
+				LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(
+					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
+				),
+			}
 		}
 
 		fn structural_lod(&self) -> Option<StructuralLod> {

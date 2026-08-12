@@ -40,9 +40,11 @@ pub use tuft_patch::GroveTuftPatch;
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 #[cfg(feature = "render")]
 pub use vc_compose::{
-	canopy_ball_material_from_palette, flatten_foliage_nodes, flatten_foliage_nodes_nested,
-	flatten_stick_nodes, frond_material_from_palette, grove_structural_footprint,
-	layers_from_nodes, stick_material_from_palette,
+	canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_site_nested,
+	flatten_foliage_nodes, flatten_foliage_nodes_nested, flatten_stick_nodes,
+	foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+	grove_detail_level, grove_structural_footprint, layers_from_nodes, stick_material_from_palette,
+	CanopyProxySite, ULTRA_LOW_CANOPY_BIN_METERS,
 };
 
 use bevy_math::{Vec2, Vec3};

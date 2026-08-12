@@ -9,7 +9,7 @@ use chico_sbs_geometry::chain::storybook_tree::{
 	is_graph_terminal, StorybookTreeChain, StorybookTreePhase,
 };
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
-use chico_sbs_geometry::{AzimuthHeightBands, BallStickChain, BallStickNode};
+use chico_sbs_geometry::{BallStickChain, BallStickNode};
 use chico_vegetation_components::{FoliageNode, Placement};
 use lod::gen::LodSceneLevel;
 
@@ -17,13 +17,11 @@ use crate::jungle_canopy_vc::{
 	emit_jungle_canopy_lod, JungleCanopyLodPlan, JungleFoliageCandidate, JungleGrowthEmitMode,
 	JungleGrowthScaleParams,
 };
-use crate::storybook_tree::canopy::{HIGH_FOLIAGE_BANDS, LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS};
+use crate::storybook_tree::canopy::{HIGH_FOLIAGE_BANDS, LOW_FOLIAGE_BANDS};
 
 /// Default [`crate::JungleStorybookTreeParams::jungle_growth_radius_scale`].
 pub const DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE: f32 = 4.0;
 
-/// Medium growth bands (High emits every growth candidate).
-const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Minimum ring parameter `u` before a node may receive jungle growth (keeps trunk base clear).
 const MIN_RING_U_FOR_GROWTH: f32 = 0.28;
 
@@ -126,14 +124,10 @@ fn full_canopy_proxy(
 
 fn lod_plan(level: LodSceneLevel) -> JungleCanopyLodPlan {
 	match level {
-		LodSceneLevel::High => JungleCanopyLodPlan {
+		// Medium keeps High growth/canopy topology; FrondCollection fine-phase merge thins.
+		LodSceneLevel::High | LodSceneLevel::Medium => JungleCanopyLodPlan {
 			growth: JungleGrowthEmitMode::All,
 			canopy_bands: HIGH_FOLIAGE_BANDS,
-			include_proxy: false,
-		},
-		LodSceneLevel::Medium => JungleCanopyLodPlan {
-			growth: JungleGrowthEmitMode::Banded(MEDIUM_GROWTH_BANDS),
-			canopy_bands: MEDIUM_FOLIAGE_BANDS,
 			include_proxy: false,
 		},
 		LodSceneLevel::Low

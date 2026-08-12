@@ -1,9 +1,9 @@
 //! **Palm Crown** — stacked frond rings as [`VegetationComponents`].
 //!
-//! High emits one [`FrondCollection`] per frond with a multi-segment rachis run. Medium
-//! keeps the same frond count but collapses each rachis to a single chord. Per-frond
-//! collections keep merge LOD on rachis-scale extents. Low / UltraLow drop the fronds and
-//! keep two rotated layered-ball proxies fit to the High crown AABB.
+//! High / Medium emit one [`FrondCollection`] per frond with a multi-segment rachis run;
+//! fine-phase collection merge does Medium decimation. Per-frond collections keep merge
+//! LOD on rachis-scale extents. Low / UltraLow drop the fronds and keep two rotated
+//! layered-ball proxies fit to the High crown AABB.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
 //! [`spawn`] for date / Waialea / bush trees still on RenderItem.
@@ -369,10 +369,10 @@ impl VegetationComponents for PalmCrown {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		match level {
-			LodSceneLevel::High => Layers::from_free(self.frond_nodes(false)),
-			// Medium keeps fronds but drops multi-segment rachis (single chord per blade).
-			LodSceneLevel::Medium => Layers::from_free(self.frond_nodes(true)),
-			// Structural UltraLow collapses to Low content; both drop fronds for proxy balls.
+			// Medium keeps High topology; FrondCollection fine-phase merge thins runs.
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				Layers::from_free(self.frond_nodes(false))
+			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
@@ -434,7 +434,7 @@ mod tests {
 	}
 
 	#[test]
-	fn medium_collapses_rachis_low_is_two_layered_balls() -> Result<()> {
+	fn medium_keeps_high_rachis_low_is_two_layered_balls() -> Result<()> {
 		let built = crown(5).build();
 		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		let medium = built.foliage_nodes_for_level(LodSceneLevel::Medium).flatten();
@@ -447,7 +447,7 @@ mod tests {
 			[0]
 		.segments
 		.len();
-		assert_eq!(medium_segs, 1);
+		assert_eq!(medium_segs, high_segs);
 
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), 2);

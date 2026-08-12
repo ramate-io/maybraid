@@ -282,10 +282,12 @@ mod vc {
 
 	use super::{definition, TropicalThicketCell, TropicalThicketItem};
 	use crate::grove::{
-		canopy_ball_material_from_palette, flatten_foliage_nodes, flatten_stick_nodes,
-		frond_material_from_palette, grove_structural_footprint, layers_from_nodes, placement_noise,
-		stick_material_from_palette, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		canopy_ball_material_from_palette, canopy_proxy_site, flatten_foliage_nodes,
+		flatten_stick_nodes, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
+		frond_material_from_palette, grove_detail_level, grove_structural_footprint,
+		layers_from_nodes, placement_noise, stick_material_from_palette, CanopyProxySite,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -516,6 +518,26 @@ mod vc {
 			}
 			out
 		}
+
+		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
+			self.plants
+				.iter()
+				.filter_map(|plant| {
+					let material = &plant.ball_material;
+					match &plant.kind {
+						TropicalThicketKind::Palm(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						TropicalThicketKind::Banyan(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						TropicalThicketKind::Bush(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+					}
+				})
+				.collect()
+		}
 	}
 
 	fn grow_plant(
@@ -583,11 +605,26 @@ mod vc {
 
 	impl VegetationComponents for TropicalThicket {
 		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
-			layers_from_nodes(self.stick_nodes(level))
+			match grove_detail_level(level) {
+				Some(detail) => layers_from_nodes(self.stick_nodes(detail)),
+				None => Layers::new(),
+			}
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-			layers_from_nodes(self.foliage_nodes(level))
+			match level {
+				LodSceneLevel::High | LodSceneLevel::Medium => {
+					layers_from_nodes(self.foliage_nodes(level))
+				}
+				LodSceneLevel::Low => {
+					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
+				}
+				LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(
+					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
+				),
+			}
 		}
 
 		fn structural_lod(&self) -> Option<StructuralLod> {
@@ -789,6 +826,36 @@ mod tests {
 		let b = grove.populate(&extent, &terrain);
 		assert_eq!(a, b);
 		assert!(!a.is_empty());
+		Ok(())
+	}
+
+	#[cfg(feature = "render")]
+	#[test]
+	fn low_and_ultra_low_emit_canopy_ball_proxies() -> Result<()> {
+		use chico_vegetation_components::VegetationComponents;
+		use lod::gen::LodSceneLevel;
+
+		let mut params = TropicalThicketParams::default();
+		params.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0));
+		params.terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.15 };
+		let grove = params.build();
+		assert!(!grove.plants.is_empty());
+
+		let low = grove.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+		assert_eq!(low.len(), grove.plants.len());
+		assert!(low.iter().all(|n| matches!(
+			n.geometry,
+			chico_vegetation_components::FoliageGeometry::CheapBall
+		)));
+		assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).flatten().is_empty());
+
+		let ultra = grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten();
+		assert!(!ultra.is_empty());
+		assert!(ultra.len() <= grove.plants.len());
+		assert!(ultra.iter().all(|n| matches!(
+			n.geometry,
+			chico_vegetation_components::FoliageGeometry::CheapBall
+		)));
 		Ok(())
 	}
 }
