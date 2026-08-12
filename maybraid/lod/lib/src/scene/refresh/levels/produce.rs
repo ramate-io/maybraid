@@ -50,8 +50,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
 {
-	let mut region_iter = regions.read().peekable();
-	if region_iter.peek().is_none() {
+	if regions.is_empty() {
 		return;
 	}
 	let snapshots = collect_node_snapshots(&nodes);
@@ -59,10 +58,9 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 		return;
 	}
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let ref_refs: Vec<_> = refs.iter().collect();
 
 	let mut index = index.into_inner();
-	for region_msg in region_iter {
+	for region_msg in regions.read() {
 		for (entity, scene) in index.hosts_in_region(region_msg.region) {
 			if !nested_host_parent_allows_refresh(
 				entity,
@@ -75,7 +73,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 			) {
 				continue;
 			}
-			let level = scene.scene_lod_level_from_levels(&ref_refs);
+			let level = scene.scene_lod_level_from_levels(&refs);
 			levels.write(LodSceneRefreshLevel { entity, level });
 		}
 	}
@@ -100,9 +98,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

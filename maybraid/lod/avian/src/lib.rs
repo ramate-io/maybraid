@@ -16,7 +16,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
 use lod::{
-	LodSceneBoundsMarshaller, LodSceneHost, LodSceneRegionIndex, LodSceneRefreshPlugin, LodViewer,
+	LodSceneBoundsMarshaller, LodSceneHost, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
 	PatchSceneBounds,
 };
 
@@ -59,10 +59,15 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 		region: Aabb3d,
 	) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
 		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
-		// Own the hit list so the spatial borrow ends before `hosts.get`.
-		let hits: Vec<Entity> = self.spatial.aabb_intersections_with_aabb(collider);
+		let hits = self.spatial.aabb_intersections_with_aabb(collider);
 		hits.into_iter()
 			.filter_map(|entity| self.hosts.get(entity).ok().map(|scene| (entity, scene)))
+	}
+}
+
+fn ensure_avian_host_bounds<T: Component + LodScene + 'static>(app: &mut App) {
+	if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
+		app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
 	}
 }
 
@@ -90,10 +95,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -104,10 +106,7 @@ where
 	F: QueryFilter + 'static,
 {
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 
@@ -118,16 +117,11 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
-		}
+		ensure_avian_host_bounds::<T>(app);
 		if self.full_scan_cull {
-			app.add_plugins(LodSceneRefreshPlugin::<
-				T,
-				M,
-				AvianLodSceneRegionIndex<'_, '_, T>,
-				F,
-			>::default());
+			app.add_plugins(
+				LodSceneRefreshPlugin::<T, M, AvianLodSceneRegionIndex<'_, '_, T>, F>::default(),
+			);
 		} else {
 			app.add_plugins(LodSceneRefreshPlugin::<
 				T,
@@ -156,9 +150,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
@@ -169,9 +161,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
-		}
+		ensure_avian_host_bounds::<T>(app);
 		app.add_plugins(lod::LodSceneRegionCullPlugin::<
 			AvianLodSceneRegionIndex<'_, '_, T>,
 			M,

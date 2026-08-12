@@ -9,7 +9,7 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use crate::lod_chunk_trace;
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{lod_level_roots_entity, LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::types::{LodCullInFlight, LodLevelRootPending};
@@ -30,14 +30,7 @@ pub fn resume_desired_pending_roots(
 		let Some(host_children) = host_children else {
 			continue;
 		};
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-		let Some(roots_entity) = roots_entity else {
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
 			continue;
 		};
 		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
@@ -61,9 +54,6 @@ pub fn resume_desired_pending_roots(
 		}
 	}
 	if lod_chunk_trace() && resumed > 0 {
-		info!(
-			"[lod.chunk] resume_desired: resumed={resumed} in {:.2}ms",
-			ms(t0)
-		);
+		info!("[lod.chunk] resume_desired: resumed={resumed} in {:.2}ms", ms(t0));
 	}
 }

@@ -10,17 +10,17 @@ use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
 use crate::scene::cull::LodSceneCulls;
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{lod_level_roots_entity, LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
 
+use super::super::ensure_refresh_core;
 use super::super::sync::{
-	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullRequest,
-	LodLevelRootPending, LodCullInFlight,
+	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullInFlight, LodCullRequest,
+	LodLevelRootPending,
 };
 use super::super::viewer::LodViewer;
-use super::super::ensure_refresh_core;
 use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefreshAllowed};
 use super::produce::LodSceneCullRegion;
 
@@ -36,11 +36,7 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	hosts: Query<
 		(&T, &LodSceneLevel, &Children),
-		(
-			With<LodSceneHost>,
-			With<LodNestedRefreshAllowed>,
-			With<LodHostHasCullableRoots>,
-		),
+		(With<LodSceneHost>, With<LodNestedRefreshAllowed>, With<LodHostHasCullableRoots>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
@@ -53,22 +49,18 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
 {
-	let mut region_iter = regions.read().peekable();
-	if region_iter.peek().is_none() {
+	if regions.is_empty() {
 		return;
 	}
 
 	let snapshots = collect_node_snapshots(&nodes);
-	if snapshots.is_empty() {
-		return;
-	}
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let Some(viewer_ref) = refs.first() else {
 		return;
 	};
 
 	let mut index = index.into_inner();
-	for region_msg in region_iter {
+	for region_msg in regions.read() {
 		for (entity, _scene) in index.hosts_in_region(region_msg.region) {
 			let Ok((scene, current, host_children)) = hosts.get(entity) else {
 				continue;
@@ -79,14 +71,8 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				continue;
 			}
 
-			let mut roots_entity = None;
-			for child in host_children.iter() {
-				if level_roots_heads.contains(child) {
-					roots_entity = Some(child);
-					break;
-				}
-			}
-			let Some(roots_entity) = roots_entity else {
+			let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads)
+			else {
 				continue;
 			};
 			let Ok(root_children) = level_roots_heads.get(roots_entity) else {
@@ -137,9 +123,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

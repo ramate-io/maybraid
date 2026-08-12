@@ -18,12 +18,7 @@ pub struct LodCullRegionCursor {
 
 impl Default for LodCullRegionCursor {
 	fn default() -> Self {
-		Self {
-			cells: Vec::new(),
-			next: 0,
-			anchor_cell: None,
-			regions_per_tick: 1,
-		}
+		Self { cells: Vec::new(), next: 0, anchor_cell: None, regions_per_tick: 1 }
 	}
 }
 
@@ -38,29 +33,14 @@ impl LodCullRegionCursor {
 		self.anchor_cell = None;
 	}
 
-	/// Whether [`Self::cells`] must be replaced for `anchor`.
-	pub fn needs_cell_rebuild(&self, anchor: IVec3) -> bool {
-		self.anchor_cell != Some(anchor)
-	}
-
-	/// Replace the cell list when the anchor changes; keep RR if the anchor is unchanged.
-	pub fn sync_cells(&mut self, anchor: IVec3, cells: Vec<IVec3>) {
-		if self.anchor_cell != Some(anchor) {
-			self.anchor_cell = Some(anchor);
-			self.cells = cells;
-			self.next = 0;
+	/// Rebuild the cell list when `anchor` changes; otherwise keep the round-robin cursor.
+	pub fn ensure_cells(&mut self, anchor: IVec3, enumerate: impl FnOnce() -> Vec<IVec3>) {
+		if self.anchor_cell == Some(anchor) {
 			return;
 		}
-		// Same anchor: keep cursor; refresh list only if length/identity drifted (params).
-		if self.cells != cells {
-			let n = cells.len() as u32;
-			self.cells = cells;
-			if n > 0 {
-				self.next %= n;
-			} else {
-				self.next = 0;
-			}
-		}
+		self.anchor_cell = Some(anchor);
+		self.cells = enumerate();
+		self.next = 0;
 	}
 
 	/// Take up to [`Self::regions_per_tick`] cells, advancing with wrap.

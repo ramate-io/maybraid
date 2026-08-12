@@ -14,13 +14,14 @@ use crate::lod_ref::{
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+	lod_level_roots_entity, nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots,
+	LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
 use super::chunk::{
-	LodChunkBudgetClock, LodChunkFulfillment, LodLevelRootPending, LodCullInFlight,
+	LodChunkBudgetClock, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
 };
 
 /// Impulse: tear down `entity` under budgeted cull ([`LodCullInFlight`]).
@@ -119,14 +120,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		let Ok(host_children) = children_q.get(host) else {
 			continue;
 		};
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_bags.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-		let Some(roots_entity) = roots_entity else {
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_bags) else {
 			continue;
 		};
 		let Ok(root_children) = children_q.get(roots_entity) else {
@@ -134,9 +128,10 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		};
 
 		// Active warm-swap pending (not already tearing down).
-		if root_children.iter().any(|child| {
-			pending.contains(child) && !wants_cull.contains(child)
-		}) {
+		if root_children
+			.iter()
+			.any(|child| pending.contains(child) && !wants_cull.contains(child))
+		{
 			continue;
 		}
 
@@ -224,10 +219,8 @@ pub fn drain_lod_cull(
 		return;
 	}
 
-	let mut targets: Vec<(Entity, u32)> = culling
-		.iter()
-		.map(|(e, _, _)| (e, entity_depth(e, &child_of)))
-		.collect();
+	let mut targets: Vec<(Entity, u32)> =
+		culling.iter().map(|(e, _, _)| (e, entity_depth(e, &child_of))).collect();
 	// Deeper first so nested hosts / roots run before parents in one pass.
 	targets.sort_by_key(|(_, depth)| std::cmp::Reverse(*depth));
 
@@ -273,10 +266,8 @@ pub fn drain_lod_cull(
 				.remove::<LodLevelRootPending>();
 		}
 
-		let child_ids: Vec<Entity> = children_q
-			.get(entity)
-			.map(|c| c.iter().collect())
-			.unwrap_or_default();
+		let child_ids: Vec<Entity> =
+			children_q.get(entity).map(|c| c.iter().collect()).unwrap_or_default();
 
 		if child_ids.is_empty() {
 			let w = DEFAULT_CHUNK_WEIGHT.max(1);

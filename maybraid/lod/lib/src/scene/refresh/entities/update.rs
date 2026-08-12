@@ -46,7 +46,6 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 {
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let ref_refs: Vec<_> = refs.iter().collect();
 
 	let desired: Vec<(Entity, LodSceneLevel)> = {
 		let (host_levels, hosts) = sets.p0();
@@ -63,7 +62,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 					&visibilities,
 				)
 			})
-			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&ref_refs)))
+			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&refs)))
 			.collect()
 	};
 
