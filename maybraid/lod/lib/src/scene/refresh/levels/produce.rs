@@ -50,6 +50,10 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
 {
+	let mut region_iter = regions.read().peekable();
+	if region_iter.peek().is_none() {
+		return;
+	}
 	let snapshots = collect_node_snapshots(&nodes);
 	if snapshots.is_empty() {
 		return;
@@ -58,7 +62,7 @@ pub fn produce_lod_refresh_levels<I, M, T, F>(
 	let ref_refs: Vec<_> = refs.iter().collect();
 
 	let mut index = index.into_inner();
-	for region_msg in regions.read() {
+	for region_msg in region_iter {
 		for (entity, scene) in index.hosts_in_region(region_msg.region) {
 			if !nested_host_parent_allows_refresh(
 				entity,

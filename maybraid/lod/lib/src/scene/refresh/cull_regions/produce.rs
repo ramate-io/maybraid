@@ -65,6 +65,9 @@ pub fn produce_lod_cull_regions<P, F, M>(
 	if nodes.is_empty() {
 		return;
 	}
+	if producer.is_changed() {
+		cursor.invalidate_cells();
+	}
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let ref_refs: Vec<&LodRef> = refs.iter().collect();

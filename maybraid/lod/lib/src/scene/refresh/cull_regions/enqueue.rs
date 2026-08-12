@@ -1,7 +1,6 @@
 //! Region-scoped cull enqueue via [`crate::LodSceneRegionIndex`].
 
 use std::marker::PhantomData;
-use std::time::Instant;
 
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
@@ -68,25 +67,15 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 		return;
 	};
 
-	let t0 = Instant::now();
-	let mut hosts_touched = 0u32;
-	let mut culls_none = 0u32;
-	let mut roots_seen = 0u32;
-	let mut enqueued = 0u32;
-	let mut regions_n = 0u32;
-
 	let mut index = index.into_inner();
 	for region_msg in region_iter {
-		regions_n += 1;
 		for (entity, _scene) in index.hosts_in_region(region_msg.region) {
 			let Ok((scene, current, host_children)) = hosts.get(entity) else {
 				continue;
 			};
-			hosts_touched += 1;
 
 			let culls = scene.scene_lod_culls(viewer_ref, *current);
 			if matches!(culls, LodSceneCulls::None) {
-				culls_none += 1;
 				continue;
 			}
 
@@ -115,7 +104,6 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				let Ok(root) = root_keys.get(child) else {
 					continue;
 				};
-				roots_seen += 1;
 				if root.0 == *current {
 					continue;
 				}
@@ -124,18 +112,9 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				}
 				if culls.should_cull(root.0) {
 					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
-					enqueued += 1;
 				}
 			}
 		}
-	}
-
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if enqueued > 0 {
-		info!(
-			"[lod.cull] region_enqueue: regions={regions_n} hosts={hosts_touched} \
-			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
-		);
 	}
 }
 

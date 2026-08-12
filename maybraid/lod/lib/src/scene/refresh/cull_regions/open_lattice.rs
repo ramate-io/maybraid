@@ -104,8 +104,9 @@ impl LodCullRegions for OpenLattice {
 			return LodCullRegionsStatus::Unchanged;
 		};
 		let anchor = self.cell_index(driver.current_transform.translation);
-		let cells = self.enumerate_cells(anchor);
-		cursor.sync_cells(anchor, cells);
+		if cursor.needs_cell_rebuild(anchor) {
+			cursor.sync_cells(anchor, self.enumerate_cells(anchor));
+		}
 		let batch = cursor.take_cells();
 		if batch.is_empty() {
 			return LodCullRegionsStatus::Unchanged;
@@ -168,5 +169,28 @@ mod tests {
 		let _ = lattice.lod_cull_regions(&[&r2], &mut cursor);
 		assert_ne!(cursor.anchor_cell, Some(IVec3::ZERO));
 		assert_eq!(cursor.next, 1); // rebuilt then took one
+	}
+
+	#[test]
+	fn same_anchor_keeps_cursor_without_rebuild() {
+		let lattice = OpenLattice::new(1000.0, 3000.0, 500.0);
+		let mut cursor = LodCullRegionCursor::default().with_regions_per_tick(1);
+		let t = Transform::from_translation(Vec3::ZERO);
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let r = lod_ref_at(&t, &t, &bounds);
+		let _ = lattice.lod_cull_regions(&[&r], &mut cursor);
+		let n = cursor.cells.len();
+		assert!(n > 1);
+		assert_eq!(cursor.next, 1);
+		let _ = lattice.lod_cull_regions(&[&r], &mut cursor);
+		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
+		assert_eq!(cursor.next, 2);
+		assert_eq!(cursor.cells.len(), n);
+
+		cursor.invalidate_cells();
+		let _ = lattice.lod_cull_regions(&[&r], &mut cursor);
+		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
+		assert_eq!(cursor.next, 1);
+		assert_eq!(cursor.cells.len(), n);
 	}
 }

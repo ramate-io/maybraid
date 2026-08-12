@@ -1,4 +1,4 @@
-//! Shared floor / flags for noisy LOD timing `info!` lines.
+//! Shared flags for optional LOD timing `info!` lines.
 
 use std::sync::OnceLock;
 
@@ -7,9 +7,8 @@ const DEFAULT_LOD_LOG_MIN_MS: f64 = 1.0;
 
 /// Min milliseconds before soft timing logs fire (`LOD_LOG_MIN_MS`, default **1.0**).
 ///
-/// Used when a system would otherwise log every slow-ish frame (spatial queries,
-/// level updates, cull scans). Eventful logs (e.g. non-zero enqueue counts) stay
-/// independent of this floor.
+/// Kept for callers that still gate their own LOD logs. Core refresh no longer
+/// emits always-on timing `info!`; chunk fulfill uses [`lod_chunk_trace`].
 pub fn lod_log_min_ms() -> f64 {
 	static CELL: OnceLock<f64> = OnceLock::new();
 	*CELL.get_or_init(|| {

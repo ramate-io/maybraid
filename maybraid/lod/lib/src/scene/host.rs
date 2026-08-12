@@ -228,17 +228,12 @@ pub fn sync_lod_level_roots(
 	wants_cull: Query<(), With<crate::LodCullInFlight>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
-	let t0 = std::time::Instant::now();
-	let mut n = 0u32;
-	let mut requested = 0u32;
 	for (host, level, host_children) in &hosts {
-		n += 1;
 		let desired = *level;
 
 		// No children yet → nothing to show/hide; ask for the first level root to be spawned.
 		let Some(host_children) = host_children else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 			continue;
 		};
 
@@ -254,7 +249,6 @@ pub fn sync_lod_level_roots(
 		// Host has children but no LodLevelRoots yet → same as cold start: request a spawn.
 		let Some(roots_entity) = roots_entity else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 			continue;
 		};
 
@@ -332,14 +326,7 @@ pub fn sync_lod_level_roots(
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 		} else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 		}
-	}
-	if n > 0 {
-		info!(
-			"[lod.refresh] sync_lod_level_roots: hosts={n} spawn_requests={requested} in {:.2}ms",
-			t0.elapsed().as_secs_f64() * 1000.0
-		);
 	}
 }
 

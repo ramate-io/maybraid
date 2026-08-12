@@ -33,6 +33,16 @@ impl LodCullRegionCursor {
 		self
 	}
 
+	/// Drop the cached cell list so the next produce rebuilds (e.g. lattice params changed).
+	pub fn invalidate_cells(&mut self) {
+		self.anchor_cell = None;
+	}
+
+	/// Whether [`Self::cells`] must be replaced for `anchor`.
+	pub fn needs_cell_rebuild(&self, anchor: IVec3) -> bool {
+		self.anchor_cell != Some(anchor)
+	}
+
 	/// Replace the cell list when the anchor changes; keep RR if the anchor is unchanged.
 	pub fn sync_cells(&mut self, anchor: IVec3, cells: Vec<IVec3>) {
 		if self.anchor_cell != Some(anchor) {

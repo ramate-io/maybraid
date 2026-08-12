@@ -95,15 +95,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	}
 	let refs = lod_refs_from_snapshots(&snapshots);
 
-	let t0 = std::time::Instant::now();
-	let mut enqueued = 0u32;
-	let mut hosts_scanned = 0u32;
-	let mut parent_skip = 0u32;
-	let mut culls_none = 0u32;
-	let mut roots_seen = 0u32;
-
 	for (host, scene, current) in &hosts {
-		hosts_scanned += 1;
 		if !nested_host_parent_allows_refresh(
 			host,
 			&child_of,
@@ -113,7 +105,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			&level_roots_bags,
 			&visibilities,
 		) {
-			parent_skip += 1;
 			continue;
 		}
 		// Viewer-only ref (no per-host dominant level vote).
@@ -122,7 +113,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		};
 		let culls = scene.scene_lod_culls(lod_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
-			culls_none += 1;
 			continue;
 		}
 
@@ -154,7 +144,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
-			roots_seen += 1;
 			if root.0 == *current {
 				continue;
 			}
@@ -163,17 +152,8 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			}
 			if culls.should_cull(root.0) {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
-				enqueued += 1;
 			}
 		}
-	}
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	// Activity-gated: duration alone was spamming every frame on large host sets.
-	if enqueued > 0 {
-		info!(
-			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} parent_skip={parent_skip} \
-			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
-		);
 	}
 }
 
@@ -244,10 +224,6 @@ pub fn drain_lod_cull(
 		return;
 	}
 
-	let t0 = std::time::Instant::now();
-	let mut despawned = 0u32;
-	let mut weight_spent = 0u32;
-	let mut waiting_nested = 0u32;
 	let mut targets: Vec<(Entity, u32)> = culling
 		.iter()
 		.map(|(e, _, _)| (e, entity_depth(e, &child_of)))
@@ -272,7 +248,6 @@ pub fn drain_lod_cull(
 			for host in nested_hosts {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, host, &wants_cull);
 			}
-			waiting_nested += 1;
 			continue;
 		}
 
@@ -283,7 +258,6 @@ pub fn drain_lod_cull(
 				for root in roots {
 					enqueue_lod_cull(&mut commands, &mut cull_writer, root, &wants_cull);
 				}
-				waiting_nested += 1;
 				continue;
 			}
 		}
@@ -308,8 +282,6 @@ pub fn drain_lod_cull(
 			let w = DEFAULT_CHUNK_WEIGHT.max(1);
 			commands.entity(entity).despawn();
 			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
-			weight_spent += w;
-			despawned += 1;
 			continue;
 		}
 
@@ -321,19 +293,7 @@ pub fn drain_lod_cull(
 			let w = DEFAULT_CHUNK_WEIGHT.max(1);
 			commands.entity(child).despawn();
 			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
-			weight_spent += w;
-			despawned += 1;
 			despawned_this = true;
 		}
-	}
-
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if despawned > 0 || waiting_nested > 0 {
-		info!(
-			"[lod.chunk] drain_cull: despawned={despawned} weight_spent={weight_spent} \
-			 waiting_nested={waiting_nested} budget_left={} queue_cmds={elapsed_ms:.2}ms \
-			 (apply cost: watch [lod.commands] system_commands)",
-			clock.cull_remaining
-		);
 	}
 }
