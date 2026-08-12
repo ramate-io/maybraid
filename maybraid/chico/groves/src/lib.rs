@@ -105,7 +105,7 @@ pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 #[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
 #[cfg(feature = "render")]
-pub use strange_oasis::{StrangeOasis, StrangeOasisParams};
+pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};

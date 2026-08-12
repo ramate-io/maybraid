@@ -6,14 +6,16 @@
 
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
-use chico_groves::{LevantineScrub, MonsterGrass, StrangeOasis, TropicalThicket};
+use chico_groves::{
+	LevantineScrub, MonsterGrass, OasisDatePalm, StrangeOasis, TropicalThicket,
+};
 use chico_sbs_trees::{
 	BraidOakTree, DatePalm, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
 	LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch, RorysHeadTrained,
 	SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch, VaseTree,
 	WaialeaPalm,
 };
-use chico_vegetation_components::{ComponentsOnly, FoliageNode, StickNode};
+use chico_vegetation_components::{ComponentsOnly, FoliageNode, PlacedVegetation, StickNode};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
@@ -86,11 +88,11 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, FoliageNode);
 		avian_host!(app, StickNode);
 
-		// Structural grove hosts.
+		// Structural grove hosts (Monster Grass still flattens via ComponentsOnly).
 		avian_host!(app, ComponentsOnly<MonsterGrass>);
-		avian_host!(app, ComponentsOnly<LevantineScrub>);
-		avian_host!(app, ComponentsOnly<StrangeOasis>);
-		avian_host!(app, ComponentsOnly<TropicalThicket>);
+		avian_host!(app, LevantineScrub);
+		avian_host!(app, StrangeOasis);
+		avian_host!(app, TropicalThicket);
 
 		// Structural single-tree / component hosts used by `/show`.
 		avian_host!(app, ComponentsOnly<SopesBanyan>);
@@ -112,5 +114,17 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<WaialeaPalm>);
 		avian_host!(app, ComponentsOnly<PalmBush>);
 		avian_host!(app, ComponentsOnly<HighBushShoots>);
+
+		// Nested grove plant hosts (posed + palette materials).
+		avian_host!(app, ComponentsOnly<PlacedVegetation<PalmBush>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<HonuBanyan>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<HighBushShoots>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<OasisDatePalm>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<PenmarchTorch>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<StorybookTree>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<SimplemansHedge>>);
 	}
 }

@@ -55,7 +55,9 @@ use chico_sbs_trees::palm_bush::PalmBushParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
-use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
+use chico_vegetation_components::{
+	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+};
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
@@ -1058,14 +1060,20 @@ impl RenderSubject {
 			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalThicket(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::JerrysChaparral(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LevantineScrub(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
@@ -1081,8 +1089,11 @@ impl RenderSubject {
 			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::StrangeOasis(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),

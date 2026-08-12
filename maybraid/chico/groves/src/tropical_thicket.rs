@@ -272,22 +272,27 @@ mod vc {
 		HighBushShoots, HighBushShootsParams, HonuBanyan, HonuBanyanParams, PalmBush,
 		PalmBushParams,
 	};
+	use bevy::math::bounding::Aabb3d;
+	use bevy::scene::prelude::Scene;
 	use chico_vegetation_components::{
-		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+		vegetation_scene_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
 	};
 	use clap::Args;
-	use lod::gen::LodSceneLevel;
+	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+	use lod::lod_ref::LodRef;
+	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, TropicalThicketCell, TropicalThicketItem};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, flatten_foliage_nodes,
-		flatten_stick_nodes, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
-		frond_material_from_palette, grove_detail_level, grove_structural_footprint,
-		layers_from_nodes, placement_noise, stick_material_from_palette, CanopyProxySite,
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
+		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
+		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -429,7 +434,7 @@ mod vc {
 		frond_material: MaterialRef,
 	}
 
-	#[derive(Clone)]
+	#[derive(Clone, Component)]
 	pub struct TropicalThicket {
 		pub plants: Vec<TropicalThicketPlant>,
 		pub structural_center: Vec3,
@@ -457,66 +462,36 @@ mod vc {
 			}
 		}
 
-		fn stick_nodes(&self, level: LodSceneLevel) -> Vec<StickNode> {
-			let mut out = Vec::new();
-			for plant in &self.plants {
-				match &plant.kind {
-					TropicalThicketKind::Palm(_) => {}
-					TropicalThicketKind::Banyan(t) => {
-						out.extend(flatten_stick_nodes(
-							t,
-							plant.placement,
-							&plant.stick_material,
-							level,
-						));
-					}
-					TropicalThicketKind::Bush(t) => {
-						out.extend(flatten_stick_nodes(
-							t,
-							plant.placement,
-							&plant.stick_material,
-							level,
-						));
-					}
-				}
-			}
-			out
-		}
-
-		fn foliage_nodes(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
-			let mut out = Vec::new();
-			for plant in &self.plants {
-				match &plant.kind {
-					TropicalThicketKind::Palm(t) => {
-						out.extend(flatten_foliage_nodes(
-							t,
-							plant.placement,
-							&plant.ball_material,
-							&plant.frond_material,
-							level,
-						));
-					}
-					TropicalThicketKind::Banyan(t) => {
-						out.extend(flatten_foliage_nodes(
-							t,
-							plant.placement,
-							&plant.ball_material,
-							&plant.frond_material,
-							level,
-						));
-					}
-					TropicalThicketKind::Bush(t) => {
-						out.extend(flatten_foliage_nodes(
-							t,
-							plant.placement,
-							&plant.ball_material,
-							&plant.frond_material,
-							level,
-						));
-					}
-				}
-			}
-			out
+		pub(crate) fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+			self.plants
+				.iter()
+				.map(|plant| match &plant.kind {
+					TropicalThicketKind::Palm(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+					TropicalThicketKind::Banyan(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+					TropicalThicketKind::Bush(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+				})
+				.collect()
 		}
 
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
@@ -604,18 +579,14 @@ mod vc {
 	}
 
 	impl VegetationComponents for TropicalThicket {
-		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
-			match grove_detail_level(level) {
-				Some(detail) => layers_from_nodes(self.stick_nodes(detail)),
-				None => Layers::new(),
-			}
+		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+			// High/Medium nest plant hosts via [`LodScene`]; sticks stay empty.
+			Layers::new()
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			match level {
-				LodSceneLevel::High | LodSceneLevel::Medium => {
-					layers_from_nodes(self.foliage_nodes(level))
-				}
+				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
 				LodSceneLevel::Low => {
 					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
 				}
@@ -635,6 +606,64 @@ mod vc {
 					TROPICAL_THICKET_STRUCTURAL_LOW_FACTOR,
 				),
 			)
+		}
+	}
+
+	impl LodScene for TropicalThicket {
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			self.structural_lod()
+				.map(|band| grove_lod_level(band, lod_ref))
+				.unwrap_or(LodSceneLevel::High)
+		}
+
+		fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+			self.structural_lod()
+				.map(|band| grove_lod_status(band, lod_ref))
+				.unwrap_or(LodSceneStatus::Unchanged)
+		}
+
+		fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+			self.structural_lod()
+				.map(|band| grove_lod_culls(band, lod_ref))
+				.unwrap_or(LodSceneCulls::None)
+		}
+
+		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+			// High/Medium content is nested hosts in chunks; Low/UltraLow use canopy balls.
+			match grove_detail_level(level) {
+				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
+				None => {
+					let mut children: Vec<Box<dyn Scene>> = Vec::new();
+					chico_vegetation_components::append_component_scenes(
+						self, lod_ref, level, &mut children,
+					);
+					chico_vegetation_components::scene_children(children)
+				}
+			}
+		}
+
+		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+			match grove_detail_level(level) {
+				Some(_) => {
+					let chunks = self.nest_plant_chunks(lod_ref);
+					if chunks.is_empty() {
+						SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
+					} else {
+						SceneChunk::chunks(chunks)
+					}
+				}
+				None => vegetation_scene_chunks(self, lod_ref, level),
+			}
+		}
+
+		fn scene_bounds(&self) -> Aabb3d {
+			self.structural_lod()
+				.map(|p| p.footprint_aabb())
+				.unwrap_or_else(|| chico_vegetation_components::vegetation_bounds(self))
+		}
+
+		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
 		}
 	}
 }
@@ -856,6 +885,40 @@ mod tests {
 			n.geometry,
 			chico_vegetation_components::FoliageGeometry::CheapBall
 		)));
+		Ok(())
+	}
+
+	#[cfg(feature = "render")]
+	#[test]
+	fn high_nests_one_plant_host_chunk_per_plant() -> Result<()> {
+		use bevy::prelude::Transform;
+		use chico_vegetation_components::VegetationComponents;
+		use lod::gen::{LodScene, LodSceneLevel};
+		use lod::lod_ref::LodRef;
+
+		let mut params = TropicalThicketParams::default();
+		params.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0));
+		params.terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.15 };
+		let grove = params.build();
+		assert!(!grove.plants.is_empty());
+
+		let identity = Transform::IDENTITY;
+		let bounds = grove.scene_bounds();
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &bounds,
+		};
+		let chunks = grove.nest_plant_chunks(&lod_ref);
+		assert_eq!(chunks.len(), grove.plants.len());
+		assert!(
+			grove
+				.foliage_nodes_for_level(LodSceneLevel::High)
+				.flatten()
+				.is_empty(),
+			"High foliage stays on nested plant hosts, not the grove"
+		);
 		Ok(())
 	}
 }

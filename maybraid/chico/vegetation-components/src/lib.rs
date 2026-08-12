@@ -9,6 +9,7 @@ pub mod lod_band;
 pub mod lod_host;
 pub mod materials;
 pub mod placed;
+pub mod placed_vegetation;
 pub mod procedural;
 pub mod scene_children;
 pub mod sticks;
@@ -24,6 +25,7 @@ pub use foliage::{
 };
 pub use layer::{Layer, Layers};
 pub use placed::Placement;
+pub use placed_vegetation::PlacedVegetation;
 pub use procedural::{
 	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_KIT_HALF_X, STICK_KIT_HALF,
 };
@@ -42,6 +44,7 @@ pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
 
+use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -220,6 +223,28 @@ pub fn component_only_scene(
 	scene_children(children)
 }
 
+/// Nest a [`ComponentsOnly`] host (pending level roots + typed component).
+///
+/// Uses [`template`] so `T` need not implement [`Default`] (unlike [`LodScene::host`]).
+pub fn components_only_host<T>(
+	vegetation: T,
+	lod_ref: &LodRef,
+) -> impl Scene + 'static
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let host = ComponentsOnly(vegetation);
+	let level = host.scene_lod_level(lod_ref);
+	let bounds = host.scene_bounds();
+	let host_for_template = host.clone();
+	(
+		lod_host_scene_pending(level, bounds),
+		bsn! {
+			template(move |_ctx| Ok(host_for_template.clone()))
+		},
+	)
+}
+
 /// Spawn a [`ComponentsOnly`] vegetation host; chunk fulfill streams the first level.
 pub fn spawn_vegetation_components<T>(
 	commands: &mut Commands,
@@ -250,6 +275,38 @@ where
 		))
 		.id();
 	commands.entity(entity).insert(host);
+	vec![entity]
+}
+
+/// Spawn a typed [`LodScene`] host (grove roots that nest [`ComponentsOnly`] plants).
+pub fn spawn_lod_scene_host<T>(
+	commands: &mut Commands,
+	host: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+) -> Vec<Entity>
+where
+	T: LodScene + Component + Clone + Send + Sync + 'static,
+{
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let level = host.scene_lod_level(&lod_ref);
+	let pending = lod_host_scene_pending(level, bounds);
+	let entity = commands
+		.spawn_scene((
+			pending,
+			bsn! {
+				template_value(transform)
+				Visibility::default()
+			},
+		))
+		.id();
+	commands.entity(entity).insert(host.clone());
 	vec![entity]
 }
 

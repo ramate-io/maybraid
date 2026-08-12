@@ -3,11 +3,14 @@
 use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
+use bevy::scene::prelude::Scene;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, chico_stick_material_ref, FoliageGeometry, FoliageNode, Layers,
-	Placement, StickNode, VegetationComponents,
+	chico_leaf_material_ref, chico_stick_material_ref, components_only_host, FoliageGeometry,
+	FoliageNode, Layers, Placement, PlacedVegetation, StickNode, StructuralLod, VegetationComponents,
 };
-use lod::gen::LodSceneLevel;
+use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::lod_ref::LodRef;
+use lod::{cull_offset_bands_from_factor, SceneChunk};
 use material_ref::MaterialRef;
 
 use super::{GroveExtent, PaletteMix};
@@ -203,7 +206,7 @@ pub fn foliage_ultra_low_merged_balls(
 		.collect()
 }
 
-/// Map grove structural level: High/Medium keep plant emit; Low/UltraLow use canopy proxies.
+/// Map grove structural level: High/Medium nest plant hosts; Low/UltraLow use canopy proxies.
 pub fn grove_detail_level(level: LodSceneLevel) -> Option<LodSceneLevel> {
 	match level {
 		LodSceneLevel::High | LodSceneLevel::Medium => Some(level),
@@ -212,4 +215,67 @@ pub fn grove_detail_level(level: LodSceneLevel) -> Option<LodSceneLevel> {
 		| LodSceneLevel::Distance(_)
 		| LodSceneLevel::Resolution(_) => None,
 	}
+}
+
+/// Nest one posed plant as [`chico_vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
+pub fn nest_placed_plant_host<T>(
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	lod_ref: &LodRef,
+) -> impl Scene + 'static
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	components_only_host(
+		PlacedVegetation::new(
+			plant,
+			placement,
+			stick_material.clone(),
+			ball_material.clone(),
+			frond_material.clone(),
+		),
+		lod_ref,
+	)
+}
+
+/// Weighted chunk wrapping [`nest_placed_plant_host`].
+pub fn nest_placed_plant_chunk<T>(
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	lod_ref: &LodRef,
+) -> SceneChunk
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	SceneChunk::weighted(
+		1,
+		nest_placed_plant_host(
+			plant,
+			placement,
+			stick_material,
+			ball_material,
+			frond_material,
+			lod_ref,
+		),
+	)
+}
+
+pub fn grove_lod_level(band: StructuralLod, lod_ref: &LodRef) -> LodSceneLevel {
+	band.level_for(lod_ref.current_transform)
+}
+
+pub fn grove_lod_status(band: StructuralLod, lod_ref: &LodRef) -> LodSceneStatus {
+	band.status_for_lod_ref(lod_ref)
+}
+
+pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
+	let factor = lod_ref.current_transform.translation.distance(band.center)
+		/ band.tree_radius.max(1e-4);
+	cull_offset_bands_from_factor(factor, band.high_factor, band.medium_factor, band.low_factor)
 }

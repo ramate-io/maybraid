@@ -14,8 +14,9 @@ use chico_sbs_trees::{
 	TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
-	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
 };
+use lod::gen::LodScene;
 use clap::{Args, Subcommand};
 
 use crate::render::SbsRenderItem;
@@ -369,6 +370,20 @@ where
 	}
 }
 
+fn spawn_show_grove<T>(commands: &mut Commands, grove: &T)
+where
+	T: LodScene + VegetationComponents + Component + Clone + Send + Sync + 'static,
+{
+	let bounds = grove
+		.structural_lod()
+		.map(|p| p.footprint_aabb())
+		.unwrap_or_else(|| vegetation_bounds(grove));
+	let entities = spawn_lod_scene_host(commands, grove, Transform::IDENTITY, bounds);
+	for entity in entities {
+		commands.entity(entity).insert(ShowRoot);
+	}
+}
+
 /// Present `/show` subjects when `ShowConfig` changes. Clears legacy `/render` roots.
 pub fn sync_show(
 	mut commands: Commands,
@@ -499,9 +514,9 @@ pub fn sync_show(
 				commands.entity(entity).insert(ShowRoot);
 			}
 		}
-		ShowSubject::LevantineScrub(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::StrangeOasis(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::TropicalThicket(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::LevantineScrub(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::StrangeOasis(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
