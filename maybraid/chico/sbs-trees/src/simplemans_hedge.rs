@@ -10,7 +10,7 @@ pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_vegetation_components::{
-	FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -226,8 +226,10 @@ impl VegetationComponents for SimplemansHedge {
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
 				Layers::from_free(self.foliage_nodes_all_clumps())
+					.map(|n| n.with_material(chico_leaf_material_ref()))
 			}
-			LodSceneLevel::Low => Layers::from_free(self.foliage_nodes_low()),
+			LodSceneLevel::Low => Layers::from_free(self.foliage_nodes_low())
+				.map(|n| n.with_material(chico_leaf_material_ref())),
 			LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => Layers::new(),

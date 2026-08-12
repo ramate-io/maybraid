@@ -50,6 +50,41 @@ impl TuftPatchParams {
 		Self { clump_count, patch_extent_xz, shape }
 	}
 
+	/// Unit-footprint patch (`patch_extent_xz = 1`) whose layout noise is driven solely by `num`.
+	///
+	/// Use with a world [`Placement`] scale so many plants share one archetypal mesh.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::unit_from_num_shaped(num, BladeTuftShape::default())
+	}
+
+	/// Like [`Self::unit_from_num`], but keeps authored shape metrics (length / width / …).
+	///
+	/// Overwrites `shape.seed` with `num` and forces `patch_extent_xz = 1`. Clump count stays
+	/// at the default unless the caller sets it after.
+	pub fn unit_from_num_shaped(num: u32, mut shape: BladeTuftShape) -> Self {
+		shape.seed = num as i32;
+		Self {
+			clump_count: Self::default().clump_count,
+			patch_extent_xz: 1.0,
+			shape,
+		}
+	}
+
+	/// Normalize this params set to unit footprint keyed by `num`.
+	///
+	/// Returns `(unit_params, world_size)` where `world_size` is the pre-normalize scale to
+	/// apply on the plant [`Placement`] (`max(patch_extent_xz, blade_length)`).
+	pub fn into_unit_from_num(mut self, num: u32) -> (Self, f32) {
+		let size = self.patch_extent_xz.max(self.shape.blade_length).max(1e-4);
+		let inv = 1.0 / size;
+		self.shape.blade_length *= inv;
+		self.shape.blade_width *= inv;
+		self.shape.base_spread *= inv;
+		self.patch_extent_xz = if self.patch_extent_xz > 1e-3 { 1.0 } else { 0.0 };
+		self.shape.seed = num as i32;
+		(self, size)
+	}
+
 	/// Deterministic patch-local clump anchors, scattered within the XZ footprint.
 	pub fn clump_anchors(&self) -> Vec<Vec3> {
 		let config =
@@ -108,6 +143,16 @@ impl TuftPatch {
 			anchors,
 			runs,
 		}
+	}
+
+	/// Unit-footprint patch from [`TuftPatchParams::unit_from_num`].
+	pub fn unit_from_num(num: u32) -> Self {
+		TuftPatchParams::unit_from_num(num).build()
+	}
+
+	/// Unit-footprint patch from [`TuftPatchParams::unit_from_num_shaped`].
+	pub fn unit_from_num_shaped(num: u32, shape: BladeTuftShape) -> Self {
+		TuftPatchParams::unit_from_num_shaped(num, shape).build()
 	}
 
 	fn clump_runs_from(shape: &BladeTuftShape, anchor: Vec3) -> Vec<FrondRun> {
@@ -387,6 +432,36 @@ mod tests {
 		let out = TuftPatch::merge_placed(patches, 0);
 		assert_eq!(out.len(), 4);
 		assert!((out[2].frond_runs()[0].segments[0].placement.translation.x - 10.0).abs() < 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_from_num_is_unit_footprint_and_deterministic() -> Result<()> {
+		let a = TuftPatch::unit_from_num(7);
+		let b = TuftPatch::unit_from_num(7);
+		assert_eq!(a.patch_extent_xz, 1.0);
+		assert_eq!(a.shape.seed, 7);
+		assert_eq!(a.anchors, b.anchors);
+		assert_ne!(a.anchors, TuftPatch::unit_from_num(8).anchors);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let params = TuftPatchParams {
+			clump_count: 3,
+			patch_extent_xz: 4.0,
+			shape: BladeTuftShape {
+				blade_length: 2.0,
+				seed: 0,
+				..BladeTuftShape::default()
+			},
+		};
+		let (unit, size) = params.into_unit_from_num(3);
+		assert!((size - 4.0).abs() < 1e-5);
+		assert_eq!(unit.patch_extent_xz, 1.0);
+		assert_eq!(unit.shape.seed, 3);
+		assert!((unit.shape.blade_length - 0.5).abs() < 1e-5);
 		Ok(())
 	}
 }

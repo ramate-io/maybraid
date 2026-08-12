@@ -2,6 +2,7 @@
 
 pub mod camera;
 pub mod checkerboard_material;
+mod chico_material_lib;
 pub mod commands;
 pub mod diagnostics;
 mod ground;
@@ -48,13 +49,10 @@ use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::LodSceneHost;
 use vegetation_lod::VegetationLodRefreshPlugin;
+use chico_material_lib::ChicoMaterialRefPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
-use render_materials::{
-	patch_vegetation_foliage_leaf_material, patch_vegetation_frond_not_shadow_caster,
-	patch_vegetation_frond_solid_material,
-	setup_render_materials, sync_render_material_handles,
-};
+use render_materials::{setup_render_materials, sync_render_material_handles};
 use scene_ref::SceneRefPlugin;
 
 pub struct SbsTreesPlaygroundPlugin;
@@ -92,6 +90,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 			app.add_plugins(FrondRenderItemPlugin::default());
 		}
 		app.add_plugins(ChicoVegetationShadersPlugin);
+		if !app.is_plugin_added::<ChicoMaterialRefPlugin>() {
+			app.add_plugins(ChicoMaterialRefPlugin);
+		}
 		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<CrookCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
@@ -119,13 +120,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
-					(
-						patch_vegetation_foliage_leaf_material,
-						patch_vegetation_frond_solid_material,
-						patch_vegetation_frond_not_shadow_caster,
-					)
-						.after(sync_show)
-						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

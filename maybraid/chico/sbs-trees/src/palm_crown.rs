@@ -14,8 +14,8 @@ pub use spawn::spawn_stacked_frond_crowns;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_vegetation_components::{
-	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
+	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
+	VegetationComponents, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
 	STRUCTURAL_MEDIUM_FACTOR,
 };
 use clap::Args;
@@ -194,13 +194,15 @@ impl PalmCrown {
 					.with_pitch(0.18)
 					.with_roll(-0.22)
 					.with_scale(scale),
-			),
+			)
+			.with_material(chico_leaf_material_ref()),
 			FoliageNode::layered_ball(
 				Placement::new(center_b, yaw_b)
 					.with_pitch(-0.28)
 					.with_roll(0.4)
 					.with_scale(scale),
-			),
+			)
+			.with_material(chico_leaf_material_ref()),
 		]
 	}
 

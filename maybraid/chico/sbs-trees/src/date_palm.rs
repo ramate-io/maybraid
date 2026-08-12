@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
+	chico_stick_material_ref, FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -93,6 +93,7 @@ impl DatePalm {
 impl VegetationComponents for DatePalm {
 	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
 		Layers::from_free(trunk_stick_nodes(&self.chain))
+			.map(|n| n.with_material(chico_stick_material_ref()))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {

@@ -22,8 +22,8 @@ use chico_sbs_geometry::{
 	BallStickChain, FriendsConiferChain, FriendsConiferSbs,
 };
 use chico_vegetation_components::{
-	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, VegetationComponents,
-	StructuralLod,
+	chico_stick_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
+	VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -313,7 +313,7 @@ impl VegetationComponents for TemperateConifer {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
-		Layers::from_free(nodes)
+		Layers::from_free(nodes).map(|n| n.with_material(chico_stick_material_ref()))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
