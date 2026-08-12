@@ -23,6 +23,7 @@ chico-vegetation-components = { workspace = true, optional = true }
 chico-vegetation-shaders = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 lod = { workspace = true, optional = true }
+material-ref = { workspace = true, optional = true }
 
 [features]
 default = []
@@ -34,6 +35,7 @@ render = [
 	"dep:chico-vegetation-shaders",
 	"dep:clap",
 	"dep:lod",
+	"dep:material-ref",
 	"procedural-common/clap",
 ]
 clap = ["render"]

@@ -14,8 +14,8 @@
 //!
 //! Structural LOD (× grove footprint): High (full clumps); Medium = ~¼ of High tufts
 //! (same geometry, thinned); Low ≈ one upright proxy per ~8 cells; UltraLow = 2×2 carpets.
-//! Leaf materials are not applied yet; [`MonsterGrassCell::palette_mix`] keeps the authored
-//! color ranges.
+//! Per-plant leaf color: [`MonsterGrassCell::palette_mix`] + [`PaletteMix::pick_color`] with a
+//! placement seed → [`MaterialRef::default()`].with_palette([color]).
 
 use std::ops::RangeInclusive;
 
@@ -205,10 +205,7 @@ impl MonsterGrassCell {
 		}
 	}
 
-	/// Authored palette ranges for this varietal.
-	///
-	/// Not applied while VegetationComponents presentation uses procedural frond kits; kept as
-	/// the reference for restoring leaf materials / `WithPalette` later.
+	/// Authored palette ranges for this varietal (placement seed picks one endpoint color).
 	pub fn palette_mix(self) -> PaletteMix {
 		const GIANT_WET_MIX: PaletteMix = PaletteMix::new(&[
 			PaletteSlot::new("deep_green", "wet_green"),
@@ -249,11 +246,13 @@ mod vc {
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
+	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 	use super::{definition, MonsterGrassCell};
 	use crate::grove::{
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	/// Authoring / CLI parameters for Monster Grass.
@@ -391,6 +390,16 @@ mod vc {
 	pub struct MonsterGrassPlant {
 		pub placement: Placement,
 		pub patch: TuftPatch,
+		/// Green standard material with one palette-picked color.
+		pub material: MaterialRef,
+	}
+
+	fn material_for_cell(cell: MonsterGrassCell, position: Vec3, foliage_noise: NoiseParams) -> MaterialRef {
+		let seed = placement_noise(foliage_noise, position).seed;
+		cell.palette_mix()
+			.pick_color(seed)
+			.map(|c| MaterialRef::default().with_palette([c]))
+			.unwrap_or_default()
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
@@ -433,27 +442,71 @@ mod vc {
 			patch_variants: u32,
 		) -> Self {
 			let variants = patch_variants.max(1);
-			let grown = placements.iter().map(|placed| {
-				let variant = patch_variant_index(placed.position, variants);
-				let noise = variant_noise(foliage_noise, variant);
-				let mut params = placed.variant.patch().build_tuft_patch(noise);
-				params.shape.noise_amplitude = foliage_noise.amplitude;
-				params.shape.noise_frequency = foliage_noise.frequency;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let placement = Placement::new(placed.position, 0.0)
-					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
-				(placement, unit_params.build())
-			});
+			let grown: Vec<(Placement, TuftPatch, MaterialRef)> = placements
+				.iter()
+				.map(|placed| {
+					let variant = patch_variant_index(placed.position, variants);
+					let noise = variant_noise(foliage_noise, variant);
+					let mut params = placed.variant.patch().build_tuft_patch(noise);
+					params.shape.noise_amplitude = foliage_noise.amplitude;
+					params.shape.noise_frequency = foliage_noise.frequency;
+					let (unit_params, world_size) = params.into_unit_from_num(variant);
+					let placement = Placement::new(placed.position, 0.0)
+						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
+					let material = material_for_cell(placed.variant, placed.position, foliage_noise);
+					(placement, unit_params.build(), material)
+				})
+				.collect();
 			// Unmerged: keep plant placement (unit runs). Fold: bake placements into runs.
 			let plants = if merge_collections == 0 {
 				grown
-					.map(|(placement, patch)| MonsterGrassPlant { placement, patch })
+					.into_iter()
+					.map(|(placement, patch, material)| MonsterGrassPlant {
+						placement,
+						patch,
+						material,
+					})
 					.collect()
 			} else {
-				TuftPatch::merge_placed(grown, merge_collections)
+				// Fold like [`TuftPatch::merge_placed`], keeping the first plant's material
+				// per output collection.
+				let pairs: Vec<(Placement, TuftPatch)> =
+					grown.iter().map(|(p, patch, _)| (*p, patch.clone())).collect();
+				let materials: Vec<MaterialRef> =
+					grown.into_iter().map(|(_, _, m)| m).collect();
+				let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> = pairs
 					.into_iter()
-					.map(|patch| MonsterGrassPlant { placement: Placement::IDENTITY, patch })
-					.collect()
+					.zip(materials)
+					.map(|((p, patch), m)| (p, patch, m))
+					.collect();
+				remaining.sort_by(|a, b| {
+					a.0
+						.translation
+						.x
+						.total_cmp(&b.0.translation.x)
+						.then(a.0.translation.z.total_cmp(&b.0.translation.z))
+				});
+				let target = merge_collections.max(1);
+				let chunk_len = remaining.len().div_ceil(target);
+				let mut plants = Vec::with_capacity(target.min(remaining.len()));
+				while !remaining.is_empty() {
+					let take = chunk_len.min(remaining.len());
+					let chunk: Vec<_> = remaining.drain(..take).collect();
+					let material = chunk[0].2.clone();
+					let mut iter = chunk.into_iter();
+					let (placement, mut merged, _) = iter.next().expect("chunk non-empty");
+					merged.apply_placement(placement);
+					for (placement, mut next, _) in iter {
+						next.apply_placement(placement);
+						merged.merge(next);
+					}
+					plants.push(MonsterGrassPlant {
+						placement: Placement::IDENTITY,
+						patch: merged,
+						material,
+					});
+				}
+				plants
 			};
 			let span = extent.max() - extent.min();
 			let half = span * 0.5;
@@ -475,9 +528,10 @@ mod vc {
 			plant: &MonsterGrassPlant,
 			level: LodSceneLevel,
 		) -> impl Iterator<Item = FoliageNode> + '_ {
-			plant.patch.foliage_nodes_for_level(level).flatten().into_iter().map(|mut node| {
+			let material = plant.material.clone();
+			plant.patch.foliage_nodes_for_level(level).flatten().into_iter().map(move |mut node| {
 				node.placement = plant.placement.compose_child(node.placement);
-				node
+				node.with_material(material.clone())
 			})
 		}
 
@@ -527,6 +581,11 @@ mod vc {
 				}
 			}
 
+			let material = self
+				.plants
+				.first()
+				.map(|p| p.material.clone())
+				.unwrap_or_default();
 			let mut runs = Vec::with_capacity(bins.len());
 			for ((ix, iz), (sum_pos, sum_width, count)) in bins {
 				let n = (count as f32).max(1.0);
@@ -541,7 +600,7 @@ mod vc {
 					runs.push(run);
 				}
 			}
-			collection_nodes(runs, self.structural_center, self.footprint_radius)
+			collection_nodes(runs, self.structural_center, self.footprint_radius, material)
 		}
 
 		/// Four flat XZ carpet segments covering a 2×2 subdivision of the grove extent.
@@ -550,9 +609,16 @@ mod vc {
 		/// Low/UltraLow merge rebuilds via [`Placement::frond_segment`], which maps a
 		/// large “width” onto world up and turns carpets into walls.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
+			let material = self
+				.plants
+				.first()
+				.map(|p| p.material.clone())
+				.unwrap_or_default();
 			horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA)
 				.into_iter()
-				.map(FoliageNode::straight_frond_segment)
+				.map(|placement| {
+					FoliageNode::straight_frond_segment(placement).with_material(material.clone())
+				})
 				.collect()
 		}
 	}
@@ -609,14 +675,20 @@ mod vc {
 		out
 	}
 
-	fn collection_nodes(runs: Vec<FrondRun>, center: Vec3, radius: f32) -> Vec<FoliageNode> {
+	fn collection_nodes(
+		runs: Vec<FrondRun>,
+		center: Vec3,
+		radius: f32,
+		material: MaterialRef,
+	) -> Vec<FoliageNode> {
 		if runs.is_empty() {
 			return Vec::new();
 		}
 		vec![FoliageNode::frond_collection(
 			FrondCollection::new(runs).with_probe(center, radius),
 			Placement::IDENTITY,
-		)]
+		)
+		.with_material(material)]
 	}
 
 	impl VegetationComponents for MonsterGrass {

@@ -20,6 +20,9 @@ mod sampling;
 mod terrain;
 mod tuft_patch;
 
+#[cfg(feature = "render")]
+pub mod vc_compose;
+
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,
 	VariantWeightOverrides,
@@ -35,6 +38,12 @@ pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+#[cfg(feature = "render")]
+pub use vc_compose::{
+	canopy_ball_material_from_palette, flatten_foliage_nodes, flatten_foliage_nodes_nested,
+	flatten_stick_nodes, frond_material_from_palette, grove_structural_footprint,
+	layers_from_nodes, stick_material_from_palette,
+};
 
 use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;

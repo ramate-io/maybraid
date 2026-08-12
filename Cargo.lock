@@ -2241,6 +2241,7 @@ dependencies = [
  "gimme-gen",
  "lod",
  "log",
+ "material-ref",
  "procedural-common",
 ]
 

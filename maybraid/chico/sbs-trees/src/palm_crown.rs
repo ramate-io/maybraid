@@ -75,6 +75,126 @@ impl PalmCrownParams {
 		Self { ring_count, ring_spacing, shape }
 	}
 
+	/// Characteristic authored size before unit normalize (Placement world scale).
+	///
+	/// `max(length, width * fronds, ring-stack height)`.
+	pub fn characteristic_size(&self) -> f32 {
+		let rings = self.ring_count.max(1).saturating_sub(1) as f32;
+		let stack = rings * self.ring_spacing.max(0.0);
+		let frond_span = self.shape.width.max(0.0) * self.shape.frond_count.max(1) as f32;
+		self.shape.length.max(frond_span).max(stack).max(1e-4)
+	}
+
+	fn apply_full_archetype(&mut self) {
+		self.ring_count = 3;
+		self.shape.frond_count = 8;
+		self.shape.spine_segments = 3;
+		self.shape.leaflet_count = 16;
+		// Palmier tree-top pose (shared with default, denser fronds).
+		self.shape.droop = 0.55;
+		self.shape.arch_lift = 0.28;
+		self.shape.twist = 0.55;
+		self.shape.downward_tilt_radians = 0.55;
+		self.shape.outward_spread_radians = 1.4;
+		self.shape.emission_lift_radians = 0.32;
+	}
+
+	fn apply_detail_archetype(&mut self) {
+		self.ring_count = 2;
+		self.shape.frond_count = 5;
+		self.shape.spine_segments = 2;
+		self.shape.leaflet_count = 11;
+		self.shape.droop = 0.5;
+		self.shape.arch_lift = 0.22;
+		self.shape.twist = 0.45;
+		self.shape.downward_tilt_radians = 0.5;
+		self.shape.outward_spread_radians = 1.25;
+		self.shape.emission_lift_radians = 0.28;
+	}
+
+	fn normalize_to_unit(&mut self) -> f32 {
+		let size = self.characteristic_size();
+		let inv = 1.0 / size;
+		self.shape.length *= inv;
+		self.shape.width *= inv;
+		self.shape.shoot_half_radius *= inv;
+		self.shape.rachis_half_thickness *= inv;
+		self.ring_spacing *= inv;
+		size
+	}
+
+	/// Proper tree-top crown archetype with unit characteristic size, keyed by `num` (seed).
+	pub fn unit_full_from_num(num: u32) -> Self {
+		let mut params = Self {
+			ring_count: 3,
+			ring_spacing: 0.14,
+			shape: FrondCrownShape {
+				frond_count: 8,
+				length: 1.6,
+				width: 0.16,
+				droop: 0.55,
+				arch_lift: 0.28,
+				twist: 0.55,
+				leaflet_count: 16,
+				spine_segments: 3,
+				downward_tilt_radians: 0.55,
+				outward_spread_radians: 1.4,
+				emission_lift_radians: 0.32,
+				seed: num as i32,
+				..FrondCrownShape::default()
+			},
+		};
+		params.apply_full_archetype();
+		params.shape.seed = num as i32;
+		let _ = params.normalize_to_unit();
+		params
+	}
+
+	/// Lighter understory crown archetype with unit characteristic size, keyed by `num`.
+	pub fn unit_detail_from_num(num: u32) -> Self {
+		let mut params = Self {
+			ring_count: 2,
+			ring_spacing: 0.1,
+			shape: FrondCrownShape {
+				frond_count: 5,
+				length: 1.0,
+				width: 0.12,
+				droop: 0.5,
+				arch_lift: 0.22,
+				twist: 0.45,
+				leaflet_count: 11,
+				spine_segments: 2,
+				downward_tilt_radians: 0.5,
+				outward_spread_radians: 1.25,
+				emission_lift_radians: 0.28,
+				seed: num as i32,
+				..FrondCrownShape::default()
+			},
+		};
+		params.apply_detail_archetype();
+		params.shape.seed = num as i32;
+		let _ = params.normalize_to_unit();
+		params
+	}
+
+	/// Apply full tree-top topology, normalize authored metrics to unit, key by `num`.
+	///
+	/// Returns `(unit_params, world_size)` for [`Placement`] scale.
+	pub fn into_unit_full_from_num(mut self, num: u32) -> (Self, f32) {
+		self.apply_full_archetype();
+		let size = self.normalize_to_unit();
+		self.shape.seed = num as i32;
+		(self, size)
+	}
+
+	/// Apply understory topology, normalize authored metrics to unit, key by `num`.
+	pub fn into_unit_detail_from_num(mut self, num: u32) -> (Self, f32) {
+		self.apply_detail_archetype();
+		let size = self.normalize_to_unit();
+		self.shape.seed = num as i32;
+		(self, size)
+	}
+
 	/// Tree-local ring anchors stacked along +Y from the origin.
 	pub fn ring_anchors(&self) -> Vec<Vec3> {
 		let n = self.ring_count.max(1);
@@ -330,6 +450,88 @@ mod tests {
 		let shape = PalmCrownParams::default().shape;
 		assert!(shape.frond_count <= 5);
 		assert!(shape.spine_segments <= 2);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_full_from_num_is_deterministic_unit_footprint() -> Result<()> {
+		let a = PalmCrownParams::unit_full_from_num(7);
+		let b = PalmCrownParams::unit_full_from_num(7);
+		assert_eq!(a, b);
+		assert_eq!(a.shape.seed, 7);
+		assert_eq!(a.ring_count, 3);
+		assert!((7..=9).contains(&a.shape.frond_count));
+		assert!((2..=3).contains(&a.shape.spine_segments));
+		assert_eq!(a.shape.leaflet_count, 16);
+		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
+		// Anchors are seed-independent; ring shapes / frond runs key off seed.
+		assert_eq!(a.ring_shape(0).seed, 7);
+		assert_ne!(
+			a.ring_shape(0).seed,
+			PalmCrownParams::unit_full_from_num(8).ring_shape(0).seed
+		);
+		let runs_a = a.ring_shape(0).frond_runs_at(Vec3::ZERO);
+		let runs_b = PalmCrownParams::unit_full_from_num(8)
+			.ring_shape(0)
+			.frond_runs_at(Vec3::ZERO);
+		assert_ne!(runs_a[0][0].direction, runs_b[0][0].direction);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_detail_from_num_is_lighter_unit_footprint() -> Result<()> {
+		let a = PalmCrownParams::unit_detail_from_num(3);
+		let b = PalmCrownParams::unit_detail_from_num(3);
+		assert_eq!(a, b);
+		assert_eq!(a.shape.seed, 3);
+		assert!((4..=5).contains(&a.shape.frond_count));
+		assert_eq!(a.shape.spine_segments, 2);
+		assert!((10..=12).contains(&a.shape.leaflet_count));
+		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
+		// Detail is smaller / sparser than full when compared pre-normalize via counts.
+		let full = PalmCrownParams::unit_full_from_num(3);
+		assert!(a.shape.frond_count < full.shape.frond_count);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_full_from_num_returns_world_size() -> Result<()> {
+		let authored = PalmCrownParams {
+			ring_count: 4,
+			ring_spacing: 0.5,
+			shape: FrondCrownShape {
+				length: 4.0,
+				width: 0.4,
+				frond_count: 6,
+				seed: 0,
+				..PalmCrownParams::default().shape
+			},
+		};
+		let size_before = authored.characteristic_size();
+		let (unit, size) = authored.into_unit_full_from_num(11);
+		assert!((size - size_before).abs() < 1e-4 || size > 0.0);
+		assert_eq!(unit.shape.seed, 11);
+		assert_eq!(unit.ring_count, 3);
+		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_detail_from_num_returns_world_size() -> Result<()> {
+		let authored = PalmCrownParams {
+			ring_spacing: 0.3,
+			shape: FrondCrownShape {
+				length: 2.5,
+				width: 0.2,
+				..PalmCrownParams::default().shape
+			},
+			..PalmCrownParams::default()
+		};
+		let (unit, size) = authored.into_unit_detail_from_num(5);
+		assert!(size > 1.0);
+		assert_eq!(unit.shape.seed, 5);
+		assert!((4..=5).contains(&unit.shape.frond_count));
+		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
 		Ok(())
 	}
 }

@@ -116,18 +116,12 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::TropicalThicket(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TropicalThicket(_) => {}
 		RenderSubject::JerrysChaparral(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::LevantineScrub(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::LevantineScrub(_) => {}
 		RenderSubject::TallGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -235,10 +229,7 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::StrangeOasis(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::StrangeOasis(_) => {}
 		RenderSubject::Shamanhome(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());

@@ -20,10 +20,11 @@ use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
 use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_grove_render_items::jungle_massives::JungleMassivesStd;
 use chico_grove_render_items::leeward::LeewardStd;
-use chico_grove_render_items::levantine_scrub::LevantineScrubStd;
 use chico_grove_render_items::low_bush::LowBushStd;
 use chico_grove_render_items::orchard::OrchardStd;
-use chico_groves::MonsterGrassParams;
+use chico_groves::{
+	LevantineScrubParams, MonsterGrassParams, StrangeOasisParams, TropicalThicketParams,
+};
 use chico_grove_render_items::palm_shade::PalmShadeStd;
 use chico_grove_render_items::riparian_general::RiparianGeneralStd;
 use chico_grove_render_items::riparian_mix::RiparianMixStd;
@@ -32,12 +33,10 @@ use chico_grove_render_items::rolling_oaks::RollingOaksStd;
 use chico_grove_render_items::shamanhome::ShamanhomeStd;
 use chico_grove_render_items::spotty_bushes::SpottyBushesStd;
 use chico_grove_render_items::storytellers::StorytellersStd;
-use chico_grove_render_items::strange_oasis::StrangeOasisStd;
 use chico_grove_render_items::tall_grass::TallGrassStd;
 use chico_grove_render_items::temperate_lower_massives::TemperateLowerMassivesStd;
 use chico_grove_render_items::temperate_massives::TemperateMassivesStd;
 use chico_grove_render_items::trade_winds::TradeWindsStd;
-use chico_grove_render_items::tropical_thicket::TropicalThicketStd;
 use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
 use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_grove_render_items::unending_jungle::UnendingJungleStd;
@@ -170,14 +169,14 @@ pub type RenderBushScrub = BushScrubStd;
 /// [`TropicalUndergrowthStd`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
 pub type RenderTropicalUndergrowth = TropicalUndergrowthStd;
 
-/// [`TropicalThicketStd`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
-pub type RenderTropicalThicket = TropicalThicketStd;
+/// [`TropicalThicketParams`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
+pub type RenderTropicalThicket = TropicalThicketParams;
 
 /// [`JerrysChaparralStd`] — moderately dense dry scrub chaparral ([#318](https://github.com/ramate-io/maybraid/issues/318)).
 pub type RenderJerrysChaparral = JerrysChaparralStd;
 
-/// [`LevantineScrubStd`] — dry Mediterranean scrub understory ([#320](https://github.com/ramate-io/maybraid/issues/320)).
-pub type RenderLevantineScrub = LevantineScrubStd;
+/// [`LevantineScrubParams`] — dry Mediterranean scrub understory ([#320](https://github.com/ramate-io/maybraid/issues/320)).
+pub type RenderLevantineScrub = LevantineScrubParams;
 
 /// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
 pub type RenderTallGrass = TallGrassStd;
@@ -203,8 +202,8 @@ pub type RenderSpottyBushes = SpottyBushesStd;
 /// [`UnendingJungleStd`] — moderate lower-canopy jungle grove ([#322](https://github.com/ramate-io/maybraid/issues/322)).
 pub type RenderUnendingJungle = UnendingJungleStd;
 
-/// [`StrangeOasisStd`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
-pub type RenderStrangeOasis = StrangeOasisStd;
+/// [`StrangeOasisParams`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
+pub type RenderStrangeOasis = StrangeOasisParams;
 
 /// [`ShamanhomeStd`] — moderate sacred lower-canopy grove ([#324](https://github.com/ramate-io/maybraid/issues/324)).
 pub type RenderShamanhome = ShamanhomeStd;
@@ -895,13 +894,11 @@ impl RenderSubject {
 			}
 			Self::StrangeOasis(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|leaf={:?}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
 					g.leaf_surface_noise
 				)
 			}
@@ -1059,9 +1056,17 @@ impl RenderSubject {
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalThicket(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TropicalThicket(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::JerrysChaparral(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::LevantineScrub(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::LevantineScrub(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::MonsterGrass(item) => {
@@ -1074,7 +1079,11 @@ impl RenderSubject {
 			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::StrangeOasis(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::StrangeOasis(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),

@@ -102,6 +102,12 @@ pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
+#[cfg(feature = "render")]
+pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
+#[cfg(feature = "render")]
+pub use strange_oasis::{StrangeOasis, StrangeOasisParams};
+#[cfg(feature = "render")]
+pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
 pub use palm_shade::{PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm};
 pub use riparian_general::{

@@ -265,6 +265,348 @@ impl TropicalThicketCell {
 	}
 }
 
+#[cfg(feature = "render")]
+mod vc {
+	use bevy::prelude::*;
+	use chico_sbs_trees::{
+		HighBushShoots, HighBushShootsParams, HonuBanyan, HonuBanyanParams, PalmBush,
+		PalmBushParams,
+	};
+	use chico_vegetation_components::{
+		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+	};
+	use clap::Args;
+	use lod::gen::LodSceneLevel;
+	use material_ref::MaterialRef;
+	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+
+	use super::{definition, TropicalThicketCell, TropicalThicketItem};
+	use crate::grove::{
+		canopy_ball_material_from_palette, flatten_foliage_nodes, flatten_stick_nodes,
+		frond_material_from_palette, grove_structural_footprint, layers_from_nodes, placement_noise,
+		stick_material_from_palette, FlatTerrainSample, GroveCellVariant, GroveExtent,
+		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+	};
+
+	pub const TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
+	pub const TROPICAL_THICKET_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const TROPICAL_THICKET_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+
+	/// Authoring / CLI parameters for Tropical Thicket.
+	#[derive(Clone, Debug, Args)]
+	#[command(rename_all = "kebab-case")]
+	pub struct TropicalThicketParams {
+		#[command(flatten, next_help_heading = "Grove")]
+		pub grove: GroveFrontend,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,1.0,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "The noise applied to the chains of sticks in bushes and banyans",
+		)]
+		pub bush_chain_noise: NoiseParams,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,0.05,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Stick Surface Noise",
+		)]
+		pub stick_surface_noise: NoiseParams,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,0.06,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Leaf Surface Noise",
+		)]
+		pub leaf_surface_noise: NoiseParams,
+
+		#[arg(skip)]
+		pub extent: GroveExtent,
+
+		#[command(flatten, next_help_heading = "Terrain")]
+		pub terrain: FlatTerrainSample,
+
+		#[arg(skip)]
+		resolved_placements: Option<Vec<GroveCellVariant<TropicalThicketCell>>>,
+	}
+
+	impl Default for TropicalThicketParams {
+		fn default() -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				bush_chain_noise: NoiseParams::from_scalar(0.0, 1.0, 1.0, 1),
+				stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+				leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain: FlatTerrainSample::default(),
+				resolved_placements: None,
+			}
+		}
+	}
+
+	impl TropicalThicketParams {
+		pub fn with_resolved_placements(
+			resolved_placements: Vec<GroveCellVariant<TropicalThicketCell>>,
+			terrain: FlatTerrainSample,
+			bush_chain_noise: NoiseParams,
+			stick_surface_noise: NoiseParams,
+			leaf_surface_noise: NoiseParams,
+		) -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				bush_chain_noise,
+				stick_surface_noise,
+				leaf_surface_noise,
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain,
+				resolved_placements: Some(resolved_placements),
+			}
+		}
+
+		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
+			self.extent = extent;
+			self
+		}
+
+		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
+			self.terrain = terrain;
+			self
+		}
+
+		pub fn cell_extent_xz(&self) -> Vec2 {
+			self.grove.definition(definition()).cell_extent_xz
+		}
+
+		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+			self.extent.subdivide_xz(self.cell_extent_xz())
+		}
+
+		pub fn placements(&self) -> Vec<GroveCellVariant<TropicalThicketCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+		}
+
+		pub fn build(&self) -> TropicalThicket {
+			TropicalThicket::from_placements(
+				&self.placements(),
+				self.grove.noise,
+				self.bush_chain_noise,
+				&self.extent,
+			)
+		}
+	}
+
+	#[derive(Clone)]
+	enum TropicalThicketKind {
+		/// Ground palm bush; crown counts keyed by [`PalmBushParams::unit_detail_from_num`].
+		Palm(PalmBush),
+		Banyan(HonuBanyan),
+		Bush(HighBushShoots),
+	}
+
+	#[derive(Clone)]
+	pub struct TropicalThicketPlant {
+		pub placement: Placement,
+		kind: TropicalThicketKind,
+		stick_material: MaterialRef,
+		ball_material: MaterialRef,
+		frond_material: MaterialRef,
+	}
+
+	#[derive(Clone)]
+	pub struct TropicalThicket {
+		pub plants: Vec<TropicalThicketPlant>,
+		pub structural_center: Vec3,
+		pub footprint_radius: f32,
+		pub extent: GroveExtent,
+	}
+
+	impl TropicalThicket {
+		pub fn from_placements(
+			placements: &[GroveCellVariant<TropicalThicketCell>],
+			grove_noise: NoiseParams,
+			bush_chain_noise: NoiseParams,
+			extent: &GroveExtent,
+		) -> Self {
+			let plants = placements
+				.iter()
+				.map(|placed| grow_plant(placed, grove_noise, bush_chain_noise))
+				.collect();
+			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
+			Self {
+				plants,
+				structural_center,
+				footprint_radius,
+				extent: *extent,
+			}
+		}
+
+		fn stick_nodes(&self, level: LodSceneLevel) -> Vec<StickNode> {
+			let mut out = Vec::new();
+			for plant in &self.plants {
+				match &plant.kind {
+					TropicalThicketKind::Palm(_) => {}
+					TropicalThicketKind::Banyan(t) => {
+						out.extend(flatten_stick_nodes(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							level,
+						));
+					}
+					TropicalThicketKind::Bush(t) => {
+						out.extend(flatten_stick_nodes(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							level,
+						));
+					}
+				}
+			}
+			out
+		}
+
+		fn foliage_nodes(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
+			let mut out = Vec::new();
+			for plant in &self.plants {
+				match &plant.kind {
+					TropicalThicketKind::Palm(t) => {
+						out.extend(flatten_foliage_nodes(
+							t,
+							plant.placement,
+							&plant.ball_material,
+							&plant.frond_material,
+							level,
+						));
+					}
+					TropicalThicketKind::Banyan(t) => {
+						out.extend(flatten_foliage_nodes(
+							t,
+							plant.placement,
+							&plant.ball_material,
+							&plant.frond_material,
+							level,
+						));
+					}
+					TropicalThicketKind::Bush(t) => {
+						out.extend(flatten_foliage_nodes(
+							t,
+							plant.placement,
+							&plant.ball_material,
+							&plant.frond_material,
+							level,
+						));
+					}
+				}
+			}
+			out
+		}
+	}
+
+	fn grow_plant(
+		placed: &GroveCellVariant<TropicalThicketCell>,
+		grove_noise: NoiseParams,
+		bush_chain_noise: NoiseParams,
+	) -> TropicalThicketPlant {
+		let build_noise = placement_noise(grove_noise, placed.position);
+		let chain_noise = placement_noise(bush_chain_noise, placed.position);
+		let stick_seed = chain_noise.seed;
+		let canopy_seed = build_noise.seed.wrapping_add(31);
+		let stick_material =
+			stick_material_from_palette(Some(placed.variant.stick_palette_mix()), stick_seed);
+		let ball_material = canopy_ball_material_from_palette(
+			Some(placed.variant.canopy_palette_mix()),
+			canopy_seed,
+		);
+		let frond_material = frond_material_from_palette(
+			Some(placed.variant.canopy_palette_mix()),
+			canopy_seed,
+		);
+
+		let (kind, placement) = match placed.variant.item() {
+			TropicalThicketItem::Palm(palm) => {
+				let mut geometry = palm.build_with_noise(build_noise);
+				let seed = build_noise.seed.unsigned_abs();
+				// Quantize ring / frond counts + foliage seed; keep authored height / scale.
+				let unit = PalmBushParams::unit_detail_from_num(seed);
+				geometry.crown.ring_count = unit.geometry.crown.ring_count;
+				geometry.crown.fronds_per_ring = unit.geometry.crown.fronds_per_ring;
+				geometry.foliage_noise.seed = seed as i32;
+				let bush = PalmBushParams::new(geometry).build();
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat(placed.scale.max(1e-4)));
+				(TropicalThicketKind::Palm(bush), placement)
+			}
+			TropicalThicketItem::Bush(bush) => {
+				let mut shape = bush.build_with_noise(build_noise);
+				shape.chain_noise = chain_noise;
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat(placed.scale.max(1e-4)));
+				(TropicalThicketKind::Bush(HighBushShootsParams::new(shape).build()), placement)
+			}
+			TropicalThicketItem::Banyan(banyan) => {
+				let samples = banyan.build_with_noise(build_noise);
+				let mut params = HonuBanyanParams::default();
+				params.geometry = samples.geometry;
+				params.growth_spawn_fraction = samples.growth_spawn_fraction;
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat(placed.scale.max(1e-4)));
+				(TropicalThicketKind::Banyan(params.build()), placement)
+			}
+		};
+
+		TropicalThicketPlant {
+			placement,
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
+		}
+	}
+
+	impl VegetationComponents for TropicalThicket {
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			layers_from_nodes(self.stick_nodes(level))
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			layers_from_nodes(self.foliage_nodes(level))
+		}
+
+		fn structural_lod(&self) -> Option<StructuralLod> {
+			Some(
+				StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
+					TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR,
+					TROPICAL_THICKET_STRUCTURAL_MEDIUM_FACTOR,
+					TROPICAL_THICKET_STRUCTURAL_LOW_FACTOR,
+				),
+			)
+		}
+	}
+}
+
+#[cfg(feature = "render")]
+pub use vc::{
+	TropicalThicket, TropicalThicketParams, TropicalThicketPlant,
+	TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR, TROPICAL_THICKET_STRUCTURAL_LOW_FACTOR,
+	TROPICAL_THICKET_STRUCTURAL_MEDIUM_FACTOR,
+};
+
 #[cfg(test)]
 mod tests {
 	use super::*;

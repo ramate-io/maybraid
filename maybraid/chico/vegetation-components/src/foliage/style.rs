@@ -12,8 +12,6 @@ pub enum FoliageStyle {
 	/// Procedural unit sphere (stand-in for noisy SDF balls).
 	#[default]
 	NoisyBall,
-	/// Inline icosphere + plate shell (plane splay).
-	PlaneSplay,
 	/// GLB triad under `vegetation/foliage/standard/` (layered ball kit).
 	Standard,
 }
@@ -38,7 +36,7 @@ impl FoliageStyle {
 	/// Layered-ball GLB for `self` at `level`, when this style is asset-backed.
 	pub fn layered_ball_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
-			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::NoisyBall => None,
 			Self::Standard => Some(Self::standard_triad_for_level(
 				level,
 				foliage_assets::standard::LAYERED_BALL_HIGH,
@@ -51,7 +49,7 @@ impl FoliageStyle {
 	/// Cheap-ball GLB for `self` at `level`, when this style is asset-backed.
 	pub fn cheap_ball_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
-			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::NoisyBall => None,
 			Self::Standard => Some(Self::standard_triad_for_level(
 				level,
 				foliage_assets::standard::CHEAP_BALL_HIGH,
@@ -64,7 +62,7 @@ impl FoliageStyle {
 	/// Point-tip straight frond GLB (`straight_frond_001_*`); prefer segment kit for strands.
 	pub fn straight_frond_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
-			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::NoisyBall => None,
 			Self::Standard => Some(Self::standard_triad_for_level(
 				level,
 				foliage_assets::standard::STRAIGHT_FROND_HIGH,
@@ -77,7 +75,7 @@ impl FoliageStyle {
 	/// Square-ended straight frond segment GLB (`straight_frond_segment_001_*`).
 	pub fn straight_frond_segment_glb_for_level(self, level: LodSceneLevel) -> Option<AssetPath> {
 		match self {
-			Self::NoisyBall | Self::PlaneSplay => None,
+			Self::NoisyBall => None,
 			Self::Standard => Some(Self::standard_triad_for_level(
 				level,
 				foliage_assets::standard::STRAIGHT_FROND_SEGMENT_HIGH,

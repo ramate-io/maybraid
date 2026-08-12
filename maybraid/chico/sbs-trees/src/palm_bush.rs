@@ -3,6 +3,11 @@
 //! [`PalmBushParams::build`] resolves ring anchors into [`PalmBush`], which implements
 //! [`VegetationComponents`]: per-frond collections at High/Medium; dual layered-ball proxy
 //! at Low/UltraLow (no sticks).
+//!
+//! Standalone unit crowns (grove Placement scale) prefer
+//! [`PalmCrownParams::unit_detail_from_num`](crate::PalmCrownParams::unit_detail_from_num).
+//! [`PalmBushParams::unit_detail_from_num`] is a thin SBS bridge that keys foliage noise and
+//! mirrors detail crown counts without rewriting height-fraction frond shaping.
 
 mod crown;
 pub mod render_item_plugin;
@@ -18,7 +23,7 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
 use crate::palm_tree::{
 	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
 	world_space_frond_shape,
@@ -42,6 +47,20 @@ impl Default for PalmBushParams {
 impl PalmBushParams {
 	pub fn new(geometry: PalmBushSbs) -> Self {
 		Self { geometry }
+	}
+
+	/// Understory bush keyed by `num` — crown counts track
+	/// [`PalmCrownParams::unit_detail_from_num`].
+	///
+	/// Frond lengths still follow SBS height fractions; use [`PalmCrownParams`] directly when
+	/// you need a unit-normalized crown mesh.
+	pub fn unit_detail_from_num(num: u32) -> Self {
+		let crown = PalmCrownParams::unit_detail_from_num(num);
+		let mut params = Self::default();
+		params.geometry.crown.ring_count = crown.ring_count;
+		params.geometry.crown.fronds_per_ring = crown.shape.frond_count;
+		params.geometry.foliage_noise.seed = num as i32;
+		params
 	}
 
 	pub fn build(&self) -> PalmBush {
