@@ -16,8 +16,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_vegetation_components::{
 	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
-	VegetationComponents, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
-	STRUCTURAL_MEDIUM_FACTOR,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -25,10 +24,12 @@ use lod::gen::LodSceneLevel;
 /// Per-ring seed salt (shared with [`spawn::FROND_RING_SEED_SALT`]).
 pub use spawn::FROND_RING_SEED_SALT;
 
-/// Medium outer edge: default structural Medium × 3 (200% further out).
-const PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR: f32 = STRUCTURAL_MEDIUM_FACTOR * 3.0;
-/// Keep Low beyond Medium so band ordering stays valid.
-const PALM_CROWN_STRUCTURAL_LOW_FACTOR: f32 = STRUCTURAL_LOW_FACTOR * 3.0;
+/// High when `distance / crown_radius ≤` this (rachis / full frond topology).
+const PALM_CROWN_STRUCTURAL_HIGH_FACTOR: f32 = 36.0;
+/// Medium outer edge (chord fronds; no multi-segment rachis).
+const PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR: f32 = 54.0;
+/// Low outer edge (layered-ball proxy).
+const PALM_CROWN_STRUCTURAL_LOW_FACTOR: f32 = 100.0;
 
 /// Authoring / CLI parameters for a palm crown (standalone or stacked rings).
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -375,21 +376,16 @@ impl VegetationComponents for PalmCrown {
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				Layers::from_free(self.layered_proxy_balls())
-			}
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.layered_proxy_balls()),
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(
-			StructuralLod::new(self.crown_center(), self.structural_radius())
-				.with_factors(
-					STRUCTURAL_HIGH_FACTOR,
-					PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
-					PALM_CROWN_STRUCTURAL_LOW_FACTOR,
-				),
-		)
+		Some(StructuralLod::new(self.crown_center(), self.structural_radius()).with_factors(
+			PALM_CROWN_STRUCTURAL_HIGH_FACTOR,
+			PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
+			PALM_CROWN_STRUCTURAL_LOW_FACTOR,
+		))
 	}
 }
 
@@ -413,11 +409,7 @@ mod tests {
 
 	#[test]
 	fn ring_anchors_stack_along_y() -> Result<()> {
-		let params = PalmCrownParams {
-			ring_count: 3,
-			ring_spacing: 0.2,
-			..crown(1)
-		};
+		let params = PalmCrownParams { ring_count: 3, ring_spacing: 0.2, ..crown(1) };
 		let anchors = params.ring_anchors();
 		assert_eq!(anchors.len(), 3);
 		assert_eq!(anchors[0], Vec3::ZERO);
@@ -447,21 +439,14 @@ mod tests {
 		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		let medium = built.foliage_nodes_for_level(LodSceneLevel::Medium).flatten();
 		assert_eq!(medium.len(), high.len());
-		let high_segs = high[0]
-			.geometry
-			.as_frond_collection()
-			.expect("high collection")
-			.runs[0]
+		let high_segs = high[0].geometry.as_frond_collection().expect("high collection").runs[0]
 			.segments
 			.len();
 		assert!(high_segs > 1);
-		let medium_segs = medium[0]
-			.geometry
-			.as_frond_collection()
-			.expect("medium collection")
-			.runs[0]
-			.segments
-			.len();
+		let medium_segs = medium[0].geometry.as_frond_collection().expect("medium collection").runs
+			[0]
+		.segments
+		.len();
 		assert_eq!(medium_segs, 1);
 
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
@@ -476,11 +461,14 @@ mod tests {
 	}
 
 	#[test]
-	fn structural_medium_band_is_extended() -> Result<()> {
+	fn structural_bands_are_palm_crown_local() -> Result<()> {
 		let built = crown(0).build();
 		let probe = built.structural_lod().expect("probe");
-		assert_eq!(probe.medium_factor, STRUCTURAL_MEDIUM_FACTOR * 3.0);
-		assert!(probe.low_factor > probe.medium_factor);
+		assert_eq!(probe.high_factor, PALM_CROWN_STRUCTURAL_HIGH_FACTOR);
+		assert_eq!(probe.medium_factor, PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR);
+		assert_eq!(probe.low_factor, PALM_CROWN_STRUCTURAL_LOW_FACTOR);
+		assert!(probe.high_factor < probe.medium_factor);
+		assert!(probe.medium_factor < probe.low_factor);
 		Ok(())
 	}
 
@@ -505,14 +493,9 @@ mod tests {
 		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
 		// Anchors are seed-independent; ring shapes / frond runs key off seed.
 		assert_eq!(a.ring_shape(0).seed, 7);
-		assert_ne!(
-			a.ring_shape(0).seed,
-			PalmCrownParams::unit_full_from_num(8).ring_shape(0).seed
-		);
+		assert_ne!(a.ring_shape(0).seed, PalmCrownParams::unit_full_from_num(8).ring_shape(0).seed);
 		let runs_a = a.ring_shape(0).frond_runs_at(Vec3::ZERO);
-		let runs_b = PalmCrownParams::unit_full_from_num(8)
-			.ring_shape(0)
-			.frond_runs_at(Vec3::ZERO);
+		let runs_b = PalmCrownParams::unit_full_from_num(8).ring_shape(0).frond_runs_at(Vec3::ZERO);
 		assert_ne!(runs_a[0][0].direction, runs_b[0][0].direction);
 		Ok(())
 	}
@@ -541,7 +524,10 @@ mod tests {
 		let h = 5.0;
 		let (unit, size) = PalmCrownParams::unit_full_for_height_from_num(h, 9);
 		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
-		assert!((size - DATE_PALM_FROND_LENGTH_FRACTION * h).abs() < 1e-3 || size >= DATE_PALM_FROND_LENGTH_FRACTION * h * 0.9);
+		assert!(
+			(size - DATE_PALM_FROND_LENGTH_FRACTION * h).abs() < 1e-3
+				|| size >= DATE_PALM_FROND_LENGTH_FRACTION * h * 0.9
+		);
 		assert!(size > 2.0);
 		Ok(())
 	}
@@ -582,11 +568,7 @@ mod tests {
 	fn into_unit_detail_from_num_returns_world_size() -> Result<()> {
 		let authored = PalmCrownParams {
 			ring_spacing: 0.3,
-			shape: FrondCrownShape {
-				length: 2.5,
-				width: 0.2,
-				..PalmCrownParams::default().shape
-			},
+			shape: FrondCrownShape { length: 2.5, width: 0.2, ..PalmCrownParams::default().shape },
 			..PalmCrownParams::default()
 		};
 		let (unit, size) = authored.into_unit_detail_from_num(5);

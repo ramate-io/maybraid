@@ -15,11 +15,15 @@ use chico_tree_components::{
 };
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, Placement, StickNode,
-	VegetationComponents, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
-	STRUCTURAL_MEDIUM_FACTOR,
+	VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
+
+/// High when `distance / footprint_radius ≤` this.
+const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 3.0;
+const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
+const HIGH_BUSH_STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for High Bush Shoots (VegetationComponents path).
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -155,9 +159,9 @@ impl VegetationComponents for HighBushShoots {
 			.max(1e-3);
 		Some(
 			StructuralLod::new(self.structural_center(), radius).with_factors(
-				STRUCTURAL_HIGH_FACTOR,
-				STRUCTURAL_MEDIUM_FACTOR,
-				STRUCTURAL_LOW_FACTOR,
+				HIGH_BUSH_STRUCTURAL_HIGH_FACTOR,
+				HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR,
+				HIGH_BUSH_STRUCTURAL_LOW_FACTOR,
 			),
 		)
 	}
