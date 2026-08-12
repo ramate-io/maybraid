@@ -4,29 +4,25 @@ use bevy::prelude::{Children, Component, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::LodSceneLevel;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::MultiSceneMerge;
 
 use crate::assets::AssetPath;
 
-/// Marks a foliage GLB [`scene_ref::SceneRefRoot`] subtree for playground leaf-shader patching.
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct VegetationFoliageAssetRoot;
-
-/// Marks a frond GLB subtree for playground solid-green (`StandardMaterial`) patching.
-#[derive(Component, Clone, Copy, Debug, Default)]
-pub struct VegetationFrondAssetRoot;
-
-#[derive(Clone, Copy)]
-enum AssetRootKind {
-	Plain,
-	Foliage,
-	Frond,
+/// Optional GLB under a transform (no deferred material).
+pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl Scene + 'static {
+	posed_material_asset_tier(asset, transform, None)
 }
 
-/// Optional GLB under a transform.
-pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl Scene + 'static {
+/// Optional GLB under a transform, with [`MaterialRefRoot`] + [`PropagateToDescendants`] on the
+/// scene root when `material` is set.
+pub fn posed_material_asset_tier(
+	asset: Option<AssetPath>,
+	transform: Transform,
+	material: Option<MaterialRef>,
+) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![Box::new(a.scene_ref().scene())],
+		Some(a) => vec![Box::new(material_asset_scene(a, material))],
 		None => vec![],
 	};
 	bsn! {
@@ -36,56 +32,39 @@ pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl 
 	}
 }
 
-fn tagged_asset_scene(asset: AssetPath, kind: AssetRootKind) -> Box<dyn Scene> {
+fn material_asset_scene(asset: AssetPath, material: Option<MaterialRef>) -> Box<dyn Scene> {
 	let scene = asset.scene_ref().scene();
-	match kind {
-		AssetRootKind::Plain => Box::new(scene),
-		AssetRootKind::Foliage => Box::new((bsn! { VegetationFoliageAssetRoot }, scene)),
-		AssetRootKind::Frond => Box::new((bsn! { VegetationFrondAssetRoot }, scene)),
+	match material {
+		Some(material) => Box::new((
+			bsn! {
+				template_value(MaterialRefRoot(material))
+				PropagateToDescendants
+			},
+			scene,
+		)),
+		None => Box::new(scene),
 	}
 }
 
-fn foliage_asset_scene(asset: AssetPath) -> impl Scene + 'static {
-	(bsn! { VegetationFoliageAssetRoot }, asset.scene_ref().scene())
-}
-
-fn frond_asset_scene(asset: AssetPath) -> impl Scene + 'static {
-	(bsn! { VegetationFrondAssetRoot }, asset.scene_ref().scene())
-}
-
-/// Foliage GLB under a transform, tagged with [`VegetationFoliageAssetRoot`].
+/// Foliage GLB under a transform, with propagating [`MaterialRefRoot`].
 pub fn posed_foliage_asset_tier(
 	asset: Option<AssetPath>,
 	transform: Transform,
+	material: MaterialRef,
 ) -> impl Scene + 'static {
-	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![Box::new(foliage_asset_scene(a))],
-		None => vec![],
-	};
-	bsn! {
-		template_value(transform)
-		Visibility::Inherited
-		Children [ {children} ]
-	}
+	posed_material_asset_tier(asset, transform, Some(material))
 }
 
-/// Frond GLB under a transform, tagged with [`VegetationFrondAssetRoot`].
+/// Frond GLB under a transform, with propagating [`MaterialRefRoot`].
 pub fn posed_frond_asset_tier(
 	asset: Option<AssetPath>,
 	transform: Transform,
+	material: MaterialRef,
 ) -> impl Scene + 'static {
-	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![Box::new(frond_asset_scene(a))],
-		None => vec![],
-	};
-	bsn! {
-		template_value(transform)
-		Visibility::Inherited
-		Children [ {children} ]
-	}
+	posed_material_asset_tier(asset, transform, Some(material))
 }
 
-/// Merged frond collection posed as one unit, tagged with [`VegetationFrondAssetRoot`].
+/// Merged frond collection posed as one unit, with propagating [`MaterialRefRoot`].
 ///
 /// `merge` parts must already be collection-/unit-local. `transform` is applied on the
 /// same entity as [`scene_ref::MultiSceneMergeRoot`] so the whole merged mesh is placed
@@ -93,9 +72,13 @@ pub fn posed_frond_asset_tier(
 pub fn posed_frond_multi_scene_merge(
 	merge: MultiSceneMerge,
 	transform: Transform,
+	material: MaterialRef,
 ) -> impl Scene + 'static {
 	(
-		bsn! { VegetationFrondAssetRoot },
+		bsn! {
+			template_value(MaterialRefRoot(material))
+			PropagateToDescendants
+		},
 		merge.scene_at(transform),
 	)
 }
@@ -166,44 +149,39 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
 		.map(|(root_level, asset)| {
-			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Plain)
+			mesh_level_root(*root_level, *asset, level == *root_level, None)
 		})
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }
 
-/// Warm host for foliage GLB LOD triads (roots tagged [`VegetationFoliageAssetRoot`]).
+/// Warm host for foliage GLB LOD triads (propagating leaf [`MaterialRef`]).
 pub fn warm_foliage_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,
 	probe: P,
 	transform: Transform,
+	material: MaterialRef,
 	roots: impl IntoIterator<Item = (LodSceneLevel, Option<AssetPath>)>,
 ) -> impl Scene + 'static {
 	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
 		.map(|(root_level, asset)| {
-			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Foliage)
+			mesh_level_root(*root_level, *asset, level == *root_level, Some(material.clone()))
 		})
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }
 
-/// Warm host for frond GLB LOD triads (roots tagged [`VegetationFrondAssetRoot`]).
+/// Warm host for frond GLB LOD triads (propagating leaf [`MaterialRef`]).
 pub fn warm_frond_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,
 	probe: P,
 	transform: Transform,
+	material: MaterialRef,
 	roots: impl IntoIterator<Item = (LodSceneLevel, Option<AssetPath>)>,
 ) -> impl Scene + 'static {
-	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
-	let root_scenes: Vec<Box<dyn Scene>> = root_list
-		.iter()
-		.map(|(root_level, asset)| {
-			mesh_level_root(*root_level, *asset, level == *root_level, AssetRootKind::Frond)
-		})
-		.collect();
-	host_with_probe_only(level, probe, transform, root_scenes)
+	warm_foliage_mesh_level_host(level, probe, transform, material, roots)
 }
 
 fn host_with_probe_only<P: Component + Clone + Default + Unpin>(
@@ -233,10 +211,10 @@ fn mesh_level_root(
 	level: LodSceneLevel,
 	asset: Option<AssetPath>,
 	visible: bool,
-	kind: AssetRootKind,
+	material: Option<MaterialRef>,
 ) -> Box<dyn Scene> {
 	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![tagged_asset_scene(a, kind)],
+		Some(a) => vec![Box::new(material_asset_scene(a, material))],
 		None => vec![],
 	};
 	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };

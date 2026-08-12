@@ -1,31 +1,12 @@
-//! Render-scene vegetation [`Material`] handles (embedded WGSL from `chico-vegetation-shaders`).
+//! Render-scene vegetation [`Material`] handles for CLI [`RenderSubject`] rebuilds.
+//!
+//! LOD vegetation components use [`crate::chico_material_lib::ChicoMaterialRefPlugin`] instead.
 
-use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use chico_vegetation_components::{
-	VegetationFoliageAssetRoot, VegetationFrondAssetRoot, VegetationProceduralAssets,
-};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::render::{RenderConfig, RenderSubject};
-
-/// True when `entity` is (or is under) a node tagged with `M`.
-fn under_marker<M: Component>(
-	mut entity: Entity,
-	parents: &Query<&ChildOf>,
-	markers: &Query<(), With<M>>,
-) -> bool {
-	loop {
-		if markers.contains(entity) {
-			return true;
-		}
-		let Ok(child_of) = parents.get(entity) else {
-			return false;
-		};
-		entity = child_of.parent();
-	}
-}
 
 /// Stable bark / foliage materials reused whenever [`RenderConfig::subject`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
@@ -53,83 +34,6 @@ fn render_tuft_standard_material() -> StandardMaterial {
 		base_color: Color::srgb(0.22, 0.62, 0.28),
 		double_sided: true,
 		..Default::default()
-	}
-}
-
-/// Replace foliage [`StandardMaterial`] with [`ChicoLeafMaterial`] (discard silhouette).
-///
-/// Runs only for [`Added<MeshMaterial3d<StandardMaterial>>`]:
-/// - procedural placeholder (`VegetationProceduralAssets::foliage_material`)
-/// - GLB / tagged meshes under [`VegetationFoliageAssetRoot`]
-///
-/// Frond kits ([`VegetationFrondAssetRoot`]) are handled by
-/// [`patch_vegetation_frond_solid_material`] (solid green, not the leaf shader).
-pub fn patch_vegetation_foliage_leaf_material(
-	mut commands: Commands,
-	mats: Res<RenderMaterials>,
-	added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
-	parents: Query<&ChildOf>,
-	foliage_roots: Query<(), With<VegetationFoliageAssetRoot>>,
-	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
-) {
-	let placeholder = VegetationProceduralAssets::foliage_material();
-	let leaf = mats.leaf.clone();
-
-	for (entity, mesh_mat) in &added {
-		// Fronds get the solid-green path, not the leaf shader.
-		if under_marker(entity, &parents, &frond_roots) {
-			continue;
-		}
-		let under_foliage = under_marker(entity, &parents, &foliage_roots);
-		if mesh_mat.id() != placeholder.id() && !under_foliage {
-			continue;
-		}
-		commands
-			.entity(entity)
-			.remove::<MeshMaterial3d<StandardMaterial>>()
-			.insert(MeshMaterial3d(leaf.clone()));
-	}
-}
-
-/// Keep frond kits on solid green [`StandardMaterial`] (`mats.tuft`).
-///
-/// Matches [`Added<MeshMaterial3d<StandardMaterial>>`] on (or under)
-/// [`VegetationFrondAssetRoot`] — including procedural collection leaves that carry the
-/// marker on the mesh entity itself.
-pub fn patch_vegetation_frond_solid_material(
-	mut commands: Commands,
-	mats: Res<RenderMaterials>,
-	added: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<MeshMaterial3d<StandardMaterial>>>,
-	parents: Query<&ChildOf>,
-	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
-) {
-	let tuft = mats.tuft.clone();
-	for (entity, mesh_mat) in &added {
-		if mesh_mat.id() == tuft.id() {
-			continue;
-		}
-		if !under_marker(entity, &parents, &frond_roots) {
-			continue;
-		}
-		commands.entity(entity).insert(MeshMaterial3d(tuft.clone()));
-	}
-}
-
-/// Drop frond meshes from the directional shadow caster set (GLB children + any kit mesh).
-///
-/// Procedural leaves also stamp [`NotShadowCaster`] at spawn; this covers spawned GLB
-/// `Mesh3d` entities under [`VegetationFrondAssetRoot`].
-pub fn patch_vegetation_frond_not_shadow_caster(
-	mut commands: Commands,
-	added: Query<Entity, (Added<Mesh3d>, Without<NotShadowCaster>)>,
-	parents: Query<&ChildOf>,
-	frond_roots: Query<(), With<VegetationFrondAssetRoot>>,
-) {
-	for entity in &added {
-		if !under_marker(entity, &parents, &frond_roots) {
-			continue;
-		}
-		commands.entity(entity).insert(NotShadowCaster);
 	}
 }
 

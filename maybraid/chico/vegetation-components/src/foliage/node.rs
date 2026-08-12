@@ -9,6 +9,7 @@ use lod::gen::{
 };
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
+use material_ref::{MaterialRef, MaterialRefRoot};
 
 use crate::assets::AssetPath;
 use crate::foliage::collection::{
@@ -20,11 +21,10 @@ use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_host::{
 	posed_foliage_asset_tier, posed_frond_asset_tier, posed_frond_multi_scene_merge,
-	VegetationFrondAssetRoot,
 };
 use crate::placed::Placement;
 use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
-use crate::scene_children::{pose, posed_mesh, scene_children};
+use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
 use scene_ref::{MultiSceneMerge, MultiScenePart};
 
 /// Authoring IR for a foliage cluster — also the fine-phase [`LodScene`] host component.
@@ -33,11 +33,24 @@ pub struct FoliageNode {
 	pub style: FoliageStyle,
 	pub geometry: FoliageGeometry,
 	pub placement: Placement,
+	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
+	/// higher-order types set leaf / palette as needed.
+	pub material: MaterialRef,
 }
 
 impl FoliageNode {
 	pub fn new(style: FoliageStyle, geometry: FoliageGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement }
+		Self {
+			style,
+			geometry,
+			placement,
+			material: MaterialRef::default(),
+		}
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = material;
+		self
 	}
 
 	pub fn noisy_ball(placement: Placement) -> Self {
@@ -136,26 +149,25 @@ impl FoliageNode {
 	}
 
 	fn procedural_ball_scene(&self) -> impl Scene + 'static {
-		posed_mesh(
+		posed_mesh_material_ref(
 			VegetationProceduralAssets::foliage_ball(),
 			VegetationProceduralAssets::foliage_material(),
+			self.material.clone(),
 			pose(self.placement),
 		)
 	}
 
 	/// Stick-cylinder stand-in when a frond GLB is missing (same \(Y \in [0, 1]\) kit axis).
-	///
-	/// Tagged with [`VegetationFrondAssetRoot`] on the mesh entity so playground material
-	/// patching can match `Added` leaves without walking the whole hierarchy every frame.
 	fn procedural_frond_scene_at(&self, placement: Placement) -> impl Scene + 'static {
 		let mesh = VegetationProceduralAssets::stick_cylinder();
-		let material = VegetationProceduralAssets::foliage_material();
+		let placeholder = VegetationProceduralAssets::foliage_material();
+		let material = self.material.clone();
 		let transform = pose(placement);
 		bsn! {
-			VegetationFrondAssetRoot
 			NotShadowCaster
 			Mesh3d({mesh})
-			MeshMaterial3d::<StandardMaterial>({material})
+			MeshMaterial3d::<StandardMaterial>({placeholder})
+			template_value(MaterialRefRoot(material))
 			template_value(transform)
 			Visibility::default()
 		}
@@ -164,7 +176,11 @@ impl FoliageNode {
 	fn member_leaf_scene(&self, member: FrondMember, level: LodSceneLevel) -> Box<dyn Scene> {
 		let placement = self.placement.compose_child(member.placement);
 		match self.frond_glb_for_kit(member.kit, level) {
-			Some(asset) => Box::new(posed_frond_asset_tier(Some(asset), pose(placement))),
+			Some(asset) => Box::new(posed_frond_asset_tier(
+				Some(asset),
+				pose(placement),
+				self.material.clone(),
+			)),
 			None => Box::new(self.procedural_frond_scene_at(placement)),
 		}
 	}
@@ -189,7 +205,11 @@ impl FoliageNode {
 
 	fn collection_content(&self, collection: &FrondCollection, level: LodSceneLevel) -> Box<dyn Scene> {
 		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
-			return Box::new(posed_frond_multi_scene_merge(merge, pose(self.placement)));
+			return Box::new(posed_frond_multi_scene_merge(
+				merge,
+				pose(self.placement),
+				self.material.clone(),
+			));
 		}
 		// Procedural / missing-GLB fallback: per-member children (world-composed).
 		let children: Vec<Box<dyn Scene>> = collection
@@ -232,9 +252,11 @@ impl FoliageNode {
 			)),
 			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
 				match self.standard_ball_glb_for_level(level) {
-					Some(asset) => {
-						Box::new(posed_foliage_asset_tier(Some(asset), pose(self.placement)))
-					}
+					Some(asset) => Box::new(posed_foliage_asset_tier(
+						Some(asset),
+						pose(self.placement),
+						self.material.clone(),
+					)),
 					None => Box::new(self.procedural_ball_scene()),
 				}
 			}
@@ -242,7 +264,11 @@ impl FoliageNode {
 				FoliageStyle::Standard,
 				FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment,
 			) => match self.standard_frond_glb_for_level(level) {
-				Some(asset) => Box::new(posed_frond_asset_tier(Some(asset), pose(self.placement))),
+				Some(asset) => Box::new(posed_frond_asset_tier(
+					Some(asset),
+					pose(self.placement),
+					self.material.clone(),
+				)),
 				None => Box::new(self.procedural_frond_scene_at(self.placement)),
 			},
 			(FoliageStyle::Standard, FoliageGeometry::FrondCollection(collection)) => {

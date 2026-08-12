@@ -16,7 +16,8 @@ pub(crate) mod stick;
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, BraidOakTreeSbs, StorybookTreeChain};
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
+	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
+	VegetationComponents, StructuralLod,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -114,7 +115,7 @@ impl VegetationComponents for BraidOakTree {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
-		Layers::from_free(nodes)
+		Layers::from_free(nodes).map(|n| n.with_material(chico_stick_material_ref()))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -127,7 +128,7 @@ impl VegetationComponents for BraidOakTree {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r),
 		};
-		Layers::from_free(nodes)
+		Layers::from_free(nodes).map(|n| n.with_material(chico_leaf_material_ref()))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {

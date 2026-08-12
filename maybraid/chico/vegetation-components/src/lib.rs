@@ -7,6 +7,7 @@ pub mod foliage;
 pub mod layer;
 pub mod lod_band;
 pub mod lod_host;
+pub mod materials;
 pub mod placed;
 pub mod procedural;
 pub mod scene_children;
@@ -26,13 +27,16 @@ pub use placed::Placement;
 pub use procedural::{
 	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_KIT_HALF_X, STICK_KIT_HALF,
 };
-pub use scene_children::{pose, posed_mesh, scene_children, with_pose};
+pub use scene_children::{pose, posed_mesh, posed_mesh_material_ref, scene_children, with_pose};
 pub use sticks::{
 	update_stick_host_levels, StickGeometry, StickLodProbe, StickNode, StickStyle, STICK_HIGH_FACTOR,
 	STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
 pub use lod_host::{
-	posed_frond_multi_scene_merge, VegetationFoliageAssetRoot, VegetationFrondAssetRoot,
+	posed_frond_multi_scene_merge, posed_material_asset_tier,
+};
+pub use materials::{
+	chico_leaf_material_ref, chico_stick_material_ref, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
 };
 pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,

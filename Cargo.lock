@@ -2299,6 +2299,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "log",
+ "material-ref",
  "procedural-common",
  "render-item",
  "scene-ref",
@@ -2346,6 +2347,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "scene-ref",
 ]
 
@@ -4243,6 +4245,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
+]
+
+[[package]]
+name = "material-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "procedural-common",
 ]
 
 [[package]]
