@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	GroveExtent, LevantineScrubParams, MonsterGrassParams, StrangeOasisParams,
-	TropicalThicketParams, DEFAULT_GROVE_EXTENT_XZ,
+	ForlornSavannaParams, GroveExtent, LevantineScrubParams, MonsterGrassParams, OrchardParams,
+	RiparianGeneralParams, RollingOaksParams, StrangeOasisParams, TropicalThicketParams,
+	DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
@@ -70,6 +71,14 @@ pub enum Show {
 	StrangeOasis(ShowStrangeOasis),
 	/// Tropical Thicket grove via VegetationComponents / LodScene.
 	TropicalThicket(ShowTropicalThicket),
+	/// Rolling Oaks grove via VegetationComponents / LodScene.
+	RollingOaks(ShowRollingOaks),
+	/// Orchard grove via VegetationComponents / LodScene.
+	Orchard(ShowOrchard),
+	/// Riparian General grove via VegetationComponents / LodScene.
+	RiparianGeneral(ShowRiparianGeneral),
+	/// Forlorn Savanna grove via VegetationComponents / LodScene.
+	ForlornSavanna(ShowForlornSavanna),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
 }
@@ -286,6 +295,90 @@ impl ShowTropicalThicket {
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
+pub struct ShowRollingOaks {
+	#[command(flatten)]
+	pub grove: RollingOaksParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowRollingOaks {
+	fn configured(self) -> RollingOaksParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowOrchard {
+	#[command(flatten)]
+	pub grove: OrchardParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowOrchard {
+	fn configured(self) -> OrchardParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowRiparianGeneral {
+	#[command(flatten)]
+	pub grove: RiparianGeneralParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowRiparianGeneral {
+	fn configured(self) -> RiparianGeneralParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowForlornSavanna {
+	#[command(flatten)]
+	pub grove: ForlornSavannaParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowForlornSavanna {
+	fn configured(self) -> ForlornSavannaParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
 pub struct ShowHighBushShoots {
 	#[command(flatten)]
 	pub bush: HighBushShootsParams,
@@ -317,6 +410,10 @@ impl Show {
 			Self::LevantineScrub(args) => ShowSubject::LevantineScrub(args.configured()),
 			Self::StrangeOasis(args) => ShowSubject::StrangeOasis(args.configured()),
 			Self::TropicalThicket(args) => ShowSubject::TropicalThicket(args.configured()),
+			Self::RollingOaks(args) => ShowSubject::RollingOaks(args.configured()),
+			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
+			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
+			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
@@ -353,6 +450,10 @@ pub enum ShowSubject {
 	LevantineScrub(LevantineScrubParams),
 	StrangeOasis(StrangeOasisParams),
 	TropicalThicket(TropicalThicketParams),
+	RollingOaks(RollingOaksParams),
+	Orchard(OrchardParams),
+	RiparianGeneral(RiparianGeneralParams),
+	ForlornSavanna(ForlornSavannaParams),
 	HighBushShoots(HighBushShootsParams),
 }
 
@@ -472,6 +573,30 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::RollingOaks(g)) => Some(format!(
+			"rolling-oaks:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Orchard(g)) => Some(format!(
+			"orchard:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::RiparianGeneral(g)) => Some(format!(
+			"riparian-general:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::ForlornSavanna(g)) => Some(format!(
+			"forlorn-savanna:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
@@ -517,6 +642,10 @@ pub fn sync_show(
 		ShowSubject::LevantineScrub(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::StrangeOasis(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::RollingOaks(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Orchard(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::RiparianGeneral(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::ForlornSavanna(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
@@ -560,6 +689,10 @@ mod tests {
 			"show levantine-scrub --grove-extent-xz 20",
 			"show strange-oasis --grove-extent-xz 20",
 			"show tropical-thicket --grove-extent-xz 20",
+			"show rolling-oaks --grove-extent-xz 260 --elevation 0.40",
+			"show orchard --grove-extent-xz 160",
+			"show riparian-general --grove-extent-xz 200",
+			"show forlorn-savanna --grove-extent-xz 300",
 			"show high-bush-shoots",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
@@ -572,6 +705,18 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::TropicalThicket(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::RollingOaks(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Orchard(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::RiparianGeneral(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::ForlornSavanna(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {

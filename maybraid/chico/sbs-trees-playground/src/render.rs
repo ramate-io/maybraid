@@ -13,7 +13,6 @@ use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
 use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
 use chico_grove_render_items::date_grove::DateGroveStd;
 use chico_grove_render_items::dryland::DrylandStd;
-use chico_grove_render_items::forlorn_savanna::ForlornSavannaStd;
 use chico_grove_render_items::goettingen_follow::GoettingenFollowStd;
 use chico_grove_render_items::high_bush::HighBushStd;
 use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
@@ -21,15 +20,13 @@ use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_grove_render_items::jungle_massives::JungleMassivesStd;
 use chico_grove_render_items::leeward::LeewardStd;
 use chico_grove_render_items::low_bush::LowBushStd;
-use chico_grove_render_items::orchard::OrchardStd;
 use chico_groves::{
-	LevantineScrubParams, MonsterGrassParams, StrangeOasisParams, TropicalThicketParams,
+	ForlornSavannaParams, LevantineScrubParams, MonsterGrassParams, OrchardParams,
+	RiparianGeneralParams, RollingOaksParams, StrangeOasisParams, TropicalThicketParams,
 };
 use chico_grove_render_items::palm_shade::PalmShadeStd;
-use chico_grove_render_items::riparian_general::RiparianGeneralStd;
 use chico_grove_render_items::riparian_mix::RiparianMixStd;
 use chico_grove_render_items::riverine_green::RiverineGreenStd;
-use chico_grove_render_items::rolling_oaks::RollingOaksStd;
 use chico_grove_render_items::shamanhome::ShamanhomeStd;
 use chico_grove_render_items::spotty_bushes::SpottyBushesStd;
 use chico_grove_render_items::storytellers::StorytellersStd;
@@ -261,17 +258,17 @@ pub type RenderConiferMassives = ConiferMassivesStd;
 /// [`TemperateMassivesStd`] — moderate giant temperate upper-canopy grove.
 pub type RenderTemperateMassives = TemperateMassivesStd;
 
-/// [`RiparianGeneralStd`] — mixed riparian upper-canopy grove.
-pub type RenderRiparianGeneral = RiparianGeneralStd;
+/// [`RiparianGeneralParams`] — mixed riparian upper-canopy grove.
+pub type RenderRiparianGeneral = RiparianGeneralParams;
 
-/// [`RollingOaksStd`] — rolling oak upper-canopy grove.
-pub type RenderRollingOaks = RollingOaksStd;
+/// [`RollingOaksParams`] — rolling oak upper-canopy grove.
+pub type RenderRollingOaks = RollingOaksParams;
 
-/// [`ForlornSavannaStd`] — sparse dry savanna upper-canopy grove.
-pub type RenderForlornSavanna = ForlornSavannaStd;
+/// [`ForlornSavannaParams`] — sparse dry savanna upper-canopy grove.
+pub type RenderForlornSavanna = ForlornSavannaParams;
 
-/// [`OrchardStd`] — cultivated orchard upper-canopy grove.
-pub type RenderOrchard = OrchardStd;
+/// [`OrchardParams`] — cultivated orchard upper-canopy grove.
+pub type RenderOrchard = OrchardParams;
 
 /// [`VineyardStd`] — cultivated vineyard upper-canopy grove.
 pub type RenderVineyard = VineyardStd;
@@ -1115,10 +1112,38 @@ impl RenderSubject {
 			Self::ChristmasTaiga(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::ConiferMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TemperateMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RiparianGeneral(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RollingOaks(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::ForlornSavanna(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Orchard(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RiparianGeneral(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::RollingOaks(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::ForlornSavanna(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Orchard(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::Vineyard(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::DateGrove(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),

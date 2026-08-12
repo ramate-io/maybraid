@@ -103,7 +103,15 @@ pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 #[cfg(feature = "render")]
+pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};
+#[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
+#[cfg(feature = "render")]
+pub use orchard::{Orchard, OrchardParams};
+#[cfg(feature = "render")]
+pub use riparian_general::{RiparianGeneral, RiparianGeneralParams};
+#[cfg(feature = "render")]
+pub use rolling_oaks::{RollingOaks, RollingOaksParams};
 #[cfg(feature = "render")]
 pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
 #[cfg(feature = "render")]

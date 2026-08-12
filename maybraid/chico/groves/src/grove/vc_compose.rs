@@ -279,3 +279,22 @@ pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
 		/ band.tree_radius.max(1e-4);
 	cull_offset_bands_from_factor(factor, band.high_factor, band.medium_factor, band.low_factor)
 }
+
+/// High/Medium → nested plant host chunks; Low/UltraLow → canopy-ball vegetation chunks.
+pub fn woody_grove_scene_chunks(
+	level: LodSceneLevel,
+	lod_ref: &LodRef,
+	plant_chunks: Vec<SceneChunk>,
+	vegetation: &impl VegetationComponents,
+) -> SceneChunk {
+	match grove_detail_level(level) {
+		Some(_) => {
+			if plant_chunks.is_empty() {
+				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
+			} else {
+				SceneChunk::chunks(plant_chunks)
+			}
+		}
+		None => chico_vegetation_components::vegetation_scene_chunks(vegetation, lod_ref, level),
+	}
+}
