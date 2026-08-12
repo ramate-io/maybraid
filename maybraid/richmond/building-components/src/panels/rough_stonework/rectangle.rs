@@ -1,33 +1,21 @@
 //! Rough-stonework unit rectangle panel kit (LOD triad + flat UltraLow).
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
+use bevy::prelude::Component;
 use bevy::scene::prelude::Scene;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 
 use crate::assets::panels::rough_stonework::{RECTANGLE_HIGH, RECTANGLE_LOW, RECTANGLE_MID};
 use crate::panels::lod::{
-	leaf_panel_scene_ref_lod, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE,
+	panel_scene_ref_for_level, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE,
 };
 
 /// Unit rectangle \(X, Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
 pub struct RoughStonePanelRectangle;
-
-impl RoughStonePanelRectangle {
-	/// LOD host for panel leaves (style triad + flat UltraLow).
-	///
-	/// Unit-kit preview: probe the subject AABB.
-	pub fn scene_with_lod(lod_ref: &LodRef) -> impl Scene + 'static {
-		leaf_panel_scene_ref_lod(
-			RECTANGLE_HIGH.scene_ref(),
-			RECTANGLE_MID.scene_ref(),
-			RECTANGLE_LOW.scene_ref(),
-			PANEL_ULTRA_LOW_RECTANGLE.scene_ref(),
-			lod_ref,
-			PanelLodProbe::from_aabb(lod_ref.bounds),
-		)
-	}
-}
 
 impl LodScene for RoughStonePanelRectangle {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
@@ -44,13 +32,23 @@ impl LodScene for RoughStonePanelRectangle {
 
 	fn scene_with_level(
 		&self,
-		lod_ref: &LodRef,
-		_level: LodSceneLevel,
+		_lod_ref: &LodRef,
+		level: LodSceneLevel,
 	) -> impl Scene + 'static {
-		RoughStonePanelRectangle::scene_with_lod(lod_ref)
+		panel_scene_ref_for_level(
+			RECTANGLE_HIGH.scene_ref(),
+			RECTANGLE_MID.scene_ref(),
+			RECTANGLE_LOW.scene_ref(),
+			PANEL_ULTRA_LOW_RECTANGLE.scene_ref(),
+			level,
+		)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		RoughStonePanelRectangle::scene_with_lod(lod_ref)
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::new(0.0, -0.2, 0.0), Vec3::new(1.0, 0.2, 1.0))
 	}
 }

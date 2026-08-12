@@ -2,20 +2,36 @@
 //!
 //! High + mid GLBs only; low / ultra-low LOD omit this filler.
 
+use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec3;
+use bevy::prelude::{Component, Transform};
+use lod::SceneChunk;
+
 use crate::partitions::geometry::JointLod;
 use crate::partitions::probe::PartitionLodProbe;
 
 /// Circular / post joint between upright linear partition segments.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
 pub struct RoughStoneworkJoint;
 
 impl lod::gen::LodScene for RoughStoneworkJoint {
 	fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneLevel {
-		PartitionLodProbe::from_aabb(lod_ref.bounds).level_for(lod_ref.current_transform)
+		JointLod::level_for_lod_ref(lod_ref)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneStatus {
-		PartitionLodProbe::from_aabb(lod_ref.bounds).status_for_lod_ref(lod_ref)
+		let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
+		let prev_factor = lod_ref.previous_transform.translation.distance(probe.center)
+			/ probe.extent.max(1e-4);
+		let curr_factor = lod_ref.current_transform.translation.distance(probe.center)
+			/ probe.extent.max(1e-4);
+		let prev = JointLod::band_from_distance_factor(prev_factor);
+		let curr = JointLod::band_from_distance_factor(curr_factor);
+		if prev == curr {
+			lod::gen::LodSceneStatus::Unchanged
+		} else {
+			lod::gen::LodSceneStatus::Changed(JointLod::level_for_lod_ref(lod_ref))
+		}
 	}
 
 	fn scene_lod_culls(
@@ -31,10 +47,18 @@ impl lod::gen::LodScene for RoughStoneworkJoint {
 		_lod_ref: &lod::lod_ref::LodRef,
 		level: lod::gen::LodSceneLevel,
 	) -> impl bevy::scene::Scene + 'static {
-		JointLod::posed_tier(bevy::prelude::Transform::IDENTITY, level)
+		JointLod::posed_tier(Transform::IDENTITY, level)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &lod::lod_ref::LodRef) -> impl bevy::scene::Scene + 'static {
-		JointLod::leaf_host(lod_ref)
+	fn scene_chunks_with_level(
+		&self,
+		lod_ref: &lod::lod_ref::LodRef,
+		level: lod::gen::LodSceneLevel,
+	) -> SceneChunk {
+		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::new(-0.5, 0.0, -0.5), Vec3::new(0.5, 1.0, 0.5))
 	}
 }

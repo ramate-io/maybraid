@@ -3,8 +3,9 @@
 use bevy::prelude::Color;
 
 /// Furniture or bathroom-fixture form filled by a wireframe box for now.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum FurnitureGeometry {
+	#[default]
 	Bed,
 	Wardrobe,
 	Dresser,

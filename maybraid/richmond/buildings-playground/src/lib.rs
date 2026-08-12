@@ -1,5 +1,6 @@
 //! Interactive viewer for Richmond building components and authored buildings.
 
+pub mod buildings_lod;
 pub mod camera;
 pub mod commands;
 mod ground;
@@ -13,24 +14,20 @@ pub use preview::{PreviewConfig, PreviewSubject};
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
+use buildings_lod::BuildingsLodRefreshPlugin;
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{
-	add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for, LodChunkFulfillBudget,
-	LodRefreshCorePlugin, LodRefreshSystems,
-};
+use lod::LodRefreshSystems;
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
 	draw_opening_plan_gizmos, draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
-	apply_parent_confines, update_building_structural_host_levels, update_panel_host_levels,
-	update_partition_host_levels, update_roof_host_levels, FurnitureWireframePlugin,
-	LabelWireframePlugin, WarmAssetLodRoots,
+	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
-use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
+use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
 
 pub struct RichmondBuildingsPlaygroundPlugin;
@@ -39,23 +36,14 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<CachedPreview>()
-			.insert_resource(LodChunkFulfillBudget {
-				spawn_weights_per_frame: 1,
-				cull_weights_per_frame: 1,
-				begins_per_frame: 1,
-			})
 			.add_plugins((
 				SceneRefPlugin,
 				FurnitureWireframePlugin,
 				LabelWireframePlugin,
 				TowerSilhouettePlugin,
-				LodRefreshCorePlugin,
+				BuildingsLodRefreshPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
-		// Wizard's Tower: incremental chunk fulfill (experiment).
-		add_lod_refresh_chunk_full_for::<WizardsTower>(app);
-		// Probe updates LodSceneLevel; WarmAssetLodRoots handles spawn + cull.
-		add_lod_refresh_cull_for::<WarmAssetLodRoots>(app);
 		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
@@ -69,10 +57,6 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					draw_opening_plan_gizmos.after(present_preview_lod),
 					draw_label_text_gizmos.after(present_preview_lod),
 					draw_roof_complex_gizmos.after(present_preview_lod),
-					update_partition_host_levels.in_set(LodRefreshSystems::UpdateLevels),
-					update_panel_host_levels.in_set(LodRefreshSystems::UpdateLevels),
-					update_roof_host_levels.in_set(LodRefreshSystems::UpdateLevels),
-					update_building_structural_host_levels.in_set(LodRefreshSystems::UpdateLevels),
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

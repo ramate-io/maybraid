@@ -9,6 +9,12 @@ pub enum RoofGeometry {
 	Dome(DomeRoof),
 }
 
+impl Default for RoofGeometry {
+	fn default() -> Self {
+		Self::Dome(DomeRoof::default())
+	}
+}
+
 impl RoofGeometry {
 	pub fn pitch(pitch: Pitch) -> Self {
 		Self::Pitch(pitch)

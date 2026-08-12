@@ -11,10 +11,10 @@ use bevy::prelude::Transform;
 use bevy::scene::prelude::Scene;
 use bevy_math::{Quat, Vec3};
 use lod::gen::LodSceneLevel;
-use lod::lod_ref::LodRef;
+use scene_ref::MirrorAxis;
 
 use crate::partitions::geometry::PartitionTile;
-use crate::partitions::host::{posed_mesh_tier, warm_mesh_host};
+use crate::partitions::host::{posed_mesh_tier, posed_mirrored_mesh_tier};
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
 use crate::placed::{Placed, Placement};
@@ -176,19 +176,14 @@ impl LinearLod {
 		posed_mesh_tier(meshes, transform, level)
 	}
 
-	pub fn posed_host(
+	/// [`Self::posed_tier`] with optional [`scene_ref::SceneRef`] axis mirroring.
+	pub fn posed_mirrored_tier(
 		meshes: PartitionMeshSet,
 		transform: Transform,
 		level: LodSceneLevel,
-		probe: PartitionLodProbe,
+		mirror: Option<MirrorAxis>,
 	) -> impl Scene + 'static {
-		warm_mesh_host(meshes, transform, level, probe)
-	}
-
-	pub fn leaf_host(meshes: PartitionMeshSet, lod_ref: &LodRef) -> impl Scene + 'static {
-		let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
-		let level = probe.level_for(lod_ref.current_transform);
-		Self::posed_host(meshes, Transform::IDENTITY, level, probe)
+		posed_mirrored_mesh_tier(meshes, transform, level, mirror)
 	}
 }
 

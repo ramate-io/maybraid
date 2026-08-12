@@ -14,7 +14,7 @@ use richmond_building_components::partitions::rough_stonework::{
 use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
-use richmond_building_components::{pose, BuildingComponents, ComponentsOnly, LabelNode};
+use richmond_building_components::{pose, BuildingComponents, LabelNode};
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
@@ -4286,16 +4286,16 @@ pub fn present_preview_lod(
 	match &config.subject {
 		PreviewSubject::None => {}
 		PreviewSubject::Linear => {
-			spawn_preview(&mut commands, transform, RoughStoneworkLinear.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, RoughStoneworkLinear.host(&lod_ref));
 		}
 		PreviewSubject::Arc90 => {
-			spawn_preview(&mut commands, transform, RoughStonework90.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, RoughStonework90.host(&lod_ref));
 		}
 		PreviewSubject::Arc180 => {
-			spawn_preview(&mut commands, transform, RoughStonework180.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, RoughStonework180.host(&lod_ref));
 		}
 		PreviewSubject::Slice90 => {
-			spawn_preview(&mut commands, transform, RoughStoneworkSlice90.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, RoughStoneworkSlice90.host(&lod_ref));
 		}
 		PreviewSubject::Pitch { rise, run, length, tile_width, left, right } => {
 			let mut pitch = Pitch::new(*rise, *run, *tile_width);
@@ -4309,21 +4309,22 @@ pub fn present_preview_lod(
 				pitch = pitch.with_right(*base);
 			}
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
-			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, roof.host(&lod_ref));
 		}
 		PreviewSubject::TessellatedTriangle { a, b, c } => {
 			let panel = PanelNode::rough_stone(
 				PanelGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
 				Placement::IDENTITY,
 			);
-			spawn_preview(&mut commands, transform, panel.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, panel.host(&lod_ref));
 		}
 		PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 			let panel = TessellatedTrianglePanel::rough_stone(*a, *b, *c);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(panel).scene_with_lod(&lod_ref),
+				&panel,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedTessellatedTriangle {
@@ -4342,10 +4343,11 @@ pub fn present_preview_lod(
 			let complex = ClippedTessellatedTriangle::rough_stone(*a, *b, *c, clip.clone())
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+				&complex,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedQuadPanel {
@@ -4365,10 +4367,11 @@ pub fn present_preview_lod(
 			let complex = ClippedQuadPanel::rough_stone(*a0, *a1, *b0, *b1, clip.clone())
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+				&complex,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedRuledStrip {
@@ -4405,10 +4408,11 @@ pub fn present_preview_lod(
 				[None, Some(mid_clip), None],
 			)
 			.with_joint_policy(policy);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				&strip,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::Tube {
@@ -4490,19 +4494,21 @@ pub fn present_preview_lod(
 			)
 			.with_joint_policy(policy)
 			.with_faces(faces);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(tube).scene_with_lod(&lod_ref),
+				&tube,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ConnectingHall => {
 			let (end_a, end_b) = connecting_hall_demo_endpoints();
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(hall).scene_with_lod(&lod_ref),
+				&hall,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ArcFloor {
@@ -4529,10 +4535,11 @@ pub fn present_preview_lod(
 				},
 				..ArcFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(floor_shell).scene_with_lod(&lod_ref),
+				&floor_shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ArcTower {
@@ -4580,18 +4587,20 @@ pub fn present_preview_lod(
 				intermediate_floor_hole: *floor_hole,
 				..ArcTowerParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(tower).scene_with_lod(&lod_ref),
+				&tower,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ConnectingShells => {
 			let demo = ConnectingShells::new();
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(demo).scene_with_lod(&lod_ref),
+				&demo,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::Trazaloid {
@@ -4629,10 +4638,11 @@ pub fn present_preview_lod(
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::PitchedRectangularRoof {
@@ -4657,10 +4667,11 @@ pub fn present_preview_lod(
 				*no_hips,
 				openings,
 			);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::RectFloor {
@@ -4688,10 +4699,11 @@ pub fn present_preview_lod(
 				},
 				..RectFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::RoundedRectFloor {
@@ -4723,10 +4735,11 @@ pub fn present_preview_lod(
 				},
 				..RoundedRectFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::IFloor {
@@ -4762,10 +4775,11 @@ pub fn present_preview_lod(
 				},
 				..IFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::RectRingFloor {
@@ -4796,10 +4810,11 @@ pub fn present_preview_lod(
 				},
 				..RectRingFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::CircRingFloor {
@@ -4828,10 +4843,11 @@ pub fn present_preview_lod(
 				},
 				..CircRingFloorParams::default()
 			});
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::RectangularPitchedRoofComplex {
@@ -4855,10 +4871,11 @@ pub fn present_preview_lod(
 				*skylight,
 			);
 			let shell = RectangularPitchedRoofComplex::new(params);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+				&shell,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::Rectangle {
@@ -4875,10 +4892,11 @@ pub fn present_preview_lod(
 				rect.oriented.b0,
 				rect.oriented.b1,
 			];
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+				&rect,
+				&lod_ref,
 			);
 			spawn_rectangle_debug_balls(
 				&mut commands,
@@ -4907,10 +4925,11 @@ pub fn present_preview_lod(
 				*roll,
 				RectInset::new(*left, *right, *bottom, *top),
 			);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+				&rect,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedRectangularStrip {
@@ -4936,10 +4955,11 @@ pub fn present_preview_lod(
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				&strip,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::FittedRectangle { a0, a1, b0, b1 } => {
@@ -4950,10 +4970,11 @@ pub fn present_preview_lod(
 				rect.fitted.b0,
 				rect.fitted.b1,
 			];
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+				&rect,
+				&lod_ref,
 			);
 			spawn_rectangle_debug_balls(
 				&mut commands,
@@ -4980,10 +5001,11 @@ pub fn present_preview_lod(
 				*b1,
 				RectInset::new(*left, *right, *bottom, *top),
 			);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+				&rect,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedFittedRectangularStrip {
@@ -5016,10 +5038,11 @@ pub fn present_preview_lod(
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				&strip,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::RectangularNTube {
@@ -5055,10 +5078,11 @@ pub fn present_preview_lod(
 			)
 			.without_face_edges(omit_faces.iter().copied())
 			.with_joint_policy(policy);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(tube).scene_with_lod(&lod_ref),
+				&tube,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ApproximatedCircle {
@@ -5068,10 +5092,11 @@ pub fn present_preview_lod(
 			clip,
 		} => {
 			let disk = ApproximatedCircle::rough_stone(*center, *radius, *segments, *clip);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(disk).scene_with_lod(&lod_ref),
+				&disk,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ArcSweep {
@@ -5087,10 +5112,11 @@ pub fn present_preview_lod(
 				*sweep_degrees,
 				start_yaw_deg.to_radians(),
 			);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(sweep).scene_with_lod(&lod_ref),
+				&sweep,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::ClippedArcSweep {
@@ -5107,10 +5133,11 @@ pub fn present_preview_lod(
 				start_yaw_deg.to_radians(),
 				[(0.2, 0.35), (0.6, 0.72)],
 			);
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(sweep).scene_with_lod(&lod_ref),
+				&sweep,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::QuadPanel {
@@ -5138,10 +5165,11 @@ pub fn present_preview_lod(
 			)
 			.with_joint_policy(policy)
 			.into_complex();
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+				&complex,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::PanelComplex {
@@ -5157,10 +5185,11 @@ pub fn present_preview_lod(
 			match mesh.parse::<PanelComplex>() {
 				Ok(complex) => {
 					let complex = complex.with_joint_policy(policy);
-					spawn_preview(
+					spawn_building_preview(
 						&mut commands,
 						transform,
-						ComponentsOnly(complex).scene_with_lod(&lod_ref),
+						&complex,
+						&lod_ref,
 					);
 				}
 				Err(e) => {
@@ -5181,10 +5210,11 @@ pub fn present_preview_lod(
 			match mesh.parse::<QuadPanelComplex>() {
 				Ok(quads) => {
 					let complex = quads.with_joint_policy(policy).into_complex();
-					spawn_preview(
+					spawn_building_preview(
 						&mut commands,
 						transform,
-						ComponentsOnly(complex).scene_with_lod(&lod_ref),
+						&complex,
+						&lod_ref,
 					);
 				}
 				Err(e) => {
@@ -5221,10 +5251,11 @@ pub fn present_preview_lod(
 				.with_lines(eave, ridge)
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_preview(
+			spawn_building_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+				&complex,
+				&lod_ref,
 			);
 		}
 		PreviewSubject::Polyline => {
@@ -5239,14 +5270,15 @@ pub fn present_preview_lod(
 				),
 				Placement::IDENTITY,
 			);
-			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, node.host(&lod_ref));
 		}
 		PreviewSubject::NoisyRectangularWall { .. } => {
 			if let Some(wall) = cache.noisy_wall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(wall).scene_with_lod(&lod_ref),
+					wall,
+					&lod_ref,
 				);
 			}
 		}
@@ -5266,47 +5298,52 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::StackedRings { .. } => {
 			if let Some(rings) = cache.stacked_rings.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(rings).scene_with_lod(&lod_ref),
+					rings,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::Bedroom { .. } => {
 			if let Some(bedroom) = cache.bedroom.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(bedroom).scene_with_lod(&lod_ref),
+					bedroom,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::BedroomExamples => {
 			for cell in &cache.bedroom_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.room).scene_with_lod(&lod_ref),
+					&cell.room,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::ResidentialBathroom { .. } => {
 			if let Some(room) = cache.residential_bathroom.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(room).scene_with_lod(&lod_ref),
+					room,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::ResidentialHalfBathroom { .. } => {
 			if let Some(room) = cache.residential_half_bathroom.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(room).scene_with_lod(&lod_ref),
+					room,
+					&lod_ref,
 				);
 			}
 		}
@@ -5317,16 +5354,12 @@ pub fn present_preview_lod(
 					| ResidentialBathroomExampleCell::Half { offset, .. } => *offset,
 				});
 				match cell {
-					ResidentialBathroomExampleCell::Full { room, .. } => spawn_preview(
-						&mut commands,
-						tf,
-						ComponentsOnly(room).scene_with_lod(&lod_ref),
-					),
-					ResidentialBathroomExampleCell::Half { room, .. } => spawn_preview(
-						&mut commands,
-						tf,
-						ComponentsOnly(room).scene_with_lod(&lod_ref),
-					),
+					ResidentialBathroomExampleCell::Full { room, .. } => {
+						spawn_building_preview(&mut commands, tf, room, &lod_ref);
+					}
+					ResidentialBathroomExampleCell::Half { room, .. } => {
+						spawn_building_preview(&mut commands, tf, room, &lod_ref);
+					}
 				}
 			}
 		}
@@ -5362,113 +5395,125 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::CommercialStall { .. } => {
 			if let Some(stall) = cache.commercial_stall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::CommercialStallStrip { .. } => {
 			if let Some(strip) = cache.commercial_stall_strip.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(strip).scene_with_lod(&lod_ref),
+					strip,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::BitesStall { .. } => {
 			if let Some(stall) = cache.bites_stall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::BitesSitdownStall { .. } => {
 			if let Some(stall) = cache.bites_sitdown_stall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::MiniMart { .. } => {
 			if let Some(stall) = cache.mini_mart.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::MiniMartExamples => {
 			for cell in &cache.mini_mart_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+					&cell.stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::PartsStall { .. } => {
 			if let Some(stall) = cache.parts_stall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::PartsExamples => {
 			for cell in &cache.parts_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+					&cell.stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::KnickKnackStall { .. } => {
 			if let Some(stall) = cache.knick_knack_stall.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::KnickKnackExamples => {
 			for cell in &cache.knick_knack_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+					&cell.stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::PublicRestroom { .. } => {
 			if let Some(stall) = cache.public_restroom.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+					stall,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::PublicRestroomExamples => {
 			for cell in &cache.public_restroom_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+					&cell.stall,
+					&lod_ref,
 				);
 			}
 		}
@@ -5483,143 +5528,148 @@ pub fn present_preview_lod(
 				let tf = transform * local;
 				match cell {
 					BitesExampleCell::Stall { stall, .. } => {
-						spawn_preview(
-							&mut commands,
-							tf,
-							ComponentsOnly(stall).scene_with_lod(&lod_ref),
-						);
+						spawn_building_preview(&mut commands, tf, stall, &lod_ref);
 					}
 					BitesExampleCell::Sitdown { stall, .. } => {
-						spawn_preview(
-							&mut commands,
-							tf,
-							ComponentsOnly(stall).scene_with_lod(&lod_ref),
-						);
+						spawn_building_preview(&mut commands, tf, stall, &lod_ref);
 					}
 				}
 			}
 		}
 		PreviewSubject::LesHallesFloorPlan { .. } => {
 			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(plan).scene_with_lod(&lod_ref),
+					plan,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LesHallesFloorPlanExamples => {
 			for cell in &cache.les_halles_floor_plan_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.plan).scene_with_lod(&lod_ref),
+					&cell.plan,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LesHallesFullStorey { .. } => {
 			if let Some(storey) = cache.les_halles_full_storey.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+					storey,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LesHallesLivableFullStorey { .. } => {
 			if let Some(storey) = cache.les_halles_livable_full_storey.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+					storey,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::MixedUseLesHallesMonotower { .. } => {
 			if let Some(tower) = cache.mixed_use_les_halles_monotower.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(tower).scene_with_lod(&lod_ref),
+					tower,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LesHallesLivableFullStoreyExamples => {
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.storey).scene_with_lod(&lod_ref),
+					&cell.storey,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::IApartmentFloorPlan { .. } => {
 			if let Some(plan) = cache.i_apartment_floor_plan.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(plan).scene_with_lod(&lod_ref),
+					plan,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::IApartmentFloorPlanExamples => {
 			for cell in &cache.i_apartment_floor_plan_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.plan).scene_with_lod(&lod_ref),
+					&cell.plan,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::IApartmentFullStorey { .. } => {
 			if let Some(storey) = cache.i_apartment_full_storey.as_ref() {
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					transform,
-					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+					storey,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::IApartmentFullStoreyExamples => {
 			for cell in &cache.i_apartment_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.storey).scene_with_lod(&lod_ref),
+					&cell.storey,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LivableApartmentsExamples => {
 			for cell in &cache.livable_apartments_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.block).scene_with_lod(&lod_ref),
+					&cell.block,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LivableApartmentExamples => {
 			for cell in &cache.livable_apartment_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.apartment).scene_with_lod(&lod_ref),
+					&cell.apartment,
+					&lod_ref,
 				);
 			}
 		}
 		PreviewSubject::LivableRectanglesExamples => {
 			for cell in &cache.livable_rectangles_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_preview(
+				spawn_building_preview(
 					&mut commands,
 					tf,
-					ComponentsOnly(&cell.area).scene_with_lod(&lod_ref),
+					&cell.area,
+					&lod_ref,
 				);
 			}
 		}
@@ -5629,19 +5679,42 @@ pub fn present_preview_lod(
 	}
 }
 
-fn spawn_livable_quarters_gallery<T: BuildingComponents>(
+fn spawn_livable_quarters_gallery<T>(
 	commands: &mut Commands,
 	transform: Transform,
 	cells: &[GalleryExampleCell<T>],
 	lod_ref: &lod::lod_ref::LodRef<'_>,
-) {
+) where
+	T: BuildingComponents + Clone + Send + Sync + 'static,
+{
 	for cell in cells {
 		let tf = transform * Transform::from_translation(cell.offset);
-		spawn_preview(
-			commands,
-			tf,
-			ComponentsOnly(&cell.room).scene_with_lod(lod_ref),
-		);
+		spawn_building_preview(commands, tf, &cell.room, lod_ref);
+	}
+}
+
+fn spawn_building_preview<T>(
+	commands: &mut Commands,
+	transform: Transform,
+	building: &T,
+	lod_ref: &lod::lod_ref::LodRef<'_>,
+) where
+	T: BuildingComponents + Clone + Send + Sync + 'static,
+{
+	use lod::gen::LodScene;
+	use richmond_building_components::{
+		append_component_scenes, scene_children, spawn_building_components, ComponentsOnly,
+	};
+	if building.structural_lod().is_some() {
+		let host = ComponentsOnly(building.clone());
+		let bounds = host.scene_bounds();
+		for entity in spawn_building_components(commands, building, transform, bounds) {
+			commands.entity(entity).insert(PreviewRoot);
+		}
+	} else {
+		let mut children: Vec<Box<dyn bevy::scene::Scene>> = Vec::new();
+		append_component_scenes(building, lod_ref, lod::gen::LodSceneLevel::High, &mut children);
+		spawn_preview(commands, transform, scene_children(children));
 	}
 }
 

@@ -11,7 +11,7 @@ pub(crate) mod tessellate;
 
 pub use geometry::*;
 pub use lod::{
-	leaf_scene_ref_lod, update_roof_host_levels, RoofLodBand, RoofLodProbe, ROOF_HIGH_FACTOR,
+	roof_scene_ref_for_level, update_roof_host_levels, RoofLodBand, RoofLodProbe, ROOF_HIGH_FACTOR,
 	ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
 };
 pub use node::RoofNode;

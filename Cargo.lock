@@ -5606,11 +5606,13 @@ dependencies = [
 name = "richmond-buildings-playground"
 version = "0.0.1"
 dependencies = [
+ "avian3d",
  "bevy",
  "bevy_math",
  "clap",
  "game-commands",
  "lod",
+ "lod-avian",
  "log",
  "procedural-common",
  "richmond-building-components",

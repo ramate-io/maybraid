@@ -98,6 +98,16 @@ pub fn placement_center(placement: &Placement) -> Vec3 {
 	placement.translation + Vec3::new(0.0, placement.scale.y.abs() * 0.5, 0.0)
 }
 
+/// Local AABB around a placed kit ([`placement_center`] ± characteristic extent).
+///
+/// Coarse on purpose: this feeds [`lod::LodScene::scene_bounds`] for host indexing,
+/// not culling geometry.
+pub fn placement_bounds(placement: &Placement) -> Aabb3d {
+	let center = placement_center(placement);
+	let half = Vec3::splat(characteristic_extent_abs(placement).max(1.0));
+	Aabb3d::from_min_max(center - half, center + half)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

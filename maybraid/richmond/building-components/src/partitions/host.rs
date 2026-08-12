@@ -1,70 +1,50 @@
-//! Partition mesh-resolution hosts: GLB sets → crate [`lod_host`](crate::lod_host) scaffolding.
+//! Partition mesh-resolution policy: GLB sets → posed content for one level.
 //!
 //! **Split of concerns**
-//! - [`crate::lod_host`] — structural warm `LodSceneHost` / level roots (any domain).
-//! - **This module** — partition **resolution policy**: which high / mid / low GLBs
-//!   sit in those roots (and eventually a dedicated **ultra-low** asset). Until ultra-low
-//!   GLBs exist, [`LodSceneLevel::UltraLow`] shares the low mesh via banding.
+//! - [`crate::lod_host`] — posed level-root content (any domain).
+//! - **This module** — partition **resolution policy**: which high / mid / low GLB is
+//!   selected for a [`LodSceneLevel`] (and eventually a dedicated **ultra-low** asset).
+//!   Until ultra-low GLBs exist, [`LodSceneLevel::UltraLow`] shares the low mesh.
 //!
 //! [`PartitionNode`](crate::partitions::PartitionNode) covers both **direct** kit mappings
-//! (e.g. a lone linear) and **tessellated** forms (polyline / arc → many tiles under one parent host).
+//! (e.g. a lone linear) and **tessellated** forms (polyline / arc → many tiles under one host).
 
 use bevy::prelude::Transform;
 use bevy::scene::prelude::Scene;
 use lod::gen::LodSceneLevel;
+use scene_ref::MirrorAxis;
 
-use crate::assets::AssetPath;
-use crate::lod_host::warm_mesh_level_host;
+use crate::lod_host::posed_scene_ref_tier;
 use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
-use crate::partitions::probe::PartitionLodProbe;
 
 pub use crate::lod_host::posed_asset_tier;
 
+/// Resolution tier for a level. UltraLow uses the low GLB until a fourth path is authored.
+pub fn mesh_tier_for_level(level: LodSceneLevel) -> PartitionMeshTier {
+	match level {
+		LodSceneLevel::High => PartitionMeshTier::High,
+		LodSceneLevel::Medium => PartitionMeshTier::Mid,
+		LodSceneLevel::Low | LodSceneLevel::UltraLow => PartitionMeshTier::Low,
+		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => PartitionMeshTier::Mid,
+	}
+}
+
 /// One SceneRef under a transform (for `scene_with_level`).
-///
-/// UltraLow uses the low GLB until a fourth ultra-low path is authored.
 pub fn posed_mesh_tier(
 	meshes: PartitionMeshSet,
 	transform: Transform,
 	level: LodSceneLevel,
 ) -> impl Scene + 'static {
-	let tier = match level {
-		LodSceneLevel::High => PartitionMeshTier::High,
-		LodSceneLevel::Medium => PartitionMeshTier::Mid,
-		LodSceneLevel::Low | LodSceneLevel::UltraLow => PartitionMeshTier::Low,
-		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => PartitionMeshTier::Mid,
-	};
-	posed_asset_tier(Some(meshes.for_tier(tier)), transform)
+	posed_mirrored_mesh_tier(meshes, transform, level, None)
 }
 
-/// Warm high / mid / low mesh roots under one host.
-///
-/// When ultra-low GLBs ship, extend [`PartitionMeshSet`] and pass a fourth
-/// `(LodSceneLevel::UltraLow, Some(meshes.ultra_low))` into [`warm_mesh_level_host`].
-pub fn warm_mesh_host(
+/// Like [`posed_mesh_tier`], with optional [`scene_ref::SceneRef`] axis mirroring.
+pub fn posed_mirrored_mesh_tier(
 	meshes: PartitionMeshSet,
 	transform: Transform,
 	level: LodSceneLevel,
-	probe: PartitionLodProbe,
+	mirror: Option<MirrorAxis>,
 ) -> impl Scene + 'static {
-	warm_mesh_level_host(
-		level,
-		probe,
-		transform,
-		[
-			(LodSceneLevel::High, Some(meshes.high)),
-			(LodSceneLevel::Medium, Some(meshes.mid)),
-			(LodSceneLevel::Low, Some(meshes.low)),
-		],
-	)
-}
-
-/// Warm host with optional per-level mesh (e.g. joint high/mid, empty low).
-pub fn warm_host(
-	level: LodSceneLevel,
-	probe: PartitionLodProbe,
-	transform: Transform,
-	roots: [(LodSceneLevel, Option<AssetPath>); 3],
-) -> impl Scene + 'static {
-	warm_mesh_level_host(level, probe, transform, roots)
+	let asset = meshes.for_tier(mesh_tier_for_level(level));
+	posed_scene_ref_tier(Some(asset.scene_ref().with_mirror(mirror)), transform)
 }

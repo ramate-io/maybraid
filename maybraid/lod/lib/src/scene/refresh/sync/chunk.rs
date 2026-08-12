@@ -1,6 +1,6 @@
 //! Incremental LOD level-root fulfillment via [`crate::SceneChunk`].
 //!
-//! Default sync path (vs optional eager [`super::eager::fulfill_lod_level_spawn`]):
+//! Default sync path for level-root fulfillment:
 //! builds a pending root, drains weighted primitives under
 //! [`LodChunkFulfillBudget`], marks content [`LodLevelRootStreamed`], then
 //! completes when next-level nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].

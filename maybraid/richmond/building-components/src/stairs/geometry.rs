@@ -6,6 +6,12 @@ pub enum StairGeometry {
 	Straight(StraightStair),
 }
 
+impl Default for StairGeometry {
+	fn default() -> Self {
+		Self::straight()
+	}
+}
+
 impl StairGeometry {
 	pub fn spiral() -> Self {
 		Self::Spiral(SpiralStair::default())
