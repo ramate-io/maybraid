@@ -11,7 +11,7 @@ pub mod joints;
 pub mod labels;
 pub mod layer;
 pub mod lod_band;
-pub mod lod_host;
+pub mod lod_host_helper;
 pub mod panels;
 pub mod parent_confines;
 pub mod partitions;
@@ -30,7 +30,7 @@ pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
 pub use lod_band::{placement_bounds, warm_mesh_lod_culls, warm_mesh_lod_culls_at_depth};
-pub use lod_host::{posed_asset_tier, posed_scene_ref_tier};
+pub use lod_host_helper::LodHostHelper;
 pub use panels::{
 	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
 	update_panel_host_levels, with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelLodBand,

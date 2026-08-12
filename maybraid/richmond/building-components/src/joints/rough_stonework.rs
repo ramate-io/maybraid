@@ -7,7 +7,7 @@ use lod::lod_ref::LodRef;
 
 use crate::assets::joints::rough_stonework::{JOINT_HIGH, JOINT_MID};
 use crate::assets::AssetPath;
-use crate::lod_host::posed_asset_tier;
+use crate::lod_host_helper::LodHostHelper;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
 use crate::placed::Placement;
 
@@ -42,7 +42,7 @@ impl JointLod {
 	}
 
 	pub fn posed_tier(transform: Transform, level: LodSceneLevel) -> impl Scene + 'static {
-		posed_asset_tier(Self::asset_for_level(level), transform)
+		LodHostHelper::posed_asset_tier(Self::asset_for_level(level), transform)
 	}
 
 	/// Level from placement + viewer (tighter than the shared partition banding).

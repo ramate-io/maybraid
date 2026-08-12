@@ -1,7 +1,7 @@
 //! Partition mesh-resolution policy: GLB sets → posed content for one level.
 //!
 //! **Split of concerns**
-//! - [`crate::lod_host`] — posed level-root content (any domain).
+//! - [`crate::LodHostHelper`] — posed level-root content (any domain).
 //! - **This module** — partition **resolution policy**: which high / mid / low GLB is
 //!   selected for a [`LodSceneLevel`] (and eventually a dedicated **ultra-low** asset).
 //!   Until ultra-low GLBs exist, [`LodSceneLevel::UltraLow`] shares the low mesh.
@@ -14,10 +14,8 @@ use bevy::scene::prelude::Scene;
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
 
-use crate::lod_host::posed_scene_ref_tier;
+use crate::lod_host_helper::LodHostHelper;
 use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
-
-pub use crate::lod_host::posed_asset_tier;
 
 /// Resolution tier for a level. UltraLow uses the low GLB until a fourth path is authored.
 pub fn mesh_tier_for_level(level: LodSceneLevel) -> PartitionMeshTier {
@@ -46,5 +44,5 @@ pub fn posed_mirrored_mesh_tier(
 	mirror: Option<MirrorAxis>,
 ) -> impl Scene + 'static {
 	let asset = meshes.for_tier(mesh_tier_for_level(level));
-	posed_scene_ref_tier(Some(asset.scene_ref().with_mirror(mirror)), transform)
+	LodHostHelper::posed_scene_ref_tier(Some(asset.scene_ref().with_mirror(mirror)), transform)
 }
