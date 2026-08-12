@@ -1,14 +1,17 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
 use bevy::prelude::*;
-use chico_groves::{GroveExtent, MonsterGrassParams, DEFAULT_GROVE_EXTENT_XZ};
+use chico_groves::{
+	GroveExtent, LevantineScrubParams, MonsterGrassParams, StrangeOasisParams,
+	TropicalThicketParams, DEFAULT_GROVE_EXTENT_XZ,
+};
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
-	BraidOakTreeParams, DatePalmParams, HonuBanyanParams, JungleStorybookTreeParams,
-	KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams, PalmBushParams,
-	PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams, SimplemansHedgeParams,
-	SopesBanyanParams, StorybookTreeParams, TemperateConiferParams, TuftPatchParams,
-	VaseTreeParams, WaialeaPalmParams,
+	BraidOakTreeParams, DatePalmParams, HighBushShootsParams, HonuBanyanParams,
+	JungleStorybookTreeParams, KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams,
+	PalmBushParams, PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams,
+	SimplemansHedgeParams, SopesBanyanParams, StorybookTreeParams, TemperateConiferParams,
+	TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
 	spawn_vegetation_components, vegetation_bounds, VegetationComponents,
@@ -60,6 +63,14 @@ pub enum Show {
 	MonsterGrass(ShowMonsterGrass),
 	/// Centered radius-10 tile of default Monster Grass groves (21×21).
 	MonsterGrassPlains,
+	/// Levantine Scrub grove via VegetationComponents / LodScene.
+	LevantineScrub(ShowLevantineScrub),
+	/// Strange Oasis grove via VegetationComponents / LodScene.
+	StrangeOasis(ShowStrangeOasis),
+	/// Tropical Thicket grove via VegetationComponents / LodScene.
+	TropicalThicket(ShowTropicalThicket),
+	/// High Bush Shoots via VegetationComponents / LodScene.
+	HighBushShoots(ShowHighBushShoots),
 }
 
 #[derive(Clone, Args)]
@@ -209,6 +220,76 @@ impl ShowMonsterGrass {
 	}
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowLevantineScrub {
+	#[command(flatten)]
+	pub grove: LevantineScrubParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowLevantineScrub {
+	fn configured(self) -> LevantineScrubParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowStrangeOasis {
+	#[command(flatten)]
+	pub grove: StrangeOasisParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowStrangeOasis {
+	fn configured(self) -> StrangeOasisParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowTropicalThicket {
+	#[command(flatten)]
+	pub grove: TropicalThicketParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowTropicalThicket {
+	fn configured(self) -> TropicalThicketParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowHighBushShoots {
+	#[command(flatten)]
+	pub bush: HighBushShootsParams,
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -232,6 +313,10 @@ impl Show {
 			Self::PalmBush(args) => ShowSubject::PalmBush(args.bush),
 			Self::MonsterGrass(args) => ShowSubject::MonsterGrass(args.configured()),
 			Self::MonsterGrassPlains => ShowSubject::MonsterGrassPlains,
+			Self::LevantineScrub(args) => ShowSubject::LevantineScrub(args.configured()),
+			Self::StrangeOasis(args) => ShowSubject::StrangeOasis(args.configured()),
+			Self::TropicalThicket(args) => ShowSubject::TropicalThicket(args.configured()),
+			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -264,6 +349,10 @@ pub enum ShowSubject {
 	PalmBush(PalmBushParams),
 	MonsterGrass(MonsterGrassParams),
 	MonsterGrassPlains,
+	LevantineScrub(LevantineScrubParams),
+	StrangeOasis(StrangeOasisParams),
+	TropicalThicket(TropicalThicketParams),
+	HighBushShoots(HighBushShootsParams),
 }
 
 #[derive(Component)]
@@ -350,6 +439,25 @@ pub fn sync_show(
 			g.foliage_noise
 		)),
 		Some(ShowSubject::MonsterGrassPlains) => Some("monster-grass-plains".into()),
+		Some(ShowSubject::LevantineScrub(g)) => Some(format!(
+			"levantine-scrub:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::StrangeOasis(g)) => Some(format!(
+			"strange-oasis:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::TropicalThicket(g)) => Some(format!(
+			"tropical-thicket:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -391,6 +499,10 @@ pub fn sync_show(
 				commands.entity(entity).insert(ShowRoot);
 			}
 		}
+		ShowSubject::LevantineScrub(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::StrangeOasis(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::TropicalThicket(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
 
@@ -424,6 +536,35 @@ mod tests {
 			cmd,
 			crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)
 		));
+		Ok(())
+	}
+
+	#[test]
+	fn show_refactored_groves_parse_and_build() -> Result<()> {
+		for line in [
+			"show levantine-scrub --grove-extent-xz 20",
+			"show strange-oasis --grove-extent-xz 20",
+			"show tropical-thicket --grove-extent-xz 20",
+			"show high-bush-shoots",
+		] {
+			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
+				.map_err(|e| anyhow::anyhow!("{line}: {e}"))?;
+			match cmd {
+				crate::commands::PlaygroundCommand::Show(Show::LevantineScrub(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::StrangeOasis(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::TropicalThicket(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {
+					let _ = args.bush.build();
+				}
+				_ => anyhow::bail!("unexpected command for {line}"),
+			}
+		}
 		Ok(())
 	}
 }

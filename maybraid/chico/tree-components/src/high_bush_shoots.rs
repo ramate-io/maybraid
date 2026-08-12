@@ -8,6 +8,7 @@ pub mod render_item_plugin;
 mod stick;
 
 pub use assembly::HighBushShoots;
+pub use canopy::should_allocate_foliage;
 pub use config::{HighBushFoliageStyle, HighBushShootsShape};
 pub use preset::{
 	apply_common_high_bush_preset, COMMON_HIGH_BUSH_RADIAL_STRENGTH, COMMON_HIGH_BUSH_SHOOT_COUNT,

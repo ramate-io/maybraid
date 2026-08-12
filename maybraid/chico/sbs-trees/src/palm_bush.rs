@@ -5,7 +5,7 @@
 //! at Low/UltraLow (no sticks).
 //!
 //! Standalone unit crowns (grove Placement scale) prefer
-//! [`PalmCrownParams::unit_detail_from_num`](crate::PalmCrownParams::unit_detail_from_num).
+//! [`PalmCrownParams::unit_detail_for_height_from_num`](crate::PalmCrownParams::unit_detail_for_height_from_num).
 //! [`PalmBushParams::unit_detail_from_num`] is a thin SBS bridge that keys foliage noise and
 //! mirrors detail crown counts without rewriting height-fraction frond shaping.
 

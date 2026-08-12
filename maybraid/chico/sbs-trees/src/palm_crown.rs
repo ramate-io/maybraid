@@ -70,6 +70,15 @@ impl Default for PalmCrownParams {
 	}
 }
 
+/// Mid-band date-palm frond length as a fraction of stalk height `H` (RFC `0.6`–`0.8`).
+const DATE_PALM_FROND_LENGTH_FRACTION: f32 = 0.7;
+/// Date-palm rachis width as a fraction of `H`.
+const DATE_PALM_FROND_WIDTH_FRACTION: f32 = 0.07;
+/// Mid-band palm-bush / Waialea frond length as a fraction of `H` (RFC `0.25`–`0.40`).
+const DETAIL_FROND_LENGTH_FRACTION: f32 = 0.325;
+/// Palm-bush / Waialea rachis width as a fraction of `H`.
+const DETAIL_FROND_WIDTH_FRACTION: f32 = 0.05;
+
 impl PalmCrownParams {
 	pub fn new(ring_count: u32, ring_spacing: f32, shape: FrondCrownShape) -> Self {
 		Self { ring_count, ring_spacing, shape }
@@ -83,6 +92,47 @@ impl PalmCrownParams {
 		let stack = rings * self.ring_spacing.max(0.0);
 		let frond_span = self.shape.width.max(0.0) * self.shape.frond_count.max(1) as f32;
 		self.shape.length.max(frond_span).max(stack).max(1e-4)
+	}
+
+	/// World-meter tree-top crown metrics for stalk height `H` (date-palm length band).
+	///
+	/// Pass into [`Self::into_unit_full_from_num`] so Placement scale restores meters after
+	/// unit normalize.
+	pub fn authored_full_for_height(height: f32) -> Self {
+		let h = height.max(1e-6);
+		Self {
+			ring_count: 3,
+			ring_spacing: 0.14,
+			shape: FrondCrownShape {
+				length: (DATE_PALM_FROND_LENGTH_FRACTION * h).max(1e-4),
+				width: (DATE_PALM_FROND_WIDTH_FRACTION * h).max(1e-6),
+				..Self::default().shape
+			},
+		}
+	}
+
+	/// World-meter understory crown metrics for plant height `H` (palm-bush / Waialea band).
+	pub fn authored_detail_for_height(height: f32) -> Self {
+		let h = height.max(1e-6);
+		Self {
+			ring_count: 2,
+			ring_spacing: 0.1,
+			shape: FrondCrownShape {
+				length: (DETAIL_FROND_LENGTH_FRACTION * h).max(1e-4),
+				width: (DETAIL_FROND_WIDTH_FRACTION * h).max(1e-6),
+				..Self::default().shape
+			},
+		}
+	}
+
+	/// Unit full crown + Placement world scale for height `H`.
+	pub fn unit_full_for_height_from_num(height: f32, num: u32) -> (Self, f32) {
+		Self::authored_full_for_height(height).into_unit_full_from_num(num)
+	}
+
+	/// Unit detail crown + Placement world scale for height `H`.
+	pub fn unit_detail_for_height_from_num(height: f32, num: u32) -> (Self, f32) {
+		Self::authored_detail_for_height(height).into_unit_detail_from_num(num)
 	}
 
 	fn apply_full_archetype(&mut self) {
@@ -124,57 +174,20 @@ impl PalmCrownParams {
 	}
 
 	/// Proper tree-top crown archetype with unit characteristic size, keyed by `num` (seed).
+	///
+	/// The mesh is ~unit sized; for grove Placement scale use
+	/// [`Self::unit_full_for_height_from_num`] (or [`Self::into_unit_full_from_num`] with
+	/// authored world meters).
 	pub fn unit_full_from_num(num: u32) -> Self {
-		let mut params = Self {
-			ring_count: 3,
-			ring_spacing: 0.14,
-			shape: FrondCrownShape {
-				frond_count: 8,
-				length: 1.6,
-				width: 0.16,
-				droop: 0.55,
-				arch_lift: 0.28,
-				twist: 0.55,
-				leaflet_count: 16,
-				spine_segments: 3,
-				downward_tilt_radians: 0.55,
-				outward_spread_radians: 1.4,
-				emission_lift_radians: 0.32,
-				seed: num as i32,
-				..FrondCrownShape::default()
-			},
-		};
-		params.apply_full_archetype();
-		params.shape.seed = num as i32;
-		let _ = params.normalize_to_unit();
-		params
+		Self::unit_full_for_height_from_num(1.6 / DATE_PALM_FROND_LENGTH_FRACTION, num).0
 	}
 
 	/// Lighter understory crown archetype with unit characteristic size, keyed by `num`.
+	///
+	/// The mesh is ~unit sized; for grove Placement scale use
+	/// [`Self::unit_detail_for_height_from_num`].
 	pub fn unit_detail_from_num(num: u32) -> Self {
-		let mut params = Self {
-			ring_count: 2,
-			ring_spacing: 0.1,
-			shape: FrondCrownShape {
-				frond_count: 5,
-				length: 1.0,
-				width: 0.12,
-				droop: 0.5,
-				arch_lift: 0.22,
-				twist: 0.45,
-				leaflet_count: 11,
-				spine_segments: 2,
-				downward_tilt_radians: 0.5,
-				outward_spread_radians: 1.25,
-				emission_lift_radians: 0.28,
-				seed: num as i32,
-				..FrondCrownShape::default()
-			},
-		};
-		params.apply_detail_archetype();
-		params.shape.seed = num as i32;
-		let _ = params.normalize_to_unit();
-		params
+		Self::unit_detail_for_height_from_num(1.0 / DETAIL_FROND_LENGTH_FRACTION, num).0
 	}
 
 	/// Apply full tree-top topology, normalize authored metrics to unit, key by `num`.
@@ -491,6 +504,26 @@ mod tests {
 		// Detail is smaller / sparser than full when compared pre-normalize via counts.
 		let full = PalmCrownParams::unit_full_from_num(3);
 		assert!(a.shape.frond_count < full.shape.frond_count);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_full_for_height_scales_with_stalk() -> Result<()> {
+		let h = 5.0;
+		let (unit, size) = PalmCrownParams::unit_full_for_height_from_num(h, 9);
+		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
+		assert!((size - DATE_PALM_FROND_LENGTH_FRACTION * h).abs() < 1e-3 || size >= DATE_PALM_FROND_LENGTH_FRACTION * h * 0.9);
+		assert!(size > 2.0);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_detail_for_height_scales_with_plant() -> Result<()> {
+		let h = 4.0;
+		let (unit, size) = PalmCrownParams::unit_detail_for_height_from_num(h, 4);
+		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
+		assert!(size > 1.0);
+		assert!((size - DETAIL_FROND_LENGTH_FRACTION * h).abs() < 0.5);
 		Ok(())
 	}
 

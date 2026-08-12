@@ -5,10 +5,10 @@
 //! High/Medium; dual layered-ball crown proxy at Low/UltraLow.
 //!
 //! Unit crown archetypes for Placement-scaled groves live on
-//! [`PalmCrownParams`](crate::PalmCrownParams) (`unit_full_from_num` /
-//! `unit_detail_from_num`). Date Palm keeps SBS trunk + height-fraction fronds; use
-//! [`DatePalmParams::unit_full_from_num`] only to key trunk/foliage noise and mirror full
-//! crown ring/frond counts.
+//! [`PalmCrownParams`](crate::PalmCrownParams) (`unit_full_for_height_from_num` /
+//! `unit_detail_for_height_from_num`). Date Palm keeps SBS trunk + height-fraction fronds;
+//! use [`DatePalmParams::unit_full_from_num`] only to key trunk/foliage noise and mirror
+//! full crown ring/frond counts.
 
 mod crown;
 pub mod render_item_plugin;

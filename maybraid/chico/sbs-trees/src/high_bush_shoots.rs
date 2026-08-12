@@ -2,16 +2,17 @@
 //!
 //! [`HighBushShootsParams::build`] grows [`HighBushShootsShape::build_chain`] once into
 //! [`HighBushShoots`]. Sticks emit per segment (High all / Medium subsample / Low sparse);
-//! foliage is cheap-ball (or layered-ball at Low) at graph terminals — not plane-splay.
+//! foliage is cheap-ball (or layered-ball at Low) using the Common High Bush ball-selection
+//! rule (terminals, upper canopy, or branch order > 1) — not plane-splay.
 //!
 //! Legacy [`chico_tree_components::HighBushShoots`] RenderItem still uses
 //! [`HighBushFoliageStyle::PlaneSplay`] / Tuft via ball-components.
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{
-	high_bush_is_graph_terminal, BallStickChain, HighBushChain,
+use chico_sbs_geometry::{BallStickChain, HighBushChain};
+use chico_tree_components::{
+	should_allocate_foliage, HighBushFoliageStyle, HighBushShootsShape,
 };
-use chico_tree_components::{HighBushFoliageStyle, HighBushShootsShape};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, Placement, StickNode,
 	VegetationComponents, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
@@ -92,17 +93,18 @@ impl HighBushShoots {
 			.collect()
 	}
 
-	/// Terminal foliage; `stride` thins candidates. High/Medium = cheap_ball; Low = layered_ball.
+	/// Foliage at RFC ball-selection joints; `stride` thins candidates.
+	/// High/Medium = cheap_ball; Low = layered_ball.
 	fn foliage_nodes(&self, stride: usize, low: bool) -> Vec<FoliageNode> {
 		let stride = stride.max(1);
 		let leaf_r = self.leaf_radius_world().max(1e-4);
-		let terminals: Vec<Vec3> = self
+		let sites: Vec<Vec3> = self
 			.chain
 			.nodes_with_hysteresis_enumerated()
-			.filter(|(idx, _, _)| high_bush_is_graph_terminal(&self.chain, *idx))
+			.filter(|(idx, _, hyst)| should_allocate_foliage(*idx, hyst, &self.chain))
 			.map(|(_, node, _)| node.position)
 			.collect();
-		terminals
+		sites
 			.into_iter()
 			.enumerate()
 			.filter(|(i, _)| i % stride == 0)
@@ -176,12 +178,21 @@ mod tests {
 	}
 
 	#[test]
-	fn high_emits_sticks_and_terminal_cheap_balls() -> Result<()> {
+	fn high_emits_sticks_and_canopy_cheap_balls() -> Result<()> {
 		let built = HighBushShootsParams::default().build();
 		let sticks = built.stick_nodes_for_level(LodSceneLevel::High).flatten();
 		assert!(!sticks.is_empty());
 		let foliage = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		assert!(!foliage.is_empty());
+		// RFC ball selection fills more than graph terminals alone.
+		let terminal_only = built
+			.chain
+			.nodes_with_hysteresis_enumerated()
+			.filter(|(idx, _, _)| {
+				chico_sbs_geometry::high_bush_is_graph_terminal(&built.chain, *idx)
+			})
+			.count();
+		assert!(foliage.len() >= terminal_only);
 		assert!(foliage.iter().all(|n| matches!(
 			n.geometry,
 			chico_vegetation_components::FoliageGeometry::CheapBall

@@ -314,7 +314,8 @@ mod vc {
 
 	#[derive(Clone)]
 	enum StrangeOasisKind {
-		/// Columnar trunk + unit PalmCrown at tip ([`PalmCrownParams::unit_full_from_num`]).
+		/// Columnar trunk + unit PalmCrown at tip
+		/// ([`PalmCrownParams::unit_full_for_height_from_num`]).
 		DatePalm {
 			trunk: DatePalm,
 			crown: PalmCrown,
@@ -459,11 +460,12 @@ mod vc {
 				let trunk = trunk_params.build();
 				let tip = DatePalmSbs::trunk_tip_from_chain(&trunk.chain);
 				let crown_seed = build_noise.seed.unsigned_abs();
-				let crown = PalmCrownParams::unit_full_from_num(crown_seed).build();
-				// Unit crown (~1) → authored frond reach.
-				let world_size = (geometry.frond_world_scale * 1.6).max(0.5);
+				// Quantize topology to unit crown; Placement restores height-band meters.
+				let (unit_crown, world_size) =
+					PalmCrownParams::unit_full_for_height_from_num(geometry.height(), crown_seed);
+				let crown = unit_crown.build();
 				let crown_local =
-					Placement::new(tip, 0.0).with_scale(Vec3::splat(world_size));
+					Placement::new(tip, 0.0).with_scale(Vec3::splat(world_size.max(1e-4)));
 				StrangeOasisKind::DatePalm { trunk, crown, crown_local }
 			}
 			StrangeOasisItem::Torch(torch) => {

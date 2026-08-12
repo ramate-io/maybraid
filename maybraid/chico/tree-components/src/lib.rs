@@ -6,8 +6,9 @@ pub mod jungle_storybook_canopy;
 pub mod skipped_mesh_material;
 
 pub use high_bush_shoots::{
-	apply_common_high_bush_preset, HighBushFoliageStyle, HighBushShoots, HighBushShootsShape,
-	COMMON_HIGH_BUSH_RADIAL_STRENGTH, COMMON_HIGH_BUSH_SHOOT_COUNT, COMMON_HIGH_BUSH_VERTICAL_BIAS,
+	apply_common_high_bush_preset, should_allocate_foliage, HighBushFoliageStyle, HighBushShoots,
+	HighBushShootsShape, COMMON_HIGH_BUSH_RADIAL_STRENGTH, COMMON_HIGH_BUSH_SHOOT_COUNT,
+	COMMON_HIGH_BUSH_VERTICAL_BIAS,
 };
 pub use jungle_growth::{JungleGrowth, JungleGrowthShape};
 pub use jungle_storybook_canopy::JungleStorybookCanopyFoliage;
