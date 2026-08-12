@@ -564,6 +564,8 @@ mod vc {
 				let mut params = HonuBanyanParams::default();
 				params.geometry = samples.geometry;
 				params.growth_spawn_fraction = samples.growth_spawn_fraction;
+				// Mini Honu (~2–4 m) must not keep full-canopy growth radius (4.0).
+				params = params.with_growth_scale_for_height();
 				let placement = Placement::new(placed.position, 0.0)
 					.with_scale(Vec3::splat(placed.scale.max(1e-4)));
 				(TropicalThicketKind::Banyan(params.build()), placement)

@@ -1,12 +1,18 @@
 //! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
 //!
-//! Structural hosts ([`ComponentsOnly`]`<Grove>`) nest fine-phase
-//! [`FoliageNode`] / [`StickNode`] hosts; both layers listen on the same region channels.
-//! Cull uses a rotating [`OpenLattice`] annulus (not a full-host scan).
+//! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) and structural
+//! [`ComponentsOnly`] wrappers that band via [`VegetationComponents::structural_lod`]
+//! share the same region channels. Cull uses a rotating [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{LevantineScrub, MonsterGrass, StrangeOasis, TropicalThicket};
+use chico_sbs_trees::{
+	BraidOakTree, DatePalm, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
+	LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch, RorysHeadTrained,
+	SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch, VaseTree,
+	WaialeaPalm,
+};
 use chico_vegetation_components::{ComponentsOnly, FoliageNode, StickNode};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
@@ -26,32 +32,24 @@ pub struct VegetationSpotlight;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VegetationCull;
 
-/// Register Avian refresh + cull for one structural [`ComponentsOnly`]`<G>` grove host.
-macro_rules! structural_grove_lod {
-	($app:expr, $grove:ty) => {{
+/// Register Avian refresh + cull for one LOD host type (fine-phase or structural).
+macro_rules! avian_host {
+	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-			AvianLodSceneRefreshPlugin::<
-				ComponentsOnly<$grove>,
-				VegetationBullseye,
-				With<Camera>,
-			>::without_full_scan_cull(),
-			AvianLodSceneRefreshPlugin::<
-				ComponentsOnly<$grove>,
-				VegetationSpotlight,
-				With<Camera>,
-			>::without_full_scan_cull(),
-			AvianLodSceneCullPlugin::<ComponentsOnly<$grove>, VegetationCull, With<Camera>>::default(),
+			AvianLodSceneRefreshPlugin::<$ty, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneRefreshPlugin::<$ty, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
 		));
 	}};
 }
 
 /// Full modern refresh stack for structural + fine-phase vegetation hosts.
 ///
-/// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages  
+/// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages
 /// 2. [`PatchSceneBounds`](lod::PatchSceneBounds) stamps host Avian volumes from
-///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)  
-/// 3. Avian region index → level messages for structural and child component hosts  
-/// 4. Entity refresh (max fold) + chunk sync  
+///    [`LodScene::scene_bounds`](lod::LodScene::scene_bounds)
+/// 3. Avian region index → level messages for structural and child component hosts
+/// 4. Entity refresh (max fold) + chunk sync
 /// 5. [`OpenLattice`] cull regions → Avian index → budgeted root teardown
 pub struct VegetationLodRefreshPlugin;
 
@@ -82,19 +80,37 @@ impl Plugin for VegetationLodRefreshPlugin {
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),
 			LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, VegetationCull>::default(),
-			// Fine-phase stick / foliage hosts nested under structural roots.
-			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneRefreshPlugin::<FoliageNode, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneCullPlugin::<FoliageNode, VegetationCull, With<Camera>>::default(),
-			AvianLodSceneRefreshPlugin::<StickNode, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneRefreshPlugin::<StickNode, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneCullPlugin::<StickNode, VegetationCull, With<Camera>>::default(),
 		));
 
-		// Structural grove hosts (levels + chunk; cull via lattice).
-		structural_grove_lod!(app, MonsterGrass);
-		structural_grove_lod!(app, LevantineScrub);
-		structural_grove_lod!(app, StrangeOasis);
-		structural_grove_lod!(app, TropicalThicket);
+		// Fine-phase domain hosts nested under structural roots.
+		avian_host!(app, FoliageNode);
+		avian_host!(app, StickNode);
+
+		// Structural grove hosts.
+		avian_host!(app, ComponentsOnly<MonsterGrass>);
+		avian_host!(app, ComponentsOnly<LevantineScrub>);
+		avian_host!(app, ComponentsOnly<StrangeOasis>);
+		avian_host!(app, ComponentsOnly<TropicalThicket>);
+
+		// Structural single-tree / component hosts used by `/show`.
+		avian_host!(app, ComponentsOnly<SopesBanyan>);
+		avian_host!(app, ComponentsOnly<PenmarchTorch>);
+		avian_host!(app, ComponentsOnly<KamakuraTorch>);
+		avian_host!(app, ComponentsOnly<RorysHeadTrained>);
+		avian_host!(app, ComponentsOnly<StorybookTree>);
+		avian_host!(app, ComponentsOnly<VaseTree>);
+		avian_host!(app, ComponentsOnly<NorthernConifer>);
+		avian_host!(app, ComponentsOnly<LiamsConifer>);
+		avian_host!(app, ComponentsOnly<TemperateConifer>);
+		avian_host!(app, ComponentsOnly<HonuBanyan>);
+		avian_host!(app, ComponentsOnly<JungleStorybookTree>);
+		avian_host!(app, ComponentsOnly<BraidOakTree>);
+		avian_host!(app, ComponentsOnly<SimplemansHedge>);
+		avian_host!(app, ComponentsOnly<TuftPatch>);
+		avian_host!(app, ComponentsOnly<PalmCrown>);
+		avian_host!(app, ComponentsOnly<DatePalm>);
+		avian_host!(app, ComponentsOnly<WaialeaPalm>);
+		avian_host!(app, ComponentsOnly<PalmBush>);
+		avian_host!(app, ComponentsOnly<HighBushShoots>);
 	}
 }

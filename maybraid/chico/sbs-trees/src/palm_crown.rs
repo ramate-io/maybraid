@@ -1,8 +1,9 @@
 //! **Palm Crown** — stacked frond rings as [`VegetationComponents`].
 //!
-//! High / Medium emit one [`FrondCollection`] per frond (rachis as a short straight-segment
-//! run). Per-frond collections keep merge LOD on rachis-scale extents. Low / UltraLow drop
-//! the fronds and keep two rotated layered-ball proxies fit to the High crown AABB.
+//! High emits one [`FrondCollection`] per frond with a multi-segment rachis run. Medium
+//! keeps the same frond count but collapses each rachis to a single chord. Per-frond
+//! collections keep merge LOD on rachis-scale extents. Low / UltraLow drop the fronds and
+//! keep two rotated layered-ball proxies fit to the High crown AABB.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
 //! [`spawn`] for date / Waialea / bush trees still on RenderItem.
@@ -136,11 +137,11 @@ impl PalmCrownParams {
 	}
 
 	fn apply_full_archetype(&mut self) {
-		self.ring_count = 3;
-		self.shape.frond_count = 8;
-		self.shape.spine_segments = 3;
+		// A few stacked rings + articulated rachis (not the sparse mesh default).
+		self.ring_count = 6;
+		self.shape.frond_count = 10;
+		self.shape.spine_segments = 9;
 		self.shape.leaflet_count = 16;
-		// Palmier tree-top pose (shared with default, denser fronds).
 		self.shape.droop = 0.55;
 		self.shape.arch_lift = 0.28;
 		self.shape.twist = 0.55;
@@ -150,10 +151,10 @@ impl PalmCrownParams {
 	}
 
 	fn apply_detail_archetype(&mut self) {
-		self.ring_count = 2;
-		self.shape.frond_count = 5;
-		self.shape.spine_segments = 2;
-		self.shape.leaflet_count = 11;
+		self.ring_count = 3;
+		self.shape.frond_count = 6;
+		self.shape.spine_segments = 5;
+		self.shape.leaflet_count = 12;
 		self.shape.droop = 0.5;
 		self.shape.arch_lift = 0.22;
 		self.shape.twist = 0.45;
@@ -260,7 +261,10 @@ impl PalmCrown {
 	///
 	/// Ring-wide collections make the LOD extent the crown diameter, so UltraLow merge
 	/// collapses to an oversized chord; per-frond collections keep extent ≈ rachis length.
-	fn frond_nodes(&self) -> Vec<FoliageNode> {
+	///
+	/// When `collapse_rachis`, each multi-segment spine becomes a single base→tip chord
+	/// (Medium structural band).
+	fn frond_nodes(&self, collapse_rachis: bool) -> Vec<FoliageNode> {
 		let mut nodes = Vec::new();
 		for (index, anchor) in self.anchors.iter().enumerate() {
 			let shape = self.ring_shape(index as u32);
@@ -274,9 +278,15 @@ impl PalmCrown {
 				if placements.is_empty() {
 					continue;
 				}
+				let mut frond_run = FrondRun::from_placements(placements);
+				if collapse_rachis {
+					let Some(chord) = frond_run.collapse_to_chord(1.0) else {
+						continue;
+					};
+					frond_run = FrondRun::new([chord]);
+				}
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new([FrondRun::from_placements(placements)])
-						.bake_bounds_from_runs(),
+					FrondCollection::new([frond_run]).bake_bounds_from_runs(),
 					Placement::IDENTITY,
 				));
 			}
@@ -358,9 +368,9 @@ impl VegetationComponents for PalmCrown {
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		match level {
-			LodSceneLevel::High | LodSceneLevel::Medium => {
-				Layers::from_free(self.frond_nodes())
-			}
+			LodSceneLevel::High => Layers::from_free(self.frond_nodes(false)),
+			// Medium keeps fronds but drops multi-segment rachis (single chord per blade).
+			LodSceneLevel::Medium => Layers::from_free(self.frond_nodes(true)),
 			// Structural UltraLow collapses to Low content; both drop fronds for proxy balls.
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
@@ -432,11 +442,27 @@ mod tests {
 	}
 
 	#[test]
-	fn medium_keeps_fronds_low_is_two_layered_balls() -> Result<()> {
+	fn medium_collapses_rachis_low_is_two_layered_balls() -> Result<()> {
 		let built = crown(5).build();
+		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		let medium = built.foliage_nodes_for_level(LodSceneLevel::Medium).flatten();
-		assert!(!medium.is_empty());
-		assert!(medium[0].geometry.as_frond_collection().is_some());
+		assert_eq!(medium.len(), high.len());
+		let high_segs = high[0]
+			.geometry
+			.as_frond_collection()
+			.expect("high collection")
+			.runs[0]
+			.segments
+			.len();
+		assert!(high_segs > 1);
+		let medium_segs = medium[0]
+			.geometry
+			.as_frond_collection()
+			.expect("medium collection")
+			.runs[0]
+			.segments
+			.len();
+		assert_eq!(medium_segs, 1);
 
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), 2);
@@ -472,9 +498,9 @@ mod tests {
 		let b = PalmCrownParams::unit_full_from_num(7);
 		assert_eq!(a, b);
 		assert_eq!(a.shape.seed, 7);
-		assert_eq!(a.ring_count, 3);
-		assert!((7..=9).contains(&a.shape.frond_count));
-		assert!((2..=3).contains(&a.shape.spine_segments));
+		assert_eq!(a.ring_count, 6);
+		assert!((9..=11).contains(&a.shape.frond_count));
+		assert!((8..=10).contains(&a.shape.spine_segments));
 		assert_eq!(a.shape.leaflet_count, 16);
 		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
 		// Anchors are seed-independent; ring shapes / frond runs key off seed.
@@ -497,13 +523,16 @@ mod tests {
 		let b = PalmCrownParams::unit_detail_from_num(3);
 		assert_eq!(a, b);
 		assert_eq!(a.shape.seed, 3);
-		assert!((4..=5).contains(&a.shape.frond_count));
-		assert_eq!(a.shape.spine_segments, 2);
-		assert!((10..=12).contains(&a.shape.leaflet_count));
+		assert_eq!(a.ring_count, 3);
+		assert!((5..=7).contains(&a.shape.frond_count));
+		assert!((4..=6).contains(&a.shape.spine_segments));
+		assert!((10..=14).contains(&a.shape.leaflet_count));
 		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
 		// Detail is smaller / sparser than full when compared pre-normalize via counts.
 		let full = PalmCrownParams::unit_full_from_num(3);
 		assert!(a.shape.frond_count < full.shape.frond_count);
+		assert!(a.ring_count < full.ring_count);
+		assert!(a.shape.spine_segments < full.shape.spine_segments);
 		Ok(())
 	}
 
@@ -544,7 +573,7 @@ mod tests {
 		let (unit, size) = authored.into_unit_full_from_num(11);
 		assert!((size - size_before).abs() < 1e-4 || size > 0.0);
 		assert_eq!(unit.shape.seed, 11);
-		assert_eq!(unit.ring_count, 3);
+		assert_eq!(unit.ring_count, 6);
 		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
 		Ok(())
 	}
@@ -563,7 +592,7 @@ mod tests {
 		let (unit, size) = authored.into_unit_detail_from_num(5);
 		assert!(size > 1.0);
 		assert_eq!(unit.shape.seed, 5);
-		assert!((4..=5).contains(&unit.shape.frond_count));
+		assert!((5..=7).contains(&unit.shape.frond_count));
 		assert!((unit.characteristic_size() - 1.0).abs() < 1e-3);
 		Ok(())
 	}

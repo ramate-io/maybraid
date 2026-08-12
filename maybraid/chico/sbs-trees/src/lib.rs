@@ -32,7 +32,10 @@ pub use braid_oak_tree::{BraidOakTree, BraidOakTreeParams};
 pub use date_palm::{DatePalm, DatePalmParams};
 pub use friends_conifer::FriendsConiferStd;
 pub use high_bush_shoots::{HighBushShoots, HighBushShootsParams};
-pub use honu_banyan::{HonuBanyan, HonuBanyanParams};
+pub use honu_banyan::{
+	jungle_growth_radius_scale_for_height, HonuBanyan, HonuBanyanParams,
+	DEFAULT_HONU_GROWTH_RADIUS_SCALE, HONU_GROWTH_REFERENCE_HEIGHT,
+};
 pub use jungle_storybook_tree::{JungleStorybookTree, JungleStorybookTreeParams};
 pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::{LiamsConifer, LiamsConiferParams};
