@@ -27,6 +27,27 @@ pub trait CharacterComponents {
 	}
 }
 
+/// Config → inner recipe plus clothing. Clothing is never part of the inner species.
+pub trait CharacterRecipe {
+	type Components: CharacterComponents + Clone + Send + Sync + 'static;
+
+	fn components(&self) -> Self::Components;
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer>;
+
+	fn clothed(&self) -> Clothed<Self::Components> {
+		Clothed::new(self.components(), self.clothing_layers())
+	}
+}
+
+/// Map selected clothing meshes to [`ClothingLayer`]s with per-mesh colors.
+pub fn clothing_layers(
+	clothing: impl IntoIterator<Item = ClothingMesh>,
+	mut color: impl FnMut(ClothingMesh) -> ItemColor,
+) -> Vec<ClothingLayer> {
+	clothing.into_iter().map(|mesh| ClothingLayer::new(mesh, color(mesh))).collect()
+}
+
 impl<T: CharacterComponents + ?Sized> CharacterComponents for &T {
 	fn rig_nodes_for_level(&self, level: LodSceneLevel) -> Layers<RigNode> {
 		(**self).rig_nodes_for_level(level)

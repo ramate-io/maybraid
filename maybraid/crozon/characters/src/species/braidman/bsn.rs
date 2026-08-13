@@ -19,7 +19,7 @@ use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::common::{
 		bsn::{self as common_bsn, WithBaseColor},
-		BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
+		nodes as humanoid, BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 	},
 };
 use lod::gen::LodSceneLevel;
@@ -75,46 +75,32 @@ impl CharacterComponents for Braidman {
 			sliders: self.sliders.clamped(),
 		}
 		.resolve();
-		Layers::from_free(vec![
-			BraidmanAssets::body_rig_node_with_pose(pose),
-			BraidmanAssets::head_rig_node(),
-		])
+		Layers::from_free(vec![humanoid::humanoid_body_rig(pose), humanoid::orthograde_head_rig()])
 	}
 
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let sliders = self.sliders.clamped();
-		let mut out = Layers::from_labeled("body", vec![BraidmanAssets::body_mesh_node(self.body)]);
-		out.extend_labeled("head", vec![BraidmanAssets::head_mesh_node(self.head)]);
+		let mut out = Layers::from_labeled("body", vec![humanoid::body_mesh(self.body)]);
+		out.extend_labeled(
+			"head",
+			vec![humanoid::head_mesh(self.head.label(), self.head.path().as_str())],
+		);
 		let mut features = vec![
-			BraidmanAssets::eye_left_node(
-				self.eye,
-				sliders.feature_transform(CharacterPartSlot::EyeLeft),
-			),
-			BraidmanAssets::eye_right_node(
-				self.eye,
-				sliders.feature_transform(CharacterPartSlot::EyeRight),
-			),
-			BraidmanAssets::nose_node(
-				self.nose,
-				sliders.feature_transform(CharacterPartSlot::Nose),
-			),
-			BraidmanAssets::mouth_node(
-				self.mouth,
-				sliders.feature_transform(CharacterPartSlot::Mouth),
-			),
-			BraidmanAssets::ear_left_node(
-				self.ear,
-				sliders.feature_transform(CharacterPartSlot::EarLeft),
-			),
-			BraidmanAssets::ear_right_node(
-				self.ear,
-				sliders.feature_transform(CharacterPartSlot::EarRight),
-			),
+			humanoid::eye_left(self.eye)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::EyeLeft)),
+			humanoid::eye_right(self.eye)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::EyeRight)),
+			humanoid::nose(self.nose)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::Nose)),
+			humanoid::mouth(self.mouth)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::Mouth)),
+			humanoid::ear_left(self.ear)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::EarLeft)),
+			humanoid::ear_right(self.ear)
+				.with_feature(sliders.feature_transform(CharacterPartSlot::EarRight)),
 		];
-		if let Some(hair) =
-			BraidmanAssets::hair_node(self.hair, sliders.feature_transform(CharacterPartSlot::Hair))
-		{
-			features.push(hair);
+		if let Some(hair) = humanoid::hair(self.hair) {
+			features.push(hair.with_feature(sliders.feature_transform(CharacterPartSlot::Hair)));
 		}
 		out.extend_labeled("features", features);
 		out

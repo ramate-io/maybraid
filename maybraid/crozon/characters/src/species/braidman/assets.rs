@@ -12,14 +12,11 @@ use crate::{
 		RigAsset, SkinTarget, SocketAttachment, SocketRig,
 	},
 	assets::AssetNormalization,
-	nodes::{PartNode, RigNode},
-	socket::{RigId, SkinRef, SocketRef},
 	species::{
 		braidman::{pose::BraidmanPose, BraidmanConfig},
 		common::{BODY_RIG, HEAD_RIG},
 	},
 };
-use scene_ref::MirrorAxis;
 
 pub use crate::species::common::{
 	BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
@@ -53,143 +50,6 @@ impl BraidmanAssets {
 		config.clothing.iter().fold(assembly, |assembly, clothing| {
 			assembly.with_part(ResolvedCharacterPart::clothing(*clothing))
 		})
-	}
-
-	pub fn body_rig_node(config: &BraidmanConfig) -> RigNode {
-		Self::body_rig_node_with_pose(BraidmanPose::from_config(config).resolve())
-	}
-
-	pub fn body_rig_node_with_pose(pose: crate::ResolvedRigPose) -> RigNode {
-		RigNode::body("Humanoid", BODY_RIG.as_str()).with_pose(pose)
-	}
-
-	pub fn head_rig_node() -> RigNode {
-		RigNode::head("OrthogradeHeadRig", HEAD_RIG.as_str())
-			.with_normalization(AssetNormalization::base_y(0.26))
-			.socketed(SocketRef::on(RigId::Body, "upper_neck"))
-	}
-
-	pub fn body_mesh_node(body: BodyMesh) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::BodyMesh,
-			body.label(),
-			body.path().as_str(),
-			AssetNormalization::IDENTITY,
-		)
-		.skinned(SkinRef::to(RigId::Body))
-	}
-
-	pub fn head_mesh_node(head: HeadMesh) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::HeadMesh,
-			head.label(),
-			head.path().as_str(),
-			AssetNormalization::IDENTITY,
-		)
-		.socketed(SocketRef::on(RigId::Head, "root"))
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn eye_left_node(eye: EyeMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::EyeLeft,
-			eye.label(),
-			eye.path().as_str(),
-			AssetNormalization::centroid(0.16),
-		)
-		.with_feature(feature)
-		.socketed(SocketRef::on(RigId::Head, "eye_socket.L").with_local(Self::eye_socket_local()))
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn eye_right_node(eye: EyeMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::EyeRight,
-			eye.label(),
-			eye.path().as_str(),
-			AssetNormalization::centroid(0.16),
-		)
-		.with_feature(feature)
-		.reflected(MirrorAxis::X)
-		.socketed(SocketRef::on(RigId::Head, "eye_socket.R").with_local(Self::eye_socket_local()))
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn nose_node(nose: NoseMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::Nose,
-			nose.label(),
-			nose.path().as_str(),
-			nose.normalization(),
-		)
-		.with_feature(feature)
-		.socketed(
-			SocketRef::on(RigId::Head, "nose_socket")
-				.with_local(Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))),
-		)
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn mouth_node(mouth: MouthMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::Mouth,
-			mouth.label(),
-			mouth.path().as_str(),
-			AssetNormalization::centroid(0.12),
-		)
-		.with_feature(feature)
-		.socketed(
-			SocketRef::on(RigId::Head, "mouth_socket")
-				.with_local(Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))),
-		)
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn ear_left_node(ear: EarMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::EarLeft,
-			ear.label(),
-			ear.path().as_str(),
-			AssetNormalization::centroid(0.15),
-		)
-		.with_feature(feature)
-		.socketed(
-			SocketRef::on(RigId::Head, "ear_socket.L").with_local(Self::ear_left_socket_local()),
-		)
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn ear_right_node(ear: EarMesh, feature: Transform) -> PartNode {
-		PartNode::glb(
-			CharacterPartSlot::EarRight,
-			ear.label(),
-			ear.path().as_str(),
-			AssetNormalization::centroid(0.15),
-		)
-		.with_feature(feature)
-		.reflected(MirrorAxis::X)
-		.socketed(
-			SocketRef::on(RigId::Head, "ear_socket.R").with_local(Self::ear_right_socket_local()),
-		)
-		.skinned(SkinRef::to(RigId::Head))
-	}
-
-	pub fn hair_node(hair: HairMesh, feature: Transform) -> Option<PartNode> {
-		let path = hair.path()?;
-		Some(
-			PartNode::glb(
-				CharacterPartSlot::Hair,
-				hair.label(),
-				path.as_str(),
-				AssetNormalization::centroid(1.0),
-			)
-			.with_feature(feature)
-			.socketed(
-				SocketRef::on(RigId::Head, "crown_socket")
-					.with_local(Transform::from_translation(Vec3::new(0.0, -0.1, 0.1))),
-			)
-			.skinned(SkinRef::to(RigId::Head)),
-		)
 	}
 
 	fn body_mesh(body: BodyMesh) -> ResolvedCharacterPart {
@@ -313,25 +173,6 @@ impl BraidmanAssets {
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
 		SocketAttachment { rig: SocketRig::Head, bone, local_transform }
-	}
-
-	/// Bone-local pose shared by left and right eyes (`X = 0` on both sockets).
-	fn eye_socket_local() -> Transform {
-		Transform::from_translation(Vec3::new(0.0, -0.1, -0.075))
-	}
-
-	fn ear_left_socket_local() -> Transform {
-		Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
-			.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0))
-	}
-
-	/// Right-socket placement (`+X` on `ear_socket.R` points inward).
-	///
-	/// Handedness/hierarchy come from [`scene_ref::SceneRef::reflected`], not from
-	/// reusing the left local.
-	fn ear_right_socket_local() -> Transform {
-		Transform::from_translation(Vec3::new(-0.1, -0.1, 0.00))
-			.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0))
 	}
 
 	fn mirror_x() -> Transform {

@@ -1,8 +1,9 @@
 //! Runtime plugin: stamp CharacterRig / CharacterPart on nested LodScene hosts.
 
 use bevy::prelude::*;
-use lod::LodRefreshSystems;
+use lod::{add_lod_refresh_chunk_for, LodRefreshSystems, LodScene};
 
+use crate::components::{CharacterComponents, ComponentsOnly};
 use crate::nodes::{PartNode, RigNode};
 use crate::rig::{
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, LodCharacterRig, RigBindScales,
@@ -13,6 +14,18 @@ use crate::socket::{SkinRefRoot, SocketRefRoot};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum CharacterHostSystems {
 	Prepare,
+}
+
+/// Register chunk fulfill for a structural [`ComponentsOnly<C>`] host.
+///
+/// [`RigNode`] / [`PartNode`] are registered once by the app; each species only
+/// adds its recipe type here (typically [`crate::Clothed<T>`]).
+pub fn add_character_components_host<C>(app: &mut App)
+where
+	C: CharacterComponents + Send + Sync + 'static,
+	ComponentsOnly<C>: Component + LodScene,
+{
+	add_lod_refresh_chunk_for::<ComponentsOnly<C>>(app);
 }
 
 /// Installs character LodScene host preparation (socket/skin fulfill is scheduled by the app).

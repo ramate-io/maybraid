@@ -1086,20 +1086,32 @@ pub fn sync_preview(
 		commands.entity(entity).try_despawn();
 	}
 
-	if matches!(&*config, ConceptPreviewConfig::Braidman { .. }) {
-		spawn_braidman_lod_preview(&mut commands, &config);
-	} else {
-		PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
+	if spawn_lod_character_preview(&mut commands, &config) {
+		return;
+	}
+	PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
+}
+
+fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) -> bool {
+	match config {
+		ConceptPreviewConfig::Braidman { config, .. } => {
+			spawn_clothed_character(commands, &config.clothed());
+			true
+		}
+		ConceptPreviewConfig::Brodler { config, .. } => {
+			spawn_clothed_character(commands, &config.clothed());
+			true
+		}
+		_ => false,
 	}
 }
 
-fn spawn_braidman_lod_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
-	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config else {
-		return;
-	};
-	let clothed = braidman.clothed();
-	let bounds = character_bounds(&clothed);
-	for entity in spawn_character_components(commands, &clothed, Transform::IDENTITY, bounds) {
+fn spawn_clothed_character<T>(commands: &mut Commands, character: &T)
+where
+	T: crozon_characters::CharacterComponents + Clone + Send + Sync + 'static,
+{
+	let bounds = character_bounds(character);
+	for entity in spawn_character_components(commands, character, Transform::IDENTITY, bounds) {
 		commands.entity(entity).insert((
 			ConceptPreviewRoot,
 			PreviewAwaitingReveal,
@@ -1108,16 +1120,20 @@ fn spawn_braidman_lod_preview(commands: &mut Commands, config: &ConceptPreviewCo
 	}
 }
 
-/// Stamp preview-only markers onto nested Braidman LodScene hosts after chunk fulfill.
+/// Stamp preview-only markers onto nested LodScene character hosts after chunk fulfill.
 pub fn stamp_lod_character_preview(
 	mut commands: Commands,
 	config: Res<ConceptPreviewConfig>,
 	body_rigs: Query<(Entity, &RigNode, &Transform), Without<AnimatedBodyRig>>,
 	parts: Query<(Entity, &PartNode), Without<PreviewAssetTarget>>,
 ) {
-	let ConceptPreviewConfig::Braidman { config: braidman, .. } = &*config else {
+	let stamps_lod = matches!(
+		&*config,
+		ConceptPreviewConfig::Braidman { .. } | ConceptPreviewConfig::Brodler { .. }
+	);
+	if !stamps_lod {
 		return;
-	};
+	}
 
 	for (entity, node, transform) in &body_rigs {
 		if node.id == RigId::Body {
@@ -1128,13 +1144,31 @@ pub fn stamp_lod_character_preview(
 	}
 
 	for (entity, node) in &parts {
+		let Some(target) = preview_target_lod_part(&config, node) else {
+			continue;
+		};
 		commands.entity(entity).insert((
-			preview_target_braidman_part(braidman, node),
+			target,
 			PreviewPartBaseTransform {
 				normalization: node.normalization.transform(),
 				socket: node.socket.map(|socket| socket.local),
 			},
 		));
+	}
+}
+
+fn preview_target_lod_part(
+	config: &ConceptPreviewConfig,
+	part: &PartNode,
+) -> Option<PreviewAssetTarget> {
+	match config {
+		ConceptPreviewConfig::Braidman { config, .. } => {
+			Some(preview_target_braidman_part(config, part))
+		}
+		ConceptPreviewConfig::Brodler { config, .. } => {
+			Some(preview_target_brodler_part(config, part))
+		}
+		_ => None,
 	}
 }
 
@@ -1169,6 +1203,35 @@ fn preview_target_braidman_part(config: &BraidmanConfig, part: &PartNode) -> Pre
 		}
 	};
 	PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
+}
+
+fn preview_target_brodler_part(config: &BrodlerConfig, part: &PartNode) -> PreviewAssetTarget {
+	let target = match part.slot {
+		CharacterPartSlot::BodyMesh => PreviewTarget::BrodlerBody,
+		CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrodlerBody,
+		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+			PreviewTarget::BrodlerHead(config.head)
+		}
+		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+			PreviewTarget::BrodlerEye(config.eye)
+		}
+		CharacterPartSlot::Nose => PreviewTarget::BrodlerNose(config.nose),
+		CharacterPartSlot::Mouth => PreviewTarget::BrodlerMouth(config.mouth),
+		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+			PreviewTarget::BrodlerEar(config.ear)
+		}
+		CharacterPartSlot::Horns => PreviewTarget::BrodlerHorns(config.horns),
+		CharacterPartSlot::Hair => PreviewTarget::BrodlerHair(config.hair),
+		CharacterPartSlot::Clothing => config
+			.clothing
+			.iter()
+			.copied()
+			.find(|clothing| clothing.label() == part.label)
+			.map(PreviewTarget::BrodlerClothing)
+			.unwrap_or(PreviewTarget::BrodlerHead(config.head)),
+		CharacterPartSlot::Tail | CharacterPartSlot::Spine => PreviewTarget::BrodlerBody,
+	};
+	PreviewAssetTarget { target, color: preview_color_brodler(config, target) }
 }
 
 fn sync_live_preview(

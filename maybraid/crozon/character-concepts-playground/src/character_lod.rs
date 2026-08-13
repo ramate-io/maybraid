@@ -1,17 +1,18 @@
-//! LodScene refresh for Braidman character hosts (High-only bands for now).
+//! LodScene refresh for character hosts (High-only bands for now).
+//!
+//! Nested [`RigNode`] / [`PartNode`] are registered once. Each species host is
+//! `ComponentsOnly<Clothed<T>>` via [`add_character_components_host`].
 
 use bevy::prelude::*;
 use crozon_characters::{
-	species::braidman::bsn::Braidman, CharacterComponentsPlugin, Clothed, ComponentsOnly, PartNode,
-	RigNode,
+	add_character_components_host,
+	species::{braidman::bsn::Braidman, brodler::bsn::Brodler},
+	CharacterComponentsPlugin, Clothed, PartNode, RigNode,
 };
 use lod::{add_lod_refresh_chunk_for, LodRefreshCorePlugin};
 use scene_ref::SceneRefPlugin;
 
-/// Structural host type spawned for Braidman previews.
-pub type BraidmanHost = ComponentsOnly<Clothed<Braidman>>;
-
-/// Chunk fulfill + scene-ref + character socket/skin plugin for Braidman LodScene hosts.
+/// Chunk fulfill + scene-ref + character socket/skin plugin for LodScene hosts.
 pub struct CharacterLodPlugin;
 
 impl Plugin for CharacterLodPlugin {
@@ -25,8 +26,9 @@ impl Plugin for CharacterLodPlugin {
 		if !app.is_plugin_added::<CharacterComponentsPlugin>() {
 			app.add_plugins(CharacterComponentsPlugin);
 		}
-		add_lod_refresh_chunk_for::<BraidmanHost>(app);
 		add_lod_refresh_chunk_for::<RigNode>(app);
 		add_lod_refresh_chunk_for::<PartNode>(app);
+		add_character_components_host::<Clothed<Braidman>>(app);
+		add_character_components_host::<Clothed<Brodler>>(app);
 	}
 }

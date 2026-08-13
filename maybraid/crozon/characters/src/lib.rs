@@ -30,14 +30,14 @@ pub use assembly::{
 };
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
-	character_bounds, spawn_character_components, CharacterComponents, Clothed, ClothingLayer,
-	ComponentsOnly,
+	character_bounds, clothing_layers, spawn_character_components, CharacterComponents,
+	CharacterRecipe, Clothed, ClothingLayer, ComponentsOnly,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use layer::{Layer, Layers};
 pub use nodes::{PartNode, RigNode};
-pub use plugin::{CharacterComponentsPlugin, CharacterHostSystems};
+pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};
 pub use presets::{BuildPreset, GenderPreset};
 pub use rig::{
 	bind_scales_ready, bone_map_ready, build_rig_bone_map, missing_landmark_bones, ActiveRigPose,

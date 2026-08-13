@@ -13,7 +13,7 @@ use crate::{
 		common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use clap::ValueEnum;
@@ -148,6 +148,25 @@ impl BrodlerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Brodler>`).
+	pub fn clothed(&self) -> Clothed<crate::species::brodler::bsn::Brodler> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for BrodlerConfig {
+	type Components = crate::species::brodler::bsn::Brodler;
+
+	fn components(&self) -> Self::Components {
+		crate::species::brodler::bsn::Brodler::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

@@ -13,7 +13,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
@@ -170,14 +170,21 @@ impl BraidmanConfig {
 
 	/// Inner recipe plus clothing layers (`Clothed<Braidman>`).
 	pub fn clothed(&self) -> Clothed<crate::species::braidman::bsn::Braidman> {
-		use crate::species::braidman::bsn::Braidman;
-		Clothed::new(
-			Braidman::from_config(self),
-			self.clothing
-				.iter()
-				.map(|mesh| ClothingLayer::new(*mesh, self.colors.clothing_color(*mesh)))
-				.collect(),
-		)
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for BraidmanConfig {
+	type Components = crate::species::braidman::bsn::Braidman;
+
+	fn components(&self) -> Self::Components {
+		crate::species::braidman::bsn::Braidman::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

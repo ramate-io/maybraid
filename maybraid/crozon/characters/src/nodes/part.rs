@@ -10,7 +10,7 @@ use scene_ref::{MirrorAxis, SceneRef};
 
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
-use crate::socket::{SkinRef, SocketRef};
+use crate::socket::{RigId, SkinRef, SocketRef};
 
 /// Authoring IR for a character mesh or feature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -65,6 +65,17 @@ impl PartNode {
 	pub fn skinned(mut self, skin: SkinRef) -> Self {
 		self.skin = Some(skin);
 		self
+	}
+
+	/// Socket onto a head-rig bone and skin to that same rig.
+	pub fn on_head(self, bone: &'static str, local: Transform) -> Self {
+		self.socketed(SocketRef::on(RigId::Head, bone).with_local(local))
+			.skinned(SkinRef::to(RigId::Head))
+	}
+
+	/// Skin to the body rig with no socket (typical body mesh).
+	pub fn on_body(self) -> Self {
+		self.skinned(SkinRef::to(RigId::Body))
 	}
 
 	pub fn with_feature(mut self, feature: Transform) -> Self {
