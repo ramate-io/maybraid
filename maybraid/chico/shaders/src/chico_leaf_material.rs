@@ -1,4 +1,4 @@
-//! Canopy leaf [`Material`] — UV fractal noise silhouettes + PBR (`leaf_material` lineage).
+//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, double-sided PBR.
 
 use bevy::{
 	asset::embedded_asset,
@@ -35,12 +35,17 @@ impl Default for ChicoLeafMaterial {
 }
 
 impl Material for ChicoLeafMaterial {
+	fn vertex_shader() -> ShaderRef {
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chico_leaf_material.wgsl").into()
+	}
+
 	fn fragment_shader() -> ShaderRef {
 		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chico_leaf_material.wgsl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
-		AlphaMode::Opaque
+		// `fwidth` coverage; falls back to discard when MSAA is off.
+		AlphaMode::AlphaToCoverage
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {

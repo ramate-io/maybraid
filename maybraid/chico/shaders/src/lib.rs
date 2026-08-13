@@ -1,7 +1,7 @@
 //! Chico vegetation shaders: reusable Bevy [`Material`] types with embedded WGSL for bark sticks and stylized canopy foliage.
 //!
 //! - [`ChicoStickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
-//! - [`ChicoLeafMaterial`] — UV noise silhouette PBR with blending (from `playgrounds/objects/assets/shaders/leaf_material.wgsl`).
+//! - [`ChicoLeafMaterial`] — object-space leafy breakup + vertex sway + double-sided PBR.
 
 use bevy::prelude::*;
 
