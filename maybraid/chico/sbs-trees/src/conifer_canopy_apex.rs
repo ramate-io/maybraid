@@ -31,6 +31,7 @@ pub fn sample_apex_canopy_spawn(
 
 /// Tree-local transform at a chain tip (chains are generated in tree space; the tree root
 /// entity owns world placement).
+#[allow(dead_code)]
 fn local_transform_at_tip(
 	tip: &BallStickNode,
 	world_uniform_scale: f32,
@@ -44,6 +45,7 @@ fn local_transform_at_tip(
 }
 
 /// [`ChicoBall`] at a crown tip (always spawned).
+#[allow(dead_code)]
 pub fn spawn_apex_chico_ball_at_tip<LeafM, LeafS>(
 	tree_height: f32,
 	tip: &BallStickNode,
@@ -71,6 +73,7 @@ where
 }
 
 /// [`ChicoBall`] at a crown tip with an already-resolved world radius.
+#[allow(dead_code)]
 pub fn spawn_apex_chico_ball_at_tip_with_radius<LeafM, LeafS>(
 	world_radius: f32,
 	tip: &BallStickNode,
@@ -93,6 +96,7 @@ where
 }
 
 /// Optional [`ChicoBall`] at the stalk crown ([#236](https://github.com/ramate-io/maybraid/issues/236)).
+#[allow(dead_code)]
 pub fn spawn_apex_chico_ball<LeafM, LeafS>(
 	geometry: &FriendsConiferSbs,
 	chain: &BallStickChain<FriendsConiferChain>,

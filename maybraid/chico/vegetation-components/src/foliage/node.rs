@@ -23,7 +23,7 @@ use crate::lod_host::{
 	posed_foliage_asset_tier, posed_frond_asset_tier, posed_frond_multi_scene_merge,
 };
 use crate::placed::Placement;
-use crate::procedural::{PendingPlaneSplay, VegetationProceduralAssets};
+use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
 use scene_ref::{MultiSceneMerge, MultiScenePart};
 
@@ -96,10 +96,6 @@ impl FoliageNode {
 
 	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, geometry, placement)
-	}
-
-	pub fn plane_splay(geometry: FoliageGeometry, placement: Placement) -> Self {
-		Self::new(FoliageStyle::PlaneSplay, geometry, placement)
 	}
 
 	fn probe(&self) -> FoliageLodProbe {
@@ -220,36 +216,8 @@ impl FoliageNode {
 		Box::new(scene_children(children))
 	}
 
-	fn plane_splay_scene(
-		&self,
-		icosphere_subdivisions: u32,
-		core_radius: f32,
-		leaf_disc_radius: f32,
-	) -> impl Scene + 'static {
-		let pending = PendingPlaneSplay {
-			icosphere_subdivisions,
-			core_radius,
-			leaf_disc_radius,
-		};
-		let transform = pose(self.placement);
-		bsn! {
-			template_value(pending)
-			template_value(transform)
-			Visibility::default()
-		}
-	}
-
 	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
 		match (&self.style, &self.geometry) {
-			(FoliageStyle::PlaneSplay, FoliageGeometry::PlaneSplay {
-				icosphere_subdivisions,
-				core_radius,
-				leaf_disc_radius,
-			}) => Box::new(self.plane_splay_scene(
-				*icosphere_subdivisions,
-				*core_radius,
-				*leaf_disc_radius,
-			)),
 			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
 				match self.standard_ball_glb_for_level(level) {
 					Some(asset) => Box::new(posed_foliage_asset_tier(

@@ -5,14 +5,13 @@ use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
-	StickNode, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
-	STRUCTURAL_MEDIUM_FACTOR,
+	StickNode, StructuralLod,
 };
 
-/// Medium outer edge: default structural Medium × 3 (same as [`crate::PalmCrown`]).
-pub(crate) const PALM_STRUCTURAL_MEDIUM_FACTOR: f32 = STRUCTURAL_MEDIUM_FACTOR * 3.0;
-/// Keep Low beyond Medium so band ordering stays valid.
-pub(crate) const PALM_STRUCTURAL_LOW_FACTOR: f32 = STRUCTURAL_LOW_FACTOR * 3.0;
+/// Date / Waialea / PalmBush structural bands (literals — not shared Sope defaults).
+pub(crate) const PALM_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+pub(crate) const PALM_STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+pub(crate) const PALM_STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Target fronds (runs) per [`FrondCollection`] — small groups keep merge extent
 /// rachis-scale without the oversized UltraLow chord of a full ring.
@@ -125,7 +124,7 @@ pub(crate) fn palm_structural_lod(
 	tree_radius: f32,
 ) -> StructuralLod {
 	StructuralLod::new(center, tree_radius.max(1e-3)).with_factors(
-		STRUCTURAL_HIGH_FACTOR,
+		PALM_STRUCTURAL_HIGH_FACTOR,
 		PALM_STRUCTURAL_MEDIUM_FACTOR,
 		PALM_STRUCTURAL_LOW_FACTOR,
 	)

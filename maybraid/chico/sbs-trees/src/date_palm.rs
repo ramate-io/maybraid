@@ -3,6 +3,12 @@
 //! [`DatePalmParams::build`] grows the trunk chain once into [`DatePalm`], which implements
 //! [`VegetationComponents`]: trunk sticks at all bands; per-frond [`FrondCollection`]s at
 //! High/Medium; dual layered-ball crown proxy at Low/UltraLow.
+//!
+//! Unit crown archetypes for Placement-scaled groves live on
+//! [`PalmCrownParams`](crate::PalmCrownParams) (`unit_full_for_height_from_num` /
+//! `unit_detail_for_height_from_num`). Date Palm keeps SBS trunk + height-fraction fronds;
+//! use [`DatePalmParams::unit_full_from_num`] only to key trunk/foliage noise and mirror
+//! full crown ring/frond counts.
 
 mod crown;
 pub mod render_item_plugin;
@@ -20,7 +26,7 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
 use crate::palm_tree::{
 	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
 	trunk_stick_nodes, world_space_frond_shape,
@@ -43,6 +49,17 @@ impl Default for DatePalmParams {
 }
 
 impl DatePalmParams {
+	/// Tree-top date palm keyed by `num` — crown counts track
+	/// [`PalmCrownParams::unit_full_from_num`] (SBS frond shaping still height-fraction).
+	pub fn unit_full_from_num(num: u32) -> Self {
+		let crown = PalmCrownParams::unit_full_from_num(num);
+		let mut params = Self::default();
+		params.geometry.crown.ring_count = crown.ring_count;
+		params.geometry.crown.fronds_per_ring = crown.shape.frond_count;
+		params.geometry.trunk_noise.seed = num as i32;
+		params
+	}
+
 	pub fn build(&self) -> DatePalm {
 		DatePalm::from_params(self)
 	}

@@ -195,6 +195,424 @@ impl StrangeOasisCell {
 	}
 }
 
+#[cfg(feature = "render")]
+mod vc {
+	use bevy::prelude::*;
+	use chico_sbs_geometry::DatePalmSbs;
+	use chico_sbs_trees::{
+		DatePalm, DatePalmParams, PalmCrown, PalmCrownParams, PenmarchTorch, PenmarchTorchParams,
+		StorybookTree, StorybookTreeParams,
+	};
+	use bevy::math::bounding::Aabb3d;
+	use bevy::scene::prelude::Scene;
+	use chico_vegetation_components::{
+		vegetation_scene_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
+	};
+	use clap::Args;
+	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+	use lod::lod_ref::LodRef;
+	use lod::{lod_host_scene_pending, SceneChunk};
+	use material_ref::MaterialRef;
+	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+
+	use super::{definition, StrangeOasisCell, StrangeOasisItem};
+	use crate::grove::{
+		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_placed_plant_chunk, placement_noise,
+		stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+	};
+
+	pub const STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
+	pub const STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const STRANGE_OASIS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+
+	/// Authoring / CLI parameters for Strange Oasis.
+	#[derive(Clone, Debug, Args)]
+	#[command(rename_all = "kebab-case")]
+	pub struct StrangeOasisParams {
+		#[command(flatten, next_help_heading = "Grove")]
+		pub grove: GroveFrontend,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,0.06,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Leaf Surface Noise",
+		)]
+		pub leaf_surface_noise: NoiseParams,
+
+		#[arg(skip)]
+		pub extent: GroveExtent,
+
+		#[command(flatten, next_help_heading = "Terrain")]
+		pub terrain: FlatTerrainSample,
+
+		#[arg(skip)]
+		resolved_placements: Option<Vec<GroveCellVariant<StrangeOasisCell>>>,
+	}
+
+	impl Default for StrangeOasisParams {
+		fn default() -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain: FlatTerrainSample::default(),
+				resolved_placements: None,
+			}
+		}
+	}
+
+	impl StrangeOasisParams {
+		pub fn with_resolved_placements(
+			resolved_placements: Vec<GroveCellVariant<StrangeOasisCell>>,
+			terrain: FlatTerrainSample,
+			leaf_surface_noise: NoiseParams,
+		) -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				leaf_surface_noise,
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain,
+				resolved_placements: Some(resolved_placements),
+			}
+		}
+
+		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
+			self.extent = extent;
+			self
+		}
+
+		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
+			self.terrain = terrain;
+			self
+		}
+
+		pub fn cell_extent_xz(&self) -> Vec2 {
+			self.grove.definition(definition()).cell_extent_xz
+		}
+
+		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+			self.extent.subdivide_xz(self.cell_extent_xz())
+		}
+
+		pub fn placements(&self) -> Vec<GroveCellVariant<StrangeOasisCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+		}
+
+		pub fn build(&self) -> StrangeOasis {
+			StrangeOasis::from_placements(&self.placements(), self.grove.noise, &self.extent)
+		}
+	}
+
+	/// Oasis date palm: trunk sticks + unit [`PalmCrown`] foliage (no DatePalm fronds).
+	#[derive(Clone, Component)]
+	pub struct OasisDatePalm {
+		pub trunk: DatePalm,
+		pub crown: PalmCrown,
+		pub crown_local: Placement,
+	}
+
+	impl VegetationComponents for OasisDatePalm {
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			self.trunk.stick_nodes_for_level(level)
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			let nodes = self
+				.crown
+				.foliage_nodes_for_level(level)
+				.flatten()
+				.into_iter()
+				.map(|mut node| {
+					node.placement = self.crown_local.compose_child(node.placement);
+					node
+				})
+				.collect::<Vec<_>>();
+			Layers::from_free(nodes)
+		}
+
+		fn structural_lod(&self) -> Option<StructuralLod> {
+			let lod = self.crown.structural_lod()?;
+			let scale = self.crown_local.scale.abs().max_element().max(1e-4);
+			let center = self
+				.crown_local
+				.compose_child(Placement::new(lod.center, 0.0))
+				.translation;
+			Some(
+				StructuralLod::new(center, (lod.tree_radius * scale).max(1e-4))
+					.with_factors(lod.high_factor, lod.medium_factor, lod.low_factor)
+					.with_preserve_ultra_low(lod.preserve_ultra_low),
+			)
+		}
+	}
+
+	#[derive(Clone)]
+	enum StrangeOasisKind {
+		/// Columnar trunk + unit PalmCrown at tip
+		/// ([`PalmCrownParams::unit_full_for_height_from_num`]).
+		DatePalm(OasisDatePalm),
+		Torch(PenmarchTorch),
+		Storybook(StorybookTree),
+	}
+
+	#[derive(Clone)]
+	pub struct StrangeOasisPlant {
+		pub placement: Placement,
+		kind: StrangeOasisKind,
+		stick_material: MaterialRef,
+		ball_material: MaterialRef,
+		frond_material: MaterialRef,
+	}
+
+	#[derive(Clone, Component)]
+	pub struct StrangeOasis {
+		pub plants: Vec<StrangeOasisPlant>,
+		pub structural_center: Vec3,
+		pub footprint_radius: f32,
+		pub extent: GroveExtent,
+	}
+
+	impl StrangeOasis {
+		pub fn from_placements(
+			placements: &[GroveCellVariant<StrangeOasisCell>],
+			grove_noise: NoiseParams,
+			extent: &GroveExtent,
+		) -> Self {
+			let plants = placements
+				.iter()
+				.map(|placed| grow_plant(placed, grove_noise))
+				.collect();
+			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
+			Self {
+				plants,
+				structural_center,
+				footprint_radius,
+				extent: *extent,
+			}
+		}
+
+		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+			self.plants
+				.iter()
+				.map(|plant| match &plant.kind {
+					StrangeOasisKind::DatePalm(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+					StrangeOasisKind::Torch(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+					StrangeOasisKind::Storybook(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+				})
+				.collect()
+		}
+
+		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
+			self.plants
+				.iter()
+				.filter_map(|plant| {
+					let material = &plant.ball_material;
+					match &plant.kind {
+						StrangeOasisKind::DatePalm(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						StrangeOasisKind::Torch(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						StrangeOasisKind::Storybook(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+					}
+				})
+				.collect()
+		}
+	}
+
+	fn grow_plant(
+		placed: &GroveCellVariant<StrangeOasisCell>,
+		grove_noise: NoiseParams,
+	) -> StrangeOasisPlant {
+		let build_noise = placement_noise(grove_noise, placed.position);
+		let stick_seed = build_noise.seed;
+		let canopy_seed = build_noise.seed.wrapping_add(31);
+		let stick_material =
+			stick_material_from_palette(Some(placed.variant.stick_palette_mix()), stick_seed);
+		let ball_material = canopy_ball_material_from_palette(
+			Some(placed.variant.canopy_palette_mix()),
+			canopy_seed,
+		);
+		let frond_material = frond_material_from_palette(
+			Some(placed.variant.canopy_palette_mix()),
+			canopy_seed,
+		);
+		let placement =
+			Placement::new(placed.position, 0.0).with_scale(Vec3::splat(placed.scale.max(1e-4)));
+
+		let kind = match placed.variant.item() {
+			StrangeOasisItem::DatePalm(palm) => {
+				let geometry = palm.build_with_noise(build_noise);
+				let mut trunk_params = DatePalmParams::default();
+				trunk_params.geometry = geometry.clone();
+				let trunk = trunk_params.build();
+				let tip = DatePalmSbs::trunk_tip_from_chain(&trunk.chain);
+				let crown_seed = build_noise.seed.unsigned_abs();
+				// Quantize topology to unit crown; Placement restores height-band meters.
+				let (unit_crown, world_size) =
+					PalmCrownParams::unit_full_for_height_from_num(geometry.height(), crown_seed);
+				let crown = unit_crown.build();
+				let crown_local =
+					Placement::new(tip, 0.0).with_scale(Vec3::splat(world_size.max(1e-4)));
+				StrangeOasisKind::DatePalm(OasisDatePalm { trunk, crown, crown_local })
+			}
+			StrangeOasisItem::Torch(torch) => {
+				let geometry = torch.build_with_noise(build_noise);
+				let mut params = PenmarchTorchParams::default();
+				params.geometry = geometry;
+				StrangeOasisKind::Torch(params.build())
+			}
+			StrangeOasisItem::Storybook(story) => {
+				let geometry = story.build_with_noise(build_noise);
+				let mut params = StorybookTreeParams::default();
+				params.geometry = geometry;
+				StrangeOasisKind::Storybook(params.build())
+			}
+		};
+
+		StrangeOasisPlant {
+			placement,
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
+		}
+	}
+
+	impl VegetationComponents for StrangeOasis {
+		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+			Layers::new()
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			match level {
+				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
+				LodSceneLevel::Low => {
+					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
+				}
+				LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(
+					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
+				),
+			}
+		}
+
+		fn structural_lod(&self) -> Option<StructuralLod> {
+			Some(
+				StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
+					STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR,
+					STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR,
+					STRANGE_OASIS_STRUCTURAL_LOW_FACTOR,
+				),
+			)
+		}
+	}
+
+	impl LodScene for StrangeOasis {
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			self.structural_lod()
+				.map(|band| grove_lod_level(band, lod_ref))
+				.unwrap_or(LodSceneLevel::High)
+		}
+
+		fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+			self.structural_lod()
+				.map(|band| grove_lod_status(band, lod_ref))
+				.unwrap_or(LodSceneStatus::Unchanged)
+		}
+
+		fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+			self.structural_lod()
+				.map(|band| grove_lod_culls(band, lod_ref))
+				.unwrap_or(LodSceneCulls::None)
+		}
+
+		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+			match grove_detail_level(level) {
+				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
+				None => {
+					let mut children: Vec<Box<dyn Scene>> = Vec::new();
+					chico_vegetation_components::append_component_scenes(
+						self, lod_ref, level, &mut children,
+					);
+					chico_vegetation_components::scene_children(children)
+				}
+			}
+		}
+
+		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+			match grove_detail_level(level) {
+				Some(_) => {
+					let chunks = self.nest_plant_chunks(lod_ref);
+					if chunks.is_empty() {
+						SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
+					} else {
+						SceneChunk::chunks(chunks)
+					}
+				}
+				None => vegetation_scene_chunks(self, lod_ref, level),
+			}
+		}
+
+		fn scene_bounds(&self) -> Aabb3d {
+			self.structural_lod()
+				.map(|p| p.footprint_aabb())
+				.unwrap_or_else(|| chico_vegetation_components::vegetation_bounds(self))
+		}
+
+		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+		}
+	}
+}
+
+#[cfg(feature = "render")]
+pub use vc::{
+	OasisDatePalm, StrangeOasis, StrangeOasisParams, StrangeOasisPlant,
+	STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR, STRANGE_OASIS_STRUCTURAL_LOW_FACTOR,
+	STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR,
+};
+
 #[cfg(test)]
 mod tests {
 	use super::*;

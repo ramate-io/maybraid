@@ -21,7 +21,11 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{foliage_nodes_for_level, DEFAULT_HONU_GROWTH_RADIUS_SCALE};
+pub use canopy::{
+	jungle_growth_radius_scale_for_height, DEFAULT_HONU_GROWTH_RADIUS_SCALE,
+	HONU_GROWTH_REFERENCE_HEIGHT,
+};
+use canopy::foliage_nodes_for_level;
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
@@ -57,6 +61,13 @@ impl HonuBanyanParams {
 	/// Grow the ball-stick chain once for presentation / LOD emission.
 	pub fn build(&self) -> HonuBanyan {
 		HonuBanyan::from_params(self)
+	}
+
+	/// Set [`Self::jungle_growth_radius_scale`] from authored tree height.
+	pub fn with_growth_scale_for_height(mut self) -> Self {
+		self.jungle_growth_radius_scale =
+			jungle_growth_radius_scale_for_height(self.geometry.scale.tree_height);
+		self
 	}
 }
 

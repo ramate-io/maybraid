@@ -3,50 +3,21 @@ use chico_ball_components::tuft::{
 	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
-use chico_grove_render_items::alpine::AlpineStd;
-use chico_grove_render_items::arid_conifer_sapling::AridConiferSaplingStd;
-use chico_grove_render_items::braid_grass::BraidGrassStd;
-use chico_grove_render_items::bush_scrub::BushScrubStd;
-use chico_grove_render_items::christmas_taiga::ChristmasTaigaStd;
-use chico_grove_render_items::common_tufts::CommonTuftsStd;
-use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
-use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
-use chico_grove_render_items::date_grove::DateGroveStd;
-use chico_grove_render_items::dryland::DrylandStd;
-use chico_grove_render_items::forlorn_savanna::ForlornSavannaStd;
-use chico_grove_render_items::goettingen_follow::GoettingenFollowStd;
-use chico_grove_render_items::high_bush::HighBushStd;
-use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
-use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
-use chico_grove_render_items::jungle_massives::JungleMassivesStd;
-use chico_grove_render_items::leeward::LeewardStd;
-use chico_grove_render_items::levantine_scrub::LevantineScrubStd;
-use chico_grove_render_items::low_bush::LowBushStd;
-use chico_grove_render_items::orchard::OrchardStd;
-use chico_groves::MonsterGrassParams;
-use chico_grove_render_items::palm_shade::PalmShadeStd;
-use chico_grove_render_items::riparian_general::RiparianGeneralStd;
-use chico_grove_render_items::riparian_mix::RiparianMixStd;
-use chico_grove_render_items::riverine_green::RiverineGreenStd;
-use chico_grove_render_items::rolling_oaks::RollingOaksStd;
-use chico_grove_render_items::shamanhome::ShamanhomeStd;
-use chico_grove_render_items::spotty_bushes::SpottyBushesStd;
-use chico_grove_render_items::storytellers::StorytellersStd;
-use chico_grove_render_items::strange_oasis::StrangeOasisStd;
-use chico_grove_render_items::tall_grass::TallGrassStd;
-use chico_grove_render_items::temperate_lower_massives::TemperateLowerMassivesStd;
-use chico_grove_render_items::temperate_massives::TemperateMassivesStd;
-use chico_grove_render_items::trade_winds::TradeWindsStd;
-use chico_grove_render_items::tropical_thicket::TropicalThicketStd;
-use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
-use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
-use chico_grove_render_items::unending_jungle::UnendingJungleStd;
-use chico_grove_render_items::vineyard::VineyardStd;
-use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
-use chico_grove_render_items::wild_grass::WildGrassStd;
+use chico_groves::{
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams, ChristmasTaigaParams,
+	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
+	ForlornSavannaParams, GoettingenFollowParams, HighBushParams, JerrysChaparralParams,
+	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
+	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
+	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
+	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
+	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
+	TropicalUndergrowthParams, UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
+	WildGrassParams,
+};
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
-use chico_sbs_trees::friends_conifer::FriendsConifer;
+use chico_sbs_trees::friends_conifer::FriendsConiferParams;
 use chico_sbs_trees::honu_banyan::HonuBanyanParams;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTreeParams;
 use chico_sbs_trees::kamakura_torch::KamakuraTorchParams;
@@ -56,7 +27,9 @@ use chico_sbs_trees::palm_bush::PalmBushParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
-use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
+use chico_vegetation_components::{
+	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+};
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
@@ -67,7 +40,7 @@ use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
 	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
 };
-use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
+use chico_vegetation_shaders::ChicoStickMaterial;
 use chunk::cascade::CascadeChunk;
 use render_item::RenderItem;
 
@@ -80,13 +53,8 @@ pub type RenderHonuBanyan = HonuBanyanParams;
 /// [`LiamsConifer`] — VegetationComponents / LodScene.
 pub type RenderLiamsConifer = LiamsConiferParams;
 
-/// [`FriendsConifer`] — log-profile conifer with plane-splay foliage ([#236](https://github.com/ramate-io/maybraid/issues/236)).
-pub type RenderFriendsConifer = FriendsConifer<
-	ChicoStickMaterial,
-	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
->;
+/// [`FriendsConiferParams`] — log-profile conifer with plane-splay foliage ([#236](https://github.com/ramate-io/maybraid/issues/236)).
+pub type RenderFriendsConifer = FriendsConiferParams;
 
 /// [`NorthernConifer`] — Liam's geometry with plane-splay foliage ([#232](https://github.com/ramate-io/maybraid/issues/232)).
 pub type RenderNorthernConifer = NorthernConiferParams;
@@ -155,128 +123,128 @@ pub type RenderJungleGrowth = JungleGrowth<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-/// [`BraidGrassStd`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
-pub type RenderBraidGrass = BraidGrassStd;
+/// [`BraidGrassParams`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
+pub type RenderBraidGrass = BraidGrassParams;
 
-/// [`TropicalTuftsStd`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
-pub type RenderTropicalTufts = TropicalTuftsStd;
+/// [`TropicalTuftsParams`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
+pub type RenderTropicalTufts = TropicalTuftsParams;
 
-/// [`CommonTuftsStd`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
-pub type RenderCommonTufts = CommonTuftsStd;
+/// [`CommonTuftsParams`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
+pub type RenderCommonTufts = CommonTuftsParams;
 
-/// [`BushScrubStd`] — sparse tuft-and-bush grove ([#303](https://github.com/ramate-io/maybraid/issues/303)).
-pub type RenderBushScrub = BushScrubStd;
+/// [`BushScrubParams`] — sparse tuft-and-bush grove ([#303](https://github.com/ramate-io/maybraid/issues/303)).
+pub type RenderBushScrub = BushScrubParams;
 
-/// [`TropicalUndergrowthStd`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
-pub type RenderTropicalUndergrowth = TropicalUndergrowthStd;
+/// [`TropicalUndergrowthParams`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
+pub type RenderTropicalUndergrowth = TropicalUndergrowthParams;
 
-/// [`TropicalThicketStd`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
-pub type RenderTropicalThicket = TropicalThicketStd;
+/// [`TropicalThicketParams`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
+pub type RenderTropicalThicket = TropicalThicketParams;
 
-/// [`JerrysChaparralStd`] — moderately dense dry scrub chaparral ([#318](https://github.com/ramate-io/maybraid/issues/318)).
-pub type RenderJerrysChaparral = JerrysChaparralStd;
+/// [`JerrysChaparralParams`] — moderately dense dry scrub chaparral ([#318](https://github.com/ramate-io/maybraid/issues/318)).
+pub type RenderJerrysChaparral = JerrysChaparralParams;
 
-/// [`LevantineScrubStd`] — dry Mediterranean scrub understory ([#320](https://github.com/ramate-io/maybraid/issues/320)).
-pub type RenderLevantineScrub = LevantineScrubStd;
+/// [`LevantineScrubParams`] — dry Mediterranean scrub understory ([#320](https://github.com/ramate-io/maybraid/issues/320)).
+pub type RenderLevantineScrub = LevantineScrubParams;
 
-/// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
-pub type RenderTallGrass = TallGrassStd;
+/// [`TallGrassParams`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
+pub type RenderTallGrass = TallGrassParams;
 
-/// [`WildGrassStd`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
-pub type RenderWildGrass = WildGrassStd;
+/// [`WildGrassParams`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
+pub type RenderWildGrass = WildGrassParams;
 
 /// [`MonsterGrassParams`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
 pub type RenderMonsterGrass = MonsterGrassParams;
 
-/// [`RiverineGreenStd`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
-pub type RenderRiverineGreen = RiverineGreenStd;
+/// [`RiverineGreenParams`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
+pub type RenderRiverineGreen = RiverineGreenParams;
 
-/// [`LowBushStd`] — moderate low shrub understory grove ([#310](https://github.com/ramate-io/maybraid/issues/310)).
-pub type RenderLowBush = LowBushStd;
+/// [`LowBushParams`] — moderate low shrub understory grove ([#310](https://github.com/ramate-io/maybraid/issues/310)).
+pub type RenderLowBush = LowBushParams;
 
-/// [`HighBushStd`] — moderate tall shrub understory grove ([#312](https://github.com/ramate-io/maybraid/issues/312)).
-pub type RenderHighBush = HighBushStd;
+/// [`HighBushParams`] — moderate tall shrub understory grove ([#312](https://github.com/ramate-io/maybraid/issues/312)).
+pub type RenderHighBush = HighBushParams;
 
-/// [`SpottyBushesStd`] — very sparse High Bush punctuation grove ([#321](https://github.com/ramate-io/maybraid/issues/321)).
-pub type RenderSpottyBushes = SpottyBushesStd;
+/// [`SpottyBushesParams`] — very sparse High Bush punctuation grove ([#321](https://github.com/ramate-io/maybraid/issues/321)).
+pub type RenderSpottyBushes = SpottyBushesParams;
 
-/// [`UnendingJungleStd`] — moderate lower-canopy jungle grove ([#322](https://github.com/ramate-io/maybraid/issues/322)).
-pub type RenderUnendingJungle = UnendingJungleStd;
+/// [`UnendingJungleParams`] — moderate lower-canopy jungle grove ([#322](https://github.com/ramate-io/maybraid/issues/322)).
+pub type RenderUnendingJungle = UnendingJungleParams;
 
-/// [`StrangeOasisStd`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
-pub type RenderStrangeOasis = StrangeOasisStd;
+/// [`StrangeOasisParams`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
+pub type RenderStrangeOasis = StrangeOasisParams;
 
-/// [`ShamanhomeStd`] — moderate sacred lower-canopy grove ([#324](https://github.com/ramate-io/maybraid/issues/324)).
-pub type RenderShamanhome = ShamanhomeStd;
+/// [`ShamanhomeParams`] — moderate sacred lower-canopy grove ([#324](https://github.com/ramate-io/maybraid/issues/324)).
+pub type RenderShamanhome = ShamanhomeParams;
 
-/// [`GoettingenFollowStd`] — low-density temperate follow-layer grove ([#325](https://github.com/ramate-io/maybraid/issues/325)).
-pub type RenderGoettingenFollow = GoettingenFollowStd;
+/// [`GoettingenFollowParams`] — low-density temperate follow-layer grove ([#325](https://github.com/ramate-io/maybraid/issues/325)).
+pub type RenderGoettingenFollow = GoettingenFollowParams;
 
-/// [`ConiferSaplingStd`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
-pub type RenderConiferSapling = ConiferSaplingStd;
+/// [`ConiferSaplingParams`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
+pub type RenderConiferSapling = ConiferSaplingParams;
 
-/// [`AridConiferSaplingStd`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
-pub type RenderAridConiferSapling = AridConiferSaplingStd;
+/// [`AridConiferSaplingParams`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
+pub type RenderAridConiferSapling = AridConiferSaplingParams;
 
-/// [`JungleLowerMassivesStd`] — moderate massive jungle lower-canopy grove ([#328](https://github.com/ramate-io/maybraid/issues/328)).
-pub type RenderJungleLowerMassives = JungleLowerMassivesStd;
+/// [`JungleLowerMassivesParams`] — moderate massive jungle lower-canopy grove ([#328](https://github.com/ramate-io/maybraid/issues/328)).
+pub type RenderJungleLowerMassives = JungleLowerMassivesParams;
 
-/// [`JungleMassivesStd`] — moderate giant jungle upper-canopy grove ([#331](https://github.com/ramate-io/maybraid/issues/331)).
-pub type RenderJungleMassives = JungleMassivesStd;
+/// [`JungleMassivesParams`] — moderate giant jungle upper-canopy grove ([#331](https://github.com/ramate-io/maybraid/issues/331)).
+pub type RenderJungleMassives = JungleMassivesParams;
 
-/// [`TemperateLowerMassivesStd`] — low-density massive temperate lower-canopy grove ([#330](https://github.com/ramate-io/maybraid/issues/330)).
-pub type RenderTemperateLowerMassives = TemperateLowerMassivesStd;
+/// [`TemperateLowerMassivesParams`] — low-density massive temperate lower-canopy grove ([#330](https://github.com/ramate-io/maybraid/issues/330)).
+pub type RenderTemperateLowerMassives = TemperateLowerMassivesParams;
 
-/// [`PalmShadeStd`] — sparse Waialea and Date Palm upper-canopy grove ([#332](https://github.com/ramate-io/maybraid/issues/332)).
-pub type RenderPalmShade = PalmShadeStd;
+/// [`PalmShadeParams`] — sparse Waialea and Date Palm upper-canopy grove ([#332](https://github.com/ramate-io/maybraid/issues/332)).
+pub type RenderPalmShade = PalmShadeParams;
 
-/// [`RiparianMixStd`] — mixed riparian upper-canopy grove ([#333](https://github.com/ramate-io/maybraid/issues/333)).
-pub type RenderRiparianMix = RiparianMixStd;
+/// [`RiparianMixParams`] — mixed riparian upper-canopy grove ([#333](https://github.com/ramate-io/maybraid/issues/333)).
+pub type RenderRiparianMix = RiparianMixParams;
 
-/// [`AlpineStd`] — cold upland conifer upper-canopy grove ([#334](https://github.com/ramate-io/maybraid/issues/334)).
-pub type RenderAlpine = AlpineStd;
+/// [`AlpineParams`] — cold upland conifer upper-canopy grove ([#334](https://github.com/ramate-io/maybraid/issues/334)).
+pub type RenderAlpine = AlpineParams;
 
-/// [`DrylandStd`] — very-low-density arid upper-canopy grove ([#335](https://github.com/ramate-io/maybraid/issues/335)).
-pub type RenderDryland = DrylandStd;
+/// [`DrylandParams`] — very-low-density arid upper-canopy grove ([#335](https://github.com/ramate-io/maybraid/issues/335)).
+pub type RenderDryland = DrylandParams;
 
-/// [`StorytellersStd`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
-pub type RenderStorytellers = StorytellersStd;
+/// [`StorytellersParams`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
+pub type RenderStorytellers = StorytellersParams;
 
-/// [`TradeWindsStd`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
-pub type RenderTradeWinds = TradeWindsStd;
+/// [`TradeWindsParams`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
+pub type RenderTradeWinds = TradeWindsParams;
 
-/// [`WanderingAcaciaStd`] — very-low-density dry open upper-canopy grove ([#338](https://github.com/ramate-io/maybraid/issues/338)).
-pub type RenderWanderingAcacia = WanderingAcaciaStd;
+/// [`WanderingAcaciaParams`] — very-low-density dry open upper-canopy grove ([#338](https://github.com/ramate-io/maybraid/issues/338)).
+pub type RenderWanderingAcacia = WanderingAcaciaParams;
 
-/// [`LeewardStd`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
-pub type RenderLeeward = LeewardStd;
+/// [`LeewardParams`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
+pub type RenderLeeward = LeewardParams;
 
-/// [`ChristmasTaigaStd`] — moderate-density cold Northern Conifer upper-canopy grove ([#341](https://github.com/ramate-io/maybraid/issues/341)).
-pub type RenderChristmasTaiga = ChristmasTaigaStd;
+/// [`ChristmasTaigaParams`] — moderate-density cold Northern Conifer upper-canopy grove ([#341](https://github.com/ramate-io/maybraid/issues/341)).
+pub type RenderChristmasTaiga = ChristmasTaigaParams;
 
-/// [`ConiferMassivesStd`] — moderate giant conifer upper-canopy grove.
-pub type RenderConiferMassives = ConiferMassivesStd;
+/// [`ConiferMassivesParams`] — moderate giant conifer upper-canopy grove.
+pub type RenderConiferMassives = ConiferMassivesParams;
 
-/// [`TemperateMassivesStd`] — moderate giant temperate upper-canopy grove.
-pub type RenderTemperateMassives = TemperateMassivesStd;
+/// [`TemperateMassivesParams`] — moderate giant temperate upper-canopy grove.
+pub type RenderTemperateMassives = TemperateMassivesParams;
 
-/// [`RiparianGeneralStd`] — mixed riparian upper-canopy grove.
-pub type RenderRiparianGeneral = RiparianGeneralStd;
+/// [`RiparianGeneralParams`] — mixed riparian upper-canopy grove.
+pub type RenderRiparianGeneral = RiparianGeneralParams;
 
-/// [`RollingOaksStd`] — rolling oak upper-canopy grove.
-pub type RenderRollingOaks = RollingOaksStd;
+/// [`RollingOaksParams`] — rolling oak upper-canopy grove.
+pub type RenderRollingOaks = RollingOaksParams;
 
-/// [`ForlornSavannaStd`] — sparse dry savanna upper-canopy grove.
-pub type RenderForlornSavanna = ForlornSavannaStd;
+/// [`ForlornSavannaParams`] — sparse dry savanna upper-canopy grove.
+pub type RenderForlornSavanna = ForlornSavannaParams;
 
-/// [`OrchardStd`] — cultivated orchard upper-canopy grove.
-pub type RenderOrchard = OrchardStd;
+/// [`OrchardParams`] — cultivated orchard upper-canopy grove.
+pub type RenderOrchard = OrchardParams;
 
-/// [`VineyardStd`] — cultivated vineyard upper-canopy grove.
-pub type RenderVineyard = VineyardStd;
+/// [`VineyardParams`] — cultivated vineyard upper-canopy grove.
+pub type RenderVineyard = VineyardParams;
 
-/// [`DateGroveStd`] — date palm upper-canopy grove.
-pub type RenderDateGrove = DateGroveStd;
+/// [`DateGroveParams`] — fruiting Date Palm grove.
+pub type RenderDateGrove = DateGroveParams;
 
 /// The configured render item currently shown in the scene.
 ///
@@ -895,13 +863,11 @@ impl RenderSubject {
 			}
 			Self::StrangeOasis(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|leaf={:?}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
 					g.leaf_surface_noise
 				)
 			}
@@ -986,7 +952,11 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&tree);
 				spawn_vegetation_components(commands, &tree, transform, bounds)
 			}
-			Self::FriendsConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::FriendsConifer(item) => {
+				let tree = item.build();
+				let bounds = vegetation_bounds(&tree);
+				spawn_vegetation_components(commands, &tree, transform, bounds)
+			}
 			Self::NorthernConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
@@ -1054,53 +1024,316 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&patch);
 				spawn_vegetation_components(commands, &patch, transform, bounds)
 			}
-			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalThicket(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::JerrysChaparral(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::LevantineScrub(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BraidGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::TropicalTufts(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::CommonTufts(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::BushScrub(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TropicalUndergrowth(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TropicalThicket(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::JerrysChaparral(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::LevantineScrub(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TallGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::WildGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::MonsterGrass(item) => {
 				let grove = item.build();
 				let bounds = vegetation_bounds(&grove);
 				spawn_vegetation_components(commands, &grove, transform, bounds)
 			}
-			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::LowBush(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::StrangeOasis(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::JungleMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TemperateLowerMassives(item) => {
-				item.spawn_render_items(commands, chunk, transform)
+			Self::RiverineGreen(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::LowBush(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
-			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RiparianMix(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Dryland(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Storytellers(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::WanderingAcacia(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Leeward(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::ChristmasTaiga(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::ConiferMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TemperateMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RiparianGeneral(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::RollingOaks(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::ForlornSavanna(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Orchard(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Vineyard(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::DateGrove(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::HighBush(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::SpottyBushes(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::UnendingJungle(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::StrangeOasis(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Shamanhome(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::GoettingenFollow(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::ConiferSapling(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::AridConiferSapling(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::JungleLowerMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::JungleMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TemperateLowerMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::PalmShade(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::RiparianMix(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Alpine(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Dryland(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Storytellers(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::TradeWinds(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::WanderingAcacia(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::Leeward(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::ChristmasTaiga(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::ConiferMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TemperateMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::RiparianGeneral(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::RollingOaks(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::ForlornSavanna(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Orchard(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::Vineyard(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::DateGrove(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

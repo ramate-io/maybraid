@@ -22,12 +22,6 @@ pub enum FoliageGeometry {
 	StraightFrondSegment,
 	/// Many placed frond kits under one LOD parent (merge thinning by distance).
 	FrondCollection(FrondCollection),
-	/// Plane-splay cluster parameters (local units before placement scale).
-	PlaneSplay {
-		icosphere_subdivisions: u32,
-		core_radius: f32,
-		leaf_disc_radius: f32,
-	},
 }
 
 impl Default for FoliageGeometry {
@@ -59,18 +53,6 @@ impl FoliageGeometry {
 
 	pub fn frond_collection(collection: FrondCollection) -> Self {
 		Self::FrondCollection(collection)
-	}
-
-	pub fn plane_splay(
-		icosphere_subdivisions: u32,
-		core_radius: f32,
-		leaf_disc_radius: f32,
-	) -> Self {
-		Self::PlaneSplay { icosphere_subdivisions, core_radius, leaf_disc_radius }
-	}
-
-	pub fn default_plane_splay() -> Self {
-		Self::plane_splay(0, 0.8, 0.9)
 	}
 
 	pub fn is_layered_ball(&self) -> bool {

@@ -12,17 +12,24 @@ use crate::jungle_canopy_vc::{
 	JungleGrowthScaleParams,
 };
 
-/// High outer / inner canopy bands.
+/// High / Medium outer / inner canopy bands.
 const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
-/// Medium foliage bands (growth + canopy).
-const MEDIUM_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(17, 4);
-/// Medium growth: keep a visible epiphyte count without matching canopy density.
-const MEDIUM_GROWTH_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(12, 4);
 /// Low foliage: cheap-ball kit.
 const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
-/// Default [`crate::HonuBanyanParams::jungle_growth_radius_scale`].
+/// Default [`crate::HonuBanyanParams::jungle_growth_radius_scale`] for full (~24 m) Honu.
 pub const DEFAULT_HONU_GROWTH_RADIUS_SCALE: f32 = 4.0;
+/// Reference stalk height that pairs with [`DEFAULT_HONU_GROWTH_RADIUS_SCALE`].
+pub const HONU_GROWTH_REFERENCE_HEIGHT: f32 = 24.0;
+/// Floor so tiny trees still get a readable growth cluster.
+const MIN_HONU_GROWTH_RADIUS_SCALE: f32 = 0.35;
+
+/// Scale jungle-growth assembly with tree height (mini Honu vs full canopy).
+pub fn jungle_growth_radius_scale_for_height(tree_height: f32) -> f32 {
+	let t = (tree_height.max(1e-3) / HONU_GROWTH_REFERENCE_HEIGHT).clamp(0.12, 1.0);
+	(DEFAULT_HONU_GROWTH_RADIUS_SCALE * t).max(MIN_HONU_GROWTH_RADIUS_SCALE)
+}
+
 /// Frond scale relative to the assembly.
 const FOLIAGE_SCALE_CENTER: f32 = 1.6;
 
@@ -154,15 +161,11 @@ fn mid_canopy_proxy_ball(
 
 fn lod_plan(level: LodSceneLevel) -> JungleCanopyLodPlan {
 	match level {
-		LodSceneLevel::High => JungleCanopyLodPlan {
+		// Medium keeps High growth/canopy topology; FrondCollection fine-phase merge thins.
+		LodSceneLevel::High | LodSceneLevel::Medium => JungleCanopyLodPlan {
 			growth: JungleGrowthEmitMode::All,
 			canopy_bands: HIGH_FOLIAGE_BANDS,
 			include_proxy: false,
-		},
-		LodSceneLevel::Medium => JungleCanopyLodPlan {
-			growth: JungleGrowthEmitMode::Banded(MEDIUM_GROWTH_BANDS),
-			canopy_bands: MEDIUM_FOLIAGE_BANDS,
-			include_proxy: true,
 		},
 		LodSceneLevel::Low
 		| LodSceneLevel::UltraLow
@@ -226,5 +229,14 @@ mod vc_growth_tests {
 			"expected jungle-growth frond collections, got {} foliage nodes",
 			nodes.len()
 		);
+	}
+
+	#[test]
+	fn growth_radius_scales_down_for_mini_height() {
+		let full = jungle_growth_radius_scale_for_height(HONU_GROWTH_REFERENCE_HEIGHT);
+		assert!((full - DEFAULT_HONU_GROWTH_RADIUS_SCALE).abs() < 1e-4);
+		let mini = jungle_growth_radius_scale_for_height(3.0);
+		assert!(mini < full * 0.25);
+		assert!(mini >= MIN_HONU_GROWTH_RADIUS_SCALE);
 	}
 }

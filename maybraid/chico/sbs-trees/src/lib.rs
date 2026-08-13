@@ -5,6 +5,7 @@ pub mod braid_oak_tree;
 mod conifer_canopy_apex;
 pub mod date_palm;
 pub mod friends_conifer;
+pub mod high_bush_shoots;
 pub mod honu_banyan;
 mod jungle_canopy_vc;
 mod jungle_growth_vc;
@@ -29,8 +30,12 @@ pub mod waialea_palm;
 
 pub use braid_oak_tree::{BraidOakTree, BraidOakTreeParams};
 pub use date_palm::{DatePalm, DatePalmParams};
-pub use friends_conifer::FriendsConiferStd;
-pub use honu_banyan::{HonuBanyan, HonuBanyanParams};
+pub use friends_conifer::{FriendsConifer, FriendsConiferParams};
+pub use high_bush_shoots::{HighBushShoots, HighBushShootsParams};
+pub use honu_banyan::{
+	jungle_growth_radius_scale_for_height, HonuBanyan, HonuBanyanParams,
+	DEFAULT_HONU_GROWTH_RADIUS_SCALE, HONU_GROWTH_REFERENCE_HEIGHT,
+};
 pub use jungle_storybook_tree::{JungleStorybookTree, JungleStorybookTreeParams};
 pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::{LiamsConifer, LiamsConiferParams};

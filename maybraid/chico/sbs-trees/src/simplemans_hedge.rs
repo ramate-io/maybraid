@@ -10,7 +10,8 @@ pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+	VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -234,6 +235,14 @@ impl VegetationComponents for SimplemansHedge {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => Layers::new(),
 		}
+	}
+
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		let radius = (self.footprint_xz * 0.5).max(self.height * 0.5).max(1e-3);
+		Some(StructuralLod::new(
+			Vec3::new(0.0, self.height * 0.5, 0.0),
+			radius,
+		))
 	}
 }
 
