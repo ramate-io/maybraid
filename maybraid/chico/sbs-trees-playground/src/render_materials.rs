@@ -130,24 +130,12 @@ fn attach_render_materials(
 		}
 		RenderSubject::MonsterGrass(_) => {}
 		RenderSubject::RiverineGreen(_) => {}
-		RenderSubject::LowBush(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::LowBush(_) => {}
 		RenderSubject::HighBush(_) => {}
 		RenderSubject::SpottyBushes(_) => {}
-		RenderSubject::UnendingJungle(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::JungleLowerMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::JungleMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::UnendingJungle(_) => {}
+		RenderSubject::JungleLowerMassives(_) => {}
+		RenderSubject::JungleMassives(_) => {}
 		RenderSubject::TemperateLowerMassives(_) => {}
 		RenderSubject::PalmShade(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());

@@ -111,7 +111,13 @@ pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
 #[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushParams};
 #[cfg(feature = "render")]
+pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesParams};
+#[cfg(feature = "render")]
+pub use jungle_massives::{JungleMassives, JungleMassivesParams};
+#[cfg(feature = "render")]
 pub use leeward::{Leeward, LeewardParams};
+#[cfg(feature = "render")]
+pub use low_bush::{LowBush, LowBushParams};
 #[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
 #[cfg(feature = "render")]
@@ -136,6 +142,8 @@ pub use temperate_massives::{TemperateMassives, TemperateMassivesParams};
 pub use trade_winds::{TradeWinds, TradeWindsParams};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
+#[cfg(feature = "render")]
+pub use unending_jungle::{UnendingJungle, UnendingJungleParams};
 #[cfg(feature = "render")]
 pub use vineyard::{Vineyard, VineyardParams};
 #[cfg(feature = "render")]

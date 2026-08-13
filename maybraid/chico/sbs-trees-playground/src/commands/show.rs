@@ -3,10 +3,11 @@
 use bevy::prelude::*;
 use chico_groves::{
 	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent, HighBushParams,
-	LeewardParams, LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
-	RiverineGreenParams, RollingOaksParams, SpottyBushesParams, StorytellersParams,
-	StrangeOasisParams, TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams,
-	TropicalThicketParams, VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
+	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
+	LowBushParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams, RiverineGreenParams,
+	RollingOaksParams, SpottyBushesParams, StorytellersParams, StrangeOasisParams,
+	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
+	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
@@ -105,6 +106,14 @@ pub enum Show {
 	SpottyBushes(ShowSpottyBushes),
 	/// Riverine Green grove via VegetationComponents / LodScene.
 	RiverineGreen(ShowRiverineGreen),
+	/// Low Bush grove via VegetationComponents / LodScene.
+	LowBush(ShowLowBush),
+	/// Jungle Massives grove via VegetationComponents / LodScene.
+	JungleMassives(ShowJungleMassives),
+	/// Jungle Lower Massives grove via VegetationComponents / LodScene.
+	JungleLowerMassives(ShowJungleLowerMassives),
+	/// Unending Jungle grove via VegetationComponents / LodScene.
+	UnendingJungle(ShowUnendingJungle),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
 }
@@ -656,6 +665,91 @@ impl ShowRiverineGreen {
 		grove
 	}
 }
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowLowBush {
+	#[command(flatten)]
+	pub grove: LowBushParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowLowBush {
+	fn configured(self) -> LowBushParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowJungleMassives {
+	#[command(flatten)]
+	pub grove: JungleMassivesParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowJungleMassives {
+	fn configured(self) -> JungleMassivesParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowJungleLowerMassives {
+	#[command(flatten)]
+	pub grove: JungleLowerMassivesParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowJungleLowerMassives {
+	fn configured(self) -> JungleLowerMassivesParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowUnendingJungle {
+	#[command(flatten)]
+	pub grove: UnendingJungleParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowUnendingJungle {
+	fn configured(self) -> UnendingJungleParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowHighBushShoots {
@@ -707,6 +801,10 @@ impl Show {
 			Self::HighBush(args) => ShowSubject::HighBush(args.configured()),
 			Self::SpottyBushes(args) => ShowSubject::SpottyBushes(args.configured()),
 			Self::RiverineGreen(args) => ShowSubject::RiverineGreen(args.configured()),
+			Self::LowBush(args) => ShowSubject::LowBush(args.configured()),
+			Self::JungleMassives(args) => ShowSubject::JungleMassives(args.configured()),
+			Self::JungleLowerMassives(args) => ShowSubject::JungleLowerMassives(args.configured()),
+			Self::UnendingJungle(args) => ShowSubject::UnendingJungle(args.configured()),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
@@ -759,6 +857,10 @@ pub enum ShowSubject {
 	HighBush(HighBushParams),
 	SpottyBushes(SpottyBushesParams),
 	RiverineGreen(RiverineGreenParams),
+	LowBush(LowBushParams),
+	JungleMassives(JungleMassivesParams),
+	JungleLowerMassives(JungleLowerMassivesParams),
+	UnendingJungle(UnendingJungleParams),
 	HighBushShoots(HighBushShootsParams),
 }
 
@@ -974,6 +1076,30 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::LowBush(g)) => Some(format!(
+			"low-bush:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::JungleMassives(g)) => Some(format!(
+			"jungle-massives:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::JungleLowerMassives(g)) => Some(format!(
+			"jungle-lower-massives:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::UnendingJungle(g)) => Some(format!(
+			"unending-jungle:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
@@ -1037,6 +1163,10 @@ pub fn sync_show(
 		ShowSubject::HighBush(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::SpottyBushes(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::RiverineGreen(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::LowBush(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::JungleMassives(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::JungleLowerMassives(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::UnendingJungle(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
@@ -1096,6 +1226,10 @@ mod tests {
 			"show high-bush --grove-extent-xz 46 --elevation 0.35",
 			"show spotty-bushes --grove-extent-xz 39 --elevation 0.35",
 			"show riverine-green --grove-extent-xz 28 --elevation 0.25",
+			"show low-bush --grove-extent-xz 34 --elevation 0.30",
+			"show jungle-massives --grove-extent-xz 220",
+			"show jungle-lower-massives --grove-extent-xz 92",
+			"show unending-jungle --grove-extent-xz 39 --elevation 0.35",
 			"show high-bush-shoots",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
@@ -1156,6 +1290,18 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::RiverineGreen(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::LowBush(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::JungleMassives(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::JungleLowerMassives(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::UnendingJungle(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {
