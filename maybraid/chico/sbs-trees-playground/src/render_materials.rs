@@ -131,10 +131,7 @@ fn attach_render_materials(
 		RenderSubject::JungleLowerMassives(_) => {}
 		RenderSubject::JungleMassives(_) => {}
 		RenderSubject::TemperateLowerMassives(_) => {}
-		RenderSubject::PalmShade(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::PalmShade(_) => {}
 		RenderSubject::RiparianMix(_) => {}
 		RenderSubject::Alpine(_) => {}
 		RenderSubject::Dryland(_) => {}
@@ -150,15 +147,9 @@ fn attach_render_materials(
 		RenderSubject::ForlornSavanna(_) => {}
 		RenderSubject::Orchard(_) => {}
 		RenderSubject::Vineyard(_) => {}
-		RenderSubject::DateGrove(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::DateGrove(_) => {}
 		RenderSubject::StrangeOasis(_) => {}
-		RenderSubject::Shamanhome(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::Shamanhome(_) => {}
 		RenderSubject::GoettingenFollow(_) => {}
 		RenderSubject::ConiferSapling(_) => {}
 		RenderSubject::AridConiferSapling(_) => {}

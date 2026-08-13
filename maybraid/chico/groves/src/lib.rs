@@ -119,6 +119,12 @@ pub use conifer_massives::{ConiferMassives, ConiferMassivesParams};
 #[cfg(feature = "render")]
 pub use conifer_sapling::{ConiferSapling, ConiferSaplingParams};
 #[cfg(feature = "render")]
+pub use date_grove::{DateGrove, DateGroveParams};
+#[cfg(feature = "render")]
+pub use palm_shade::{PalmShade, PalmShadeParams};
+#[cfg(feature = "render")]
+pub use shamanhome::{Shamanhome, ShamanhomeParams};
+#[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushParams};
 #[cfg(feature = "render")]
 pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralParams};

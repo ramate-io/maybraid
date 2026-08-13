@@ -3,13 +3,14 @@
 use bevy::prelude::*;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, ChristmasTaigaParams, ConiferMassivesParams,
-	ConiferSaplingParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent,
-	HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams, JungleMassivesParams,
-	LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams, OrchardParams,
-	RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
-	SpottyBushesParams, StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams,
-	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, UnendingJungleParams,
-	VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
+	ConiferSaplingParams, DateGroveParams, DrylandParams, ForlornSavannaParams,
+	GoettingenFollowParams, GroveExtent, HighBushParams, JerrysChaparralParams,
+	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
+	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
+	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
+	StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams, TemperateMassivesParams,
+	TradeWindsParams, TropicalThicketParams, UnendingJungleParams, VineyardParams,
+	WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
@@ -130,6 +131,12 @@ pub enum Show {
 	AridConiferSapling(ShowAridConiferSapling),
 	/// Conifer Massives grove via VegetationComponents / LodScene.
 	ConiferMassives(ShowConiferMassives),
+	/// Palm Shade grove via VegetationComponents / LodScene.
+	PalmShade(ShowPalmShade),
+	/// Shamanhome grove via VegetationComponents / LodScene.
+	Shamanhome(ShowShamanhome),
+	/// Date Grove via VegetationComponents / LodScene.
+	DateGrove(ShowDateGrove),
 	/// Friend's Conifer via VegetationComponents / LodScene.
 	FriendsConifer(ShowFriendsConifer),
 	/// High Bush Shoots via VegetationComponents / LodScene.
@@ -919,6 +926,69 @@ impl ShowConiferMassives {
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
+pub struct ShowPalmShade {
+	#[command(flatten)]
+	pub grove: PalmShadeParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowPalmShade {
+	fn configured(self) -> PalmShadeParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowShamanhome {
+	#[command(flatten)]
+	pub grove: ShamanhomeParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowShamanhome {
+	fn configured(self) -> ShamanhomeParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowDateGrove {
+	#[command(flatten)]
+	pub grove: DateGroveParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowDateGrove {
+	fn configured(self) -> DateGroveParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
 pub struct ShowFriendsConifer {
 	#[command(flatten)]
 	pub tree: FriendsConiferParams,
@@ -986,6 +1056,9 @@ impl Show {
 			Self::ConiferSapling(args) => ShowSubject::ConiferSapling(args.configured()),
 			Self::AridConiferSapling(args) => ShowSubject::AridConiferSapling(args.configured()),
 			Self::ConiferMassives(args) => ShowSubject::ConiferMassives(args.configured()),
+			Self::PalmShade(args) => ShowSubject::PalmShade(args.configured()),
+			Self::Shamanhome(args) => ShowSubject::Shamanhome(args.configured()),
+			Self::DateGrove(args) => ShowSubject::DateGrove(args.configured()),
 			Self::FriendsConifer(args) => ShowSubject::FriendsConifer(args.tree),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
@@ -1050,6 +1123,9 @@ pub enum ShowSubject {
 	ConiferSapling(ConiferSaplingParams),
 	AridConiferSapling(AridConiferSaplingParams),
 	ConiferMassives(ConiferMassivesParams),
+	PalmShade(PalmShadeParams),
+	Shamanhome(ShamanhomeParams),
+	DateGrove(DateGroveParams),
 	FriendsConifer(FriendsConiferParams),
 	HighBushShoots(HighBushShootsParams),
 }
@@ -1332,6 +1408,24 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::PalmShade(g)) => Some(format!(
+			"palm-shade:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Shamanhome(g)) => Some(format!(
+			"shamanhome:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::DateGrove(g)) => Some(format!(
+			"date-grove:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::FriendsConifer(t)) => Some(format!(
 			"friends-conifer:{:?}|splay={}",
 			t.geometry, t.splay_radius_fraction_of_height
@@ -1410,6 +1504,9 @@ pub fn sync_show(
 		ShowSubject::ConiferSapling(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::AridConiferSapling(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::ConiferMassives(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::PalmShade(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Shamanhome(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::DateGrove(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::FriendsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
@@ -1481,6 +1578,9 @@ mod tests {
 			"show conifer-sapling --grove-extent-xz 39 --elevation 0.55",
 			"show arid-conifer-sapling --grove-extent-xz 39",
 			"show conifer-massives --grove-extent-xz 400",
+			"show palm-shade --grove-extent-xz 220",
+			"show shamanhome --grove-extent-xz 39 --elevation 0.25",
+			"show date-grove --grove-extent-xz 160",
 			"show friends-conifer",
 			"show high-bush-shoots",
 		] {
@@ -1575,6 +1675,15 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::ConiferMassives(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::PalmShade(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Shamanhome(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::DateGrove(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::FriendsConifer(args)) => {
