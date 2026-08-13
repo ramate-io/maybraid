@@ -2831,6 +2831,7 @@ dependencies = [
  "crozon-character-items",
  "crozon-rigs",
  "lod",
+ "malo-animations",
  "material-ref",
  "scene-ref",
 ]

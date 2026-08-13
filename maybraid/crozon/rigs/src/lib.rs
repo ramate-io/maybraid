@@ -195,6 +195,22 @@ impl BonePose {
 			articulation::compose_local_rotation(rest, axis, swing, flex, twist);
 		self
 	}
+
+	/// Lerp translation/scale, slerp rotation, lerp swing/flex/twist.
+	pub fn blend(&self, to: &Self, weight: f32) -> Self {
+		let weight = weight.clamp(0.0, 1.0);
+		Self {
+			name: self.name.clone(),
+			transform: Transform {
+				translation: self.transform.translation.lerp(to.transform.translation, weight),
+				rotation: self.transform.rotation.slerp(to.transform.rotation, weight),
+				scale: self.transform.scale.lerp(to.transform.scale, weight),
+			},
+			swing: self.swing + (to.swing - self.swing) * weight,
+			flex: self.flex + (to.flex - self.flex) * weight,
+			twist: self.twist + (to.twist - self.twist) * weight,
+		}
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -245,6 +261,23 @@ impl RigPose {
 		self.0.is_empty()
 	}
 
+	/// Blend two absolute poses. Missing bones are taken from the other side.
+	pub fn blend(from: &Self, to: &Self, weight: f32) -> Self {
+		let weight = weight.clamp(0.0, 1.0);
+		let mut out = Self::new();
+		let mut names: std::collections::HashSet<Name> = from.0.keys().cloned().collect();
+		names.extend(to.0.keys().cloned());
+		for name in names {
+			match (from.get(&name), to.get(&name)) {
+				(Some(a), Some(b)) => out.insert(a.blend(b, weight)),
+				(Some(a), None) => out.insert(a.clone()),
+				(None, Some(b)) => out.insert(b.clone()),
+				(None, None) => {}
+			}
+		}
+		out
+	}
+
 	/// Add the same translation to every named bone, preserving existing swing/flex.
 	/// Inserts identity articulation for bones not yet in the pose.
 	pub fn move_all(&mut self, bones: impl IntoIterator<Item = Name>, translation: Vec3) {
@@ -277,6 +310,18 @@ mod tests {
 
 		assert_eq!(pose.get(&name).map(|pose| pose.transform), Some(transform));
 		assert_eq!(pose.len(), 1);
+	}
+
+	#[test]
+	fn rig_pose_blend_midpoint_lerps_translation() {
+		let name = Name::from("femur.L");
+		let mut from = RigPose::new();
+		from.insert(BonePose::new(name.clone(), Transform::from_translation(Vec3::ZERO)));
+		let mut to = RigPose::new();
+		to.insert(BonePose::new(name.clone(), Transform::from_translation(Vec3::X)));
+		let mid = RigPose::blend(&from, &to, 0.5);
+		let bone = mid.get(&name).expect("femur");
+		assert!((bone.transform.translation - Vec3::splat(0.0).lerp(Vec3::X, 0.5)).length() < 1e-5);
 	}
 
 	#[test]

@@ -6,6 +6,7 @@
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
 //! `Changed`), not LOD refresh.
 
+pub mod anim;
 pub mod assembly;
 pub mod assets;
 pub mod components;
@@ -15,6 +16,7 @@ pub mod member;
 pub mod menu_traits;
 pub mod nodes;
 pub mod plugin;
+pub mod pose;
 pub mod presets;
 pub mod rig;
 pub mod scene_children;
@@ -22,6 +24,9 @@ pub mod skin;
 pub mod socket;
 pub mod species;
 
+pub use anim::{
+	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimId, AnimMailbox, AnimRef, AnimRefRoot,
+};
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
@@ -38,6 +43,7 @@ pub use member::{
 };
 pub use nodes::{PartNode, RigNode};
 pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};
+pub use pose::maintain_resolved_pose;
 pub use presets::{BuildPreset, GenderPreset};
 pub use rig::{
 	bind_scales_ready, bone_map_ready, build_rig_bone_map, missing_landmark_bones, ActiveRigPose,

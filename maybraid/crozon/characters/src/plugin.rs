@@ -3,8 +3,10 @@
 use bevy::prelude::*;
 use lod::{add_lod_refresh_chunk_for, LodRefreshSystems, LodScene};
 
+use crate::anim::{prepare_anim_mailbox, tick_anim_mailbox};
 use crate::components::{CharacterComponents, ComponentsOnly};
 use crate::member::stamp_character_members;
+use crate::pose::maintain_resolved_pose;
 use crate::skin::invalidate_changed_skin_ref_roots;
 use crate::socket::invalidate_changed_socket_ref_roots;
 
@@ -21,15 +23,18 @@ where
 	add_lod_refresh_chunk_for::<ComponentsOnly<C>>(app);
 }
 
-/// Membership stamp and ref-invalidate for nested character hosts.
+/// Membership, pose, and animation mailbox for nested character hosts.
 ///
 /// [`Self::Membership`] walks [`ChildOf`] to [`crate::CharacterRoot`] after LOD
-/// fulfill and before socket/skin fulfill. [`Self::InvalidateRefs`] drops
-/// `*Applied` when [`crate::SocketRefRoot`] / [`crate::SkinRefRoot`] change.
+/// fulfill. [`Self::InvalidateRefs`] drops `*Applied` when socket/skin refs
+/// change. [`Self::Pose`] applies [`crate::ActiveRigPose`]. [`Self::Anim`]
+/// prepares and ticks the clip mailbox.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CharacterHostSystems {
 	Membership,
 	InvalidateRefs,
+	Pose,
+	Anim,
 }
 
 /// Nested character hosts are spawned as LodScene; membership is stamped after fulfill.
@@ -42,7 +47,13 @@ impl Plugin for CharacterComponentsPlugin {
 			(
 				CharacterHostSystems::Membership.after(LodRefreshSystems::Fulfill),
 				CharacterHostSystems::InvalidateRefs.after(CharacterHostSystems::Membership),
+				CharacterHostSystems::Pose.after(CharacterHostSystems::InvalidateRefs),
+				CharacterHostSystems::Anim.after(CharacterHostSystems::Pose),
 			),
+		);
+		app.configure_sets(
+			PostUpdate,
+			CharacterHostSystems::Pose.before(TransformSystems::Propagate),
 		);
 		app.add_systems(Update, stamp_character_members.in_set(CharacterHostSystems::Membership));
 		app.add_systems(
@@ -50,5 +61,12 @@ impl Plugin for CharacterComponentsPlugin {
 			(invalidate_changed_socket_ref_roots, invalidate_changed_skin_ref_roots)
 				.in_set(CharacterHostSystems::InvalidateRefs),
 		);
+		app.add_systems(Update, maintain_resolved_pose.in_set(CharacterHostSystems::Pose));
+		app.add_systems(
+			Update,
+			(prepare_anim_mailbox, tick_anim_mailbox.after(prepare_anim_mailbox))
+				.in_set(CharacterHostSystems::Anim),
+		);
+		app.add_systems(PostUpdate, maintain_resolved_pose.in_set(CharacterHostSystems::Pose));
 	}
 }

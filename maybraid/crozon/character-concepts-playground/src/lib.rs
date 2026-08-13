@@ -33,7 +33,6 @@ use crozon_character_playground::camera;
 use crozon_character_ui_menus::CharacterMenu;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
-use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
 use character_lod::CharacterLodPlugin;
 use crozon_characters::{
@@ -56,7 +55,7 @@ use preview::{
 };
 use skinning::{
 	attach_focus_reference_to_sockets, attach_parts_to_sockets, dump_bones_to_console,
-	maintain_resolved_pose, DumpBonesRequest,
+	DumpBonesRequest,
 };
 use species_session::{
 	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
@@ -89,6 +88,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				..CameraLookConfig::default()
 			}))
 			.add_plugins(CharacterLodPlugin)
+			.configure_sets(Update, CharacterHostSystems::Pose.after(build_rig_bone_map))
 			.add_plugins(
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
@@ -131,7 +131,6 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					build_rig_bone_map
 						.after(sync_focus_reference)
 						.after(stamp_lod_character_preview),
-					maintain_resolved_pose.after(build_rig_bone_map),
 				),
 			)
 			.add_systems(
@@ -155,14 +154,12 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.after(remap_part_skin_to_rig)
 						.run_if(preview_pass_ready),
 					reveal_ready_preview
-						.after(maintain_resolved_pose)
+						.after(CharacterHostSystems::Pose)
 						.after(prune_duplicate_part_scenes)
 						.run_if(preview_pass_ready),
 					apply_preview_colors
 						.after(prune_duplicate_part_scenes)
 						.run_if(preview_pass_ready),
-					init_limb_animators.after(maintain_resolved_pose).run_if(preview_pass_ready),
-					animate_body_rig.after(init_limb_animators).run_if(preview_pass_ready),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
@@ -170,14 +167,9 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			)
 			.add_systems(
 				PostUpdate,
-				(
-					maintain_resolved_pose.before(TransformSystems::Propagate),
-					// Runs after propagation so shadow-rig socket globals reflect
-					// the pose written this frame.
-					apply_camera_suggestion
-						.after(TransformSystems::Propagate)
-						.after(maintain_resolved_pose),
-				),
+				(apply_camera_suggestion
+					.after(TransformSystems::Propagate)
+					.after(CharacterHostSystems::Pose),),
 			);
 	}
 }

@@ -40,12 +40,12 @@ use crozon_characters::{
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		ylter::YilterConfig,
 	},
-	CharacterComponents, MaterialRefRoot, PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot,
-	SocketRefApplied, SocketRefRoot,
+	AnimRef, AnimRefRoot, CharacterComponents, MaterialRefRoot, PartNode, RigId,
+	RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied, SocketRefRoot,
 };
 use lod::LodSceneLevel;
 
-use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
+use crate::animation::ConceptAnimation;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole,
@@ -1151,11 +1151,12 @@ pub fn sync_preview(
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
 	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
-	mut body_poses: Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	mut body_poses: Query<(&mut ActiveRigPose, &CharacterRig), With<AnimRefRoot>>,
 	mut neck_poses: Query<
 		(&mut ActiveRigPose, &CharacterRig),
-		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
+		(Without<AnimRefRoot>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
+	anim_roots: Query<(Entity, &AnimRefRoot)>,
 	mut parts: Query<(
 		Entity,
 		&PartNode,
@@ -1175,7 +1176,14 @@ pub fn sync_preview(
 
 	if sync_state.spawn_key == spawn_key {
 		sync_state.live_key = live_key;
-		sync_live_preview(&mut commands, &config, &mut body_poses, &mut neck_poses, &mut parts);
+		sync_live_preview(
+			&mut commands,
+			&config,
+			&mut body_poses,
+			&mut neck_poses,
+			&anim_roots,
+			&mut parts,
+		);
 		return;
 	}
 
@@ -1214,14 +1222,12 @@ where
 pub fn stamp_lod_character_preview(
 	mut commands: Commands,
 	config: Res<ConceptPreviewConfig>,
-	body_rigs: Query<(Entity, &RigNode, &Transform), Without<AnimatedBodyRig>>,
+	body_rigs: Query<(Entity, &RigNode), Without<AnimRefRoot>>,
 	parts: Query<(Entity, &PartNode), Without<PreviewAssetTarget>>,
 ) {
-	for (entity, node, transform) in &body_rigs {
+	for (entity, node) in &body_rigs {
 		if node.id == RigId::Body {
-			commands
-				.entity(entity)
-				.insert((AnimatedBodyRig, BodyRigBindTransform(*transform)));
+			commands.entity(entity).insert(AnimRefRoot(AnimRef::from(config.animation())));
 		}
 	}
 
@@ -1239,11 +1245,12 @@ pub fn stamp_lod_character_preview(
 fn sync_live_preview(
 	commands: &mut Commands,
 	config: &ConceptPreviewConfig,
-	body_poses: &mut Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	body_poses: &mut Query<(&mut ActiveRigPose, &CharacterRig), With<AnimRefRoot>>,
 	neck_poses: &mut Query<
 		(&mut ActiveRigPose, &CharacterRig),
-		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
+		(Without<AnimRefRoot>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
+	anim_roots: &Query<(Entity, &AnimRefRoot)>,
 	parts: &mut Query<(
 		Entity,
 		&PartNode,
@@ -1256,8 +1263,10 @@ fn sync_live_preview(
 ) {
 	let rig_nodes = config.lod_rig_nodes();
 	if let Some(body) = rig_nodes.iter().find(|node| node.id == RigId::Body) {
-		for mut pose in body_poses {
-			pose.pose = body.pose.clone();
+		for (mut pose, rig) in body_poses {
+			if rig.role == CharacterRigRole::Body {
+				pose.pose = body.pose.clone();
+			}
 		}
 	}
 
@@ -1266,6 +1275,13 @@ fn sync_live_preview(
 			if rig.role == CharacterRigRole::Neck {
 				pose.pose = neck.pose.clone();
 			}
+		}
+	}
+
+	let desired_anim = AnimRef::from(config.animation());
+	for (entity, root) in anim_roots {
+		if root.0 != desired_anim {
+			commands.entity(entity).insert(AnimRefRoot(desired_anim));
 		}
 	}
 
@@ -1321,7 +1337,7 @@ pub fn reveal_ready_preview(
 	mut debug: ResMut<PreviewRevealDebugState>,
 	config: Res<ConceptPreviewConfig>,
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
-	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimatedBodyRig>>,
+	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimRefRoot>>,
 	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
 	awaiting_lod_socket: Query<(), (With<SocketRefRoot>, Without<SocketRefApplied>)>,
 	awaiting_lod_skin: Query<(), (With<SkinRefRoot>, Without<SkinRefApplied>)>,

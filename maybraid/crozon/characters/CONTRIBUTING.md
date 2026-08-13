@@ -29,7 +29,10 @@ registered once. Those nodes stamp socket/skin/rig/part/transform from
 the GLB child, so live paint is an insert on the member you query. Nested hosts
 get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
 [`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
-character. Do not grow a post-spawn prepare pass that copies materials or poses.
+character. Proportion pose is [`ActiveRigPose`](src/rig.rs) on the rig member
+([`maintain_resolved_pose`](src/pose.rs)). Clips are [`AnimRefRoot`](src/anim.rs)
+on the body rig; the mailbox transitions from the last sampled pose when the
+clip changes. Do not grow a post-spawn prepare pass that copies materials or poses.
 
 The playground spawn path is LodScene (`Config::clothed()`).
 [`CharacterComponents`](src/components.rs) is the only character recipe.
@@ -37,7 +40,8 @@ Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_f
 and [`ClothingLayer`](src/components.rs) stamp palette[0]). Live playground tint
 inserts [`MaterialRefRoot`](src/nodes/part.rs) on the part host (change-driven
 [`material-ref`](../../material-ref) fulfill); [`PreviewAssetTarget`](../character-concepts-playground/src/preview.rs)
-stays UI mapping, not the paint path.
+stays UI mapping, not the paint path. Live animation inserts [`AnimRefRoot`](src/anim.rs)
+(`ConceptAnimation` maps at the playground/menu edge).
 
 ### 1. `crozon-characters` (this crate)
 
