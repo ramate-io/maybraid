@@ -43,7 +43,7 @@ impl BuildWithNoise<HighBushShootsShape> for HighBushBush {
 			segment_radius_fraction_lo: DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 			segment_radius_fraction_hi: DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 			leaf_radius_fraction: leaf_radius / height,
-			foliage_style: HighBushFoliageStyle::PlaneSplay,
+			foliage_style: HighBushFoliageStyle::LayeredBall,
 			chain_noise: noise,
 		}
 	}

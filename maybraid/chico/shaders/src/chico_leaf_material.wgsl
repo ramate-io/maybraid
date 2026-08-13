@@ -281,12 +281,20 @@ fn fragment(
     let world_bias = (fbm_3d(world_pos * 0.45) - 0.5) * 0.05;
     let field = hole + local_coarse + world_bias;
 
-    // Hub (r ~ 0) stays mostly solid; rims take the cheese.
-    let hub = 1.0 - smoothstep(0.28, 0.92, r);
+    // Hub stays mostly solid; cheese starts well inside the kit so the
+    // quad / ico outline is not the silhouette.
+    let hub = 1.0 - smoothstep(0.22, 0.62, r);
     let threshold = mix(0.18, 0.46, 1.0 - hub);
 
     let fw = max(fwidth(field) * 1.35, 0.01);
-    let alpha = smoothstep(threshold - fw, threshold + fw, field);
+    let hole_alpha = smoothstep(threshold - fw, threshold + fw, field);
+
+    // Noisy blot radius: thick object-space rim, not a 1px mesh edge.
+    let blot = 0.52 + 0.38 * fbm_3d(local_pos * 2.4);
+    let rim_w = max(fwidth(r) * 2.0, 0.08);
+    let radial_alpha = smoothstep(0.0, rim_w, blot - r);
+
+    let alpha = hole_alpha * radial_alpha;
     if (alpha < 0.08) {
         discard;
     }
@@ -305,7 +313,7 @@ fn fragment(
     );
 
     let brightness = mix(0.78, 1.18, speckle);
-    let wash = mix(0.78, 1.0, saturate(alpha * 1.35));
+    let wash = mix(0.72, 1.0, saturate(min(alpha, radial_alpha) * 1.25));
 
     let base_rgb = vec3<f32>(
         base_color.x,

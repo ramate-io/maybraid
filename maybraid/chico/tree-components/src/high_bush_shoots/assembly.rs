@@ -117,8 +117,10 @@ where
 		);
 
 		match shape.foliage_style {
-			// CheapBall has no dedicated RenderItem kit yet — same plane-splay canopy.
-			HighBushFoliageStyle::PlaneSplay | HighBushFoliageStyle::CheapBall => {
+			// Ball kits have no dedicated RenderItem path yet — same plane-splay canopy.
+			HighBushFoliageStyle::PlaneSplay
+			| HighBushFoliageStyle::CheapBall
+			| HighBushFoliageStyle::LayeredBall => {
 				let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
 				leaf_splay.material = leaf_material.clone();
 				let leaf_rule = HighBushSplayCanopyRule::<LeafM, LeafS> {
@@ -184,7 +186,9 @@ where
 		);
 
 		match shape.foliage_style {
-			HighBushFoliageStyle::PlaneSplay | HighBushFoliageStyle::CheapBall => {
+			HighBushFoliageStyle::PlaneSplay
+			| HighBushFoliageStyle::CheapBall
+			| HighBushFoliageStyle::LayeredBall => {
 				let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
 				leaf_splay.material = self.leaf_material.clone();
 				let leaf_rule = HighBushSplayCanopyRule::<LeafM, LeafS> {
