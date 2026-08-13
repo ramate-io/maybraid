@@ -30,7 +30,7 @@ pub mod waialea_palm;
 
 pub use braid_oak_tree::{BraidOakTree, BraidOakTreeParams};
 pub use date_palm::{DatePalm, DatePalmParams};
-pub use friends_conifer::FriendsConiferStd;
+pub use friends_conifer::{FriendsConifer, FriendsConiferParams};
 pub use high_bush_shoots::{HighBushShoots, HighBushShootsParams};
 pub use honu_banyan::{
 	jungle_growth_radius_scale_for_height, HonuBanyan, HonuBanyanParams,

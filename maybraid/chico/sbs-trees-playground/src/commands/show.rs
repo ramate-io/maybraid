@@ -2,16 +2,17 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent, HighBushParams,
-	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
-	LowBushParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams, RiverineGreenParams,
-	RollingOaksParams, SpottyBushesParams, StorytellersParams, StrangeOasisParams,
-	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
+	AlpineParams, ChristmasTaigaParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams,
+	GroveExtent, HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams,
+	JungleMassivesParams, LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams,
+	OrchardParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
+	SpottyBushesParams, StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams,
+	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, UnendingJungleParams,
+	VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
-	BraidOakTreeParams, DatePalmParams, HighBushShootsParams, HonuBanyanParams,
+	BraidOakTreeParams, DatePalmParams, FriendsConiferParams, HighBushShootsParams, HonuBanyanParams,
 	JungleStorybookTreeParams, KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams,
 	PalmBushParams, PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams,
 	SimplemansHedgeParams, SopesBanyanParams, StorybookTreeParams, TemperateConiferParams,
@@ -114,6 +115,16 @@ pub enum Show {
 	JungleLowerMassives(ShowJungleLowerMassives),
 	/// Unending Jungle grove via VegetationComponents / LodScene.
 	UnendingJungle(ShowUnendingJungle),
+	/// Jerry's Chaparral grove via VegetationComponents / LodScene.
+	JerrysChaparral(ShowJerrysChaparral),
+	/// Riparian Mix grove via VegetationComponents / LodScene.
+	RiparianMix(ShowRiparianMix),
+	/// Alpine grove via VegetationComponents / LodScene.
+	Alpine(ShowAlpine),
+	/// Christmas Taiga grove via VegetationComponents / LodScene.
+	ChristmasTaiga(ShowChristmasTaiga),
+	/// Friend's Conifer via VegetationComponents / LodScene.
+	FriendsConifer(ShowFriendsConifer),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
 }
@@ -750,6 +761,98 @@ impl ShowUnendingJungle {
 	}
 }
 
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowJerrysChaparral {
+	#[command(flatten)]
+	pub grove: JerrysChaparralParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowJerrysChaparral {
+	fn configured(self) -> JerrysChaparralParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowRiparianMix {
+	#[command(flatten)]
+	pub grove: RiparianMixParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowRiparianMix {
+	fn configured(self) -> RiparianMixParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowAlpine {
+	#[command(flatten)]
+	pub grove: AlpineParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowAlpine {
+	fn configured(self) -> AlpineParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowChristmasTaiga {
+	#[command(flatten)]
+	pub grove: ChristmasTaigaParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowChristmasTaiga {
+	fn configured(self) -> ChristmasTaigaParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowFriendsConifer {
+	#[command(flatten)]
+	pub tree: FriendsConiferParams,
+}
+
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowHighBushShoots {
@@ -805,6 +908,11 @@ impl Show {
 			Self::JungleMassives(args) => ShowSubject::JungleMassives(args.configured()),
 			Self::JungleLowerMassives(args) => ShowSubject::JungleLowerMassives(args.configured()),
 			Self::UnendingJungle(args) => ShowSubject::UnendingJungle(args.configured()),
+			Self::JerrysChaparral(args) => ShowSubject::JerrysChaparral(args.configured()),
+			Self::RiparianMix(args) => ShowSubject::RiparianMix(args.configured()),
+			Self::Alpine(args) => ShowSubject::Alpine(args.configured()),
+			Self::ChristmasTaiga(args) => ShowSubject::ChristmasTaiga(args.configured()),
+			Self::FriendsConifer(args) => ShowSubject::FriendsConifer(args.tree),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
@@ -861,6 +969,11 @@ pub enum ShowSubject {
 	JungleMassives(JungleMassivesParams),
 	JungleLowerMassives(JungleLowerMassivesParams),
 	UnendingJungle(UnendingJungleParams),
+	JerrysChaparral(JerrysChaparralParams),
+	RiparianMix(RiparianMixParams),
+	Alpine(AlpineParams),
+	ChristmasTaiga(ChristmasTaigaParams),
+	FriendsConifer(FriendsConiferParams),
 	HighBushShoots(HighBushShootsParams),
 }
 
@@ -1100,6 +1213,34 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::JerrysChaparral(g)) => Some(format!(
+			"jerrys-chaparral:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::RiparianMix(g)) => Some(format!(
+			"riparian-mix:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Alpine(g)) => Some(format!(
+			"alpine:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::ChristmasTaiga(g)) => Some(format!(
+			"christmas-taiga:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::FriendsConifer(t)) => Some(format!(
+			"friends-conifer:{:?}|splay={}",
+			t.geometry, t.splay_radius_fraction_of_height
+		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
@@ -1167,6 +1308,11 @@ pub fn sync_show(
 		ShowSubject::JungleMassives(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::JungleLowerMassives(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::UnendingJungle(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::JerrysChaparral(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::RiparianMix(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Alpine(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::ChristmasTaiga(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::FriendsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
@@ -1230,6 +1376,11 @@ mod tests {
 			"show jungle-massives --grove-extent-xz 220",
 			"show jungle-lower-massives --grove-extent-xz 92",
 			"show unending-jungle --grove-extent-xz 39 --elevation 0.35",
+			"show jerrys-chaparral --grove-extent-xz 39 --elevation 0.35",
+			"show riparian-mix --grove-extent-xz 180",
+			"show alpine --grove-extent-xz 220",
+			"show christmas-taiga --grove-extent-xz 200",
+			"show friends-conifer",
 			"show high-bush-shoots",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
@@ -1303,6 +1454,21 @@ mod tests {
 				}
 				crate::commands::PlaygroundCommand::Show(Show::UnendingJungle(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::JerrysChaparral(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::RiparianMix(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Alpine(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::ChristmasTaiga(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::FriendsConifer(args)) => {
+					let _ = args.tree.build();
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {
 					let _ = args.bush.build();

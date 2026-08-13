@@ -83,8 +83,8 @@ pub use goettingen_follow::{
 };
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use jerrys_chaparral::{
-	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer, JerrysChaparralItem,
-	JerrysChaparralRoryHead,
+	ChaparralFlatTerrain, JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer,
+	JerrysChaparralItem, JerrysChaparralRoryHead,
 };
 pub use jungle_lower_massives::{
 	JungleLowerMassivesBanyan, JungleLowerMassivesBraidOak, JungleLowerMassivesCell,
@@ -109,7 +109,13 @@ pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};
 #[cfg(feature = "render")]
 pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
 #[cfg(feature = "render")]
+pub use alpine::{Alpine, AlpineParams};
+#[cfg(feature = "render")]
+pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaParams};
+#[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushParams};
+#[cfg(feature = "render")]
+pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralParams};
 #[cfg(feature = "render")]
 pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesParams};
 #[cfg(feature = "render")]
@@ -124,6 +130,8 @@ pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
 pub use orchard::{Orchard, OrchardParams};
 #[cfg(feature = "render")]
 pub use riparian_general::{RiparianGeneral, RiparianGeneralParams};
+#[cfg(feature = "render")]
+pub use riparian_mix::{RiparianMix, RiparianMixParams};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenParams};
 #[cfg(feature = "render")]

@@ -68,17 +68,14 @@ pub fn setup_render_materials(
 fn attach_render_materials(
 	subject: &mut RenderSubject,
 	stick: &Handle<ChicoStickMaterial>,
-	conifer_stick: &Handle<ChicoStickMaterial>,
-	leaf: &Handle<ChicoLeafMaterial>,
+	_conifer_stick: &Handle<ChicoStickMaterial>,
+	_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
 		RenderSubject::SopesBanyan(_tree) => {}
 		RenderSubject::LiamsConifer(_tree) => {}
-		RenderSubject::FriendsConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::FriendsConifer(_) => {}
 		RenderSubject::NorthernConifer(_tree) => {}
 		RenderSubject::TemperateConifer(_tree) => {}
 		RenderSubject::DatePalm(_tree) => {}
@@ -117,10 +114,7 @@ fn attach_render_materials(
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::TropicalThicket(_) => {}
-		RenderSubject::JerrysChaparral(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::JerrysChaparral(_) => {}
 		RenderSubject::LevantineScrub(_) => {}
 		RenderSubject::TallGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
@@ -141,23 +135,14 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::RiparianMix(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Alpine(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::RiparianMix(_) => {}
+		RenderSubject::Alpine(_) => {}
 		RenderSubject::Dryland(_) => {}
 		RenderSubject::Storytellers(_) => {}
 		RenderSubject::TradeWinds(_) => {}
 		RenderSubject::WanderingAcacia(_) => {}
 		RenderSubject::Leeward(_) => {}
-		RenderSubject::ChristmasTaiga(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::ChristmasTaiga(_) => {}
 		RenderSubject::ConiferMassives(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());

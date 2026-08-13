@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_vegetation_components::{spawn_vegetation_components, vegetation_bounds};
-use chico_sbs_trees::friends_conifer::FriendsConifer;
+use chico_sbs_trees::friends_conifer::FriendsConiferParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_tree_components::HighBushShoots;
 use chico_vegetation_shaders::ChicoStickMaterial;
@@ -19,31 +19,7 @@ use chico_groves::{
 	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-/// Uniform terrain tuned for chaparral placement constraints (RFC min elevation > 0).
-#[derive(Debug, Clone, Copy, PartialEq, Args)]
-#[command(next_help_heading = "Terrain")]
-pub struct ChaparralFlatTerrain {
-	#[arg(long, default_value_t = 0.35)]
-	pub elevation: f32,
-	#[arg(long, default_value_t = 0.15)]
-	pub steepness: f32,
-}
-
-impl Default for ChaparralFlatTerrain {
-	fn default() -> Self {
-		Self { elevation: 0.35, steepness: 0.15 }
-	}
-}
-
-impl GroveWorldSample for ChaparralFlatTerrain {
-	fn elevation_at(&self, _position: Vec3) -> f32 {
-		self.elevation
-	}
-
-	fn steepness_at(&self, _position: Vec3) -> f32 {
-		self.steepness
-	}
-}
+pub use chico_groves::jerrys_chaparral::ChaparralFlatTerrain;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Jerry's Chaparral instance.
 pub type JerrysChaparralStd = JerrysChaparral<
@@ -272,31 +248,13 @@ where
 				}
 				JerrysChaparralItem::FriendsConifer(conifer) => {
 					let samples = conifer.build_with_noise(build_noise);
-					let mut tree = FriendsConifer::<StickM, StickS, LeafM, LeafS>::default();
-					tree.geometry = samples.geometry;
-					tree.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-					tree.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-					tree.stick_material = self.stick_material.clone();
-					tree.leaf_material = self.leaf_material.clone();
-					tree.stick_surface_noise =
-						placement_noise(self.stick_surface_noise, placed.position);
-					tree.leaf_surface_noise = foliage_noise;
-					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
-					let stick_seed = chain_noise.seed as i32;
-					let canopy_seed = build_noise.seed as i32 + 31;
-					patch_spawned_leaf_material::<StickM>(
-						&entities,
-						placed.variant.stick_palette_mix(),
-						stick_seed,
-						commands,
-					);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.canopy_palette_mix(),
-						canopy_seed,
-						commands,
-					);
-					entities
+					let mut params = FriendsConiferParams::default();
+					params.geometry = samples.geometry;
+					params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+					params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+					let tree = params.build();
+					let bounds = vegetation_bounds(&tree);
+					spawn_vegetation_components(commands, &tree, local, bounds)
 				}
 			};
 			out.extend(entities);

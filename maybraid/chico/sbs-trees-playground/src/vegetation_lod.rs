@@ -7,13 +7,14 @@
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{
-	Dryland, ForlornSavanna, GoettingenFollow, HighBush, JungleLowerMassives, JungleMassives,
-	Leeward, LevantineScrub, LowBush, MonsterGrass, OasisDatePalm, Orchard, RiparianGeneral,
-	RiverineGreen, RollingOaks, SpottyBushes, Storytellers, StrangeOasis, TemperateLowerMassives,
-	TemperateMassives, TradeWinds, TropicalThicket, UnendingJungle, Vineyard, WanderingAcacia,
+	Alpine, ChristmasTaiga, Dryland, ForlornSavanna, GoettingenFollow, HighBush, JerrysChaparral,
+	JungleLowerMassives, JungleMassives, Leeward, LevantineScrub, LowBush, MonsterGrass,
+	OasisDatePalm, Orchard, RiparianGeneral, RiparianMix, RiverineGreen, RollingOaks, SpottyBushes,
+	Storytellers, StrangeOasis, TemperateLowerMassives, TemperateMassives, TradeWinds,
+	TropicalThicket, UnendingJungle, Vineyard, WanderingAcacia,
 };
 use chico_sbs_trees::{
-	BraidOakTree, DatePalm, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
+	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
 	LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch, RorysHeadTrained,
 	SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch, VaseTree,
 	WaialeaPalm,
@@ -116,6 +117,10 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, JungleMassives);
 		avian_host!(app, JungleLowerMassives);
 		avian_host!(app, UnendingJungle);
+		avian_host!(app, JerrysChaparral);
+		avian_host!(app, RiparianMix);
+		avian_host!(app, Alpine);
+		avian_host!(app, ChristmasTaiga);
 
 		// Structural single-tree / component hosts used by `/show`.
 		avian_host!(app, ComponentsOnly<SopesBanyan>);
@@ -124,6 +129,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<RorysHeadTrained>);
 		avian_host!(app, ComponentsOnly<StorybookTree>);
 		avian_host!(app, ComponentsOnly<VaseTree>);
+		avian_host!(app, ComponentsOnly<FriendsConifer>);
 		avian_host!(app, ComponentsOnly<NorthernConifer>);
 		avian_host!(app, ComponentsOnly<LiamsConifer>);
 		avian_host!(app, ComponentsOnly<TemperateConifer>);
@@ -155,5 +161,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<SopesBanyan>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<WaialeaPalm>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<JungleStorybookTree>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<FriendsConifer>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<NorthernConifer>>);
 	}
 }
