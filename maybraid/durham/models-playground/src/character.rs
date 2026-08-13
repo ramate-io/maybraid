@@ -22,7 +22,7 @@ use crozon_characters::{
 use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
-use crate::player::{capsule_half_height, Grounded, Player, PlayerCapsule};
+use crate::player::{Jumping, Player, PlayerCapsule};
 use avian3d::prelude::LinearVelocity;
 
 const WALK_SPEED: f32 = 1.0;
@@ -130,8 +130,7 @@ pub(crate) fn apply_set_character(
 			*visibility = Visibility::Hidden;
 		}
 
-		let offset = Transform::from_translation(Vec3::new(0.0, -capsule_half_height(), 0.0));
-		for spawned in spawn_species(&mut commands, request.species, offset) {
+		for spawned in spawn_species(&mut commands, request.species, Transform::IDENTITY) {
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
 		commands.spawn(RequestModeCharacter);
@@ -146,7 +145,7 @@ pub(crate) fn apply_set_character(
 /// Walk / run / jump on the body mailbox from player speed and grounded state.
 pub(crate) fn drive_player_locomotion(
 	mut commands: Commands,
-	players: Query<(&LinearVelocity, Has<Grounded>), With<Player>>,
+	players: Query<(&LinearVelocity, Has<Jumping>), With<Player>>,
 	mut visuals: Query<
 		(&CharacterMembers, &mut Transform),
 		(With<PlayerVisual>, With<CharacterRoot>),
@@ -154,7 +153,7 @@ pub(crate) fn drive_player_locomotion(
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
-	let Ok((velocity, grounded)) = players.single() else {
+	let Ok((velocity, jumping)) = players.single() else {
 		return;
 	};
 	let Ok((members, mut visual)) = visuals.single_mut() else {
@@ -164,7 +163,7 @@ pub(crate) fn drive_player_locomotion(
 	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
 	let speed = horizontal.length();
 	if speed > FACE_SPEED {
-		visual.look_to(horizontal, Vec3::Y);
+		visual.look_to(-horizontal, Vec3::Y);
 	}
 
 	for member in members.iter() {
@@ -174,7 +173,7 @@ pub(crate) fn drive_player_locomotion(
 		if rig.role != CharacterRigRole::Body {
 			continue;
 		}
-		let clip = locomotion_clip(rig.skeleton, grounded, speed);
+		let clip = locomotion_clip(rig.skeleton, jumping, speed);
 		let desired = AnimRef::new(clip);
 		let needs = match anims.get(member) {
 			Ok(root) => root.0 != desired,
@@ -186,10 +185,10 @@ pub(crate) fn drive_player_locomotion(
 	}
 }
 
-fn locomotion_clip(skeleton: RigSkeletonKind, grounded: bool, speed: f32) -> AnimId {
+fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimId {
 	match skeleton {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => {
-			if !grounded {
+			if jumping {
 				AnimId::Jump
 			} else if speed > RUN_SPEED {
 				AnimId::Run
