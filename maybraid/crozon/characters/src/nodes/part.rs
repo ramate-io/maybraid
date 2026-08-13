@@ -77,6 +77,11 @@ impl PartNode {
 		self
 	}
 
+	pub fn reflected(mut self, axis: MirrorAxis) -> Self {
+		self.scene = self.scene.reflected(axis);
+		self
+	}
+
 	/// Normalization × feature, applied on the host before socket fulfill.
 	pub fn authored_transform(&self) -> Transform {
 		self.normalization.transform().mul_transform(self.feature)

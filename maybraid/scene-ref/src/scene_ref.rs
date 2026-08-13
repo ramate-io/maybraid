@@ -8,7 +8,8 @@ use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::Scene;
 use bevy::world_serialization::WorldAsset;
 
-/// Axis along which a [`SceneRef`] rebuilds mirrored mesh geometry.
+/// Axis along which a [`SceneRef`] rebuilds mirrored mesh geometry (and, for
+/// [`SceneRef::reflected`], instance transforms).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MirrorAxis {
 	X,
@@ -34,6 +35,10 @@ pub struct SceneRef {
 	pub path: String,
 	/// When set, resolve to a rebuilt [`WorldAsset`] mirrored on this axis.
 	pub mirror: Option<MirrorAxis>,
+	/// When `mirror` is set, also conjugate instance [`bevy::prelude::Transform`]s
+	/// (`S M S`) so the hierarchy matches a parent axis-flip. Vertex-only
+	/// [`Self::mirrored`] leaves this false; [`Self::reflected`] sets it.
+	pub reflect_instance: bool,
 }
 
 /// BSN / ECS root that resolves to [`WorldAssetRoot`] via [`SceneRefHandles`].
@@ -43,24 +48,36 @@ pub struct SceneRefRoot(pub SceneRef);
 impl SceneRef {
 	/// GLB / glTF at `path` (scene 0 unless `path` already includes a label).
 	pub fn glb(path: impl Into<String>) -> Self {
-		Self { path: path.into(), mirror: None }
+		Self { path: path.into(), mirror: None, reflect_instance: false }
 	}
 
-	/// Same path with axis mirroring enabled.
+	/// Same path with **vertex/winding** mirroring (caller places the instance).
 	pub fn mirrored(mut self, axis: MirrorAxis) -> Self {
 		self.mirror = Some(axis);
+		self.reflect_instance = false;
 		self
 	}
 
-	/// Set or clear the mirror axis.
+	/// Same path with vertex/winding mirroring **and** conjugated instance TRS.
+	///
+	/// Equivalent to a parent `scale(axis)` with positive scale at the caller.
+	/// Use this for skinned / hierarchical GLBs (e.g. character features).
+	pub fn reflected(mut self, axis: MirrorAxis) -> Self {
+		self.mirror = Some(axis);
+		self.reflect_instance = true;
+		self
+	}
+
+	/// Set or clear the mirror axis (vertex/winding only; clears instance reflect).
 	pub fn with_mirror(mut self, mirror: Option<MirrorAxis>) -> Self {
 		self.mirror = mirror;
+		self.reflect_instance = false;
 		self
 	}
 
 	/// Source (unmirrored) ref sharing this path.
 	pub fn without_mirror(&self) -> Self {
-		Self { path: self.path.clone(), mirror: None }
+		Self { path: self.path.clone(), mirror: None, reflect_instance: false }
 	}
 
 	/// Asset path string used for loading the **source** glTF (includes `#Scene0` when unlabeled).
@@ -107,7 +124,7 @@ impl From<SceneRef> for HandleTemplate<WorldAsset> {
 	fn from(scene_ref: SceneRef) -> Self {
 		assert!(
 			scene_ref.mirror.is_none(),
-			"mirrored SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
+			"mirrored/reflected SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
 		);
 		HandleTemplate::Path(AssetPath::from(scene_ref.labeled_path()))
 	}
@@ -117,7 +134,7 @@ impl From<&SceneRef> for HandleTemplate<WorldAsset> {
 	fn from(scene_ref: &SceneRef) -> Self {
 		assert!(
 			scene_ref.mirror.is_none(),
-			"mirrored SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
+			"mirrored/reflected SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
 		);
 		HandleTemplate::Path(AssetPath::from(scene_ref.labeled_path()))
 	}

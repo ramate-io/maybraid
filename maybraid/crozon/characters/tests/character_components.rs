@@ -36,7 +36,7 @@ fn clothed_braidman_adds_clothing_layer() {
 }
 
 #[test]
-fn right_features_use_scene_ref_mirror() {
+fn right_features_use_scene_ref_instance_reflect() {
 	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
 	let parts = braidman.part_nodes_for_level(LodSceneLevel::High).flatten();
 	let right_ear = parts
@@ -44,11 +44,35 @@ fn right_features_use_scene_ref_mirror() {
 		.find(|p| p.slot == crozon_characters::CharacterPartSlot::EarRight)
 		.expect("right ear");
 	assert_eq!(right_ear.scene.mirror, Some(MirrorAxis::X));
+	assert!(right_ear.scene.reflect_instance);
 	let right_eye = parts
 		.iter()
 		.find(|p| p.slot == crozon_characters::CharacterPartSlot::EyeRight)
 		.expect("right eye");
 	assert_eq!(right_eye.scene.mirror, Some(MirrorAxis::X));
+	assert!(right_eye.scene.reflect_instance);
+}
+
+#[test]
+fn right_ear_keeps_right_socket_local() {
+	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
+	let parts = braidman.part_nodes_for_level(LodSceneLevel::High).flatten();
+	let local = |slot| {
+		parts
+			.iter()
+			.find(|p| p.slot == slot)
+			.and_then(|p| p.socket)
+			.map(|s| s.local)
+			.expect("socket")
+	};
+	let left_ear = local(crozon_characters::CharacterPartSlot::EarLeft);
+	let right_ear = local(crozon_characters::CharacterPartSlot::EarRight);
+	assert_ne!(left_ear, right_ear);
+	assert!(right_ear.translation.x < 0.0);
+	assert_eq!(
+		local(crozon_characters::CharacterPartSlot::EyeLeft),
+		local(crozon_characters::CharacterPartSlot::EyeRight)
+	);
 }
 
 #[test]

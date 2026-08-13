@@ -98,10 +98,7 @@ impl BraidmanAssets {
 			AssetNormalization::centroid(0.16),
 		)
 		.with_feature(feature)
-		.socketed(
-			SocketRef::on(RigId::Head, "eye_socket.L")
-				.with_local(Transform::from_translation(Vec3::new(0.0, -0.1, -0.075))),
-		)
+		.socketed(SocketRef::on(RigId::Head, "eye_socket.L").with_local(Self::eye_socket_local()))
 		.skinned(SkinRef::to(RigId::Head))
 	}
 
@@ -113,11 +110,8 @@ impl BraidmanAssets {
 			AssetNormalization::centroid(0.16),
 		)
 		.with_feature(feature)
-		.mirrored(MirrorAxis::X)
-		.socketed(
-			SocketRef::on(RigId::Head, "eye_socket.R")
-				.with_local(Transform::from_translation(Vec3::new(0.0, -0.1, -0.075))),
-		)
+		.reflected(MirrorAxis::X)
+		.socketed(SocketRef::on(RigId::Head, "eye_socket.R").with_local(Self::eye_socket_local()))
 		.skinned(SkinRef::to(RigId::Head))
 	}
 
@@ -160,10 +154,7 @@ impl BraidmanAssets {
 		)
 		.with_feature(feature)
 		.socketed(
-			SocketRef::on(RigId::Head, "ear_socket.L").with_local(
-				Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
-					.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0)),
-			),
+			SocketRef::on(RigId::Head, "ear_socket.L").with_local(Self::ear_left_socket_local()),
 		)
 		.skinned(SkinRef::to(RigId::Head))
 	}
@@ -176,12 +167,9 @@ impl BraidmanAssets {
 			AssetNormalization::centroid(0.15),
 		)
 		.with_feature(feature)
-		.mirrored(MirrorAxis::X)
+		.reflected(MirrorAxis::X)
 		.socketed(
-			SocketRef::on(RigId::Head, "ear_socket.R").with_local(
-				Transform::from_translation(Vec3::new(-0.1, -0.1, 0.00))
-					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
-			),
+			SocketRef::on(RigId::Head, "ear_socket.R").with_local(Self::ear_right_socket_local()),
 		)
 		.skinned(SkinRef::to(RigId::Head))
 	}
@@ -325,6 +313,25 @@ impl BraidmanAssets {
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
 		SocketAttachment { rig: SocketRig::Head, bone, local_transform }
+	}
+
+	/// Bone-local pose shared by left and right eyes (`X = 0` on both sockets).
+	fn eye_socket_local() -> Transform {
+		Transform::from_translation(Vec3::new(0.0, -0.1, -0.075))
+	}
+
+	fn ear_left_socket_local() -> Transform {
+		Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
+			.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0))
+	}
+
+	/// Right-socket placement (`+X` on `ear_socket.R` points inward).
+	///
+	/// Handedness/hierarchy come from [`scene_ref::SceneRef::reflected`], not from
+	/// reusing the left local.
+	fn ear_right_socket_local() -> Transform {
+		Transform::from_translation(Vec3::new(-0.1, -0.1, 0.00))
+			.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0))
 	}
 
 	fn mirror_x() -> Transform {

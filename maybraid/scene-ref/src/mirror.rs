@@ -4,7 +4,7 @@ use bevy::asset::{AssetId, Handle};
 use bevy::ecs::reflect::AppTypeRegistry;
 use bevy::mesh::Mesh;
 use bevy::platform::collections::HashMap;
-use bevy::prelude::{Assets, Mesh3d, Transform};
+use bevy::prelude::{Assets, GlobalTransform, Mesh3d, Quat, Transform};
 use bevy::world_serialization::WorldAsset;
 
 use crate::scene_ref::MirrorAxis;
@@ -18,27 +18,56 @@ pub fn mirror_mesh(mesh: &Mesh, axis: MirrorAxis) -> Mesh {
 	out
 }
 
+/// Reflect `transform` through `axis` so it matches a parent scale-flip.
+///
+/// Vertex-only mirroring leaves GLB node translations on the source side of the
+/// axis. Conjugating each local TRS (`S M S`) plus [`mirror_mesh`] is equivalent
+/// to a parent `scale(axis)` with positive scale at the caller.
+pub fn mirror_transform(transform: Transform, axis: MirrorAxis) -> Transform {
+	let s = axis.scale();
+	Transform {
+		translation: transform.translation * s,
+		rotation: mirror_rotation(transform.rotation, axis),
+		scale: transform.scale,
+	}
+}
+
+fn mirror_rotation(rotation: Quat, axis: MirrorAxis) -> Quat {
+	match axis {
+		MirrorAxis::X => Quat::from_xyzw(rotation.x, -rotation.y, -rotation.z, rotation.w),
+		MirrorAxis::Y => Quat::from_xyzw(-rotation.x, rotation.y, -rotation.z, rotation.w),
+		MirrorAxis::Z => Quat::from_xyzw(-rotation.x, -rotation.y, rotation.z, rotation.w),
+	}
+}
+
 /// Clone `source` and rewrite every `Mesh3d` to a newly registered mirrored mesh.
 ///
+/// When `reflect_instance` is set, also conjugate every [`Transform`] (and
+/// [`GlobalTransform`] if present) so hierarchy offsets match a parent axis-flip.
 /// Caller must ensure the source handle is
 /// [`AssetServer::is_loaded_with_dependencies`] so mesh bytes are in `Assets<Mesh>`.
 pub(crate) fn mirror_world_asset(
 	source: &WorldAsset,
 	axis: MirrorAxis,
+	reflect_instance: bool,
 	meshes: &mut Assets<Mesh>,
 	type_registry: &AppTypeRegistry,
 ) -> Option<WorldAsset> {
 	let mut cloned = source.clone_with(type_registry).ok()?;
 
-	let mut entities = Vec::new();
+	let mut mesh_entities = Vec::new();
+	let mut transform_entities = Vec::new();
 	for entity in cloned.world.iter_entities() {
 		if let Some(mesh3d) = entity.get::<Mesh3d>() {
-			entities.push((entity.id(), mesh3d.0.clone()));
+			mesh_entities.push((entity.id(), mesh3d.0.clone()));
+		}
+		if reflect_instance && entity.get::<Transform>().is_some() {
+			transform_entities.push(entity.id());
 		}
 	}
 
 	let mut remap: HashMap<AssetId<Mesh>, Handle<Mesh>> = HashMap::default();
-	for (entity, old_handle) in entities {
+	for (entity, old_handle) in mesh_entities {
 		let new_handle = if let Some(h) = remap.get(&old_handle.id()) {
 			h.clone()
 		} else {
@@ -52,5 +81,65 @@ pub(crate) fn mirror_world_asset(
 		}
 	}
 
+	for entity in transform_entities {
+		let Some(transform) = cloned.world.get::<Transform>(entity).copied() else {
+			continue;
+		};
+		let mirrored = mirror_transform(transform, axis);
+		if let Some(mut transform) = cloned.world.get_mut::<Transform>(entity) {
+			*transform = mirrored;
+		}
+		if cloned.world.get::<GlobalTransform>(entity).is_some() {
+			if let Some(mut global) = cloned.world.get_mut::<GlobalTransform>(entity) {
+				*global = GlobalTransform::from(mirrored);
+			}
+		}
+	}
+
 	Some(cloned)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy::prelude::Vec3;
+	use std::f32::consts::FRAC_PI_4;
+
+	#[test]
+	fn mirror_transform_x_negates_translation_and_conjugates_yaw() {
+		let src = Transform {
+			translation: Vec3::new(0.2, -0.1, 0.05),
+			rotation: Quat::from_rotation_y(FRAC_PI_4),
+			scale: Vec3::splat(0.15),
+		};
+		let mirrored = mirror_transform(src, MirrorAxis::X);
+		assert!((mirrored.translation.x + 0.2).abs() < 1e-5);
+		assert!((mirrored.translation.y + 0.1).abs() < 1e-5);
+		assert!((mirrored.translation.z - 0.05).abs() < 1e-5);
+		assert!((mirrored.scale - src.scale).length() < 1e-5);
+
+		let expected_yaw = Quat::from_rotation_y(-FRAC_PI_4);
+		assert!(mirrored.rotation.angle_between(expected_yaw) < 1e-4);
+	}
+
+	#[test]
+	fn mirrored_local_matches_parent_scale_flip() {
+		let m = Transform {
+			translation: Vec3::new(0.2, -0.1, 0.05),
+			rotation: Quat::from_rotation_y(FRAC_PI_4),
+			scale: Vec3::splat(0.15),
+		};
+		let p = Vec3::new(0.3, 0.1, -0.2);
+		let parent_flip = Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0));
+		let via_parent = parent_flip.transform_point(m.transform_point(p));
+
+		let m_prime = mirror_transform(m, MirrorAxis::X);
+		let p_prime = Vec3::new(-p.x, p.y, p.z);
+		let via_mirror = m_prime.transform_point(p_prime);
+
+		assert!(
+			via_parent.distance(via_mirror) < 1e-5,
+			"parent={via_parent:?} mirrored={via_mirror:?}"
+		);
+	}
 }
