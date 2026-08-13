@@ -28,7 +28,7 @@ pub enum LodRequest {
 }
 
 /// Borrowed view of a driver ([`LodNode`]) pose + that driver's extents.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct LodRef<'a> {
 	/// The entity that triggered the LOD change.
 	///

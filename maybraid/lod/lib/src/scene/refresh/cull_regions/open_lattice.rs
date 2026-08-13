@@ -28,25 +28,21 @@ pub struct OpenLattice {
 
 impl Default for OpenLattice {
 	fn default() -> Self {
-		Self {
-			exclude_extent: 1000.0,
-			outer_extent: 5000.0,
-			tile_size: 500.0,
-		}
+		Self { exclude_extent: 1000.0, outer_extent: 5000.0, tile_size: 500.0 }
 	}
 }
 
 impl OpenLattice {
 	pub fn new(exclude_extent: f32, outer_extent: f32, tile_size: f32) -> Self {
-		Self {
-			exclude_extent,
-			outer_extent,
-			tile_size,
-		}
+		Self { exclude_extent, outer_extent, tile_size }
+	}
+
+	fn tile(&self) -> f32 {
+		self.tile_size.max(1e-3)
 	}
 
 	fn cell_index(&self, point: Vec3) -> IVec3 {
-		let s = self.tile_size.max(1e-3);
+		let s = self.tile();
 		IVec3::new(
 			(point.x / s).floor() as i32,
 			(point.y / s).floor() as i32,
@@ -55,11 +51,11 @@ impl OpenLattice {
 	}
 
 	fn cell_center(&self, index: IVec3) -> Vec3 {
-		(index.as_vec3() + Vec3::splat(0.5)) * self.tile_size.max(1e-3)
+		(index.as_vec3() + Vec3::splat(0.5)) * self.tile()
 	}
 
 	fn tile_aabb(&self, index: IVec3) -> Aabb3d {
-		let s = self.tile_size.max(1e-3);
+		let s = self.tile();
 		let min = index.as_vec3() * s;
 		let max = min + Vec3::splat(s);
 		Aabb3d::from_min_max(min, max)
@@ -73,7 +69,7 @@ impl OpenLattice {
 
 	/// XZ annulus cells around `anchor` (same Y cell as the driver).
 	pub fn enumerate_cells(&self, anchor: IVec3) -> Vec<IVec3> {
-		let tile = self.tile_size.max(1e-3);
+		let tile = self.tile();
 		let half_outer = ((self.outer_extent * 0.5) / tile).ceil() as i32;
 		let anchor_center = self.cell_center(anchor);
 		let mut cells = Vec::new();
@@ -97,15 +93,14 @@ impl OpenLattice {
 impl LodCullRegions for OpenLattice {
 	fn lod_cull_regions(
 		&self,
-		lod_refs: &[&LodRef],
+		lod_refs: &[LodRef],
 		cursor: &mut LodCullRegionCursor,
 	) -> LodCullRegionsStatus {
 		let Some(driver) = lod_refs.first() else {
 			return LodCullRegionsStatus::Unchanged;
 		};
 		let anchor = self.cell_index(driver.current_transform.translation);
-		let cells = self.enumerate_cells(anchor);
-		cursor.sync_cells(anchor, cells);
+		cursor.ensure_cells(anchor, || self.enumerate_cells(anchor));
 		let batch = cursor.take_cells();
 		if batch.is_empty() {
 			return LodCullRegionsStatus::Unchanged;
@@ -119,11 +114,7 @@ mod tests {
 	use super::*;
 	use bevy::prelude::Transform;
 
-	fn lod_ref_at<'a>(
-		prev: &'a Transform,
-		curr: &'a Transform,
-		bounds: &'a Aabb3d,
-	) -> LodRef<'a> {
+	fn lod_ref_at<'a>(prev: &'a Transform, curr: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {
 			entity: Entity::from_bits(1),
 			previous_transform: prev,
@@ -151,7 +142,7 @@ mod tests {
 		let t = Transform::from_translation(Vec3::ZERO);
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		let r = lod_ref_at(&t, &t, &bounds);
-		let status = lattice.lod_cull_regions(&[&r], &mut cursor);
+		let status = lattice.lod_cull_regions(&[r], &mut cursor);
 		let LodCullRegionsStatus::Changed(first) = status else {
 			panic!("expected changed");
 		};
@@ -159,14 +150,37 @@ mod tests {
 		let n = cursor.cells.len();
 		assert!(n > 1);
 		for _ in 0..n + 2 {
-			let _ = lattice.lod_cull_regions(&[&r], &mut cursor);
+			let _ = lattice.lod_cull_regions(&[r], &mut cursor);
 		}
 		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
 
 		let t2 = Transform::from_translation(Vec3::new(600.0, 0.0, 0.0));
 		let r2 = lod_ref_at(&t, &t2, &bounds);
-		let _ = lattice.lod_cull_regions(&[&r2], &mut cursor);
+		let _ = lattice.lod_cull_regions(&[r2], &mut cursor);
 		assert_ne!(cursor.anchor_cell, Some(IVec3::ZERO));
 		assert_eq!(cursor.next, 1); // rebuilt then took one
+	}
+
+	#[test]
+	fn same_anchor_keeps_cursor_without_rebuild() {
+		let lattice = OpenLattice::new(1000.0, 3000.0, 500.0);
+		let mut cursor = LodCullRegionCursor::default().with_regions_per_tick(1);
+		let t = Transform::from_translation(Vec3::ZERO);
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let r = lod_ref_at(&t, &t, &bounds);
+		let _ = lattice.lod_cull_regions(&[r], &mut cursor);
+		let n = cursor.cells.len();
+		assert!(n > 1);
+		assert_eq!(cursor.next, 1);
+		let _ = lattice.lod_cull_regions(&[r], &mut cursor);
+		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
+		assert_eq!(cursor.next, 2);
+		assert_eq!(cursor.cells.len(), n);
+
+		cursor.invalidate_cells();
+		let _ = lattice.lod_cull_regions(&[r], &mut cursor);
+		assert_eq!(cursor.anchor_cell, Some(IVec3::ZERO));
+		assert_eq!(cursor.next, 1);
+		assert_eq!(cursor.cells.len(), n);
 	}
 }

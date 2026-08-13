@@ -40,15 +40,14 @@ pub use cull_regions::{
 	produce_lod_cull_for_region, produce_lod_cull_regions, sync_cullable_roots_marker,
 	sync_nested_refresh_allowed, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
-	LodNestedRefreshBlocked, LodSceneCullRegion,
-	LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
+	LodNestedRefreshBlocked, LodSceneCullRegion, LodSceneCullRegionPlugin,
+	LodSceneRegionCullPlugin, OpenLattice,
 };
 pub use entities::{
-	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels, LodSceneRefreshEntitiesPlugin,
+	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels,
+	LodSceneRefreshEntitiesPlugin,
 };
-pub use levels::{
-	produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
-};
+pub use levels::{produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin};
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
 	LodRefreshRegionsStatus, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, Spotlight,
@@ -146,10 +145,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -161,10 +157,7 @@ where
 	F: QueryFilter + 'static,
 {
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 
@@ -193,3 +186,6 @@ where
 
 /// Compatibility alias for [`LodSceneRefreshRegionPlugin`].
 pub type LodRefreshProductionPlugin<P, F, M> = LodSceneRefreshRegionPlugin<P, F, M>;
+
+#[cfg(test)]
+mod tests;

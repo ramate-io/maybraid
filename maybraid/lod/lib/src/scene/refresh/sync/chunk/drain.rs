@@ -32,18 +32,14 @@ struct TupleBuckets {
 
 impl Default for TupleBuckets {
 	fn default() -> Self {
-		Self {
-			bands: std::array::from_fn(|_| Vec::new()),
-		}
+		Self { bands: std::array::from_fn(|_| Vec::new()) }
 	}
 }
 
 impl TupleBuckets {
 	fn push(&mut self, entity: Entity, parent: LodSceneLevel, self_level: LodSceneLevel) {
-		let rank = LevelBand::tuple_rank(
-			LevelBand::from_level(parent),
-			LevelBand::from_level(self_level),
-		);
+		let rank =
+			LevelBand::tuple_rank(LevelBand::from_level(parent), LevelBand::from_level(self_level));
 		self.bands[rank].push(entity);
 	}
 }
@@ -117,10 +113,7 @@ pub fn drain_chunk_lod_fulfill(
 			paused_skipped += 1;
 			continue;
 		};
-		let shown = visibilities
-			.get(entity)
-			.ok()
-			.is_some_and(|v| lod_root_is_shown(*v));
+		let shown = visibilities.get(entity).ok().is_some_and(|v| lod_root_is_shown(*v));
 		let class = if job.cold {
 			if root.0 != *desired {
 				paused_skipped += 1;
@@ -135,9 +128,7 @@ pub fn drain_chunk_lod_fulfill(
 			paused_skipped += 1;
 			continue;
 		};
-		buckets
-			.for_class_mut(class)
-			.push(entity, job.parent_desired, root.0);
+		buckets.for_class_mut(class).push(entity, job.parent_desired, root.0);
 	}
 
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);

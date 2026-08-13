@@ -1,5 +1,6 @@
 //! Runtime ECS hosts that switch LOD level roots without despawning the host.
 
+use bevy::ecs::query::QueryData;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -29,29 +30,16 @@ pub fn host_shows_level_root(
 	let Ok(host_kids) = children_q.get(host) else {
 		return false;
 	};
-	for kid in host_kids.iter() {
-		if !level_roots_bags.contains(kid) {
-			continue;
-		}
-		let Ok(root_kids) = children_q.get(kid) else {
-			continue;
-		};
-		for root_e in root_kids.iter() {
-			let Ok(root) = root_keys.get(root_e) else {
-				continue;
-			};
-			if root.0 != level {
-				continue;
-			}
-			let Ok(vis) = visibilities.get(root_e) else {
-				continue;
-			};
-			if lod_root_is_shown(*vis) {
-				return true;
-			}
-		}
-	}
-	false
+	let Some(bag) = lod_level_roots_entity(host_kids, level_roots_bags) else {
+		return false;
+	};
+	let Ok(root_kids) = children_q.get(bag) else {
+		return false;
+	};
+	root_kids.iter().any(|root_e| {
+		root_keys.get(root_e).is_ok_and(|root| root.0 == level)
+			&& visibilities.get(root_e).is_ok_and(|vis| lod_root_is_shown(*vis))
+	})
 }
 
 /// Whether a nested host may run fine-phase **refresh** (level produce / cull / probe update).
@@ -135,6 +123,14 @@ pub fn parent_host_desired_or_high(
 /// Parent of level-root children (keeps level variants out of the structural child bag).
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodLevelRoots;
+
+/// Direct child that owns [`LodLevelRoot`]s, if this host has one.
+pub fn lod_level_roots_entity<D: QueryData>(
+	host_children: &Children,
+	bags: &Query<D, With<LodLevelRoots>>,
+) -> Option<Entity> {
+	host_children.iter().find(|&child| bags.contains(child))
+}
 
 /// One spawned LOD variant under [`LodLevelRoots`] (keyed by [`LodSceneLevel`]).
 #[derive(Debug, Clone, Copy, Component, Default)]
@@ -228,33 +224,17 @@ pub fn sync_lod_level_roots(
 	wants_cull: Query<(), With<crate::LodCullInFlight>>,
 	mut visibilities: Query<&mut Visibility>,
 ) {
-	let t0 = std::time::Instant::now();
-	let mut n = 0u32;
-	let mut requested = 0u32;
 	for (host, level, host_children) in &hosts {
-		n += 1;
 		let desired = *level;
 
 		// No children yet → nothing to show/hide; ask for the first level root to be spawned.
 		let Some(host_children) = host_children else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 			continue;
 		};
 
-		// Locate the LodLevelRoots bag among the host's direct children.
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-
-		// Host has children but no LodLevelRoots yet → same as cold start: request a spawn.
-		let Some(roots_entity) = roots_entity else {
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 			continue;
 		};
 
@@ -319,11 +299,7 @@ pub fn sync_lod_level_roots(
 			} else {
 				false
 			};
-			*visibility = if show {
-				Visibility::Inherited
-			} else {
-				Visibility::Hidden
-			};
+			*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
 		}
 
 		// Desired root present (ready or pending) → drop stale spawn request.
@@ -332,14 +308,7 @@ pub fn sync_lod_level_roots(
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 		} else {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
-			requested += 1;
 		}
-	}
-	if n > 0 {
-		info!(
-			"[lod.refresh] sync_lod_level_roots: hosts={n} spawn_requests={requested} in {:.2}ms",
-			t0.elapsed().as_secs_f64() * 1000.0
-		);
 	}
 }
 

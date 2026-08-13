@@ -28,10 +28,7 @@ pub struct LodNodePose {
 
 impl Default for LodNodePose {
 	fn default() -> Self {
-		Self {
-			previous: Transform::IDENTITY,
-			current: Transform::IDENTITY,
-		}
+		Self { previous: Transform::IDENTITY, current: Transform::IDENTITY }
 	}
 }
 
@@ -55,6 +52,18 @@ pub struct LodNodeSnapshot {
 	pub current: Transform,
 	/// Driver extents (from [`LodNodeBounds`], or a point at `current.translation`).
 	pub bounds: Aabb3d,
+}
+
+impl LodNodeSnapshot {
+	/// Borrowed [`LodRef`] for this snapshot.
+	pub fn as_lod_ref(&self) -> LodRef<'_> {
+		LodRef {
+			entity: self.entity,
+			previous_transform: &self.previous,
+			current_transform: &self.current,
+			bounds: &self.bounds,
+		}
+	}
 }
 
 /// Advance [`LodNodePose`] when the node's [`Transform`] changes.
@@ -86,22 +95,12 @@ pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
 			entity,
 			previous: pose.previous,
 			current: pose.current,
-			bounds: bounds
-				.map(|b| b.0)
-				.unwrap_or_else(|| point_bounds(pose.current.translation)),
+			bounds: bounds.map(|b| b.0).unwrap_or_else(|| point_bounds(pose.current.translation)),
 		})
 		.collect()
 }
 
 /// Build one [`LodRef`] per snapshot (driver pose + that driver's bounds).
 pub fn lod_refs_from_snapshots<'a>(snapshots: &'a [LodNodeSnapshot]) -> Vec<LodRef<'a>> {
-	snapshots
-		.iter()
-		.map(|snap| LodRef {
-			entity: snap.entity,
-			previous_transform: &snap.previous,
-			current_transform: &snap.current,
-			bounds: &snap.bounds,
-		})
-		.collect()
+	snapshots.iter().map(LodNodeSnapshot::as_lod_ref).collect()
 }

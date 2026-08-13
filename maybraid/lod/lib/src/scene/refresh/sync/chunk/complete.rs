@@ -21,12 +21,7 @@ use super::util::{count_nested_hosts, ms};
 pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut pending: Query<
-		(
-			Entity,
-			Option<&mut LodChunkFulfillment>,
-			Option<&ChildOf>,
-			Has<LodLevelRootStreamed>,
-		),
+		(Entity, Option<&mut LodChunkFulfillment>, Option<&ChildOf>, Has<LodLevelRootStreamed>),
 		(With<LodLevelRootPending>, Without<LodCullInFlight>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,

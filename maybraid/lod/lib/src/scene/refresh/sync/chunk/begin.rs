@@ -8,14 +8,14 @@ use std::time::Instant;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
+use crate::lod_chunk_trace;
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef};
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, parent_host_desired_or_high, LodLevelRoot, LodLevelRoots,
-	LodLevelSpawnRequest, LodSceneHost,
+	lod_level_roots_entity, nested_host_parent_allows_refresh, parent_host_desired_or_high,
+	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
-use crate::lod_chunk_trace;
 
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, LevelBand};
@@ -23,7 +23,7 @@ use super::types::{
 	FulfillClass, LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed,
 };
-use super::util::{has_present_root, ms, roots_bag_entity};
+use super::util::{has_present_root, ms};
 
 #[derive(Clone, Copy)]
 struct BeginCandidate {
@@ -35,23 +35,17 @@ struct BeginCandidate {
 }
 
 fn roll_active_into_desired(clock: &mut LodChunkBeginClock) {
-	clock.desired_remaining = clock
-		.desired_remaining
-		.saturating_add(clock.active_remaining);
+	clock.desired_remaining = clock.desired_remaining.saturating_add(clock.active_remaining);
 	clock.active_remaining = 0;
 }
 
 fn roll_presence_into_desired(clock: &mut LodChunkBeginClock) {
-	clock.desired_remaining = clock
-		.desired_remaining
-		.saturating_add(clock.presence_remaining);
+	clock.desired_remaining = clock.desired_remaining.saturating_add(clock.presence_remaining);
 	clock.presence_remaining = 0;
 }
 
 fn roll_desired_into_presence(clock: &mut LodChunkBeginClock) {
-	clock.presence_remaining = clock
-		.presence_remaining
-		.saturating_add(clock.desired_remaining);
+	clock.presence_remaining = clock.presence_remaining.saturating_add(clock.desired_remaining);
 	clock.desired_remaining = 0;
 }
 
@@ -89,11 +83,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	let lod_ref = pose.as_lod_ref(viewer_entity, &driver_bounds);
 
 	let t_sys = Instant::now();
-	let mut stats = BeginStats {
-		jobs_started: 0,
-		chunks_ms_total: 0.0,
-		spawn_ms_total: 0.0,
-	};
+	let mut stats = BeginStats { jobs_started: 0, chunks_ms_total: 0.0, spawn_ms_total: 0.0 };
 
 	roll_active_into_desired(&mut begin_clock);
 
@@ -115,7 +105,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		};
-		let Some(roots_entity) = roots_bag_entity(host_children, &level_roots_bags) else {
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_bags) else {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
 			continue;
 		};
@@ -169,13 +159,8 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		}
 
 		let parent_desired = parent_host_desired_or_high(host, &child_of, &host_levels);
-		let candidate = BeginCandidate {
-			host,
-			roots_entity,
-			level: request.level,
-			cold,
-			parent_desired,
-		};
+		let candidate =
+			BeginCandidate { host, roots_entity, level: request.level, cold, parent_desired };
 		let near = LevelBand::from_level(request.level).is_near();
 		match (cold, near) {
 			(true, true) => presence_near.push(candidate),
@@ -321,11 +306,7 @@ fn admit_candidates<T: Component + LodScene>(
 		let t_spawn = Instant::now();
 		let level = candidate.level;
 		let cold = candidate.cold;
-		let initial_vis = if cold {
-			Visibility::Inherited
-		} else {
-			Visibility::Hidden
-		};
+		let initial_vis = if cold { Visibility::Inherited } else { Visibility::Hidden };
 		let level_root = bsn! {
 			template_value(LodLevelRoot(level))
 			LodLevelRootPending

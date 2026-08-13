@@ -46,8 +46,6 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 {
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let ref_refs: Vec<_> = refs.iter().collect();
-	let t0 = std::time::Instant::now();
 
 	let desired: Vec<(Entity, LodSceneLevel)> = {
 		let (host_levels, hosts) = sets.p0();
@@ -64,12 +62,10 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 					&visibilities,
 				)
 			})
-			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&ref_refs)))
+			.map(|(entity, scene)| (entity, scene.scene_lod_level_from_levels(&refs)))
 			.collect()
 	};
 
-	let mut changed = 0u32;
-	let n = desired.len() as u32;
 	{
 		let mut levels = sets.p1();
 		for (entity, want) in desired {
@@ -78,15 +74,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 			};
 			if *level != want {
 				*level = want;
-				changed += 1;
 			}
 		}
-	}
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if changed > 0 || elapsed_ms >= crate::lod_log_min_ms() {
-		info!(
-			"[lod.refresh] update_lod_host_levels: hosts={n} nodes={} changed={changed} in {elapsed_ms:.2}ms",
-			snapshots.len()
-		);
 	}
 }

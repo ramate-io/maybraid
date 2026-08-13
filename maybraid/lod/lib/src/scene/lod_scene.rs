@@ -32,7 +32,7 @@ pub trait LodScene {
 	///
 	/// Default: max of [`Self::scene_lod_level`] over `lod_refs`. Empty input means
 	/// no driver this frame → [`LodSceneLevel::UltraLow`].
-	fn scene_lod_level_from_levels(&self, lod_refs: &[&LodRef]) -> LodSceneLevel {
+	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
 		lod_refs
 			.iter()
 			.map(|lod_ref| self.scene_lod_level(lod_ref))
