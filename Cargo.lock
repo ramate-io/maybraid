@@ -2204,27 +2204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chico-grove-render-items"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "chico-ball-components",
- "chico-groves",
- "chico-sbs-geometry",
- "chico-sbs-trees",
- "chico-tree-components",
- "chico-vegetation-components",
- "chico-vegetation-shaders",
- "clap",
- "gimme-gen",
- "log",
- "procedural-common",
- "render-item",
-]
-
-[[package]]
 name = "chico-groves"
 version = "0.0.1"
 dependencies = [
@@ -2285,7 +2264,6 @@ dependencies = [
  "avian3d",
  "bevy",
  "chico-ball-components",
- "chico-grove-render-items",
  "chico-groves",
  "chico-sbs-geometry",
  "chico-sbs-trees",
