@@ -113,6 +113,10 @@ pub use tropical_tufts::{TropicalTufts, TropicalTuftsParams};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassParams};
 #[cfg(feature = "render")]
+pub use bush_scrub::{BushScrub, BushScrubParams};
+#[cfg(feature = "render")]
+pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthParams};
+#[cfg(feature = "render")]
 pub use dryland::{Dryland, DrylandParams};
 #[cfg(feature = "render")]
 pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};

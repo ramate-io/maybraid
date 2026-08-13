@@ -99,14 +99,8 @@ fn attach_render_materials(
 		RenderSubject::BraidGrass(_) => {}
 		RenderSubject::TropicalTufts(_) => {}
 		RenderSubject::CommonTufts(_) => {}
-		RenderSubject::BushScrub(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TropicalUndergrowth(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::BushScrub(_) => {}
+		RenderSubject::TropicalUndergrowth(_) => {}
 		RenderSubject::TropicalThicket(_) => {}
 		RenderSubject::JerrysChaparral(_) => {}
 		RenderSubject::LevantineScrub(_) => {}

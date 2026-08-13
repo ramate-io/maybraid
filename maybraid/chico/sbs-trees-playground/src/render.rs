@@ -3,9 +3,8 @@ use chico_ball_components::tuft::{
 	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
-use chico_grove_render_items::bush_scrub::BushScrubStd;
 use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, BraidGrassParams, ChristmasTaigaParams,
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams, ChristmasTaigaParams,
 	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
 	ForlornSavannaParams, GoettingenFollowParams, HighBushParams, JerrysChaparralParams,
 	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
@@ -13,9 +12,9 @@ use chico_groves::{
 	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
 	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
 	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
+	TropicalUndergrowthParams, UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
+	WildGrassParams,
 };
-use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConiferParams;
@@ -133,11 +132,11 @@ pub type RenderTropicalTufts = TropicalTuftsParams;
 /// [`CommonTuftsParams`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
 pub type RenderCommonTufts = CommonTuftsParams;
 
-/// [`BushScrubStd`] — sparse tuft-and-bush grove ([#303](https://github.com/ramate-io/maybraid/issues/303)).
-pub type RenderBushScrub = BushScrubStd;
+/// [`BushScrubParams`] — sparse tuft-and-bush grove ([#303](https://github.com/ramate-io/maybraid/issues/303)).
+pub type RenderBushScrub = BushScrubParams;
 
-/// [`TropicalUndergrowthStd`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
-pub type RenderTropicalUndergrowth = TropicalUndergrowthStd;
+/// [`TropicalUndergrowthParams`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
+pub type RenderTropicalUndergrowth = TropicalUndergrowthParams;
 
 /// [`TropicalThicketParams`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
 pub type RenderTropicalThicket = TropicalThicketParams;
@@ -1040,8 +1039,22 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&grove);
 				spawn_vegetation_components(commands, &grove, transform, bounds)
 			}
-			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BushScrub(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::TropicalUndergrowth(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::TropicalThicket(item) => {
 				let grove = item.build();
 				let bounds = grove

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, BraidGrassParams, ChristmasTaigaParams,
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams, ChristmasTaigaParams,
 	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
 	ForlornSavannaParams, GoettingenFollowParams, GroveExtent, HighBushParams, JerrysChaparralParams,
 	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
@@ -10,8 +10,8 @@ use chico_groves::{
 	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
 	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
 	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
-	DEFAULT_GROVE_EXTENT_XZ,
+	TropicalUndergrowthParams, UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
+	WildGrassParams, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
@@ -82,6 +82,10 @@ pub enum Show {
 	TallGrass(ShowTallGrass),
 	/// Wild Grass grove via VegetationComponents / LodScene.
 	WildGrass(ShowWildGrass),
+	/// Bush Scrub grove via VegetationComponents / LodScene.
+	BushScrub(ShowBushScrub),
+	/// Tropical Undergrowth grove via VegetationComponents / LodScene.
+	TropicalUndergrowth(ShowTropicalUndergrowth),
 	/// Levantine Scrub grove via VegetationComponents / LodScene.
 	LevantineScrub(ShowLevantineScrub),
 	/// Strange Oasis grove via VegetationComponents / LodScene.
@@ -404,6 +408,49 @@ impl ShowWildGrass {
 		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
 		grass.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
 		grass
+	}
+}
+
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowBushScrub {
+	#[command(flatten)]
+	pub grove: BushScrubParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowBushScrub {
+	fn configured(self) -> BushScrubParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowTropicalUndergrowth {
+	#[command(flatten)]
+	pub grove: TropicalUndergrowthParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowTropicalUndergrowth {
+	fn configured(self) -> TropicalUndergrowthParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
 	}
 }
 
@@ -1146,6 +1193,8 @@ impl Show {
 			Self::CommonTufts(args) => ShowSubject::CommonTufts(args.configured()),
 			Self::TallGrass(args) => ShowSubject::TallGrass(args.configured()),
 			Self::WildGrass(args) => ShowSubject::WildGrass(args.configured()),
+			Self::BushScrub(args) => ShowSubject::BushScrub(args.configured()),
+			Self::TropicalUndergrowth(args) => ShowSubject::TropicalUndergrowth(args.configured()),
 			Self::LevantineScrub(args) => ShowSubject::LevantineScrub(args.configured()),
 			Self::StrangeOasis(args) => ShowSubject::StrangeOasis(args.configured()),
 			Self::TropicalThicket(args) => ShowSubject::TropicalThicket(args.configured()),
@@ -1220,6 +1269,8 @@ pub enum ShowSubject {
 	CommonTufts(CommonTuftsParams),
 	TallGrass(TallGrassParams),
 	WildGrass(WildGrassParams),
+	BushScrub(BushScrubParams),
+	TropicalUndergrowth(TropicalUndergrowthParams),
 	LevantineScrub(LevantineScrubParams),
 	StrangeOasis(StrangeOasisParams),
 	TropicalThicket(TropicalThicketParams),
@@ -1389,6 +1440,18 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain,
 			g.merge_collections
+		)),
+		Some(ShowSubject::BushScrub(g)) => Some(format!(
+			"bush-scrub:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::TropicalUndergrowth(g)) => Some(format!(
+			"tropical-undergrowth:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
 		)),
 		Some(ShowSubject::LevantineScrub(g)) => Some(format!(
 			"levantine-scrub:extent={:?}|cell={:?}|terrain={:?}",
@@ -1639,6 +1702,8 @@ pub fn sync_show(
 		ShowSubject::CommonTufts(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::TallGrass(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::WildGrass(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::BushScrub(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TropicalUndergrowth(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::LevantineScrub(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::StrangeOasis(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1720,6 +1785,8 @@ mod tests {
 			"show common-tufts --grove-extent-xz 8 --elevation 0.4",
 			"show tall-grass --grove-extent-xz 14 --elevation 0.40",
 			"show wild-grass --grove-extent-xz 14 --elevation 0.35",
+			"show bush-scrub --grove-extent-xz 35 --elevation 0.40",
+			"show tropical-undergrowth --grove-extent-xz 35 --elevation 0.35",
 			"show levantine-scrub --grove-extent-xz 20",
 			"show strange-oasis --grove-extent-xz 20",
 			"show tropical-thicket --grove-extent-xz 20",
@@ -1773,6 +1840,12 @@ mod tests {
 				}
 				crate::commands::PlaygroundCommand::Show(Show::WildGrass(args)) => {
 					assert!(!args.configured().build().plants().is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::BushScrub(args)) => {
+					assert!(!args.configured().build().is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::TropicalUndergrowth(args)) => {
+					assert!(!args.configured().build().is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::LevantineScrub(args)) => {
 					assert!(!args.configured().build().plants.is_empty());

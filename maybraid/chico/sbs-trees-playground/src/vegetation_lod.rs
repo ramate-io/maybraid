@@ -7,13 +7,13 @@
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{
-	Alpine, AridConiferSapling, BraidGrass, ChristmasTaiga, CommonTufts, ConiferMassives,
+	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts, ConiferMassives,
 	ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow, HighBush,
 	JerrysChaparral, JungleLowerMassives, JungleMassives, Leeward, LevantineScrub, LowBush,
 	MonsterGrass, OasisDatePalm, Orchard, PalmShade, RiparianGeneral, RiparianMix, RiverineGreen,
 	RollingOaks, Shamanhome, SpottyBushes, Storytellers, StrangeOasis, TallGrass,
 	TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket, TropicalTufts,
-	UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
+	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 use chico_sbs_trees::{
 	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
@@ -101,6 +101,8 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<CommonTufts>);
 		avian_host!(app, ComponentsOnly<TallGrass>);
 		avian_host!(app, ComponentsOnly<WildGrass>);
+		avian_host!(app, BushScrub);
+		avian_host!(app, TropicalUndergrowth);
 		avian_host!(app, LevantineScrub);
 		avian_host!(app, StrangeOasis);
 		avian_host!(app, TropicalThicket);
@@ -151,6 +153,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<BraidOakTree>);
 		avian_host!(app, ComponentsOnly<SimplemansHedge>);
 		avian_host!(app, ComponentsOnly<TuftPatch>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<TuftPatch>>);
 		avian_host!(app, ComponentsOnly<PalmCrown>);
 		avian_host!(app, ComponentsOnly<DatePalm>);
 		avian_host!(app, ComponentsOnly<WaialeaPalm>);
