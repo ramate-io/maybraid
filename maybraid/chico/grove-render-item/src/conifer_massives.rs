@@ -18,7 +18,7 @@ use crate::skipped_mesh_material::{
 };
 use chico_groves::conifer_massives::{definition, ConiferMassivesCell, ConiferMassivesItem};
 use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
 	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
@@ -199,17 +199,13 @@ where
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
+		_cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
-			let foliage_noise = placement_noise(self.leaf_surface_noise, placed.position);
 			let build_noise = placement_noise(self.grove.noise, placed.position);
-			let chain_noise = placement_noise(self.tree_chain_noise, placed.position);
-			let stick_seed = chain_noise.seed as i32;
-			let canopy_seed = build_noise.seed as i32 + 31;
 
 			let entities = match placed.variant.item() {
 				ConiferMassivesItem::NorthernConifer(conifer) => {

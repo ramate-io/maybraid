@@ -7,11 +7,12 @@
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{
-	Alpine, ChristmasTaiga, Dryland, ForlornSavanna, GoettingenFollow, HighBush, JerrysChaparral,
-	JungleLowerMassives, JungleMassives, Leeward, LevantineScrub, LowBush, MonsterGrass,
-	OasisDatePalm, Orchard, RiparianGeneral, RiparianMix, RiverineGreen, RollingOaks, SpottyBushes,
-	Storytellers, StrangeOasis, TemperateLowerMassives, TemperateMassives, TradeWinds,
-	TropicalThicket, UnendingJungle, Vineyard, WanderingAcacia,
+	Alpine, AridConiferSapling, ChristmasTaiga, ConiferMassives, ConiferSapling, Dryland,
+	ForlornSavanna, GoettingenFollow, HighBush, JerrysChaparral, JungleLowerMassives,
+	JungleMassives, Leeward, LevantineScrub, LowBush, MonsterGrass, OasisDatePalm, Orchard,
+	RiparianGeneral, RiparianMix, RiverineGreen, RollingOaks, SpottyBushes, Storytellers,
+	StrangeOasis, TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket,
+	UnendingJungle, Vineyard, WanderingAcacia,
 };
 use chico_sbs_trees::{
 	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
@@ -121,6 +122,9 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, RiparianMix);
 		avian_host!(app, Alpine);
 		avian_host!(app, ChristmasTaiga);
+		avian_host!(app, ConiferSapling);
+		avian_host!(app, AridConiferSapling);
+		avian_host!(app, ConiferMassives);
 
 		// Structural single-tree / component hosts used by `/show`.
 		avian_host!(app, ComponentsOnly<SopesBanyan>);

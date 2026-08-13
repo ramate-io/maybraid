@@ -4,15 +4,42 @@
 //! Mixed Friend's and Northern Conifer saplings beneath taller evergreen canopy. Forest-layer
 //! attachment remains a follow-up.
 
-use bevy_math::Vec2;
+use bevy_math::{Vec2, Vec3};
 use procedural_common::UnitRange;
 
 pub mod variants;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
-	PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveWorldSample,
+	PaletteMix, PaletteSlot, PlacementConstraints,
 };
+
+/// Uniform terrain tuned for conifer sapling placement constraints (RFC elevation bands overlap).
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "render", derive(clap::Args))]
+#[cfg_attr(feature = "render", command(next_help_heading = "Terrain"))]
+pub struct SaplingFlatTerrain {
+	#[cfg_attr(feature = "render", arg(long, default_value_t = 0.50))]
+	pub elevation: f32,
+	#[cfg_attr(feature = "render", arg(long, default_value_t = 0.30))]
+	pub steepness: f32,
+}
+
+impl Default for SaplingFlatTerrain {
+	fn default() -> Self {
+		Self { elevation: 0.50, steepness: 0.30 }
+	}
+}
+
+impl GroveWorldSample for SaplingFlatTerrain {
+	fn elevation_at(&self, _position: Vec3) -> f32 {
+		self.elevation
+	}
+
+	fn steepness_at(&self, _position: Vec3) -> f32 {
+		self.steepness
+	}
+}
 
 /// Standard sapling height band ([`1.0`, `4.0`] m).
 const SAPLING_HEIGHT: UnitRange = UnitRange::new(1.0, 4.0);
@@ -237,6 +264,343 @@ impl ConiferSaplingCell {
 		}
 	}
 }
+
+#[cfg(feature = "render")]
+mod vc {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::prelude::*;
+	use bevy::scene::prelude::Scene;
+	use super::SaplingFlatTerrain;
+	use super::variants::conifer_sapling_friends_conifer::FriendConiferSamples;
+	use chico_sbs_trees::{FriendsConifer, FriendsConiferParams, NorthernConifer, NorthernConiferParams};
+	use chico_vegetation_components::{
+		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+	};
+	use clap::Args;
+	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+	use lod::lod_ref::LodRef;
+	use lod::{lod_host_scene_pending, SceneChunk};
+	use material_ref::MaterialRef;
+	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+
+	use super::{definition, ConiferSaplingCell, ConiferSaplingItem};
+	use crate::grove::{
+		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
+		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
+		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
+		woody_grove_scene_chunks, CanopyProxySite, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+	};
+
+	pub const CONIFER_SAPLING_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
+	pub const CONIFER_SAPLING_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const CONIFER_SAPLING_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+
+	#[derive(Clone, Debug, Args)]
+	#[command(rename_all = "kebab-case")]
+	pub struct ConiferSaplingParams {
+		#[command(flatten, next_help_heading = "Grove")]
+		pub grove: GroveFrontend,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,1.0,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "The noise applied to the chains of sticks in trees",
+		)]
+		pub tree_chain_noise: NoiseParams,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,0.05,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Stick Surface Noise",
+		)]
+		pub stick_surface_noise: NoiseParams,
+
+		#[arg(
+			long,
+			default_value = "0,1.0,0.06,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Leaf Surface Noise",
+		)]
+		pub leaf_surface_noise: NoiseParams,
+
+		#[arg(skip)]
+		pub extent: GroveExtent,
+
+		#[command(flatten, next_help_heading = "Terrain")]
+		pub terrain: SaplingFlatTerrain,
+
+		#[arg(skip)]
+		resolved_placements: Option<Vec<GroveCellVariant<ConiferSaplingCell>>>,
+	}
+
+	impl Default for ConiferSaplingParams {
+		fn default() -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				tree_chain_noise: NoiseParams::from_scalar(0.0, 1.0, 1.0, 1),
+				stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+				leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain: SaplingFlatTerrain::default(),
+				resolved_placements: None,
+			}
+		}
+	}
+
+	impl ConiferSaplingParams {
+		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
+			self.extent = extent;
+			self
+		}
+
+		pub fn with_terrain(mut self, terrain: SaplingFlatTerrain) -> Self {
+			self.terrain = terrain;
+			self
+		}
+
+		pub fn cell_extent_xz(&self) -> Vec2 {
+			self.grove.definition(definition()).cell_extent_xz
+		}
+
+		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+			self.extent.subdivide_xz(self.cell_extent_xz())
+		}
+
+		pub fn placements(&self) -> Vec<GroveCellVariant<ConiferSaplingCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+		}
+
+		pub fn build(&self) -> ConiferSapling {
+			ConiferSapling::from_placements(&self.placements(), self.grove.noise, &self.extent)
+		}
+	}
+
+	#[derive(Clone)]
+	enum ConiferSaplingKind {
+		Friends(FriendsConifer),
+		Northern(NorthernConifer),
+	}
+
+	#[derive(Clone)]
+	pub struct ConiferSaplingPlant {
+		pub placement: Placement,
+		kind: ConiferSaplingKind,
+		stick_material: MaterialRef,
+		ball_material: MaterialRef,
+		frond_material: MaterialRef,
+	}
+
+	#[derive(Clone, Component)]
+	pub struct ConiferSapling {
+		pub plants: Vec<ConiferSaplingPlant>,
+		pub structural_center: Vec3,
+		pub footprint_radius: f32,
+		pub extent: GroveExtent,
+	}
+
+	impl ConiferSapling {
+		pub fn from_placements(
+			placements: &[GroveCellVariant<ConiferSaplingCell>],
+			grove_noise: NoiseParams,
+			extent: &GroveExtent,
+		) -> Self {
+			let plants = placements.iter().map(|placed| grow_plant(placed, grove_noise)).collect();
+			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
+			Self {
+				plants,
+				structural_center,
+				footprint_radius,
+				extent: *extent,
+			}
+		}
+
+		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+			self.plants
+				.iter()
+				.map(|plant| match &plant.kind {
+					ConiferSaplingKind::Friends(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+					ConiferSaplingKind::Northern(t) => nest_placed_plant_chunk(
+						t.clone(),
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+						&plant.frond_material,
+						lod_ref,
+					),
+				})
+				.collect()
+		}
+
+		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
+			self.plants
+				.iter()
+				.filter_map(|plant| {
+					let material = &plant.ball_material;
+					match &plant.kind {
+						ConiferSaplingKind::Friends(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+						ConiferSaplingKind::Northern(t) => {
+							canopy_proxy_site(t, plant.placement, material)
+						}
+					}
+				})
+				.collect()
+		}
+	}
+
+	fn grow_plant(
+		placed: &GroveCellVariant<ConiferSaplingCell>,
+		grove_noise: NoiseParams,
+	) -> ConiferSaplingPlant {
+		let build_noise = placement_noise(grove_noise, placed.position);
+		let stick_seed = build_noise.seed;
+		let canopy_seed = build_noise.seed.wrapping_add(31);
+		let stick_material =
+			stick_material_from_palette(Some(placed.variant.stick_palette_mix()), stick_seed);
+		let ball_material = canopy_ball_material_from_palette(
+			Some(placed.variant.canopy_palette_mix()),
+			canopy_seed,
+		);
+		let frond_material =
+			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
+		let placement =
+			Placement::new(placed.position, 0.0).with_scale(Vec3::splat(placed.scale.max(1e-4)));
+
+		let kind = match placed.variant.item() {
+			ConiferSaplingItem::FriendsConifer(conifer) => {
+				let samples =
+					BuildWithNoise::<FriendConiferSamples>::build_with_noise(conifer, build_noise);
+				let mut params = FriendsConiferParams::default();
+				params.geometry = samples.geometry;
+				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+				ConiferSaplingKind::Friends(params.build())
+			}
+			ConiferSaplingItem::NorthernConifer(conifer) => {
+				let samples = conifer.build_with_noise(build_noise);
+				let mut params = NorthernConiferParams::default();
+				params.geometry = samples.geometry;
+				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+				params.splay_spawn_fraction = samples.splay_spawn_fraction;
+				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+				ConiferSaplingKind::Northern(params.build())
+			}
+		};
+
+		ConiferSaplingPlant {
+			placement,
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
+		}
+	}
+
+	impl VegetationComponents for ConiferSapling {
+		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
+			Layers::new()
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			match level {
+				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
+				LodSceneLevel::Low => {
+					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
+				}
+				LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(
+					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
+				),
+			}
+		}
+
+		fn structural_lod(&self) -> Option<StructuralLod> {
+			Some(
+				StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
+					CONIFER_SAPLING_STRUCTURAL_HIGH_FACTOR,
+					CONIFER_SAPLING_STRUCTURAL_MEDIUM_FACTOR,
+					CONIFER_SAPLING_STRUCTURAL_LOW_FACTOR,
+				),
+			)
+		}
+	}
+
+	impl LodScene for ConiferSapling {
+		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+			self.structural_lod()
+				.map(|band| grove_lod_level(band, lod_ref))
+				.unwrap_or(LodSceneLevel::High)
+		}
+
+		fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+			self.structural_lod()
+				.map(|band| grove_lod_status(band, lod_ref))
+				.unwrap_or(LodSceneStatus::Unchanged)
+		}
+
+		fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+			self.structural_lod()
+				.map(|band| grove_lod_culls(band, lod_ref))
+				.unwrap_or(LodSceneCulls::None)
+		}
+
+		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+			match grove_detail_level(level) {
+				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
+				None => {
+					let mut children: Vec<Box<dyn Scene>> = Vec::new();
+					chico_vegetation_components::append_component_scenes(
+						self, lod_ref, level, &mut children,
+					);
+					chico_vegetation_components::scene_children(children)
+				}
+			}
+		}
+
+		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+		}
+
+		fn scene_bounds(&self) -> Aabb3d {
+			self.structural_lod()
+				.map(|p| p.footprint_aabb())
+				.unwrap_or_else(|| chico_vegetation_components::vegetation_bounds(self))
+		}
+
+		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+		}
+	}
+}
+
+#[cfg(feature = "render")]
+pub use vc::{
+	ConiferSapling, ConiferSaplingParams, ConiferSaplingPlant, CONIFER_SAPLING_STRUCTURAL_HIGH_FACTOR,
+	CONIFER_SAPLING_STRUCTURAL_LOW_FACTOR, CONIFER_SAPLING_STRUCTURAL_MEDIUM_FACTOR,
+};
+
 
 #[cfg(test)]
 mod tests {

@@ -16,35 +16,11 @@ use crate::skipped_mesh_material::{
 };
 use chico_groves::conifer_sapling::{definition, ConiferSaplingCell, ConiferSaplingItem};
 use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, GroveCellVariant, GroveExtent, GroveFrontend,
+	placement_noise, GroveCellVariant, GroveExtent, GroveFrontend,
 	GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-/// Uniform terrain tuned for conifer sapling placement constraints (RFC elevation bands overlap).
-#[derive(Debug, Clone, Copy, PartialEq, Args)]
-#[command(next_help_heading = "Terrain")]
-pub struct SaplingFlatTerrain {
-	#[arg(long, default_value_t = 0.50)]
-	pub elevation: f32,
-	#[arg(long, default_value_t = 0.30)]
-	pub steepness: f32,
-}
-
-impl Default for SaplingFlatTerrain {
-	fn default() -> Self {
-		Self { elevation: 0.50, steepness: 0.30 }
-	}
-}
-
-impl GroveWorldSample for SaplingFlatTerrain {
-	fn elevation_at(&self, _position: Vec3) -> f32 {
-		self.elevation
-	}
-
-	fn steepness_at(&self, _position: Vec3) -> f32 {
-		self.steepness
-	}
-}
+pub use chico_groves::conifer_sapling::SaplingFlatTerrain;
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Conifer Sapling instance.
 pub type ConiferSaplingStd = ConiferSapling<
@@ -223,17 +199,13 @@ where
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
+		_cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
-			let chain_noise = placement_noise(self.tree_chain_noise, placed.position);
 			let build_noise = placement_noise(self.grove.noise, placed.position);
-			let foliage_noise = placement_noise(self.leaf_surface_noise, placed.position);
-			let stick_seed = chain_noise.seed as i32;
-			let canopy_seed = build_noise.seed as i32 + 31;
 
 			let entities = match placed.variant.item() {
 				ConiferSaplingItem::FriendsConifer(conifer) => {

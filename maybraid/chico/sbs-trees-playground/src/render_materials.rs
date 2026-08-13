@@ -143,10 +143,7 @@ fn attach_render_materials(
 		RenderSubject::WanderingAcacia(_) => {}
 		RenderSubject::Leeward(_) => {}
 		RenderSubject::ChristmasTaiga(_) => {}
-		RenderSubject::ConiferMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::ConiferMassives(_) => {}
 		RenderSubject::TemperateMassives(_) => {}
 		RenderSubject::RiparianGeneral(_) => {}
 		RenderSubject::RollingOaks(_) => {}
@@ -163,14 +160,8 @@ fn attach_render_materials(
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::GoettingenFollow(_) => {}
-		RenderSubject::ConiferSapling(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::AridConiferSapling(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::ConiferSapling(_) => {}
+		RenderSubject::AridConiferSapling(_) => {}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

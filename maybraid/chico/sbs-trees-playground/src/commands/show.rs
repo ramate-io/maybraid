@@ -2,10 +2,11 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	AlpineParams, ChristmasTaigaParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams,
-	GroveExtent, HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams,
-	JungleMassivesParams, LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams,
-	OrchardParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
+	AlpineParams, AridConiferSaplingParams, ChristmasTaigaParams, ConiferMassivesParams,
+	ConiferSaplingParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent,
+	HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams, JungleMassivesParams,
+	LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams, OrchardParams,
+	RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
 	SpottyBushesParams, StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams,
 	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, UnendingJungleParams,
 	VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
@@ -123,6 +124,12 @@ pub enum Show {
 	Alpine(ShowAlpine),
 	/// Christmas Taiga grove via VegetationComponents / LodScene.
 	ChristmasTaiga(ShowChristmasTaiga),
+	/// Conifer Sapling grove via VegetationComponents / LodScene.
+	ConiferSapling(ShowConiferSapling),
+	/// Arid Conifer Sapling grove via VegetationComponents / LodScene.
+	AridConiferSapling(ShowAridConiferSapling),
+	/// Conifer Massives grove via VegetationComponents / LodScene.
+	ConiferMassives(ShowConiferMassives),
 	/// Friend's Conifer via VegetationComponents / LodScene.
 	FriendsConifer(ShowFriendsConifer),
 	/// High Bush Shoots via VegetationComponents / LodScene.
@@ -846,6 +853,70 @@ impl ShowChristmasTaiga {
 	}
 }
 
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowConiferSapling {
+	#[command(flatten)]
+	pub grove: ConiferSaplingParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowConiferSapling {
+	fn configured(self) -> ConiferSaplingParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowAridConiferSapling {
+	#[command(flatten)]
+	pub grove: AridConiferSaplingParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowAridConiferSapling {
+	fn configured(self) -> AridConiferSaplingParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowConiferMassives {
+	#[command(flatten)]
+	pub grove: ConiferMassivesParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowConiferMassives {
+	fn configured(self) -> ConiferMassivesParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowFriendsConifer {
@@ -912,6 +983,9 @@ impl Show {
 			Self::RiparianMix(args) => ShowSubject::RiparianMix(args.configured()),
 			Self::Alpine(args) => ShowSubject::Alpine(args.configured()),
 			Self::ChristmasTaiga(args) => ShowSubject::ChristmasTaiga(args.configured()),
+			Self::ConiferSapling(args) => ShowSubject::ConiferSapling(args.configured()),
+			Self::AridConiferSapling(args) => ShowSubject::AridConiferSapling(args.configured()),
+			Self::ConiferMassives(args) => ShowSubject::ConiferMassives(args.configured()),
 			Self::FriendsConifer(args) => ShowSubject::FriendsConifer(args.tree),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
@@ -973,6 +1047,9 @@ pub enum ShowSubject {
 	RiparianMix(RiparianMixParams),
 	Alpine(AlpineParams),
 	ChristmasTaiga(ChristmasTaigaParams),
+	ConiferSapling(ConiferSaplingParams),
+	AridConiferSapling(AridConiferSaplingParams),
+	ConiferMassives(ConiferMassivesParams),
 	FriendsConifer(FriendsConiferParams),
 	HighBushShoots(HighBushShootsParams),
 }
@@ -1237,6 +1314,24 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::ConiferSapling(g)) => Some(format!(
+			"conifer-sapling:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::AridConiferSapling(g)) => Some(format!(
+			"arid-conifer-sapling:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::ConiferMassives(g)) => Some(format!(
+			"conifer-massives:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::FriendsConifer(t)) => Some(format!(
 			"friends-conifer:{:?}|splay={}",
 			t.geometry, t.splay_radius_fraction_of_height
@@ -1312,6 +1407,9 @@ pub fn sync_show(
 		ShowSubject::RiparianMix(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::Alpine(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::ChristmasTaiga(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::ConiferSapling(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::AridConiferSapling(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::ConiferMassives(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::FriendsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
@@ -1380,6 +1478,9 @@ mod tests {
 			"show riparian-mix --grove-extent-xz 180",
 			"show alpine --grove-extent-xz 220",
 			"show christmas-taiga --grove-extent-xz 200",
+			"show conifer-sapling --grove-extent-xz 39 --elevation 0.55",
+			"show arid-conifer-sapling --grove-extent-xz 39",
+			"show conifer-massives --grove-extent-xz 400",
 			"show friends-conifer",
 			"show high-bush-shoots",
 		] {
@@ -1465,6 +1566,15 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::ChristmasTaiga(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::ConiferSapling(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::AridConiferSapling(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::ConiferMassives(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::FriendsConifer(args)) => {

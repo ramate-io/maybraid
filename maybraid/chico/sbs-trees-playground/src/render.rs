@@ -3,15 +3,13 @@ use chico_ball_components::tuft::{
 	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
-use chico_grove_render_items::arid_conifer_sapling::AridConiferSaplingStd;
 use chico_grove_render_items::braid_grass::BraidGrassStd;
 use chico_grove_render_items::bush_scrub::BushScrubStd;
 use chico_grove_render_items::common_tufts::CommonTuftsStd;
-use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
-use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
 use chico_grove_render_items::date_grove::DateGroveStd;
 use chico_groves::{
-	AlpineParams, ChristmasTaigaParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams,
+	AlpineParams, AridConiferSaplingParams, ChristmasTaigaParams, ConiferMassivesParams,
+	ConiferSaplingParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams,
 	HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams, JungleMassivesParams,
 	LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams, OrchardParams,
 	RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
@@ -190,11 +188,11 @@ pub type RenderShamanhome = ShamanhomeStd;
 /// [`GoettingenFollowParams`] — low-density temperate follow-layer grove ([#325](https://github.com/ramate-io/maybraid/issues/325)).
 pub type RenderGoettingenFollow = GoettingenFollowParams;
 
-/// [`ConiferSaplingStd`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
-pub type RenderConiferSapling = ConiferSaplingStd;
+/// [`ConiferSaplingParams`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
+pub type RenderConiferSapling = ConiferSaplingParams;
 
-/// [`AridConiferSaplingStd`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
-pub type RenderAridConiferSapling = AridConiferSaplingStd;
+/// [`AridConiferSaplingParams`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
+pub type RenderAridConiferSapling = AridConiferSaplingParams;
 
 /// [`JungleLowerMassivesParams`] — moderate massive jungle lower-canopy grove ([#328](https://github.com/ramate-io/maybraid/issues/328)).
 pub type RenderJungleLowerMassives = JungleLowerMassivesParams;
@@ -232,8 +230,8 @@ pub type RenderLeeward = LeewardParams;
 /// [`ChristmasTaigaParams`] — moderate-density cold Northern Conifer upper-canopy grove ([#341](https://github.com/ramate-io/maybraid/issues/341)).
 pub type RenderChristmasTaiga = ChristmasTaigaParams;
 
-/// [`ConiferMassivesStd`] — moderate giant conifer upper-canopy grove.
-pub type RenderConiferMassives = ConiferMassivesStd;
+/// [`ConiferMassivesParams`] — moderate giant conifer upper-canopy grove.
+pub type RenderConiferMassives = ConiferMassivesParams;
 
 /// [`TemperateMassivesParams`] — moderate giant temperate upper-canopy grove.
 pub type RenderTemperateMassives = TemperateMassivesParams;
@@ -1127,8 +1125,22 @@ impl RenderSubject {
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
-			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ConiferSapling(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
+			Self::AridConiferSapling(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::JungleLowerMassives(item) => {
 				let grove = item.build();
 				let bounds = grove
@@ -1218,7 +1230,14 @@ impl RenderSubject {
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
-			Self::ConiferMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ConiferMassives(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::TemperateMassives(item) => {
 				let grove = item.build();
 				let bounds = grove

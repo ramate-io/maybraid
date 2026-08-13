@@ -69,7 +69,7 @@ pub use conifer_massives::{
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
 };
 pub use conifer_sapling::{
-	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
+	SaplingFlatTerrain, ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
 };
 pub use date_grove::{DateGroveCell, DateGroveDatePalm, DateGroveItem};
@@ -112,6 +112,12 @@ pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
 pub use alpine::{Alpine, AlpineParams};
 #[cfg(feature = "render")]
 pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaParams};
+#[cfg(feature = "render")]
+pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingParams};
+#[cfg(feature = "render")]
+pub use conifer_massives::{ConiferMassives, ConiferMassivesParams};
+#[cfg(feature = "render")]
+pub use conifer_sapling::{ConiferSapling, ConiferSaplingParams};
 #[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushParams};
 #[cfg(feature = "render")]
