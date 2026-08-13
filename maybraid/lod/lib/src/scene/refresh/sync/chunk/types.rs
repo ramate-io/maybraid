@@ -87,11 +87,7 @@ pub struct LodChunkFulfillBudget {
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
-		Self {
-			spawn_weights_per_frame: 512,
-			cull_weights_per_frame: 64,
-			begins_per_frame: 48,
-		}
+		Self { spawn_weights_per_frame: 512, cull_weights_per_frame: 64, begins_per_frame: 48 }
 	}
 }
 
@@ -133,9 +129,7 @@ pub struct LodChunkBandCursors {
 
 impl Default for LodChunkBandCursors {
 	fn default() -> Self {
-		Self {
-			bands: [0; LOD_CHUNK_TUPLE_BAND_COUNT],
-		}
+		Self { bands: [0; LOD_CHUNK_TUPLE_BAND_COUNT] }
 	}
 }
 

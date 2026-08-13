@@ -53,9 +53,7 @@ where
 	T: Component + LodScene + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
