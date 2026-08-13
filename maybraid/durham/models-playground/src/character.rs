@@ -22,12 +22,13 @@ use crozon_characters::{
 use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
-use crate::player::{Jumping, Player, PlayerCapsule};
+use crate::player::{Jumping, MoveWish, Player, PlayerCapsule};
 use avian3d::prelude::LinearVelocity;
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
-const FACE_SPEED: f32 = 0.35;
+const FACE_DEADZONE: f32 = 0.05;
+const TURN_RATE: f32 = 5.5;
 
 /// Species for `/set-character`. Default preview recipe, no concepts sliders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
@@ -145,7 +146,8 @@ pub(crate) fn apply_set_character(
 /// Walk / run / jump on the body mailbox from player speed and grounded state.
 pub(crate) fn drive_player_locomotion(
 	mut commands: Commands,
-	players: Query<(&LinearVelocity, Has<Jumping>), With<Player>>,
+	time: Res<Time>,
+	players: Query<(&LinearVelocity, &MoveWish, Has<Jumping>), With<Player>>,
 	mut visuals: Query<
 		(&CharacterMembers, &mut Transform),
 		(With<PlayerVisual>, With<CharacterRoot>),
@@ -153,7 +155,7 @@ pub(crate) fn drive_player_locomotion(
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
-	let Ok((velocity, jumping)) = players.single() else {
+	let Ok((velocity, wish, jumping)) = players.single() else {
 		return;
 	};
 	let Ok((members, mut visual)) = visuals.single_mut() else {
@@ -162,9 +164,7 @@ pub(crate) fn drive_player_locomotion(
 
 	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
 	let speed = horizontal.length();
-	if speed > FACE_SPEED {
-		visual.look_to(-horizontal, Vec3::Y);
-	}
+	face_wish(&mut visual, wish.0, time.delta_secs());
 
 	for member in members.iter() {
 		let Ok(rig) = rigs.get(member) else {
@@ -183,6 +183,30 @@ pub(crate) fn drive_player_locomotion(
 			commands.entity(member).insert(AnimRefRoot(desired));
 		}
 	}
+}
+
+/// Slerp mesh +Z toward camera-relative wish. Coasting keeps the last heading.
+fn face_wish(visual: &mut Transform, wish: Vec3, dt: f32) {
+	let target = Vec3::new(wish.x, 0.0, wish.z);
+	if target.length_squared() < 1e-4 {
+		return;
+	}
+	let target = target.normalize();
+	let current = {
+		let facing = -visual.forward();
+		let xz = Vec3::new(facing.x, 0.0, facing.z);
+		if xz.length_squared() < 1e-4 {
+			visual.look_to(-target, Vec3::Y);
+			return;
+		}
+		xz.normalize()
+	};
+	let angle = current.angle_between(target);
+	if angle < FACE_DEADZONE {
+		return;
+	}
+	let t = (TURN_RATE * dt / angle).min(1.0);
+	visual.look_to(-current.slerp(target, t), Vec3::Y);
 }
 
 fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimId {

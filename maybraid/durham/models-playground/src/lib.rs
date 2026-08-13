@@ -36,7 +36,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
-use player::{respawn_player_on_layout, Player, PlayerPlugin};
+use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
@@ -140,7 +140,9 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					apply_mesh_stats.after(apply_mode_commands),
 					generate_cells.after(apply_mesh_stats),
 					present_cells.after(generate_cells),
-					drive_player_locomotion.before(CharacterHostSystems::Anim),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterHostSystems::Anim),
 					update_cell_location_hud.after(present_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

@@ -27,6 +27,13 @@ const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
+/// Camera-relative WASD wish on XZ. Zero when no move input.
+#[derive(Component, Default)]
+pub(crate) struct MoveWish(pub Vec3);
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct PlayerControlSystems;
+
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaygroundMode {
@@ -92,7 +99,8 @@ impl Plugin for PlayerPlugin {
 					apply_movement_damping,
 					follow_character_camera,
 				)
-					.chain(),
+					.chain()
+					.in_set(PlayerControlSystems),
 			);
 	}
 }
@@ -128,6 +136,7 @@ fn spawn_player(
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
 			MaxSlopeAngle(MAX_SLOPE_ANGLE),
+			MoveWish::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(1.25),
@@ -166,9 +175,14 @@ fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	keyboard: Res<ButtonInput<KeyCode>>,
+	cameras: Query<&CameraController, With<Camera3d>>,
+	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut writer: MessageWriter<MovementAction>,
 ) {
 	if *mode != PlaygroundMode::Character || text_focus.0 {
+		for mut wish in &mut wishes {
+			wish.0 = Vec3::ZERO;
+		}
 		return;
 	}
 
@@ -180,6 +194,22 @@ fn keyboard_movement_input(
 	let direction =
 		Vec2::new(right as i8 as f32 - left as i8 as f32, up as i8 as f32 - down as i8 as f32)
 			.clamp_length_max(1.0);
+
+	let wish_dir = if direction != Vec2::ZERO {
+		if let Ok(camera) = cameras.single() {
+			let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
+			let forward = yaw * -Vec3::Z;
+			let right_dir = yaw * Vec3::X;
+			(right_dir * direction.x + forward * direction.y).normalize_or_zero()
+		} else {
+			Vec3::ZERO
+		}
+	} else {
+		Vec3::ZERO
+	};
+	for mut wish in &mut wishes {
+		wish.0 = wish_dir;
+	}
 
 	if direction != Vec2::ZERO {
 		writer.write(MovementAction::Move(direction));

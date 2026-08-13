@@ -25,8 +25,8 @@ use malo_animations::{
 use crate::concepts::ConceptAnimation;
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 
-const RUN_CYCLE_SPEED: f32 = 0.5;
-const WALK_CYCLE_SPEED: f32 = 0.35;
+const RUN_CYCLE_SPEED: f32 = 1.4;
+const WALK_CYCLE_SPEED: f32 = 0.9;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
