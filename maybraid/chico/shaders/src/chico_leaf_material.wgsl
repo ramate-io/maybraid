@@ -14,7 +14,7 @@
     morph::{morph_position, morph_normal, morph_tangent},
     forward_io::Vertex,
     view_transformations::position_world_to_clip,
-    mesh_view_bindings::{view, globals},
+    mesh_view_bindings::{view, globals, lights},
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
     pbr_bindings,
@@ -326,6 +326,11 @@ fn fragment(
         alpha,
     );
 
+    // Matte dielectric — default roughness 0.5 reads as plastic in shadow.
+    pbr_input.material.perceptual_roughness = 1.0;
+    pbr_input.material.metallic = 0.0;
+    pbr_input.material.reflectance = vec3<f32>(0.12, 0.12, 0.12);
+
     // ----------------------------------------------------
     // PBR setup — both sides light toward the camera
     // ----------------------------------------------------
@@ -343,32 +348,21 @@ fn fragment(
         is_front,
     );
 
-    // ----------------------------------------------------
-    // Fake world-space bump
-    // ----------------------------------------------------
-
-    let bump_scale = 5.0;
-    let eps = 0.055;
-
-    let bp = world_pos * bump_scale;
-    let b0 = fbm_3d(bp);
-    let bx = fbm_3d(bp + vec3<f32>(eps, 0.0, 0.0));
-    let by = fbm_3d(bp + vec3<f32>(0.0, eps, 0.0));
-    let bz = fbm_3d(bp + vec3<f32>(0.0, 0.0, eps));
-
-    let bump_gradient = normalize(vec3<f32>(
-        bx - b0,
-        by - b0,
-        bz - b0,
-    ));
-
-    let bump_strength = 0.16;
-    let bumped_normal = normalize(prepared_normal + bump_gradient * bump_strength);
-
-    pbr_input.world_normal = bumped_normal;
-    pbr_input.N = bumped_normal;
+    // Soften ico/card faceting; wrap keeps N·L from going fully black.
+    let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.4));
+    pbr_input.world_normal = n;
+    pbr_input.N = n;
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
 
-    return tone_mapping(vec4<f32>(lit_color.rgb, alpha), view.color_grading);
+    var wrap = 0.5;
+    var back = 0.0;
+    if (lights.n_directional_lights > 0u) {
+        let L = lights.directional_lights[0].direction_to_light;
+        wrap = saturate(dot(n, L) * 0.5 + 0.5);
+        back = saturate(-dot(n, L));
+    }
+    let lifted = lit_color.rgb + base_rgb * (0.16 + 0.22 * wrap + 0.28 * back);
+
+    return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
 }

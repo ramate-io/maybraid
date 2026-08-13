@@ -2,6 +2,7 @@
 
 use bevy::{
 	asset::embedded_asset,
+	light::NotShadowCaster,
 	mesh::MeshVertexBufferLayoutRef,
 	pbr::{MaterialPipeline, MaterialPipelineKey},
 	prelude::*,
@@ -19,6 +20,16 @@ impl Plugin for ChicoLeafMaterialPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "chico_leaf_material.wgsl");
 		app.add_plugins(MaterialPlugin::<ChicoLeafMaterial>::default());
+		app.add_systems(PostUpdate, disable_leaf_shadow_casters);
+	}
+}
+
+fn disable_leaf_shadow_casters(
+	mut commands: Commands,
+	query: Query<Entity, (With<MeshMaterial3d<ChicoLeafMaterial>>, Without<NotShadowCaster>)>,
+) {
+	for entity in &query {
+		commands.entity(entity).insert(NotShadowCaster);
 	}
 }
 
