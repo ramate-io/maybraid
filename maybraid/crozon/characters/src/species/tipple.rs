@@ -10,16 +10,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::TippleAssets;
 
 pub use assets::{TippleBeakMesh, TippleHeadMesh};
 pub use palette::{TippleBeakColor, TippleEyeColor, TipplePlumageColor};
@@ -126,15 +121,5 @@ impl CharacterRecipe for TippleConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for TippleConfig {
-	fn species_name(&self) -> &'static str {
-		"tipple"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TippleAssets::resolve(self)
 	}
 }

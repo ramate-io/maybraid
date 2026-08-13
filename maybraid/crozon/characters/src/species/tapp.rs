@@ -10,16 +10,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::TappAssets;
 
 pub use assets::{TappBeakMesh, TappHeadMesh};
 pub use palette::{TappBeakColor, TappEyeColor, TappPlumageColor};
@@ -126,15 +121,5 @@ impl CharacterRecipe for TappConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for TappConfig {
-	fn species_name(&self) -> &'static str {
-		"tapp"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TappAssets::resolve(self)
 	}
 }

@@ -1,27 +1,22 @@
-//! BSN scenes for Kaller.
+//! LodScene recipe for Kaller.
 //!
-//! `data_scene()` carries the semantic [`Kaller`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Kaller`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`KallerConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{KallerAssets, KallerHeadMesh, KallerHornMesh, KallerSnoutMesh},
+	assets::{KallerHeadMesh, KallerHornMesh, KallerSnoutMesh},
 	pose::{KallerPose, KALLER_OVERALL_SCALE},
 	KallerColors, KallerConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, EyeMesh, HairMesh,
-	},
+	species::common::{nodes as humanoid, EyeMesh, HairMesh},
 };
 use lod::gen::LodSceneLevel;
 
@@ -96,43 +91,5 @@ impl CharacterComponents for Kaller {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl KallerConfig {
-	/// Semantic layer: the root [`Kaller`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let kaller = Kaller::from_config(self);
-		bsn! { template_value(kaller) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = KallerAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &KallerColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::Mouth => colors.snout.color(),
-		CharacterPartSlot::Horns => colors.crown.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		_ => colors.plumage.color(),
 	}
 }

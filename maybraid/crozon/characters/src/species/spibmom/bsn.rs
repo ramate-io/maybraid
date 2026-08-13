@@ -1,27 +1,22 @@
-//! BSN scenes for Spibmom.
+//! LodScene recipe for Spibmom.
 //!
-//! `data_scene()` carries the semantic [`Spibmom`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Spibmom`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`SpibmomConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{SpibmomAssets, SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh},
+	assets::{SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh},
 	pose::SpibmomPose,
 	SpibmomColors, SpibmomConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, EyeMesh, HairMesh, EAR_ROUND,
-	},
+	species::common::{nodes as humanoid, EyeMesh, HairMesh, EAR_ROUND},
 };
 use lod::gen::LodSceneLevel;
 
@@ -150,46 +145,5 @@ impl CharacterComponents for Spibmom {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl SpibmomConfig {
-	/// Semantic layer: the root [`Spibmom`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let spibmom = Spibmom::from_config(self);
-		bsn! { template_value(spibmom) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = SpibmomAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &SpibmomColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::Horns => colors.crown.color(),
-		CharacterPartSlot::Spine => colors.spine.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears.color(),
-		CharacterPartSlot::Mouth => colors.mouth.color(),
-		CharacterPartSlot::Hair => colors.hair.color(),
-		_ => colors.skin.color(),
 	}
 }

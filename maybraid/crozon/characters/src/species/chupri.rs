@@ -11,16 +11,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::ChupriAssets;
 
 pub use assets::{ChupriBeakMesh, ChupriHeadMesh};
 pub use palette::{ChupriBeakColor, ChupriEyeColor, ChupriPlumageColor};
@@ -128,15 +123,5 @@ impl CharacterRecipe for ChupriConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for ChupriConfig {
-	fn species_name(&self) -> &'static str {
-		"chupri"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ChupriAssets::resolve(self)
 	}
 }

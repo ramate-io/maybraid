@@ -1,20 +1,15 @@
-//! BSN scenes for Sonyak.
+//! LodScene recipe for Sonyak.
 //!
-//! `data_scene()` carries the semantic [`Sonyak`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Sonyak`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`SonyakConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{SonyakAssets, EYE_THORN},
-	pose::SonyakPose,
-	sliders::SonyakSliders,
-	SonyakColors, SonyakConfig,
+	assets::EYE_THORN, pose::SonyakPose, sliders::SonyakSliders, SonyakColors, SonyakConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
@@ -22,10 +17,7 @@ use crate::{
 	presets::{BuildPreset, GenderPreset},
 	socket::{RigId, SocketRef},
 	species::{
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, HairMesh, TAIL_CAT,
-		},
+		common::{nodes as humanoid, HairMesh, TAIL_CAT},
 		sonyak::assets::{SonyakBodyMesh, SonyakHeadMesh, SonyakMouthMesh},
 	},
 };
@@ -129,53 +121,6 @@ impl CharacterComponents for Sonyak {
 		out.extend_labeled("features", features);
 		out
 	}
-}
-
-impl SonyakConfig {
-	/// Semantic layer: the root [`Sonyak`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let sonyak = Sonyak::from_config(self);
-		bsn! { template_value(sonyak) }
-	}
-
-	/// Visual layer: body/head rigs plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = SonyakAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &SonyakColors, part: &ResolvedCharacterPart) -> Color {
-	let item = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::Hair => colors.hair,
-		CharacterPartSlot::Tail => colors.tail,
-		CharacterPartSlot::BodyMesh => colors.body,
-		_ => colors.body,
-	};
-	item.color()
 }
 
 const _: SonyakBodyMesh = SonyakBodyMesh::Gumbus;

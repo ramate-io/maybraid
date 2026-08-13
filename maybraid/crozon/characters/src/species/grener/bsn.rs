@@ -1,27 +1,20 @@
-//! BSN scenes for Grener.
+//! LodScene recipe for Grener.
 //!
-//! `data_scene()` carries the semantic [`Grener`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Grener`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`GrenerConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::GrenerAssets,
 	pose::{GrenerPose, GRENER_OVERALL_SCALE},
 	GrenerColors, GrenerConfig,
 };
 use crate::{
-	assembly::ResolvedCharacterPart,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, BODY_SHARK,
-	},
+	species::common::{nodes as humanoid, BODY_SHARK},
 };
 use lod::gen::LodSceneLevel;
 
@@ -55,34 +48,4 @@ impl CharacterComponents for Grener {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		Layers::from_labeled("body", vec![humanoid::body_part("shark", BODY_SHARK.as_str())])
 	}
-}
-
-impl GrenerConfig {
-	pub fn data_scene(&self) -> impl Scene {
-		let grener = Grener::from_config(self);
-		bsn! { template_value(grener) }
-	}
-
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = GrenerAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &GrenerColors, _part: &ResolvedCharacterPart) -> Color {
-	colors.body.color()
 }

@@ -11,11 +11,9 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
-use assets::SonyakAssets;
 use crozon_character_items::ItemColor;
 use sliders::SonyakSliders;
 
@@ -132,15 +130,5 @@ impl CharacterRecipe for SonyakConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for SonyakConfig {
-	fn species_name(&self) -> &'static str {
-		"sonyak"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		SonyakAssets::resolve(self)
 	}
 }

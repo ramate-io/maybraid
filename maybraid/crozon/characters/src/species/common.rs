@@ -1,7 +1,6 @@
 //! Shared humanoid asset catalog used by multiple species.
 
 pub mod assets;
-pub mod bsn;
 pub mod nodes;
 
 pub use assets::{

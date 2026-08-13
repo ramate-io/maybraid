@@ -1,15 +1,13 @@
-//! BSN scenes for Hars.
+//! LodScene recipe for Hars.
 //!
-//! `data_scene()` carries the semantic [`Hars`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Hars`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`HarsConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{assets::HarsAssets, pose::HarsPose, sliders::HarsSliders, HarsColors, HarsConfig};
+use super::{pose::HarsPose, sliders::HarsSliders, HarsColors, HarsConfig};
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
@@ -17,10 +15,7 @@ use crate::{
 	presets::{BuildPreset, GenderPreset},
 	socket::RigId,
 	species::{
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT,
-		},
+		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT},
 		hars::assets::{HarsBodyMesh, HarsHeadMesh, HarsMouthMesh},
 	},
 };
@@ -152,53 +147,6 @@ impl CharacterComponents for Hars {
 		);
 		out
 	}
-}
-
-impl HarsConfig {
-	/// Semantic layer: the root [`Hars`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let hars = Hars::from_config(self);
-		bsn! { template_value(hars) }
-	}
-
-	/// Visual layer: body/neck/head rigs plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = HarsAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &HarsColors, part: &ResolvedCharacterPart) -> Color {
-	let item = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::Tail => colors.tail,
-		CharacterPartSlot::BodyMesh => colors.body,
-		_ => colors.body,
-	};
-	item.color()
 }
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.

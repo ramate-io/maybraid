@@ -13,12 +13,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::HarsAssets;
 use crozon_character_items::ItemColor;
 use sliders::HarsSliders;
 
@@ -140,15 +138,5 @@ impl CharacterRecipe for HarsConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for HarsConfig {
-	fn species_name(&self) -> &'static str {
-		"hars"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		HarsAssets::resolve(self)
 	}
 }

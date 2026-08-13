@@ -11,12 +11,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::CaoleAssets;
 use crozon_character_items::ItemColor;
 use sliders::CaoleSliders;
 
@@ -141,15 +139,5 @@ impl CharacterRecipe for CaoleConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for CaoleConfig {
-	fn species_name(&self) -> &'static str {
-		"caole"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		CaoleAssets::resolve(self)
 	}
 }

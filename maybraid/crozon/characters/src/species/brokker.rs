@@ -10,16 +10,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::BrokkerAssets;
 
 pub use assets::{BrokkerHeadMesh, BrokkerSnoutMesh};
 pub use palette::{BrokkerEyeColor, BrokkerPlumageColor, BrokkerSnoutColor};
@@ -123,15 +118,5 @@ impl CharacterRecipe for BrokkerConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for BrokkerConfig {
-	fn species_name(&self) -> &'static str {
-		"brokker"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BrokkerAssets::resolve(self)
 	}
 }

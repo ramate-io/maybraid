@@ -11,11 +11,9 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
-use assets::YilterAssets;
 use crozon_character_items::ItemColor;
 use sliders::YilterSliders;
 
@@ -133,15 +131,5 @@ impl CharacterRecipe for YilterConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for YilterConfig {
-	fn species_name(&self) -> &'static str {
-		"ylter"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		YilterAssets::resolve(self)
 	}
 }

@@ -1,24 +1,18 @@
-//! BSN scenes for Braidman.
+//! LodScene recipe for Braidman.
 //!
-//! `data_scene()` carries the semantic [`Braidman`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Braidman`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`BraidmanConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{
-	assets::BraidmanAssets, pose::BraidmanPose, sliders::BraidmanSliders, BraidmanColors,
-	BraidmanConfig,
-};
+use super::{pose::BraidmanPose, sliders::BraidmanSliders, BraidmanColors, BraidmanConfig};
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
 	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
 		nodes as humanoid, BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 	},
 };
@@ -105,54 +99,4 @@ impl CharacterComponents for Braidman {
 		out.extend_labeled("features", features);
 		out
 	}
-}
-
-impl BraidmanConfig {
-	/// Semantic layer: the root [`Braidman`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let braidman = Braidman::from_config(self);
-		bsn! { template_value(braidman) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = BraidmanAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &BraidmanColors, part: &ResolvedCharacterPart) -> Color {
-	let item = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh | CharacterPartSlot::Horns => {
-			colors.head
-		}
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::Nose => colors.nose,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears,
-		CharacterPartSlot::Hair => colors.hair,
-		_ => colors.body,
-	};
-	item.color()
 }

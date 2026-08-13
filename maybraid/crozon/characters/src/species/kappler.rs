@@ -10,16 +10,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::KapplerAssets;
 
 pub use assets::{KapplerBeakMesh, KapplerHeadMesh};
 pub use palette::{KapplerBeakColor, KapplerEyeColor, KapplerPlumageColor};
@@ -126,15 +121,5 @@ impl CharacterRecipe for KapplerConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for KapplerConfig {
-	fn species_name(&self) -> &'static str {
-		"kappler"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		KapplerAssets::resolve(self)
 	}
 }

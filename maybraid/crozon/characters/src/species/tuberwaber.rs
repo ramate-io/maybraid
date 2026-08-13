@@ -13,12 +13,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
-use assets::TuberwaberAssets;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::TuberwaberSliders;
 
@@ -181,15 +179,5 @@ impl CharacterRecipe for TuberwaberConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for TuberwaberConfig {
-	fn species_name(&self) -> &'static str {
-		"tuberwaber"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TuberwaberAssets::resolve(self)
 	}
 }

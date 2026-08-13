@@ -9,16 +9,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::MygrAssets;
 
 pub use assets::{MygrHeadMesh, MygrMouthMesh};
 pub use palette::{MygrEyeColor, MygrSkinColor};
@@ -122,15 +117,5 @@ impl CharacterRecipe for MygrConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for MygrConfig {
-	fn species_name(&self) -> &'static str {
-		"mygr"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		MygrAssets::resolve(self)
 	}
 }

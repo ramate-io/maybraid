@@ -1,27 +1,22 @@
-//! BSN scenes for Tipple.
+//! LodScene recipe for Tipple.
 //!
-//! `data_scene()` carries the semantic [`Tipple`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Tipple`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`TippleConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{TippleAssets, TippleBeakMesh, TippleHeadMesh},
+	assets::{TippleBeakMesh, TippleHeadMesh},
 	pose::{TipplePose, TIPPLE_OVERALL_SCALE},
 	TippleColors, TippleConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, EyeMesh, HairMesh,
-	},
+	species::common::{nodes as humanoid, EyeMesh, HairMesh},
 };
 use lod::gen::LodSceneLevel;
 
@@ -98,43 +93,5 @@ impl CharacterComponents for Tipple {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl TippleConfig {
-	/// Semantic layer: the root [`Tipple`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let tipple = Tipple::from_config(self);
-		bsn! { template_value(tipple) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = TippleAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &TippleColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::Mouth => colors.beak.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		// Body, head, and plumage-tinted crest.
-		_ => colors.plumage.color(),
 	}
 }

@@ -9,17 +9,12 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use clap::ValueEnum;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::BrodlerAssets;
 
 pub use assets::HornMesh;
 pub use palette::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor};
@@ -167,15 +162,5 @@ impl CharacterRecipe for BrodlerConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for BrodlerConfig {
-	fn species_name(&self) -> &'static str {
-		"brodler"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BrodlerAssets::resolve(self)
 	}
 }

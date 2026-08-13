@@ -4,7 +4,6 @@
 //! species-owned assets, baseline proportions, presets, and slider resolution
 //! before the full Braidman matrix is implemented.
 
-pub mod assets;
 pub mod bsn;
 pub mod pose;
 pub mod presets;
@@ -12,12 +11,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
-use assets::BraidmanAssets;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::BraidmanSliders;
 
@@ -185,15 +182,5 @@ impl CharacterRecipe for BraidmanConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for BraidmanConfig {
-	fn species_name(&self) -> &'static str {
-		"braidman"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BraidmanAssets::resolve(self)
 	}
 }

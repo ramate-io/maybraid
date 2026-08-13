@@ -13,12 +13,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::ClaberAssets;
 use sliders::ClaberSliders;
 
 pub use assets::{ClaberBodyMesh, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh};
@@ -143,15 +141,5 @@ impl CharacterRecipe for ClaberConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for ClaberConfig {
-	fn species_name(&self) -> &'static str {
-		"claber"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ClaberAssets::resolve(self)
 	}
 }

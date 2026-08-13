@@ -11,12 +11,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::BrenalAssets;
 use crozon_character_items::ItemColor;
 use sliders::BrenalSliders;
 
@@ -141,15 +139,5 @@ impl CharacterRecipe for BrenalConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for BrenalConfig {
-	fn species_name(&self) -> &'static str {
-		"brenal"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BrenalAssets::resolve(self)
 	}
 }

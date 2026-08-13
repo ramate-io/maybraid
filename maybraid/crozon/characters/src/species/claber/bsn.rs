@@ -1,20 +1,18 @@
-//! BSN scenes for Claber.
+//! LodScene recipe for Claber.
 //!
-//! `data_scene()` carries the semantic [`Claber`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Claber`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`ClaberConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{ClaberAssets, CROWN_SCALE, SNOUT_XY_SCALE, SNOUT_Z_SCALE},
+	assets::{CROWN_SCALE, SNOUT_XY_SCALE, SNOUT_Z_SCALE},
 	pose::ClaberPose,
 	sliders::ClaberSliders,
 	ClaberColors, ClaberConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
@@ -23,10 +21,7 @@ use crate::{
 	socket::{RigId, SocketRef},
 	species::{
 		claber::assets::{ClaberBodyMesh, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_LERODON_QUADRUPED,
-		},
+		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_LERODON_QUADRUPED},
 	},
 };
 use lod::gen::LodSceneLevel;
@@ -174,54 +169,6 @@ impl CharacterComponents for Claber {
 		out.extend_labeled("features", features);
 		out
 	}
-}
-
-impl ClaberConfig {
-	/// Semantic layer: the root [`Claber`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let claber = Claber::from_config(self);
-		bsn! { template_value(claber) }
-	}
-
-	/// Visual layer: body/head rigs plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = ClaberAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &ClaberColors, part: &ResolvedCharacterPart) -> Color {
-	let tone = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::Horns => colors.horns,
-		CharacterPartSlot::Tail => colors.tail,
-		CharacterPartSlot::BodyMesh => colors.body,
-		_ => colors.body,
-	};
-	tone.color()
 }
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.

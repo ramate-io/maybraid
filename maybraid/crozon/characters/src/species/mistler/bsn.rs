@@ -1,27 +1,20 @@
-//! BSN scenes for Mistler.
+//! LodScene recipe for Mistler.
 //!
-//! `data_scene()` carries the semantic [`Mistler`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Mistler`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`MistlerConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::MistlerAssets,
 	pose::{MistlerPose, MISTLER_OVERALL_SCALE},
 	MistlerColors, MistlerConfig,
 };
 use crate::{
-	assembly::ResolvedCharacterPart,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, BODY_SPRITE_FISH,
-	},
+	species::common::{nodes as humanoid, BODY_SPRITE_FISH},
 };
 use lod::gen::LodSceneLevel;
 
@@ -58,34 +51,4 @@ impl CharacterComponents for Mistler {
 			vec![humanoid::body_part("sprite-fish", BODY_SPRITE_FISH.as_str())],
 		)
 	}
-}
-
-impl MistlerConfig {
-	pub fn data_scene(&self) -> impl Scene {
-		let mistler = Mistler::from_config(self);
-		bsn! { template_value(mistler) }
-	}
-
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = MistlerAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &MistlerColors, _part: &ResolvedCharacterPart) -> Color {
-	colors.body.color()
 }

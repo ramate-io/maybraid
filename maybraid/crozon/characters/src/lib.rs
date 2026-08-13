@@ -1,13 +1,9 @@
 //! Reusable Crozon character definitions.
 //!
-//! This crate owns the data model that sits between a character creation input
-//! surface and any concrete Bevy preview. Commands and future UI should resolve
-//! into these types first, then a playground or game runtime can decide how to
-//! spawn, skin, animate, and inspect the resulting assembly.
-//!
-//! Species that implement [`CharacterComponents`] present as nested [`lod::LodScene`]
-//! hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with sockets and skinning
-//! as deferred refs parallel to [`scene_ref::SceneRef`].
+//! [`CharacterComponents`] is the character recipe: species configs produce nested
+//! [`lod::LodScene`] hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with
+//! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
+//! Live pose, animation, and preview colors are ECS mutation, not LOD refresh.
 
 pub mod assembly;
 pub mod assets;
@@ -24,10 +20,7 @@ pub mod skin;
 pub mod socket;
 pub mod species;
 
-pub use assembly::{
-	CharacterAsset, CharacterPartSlot, ResolvedCharacterAssembly, ResolvedCharacterPart, RigAsset,
-	SkinTarget, SocketAttachment, SocketRig,
-};
+pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
 	character_bounds, clothing_layers, spawn_character_components, CharacterComponents,

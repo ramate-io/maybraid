@@ -1,27 +1,22 @@
-//! BSN scenes for Lero.
+//! LodScene recipe for Lero.
 //!
-//! `data_scene()` carries the semantic [`Lero`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Lero`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`LeroConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{LeroAssets, LeroHeadMesh, LeroMouthMesh},
+	assets::{LeroHeadMesh, LeroMouthMesh},
 	pose::LeroPose,
 	LeroColors, LeroConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, HairMesh, BODY_FULL, EYE_STANDARD, TAIL_LERODON,
-	},
+	species::common::{nodes as humanoid, HairMesh, BODY_FULL, EYE_STANDARD, TAIL_LERODON},
 };
 use lod::gen::LodSceneLevel;
 
@@ -113,45 +108,5 @@ impl CharacterComponents for Lero {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl LeroConfig {
-	/// Semantic layer: the root [`Lero`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let lero = Lero::from_config(self);
-		bsn! { template_value(lero) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = LeroAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &LeroColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::Mouth => colors.mouth.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		CharacterPartSlot::Tail => colors.tail.color(),
-		CharacterPartSlot::Spine => colors.spine.color(),
-		CharacterPartSlot::Hair => colors.hair.color(),
-		_ => colors.skin.color(),
 	}
 }

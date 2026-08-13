@@ -1,27 +1,22 @@
-//! BSN scenes for Dui.
+//! LodScene recipe for Dui.
 //!
-//! `data_scene()` carries the semantic [`Dui`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Dui`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`DuiConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{DuiAssets, DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh},
+	assets::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh},
 	pose::DuiPose,
 	DuiColors, DuiConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{
-		bsn::{self as common_bsn, WithBaseColor},
-		nodes as humanoid, HairMesh,
-	},
+	species::common::{nodes as humanoid, HairMesh},
 };
 use lod::gen::LodSceneLevel;
 
@@ -113,44 +108,5 @@ impl CharacterComponents for Dui {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl DuiConfig {
-	/// Semantic layer: the root [`Dui`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let dui = Dui::from_config(self);
-		bsn! { template_value(dui) }
-	}
-
-	/// Visual layer: body rig plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = DuiAssets::resolve(self);
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			|part| part.asset.normalization.transform(),
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	/// Full character: semantic root with the visual hierarchy underneath.
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &DuiColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::Nose => colors.nose_color.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		CharacterPartSlot::Mouth => colors.mouth.color(),
-		CharacterPartSlot::Hair => colors.hair.color(),
-		_ => colors.skin.color(),
 	}
 }

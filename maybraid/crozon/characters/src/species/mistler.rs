@@ -3,16 +3,11 @@
 //! Sprite fish on the forelimbed rig (~1 ft). Authoring body length is ~2 m, so
 //! overall scale is ~0.15× via body-rig asset normalization.
 
-pub mod assets;
 pub mod bsn;
 pub mod palette;
 pub mod pose;
 
-use crate::{
-	species::SpeciesConfig, CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
-};
-
-use assets::MistlerAssets;
+use crate::{CharacterRecipe, Clothed, ClothingLayer};
 
 pub use palette::MistlerBodyColor;
 
@@ -66,15 +61,5 @@ impl CharacterRecipe for MistlerConfig {
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
 		Vec::new()
-	}
-}
-
-impl SpeciesConfig for MistlerConfig {
-	fn species_name(&self) -> &'static str {
-		"mistler"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		MistlerAssets::resolve(self)
 	}
 }

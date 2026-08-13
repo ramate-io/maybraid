@@ -10,16 +10,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::ToppleAssets;
 
 pub use assets::{ToppleBeakMesh, ToppleHeadMesh};
 pub use palette::{ToppleBeakColor, ToppleEyeColor, TopplePlumageColor};
@@ -126,15 +121,5 @@ impl CharacterRecipe for ToppleConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for ToppleConfig {
-	fn species_name(&self) -> &'static str {
-		"topple"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ToppleAssets::resolve(self)
 	}
 }

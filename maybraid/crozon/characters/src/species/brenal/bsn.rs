@@ -1,17 +1,13 @@
-//! BSN scenes for Brenal.
+//! LodScene recipe for Brenal.
 //!
-//! `data_scene()` carries the semantic [`Brenal`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Brenal`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`BrenalConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{
-	assets::BrenalAssets, pose::BrenalPose, sliders::BrenalSliders, BrenalColors, BrenalConfig,
-};
+use super::{pose::BrenalPose, sliders::BrenalSliders, BrenalColors, BrenalConfig};
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
@@ -20,10 +16,7 @@ use crate::{
 	socket::RigId,
 	species::{
 		brenal::assets::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT,
-		},
+		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT},
 	},
 };
 use lod::gen::LodSceneLevel;
@@ -158,54 +151,6 @@ impl CharacterComponents for Brenal {
 		out.extend_labeled("features", features);
 		out
 	}
-}
-
-impl BrenalConfig {
-	/// Semantic layer: the root [`Brenal`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let brenal = Brenal::from_config(self);
-		bsn! { template_value(brenal) }
-	}
-
-	/// Visual layer: body/head rigs plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = BrenalAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &BrenalColors, part: &ResolvedCharacterPart) -> Color {
-	let item = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::Horns => colors.horns,
-		CharacterPartSlot::Tail => colors.tail,
-		CharacterPartSlot::BodyMesh => colors.body,
-		_ => colors.body,
-	};
-	item.color()
 }
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.

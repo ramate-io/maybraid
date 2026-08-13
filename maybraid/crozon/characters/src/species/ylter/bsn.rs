@@ -1,20 +1,15 @@
-//! BSN scenes for Yilter.
+//! LodScene recipe for Yilter.
 //!
-//! `data_scene()` carries the semantic [`Yilter`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Yilter`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`YilterConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use super::{
-	assets::{YilterAssets, EYE_THORN},
-	pose::YilterPose,
-	sliders::YilterSliders,
-	YilterColors, YilterConfig,
+	assets::EYE_THORN, pose::YilterPose, sliders::YilterSliders, YilterColors, YilterConfig,
 };
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
@@ -22,10 +17,7 @@ use crate::{
 	presets::{BuildPreset, GenderPreset},
 	socket::{RigId, SocketRef},
 	species::{
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, TAIL_CAT,
-		},
+		common::{nodes as humanoid, TAIL_CAT},
 		ylter::assets::{YilterBodyMesh, YilterHeadMesh, YilterMouthMesh},
 	},
 };
@@ -136,53 +128,6 @@ impl CharacterComponents for Yilter {
 		);
 		out
 	}
-}
-
-impl YilterConfig {
-	/// Semantic layer: the root [`Yilter`] component only.
-	pub fn data_scene(&self) -> impl Scene {
-		let ylter = Yilter::from_config(self);
-		bsn! { template_value(ylter) }
-	}
-
-	/// Visual layer: body/neck/head rigs plus resolved parts, colored for material family `M`.
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = YilterAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &YilterColors, part: &ResolvedCharacterPart) -> Color {
-	let item = match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
-		CharacterPartSlot::Mouth => colors.mouth,
-		CharacterPartSlot::Tail => colors.tail,
-		CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => colors.neck,
-		CharacterPartSlot::BodyMesh => colors.body,
-		_ => colors.body,
-	};
-	item.color()
 }
 
 const _: YilterBodyMesh = YilterBodyMesh::Rumbler;

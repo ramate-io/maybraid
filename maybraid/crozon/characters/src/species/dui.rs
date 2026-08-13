@@ -8,14 +8,9 @@ pub mod bsn;
 pub mod palette;
 pub mod pose;
 
-use crate::{
-	species::{common::HairMesh, SpeciesConfig},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
-};
+use crate::{species::common::HairMesh, CharacterRecipe, Clothed, ClothingLayer};
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::DuiAssets;
 
 pub use assets::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh};
 pub use palette::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor};
@@ -120,15 +115,5 @@ impl CharacterRecipe for DuiConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for DuiConfig {
-	fn species_name(&self) -> &'static str {
-		"dui"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		DuiAssets::resolve(self)
 	}
 }

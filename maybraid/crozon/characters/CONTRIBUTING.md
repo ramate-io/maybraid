@@ -5,13 +5,13 @@
 ## Adding a new species
 
 A species is a self-contained module under `src/species/` that owns its config,
-baseline pose, asset resolver, and color `enums`. Shared mesh catalogs (body, eye,
+baseline pose, LodScene recipe, and color `enums`. Shared mesh catalogs (body, eye,
 hair, clothing, etc.) live in `src/species/common/assets.rs`; species-specific
 meshes and swatches stay in the species module.
 
-Use **`Brodler`** as the template for a fixed-silhouette species (config + assets
-+ pose, no user sliders). Use **`Braidman`** when the species needs gender/build
-presets and rig or feature sliders.
+Use **`Brodler`** as the template for a fixed-silhouette species (config + catalog
+enums + pose, no user sliders). Use **`Braidman`** when the species needs
+gender/build presets and rig or feature sliders.
 
 Orthograde humanoid species that share the standard head-rig sockets should
 implement [`CharacterComponents`](src/components.rs) with builders in
@@ -25,10 +25,8 @@ host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once.
 
-The playground spawn path is LodScene (`Config::clothed()`). Keep
-`*Assets::resolve()` / `visual_scene()` until a species has been visually
-reviewed against that recipe; do not add new callers of the assembly spawn
-path.
+The playground spawn path is LodScene (`Config::clothed()`).
+[`CharacterComponents`](src/components.rs) is the only character recipe.
 
 ### 1. `crozon-characters` (this crate)
 
@@ -36,18 +34,19 @@ path.
    - `*Config` and `*Colors` structs
    - species-local `enums` (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
      and `color()` where needed
-   - `impl SpeciesConfig for *Config` calling `*Assets::resolve(self)`
-2. Create `src/species/<name>/assets.rs`:
-   - `*Assets::resolve()` building a [`ResolvedCharacterAssembly`](src/assembly.rs)
-   - socket attachments for head features; omit parts the species does not use
-     (for example `Mygr` has no nose)
-3. Create `src/species/<name>/pose.rs` when the species has a fixed baseline:
+   - `impl CharacterRecipe for *Config` plus `clothed()`
+2. Create `src/species/<name>/bsn.rs` with the inner [`CharacterComponents`](src/components.rs)
+   recipe (`rig_nodes_for_level` / `part_nodes_for_level`).
+3. Create `src/species/<name>/assets.rs` when the species has a local mesh catalog:
+   - mesh `enums` with `VALUES`, `label()`, and `path()`
+   - omit parts the species does not use (for example `Mygr` has no nose)
+4. Create `src/species/<name>/pose.rs` when the species has a fixed baseline:
    - compose [`RigPoseLayer`](../rigs/src/pose.rs) scales via
      `BraidmanSliders::apply_*` helpers for leg length, thigh thickness, etc.
-4. Register the module in [`src/species.rs`](src/species.rs).
-5. Add shared asset paths to [`src/species/common/assets.rs`](src/species/common/assets.rs)
+5. Register the module in [`src/species.rs`](src/species.rs).
+6. Add shared asset paths to [`src/species/common/assets.rs`](src/species/common/assets.rs)
    when a mesh may be reused across species.
-6. Wire menu traits in [`src/menu_traits.rs`](src/menu_traits.rs):
+7. Wire menu traits in [`src/menu_traits.rs`](src/menu_traits.rs):
    - `impl_menu_identity!` for list/cycle `enums`
    - `impl_asset_option!` for thumbnail meshes
    - `SwatchOption` for species color `enums`
@@ -99,17 +98,17 @@ CROZON_PREVIEW_DEBUG=1 crozon-concepts hars preview
 
 ### Socketing, scale, and shear
 
-Parts attach with [`SocketAttachment`](src/assembly.rs): a `ChildOf(bone)` plus a
+Parts attach with [`SocketRef`](src/socket.rs): a `ChildOf(bone)` plus a
 local `Transform`. Bevy propagates the full parent affine, so **non-uniform scale
 on an ancestor combined with rotation on or under that socket shears** the
 attached mesh. Intermediate bones do not fix this if the part remains a transform
 child of the scaled chain.
 
-Nested armatures use [`SocketRig::Neck`](src/assembly.rs) /
+Nested armatures use [`RigId::Neck`](src/socket.rs) /
 [`CharacterPartSlot::NeckRig`](src/assembly.rs) (+ optional `NeckMesh`):
 
 1. Socket the neck OwnRig to the body `head_socket`.
-2. Apply **pitch** (and optional **uniform** scale) via [`ResolvedCharacterPart::pose`].
+2. Apply **pitch** (and optional **uniform** scale) via the neck [`RigNode`](src/nodes/rig_node.rs) pose.
 3. Socket the head to the neck tip `head_socket` (counter-pitch on the tip bone).
 
 With a dedicated neck armature/mesh, **prefer authored length + pitch + uniform

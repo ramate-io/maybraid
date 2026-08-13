@@ -1,28 +1,20 @@
-//! BSN scenes for Tuberwaber.
+//! LodScene recipe for Tuberwaber.
 //!
-//! `data_scene()` carries the semantic [`Tuberwaber`] root component (including
-//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
-//! layers the two for higher-order consumers.
+//! [`Tuberwaber`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`TuberwaberConfig::clothed`].
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{
-	assets::TuberwaberAssets, pose::TuberwaberPose, sliders::TuberwaberSliders, TuberwaberColors,
-	TuberwaberConfig,
-};
+use super::{pose::TuberwaberPose, sliders::TuberwaberSliders, TuberwaberColors, TuberwaberConfig};
 use crate::{
-	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			nodes as humanoid, EyeMesh, HairMesh, MouthMesh, NoseMesh, HORNS_HARROWED_CROWN,
-		},
+		common::{nodes as humanoid, EyeMesh, HairMesh, MouthMesh, NoseMesh, HORNS_HARROWED_CROWN},
 		tuberwaber::assets::{TuberwaberBodyMesh, TuberwaberHeadMesh},
 	},
 };
@@ -151,50 +143,6 @@ impl CharacterComponents for Tuberwaber {
 		}
 		out.extend_labeled("features", features);
 		out
-	}
-}
-
-impl TuberwaberConfig {
-	pub fn data_scene(&self) -> impl Scene {
-		let tuberwaber = Tuberwaber::from_config(self);
-		bsn! { template_value(tuberwaber) }
-	}
-
-	pub fn visual_scene<M: WithBaseColor>(&self) -> impl Scene {
-		let assembly = TuberwaberAssets::resolve(self);
-		let sliders = self.sliders.clamped();
-		let colors = self.colors.clone();
-		common_bsn::assembly_visual_scene::<M>(
-			&assembly,
-			move |part| {
-				part.asset
-					.normalization
-					.transform()
-					.mul_transform(sliders.feature_transform(part.slot))
-			},
-			move |part| part_color(&colors, part),
-		)
-	}
-
-	pub fn scene<M: WithBaseColor>(&self) -> impl Scene {
-		let data = self.data_scene();
-		let visual = self.visual_scene::<M>();
-		bsn! {
-			{data}
-			Children [ ({visual}) ]
-		}
-	}
-}
-
-fn part_color(colors: &TuberwaberColors, part: &ResolvedCharacterPart) -> Color {
-	match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head.color(),
-		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
-		CharacterPartSlot::Nose => colors.nose.color(),
-		CharacterPartSlot::Mouth => colors.mouth.color(),
-		CharacterPartSlot::Horns => colors.horns.color(),
-		CharacterPartSlot::Hair => colors.hair.color(),
-		_ => colors.body.color(),
 	}
 }
 

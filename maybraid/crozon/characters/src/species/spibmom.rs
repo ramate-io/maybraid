@@ -9,16 +9,11 @@ pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, Clothed, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::SpibmomAssets;
 
 pub use assets::{SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh};
 pub use palette::{
@@ -135,15 +130,5 @@ impl CharacterRecipe for SpibmomConfig {
 		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
-	}
-}
-
-impl SpeciesConfig for SpibmomConfig {
-	fn species_name(&self) -> &'static str {
-		"spibmom"
-	}
-
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		SpibmomAssets::resolve(self)
 	}
 }

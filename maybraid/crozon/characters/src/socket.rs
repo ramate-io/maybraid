@@ -6,7 +6,6 @@
 
 use bevy::prelude::*;
 
-use crate::assembly::SocketRig;
 use crate::rig::{BoneMap, CharacterRig, CharacterRigRole, LodCharacterRig};
 
 /// Semantic rig identity used at scene-build time (entities do not exist yet).
@@ -24,26 +23,6 @@ impl RigId {
 			Self::Body => CharacterRigRole::Body,
 			Self::Neck => CharacterRigRole::Neck,
 			Self::Head => CharacterRigRole::Head,
-		}
-	}
-}
-
-impl From<SocketRig> for RigId {
-	fn from(rig: SocketRig) -> Self {
-		match rig {
-			SocketRig::Body => Self::Body,
-			SocketRig::Neck => Self::Neck,
-			SocketRig::Head => Self::Head,
-		}
-	}
-}
-
-impl From<RigId> for SocketRig {
-	fn from(id: RigId) -> Self {
-		match id {
-			RigId::Body => Self::Body,
-			RigId::Neck => Self::Neck,
-			RigId::Head => Self::Head,
 		}
 	}
 }
