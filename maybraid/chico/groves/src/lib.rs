@@ -103,7 +103,13 @@ pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 #[cfg(feature = "render")]
+pub use dryland::{Dryland, DrylandParams};
+#[cfg(feature = "render")]
 pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};
+#[cfg(feature = "render")]
+pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
+#[cfg(feature = "render")]
+pub use leeward::{Leeward, LeewardParams};
 #[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
 #[cfg(feature = "render")]
@@ -116,6 +122,8 @@ pub use rolling_oaks::{RollingOaks, RollingOaksParams};
 pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
+#[cfg(feature = "render")]
+pub use vineyard::{Vineyard, VineyardParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
 pub use palm_shade::{PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm};
 pub use riparian_general::{

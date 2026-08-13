@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	ForlornSavannaParams, GroveExtent, LevantineScrubParams, MonsterGrassParams, OrchardParams,
-	RiparianGeneralParams, RollingOaksParams, StrangeOasisParams, TropicalThicketParams,
+	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent, LeewardParams,
+	LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
+	RollingOaksParams, StrangeOasisParams, TropicalThicketParams, VineyardParams,
 	DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
@@ -79,6 +80,14 @@ pub enum Show {
 	RiparianGeneral(ShowRiparianGeneral),
 	/// Forlorn Savanna grove via VegetationComponents / LodScene.
 	ForlornSavanna(ShowForlornSavanna),
+	/// Göttingen Follow grove via VegetationComponents / LodScene.
+	GoettingenFollow(ShowGoettingenFollow),
+	/// Vineyard grove via VegetationComponents / LodScene.
+	Vineyard(ShowVineyard),
+	/// Dryland grove via VegetationComponents / LodScene.
+	Dryland(ShowDryland),
+	/// Leeward grove via VegetationComponents / LodScene.
+	Leeward(ShowLeeward),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
 }
@@ -377,6 +386,91 @@ impl ShowForlornSavanna {
 	}
 }
 
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowGoettingenFollow {
+	#[command(flatten)]
+	pub grove: GoettingenFollowParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowGoettingenFollow {
+	fn configured(self) -> GoettingenFollowParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowVineyard {
+	#[command(flatten)]
+	pub grove: VineyardParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowVineyard {
+	fn configured(self) -> VineyardParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowDryland {
+	#[command(flatten)]
+	pub grove: DrylandParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowDryland {
+	fn configured(self) -> DrylandParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowLeeward {
+	#[command(flatten)]
+	pub grove: LeewardParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowLeeward {
+	fn configured(self) -> LeewardParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowHighBushShoots {
@@ -414,6 +508,10 @@ impl Show {
 			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
 			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
 			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
+			Self::GoettingenFollow(args) => ShowSubject::GoettingenFollow(args.configured()),
+			Self::Vineyard(args) => ShowSubject::Vineyard(args.configured()),
+			Self::Dryland(args) => ShowSubject::Dryland(args.configured()),
+			Self::Leeward(args) => ShowSubject::Leeward(args.configured()),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
@@ -454,6 +552,10 @@ pub enum ShowSubject {
 	Orchard(OrchardParams),
 	RiparianGeneral(RiparianGeneralParams),
 	ForlornSavanna(ForlornSavannaParams),
+	GoettingenFollow(GoettingenFollowParams),
+	Vineyard(VineyardParams),
+	Dryland(DrylandParams),
+	Leeward(LeewardParams),
 	HighBushShoots(HighBushShootsParams),
 }
 
@@ -597,6 +699,30 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::GoettingenFollow(g)) => Some(format!(
+			"goettingen-follow:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Vineyard(g)) => Some(format!(
+			"vineyard:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Dryland(g)) => Some(format!(
+			"dryland:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::Leeward(g)) => Some(format!(
+			"leeward:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
@@ -646,6 +772,10 @@ pub fn sync_show(
 		ShowSubject::Orchard(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::RiparianGeneral(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::ForlornSavanna(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::GoettingenFollow(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Vineyard(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Dryland(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::Leeward(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
@@ -693,6 +823,10 @@ mod tests {
 			"show orchard --grove-extent-xz 160",
 			"show riparian-general --grove-extent-xz 200",
 			"show forlorn-savanna --grove-extent-xz 300",
+			"show goettingen-follow --grove-extent-xz 39 --elevation 0.25",
+			"show vineyard --grove-extent-xz 90 --elevation 0.35",
+			"show dryland --grove-extent-xz 280",
+			"show leeward --grove-extent-xz 220",
 			"show high-bush-shoots",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
@@ -717,6 +851,18 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::ForlornSavanna(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::GoettingenFollow(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Vineyard(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Dryland(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::Leeward(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {

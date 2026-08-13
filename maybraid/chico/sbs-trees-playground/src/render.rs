@@ -12,17 +12,15 @@ use chico_grove_render_items::common_tufts::CommonTuftsStd;
 use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
 use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
 use chico_grove_render_items::date_grove::DateGroveStd;
-use chico_grove_render_items::dryland::DrylandStd;
-use chico_grove_render_items::goettingen_follow::GoettingenFollowStd;
 use chico_grove_render_items::high_bush::HighBushStd;
 use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
 use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_grove_render_items::jungle_massives::JungleMassivesStd;
-use chico_grove_render_items::leeward::LeewardStd;
 use chico_grove_render_items::low_bush::LowBushStd;
 use chico_groves::{
-	ForlornSavannaParams, LevantineScrubParams, MonsterGrassParams, OrchardParams,
-	RiparianGeneralParams, RollingOaksParams, StrangeOasisParams, TropicalThicketParams,
+	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, LeewardParams,
+	LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
+	RollingOaksParams, StrangeOasisParams, TropicalThicketParams, VineyardParams,
 };
 use chico_grove_render_items::palm_shade::PalmShadeStd;
 use chico_grove_render_items::riparian_mix::RiparianMixStd;
@@ -37,7 +35,6 @@ use chico_grove_render_items::trade_winds::TradeWindsStd;
 use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
 use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_grove_render_items::unending_jungle::UnendingJungleStd;
-use chico_grove_render_items::vineyard::VineyardStd;
 use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
 use chico_grove_render_items::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
@@ -207,8 +204,8 @@ pub type RenderStrangeOasis = StrangeOasisParams;
 /// [`ShamanhomeStd`] — moderate sacred lower-canopy grove ([#324](https://github.com/ramate-io/maybraid/issues/324)).
 pub type RenderShamanhome = ShamanhomeStd;
 
-/// [`GoettingenFollowStd`] — low-density temperate follow-layer grove ([#325](https://github.com/ramate-io/maybraid/issues/325)).
-pub type RenderGoettingenFollow = GoettingenFollowStd;
+/// [`GoettingenFollowParams`] — low-density temperate follow-layer grove ([#325](https://github.com/ramate-io/maybraid/issues/325)).
+pub type RenderGoettingenFollow = GoettingenFollowParams;
 
 /// [`ConiferSaplingStd`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
 pub type RenderConiferSapling = ConiferSaplingStd;
@@ -234,8 +231,8 @@ pub type RenderRiparianMix = RiparianMixStd;
 /// [`AlpineStd`] — cold upland conifer upper-canopy grove ([#334](https://github.com/ramate-io/maybraid/issues/334)).
 pub type RenderAlpine = AlpineStd;
 
-/// [`DrylandStd`] — very-low-density arid upper-canopy grove ([#335](https://github.com/ramate-io/maybraid/issues/335)).
-pub type RenderDryland = DrylandStd;
+/// [`DrylandParams`] — very-low-density arid upper-canopy grove ([#335](https://github.com/ramate-io/maybraid/issues/335)).
+pub type RenderDryland = DrylandParams;
 
 /// [`StorytellersStd`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
 pub type RenderStorytellers = StorytellersStd;
@@ -246,8 +243,8 @@ pub type RenderTradeWinds = TradeWindsStd;
 /// [`WanderingAcaciaStd`] — very-low-density dry open upper-canopy grove ([#338](https://github.com/ramate-io/maybraid/issues/338)).
 pub type RenderWanderingAcacia = WanderingAcaciaStd;
 
-/// [`LeewardStd`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
-pub type RenderLeeward = LeewardStd;
+/// [`LeewardParams`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
+pub type RenderLeeward = LeewardParams;
 
 /// [`ChristmasTaigaStd`] — moderate-density cold Northern Conifer upper-canopy grove ([#341](https://github.com/ramate-io/maybraid/issues/341)).
 pub type RenderChristmasTaiga = ChristmasTaigaStd;
@@ -270,8 +267,8 @@ pub type RenderForlornSavanna = ForlornSavannaParams;
 /// [`OrchardParams`] — cultivated orchard upper-canopy grove.
 pub type RenderOrchard = OrchardParams;
 
-/// [`VineyardStd`] — cultivated vineyard upper-canopy grove.
-pub type RenderVineyard = VineyardStd;
+/// [`VineyardParams`] — cultivated vineyard upper-canopy grove.
+pub type RenderVineyard = VineyardParams;
 
 /// [`DateGroveStd`] — date palm upper-canopy grove.
 pub type RenderDateGrove = DateGroveStd;
@@ -1093,7 +1090,14 @@ impl RenderSubject {
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::GoettingenFollow(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
@@ -1104,11 +1108,25 @@ impl RenderSubject {
 			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::RiparianMix(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Dryland(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Dryland(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::Storytellers(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WanderingAcacia(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::Leeward(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Leeward(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::ChristmasTaiga(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::ConiferMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TemperateMassives(item) => item.spawn_render_items(commands, chunk, transform),
@@ -1144,7 +1162,14 @@ impl RenderSubject {
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
-			Self::Vineyard(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Vineyard(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			}
 			Self::DateGrove(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
