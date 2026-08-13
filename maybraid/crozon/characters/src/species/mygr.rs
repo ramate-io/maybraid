@@ -13,7 +13,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -103,6 +103,25 @@ impl MygrConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Mygr>`).
+	pub fn clothed(&self) -> Clothed<crate::species::mygr::bsn::Mygr> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for MygrConfig {
+	type Components = crate::species::mygr::bsn::Mygr;
+
+	fn components(&self) -> Self::Components {
+		crate::species::mygr::bsn::Mygr::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

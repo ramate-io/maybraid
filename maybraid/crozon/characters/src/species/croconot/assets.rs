@@ -21,8 +21,8 @@ use crate::{
 pub use crate::species::common::EyeMesh;
 
 /// Lerodon snout scale on the pronograde mouth socket (from Lero, enlarged for Croconot).
-const SNOUT_XY_SCALE: f32 = 2.25;
-const SNOUT_Z_SCALE: f32 = 6.2;
+pub(crate) const SNOUT_XY_SCALE: f32 = 2.25;
+pub(crate) const SNOUT_Z_SCALE: f32 = 6.2;
 
 /// Species-local resolver for Croconot asset choices.
 pub struct CroconotAssets;

@@ -8,7 +8,9 @@ pub mod bsn;
 pub mod palette;
 pub mod pose;
 
-use crate::{species::SpeciesConfig, ResolvedCharacterAssembly};
+use crate::{
+	species::SpeciesConfig, CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
+};
 
 use assets::GrenerAssets;
 
@@ -47,6 +49,23 @@ impl GrenerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Grener>`).
+	pub fn clothed(&self) -> Clothed<crate::species::grener::bsn::Grener> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for GrenerConfig {
+	type Components = crate::species::grener::bsn::Grener;
+
+	fn components(&self) -> Self::Components {
+		crate::species::grener::bsn::Grener::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

@@ -14,7 +14,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -107,6 +107,25 @@ impl TappConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Tapp>`).
+	pub fn clothed(&self) -> Clothed<crate::species::tapp::bsn::Tapp> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for TappConfig {
+	type Components = crate::species::tapp::bsn::Tapp;
+
+	fn components(&self) -> Self::Components {
+		crate::species::tapp::bsn::Tapp::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

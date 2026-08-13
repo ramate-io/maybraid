@@ -12,7 +12,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use assets::YilterAssets;
@@ -116,6 +116,23 @@ impl YilterConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Yilter>`).
+	pub fn clothed(&self) -> Clothed<crate::species::ylter::bsn::Yilter> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for YilterConfig {
+	type Components = crate::species::ylter::bsn::Yilter;
+
+	fn components(&self) -> Self::Components {
+		crate::species::ylter::bsn::Yilter::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

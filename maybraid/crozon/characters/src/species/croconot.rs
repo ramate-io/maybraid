@@ -12,7 +12,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::EyeMesh;
@@ -124,6 +124,23 @@ impl CroconotConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Croconot>`).
+	pub fn clothed(&self) -> Clothed<crate::species::croconot::bsn::Croconot> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for CroconotConfig {
+	type Components = crate::species::croconot::bsn::Croconot;
+
+	fn components(&self) -> Self::Components {
+		crate::species::croconot::bsn::Croconot::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

@@ -73,9 +73,26 @@ impl PartNode {
 			.skinned(SkinRef::to(RigId::Head))
 	}
 
+	/// Socket onto a neck-rig bone and skin to that same rig.
+	pub fn on_neck(self, bone: &'static str, local: Transform) -> Self {
+		self.socketed(SocketRef::on(RigId::Neck, bone).with_local(local))
+			.skinned(SkinRef::to(RigId::Neck))
+	}
+
 	/// Skin to the body rig with no socket (typical body mesh).
 	pub fn on_body(self) -> Self {
 		self.skinned(SkinRef::to(RigId::Body))
+	}
+
+	/// Socket onto a body-rig bone and skin to that same rig (tails, spines).
+	pub fn on_body_bone(self, bone: &'static str, local: Transform) -> Self {
+		self.socketed(SocketRef::on(RigId::Body, bone).with_local(local))
+			.skinned(SkinRef::to(RigId::Body))
+	}
+
+	pub fn with_normalization(mut self, normalization: AssetNormalization) -> Self {
+		self.normalization = normalization;
+		self
 	}
 
 	pub fn with_feature(mut self, feature: Transform) -> Self {

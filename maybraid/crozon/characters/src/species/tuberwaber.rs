@@ -14,7 +14,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
@@ -162,6 +162,25 @@ impl TuberwaberConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Tuberwaber>`).
+	pub fn clothed(&self) -> Clothed<crate::species::tuberwaber::bsn::Tuberwaber> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for TuberwaberConfig {
+	type Components = crate::species::tuberwaber::bsn::Tuberwaber;
+
+	fn components(&self) -> Self::Components {
+		crate::species::tuberwaber::bsn::Tuberwaber::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

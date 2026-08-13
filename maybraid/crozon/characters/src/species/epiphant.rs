@@ -13,7 +13,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::EyeMesh;
@@ -131,6 +131,23 @@ impl EpiphantConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Epiphant>`).
+	pub fn clothed(&self) -> Clothed<crate::species::epiphant::bsn::Epiphant> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for EpiphantConfig {
+	type Components = crate::species::epiphant::bsn::Epiphant;
+
+	fn components(&self) -> Self::Components {
+		crate::species::epiphant::bsn::Epiphant::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

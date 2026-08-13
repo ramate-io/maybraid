@@ -21,11 +21,11 @@ use crate::{
 pub use crate::species::common::EyeMesh;
 
 /// Robrek snout on the pronograde mouth socket: wider XY, shorter Z than Croconot's Lerodon.
-const SNOUT_XY_SCALE: f32 = 2.9;
-const SNOUT_Z_SCALE: f32 = 4.4;
+pub(crate) const SNOUT_XY_SCALE: f32 = 2.9;
+pub(crate) const SNOUT_Z_SCALE: f32 = 4.4;
 
 /// Enlarged harrowed crown on the pronograde crown socket.
-const CROWN_SCALE: f32 = 1.75;
+pub(crate) const CROWN_SCALE: f32 = 1.75;
 
 /// Species-local resolver for Claber asset choices.
 pub struct ClaberAssets;

@@ -1,14 +1,34 @@
 //! BSN scenes for Grener.
+//!
+//! `data_scene()` carries the semantic [`Grener`] root component (including
+//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
+//! layers the two for higher-order consumers.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{assets::GrenerAssets, GrenerColors, GrenerConfig};
+use super::{
+	assets::GrenerAssets,
+	pose::{GrenerPose, GRENER_OVERALL_SCALE},
+	GrenerColors, GrenerConfig,
+};
 use crate::{
 	assembly::ResolvedCharacterPart,
-	species::common::bsn::{self as common_bsn, WithBaseColor},
+	assets::AssetNormalization,
+	components::CharacterComponents,
+	layer::Layers,
+	nodes::{PartNode, RigNode},
+	species::common::{
+		bsn::{self as common_bsn, WithBaseColor},
+		nodes as humanoid, BODY_SHARK,
+	},
 };
+use lod::gen::LodSceneLevel;
 
+/// Semantic Grener data attached to the character root entity.
+///
+/// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
+/// [`GrenerConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Grener {
 	pub colors: GrenerColors,
@@ -23,6 +43,17 @@ impl Grener {
 impl Default for Grener {
 	fn default() -> Self {
 		Self::from_config(&GrenerConfig::default_preview())
+	}
+}
+
+impl CharacterComponents for Grener {
+	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
+		Layers::from_free(vec![humanoid::forelimbed_body_rig(GrenerPose.resolve())
+			.with_normalization(AssetNormalization::centroid(GRENER_OVERALL_SCALE))])
+	}
+
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::from_labeled("body", vec![humanoid::body_part("shark", BODY_SHARK.as_str())])
 	}
 }
 

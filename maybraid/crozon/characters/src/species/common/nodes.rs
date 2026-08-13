@@ -15,7 +15,10 @@ use crate::{
 	ResolvedRigPose,
 };
 
-use super::{BodyMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh, BODY_RIG, HEAD_RIG};
+use super::{
+	BodyMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh, BODY_RIG, FORELIMBED_RIG, HEAD_RIG,
+	NECK_BASIC, NECK_TRIPLE_JOIN, PRONOGRADE_HEAD_RIG, QUADRUPED_RIG,
+};
 
 pub fn eye_socket_local() -> Transform {
 	Transform::from_translation(Vec3::new(0.0, -0.1, -0.075))
@@ -48,20 +51,71 @@ pub fn humanoid_body_rig(pose: ResolvedRigPose) -> RigNode {
 	RigNode::body("Humanoid", BODY_RIG.as_str()).with_pose(pose)
 }
 
+pub fn quadruped_body_rig(pose: ResolvedRigPose) -> RigNode {
+	RigNode::body("Quadruped", QUADRUPED_RIG.as_str()).with_pose(pose)
+}
+
+pub fn forelimbed_body_rig(pose: ResolvedRigPose) -> RigNode {
+	RigNode::body("Forelimbed", FORELIMBED_RIG.as_str()).with_pose(pose)
+}
+
 pub fn orthograde_head_rig() -> RigNode {
+	orthograde_head_rig_at(AssetNormalization::base_y(0.26), Transform::IDENTITY)
+}
+
+pub fn orthograde_head_rig_at(
+	normalization: AssetNormalization,
+	socket_local: Transform,
+) -> RigNode {
 	RigNode::head("OrthogradeHeadRig", HEAD_RIG.as_str())
-		.with_normalization(AssetNormalization::base_y(0.26))
-		.socketed(SocketRef::on(RigId::Body, "upper_neck"))
+		.with_normalization(normalization)
+		.socketed(SocketRef::on(RigId::Body, "upper_neck").with_local(socket_local))
+}
+
+pub fn pronograde_head_rig(
+	normalization: AssetNormalization,
+	parent: RigId,
+	bone: &'static str,
+	socket_local: Transform,
+) -> RigNode {
+	RigNode::head("PronogradeHeadRig", PRONOGRADE_HEAD_RIG.as_str())
+		.with_normalization(normalization)
+		.socketed(SocketRef::on(parent, bone).with_local(socket_local))
+}
+
+pub fn triple_join_neck_rig(pose: ResolvedRigPose, socket_local: Transform) -> RigNode {
+	RigNode::neck("TripleJoinNeck", NECK_TRIPLE_JOIN.as_str())
+		.with_normalization(AssetNormalization::base_y(0.4))
+		.with_pose(pose)
+		.socketed(SocketRef::on(RigId::Body, "head_socket").with_local(socket_local))
 }
 
 pub fn body_mesh(body: BodyMesh) -> PartNode {
+	body_part(body.label(), body.path().as_str())
+}
+
+pub fn body_part(label: &'static str, path: impl Into<String>) -> PartNode {
+	PartNode::glb(CharacterPartSlot::BodyMesh, label, path, AssetNormalization::IDENTITY).on_body()
+}
+
+pub fn neck_mesh() -> PartNode {
 	PartNode::glb(
-		CharacterPartSlot::BodyMesh,
-		body.label(),
-		body.path().as_str(),
+		CharacterPartSlot::NeckMesh,
+		"basic-neck",
+		NECK_BASIC.as_str(),
 		AssetNormalization::IDENTITY,
 	)
-	.on_body()
+	.on_neck("neck_base", Transform::IDENTITY)
+}
+
+pub fn tail(label: &'static str, path: impl Into<String>, bone: &'static str) -> PartNode {
+	PartNode::glb(CharacterPartSlot::Tail, label, path, AssetNormalization::IDENTITY)
+		.on_body_bone(bone, Transform::IDENTITY)
+}
+
+pub fn spine(label: &'static str, path: impl Into<String>, bone: &'static str) -> PartNode {
+	PartNode::glb(CharacterPartSlot::Spine, label, path, AssetNormalization::IDENTITY)
+		.on_body_bone(bone, Transform::IDENTITY)
 }
 
 pub fn head_mesh(label: &'static str, path: impl Into<String>) -> PartNode {
@@ -159,12 +213,16 @@ pub fn ear_right(ear: EarMesh) -> PartNode {
 }
 
 pub fn hair(hair: HairMesh) -> Option<PartNode> {
+	hair_scaled(hair, 1.0)
+}
+
+pub fn hair_scaled(hair: HairMesh, centroid_scale: f32) -> Option<PartNode> {
 	let path = hair.path()?;
 	Some(head_feature(
 		CharacterPartSlot::Hair,
 		hair.label(),
 		path.as_str(),
-		AssetNormalization::centroid(1.0),
+		AssetNormalization::centroid(centroid_scale),
 		"crown_socket",
 		crown_socket_local(),
 	))

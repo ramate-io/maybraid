@@ -14,7 +14,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -107,6 +107,25 @@ impl KisparConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Kispar>`).
+	pub fn clothed(&self) -> Clothed<crate::species::kispar::bsn::Kispar> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for KisparConfig {
+	type Components = crate::species::kispar::bsn::Kispar;
+
+	fn components(&self) -> Self::Components {
+		crate::species::kispar::bsn::Kispar::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

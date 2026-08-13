@@ -22,7 +22,7 @@ const EAR_EPIPHANT: AssetPath = AssetPath::new("characters/ears/epiphant_ear_lef
 const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.glb");
 
 /// Enlarge the pronograde head stack so the meerkat head reads as "large" on the body.
-const HEAD_RIG_SOCKET_SCALE: f32 = 1.45;
+pub(crate) const HEAD_RIG_SOCKET_SCALE: f32 = 1.45;
 
 /// Species-local resolver for Epiphant asset choices.
 pub struct EpiphantAssets;

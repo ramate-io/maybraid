@@ -10,7 +10,7 @@ pub mod pose;
 
 use crate::{
 	species::{common::HairMesh, SpeciesConfig},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -107,6 +107,25 @@ impl LeroConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Lero>`).
+	pub fn clothed(&self) -> Clothed<crate::species::lero::bsn::Lero> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for LeroConfig {
+	type Components = crate::species::lero::bsn::Lero;
+
+	fn components(&self) -> Self::Components {
+		crate::species::lero::bsn::Lero::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

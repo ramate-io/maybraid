@@ -18,7 +18,7 @@ use crate::{
 };
 
 const HEAD_BARRED_BOWL: AssetPath = AssetPath::new("characters/heads/barred_bowl_head.glb");
-const EYE_THORN: AssetPath = AssetPath::new("characters/horns/single_thorn_left.glb");
+pub(crate) const EYE_THORN: AssetPath = AssetPath::new("characters/horns/single_thorn_left.glb");
 
 /// Species-local resolver for Sonyak asset choices.
 pub struct SonyakAssets;

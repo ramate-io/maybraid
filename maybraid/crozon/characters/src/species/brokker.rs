@@ -14,7 +14,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -104,6 +104,25 @@ impl BrokkerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Brokker>`).
+	pub fn clothed(&self) -> Clothed<crate::species::brokker::bsn::Brokker> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for BrokkerConfig {
+	type Components = crate::species::brokker::bsn::Brokker;
+
+	fn components(&self) -> Self::Components {
+		crate::species::brokker::bsn::Brokker::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

@@ -1,14 +1,34 @@
 //! BSN scenes for Thumplus.
+//!
+//! `data_scene()` carries the semantic [`Thumplus`] root component (including
+//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
+//! layers the two for higher-order consumers.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{assets::ThumplusAssets, ThumplusColors, ThumplusConfig};
+use super::{
+	assets::ThumplusAssets,
+	pose::{ThumplusPose, THUMPLUS_OVERALL_SCALE},
+	ThumplusColors, ThumplusConfig,
+};
 use crate::{
 	assembly::ResolvedCharacterPart,
-	species::common::bsn::{self as common_bsn, WithBaseColor},
+	assets::AssetNormalization,
+	components::CharacterComponents,
+	layer::Layers,
+	nodes::{PartNode, RigNode},
+	species::common::{
+		bsn::{self as common_bsn, WithBaseColor},
+		nodes as humanoid, BODY_WHALE,
+	},
 };
+use lod::gen::LodSceneLevel;
 
+/// Semantic Thumplus data attached to the character root entity.
+///
+/// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
+/// [`ThumplusConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Thumplus {
 	pub colors: ThumplusColors,
@@ -23,6 +43,17 @@ impl Thumplus {
 impl Default for Thumplus {
 	fn default() -> Self {
 		Self::from_config(&ThumplusConfig::default_preview())
+	}
+}
+
+impl CharacterComponents for Thumplus {
+	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
+		Layers::from_free(vec![humanoid::forelimbed_body_rig(ThumplusPose.resolve())
+			.with_normalization(AssetNormalization::centroid(THUMPLUS_OVERALL_SCALE))])
+	}
+
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::from_labeled("body", vec![humanoid::body_part("whale", BODY_WHALE.as_str())])
 	}
 }
 

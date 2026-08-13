@@ -1,24 +1,34 @@
 //! BSN scenes for Lidder.
+//!
+//! `data_scene()` carries the semantic [`Lidder`] root component (including
+//! colors), `visual_scene()` composes the rig/part scenes, and `scene()`
+//! layers the two for higher-order consumers.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{assets::LidderAssets, LidderColors, LidderConfig};
+use super::{
+	assets::{LidderAssets, LidderBeakMesh, LidderHeadMesh},
+	pose::LidderPose,
+	LidderColors, LidderConfig,
+};
 use crate::{
 	assembly::{CharacterPartSlot, ResolvedCharacterPart},
-	species::{
-		common::{
-			bsn::{self as common_bsn, WithBaseColor},
-			EyeMesh, HairMesh,
-		},
-		lidder::assets::LidderBeakMesh,
+	assets::AssetNormalization,
+	components::CharacterComponents,
+	layer::Layers,
+	nodes::{PartNode, RigNode},
+	species::common::{
+		bsn::{self as common_bsn, WithBaseColor},
+		nodes as humanoid, EyeMesh, HairMesh,
 	},
 };
+use lod::gen::LodSceneLevel;
 
 /// Semantic Lidder data attached to the character root entity.
 ///
-/// Clothing is not part of the character: compose
-/// [`crate::species::common::bsn::clothing_scene`] over `scene()` instead.
+/// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
+/// [`LidderConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Lidder {
 	pub beak: LidderBeakMesh,
@@ -41,6 +51,52 @@ impl Lidder {
 impl Default for Lidder {
 	fn default() -> Self {
 		Self::from_config(&LidderConfig::default_preview())
+	}
+}
+
+impl CharacterComponents for Lidder {
+	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
+		Layers::from_free(vec![
+			humanoid::humanoid_body_rig(LidderPose.resolve()),
+			humanoid::orthograde_head_rig(),
+		])
+	}
+
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		let mut out = Layers::from_labeled(
+			"body",
+			vec![humanoid::body_part("crane", "characters/bodies/crane_body.glb")],
+		);
+		out.extend_labeled(
+			"head",
+			vec![humanoid::head_mesh(
+				LidderHeadMesh::Meerkat.label(),
+				LidderHeadMesh::Meerkat.path().as_str(),
+			)],
+		);
+		let mut features = vec![
+			humanoid::eye_left(self.eye),
+			humanoid::eye_right(self.eye),
+			humanoid::head_feature(
+				CharacterPartSlot::Mouth,
+				self.beak.label(),
+				self.beak.path().as_str(),
+				AssetNormalization::centroid(0.35),
+				"mouth_socket",
+				humanoid::mouth_socket_local(),
+			),
+		];
+		if let Some(hair) = humanoid::hair_scaled(
+			self.hair,
+			match self.hair {
+				HairMesh::FeatherHawk => 0.4,
+				_ => 1.0,
+			},
+		) {
+			features.push(hair);
+		}
+		out.extend_labeled("features", features);
+		out
 	}
 }
 

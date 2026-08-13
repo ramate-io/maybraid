@@ -25,8 +25,10 @@ host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once.
 
-Until a species is on this path, keep `*Assets::resolve()` for
-`visual_scene()` / the legacy preview spawner.
+The playground spawn path is LodScene (`Config::clothed()`). Keep
+`*Assets::resolve()` / `visual_scene()` until a species has been visually
+reviewed against that recipe; do not add new callers of the assembly spawn
+path.
 
 ### 1. `crozon-characters` (this crate)
 
@@ -68,7 +70,8 @@ Until a species is on this path, keep `*Assets::resolve()` for
 2. Extend [`src/preview.rs`](../character-concepts-playground/src/preview.rs):
    - `ConceptPreviewConfig::<Name>`
    - `PreviewTarget::<Name>*` variants
-   - `preview_color_<name>`, `preview_target` mapping, sync paths
+   - `preview_color_<name>`, `preview_asset_target` mapping, spawn/`clothed()` /
+     `lod_rig_nodes` match arms
 3. Update [`src/menu_listeners.rs`](../character-concepts-playground/src/menu_listeners.rs),
    [`src/species_session.rs`](../character-concepts-playground/src/species_session.rs),
    [`src/focus_reference.rs`](../character-concepts-playground/src/focus_reference.rs),

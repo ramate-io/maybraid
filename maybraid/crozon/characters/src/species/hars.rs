@@ -14,7 +14,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::EyeMesh;
@@ -123,6 +123,23 @@ impl HarsConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Hars>`).
+	pub fn clothed(&self) -> Clothed<crate::species::hars::bsn::Hars> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for HarsConfig {
+	type Components = crate::species::hars::bsn::Hars;
+
+	fn components(&self) -> Self::Components {
+		crate::species::hars::bsn::Hars::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

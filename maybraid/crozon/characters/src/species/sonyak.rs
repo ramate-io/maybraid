@@ -12,7 +12,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use assets::SonyakAssets;
@@ -115,6 +115,23 @@ impl SonyakConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Sonyak>`).
+	pub fn clothed(&self) -> Clothed<crate::species::sonyak::bsn::Sonyak> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for SonyakConfig {
+	type Components = crate::species::sonyak::bsn::Sonyak;
+
+	fn components(&self) -> Self::Components {
+		crate::species::sonyak::bsn::Sonyak::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

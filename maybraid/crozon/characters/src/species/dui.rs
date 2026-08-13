@@ -10,7 +10,7 @@ pub mod pose;
 
 use crate::{
 	species::{common::HairMesh, SpeciesConfig},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -101,6 +101,25 @@ impl DuiConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Dui>`).
+	pub fn clothed(&self) -> Clothed<crate::species::dui::bsn::Dui> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for DuiConfig {
+	type Components = crate::species::dui::bsn::Dui;
+
+	fn components(&self) -> Self::Components {
+		crate::species::dui::bsn::Dui::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

@@ -27,10 +27,10 @@
 //! Readiness is signalled by imperative state changes, never approximated from
 //! bone transforms:
 //!
-//! 1. [`sync_focus_reference`] spawns a shadow body rig (plus a head rig when
-//!    the assembly has a `HeadRig` part) whenever the spawn key — body-rig and
-//!    head-rig asset paths — changes. Old shadow roots are despawned. The head
-//!    is spawned with `part.asset.normalization.transform()`, matching preview.
+//! 1. [`sync_focus_reference`] spawns a shadow body rig (plus neck / head when
+//!    the LodScene recipe has those [`RigNode`]s) whenever the spawn key — body,
+//!    neck, and head-rig asset paths — changes. Old shadow roots are despawned.
+//!    The head is spawned with `node.normalization.transform()`, matching preview.
 //! 2. `build_rig_bone_map` (skinning) fills [`BoneMap`] as the GLTF scenes
 //!    spawn bones.
 //! 3. `maintain_resolved_pose` (skinning) applies the proportional pose and
@@ -45,15 +45,11 @@
 //!    so no respawn and no readiness reset is needed.
 
 use bevy::prelude::*;
-use crozon_characters::{
-	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
-	SocketRig,
-};
+use crozon_characters::{RigId, RigNode};
 
 use crate::preview::ConceptPreviewConfig;
 use crate::skinning::{
 	ActiveRigPose, BoneMap, CharacterRig, CharacterRigRole, NeedsSocketPlacement, RigBindScales,
-	RigSkeletonKind,
 };
 
 #[derive(Component)]
@@ -119,20 +115,15 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 /// Shadow rigs must respawn when the underlying armature assets change: a new
 /// body, neck, or head rig carries different socket bones. Cosmetic part swaps on
 /// the same armatures only refresh the live pose.
-fn focus_spawn_key(assembly: &ResolvedCharacterAssembly) -> String {
-	let neck_rig_path = assembly
-		.parts
-		.iter()
-		.find(|part| part.slot == CharacterPartSlot::NeckRig)
-		.map(|part| part.asset.path.as_str())
-		.unwrap_or("");
-	let head_rig_path = assembly
-		.parts
-		.iter()
-		.find(|part| part.slot == CharacterPartSlot::HeadRig)
-		.map(|part| part.asset.path.as_str())
-		.unwrap_or("");
-	format!("body={} neck={neck_rig_path} head={head_rig_path}", assembly.body_rig.path.as_str())
+fn focus_spawn_key(nodes: &[RigNode]) -> String {
+	let path = |id: RigId| {
+		nodes
+			.iter()
+			.find(|node| node.id == id)
+			.map(|node| node.scene.path.as_str())
+			.unwrap_or("")
+	};
+	format!("body={} neck={} head={}", path(RigId::Body), path(RigId::Neck), path(RigId::Head))
 }
 
 pub fn sync_focus_reference(
@@ -148,20 +139,23 @@ pub fn sync_focus_reference(
 		return;
 	}
 
-	let assembly = config.resolve();
-	let spawn_key = focus_spawn_key(&assembly);
+	let nodes = config.lod_rig_nodes();
+	let spawn_key = focus_spawn_key(&nodes);
 	if sync_state.spawn_key == spawn_key {
 		// Same armatures: update poses in place. `maintain_resolved_pose`
 		// re-applies them every frame, so nothing else needs to be invalidated.
 		sync_state.live_key = live_key;
-		let neck_pose = assembly
-			.parts
-			.iter()
-			.find(|part| part.slot == CharacterPartSlot::NeckRig)
-			.and_then(|part| part.pose.clone());
+		let body_pose =
+			nodes.iter().find(|node| node.id == RigId::Body).map(|node| node.pose.clone());
+		let neck_pose =
+			nodes.iter().find(|node| node.id == RigId::Neck).map(|node| node.pose.clone());
 		for (mut pose, rig) in &mut poses {
 			match rig.role {
-				CharacterRigRole::Body => pose.pose = assembly.pose.clone(),
+				CharacterRigRole::Body => {
+					if let Some(body_pose) = &body_pose {
+						pose.pose = body_pose.clone();
+					}
+				}
 				CharacterRigRole::Neck => {
 					if let Some(neck_pose) = &neck_pose {
 						pose.pose = neck_pose.clone();
@@ -183,86 +177,79 @@ pub fn sync_focus_reference(
 		commands.entity(entity).try_despawn();
 	}
 
-	spawn_focus_reference(&mut commands, &asset_server, &assembly);
+	spawn_focus_reference(&mut commands, &asset_server, &nodes);
 }
 
-fn spawn_focus_reference(
-	commands: &mut Commands,
-	asset_server: &AssetServer,
-	assembly: &ResolvedCharacterAssembly,
-) {
-	let skeleton = RigSkeletonKind::from_body_rig_label(assembly.body_rig.label);
-	let transform = assembly.body_rig.normalization.transform();
+fn spawn_focus_reference(commands: &mut Commands, asset_server: &AssetServer, nodes: &[RigNode]) {
+	let Some(body) = nodes.iter().find(|node| node.id == RigId::Body) else {
+		return;
+	};
+	let transform = body.normalization.transform();
 	let body_rig = commands
 		.spawn((
 			WorldAssetRoot(
-				asset_server
-					.load(GltfAssetLabel::Scene(0).from_asset(assembly.body_rig.path.as_str())),
+				asset_server.load(GltfAssetLabel::Scene(0).from_asset(body.scene.path.clone())),
 			),
-			CharacterRig { role: CharacterRigRole::Body, skeleton },
+			CharacterRig { role: CharacterRigRole::Body, skeleton: body.skeleton },
 			FocusReferenceRig,
 			BoneMap::default(),
-			ActiveRigPose { pose: assembly.pose.clone() },
+			ActiveRigPose { pose: body.pose.clone() },
 			RigBindScales::default(),
 			FocusReferenceRoot,
 			Visibility::Hidden,
 			transform,
-			Name::new(format!("focus_{}_body_rig", assembly.label)),
+			Name::new(format!("focus_{}_body_rig", body.label)),
 		))
 		.id();
 
 	let mut neck_rig = None;
-	if let Some(neck_part) =
-		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::NeckRig)
-	{
-		let mut entity = commands.spawn((
-			WorldAssetRoot(
-				asset_server
-					.load(GltfAssetLabel::Scene(0).from_asset(neck_part.asset.path.as_str())),
-			),
-			CharacterRig { role: CharacterRigRole::Neck, skeleton: RigSkeletonKind::Neck },
-			FocusReferenceRig,
-			BoneMap::default(),
-			FocusReferenceRoot,
-			Visibility::Hidden,
-			Transform::IDENTITY,
-			Name::new("focus_neck_rig"),
-		));
-		if let Some(pose) = &neck_part.pose {
-			entity.insert((ActiveRigPose { pose: pose.clone() }, RigBindScales::default()));
-		}
-		let entity = entity.id();
-		if let Some(socket) = neck_part.socket {
-			commands.entity(entity).insert(NeedsSocketPlacement {
-				rig_root: body_rig,
-				socket_bone: socket.bone,
-				local_transform: socket.local_transform,
-			});
+	if let Some(neck) = nodes.iter().find(|node| node.id == RigId::Neck) {
+		let entity = commands
+			.spawn((
+				WorldAssetRoot(
+					asset_server.load(GltfAssetLabel::Scene(0).from_asset(neck.scene.path.clone())),
+				),
+				CharacterRig { role: CharacterRigRole::Neck, skeleton: neck.skeleton },
+				FocusReferenceRig,
+				BoneMap::default(),
+				ActiveRigPose { pose: neck.pose.clone() },
+				RigBindScales::default(),
+				FocusReferenceRoot,
+				Visibility::Hidden,
+				Transform::IDENTITY,
+				Name::new("focus_neck_rig"),
+			))
+			.id();
+		if let Some(socket) = neck.socket {
+			if let Some(rig_root) = focus_socket_rig(socket.rig, body_rig, None) {
+				commands.entity(entity).insert(NeedsSocketPlacement {
+					rig_root,
+					socket_bone: socket.bone,
+					local_transform: socket.local,
+				});
+			}
 		}
 		neck_rig = Some(entity);
 	}
 
-	let Some(head_part) =
-		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::HeadRig)
-	else {
+	let Some(head) = nodes.iter().find(|node| node.id == RigId::Head) else {
 		return;
 	};
 
-	// CRITICAL: same authored scale as `PreviewSpawner::spawn_head_rig`.
+	// CRITICAL: same authored scale as the LodScene head [`RigNode`].
 	//
 	// Head GLTFs are normalized at spawn (often `AssetNormalization::base_y(0.26)`).
 	// `attach_part_to_socket` does `local_transform.scale *= authored_scale`, so
 	// this value must already be on the entity when the head is parented to the
 	// body socket. Identity scale here is what made camera-focus nose/crown Y
 	// resolve several times too high after shadow-only focus resolution landed.
-	let head_transform = head_part.asset.normalization.transform();
+	let head_transform = head.normalization.transform();
 	let head_rig = commands
 		.spawn((
 			WorldAssetRoot(
-				asset_server
-					.load(GltfAssetLabel::Scene(0).from_asset(head_part.asset.path.as_str())),
+				asset_server.load(GltfAssetLabel::Scene(0).from_asset(head.scene.path.clone())),
 			),
-			CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
+			CharacterRig { role: CharacterRigRole::Head, skeleton: head.skeleton },
 			FocusReferenceRig,
 			BoneMap::default(),
 			FocusReferenceRoot,
@@ -272,18 +259,21 @@ fn spawn_focus_reference(
 		))
 		.id();
 
-	if let Some(socket) = head_part.socket {
-		let rig_root = match socket.rig {
-			SocketRig::Body => Some(body_rig),
-			SocketRig::Neck => neck_rig,
-			SocketRig::Head => None,
-		};
-		if let Some(rig_root) = rig_root {
+	if let Some(socket) = head.socket {
+		if let Some(rig_root) = focus_socket_rig(socket.rig, body_rig, neck_rig) {
 			commands.entity(head_rig).insert(NeedsSocketPlacement {
 				rig_root,
 				socket_bone: socket.bone,
-				local_transform: socket.local_transform,
+				local_transform: socket.local,
 			});
 		}
+	}
+}
+
+fn focus_socket_rig(rig: RigId, body_rig: Entity, neck_rig: Option<Entity>) -> Option<Entity> {
+	match rig {
+		RigId::Body => Some(body_rig),
+		RigId::Neck => neck_rig,
+		RigId::Head => None,
 	}
 }

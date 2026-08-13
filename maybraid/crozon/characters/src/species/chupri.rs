@@ -15,7 +15,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -109,6 +109,25 @@ impl ChupriConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Chupri>`).
+	pub fn clothed(&self) -> Clothed<crate::species::chupri::bsn::Chupri> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for ChupriConfig {
+	type Components = crate::species::chupri::bsn::Chupri;
+
+	fn components(&self) -> Self::Components {
+		crate::species::chupri::bsn::Chupri::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

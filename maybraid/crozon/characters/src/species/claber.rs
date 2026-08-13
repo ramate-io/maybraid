@@ -14,7 +14,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::EyeMesh;
@@ -126,6 +126,23 @@ impl ClaberConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Claber>`).
+	pub fn clothed(&self) -> Clothed<crate::species::claber::bsn::Claber> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for ClaberConfig {
+	type Components = crate::species::claber::bsn::Claber;
+
+	fn components(&self) -> Self::Components {
+		crate::species::claber::bsn::Claber::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 

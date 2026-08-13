@@ -1,4 +1,5 @@
-//! Preview-only socket placement (legacy spawn path) and pose application.
+//! Preview-only socket placement for hidden focus-reference rigs, plus pose
+//! application. Visible preview parts socket through [`crozon_characters::SocketRef`].
 //!
 //! Rig/part markers, bone maps, and skin remap live in `crozon-characters`.
 
@@ -7,7 +8,7 @@ use bevy::prelude::*;
 pub use crozon_characters::{
 	bind_scales_ready, bone_map_ready, missing_landmark_bones, ActiveRigPose, BoneMap,
 	CharacterPart, CharacterRig, CharacterRigRole, NeedsDuplicateScenePrune, NeedsSkinRemap,
-	NoMatchingArmature, PartRigRef, ResolvedPoseApplied, RigBindScales, RigSkeletonKind,
+	NoMatchingArmature, ResolvedPoseApplied, RigBindScales, RigSkeletonKind,
 };
 
 #[derive(Component)]

@@ -1,8 +1,8 @@
 //! Command-driven playground for the Character Concepts Screen.
 //!
 //! This crate is the first executable surface for the concept plan. Commands are
-//! temporary stand-ins for future UI fields; they still resolve through
-//! `crozon-characters` before any Bevy entities are spawned.
+//! temporary stand-ins for future UI fields; they spawn through
+//! `crozon-characters` LodScene recipes (`Config::clothed()`).
 
 mod animation;
 mod camera_focus;

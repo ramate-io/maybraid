@@ -14,7 +14,7 @@ use crate::{
 		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -107,6 +107,25 @@ impl ToppleConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus clothing layers (`Clothed<Topple>`).
+	pub fn clothed(&self) -> Clothed<crate::species::topple::bsn::Topple> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for ToppleConfig {
+	type Components = crate::species::topple::bsn::Topple;
+
+	fn components(&self) -> Self::Components {
+		crate::species::topple::bsn::Topple::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }
 

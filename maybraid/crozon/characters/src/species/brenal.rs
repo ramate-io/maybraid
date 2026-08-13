@@ -12,7 +12,7 @@ pub mod sliders;
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, Clothed, ClothingLayer, ResolvedCharacterAssembly,
 };
 
 use crate::species::common::EyeMesh;
@@ -124,6 +124,23 @@ impl BrenalConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
+	}
+
+	/// Inner recipe plus empty clothing layers (`Clothed<Brenal>`).
+	pub fn clothed(&self) -> Clothed<crate::species::brenal::bsn::Brenal> {
+		CharacterRecipe::clothed(self)
+	}
+}
+
+impl CharacterRecipe for BrenalConfig {
+	type Components = crate::species::brenal::bsn::Brenal;
+
+	fn components(&self) -> Self::Components {
+		crate::species::brenal::bsn::Brenal::from_config(self)
+	}
+
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }
 
