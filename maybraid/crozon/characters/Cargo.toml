@@ -16,6 +16,11 @@ character-ui-menu = { workspace = true }
 clap = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-rigs = { workspace = true }
+lod = { workspace = true }
+scene-ref = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

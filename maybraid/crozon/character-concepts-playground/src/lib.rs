@@ -6,6 +6,7 @@
 
 mod animation;
 mod camera_focus;
+mod character_lod;
 pub mod commands;
 mod diagnostics;
 mod focus;
@@ -34,8 +35,14 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use character_lod::CharacterLodPlugin;
+use crozon_characters::{
+	build_rig_bone_map, fulfill_skin_ref_roots, fulfill_socket_ref_roots,
+	prune_duplicate_part_scenes, remap_part_skin_to_rig, CharacterHostSystems,
+};
 use focus::animate_focused_preview_asset;
 use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
+use lod::{LodRefreshSystems, LodViewer};
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
 use menu_listeners::{
@@ -43,13 +50,13 @@ use menu_listeners::{
 	sync_menu_state_from_config, CharacterMenuState,
 };
 use preview::{
-	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
-	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown, PreviewRevealDebugState,
+	preview_pass_ready, reveal_ready_preview, stamp_lod_character_preview, sync_preview,
+	tick_preview_respawn_cooldown, ConceptPreviewConfig, ConceptPreviewSyncState,
+	PreviewRespawnCooldown, PreviewRevealDebugState,
 };
 use skinning::{
-	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,
-	dump_bones_to_console, maintain_resolved_pose, prune_duplicate_part_scenes,
-	remap_part_skin_to_rig, DumpBonesRequest,
+	attach_focus_reference_to_sockets, attach_parts_to_sockets, dump_bones_to_console,
+	maintain_resolved_pose, DumpBonesRequest,
 };
 use species_session::{
 	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
@@ -81,6 +88,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				enabled_at_start: false,
 				..CameraLookConfig::default()
 			}))
+			.add_plugins(CharacterLodPlugin)
 			.add_plugins(
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
@@ -90,6 +98,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				Startup,
 				(
 					camera::setup_camera,
+					add_lod_viewer_to_camera.after(camera::setup_camera),
 					setup_lighting,
 					scale_reference::setup_scale_reference,
 					init_character_menu_state,
@@ -113,10 +122,16 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(on_character_menu_event),
 					sync_focus_reference.after(sync_preview),
+					stamp_lod_character_preview
+						.after(sync_preview)
+						.after(CharacterHostSystems::Prepare)
+						.after(LodRefreshSystems::Fulfill),
 					animate_focused_preview_asset
 						.after(dispatch_menu_interactions)
 						.before(sync_preview),
-					build_rig_bone_map.after(sync_focus_reference),
+					build_rig_bone_map
+						.after(sync_focus_reference)
+						.after(stamp_lod_character_preview),
 					maintain_resolved_pose.after(build_rig_bone_map),
 				),
 			)
@@ -125,8 +140,13 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					attach_focus_reference_to_sockets.after(build_rig_bone_map),
 					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
+					fulfill_socket_ref_roots.after(build_rig_bone_map).run_if(preview_pass_ready),
+					fulfill_skin_ref_roots
+						.after(fulfill_socket_ref_roots)
+						.run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
+						.after(fulfill_skin_ref_roots)
 						.after(SceneSpawnerSystems::WorldInstanceSpawn)
 						.run_if(preview_pass_ready),
 					prune_duplicate_part_scenes
@@ -157,6 +177,15 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.after(maintain_resolved_pose),
 				),
 			);
+	}
+}
+
+fn add_lod_viewer_to_camera(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera3d>, Without<LodViewer>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(LodViewer);
 	}
 }
 

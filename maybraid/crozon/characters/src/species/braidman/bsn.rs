@@ -7,19 +7,27 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
-use super::{assets::BraidmanAssets, sliders::BraidmanSliders, BraidmanColors, BraidmanConfig};
+use super::{
+	assets::BraidmanAssets, pose::BraidmanPose, sliders::BraidmanSliders, BraidmanColors,
+	BraidmanConfig,
+};
 use crate::{
 	assembly::{CharacterPartSlot, ResolvedCharacterPart},
+	components::CharacterComponents,
+	layer::Layers,
+	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
 	species::common::{
 		bsn::{self as common_bsn, WithBaseColor},
 		BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 	},
 };
+use lod::gen::LodSceneLevel;
+
 /// Semantic Braidman data attached to the character root entity.
 ///
-/// Clothing is not part of the character: compose
-/// [`crate::species::common::bsn::clothing_scene`] over `scene()` instead.
+/// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
+/// [`BraidmanConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Braidman {
 	pub gender: GenderPreset,
@@ -56,6 +64,60 @@ impl Braidman {
 impl Default for Braidman {
 	fn default() -> Self {
 		Self::from_config(&BraidmanConfig::default_preview())
+	}
+}
+
+impl CharacterComponents for Braidman {
+	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
+		let pose = BraidmanPose {
+			gender: self.gender,
+			build: self.build,
+			sliders: self.sliders.clamped(),
+		}
+		.resolve();
+		Layers::from_free(vec![
+			BraidmanAssets::body_rig_node_with_pose(pose),
+			BraidmanAssets::head_rig_node(),
+		])
+	}
+
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		let sliders = self.sliders.clamped();
+		let mut out = Layers::from_labeled("body", vec![BraidmanAssets::body_mesh_node(self.body)]);
+		out.extend_labeled("head", vec![BraidmanAssets::head_mesh_node(self.head)]);
+		let mut features = vec![
+			BraidmanAssets::eye_left_node(
+				self.eye,
+				sliders.feature_transform(CharacterPartSlot::EyeLeft),
+			),
+			BraidmanAssets::eye_right_node(
+				self.eye,
+				sliders.feature_transform(CharacterPartSlot::EyeRight),
+			),
+			BraidmanAssets::nose_node(
+				self.nose,
+				sliders.feature_transform(CharacterPartSlot::Nose),
+			),
+			BraidmanAssets::mouth_node(
+				self.mouth,
+				sliders.feature_transform(CharacterPartSlot::Mouth),
+			),
+			BraidmanAssets::ear_left_node(
+				self.ear,
+				sliders.feature_transform(CharacterPartSlot::EarLeft),
+			),
+			BraidmanAssets::ear_right_node(
+				self.ear,
+				sliders.feature_transform(CharacterPartSlot::EarRight),
+			),
+		];
+		if let Some(hair) =
+			BraidmanAssets::hair_node(self.hair, sliders.feature_transform(CharacterPartSlot::Hair))
+		{
+			features.push(hair);
+		}
+		out.extend_labeled("features", features);
+		out
 	}
 }
 

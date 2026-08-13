@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
+	character_bounds, spawn_character_components,
 	species::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
@@ -39,7 +40,8 @@ use crozon_characters::{
 		ylter::YilterConfig,
 		SpeciesConfig,
 	},
-	ResolvedCharacterPart, SkinTarget, SocketRig,
+	PartNode, ResolvedCharacterPart, RigId, RigNode, SkinRefApplied, SkinRefRoot, SkinTarget,
+	SocketRefApplied, SocketRefRoot, SocketRig,
 };
 
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
@@ -1084,7 +1086,89 @@ pub fn sync_preview(
 		commands.entity(entity).try_despawn();
 	}
 
-	PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
+	if matches!(&*config, ConceptPreviewConfig::Braidman { .. }) {
+		spawn_braidman_lod_preview(&mut commands, &config);
+	} else {
+		PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
+	}
+}
+
+fn spawn_braidman_lod_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
+	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config else {
+		return;
+	};
+	let clothed = braidman.clothed();
+	let bounds = character_bounds(&clothed);
+	for entity in spawn_character_components(commands, &clothed, Transform::IDENTITY, bounds) {
+		commands.entity(entity).insert((
+			ConceptPreviewRoot,
+			PreviewAwaitingReveal,
+			Visibility::Hidden,
+		));
+	}
+}
+
+/// Stamp preview-only markers onto nested Braidman LodScene hosts after chunk fulfill.
+pub fn stamp_lod_character_preview(
+	mut commands: Commands,
+	config: Res<ConceptPreviewConfig>,
+	body_rigs: Query<(Entity, &RigNode, &Transform), Without<AnimatedBodyRig>>,
+	parts: Query<(Entity, &PartNode), Without<PreviewAssetTarget>>,
+) {
+	let ConceptPreviewConfig::Braidman { config: braidman, .. } = &*config else {
+		return;
+	};
+
+	for (entity, node, transform) in &body_rigs {
+		if node.id == RigId::Body {
+			commands
+				.entity(entity)
+				.insert((AnimatedBodyRig, BodyRigBindTransform(*transform)));
+		}
+	}
+
+	for (entity, node) in &parts {
+		commands.entity(entity).insert((
+			preview_target_braidman_part(braidman, node),
+			PreviewPartBaseTransform {
+				normalization: node.normalization.transform(),
+				socket: node.socket.map(|socket| socket.local),
+			},
+		));
+	}
+}
+
+fn preview_target_braidman_part(config: &BraidmanConfig, part: &PartNode) -> PreviewAssetTarget {
+	let target = match part.slot {
+		CharacterPartSlot::BodyMesh => PreviewTarget::BraidmanBody(config.body),
+		CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+			PreviewTarget::BraidmanBody(config.body)
+		}
+		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+			PreviewTarget::BraidmanHead(config.head)
+		}
+		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+			PreviewTarget::BraidmanEye(config.eye)
+		}
+		CharacterPartSlot::Nose => PreviewTarget::BraidmanNose(config.nose),
+		CharacterPartSlot::Mouth => PreviewTarget::BraidmanMouth(config.mouth),
+		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+			PreviewTarget::BraidmanEar(config.ear)
+		}
+		CharacterPartSlot::Hair => PreviewTarget::BraidmanHair(config.hair),
+		CharacterPartSlot::Horns => PreviewTarget::BraidmanHead(config.head),
+		CharacterPartSlot::Clothing => config
+			.clothing
+			.iter()
+			.copied()
+			.find(|clothing| clothing.label() == part.label)
+			.map(PreviewTarget::BraidmanClothing)
+			.unwrap_or(PreviewTarget::BraidmanHead(config.head)),
+		CharacterPartSlot::Tail | CharacterPartSlot::Spine => {
+			PreviewTarget::BraidmanBody(config.body)
+		}
+	};
+	PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
 }
 
 fn sync_live_preview(
@@ -1478,19 +1562,13 @@ pub fn reveal_ready_preview(
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
 	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimatedBodyRig>>,
 	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
+	awaiting_lod_socket: Query<(), (With<SocketRefRoot>, Without<SocketRefApplied>)>,
+	awaiting_lod_skin: Query<(), (With<SkinRefRoot>, Without<SkinRefApplied>)>,
 	awaiting_remap: Query<
 		(),
-		(
-			With<NeedsSkinRemap>,
-			With<CharacterPart>,
-			With<ConceptPreviewRoot>,
-			Without<NoMatchingArmature>,
-		),
+		(With<NeedsSkinRemap>, With<CharacterPart>, Without<NoMatchingArmature>),
 	>,
-	awaiting_prune: Query<
-		(),
-		(With<NeedsDuplicateScenePrune>, With<CharacterPart>, With<ConceptPreviewRoot>),
-	>,
+	awaiting_prune: Query<(), (With<NeedsDuplicateScenePrune>, With<CharacterPart>)>,
 ) {
 	let spawn_key = config.spawn_key();
 	if debug.spawn_key != spawn_key {
@@ -1530,12 +1608,19 @@ pub fn reveal_ready_preview(
 		}
 		return;
 	}
-	if !awaiting_socket.is_empty() || !awaiting_remap.is_empty() || !awaiting_prune.is_empty() {
+	if !awaiting_socket.is_empty()
+		|| !awaiting_lod_socket.is_empty()
+		|| !awaiting_lod_skin.is_empty()
+		|| !awaiting_remap.is_empty()
+		|| !awaiting_prune.is_empty()
+	{
 		if !debug.logged_block {
 			debug.logged_block = true;
 			warn!(
-				"[preview] reveal blocked: awaiting_socket={} awaiting_remap={} awaiting_prune={}",
+				"[preview] reveal blocked: awaiting_socket={} lod_socket={} lod_skin={} awaiting_remap={} awaiting_prune={}",
 				awaiting_socket.iter().count(),
+				awaiting_lod_socket.iter().count(),
+				awaiting_lod_skin.iter().count(),
 				awaiting_remap.iter().count(),
 				awaiting_prune.iter().count()
 			);
