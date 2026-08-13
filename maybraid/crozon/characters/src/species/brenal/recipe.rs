@@ -1,16 +1,11 @@
-//! LodScene recipe for Croconot.
+//! LodScene recipe for Brenal.
 //!
-//! [`Croconot`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`CroconotConfig::clothed`].
+//! [`Brenal`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`BrenalConfig::clothed`].
 
 use bevy::prelude::*;
 
-use super::{
-	assets::{SNOUT_XY_SCALE, SNOUT_Z_SCALE},
-	pose::CroconotPose,
-	sliders::CroconotSliders,
-	CroconotColors, CroconotConfig,
-};
+use super::{pose::BrenalPose, sliders::BrenalSliders, BrenalColors, BrenalConfig};
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
@@ -18,32 +13,30 @@ use crate::{
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
-	socket::{RigId, SocketRef},
+	socket::RigId,
 	species::{
-		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_LERODON_QUADRUPED},
-		croconot::assets::{
-			CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh,
-		},
+		brenal::assets::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
+		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT},
 	},
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Croconot data attached to the character root entity.
+/// Semantic Brenal data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`CroconotConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`BrenalConfig::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
-pub struct Croconot {
+pub struct Brenal {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
-	pub horns: CroconotHornMesh,
+	pub horns: BrenalHornMesh,
 	pub eye: EyeMesh,
-	pub colors: CroconotColors,
-	pub sliders: CroconotSliders,
+	pub colors: BrenalColors,
+	pub sliders: BrenalSliders,
 }
 
-impl Croconot {
-	pub fn from_config(config: &CroconotConfig) -> Self {
+impl Brenal {
+	pub fn from_config(config: &BrenalConfig) -> Self {
 		Self {
 			gender: config.gender,
 			build: config.build,
@@ -55,19 +48,16 @@ impl Croconot {
 	}
 }
 
-impl Default for Croconot {
+impl Default for Brenal {
 	fn default() -> Self {
-		Self::from_config(&CroconotConfig::default_preview())
+		Self::from_config(&BrenalConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Croconot {
+impl CharacterComponents for Brenal {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
-		let pose = CroconotPose {
-			gender: self.gender,
-			build: self.build,
-			sliders: self.sliders.clamped(),
-		};
+		let pose =
+			BrenalPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() };
 		Layers::from_free(vec![
 			humanoid::quadruped_body_rig(pose.resolve()),
 			humanoid::pronograde_head_rig(
@@ -85,25 +75,17 @@ impl CharacterComponents for Croconot {
 			"body",
 			vec![
 				humanoid::body_part(
-					CroconotBodyMesh::Dragloon.label(),
-					CroconotBodyMesh::Dragloon.path().as_str(),
+					BrenalBodyMesh::Gumbus.label(),
+					BrenalBodyMesh::Gumbus.path().as_str(),
 				),
-				humanoid::tail(
-					"lerodon-tail",
-					TAIL_LERODON_QUADRUPED.as_str(),
-					"haunch_vertical_thickness",
-				)
-				.socketed(
-					SocketRef::on(RigId::Body, "haunch_vertical_thickness")
-						.with_local(Transform::from_translation(Vec3::new(0.0, -0.05, -0.05))),
-				),
+				humanoid::tail("cat-tail", TAIL_CAT.as_str(), "tailbone"),
 			],
 		);
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				CroconotHeadMesh::Canine.label(),
-				CroconotHeadMesh::Canine.path().as_str(),
+				BrenalHeadMesh::Canine.label(),
+				BrenalHeadMesh::Canine.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -113,7 +95,7 @@ impl CharacterComponents for Croconot {
 				self.eye.path().as_str(),
 				AssetNormalization::centroid(0.4),
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.25)),
 			)
 			.with_feature(sliders.feature_transform(CharacterPartSlot::EyeLeft)),
 			humanoid::reflected_head_feature(
@@ -122,20 +104,16 @@ impl CharacterComponents for Croconot {
 				self.eye.path().as_str(),
 				AssetNormalization::centroid(0.4),
 				"eye_socket.R",
-				Transform::from_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.25)),
 			)
 			.with_feature(sliders.feature_transform(CharacterPartSlot::EyeRight)),
 			humanoid::head_feature(
 				CharacterPartSlot::Mouth,
-				CroconotMouthMesh::Lerodon.label(),
-				CroconotMouthMesh::Lerodon.path().as_str(),
-				AssetNormalization::centroid(0.4),
+				BrenalMouthMesh::CanineSnout.label(),
+				BrenalMouthMesh::CanineSnout.path().as_str(),
+				AssetNormalization::centroid(0.8),
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)).with_scale(Vec3::new(
-					SNOUT_XY_SCALE,
-					SNOUT_XY_SCALE,
-					SNOUT_Z_SCALE,
-				)),
+				Transform::IDENTITY,
 			)
 			.with_feature(sliders.feature_transform(CharacterPartSlot::Mouth)),
 			humanoid::head_feature(
@@ -157,7 +135,7 @@ impl CharacterComponents for Croconot {
 			)
 			.with_feature(sliders.feature_transform(CharacterPartSlot::EarRight)),
 		];
-		if self.horns != CroconotHornMesh::None {
+		if self.horns != BrenalHornMesh::None {
 			features.push(
 				humanoid::head_feature(
 					CharacterPartSlot::Horns,
@@ -171,10 +149,13 @@ impl CharacterComponents for Croconot {
 			);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.
-const _: CroconotBodyMesh = CroconotBodyMesh::Dragloon;
-const _: CroconotHeadMesh = CroconotHeadMesh::Canine;
+const _: BrenalBodyMesh = BrenalBodyMesh::Gumbus;
+const _: BrenalHeadMesh = BrenalHeadMesh::Canine;

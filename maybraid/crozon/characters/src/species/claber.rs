@@ -5,7 +5,8 @@
 //! (shorter/wider), flank ears, lerodon tail, and a prominent harrowed crown.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Claber;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -49,6 +50,19 @@ impl Default for ClaberColors {
 }
 
 impl ClaberColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ClaberColor {
 		self.body
 	}
@@ -127,16 +141,16 @@ impl ClaberConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Claber>`).
-	pub fn clothed(&self) -> Clothed<crate::species::claber::bsn::Claber> {
+	pub fn clothed(&self) -> Clothed<Claber> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for ClaberConfig {
-	type Components = crate::species::claber::bsn::Claber;
+	type Components = Claber;
 
 	fn components(&self) -> Self::Components {
-		crate::species::claber::bsn::Claber::from_config(self)
+		Claber::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

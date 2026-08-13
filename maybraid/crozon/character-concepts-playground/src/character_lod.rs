@@ -7,13 +7,12 @@ use bevy::prelude::*;
 use crozon_characters::{
 	add_character_components_host,
 	species::{
-		braidman::bsn::Braidman, brenal::bsn::Brenal, brodler::bsn::Brodler, brokker::bsn::Brokker,
-		caole::bsn::Caole, chupri::bsn::Chupri, claber::bsn::Claber, croconot::bsn::Croconot,
-		dui::bsn::Dui, epiphant::bsn::Epiphant, grener::bsn::Grener, hars::bsn::Hars,
-		kaller::bsn::Kaller, kappler::bsn::Kappler, kispar::bsn::Kispar, lero::bsn::Lero,
-		lidder::bsn::Lidder, mistler::bsn::Mistler, mygr::bsn::Mygr, sonyak::bsn::Sonyak,
-		spibmom::bsn::Spibmom, tapp::bsn::Tapp, thumplus::bsn::Thumplus, tipple::bsn::Tipple,
-		topple::bsn::Topple, tuberwaber::bsn::Tuberwaber, wumbus::bsn::Wumbus, ylter::bsn::Yilter,
+		braidman::Braidman, brenal::Brenal, brodler::Brodler, brokker::Brokker, caole::Caole,
+		chupri::Chupri, claber::Claber, croconot::Croconot, dui::Dui, epiphant::Epiphant,
+		grener::Grener, hars::Hars, kaller::Kaller, kappler::Kappler, kispar::Kispar, lero::Lero,
+		lidder::Lidder, mistler::Mistler, mygr::Mygr, sonyak::Sonyak, spibmom::Spibmom, tapp::Tapp,
+		thumplus::Thumplus, tipple::Tipple, topple::Topple, tuberwaber::Tuberwaber, wumbus::Wumbus,
+		ylter::Yilter,
 	},
 	CharacterComponentsPlugin, Clothed, PartNode, RigNode,
 };

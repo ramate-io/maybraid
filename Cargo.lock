@@ -2830,6 +2830,7 @@ dependencies = [
  "crozon-character-items",
  "crozon-rigs",
  "lod",
+ "material-ref",
  "scene-ref",
 ]
 

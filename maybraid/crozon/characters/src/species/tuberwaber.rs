@@ -5,7 +5,8 @@
 //! fixed harrowed crown, and a colorful cool-toned skin palette (no ears).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tuberwaber;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -54,6 +55,19 @@ impl Default for TuberwaberColors {
 }
 
 impl TuberwaberColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | Nose => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Hair => self.hair.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> TuberwaberColor {
 		self.body
 	}
@@ -163,16 +177,16 @@ impl TuberwaberConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Tuberwaber>`).
-	pub fn clothed(&self) -> Clothed<crate::species::tuberwaber::bsn::Tuberwaber> {
+	pub fn clothed(&self) -> Clothed<Tuberwaber> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for TuberwaberConfig {
-	type Components = crate::species::tuberwaber::bsn::Tuberwaber;
+	type Components = Tuberwaber;
 
 	fn components(&self) -> Self::Components {
-		crate::species::tuberwaber::bsn::Tuberwaber::from_config(self)
+		Tuberwaber::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

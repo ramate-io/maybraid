@@ -4,7 +4,8 @@
 //! ears, species-owned fur/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Mygr;
 pub mod palette;
 pub mod pose;
 
@@ -42,6 +43,17 @@ impl Default for MygrColors {
 }
 
 impl MygrColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | EarLeft | EarRight | Tail => self.skin.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -101,16 +113,16 @@ impl MygrConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Mygr>`).
-	pub fn clothed(&self) -> Clothed<crate::species::mygr::bsn::Mygr> {
+	pub fn clothed(&self) -> Clothed<Mygr> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for MygrConfig {
-	type Components = crate::species::mygr::bsn::Mygr;
+	type Components = Mygr;
 
 	fn components(&self) -> Self::Components {
-		crate::species::mygr::bsn::Mygr::from_config(self)
+		Mygr::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

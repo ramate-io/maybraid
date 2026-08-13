@@ -4,7 +4,8 @@
 //! Dui barred-bowl head on an orthograde head rig, cow snout, and long legs.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Yilter;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -44,6 +45,19 @@ impl Default for YilterColors {
 }
 
 impl YilterColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig => self.head.color(),
+			NeckMesh | NeckRig => self.neck.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -117,16 +131,16 @@ impl YilterConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Yilter>`).
-	pub fn clothed(&self) -> Clothed<crate::species::ylter::bsn::Yilter> {
+	pub fn clothed(&self) -> Clothed<Yilter> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for YilterConfig {
-	type Components = crate::species::ylter::bsn::Yilter;
+	type Components = Yilter;
 
 	fn components(&self) -> Self::Components {
-		crate::species::ylter::bsn::Yilter::from_config(self)
+		Yilter::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

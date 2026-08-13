@@ -1,14 +1,14 @@
-//! LodScene recipe for Mygr.
+//! LodScene recipe for Wumbus.
 //!
-//! [`Mygr`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`MygrConfig::clothed`].
+//! [`Wumbus`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`WumbusConfig::clothed`].
 
 use bevy::prelude::*;
 
 use super::{
-	assets::{MygrHeadMesh, MygrMouthMesh},
-	pose::MygrPose,
-	MygrColors, MygrConfig,
+	assets::{WumbusHeadMesh, WumbusHornMesh, WumbusMouthMesh},
+	pose::WumbusPose,
+	WumbusColors, WumbusConfig,
 };
 use crate::{
 	assembly::CharacterPartSlot,
@@ -16,52 +16,61 @@ use crate::{
 	components::CharacterComponents,
 	layer::Layers,
 	nodes::{PartNode, RigNode},
-	species::common::{nodes as humanoid, EyeMesh, HairMesh, EAR_FLANK, TAIL_CAT},
+	species::common::{nodes as humanoid, EyeMesh, HairMesh, EAR_FLANK},
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Mygr data attached to the character root entity.
+/// Semantic Wumbus data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`MygrConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`WumbusConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
-pub struct Mygr {
+pub struct Wumbus {
+	pub horns: WumbusHornMesh,
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
-	pub colors: MygrColors,
+	pub colors: WumbusColors,
 }
 
-impl Mygr {
-	pub fn from_config(config: &MygrConfig) -> Self {
-		Self { eye: config.eye, hair: config.hair, colors: config.colors.clone() }
+impl Wumbus {
+	pub fn from_config(config: &WumbusConfig) -> Self {
+		Self {
+			horns: config.horns,
+			eye: config.eye,
+			hair: config.hair,
+			colors: config.colors.clone(),
+		}
 	}
 }
 
-impl Default for Mygr {
+impl Default for Wumbus {
 	fn default() -> Self {
-		Self::from_config(&MygrConfig::default_preview())
+		Self::from_config(&WumbusConfig::default_preview())
 	}
 }
 
-fn mygr_eye_local() -> Transform {
+fn wumbus_eye_local() -> Transform {
 	Transform::from_translation(Vec3::new(0.0, 0.0, -0.12))
 }
 
-fn mygr_ear_left_local() -> Transform {
+fn wumbus_ear_left_local() -> Transform {
 	Transform::from_translation(Vec3::new(0.15, 0.3, -0.05))
 		.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0))
 }
 
-fn mygr_ear_right_local() -> Transform {
+fn wumbus_ear_right_local() -> Transform {
 	Transform::from_translation(Vec3::new(-0.15, 0.3, -0.05))
 		.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0))
 }
 
-impl CharacterComponents for Mygr {
+impl CharacterComponents for Wumbus {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
-			humanoid::humanoid_body_rig(MygrPose.resolve()),
-			humanoid::orthograde_head_rig(),
+			humanoid::humanoid_body_rig(WumbusPose.resolve()),
+			humanoid::orthograde_head_rig_at(
+				AssetNormalization::base_y(0.3),
+				Transform::from_translation(Vec3::new(0.0, -0.2, 0.00)),
+			),
 		])
 	}
 
@@ -69,15 +78,19 @@ impl CharacterComponents for Mygr {
 		let mut out = Layers::from_labeled(
 			"body",
 			vec![
-				humanoid::body_part("full", crate::species::common::BODY_FULL.as_str()),
-				humanoid::tail("cat-tail", TAIL_CAT.as_str(), "root"),
+				humanoid::body_part("wumbus", "characters/bodies/wumbus_biped_full_body.glb"),
+				humanoid::spine(
+					"snail-back",
+					"characters/spines/snail_back_full_exo.glb",
+					"upper_back",
+				),
 			],
 		);
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				MygrHeadMesh::OrthoBear.label(),
-				MygrHeadMesh::OrthoBear.path().as_str(),
+				WumbusHeadMesh::OrthoBear.label(),
+				WumbusHeadMesh::OrthoBear.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -87,7 +100,7 @@ impl CharacterComponents for Mygr {
 				self.eye.path().as_str(),
 				AssetNormalization::centroid(0.2),
 				"eye_socket.L",
-				mygr_eye_local(),
+				wumbus_eye_local(),
 			),
 			humanoid::reflected_head_feature(
 				CharacterPartSlot::EyeRight,
@@ -95,12 +108,12 @@ impl CharacterComponents for Mygr {
 				self.eye.path().as_str(),
 				AssetNormalization::centroid(0.2),
 				"eye_socket.R",
-				mygr_eye_local(),
+				wumbus_eye_local(),
 			),
 			humanoid::head_feature(
 				CharacterPartSlot::Mouth,
-				MygrMouthMesh::CanineSnout.label(),
-				MygrMouthMesh::CanineSnout.path().as_str(),
+				WumbusMouthMesh::CanineSnout.label(),
+				WumbusMouthMesh::CanineSnout.path().as_str(),
 				AssetNormalization::centroid(0.4),
 				"mouth_socket",
 				humanoid::mouth_socket_local(),
@@ -111,7 +124,7 @@ impl CharacterComponents for Mygr {
 				EAR_FLANK.as_str(),
 				AssetNormalization::centroid(0.4),
 				"ear_socket.L",
-				mygr_ear_left_local(),
+				wumbus_ear_left_local(),
 			),
 			humanoid::reflected_head_feature(
 				CharacterPartSlot::EarRight,
@@ -119,13 +132,19 @@ impl CharacterComponents for Mygr {
 				EAR_FLANK.as_str(),
 				AssetNormalization::centroid(0.4),
 				"ear_socket.R",
-				mygr_ear_right_local(),
+				wumbus_ear_right_local(),
 			),
 		];
+		if self.horns != WumbusHornMesh::None {
+			features.push(humanoid::horns(self.horns.label(), self.horns.path().as_str()));
+		}
 		if let Some(hair) = humanoid::hair(self.hair) {
 			features.push(hair);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

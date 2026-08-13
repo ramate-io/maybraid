@@ -126,7 +126,10 @@ impl CharacterComponents for Yilter {
 				.with_feature(sliders.feature_transform(CharacterPartSlot::Mouth)),
 			],
 		);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }
 

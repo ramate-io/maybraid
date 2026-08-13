@@ -37,14 +37,15 @@ impl RigSkeletonKind {
 	}
 }
 
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum CharacterRigRole {
+	#[default]
 	Body,
 	Neck,
 	Head,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 pub struct CharacterRig {
 	pub role: CharacterRigRole,
 	pub skeleton: RigSkeletonKind,
@@ -53,11 +54,11 @@ pub struct CharacterRig {
 /// Marks a [`CharacterRig`] that came from a [`crate::RigNode`] LodScene host.
 ///
 /// Socket/skin fulfill uses this so hidden focus-reference rigs are ignored.
-#[derive(Component)]
+#[derive(Component, Clone, Copy, Default)]
 pub struct LodCharacterRig;
 
 /// Marks which logical character slot an instantiated part occupies.
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterPart {
 	pub slot: CharacterPartSlot,
 }
@@ -82,19 +83,19 @@ pub struct NoMatchingArmature {
 }
 
 /// Named-bone index for one [`CharacterRig`] (scoped to that armature).
-#[derive(Component, Default)]
+#[derive(Component, Default, Clone)]
 pub struct BoneMap {
 	pub by_name: HashMap<String, Entity>,
 }
 
 /// Resolved proportional layers to maintain on this rig across frames.
-#[derive(Component)]
+#[derive(Component, Clone, Default)]
 pub struct ActiveRigPose {
 	pub pose: ResolvedRigPose,
 }
 
 /// Bind-pose bone TRS captured once each named bone appears in the rig map.
-#[derive(Component, Default)]
+#[derive(Component, Default, Clone)]
 pub struct RigBindScales {
 	pub scales: HashMap<String, Vec3>,
 	pub translations: HashMap<String, Vec3>,

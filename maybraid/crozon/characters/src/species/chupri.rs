@@ -6,7 +6,8 @@
 //! ~2 m biped), not per-bone root scale (pelvis/buttocks are root siblings).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Chupri;
 pub mod palette;
 pub mod pose;
 
@@ -45,6 +46,16 @@ impl Default for ChupriColors {
 }
 
 impl ChupriColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -107,16 +118,16 @@ impl ChupriConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Chupri>`).
-	pub fn clothed(&self) -> Clothed<crate::species::chupri::bsn::Chupri> {
+	pub fn clothed(&self) -> Clothed<Chupri> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for ChupriConfig {
-	type Components = crate::species::chupri::bsn::Chupri;
+	type Components = Chupri;
 
 	fn components(&self) -> Self::Components {
-		crate::species::chupri::bsn::Chupri::from_config(self)
+		Chupri::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

@@ -144,7 +144,10 @@ impl CharacterComponents for Epiphant {
 				.with_feature(sliders.feature_transform(CharacterPartSlot::EarRight)),
 			],
 		);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }
 

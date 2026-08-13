@@ -1,14 +1,14 @@
-//! LodScene recipe for Chupri.
+//! LodScene recipe for Kappler.
 //!
-//! [`Chupri`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`ChupriConfig::clothed`].
+//! [`Kappler`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`KapplerConfig::clothed`].
 
 use bevy::prelude::*;
 
 use super::{
-	assets::{ChupriBeakMesh, ChupriHeadMesh},
-	pose::{ChupriPose, CHUPRI_OVERALL_SCALE},
-	ChupriColors, ChupriConfig,
+	assets::{KapplerBeakMesh, KapplerHeadMesh},
+	pose::{KapplerPose, KAPPLER_OVERALL_SCALE},
+	KapplerColors, KapplerConfig,
 };
 use crate::{
 	assembly::CharacterPartSlot,
@@ -20,20 +20,23 @@ use crate::{
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Chupri data attached to the character root entity.
+/// Cartoonishly large head (same as Topple).
+const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
+
+/// Semantic Kappler data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`ChupriConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`KapplerConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
-pub struct Chupri {
-	pub beak: ChupriBeakMesh,
+pub struct Kappler {
+	pub beak: KapplerBeakMesh,
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
-	pub colors: ChupriColors,
+	pub colors: KapplerColors,
 }
 
-impl Chupri {
-	pub fn from_config(config: &ChupriConfig) -> Self {
+impl Kappler {
+	pub fn from_config(config: &KapplerConfig) -> Self {
 		Self {
 			beak: config.beak,
 			eye: config.eye,
@@ -43,31 +46,34 @@ impl Chupri {
 	}
 }
 
-impl Default for Chupri {
+impl Default for Kappler {
 	fn default() -> Self {
-		Self::from_config(&ChupriConfig::default_preview())
+		Self::from_config(&KapplerConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Chupri {
+impl CharacterComponents for Kappler {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
-			humanoid::humanoid_body_rig(ChupriPose.resolve())
-				.with_normalization(AssetNormalization::centroid(CHUPRI_OVERALL_SCALE)),
-			humanoid::orthograde_head_rig(),
+			humanoid::humanoid_body_rig(KapplerPose.resolve())
+				.with_normalization(AssetNormalization::centroid(KAPPLER_OVERALL_SCALE)),
+			humanoid::orthograde_head_rig_at(
+				AssetNormalization::base_y(0.26),
+				Transform::from_scale(Vec3::splat(HEAD_RIG_SOCKET_SCALE)),
+			),
 		])
 	}
 
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("crane", "characters/bodies/crane_body.glb")],
+			vec![humanoid::body_part("whelp", "characters/bodies/whelp_bird.glb")],
 		);
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				ChupriHeadMesh::Meerkat.label(),
-				ChupriHeadMesh::Meerkat.path().as_str(),
+				KapplerHeadMesh::Meerkat.label(),
+				KapplerHeadMesh::Meerkat.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -92,6 +98,9 @@ impl CharacterComponents for Chupri {
 			features.push(hair);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

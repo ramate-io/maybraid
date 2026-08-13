@@ -5,7 +5,8 @@
 //! normalization (~0.30×); thin proportions via BraidmanSliders.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tapp;
 pub mod palette;
 pub mod pose;
 
@@ -43,6 +44,16 @@ impl Default for TappColors {
 }
 
 impl TappColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -105,16 +116,16 @@ impl TappConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Tapp>`).
-	pub fn clothed(&self) -> Clothed<crate::species::tapp::bsn::Tapp> {
+	pub fn clothed(&self) -> Clothed<Tapp> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for TappConfig {
-	type Components = crate::species::tapp::bsn::Tapp;
+	type Components = Tapp;
 
 	fn components(&self) -> Self::Components {
-		crate::species::tapp::bsn::Tapp::from_config(self)
+		Tapp::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

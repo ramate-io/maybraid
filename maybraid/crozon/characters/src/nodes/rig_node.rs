@@ -2,16 +2,19 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Vec3};
-use bevy::scene::prelude::Scene;
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_rigs::ResolvedRigPose;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::SceneChunk;
+use lod::{lod_host_scene_pending, SceneChunk};
 use scene_ref::SceneRef;
 
 use crate::assets::AssetNormalization;
-use crate::rig::RigSkeletonKind;
-use crate::socket::{RigId, SocketRef};
+use crate::rig::{
+	ActiveRigPose, BoneMap, CharacterRig, LodCharacterRig, RigBindScales, RigSkeletonKind,
+};
+use crate::scene_children::maybe_component;
+use crate::socket::{RigId, SocketRef, SocketRefRoot};
 
 /// Authoring IR for a character armature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -124,5 +127,31 @@ impl LodScene for RigNode {
 
 	fn scene_bounds(&self) -> Aabb3d {
 		Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 2.5, 1.0))
+	}
+
+	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	where
+		Self: Component + Clone + Default + Unpin + Sized,
+	{
+		let level = self.scene_lod_level(lod_ref);
+		let bounds = self.scene_bounds();
+		let node = self.clone();
+		let transform = node.normalization.transform();
+		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
+		let pose = ActiveRigPose { pose: node.pose.clone() };
+		let socket = node.socket.map(SocketRefRoot);
+		(
+			lod_host_scene_pending(level, bounds),
+			bsn! {
+				template_value(node)
+				template_value(transform)
+				template_value(rig)
+				LodCharacterRig
+				template_value(BoneMap::default())
+				template_value(pose)
+				template_value(RigBindScales::default())
+			},
+			maybe_component(socket),
+		)
 	}
 }

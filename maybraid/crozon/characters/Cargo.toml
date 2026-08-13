@@ -17,6 +17,7 @@ clap = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-rigs = { workspace = true }
 lod = { workspace = true }
+material-ref = { workspace = true }
 scene-ref = { workspace = true }
 
 [dev-dependencies]

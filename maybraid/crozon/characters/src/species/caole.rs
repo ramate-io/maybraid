@@ -4,7 +4,8 @@
 //! flank ears, cat tail, and cow snout. Head mesh is Caole or Cowder.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Caole;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -45,6 +46,18 @@ impl Default for CaoleColors {
 }
 
 impl CaoleColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -125,16 +138,16 @@ impl CaoleConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Caole>`).
-	pub fn clothed(&self) -> Clothed<crate::species::caole::bsn::Caole> {
+	pub fn clothed(&self) -> Clothed<Caole> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for CaoleConfig {
-	type Components = crate::species::caole::bsn::Caole;
+	type Components = Caole;
 
 	fn components(&self) -> Self::Components {
-		crate::species::caole::bsn::Caole::from_config(self)
+		Caole::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

@@ -3,7 +3,8 @@
 //! Sprite fish on the forelimbed rig (~1 ft). Authoring body length is ~2 m, so
 //! overall scale is ~0.15× via body-rig asset normalization.
 
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Mistler;
 pub mod palette;
 pub mod pose;
 
@@ -19,6 +20,12 @@ pub struct MistlerColors {
 impl Default for MistlerColors {
 	fn default() -> Self {
 		Self { body: MistlerBodyColor::Coral }
+	}
+}
+
+impl MistlerColors {
+	pub fn color_for_slot(&self, _slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		self.body.color()
 	}
 }
 
@@ -47,16 +54,16 @@ impl MistlerConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Mistler>`).
-	pub fn clothed(&self) -> Clothed<crate::species::mistler::bsn::Mistler> {
+	pub fn clothed(&self) -> Clothed<Mistler> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for MistlerConfig {
-	type Components = crate::species::mistler::bsn::Mistler;
+	type Components = Mistler;
 
 	fn components(&self) -> Self::Components {
-		crate::species::mistler::bsn::Mistler::from_config(self)
+		Mistler::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

@@ -29,8 +29,9 @@ pub use components::{
 pub use concepts::ConceptAnimation;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use layer::{Layer, Layers};
+pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 pub use nodes::{PartNode, RigNode};
-pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};
+pub use plugin::{add_character_components_host, CharacterComponentsPlugin};
 pub use presets::{BuildPreset, GenderPreset};
 pub use rig::{
 	bind_scales_ready, bone_map_ready, build_rig_bone_map, missing_landmark_bones, ActiveRigPose,

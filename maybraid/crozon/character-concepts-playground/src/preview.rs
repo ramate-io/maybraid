@@ -16,7 +16,7 @@ use crozon_characters::{
 		brokker::{BrokkerConfig, BrokkerSnoutMesh},
 		caole::CaoleConfig,
 		chupri::{ChupriBeakMesh, ChupriConfig},
-		claber::{ClaberColor, ClaberConfig},
+		claber::ClaberConfig,
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		croconot::CroconotConfig,
 		dui::{DuiConfig, DuiNoseMesh},
@@ -53,6 +53,126 @@ use crate::skinning::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature,
 	RigBindScales,
 };
+
+/// Run `$body` with `$recipe` bound to `config.clothed()` (monomorphized per species).
+macro_rules! with_clothed_recipe {
+	($config:expr, $recipe:ident => $body:expr) => {
+		match $config {
+			ConceptPreviewConfig::Braidman { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Brenal { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Caole { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Epiphant { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Hars { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Yilter { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Sonyak { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Claber { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Croconot { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Brodler { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Mygr { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Dui { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Lidder { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Chupri { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Brokker { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Tipple { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Topple { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Kispar { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Tapp { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Kaller { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Kappler { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Wumbus { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Lero { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Spibmom { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Grener { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Thumplus { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Mistler { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+			ConceptPreviewConfig::Tuberwaber { config, .. } => {
+				let $recipe = config.clothed();
+				$body
+			}
+		}
+	};
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ConceptSpecies {
@@ -421,39 +541,16 @@ impl ConceptPreviewConfig {
 
 	/// High-band armature nodes from the LodScene recipe (body / neck / head).
 	pub fn lod_rig_nodes(&self) -> Vec<RigNode> {
-		fn nodes(character: &impl CharacterComponents) -> Vec<RigNode> {
-			character.rig_nodes_for_level(LodSceneLevel::High).flatten()
-		}
-		match self {
-			Self::Braidman { config, .. } => nodes(&config.clothed()),
-			Self::Brenal { config, .. } => nodes(&config.clothed()),
-			Self::Caole { config, .. } => nodes(&config.clothed()),
-			Self::Epiphant { config, .. } => nodes(&config.clothed()),
-			Self::Hars { config, .. } => nodes(&config.clothed()),
-			Self::Yilter { config, .. } => nodes(&config.clothed()),
-			Self::Sonyak { config, .. } => nodes(&config.clothed()),
-			Self::Claber { config, .. } => nodes(&config.clothed()),
-			Self::Croconot { config, .. } => nodes(&config.clothed()),
-			Self::Brodler { config, .. } => nodes(&config.clothed()),
-			Self::Mygr { config, .. } => nodes(&config.clothed()),
-			Self::Dui { config, .. } => nodes(&config.clothed()),
-			Self::Lidder { config, .. } => nodes(&config.clothed()),
-			Self::Chupri { config, .. } => nodes(&config.clothed()),
-			Self::Brokker { config, .. } => nodes(&config.clothed()),
-			Self::Tipple { config, .. } => nodes(&config.clothed()),
-			Self::Topple { config, .. } => nodes(&config.clothed()),
-			Self::Kispar { config, .. } => nodes(&config.clothed()),
-			Self::Tapp { config, .. } => nodes(&config.clothed()),
-			Self::Kaller { config, .. } => nodes(&config.clothed()),
-			Self::Kappler { config, .. } => nodes(&config.clothed()),
-			Self::Wumbus { config, .. } => nodes(&config.clothed()),
-			Self::Lero { config, .. } => nodes(&config.clothed()),
-			Self::Spibmom { config, .. } => nodes(&config.clothed()),
-			Self::Grener { config, .. } => nodes(&config.clothed()),
-			Self::Thumplus { config, .. } => nodes(&config.clothed()),
-			Self::Mistler { config, .. } => nodes(&config.clothed()),
-			Self::Tuberwaber { config, .. } => nodes(&config.clothed()),
-		}
+		with_clothed_recipe!(self, recipe => {
+			recipe.rig_nodes_for_level(LodSceneLevel::High).flatten()
+		})
+	}
+
+	/// High-band part nodes from the LodScene recipe (meshes + clothing).
+	pub fn lod_part_nodes(&self) -> Vec<PartNode> {
+		with_clothed_recipe!(self, recipe => {
+			recipe.part_nodes_for_level(LodSceneLevel::High).flatten()
+		})
 	}
 
 	pub fn status_label(&self) -> String {
@@ -1062,6 +1159,7 @@ pub fn sync_preview(
 		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
 	mut parts: Query<(
+		&PartNode,
 		&CharacterPart,
 		&mut PreviewAssetTarget,
 		Option<&PreviewPartBaseTransform>,
@@ -1093,97 +1191,14 @@ pub fn sync_preview(
 }
 
 fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
-	match config {
-		ConceptPreviewConfig::Braidman { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Brenal { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Caole { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Epiphant { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Hars { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Yilter { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Sonyak { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Claber { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Croconot { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Brodler { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Mygr { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Dui { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Lidder { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Chupri { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Brokker { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Tipple { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Topple { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Kispar { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Tapp { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Kaller { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Kappler { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Wumbus { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Lero { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Spibmom { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Grener { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Thumplus { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Mistler { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-		ConceptPreviewConfig::Tuberwaber { config, .. } => {
-			spawn_clothed_character(commands, &config.clothed());
-		}
-	}
+	with_clothed_recipe!(config, recipe => {
+		spawn_clothed_character(commands, &recipe);
+	});
 }
 
 fn spawn_clothed_character<T>(commands: &mut Commands, character: &T)
 where
-	T: crozon_characters::CharacterComponents + Clone + Send + Sync + 'static,
+	T: CharacterComponents + Clone + Send + Sync + 'static,
 {
 	let bounds = character_bounds(character);
 	for entity in spawn_character_components(commands, character, Transform::IDENTITY, bounds) {
@@ -1211,8 +1226,10 @@ pub fn stamp_lod_character_preview(
 	}
 
 	for (entity, node) in &parts {
+		let mut target = preview_asset_target(&config, node.slot, node.label);
+		target.color = PreviewColor::from_part(node);
 		commands.entity(entity).insert((
-			preview_asset_target(&config, node.slot, node.label),
+			target,
 			PreviewPartBaseTransform {
 				normalization: node.normalization.transform(),
 				socket: node.socket.map(|socket| socket.local),
@@ -1229,6 +1246,7 @@ fn sync_live_preview(
 		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
 	parts: &mut Query<(
+		&PartNode,
 		&CharacterPart,
 		&mut PreviewAssetTarget,
 		Option<&PreviewPartBaseTransform>,
@@ -1250,348 +1268,40 @@ fn sync_live_preview(
 		}
 	}
 
-	match config {
-		ConceptPreviewConfig::Braidman { config: braidman, .. } => {
-			let sliders = braidman.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_braidman(braidman, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
+	let recipe_parts = config.lod_part_nodes();
+	for (node, part, mut target, base, transform) in parts {
+		if let Some(recipe) = recipe_part(&recipe_parts, node) {
+			target.color = PreviewColor::from_part(recipe);
 		}
-		ConceptPreviewConfig::Brenal { config: brenal, .. } => {
-			let sliders = brenal.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_brenal(brenal, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
+		if !has_feature_transform(part.slot) {
+			continue;
 		}
-		ConceptPreviewConfig::Caole { config: caole, .. } => {
-			let sliders = caole.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_caole(caole, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
+		let Some(recipe) = recipe_part(&recipe_parts, node) else {
+			continue;
+		};
+		let Some(base) = base else {
+			continue;
+		};
+		let Some(mut transform) = transform else {
+			continue;
+		};
+		let authored = base.normalization.mul_transform(recipe.feature);
+		match base.socket {
+			Some(socket) => {
+				*transform = socket;
+				transform.scale *= authored.scale;
+				transform.rotation *= authored.rotation;
 			}
-		}
-		ConceptPreviewConfig::Epiphant { config: epiphant, .. } => {
-			let sliders = epiphant.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_epiphant(epiphant, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Hars { config: hars, .. } => {
-			let sliders = hars.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_hars(hars, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Yilter { config: ylter, .. } => {
-			let sliders = ylter.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_ylter(ylter, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Sonyak { config: sonyak, .. } => {
-			let sliders = sonyak.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_sonyak(sonyak, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Claber { config: claber, .. } => {
-			let sliders = claber.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_claber(claber, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Croconot { config: croconot, .. } => {
-			let sliders = croconot.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_croconot(croconot, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
-		}
-		ConceptPreviewConfig::Brodler { config: brodler, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_brodler(brodler, target.target);
-			}
-		}
-		ConceptPreviewConfig::Mygr { config: mygr, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_mygr(mygr, target.target);
-			}
-		}
-		ConceptPreviewConfig::Dui { config: dui, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_dui(dui, target.target);
-			}
-		}
-		ConceptPreviewConfig::Lidder { config: lidder, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_lidder(lidder, target.target);
-			}
-		}
-		ConceptPreviewConfig::Chupri { config: chupri, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_chupri(chupri, target.target);
-			}
-		}
-		ConceptPreviewConfig::Brokker { config: brokker, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_brokker(brokker, target.target);
-			}
-		}
-		ConceptPreviewConfig::Tipple { config: tipple, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_tipple(tipple, target.target);
-			}
-		}
-		ConceptPreviewConfig::Topple { config: topple, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_topple(topple, target.target);
-			}
-		}
-		ConceptPreviewConfig::Kispar { config: kispar, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_kispar(kispar, target.target);
-			}
-		}
-		ConceptPreviewConfig::Tapp { config: tapp, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_tapp(tapp, target.target);
-			}
-		}
-		ConceptPreviewConfig::Kaller { config: kaller, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_kaller(kaller, target.target);
-			}
-		}
-		ConceptPreviewConfig::Kappler { config: kappler, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_kappler(kappler, target.target);
-			}
-		}
-		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_wumbus(wumbus, target.target);
-			}
-		}
-		ConceptPreviewConfig::Lero { config: lero, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_lero(lero, target.target);
-			}
-		}
-		ConceptPreviewConfig::Spibmom { config: spibmom, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_spibmom(spibmom, target.target);
-			}
-		}
-		ConceptPreviewConfig::Grener { config: grener, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_grener(grener, target.target);
-			}
-		}
-		ConceptPreviewConfig::Thumplus { config: thumplus, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_thumplus(thumplus, target.target);
-			}
-		}
-		ConceptPreviewConfig::Mistler { config: mistler, .. } => {
-			for (_, mut target, ..) in parts {
-				target.color = preview_color_mistler(mistler, target.target);
-			}
-		}
-		ConceptPreviewConfig::Tuberwaber { config: tuberwaber, .. } => {
-			let sliders = tuberwaber.sliders.clamped();
-			for (part, mut target, base, transform) in parts {
-				target.color = preview_color_tuberwaber(tuberwaber, target.target);
-				let Some(base) = base else {
-					continue;
-				};
-				let Some(mut transform) = transform else {
-					continue;
-				};
-				if !has_feature_transform(part.slot) {
-					continue;
-				}
-				let authored =
-					base.normalization.mul_transform(sliders.feature_transform(part.slot));
-				match base.socket {
-					Some(socket) => {
-						*transform = socket;
-						transform.scale *= authored.scale;
-						transform.rotation *= authored.rotation;
-					}
-					None => *transform = authored,
-				}
-			}
+			None => *transform = authored,
 		}
 	}
+}
+
+fn recipe_part<'a>(parts: &'a [PartNode], node: &PartNode) -> Option<&'a PartNode> {
+	parts
+		.iter()
+		.find(|part| part.slot == node.slot && part.label == node.label)
+		.or_else(|| parts.iter().find(|part| part.slot == node.slot))
 }
 
 #[derive(Resource, Default)]
@@ -1702,414 +1412,6 @@ fn has_feature_transform(slot: CharacterPartSlot) -> bool {
 	)
 }
 
-fn preview_color_braidman(config: &BraidmanConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	let skin = config.colors.skin_color();
-	PreviewColor::Item(match target {
-		PreviewTarget::BraidmanBody(_) => config.colors.body,
-		PreviewTarget::BraidmanHead(_)
-		| PreviewTarget::BraidmanNose(_)
-		| PreviewTarget::BraidmanEar(_) => skin,
-		PreviewTarget::BraidmanEye(_) => config.colors.eyes,
-		PreviewTarget::BraidmanMouth(_) => config.colors.mouth,
-		PreviewTarget::BraidmanHair(_) => config.colors.hair,
-		PreviewTarget::BraidmanClothing(clothing) => config.colors.clothing_color(clothing),
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_brenal(config: &BrenalConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	let skin = config.colors.skin_color();
-	PreviewColor::Item(match target {
-		PreviewTarget::BrenalBody => config.colors.body,
-		PreviewTarget::BrenalHead | PreviewTarget::BrenalEar => skin,
-		PreviewTarget::BrenalEye(_) => config.colors.eyes,
-		PreviewTarget::BrenalMouth => config.colors.mouth,
-		PreviewTarget::BrenalHorns(_) => config.colors.horns,
-		PreviewTarget::BrenalTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	let skin = config.colors.skin_color();
-	PreviewColor::Item(match target {
-		PreviewTarget::CaoleBody => config.colors.body,
-		PreviewTarget::CaoleHead | PreviewTarget::CaoleEar => skin,
-		PreviewTarget::CaoleEye(_) => config.colors.eyes,
-		PreviewTarget::CaoleMouth => config.colors.mouth,
-		PreviewTarget::CaoleTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_epiphant(config: &EpiphantConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_characters::species::epiphant::EpiphantColor;
-
-	PreviewColor::Epiphant(match target {
-		PreviewTarget::EpiphantBody => config.colors.body,
-		PreviewTarget::EpiphantHead => config.colors.head,
-		PreviewTarget::EpiphantEye(_) => config.colors.eyes,
-		PreviewTarget::EpiphantEar => config.colors.ears,
-		PreviewTarget::EpiphantNose => config.colors.nose,
-		PreviewTarget::EpiphantTail => config.colors.tail,
-		_ => EpiphantColor::Slate,
-	})
-}
-
-fn preview_color_hars(config: &HarsConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	let skin = config.colors.skin_color();
-	PreviewColor::Item(match target {
-		PreviewTarget::HarsBody => config.colors.body,
-		PreviewTarget::HarsHead | PreviewTarget::HarsEar => skin,
-		PreviewTarget::HarsEye(_) => config.colors.eyes,
-		PreviewTarget::HarsMouth => config.colors.mouth,
-		PreviewTarget::HarsTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_ylter(config: &YilterConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	PreviewColor::Item(match target {
-		PreviewTarget::YilterBody => config.colors.body,
-		PreviewTarget::YilterHead => config.colors.head,
-		PreviewTarget::YilterNeck => config.colors.neck,
-		PreviewTarget::YilterEye => config.colors.eyes,
-		PreviewTarget::YilterMouth => config.colors.mouth,
-		PreviewTarget::YilterTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_sonyak(config: &SonyakConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	PreviewColor::Item(match target {
-		PreviewTarget::SonyakBody => config.colors.body,
-		PreviewTarget::SonyakHead => config.colors.head,
-		PreviewTarget::SonyakEye => config.colors.eyes,
-		PreviewTarget::SonyakHair => config.colors.hair,
-		PreviewTarget::SonyakMouth => config.colors.mouth,
-		PreviewTarget::SonyakTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_claber(config: &ClaberConfig, target: PreviewTarget) -> PreviewColor {
-	let skin = config.colors.skin_color();
-	PreviewColor::Claber(match target {
-		PreviewTarget::ClaberBody => config.colors.body,
-		PreviewTarget::ClaberHead | PreviewTarget::ClaberEar => skin,
-		PreviewTarget::ClaberEye(_) => config.colors.eyes,
-		PreviewTarget::ClaberMouth => config.colors.mouth,
-		PreviewTarget::ClaberHorns(_) => config.colors.horns,
-		PreviewTarget::ClaberTail => config.colors.tail,
-		_ => ClaberColor::DesertBrown,
-	})
-}
-
-fn preview_color_croconot(config: &CroconotConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
-
-	let skin = config.colors.skin_color();
-	PreviewColor::Item(match target {
-		PreviewTarget::CroconotBody => config.colors.body,
-		PreviewTarget::CroconotHead | PreviewTarget::CroconotEar => skin,
-		PreviewTarget::CroconotEye(_) => config.colors.eyes,
-		PreviewTarget::CroconotMouth => config.colors.mouth,
-		PreviewTarget::CroconotHorns(_) => config.colors.horns,
-		PreviewTarget::CroconotTail => config.colors.tail,
-		_ => ItemColor::Natural,
-	})
-}
-
-fn preview_color_brodler(config: &BrodlerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::BrodlerHead(_)
-		| PreviewTarget::BrodlerBody
-		| PreviewTarget::BrodlerNose(_)
-		| PreviewTarget::BrodlerEar(_) => PreviewColor::BrodlerSkin(config.colors.skin),
-		PreviewTarget::BrodlerHorns(_) => PreviewColor::BrodlerHorn(config.colors.horns),
-		PreviewTarget::BrodlerEye(_) => PreviewColor::BrodlerEye(config.colors.eyes),
-		PreviewTarget::BrodlerMouth(_) => PreviewColor::Item(config.colors.mouth),
-		PreviewTarget::BrodlerHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::BrodlerClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::BrodlerSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::MygrHead
-		| PreviewTarget::MygrBody
-		| PreviewTarget::MygrEar
-		| PreviewTarget::MygrTail => PreviewColor::MygrSkin(config.colors.skin),
-		PreviewTarget::MygrEye(_) => PreviewColor::MygrEye(config.colors.eyes),
-		PreviewTarget::MygrMouth => PreviewColor::Item(config.colors.mouth),
-		PreviewTarget::MygrHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::MygrClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::MygrSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::DuiHead | PreviewTarget::DuiBody => {
-			PreviewColor::DuiSkin(config.colors.skin)
-		}
-		PreviewTarget::DuiNose(_) => PreviewColor::DuiNose(config.colors.nose_color),
-		PreviewTarget::DuiEye => PreviewColor::DuiEye(config.colors.eyes),
-		PreviewTarget::DuiMouth => PreviewColor::DuiMouth(config.colors.mouth),
-		PreviewTarget::DuiHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::DuiClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::DuiSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_lidder(config: &LidderConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::LidderHead | PreviewTarget::LidderBody => {
-			PreviewColor::LidderPlumage(config.colors.plumage)
-		}
-		PreviewTarget::LidderEye => PreviewColor::LidderEye(config.colors.eyes),
-		PreviewTarget::LidderBeak(_) => PreviewColor::LidderBeak(config.colors.beak),
-		PreviewTarget::LidderHair(_) => PreviewColor::LidderPlumage(config.colors.plumage),
-		PreviewTarget::LidderClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::LidderPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_chupri(config: &ChupriConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::ChupriHead | PreviewTarget::ChupriBody => {
-			PreviewColor::ChupriPlumage(config.colors.plumage)
-		}
-		PreviewTarget::ChupriEye => PreviewColor::ChupriEye(config.colors.eyes),
-		PreviewTarget::ChupriBeak(_) => PreviewColor::ChupriBeak(config.colors.beak),
-		PreviewTarget::ChupriHair(_) => PreviewColor::ChupriPlumage(config.colors.plumage),
-		PreviewTarget::ChupriClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::ChupriPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_brokker(config: &BrokkerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::BrokkerHead | PreviewTarget::BrokkerBody => {
-			PreviewColor::BrokkerPlumage(config.colors.plumage)
-		}
-		PreviewTarget::BrokkerEye => PreviewColor::BrokkerEye(config.colors.eyes),
-		PreviewTarget::BrokkerSnout(_) => PreviewColor::BrokkerSnout(config.colors.snout),
-		PreviewTarget::BrokkerHair(_) => PreviewColor::BrokkerPlumage(config.colors.plumage),
-		PreviewTarget::BrokkerClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::BrokkerPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_tipple(config: &TippleConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::TippleHead | PreviewTarget::TippleBody => {
-			PreviewColor::TipplePlumage(config.colors.plumage)
-		}
-		PreviewTarget::TippleEye => PreviewColor::TippleEye(config.colors.eyes),
-		PreviewTarget::TippleBeak(_) => PreviewColor::TippleBeak(config.colors.beak),
-		PreviewTarget::TippleHair(_) => PreviewColor::TipplePlumage(config.colors.plumage),
-		PreviewTarget::TippleClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::TipplePlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_topple(config: &ToppleConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::ToppleHead | PreviewTarget::ToppleBody => {
-			PreviewColor::TopplePlumage(config.colors.plumage)
-		}
-		PreviewTarget::ToppleEye => PreviewColor::ToppleEye(config.colors.eyes),
-		PreviewTarget::ToppleBeak(_) => PreviewColor::ToppleBeak(config.colors.beak),
-		PreviewTarget::ToppleHair(_) => PreviewColor::TopplePlumage(config.colors.plumage),
-		PreviewTarget::ToppleClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::TopplePlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_kispar(config: &KisparConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::KisparHead | PreviewTarget::KisparBody => {
-			PreviewColor::KisparPlumage(config.colors.plumage)
-		}
-		PreviewTarget::KisparEye => PreviewColor::KisparEye(config.colors.eyes),
-		PreviewTarget::KisparBeak(_) => PreviewColor::KisparBeak(config.colors.beak),
-		PreviewTarget::KisparHair(_) => PreviewColor::KisparPlumage(config.colors.plumage),
-		PreviewTarget::KisparClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::KisparPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_tapp(config: &TappConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::TappHead | PreviewTarget::TappBody => {
-			PreviewColor::TappPlumage(config.colors.plumage)
-		}
-		PreviewTarget::TappEye => PreviewColor::TappEye(config.colors.eyes),
-		PreviewTarget::TappBeak(_) => PreviewColor::TappBeak(config.colors.beak),
-		PreviewTarget::TappHair(_) => PreviewColor::TappPlumage(config.colors.plumage),
-		PreviewTarget::TappClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::TappPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_kaller(config: &KallerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::KallerHead | PreviewTarget::KallerBody => {
-			PreviewColor::KallerPlumage(config.colors.plumage)
-		}
-		PreviewTarget::KallerEye => PreviewColor::KallerEye(config.colors.eyes),
-		PreviewTarget::KallerSnout(_) => PreviewColor::KallerSnout(config.colors.snout),
-		PreviewTarget::KallerCrown => PreviewColor::KallerCrown(config.colors.crown),
-		PreviewTarget::KallerHair(_) => PreviewColor::KallerPlumage(config.colors.plumage),
-		PreviewTarget::KallerClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::KallerPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_kappler(config: &KapplerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::KapplerHead | PreviewTarget::KapplerBody => {
-			PreviewColor::KapplerPlumage(config.colors.plumage)
-		}
-		PreviewTarget::KapplerEye => PreviewColor::KapplerEye(config.colors.eyes),
-		PreviewTarget::KapplerBeak(_) => PreviewColor::KapplerBeak(config.colors.beak),
-		PreviewTarget::KapplerHair(_) => PreviewColor::KapplerPlumage(config.colors.plumage),
-		PreviewTarget::KapplerClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::KapplerPlumage(config.colors.plumage),
-	}
-}
-
-fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::WumbusHead | PreviewTarget::WumbusBody => {
-			PreviewColor::WumbusSkin(config.colors.skin)
-		}
-		PreviewTarget::WumbusHorns(_) => PreviewColor::WumbusHorn(config.colors.horns),
-		PreviewTarget::WumbusSpine => PreviewColor::WumbusSpine(config.colors.spine),
-		PreviewTarget::WumbusEye(_) => PreviewColor::WumbusEye(config.colors.eyes),
-		PreviewTarget::WumbusEar => PreviewColor::WumbusEar(config.colors.ears),
-		PreviewTarget::WumbusMouth => PreviewColor::WumbusMouth(config.colors.mouth),
-		PreviewTarget::WumbusHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::WumbusClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::WumbusSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_lero(config: &LeroConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::LeroHead | PreviewTarget::LeroBody => {
-			PreviewColor::LeroSkin(config.colors.skin)
-		}
-		PreviewTarget::LeroMouth(_) => PreviewColor::LeroMouth(config.colors.mouth),
-		PreviewTarget::LeroEye => PreviewColor::LeroEye(config.colors.eyes),
-		PreviewTarget::LeroTail => PreviewColor::LeroTail(config.colors.tail),
-		PreviewTarget::LeroSpine => PreviewColor::LeroSpine(config.colors.spine),
-		PreviewTarget::LeroHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::LeroClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::LeroSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::SpibmomHead | PreviewTarget::SpibmomBody => {
-			PreviewColor::SpibmomSkin(config.colors.skin)
-		}
-		PreviewTarget::SpibmomHorns => PreviewColor::SpibmomCrown(config.colors.crown),
-		PreviewTarget::SpibmomSpine => PreviewColor::SpibmomSpine(config.colors.spine),
-		PreviewTarget::SpibmomEye(_) => PreviewColor::SpibmomEye(config.colors.eyes),
-		PreviewTarget::SpibmomEar => PreviewColor::SpibmomEar(config.colors.ears),
-		PreviewTarget::SpibmomMouth => PreviewColor::SpibmomMouth(config.colors.mouth),
-		PreviewTarget::SpibmomHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::SpibmomClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		_ => PreviewColor::SpibmomSkin(config.colors.skin),
-	}
-}
-
-fn preview_color_grener(config: &GrenerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::GrenerBody => PreviewColor::GrenerBody(config.colors.body),
-		_ => PreviewColor::GrenerBody(config.colors.body),
-	}
-}
-
-fn preview_color_thumplus(config: &ThumplusConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::ThumplusBody => PreviewColor::ThumplusBody(config.colors.body),
-		_ => PreviewColor::ThumplusBody(config.colors.body),
-	}
-}
-
-fn preview_color_mistler(config: &MistlerConfig, target: PreviewTarget) -> PreviewColor {
-	match target {
-		PreviewTarget::MistlerBody => PreviewColor::MistlerBody(config.colors.body),
-		_ => PreviewColor::MistlerBody(config.colors.body),
-	}
-}
-
-fn preview_color_tuberwaber(config: &TuberwaberConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_characters::species::tuberwaber::TuberwaberColor;
-
-	match target {
-		PreviewTarget::TuberwaberHair(_) => PreviewColor::Item(config.colors.hair),
-		PreviewTarget::TuberwaberClothing(clothing) => {
-			PreviewColor::Item(config.colors.clothing_color(clothing))
-		}
-		PreviewTarget::TuberwaberBody(_) => PreviewColor::Tuberwaber(config.colors.body),
-		PreviewTarget::TuberwaberHead(_) | PreviewTarget::TuberwaberNose(_) => {
-			PreviewColor::Tuberwaber(config.colors.skin_color())
-		}
-		PreviewTarget::TuberwaberEye(_) => PreviewColor::Tuberwaber(config.colors.eyes),
-		PreviewTarget::TuberwaberMouth(_) => PreviewColor::Tuberwaber(config.colors.mouth),
-		PreviewTarget::TuberwaberHorns => PreviewColor::Tuberwaber(config.colors.horns),
-		_ => PreviewColor::Tuberwaber(TuberwaberColor::MistBlue),
-	}
-}
-
 pub fn preview_asset_target(
 	config: &ConceptPreviewConfig,
 	slot: CharacterPartSlot,
@@ -2145,7 +1447,7 @@ pub fn preview_asset_target(
 				CharacterPartSlot::Tail => PreviewTarget::BraidmanBody(config.body),
 				CharacterPartSlot::Spine => PreviewTarget::BraidmanBody(config.body),
 			};
-			PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Brenal { config, .. } => {
 			let target = match slot {
@@ -2170,7 +1472,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_brenal(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Caole { config, .. } => {
 			let target = match slot {
@@ -2193,7 +1495,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::CaoleHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_caole(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Epiphant { config, .. } => {
 			let target = match slot {
@@ -2218,7 +1520,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::EpiphantHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_epiphant(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Hars { config, .. } => {
 			let target = match slot {
@@ -2237,9 +1539,9 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::HarsHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_hars(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
-		ConceptPreviewConfig::Yilter { config, .. } => {
+		ConceptPreviewConfig::Yilter { .. } => {
 			let target = match slot {
 				CharacterPartSlot::BodyMesh => PreviewTarget::YilterBody,
 				CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
@@ -2261,9 +1563,9 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::YilterHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_ylter(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
-		ConceptPreviewConfig::Sonyak { config, .. } => {
+		ConceptPreviewConfig::Sonyak { .. } => {
 			let target = match slot {
 				CharacterPartSlot::BodyMesh => PreviewTarget::SonyakBody,
 				CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
@@ -2285,7 +1587,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::SonyakHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_sonyak(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Claber { config, .. } => {
 			let target = match slot {
@@ -2310,7 +1612,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::ClaberHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_claber(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Croconot { config, .. } => {
 			let target = match slot {
@@ -2335,7 +1637,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::CroconotHead,
 			};
-			PreviewAssetTarget { target, color: preview_color_croconot(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Brodler { config, .. } => {
 			let target = match slot {
@@ -2366,7 +1668,7 @@ pub fn preview_asset_target(
 				CharacterPartSlot::Tail => PreviewTarget::BrodlerBody,
 				CharacterPartSlot::Spine => PreviewTarget::BrodlerBody,
 			};
-			PreviewAssetTarget { target, color: preview_color_brodler(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Mygr { config, .. } => {
 			let target = match slot {
@@ -2390,7 +1692,7 @@ pub fn preview_asset_target(
 					.unwrap_or(PreviewTarget::MygrHead),
 				CharacterPartSlot::Spine => PreviewTarget::MygrBody,
 			};
-			PreviewAssetTarget { target, color: preview_color_mygr(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Dui { config, .. } => {
 			let target = match slot {
@@ -2414,7 +1716,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::DuiClothing)
 					.unwrap_or(PreviewTarget::DuiHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_dui(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Lidder { config, .. } => {
 			let target = match slot {
@@ -2444,7 +1746,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::LidderClothing)
 					.unwrap_or(PreviewTarget::LidderHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_lidder(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Chupri { config, .. } => {
 			let target = match slot {
@@ -2474,7 +1776,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::ChupriClothing)
 					.unwrap_or(PreviewTarget::ChupriHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_chupri(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Brokker { config, .. } => {
 			let target = match slot {
@@ -2504,7 +1806,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::BrokkerClothing)
 					.unwrap_or(PreviewTarget::BrokkerHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_brokker(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 
 		ConceptPreviewConfig::Tipple { config, .. } => {
@@ -2535,7 +1837,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::TippleClothing)
 					.unwrap_or(PreviewTarget::TippleHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_tipple(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 
 		ConceptPreviewConfig::Topple { config, .. } => {
@@ -2566,7 +1868,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::ToppleClothing)
 					.unwrap_or(PreviewTarget::ToppleHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_topple(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 
 		ConceptPreviewConfig::Kispar { config, .. } => {
@@ -2597,7 +1899,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KisparClothing)
 					.unwrap_or(PreviewTarget::KisparHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_kispar(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Tapp { config, .. } => {
 			let target = match slot {
@@ -2621,7 +1923,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::TappClothing)
 					.unwrap_or(PreviewTarget::TappHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_tapp(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Kaller { config, .. } => {
 			let target = match slot {
@@ -2651,7 +1953,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KallerClothing)
 					.unwrap_or(PreviewTarget::KallerHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_kaller(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Kappler { config, .. } => {
 			let target = match slot {
@@ -2681,7 +1983,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KapplerClothing)
 					.unwrap_or(PreviewTarget::KapplerHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_kappler(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Wumbus { config, .. } => {
 			let target = match slot {
@@ -2711,7 +2013,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::WumbusClothing)
 					.unwrap_or(PreviewTarget::WumbusHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_wumbus(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Lero { config, .. } => {
 			let target = match slot {
@@ -2735,7 +2037,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::LeroClothing)
 					.unwrap_or(PreviewTarget::LeroHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_lero(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Spibmom { config, .. } => {
 			let target = match slot {
@@ -2765,19 +2067,19 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::SpibmomClothing)
 					.unwrap_or(PreviewTarget::SpibmomHead),
 			};
-			PreviewAssetTarget { target, color: preview_color_spibmom(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
-		ConceptPreviewConfig::Grener { config, .. } => {
+		ConceptPreviewConfig::Grener { .. } => {
 			let target = PreviewTarget::GrenerBody;
-			PreviewAssetTarget { target, color: preview_color_grener(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
-		ConceptPreviewConfig::Thumplus { config, .. } => {
+		ConceptPreviewConfig::Thumplus { .. } => {
 			let target = PreviewTarget::ThumplusBody;
-			PreviewAssetTarget { target, color: preview_color_thumplus(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
-		ConceptPreviewConfig::Mistler { config, .. } => {
+		ConceptPreviewConfig::Mistler { .. } => {
 			let target = PreviewTarget::MistlerBody;
-			PreviewAssetTarget { target, color: preview_color_mistler(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 		ConceptPreviewConfig::Tuberwaber { config, .. } => {
 			let target = match slot {
@@ -2807,7 +2109,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Tail
 				| CharacterPartSlot::Spine => PreviewTarget::TuberwaberBody(config.body),
 			};
-			PreviewAssetTarget { target, color: preview_color_tuberwaber(config, target) }
+			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
 		}
 	}
 }

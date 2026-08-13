@@ -6,7 +6,8 @@
 //! tail, and cow snout.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Hars;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -47,6 +48,19 @@ impl Default for HarsColors {
 }
 
 impl HarsColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			NeckMesh | NeckRig => self.body.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -124,16 +138,16 @@ impl HarsConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Hars>`).
-	pub fn clothed(&self) -> Clothed<crate::species::hars::bsn::Hars> {
+	pub fn clothed(&self) -> Clothed<Hars> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for HarsConfig {
-	type Components = crate::species::hars::bsn::Hars;
+	type Components = Hars;
 
 	fn components(&self) -> Self::Components {
-		crate::species::hars::bsn::Hars::from_config(self)
+		Hars::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

@@ -4,7 +4,8 @@
 //! dark fur colors with lighter contrasting features, and optional harrowed crown.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Wumbus;
 pub mod palette;
 pub mod pose;
 
@@ -51,6 +52,20 @@ impl Default for WumbusColors {
 }
 
 impl WumbusColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Horns => self.horns.color(),
+			Spine => self.spine.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -115,16 +130,16 @@ impl WumbusConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Wumbus>`).
-	pub fn clothed(&self) -> Clothed<crate::species::wumbus::bsn::Wumbus> {
+	pub fn clothed(&self) -> Clothed<Wumbus> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for WumbusConfig {
-	type Components = crate::species::wumbus::bsn::Wumbus;
+	type Components = Wumbus;
 
 	fn components(&self) -> Self::Components {
-		crate::species::wumbus::bsn::Wumbus::from_config(self)
+		Wumbus::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

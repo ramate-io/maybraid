@@ -5,7 +5,8 @@
 //! body-rig asset normalization (~0.30×).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Kaller;
 pub mod palette;
 pub mod pose;
 
@@ -45,6 +46,17 @@ impl Default for KallerColors {
 }
 
 impl KallerColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.snout.color(),
+			Horns => self.crown.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -105,16 +117,16 @@ impl KallerConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Kaller>`).
-	pub fn clothed(&self) -> Clothed<crate::species::kaller::bsn::Kaller> {
+	pub fn clothed(&self) -> Clothed<Kaller> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for KallerConfig {
-	type Components = crate::species::kaller::bsn::Kaller;
+	type Components = Kaller;
 
 	fn components(&self) -> Self::Components {
-		crate::species::kaller::bsn::Kaller::from_config(self)
+		Kaller::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

@@ -1,167 +1,39 @@
 //! Shared preview color for material and thumbnail tinting.
 
 use bevy::prelude::*;
-use crozon_character_items::ItemColor;
-use crozon_characters::species::{
-	brodler::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor},
-	brokker::{BrokkerEyeColor, BrokkerPlumageColor, BrokkerSnoutColor},
-	chupri::{ChupriBeakColor, ChupriEyeColor, ChupriPlumageColor},
-	claber::ClaberColor,
-	dui::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
-	epiphant::EpiphantColor,
-	grener::GrenerBodyColor,
-	kaller::{KallerCrownColor, KallerEyeColor, KallerPlumageColor, KallerSnoutColor},
-	kappler::{KapplerBeakColor, KapplerEyeColor, KapplerPlumageColor},
-	kispar::{KisparBeakColor, KisparEyeColor, KisparPlumageColor},
-	lero::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor},
-	lidder::{LidderBeakColor, LidderEyeColor, LidderPlumageColor},
-	mistler::MistlerBodyColor,
-	mygr::{MygrEyeColor, MygrSkinColor},
-	spibmom::{
-		SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomMouthColor, SpibmomSkinColor,
-		SpibmomSpineColor,
-	},
-	tapp::{TappBeakColor, TappEyeColor, TappPlumageColor},
-	thumplus::ThumplusBodyColor,
-	tipple::{TippleBeakColor, TippleEyeColor, TipplePlumageColor},
-	topple::{ToppleBeakColor, ToppleEyeColor, TopplePlumageColor},
-	tuberwaber::TuberwaberColor,
-	wumbus::{
-		WumbusEarColor, WumbusEyeColor, WumbusHornColor, WumbusMouthColor, WumbusSkinColor,
-		WumbusSpineColor,
-	},
-};
 
+/// Quantized sRGB tint from recipe [`crozon_characters::MaterialRef`] palette[0].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum PreviewColor {
-	/// Shared item palette: hair everywhere, plus Braidman body/eye/mouth.
-	Item(ItemColor),
-	BrodlerSkin(BrodlerSkinColor),
-	BrodlerEye(BrodlerEyeColor),
-	BrodlerHorn(BrodlerHornColor),
-	MygrSkin(MygrSkinColor),
-	MygrEye(MygrEyeColor),
-	DuiSkin(DuiSkinColor),
-	DuiEye(DuiEyeColor),
-	DuiNose(DuiNoseColor),
-	DuiMouth(DuiMouthColor),
-	LidderPlumage(LidderPlumageColor),
-	LidderEye(LidderEyeColor),
-	LidderBeak(LidderBeakColor),
-	ChupriPlumage(ChupriPlumageColor),
-	ChupriEye(ChupriEyeColor),
-	ChupriBeak(ChupriBeakColor),
-	BrokkerPlumage(BrokkerPlumageColor),
-	BrokkerEye(BrokkerEyeColor),
-	BrokkerSnout(BrokkerSnoutColor),
-	TipplePlumage(TipplePlumageColor),
-	TippleEye(TippleEyeColor),
-	TippleBeak(TippleBeakColor),
-	TopplePlumage(TopplePlumageColor),
-	ToppleEye(ToppleEyeColor),
-	ToppleBeak(ToppleBeakColor),
-	KisparPlumage(KisparPlumageColor),
-	KisparEye(KisparEyeColor),
-	KisparBeak(KisparBeakColor),
-	TappPlumage(TappPlumageColor),
-	TappEye(TappEyeColor),
-	TappBeak(TappBeakColor),
-	KallerPlumage(KallerPlumageColor),
-	KallerEye(KallerEyeColor),
-	KallerSnout(KallerSnoutColor),
-	KallerCrown(KallerCrownColor),
-	KapplerPlumage(KapplerPlumageColor),
-	KapplerEye(KapplerEyeColor),
-	KapplerBeak(KapplerBeakColor),
-	GrenerBody(GrenerBodyColor),
-	ThumplusBody(ThumplusBodyColor),
-	MistlerBody(MistlerBodyColor),
-	Claber(ClaberColor),
-	Epiphant(EpiphantColor),
-	Tuberwaber(TuberwaberColor),
-	WumbusSkin(WumbusSkinColor),
-	WumbusEye(WumbusEyeColor),
-	WumbusEar(WumbusEarColor),
-	WumbusMouth(WumbusMouthColor),
-	WumbusHorn(WumbusHornColor),
-	WumbusSpine(WumbusSpineColor),
-	LeroSkin(LeroSkinColor),
-	LeroEye(LeroEyeColor),
-	LeroMouth(LeroMouthColor),
-	LeroTail(LeroTailColor),
-	LeroSpine(LeroSpineColor),
-	SpibmomSkin(SpibmomSkinColor),
-	SpibmomEye(SpibmomEyeColor),
-	SpibmomEar(SpibmomEarColor),
-	SpibmomMouth(SpibmomMouthColor),
-	SpibmomCrown(SpibmomCrownColor),
-	SpibmomSpine(SpibmomSpineColor),
-}
+pub struct PreviewColor(pub [u8; 4]);
 
 impl PreviewColor {
+	pub const PLACEHOLDER: Self = Self([180, 180, 180, 255]);
+
 	pub fn bevy_color(self) -> Color {
-		match self {
-			Self::Item(color) => color.color(),
-			Self::BrodlerSkin(color) => color.color(),
-			Self::BrodlerEye(color) => color.color(),
-			Self::BrodlerHorn(color) => color.color(),
-			Self::MygrSkin(color) => color.color(),
-			Self::MygrEye(color) => color.color(),
-			Self::DuiSkin(color) => color.color(),
-			Self::DuiEye(color) => color.color(),
-			Self::DuiNose(color) => color.color(),
-			Self::DuiMouth(color) => color.color(),
-			Self::LidderPlumage(color) => color.color(),
-			Self::LidderEye(color) => color.color(),
-			Self::LidderBeak(color) => color.color(),
-			Self::ChupriPlumage(color) => color.color(),
-			Self::ChupriEye(color) => color.color(),
-			Self::ChupriBeak(color) => color.color(),
-			Self::BrokkerPlumage(color) => color.color(),
-			Self::BrokkerEye(color) => color.color(),
-			Self::BrokkerSnout(color) => color.color(),
-			Self::TipplePlumage(color) => color.color(),
-			Self::TippleEye(color) => color.color(),
-			Self::TippleBeak(color) => color.color(),
-			Self::TopplePlumage(color) => color.color(),
-			Self::ToppleEye(color) => color.color(),
-			Self::ToppleBeak(color) => color.color(),
-			Self::KisparPlumage(color) => color.color(),
-			Self::KisparEye(color) => color.color(),
-			Self::KisparBeak(color) => color.color(),
-			Self::TappPlumage(color) => color.color(),
-			Self::TappEye(color) => color.color(),
-			Self::TappBeak(color) => color.color(),
-			Self::KallerPlumage(color) => color.color(),
-			Self::KallerEye(color) => color.color(),
-			Self::KallerSnout(color) => color.color(),
-			Self::KallerCrown(color) => color.color(),
-			Self::KapplerPlumage(color) => color.color(),
-			Self::KapplerEye(color) => color.color(),
-			Self::KapplerBeak(color) => color.color(),
-			Self::GrenerBody(color) => color.color(),
-			Self::ThumplusBody(color) => color.color(),
-			Self::MistlerBody(color) => color.color(),
-			Self::Claber(color) => color.color(),
-			Self::Epiphant(color) => color.color(),
-			Self::Tuberwaber(color) => color.color(),
-			Self::WumbusSkin(color) => color.color(),
-			Self::WumbusEye(color) => color.color(),
-			Self::WumbusEar(color) => color.color(),
-			Self::WumbusMouth(color) => color.color(),
-			Self::WumbusHorn(color) => color.color(),
-			Self::WumbusSpine(color) => color.color(),
-			Self::LeroSkin(color) => color.color(),
-			Self::LeroEye(color) => color.color(),
-			Self::LeroMouth(color) => color.color(),
-			Self::LeroTail(color) => color.color(),
-			Self::LeroSpine(color) => color.color(),
-			Self::SpibmomSkin(color) => color.color(),
-			Self::SpibmomEye(color) => color.color(),
-			Self::SpibmomEar(color) => color.color(),
-			Self::SpibmomMouth(color) => color.color(),
-			Self::SpibmomCrown(color) => color.color(),
-			Self::SpibmomSpine(color) => color.color(),
-		}
+		let [r, g, b, a] = self.0;
+		Color::srgba(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, a as f32 / 255.0)
+	}
+
+	pub fn from_bevy(color: Color) -> Self {
+		let c = color.to_srgba();
+		Self([
+			(c.red * 255.0).round() as u8,
+			(c.green * 255.0).round() as u8,
+			(c.blue * 255.0).round() as u8,
+			(c.alpha * 255.0).round() as u8,
+		])
+	}
+
+	pub fn from_material(material: &crozon_characters::MaterialRef) -> Self {
+		material
+			.palette
+			.first()
+			.copied()
+			.map(Self::from_bevy)
+			.unwrap_or(Self::PLACEHOLDER)
+	}
+
+	pub fn from_part(part: &crozon_characters::PartNode) -> Self {
+		Self::from_material(&part.material)
 	}
 }

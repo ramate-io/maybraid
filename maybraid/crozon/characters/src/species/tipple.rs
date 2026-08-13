@@ -5,7 +5,8 @@
 //! uses body-rig asset normalization (~0.15×), not per-bone root scale.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tipple;
 pub mod palette;
 pub mod pose;
 
@@ -43,6 +44,16 @@ impl Default for TippleColors {
 }
 
 impl TippleColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -105,16 +116,16 @@ impl TippleConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Tipple>`).
-	pub fn clothed(&self) -> Clothed<crate::species::tipple::bsn::Tipple> {
+	pub fn clothed(&self) -> Clothed<Tipple> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for TippleConfig {
-	type Components = crate::species::tipple::bsn::Tipple;
+	type Components = Tipple;
 
 	fn components(&self) -> Self::Components {
-		crate::species::tipple::bsn::Tipple::from_config(self)
+		Tipple::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

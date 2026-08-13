@@ -3,7 +3,8 @@
 //! Whale on the forelimbed rig (~6 m). Authoring body length is ~2 m, so
 //! overall scale is 3× via body-rig asset normalization.
 
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Thumplus;
 pub mod palette;
 pub mod pose;
 
@@ -19,6 +20,12 @@ pub struct ThumplusColors {
 impl Default for ThumplusColors {
 	fn default() -> Self {
 		Self { body: ThumplusBodyColor::Ocean }
+	}
+}
+
+impl ThumplusColors {
+	pub fn color_for_slot(&self, _slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		self.body.color()
 	}
 }
 
@@ -47,16 +54,16 @@ impl ThumplusConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Thumplus>`).
-	pub fn clothed(&self) -> Clothed<crate::species::thumplus::bsn::Thumplus> {
+	pub fn clothed(&self) -> Clothed<Thumplus> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for ThumplusConfig {
-	type Components = crate::species::thumplus::bsn::Thumplus;
+	type Components = Thumplus;
 
 	fn components(&self) -> Self::Components {
-		crate::species::thumplus::bsn::Thumplus::from_config(self)
+		Thumplus::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

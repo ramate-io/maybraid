@@ -4,7 +4,8 @@
 //! optional t-bar nose, small common mouth, no ears, and soft earth-tone skin colors.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Dui;
 pub mod palette;
 pub mod pose;
 
@@ -41,6 +42,18 @@ impl Default for DuiColors {
 }
 
 impl DuiColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Nose => self.nose_color.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -99,16 +112,16 @@ impl DuiConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Dui>`).
-	pub fn clothed(&self) -> Clothed<crate::species::dui::bsn::Dui> {
+	pub fn clothed(&self) -> Clothed<Dui> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for DuiConfig {
-	type Components = crate::species::dui::bsn::Dui;
+	type Components = Dui;
 
 	fn components(&self) -> Self::Components {
-		crate::species::dui::bsn::Dui::from_config(self)
+		Dui::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

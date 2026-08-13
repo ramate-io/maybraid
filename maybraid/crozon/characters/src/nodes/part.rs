@@ -2,15 +2,18 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform, Vec3};
-use bevy::scene::prelude::Scene;
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::SceneChunk;
+use lod::{lod_host_scene_pending, SceneChunk};
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::{MirrorAxis, SceneRef};
 
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
-use crate::socket::{RigId, SkinRef, SocketRef};
+use crate::rig::CharacterPart;
+use crate::scene_children::maybe_component;
+use crate::socket::{RigId, SkinRef, SkinRefRoot, SocketRef, SocketRefRoot};
 
 /// Authoring IR for a character mesh or feature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -23,6 +26,8 @@ pub struct PartNode {
 	pub feature: Transform,
 	pub socket: Option<SocketRef>,
 	pub skin: Option<SkinRef>,
+	/// Deferred material (palette[0] is the preview / PBR base color).
+	pub material: MaterialRef,
 }
 
 impl Default for PartNode {
@@ -35,6 +40,7 @@ impl Default for PartNode {
 			feature: Transform::IDENTITY,
 			socket: None,
 			skin: None,
+			material: MaterialRef::default(),
 		}
 	}
 }
@@ -54,6 +60,7 @@ impl PartNode {
 			feature: Transform::IDENTITY,
 			socket: None,
 			skin: None,
+			material: MaterialRef::default(),
 		}
 	}
 
@@ -100,6 +107,16 @@ impl PartNode {
 		self
 	}
 
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = material;
+		self
+	}
+
+	/// Solid preview / PBR tint via [`MaterialRef`] palette[0].
+	pub fn with_base_color(self, color: bevy::prelude::Color) -> Self {
+		self.with_material(MaterialRef::default_material().with_palette([color]))
+	}
+
 	pub fn mirrored(mut self, axis: MirrorAxis) -> Self {
 		self.scene = self.scene.mirrored(axis);
 		self
@@ -116,7 +133,14 @@ impl PartNode {
 	}
 
 	fn content_for_level(&self, _level: LodSceneLevel) -> impl Scene + 'static {
-		self.scene.clone().scene()
+		let material = self.material.clone();
+		(
+			bsn! {
+				template_value(MaterialRefRoot(material))
+				PropagateToDescendants
+			},
+			self.scene.clone().scene(),
+		)
 	}
 }
 
@@ -143,5 +167,28 @@ impl LodScene for PartNode {
 
 	fn scene_bounds(&self) -> Aabb3d {
 		Aabb3d::from_min_max(Vec3::splat(-0.5), Vec3::splat(0.5))
+	}
+
+	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	where
+		Self: Component + Clone + Default + Unpin + Sized,
+	{
+		let level = self.scene_lod_level(lod_ref);
+		let bounds = self.scene_bounds();
+		let node = self.clone();
+		let transform = node.authored_transform();
+		let part = CharacterPart { slot: node.slot };
+		let socket = node.socket.map(SocketRefRoot);
+		let skin = node.skin.map(SkinRefRoot);
+		(
+			lod_host_scene_pending(level, bounds),
+			bsn! {
+				template_value(node)
+				template_value(transform)
+				template_value(part)
+			},
+			maybe_component(socket),
+			maybe_component(skin),
+		)
 	}
 }

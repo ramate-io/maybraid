@@ -23,20 +23,27 @@ is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe`](src/components.rs)
 (`Config::clothed()`), not part of the inner species. Register the playground
 host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
-registered once.
+registered once. Those nodes stamp socket/skin/rig/part/transform from
+[`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs); part materials go on
+the GLB via [`scene_with_level`](src/nodes/part.rs) (`MaterialRefRoot` +
+`PropagateToDescendants`), not a post-spawn prepare system.
 
 The playground spawn path is LodScene (`Config::clothed()`).
 [`CharacterComponents`](src/components.rs) is the only character recipe.
+Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_for_slot`
+and [`ClothingLayer`](src/components.rs) stamp palette[0]); live playground tint
+reads that material rather than a parallel `preview_color_*` map.
 
 ### 1. `crozon-characters` (this crate)
 
 1. Create `src/species/<name>.rs` with:
-   - `*Config` and `*Colors` structs
+   - `*Config` and `*Colors` structs (`*Colors::color_for_slot` for recipe tints)
    - species-local `enums` (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
      and `color()` where needed
    - `impl CharacterRecipe for *Config` plus `clothed()`
-2. Create `src/species/<name>/bsn.rs` with the inner [`CharacterComponents`](src/components.rs)
-   recipe (`rig_nodes_for_level` / `part_nodes_for_level`).
+2. Create `src/species/<name>/recipe.rs` with the inner [`CharacterComponents`](src/components.rs)
+   recipe (`rig_nodes_for_level` / `part_nodes_for_level`). Stamp part colors from
+   `color_for_slot` onto `PartNode.material` (`with_base_color`).
 3. Create `src/species/<name>/assets.rs` when the species has a local mesh catalog:
    - mesh `enums` with `VALUES`, `label()`, and `path()`
    - omit parts the species does not use (for example `Mygr` has no nose)
@@ -67,10 +74,10 @@ The playground spawn path is LodScene (`Config::clothed()`).
 
 1. Add `src/commands/<name>.rs` for CLI preview `args`.
 2. Extend [`src/preview.rs`](../character-concepts-playground/src/preview.rs):
-   - `ConceptPreviewConfig::<Name>`
-   - `PreviewTarget::<Name>*` variants
-   - `preview_color_<name>`, `preview_asset_target` mapping, spawn/`clothed()` /
-     `lod_rig_nodes` match arms
+   - `ConceptPreviewConfig::<Name>` (add the variant to `with_clothed_recipe!`)
+   - `PreviewTarget::<Name>*` variants and `preview_asset_target` mapping
+   - `*Colors::color_for_slot` (recipe stamps `PartNode.material`; spawn /
+     `lod_rig_nodes` / `lod_part_nodes` go through the macro)
 3. Update [`src/menu_listeners.rs`](../character-concepts-playground/src/menu_listeners.rs),
    [`src/species_session.rs`](../character-concepts-playground/src/species_session.rs),
    [`src/focus_reference.rs`](../character-concepts-playground/src/focus_reference.rs),

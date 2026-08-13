@@ -5,7 +5,8 @@
 //! normalization (~0.30×).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Topple;
 pub mod palette;
 pub mod pose;
 
@@ -43,6 +44,16 @@ impl Default for ToppleColors {
 }
 
 impl ToppleColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -105,16 +116,16 @@ impl ToppleConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Topple>`).
-	pub fn clothed(&self) -> Clothed<crate::species::topple::bsn::Topple> {
+	pub fn clothed(&self) -> Clothed<Topple> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for ToppleConfig {
-	type Components = crate::species::topple::bsn::Topple;
+	type Components = Topple;
 
 	fn components(&self) -> Self::Components {
-		crate::species::topple::bsn::Topple::from_config(self)
+		Topple::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

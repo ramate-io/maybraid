@@ -1,14 +1,14 @@
-//! LodScene recipe for Kaller.
+//! LodScene recipe for Kispar.
 //!
-//! [`Kaller`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`KallerConfig::clothed`].
+//! [`Kispar`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`KisparConfig::clothed`].
 
 use bevy::prelude::*;
 
 use super::{
-	assets::{KallerHeadMesh, KallerHornMesh, KallerSnoutMesh},
-	pose::{KallerPose, KALLER_OVERALL_SCALE},
-	KallerColors, KallerConfig,
+	assets::{KisparBeakMesh, KisparHeadMesh},
+	pose::{KisparPose, KISPAR_OVERALL_SCALE},
+	KisparColors, KisparConfig,
 };
 use crate::{
 	assembly::CharacterPartSlot,
@@ -20,34 +20,40 @@ use crate::{
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Kaller data attached to the character root entity.
+/// Semantic Kispar data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`KallerConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`KisparConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
-pub struct Kaller {
+pub struct Kispar {
+	pub beak: KisparBeakMesh,
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
-	pub colors: KallerColors,
+	pub colors: KisparColors,
 }
 
-impl Kaller {
-	pub fn from_config(config: &KallerConfig) -> Self {
-		Self { eye: config.eye, hair: config.hair, colors: config.colors.clone() }
+impl Kispar {
+	pub fn from_config(config: &KisparConfig) -> Self {
+		Self {
+			beak: config.beak,
+			eye: config.eye,
+			hair: config.hair,
+			colors: config.colors.clone(),
+		}
 	}
 }
 
-impl Default for Kaller {
+impl Default for Kispar {
 	fn default() -> Self {
-		Self::from_config(&KallerConfig::default_preview())
+		Self::from_config(&KisparConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Kaller {
+impl CharacterComponents for Kispar {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
-			humanoid::humanoid_body_rig(KallerPose.resolve())
-				.with_normalization(AssetNormalization::centroid(KALLER_OVERALL_SCALE)),
+			humanoid::humanoid_body_rig(KisparPose.resolve())
+				.with_normalization(AssetNormalization::centroid(KISPAR_OVERALL_SCALE)),
 			humanoid::orthograde_head_rig(),
 		])
 	}
@@ -60,8 +66,8 @@ impl CharacterComponents for Kaller {
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				KallerHeadMesh::Meerkat.label(),
-				KallerHeadMesh::Meerkat.path().as_str(),
+				KisparHeadMesh::Meerkat.label(),
+				KisparHeadMesh::Meerkat.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -69,15 +75,11 @@ impl CharacterComponents for Kaller {
 			humanoid::eye_right(self.eye),
 			humanoid::head_feature(
 				CharacterPartSlot::Mouth,
-				KallerSnoutMesh::Robrek.label(),
-				KallerSnoutMesh::Robrek.path().as_str(),
-				AssetNormalization::centroid(0.35),
+				self.beak.label(),
+				self.beak.path().as_str(),
+				AssetNormalization::centroid(0.45),
 				"mouth_socket",
-				humanoid::mouth_socket_local().with_scale(Vec3::new(1.0, 1.0, 1.15)),
-			),
-			humanoid::horns(
-				KallerHornMesh::HarrowedCrown.label(),
-				KallerHornMesh::HarrowedCrown.path().as_str(),
+				humanoid::mouth_socket_local().with_scale(Vec3::new(0.85, 0.85, 1.65)),
 			),
 		];
 		if let Some(hair) = humanoid::hair_scaled(
@@ -90,6 +92,9 @@ impl CharacterComponents for Kaller {
 			features.push(hair);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

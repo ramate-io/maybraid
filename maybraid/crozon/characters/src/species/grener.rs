@@ -3,7 +3,8 @@
 //! Shark on the forelimbed rig (~3 m). Authoring body length is ~2 m, so
 //! overall scale is 1.5× via body-rig asset normalization.
 
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Grener;
 pub mod palette;
 pub mod pose;
 
@@ -19,6 +20,12 @@ pub struct GrenerColors {
 impl Default for GrenerColors {
 	fn default() -> Self {
 		Self { body: GrenerBodyColor::Slate }
+	}
+}
+
+impl GrenerColors {
+	pub fn color_for_slot(&self, _slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		self.body.color()
 	}
 }
 
@@ -47,16 +54,16 @@ impl GrenerConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Grener>`).
-	pub fn clothed(&self) -> Clothed<crate::species::grener::bsn::Grener> {
+	pub fn clothed(&self) -> Clothed<Grener> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for GrenerConfig {
-	type Components = crate::species::grener::bsn::Grener;
+	type Components = Grener;
 
 	fn components(&self) -> Self::Components {
-		crate::species::grener::bsn::Grener::from_config(self)
+		Grener::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

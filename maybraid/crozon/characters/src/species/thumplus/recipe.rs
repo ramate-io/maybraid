@@ -46,6 +46,11 @@ impl CharacterComponents for Thumplus {
 	}
 
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
-		Layers::from_labeled("body", vec![humanoid::body_part("whale", BODY_WHALE.as_str())])
+		Layers::from_labeled("body", vec![humanoid::body_part("whale", BODY_WHALE.as_str())]).map(
+			|part| {
+				let color = self.colors.color_for_slot(part.slot);
+				part.with_base_color(color)
+			},
+		)
 	}
 }

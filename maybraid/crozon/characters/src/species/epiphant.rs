@@ -4,7 +4,8 @@
 //! meerkat head, Epiphant ears, trunkish nose, and cat tail.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Epiphant;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -46,6 +47,19 @@ impl Default for EpiphantColors {
 }
 
 impl EpiphantColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig => self.head.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Nose => self.nose.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> EpiphantColor {
 		self.body
 	}
@@ -132,16 +146,16 @@ impl EpiphantConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Epiphant>`).
-	pub fn clothed(&self) -> Clothed<crate::species::epiphant::bsn::Epiphant> {
+	pub fn clothed(&self) -> Clothed<Epiphant> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for EpiphantConfig {
-	type Components = crate::species::epiphant::bsn::Epiphant;
+	type Components = Epiphant;
 
 	fn components(&self) -> Self::Components {
-		crate::species::epiphant::bsn::Epiphant::from_config(self)
+		Epiphant::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

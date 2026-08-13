@@ -4,7 +4,8 @@
 //! species-owned assets, baseline proportions, presets, and slider resolution
 //! before the full Braidman matrix is implemented.
 
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Braidman;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -49,6 +50,18 @@ impl Default for BraidmanColors {
 }
 
 impl BraidmanColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | Spine | Tail => self.body.color(),
+			HeadMesh | HeadRig | Nose | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -166,16 +179,16 @@ impl BraidmanConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Braidman>`).
-	pub fn clothed(&self) -> Clothed<crate::species::braidman::bsn::Braidman> {
+	pub fn clothed(&self) -> Clothed<Braidman> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for BraidmanConfig {
-	type Components = crate::species::braidman::bsn::Braidman;
+	type Components = Braidman;
 
 	fn components(&self) -> Self::Components {
-		crate::species::braidman::bsn::Braidman::from_config(self)
+		Braidman::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

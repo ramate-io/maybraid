@@ -142,7 +142,10 @@ impl CharacterComponents for Tuberwaber {
 			features.push(hair.with_feature(sliders.feature_transform(CharacterPartSlot::Hair)));
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }
 

@@ -1,14 +1,14 @@
-//! LodScene recipe for Topple.
+//! LodScene recipe for Tapp.
 //!
-//! [`Topple`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`ToppleConfig::clothed`].
+//! [`Tapp`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`TappConfig::clothed`].
 
 use bevy::prelude::*;
 
 use super::{
-	assets::{ToppleBeakMesh, ToppleHeadMesh},
-	pose::{TopplePose, TOPPLE_OVERALL_SCALE},
-	ToppleColors, ToppleConfig,
+	assets::{TappBeakMesh, TappHeadMesh},
+	pose::{TappPose, TAPP_OVERALL_SCALE},
+	TappColors, TappConfig,
 };
 use crate::{
 	assembly::CharacterPartSlot,
@@ -20,23 +20,23 @@ use crate::{
 };
 use lod::gen::LodSceneLevel;
 
-/// Cartoonishly large head relative to the ~2 ft whelp body.
+/// Cartoonishly large head relative to the ~2 ft whelp body (same as Topple).
 const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
 
-/// Semantic Topple data attached to the character root entity.
+/// Semantic Tapp data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`ToppleConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`TappConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
-pub struct Topple {
-	pub beak: ToppleBeakMesh,
+pub struct Tapp {
+	pub beak: TappBeakMesh,
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
-	pub colors: ToppleColors,
+	pub colors: TappColors,
 }
 
-impl Topple {
-	pub fn from_config(config: &ToppleConfig) -> Self {
+impl Tapp {
+	pub fn from_config(config: &TappConfig) -> Self {
 		Self {
 			beak: config.beak,
 			eye: config.eye,
@@ -46,17 +46,17 @@ impl Topple {
 	}
 }
 
-impl Default for Topple {
+impl Default for Tapp {
 	fn default() -> Self {
-		Self::from_config(&ToppleConfig::default_preview())
+		Self::from_config(&TappConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Topple {
+impl CharacterComponents for Tapp {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
-			humanoid::humanoid_body_rig(TopplePose.resolve())
-				.with_normalization(AssetNormalization::centroid(TOPPLE_OVERALL_SCALE)),
+			humanoid::humanoid_body_rig(TappPose.resolve())
+				.with_normalization(AssetNormalization::centroid(TAPP_OVERALL_SCALE)),
 			humanoid::orthograde_head_rig_at(
 				AssetNormalization::base_y(0.26),
 				Transform::from_scale(Vec3::splat(HEAD_RIG_SOCKET_SCALE)),
@@ -72,8 +72,8 @@ impl CharacterComponents for Topple {
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				ToppleHeadMesh::Meerkat.label(),
-				ToppleHeadMesh::Meerkat.path().as_str(),
+				TappHeadMesh::Meerkat.label(),
+				TappHeadMesh::Meerkat.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -83,9 +83,9 @@ impl CharacterComponents for Topple {
 				CharacterPartSlot::Mouth,
 				self.beak.label(),
 				self.beak.path().as_str(),
-				AssetNormalization::centroid(0.35),
+				AssetNormalization::centroid(0.5),
 				"mouth_socket",
-				humanoid::mouth_socket_local(),
+				humanoid::mouth_socket_local().with_scale(Vec3::new(0.8, 0.8, 1.8)),
 			),
 		];
 		if let Some(hair) = humanoid::hair_scaled(
@@ -98,6 +98,9 @@ impl CharacterComponents for Topple {
 			features.push(hair);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

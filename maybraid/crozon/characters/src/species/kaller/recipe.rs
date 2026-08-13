@@ -1,14 +1,14 @@
-//! LodScene recipe for Brokker.
+//! LodScene recipe for Kaller.
 //!
-//! [`Brokker`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`BrokkerConfig::clothed`].
+//! [`Kaller`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`KallerConfig::clothed`].
 
 use bevy::prelude::*;
 
 use super::{
-	assets::{BrokkerHeadMesh, BrokkerSnoutMesh},
-	pose::BrokkerPose,
-	BrokkerColors, BrokkerConfig,
+	assets::{KallerHeadMesh, KallerHornMesh, KallerSnoutMesh},
+	pose::{KallerPose, KALLER_OVERALL_SCALE},
+	KallerColors, KallerConfig,
 };
 use crate::{
 	assembly::CharacterPartSlot,
@@ -20,33 +20,34 @@ use crate::{
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Brokker data attached to the character root entity.
+/// Semantic Kaller data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`BrokkerConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`KallerConfig::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
-pub struct Brokker {
+pub struct Kaller {
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
-	pub colors: BrokkerColors,
+	pub colors: KallerColors,
 }
 
-impl Brokker {
-	pub fn from_config(config: &BrokkerConfig) -> Self {
+impl Kaller {
+	pub fn from_config(config: &KallerConfig) -> Self {
 		Self { eye: config.eye, hair: config.hair, colors: config.colors.clone() }
 	}
 }
 
-impl Default for Brokker {
+impl Default for Kaller {
 	fn default() -> Self {
-		Self::from_config(&BrokkerConfig::default_preview())
+		Self::from_config(&KallerConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Brokker {
+impl CharacterComponents for Kaller {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
-			humanoid::humanoid_body_rig(BrokkerPose.resolve()),
+			humanoid::humanoid_body_rig(KallerPose.resolve())
+				.with_normalization(AssetNormalization::centroid(KALLER_OVERALL_SCALE)),
 			humanoid::orthograde_head_rig(),
 		])
 	}
@@ -54,13 +55,13 @@ impl CharacterComponents for Brokker {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("libird", "characters/bodies/libird_body.glb")],
+			vec![humanoid::body_part("sparrow", "characters/bodies/sparrow_body.glb")],
 		);
 		out.extend_labeled(
 			"head",
 			vec![humanoid::head_mesh(
-				BrokkerHeadMesh::OrthoTee.label(),
-				BrokkerHeadMesh::OrthoTee.path().as_str(),
+				KallerHeadMesh::Meerkat.label(),
+				KallerHeadMesh::Meerkat.path().as_str(),
 			)],
 		);
 		let mut features = vec![
@@ -68,11 +69,15 @@ impl CharacterComponents for Brokker {
 			humanoid::eye_right(self.eye),
 			humanoid::head_feature(
 				CharacterPartSlot::Mouth,
-				BrokkerSnoutMesh::Igny.label(),
-				BrokkerSnoutMesh::Igny.path().as_str(),
+				KallerSnoutMesh::Robrek.label(),
+				KallerSnoutMesh::Robrek.path().as_str(),
 				AssetNormalization::centroid(0.35),
 				"mouth_socket",
-				humanoid::mouth_socket_local(),
+				humanoid::mouth_socket_local().with_scale(Vec3::new(1.0, 1.0, 1.15)),
+			),
+			humanoid::horns(
+				KallerHornMesh::HarrowedCrown.label(),
+				KallerHornMesh::HarrowedCrown.path().as_str(),
 			),
 		];
 		if let Some(hair) = humanoid::hair_scaled(
@@ -85,6 +90,9 @@ impl CharacterComponents for Brokker {
 			features.push(hair);
 		}
 		out.extend_labeled("features", features);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

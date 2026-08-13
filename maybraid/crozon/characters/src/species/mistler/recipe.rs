@@ -50,5 +50,9 @@ impl CharacterComponents for Mistler {
 			"body",
 			vec![humanoid::body_part("sprite-fish", BODY_SPRITE_FISH.as_str())],
 		)
+		.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }

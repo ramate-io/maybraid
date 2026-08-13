@@ -78,6 +78,7 @@ impl ClothingLayer {
 			AssetNormalization::IDENTITY,
 		)
 		.skinned(SkinRef::to(RigId::Body))
+		.with_base_color(self.color.color())
 	}
 }
 

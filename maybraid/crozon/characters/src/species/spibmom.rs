@@ -4,7 +4,8 @@
 //! small flank ears, and igny snout. Soft blue skin with light contrasting accents.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Spibmom;
 pub mod palette;
 pub mod pose;
 
@@ -51,6 +52,20 @@ impl Default for SpibmomColors {
 }
 
 impl SpibmomColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Horns => self.crown.color(),
+			Spine => self.spine.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -114,16 +129,16 @@ impl SpibmomConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Spibmom>`).
-	pub fn clothed(&self) -> Clothed<crate::species::spibmom::bsn::Spibmom> {
+	pub fn clothed(&self) -> Clothed<Spibmom> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for SpibmomConfig {
-	type Components = crate::species::spibmom::bsn::Spibmom;
+	type Components = Spibmom;
 
 	fn components(&self) -> Self::Components {
-		crate::species::spibmom::bsn::Spibmom::from_config(self)
+		Spibmom::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

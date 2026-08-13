@@ -4,7 +4,8 @@
 //! species-owned skin/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Brodler;
 pub mod palette;
 pub mod pose;
 
@@ -71,6 +72,18 @@ impl Default for BrodlerColors {
 }
 
 impl BrodlerColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Nose | EarLeft | EarRight => self.skin.color(),
+			Horns => self.horns.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -146,16 +159,16 @@ impl BrodlerConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Brodler>`).
-	pub fn clothed(&self) -> Clothed<crate::species::brodler::bsn::Brodler> {
+	pub fn clothed(&self) -> Clothed<Brodler> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for BrodlerConfig {
-	type Components = crate::species::brodler::bsn::Brodler;
+	type Components = Brodler;
 
 	fn components(&self) -> Self::Components {
-		crate::species::brodler::bsn::Brodler::from_config(self)
+		Brodler::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

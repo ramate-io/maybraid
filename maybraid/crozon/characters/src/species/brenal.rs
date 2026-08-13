@@ -4,7 +4,8 @@
 //! flank ears, cat tail, and optional harrowed crown horns.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Brenal;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -47,6 +48,19 @@ impl Default for BrenalColors {
 }
 
 impl BrenalColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -125,16 +139,16 @@ impl BrenalConfig {
 	}
 
 	/// Inner recipe plus empty clothing layers (`Clothed<Brenal>`).
-	pub fn clothed(&self) -> Clothed<crate::species::brenal::bsn::Brenal> {
+	pub fn clothed(&self) -> Clothed<Brenal> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for BrenalConfig {
-	type Components = crate::species::brenal::bsn::Brenal;
+	type Components = Brenal;
 
 	fn components(&self) -> Self::Components {
-		crate::species::brenal::bsn::Brenal::from_config(self)
+		Brenal::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

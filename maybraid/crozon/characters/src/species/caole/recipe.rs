@@ -1,11 +1,11 @@
-//! LodScene recipe for Hars.
+//! LodScene recipe for Caole.
 //!
-//! [`Hars`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`HarsConfig::clothed`].
+//! [`Caole`] is the inner [`CharacterComponents`] value. Clothing is
+//! [`crate::Clothed`] via [`CaoleConfig::clothed`].
 
 use bevy::prelude::*;
 
-use super::{pose::HarsPose, sliders::HarsSliders, HarsColors, HarsConfig};
+use super::{pose::CaolePose, sliders::CaoleSliders, CaoleColors, CaoleConfig};
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
@@ -15,31 +15,33 @@ use crate::{
 	presets::{BuildPreset, GenderPreset},
 	socket::RigId,
 	species::{
-		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, TAIL_CAT},
-		hars::assets::{HarsBodyMesh, HarsHeadMesh, HarsMouthMesh},
+		caole::assets::{CaoleBodyMesh, CaoleMouthMesh},
+		common::{nodes as humanoid, EarMesh, EyeMesh, EAR_FLANK, HEAD_COWDER, TAIL_CAT},
 	},
 };
 use lod::gen::LodSceneLevel;
 
-/// Semantic Hars data attached to the character root entity.
+/// Semantic Caole data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`HarsConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`CaoleConfig::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
-pub struct Hars {
+pub struct Caole {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
-	pub mouth: HarsMouthMesh,
+	pub body: CaoleBodyMesh,
+	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
-	pub colors: HarsColors,
-	pub sliders: HarsSliders,
+	pub colors: CaoleColors,
+	pub sliders: CaoleSliders,
 }
 
-impl Hars {
-	pub fn from_config(config: &HarsConfig) -> Self {
+impl Caole {
+	pub fn from_config(config: &CaoleConfig) -> Self {
 		Self {
 			gender: config.gender,
 			build: config.build,
+			body: config.body,
 			mouth: config.mouth,
 			eye: config.eye,
 			colors: config.colors.clone(),
@@ -48,25 +50,25 @@ impl Hars {
 	}
 }
 
-impl Default for Hars {
+impl Default for Caole {
 	fn default() -> Self {
-		Self::from_config(&HarsConfig::default_preview())
+		Self::from_config(&CaoleConfig::default_preview())
 	}
 }
 
-impl CharacterComponents for Hars {
+impl CharacterComponents for Caole {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
-		let pose =
-			HarsPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() };
+		let pose = CaolePose {
+			body: self.body,
+			gender: self.gender,
+			build: self.build,
+			sliders: self.sliders.clamped(),
+		};
 		Layers::from_free(vec![
 			humanoid::quadruped_body_rig(pose.resolve()),
-			humanoid::triple_join_neck_rig(
-				pose.neck_pose(),
-				Transform::from_translation(Vec3::new(0.0, 0.2, -0.2)),
-			),
 			humanoid::pronograde_head_rig(
-				AssetNormalization::base_y(0.7),
-				RigId::Neck,
+				AssetNormalization::base_y(0.4),
+				RigId::Body,
 				"head_socket",
 				Transform::IDENTITY,
 			),
@@ -78,21 +80,11 @@ impl CharacterComponents for Hars {
 		let mut out = Layers::from_labeled(
 			"body",
 			vec![
-				humanoid::body_part(
-					HarsBodyMesh::Rumbler.label(),
-					HarsBodyMesh::Rumbler.path().as_str(),
-				),
+				humanoid::body_part(self.body.label(), self.body.path().as_str()),
 				humanoid::tail("cat-tail", TAIL_CAT.as_str(), "tailbone"),
 			],
 		);
-		out.extend_labeled("neck", vec![humanoid::neck_mesh()]);
-		out.extend_labeled(
-			"head",
-			vec![humanoid::head_mesh(
-				HarsHeadMesh::Cowder.label(),
-				HarsHeadMesh::Cowder.path().as_str(),
-			)],
-		);
+		out.extend_labeled("head", vec![humanoid::head_mesh("cowder", HEAD_COWDER.as_str())]);
 		out.extend_labeled(
 			"features",
 			vec![
@@ -145,11 +137,14 @@ impl CharacterComponents for Hars {
 				.with_feature(sliders.feature_transform(CharacterPartSlot::EarRight)),
 			],
 		);
-		out
+		out.map(|part| {
+			let color = self.colors.color_for_slot(part.slot);
+			part.with_base_color(color)
+		})
 	}
 }
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.
-const _: HarsBodyMesh = HarsBodyMesh::Rumbler;
-const _: HarsHeadMesh = HarsHeadMesh::Cowder;
-const _: HarsMouthMesh = HarsMouthMesh::Cow;
+const _: CaoleBodyMesh = CaoleBodyMesh::Gumbus;
+const _: CaoleBodyMesh = CaoleBodyMesh::Rumbler;
+const _: CaoleMouthMesh = CaoleMouthMesh::Cow;

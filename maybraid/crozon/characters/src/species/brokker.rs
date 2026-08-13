@@ -5,7 +5,8 @@
 //! proportion layers (no overall asset normalization).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Brokker;
 pub mod palette;
 pub mod pose;
 
@@ -43,6 +44,16 @@ impl Default for BrokkerColors {
 }
 
 impl BrokkerColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.snout.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -102,16 +113,16 @@ impl BrokkerConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Brokker>`).
-	pub fn clothed(&self) -> Clothed<crate::species::brokker::bsn::Brokker> {
+	pub fn clothed(&self) -> Clothed<Brokker> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for BrokkerConfig {
-	type Components = crate::species::brokker::bsn::Brokker;
+	type Components = Brokker;
 
 	fn components(&self) -> Self::Components {
-		crate::species::brokker::bsn::Brokker::from_config(self)
+		Brokker::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {

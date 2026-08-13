@@ -4,7 +4,8 @@
 //! lerodon or robrek snout, faded green and red scales, and light accent colors.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Lero;
 pub mod palette;
 pub mod pose;
 
@@ -43,6 +44,19 @@ impl Default for LeroColors {
 }
 
 impl LeroColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Mouth => self.mouth.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Tail => self.tail.color(),
+			Spine => self.spine.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -105,16 +119,16 @@ impl LeroConfig {
 	}
 
 	/// Inner recipe plus clothing layers (`Clothed<Lero>`).
-	pub fn clothed(&self) -> Clothed<crate::species::lero::bsn::Lero> {
+	pub fn clothed(&self) -> Clothed<Lero> {
 		CharacterRecipe::clothed(self)
 	}
 }
 
 impl CharacterRecipe for LeroConfig {
-	type Components = crate::species::lero::bsn::Lero;
+	type Components = Lero;
 
 	fn components(&self) -> Self::Components {
-		crate::species::lero::bsn::Lero::from_config(self)
+		Lero::from_config(self)
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
