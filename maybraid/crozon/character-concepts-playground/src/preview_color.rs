@@ -1,4 +1,7 @@
-//! Shared preview color for material and thumbnail tinting.
+//! Shared preview color helpers (thumbnail / UI). Character live paint uses
+//! [`crozon_characters::MaterialRefRoot`] on the part host.
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 

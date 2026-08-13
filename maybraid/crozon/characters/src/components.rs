@@ -12,6 +12,7 @@ use lod::{lod_host_scene_pending, SceneChunk};
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
 use crate::layer::Layers;
+use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
 use crate::scene_children::scene_children;
 use crate::socket::{RigId, SkinRef};
@@ -250,7 +251,7 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert(host);
+	commands.entity(entity).insert((host, CharacterRoot));
 	vec![entity]
 }
 

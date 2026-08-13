@@ -24,15 +24,20 @@ is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe`](src/components.rs)
 host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once. Those nodes stamp socket/skin/rig/part/transform from
-[`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs); part materials go on
-the GLB via [`scene_with_level`](src/nodes/part.rs) (`MaterialRefRoot` +
-`PropagateToDescendants`), not a post-spawn prepare system.
+[`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs); part materials
+(`MaterialRefRoot` + `PropagateToDescendants`) live on the **part host**, not
+the GLB child, so live paint is an insert on the member you query. Nested hosts
+get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
+[`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
+character. Do not grow a post-spawn prepare pass that copies materials or poses.
 
 The playground spawn path is LodScene (`Config::clothed()`).
 [`CharacterComponents`](src/components.rs) is the only character recipe.
 Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_for_slot`
-and [`ClothingLayer`](src/components.rs) stamp palette[0]); live playground tint
-reads that material rather than a parallel `preview_color_*` map.
+and [`ClothingLayer`](src/components.rs) stamp palette[0]). Live playground tint
+inserts [`MaterialRefRoot`](src/nodes/part.rs) on the part host (change-driven
+[`material-ref`](../../material-ref) fulfill); [`PreviewAssetTarget`](../character-concepts-playground/src/preview.rs)
+stays UI mapping, not the paint path.
 
 ### 1. `crozon-characters` (this crate)
 
@@ -77,7 +82,8 @@ reads that material rather than a parallel `preview_color_*` map.
    - `ConceptPreviewConfig::<Name>` (add the variant to `with_clothed_recipe!`)
    - `PreviewTarget::<Name>*` variants and `preview_asset_target` mapping
    - `*Colors::color_for_slot` (recipe stamps `PartNode.material`; spawn /
-     `lod_rig_nodes` / `lod_part_nodes` go through the macro)
+     `lod_rig_nodes` / `lod_part_nodes` go through the macro). Live tint writes
+     `MaterialRefRoot` on the part host.
 3. Update [`src/menu_listeners.rs`](../character-concepts-playground/src/menu_listeners.rs),
    [`src/species_session.rs`](../character-concepts-playground/src/species_session.rs),
    [`src/focus_reference.rs`](../character-concepts-playground/src/focus_reference.rs),

@@ -38,7 +38,7 @@ use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
 use character_lod::CharacterLodPlugin;
 use crozon_characters::{
 	build_rig_bone_map, fulfill_skin_ref_roots, fulfill_socket_ref_roots,
-	prune_duplicate_part_scenes, remap_part_skin_to_rig,
+	prune_duplicate_part_scenes, remap_part_skin_to_rig, CharacterHostSystems,
 };
 use focus::animate_focused_preview_asset;
 use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
@@ -139,7 +139,10 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					attach_focus_reference_to_sockets.after(build_rig_bone_map),
 					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
-					fulfill_socket_ref_roots.after(build_rig_bone_map).run_if(preview_pass_ready),
+					fulfill_socket_ref_roots
+						.after(build_rig_bone_map)
+						.after(CharacterHostSystems::InvalidateRefs)
+						.run_if(preview_pass_ready),
 					fulfill_skin_ref_roots
 						.after(fulfill_socket_ref_roots)
 						.run_if(preview_pass_ready),

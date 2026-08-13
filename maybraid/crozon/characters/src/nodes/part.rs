@@ -131,17 +131,6 @@ impl PartNode {
 	pub fn authored_transform(&self) -> Transform {
 		self.normalization.transform().mul_transform(self.feature)
 	}
-
-	fn content_for_level(&self, _level: LodSceneLevel) -> impl Scene + 'static {
-		let material = self.material.clone();
-		(
-			bsn! {
-				template_value(MaterialRefRoot(material))
-				PropagateToDescendants
-			},
-			self.scene.clone().scene(),
-		)
-	}
 }
 
 impl LodScene for PartNode {
@@ -157,8 +146,8 @@ impl LodScene for PartNode {
 		LodSceneCulls::None
 	}
 
-	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		self.content_for_level(level)
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
+		self.scene.clone().scene()
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
@@ -178,6 +167,7 @@ impl LodScene for PartNode {
 		let node = self.clone();
 		let transform = node.authored_transform();
 		let part = CharacterPart { slot: node.slot };
+		let material = MaterialRefRoot(node.material.clone());
 		let socket = node.socket.map(SocketRefRoot);
 		let skin = node.skin.map(SkinRefRoot);
 		(
@@ -186,6 +176,8 @@ impl LodScene for PartNode {
 				template_value(node)
 				template_value(transform)
 				template_value(part)
+				template_value(material)
+				PropagateToDescendants
 			},
 			maybe_component(socket),
 			maybe_component(skin),

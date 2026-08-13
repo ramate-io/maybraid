@@ -18,7 +18,9 @@ mod reference;
 mod standard;
 
 pub use fulfill::{
-	fulfill_material_ref_descendants, fulfill_material_ref_roots, MaterialRefPlugin,
+	fulfill_material_ref_descendants, fulfill_material_ref_roots,
+	invalidate_changed_material_ref_roots, restamp_material_ref_descendants_of_changed,
+	MaterialRefPlugin,
 };
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
@@ -50,10 +52,8 @@ mod tests {
 	#[test]
 	fn material_ref_key_changes_with_palette_or_name() -> anyhow::Result<()> {
 		let base = MaterialRef::named("tuft").with_palette([Color::srgb(0.1, 0.5, 0.2)]);
-		let other_color =
-			MaterialRef::named("tuft").with_palette([Color::srgb(0.9, 0.1, 0.1)]);
-		let other_name =
-			MaterialRef::named("bark").with_palette([Color::srgb(0.1, 0.5, 0.2)]);
+		let other_color = MaterialRef::named("tuft").with_palette([Color::srgb(0.9, 0.1, 0.1)]);
+		let other_name = MaterialRef::named("bark").with_palette([Color::srgb(0.1, 0.5, 0.2)]);
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_color));
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_name));
 		Ok(())
@@ -75,10 +75,7 @@ mod tests {
 		assert_eq!(app.world().resource::<StandardMaterialRefCache>().len(), 1);
 
 		// Second entity with same ref reuses cache.
-		let entity2 = app
-			.world_mut()
-			.spawn(MaterialRefRoot(MaterialRef::named("tuft")))
-			.id();
+		let entity2 = app.world_mut().spawn(MaterialRefRoot(MaterialRef::named("tuft"))).id();
 		app.update();
 		assert!(app.world().get::<MaterialRefApplied>(entity2).is_some());
 		assert_eq!(app.world().resource::<StandardMaterialRefCache>().len(), 1);
@@ -94,27 +91,63 @@ mod tests {
 			.init_resource::<StandardMaterialRefCache>()
 			.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default());
 
-		let mesh = app.world_mut().resource_mut::<Assets<Mesh>>().add(Mesh::from(
-			bevy::prelude::Cuboid::from_length(1.0),
-		));
+		let mesh = app
+			.world_mut()
+			.resource_mut::<Assets<Mesh>>()
+			.add(Mesh::from(bevy::prelude::Cuboid::from_length(1.0)));
 		let root = app
 			.world_mut()
-			.spawn((
-				MaterialRefRoot(MaterialRef::named("tuft")),
-				PropagateToDescendants,
-			))
+			.spawn((MaterialRefRoot(MaterialRef::named("tuft")), PropagateToDescendants))
 			.id();
 		app.update();
 		assert!(app.world().get::<MaterialRefApplied>(root).is_some());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(root).is_none());
 
-		let child = app
-			.world_mut()
-			.spawn((Mesh3d(mesh), ChildOf(root)))
-			.id();
+		let child = app.world_mut().spawn((Mesh3d(mesh), ChildOf(root))).id();
 		app.update();
 		assert!(app.world().get::<MaterialRefApplied>(child).is_some());
 		assert!(app.world().get::<MeshMaterial3d<StandardMaterial>>(child).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn changing_material_ref_restamps_descendants() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<Mesh>()
+			.init_asset::<StandardMaterial>()
+			.init_resource::<StandardMaterialRefCache>()
+			.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default());
+
+		let mesh = app
+			.world_mut()
+			.resource_mut::<Assets<Mesh>>()
+			.add(Mesh::from(bevy::prelude::Cuboid::from_length(1.0)));
+		let root = app
+			.world_mut()
+			.spawn((MaterialRefRoot(MaterialRef::named("tuft")), PropagateToDescendants))
+			.id();
+		let child = app.world_mut().spawn((Mesh3d(mesh), ChildOf(root))).id();
+		app.update();
+		let first = app
+			.world()
+			.get::<MeshMaterial3d<StandardMaterial>>(child)
+			.expect("first fulfill")
+			.0
+			.clone();
+
+		app.world_mut()
+			.entity_mut(root)
+			.insert(MaterialRefRoot(MaterialRef::named("bark")));
+		app.update();
+		let second = app
+			.world()
+			.get::<MeshMaterial3d<StandardMaterial>>(child)
+			.expect("restamp")
+			.0
+			.clone();
+		assert_ne!(first, second);
+		assert!(app.world().get::<MaterialRefApplied>(child).is_some());
 		Ok(())
 	}
 }

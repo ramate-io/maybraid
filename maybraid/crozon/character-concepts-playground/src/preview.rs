@@ -1,8 +1,8 @@
 //! Preview configuration and spawning.
 //!
 //! Commands update [`ConceptPreviewConfig`]. This module spawns nested LodScene
-//! hosts via [`spawn_character_components`] (`Config::clothed()`). Live color and
-//! slider updates stamp [`PreviewAssetTarget`] onto [`PartNode`]s after fulfill.
+//! hosts via [`spawn_character_components`] (`Config::clothed()`). Live color
+//! inserts [`MaterialRefRoot`] on part hosts; [`PreviewAssetTarget`] stays UI mapping.
 
 use bevy::prelude::*;
 use crozon_character_items::ClothingMesh;
@@ -40,13 +40,12 @@ use crozon_characters::{
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		ylter::YilterConfig,
 	},
-	CharacterComponents, PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied,
-	SocketRefRoot,
+	CharacterComponents, MaterialRefRoot, PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot,
+	SocketRefApplied, SocketRefRoot,
 };
 use lod::LodSceneLevel;
 
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
-use crate::preview_color::PreviewColor;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole,
@@ -966,7 +965,6 @@ pub struct PreviewPartBaseTransform {
 #[derive(Component, Clone, Copy)]
 pub struct PreviewAssetTarget {
 	pub target: PreviewTarget,
-	pub color: PreviewColor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1159,9 +1157,11 @@ pub fn sync_preview(
 		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
 	mut parts: Query<(
+		Entity,
 		&PartNode,
 		&CharacterPart,
-		&mut PreviewAssetTarget,
+		&PreviewAssetTarget,
+		Option<&MaterialRefRoot>,
 		Option<&PreviewPartBaseTransform>,
 		Option<&mut Transform>,
 	)>,
@@ -1175,7 +1175,7 @@ pub fn sync_preview(
 
 	if sync_state.spawn_key == spawn_key {
 		sync_state.live_key = live_key;
-		sync_live_preview(&config, &mut body_poses, &mut neck_poses, &mut parts);
+		sync_live_preview(&mut commands, &config, &mut body_poses, &mut neck_poses, &mut parts);
 		return;
 	}
 
@@ -1226,10 +1226,8 @@ pub fn stamp_lod_character_preview(
 	}
 
 	for (entity, node) in &parts {
-		let mut target = preview_asset_target(&config, node.slot, node.label);
-		target.color = PreviewColor::from_part(node);
 		commands.entity(entity).insert((
-			target,
+			preview_asset_target(&config, node.slot, node.label),
 			PreviewPartBaseTransform {
 				normalization: node.normalization.transform(),
 				socket: node.socket.map(|socket| socket.local),
@@ -1239,6 +1237,7 @@ pub fn stamp_lod_character_preview(
 }
 
 fn sync_live_preview(
+	commands: &mut Commands,
 	config: &ConceptPreviewConfig,
 	body_poses: &mut Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
 	neck_poses: &mut Query<
@@ -1246,9 +1245,11 @@ fn sync_live_preview(
 		(Without<AnimatedBodyRig>, Without<crate::focus_reference::FocusReferenceRig>),
 	>,
 	parts: &mut Query<(
+		Entity,
 		&PartNode,
 		&CharacterPart,
-		&mut PreviewAssetTarget,
+		&PreviewAssetTarget,
+		Option<&MaterialRefRoot>,
 		Option<&PreviewPartBaseTransform>,
 		Option<&mut Transform>,
 	)>,
@@ -1269,9 +1270,12 @@ fn sync_live_preview(
 	}
 
 	let recipe_parts = config.lod_part_nodes();
-	for (node, part, mut target, base, transform) in parts {
+	for (entity, node, part, _target, current_material, base, transform) in parts {
 		if let Some(recipe) = recipe_part(&recipe_parts, node) {
-			target.color = PreviewColor::from_part(recipe);
+			let needs_paint = current_material.is_none_or(|root| root.0 != recipe.material);
+			if needs_paint {
+				commands.entity(entity).insert(MaterialRefRoot(recipe.material.clone()));
+			}
 		}
 		if !has_feature_transform(part.slot) {
 			continue;
@@ -1447,7 +1451,7 @@ pub fn preview_asset_target(
 				CharacterPartSlot::Tail => PreviewTarget::BraidmanBody(config.body),
 				CharacterPartSlot::Spine => PreviewTarget::BraidmanBody(config.body),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Brenal { config, .. } => {
 			let target = match slot {
@@ -1472,7 +1476,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Caole { config, .. } => {
 			let target = match slot {
@@ -1495,7 +1499,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::CaoleHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Epiphant { config, .. } => {
 			let target = match slot {
@@ -1520,7 +1524,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::EpiphantHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Hars { config, .. } => {
 			let target = match slot {
@@ -1539,7 +1543,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::HarsHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Yilter { .. } => {
 			let target = match slot {
@@ -1563,7 +1567,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::YilterHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Sonyak { .. } => {
 			let target = match slot {
@@ -1587,7 +1591,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Spine
 				| CharacterPartSlot::Horns => PreviewTarget::SonyakHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Claber { config, .. } => {
 			let target = match slot {
@@ -1612,7 +1616,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::ClaberHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Croconot { config, .. } => {
 			let target = match slot {
@@ -1637,7 +1641,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Clothing
 				| CharacterPartSlot::Spine => PreviewTarget::CroconotHead,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Brodler { config, .. } => {
 			let target = match slot {
@@ -1668,7 +1672,7 @@ pub fn preview_asset_target(
 				CharacterPartSlot::Tail => PreviewTarget::BrodlerBody,
 				CharacterPartSlot::Spine => PreviewTarget::BrodlerBody,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Mygr { config, .. } => {
 			let target = match slot {
@@ -1692,7 +1696,7 @@ pub fn preview_asset_target(
 					.unwrap_or(PreviewTarget::MygrHead),
 				CharacterPartSlot::Spine => PreviewTarget::MygrBody,
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Dui { config, .. } => {
 			let target = match slot {
@@ -1716,7 +1720,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::DuiClothing)
 					.unwrap_or(PreviewTarget::DuiHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Lidder { config, .. } => {
 			let target = match slot {
@@ -1746,7 +1750,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::LidderClothing)
 					.unwrap_or(PreviewTarget::LidderHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Chupri { config, .. } => {
 			let target = match slot {
@@ -1776,7 +1780,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::ChupriClothing)
 					.unwrap_or(PreviewTarget::ChupriHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Brokker { config, .. } => {
 			let target = match slot {
@@ -1806,7 +1810,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::BrokkerClothing)
 					.unwrap_or(PreviewTarget::BrokkerHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 
 		ConceptPreviewConfig::Tipple { config, .. } => {
@@ -1837,7 +1841,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::TippleClothing)
 					.unwrap_or(PreviewTarget::TippleHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 
 		ConceptPreviewConfig::Topple { config, .. } => {
@@ -1868,7 +1872,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::ToppleClothing)
 					.unwrap_or(PreviewTarget::ToppleHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 
 		ConceptPreviewConfig::Kispar { config, .. } => {
@@ -1899,7 +1903,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KisparClothing)
 					.unwrap_or(PreviewTarget::KisparHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Tapp { config, .. } => {
 			let target = match slot {
@@ -1923,7 +1927,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::TappClothing)
 					.unwrap_or(PreviewTarget::TappHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Kaller { config, .. } => {
 			let target = match slot {
@@ -1953,7 +1957,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KallerClothing)
 					.unwrap_or(PreviewTarget::KallerHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Kappler { config, .. } => {
 			let target = match slot {
@@ -1983,7 +1987,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::KapplerClothing)
 					.unwrap_or(PreviewTarget::KapplerHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Wumbus { config, .. } => {
 			let target = match slot {
@@ -2013,7 +2017,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::WumbusClothing)
 					.unwrap_or(PreviewTarget::WumbusHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Lero { config, .. } => {
 			let target = match slot {
@@ -2037,7 +2041,7 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::LeroClothing)
 					.unwrap_or(PreviewTarget::LeroHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Spibmom { config, .. } => {
 			let target = match slot {
@@ -2067,19 +2071,19 @@ pub fn preview_asset_target(
 					.map(PreviewTarget::SpibmomClothing)
 					.unwrap_or(PreviewTarget::SpibmomHead),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Grener { .. } => {
 			let target = PreviewTarget::GrenerBody;
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Thumplus { .. } => {
 			let target = PreviewTarget::ThumplusBody;
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Mistler { .. } => {
 			let target = PreviewTarget::MistlerBody;
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 		ConceptPreviewConfig::Tuberwaber { config, .. } => {
 			let target = match slot {
@@ -2109,7 +2113,7 @@ pub fn preview_asset_target(
 				| CharacterPartSlot::Tail
 				| CharacterPartSlot::Spine => PreviewTarget::TuberwaberBody(config.body),
 			};
-			PreviewAssetTarget { target, color: PreviewColor::PLACEHOLDER }
+			PreviewAssetTarget { target }
 		}
 	}
 }

@@ -17,6 +17,7 @@ use crozon_characters::{
 	CharacterComponentsPlugin, Clothed, PartNode, RigNode,
 };
 use lod::{add_lod_refresh_chunk_for, LodRefreshCorePlugin};
+use material_ref::StandardMaterialRefPlugin;
 use scene_ref::SceneRefPlugin;
 
 /// Chunk fulfill + scene-ref + character socket/skin plugin for LodScene hosts.
@@ -26,6 +27,9 @@ impl Plugin for CharacterLodPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<SceneRefPlugin>() {
 			app.add_plugins(SceneRefPlugin);
+		}
+		if !app.is_plugin_added::<StandardMaterialRefPlugin>() {
+			app.add_plugins(StandardMaterialRefPlugin);
 		}
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);

@@ -8,20 +8,39 @@ use bevy::{
 	world_serialization::{WorldInstance, WorldInstanceSpawner},
 };
 
+use crate::member::{find_member_rig, CharacterMembers, MemberOf};
 use crate::rig::{
 	BoneMap, CharacterPart, CharacterRig, LodCharacterRig, NeedsDuplicateScenePrune,
 	NeedsSkinRemap, NoMatchingArmature, PartRigRef,
 };
 use crate::socket::{SkinRefApplied, SkinRefRoot};
 
+/// Drop [`SkinRefApplied`] when the identity changes so fulfill re-resolves.
+pub fn invalidate_changed_skin_ref_roots(
+	mut commands: Commands,
+	changed: Query<Entity, (Changed<SkinRefRoot>, With<SkinRefApplied>)>,
+) {
+	for entity in &changed {
+		commands.entity(entity).remove::<SkinRefApplied>();
+	}
+}
+
 pub fn fulfill_skin_ref_roots(
 	mut commands: Commands,
 	pending: Query<(Entity, &SkinRefRoot), (With<CharacterPart>, Without<SkinRefApplied>)>,
+	member_of: Query<&MemberOf>,
+	members: Query<&CharacterMembers>,
 	rigs: Query<(Entity, &CharacterRig, &BoneMap), With<LodCharacterRig>>,
 ) {
 	for (entity, SkinRefRoot(skin)) in &pending {
-		let role = skin.target.role();
-		let Some((rig_root, _, map)) = rigs.iter().find(|(_, rig, _)| rig.role == role) else {
+		let Ok(MemberOf(root)) = member_of.get(entity) else {
+			continue;
+		};
+		let Ok(character_members) = members.get(*root) else {
+			continue;
+		};
+		let Some((rig_root, map)) = find_member_rig(character_members, skin.target.role(), &rigs)
+		else {
 			continue;
 		};
 		if map.by_name.is_empty() {

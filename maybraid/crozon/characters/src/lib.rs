@@ -3,13 +3,15 @@
 //! [`CharacterComponents`] is the character recipe: species configs produce nested
 //! [`lod::LodScene`] hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with
 //! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
-//! Live pose, animation, and preview colors are ECS mutation, not LOD refresh.
+//! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
+//! `Changed`), not LOD refresh.
 
 pub mod assembly;
 pub mod assets;
 pub mod components;
 pub mod concepts;
 pub mod layer;
+pub mod member;
 pub mod menu_traits;
 pub mod nodes;
 pub mod plugin;
@@ -30,8 +32,12 @@ pub use concepts::ConceptAnimation;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use layer::{Layer, Layers};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
+pub use member::{
+	attach_part_node, find_part_member, stamp_character_members, CharacterMembers, CharacterRoot,
+	MemberOf,
+};
 pub use nodes::{PartNode, RigNode};
-pub use plugin::{add_character_components_host, CharacterComponentsPlugin};
+pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};
 pub use presets::{BuildPreset, GenderPreset};
 pub use rig::{
 	bind_scales_ready, bone_map_ready, build_rig_bone_map, missing_landmark_bones, ActiveRigPose,
@@ -39,8 +45,11 @@ pub use rig::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, NoMatchingArmature, PartRigRef, ResolvedPoseApplied,
 	RigBindScales, RigSkeletonKind,
 };
-pub use skin::{fulfill_skin_ref_roots, prune_duplicate_part_scenes, remap_part_skin_to_rig};
+pub use skin::{
+	fulfill_skin_ref_roots, invalidate_changed_skin_ref_roots, prune_duplicate_part_scenes,
+	remap_part_skin_to_rig,
+};
 pub use socket::{
-	fulfill_socket_ref_roots, RigId, SkinRef, SkinRefApplied, SkinRefRoot, SocketRef,
-	SocketRefApplied, SocketRefRoot,
+	fulfill_socket_ref_roots, invalidate_changed_socket_ref_roots, RigId, SkinRef, SkinRefApplied,
+	SkinRefRoot, SocketRef, SocketRefApplied, SocketRefRoot,
 };
