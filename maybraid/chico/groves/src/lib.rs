@@ -103,6 +103,16 @@ pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
 #[cfg(feature = "render")]
+pub use braid_grass::{BraidGrass, BraidGrassParams};
+#[cfg(feature = "render")]
+pub use common_tufts::{CommonTufts, CommonTuftsParams};
+#[cfg(feature = "render")]
+pub use tall_grass::{TallGrass, TallGrassParams};
+#[cfg(feature = "render")]
+pub use tropical_tufts::{TropicalTufts, TropicalTuftsParams};
+#[cfg(feature = "render")]
+pub use wild_grass::{WildGrass, WildGrassParams};
+#[cfg(feature = "render")]
 pub use dryland::{Dryland, DrylandParams};
 #[cfg(feature = "render")]
 pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};

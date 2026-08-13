@@ -22,6 +22,8 @@ mod tuft_patch;
 
 #[cfg(feature = "render")]
 pub mod vc_compose;
+#[cfg(feature = "render")]
+pub mod vc_tuft;
 
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,

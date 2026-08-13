@@ -96,15 +96,9 @@ fn attach_render_materials(
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::TuftPatch(_t) => {}
-		RenderSubject::BraidGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TropicalTufts(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::CommonTufts(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::BraidGrass(_) => {}
+		RenderSubject::TropicalTufts(_) => {}
+		RenderSubject::CommonTufts(_) => {}
 		RenderSubject::BushScrub(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
@@ -116,12 +110,8 @@ fn attach_render_materials(
 		RenderSubject::TropicalThicket(_) => {}
 		RenderSubject::JerrysChaparral(_) => {}
 		RenderSubject::LevantineScrub(_) => {}
-		RenderSubject::TallGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::WildGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TallGrass(_) => {}
+		RenderSubject::WildGrass(_) => {}
 		RenderSubject::MonsterGrass(_) => {}
 		RenderSubject::RiverineGreen(_) => {}
 		RenderSubject::LowBush(_) => {}

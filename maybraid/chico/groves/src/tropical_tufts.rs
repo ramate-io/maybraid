@@ -220,6 +220,237 @@ impl TropicalTuftsCell {
 	}
 }
 
+
+#[cfg(feature = "render")]
+mod vc {
+	use bevy::prelude::*;
+	use chico_sbs_trees::{PalmBush, PalmBushParams};
+	use chico_vegetation_components::{
+		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+	};
+	use clap::Args;
+	use lod::gen::LodSceneLevel;
+	use material_ref::MaterialRef;
+	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+
+	use super::{definition, TropicalTuftsCell, TropicalTuftsItem};
+	use crate::grove::{
+		flatten_foliage_nodes, frond_material_from_palette, placement_noise, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+	};
+	use crate::grove::vc_tuft::{
+		grow_tuft_plants, material_from_palette, patch_variant_index, single_blade_patch_params,
+		stamp_foliage_noise, tuft_grove_stick_nodes, unit_plant_from_params, variant_noise,
+		TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
+		TUFT_GROVE_STRUCTURAL_LOW_FACTOR, TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
+	};
+
+	pub const TROPICAL_TUFTS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
+	pub const TROPICAL_TUFTS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
+	pub const TROPICAL_TUFTS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	#[derive(Clone, Debug, Args)]
+	#[command(rename_all = "kebab-case")]
+	pub struct TropicalTuftsParams {
+		#[command(flatten, next_help_heading = "Grove")]
+		pub grove: GroveFrontend,
+
+		#[arg(
+			long,
+			default_value = "0,1,0.06,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
+			help_heading = "Foliage Surface Noise",
+		)]
+		pub foliage_noise: NoiseParams,
+
+		#[arg(skip)]
+		pub extent: GroveExtent,
+
+		#[command(flatten, next_help_heading = "Terrain")]
+		pub terrain: FlatTerrainSample,
+
+		#[arg(long, default_value_t = 0)]
+		pub merge_collections: usize,
+
+		#[arg(long, default_value_t = 100)]
+		pub patch_variants: u32,
+
+		#[arg(skip)]
+		resolved_placements: Option<Vec<GroveCellVariant<TropicalTuftsCell>>>,
+	}
+
+	impl Default for TropicalTuftsParams {
+		fn default() -> Self {
+			Self {
+				grove: GroveFrontend::default(),
+				foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
+				extent: GroveExtent::new(
+					Vec3::ZERO,
+					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+				),
+				terrain: FlatTerrainSample::default(),
+				merge_collections: 0,
+				patch_variants: 100,
+				resolved_placements: None,
+			}
+		}
+	}
+
+	impl TropicalTuftsParams {
+		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
+			self.extent = extent;
+			self
+		}
+
+		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
+			self.terrain = terrain;
+			self
+		}
+
+		pub fn cell_extent_xz(&self) -> Vec2 {
+			self.grove.definition(definition()).cell_extent_xz
+		}
+
+		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+			self.extent.subdivide_xz(self.cell_extent_xz())
+		}
+
+		pub fn placements(&self) -> Vec<GroveCellVariant<TropicalTuftsCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+		}
+
+		pub fn build(&self) -> TropicalTufts {
+			let foliage_noise = self.foliage_noise;
+			let variants = self.patch_variants.max(1);
+			let mut tuft_grown = Vec::new();
+			let mut palms = Vec::new();
+			for placed in self.placements() {
+				let mix = placed.variant.palette_mix();
+				match placed.variant.item() {
+					TropicalTuftsItem::Tuft(clump) => {
+						let variant = patch_variant_index(placed.position, variants);
+						let noise = variant_noise(foliage_noise, variant);
+						let params = single_blade_patch_params(
+							clump.build_with_noise(noise),
+							foliage_noise,
+						);
+						let material =
+							material_from_palette(mix, placed.position, foliage_noise);
+						tuft_grown.push(unit_plant_from_params(
+							params,
+							variant,
+							placed.position,
+							placed.scale,
+							material,
+						));
+					}
+					TropicalTuftsItem::Patch(patch) => {
+						let variant = patch_variant_index(placed.position, variants);
+						let noise = variant_noise(foliage_noise, variant);
+						let params =
+							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise);
+						let material =
+							material_from_palette(mix, placed.position, foliage_noise);
+						tuft_grown.push(unit_plant_from_params(
+							params,
+							variant,
+							placed.position,
+							placed.scale,
+							material,
+						));
+					}
+					TropicalTuftsItem::PalmBush(palm) => {
+						let noise = placement_noise(foliage_noise, placed.position);
+						let geometry = palm.build_with_noise(noise);
+						let mut params = PalmBushParams::default();
+						params.geometry = geometry;
+						let material =
+							material_from_palette(mix, placed.position, foliage_noise);
+						let frond_material =
+							frond_material_from_palette(Some(mix), noise.seed);
+						palms.push(TropicalTuftsPalm {
+							placement: Placement::new(placed.position, 0.0)
+								.with_scale(Vec3::splat(placed.scale.max(1e-4))),
+							bush: params.build(),
+							material,
+							frond_material,
+						});
+					}
+				}
+			}
+			TropicalTufts {
+				body: TuftGroveBody::from_plants(
+					grow_tuft_plants(tuft_grown, self.merge_collections),
+					&self.extent,
+					self.cell_extent_xz(),
+					TuftGroveProxyHeights::SHORT,
+				),
+				palms,
+			}
+		}
+	}
+
+	#[derive(Clone)]
+	struct TropicalTuftsPalm {
+		placement: Placement,
+		bush: PalmBush,
+		material: MaterialRef,
+		frond_material: MaterialRef,
+	}
+
+	#[derive(Clone, Component)]
+	pub struct TropicalTufts {
+		body: TuftGroveBody,
+		palms: Vec<TropicalTuftsPalm>,
+	}
+
+	impl TropicalTufts {
+		pub fn plants(&self) -> &[TuftGrovePlant] {
+			&self.body.plants
+		}
+	}
+
+	impl VegetationComponents for TropicalTufts {
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			tuft_grove_stick_nodes(level)
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+			let mut nodes = self.body.foliage_for_level(level).flatten();
+			// Palm companions: High/Medium fronds; Low/UltraLow layered balls from PalmBush.
+			let palm_level = match level {
+				LodSceneLevel::Medium => LodSceneLevel::High,
+				other => other,
+			};
+			for palm in &self.palms {
+				nodes.extend(flatten_foliage_nodes(
+					&palm.bush,
+					palm.placement,
+					&palm.material,
+					&palm.frond_material,
+					palm_level,
+				));
+			}
+			Layers::from_free(nodes)
+		}
+
+		fn structural_lod(&self) -> Option<StructuralLod> {
+			Some(self.body.structural_lod())
+		}
+	}
+}
+
+#[cfg(feature = "render")]
+pub use vc::{
+	TropicalTufts, TropicalTuftsParams, TROPICAL_TUFTS_STRUCTURAL_HIGH_FACTOR,
+	TROPICAL_TUFTS_STRUCTURAL_LOW_FACTOR, TROPICAL_TUFTS_STRUCTURAL_MEDIUM_FACTOR,
+};
+
+
 #[cfg(test)]
 mod tests {
 	use super::*;

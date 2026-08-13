@@ -7,12 +7,13 @@
 use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{
-	Alpine, AridConiferSapling, ChristmasTaiga, ConiferMassives, ConiferSapling, DateGrove, Dryland,
-	ForlornSavanna, GoettingenFollow, HighBush, JerrysChaparral, JungleLowerMassives,
-	JungleMassives, Leeward, LevantineScrub, LowBush, MonsterGrass, OasisDatePalm, Orchard,
-	PalmShade, RiparianGeneral, RiparianMix, RiverineGreen, RollingOaks, Shamanhome, SpottyBushes,
-	Storytellers, StrangeOasis, TemperateLowerMassives, TemperateMassives, TradeWinds,
-	TropicalThicket, UnendingJungle, Vineyard, WanderingAcacia,
+	Alpine, AridConiferSapling, BraidGrass, ChristmasTaiga, CommonTufts, ConiferMassives,
+	ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow, HighBush,
+	JerrysChaparral, JungleLowerMassives, JungleMassives, Leeward, LevantineScrub, LowBush,
+	MonsterGrass, OasisDatePalm, Orchard, PalmShade, RiparianGeneral, RiparianMix, RiverineGreen,
+	RollingOaks, Shamanhome, SpottyBushes, Storytellers, StrangeOasis, TallGrass,
+	TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket, TropicalTufts,
+	UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 use chico_sbs_trees::{
 	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
@@ -95,6 +96,11 @@ impl Plugin for VegetationLodRefreshPlugin {
 
 		// Structural grove hosts (Monster Grass still flattens via ComponentsOnly).
 		avian_host!(app, ComponentsOnly<MonsterGrass>);
+		avian_host!(app, ComponentsOnly<BraidGrass>);
+		avian_host!(app, ComponentsOnly<TropicalTufts>);
+		avian_host!(app, ComponentsOnly<CommonTufts>);
+		avian_host!(app, ComponentsOnly<TallGrass>);
+		avian_host!(app, ComponentsOnly<WildGrass>);
 		avian_host!(app, LevantineScrub);
 		avian_host!(app, StrangeOasis);
 		avian_host!(app, TropicalThicket);

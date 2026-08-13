@@ -3,23 +3,19 @@ use chico_ball_components::tuft::{
 	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
-use chico_grove_render_items::braid_grass::BraidGrassStd;
 use chico_grove_render_items::bush_scrub::BushScrubStd;
-use chico_grove_render_items::common_tufts::CommonTuftsStd;
 use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, ChristmasTaigaParams, ConiferMassivesParams,
-	ConiferSaplingParams, DateGroveParams, DrylandParams, ForlornSavannaParams,
-	GoettingenFollowParams, HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams,
-	JungleMassivesParams, LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams,
-	OrchardParams, PalmShadeParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams,
-	RollingOaksParams, ShamanhomeParams, SpottyBushesParams, StorytellersParams, StrangeOasisParams,
-	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, ChristmasTaigaParams,
+	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
+	ForlornSavannaParams, GoettingenFollowParams, HighBushParams, JerrysChaparralParams,
+	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
+	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
+	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
+	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
+	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
+	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
 };
-use chico_grove_render_items::tall_grass::TallGrassStd;
-use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
 use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
-use chico_grove_render_items::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConiferParams;
@@ -128,14 +124,14 @@ pub type RenderJungleGrowth = JungleGrowth<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-/// [`BraidGrassStd`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
-pub type RenderBraidGrass = BraidGrassStd;
+/// [`BraidGrassParams`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
+pub type RenderBraidGrass = BraidGrassParams;
 
-/// [`TropicalTuftsStd`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
-pub type RenderTropicalTufts = TropicalTuftsStd;
+/// [`TropicalTuftsParams`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
+pub type RenderTropicalTufts = TropicalTuftsParams;
 
-/// [`CommonTuftsStd`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
-pub type RenderCommonTufts = CommonTuftsStd;
+/// [`CommonTuftsParams`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
+pub type RenderCommonTufts = CommonTuftsParams;
 
 /// [`BushScrubStd`] — sparse tuft-and-bush grove ([#303](https://github.com/ramate-io/maybraid/issues/303)).
 pub type RenderBushScrub = BushScrubStd;
@@ -152,11 +148,11 @@ pub type RenderJerrysChaparral = JerrysChaparralParams;
 /// [`LevantineScrubParams`] — dry Mediterranean scrub understory ([#320](https://github.com/ramate-io/maybraid/issues/320)).
 pub type RenderLevantineScrub = LevantineScrubParams;
 
-/// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
-pub type RenderTallGrass = TallGrassStd;
+/// [`TallGrassParams`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
+pub type RenderTallGrass = TallGrassParams;
 
-/// [`WildGrassStd`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
-pub type RenderWildGrass = WildGrassStd;
+/// [`WildGrassParams`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
+pub type RenderWildGrass = WildGrassParams;
 
 /// [`MonsterGrassParams`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
 pub type RenderMonsterGrass = MonsterGrassParams;
@@ -1029,9 +1025,21 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&patch);
 				spawn_vegetation_components(commands, &patch, transform, bounds)
 			}
-			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BraidGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::TropicalTufts(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::CommonTufts(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalThicket(item) => {
@@ -1058,8 +1066,16 @@ impl RenderSubject {
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
-			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TallGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
+			Self::WildGrass(item) => {
+				let grove = item.build();
+				let bounds = vegetation_bounds(&grove);
+				spawn_vegetation_components(commands, &grove, transform, bounds)
+			}
 			Self::MonsterGrass(item) => {
 				let grove = item.build();
 				let bounds = vegetation_bounds(&grove);
