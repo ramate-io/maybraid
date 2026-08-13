@@ -2,11 +2,11 @@
 
 use bevy::prelude::*;
 use chico_groves::{
-	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent, LeewardParams,
-	LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
-	RollingOaksParams, StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams,
-	TemperateMassivesParams, TropicalThicketParams, VineyardParams, WanderingAcaciaParams,
-	DEFAULT_GROVE_EXTENT_XZ,
+	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent, HighBushParams,
+	LeewardParams, LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
+	RiverineGreenParams, RollingOaksParams, SpottyBushesParams, StorytellersParams,
+	StrangeOasisParams, TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams,
+	TropicalThicketParams, VineyardParams, WanderingAcaciaParams, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
@@ -97,6 +97,14 @@ pub enum Show {
 	Storytellers(ShowStorytellers),
 	/// Wandering Acacia grove via VegetationComponents / LodScene.
 	WanderingAcacia(ShowWanderingAcacia),
+	/// Trade Winds grove via VegetationComponents / LodScene.
+	TradeWinds(ShowTradeWinds),
+	/// High Bush grove via VegetationComponents / LodScene.
+	HighBush(ShowHighBush),
+	/// Spotty Bushes grove via VegetationComponents / LodScene.
+	SpottyBushes(ShowSpottyBushes),
+	/// Riverine Green grove via VegetationComponents / LodScene.
+	RiverineGreen(ShowRiverineGreen),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
 }
@@ -564,6 +572,90 @@ impl ShowWanderingAcacia {
 		grove
 	}
 }
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowTradeWinds {
+	#[command(flatten)]
+	pub grove: TradeWindsParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowTradeWinds {
+	fn configured(self) -> TradeWindsParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowHighBush {
+	#[command(flatten)]
+	pub grove: HighBushParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowHighBush {
+	fn configured(self) -> HighBushParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowSpottyBushes {
+	#[command(flatten)]
+	pub grove: SpottyBushesParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowSpottyBushes {
+	fn configured(self) -> SpottyBushesParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowRiverineGreen {
+	#[command(flatten)]
+	pub grove: RiverineGreenParams,
+
+	/// Square preview extent (m) on XZ; at least one authored cell.
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
+}
+
+impl ShowRiverineGreen {
+	fn configured(self) -> RiverineGreenParams {
+		let mut grove = self.grove;
+		let cell = grove.cell_extent_xz();
+		let span = self.grove_extent_xz.max(cell.x).max(cell.y);
+		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grove
+	}
+}
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowHighBushShoots {
@@ -611,6 +703,10 @@ impl Show {
 			Self::TemperateMassives(args) => ShowSubject::TemperateMassives(args.configured()),
 			Self::Storytellers(args) => ShowSubject::Storytellers(args.configured()),
 			Self::WanderingAcacia(args) => ShowSubject::WanderingAcacia(args.configured()),
+			Self::TradeWinds(args) => ShowSubject::TradeWinds(args.configured()),
+			Self::HighBush(args) => ShowSubject::HighBush(args.configured()),
+			Self::SpottyBushes(args) => ShowSubject::SpottyBushes(args.configured()),
+			Self::RiverineGreen(args) => ShowSubject::RiverineGreen(args.configured()),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
@@ -659,6 +755,10 @@ pub enum ShowSubject {
 	TemperateMassives(TemperateMassivesParams),
 	Storytellers(StorytellersParams),
 	WanderingAcacia(WanderingAcaciaParams),
+	TradeWinds(TradeWindsParams),
+	HighBush(HighBushParams),
+	SpottyBushes(SpottyBushesParams),
+	RiverineGreen(RiverineGreenParams),
 	HighBushShoots(HighBushShootsParams),
 }
 
@@ -850,6 +950,30 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::TradeWinds(g)) => Some(format!(
+			"trade-winds:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::HighBush(g)) => Some(format!(
+			"high-bush:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::SpottyBushes(g)) => Some(format!(
+			"spotty-bushes:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
+		Some(ShowSubject::RiverineGreen(g)) => Some(format!(
+			"riverine-green:extent={:?}|cell={:?}|terrain={:?}",
+			g.extent,
+			g.cell_extent_xz(),
+			g.terrain
+		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
@@ -909,6 +1033,10 @@ pub fn sync_show(
 		ShowSubject::TemperateMassives(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::Storytellers(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::WanderingAcacia(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TradeWinds(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::HighBush(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::SpottyBushes(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::RiverineGreen(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
@@ -964,6 +1092,10 @@ mod tests {
 			"show temperate-massives --grove-extent-xz 400",
 			"show storytellers --grove-extent-xz 220",
 			"show wandering-acacia --grove-extent-xz 300",
+			"show trade-winds --grove-extent-xz 260",
+			"show high-bush --grove-extent-xz 46 --elevation 0.35",
+			"show spotty-bushes --grove-extent-xz 39 --elevation 0.35",
+			"show riverine-green --grove-extent-xz 28 --elevation 0.25",
 			"show high-bush-shoots",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
@@ -1012,6 +1144,18 @@ mod tests {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::WanderingAcacia(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::TradeWinds(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::HighBush(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::SpottyBushes(args)) => {
+					assert!(!args.configured().build().plants.is_empty());
+				}
+				crate::commands::PlaygroundCommand::Show(Show::RiverineGreen(args)) => {
 					assert!(!args.configured().build().plants.is_empty());
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {

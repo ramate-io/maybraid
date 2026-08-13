@@ -109,6 +109,8 @@ pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};
 #[cfg(feature = "render")]
 pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
 #[cfg(feature = "render")]
+pub use high_bush::{HighBush, HighBushParams};
+#[cfg(feature = "render")]
 pub use leeward::{Leeward, LeewardParams};
 #[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
@@ -117,7 +119,11 @@ pub use orchard::{Orchard, OrchardParams};
 #[cfg(feature = "render")]
 pub use riparian_general::{RiparianGeneral, RiparianGeneralParams};
 #[cfg(feature = "render")]
+pub use riverine_green::{RiverineGreen, RiverineGreenParams};
+#[cfg(feature = "render")]
 pub use rolling_oaks::{RollingOaks, RollingOaksParams};
+#[cfg(feature = "render")]
+pub use spotty_bushes::{SpottyBushes, SpottyBushesParams};
 #[cfg(feature = "render")]
 pub use storytellers::{Storytellers, StorytellersParams};
 #[cfg(feature = "render")]
@@ -126,6 +132,8 @@ pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
 pub use temperate_lower_massives::{TemperateLowerMassives, TemperateLowerMassivesParams};
 #[cfg(feature = "render")]
 pub use temperate_massives::{TemperateMassives, TemperateMassivesParams};
+#[cfg(feature = "render")]
+pub use trade_winds::{TradeWinds, TradeWindsParams};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
 #[cfg(feature = "render")]

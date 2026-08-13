@@ -12,24 +12,21 @@ use chico_grove_render_items::common_tufts::CommonTuftsStd;
 use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
 use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
 use chico_grove_render_items::date_grove::DateGroveStd;
-use chico_grove_render_items::high_bush::HighBushStd;
 use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
 use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_grove_render_items::jungle_massives::JungleMassivesStd;
 use chico_grove_render_items::low_bush::LowBushStd;
 use chico_groves::{
-	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, LeewardParams,
+	DrylandParams, ForlornSavannaParams, GoettingenFollowParams, HighBushParams, LeewardParams,
 	LevantineScrubParams, MonsterGrassParams, OrchardParams, RiparianGeneralParams,
-	RollingOaksParams, StorytellersParams, StrangeOasisParams, TemperateLowerMassivesParams,
-	TemperateMassivesParams, TropicalThicketParams, VineyardParams, WanderingAcaciaParams,
+	RiverineGreenParams, RollingOaksParams, SpottyBushesParams, StorytellersParams,
+	StrangeOasisParams, TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams,
+	TropicalThicketParams, VineyardParams, WanderingAcaciaParams,
 };
 use chico_grove_render_items::palm_shade::PalmShadeStd;
 use chico_grove_render_items::riparian_mix::RiparianMixStd;
-use chico_grove_render_items::riverine_green::RiverineGreenStd;
 use chico_grove_render_items::shamanhome::ShamanhomeStd;
-use chico_grove_render_items::spotty_bushes::SpottyBushesStd;
 use chico_grove_render_items::tall_grass::TallGrassStd;
-use chico_grove_render_items::trade_winds::TradeWindsStd;
 use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
 use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_grove_render_items::unending_jungle::UnendingJungleStd;
@@ -180,17 +177,17 @@ pub type RenderWildGrass = WildGrassStd;
 /// [`MonsterGrassParams`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
 pub type RenderMonsterGrass = MonsterGrassParams;
 
-/// [`RiverineGreenStd`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
-pub type RenderRiverineGreen = RiverineGreenStd;
+/// [`RiverineGreenParams`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
+pub type RenderRiverineGreen = RiverineGreenParams;
 
 /// [`LowBushStd`] — moderate low shrub understory grove ([#310](https://github.com/ramate-io/maybraid/issues/310)).
 pub type RenderLowBush = LowBushStd;
 
-/// [`HighBushStd`] — moderate tall shrub understory grove ([#312](https://github.com/ramate-io/maybraid/issues/312)).
-pub type RenderHighBush = HighBushStd;
+/// [`HighBushParams`] — moderate tall shrub understory grove ([#312](https://github.com/ramate-io/maybraid/issues/312)).
+pub type RenderHighBush = HighBushParams;
 
-/// [`SpottyBushesStd`] — very sparse High Bush punctuation grove ([#321](https://github.com/ramate-io/maybraid/issues/321)).
-pub type RenderSpottyBushes = SpottyBushesStd;
+/// [`SpottyBushesParams`] — very sparse High Bush punctuation grove ([#321](https://github.com/ramate-io/maybraid/issues/321)).
+pub type RenderSpottyBushes = SpottyBushesParams;
 
 /// [`UnendingJungleStd`] — moderate lower-canopy jungle grove ([#322](https://github.com/ramate-io/maybraid/issues/322)).
 pub type RenderUnendingJungle = UnendingJungleStd;
@@ -234,8 +231,8 @@ pub type RenderDryland = DrylandParams;
 /// [`StorytellersParams`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
 pub type RenderStorytellers = StorytellersParams;
 
-/// [`TradeWindsStd`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
-pub type RenderTradeWinds = TradeWindsStd;
+/// [`TradeWindsParams`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
+pub type RenderTradeWinds = TradeWindsParams;
 
 /// [`WanderingAcaciaParams`] — very-low-density dry open upper-canopy grove ([#338](https://github.com/ramate-io/maybraid/issues/338)).
 pub type RenderWanderingAcacia = WanderingAcaciaParams;
@@ -1073,10 +1070,31 @@ impl RenderSubject {
 				let bounds = vegetation_bounds(&grove);
 				spawn_vegetation_components(commands, &grove, transform, bounds)
 			}
-			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RiverineGreen(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
 			Self::LowBush(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::HighBush(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
+			Self::SpottyBushes(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
 			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::StrangeOasis(item) => {
 				let grove = item.build();
@@ -1126,7 +1144,14 @@ impl RenderSubject {
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			},
-			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TradeWinds(item) => {
+				let grove = item.build();
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
+			},
 			Self::WanderingAcacia(item) => {
 				let grove = item.build();
 				let bounds = grove
