@@ -14,7 +14,7 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
@@ -135,11 +135,6 @@ impl HarsConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus empty clothing layers (`Clothed<Hars>`).
-	pub fn clothed(&self) -> Clothed<Hars> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

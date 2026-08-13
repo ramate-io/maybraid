@@ -12,7 +12,7 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
@@ -176,11 +176,6 @@ impl BraidmanConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Braidman>`).
-	pub fn clothed(&self) -> Clothed<Braidman> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

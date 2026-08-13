@@ -13,7 +13,7 @@ pub mod pose;
 
 use crate::{
 	species::common::{EyeMesh, HairMesh},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -115,11 +115,6 @@ impl ChupriConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Chupri>`).
-	pub fn clothed(&self) -> Clothed<Chupri> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

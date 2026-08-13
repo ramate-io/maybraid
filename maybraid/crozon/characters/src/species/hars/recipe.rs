@@ -1,7 +1,7 @@
 //! LodScene recipe for Hars.
 //!
 //! [`Hars`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`HarsConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -23,7 +23,7 @@ use lod::gen::LodSceneLevel;
 
 /// Semantic Hars data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`HarsConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`crate::CharacterRecipe::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
 pub struct Hars {

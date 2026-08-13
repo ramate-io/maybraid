@@ -1,9 +1,10 @@
 //! Preview configuration and spawning.
 //!
 //! Commands update [`ConceptPreviewConfig`]. This module spawns nested LodScene
-//! hosts via [`spawn_character_components`] (`Config::clothed()`). Live color
+//! hosts via [`spawn_character_components`] ([`CharacterRecipe::clothed`]). Live color
 //! inserts [`MaterialRefRoot`] on part hosts; [`PreviewAssetTarget`] stays UI mapping.
 
+use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
@@ -40,8 +41,8 @@ use crozon_characters::{
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		ylter::YilterConfig,
 	},
-	AnimRef, AnimRefRoot, CharacterComponents, MaterialRefRoot, PartNode, RigId,
-	RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied, SocketRefRoot,
+	AnimRef, AnimRefRoot, CharacterComponents, CharacterMembers, CharacterRecipe, MaterialRefRoot,
+	PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied, SocketRefRoot,
 };
 use lod::LodSceneLevel;
 
@@ -49,8 +50,7 @@ use crate::animation::ConceptAnimation;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole,
-	NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature,
-	RigBindScales,
+	NeedsDuplicateScenePrune, NeedsSkinRemap, NoMatchingArmature, RigBindScales,
 };
 
 /// Run `$body` with `$recipe` bound to `config.clothed()` (monomorphized per species).
@@ -1151,22 +1151,17 @@ pub fn sync_preview(
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
 	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
-	mut body_poses: Query<(&mut ActiveRigPose, &CharacterRig), With<AnimRefRoot>>,
-	mut neck_poses: Query<
-		(&mut ActiveRigPose, &CharacterRig),
-		(Without<AnimRefRoot>, Without<crate::focus_reference::FocusReferenceRig>),
-	>,
-	anim_roots: Query<(Entity, &AnimRefRoot)>,
+	roots: Query<(Entity, Option<&CharacterMembers>), With<ConceptPreviewRoot>>,
+	mut poses: Query<(&mut ActiveRigPose, &CharacterRig)>,
+	anims: Query<(Entity, &AnimRefRoot)>,
 	mut parts: Query<(
 		Entity,
 		&PartNode,
 		&CharacterPart,
-		&PreviewAssetTarget,
 		Option<&MaterialRefRoot>,
 		Option<&PreviewPartBaseTransform>,
 		Option<&mut Transform>,
 	)>,
-	roots: Query<Entity, With<ConceptPreviewRoot>>,
 ) {
 	let live_key = config.sync_key();
 	let spawn_key = config.spawn_key();
@@ -1176,14 +1171,7 @@ pub fn sync_preview(
 
 	if sync_state.spawn_key == spawn_key {
 		sync_state.live_key = live_key;
-		sync_live_preview(
-			&mut commands,
-			&config,
-			&mut body_poses,
-			&mut neck_poses,
-			&anim_roots,
-			&mut parts,
-		);
+		sync_live_preview(&mut commands, &config, &roots, &mut poses, &anims, &mut parts);
 		return;
 	}
 
@@ -1191,7 +1179,7 @@ pub fn sync_preview(
 	sync_state.spawn_key.clone_from(&spawn_key);
 	respawn_cooldown.frames_remaining = 1;
 
-	for entity in &roots {
+	for (entity, _) in &roots {
 		commands.entity(entity).try_despawn();
 	}
 
@@ -1218,101 +1206,124 @@ where
 	}
 }
 
-/// Stamp preview-only markers onto nested LodScene character hosts after chunk fulfill.
+/// Stamp preview-only UI markers onto nested hosts after membership, and write
+/// the session clip onto the body member (`AnimRefRoot` defaults to still on host).
 pub fn stamp_lod_character_preview(
 	mut commands: Commands,
 	config: Res<ConceptPreviewConfig>,
-	body_rigs: Query<(Entity, &RigNode), Without<AnimRefRoot>>,
-	parts: Query<(Entity, &PartNode), Without<PreviewAssetTarget>>,
+	roots: Query<&CharacterMembers, With<ConceptPreviewRoot>>,
+	parts: Query<&PartNode, Without<PreviewAssetTarget>>,
+	rigs: Query<&CharacterRig>,
+	anims: Query<&AnimRefRoot>,
 ) {
-	for (entity, node) in &body_rigs {
-		if node.id == RigId::Body {
-			commands.entity(entity).insert(AnimRefRoot(AnimRef::from(config.animation())));
+	let desired_anim = AnimRef::from(config.animation());
+	for members in &roots {
+		for member in members.iter() {
+			if let Ok(node) = parts.get(member) {
+				commands.entity(member).insert((
+					preview_asset_target(&config, node.slot, node.label),
+					PreviewPartBaseTransform {
+						normalization: node.normalization.transform(),
+						socket: node.socket.map(|socket| socket.local),
+					},
+				));
+			}
+			if rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {
+				let needs_clip = match anims.get(member) {
+					Ok(root) => root.0 != desired_anim,
+					Err(_) => true,
+				};
+				if needs_clip {
+					commands.entity(member).insert(AnimRefRoot(desired_anim));
+				}
+			}
 		}
-	}
-
-	for (entity, node) in &parts {
-		commands.entity(entity).insert((
-			preview_asset_target(&config, node.slot, node.label),
-			PreviewPartBaseTransform {
-				normalization: node.normalization.transform(),
-				socket: node.socket.map(|socket| socket.local),
-			},
-		));
 	}
 }
 
 fn sync_live_preview(
 	commands: &mut Commands,
 	config: &ConceptPreviewConfig,
-	body_poses: &mut Query<(&mut ActiveRigPose, &CharacterRig), With<AnimRefRoot>>,
-	neck_poses: &mut Query<
-		(&mut ActiveRigPose, &CharacterRig),
-		(Without<AnimRefRoot>, Without<crate::focus_reference::FocusReferenceRig>),
-	>,
-	anim_roots: &Query<(Entity, &AnimRefRoot)>,
+	roots: &Query<(Entity, Option<&CharacterMembers>), With<ConceptPreviewRoot>>,
+	poses: &mut Query<(&mut ActiveRigPose, &CharacterRig)>,
+	anims: &Query<(Entity, &AnimRefRoot)>,
 	parts: &mut Query<(
 		Entity,
 		&PartNode,
 		&CharacterPart,
-		&PreviewAssetTarget,
 		Option<&MaterialRefRoot>,
 		Option<&PreviewPartBaseTransform>,
 		Option<&mut Transform>,
 	)>,
 ) {
 	let rig_nodes = config.lod_rig_nodes();
-	if let Some(body) = rig_nodes.iter().find(|node| node.id == RigId::Body) {
-		for (mut pose, rig) in body_poses {
-			if rig.role == CharacterRigRole::Body {
-				pose.pose = body.pose.clone();
-			}
-		}
-	}
-
-	if let Some(neck) = rig_nodes.iter().find(|node| node.id == RigId::Neck) {
-		for (mut pose, rig) in neck_poses {
-			if rig.role == CharacterRigRole::Neck {
-				pose.pose = neck.pose.clone();
-			}
-		}
-	}
-
+	let body_pose = rig_nodes
+		.iter()
+		.find(|node| node.id == RigId::Body)
+		.map(|node| node.pose.clone());
+	let neck_pose = rig_nodes
+		.iter()
+		.find(|node| node.id == RigId::Neck)
+		.map(|node| node.pose.clone());
 	let desired_anim = AnimRef::from(config.animation());
-	for (entity, root) in anim_roots {
-		if root.0 != desired_anim {
-			commands.entity(entity).insert(AnimRefRoot(desired_anim));
-		}
-	}
-
 	let recipe_parts = config.lod_part_nodes();
-	for (entity, node, part, _target, current_material, base, transform) in parts {
-		if let Some(recipe) = recipe_part(&recipe_parts, node) {
-			let needs_paint = current_material.is_none_or(|root| root.0 != recipe.material);
-			if needs_paint {
-				commands.entity(entity).insert(MaterialRefRoot(recipe.material.clone()));
+
+	for (_, members) in roots {
+		let Some(members) = members else {
+			continue;
+		};
+		for member in members.iter() {
+			if let Ok((mut pose, rig)) = poses.get_mut(member) {
+				match rig.role {
+					CharacterRigRole::Body => {
+						if let Some(body_pose) = &body_pose {
+							pose.pose = body_pose.clone();
+						}
+					}
+					CharacterRigRole::Neck => {
+						if let Some(neck_pose) = &neck_pose {
+							pose.pose = neck_pose.clone();
+						}
+					}
+					CharacterRigRole::Head => {}
+				}
 			}
-		}
-		if !has_feature_transform(part.slot) {
-			continue;
-		}
-		let Some(recipe) = recipe_part(&recipe_parts, node) else {
-			continue;
-		};
-		let Some(base) = base else {
-			continue;
-		};
-		let Some(mut transform) = transform else {
-			continue;
-		};
-		let authored = base.normalization.mul_transform(recipe.feature);
-		match base.socket {
-			Some(socket) => {
-				*transform = socket;
-				transform.scale *= authored.scale;
-				transform.rotation *= authored.rotation;
+			if let Ok((_, root)) = anims.get(member) {
+				if root.0 != desired_anim {
+					commands.entity(member).insert(AnimRefRoot(desired_anim));
+				}
 			}
-			None => *transform = authored,
+			if let Ok((entity, node, part, current_material, base, transform)) =
+				parts.get_mut(member)
+			{
+				if let Some(recipe) = recipe_part(&recipe_parts, node) {
+					let needs_paint = current_material.is_none_or(|root| root.0 != recipe.material);
+					if needs_paint {
+						commands.entity(entity).insert(MaterialRefRoot(recipe.material.clone()));
+					}
+				}
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let Some(recipe) = recipe_part(&recipe_parts, node) else {
+					continue;
+				};
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				let authored = base.normalization.mul_transform(recipe.feature);
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
 		}
 	}
 }
@@ -1338,8 +1349,10 @@ pub fn reveal_ready_preview(
 	config: Res<ConceptPreviewConfig>,
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
 	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimRefRoot>>,
-	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
-	awaiting_lod_socket: Query<(), (With<SocketRefRoot>, Without<SocketRefApplied>)>,
+	awaiting_lod_socket: Query<
+		(),
+		(Or<(With<RigNode>, With<PartNode>)>, With<SocketRefRoot>, Without<SocketRefApplied>),
+	>,
 	awaiting_lod_skin: Query<(), (With<SkinRefRoot>, Without<SkinRefApplied>)>,
 	awaiting_remap: Query<
 		(),
@@ -1385,8 +1398,7 @@ pub fn reveal_ready_preview(
 		}
 		return;
 	}
-	if !awaiting_socket.is_empty()
-		|| !awaiting_lod_socket.is_empty()
+	if !awaiting_lod_socket.is_empty()
 		|| !awaiting_lod_skin.is_empty()
 		|| !awaiting_remap.is_empty()
 		|| !awaiting_prune.is_empty()
@@ -1394,8 +1406,7 @@ pub fn reveal_ready_preview(
 		if !debug.logged_block {
 			debug.logged_block = true;
 			warn!(
-				"[preview] reveal blocked: awaiting_socket={} lod_socket={} lod_skin={} awaiting_remap={} awaiting_prune={}",
-				awaiting_socket.iter().count(),
+				"[preview] reveal blocked: lod_socket={} lod_skin={} awaiting_remap={} awaiting_prune={}",
 				awaiting_lod_socket.iter().count(),
 				awaiting_lod_skin.iter().count(),
 				awaiting_remap.iter().count(),

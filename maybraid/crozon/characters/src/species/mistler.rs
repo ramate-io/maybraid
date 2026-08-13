@@ -8,7 +8,7 @@ pub use recipe::Mistler;
 pub mod palette;
 pub mod pose;
 
-use crate::{CharacterRecipe, Clothed, ClothingLayer};
+use crate::{CharacterRecipe, ClothingLayer};
 
 pub use palette::MistlerBodyColor;
 
@@ -51,11 +51,6 @@ impl MistlerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Mistler>`).
-	pub fn clothed(&self) -> Clothed<Mistler> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

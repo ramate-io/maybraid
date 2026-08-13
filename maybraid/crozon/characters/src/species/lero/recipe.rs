@@ -1,7 +1,7 @@
 //! LodScene recipe for Lero.
 //!
 //! [`Lero`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`LeroConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -25,7 +25,7 @@ const SNOUT_Z_SCALE: f32 = 2.5;
 /// Semantic Lero data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`LeroConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Lero {
 	pub mouth: LeroMouthMesh,

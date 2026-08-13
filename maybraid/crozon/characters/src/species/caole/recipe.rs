@@ -1,7 +1,7 @@
 //! LodScene recipe for Caole.
 //!
 //! [`Caole`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`CaoleConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -23,7 +23,7 @@ use lod::gen::LodSceneLevel;
 
 /// Semantic Caole data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`CaoleConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`crate::CharacterRecipe::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
 pub struct Caole {

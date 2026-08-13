@@ -8,7 +8,7 @@ pub use recipe::Thumplus;
 pub mod palette;
 pub mod pose;
 
-use crate::{CharacterRecipe, Clothed, ClothingLayer};
+use crate::{CharacterRecipe, ClothingLayer};
 
 pub use palette::ThumplusBodyColor;
 
@@ -51,11 +51,6 @@ impl ThumplusConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Thumplus>`).
-	pub fn clothed(&self) -> Clothed<Thumplus> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

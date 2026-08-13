@@ -52,8 +52,6 @@ pub struct CharacterRig {
 }
 
 /// Marks a [`CharacterRig`] that came from a [`crate::RigNode`] LodScene host.
-///
-/// Socket/skin fulfill uses this so hidden focus-reference rigs are ignored.
 #[derive(Component, Clone, Copy, Default)]
 pub struct LodCharacterRig;
 

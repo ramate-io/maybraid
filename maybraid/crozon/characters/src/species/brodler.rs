@@ -11,7 +11,7 @@ pub mod pose;
 
 use crate::{
 	species::common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use clap::ValueEnum;
@@ -156,11 +156,6 @@ impl BrodlerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Brodler>`).
-	pub fn clothed(&self) -> Clothed<Brodler> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

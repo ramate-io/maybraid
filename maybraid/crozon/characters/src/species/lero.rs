@@ -9,7 +9,7 @@ pub use recipe::Lero;
 pub mod palette;
 pub mod pose;
 
-use crate::{species::common::HairMesh, CharacterRecipe, Clothed, ClothingLayer};
+use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
@@ -116,11 +116,6 @@ impl LeroConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Lero>`).
-	pub fn clothed(&self) -> Clothed<Lero> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

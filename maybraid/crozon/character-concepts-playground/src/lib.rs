@@ -2,7 +2,7 @@
 //!
 //! This crate is the first executable surface for the concept plan. Commands are
 //! temporary stand-ins for future UI fields; they spawn through
-//! `crozon-characters` LodScene recipes (`Config::clothed()`).
+//! `crozon-characters` LodScene recipes ([`crozon_characters::CharacterRecipe::clothed`]).
 
 mod animation;
 mod camera_focus;
@@ -25,7 +25,6 @@ pub use commands::{ConceptsCommand, CONCEPTS_CLI_NAME};
 pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
-use bevy::app::SceneSpawnerSystems;
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -35,13 +34,10 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
 use character_lod::CharacterLodPlugin;
-use crozon_characters::{
-	build_rig_bone_map, fulfill_skin_ref_roots, fulfill_socket_ref_roots,
-	prune_duplicate_part_scenes, remap_part_skin_to_rig, CharacterHostSystems,
-};
+use crozon_characters::CharacterHostSystems;
 use focus::animate_focused_preview_asset;
 use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
-use lod::{LodRefreshSystems, LodViewer};
+use lod::LodViewer;
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
 use menu_listeners::{
@@ -53,10 +49,7 @@ use preview::{
 	tick_preview_respawn_cooldown, ConceptPreviewConfig, ConceptPreviewSyncState,
 	PreviewRespawnCooldown, PreviewRevealDebugState,
 };
-use skinning::{
-	attach_focus_reference_to_sockets, attach_parts_to_sockets, dump_bones_to_console,
-	DumpBonesRequest,
-};
+use skinning::{dump_bones_to_console, DumpBonesRequest};
 use species_session::{
 	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
 };
@@ -88,7 +81,6 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				..CameraLookConfig::default()
 			}))
 			.add_plugins(CharacterLodPlugin)
-			.configure_sets(Update, CharacterHostSystems::Pose.after(build_rig_bone_map))
 			.add_plugins(
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
@@ -121,44 +113,25 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(on_character_menu_event),
-					sync_focus_reference.after(sync_preview),
+					sync_focus_reference.after(sync_preview).before(CharacterHostSystems::BoneMap),
 					stamp_lod_character_preview
 						.after(sync_preview)
-						.after(LodRefreshSystems::Fulfill),
+						.after(CharacterHostSystems::Membership)
+						.before(CharacterHostSystems::Anim),
 					animate_focused_preview_asset
 						.after(dispatch_menu_interactions)
 						.before(sync_preview),
-					build_rig_bone_map
-						.after(sync_focus_reference)
-						.after(stamp_lod_character_preview),
 				),
 			)
 			.add_systems(
 				Update,
 				(
-					attach_focus_reference_to_sockets.after(build_rig_bone_map),
-					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
-					fulfill_socket_ref_roots
-						.after(build_rig_bone_map)
-						.after(CharacterHostSystems::InvalidateRefs)
-						.run_if(preview_pass_ready),
-					fulfill_skin_ref_roots
-						.after(fulfill_socket_ref_roots)
-						.run_if(preview_pass_ready),
-					remap_part_skin_to_rig
-						.after(attach_parts_to_sockets)
-						.after(fulfill_skin_ref_roots)
-						.after(SceneSpawnerSystems::WorldInstanceSpawn)
-						.run_if(preview_pass_ready),
-					prune_duplicate_part_scenes
-						.after(remap_part_skin_to_rig)
-						.run_if(preview_pass_ready),
 					reveal_ready_preview
 						.after(CharacterHostSystems::Pose)
-						.after(prune_duplicate_part_scenes)
+						.after(CharacterHostSystems::Fulfill)
 						.run_if(preview_pass_ready),
 					apply_preview_colors
-						.after(prune_duplicate_part_scenes)
+						.after(CharacterHostSystems::Fulfill)
 						.run_if(preview_pass_ready),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),

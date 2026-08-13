@@ -1,7 +1,7 @@
 //! LodScene recipe for Claber.
 //!
 //! [`Claber`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`ClaberConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -28,7 +28,7 @@ use lod::gen::LodSceneLevel;
 
 /// Semantic Claber data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`ClaberConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`crate::CharacterRecipe::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
 pub struct Claber {

@@ -1,7 +1,7 @@
 //! LodScene recipe for Kispar.
 //!
 //! [`Kispar`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`KisparConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -23,7 +23,7 @@ use lod::gen::LodSceneLevel;
 /// Semantic Kispar data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`KisparConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Kispar {
 	pub beak: KisparBeakMesh,

@@ -14,7 +14,7 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
@@ -174,11 +174,6 @@ impl TuberwaberConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Tuberwaber>`).
-	pub fn clothed(&self) -> Clothed<Tuberwaber> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

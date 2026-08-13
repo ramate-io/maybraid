@@ -12,7 +12,7 @@ pub mod pose;
 
 use crate::{
 	species::common::{EyeMesh, HairMesh},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -113,11 +113,6 @@ impl TippleConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Tipple>`).
-	pub fn clothed(&self) -> Clothed<Tipple> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

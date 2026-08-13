@@ -1,7 +1,7 @@
 //! LodScene recipe for Brokker.
 //!
 //! [`Brokker`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`BrokkerConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -23,7 +23,7 @@ use lod::gen::LodSceneLevel;
 /// Semantic Brokker data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`BrokkerConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Brokker {
 	pub eye: EyeMesh,

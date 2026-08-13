@@ -1,7 +1,7 @@
 //! LodScene recipe for Yilter.
 //!
 //! [`Yilter`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`YilterConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -25,7 +25,7 @@ use lod::gen::LodSceneLevel;
 
 /// Semantic Yilter data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`YilterConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`crate::CharacterRecipe::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
 pub struct Yilter {

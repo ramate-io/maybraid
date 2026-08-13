@@ -1,7 +1,7 @@
 //! LodScene recipe for Dui.
 //!
 //! [`Dui`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`DuiConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -23,7 +23,7 @@ use lod::gen::LodSceneLevel;
 /// Semantic Dui data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`DuiConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Dui {
 	pub nose: DuiNoseMesh,

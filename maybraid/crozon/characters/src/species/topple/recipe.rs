@@ -1,7 +1,7 @@
 //! LodScene recipe for Topple.
 //!
 //! [`Topple`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`ToppleConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -26,7 +26,7 @@ const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
 /// Semantic Topple data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`ToppleConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Topple {
 	pub beak: ToppleBeakMesh,

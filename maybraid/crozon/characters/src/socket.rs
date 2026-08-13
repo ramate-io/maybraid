@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 
 use crate::member::{find_member_rig, CharacterMembers, MemberOf};
-use crate::rig::{BoneMap, CharacterRig, CharacterRigRole, LodCharacterRig};
+use crate::rig::{BoneMap, CharacterRig, CharacterRigRole};
 
 /// Semantic rig identity used at scene-build time (entities do not exist yet).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -97,7 +97,7 @@ pub fn fulfill_socket_ref_roots(
 	mut pending: Query<(Entity, &SocketRefRoot, &mut Transform), Without<SocketRefApplied>>,
 	member_of: Query<&MemberOf>,
 	members: Query<&CharacterMembers>,
-	rigs: Query<(Entity, &CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	rigs: Query<(Entity, &CharacterRig, &BoneMap)>,
 ) {
 	for (entity, SocketRefRoot(socket), mut transform) in &mut pending {
 		let Ok(MemberOf(root)) = member_of.get(entity) else {
@@ -119,7 +119,7 @@ pub(crate) fn attach_to_socket(
 	transform: &mut Transform,
 	socket: &SocketRef,
 	members: &CharacterMembers,
-	rigs: &Query<(Entity, &CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	rigs: &Query<(Entity, &CharacterRig, &BoneMap)>,
 ) -> bool {
 	let Some((_, map)) = find_member_rig(members, socket.rig.role(), rigs) else {
 		return false;

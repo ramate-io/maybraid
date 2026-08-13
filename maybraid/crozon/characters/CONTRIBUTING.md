@@ -19,8 +19,8 @@ implement [`CharacterComponents`](src/components.rs) with builders in
 `eye_right`, `ear_left` / `ear_right`, `orthograde_head_rig`, …). Right-side
 left-authored GLBs use [`SceneRef::reflected`](../../scene-ref/src/scene_ref.rs)
 for handedness; socket locals stay placement-only (no `scale.x = -1`). Clothing
-is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe`](src/components.rs)
-(`Config::clothed()`), not part of the inner species. Register the playground
+is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe::clothed`](src/components.rs),
+not part of the inner species. Register the playground
 host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once. Those nodes stamp socket/skin/rig/part/transform from
@@ -31,17 +31,21 @@ get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
 [`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
 character. Proportion pose is [`ActiveRigPose`](src/rig.rs) on the rig member
 ([`maintain_resolved_pose`](src/pose.rs)). Clips are [`AnimRefRoot`](src/anim.rs)
-on the body rig; the mailbox transitions from the last sampled pose when the
-clip changes. Do not grow a post-spawn prepare pass that copies materials or poses.
+on the body-rig host (default still); the mailbox transitions from the last
+sampled pose when the clip changes. [`CharacterComponentsPlugin`](src/plugin.rs)
+owns membership, bone map, socket/skin fulfill, pose, and the mailbox. Do not
+grow a post-spawn prepare pass that copies materials or poses.
 
-The playground spawn path is LodScene (`Config::clothed()`).
+The playground spawn path is LodScene ([`CharacterRecipe::clothed`](src/components.rs)).
 [`CharacterComponents`](src/components.rs) is the only character recipe.
 Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_for_slot`
 and [`ClothingLayer`](src/components.rs) stamp palette[0]). Live playground tint
 inserts [`MaterialRefRoot`](src/nodes/part.rs) on the part host (change-driven
 [`material-ref`](../../material-ref) fulfill); [`PreviewAssetTarget`](../character-concepts-playground/src/preview.rs)
 stays UI mapping, not the paint path. Live animation inserts [`AnimRefRoot`](src/anim.rs)
-(`ConceptAnimation` maps at the playground/menu edge).
+on the body member (`ConceptAnimation` maps at the playground/menu edge).
+Playground live updates query [`CharacterMembers`](src/member.rs) of the preview
+root — not the whole world.
 
 ### 1. `crozon-characters` (this crate)
 
@@ -49,7 +53,7 @@ stays UI mapping, not the paint path. Live animation inserts [`AnimRefRoot`](src
    - `*Config` and `*Colors` structs (`*Colors::color_for_slot` for recipe tints)
    - species-local `enums` (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
      and `color()` where needed
-   - `impl CharacterRecipe for *Config` plus `clothed()`
+   - `impl CharacterRecipe for *Config`
 2. Create `src/species/<name>/recipe.rs` with the inner [`CharacterComponents`](src/components.rs)
    recipe (`rig_nodes_for_level` / `part_nodes_for_level`). Stamp part colors from
    `color_for_slot` onto `PartNode.material` (`with_base_color`).
@@ -87,7 +91,7 @@ stays UI mapping, not the paint path. Live animation inserts [`AnimRefRoot`](src
    - `PreviewTarget::<Name>*` variants and `preview_asset_target` mapping
    - `*Colors::color_for_slot` (recipe stamps `PartNode.material`; spawn /
      `lod_rig_nodes` / `lod_part_nodes` go through the macro). Live tint writes
-     `MaterialRefRoot` on the part host.
+     `MaterialRefRoot` on the part member of the preview [`CharacterRoot`].
 3. Update [`src/menu_listeners.rs`](../character-concepts-playground/src/menu_listeners.rs),
    [`src/species_session.rs`](../character-concepts-playground/src/species_session.rs),
    [`src/focus_reference.rs`](../character-concepts-playground/src/focus_reference.rs),

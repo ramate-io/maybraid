@@ -12,7 +12,7 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::ItemColor;
@@ -128,11 +128,6 @@ impl YilterConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus empty clothing layers (`Clothed<Yilter>`).
-	pub fn clothed(&self) -> Clothed<Yilter> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

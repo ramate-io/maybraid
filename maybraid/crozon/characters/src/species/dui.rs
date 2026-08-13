@@ -9,7 +9,7 @@ pub use recipe::Dui;
 pub mod palette;
 pub mod pose;
 
-use crate::{species::common::HairMesh, CharacterRecipe, Clothed, ClothingLayer};
+use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
@@ -109,11 +109,6 @@ impl DuiConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Dui>`).
-	pub fn clothed(&self) -> Clothed<Dui> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

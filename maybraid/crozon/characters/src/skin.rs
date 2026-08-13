@@ -10,8 +10,8 @@ use bevy::{
 
 use crate::member::{find_member_rig, CharacterMembers, MemberOf};
 use crate::rig::{
-	BoneMap, CharacterPart, CharacterRig, LodCharacterRig, NeedsDuplicateScenePrune,
-	NeedsSkinRemap, NoMatchingArmature, PartRigRef,
+	BoneMap, CharacterPart, CharacterRig, NeedsDuplicateScenePrune, NeedsSkinRemap,
+	NoMatchingArmature, PartRigRef,
 };
 use crate::socket::{SkinRefApplied, SkinRefRoot};
 
@@ -30,7 +30,7 @@ pub fn fulfill_skin_ref_roots(
 	pending: Query<(Entity, &SkinRefRoot), (With<CharacterPart>, Without<SkinRefApplied>)>,
 	member_of: Query<&MemberOf>,
 	members: Query<&CharacterMembers>,
-	rigs: Query<(Entity, &CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	rigs: Query<(Entity, &CharacterRig, &BoneMap)>,
 ) {
 	for (entity, SkinRefRoot(skin)) in &pending {
 		let Ok(MemberOf(root)) = member_of.get(entity) else {

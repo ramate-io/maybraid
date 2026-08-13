@@ -9,6 +9,7 @@ use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 use scene_ref::SceneRef;
 
+use crate::anim::AnimRefRoot;
 use crate::assets::AssetNormalization;
 use crate::rig::{
 	ActiveRigPose, BoneMap, CharacterRig, LodCharacterRig, RigBindScales, RigSkeletonKind,
@@ -140,6 +141,7 @@ impl LodScene for RigNode {
 		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
 		let pose = ActiveRigPose { pose: node.pose.clone() };
 		let socket = node.socket.map(SocketRefRoot);
+		let anim = (node.id == RigId::Body).then_some(AnimRefRoot::default());
 		(
 			lod_host_scene_pending(level, bounds),
 			bsn! {
@@ -152,6 +154,7 @@ impl LodScene for RigNode {
 				template_value(RigBindScales::default())
 			},
 			maybe_component(socket),
+			maybe_component(anim),
 		)
 	}
 }

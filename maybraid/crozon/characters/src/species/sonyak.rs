@@ -12,7 +12,7 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::ItemColor;
@@ -127,11 +127,6 @@ impl SonyakConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus empty clothing layers (`Clothed<Sonyak>`).
-	pub fn clothed(&self) -> Clothed<Sonyak> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

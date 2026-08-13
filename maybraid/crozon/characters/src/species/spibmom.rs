@@ -11,7 +11,7 @@ pub mod pose;
 
 use crate::{
 	species::common::{EyeMesh, HairMesh},
-	CharacterRecipe, Clothed, ClothingLayer,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -126,11 +126,6 @@ impl SpibmomConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Spibmom>`).
-	pub fn clothed(&self) -> Clothed<Spibmom> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

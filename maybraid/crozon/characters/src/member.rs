@@ -14,7 +14,7 @@ use lod::lod_ref::LodRef;
 
 use crate::assembly::CharacterPartSlot;
 use crate::nodes::{PartNode, RigNode};
-use crate::rig::{BoneMap, CharacterRig, CharacterRigRole, LodCharacterRig};
+use crate::rig::{BoneMap, CharacterRig, CharacterRigRole};
 
 /// Marker on the [`crate::ComponentsOnly`] host spawned by
 /// [`crate::spawn_character_components`].
@@ -65,7 +65,7 @@ fn character_root_of(
 pub fn find_member_rig<'a>(
 	members: &CharacterMembers,
 	role: CharacterRigRole,
-	rigs: &'a Query<(Entity, &CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	rigs: &'a Query<(Entity, &CharacterRig, &BoneMap)>,
 ) -> Option<(Entity, &'a BoneMap)> {
 	members.iter().find_map(|member| {
 		let (entity, rig, map) = rigs.get(member).ok()?;

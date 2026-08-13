@@ -1,7 +1,7 @@
 //! LodScene recipe for Spibmom.
 //!
 //! [`Spibmom`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`SpibmomConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -25,7 +25,7 @@ const HEAD_RIG_SOCKET_SCALE: f32 = 2.0;
 /// Semantic Spibmom data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`SpibmomConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Spibmom {
 	pub eye: EyeMesh,

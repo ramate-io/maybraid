@@ -1,7 +1,7 @@
 //! LodScene recipe for Brodler.
 //!
 //! [`Brodler`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`BrodlerConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -19,7 +19,7 @@ use lod::gen::LodSceneLevel;
 /// Semantic Brodler data attached to the character root entity.
 ///
 /// Clothing is a higher-order wrapper ([`crate::Clothed`]) via
-/// [`BrodlerConfig::clothed`]. The inner recipe does not emit clothing parts.
+/// [`crate::CharacterRecipe::clothed`]. The inner recipe does not emit clothing parts.
 #[derive(Component, Clone, PartialEq)]
 pub struct Brodler {
 	pub head: BrodlerHeadMesh,

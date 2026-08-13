@@ -8,7 +8,7 @@ pub use recipe::Grener;
 pub mod palette;
 pub mod pose;
 
-use crate::{CharacterRecipe, Clothed, ClothingLayer};
+use crate::{CharacterRecipe, ClothingLayer};
 
 pub use palette::GrenerBodyColor;
 
@@ -51,11 +51,6 @@ impl GrenerConfig {
 
 	pub fn sync_key(&self) -> String {
 		format!("{self:?}")
-	}
-
-	/// Inner recipe plus clothing layers (`Clothed<Grener>`).
-	pub fn clothed(&self) -> Clothed<Grener> {
-		CharacterRecipe::clothed(self)
 	}
 }
 

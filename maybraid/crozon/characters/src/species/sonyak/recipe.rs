@@ -1,7 +1,7 @@
 //! LodScene recipe for Sonyak.
 //!
 //! [`Sonyak`] is the inner [`CharacterComponents`] value. Clothing is
-//! [`crate::Clothed`] via [`SonyakConfig::clothed`].
+//! [`crate::Clothed`] via [`crate::CharacterRecipe::clothed`].
 
 use bevy::prelude::*;
 
@@ -25,7 +25,7 @@ use lod::gen::LodSceneLevel;
 
 /// Semantic Sonyak data attached to the character root entity.
 ///
-/// This species has no clothing catalog; [`SonyakConfig::clothed`] wraps the
+/// This species has no clothing catalog; [`crate::CharacterRecipe::clothed`] wraps the
 /// inner recipe with an empty clothing layer list.
 #[derive(Component, Clone, PartialEq)]
 pub struct Sonyak {
