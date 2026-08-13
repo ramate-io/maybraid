@@ -4,18 +4,14 @@
 //! lerodon or robrek snout, faded green and red scales, and light accent colors.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Lero;
 pub mod palette;
 pub mod pose;
 
-use crate::{
-	species::{common::HairMesh, SpeciesConfig},
-	ResolvedCharacterAssembly,
-};
+use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::LeroAssets;
 
 pub use assets::{LeroHeadMesh, LeroMouthMesh};
 pub use palette::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor};
@@ -48,6 +44,19 @@ impl Default for LeroColors {
 }
 
 impl LeroColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Mouth => self.mouth.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Tail => self.tail.color(),
+			Spine => self.spine.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -110,12 +119,16 @@ impl LeroConfig {
 	}
 }
 
-impl SpeciesConfig for LeroConfig {
-	fn species_name(&self) -> &'static str {
-		"lero"
+impl CharacterRecipe for LeroConfig {
+	type Components = Lero;
+
+	fn components(&self) -> Self::Components {
+		Lero::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		LeroAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

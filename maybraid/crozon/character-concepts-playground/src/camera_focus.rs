@@ -17,7 +17,7 @@
 //!   shadow body rig, inserted by `maintain_resolved_pose` the first frame it
 //!   writes the proportional pose.
 //! - **Head focus** additionally waits for the shadow head rig to be parented
-//!   to its socket bone, signalled by removal of [`NeedsSocketPlacement`].
+//!   to its socket bone, signalled by [`SocketRefApplied`].
 //! - The socket bone itself is a plain existence lookup in the rig's
 //!   [`BoneMap`]; `"root"` anchors on the rig entity instead of a named bone.
 //!
@@ -53,13 +53,12 @@ use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
 use crozon_character_ui_menus::focus::THUMPLUS_BODY_FOCUS;
 use crozon_character_ui_menus::focus::TIPPLE_BODY_FOCUS;
 use crozon_character_ui_menus::BODY_FOCUS;
+use crozon_characters::{SocketRefApplied, SocketRefRoot};
 
 use crate::{
 	focus_reference::FocusReferenceRig,
 	preview::ConceptPreviewConfig,
-	skinning::{
-		BoneMap, CharacterRig, CharacterRigRole, NeedsSocketPlacement, ResolvedPoseApplied,
-	},
+	skinning::{BoneMap, CharacterRig, CharacterRigRole, ResolvedPoseApplied},
 	ui::CreatorUiState,
 };
 
@@ -141,7 +140,8 @@ type ShadowRigQuery<'w, 's> = Query<
 		&'static CharacterRig,
 		&'static GlobalTransform,
 		Has<ResolvedPoseApplied>,
-		Has<NeedsSocketPlacement>,
+		Has<SocketRefRoot>,
+		Has<SocketRefApplied>,
 	),
 	With<FocusReferenceRig>,
 >;
@@ -226,20 +226,20 @@ fn resolve_focus_transform(
 	// meaningful once the body pose has been applied.
 	let body_pose_applied = shadow_rigs
 		.iter()
-		.any(|(_, rig, _, pose_applied, _)| rig.role == CharacterRigRole::Body && pose_applied);
+		.any(|(_, rig, _, pose_applied, _, _)| rig.role == CharacterRigRole::Body && pose_applied);
 	if !body_pose_applied {
 		return None;
 	}
 
-	let neck_awaiting = shadow_rigs.iter().any(|(_, rig, _, _, awaiting_socket)| {
-		rig.role == CharacterRigRole::Neck && awaiting_socket
+	let neck_awaiting = shadow_rigs.iter().any(|(_, rig, _, _, has_socket, applied)| {
+		rig.role == CharacterRigRole::Neck && has_socket && !applied
 	});
 
-	for (bone_map, rig, rig_global, _, awaiting_socket) in shadow_rigs.iter() {
+	for (bone_map, rig, rig_global, _, has_socket, applied) in shadow_rigs.iter() {
 		if !rig_role_matches(focus.rig, rig.role) {
 			continue;
 		}
-		if rig.role == CharacterRigRole::Head && (awaiting_socket || neck_awaiting) {
+		if rig.role == CharacterRigRole::Head && ((has_socket && !applied) || neck_awaiting) {
 			continue;
 		}
 		let Some(socket) = focus_socket_global(focus, bone_map, rig_global, bone_globals) else {
@@ -293,12 +293,13 @@ fn log_focus_waiting(
 	}
 	let status = shadow_rigs
 		.iter()
-		.filter(|(_, rig, _, _, _)| rig_role_matches(focus.rig, rig.role))
-		.map(|(map, rig, _, pose_applied, awaiting_socket)| {
+		.filter(|(_, rig, _, _, _, _)| rig_role_matches(focus.rig, rig.role))
+		.map(|(map, rig, _, pose_applied, has_socket, applied)| {
 			format!(
-				"role={:?} bones={} pose_applied={pose_applied} awaiting_socket={awaiting_socket} socket_mapped={}",
+				"role={:?} bones={} pose_applied={pose_applied} awaiting_socket={} socket_mapped={}",
 				rig.role,
 				map.by_name.len(),
+				has_socket && !applied,
 				focus.socket == "root" || map.by_name.contains_key(focus.socket),
 			)
 		})

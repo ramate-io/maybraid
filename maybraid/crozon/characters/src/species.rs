@@ -1,7 +1,7 @@
 //! Species definitions.
 //!
 //! A species owns its baseline silhouette, supported assets, defaults, and the
-//! mapping from resolved controls to rig/feature effects.
+//! mapping from resolved controls to a [`crate::CharacterComponents`] recipe.
 
 pub mod braidman;
 pub mod brenal;
@@ -32,12 +32,3 @@ pub mod topple;
 pub mod tuberwaber;
 pub mod wumbus;
 pub mod ylter;
-
-use crate::ResolvedCharacterAssembly;
-
-/// Type-owned resolution contract for species-specific configs.
-pub trait SpeciesConfig {
-	fn species_name(&self) -> &'static str;
-
-	fn resolve(&self) -> ResolvedCharacterAssembly;
-}

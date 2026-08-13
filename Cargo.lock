@@ -2777,7 +2777,10 @@ dependencies = [
  "crozon-characters",
  "crozon-rigs",
  "game-commands",
+ "lod",
  "malo-animations",
+ "material-ref",
+ "scene-ref",
 ]
 
 [[package]]
@@ -2820,12 +2823,17 @@ dependencies = [
 name = "crozon-characters"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "bevy_math",
  "character-ui-menu",
  "clap",
  "crozon-character-items",
  "crozon-rigs",
+ "lod",
+ "malo-animations",
+ "material-ref",
+ "scene-ref",
 ]
 
 [[package]]
@@ -2998,6 +3006,7 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "crozon-characters",
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",

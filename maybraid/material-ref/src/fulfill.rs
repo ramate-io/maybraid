@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::{
-	Added, App, ChildOf, Commands, Entity, IntoScheduleConfigs, Mesh3d, Plugin, Query, Update,
-	With, Without,
+	Added, App, Changed, ChildOf, Children, Commands, Entity, IntoScheduleConfigs, Mesh3d, Plugin,
+	Query, Update, With, Without,
 };
 
 use crate::lib_trait::MaterialLib;
@@ -39,6 +39,28 @@ pub fn fulfill_material_ref_roots<L>(
 	}
 }
 
+/// Drop [`MaterialRefApplied`] on a changed root and its descendants so fulfill restamps.
+pub fn invalidate_changed_material_ref_roots(
+	mut commands: Commands,
+	changed: Query<Entity, (Changed<MaterialRefRoot>, With<MaterialRefApplied>)>,
+	children: Query<&Children>,
+	applied: Query<(), With<MaterialRefApplied>>,
+) {
+	for root in &changed {
+		commands.entity(root).remove::<MaterialRefApplied>();
+		let mut stack: Vec<Entity> =
+			children.get(root).map(|c| c.iter().copied().collect()).unwrap_or_default();
+		while let Some(child) = stack.pop() {
+			if applied.contains(child) {
+				commands.entity(child).remove::<MaterialRefApplied>();
+			}
+			if let Ok(kids) = children.get(child) {
+				stack.extend(kids.iter().copied());
+			}
+		}
+	}
+}
+
 /// When [`PropagateToDescendants`] is set, fulfill newly added `Mesh3d` entities under the root.
 pub fn fulfill_material_ref_descendants<L>(
 	mut commands: Commands,
@@ -57,6 +79,36 @@ pub fn fulfill_material_ref_descendants<L>(
 		};
 		lib.fulfill(entity, &material_ref, &mut commands);
 		commands.entity(entity).insert(MaterialRefApplied);
+	}
+}
+
+/// Restamp existing `Mesh3d` descendants when a propagating root's identity changes.
+pub fn restamp_material_ref_descendants_of_changed<L>(
+	mut commands: Commands,
+	changed: Query<
+		(Entity, &MaterialRefRoot),
+		(Changed<MaterialRefRoot>, With<PropagateToDescendants>),
+	>,
+	children: Query<&Children>,
+	meshes: Query<(), With<Mesh3d>>,
+	lib: StaticSystemParam<L>,
+) where
+	L: SystemParam + 'static,
+	for<'w, 's> L::Item<'w, 's>: MaterialLib,
+{
+	let mut lib = lib.into_inner();
+	for (root, material) in &changed {
+		let mut stack: Vec<Entity> =
+			children.get(root).map(|c| c.iter().copied().collect()).unwrap_or_default();
+		while let Some(child) = stack.pop() {
+			if meshes.contains(child) {
+				lib.fulfill(child, &material.0, &mut commands);
+				commands.entity(child).insert(MaterialRefApplied);
+			}
+			if let Ok(kids) = children.get(child) {
+				stack.extend(kids.iter().copied());
+			}
+		}
 	}
 }
 
@@ -105,8 +157,11 @@ where
 		app.add_systems(
 			Update,
 			(
-				fulfill_material_ref_roots::<L>,
+				invalidate_changed_material_ref_roots,
+				fulfill_material_ref_roots::<L>.after(invalidate_changed_material_ref_roots),
 				fulfill_material_ref_descendants::<L>.after(fulfill_material_ref_roots::<L>),
+				restamp_material_ref_descendants_of_changed::<L>
+					.after(fulfill_material_ref_roots::<L>),
 			),
 		);
 	}

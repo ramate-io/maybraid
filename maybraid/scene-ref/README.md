@@ -16,9 +16,14 @@ app.add_plugins(SceneRefPlugin);
 // AssetServer + SceneRefHandles keep one strong handle per SceneRef).
 let scene = SceneRef::glb("urban/floors/foo.glb").scene();
 
-// Axis-mirrored rebuild (distinct cache key; positive Transform scale at the caller):
+// Axis-mirrored rebuild (vertex/winding only; positive Transform scale at the caller):
 let mirrored = SceneRef::glb("urban/panels/unit_right_triangle.glb")
     .mirrored(MirrorAxis::X)
+    .scene();
+
+// Instance reflection (verts + conjugated hierarchy; for skinned / nested GLBs):
+let reflected = SceneRef::glb("characters/ears/round_scoop_lateral_ear_left.glb")
+    .reflected(MirrorAxis::X)
     .scene();
 
 // Merge several scenes into one mesh WorldAsset (per-part transforms baked into verts):
@@ -38,9 +43,10 @@ fn preload(mut handles: ResMut<SceneRefHandles>, assets: Res<AssetServer>) {
 ```
 
 [`SceneRef::glb`] accepts a path relative to the Bevy asset root. If no `#SceneN`
-label is present, scene `0` is used. Optional [`MirrorAxis`] rebuilds positions,
-normals, and tangents with reversed winding so single-sided materials stay correct
-without negative Transform scale.
+label is present, scene `0` is used. [`SceneRef::mirrored`] rebuilds positions,
+normals, and tangents with reversed winding (caller places the instance).
+[`SceneRef::reflected`] does that and conjugates each entity `Transform`, matching
+a parent axis-flip without negative Transform scale at the caller.
 
 [`MultiSceneMerge`] resolves each part through [`SceneRefHandles`] (including mirrors),
 bakes each mesh entity’s hierarchy transform plus the part transform into vertices,
