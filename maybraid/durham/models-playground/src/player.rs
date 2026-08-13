@@ -14,8 +14,8 @@ use std::f32::consts::PI;
 use crate::camera::CameraController;
 use crate::WorldBaseTerrain;
 
-const CAPSULE_RADIUS: f32 = 0.4;
-const CAPSULE_LENGTH: f32 = 1.0;
+pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
+pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
 const MOVE_ACCEL: f32 = 40.0;
 const MOVE_DAMPING: f32 = 0.92;
 const JUMP_IMPULSE: f32 = 8.0;
@@ -36,12 +36,16 @@ pub enum PlaygroundMode {
 #[derive(Component)]
 pub struct Player;
 
+/// Debug capsule mesh parented to [`Player`] (hidden when a character visual is set).
+#[derive(Component)]
+pub struct PlayerCapsule;
+
 #[derive(Component)]
 struct CharacterController;
 
 #[derive(Component)]
 #[component(storage = "SparseSet")]
-struct Grounded;
+pub(crate) struct Grounded;
 
 #[derive(Component)]
 struct MovementAcceleration(f32);
@@ -96,13 +100,11 @@ fn spawn_player(
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
 
-	commands
+	let player = commands
 		.spawn((
 			Name::new("Player"),
 			Player,
 			CharacterController,
-			Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
-			MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
 			Transform::from_translation(spawn),
 			RigidBody::Dynamic,
 			collider,
@@ -118,12 +120,24 @@ fn spawn_player(
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(2.0),
-		));
+		))
+		.id();
+	commands.spawn((
+		Name::new("PlayerCapsule"),
+		PlayerCapsule,
+		ChildOf(player),
+		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
+		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
+	));
+}
+
+pub(crate) fn capsule_half_height() -> f32 {
+	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
 }
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.5, center.z)
+	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
 }
 
 /// Reposition the player after terrain layout regeneration.

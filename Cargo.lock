@@ -3006,6 +3006,7 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "crozon-characters",
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",

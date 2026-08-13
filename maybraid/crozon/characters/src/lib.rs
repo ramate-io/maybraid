@@ -11,6 +11,7 @@ pub mod assembly;
 pub mod assets;
 pub mod components;
 pub mod concepts;
+pub mod hosts;
 pub mod layer;
 pub mod member;
 pub mod menu_traits;
@@ -35,6 +36,7 @@ pub use components::{
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
+pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 pub use member::{

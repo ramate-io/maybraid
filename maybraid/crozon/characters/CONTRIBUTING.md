@@ -20,8 +20,11 @@ implement [`CharacterComponents`](src/components.rs) with builders in
 left-authored GLBs use [`SceneRef::reflected`](../../scene-ref/src/scene_ref.rs)
 for handedness; socket locals stay placement-only (no `scale.x = -1`). Clothing
 is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe::clothed`](src/components.rs),
-not part of the inner species. Register the playground
-host with [`add_character_components_host::<Clothed<T>>`](src/plugin.rs);
+not part of the inner species. Apps that spawn characters add
+[`CharacterHostsPlugin`](src/hosts.rs) (scene-ref, material-ref, LOD refresh,
+[`CharacterComponentsPlugin`](src/plugin.rs), and every clothed species). A
+single species can instead call
+[`add_character_components_host::<Clothed<T>>`](src/plugin.rs).
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once. Those nodes stamp socket/skin/rig/part/transform from
 [`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs); part materials
