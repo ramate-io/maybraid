@@ -6,7 +6,8 @@
 //!
 //! [`SceneRefPlugin`] installs [`SceneRefHandles`] and [`MultiSceneMergeHandles`],
 //! which memoize [`Handle<WorldAsset>`]s. Mirrored refs rebuild meshes (axis flip +
-//! winding reverse) into a distinct cached asset before merge sees them.
+//! winding reverse) and reflect instance [`Transform`]s into a distinct cached
+//! asset before merge sees them.
 //! Use [`SceneRef::scene`] / [`SceneRefRoot`] or [`MultiSceneMerge::scene`] /
 //! [`MultiSceneMergeRoot`]; fulfill systems insert [`WorldAssetRoot`] when ready.
 
@@ -20,7 +21,7 @@ mod world_asset;
 use bevy::prelude::{App, Plugin, Update};
 
 pub use handles::SceneRefHandles;
-pub use mirror::mirror_mesh;
+pub use mirror::{mirror_mesh, mirror_transform};
 pub use multi_merge::{
 	MultiSceneMerge, MultiSceneMergeHandles, MultiSceneMergeRoot, MultiScenePart, TransformKey,
 };

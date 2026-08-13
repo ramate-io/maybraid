@@ -8,7 +8,7 @@ use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::Scene;
 use bevy::world_serialization::WorldAsset;
 
-/// Axis along which a [`SceneRef`] rebuilds mirrored mesh geometry.
+/// Axis along which a [`SceneRef`] rebuilds mirrored mesh geometry and instance transforms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MirrorAxis {
 	X,
