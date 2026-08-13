@@ -106,6 +106,14 @@ root — not the whole world.
 cargo test -p crozon-characters
 cargo test -p crozon-character-ui-menus
 cargo check -p crozon-character-concepts-playground
+cargo check -p crozon-character-world-movements-playground
+```
+
+World locomotion (walk / run / jump on a small Durham patch) is
+[`character-world-movements-playground`](../character-world-movements-playground/):
+
+```bash
+cargo run -p crozon-character-world-movements-playground
 ```
 
 Spawn from the playground UI (species picker) or CLI:
