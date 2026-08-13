@@ -8,7 +8,8 @@ use avian3d::prelude::PhysicsPlugins;
 use bevy::prelude::*;
 use chico_groves::{
 	Dryland, ForlornSavanna, GoettingenFollow, Leeward, LevantineScrub, MonsterGrass,
-	OasisDatePalm, Orchard, RiparianGeneral, RollingOaks, StrangeOasis, TropicalThicket, Vineyard,
+	OasisDatePalm, Orchard, RiparianGeneral, RollingOaks, Storytellers, StrangeOasis,
+	TemperateLowerMassives, TemperateMassives, TropicalThicket, Vineyard, WanderingAcacia,
 };
 use chico_sbs_trees::{
 	BraidOakTree, DatePalm, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
@@ -102,6 +103,10 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, Vineyard);
 		avian_host!(app, Dryland);
 		avian_host!(app, Leeward);
+		avian_host!(app, TemperateLowerMassives);
+		avian_host!(app, TemperateMassives);
+		avian_host!(app, Storytellers);
+		avian_host!(app, WanderingAcacia);
 
 		// Structural single-tree / component hosts used by `/show`.
 		avian_host!(app, ComponentsOnly<SopesBanyan>);
@@ -137,5 +142,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<SimplemansHedge>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<LiamsConifer>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<TemperateConifer>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<KamakuraTorch>>);
+		avian_host!(app, ComponentsOnly<PlacedVegetation<SopesBanyan>>);
 	}
 }

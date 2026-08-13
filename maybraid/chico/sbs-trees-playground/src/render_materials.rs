@@ -157,10 +157,7 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::TemperateLowerMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TemperateLowerMassives(_) => {}
 		RenderSubject::PalmShade(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
@@ -174,18 +171,12 @@ fn attach_render_materials(
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::Dryland(_) => {}
-		RenderSubject::Storytellers(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::Storytellers(_) => {}
 		RenderSubject::TradeWinds(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::WanderingAcacia(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::WanderingAcacia(_) => {}
 		RenderSubject::Leeward(_) => {}
 		RenderSubject::ChristmasTaiga(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
@@ -195,10 +186,7 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::TemperateMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::TemperateMassives(_) => {}
 		RenderSubject::RiparianGeneral(_) => {}
 		RenderSubject::RollingOaks(_) => {}
 		RenderSubject::ForlornSavanna(_) => {}

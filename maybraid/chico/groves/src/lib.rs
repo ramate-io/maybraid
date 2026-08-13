@@ -119,11 +119,19 @@ pub use riparian_general::{RiparianGeneral, RiparianGeneralParams};
 #[cfg(feature = "render")]
 pub use rolling_oaks::{RollingOaks, RollingOaksParams};
 #[cfg(feature = "render")]
+pub use storytellers::{Storytellers, StorytellersParams};
+#[cfg(feature = "render")]
 pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
+#[cfg(feature = "render")]
+pub use temperate_lower_massives::{TemperateLowerMassives, TemperateLowerMassivesParams};
+#[cfg(feature = "render")]
+pub use temperate_massives::{TemperateMassives, TemperateMassivesParams};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
 #[cfg(feature = "render")]
 pub use vineyard::{Vineyard, VineyardParams};
+#[cfg(feature = "render")]
+pub use wandering_acacia::{WanderingAcacia, WanderingAcaciaParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
 pub use palm_shade::{PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm};
 pub use riparian_general::{
