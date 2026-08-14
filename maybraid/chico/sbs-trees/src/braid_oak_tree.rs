@@ -27,10 +27,13 @@ use crate::storybook_tree::canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium_with_proxy, HIGH_FOLIAGE_BANDS,
 	BRAID_MEDIUM_STICK_BANDS,
 };
-use crate::torch_tree::{
-	stick_nodes_banded, stick_nodes_low, structural_lod_for, HIGH_STICK_BANDS,
-};
+use crate::torch_tree::{stick_nodes_banded, stick_nodes_low, HIGH_STICK_BANDS};
 use stick::stick_nodes_high_crook;
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for Braid Oak Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -132,10 +135,17 @@ impl VegetationComponents for BraidOakTree {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(structural_lod_for(
-			self.structural_center(),
-			self.footprint_radius(),
-			self.geometry.height(),
-		))
+		Some(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.geometry.height(),
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

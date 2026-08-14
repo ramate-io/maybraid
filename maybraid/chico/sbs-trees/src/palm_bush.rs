@@ -25,10 +25,14 @@ use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
-	world_space_frond_shape,
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, world_space_frond_shape,
 };
 use crown::frond_shape_for_ring;
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Palm Bush.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -124,7 +128,13 @@ impl VegetationComponents for PalmBush {
 		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
 		let center = (min + max) * 0.5;
 		let radius = ((max - min) * 0.5).max_element().max(1e-3);
-		Some(palm_structural_lod(center, radius))
+		Some(
+			StructuralLod::new(center, radius).with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }
 

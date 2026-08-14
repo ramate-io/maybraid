@@ -5,13 +5,8 @@ use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
-	StickNode, StructuralLod,
+	StickNode,
 };
-
-/// Date / Waialea / PalmBush structural bands (literals — not shared Sope defaults).
-pub(crate) const PALM_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-pub(crate) const PALM_STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
-pub(crate) const PALM_STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Target fronds (runs) per [`FrondCollection`] — small groups keep merge extent
 /// rachis-scale without the oversized UltraLow chord of a full ring.
@@ -117,17 +112,6 @@ pub(crate) fn layered_proxy_balls(min: Vec3, max: Vec3) -> Vec<FoliageNode> {
 		)
 		.with_material(chico_leaf_material_ref()),
 	]
-}
-
-pub(crate) fn palm_structural_lod(
-	center: Vec3,
-	tree_radius: f32,
-) -> StructuralLod {
-	StructuralLod::new(center, tree_radius.max(1e-3)).with_factors(
-		PALM_STRUCTURAL_HIGH_FACTOR,
-		PALM_STRUCTURAL_MEDIUM_FACTOR,
-		PALM_STRUCTURAL_LOW_FACTOR,
-	)
 }
 
 /// All chain segments as trunk kits (date / Waialea columnar or arched trunks).

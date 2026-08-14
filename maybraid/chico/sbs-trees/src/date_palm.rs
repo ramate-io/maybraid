@@ -28,11 +28,15 @@ use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
-	trunk_stick_nodes, world_space_frond_shape,
+	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, trunk_stick_nodes,
+	world_space_frond_shape,
 };
-use crate::torch_tree::structural_tree_radius;
 use crown::frond_shape_for_ring;
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Date Palm.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -132,8 +136,17 @@ impl VegetationComponents for DatePalm {
 		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
 		let crown_center = (min + max) * 0.5;
 		let crown_r = ((max - min) * 0.5).max_element();
-		let radius = structural_tree_radius(self.footprint_radius(), self.geometry.height())
-			.max(crown_r);
-		Some(palm_structural_lod(crown_center, radius))
+		let radius = StructuralLod::characteristic_radius(
+			self.footprint_radius(),
+			self.geometry.height(),
+		)
+		.max(crown_r);
+		Some(
+			StructuralLod::new(crown_center, radius).with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

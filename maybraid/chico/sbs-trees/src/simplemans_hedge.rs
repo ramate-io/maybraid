@@ -17,6 +17,11 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
+
 /// Authoring / CLI parameters for Simpleman's Hedge.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
 #[command(rename_all = "kebab-case")]
@@ -238,11 +243,18 @@ impl VegetationComponents for SimplemansHedge {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let radius = (self.footprint_xz * 0.5).max(self.height * 0.5).max(1e-3);
-		Some(StructuralLod::new(
-			Vec3::new(0.0, self.height * 0.5, 0.0),
-			radius,
-		))
+		Some(
+			StructuralLod::from_extent(
+				Vec3::new(0.0, self.height * 0.5, 0.0),
+				self.footprint_xz * 0.5,
+				self.height,
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }
 

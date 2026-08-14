@@ -22,7 +22,7 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 /// High when `distance / footprint_radius ≤` this.
-const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 3.0;
+const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
 const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
 const HIGH_BUSH_STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
@@ -157,12 +157,13 @@ impl VegetationComponents for HighBushShoots {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let radius = self
-			.footprint_radius()
-			.max(self.shape.height * 0.5)
-			.max(1e-3);
 		Some(
-			StructuralLod::new(self.structural_center(), radius).with_factors(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.shape.height,
+			)
+			.with_factors(
 				HIGH_BUSH_STRUCTURAL_HIGH_FACTOR,
 				HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR,
 				HIGH_BUSH_STRUCTURAL_LOW_FACTOR,
