@@ -17,8 +17,9 @@ use crozon_rigs::Side;
 use malo_animations::{
 	animations::{
 		DorsoventralUndulation, FixedTuck, Flapping, FlipDirection, Gallop, Jab,
-		LateralUndulation, QuadrupedRun, Run, Soaring, Tuck, TuckProfile, TuckedFlip,
-		TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_BACKSWING, DEFAULT_GRAVITY,
+		LateralUndulation, Leap, QuadrupedLeap, QuadrupedRun, Run, Soaring, Tuck, TuckProfile,
+		TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, UprightLeap, Walk, DEFAULT_BACKSWING,
+		DEFAULT_GRAVITY,
 		DEFAULT_JAB_TARGET, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED,
 		DEFAULT_PRE_SQUAT_SPEED,
 	},
@@ -37,6 +38,8 @@ const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JAB_CYCLE_SPEED: f32 = 0.9;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
+/// One-shot leap lasts ~1.25 s so it covers the physics hang time.
+const LEAP_CYCLE_SPEED: f32 = 0.8;
 const BLEND_DURATION: f32 = 0.15;
 
 /// Clip discriminant. Mailbox transitions key on this, not knob values.
@@ -49,6 +52,7 @@ pub enum AnimId {
 	QuadrupedRun,
 	Gallop,
 	Jump,
+	Leap,
 	Tuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
@@ -68,6 +72,7 @@ impl AnimId {
 			Self::QuadrupedRun => QUADRUPED_RUN_CYCLE_SPEED,
 			Self::Gallop => GALLOP_CYCLE_SPEED,
 			Self::Jump => 1.0,
+			Self::Leap => LEAP_CYCLE_SPEED,
 			Self::Tuck => TUCK_CYCLE_SPEED,
 			Self::TuckedFlip => FRONT_FLIP_CYCLE_SPEED,
 			Self::TwoFootedTuckedFlip => 1.0,
@@ -187,6 +192,7 @@ pub enum AnimClip {
 	QuadrupedRun(QuadrupedRun),
 	Gallop(Gallop),
 	Jump(JumpParams),
+	Leap(Leap),
 	Tuck(TuckParams),
 	TuckedFlip(TuckedFlipParams),
 	TwoFootedTuckedFlip(TwoFootedTuckedFlipParams),
@@ -206,6 +212,7 @@ impl AnimClip {
 			Self::QuadrupedRun(_) => AnimId::QuadrupedRun,
 			Self::Gallop(_) => AnimId::Gallop,
 			Self::Jump(_) => AnimId::Jump,
+			Self::Leap(_) => AnimId::Leap,
 			Self::Tuck(_) => AnimId::Tuck,
 			Self::TuckedFlip(_) => AnimId::TuckedFlip,
 			Self::TwoFootedTuckedFlip(_) => AnimId::TwoFootedTuckedFlip,
@@ -243,6 +250,10 @@ impl AnimClip {
 
 	pub fn jump() -> Self {
 		Self::Jump(JumpParams::default())
+	}
+
+	pub fn leap() -> Self {
+		Self::Leap(Leap::default())
 	}
 
 	pub fn tuck() -> Self {
@@ -286,6 +297,7 @@ impl From<ConceptAnimation> for AnimClip {
 			ConceptAnimation::Run => Self::run(),
 			ConceptAnimation::Gallop => Self::gallop(),
 			ConceptAnimation::Jump => Self::jump(),
+			ConceptAnimation::Leap => Self::leap(),
 			ConceptAnimation::Tuck => Self::tuck(),
 			ConceptAnimation::TuckedFlip => Self::tucked_flip(),
 			ConceptAnimation::TwoFootedTuckedFlip => Self::two_footed_tucked_flip(),
@@ -581,6 +593,7 @@ fn sample_humanoid(clip: AnimClip, rig: &mut HumanoidV0Rig, progress: f32) -> Ef
 		AnimClip::Walk(walk) => walk.apply(rig, progress),
 		AnimClip::Run(run) => run.apply(rig, progress),
 		AnimClip::Jump(params) => params.apply_humanoid().apply(rig, progress),
+		AnimClip::Leap(leap) => UprightLeap::from_leap(&leap).apply(rig, progress),
 		AnimClip::Tuck(params) => {
 			Tuck::<HumanoidV0Rig>::new(params.tightness).apply(rig, progress.rem_euclid(1.0))
 		}
@@ -607,6 +620,7 @@ fn sample_quadruped(clip: AnimClip, rig: &mut QuadrupedV0Rig, progress: f32) -> 
 		AnimClip::QuadrupedRun(run) => run.apply(rig, progress),
 		AnimClip::Run(_) => QuadrupedRun::default().apply(rig, progress),
 		AnimClip::Gallop(gallop) => gallop.apply(rig, progress),
+		AnimClip::Leap(leap) => QuadrupedLeap::from_leap(&leap).apply(rig, progress),
 		_ => Effects::default(),
 	}
 }
@@ -638,5 +652,14 @@ mod tests {
 		assert_eq!(a.id(), b.id());
 		assert_ne!(a, b);
 		assert_ne!(AnimClip::walk().id(), AnimClip::run().id());
+	}
+
+	#[test]
+	fn leap_is_a_distinct_clip() {
+		let leap = AnimRef::from(ConceptAnimation::Leap);
+		assert_eq!(leap.clip.id(), AnimId::Leap);
+		assert_eq!(leap.clip, AnimClip::leap());
+		assert_eq!(leap.speed, LEAP_CYCLE_SPEED);
+		assert_ne!(AnimClip::leap().id(), AnimClip::jump().id());
 	}
 }

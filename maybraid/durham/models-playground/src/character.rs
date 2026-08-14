@@ -212,7 +212,9 @@ fn face_wish(visual: &mut Transform, wish: Vec3, dt: f32) {
 fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimClip {
 	match skeleton {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => {
-			if jumping {
+			if jumping && speed > RUN_SPEED {
+				AnimClip::leap()
+			} else if jumping {
 				AnimClip::jump()
 			} else if speed > RUN_SPEED {
 				AnimClip::run()
@@ -223,7 +225,9 @@ fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> Anim
 			}
 		}
 		RigSkeletonKind::Quadruped => {
-			if speed > RUN_SPEED {
+			if jumping {
+				AnimClip::leap()
+			} else if speed > RUN_SPEED {
 				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
 				AnimClip::quadruped_run()

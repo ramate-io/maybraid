@@ -125,6 +125,7 @@ fn spawn_player(
 			Player,
 			CharacterController,
 			Transform::from_translation(spawn),
+			Visibility::default(),
 			RigidBody::Dynamic,
 			collider,
 			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
