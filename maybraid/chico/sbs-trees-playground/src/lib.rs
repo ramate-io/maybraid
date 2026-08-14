@@ -197,12 +197,16 @@ where
 
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
+	commands.insert_resource(GlobalAmbientLight {
+		brightness: 450.0,
+		..default()
+	});
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
+		DirectionalLight { illuminance: 3500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }

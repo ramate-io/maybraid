@@ -2,8 +2,9 @@
 //!
 //! [`HighBushShootsParams::build`] grows [`HighBushShootsShape::build_chain`] once into
 //! [`HighBushShoots`]. Sticks emit per segment (High all / Medium subsample / Low sparse);
-//! foliage is cheap-ball (or layered-ball at Low) using the Common High Bush ball-selection
-//! rule (terminals, upper canopy, or branch order > 1) — not plane-splay.
+//! foliage follows [`HighBushFoliageStyle`] (default layered-ball; cheap-ball at High/Medium
+//! with a layered-ball Low proxy) using the Common High Bush ball-selection rule
+//! (terminals, upper canopy, or branch order > 1) — not plane-splay.
 //!
 //! Legacy [`chico_tree_components::HighBushShoots`] RenderItem still uses
 //! [`HighBushFoliageStyle::PlaneSplay`] / Tuft via ball-components.
@@ -37,8 +38,8 @@ impl Default for HighBushShootsParams {
 	fn default() -> Self {
 		Self {
 			shape: HighBushShootsShape {
-				// VC path prefers cheap-ball terminals; RenderItem keeps PlaneSplay default.
-				foliage_style: HighBushFoliageStyle::CheapBall,
+				// VC path prefers layered-ball terminals; RenderItem keeps PlaneSplay default.
+				foliage_style: HighBushFoliageStyle::LayeredBall,
 				..HighBushShootsShape::default()
 			},
 		}
@@ -98,7 +99,9 @@ impl HighBushShoots {
 	}
 
 	/// Foliage at RFC ball-selection joints; `stride` thins candidates.
-	/// High/Medium = cheap_ball; Low = layered_ball.
+	///
+	/// [`HighBushFoliageStyle::LayeredBall`] is layered at every LOD. Cheap / plane-splay /
+	/// tuft stay cheap-ball at High/Medium and use a layered-ball Low proxy.
 	fn foliage_nodes(&self, stride: usize, low: bool) -> Vec<FoliageNode> {
 		let stride = stride.max(1);
 		let leaf_r = self.leaf_radius_world().max(1e-4);
@@ -108,13 +111,14 @@ impl HighBushShoots {
 			.filter(|(idx, _, hyst)| should_allocate_foliage(*idx, hyst, &self.chain))
 			.map(|(_, node, _)| node.position)
 			.collect();
+		let layered = matches!(self.shape.foliage_style, HighBushFoliageStyle::LayeredBall) || low;
 		sites
 			.into_iter()
 			.enumerate()
 			.filter(|(i, _)| i % stride == 0)
 			.map(|(_, position)| {
 				let placement = Placement::foliage_uniform(position, leaf_r);
-				if low {
+				if layered {
 					FoliageNode::layered_ball(placement)
 				} else {
 					FoliageNode::cheap_ball(placement)
@@ -147,7 +151,7 @@ impl VegetationComponents for HighBushShoots {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => (3, true),
 		};
-		// PlaneSplay / CheapBall / Tuft all map to ball kits on the VC path.
+		// PlaneSplay / CheapBall / LayeredBall / Tuft all map to ball kits on the VC path.
 		Layers::from_free(self.foliage_nodes(stride, low))
 			.map(|n| n.with_material(chico_leaf_material_ref()))
 	}
@@ -173,16 +177,16 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn default_vc_uses_cheap_ball_style() -> Result<()> {
+	fn default_vc_uses_layered_ball_style() -> Result<()> {
 		assert_eq!(
 			HighBushShootsParams::default().shape.foliage_style,
-			HighBushFoliageStyle::CheapBall
+			HighBushFoliageStyle::LayeredBall
 		);
 		Ok(())
 	}
 
 	#[test]
-	fn high_emits_sticks_and_canopy_cheap_balls() -> Result<()> {
+	fn high_emits_sticks_and_canopy_layered_balls() -> Result<()> {
 		let built = HighBushShootsParams::default().build();
 		let sticks = built.stick_nodes_for_level(LodSceneLevel::High).flatten();
 		assert!(!sticks.is_empty());
@@ -197,10 +201,7 @@ mod tests {
 			})
 			.count();
 		assert!(foliage.len() >= terminal_only);
-		assert!(foliage.iter().all(|n| matches!(
-			n.geometry,
-			chico_vegetation_components::FoliageGeometry::CheapBall
-		)));
+		assert!(foliage.iter().all(|n| n.geometry.is_layered_ball()));
 		Ok(())
 	}
 
@@ -216,6 +217,19 @@ mod tests {
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert!(!low.is_empty());
 		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
+	}
+
+	#[test]
+	fn cheap_ball_style_emits_cheap_at_high() -> Result<()> {
+		let mut params = HighBushShootsParams::default();
+		params.shape.foliage_style = HighBushFoliageStyle::CheapBall;
+		let built = params.build();
+		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(high.iter().all(|n| matches!(
+			n.geometry,
+			chico_vegetation_components::FoliageGeometry::CheapBall
+		)));
 		Ok(())
 	}
 
