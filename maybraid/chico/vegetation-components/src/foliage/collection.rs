@@ -141,8 +141,9 @@ impl FrondRun {
 /// chord) so kinked blades never lose mid-chain connectivity.
 ///
 /// Prefer **tight** collections (one blade / short clump). A wide fan (e.g. a full palm
-/// ring) makes the LOD radius the ring diameter, so UltraLow's single survivor reads as
-/// an oversized chord across the crown — emit one collection per frond instead.
+/// ring) makes UltraLow's single survivor an oversized chord — emit one collection per
+/// frond (or a small batch) instead. LOD probe can still be the parent crown via
+/// [`Self::with_probe`]; keep collections tight for merge, not for distance banding.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FrondCollection {
 	pub runs: Vec<FrondRun>,
