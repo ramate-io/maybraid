@@ -16,7 +16,7 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	AnimId, AnimRef, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig,
+	AnimClip, AnimRef, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig,
 	CharacterRigRole, CharacterRoot, RigSkeletonKind,
 };
 use game_commands::ui::GameCommandStatusText;
@@ -209,35 +209,35 @@ fn face_wish(visual: &mut Transform, wish: Vec3, dt: f32) {
 	visual.look_to(-current.slerp(target, t), Vec3::Y);
 }
 
-fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimId {
+fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimClip {
 	match skeleton {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => {
 			if jumping {
-				AnimId::Jump
+				AnimClip::jump()
 			} else if speed > RUN_SPEED {
-				AnimId::Run
+				AnimClip::run()
 			} else if speed > WALK_SPEED {
-				AnimId::Walk
+				AnimClip::walk()
 			} else {
-				AnimId::Still
+				AnimClip::still()
 			}
 		}
 		RigSkeletonKind::Quadruped => {
 			if speed > RUN_SPEED {
-				AnimId::Gallop
+				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
-				AnimId::Run
+				AnimClip::quadruped_run()
 			} else {
-				AnimId::Still
+				AnimClip::still()
 			}
 		}
 		RigSkeletonKind::Forelimbed => {
 			if speed > RUN_SPEED {
-				AnimId::DorsoventralUndulation
+				AnimClip::dorsoventral_undulation()
 			} else if speed > WALK_SPEED {
-				AnimId::LateralUndulation
+				AnimClip::lateral_undulation()
 			} else {
-				AnimId::Still
+				AnimClip::still()
 			}
 		}
 	}

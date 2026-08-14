@@ -29,7 +29,7 @@ pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
 pub use gallop::Gallop;
-pub use jab::Jab;
+pub use jab::{Jab, DEFAULT_BACKSWING, DEFAULT_JAB_TARGET};
 pub use land::Land;
 pub use lateral_undulation::LateralUndulation;
 pub use mix::{smoothstep, Mix, Smooth};

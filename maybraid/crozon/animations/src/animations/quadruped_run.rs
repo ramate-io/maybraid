@@ -7,7 +7,7 @@
 use std::f32::consts::PI;
 use std::marker::PhantomData;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct QuadrupedRun {
 	/// Thigh forward/back stride amplitude (radians).
 	pub stride: f32,

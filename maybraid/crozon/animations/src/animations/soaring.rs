@@ -6,7 +6,7 @@
 use std::f32::consts::TAU;
 
 /// Held wing-spread with infrequent corrective flaps.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Soaring {
 	/// Flaps per second during a burst.
 	pub flap_speed: f32,
