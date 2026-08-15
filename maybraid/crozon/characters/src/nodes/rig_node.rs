@@ -6,7 +6,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_rigs::ResolvedRigPose;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 use scene_ref::SceneRef;
 
 use crate::assets::AssetNormalization;
@@ -132,12 +132,12 @@ impl LodScene for RigNode {
 		Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 2.5, 1.0))
 	}
 
-	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	fn host_contents(&self, lod_ref: &LodRef) -> impl Scene + 'static
 	where
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
+		let _ = lod_ref;
 		let level = self.scene_lod_level(lod_ref);
-		let bounds = self.scene_bounds();
 		let node = self.clone();
 		let transform = node.normalization.transform();
 		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
@@ -149,7 +149,6 @@ impl LodScene for RigNode {
 		let bones = body.then_some(()).and(policy.animate_bones());
 		let effects = body.then_some(()).and(policy.animate_effects());
 		(
-			lod_host_scene_pending(level, bounds),
 			bsn! {
 				template_value(node)
 				template_value(transform)

@@ -2,12 +2,12 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Visibility};
+use bevy::prelude::{Component, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_character_items::{ClothingMesh, ItemColor};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
@@ -16,7 +16,7 @@ use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
 use crozon_character_motion::motion_policy;
 
-use crate::scene_children::scene_children;
+use crate::scene_children::{maybe_component, scene_children};
 use crate::socket::{RigId, SkinRef};
 
 /// Domain IR exposed by a character (or character wrapper) for structural composition.
@@ -131,6 +131,21 @@ impl<T: Send + Sync + 'static> From<T> for ComponentsOnly<T> {
 	}
 }
 
+impl<T: Default + Send + Sync + 'static> Default for ComponentsOnly<T> {
+	fn default() -> Self {
+		Self(T::default())
+	}
+}
+
+impl<T: Default> Default for Clothed<T> {
+	fn default() -> Self {
+		Self {
+			inner: T::default(),
+			clothing: Vec::new(),
+		}
+	}
+}
+
 impl<T: Send + Sync + 'static> std::ops::Deref for ComponentsOnly<T> {
 	type Target = T;
 
@@ -174,9 +189,21 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 		character_bounds(&self.0)
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+	fn host_contents(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	where
+		Self: Component + Clone + Default + Unpin + Sized,
+	{
 		let level = self.scene_lod_level(lod_ref);
-		lod_host_scene_pending(level, self.scene_bounds())
+		let policy = motion_policy(level);
+		let host = self.clone();
+		(
+			bsn! {
+				template_value(host)
+				CharacterRoot
+				Visibility::default()
+			},
+			maybe_component(policy.apply_terrain_pitch()),
+		)
 	}
 }
 
@@ -225,44 +252,6 @@ pub fn component_only_scene(
 	let mut children: Vec<Box<dyn Scene>> = Vec::new();
 	append_component_scenes(character, lod_ref, level, &mut children);
 	scene_children(children)
-}
-
-/// Spawn a [`ComponentsOnly`] character host; chunk fulfill streams the first level.
-pub fn spawn_character_components<T>(
-	commands: &mut Commands,
-	character: &T,
-	transform: Transform,
-	bounds: Aabb3d,
-) -> Vec<Entity>
-where
-	T: CharacterComponents + Clone + Send + Sync + 'static,
-{
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
-	let host = ComponentsOnly(character.clone());
-	let level = host.scene_lod_level(&lod_ref);
-	let pending = lod_host_scene_pending(level, bounds);
-	let policy = motion_policy(level);
-	let entity = commands
-		.spawn_scene((
-			pending,
-			bsn! {
-				template_value(transform)
-				Visibility::default()
-			},
-		))
-		.id();
-	let mut entity_cmds = commands.entity(entity);
-	entity_cmds.insert((host, CharacterRoot));
-	if let Some(pitch) = policy.apply_terrain_pitch() {
-		entity_cmds.insert(pitch);
-	}
-	vec![entity]
 }
 
 /// Approximate AABB for a standing humanoid (High can be large; bands are identical).

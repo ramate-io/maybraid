@@ -3,9 +3,10 @@
 use bevy::ecs::query::Has;
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, template_value};
 use clap::ValueEnum;
 use crozon_characters::{
-	character_bounds, spawn_character_components,
+	character_bounds,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -17,8 +18,10 @@ use crozon_characters::{
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	AnimClip, AnimRef, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig,
-	CharacterRigRole, CharacterRoot, RigSkeletonKind,
+	CharacterRigRole, CharacterRoot, ComponentsOnly, RigSkeletonKind,
 };
+use lod::gen::LodScene;
+use lod::lod_ref::LodRef;
 use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
@@ -256,7 +259,22 @@ fn spawn_species(
 		($config:ty) => {{
 			let clothed = CharacterRecipe::clothed(&<$config>::default_preview());
 			let bounds = character_bounds(&clothed);
-			spawn_character_components(commands, &clothed, transform, bounds)
+			let identity = Transform::IDENTITY;
+			let lod_ref = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &identity,
+				current_transform: &identity,
+				bounds: &bounds,
+			};
+			let host = ComponentsOnly(clothed);
+			vec![commands
+				.spawn_scene((
+					host.host(&lod_ref),
+					bsn! {
+						template_value(transform)
+					},
+				))
+				.id()]
 		}};
 	}
 	match species {
