@@ -1,12 +1,13 @@
-//! Terrain pitch on the character visual. Facing and the capsule stay as they are.
+//! Terrain pitch and roll on the character visual. Facing and the capsule stay as they are.
 
 use bevy::ecs::query::Has;
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use crozon_characters::{
 	terrain_pitch::{
-		facing_with_pitch, girdle_midpoint, half_span_from_girdles, observed_pitch, step_toward,
-		support_lift, QUADRUPED_FRONT, QUADRUPED_HIND,
+		facing_with_tilt, girdle_midpoint, half_span_from_girdles, half_width_from_sides,
+		observed_pitch, observed_roll, step_toward, support_lift, QUADRUPED_FRONT, QUADRUPED_HIND,
+		QUADRUPED_LEFT, QUADRUPED_RIGHT,
 	},
 	BoneMap, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, RigSkeletonKind,
 	TerrainPitch,
@@ -19,7 +20,10 @@ use crate::WorldBaseTerrain;
 
 pub(crate) fn prepare_terrain_pitch(
 	mut commands: Commands,
-	visuals: Query<(Entity, &CharacterMembers), (With<PlayerVisual>, With<CharacterRoot>, Without<TerrainPitch>)>,
+	visuals: Query<
+		(Entity, &CharacterMembers),
+		(With<PlayerVisual>, With<CharacterRoot>, Without<TerrainPitch>),
+	>,
 	rigs: Query<(&CharacterRig, &BoneMap)>,
 	globals: Query<&GlobalTransform>,
 ) {
@@ -27,9 +31,12 @@ pub(crate) fn prepare_terrain_pitch(
 		let Some(kind) = body_skeleton(members, &rigs) else {
 			continue;
 		};
-		let (front, hind) = girdles(kind, members, &rigs, &globals);
-		let half_span = half_span_from_girdles(kind, front, hind);
-		commands.entity(entity).insert(TerrainPitch::new(kind, half_span));
+		let (front, hind, left, right) = supports(kind, members, &rigs, &globals);
+		commands.entity(entity).insert(TerrainPitch::new(
+			kind,
+			half_span_from_girdles(kind, front, hind),
+			half_width_from_sides(kind, left, right),
+		));
 	}
 }
 
@@ -59,25 +66,46 @@ pub(crate) fn apply_terrain_pitch(
 		return;
 	}
 	let facing = facing.normalize();
+	let right = Vec3::new(facing.z, 0.0, -facing.x);
 	let origin = player.translation;
 	let front_xz = origin + facing * pitch.half_span;
 	let hind_xz = origin - facing * pitch.half_span;
+	let left_xz = origin - right * pitch.half_width;
+	let right_xz = origin + right * pitch.half_width;
 
 	let center_h = height_at(&store, &layout, &base, origin.x, origin.z);
 	let front_h = height_at(&store, &layout, &base, front_xz.x, front_xz.z);
 	let hind_h = height_at(&store, &layout, &base, hind_xz.x, hind_xz.z);
+	let left_h = height_at(&store, &layout, &base, left_xz.x, left_xz.z);
+	let right_h = height_at(&store, &layout, &base, right_xz.x, right_xz.z);
 
-	let target = if jumping {
-		0.0
+	let (target_pitch, target_roll) = if jumping {
+		(0.0, 0.0)
 	} else {
-		observed_pitch(front_h, hind_h, pitch.half_span) * pitch.weight
+		(
+			observed_pitch(front_h, hind_h, pitch.half_span) * pitch.weight,
+			observed_roll(left_h, right_h, pitch.half_width) * pitch.weight,
+		)
 	};
-	pitch.radians = step_toward(pitch.radians, target, time.delta_secs());
-	visual.rotation = facing_with_pitch(facing, pitch.radians);
+	let dt = time.delta_secs();
+	pitch.pitch = step_toward(pitch.pitch, target_pitch, dt);
+	pitch.roll = step_toward(pitch.roll, target_roll, dt);
+	visual.rotation = facing_with_tilt(facing, pitch.pitch, pitch.roll);
 	visual.translation.y = if jumping {
 		0.0
 	} else {
-		support_lift(origin.y, center_h, front_h, hind_h, pitch.half_span, pitch.radians)
+		support_lift(
+			origin.y,
+			center_h,
+			front_h,
+			hind_h,
+			left_h,
+			right_h,
+			pitch.half_span,
+			pitch.half_width,
+			pitch.pitch,
+			pitch.roll,
+		)
 	};
 }
 
@@ -96,14 +124,14 @@ fn body_skeleton(
 	None
 }
 
-fn girdles(
+fn supports(
 	kind: RigSkeletonKind,
 	members: &CharacterMembers,
 	rigs: &Query<(&CharacterRig, &BoneMap)>,
 	globals: &Query<&GlobalTransform>,
-) -> (Option<Vec3>, Option<Vec3>) {
+) -> (Option<Vec3>, Option<Vec3>, Option<Vec3>, Option<Vec3>) {
 	if kind != RigSkeletonKind::Quadruped {
-		return (None, None);
+		return (None, None, None, None);
 	}
 	for member in members.iter() {
 		let Ok((rig, bones)) = rigs.get(member) else {
@@ -115,9 +143,11 @@ fn girdles(
 		return (
 			girdle_midpoint(named_world(bones, QUADRUPED_FRONT, globals)),
 			girdle_midpoint(named_world(bones, QUADRUPED_HIND, globals)),
+			girdle_midpoint(named_world(bones, QUADRUPED_LEFT, globals)),
+			girdle_midpoint(named_world(bones, QUADRUPED_RIGHT, globals)),
 		);
 	}
-	(None, None)
+	(None, None, None, None)
 }
 
 fn named_world(bones: &BoneMap, names: &[&str], globals: &Query<&GlobalTransform>) -> Vec<Vec3> {
