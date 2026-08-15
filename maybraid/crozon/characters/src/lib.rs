@@ -24,6 +24,7 @@ pub mod scene_children;
 pub mod skin;
 pub mod socket;
 pub mod species;
+pub mod terrain_pitch;
 
 pub use anim::{
 	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId, AnimMailbox, AnimRef,
@@ -62,3 +63,4 @@ pub use socket::{
 	fulfill_socket_ref_roots, invalidate_changed_socket_ref_roots, RigId, SkinRef, SkinRefApplied,
 	SkinRefRoot, SocketRef, SocketRefApplied, SocketRefRoot,
 };
+pub use terrain_pitch::TerrainPitch;

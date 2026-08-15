@@ -3,6 +3,7 @@
 pub mod camera;
 pub mod character;
 pub mod commands;
+mod pitch;
 mod player;
 mod ui;
 
@@ -17,6 +18,7 @@ use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use character::{apply_set_character, drive_player_locomotion};
+use pitch::{apply_terrain_pitch, prepare_terrain_pitch};
 use commands::{RequestModeCharacter, RequestModeFree};
 use crozon_characters::{CharacterHostSystems, CharacterHostsPlugin};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
@@ -103,6 +105,10 @@ impl Plugin for CharacterWorldMovementsPlaygroundPlugin {
 					present_cells.after(generate_cells),
 					drive_player_locomotion
 						.after(PlayerControlSystems)
+						.before(CharacterHostSystems::Anim),
+					prepare_terrain_pitch.after(drive_player_locomotion),
+					apply_terrain_pitch
+						.after(prepare_terrain_pitch)
 						.before(CharacterHostSystems::Anim),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
