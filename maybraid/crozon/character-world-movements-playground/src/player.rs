@@ -1,8 +1,4 @@
-//! Capsule player + third-person character mode for the terrain playground.
-//!
-//! Movement logic follows Avian's `dynamic_character_3d` example (dynamic body,
-//! shape-cast grounded check, jump impulse), with walk direction relative to
-//! the camera yaw.
+//! Capsule player + third-person character mode.
 
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
@@ -37,10 +33,10 @@ pub(crate) struct PlayerControlSystems;
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaygroundMode {
-	/// Free-look fly camera (default).
-	#[default]
+	/// Free-look fly camera.
 	Free,
-	/// Capsule character with third-person camera.
+	/// Capsule or Crozon character with third-person camera.
+	#[default]
 	Character,
 }
 
@@ -112,7 +108,6 @@ fn spawn_player(
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 ) {
-	// Startup: only base noise exists yet; `generate_cells` repositions onto composed height.
 	let center = layout.region_center_xz();
 	let spawn = player_spawn_point(&layout, base.0.height_at(center.x, center.z));
 	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
@@ -161,7 +156,7 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
 }
 
-/// Reposition the player after terrain layout regeneration.
+/// Reposition the player after terrain generation.
 pub fn respawn_player_on_layout(
 	layout: &TerrainCellLayout,
 	elevation: f32,

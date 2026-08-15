@@ -26,7 +26,8 @@ pub mod socket;
 pub mod species;
 
 pub use anim::{
-	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimId, AnimMailbox, AnimRef, AnimRefRoot,
+	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId, AnimMailbox, AnimRef,
+	AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
 };
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};

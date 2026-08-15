@@ -34,8 +34,9 @@ get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
 [`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
 character. Proportion pose is [`ActiveRigPose`](src/rig.rs) on the rig member
 ([`maintain_resolved_pose`](src/pose.rs)). Clips are [`AnimRefRoot`](src/anim.rs)
-on the body-rig host (default still); the mailbox transitions from the last
-sampled pose when the clip changes. [`CharacterComponentsPlugin`](src/plugin.rs)
+on the body-rig host (default still). [`AnimClip`](src/anim.rs) is the identity
+(variant + sampler knobs); the mailbox transitions on [`AnimId`](src/anim.rs)
+when the variant changes, not when knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs)
 owns membership, bone map, socket/skin fulfill, pose, and the mailbox. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
@@ -106,6 +107,14 @@ root — not the whole world.
 cargo test -p crozon-characters
 cargo test -p crozon-character-ui-menus
 cargo check -p crozon-character-concepts-playground
+cargo check -p crozon-character-world-movements-playground
+```
+
+World locomotion (walk / run / jump on a small Durham patch) is
+[`character-world-movements-playground`](../character-world-movements-playground/):
+
+```bash
+cargo run -p crozon-character-world-movements-playground
 ```
 
 Spawn from the playground UI (species picker) or CLI:
