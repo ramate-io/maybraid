@@ -47,7 +47,12 @@ advances time only; no bone writes, no rays.
 |---|---|
 | `RigNode::host` (body) | `AnimRefRoot`, `AnimateBones`, `AnimateEffects` (capability / fallback) |
 | `RigNode::scene_with_level` | per-band `AnimateBones` / `AnimateEffects` |
-| Character spawn / `scene_with_level` | `ApplyTerrainPitch` on High/Medium; omitted on Low/UltraLow |
+| Character spawn | `ApplyTerrainPitch` on the host (capability / prepare opt-in) |
+| Character `scene_with_level` **and** `scene_chunks_with_level` | `ApplyTerrainPitch` on High/Medium; omitted on Low/UltraLow |
+
+Chunk fulfill is the live path for character hosts. Pitch must be stamped there,
+not only in `scene_with_level`, or `shown_level_has::<ApplyTerrainPitch>` goes
+false as soon as a level root is shown.
 
 Systems query the **shown** `LodLevelRoot` (and its content children). If no
 level exists yet, they fall back to the host’s own markers.
