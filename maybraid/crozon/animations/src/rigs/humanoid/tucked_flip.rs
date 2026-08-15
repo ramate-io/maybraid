@@ -5,9 +5,11 @@ use crate::animations::{FixedPosition, TuckedFlip};
 use crate::{Animation, Effects};
 
 impl<R: HumanoidRig> Animation<R> for TuckedFlip<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		self.tuck.apply_fixed(rig);
+	fn apply_for(&self, rig: &mut R, _progress: f32) {
+		let _ = self.tuck.apply_fixed(rig);
+	}
 
+	fn effects_for(&self, _rig: &R, progress: f32) -> Effects {
 		let pitch = self.pitch_radians(progress);
 		Effects {
 			r#move: (pitch.abs() > f32::EPSILON)

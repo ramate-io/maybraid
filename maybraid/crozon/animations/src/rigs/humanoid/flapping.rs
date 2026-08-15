@@ -2,13 +2,12 @@ use crozon_rigs::humanoid::HumanoidRig;
 
 use crate::animations::Flapping;
 use crate::rigs::humanoid::wing::{apply_flight_body, apply_flight_wings};
-use crate::{Animation, Effects};
+use crate::Animation;
 
 impl<R: HumanoidRig> Animation<R> for Flapping {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		apply_flight_body(rig);
 		apply_flight_wings(rig, self.flap_amount(progress));
-		Effects::default()
 	}
 }
 

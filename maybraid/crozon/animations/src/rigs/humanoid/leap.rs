@@ -2,7 +2,7 @@ use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::animations::{smoothstep, UprightLeap, AIR_END, TAKEOFF_END};
 use crate::rigs::humanoid::apply::{apply_arm, apply_leg, apply_root};
-use crate::{Animation, Effects, Progress};
+use crate::{Animation, Progress};
 
 #[derive(Clone, Copy)]
 struct LeapPose {
@@ -19,14 +19,13 @@ struct LeapPose {
 }
 
 impl<R: HumanoidRig> Animation<R> for UprightLeap<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let pose = self.pose_at(Progress(progress).clamp());
 		apply_leg(rig, Side::Left, pose.left_femur, pose.left_shin);
 		apply_leg(rig, Side::Right, pose.right_femur, pose.right_shin);
 		apply_root(rig, pose.lean);
 		apply_arm(rig, Side::Left, pose.left_shoulder, 0.0, pose.left_humerus, 0.0, pose.elbow);
 		apply_arm(rig, Side::Right, pose.right_shoulder, 0.0, pose.right_humerus, 0.0, pose.elbow);
-		Effects::default()
 	}
 }
 
@@ -115,6 +114,7 @@ mod tests {
 
 	use super::*;
 	use crate::animations::{Leap, Squat, TwoFootedJump};
+	use crate::Effects;
 
 	fn femur_swing(rig: &HumanoidV0Rig, side: Side) -> f32 {
 		rig.pose().get(&rig.leg(side).femur.name).expect("femur").swing

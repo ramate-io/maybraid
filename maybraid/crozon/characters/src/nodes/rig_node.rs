@@ -9,13 +9,13 @@ use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 use scene_ref::SceneRef;
 
-use crate::anim::AnimRefRoot;
 use crate::assets::AssetNormalization;
 use crate::rig::{
 	ActiveRigPose, BoneMap, CharacterRig, LodCharacterRig, RigBindScales, RigSkeletonKind,
 };
 use crate::scene_children::maybe_component;
 use crate::socket::{RigId, SocketRef, SocketRefRoot};
+use crozon_character_motion::{motion_policy, AnimRefRoot, AnimateBones, AnimateEffects};
 
 /// Authoring IR for a character armature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -100,8 +100,21 @@ impl RigNode {
 		self
 	}
 
-	fn content_for_level(&self, _level: LodSceneLevel) -> impl Scene + 'static {
-		self.scene.clone().scene()
+	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
+		let policy = motion_policy(level);
+		let content = self.scene.clone().scene();
+		if self.id != RigId::Body {
+			return (
+				content,
+				maybe_component(None::<AnimateBones>),
+				maybe_component(None::<AnimateEffects>),
+			);
+		}
+		(
+			content,
+			maybe_component(policy.animate_bones()),
+			maybe_component(policy.animate_effects()),
+		)
 	}
 }
 
@@ -141,7 +154,10 @@ impl LodScene for RigNode {
 		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
 		let pose = ActiveRigPose { pose: node.pose.clone() };
 		let socket = node.socket.map(SocketRefRoot);
-		let anim = (node.id == RigId::Body).then_some(AnimRefRoot::default());
+		let body = node.id == RigId::Body;
+		let anim = body.then_some(AnimRefRoot::default());
+		let bones = body.then_some(AnimateBones);
+		let effects = body.then_some(AnimateEffects);
 		(
 			lod_host_scene_pending(level, bounds),
 			bsn! {
@@ -155,6 +171,8 @@ impl LodScene for RigNode {
 			},
 			maybe_component(socket),
 			maybe_component(anim),
+			maybe_component(bones),
+			maybe_component(effects),
 		)
 	}
 }

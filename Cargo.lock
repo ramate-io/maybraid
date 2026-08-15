@@ -2794,6 +2794,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "crozon-character-motion"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "crozon-rigs",
+ "ground",
+ "lod",
+ "malo-animations",
+]
+
+[[package]]
 name = "crozon-character-playground"
 version = "0.0.1"
 dependencies = [
@@ -2831,6 +2843,7 @@ dependencies = [
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",
+ "ground-avian",
  "lod",
  "log",
  "render-item",
@@ -2846,9 +2859,9 @@ dependencies = [
  "character-ui-menu",
  "clap",
  "crozon-character-items",
+ "crozon-character-motion",
  "crozon-rigs",
  "lod",
- "malo-animations",
  "material-ref",
  "scene-ref",
 ]
@@ -3027,6 +3040,7 @@ dependencies = [
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",
+ "ground-avian",
  "lod",
  "log",
  "render-item",
@@ -3580,6 +3594,22 @@ name = "grid"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9e2d4c0a8296178d8802098410ca05d86b17a10bb5ab559b3fb404c1f948220"
+
+[[package]]
+name = "ground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "ground-avian"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "ground",
+]
 
 [[package]]
 name = "guillotiere"

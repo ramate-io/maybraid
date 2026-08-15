@@ -5,7 +5,11 @@ use lod::{add_lod_refresh_chunk_for, LodRefreshCorePlugin};
 use material_ref::StandardMaterialRefPlugin;
 use scene_ref::SceneRefPlugin;
 
-use crate::plugin::{add_character_components_host, CharacterComponentsPlugin};
+use crozon_character_motion::{CharacterMotionPlugin, CharacterMotionSystems};
+
+use crate::plugin::{
+	add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems,
+};
 use crate::species::{
 	braidman::Braidman, brenal::Brenal, brodler::Brodler, brokker::Brokker, caole::Caole,
 	chupri::Chupri, claber::Claber, croconot::Croconot, dui::Dui, epiphant::Epiphant,
@@ -35,6 +39,10 @@ impl Plugin for CharacterHostsPlugin {
 		if !app.is_plugin_added::<CharacterComponentsPlugin>() {
 			app.add_plugins(CharacterComponentsPlugin);
 		}
+		if !app.is_plugin_added::<CharacterMotionPlugin>() {
+			app.add_plugins(CharacterMotionPlugin);
+		}
+		app.configure_sets(Update, CharacterMotionSystems::Anim.after(CharacterHostSystems::Pose));
 		add_lod_refresh_chunk_for::<RigNode>(app);
 		add_lod_refresh_chunk_for::<PartNode>(app);
 		add_character_components_host::<Clothed<Braidman>>(app);

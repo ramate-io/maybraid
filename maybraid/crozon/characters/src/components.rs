@@ -14,7 +14,9 @@ use crate::assets::AssetNormalization;
 use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
-use crate::scene_children::scene_children;
+use crozon_character_motion::{motion_policy, ApplyTerrainPitch};
+
+use crate::scene_children::{maybe_component, scene_children};
 use crate::socket::{RigId, SkinRef};
 
 /// Domain IR exposed by a character (or character wrapper) for structural composition.
@@ -161,7 +163,11 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		component_only_scene(&self.0, lod_ref, level)
+		let policy = motion_policy(level);
+		(
+			component_only_scene(&self.0, lod_ref, level),
+			maybe_component(policy.apply_terrain_pitch()),
+		)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
@@ -251,7 +257,7 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert((host, CharacterRoot));
+	commands.entity(entity).insert((host, CharacterRoot, ApplyTerrainPitch));
 	vec![entity]
 }
 

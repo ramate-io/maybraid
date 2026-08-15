@@ -2,7 +2,7 @@ use crozon_rigs::{quadruped::QuadrupedRig, Side};
 
 use crate::animations::{smoothstep, QuadrupedLeap, AIR_END, TAKEOFF_END};
 use crate::rigs::quadruped::apply::{apply_front_leg, apply_hind_leg, apply_neck, apply_spine};
-use crate::{Animation, Effects, Progress};
+use crate::{Animation, Progress};
 
 const PAIR_STAGGER: f32 = 0.08;
 
@@ -16,7 +16,7 @@ struct QuadLeapPose {
 }
 
 impl<R: QuadrupedRig> Animation<R> for QuadrupedLeap<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let t = Progress(progress).clamp();
 		let pose = self.pose_at(t);
 		for side in [Side::Left, Side::Right] {
@@ -25,11 +25,7 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedLeap<R> {
 				Side::Right => PAIR_STAGGER,
 			};
 			let delayed = Progress((t - stagger).max(0.0)).clamp();
-			let side_pose = if (delayed - t).abs() < 1e-4 {
-				pose
-			} else {
-				self.pose_at(delayed)
-			};
+			let side_pose = if (delayed - t).abs() < 1e-4 { pose } else { self.pose_at(delayed) };
 			apply_hind_leg(
 				rig,
 				side,
@@ -49,7 +45,6 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedLeap<R> {
 		}
 		apply_spine(rig, pose.spine * 0.35, pose.spine);
 		apply_neck(rig, -pose.spine * self.neck_follow);
-		Effects::default()
 	}
 }
 
@@ -95,7 +90,8 @@ impl<Rig> QuadrupedLeap<Rig> {
 		let front_absorb = (front_u * std::f32::consts::PI).sin();
 		let hind_absorb = (hind_u * std::f32::consts::PI).sin();
 		QuadLeapPose {
-			hind_thigh: -self.air_tuck * 0.15 * (1.0 - hind_u) - self.land_compress * 0.2 * hind_absorb,
+			hind_thigh: -self.air_tuck * 0.15 * (1.0 - hind_u)
+				- self.land_compress * 0.2 * hind_absorb,
 			front_thigh: -self.land_compress * 0.25 * front_absorb,
 			hind_shin: self.land_compress * hind_absorb,
 			front_shin: self.land_compress * front_absorb,
@@ -115,6 +111,7 @@ mod tests {
 	use crate::animations::Leap;
 
 	use super::*;
+	use crate::Effects;
 
 	fn apply_leap(rig: &mut QuadrupedV0Rig, progress: f32) -> Effects {
 		QuadrupedLeap::from_leap(&Leap::default()).apply(rig, progress)
