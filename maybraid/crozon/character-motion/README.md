@@ -1,8 +1,9 @@
 # Character motion
 
 Per-frame articulation for Crozon characters. Recipes in `crozon-characters`
-**stamp** identity; this crate **realizes** it. Motion does not implement
-`LodScene` or species recipes.
+**stamp** host identity; this crate **syncs** host motion markers from the shown
+LOD band and **realizes** clips / pitch. Motion does not implement `LodScene` or
+species recipes.
 
 ## Crate graph
 
@@ -15,7 +16,7 @@ crozon-rigs
 
 crozon-character-motion   # this crate
         ↑
-crozon-characters         # recipes; host() / scene_with_level stamp markers
+crozon-characters         # recipes; host() stamps initial markers
         ↑
 playgrounds
 ```
@@ -27,35 +28,29 @@ WASD / Space
   → physics capsule (Avian)
   → drive_player_locomotion writes AnimRefRoot on the body host
 
-shown LodLevelRoot has AnimateBones + AnimateEffects + ApplyTerrainPitch
-  → tick_anim_mailbox
-       apply_for  → bone pose (if AnimateBones)
-       effects_for → armature root-motion (if AnimateEffects)
-  → apply_terrain_pitch::<AvianElevationProbe>
-       2× hit_down (front/hind); sides only if roll_weight > 0
-       slerp visual rotation; capsule owns Y
+sync_motion_markers
+  → shown LodLevelRoot (else desired / High) → motion_policy
+  → insert/remove AnimateBones / AnimateEffects on body host
+  → insert/remove ApplyTerrainPitch on character root
+
+tick_anim_mailbox          # every body: advance clip time
+apply_anim_mailbox         # With<AnimateBones|AnimateEffects>: sample + write
+apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation
 ```
 
-UltraLow: same `AnimRefRoot` on the host, shown child has no markers → mailbox
-advances time only; no bone writes, no rays.
+UltraLow: sync strips markers → far hosts still tick time, but bone writes and
+rays are archetype-filtered out.
 
-## LOD: host vs shown child
+## LOD: host markers
 
-**Do not rebuild a level to flip a bool.** Warm bands already have the right marker.
+**Do not stamp motion markers on level-content children.** Chunk fulfill only
+spawns nested rig/part hosts. Runtime truth is on the host:
 
 | Where | What |
 |---|---|
-| `RigNode::host` (body) | `AnimRefRoot`, `AnimateBones`, `AnimateEffects` (capability / fallback) |
-| `RigNode::scene_with_level` | per-band `AnimateBones` / `AnimateEffects` |
-| Character spawn | `ApplyTerrainPitch` on the host (capability / prepare opt-in) |
-| Character `scene_with_level` **and** `scene_chunks_with_level` | `ApplyTerrainPitch` on High/Medium; omitted on Low/UltraLow |
-
-Chunk fulfill is the live path for character hosts. Pitch must be stamped there,
-not only in `scene_with_level`, or `shown_level_has::<ApplyTerrainPitch>` goes
-false as soon as a level root is shown.
-
-Systems query the **shown** `LodLevelRoot` (and its content children). If no
-level exists yet, they fall back to the host’s own markers.
+| `RigNode::host` (body) | `AnimRefRoot`; initial `AnimateBones` / `AnimateEffects` from `motion_policy` |
+| Character spawn | Initial `ApplyTerrainPitch` from `motion_policy` |
+| `sync_motion_markers` | Keeps those host markers aligned with the **shown** band |
 
 | Level | bones | effects | pitch |
 |---|---|---|---|
@@ -65,7 +60,7 @@ level exists yet, they fall back to the host’s own markers.
 | UltraLow / distance / resolution | no | no | no |
 
 This is the default linear ramp in [`motion_policy`](src/policy.rs), not a
-per-recipe regime. Stamp markers yourself in `scene_with_level` to differ.
+per-recipe regime. Sync a different map yourself to differ.
 
 ## Bevy systems
 
@@ -79,16 +74,14 @@ No clip sampling. No rays.
 
 | System | Set | Does |
 |---|---|---|
-| `prepare_anim_mailbox` | `Anim` | Insert typed rig, `AnimBone`s, `AnimMailbox` once the bone map is ready |
-| `tick_anim_mailbox` | `Anim` | Advance time; `apply_for` / `effects_for` gated by the shown child |
-| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — the app adds it with a concrete `ElevationProbe` |
+| `sync_motion_markers` | `Anim` | Shown band → host marker insert/remove |
+| `prepare_anim_mailbox` | `Anim` | Typed rig + `AnimMailbox` once the bone map is ready |
+| `tick_anim_mailbox` | `Anim` | Advance time on every body mailbox |
+| `apply_anim_mailbox` | `Anim` | Sample/write only `With<AnimateBones\|AnimateEffects>` |
+| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>` |
 
 Order `CharacterMotionSystems::Anim` after `CharacterHostSystems::Pose`.
 Order elevation after physics / locomotion.
-
-### In `ground-avian`
-
-No character systems. Only `AvianElevationProbe`.
 
 ### In playgrounds
 
@@ -104,59 +97,24 @@ No character systems. Only `AvianElevationProbe`.
 
 ### Play a clip
 
-Insert `AnimRefRoot(AnimRef::new(AnimClip::walk()))` on the **body** rig host
-(the entity with `AnimRefRoot` from `RigNode::host`). The mailbox transitions
-on `AnimId` (variant), not knob values.
-
-`ConceptAnimation` maps to `AnimClip` in `crozon-characters` (`From` impls).
-Do not put concept types in this crate.
-
-### Author a new clip
-
-1. Implement `Animation<Rig>` in `malo-animations`:
-   - `apply_for` writes bones only
-   - `effects_for` is read-only (lengths + time) and returns `Effects`
-   - `apply` is the default wrapper — do not override it
-2. Composites (`Mix`, `Transition`) must call the split on children.
-3. Add a variant to `AnimClip` / `AnimId` here and a `From<ConceptAnimation>`
-   arm in `crozon-characters` if the concepts screen should list it.
+Insert `AnimRefRoot(AnimRef::new(AnimClip::walk()))` on the **body** rig host.
+The mailbox transitions on `AnimId` (variant), not knob values.
 
 ### Gate work by LOD
 
-Stamp markers in `scene_with_level`. [`motion_policy`](src/policy.rs) is the
-shared linear default (High → UltraLow drops work). A different
-`LodSceneLevel` → marker map is a different stamp in `scene_with_level`, not
-a parameter to that function. To add a new capability, extend `MotionPolicy`
-and the systems that read `shown_level_has::<YourMarker>`. Do not rebuild a
-level to flip a bool.
+Host markers + `With<>` on expensive systems. [`motion_policy`](src/policy.rs) is
+the shared table `sync_motion_markers` applies. To add a capability, extend
+`MotionPolicy` and sync a new host marker.
 
 ### Stand on colliders (not a heightfield)
 
-Implement `ground::ElevationProbe` (or use `AvianElevationProbe`). The apply
-loop is a **function** generic over the probe — wrap it in a concrete Bevy
-system that takes your `SystemParam` probe (generic `fn`s are not systems):
-
-```rust
-fn apply_avian_terrain_pitch(time: Res<Time>, probe: AvianElevationProbe, /* queries */) {
-    apply_terrain_pitch(time, probe, /* queries */);
-}
-
-// then
-apply_avian_terrain_pitch
-    .in_set(CharacterMotionSystems::Elevation)
-```
-
-Exclude the physics body so the capsule is not a hit. Short max distance
-(`PROBE_MAX_DISTANCE`). Side rays run only when `TerrainPitch.roll_weight > 0`
-(family default is 0).
-
-Opt a species into bank by setting `TerrainPitch.roll_weight` after prepare.
-Keep sagittal pitch; do not write visual Y (capsule owns height).
+Implement `ground::ElevationProbe` (or use `AvianElevationProbe`). Wrap the
+generic apply loop in a concrete system. Side rays run only when
+`TerrainPitch.roll_weight > 0`.
 
 ### Jump / airborne
 
-Insert `SuspendTerrainPitch` on the **physics parent** of the visual. Pitch
-blends to 0 until it is removed.
+Insert `SuspendTerrainPitch` on the **physics parent** of the visual.
 
 ## What this crate is not
 

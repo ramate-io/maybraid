@@ -1,9 +1,9 @@
 //! Latest-wins mailbox that transitions from the last applied [`RigPose`].
 //!
-//! Advance clip time always (avoids a pop when a band returns). Write bones only
-//! when the shown [`lod::LodLevelRoot`] has [`AnimateBones`]; write root-motion
-//! only when it has [`AnimateEffects`].
+//! [`tick_anim_mailbox`] advances clip time for every body host. [`apply_anim_mailbox`]
+//! samples and writes only hosts with [`AnimateBones`] and/or [`AnimateEffects`].
 
+use bevy::ecs::query::{Has, Or};
 use bevy::prelude::*;
 use crozon_rigs::{
 	forelimbed::ForelimbedRig,
@@ -12,7 +12,6 @@ use crozon_rigs::{
 	},
 	BonePose, Name as RigName, RigPose,
 };
-use lod::{LodLevelRoot, LodLevelRoots};
 use malo_animations::{
 	animations::{Jab, QuadrupedLeap, QuadrupedRun, Tuck, TwoFootedTuckedFlip, UprightLeap},
 	Animation, Effects,
@@ -21,7 +20,6 @@ use malo_animations::{
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
 use crate::markers::{AnimateBones, AnimateEffects};
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
-use crate::shown::shown_level_has;
 
 const BLEND_DURATION: f32 = 0.15;
 
@@ -62,8 +60,8 @@ impl AnimMailbox {
 
 /// Insert typed rigs, [`AnimBone`]s, and [`AnimMailbox`] once the bone map is ready.
 ///
-/// Does not require the shown child to have [`AnimateBones`] — coming back into
-/// range should not rebuild the mailbox.
+/// Does not require [`AnimateBones`] — coming back into range should not rebuild
+/// the mailbox.
 pub fn prepare_anim_mailbox(
 	mut commands: Commands,
 	hosts: Query<
@@ -118,67 +116,22 @@ pub fn prepare_anim_mailbox(
 	}
 }
 
-/// Sample the requested clip; on clip change, blend from the last output pose.
+/// Advance clip / blend time for every body mailbox (cheap; runs far from camera too).
 pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	mut hosts: Query<
-		(
-			Entity,
-			&AnimRefRoot,
-			&mut AnimMailbox,
-			&BoneMap,
-			&CharacterRig,
-			&mut Transform,
-			Option<&mut HumanoidV0Rig>,
-			Option<&mut QuadrupedV0Rig>,
-			Option<&mut ForelimbedV0Rig>,
-		),
+		(&AnimRefRoot, &mut AnimMailbox, &CharacterRig, &BoneMap),
 		(With<AnimMailbox>, Without<AnimBone>),
 	>,
-	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
-	children: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	visibilities: Query<&Visibility>,
-	animate_bones: Query<(), With<AnimateBones>>,
-	animate_effects: Query<(), With<AnimateEffects>>,
+	bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {
 	let dt = time.delta_secs();
-	for (
-		host,
-		root,
-		mut mailbox,
-		bone_map,
-		character_rig,
-		mut armature,
-		humanoid,
-		quadruped,
-		forelimbed,
-	) in &mut hosts
-	{
+	for (root, mut mailbox, character_rig, bone_map) in &mut hosts {
 		if character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
 
-		let write_bones = shown_level_has::<AnimateBones>(
-			host,
-			&children,
-			&level_roots_bags,
-			&root_keys,
-			&visibilities,
-			&animate_bones,
-		);
-		let write_effects = shown_level_has::<AnimateEffects>(
-			host,
-			&children,
-			&level_roots_bags,
-			&root_keys,
-			&visibilities,
-			&animate_effects,
-		);
-
-		let requested = root.0.clip;
-		let requested_id = requested.id();
+		let requested_id = root.0.clip.id();
 		if mailbox.last != Some(requested_id) {
 			mailbox.from_pose = if mailbox.output.is_empty() {
 				rest_pose(bone_map, &bones)
@@ -194,11 +147,50 @@ pub fn tick_anim_mailbox(
 		if mailbox.blending() {
 			mailbox.blend_progress = (mailbox.blend_progress + dt / BLEND_DURATION).min(1.0);
 		}
+	}
+}
 
-		if !write_bones && !write_effects {
+/// Sample and write bones / root-motion only when the host carries those markers.
+pub fn apply_anim_mailbox(
+	mut hosts: Query<
+		(
+			&AnimRefRoot,
+			&mut AnimMailbox,
+			&BoneMap,
+			&CharacterRig,
+			&mut Transform,
+			Has<AnimateBones>,
+			Has<AnimateEffects>,
+			Option<&mut HumanoidV0Rig>,
+			Option<&mut QuadrupedV0Rig>,
+			Option<&mut ForelimbedV0Rig>,
+		),
+		(
+			With<AnimMailbox>,
+			Without<AnimBone>,
+			Or<(With<AnimateBones>, With<AnimateEffects>)>,
+		),
+	>,
+	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
+) {
+	for (
+		root,
+		mut mailbox,
+		bone_map,
+		character_rig,
+		mut armature,
+		write_bones,
+		write_effects,
+		humanoid,
+		quadruped,
+		forelimbed,
+	) in &mut hosts
+	{
+		if character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
 
+		let requested = root.0.clip;
 		let rest = rest_pose(bone_map, &bones);
 		let (sampled, effects) = match character_rig.skeleton {
 			RigSkeletonKind::Humanoid => {
@@ -261,6 +253,7 @@ pub fn tick_anim_mailbox(
 		}
 	}
 }
+
 
 fn rest_pose(
 	bone_map: &BoneMap,

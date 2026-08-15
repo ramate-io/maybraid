@@ -3,8 +3,9 @@
 //! `From<ConceptAnimation>` stays here so motion does not depend on recipes.
 
 pub use crozon_character_motion::{
-	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId, AnimMailbox, AnimRef,
-	AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
+	AnimMailbox, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
+	TwoFootedTuckedFlipParams,
 };
 
 use crate::concepts::ConceptAnimation;

@@ -5,48 +5,32 @@
 
 use bevy::prelude::*;
 use ground::ElevationProbe;
-use lod::{LodLevelRoot, LodLevelRoots};
 
 use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
 use crate::pitch::{facing_with_tilt, observed_pitch, observed_roll, step_toward, TerrainPitch};
-use crate::shown::shown_level_has;
 
 /// Start the ray this far above the body so it clears the capsule.
 pub const PROBE_LIFT: f32 = 2.0;
 /// Short downward cast — characters stand on nearby colliders, not a heightfield.
 pub const PROBE_MAX_DISTANCE: f32 = 6.0;
 
-/// Tilt each visual that has [`TerrainPitch`] when the shown LOD child (or the
-/// host, before a level exists) carries [`ApplyTerrainPitch`].
+/// Tilt visuals that carry both [`TerrainPitch`] and host [`ApplyTerrainPitch`].
 ///
 /// `P` is typically [`ground_avian::AvianElevationProbe`]. Register after
 /// physics / locomotion. Exclude the physics parent so the capsule is not a hit.
 pub fn apply_terrain_pitch<P>(
 	time: Res<Time>,
 	mut probe: P,
-	mut visuals: Query<(Entity, &mut Transform, &mut TerrainPitch, Option<&ChildOf>)>,
+	mut visuals: Query<
+		(Entity, &mut Transform, &mut TerrainPitch, Option<&ChildOf>),
+		With<ApplyTerrainPitch>,
+	>,
 	parents: Query<(&GlobalTransform, Has<SuspendTerrainPitch>)>,
-	children: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	visibilities: Query<&Visibility>,
-	apply_pitch: Query<(), With<ApplyTerrainPitch>>,
 ) where
 	P: ElevationProbe,
 {
 	let dt = time.delta_secs();
-	for (entity, mut visual, mut pitch, child_of) in &mut visuals {
-		if !shown_level_has::<ApplyTerrainPitch>(
-			entity,
-			&children,
-			&level_roots_bags,
-			&root_keys,
-			&visibilities,
-			&apply_pitch,
-		) {
-			continue;
-		}
-
+	for (_entity, mut visual, mut pitch, child_of) in &mut visuals {
 		let facing = {
 			let f = -visual.forward();
 			Vec3::new(f.x, 0.0, f.z)

@@ -2,9 +2,10 @@
 
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use crozon_characters::{apply_terrain_pitch, SuspendTerrainPitch, TerrainPitch};
+use crozon_characters::{
+	apply_terrain_pitch, ApplyTerrainPitch, SuspendTerrainPitch, TerrainPitch,
+};
 use ground_avian::AvianElevationProbe;
-use lod::{LodLevelRoot, LodLevelRoots};
 
 use crate::player::{CharacterController, Jumping};
 
@@ -25,23 +26,11 @@ pub(crate) fn sync_suspend_terrain_pitch(
 pub(crate) fn apply_avian_terrain_pitch(
 	time: Res<Time>,
 	probe: AvianElevationProbe,
-	visuals: Query<(Entity, &mut Transform, &mut TerrainPitch, Option<&ChildOf>)>,
+	visuals: Query<
+		(Entity, &mut Transform, &mut TerrainPitch, Option<&ChildOf>),
+		With<ApplyTerrainPitch>,
+	>,
 	parents: Query<(&GlobalTransform, Has<SuspendTerrainPitch>)>,
-	children: Query<&Children>,
-	level_roots_bags: Query<(), With<LodLevelRoots>>,
-	root_keys: Query<&LodLevelRoot>,
-	visibilities: Query<&Visibility>,
-	apply_pitch: Query<(), With<crozon_characters::ApplyTerrainPitch>>,
 ) {
-	apply_terrain_pitch(
-		time,
-		probe,
-		visuals,
-		parents,
-		children,
-		level_roots_bags,
-		root_keys,
-		visibilities,
-		apply_pitch,
-	);
+	apply_terrain_pitch(time, probe, visuals, parents);
 }

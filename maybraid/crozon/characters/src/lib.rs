@@ -5,8 +5,9 @@
 //! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
 //! `Changed`), not LOD refresh. Per-frame clips and terrain pitch live in
-//! [`crozon_character_motion`]; this crate stamps markers from
-//! [`lod::LodScene::host`] / [`lod::LodScene::scene_with_level`].
+//! [`crozon_character_motion`]; this crate stamps **initial** host markers from
+//! [`lod::LodScene::host`] / spawn. Motion sync keeps those markers aligned with
+//! the shown LOD band.
 
 pub mod anim;
 pub mod assembly;
@@ -29,8 +30,9 @@ pub mod species;
 pub mod terrain_pitch;
 
 pub use anim::{
-	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId, AnimMailbox, AnimRef,
-	AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
+	AnimMailbox, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
+	TwoFootedTuckedFlipParams,
 };
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
@@ -40,8 +42,9 @@ pub use components::{
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{
-	apply_terrain_pitch, motion_policy, AnimateBones, AnimateEffects, ApplyTerrainPitch,
-	CharacterMotionPlugin, CharacterMotionSystems, MotionPolicy, SuspendTerrainPitch,
+	apply_terrain_pitch, motion_policy, sync_motion_markers, AnimateBones, AnimateEffects,
+	ApplyTerrainPitch, CharacterMotionPlugin, CharacterMotionSystems, MotionPolicy,
+	SuspendTerrainPitch,
 };
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use hosts::CharacterHostsPlugin;

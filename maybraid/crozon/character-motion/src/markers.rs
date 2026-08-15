@@ -1,6 +1,7 @@
-//! LOD band policy, baked onto the host (defaults) and each [`lod::LodLevelRoot`] child.
+//! LOD band markers on the **host**. Sync inserts/removes them from the shown level.
 //!
-//! Systems read the **shown** level child. Do not rebuild a level to flip a bool.
+//! Expensive systems filter with `With<AnimateBones>` / `With<AnimateEffects>` /
+//! `With<ApplyTerrainPitch>`. Do not stamp these on level-content children.
 
 use bevy::prelude::*;
 
@@ -12,7 +13,7 @@ pub struct AnimateBones;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimateEffects;
 
-/// This band (or host, before a level exists) wants visual terrain pitch.
+/// Run visual terrain pitch on this character root.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ApplyTerrainPitch;
 

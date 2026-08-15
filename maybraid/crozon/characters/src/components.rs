@@ -14,9 +14,9 @@ use crate::assets::AssetNormalization;
 use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
-use crozon_character_motion::{motion_policy, ApplyTerrainPitch};
+use crozon_character_motion::motion_policy;
 
-use crate::scene_children::{maybe_component, scene_children};
+use crate::scene_children::scene_children;
 use crate::socket::{RigId, SkinRef};
 
 /// Domain IR exposed by a character (or character wrapper) for structural composition.
@@ -163,17 +163,10 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 	}
 
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		let policy = motion_policy(level);
-		(
-			component_only_scene(&self.0, lod_ref, level),
-			maybe_component(policy.apply_terrain_pitch()),
-		)
+		component_only_scene(&self.0, lod_ref, level)
 	}
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-		// Chunk fulfill is the live path; it must stamp the same motion markers
-		// as [`Self::scene_with_level`] or `shown_level_has::<ApplyTerrainPitch>`
-		// goes false as soon as a level root is shown.
 		character_scene_chunks(&self.0, lod_ref, level)
 	}
 
@@ -187,22 +180,16 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 	}
 }
 
-/// Weighted chunks for one structural level: pitch marker (if any) plus nested hosts.
+/// Weighted chunks for one structural level: nested rig/part hosts only.
+///
+/// Motion markers live on the character / body **host** and are synced from the
+/// shown LOD band — not stamped into these chunks.
 pub fn character_scene_chunks(
 	character: &impl CharacterComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
-	let policy = motion_policy(level);
 	let mut chunks = Vec::new();
-	if let Some(pitch) = policy.apply_terrain_pitch() {
-		chunks.push(SceneChunk::weighted(
-			1,
-			bsn! {
-				template_value(pitch)
-			},
-		));
-	}
 	for node in character.rig_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
@@ -260,6 +247,7 @@ where
 	let host = ComponentsOnly(character.clone());
 	let level = host.scene_lod_level(&lod_ref);
 	let pending = lod_host_scene_pending(level, bounds);
+	let policy = motion_policy(level);
 	let entity = commands
 		.spawn_scene((
 			pending,
@@ -269,7 +257,11 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert((host, CharacterRoot, ApplyTerrainPitch));
+	let mut entity_cmds = commands.entity(entity);
+	entity_cmds.insert((host, CharacterRoot));
+	if let Some(pitch) = policy.apply_terrain_pitch() {
+		entity_cmds.insert(pitch);
+	}
 	vec![entity]
 }
 

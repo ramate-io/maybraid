@@ -39,8 +39,9 @@ is the identity (variant + sampler knobs); the mailbox transitions on
 [`AnimId`](../character-motion/src/clip.rs) when the variant changes, not when
 knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs) owns membership, bone
 map, socket/skin fulfill, and pose. The mailbox and terrain pitch live in
-[`crozon-character-motion`](../character-motion/README.md) and read **shown**
-LOD children (`AnimateBones` / `AnimateEffects` / `ApplyTerrainPitch`). Do not
+[`crozon-character-motion`](../character-motion/README.md): host markers
+(`AnimateBones` / `AnimateEffects` / `ApplyTerrainPitch`) are synced from the
+shown LOD band and filter the expensive systems. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
 The playground spawn path is LodScene ([`CharacterRecipe::clothed`](src/components.rs)).

@@ -15,7 +15,7 @@ use crate::rig::{
 };
 use crate::scene_children::maybe_component;
 use crate::socket::{RigId, SocketRef, SocketRefRoot};
-use crozon_character_motion::{motion_policy, AnimRefRoot, AnimateBones, AnimateEffects};
+use crozon_character_motion::{motion_policy, AnimRefRoot};
 
 /// Authoring IR for a character armature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -100,21 +100,10 @@ impl RigNode {
 		self
 	}
 
-	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
-		let policy = motion_policy(level);
-		let content = self.scene.clone().scene();
-		if self.id != RigId::Body {
-			return (
-				content,
-				maybe_component(None::<AnimateBones>),
-				maybe_component(None::<AnimateEffects>),
-			);
-		}
-		(
-			content,
-			maybe_component(policy.animate_bones()),
-			maybe_component(policy.animate_effects()),
-		)
+	fn content_for_level(&self, _level: LodSceneLevel) -> impl Scene + 'static {
+		// Motion markers live on the body **host** and are synced from the shown
+		// band — level content is only the GLB / mesh scene.
+		self.scene.clone().scene()
 	}
 }
 
@@ -156,8 +145,9 @@ impl LodScene for RigNode {
 		let socket = node.socket.map(SocketRefRoot);
 		let body = node.id == RigId::Body;
 		let anim = body.then_some(AnimRefRoot::default());
-		let bones = body.then_some(AnimateBones);
-		let effects = body.then_some(AnimateEffects);
+		let policy = motion_policy(level);
+		let bones = body.then_some(()).and(policy.animate_bones());
+		let effects = body.then_some(()).and(policy.animate_effects());
 		(
 			lod_host_scene_pending(level, bounds),
 			bsn! {

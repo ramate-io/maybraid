@@ -1,5 +1,5 @@
-//! Per-band motion stamps. Bake once in `scene_with_level`; switching bands shows
-//! a different child — it does not rebuild the scene to flip a bool.
+//! Per-band motion stamps for **host** markers. Bake defaults at spawn; 
+//! [`crate::sync::sync_motion_markers`] keeps them aligned with the shown LOD band.
 //!
 //! [`motion_policy`] is the default linear ramp, not a registry of regimes.
 
@@ -7,7 +7,7 @@ use lod::LodSceneLevel;
 
 use crate::markers::{AnimateBones, AnimateEffects, ApplyTerrainPitch};
 
-/// Which motion markers a level child should carry.
+/// Which motion markers a host should carry for a level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MotionPolicy {
 	pub bones: bool,
@@ -37,9 +37,8 @@ impl MotionPolicy {
 /// Default linear [`LodSceneLevel`] → [`MotionPolicy`] map.
 ///
 /// One shared ramp for every character recipe: nearer bands keep more work,
-/// farther bands drop it. This is **not** a pluggable regime — a species or
-/// host that needs a different map should stamp markers itself in
-/// `scene_with_level` instead of going through this function.
+/// farther bands drop it. This is **not** a pluggable regime — a species that
+/// needs a different map should sync different host markers itself.
 ///
 /// | Level | bones | effects | pitch |
 /// |---|---|---|---|
