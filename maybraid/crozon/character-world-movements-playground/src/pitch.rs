@@ -83,8 +83,8 @@ pub(crate) fn apply_terrain_pitch(
 		(0.0, 0.0)
 	} else {
 		(
-			observed_pitch(front_h, hind_h, pitch.half_span) * pitch.weight,
-			observed_roll(left_h, right_h, pitch.half_width) * pitch.weight,
+			observed_pitch(front_h, hind_h, pitch.half_span) * pitch.pitch_weight,
+			observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
 		)
 	};
 	let dt = time.delta_secs();
@@ -94,18 +94,7 @@ pub(crate) fn apply_terrain_pitch(
 	visual.translation.y = if jumping {
 		0.0
 	} else {
-		support_lift(
-			origin.y,
-			center_h,
-			front_h,
-			hind_h,
-			left_h,
-			right_h,
-			pitch.half_span,
-			pitch.half_width,
-			pitch.pitch,
-			pitch.roll,
-		)
+		support_lift(origin.y, center_h, front_h, hind_h, pitch.half_span, pitch.pitch)
 	};
 }
 

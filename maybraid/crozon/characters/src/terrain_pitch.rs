@@ -1,9 +1,10 @@
 //! Approximate terrain pitch and roll from a rest support span. No IK.
 //!
 //! Sample ground at front / hind / left / right, take `atan(Δh / run)`, and
-//! apply a skeleton-family fraction to the visual. Mesh faces `+Z`; positive
-//! local `X` dips the nose, so sagittal slope is negated. The capsule stays
-//! upright.
+//! apply separate pitch and roll weights. Mesh faces `+Z`; positive local `X`
+//! dips the nose, so sagittal slope is negated. Family roll weight is 0
+//! (stand upright); set [`TerrainPitch::roll_weight`] to bank. The capsule
+//! stays upright and owns Y on a side slope.
 
 use bevy::prelude::*;
 
@@ -14,7 +15,9 @@ use crate::rig::RigSkeletonKind;
 pub struct TerrainPitch {
 	pub half_span: f32,
 	pub half_width: f32,
-	pub weight: f32,
+	pub pitch_weight: f32,
+	/// Fraction of observed side slope. Family default is 0; set per species to bank.
+	pub roll_weight: f32,
 	/// Local-X radians (nose down is positive).
 	pub pitch: f32,
 	/// Local-Z radians (right side up is positive).
@@ -23,7 +26,14 @@ pub struct TerrainPitch {
 
 impl TerrainPitch {
 	pub fn new(kind: RigSkeletonKind, half_span: f32, half_width: f32) -> Self {
-		Self { half_span, half_width, weight: pitch_weight(kind), pitch: 0.0, roll: 0.0 }
+		Self {
+			half_span,
+			half_width,
+			pitch_weight: pitch_weight(kind),
+			roll_weight: roll_weight(kind),
+			pitch: 0.0,
+			roll: 0.0,
+		}
 	}
 }
 
@@ -59,13 +69,18 @@ pub fn default_half_width(kind: RigSkeletonKind) -> f32 {
 	}
 }
 
-/// How much of the observed slope to apply. Long bodies need more or they sink.
+/// How much of the front/hind slope to apply. Long bodies need more or they sink.
 pub fn pitch_weight(kind: RigSkeletonKind) -> f32 {
 	match kind {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => 0.4,
 		RigSkeletonKind::Quadruped => 0.9,
 		RigSkeletonKind::Forelimbed => 0.7,
 	}
+}
+
+/// How much of the left/right slope to apply. Zero: stand upright; opt in later.
+pub fn roll_weight(_kind: RigSkeletonKind) -> f32 {
+	0.0
 }
 
 /// Midpoint of named bones in XZ, if at least one exists.
@@ -137,31 +152,22 @@ pub fn facing_with_tilt(facing_xz: Vec3, pitch: f32, roll: f32) -> Quat {
 	yaw * Quat::from_rotation_x(pitch) * Quat::from_rotation_z(roll)
 }
 
-/// Lift so support samples stay on the hip-clearance plane after tilt.
+/// Lift so the pitched front/hind chord stays on the hip-clearance plane.
+/// Side samples stay out: the capsule owns Y on a side slope.
 pub fn support_lift(
 	hip_y: f32,
 	center_height: f32,
 	front_height: f32,
 	hind_height: f32,
-	left_height: f32,
-	right_height: f32,
 	half_span: f32,
-	half_width: f32,
 	pitch: f32,
-	roll: f32,
 ) -> f32 {
 	let clearance = hip_y - center_height;
-	// +Rx dips +Z (front); +Rz raises +X (right).
+	// +Rx dips +Z (front).
 	let front_y = hip_y - pitch.sin() * half_span;
 	let hind_y = hip_y + pitch.sin() * half_span;
-	let left_y = hip_y - roll.sin() * half_width;
-	let right_y = hip_y + roll.sin() * half_width;
 	let err = |sample, y| (sample + clearance) - y;
-	err(front_height, front_y)
-		.max(err(hind_height, hind_y))
-		.max(err(left_height, left_y))
-		.max(err(right_height, right_y))
-		.max(0.0)
+	err(front_height, front_y).max(err(hind_height, hind_y)).max(0.0)
 }
 
 #[cfg(test)]
@@ -226,7 +232,20 @@ mod tests {
 	fn lift_is_small_on_a_gentle_plane() {
 		let half = 1.0;
 		let pitch = observed_pitch(0.2, -0.2, half);
-		let lift = support_lift(2.0, 0.0, 0.2, -0.2, 0.0, 0.0, half, 0.45, pitch, 0.0);
+		let lift = support_lift(2.0, 0.0, 0.2, -0.2, half, pitch);
 		assert!(lift < 0.05, "gentle planar slope should need little lift, got {lift}");
+	}
+
+	#[test]
+	fn family_roll_weight_defaults_to_zero() {
+		for kind in [
+			RigSkeletonKind::Humanoid,
+			RigSkeletonKind::Quadruped,
+			RigSkeletonKind::Forelimbed,
+			RigSkeletonKind::Neck,
+		] {
+			assert_eq!(roll_weight(kind), 0.0);
+			assert!(pitch_weight(kind) > 0.0);
+		}
 	}
 }
