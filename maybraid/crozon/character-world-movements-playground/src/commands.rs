@@ -26,6 +26,8 @@ pub enum PlaygroundCommand {
 		/// Species id (`braidman`, `mygr`, `hars`, …).
 		species: crate::character::CharacterSpecies,
 	},
+	/// Spawn every biped and quadruped on its own capsule; they share WASD / jump.
+	Stampede,
 }
 
 #[derive(Clone, Subcommand)]
@@ -60,6 +62,10 @@ impl PlaygroundCommand {
 			PlaygroundCommand::SetCharacter { species } => {
 				commands.spawn(crate::character::RequestSetCharacter { species });
 				*console = format!("set-character {}: pending", species.label());
+			}
+			PlaygroundCommand::Stampede => {
+				commands.spawn(crate::character::RequestStampede);
+				*console = "stampede: pending".into();
 			}
 		}
 	}

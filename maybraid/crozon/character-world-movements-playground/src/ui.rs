@@ -6,9 +6,9 @@ use crate::player::PlaygroundMode;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Crozon movements — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `set-character braidman`, `mode character`, `help`".into(),
+		empty_console_text: "Console: `set-character braidman`, `stampede`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
-		controls_hint: "help — set-character <species> — mode free|character".into(),
+		controls_hint: "help — set-character <species> — stampede — mode free|character".into(),
 	}
 }
 

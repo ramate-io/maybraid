@@ -17,7 +17,10 @@ use avian3d::prelude::LinearVelocity;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
-use character::{apply_set_character, drive_player_locomotion};
+use character::{
+	apply_set_character, apply_stampede, drive_player_locomotion, respawn_stampede_members,
+	StampedeMember,
+};
 use commands::{RequestModeCharacter, RequestModeFree};
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
@@ -100,7 +103,8 @@ impl Plugin for CharacterWorldMovementsPlaygroundPlugin {
 				(
 					camera_controller,
 					apply_set_character.after(capture_command_line_input::<PlaygroundCommand>),
-					apply_mode_commands.after(apply_set_character),
+					apply_stampede.after(apply_set_character),
+					apply_mode_commands.after(apply_stampede),
 					generate_cells.after(apply_mode_commands),
 					present_cells.after(generate_cells),
 					drive_player_locomotion
@@ -165,7 +169,14 @@ fn apply_mode_commands(
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+	mut herd: Query<
+		(&StampedeMember, &mut Transform, &mut LinearVelocity),
+		(Without<Player>, Without<Camera3d>),
+	>,
+	mut cameras: Query<
+		(&mut Transform, &mut CameraController),
+		(With<Camera3d>, Without<Player>, Without<StampedeMember>),
+	>,
 ) {
 	for entity in &free {
 		*mode = PlaygroundMode::Free;
@@ -186,6 +197,11 @@ fn apply_mode_commands(
 				.unwrap_or_else(|| base.0.height_at(center.x, center.z));
 			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 		}
+		respawn_stampede_members(&layout, |x, z| {
+			store
+				.composed_height_at(&layout, x, z)
+				.unwrap_or_else(|| base.0.height_at(x, z))
+		}, &mut herd);
 		commands.entity(entity).despawn();
 	}
 }
@@ -196,8 +212,15 @@ fn generate_cells(
 	mut pending: ResMut<TerrainPresentPending>,
 	mode: Res<PlaygroundMode>,
 	mut world_base: ResMut<WorldBaseTerrain>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+	mut cameras: Query<
+		(&mut Transform, &mut CameraController),
+		(With<Camera3d>, Without<Player>, Without<StampedeMember>),
+	>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+	mut herd: Query<
+		(&StampedeMember, &mut Transform, &mut LinearVelocity),
+		(Without<Player>, Without<Camera3d>),
+	>,
 ) {
 	if !dirty.0 {
 		return;
@@ -241,6 +264,11 @@ fn generate_cells(
 			.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
 		respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 	}
+	respawn_stampede_members(&layout, |x, z| {
+		index
+			.composed_height_at(x, z)
+			.unwrap_or_else(|| world_base.0.height_at(x, z))
+	}, &mut herd);
 
 	if *mode == PlaygroundMode::Free {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {

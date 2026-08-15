@@ -19,11 +19,13 @@ Motion dataflow: [`crozon-character-motion`](../character-motion/README.md).
 ```bash
 cargo run -p crozon-character-world-movements-playground
 cargo run -p crozon-character-world-movements-playground -- set-character mygr
+cargo run -p crozon-character-world-movements-playground -- stampede
 ```
 
 In-game: `/` console, `Y` or `F1` drawer.
 
 - `set-character <species>`
+- `stampede` — every biped and quadruped on its own capsule, 4 m grid, same WASD / jump events. Forelimbed species are omitted. Use `mode free` to orbit the pack.
 - `mode free|character`
 - WASD move, mouse look, Space jump
 

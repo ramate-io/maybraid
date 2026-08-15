@@ -1,6 +1,6 @@
 //! Crozon character visual on the terrain player (replaces the capsule mesh).
 
-use bevy::ecs::query::Has;
+use bevy::ecs::query::{Has, QueryFilter};
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use clap::ValueEnum;
@@ -22,13 +22,20 @@ use crozon_characters::{
 use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
-use crate::player::{Jumping, MoveWish, Player, PlayerCapsule};
+use crate::player::{
+	controller_spawn_point, park_player_for_stampede, restore_player_controller,
+	spawn_character_controller, CameraFollow, Jumping, MoveWish, Player, PlayerCapsule,
+};
+use crate::WorldBaseTerrain;
 use avian3d::prelude::LinearVelocity;
+use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 const FACE_DEADZONE: f32 = 0.05;
 const TURN_RATE: f32 = 5.5;
+/// World XZ spacing for [`RequestStampede`] so long quadrupeds do not overlap.
+const STAMPEDE_SPACING: f32 = 4.0;
 
 /// Species for `/set-character`. Default preview recipe, no concepts sliders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
@@ -65,6 +72,35 @@ pub enum CharacterSpecies {
 }
 
 impl CharacterSpecies {
+	/// Biped then quadruped preview recipes. Forelimbed species are omitted.
+	pub const STAMPEDE: &'static [Self] = &[
+		Self::Braidman,
+		Self::Brodler,
+		Self::Brokker,
+		Self::Chupri,
+		Self::Dui,
+		Self::Kaller,
+		Self::Kappler,
+		Self::Kispar,
+		Self::Lero,
+		Self::Lidder,
+		Self::Mygr,
+		Self::Spibmom,
+		Self::Tapp,
+		Self::Tipple,
+		Self::Topple,
+		Self::Tuberwaber,
+		Self::Wumbus,
+		Self::Brenal,
+		Self::Caole,
+		Self::Claber,
+		Self::Croconot,
+		Self::Epiphant,
+		Self::Hars,
+		Self::Sonyak,
+		Self::Yilter,
+	];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Braidman => "braidman",
@@ -99,14 +135,24 @@ impl CharacterSpecies {
 	}
 }
 
-/// Nested character host parented to [`Player`].
+/// Character host visual. Child of a [`crate::player::CharacterController`] capsule.
 #[derive(Component)]
 pub struct PlayerVisual;
+
+/// Independent stampede body. Grid offset from the patch center, in XZ.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct StampedeMember {
+	pub offset: Vec3,
+}
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestSetCharacter {
 	pub species: CharacterSpecies,
 }
+
+/// Spawn every biped and quadruped as its own controller; they share Move / Jump.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestStampede;
 
 pub(crate) fn apply_set_character(
 	mut commands: Commands,
@@ -114,6 +160,7 @@ pub(crate) fn apply_set_character(
 	requests: Query<(Entity, &RequestSetCharacter)>,
 	players: Query<Entity, With<Player>>,
 	visuals: Query<Entity, With<PlayerVisual>>,
+	herd: Query<Entity, With<StampedeMember>>,
 	mut capsules: Query<&mut Visibility, With<PlayerCapsule>>,
 ) {
 	let Ok(player) = players.single() else {
@@ -124,13 +171,8 @@ pub(crate) fn apply_set_character(
 	};
 
 	for (entity, request) in &requests {
-		for visual in &visuals {
-			commands.entity(visual).try_despawn();
-		}
-		for mut visibility in &mut capsules {
-			*visibility = Visibility::Hidden;
-		}
-
+		clear_herd(&mut commands, &visuals, &herd, &mut capsules);
+		restore_player_controller(&mut commands, player);
 		for spawned in spawn_species(&mut commands, request.species, Transform::IDENTITY) {
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
@@ -143,44 +185,142 @@ pub(crate) fn apply_set_character(
 	}
 }
 
-/// Walk / run / jump on the body mailbox from player speed and grounded state.
+/// Replace the current visual with every biped and quadruped, each on its own capsule.
+pub(crate) fn apply_stampede(
+	mut commands: Commands,
+	mut status: ResMut<GameCommandStatusText>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	store: Res<TerrainEntryStore>,
+	requests: Query<Entity, With<RequestStampede>>,
+	mut players: Query<(Entity, &mut LinearVelocity), With<Player>>,
+	visuals: Query<Entity, With<PlayerVisual>>,
+	herd: Query<Entity, With<StampedeMember>>,
+	mut capsules: Query<&mut Visibility, With<PlayerCapsule>>,
+) {
+	let Ok((player, mut velocity)) = players.single_mut() else {
+		for entity in &requests {
+			commands.entity(entity).despawn();
+		}
+		return;
+	};
+
+	for entity in &requests {
+		clear_herd(&mut commands, &visuals, &herd, &mut capsules);
+		park_player_for_stampede(&mut commands, player, &mut velocity);
+		let count = CharacterSpecies::STAMPEDE.len();
+		let center = layout.region_center_xz();
+		for (index, species) in CharacterSpecies::STAMPEDE.iter().copied().enumerate() {
+			let offset = stampede_offset(index, count);
+			let x = center.x + offset.x;
+			let z = center.z + offset.z;
+			let elevation = store
+				.composed_height_at(&layout, x, z)
+				.unwrap_or_else(|| base.0.height_at(x, z));
+			let body = spawn_character_controller(
+				&mut commands,
+				controller_spawn_point(x, z, elevation),
+			);
+			commands.entity(body).insert((
+				Name::new(format!("stampede-{}", species.label())),
+				StampedeMember { offset },
+			));
+			if offset.length_squared() < 1e-4 {
+				commands.entity(body).insert(CameraFollow);
+			}
+			for spawned in spawn_species(&mut commands, species, Transform::IDENTITY) {
+				commands.entity(spawned).insert((ChildOf(body), PlayerVisual));
+			}
+		}
+		commands.spawn(RequestModeCharacter);
+		status.0 = format!(
+			"stampede {} species — WASD / jump on every capsule",
+			count
+		);
+		commands.entity(entity).despawn();
+	}
+}
+
+fn clear_herd(
+	commands: &mut Commands,
+	visuals: &Query<Entity, With<PlayerVisual>>,
+	herd: &Query<Entity, With<StampedeMember>>,
+	capsules: &mut Query<&mut Visibility, With<PlayerCapsule>>,
+) {
+	for member in herd {
+		commands.entity(member).try_despawn();
+	}
+	for visual in visuals {
+		commands.entity(visual).try_despawn();
+	}
+	for mut visibility in capsules.iter_mut() {
+		*visibility = Visibility::Hidden;
+	}
+}
+
+/// Snap herd capsules to sampled ground after layout / mode resets.
+pub(crate) fn respawn_stampede_members<F: QueryFilter>(
+	layout: &TerrainCellLayout,
+	height_at: impl Fn(f32, f32) -> f32,
+	members: &mut Query<(&StampedeMember, &mut Transform, &mut LinearVelocity), F>,
+) {
+	let center = layout.region_center_xz();
+	for (member, mut transform, mut velocity) in members {
+		let x = center.x + member.offset.x;
+		let z = center.z + member.offset.z;
+		transform.translation = controller_spawn_point(x, z, height_at(x, z));
+		**velocity = Vec3::ZERO;
+	}
+}
+
+fn stampede_offset(index: usize, count: usize) -> Vec3 {
+	let cols = (count as f32).sqrt().ceil().max(1.0) as usize;
+	let row = index / cols;
+	let col = index % cols;
+	let origin = (cols as f32 - 1.0) * 0.5;
+	Vec3::new(
+		(col as f32 - origin) * STAMPEDE_SPACING,
+		0.0,
+		(row as f32 - origin) * STAMPEDE_SPACING,
+	)
+}
+
+/// Walk / run / jump on each visual from its own controller's wish and speed.
 pub(crate) fn drive_player_locomotion(
 	mut commands: Commands,
 	time: Res<Time>,
-	players: Query<(&LinearVelocity, &MoveWish, Has<Jumping>), With<Player>>,
+	controllers: Query<(&LinearVelocity, &MoveWish, Has<Jumping>)>,
 	mut visuals: Query<
-		(&CharacterMembers, &mut Transform),
+		(&CharacterMembers, &mut Transform, &ChildOf),
 		(With<PlayerVisual>, With<CharacterRoot>),
 	>,
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
-	let Ok((velocity, wish, jumping)) = players.single() else {
-		return;
-	};
-	let Ok((members, mut visual)) = visuals.single_mut() else {
-		return;
-	};
-
-	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
-	let speed = horizontal.length();
-	face_wish(&mut visual, wish.0, time.delta_secs());
-
-	for member in members.iter() {
-		let Ok(rig) = rigs.get(member) else {
+	let dt = time.delta_secs();
+	for (members, mut visual, child_of) in &mut visuals {
+		let Ok((velocity, wish, jumping)) = controllers.get(child_of.parent()) else {
 			continue;
 		};
-		if rig.role != CharacterRigRole::Body {
-			continue;
-		}
-		let clip = locomotion_clip(rig.skeleton, jumping, speed);
-		let desired = AnimRef::new(clip);
-		let needs = match anims.get(member) {
-			Ok(root) => root.0 != desired,
-			Err(_) => true,
-		};
-		if needs {
-			commands.entity(member).insert(AnimRefRoot(desired));
+		let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
+		let speed = horizontal.length();
+		face_wish(&mut visual, wish.0, dt);
+		for member in members.iter() {
+			let Ok(rig) = rigs.get(member) else {
+				continue;
+			};
+			if rig.role != CharacterRigRole::Body {
+				continue;
+			}
+			let clip = locomotion_clip(rig.skeleton, jumping, speed);
+			let desired = AnimRef::new(clip);
+			let needs = match anims.get(member) {
+				Ok(root) => root.0 != desired,
+				Err(_) => true,
+			};
+			if needs {
+				commands.entity(member).insert(AnimRefRoot(desired));
+			}
 		}
 	}
 }

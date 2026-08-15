@@ -43,12 +43,16 @@ pub enum PlaygroundMode {
 #[derive(Component)]
 pub struct Player;
 
+/// Third-person camera target. Stampede moves this onto the center herd body.
+#[derive(Component)]
+pub(crate) struct CameraFollow;
+
 /// Debug capsule mesh parented to [`Player`] (hidden when a character visual is set).
 #[derive(Component)]
 pub struct PlayerCapsule;
 
 #[derive(Component)]
-struct CharacterController;
+pub(crate) struct CharacterController;
 
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -73,6 +77,7 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
+/// Shared WASD / jump sequence. Every [`CharacterController`] applies the same events.
 #[derive(Message)]
 enum MovementAction {
 	Move(Vec2),
@@ -110,34 +115,8 @@ fn spawn_player(
 ) {
 	let center = layout.region_center_xz();
 	let spawn = player_spawn_point(&layout, base.0.height_at(center.x, center.z));
-	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
-	let mut caster_shape = collider.clone();
-	caster_shape.set_scale(Vec3::splat(0.99), 10);
-
-	let player = commands
-		.spawn((
-			Name::new("Player"),
-			Player,
-			CharacterController,
-			Transform::from_translation(spawn),
-			Visibility::default(),
-			RigidBody::Dynamic,
-			collider,
-			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-				.with_max_distance(GROUND_CAST_DISTANCE),
-			LockedAxes::ROTATION_LOCKED,
-		))
-		.insert((
-			MovementAcceleration(MOVE_ACCEL),
-			MovementDampingFactor(MOVE_DAMPING),
-			JumpImpulse(JUMP_IMPULSE),
-			MaxSlopeAngle(MAX_SLOPE_ANGLE),
-			MoveWish::default(),
-			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
-			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
-			GravityScale(1.25),
-		))
-		.id();
+	let player = spawn_character_controller(&mut commands, spawn);
+	commands.entity(player).insert((Name::new("Player"), Player, CameraFollow));
 	commands.spawn((
 		Name::new("PlayerCapsule"),
 		PlayerCapsule,
@@ -147,16 +126,76 @@ fn spawn_player(
 	));
 }
 
+/// Dynamic capsule that receives [`MovementAction`] (WASD / jump).
+pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: Vec3) -> Entity {
+	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
+	let mut caster_shape = collider.clone();
+	caster_shape.set_scale(Vec3::splat(0.99), 10);
+	commands
+		.spawn((
+			CharacterController,
+			Transform::from_translation(translation),
+			Visibility::default(),
+			RigidBody::Dynamic,
+			collider,
+			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+				.with_max_distance(GROUND_CAST_DISTANCE),
+			LockedAxes::ROTATION_LOCKED,
+			MovementAcceleration(MOVE_ACCEL),
+			MovementDampingFactor(MOVE_DAMPING),
+			JumpImpulse(JUMP_IMPULSE),
+			MaxSlopeAngle(MAX_SLOPE_ANGLE),
+			MoveWish::default(),
+			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
+			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
+			GravityScale(1.25),
+		))
+		.id()
+}
+
 pub(crate) fn capsule_half_height() -> f32 {
 	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
 }
 
+pub fn controller_spawn_point(x: f32, z: f32, elevation: f32) -> Vec3 {
+	Vec3::new(x, elevation + capsule_half_height() + 0.5, z)
+}
+
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
+	controller_spawn_point(center.x, center.z, elevation)
 }
 
 /// Reposition the player after terrain generation.
+/// Stop the home capsule from colliding with the herd; camera follows [`CameraFollow`].
+pub(crate) fn park_player_for_stampede(
+	commands: &mut Commands,
+	player: Entity,
+	velocity: &mut LinearVelocity,
+) {
+	**velocity = Vec3::ZERO;
+	commands.entity(player).remove::<CharacterController>();
+	commands.entity(player).remove::<Collider>();
+	commands.entity(player).remove::<ShapeCaster>();
+	commands.entity(player).remove::<CameraFollow>();
+	commands.entity(player).insert(GravityScale(0.0));
+}
+
+/// Restore the home capsule after the herd is cleared.
+pub(crate) fn restore_player_controller(commands: &mut Commands, player: Entity) {
+	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
+	let mut caster_shape = collider.clone();
+	caster_shape.set_scale(Vec3::splat(0.99), 10);
+	commands.entity(player).insert((
+		CharacterController,
+		collider,
+		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+			.with_max_distance(GROUND_CAST_DISTANCE),
+		GravityScale(1.25),
+		CameraFollow,
+	));
+}
+
 pub fn respawn_player_on_layout(
 	layout: &TerrainCellLayout,
 	elevation: f32,
@@ -172,7 +211,7 @@ fn keyboard_movement_input(
 	text_focus: Res<TextEntryFocus>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	cameras: Query<&CameraController, With<Camera3d>>,
-	mut wishes: Query<&mut MoveWish, With<Player>>,
+	mut wishes: Query<&mut MoveWish, With<CharacterController>>,
 	mut writer: MessageWriter<MovementAction>,
 ) {
 	if *mode != PlaygroundMode::Character || text_focus.0 {
@@ -325,7 +364,7 @@ fn apply_movement_damping(
 
 fn follow_character_camera(
 	mode: Res<PlaygroundMode>,
-	players: Query<&Transform, (With<Player>, Without<Camera3d>)>,
+	players: Query<&Transform, (With<CameraFollow>, Without<Camera3d>)>,
 	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
 ) {
 	if *mode != PlaygroundMode::Character {

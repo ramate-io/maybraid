@@ -6,13 +6,13 @@ use crozon_characters::{apply_terrain_pitch, SuspendTerrainPitch, TerrainPitch};
 use ground_avian::AvianElevationProbe;
 use lod::{LodLevelRoot, LodLevelRoots};
 
-use crate::player::{Jumping, Player};
+use crate::player::{CharacterController, Jumping};
 
 pub(crate) fn sync_suspend_terrain_pitch(
 	mut commands: Commands,
-	players: Query<(Entity, Has<Jumping>), With<Player>>,
+	controllers: Query<(Entity, Has<Jumping>), With<CharacterController>>,
 ) {
-	for (entity, jumping) in &players {
+	for (entity, jumping) in &controllers {
 		if jumping {
 			commands.entity(entity).insert(SuspendTerrainPitch);
 		} else {
