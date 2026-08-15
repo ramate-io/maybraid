@@ -1,5 +1,7 @@
 //! Per-band motion stamps. Bake once in `scene_with_level`; switching bands shows
 //! a different child — it does not rebuild the scene to flip a bool.
+//!
+//! [`motion_policy`] is the default linear ramp, not a registry of regimes.
 
 use lod::LodSceneLevel;
 
@@ -15,7 +17,8 @@ pub struct MotionPolicy {
 
 impl MotionPolicy {
 	pub const HIGH: Self = Self { bones: true, effects: true, pitch: true };
-	pub const LOW: Self = Self { bones: false, effects: true, pitch: true };
+	pub const MEDIUM: Self = Self { bones: false, effects: true, pitch: true };
+	pub const LOW: Self = Self { bones: false, effects: true, pitch: false };
 	pub const NONE: Self = Self { bones: false, effects: false, pitch: false };
 
 	pub fn animate_bones(self) -> Option<AnimateBones> {
@@ -31,16 +34,23 @@ impl MotionPolicy {
 	}
 }
 
-/// Band policy for character motion.
+/// Default linear [`LodSceneLevel`] → [`MotionPolicy`] map.
+///
+/// One shared ramp for every character recipe: nearer bands keep more work,
+/// farther bands drop it. This is **not** a pluggable regime — a species or
+/// host that needs a different map should stamp markers itself in
+/// `scene_with_level` instead of going through this function.
 ///
 /// | Level | bones | effects | pitch |
 /// |---|---|---|---|
-/// | High, Medium | yes | yes | yes |
-/// | Low | no | yes | yes |
+/// | High | yes | yes | yes |
+/// | Medium | no | yes | yes |
+/// | Low | no | yes | no |
 /// | UltraLow / distance / resolution | no | no | no |
 pub fn motion_policy(level: LodSceneLevel) -> MotionPolicy {
 	match level {
-		LodSceneLevel::High | LodSceneLevel::Medium => MotionPolicy::HIGH,
+		LodSceneLevel::High => MotionPolicy::HIGH,
+		LodSceneLevel::Medium => MotionPolicy::MEDIUM,
 		LodSceneLevel::Low => MotionPolicy::LOW,
 		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
 			MotionPolicy::NONE
@@ -59,9 +69,17 @@ mod tests {
 	}
 
 	#[test]
-	fn low_keeps_effects_and_pitch() {
-		let p = motion_policy(LodSceneLevel::Low);
+	fn medium_keeps_effects_and_pitch() {
+		let p = motion_policy(LodSceneLevel::Medium);
+		assert_eq!(p, MotionPolicy::MEDIUM);
 		assert!(!p.bones && p.effects && p.pitch);
+	}
+
+	#[test]
+	fn low_keeps_effects_only() {
+		let p = motion_policy(LodSceneLevel::Low);
+		assert_eq!(p, MotionPolicy::LOW);
+		assert!(!p.bones && p.effects && !p.pitch);
 	}
 
 	#[test]

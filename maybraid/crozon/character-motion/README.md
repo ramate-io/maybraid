@@ -47,18 +47,20 @@ advances time only; no bone writes, no rays.
 |---|---|
 | `RigNode::host` (body) | `AnimRefRoot`, `AnimateBones`, `AnimateEffects` (capability / fallback) |
 | `RigNode::scene_with_level` | per-band `AnimateBones` / `AnimateEffects` |
-| Character spawn / `scene_with_level` | `ApplyTerrainPitch` on High/Low; omitted on UltraLow |
+| Character spawn / `scene_with_level` | `ApplyTerrainPitch` on High/Medium; omitted on Low/UltraLow |
 
 Systems query the **shown** `LodLevelRoot` (and its content children). If no
 level exists yet, they fall back to the host’s own markers.
 
 | Level | bones | effects | pitch |
 |---|---|---|---|
-| High, Medium | yes | yes | yes |
-| Low | no | yes | yes |
+| High | yes | yes | yes |
+| Medium | no | yes | yes |
+| Low | no | yes | no |
 | UltraLow / distance / resolution | no | no | no |
 
-See [`motion_policy`](src/policy.rs).
+This is the default linear ramp in [`motion_policy`](src/policy.rs), not a
+per-recipe regime. Stamp markers yourself in `scene_with_level` to differ.
 
 ## Bevy systems
 
@@ -116,9 +118,12 @@ Do not put concept types in this crate.
 
 ### Gate work by LOD
 
-Stamp markers in `scene_with_level` via `motion_policy(level)`. To add a new
-band behavior, extend `MotionPolicy` and the systems that read
-`shown_level_has::<YourMarker>`. Do not add a “rebuild this level” path.
+Stamp markers in `scene_with_level`. [`motion_policy`](src/policy.rs) is the
+shared linear default (High → UltraLow drops work). A different
+`LodSceneLevel` → marker map is a different stamp in `scene_with_level`, not
+a parameter to that function. To add a new capability, extend `MotionPolicy`
+and the systems that read `shown_level_has::<YourMarker>`. Do not rebuild a
+level to flip a bool.
 
 ### Stand on colliders (not a heightfield)
 
