@@ -24,10 +24,14 @@ members = [
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
 
+  "maybraid/ground/lib",
+  "maybraid/ground/avian",
+
   "maybraid/sdf/common",
   "maybraid/sdf/common-playground",
 
   "maybraid/crozon/animations",
+  "maybraid/crozon/character-motion",
   "maybraid/crozon/bevy-character-ui-menu-renderer",
   "maybraid/crozon/character-concepts-playground",
   "maybraid/crozon/character-world-movements-playground",
@@ -203,6 +207,9 @@ lod-avian = { path = "maybraid/lod/avian" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 
+ground = { path = "maybraid/ground/lib" }
+ground-avian = { path = "maybraid/ground/avian" }
+
 sdf-common = { path = "maybraid/sdf/common" }
 sdf-common-playground = { path = "maybraid/sdf/common-playground" }
 crozon-character-concepts-playground = { path = "maybraid/crozon/character-concepts-playground" }
@@ -211,6 +218,7 @@ crozon-character-playground = { path = "maybraid/crozon/playground" }
 crozon-character-items = { path = "maybraid/crozon/character-items" }
 crozon-character-ui-menus = { path = "maybraid/crozon/character-ui-menus" }
 crozon-characters = { path = "maybraid/crozon/characters" }
+crozon-character-motion = { path = "maybraid/crozon/character-motion" }
 crozon-rigs = { path = "maybraid/crozon/rigs" }
 malo-animations = { path = "maybraid/crozon/animations" }
 procedural-common = { path = "maybraid/procedural/common" }

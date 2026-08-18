@@ -5,7 +5,7 @@ use bevy::prelude::{Component, Transform, Vec3};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::{MirrorAxis, SceneRef};
 
@@ -158,12 +158,11 @@ impl LodScene for PartNode {
 		Aabb3d::from_min_max(Vec3::splat(-0.5), Vec3::splat(0.5))
 	}
 
-	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	fn host_contents(&self, lod_ref: &LodRef) -> impl Scene + 'static
 	where
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
-		let level = self.scene_lod_level(lod_ref);
-		let bounds = self.scene_bounds();
+		let _ = lod_ref;
 		let node = self.clone();
 		let transform = node.authored_transform();
 		let part = CharacterPart { slot: node.slot };
@@ -171,7 +170,6 @@ impl LodScene for PartNode {
 		let socket = node.socket.map(SocketRefRoot);
 		let skin = node.skin.map(SkinRefRoot);
 		(
-			lod_host_scene_pending(level, bounds),
 			bsn! {
 				template_value(node)
 				template_value(transform)

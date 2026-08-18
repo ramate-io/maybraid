@@ -6,16 +6,16 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use crozon_rigs::ResolvedRigPose;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{lod_host_scene_pending, SceneChunk};
+use lod::SceneChunk;
 use scene_ref::SceneRef;
 
-use crate::anim::AnimRefRoot;
 use crate::assets::AssetNormalization;
 use crate::rig::{
 	ActiveRigPose, BoneMap, CharacterRig, LodCharacterRig, RigBindScales, RigSkeletonKind,
 };
 use crate::scene_children::maybe_component;
 use crate::socket::{RigId, SocketRef, SocketRefRoot};
+use crozon_character_motion::{motion_policy, AnimRefRoot};
 
 /// Authoring IR for a character armature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -101,6 +101,8 @@ impl RigNode {
 	}
 
 	fn content_for_level(&self, _level: LodSceneLevel) -> impl Scene + 'static {
+		// Motion markers live on the body **host** and are synced from the shown
+		// band — level content is only the GLB / mesh scene.
 		self.scene.clone().scene()
 	}
 }
@@ -130,20 +132,23 @@ impl LodScene for RigNode {
 		Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -1.0), Vec3::new(1.0, 2.5, 1.0))
 	}
 
-	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	fn host_contents(&self, lod_ref: &LodRef) -> impl Scene + 'static
 	where
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
+		let _ = lod_ref;
 		let level = self.scene_lod_level(lod_ref);
-		let bounds = self.scene_bounds();
 		let node = self.clone();
 		let transform = node.normalization.transform();
 		let rig = CharacterRig { role: node.id.role(), skeleton: node.skeleton };
 		let pose = ActiveRigPose { pose: node.pose.clone() };
 		let socket = node.socket.map(SocketRefRoot);
-		let anim = (node.id == RigId::Body).then_some(AnimRefRoot::default());
+		let body = node.id == RigId::Body;
+		let anim = body.then_some(AnimRefRoot::default());
+		let policy = motion_policy(level);
+		let bones = body.then_some(()).and(policy.animate_bones());
+		let effects = body.then_some(()).and(policy.animate_effects());
 		(
-			lod_host_scene_pending(level, bounds),
 			bsn! {
 				template_value(node)
 				template_value(transform)
@@ -155,6 +160,8 @@ impl LodScene for RigNode {
 			},
 			maybe_component(socket),
 			maybe_component(anim),
+			maybe_component(bones),
+			maybe_component(effects),
 		)
 	}
 }

@@ -17,7 +17,8 @@ where
 	pub fn apply(&self, rig: &mut R, animation_progress: f32, transition_progress: f32) -> Effects {
 		let rest = snapshot_pose(rig);
 		restore_pose(rig, &rest);
-		let effects = self.animation.apply(rig, animation_progress);
+		self.animation.apply_for(rig, animation_progress);
+		let effects = self.animation.effects_for(rig, animation_progress);
 		let target_pose = snapshot_pose(rig);
 		let weight = self.weight(transition_progress);
 		blend_pose(rig, &self.from_pose, &target_pose, weight);

@@ -15,9 +15,9 @@ bevy_math = { workspace = true }
 character-ui-menu = { workspace = true }
 clap = { workspace = true }
 crozon-character-items = { workspace = true }
+crozon-character-motion = { workspace = true }
 crozon-rigs = { workspace = true }
 lod = { workspace = true }
-malo-animations = { workspace = true }
 material-ref = { workspace = true }
 scene-ref = { workspace = true }
 

@@ -14,7 +14,7 @@ fn segment_debug_enabled() -> bool {
 }
 
 impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
-	fn apply(&self, rig: &mut R, elapsed: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, elapsed: f32) {
 		let lengths = rig.segment_lengths();
 		let (segment, local) = self.segment(lengths, elapsed);
 		let timings = self.timings(lengths);
@@ -25,11 +25,11 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 			JumpSegment::Squat => {
 				let squat = jump.prejump_squat(lengths);
 				let progress = local / timings.squat_duration().max(f32::EPSILON);
-				squat.apply(rig, progress);
+				squat.apply_for(rig, progress);
 			}
 			JumpSegment::Spring => {
 				let from_pose = capture_animation_pose(&Squat::<R>::for_loop(1.0, 1.0), rig, 0.0);
-				Transition::from_pose(Spring::<R>::default(), from_pose)
+				let _ = Transition::from_pose(Spring::<R>::default(), from_pose)
 					.with_curve(TransitionCurve::SmoothStep)
 					.apply(rig, local, local);
 			}
@@ -47,11 +47,11 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 				if local < blend_end {
 					let from_pose = capture_animation_pose(&Spring::<R>::default(), rig, 1.0);
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
-					Transition::from_pose(tuck, from_pose)
+					let _ = Transition::from_pose(tuck, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
 						.apply(rig, 1.0, transition_progress);
 				} else {
-					flip.tuck.apply_fixed(rig);
+					let _ = flip.tuck.apply_fixed(rig);
 				}
 			}
 			JumpSegment::Land => {
@@ -72,15 +72,18 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 				}
 				if transition_progress < 1.0 {
 					let from_pose = capture_animation_pose(&flip.tuck, rig, 0.0);
-					Transition::from_pose(land, from_pose)
+					let _ = Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
 						.apply(rig, land_progress, transition_progress);
 				} else {
-					land.apply(rig, land_progress);
+					land.apply_for(rig, land_progress);
 				}
 			}
 		}
+	}
 
+	fn effects_for(&self, rig: &R, elapsed: f32) -> Effects {
+		let lengths = rig.segment_lengths();
 		let y = self.vertical_offset(lengths, elapsed);
 		let pitch = self.flip_pitch_radians(lengths, elapsed);
 		Effects {

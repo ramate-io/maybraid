@@ -5,16 +5,16 @@ use crate::rigs::quadruped::apply::{apply_neck, apply_spine};
 use crate::rigs::quadruped::gait::{
 	apply_front_leg_at_strike, apply_hind_leg_at_strike, thigh_swing, KneeTuning, LegStrideTuning,
 };
-use crate::{Animation, Effects, Progress};
+use crate::{Animation, Progress};
 
 impl<R: QuadrupedRig> Animation<R> for QuadrupedRun {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		QuadrupedRunPose::from_run(self).apply(rig, progress)
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		QuadrupedRunPose::from_run(self).apply_for(rig, progress)
 	}
 }
 
 impl<R: QuadrupedRig> Animation<R> for QuadrupedRunPose<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let cycle = Progress(progress).cycle();
 		let tuning = leg_tuning(self);
 
@@ -27,8 +27,6 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedRunPose<R> {
 		let spine_swing = thigh_swing(cycle) * self.spine_swing;
 		apply_spine(rig, spine_swing, -spine_swing * 0.5);
 		apply_neck(rig, -spine_swing * self.neck_swing / self.spine_swing.max(1e-4));
-
-		Effects::default()
 	}
 }
 

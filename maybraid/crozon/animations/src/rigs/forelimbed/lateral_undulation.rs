@@ -2,14 +2,14 @@ use crozon_rigs::forelimbed::ForelimbedRig;
 use crozon_rigs::Side;
 
 use crate::animations::LateralUndulation;
-use crate::{Animation, Effects};
+use crate::Animation;
 
 const SEGMENT_COUNT: usize = 4;
 const YAW_SCALE: f32 = 0.45;
 const FIN_SWING: f32 = 0.12;
 
 impl<R: ForelimbedRig> Animation<R> for LateralUndulation {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let mut spine = rig.spine_pose();
 		let yaws = [
 			self.segment_yaw(progress, 0, SEGMENT_COUNT) * YAW_SCALE,
@@ -37,7 +37,5 @@ impl<R: ForelimbedRig> Animation<R> for LateralUndulation {
 			fin.upper_arm = rig.articulate_on_rig(fin.upper_arm, paddle * 0.6, 0.0);
 			rig.pose_fin(fin);
 		}
-
-		Effects::default()
 	}
 }

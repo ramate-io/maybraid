@@ -16,8 +16,7 @@ use crate::assembly::CharacterPartSlot;
 use crate::nodes::{PartNode, RigNode};
 use crate::rig::{BoneMap, CharacterRig, CharacterRigRole};
 
-/// Marker on the [`crate::ComponentsOnly`] host spawned by
-/// [`crate::spawn_character_components`].
+/// Marker on the [`crate::ComponentsOnly`] character host (see [`lod::LodScene::host`]).
 #[derive(Component, Clone, Copy, Default)]
 pub struct CharacterRoot;
 

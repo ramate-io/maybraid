@@ -37,7 +37,10 @@ add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe / region w
 // or Avian region stack (see chico sbs-trees-playground `vegetation_lod.rs`)
 ```
 
-Pending hosts use [`lod_host_scene_pending`](../lib/src/scene/host.rs) / [`LodScene::host`](../lib/src/scene/lod_scene.rs); chunk fulfill streams [`scene_chunks_with_level`](../lib/src/scene/lod_scene.rs).
+Pending hosts use [`LodScene::host`](../lib/src/scene/lod_scene.rs) (core pending
+shell + [`host_contents`](../lib/src/scene/lod_scene.rs)); chunk fulfill streams
+[`scene_chunks_with_level`](../lib/src/scene/lod_scene.rs). Domain types override
+`host_contents` only — do not re-stamp `lod_host_scene_pending`.
 
 ## Future: coalescing and compaction
 

@@ -43,8 +43,8 @@ pub fn apply_tuck_profile<R: HumanoidRig>(
 }
 
 impl<R: HumanoidRig> Animation<R> for Tuck<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		apply_tuck_profile(rig, &self.profile(), self.tuck_amount(progress))
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		let _ = apply_tuck_profile(rig, &self.profile(), self.tuck_amount(progress));
 	}
 }
 

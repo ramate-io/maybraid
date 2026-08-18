@@ -1,15 +1,16 @@
 //! Preview configuration and spawning.
 //!
 //! Commands update [`ConceptPreviewConfig`]. This module spawns nested LodScene
-//! hosts via [`spawn_character_components`] ([`CharacterRecipe::clothed`]). Live color
+//! hosts via [`ComponentsOnly`] / [`lod::LodScene::host`] ([`CharacterRecipe::clothed`]). Live color
 //! inserts [`MaterialRefRoot`] on part hosts; [`PreviewAssetTarget`] stays UI mapping.
 
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
+use bevy::scene::prelude::bsn;
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	assembly::CharacterPartSlot,
-	character_bounds, spawn_character_components,
+	character_bounds, ComponentsOnly,
 	species::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
@@ -44,6 +45,8 @@ use crozon_characters::{
 	AnimRef, AnimRefRoot, CharacterComponents, CharacterMembers, CharacterRecipe, MaterialRefRoot,
 	PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied, SocketRefRoot,
 };
+use lod::gen::LodScene;
+use lod::lod_ref::LodRef;
 use lod::LodSceneLevel;
 
 use crate::animation::ConceptAnimation;
@@ -1194,16 +1197,30 @@ fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewC
 
 fn spawn_clothed_character<T>(commands: &mut Commands, character: &T)
 where
-	T: CharacterComponents + Clone + Send + Sync + 'static,
+	T: CharacterComponents + Clone + Default + Unpin + Send + Sync + 'static,
 {
 	let bounds = character_bounds(character);
-	for entity in spawn_character_components(commands, character, Transform::IDENTITY, bounds) {
-		commands.entity(entity).insert((
-			ConceptPreviewRoot,
-			PreviewAwaitingReveal,
-			Visibility::Hidden,
-		));
-	}
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let host = ComponentsOnly(character.clone());
+	let entity = commands
+		.spawn_scene((
+			host.host(&lod_ref),
+			bsn! {
+				Transform::IDENTITY
+			},
+		))
+		.id();
+	commands.entity(entity).insert((
+		ConceptPreviewRoot,
+		PreviewAwaitingReveal,
+		Visibility::Hidden,
+	));
 }
 
 /// Stamp preview-only UI markers onto nested hosts after membership, and write

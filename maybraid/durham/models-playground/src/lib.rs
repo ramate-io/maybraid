@@ -4,6 +4,7 @@ pub mod camera;
 pub mod character;
 pub mod commands;
 mod debug_bounds;
+mod pitch;
 mod player;
 mod ui;
 
@@ -17,11 +18,12 @@ use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use character::{apply_set_character, drive_player_locomotion};
+use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree,
 };
-use crozon_characters::{CharacterHostSystems, CharacterHostsPlugin};
+use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{
 	setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay,
 };
@@ -142,7 +144,12 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					present_cells.after(generate_cells),
 					drive_player_locomotion
 						.after(PlayerControlSystems)
-						.before(CharacterHostSystems::Anim),
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
 					update_cell_location_hud.after(present_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

@@ -2,16 +2,16 @@ use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
-use crate::{Animation, Effects, Progress};
+use crate::{Animation, Progress};
 
 impl<R: HumanoidRig> Animation<R> for Walk {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		UprightWalk::from_walk(self).apply(rig, progress)
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		UprightWalk::from_walk(self).apply_for(rig, progress)
 	}
 }
 
 impl<R: HumanoidRig> Animation<R> for UprightWalk<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let phase = Progress(progress).cycle();
 		let left_arm_swing = -arm_swing(phase);
 		let right_arm_swing = arm_swing(phase + 0.5);
@@ -38,8 +38,6 @@ impl<R: HumanoidRig> Animation<R> for UprightWalk<R> {
 			walk.arm_down,
 			walk,
 		);
-
-		Effects::default()
 	}
 }
 

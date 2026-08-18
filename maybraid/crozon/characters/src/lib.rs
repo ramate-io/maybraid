@@ -4,7 +4,10 @@
 //! [`lod::LodScene`] hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with
 //! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
-//! `Changed`), not LOD refresh.
+//! `Changed`), not LOD refresh. Per-frame clips and terrain pitch live in
+//! [`crozon_character_motion`]; this crate stamps **initial** host markers from
+//! [`lod::LodScene::host`] / spawn. Motion sync keeps those markers aligned with
+//! the shown LOD band.
 
 pub mod anim;
 pub mod assembly;
@@ -24,18 +27,25 @@ pub mod scene_children;
 pub mod skin;
 pub mod socket;
 pub mod species;
+pub mod terrain_pitch;
 
 pub use anim::{
-	prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId, AnimMailbox, AnimRef,
-	AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams, TwoFootedTuckedFlipParams,
+	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimClip, AnimId,
+	AnimMailbox, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
+	TwoFootedTuckedFlipParams,
 };
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
-	character_bounds, clothing_layers, spawn_character_components, CharacterComponents,
-	CharacterRecipe, Clothed, ClothingLayer, ComponentsOnly,
+	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed, ClothingLayer,
+	ComponentsOnly,
 };
 pub use concepts::ConceptAnimation;
+pub use crozon_character_motion::{
+	apply_terrain_pitch, motion_policy, sync_motion_markers, AnimateBones, AnimateEffects,
+	ApplyTerrainPitch, CharacterMotionPlugin, CharacterMotionSystems, MotionPolicy,
+	SuspendTerrainPitch,
+};
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
@@ -62,3 +72,5 @@ pub use socket::{
 	fulfill_socket_ref_roots, invalidate_changed_socket_ref_roots, RigId, SkinRef, SkinRefApplied,
 	SkinRefRoot, SocketRef, SocketRefApplied, SocketRefRoot,
 };
+pub use terrain_pitch::prepare_character_terrain_pitch;
+pub use terrain_pitch::TerrainPitch;

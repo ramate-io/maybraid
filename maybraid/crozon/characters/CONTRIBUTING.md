@@ -22,8 +22,8 @@ for handedness; socket locals stay placement-only (no `scale.x = -1`). Clothing
 is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe::clothed`](src/components.rs),
 not part of the inner species. Apps that spawn characters add
 [`CharacterHostsPlugin`](src/hosts.rs) (scene-ref, material-ref, LOD refresh,
-[`CharacterComponentsPlugin`](src/plugin.rs), and every clothed species). A
-single species can instead call
+[`CharacterComponentsPlugin`](src/plugin.rs), [`crozon-character-motion`](../character-motion/),
+and every clothed species). A single species can instead call
 [`add_character_components_host::<Clothed<T>>`](src/plugin.rs).
 [`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
 registered once. Those nodes stamp socket/skin/rig/part/transform from
@@ -34,10 +34,14 @@ get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
 [`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
 character. Proportion pose is [`ActiveRigPose`](src/rig.rs) on the rig member
 ([`maintain_resolved_pose`](src/pose.rs)). Clips are [`AnimRefRoot`](src/anim.rs)
-on the body-rig host (default still). [`AnimClip`](src/anim.rs) is the identity
-(variant + sampler knobs); the mailbox transitions on [`AnimId`](src/anim.rs)
-when the variant changes, not when knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs)
-owns membership, bone map, socket/skin fulfill, pose, and the mailbox. Do not
+on the body-rig host (default still). [`AnimClip`](../character-motion/src/clip.rs)
+is the identity (variant + sampler knobs); the mailbox transitions on
+[`AnimId`](../character-motion/src/clip.rs) when the variant changes, not when
+knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs) owns membership, bone
+map, socket/skin fulfill, and pose. The mailbox and terrain pitch live in
+[`crozon-character-motion`](../character-motion/README.md): host markers
+(`AnimateBones` / `AnimateEffects` / `ApplyTerrainPitch`) are synced from the
+shown LOD band and filter the expensive systems. Do not
 grow a post-spawn prepare pass that copies materials or poses.
 
 The playground spawn path is LodScene ([`CharacterRecipe::clothed`](src/components.rs)).

@@ -86,28 +86,38 @@ pub trait LodScene {
 	/// Scene for the **current** LOD selection only (first present / non-host path).
 	///
 	/// Default builds level content only. Typed ECS hosts that nest under a parent
-	/// should prefer [`Self::host`] (pending [`super::host::LodSceneHost`] + `Self`).
+	/// should prefer [`Self::host`] (pending shell + [`Self::host_contents`]).
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		self.scene_with_level(lod_ref, self.scene_lod_level(lod_ref))
 	}
 
-	/// Spawn this value as a pending [`super::host::LodSceneHost`] carrying `Self`.
+	/// Domain identity on a new host entity (typed `Self`, markers, local transform, …).
 	///
-	/// Used when nesting fine-phase hosts under a structural parent: the returned
-	/// scene is an empty level-roots bag + [`super::host::LodLevelSpawnRequest`],
-	/// with `Self` stamped as the typed host component for chunk fulfill / refresh.
+	/// **Do not** stamp LOD scaffolding here (`LodSceneHost`, roots bag, spawn request).
+	/// [`Self::host`] wraps this in [`super::host::lod_host_scene_pending`].
+	fn host_contents(&self, lod_ref: &LodRef) -> impl Scene + 'static
+	where
+		Self: Component + Clone + Default + Unpin + Sized,
+	{
+		let _ = lod_ref;
+		let host = self.clone();
+		bsn! {
+			template_value(host)
+		}
+	}
+
+	/// Spawn a pending [`super::host::LodSceneHost`] with [`Self::host_contents`].
+	///
+	/// Core owns the empty [`super::host::LodLevelRoots`] bag and
+	/// [`super::host::LodLevelSpawnRequest`]. Domain types override
+	/// [`Self::host_contents`] only.
 	fn host(&self, lod_ref: &LodRef) -> impl Scene + 'static
 	where
 		Self: Component + Clone + Default + Unpin + Sized,
 	{
-		let level = self.scene_lod_level(lod_ref);
-		let bounds = self.scene_bounds();
-		let host = self.clone();
 		(
-			lod_host_scene_pending(level, bounds),
-			bsn! {
-				template_value(host)
-			},
+			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds()),
+			self.host_contents(lod_ref),
 		)
 	}
 

@@ -117,7 +117,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					stamp_lod_character_preview
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
-						.before(CharacterHostSystems::Anim),
+						.before(crozon_characters::CharacterMotionSystems::Anim),
 					animate_focused_preview_asset
 						.after(dispatch_menu_interactions)
 						.before(sync_preview),

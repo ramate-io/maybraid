@@ -2,14 +2,14 @@ use crozon_rigs::forelimbed::ForelimbedRig;
 use crozon_rigs::Side;
 
 use crate::animations::DorsoventralUndulation;
-use crate::{Animation, Effects};
+use crate::Animation;
 
 const SEGMENT_COUNT: usize = 4;
 const PITCH_SCALE: f32 = 0.4;
 const FIN_FLEX: f32 = 0.1;
 
 impl<R: ForelimbedRig> Animation<R> for DorsoventralUndulation {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let mut spine = rig.spine_pose();
 		let pitches = [
 			self.segment_pitch(progress, 0, SEGMENT_COUNT) * PITCH_SCALE,
@@ -37,7 +37,5 @@ impl<R: ForelimbedRig> Animation<R> for DorsoventralUndulation {
 			fin.upper_arm = rig.articulate_on_rig(fin.upper_arm, 0.0, paddle * 0.6);
 			rig.pose_fin(fin);
 		}
-
-		Effects::default()
 	}
 }
