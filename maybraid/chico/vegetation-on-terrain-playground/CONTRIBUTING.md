@@ -24,6 +24,7 @@ In-game: `/` console, `Y` or `F1` drawer. Fly camera: WASD, Space/Shift, mouse l
 - `grove-extent <meters>`
 - `tile-radius <tiles>`
 - `rebuild`
+- `stats mesh` — triangle / probe / LOD-host counts (also logged)
 
 Defaults: `monster-grass`, `terrain-radius 2` (4×4 cells), `grove-extent 100`, `tile-radius 1` (3×3 tiles).
 

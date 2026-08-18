@@ -9,13 +9,16 @@ pub use camera::CameraController;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::register_vegetation_view;
+use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
-	RequestGrove, RequestGroveExtent, RequestRebuild, RequestTerrainRadius, RequestTileRadius,
+	RequestGrove, RequestGroveExtent, RequestMeshStats, RequestRebuild, RequestTerrainRadius,
+	RequestTileRadius,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
@@ -28,6 +31,7 @@ use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
+use lod::LodSceneHost;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
@@ -123,7 +127,61 @@ impl Plugin for VegetationOnTerrainPlugin {
 					spawn_groves.after(present_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
-			);
+			)
+			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
+	}
+}
+
+/// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.
+fn apply_mesh_stats(
+	mut commands: Commands,
+	mut status: ResMut<GameCommandStatusText>,
+	mesh_assets: Res<Assets<Mesh>>,
+	requests: Query<Entity, With<RequestMeshStats>>,
+	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
+	foliage_probes: Query<(), With<FoliageLodProbe>>,
+	stick_probes: Query<(), With<StickLodProbe>>,
+	lod_hosts: Query<(), With<LodSceneHost>>,
+) {
+	for entity in &requests {
+		let mut total_entities = 0usize;
+		let mut visible_entities = 0usize;
+		let mut missing = 0usize;
+		let mut total_tris = 0usize;
+		let mut visible_tris = 0usize;
+		let mut unique_handles = std::collections::HashSet::new();
+		let mut visible_unique_handles = std::collections::HashSet::new();
+
+		for (mesh3d, view_visibility) in &mesh_entities {
+			total_entities += 1;
+			unique_handles.insert(mesh3d.0.id());
+			let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
+				missing += 1;
+				continue;
+			};
+			let verts = mesh.count_vertices();
+			let index_count = mesh.indices().map(|i| i.len()).unwrap_or(verts);
+			let tris = index_count / 3;
+			total_tris += tris;
+			if view_visibility.get() {
+				visible_entities += 1;
+				visible_unique_handles.insert(mesh3d.0.id());
+				visible_tris += tris;
+			}
+		}
+
+		let foliage_probes = foliage_probes.iter().count();
+		let stick_probes = stick_probes.iter().count();
+		let lod_hosts = lod_hosts.iter().count();
+		let probes_total = foliage_probes + stick_probes;
+
+		status.0 = format!(
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
+			unique_handles.len(),
+			visible_unique_handles.len(),
+		);
+		info!("{}", status.0);
+		commands.entity(entity).despawn();
 	}
 }
 

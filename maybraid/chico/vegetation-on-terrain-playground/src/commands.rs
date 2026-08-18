@@ -1,7 +1,7 @@
 //! In-game clap commands for vegetation-on-terrain.
 
 use bevy::prelude::*;
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
 
 pub const PLAYGROUND_CLI_NAME: &str = "chico-vegetation-on-terrain";
@@ -131,6 +131,16 @@ pub enum PlaygroundCommand {
 	},
 	/// Despawn and rebuild groves on the current terrain.
 	Rebuild,
+	/// LOD / mesh CPU proxies (triangle counts, etc.).
+	#[command(subcommand)]
+	Stats(Stats),
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Stats {
+	/// Mesh triangle counts plus foliage / stick / structural LOD probe hosts.
+	Mesh,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -147,6 +157,9 @@ pub struct RequestTileRadius(pub i32);
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestRebuild;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestMeshStats;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -182,11 +195,23 @@ impl PlaygroundCommand {
 				commands.spawn(RequestRebuild);
 				*console = "rebuild: pending".into();
 			}
+			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}
 
 	pub fn parse_line(line: &str) -> Result<Self, String> {
 		<Self as GameCommand>::parse_line(line)
+	}
+}
+
+impl Stats {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Stats::Mesh => {
+				commands.spawn(RequestMeshStats);
+				*console = "stats mesh: pending".into();
+			}
+		}
 	}
 }
 
@@ -210,5 +235,11 @@ mod tests {
 		assert!(matches!(terrain, PlaygroundCommand::TerrainRadius { cells: 3 }));
 		let tiles = PlaygroundCommand::parse_line("tile-radius 0").unwrap();
 		assert!(matches!(tiles, PlaygroundCommand::TileRadius { tiles: 0 }));
+	}
+
+	#[test]
+	fn parse_stats_mesh() {
+		let cmd = PlaygroundCommand::parse_line("stats mesh").unwrap();
+		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Mesh)));
 	}
 }
