@@ -4,6 +4,7 @@ pub mod fixed_tuck;
 pub mod flapping;
 pub mod jab;
 pub mod land;
+pub mod leap;
 pub mod run;
 pub mod soaring;
 pub mod spring;

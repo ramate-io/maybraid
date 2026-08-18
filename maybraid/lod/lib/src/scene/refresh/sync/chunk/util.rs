@@ -4,24 +4,12 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{LodLevelRoot, LodSceneHost};
 
 use super::types::{LodCullInFlight, LodSceneHostStreamed};
 
 pub(super) fn ms(start: Instant) -> f64 {
 	start.elapsed().as_secs_f64() * 1000.0
-}
-
-pub(super) fn roots_bag_entity(
-	host_children: &Children,
-	level_roots_bags: &Query<(), With<LodLevelRoots>>,
-) -> Option<Entity> {
-	for child in host_children.iter() {
-		if level_roots_bags.contains(child) {
-			return Some(child);
-		}
-	}
-	None
 }
 
 /// True when the host already has any non-culling level root (ready **or** pending).
@@ -34,16 +22,9 @@ pub(super) fn has_present_root(
 	root_keys: &Query<&LodLevelRoot>,
 	cull_inflight: &Query<(), With<LodCullInFlight>>,
 ) -> bool {
-	for child in root_children.iter() {
-		if root_keys.get(child).is_err() {
-			continue;
-		}
-		if cull_inflight.contains(child) {
-			continue;
-		}
-		return true;
-	}
-	false
+	root_children
+		.iter()
+		.any(|child| root_keys.contains(child) && !cull_inflight.contains(child))
 }
 
 /// Whether `entity` is a [`LodSceneHost`], or wraps one as a direct child.

@@ -5,7 +5,8 @@
 //! (shorter/wider), flank ears, lerodon tail, and a prominent harrowed crown.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Claber;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -13,12 +14,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::ClaberAssets;
 use sliders::ClaberSliders;
 
 pub use assets::{ClaberBodyMesh, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh};
@@ -51,6 +50,19 @@ impl Default for ClaberColors {
 }
 
 impl ClaberColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ClaberColor {
 		self.body
 	}
@@ -129,12 +141,14 @@ impl ClaberConfig {
 	}
 }
 
-impl SpeciesConfig for ClaberConfig {
-	fn species_name(&self) -> &'static str {
-		"claber"
+impl CharacterRecipe for ClaberConfig {
+	type Components = Claber;
+
+	fn components(&self) -> Self::Components {
+		Claber::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ClaberAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

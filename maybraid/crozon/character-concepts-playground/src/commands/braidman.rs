@@ -4,10 +4,9 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
-	species::braidman::{
-		assets::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
-		sliders::BraidmanSliders,
-		BraidmanConfig,
+	species::{
+		braidman::{sliders::BraidmanSliders, BraidmanConfig},
+		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
 	BuildPreset, GenderPreset,
 };

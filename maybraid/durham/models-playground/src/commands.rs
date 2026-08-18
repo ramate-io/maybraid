@@ -24,6 +24,11 @@ pub enum PlaygroundCommand {
 	/// Switch between free-look fly camera and third-person character control.
 	#[command(subcommand)]
 	Mode(Mode),
+	/// Replace the capsule with a Crozon character (default preview recipe).
+	SetCharacter {
+		/// Species id (`braidman`, `mygr`, `hars`, …).
+		species: crate::character::CharacterSpecies,
+	},
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
@@ -59,7 +64,7 @@ pub enum Cells {
 pub enum Mode {
 	/// Free-look fly camera (WASD + mouse, Space/Shift vertical).
 	Free,
-	/// Capsule character with third-person camera (WASD move, Space jump).
+	/// Capsule or Crozon character with third-person camera (WASD move, Space jump).
 	Character,
 }
 
@@ -97,6 +102,10 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Cells(cells) => cells.react(commands, console),
 			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
+			PlaygroundCommand::SetCharacter { species } => {
+				commands.spawn(crate::character::RequestSetCharacter { species });
+				*console = format!("set-character {}: pending", species.label());
+			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}

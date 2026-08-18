@@ -4,7 +4,7 @@
 //! [`crate::roofs::lod::RoofLodProbe`]). Unlike roofs and partitions, **UltraLow is a
 //! distinct [`LodSceneLevel`]**: every style drops to the shared flat low-res kit.
 
-use bevy::prelude::{Component, Query, Res, Transform, With};
+use bevy::prelude::{Component, Query, Transform, With};
 use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -20,7 +20,6 @@ use crate::lod_band::{
 	center_extent_from_aabb, characteristic_extent_abs, placement_center, warm_mesh_lod_culls,
 	DistanceLodBand,
 };
-use crate::lod_host::warm_content_host_hslu;
 use crate::placed::Placement;
 use crate::roofs::lod::{ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR};
 
@@ -133,28 +132,22 @@ impl LodScene for PanelLodProbe {
 	}
 }
 
-/// Warm High/Medium/Low/UltraLow panel host driven by an explicit probe.
-///
-/// Composite buildings should pass [`PanelLodProbe::from_placement`] for each kit so
-/// panels band independently. Unit-kit previews may use [`PanelLodProbe::from_aabb`]
-/// on the subject bounds.
-pub fn leaf_panel_scene_ref_lod(
+/// Posed panel kit content for one [`LodSceneLevel`] (no host scaffolding).
+pub fn panel_scene_ref_for_level(
 	high: SceneRef,
 	mid: SceneRef,
 	low: SceneRef,
 	ultra_low: SceneRef,
-	lod_ref: &LodRef,
-	probe: PanelLodProbe,
+	level: LodSceneLevel,
 ) -> impl Scene + 'static {
-	let level = probe.level_for(lod_ref.current_transform);
-	warm_content_host_hslu(
-		level,
-		probe,
-		high.scene(),
-		mid.scene(),
-		low.scene(),
-		ultra_low.scene(),
-	)
+	let scene = match level {
+		LodSceneLevel::High => high,
+		LodSceneLevel::Medium => mid,
+		LodSceneLevel::Low => low,
+		LodSceneLevel::UltraLow => ultra_low,
+		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => mid,
+	};
+	scene.scene()
 }
 
 /// Update panel host levels from the [`lod::LodViewer`] pose.

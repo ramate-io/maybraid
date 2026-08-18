@@ -2,10 +2,10 @@ use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::animations::Fall;
 use crate::rigs::humanoid::apply::{apply_arm, apply_leg};
-use crate::{Animation, Effects};
+use crate::Animation;
 
 impl<R: HumanoidRig> Animation<R> for Fall<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		apply_leg(rig, Side::Left, 0.0, 0.0);
 		apply_leg(rig, Side::Right, 0.0, 0.0);
 
@@ -20,7 +20,5 @@ impl<R: HumanoidRig> Animation<R> for Fall<R> {
 				self.forearm_flex(progress),
 			);
 		}
-
-		Effects::default()
 	}
 }

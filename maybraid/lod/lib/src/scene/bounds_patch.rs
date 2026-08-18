@@ -35,9 +35,7 @@ where
 	M: LodSceneBoundsMarshaller,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

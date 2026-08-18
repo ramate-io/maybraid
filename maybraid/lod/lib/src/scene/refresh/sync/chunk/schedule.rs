@@ -143,18 +143,9 @@ mod tests {
 
 	#[test]
 	fn tuple_rank_high_high_first() {
-		assert_eq!(
-			LevelBand::tuple_rank(LevelBand::High, LevelBand::High),
-			0
-		);
-		assert_eq!(
-			LevelBand::tuple_rank(LevelBand::High, LevelBand::Medium),
-			1
-		);
-		assert_eq!(
-			LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High),
-			LevelBand::COUNT
-		);
+		assert_eq!(LevelBand::tuple_rank(LevelBand::High, LevelBand::High), 0);
+		assert_eq!(LevelBand::tuple_rank(LevelBand::High, LevelBand::Medium), 1);
+		assert_eq!(LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High), LevelBand::COUNT);
 		assert!(
 			LevelBand::tuple_rank(LevelBand::High, LevelBand::UltraLow)
 				< LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High)

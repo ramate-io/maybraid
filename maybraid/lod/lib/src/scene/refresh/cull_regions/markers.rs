@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+	lod_level_roots_entity, nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots,
+	LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 
@@ -91,11 +92,7 @@ pub fn sync_nested_refresh_allowed(
 	added: Query<Entity, Added<LodSceneHost>>,
 	ungated: Query<
 		Entity,
-		(
-			With<LodSceneHost>,
-			Without<LodNestedRefreshAllowed>,
-			Without<LodNestedRefreshBlocked>,
-		),
+		(With<LodSceneHost>, Without<LodNestedRefreshAllowed>, Without<LodNestedRefreshBlocked>),
 	>,
 	changed_levels: Query<Entity, (With<LodSceneHost>, Changed<LodSceneLevel>)>,
 	changed_root_vis: Query<&ChildOf, (With<LodLevelRoot>, Changed<Visibility>)>,
@@ -154,14 +151,7 @@ fn host_has_cullable_roots(
 	root_keys: &Query<&LodLevelRoot>,
 	wants_cull: &Query<(), With<LodCullInFlight>>,
 ) -> bool {
-	let mut roots_entity = None;
-	for child in host_children.iter() {
-		if level_roots_heads.contains(child) {
-			roots_entity = Some(child);
-			break;
-		}
-	}
-	let Some(roots_entity) = roots_entity else {
+	let Some(roots_entity) = lod_level_roots_entity(host_children, level_roots_heads) else {
 		return false;
 	};
 	let Ok(root_children) = level_roots_heads.get(roots_entity) else {
@@ -196,10 +186,7 @@ pub fn sync_cullable_roots_marker(
 	host_children_q: Query<&Children, With<LodSceneHost>>,
 	changed_hosts: Query<
 		Entity,
-		(
-			With<LodSceneHost>,
-			Or<(Changed<LodSceneLevel>, Changed<Children>, Added<LodSceneHost>)>,
-		),
+		(With<LodSceneHost>, Or<(Changed<LodSceneLevel>, Changed<Children>, Added<LodSceneHost>)>),
 	>,
 	changed_bags: Query<&ChildOf, (With<LodLevelRoots>, Changed<Children>)>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,

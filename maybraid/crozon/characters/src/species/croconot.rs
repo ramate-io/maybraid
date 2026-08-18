@@ -4,19 +4,18 @@
 //! flank ears, lerodon tail and snout, and optional harrowed crown horns.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Croconot;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::CroconotAssets;
 use crozon_character_items::ItemColor;
 use sliders::CroconotSliders;
 
@@ -49,6 +48,19 @@ impl Default for CroconotColors {
 }
 
 impl CroconotColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -127,12 +139,14 @@ impl CroconotConfig {
 	}
 }
 
-impl SpeciesConfig for CroconotConfig {
-	fn species_name(&self) -> &'static str {
-		"croconot"
+impl CharacterRecipe for CroconotConfig {
+	type Components = Croconot;
+
+	fn components(&self) -> Self::Components {
+		Croconot::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		CroconotAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

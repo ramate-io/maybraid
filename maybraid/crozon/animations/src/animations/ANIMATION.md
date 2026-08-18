@@ -19,7 +19,12 @@ Here’s the spec I’d use.
 /// Non-cyclic animations may clamp or otherwise interpret progress beyond
 /// `0.0..=1.0`.
 pub trait Animation<R> {
-    fn apply(&self, rig: &mut R, progress: f32) -> Effects;
+    fn apply_for(&self, rig: &mut R, progress: f32);
+    fn effects_for(&self, rig: &R, progress: f32) -> Effects { Effects::default() }
+    fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+        self.apply_for(rig, progress);
+        self.effects_for(rig, progress)
+    }
 }
 ```
 

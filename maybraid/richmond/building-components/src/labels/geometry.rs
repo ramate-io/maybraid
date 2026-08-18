@@ -9,6 +9,12 @@ pub enum LabelGeometry {
 	Rectangle { extents: Vec3 },
 }
 
+impl Default for LabelGeometry {
+	fn default() -> Self {
+		Self::rectangle(Vec3::ONE)
+	}
+}
+
 impl LabelGeometry {
 	pub fn rectangle(extents: Vec3) -> Self {
 		Self::Rectangle {

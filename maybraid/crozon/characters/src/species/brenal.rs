@@ -4,19 +4,18 @@
 //! flank ears, cat tail, and optional harrowed crown horns.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Brenal;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::BrenalAssets;
 use crozon_character_items::ItemColor;
 use sliders::BrenalSliders;
 
@@ -49,6 +48,19 @@ impl Default for BrenalColors {
 }
 
 impl BrenalColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -127,12 +139,14 @@ impl BrenalConfig {
 	}
 }
 
-impl SpeciesConfig for BrenalConfig {
-	fn species_name(&self) -> &'static str {
-		"brenal"
+impl CharacterRecipe for BrenalConfig {
+	type Components = Brenal;
+
+	fn components(&self) -> Self::Components {
+		Brenal::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BrenalAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

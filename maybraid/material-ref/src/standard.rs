@@ -25,7 +25,10 @@ pub struct StandardMaterialLib<'w> {
 
 impl StandardMaterialLib<'_> {
 	/// Resolve (and memoize) a [`StandardMaterial`] handle for `material_ref`.
-	pub fn resolve(&mut self, material_ref: &MaterialRef) -> bevy::prelude::Handle<StandardMaterial> {
+	pub fn resolve(
+		&mut self,
+		material_ref: &MaterialRef,
+	) -> bevy::prelude::Handle<StandardMaterial> {
 		let key = MaterialRefKey::from(material_ref);
 		if let Some(handle) = self.cache.get(&key) {
 			return handle;

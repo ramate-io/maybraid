@@ -5,10 +5,11 @@
 //! transform) into one mesh [`WorldAsset`].
 //!
 //! [`SceneRefPlugin`] installs [`SceneRefHandles`] and [`MultiSceneMergeHandles`],
-//! which memoize [`Handle<WorldAsset>`]s. Mirrored refs rebuild meshes (axis flip +
-//! winding reverse) into a distinct cached asset before merge sees them.
-//! Use [`SceneRef::scene`] / [`SceneRefRoot`] or [`MultiSceneMerge::scene`] /
-//! [`MultiSceneMergeRoot`]; fulfill systems insert [`WorldAssetRoot`] when ready.
+//! which memoize [`Handle<WorldAsset>`]s. [`SceneRef::mirrored`] rebuilds meshes
+//! (axis flip + winding reverse); [`SceneRef::reflected`] also conjugates instance
+//! transforms. Both are distinct cache keys. Use [`SceneRef::scene`] /
+//! [`SceneRefRoot`] or [`MultiSceneMerge::scene`] / [`MultiSceneMergeRoot`];
+//! fulfill systems insert [`WorldAssetRoot`] when ready.
 
 mod fulfill;
 mod handles;
@@ -20,7 +21,7 @@ mod world_asset;
 use bevy::prelude::{App, Plugin, Update};
 
 pub use handles::SceneRefHandles;
-pub use mirror::mirror_mesh;
+pub use mirror::{mirror_mesh, mirror_transform};
 pub use multi_merge::{
 	MultiSceneMerge, MultiSceneMergeHandles, MultiSceneMergeRoot, MultiScenePart, TransformKey,
 };
@@ -64,9 +65,14 @@ mod tests {
 	fn mirror_changes_cache_key() -> anyhow::Result<()> {
 		let base = SceneRef::glb("urban/foo.glb");
 		let mirrored = base.clone().mirrored(MirrorAxis::X);
+		let reflected = base.clone().reflected(MirrorAxis::X);
 		assert_ne!(base, mirrored);
+		assert_ne!(mirrored, reflected);
 		assert_eq!(base.labeled_path(), mirrored.labeled_path());
 		assert_eq!(mirrored.mirror, Some(MirrorAxis::X));
+		assert!(!mirrored.reflect_instance);
+		assert_eq!(reflected.mirror, Some(MirrorAxis::X));
+		assert!(reflected.reflect_instance);
 		Ok(())
 	}
 

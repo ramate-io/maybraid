@@ -5,7 +5,7 @@
 //! - [`cull_regions`] — rotating cull lattice → [`LodSceneCullRegion<M>`] + enqueue
 //! - [`levels`] — region + index → [`LodSceneRefreshLevel`]
 //! - [`entities`] — fold max level → write [`crate::LodSceneLevel`]
-//! - [`sync`] — root sync, chunk fulfill (default), optional eager fulfill, cull
+//! - [`sync`] — root sync, chunk fulfill, cull
 //!
 //! Plugins:
 //! - [`LodRefreshCorePlugin`] — sets, node track, root sync (once)
@@ -40,15 +40,14 @@ pub use cull_regions::{
 	produce_lod_cull_for_region, produce_lod_cull_regions, sync_cullable_roots_marker,
 	sync_nested_refresh_allowed, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
-	LodNestedRefreshBlocked, LodSceneCullRegion,
-	LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
+	LodNestedRefreshBlocked, LodSceneCullRegion, LodSceneCullRegionPlugin,
+	LodSceneRegionCullPlugin, OpenLattice,
 };
 pub use entities::{
-	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels, LodSceneRefreshEntitiesPlugin,
+	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels,
+	LodSceneRefreshEntitiesPlugin,
 };
-pub use levels::{
-	produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
-};
+pub use levels::{produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin};
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
 	LodRefreshRegionsStatus, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, Spotlight,
@@ -57,11 +56,10 @@ pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
 	apply_lod_cull_requests, begin_chunk_lod_fulfill, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
-	fulfill_lod_level_spawn, reset_lod_chunk_budget, resume_desired_pending_roots,
-	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget,
-	LodChunkFulfillDiag, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
-	LodCullRequest, LodLevelRootPending, LodLevelRootStreamed, LodRefreshCullPlugin,
-	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshEagerSyncPlugin,
+	reset_lod_chunk_budget, resume_desired_pending_roots, LodChunkBudgetClock,
+	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillDiag,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodCullRequest,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshSyncPlugin,
 };
 pub use viewer::LodViewer;
@@ -79,7 +77,7 @@ pub enum LodRefreshSystems {
 	UpdateLevels,
 	/// Show/hide roots and enqueue [`crate::LodLevelSpawnRequest`].
 	SyncRoots,
-	/// Spawn missing level-root content (chunk default / eager optional).
+	/// Spawn missing level-root content (chunk fulfill).
 	Fulfill,
 	/// Enqueue + budgeted teardown of inactive level roots.
 	Cull,
@@ -147,10 +145,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -162,10 +157,7 @@ where
 	F: QueryFilter + 'static,
 {
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 
@@ -194,3 +186,6 @@ where
 
 /// Compatibility alias for [`LodSceneRefreshRegionPlugin`].
 pub type LodRefreshProductionPlugin<P, F, M> = LodSceneRefreshRegionPlugin<P, F, M>;
+
+#[cfg(test)]
+mod tests;

@@ -6,19 +6,18 @@
 //! tail, and cow snout.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Hars;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::HarsAssets;
 use crozon_character_items::ItemColor;
 use sliders::HarsSliders;
 
@@ -49,6 +48,19 @@ impl Default for HarsColors {
 }
 
 impl HarsColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			NeckMesh | NeckRig => self.body.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -126,12 +138,14 @@ impl HarsConfig {
 	}
 }
 
-impl SpeciesConfig for HarsConfig {
-	fn species_name(&self) -> &'static str {
-		"hars"
+impl CharacterRecipe for HarsConfig {
+	type Components = Hars;
+
+	fn components(&self) -> Self::Components {
+		Hars::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		HarsAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

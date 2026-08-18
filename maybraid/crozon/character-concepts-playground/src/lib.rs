@@ -1,11 +1,12 @@
 //! Command-driven playground for the Character Concepts Screen.
 //!
 //! This crate is the first executable surface for the concept plan. Commands are
-//! temporary stand-ins for future UI fields; they still resolve through
-//! `crozon-characters` before any Bevy entities are spawned.
+//! temporary stand-ins for future UI fields; they spawn through
+//! `crozon-characters` LodScene recipes ([`crozon_characters::CharacterRecipe::clothed`]).
 
 mod animation;
 mod camera_focus;
+mod character_lod;
 pub mod commands;
 mod diagnostics;
 mod focus;
@@ -24,7 +25,6 @@ pub use commands::{ConceptsCommand, CONCEPTS_CLI_NAME};
 pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
-use bevy::app::SceneSpawnerSystems;
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -32,10 +32,12 @@ use crozon_character_playground::camera;
 use crozon_character_ui_menus::CharacterMenu;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
-use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use character_lod::CharacterLodPlugin;
+use crozon_characters::CharacterHostSystems;
 use focus::animate_focused_preview_asset;
 use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
+use lod::LodViewer;
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
 use menu_listeners::{
@@ -43,14 +45,11 @@ use menu_listeners::{
 	sync_menu_state_from_config, CharacterMenuState,
 };
 use preview::{
-	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
-	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown, PreviewRevealDebugState,
+	preview_pass_ready, reveal_ready_preview, stamp_lod_character_preview, sync_preview,
+	tick_preview_respawn_cooldown, ConceptPreviewConfig, ConceptPreviewSyncState,
+	PreviewRespawnCooldown, PreviewRevealDebugState,
 };
-use skinning::{
-	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,
-	dump_bones_to_console, maintain_resolved_pose, prune_duplicate_part_scenes,
-	remap_part_skin_to_rig, DumpBonesRequest,
-};
+use skinning::{dump_bones_to_console, DumpBonesRequest};
 use species_session::{
 	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
 };
@@ -81,6 +80,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				enabled_at_start: false,
 				..CameraLookConfig::default()
 			}))
+			.add_plugins(CharacterLodPlugin)
 			.add_plugins(
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
@@ -90,6 +90,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				Startup,
 				(
 					camera::setup_camera,
+					add_lod_viewer_to_camera.after(camera::setup_camera),
 					setup_lighting,
 					scale_reference::setup_scale_reference,
 					init_character_menu_state,
@@ -112,35 +113,26 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(on_character_menu_event),
-					sync_focus_reference.after(sync_preview),
+					sync_focus_reference.after(sync_preview).before(CharacterHostSystems::BoneMap),
+					stamp_lod_character_preview
+						.after(sync_preview)
+						.after(CharacterHostSystems::Membership)
+						.before(crozon_characters::CharacterMotionSystems::Anim),
 					animate_focused_preview_asset
 						.after(dispatch_menu_interactions)
 						.before(sync_preview),
-					build_rig_bone_map.after(sync_focus_reference),
-					maintain_resolved_pose.after(build_rig_bone_map),
 				),
 			)
 			.add_systems(
 				Update,
 				(
-					attach_focus_reference_to_sockets.after(build_rig_bone_map),
-					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
-					remap_part_skin_to_rig
-						.after(attach_parts_to_sockets)
-						.after(SceneSpawnerSystems::WorldInstanceSpawn)
-						.run_if(preview_pass_ready),
-					prune_duplicate_part_scenes
-						.after(remap_part_skin_to_rig)
-						.run_if(preview_pass_ready),
 					reveal_ready_preview
-						.after(maintain_resolved_pose)
-						.after(prune_duplicate_part_scenes)
+						.after(CharacterHostSystems::Pose)
+						.after(CharacterHostSystems::Fulfill)
 						.run_if(preview_pass_ready),
 					apply_preview_colors
-						.after(prune_duplicate_part_scenes)
+						.after(CharacterHostSystems::Fulfill)
 						.run_if(preview_pass_ready),
-					init_limb_animators.after(maintain_resolved_pose).run_if(preview_pass_ready),
-					animate_body_rig.after(init_limb_animators).run_if(preview_pass_ready),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
@@ -148,15 +140,19 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			)
 			.add_systems(
 				PostUpdate,
-				(
-					maintain_resolved_pose.before(TransformSystems::Propagate),
-					// Runs after propagation so shadow-rig socket globals reflect
-					// the pose written this frame.
-					apply_camera_suggestion
-						.after(TransformSystems::Propagate)
-						.after(maintain_resolved_pose),
-				),
+				(apply_camera_suggestion
+					.after(TransformSystems::Propagate)
+					.after(CharacterHostSystems::Pose),),
 			);
+	}
+}
+
+fn add_lod_viewer_to_camera(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera3d>, Without<LodViewer>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(LodViewer);
 	}
 }
 

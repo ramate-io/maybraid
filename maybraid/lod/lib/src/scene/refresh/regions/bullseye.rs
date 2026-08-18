@@ -24,10 +24,7 @@ pub struct Bullseye {
 
 impl Default for Bullseye {
 	fn default() -> Self {
-		Self {
-			inner: 50.0,
-			outer: 500.0,
-		}
+		Self { inner: 50.0, outer: 500.0 }
 	}
 }
 
@@ -75,11 +72,7 @@ mod tests {
 	use super::*;
 	use bevy::prelude::Transform;
 
-	fn lod_ref_at<'a>(
-		prev: &'a Transform,
-		curr: &'a Transform,
-		bounds: &'a Aabb3d,
-	) -> LodRef<'a> {
+	fn lod_ref_at<'a>(prev: &'a Transform, curr: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {
 			entity: Entity::from_bits(1),
 			previous_transform: prev,

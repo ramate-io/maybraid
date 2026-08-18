@@ -1,18 +1,21 @@
 //! Rough-stonework unit right-triangle panel kit (LOD triad).
 
+use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
+use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
 use scene_ref::MirrorAxis;
 
 use crate::assets::panels::rough_stonework::{
 	RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_LOW, RIGHT_TRIANGLE_MID,
 };
+use crate::partitions::geometry::LinearLod;
 use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
-use crate::roofs::lod::leaf_scene_ref_lod;
+use crate::partitions::probe::PartitionLodProbe;
 
 /// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
 pub struct RoughStoneFloorRightTriangle;
 
 impl_partition_mesh_lod_scene!(
@@ -21,16 +24,26 @@ impl_partition_mesh_lod_scene!(
 );
 
 impl RoughStoneFloorRightTriangle {
-	/// LOD host with optional [`scene_ref::SceneRef`] axis mirroring on every tier.
+	/// Posed triad content with optional axis mirroring (no host scaffolding).
+	pub fn scene_for_level_mirrored(
+		level: LodSceneLevel,
+		mirror: Option<MirrorAxis>,
+	) -> impl Scene + 'static {
+		LinearLod::posed_mirrored_tier(
+			PartitionMeshSet::new(RIGHT_TRIANGLE_HIGH, RIGHT_TRIANGLE_MID, RIGHT_TRIANGLE_LOW),
+			Transform::IDENTITY,
+			level,
+			mirror,
+		)
+	}
+
+	/// Level from [`LodRef`] bounds, then mirrored posed content.
 	pub fn scene_with_lod_mirrored(
 		lod_ref: &LodRef,
 		mirror: Option<MirrorAxis>,
 	) -> impl Scene + 'static {
-		leaf_scene_ref_lod(
-			RIGHT_TRIANGLE_HIGH.scene_ref().with_mirror(mirror),
-			RIGHT_TRIANGLE_MID.scene_ref().with_mirror(mirror),
-			RIGHT_TRIANGLE_LOW.scene_ref().with_mirror(mirror),
-			lod_ref,
-		)
+		let level = PartitionLodProbe::from_aabb(lod_ref.bounds)
+			.level_for(lod_ref.current_transform);
+		Self::scene_for_level_mirrored(level, mirror)
 	}
 }

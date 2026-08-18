@@ -4,18 +4,14 @@
 //! optional t-bar nose, small common mouth, no ears, and soft earth-tone skin colors.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Dui;
 pub mod palette;
 pub mod pose;
 
-use crate::{
-	species::{common::HairMesh, SpeciesConfig},
-	ResolvedCharacterAssembly,
-};
+use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::DuiAssets;
 
 pub use assets::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh};
 pub use palette::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor};
@@ -46,6 +42,18 @@ impl Default for DuiColors {
 }
 
 impl DuiColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Nose => self.nose_color.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -104,12 +112,16 @@ impl DuiConfig {
 	}
 }
 
-impl SpeciesConfig for DuiConfig {
-	fn species_name(&self) -> &'static str {
-		"dui"
+impl CharacterRecipe for DuiConfig {
+	type Components = Dui;
+
+	fn components(&self) -> Self::Components {
+		Dui::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		DuiAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

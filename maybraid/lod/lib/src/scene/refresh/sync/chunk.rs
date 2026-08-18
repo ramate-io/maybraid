@@ -1,6 +1,6 @@
 //! Incremental LOD level-root fulfillment via [`crate::SceneChunk`].
 //!
-//! Default sync path (vs optional eager [`super::eager::fulfill_lod_level_spawn`]):
+//! Default sync path for level-root fulfillment:
 //! builds a pending root, drains weighted primitives under
 //! [`LodChunkFulfillBudget`], marks content [`LodLevelRootStreamed`], then
 //! completes when next-level nested [`LodSceneHost`]s are [`LodSceneHostStreamed`].
@@ -33,9 +33,7 @@ use crate::scene::LodScene;
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
-use super::cull::{
-	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, LodCullRequest,
-};
+use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, LodCullRequest};
 
 pub use begin::begin_chunk_lod_fulfill;
 pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
@@ -199,10 +197,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -213,10 +208,7 @@ where
 {
 	/// Chunk fulfill only — region cull plugins own enqueue.
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 

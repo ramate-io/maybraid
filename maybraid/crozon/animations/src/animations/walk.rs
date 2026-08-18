@@ -4,7 +4,7 @@
 //! cycle phase in `[0, 1)`. Humanoid rigs convert to [`UprightWalk`](super::UprightWalk)
 //! before applying joint articulation.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Walk {
 	/// Femur forward/back stride amplitude (radians).
 	pub stride: f32,

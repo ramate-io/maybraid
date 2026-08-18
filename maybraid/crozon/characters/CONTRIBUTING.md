@@ -5,32 +5,76 @@
 ## Adding a new species
 
 A species is a self-contained module under `src/species/` that owns its config,
-baseline pose, asset resolver, and color `enums`. Shared mesh catalogs (body, eye,
+baseline pose, LodScene recipe, and color `enums`. Shared mesh catalogs (body, eye,
 hair, clothing, etc.) live in `src/species/common/assets.rs`; species-specific
 meshes and swatches stay in the species module.
 
-Use **`Brodler`** as the template for a fixed-silhouette species (config + assets
-+ pose, no user sliders). Use **`Braidman`** when the species needs gender/build
-presets and rig or feature sliders.
+Use **`Brodler`** as the template for a fixed-silhouette species (config + catalog
+enums + pose, no user sliders). Use **`Braidman`** when the species needs
+gender/build presets and rig or feature sliders.
+
+Orthograde humanoid species that share the standard head-rig sockets should
+implement [`CharacterComponents`](src/components.rs) with builders in
+[`species/common/nodes.rs`](src/species/common/nodes.rs) (`eye_left` /
+`eye_right`, `ear_left` / `ear_right`, `orthograde_head_rig`, …). Right-side
+left-authored GLBs use [`SceneRef::reflected`](../../scene-ref/src/scene_ref.rs)
+for handedness; socket locals stay placement-only (no `scale.x = -1`). Clothing
+is [`Clothed<T>`](src/components.rs) via [`CharacterRecipe::clothed`](src/components.rs),
+not part of the inner species. Apps that spawn characters add
+[`CharacterHostsPlugin`](src/hosts.rs) (scene-ref, material-ref, LOD refresh,
+[`CharacterComponentsPlugin`](src/plugin.rs), [`crozon-character-motion`](../character-motion/),
+and every clothed species). A single species can instead call
+[`add_character_components_host::<Clothed<T>>`](src/plugin.rs).
+[`RigNode`](src/nodes/rig_node.rs) / [`PartNode`](src/nodes/part.rs) are
+registered once. Those nodes stamp socket/skin/rig/part/transform from
+[`LodScene::host`](../../lod/lib/src/scene/lod_scene.rs); part materials
+(`MaterialRefRoot` + `PropagateToDescendants`) live on the **part host**, not
+the GLB child, so live paint is an insert on the member you query. Nested hosts
+get [`MemberOf`](src/member.rs) after fulfill (walk [`ChildOf`] to
+[`CharacterRoot`](src/member.rs)); socket/skin fulfill is scoped to that
+character. Proportion pose is [`ActiveRigPose`](src/rig.rs) on the rig member
+([`maintain_resolved_pose`](src/pose.rs)). Clips are [`AnimRefRoot`](src/anim.rs)
+on the body-rig host (default still). [`AnimClip`](../character-motion/src/clip.rs)
+is the identity (variant + sampler knobs); the mailbox transitions on
+[`AnimId`](../character-motion/src/clip.rs) when the variant changes, not when
+knobs retune. [`CharacterComponentsPlugin`](src/plugin.rs) owns membership, bone
+map, socket/skin fulfill, and pose. The mailbox and terrain pitch live in
+[`crozon-character-motion`](../character-motion/README.md): host markers
+(`AnimateBones` / `AnimateEffects` / `ApplyTerrainPitch`) are synced from the
+shown LOD band and filter the expensive systems. Do not
+grow a post-spawn prepare pass that copies materials or poses.
+
+The playground spawn path is LodScene ([`CharacterRecipe::clothed`](src/components.rs)).
+[`CharacterComponents`](src/components.rs) is the only character recipe.
+Part colors live on [`PartNode::material`](src/nodes/part.rs) (`*Colors::color_for_slot`
+and [`ClothingLayer`](src/components.rs) stamp palette[0]). Live playground tint
+inserts [`MaterialRefRoot`](src/nodes/part.rs) on the part host (change-driven
+[`material-ref`](../../material-ref) fulfill); [`PreviewAssetTarget`](../character-concepts-playground/src/preview.rs)
+stays UI mapping, not the paint path. Live animation inserts [`AnimRefRoot`](src/anim.rs)
+on the body member (`ConceptAnimation` maps at the playground/menu edge).
+Playground live updates query [`CharacterMembers`](src/member.rs) of the preview
+root — not the whole world.
 
 ### 1. `crozon-characters` (this crate)
 
 1. Create `src/species/<name>.rs` with:
-   - `*Config` and `*Colors` structs
+   - `*Config` and `*Colors` structs (`*Colors::color_for_slot` for recipe tints)
    - species-local `enums` (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
      and `color()` where needed
-   - `impl SpeciesConfig for *Config` calling `*Assets::resolve(self)`
-2. Create `src/species/<name>/assets.rs`:
-   - `*Assets::resolve()` building a [`ResolvedCharacterAssembly`](src/assembly.rs)
-   - socket attachments for head features; omit parts the species does not use
-     (for example `Mygr` has no nose)
-3. Create `src/species/<name>/pose.rs` when the species has a fixed baseline:
+   - `impl CharacterRecipe for *Config`
+2. Create `src/species/<name>/recipe.rs` with the inner [`CharacterComponents`](src/components.rs)
+   recipe (`rig_nodes_for_level` / `part_nodes_for_level`). Stamp part colors from
+   `color_for_slot` onto `PartNode.material` (`with_base_color`).
+3. Create `src/species/<name>/assets.rs` when the species has a local mesh catalog:
+   - mesh `enums` with `VALUES`, `label()`, and `path()`
+   - omit parts the species does not use (for example `Mygr` has no nose)
+4. Create `src/species/<name>/pose.rs` when the species has a fixed baseline:
    - compose [`RigPoseLayer`](../rigs/src/pose.rs) scales via
      `BraidmanSliders::apply_*` helpers for leg length, thigh thickness, etc.
-4. Register the module in [`src/species.rs`](src/species.rs).
-5. Add shared asset paths to [`src/species/common/assets.rs`](src/species/common/assets.rs)
+5. Register the module in [`src/species.rs`](src/species.rs).
+6. Add shared asset paths to [`src/species/common/assets.rs`](src/species/common/assets.rs)
    when a mesh may be reused across species.
-6. Wire menu traits in [`src/menu_traits.rs`](src/menu_traits.rs):
+7. Wire menu traits in [`src/menu_traits.rs`](src/menu_traits.rs):
    - `impl_menu_identity!` for list/cycle `enums`
    - `impl_asset_option!` for thumbnail meshes
    - `SwatchOption` for species color `enums`
@@ -51,9 +95,11 @@ presets and rig or feature sliders.
 
 1. Add `src/commands/<name>.rs` for CLI preview `args`.
 2. Extend [`src/preview.rs`](../character-concepts-playground/src/preview.rs):
-   - `ConceptPreviewConfig::<Name>`
-   - `PreviewTarget::<Name>*` variants
-   - `preview_color_<name>`, `preview_target` mapping, sync paths
+   - `ConceptPreviewConfig::<Name>` (add the variant to `with_clothed_recipe!`)
+   - `PreviewTarget::<Name>*` variants and `preview_asset_target` mapping
+   - `*Colors::color_for_slot` (recipe stamps `PartNode.material`; spawn /
+     `lod_rig_nodes` / `lod_part_nodes` go through the macro). Live tint writes
+     `MaterialRefRoot` on the part member of the preview [`CharacterRoot`].
 3. Update [`src/menu_listeners.rs`](../character-concepts-playground/src/menu_listeners.rs),
    [`src/species_session.rs`](../character-concepts-playground/src/species_session.rs),
    [`src/focus_reference.rs`](../character-concepts-playground/src/focus_reference.rs),
@@ -65,6 +111,14 @@ presets and rig or feature sliders.
 cargo test -p crozon-characters
 cargo test -p crozon-character-ui-menus
 cargo check -p crozon-character-concepts-playground
+cargo check -p crozon-character-world-movements-playground
+```
+
+World locomotion (walk / run / jump on a small Durham patch) is
+[`character-world-movements-playground`](../character-world-movements-playground/):
+
+```bash
+cargo run -p crozon-character-world-movements-playground
 ```
 
 Spawn from the playground UI (species picker) or CLI:
@@ -81,17 +135,17 @@ CROZON_PREVIEW_DEBUG=1 crozon-concepts hars preview
 
 ### Socketing, scale, and shear
 
-Parts attach with [`SocketAttachment`](src/assembly.rs): a `ChildOf(bone)` plus a
+Parts attach with [`SocketRef`](src/socket.rs): a `ChildOf(bone)` plus a
 local `Transform`. Bevy propagates the full parent affine, so **non-uniform scale
 on an ancestor combined with rotation on or under that socket shears** the
 attached mesh. Intermediate bones do not fix this if the part remains a transform
 child of the scaled chain.
 
-Nested armatures use [`SocketRig::Neck`](src/assembly.rs) /
+Nested armatures use [`RigId::Neck`](src/socket.rs) /
 [`CharacterPartSlot::NeckRig`](src/assembly.rs) (+ optional `NeckMesh`):
 
 1. Socket the neck OwnRig to the body `head_socket`.
-2. Apply **pitch** (and optional **uniform** scale) via [`ResolvedCharacterPart::pose`].
+2. Apply **pitch** (and optional **uniform** scale) via the neck [`RigNode`](src/nodes/rig_node.rs) pose.
 3. Socket the head to the neck tip `head_socket` (counter-pitch on the tip bone).
 
 With a dedicated neck armature/mesh, **prefer authored length + pitch + uniform

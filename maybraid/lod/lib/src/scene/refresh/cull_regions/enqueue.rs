@@ -1,7 +1,6 @@
 //! Region-scoped cull enqueue via [`crate::LodSceneRegionIndex`].
 
 use std::marker::PhantomData;
-use std::time::Instant;
 
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
@@ -11,17 +10,17 @@ use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
 };
 use crate::scene::cull::LodSceneCulls;
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{lod_level_roots_entity, LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneRegionIndex;
 use crate::scene::LodScene;
 
+use super::super::ensure_refresh_core;
 use super::super::sync::{
-	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullRequest,
-	LodLevelRootPending, LodCullInFlight,
+	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullInFlight, LodCullRequest,
+	LodLevelRootPending,
 };
 use super::super::viewer::LodViewer;
-use super::super::ensure_refresh_core;
 use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefreshAllowed};
 use super::produce::LodSceneCullRegion;
 
@@ -37,11 +36,7 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	hosts: Query<
 		(&T, &LodSceneLevel, &Children),
-		(
-			With<LodSceneHost>,
-			With<LodNestedRefreshAllowed>,
-			With<LodHostHasCullableRoots>,
-		),
+		(With<LodSceneHost>, With<LodNestedRefreshAllowed>, With<LodHostHasCullableRoots>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
@@ -54,50 +49,30 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
 {
-	let mut region_iter = regions.read().peekable();
-	if region_iter.peek().is_none() {
+	if regions.is_empty() {
 		return;
 	}
 
 	let snapshots = collect_node_snapshots(&nodes);
-	if snapshots.is_empty() {
-		return;
-	}
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let Some(viewer_ref) = refs.first() else {
 		return;
 	};
 
-	let t0 = Instant::now();
-	let mut hosts_touched = 0u32;
-	let mut culls_none = 0u32;
-	let mut roots_seen = 0u32;
-	let mut enqueued = 0u32;
-	let mut regions_n = 0u32;
-
 	let mut index = index.into_inner();
-	for region_msg in region_iter {
-		regions_n += 1;
+	for region_msg in regions.read() {
 		for (entity, _scene) in index.hosts_in_region(region_msg.region) {
 			let Ok((scene, current, host_children)) = hosts.get(entity) else {
 				continue;
 			};
-			hosts_touched += 1;
 
 			let culls = scene.scene_lod_culls(viewer_ref, *current);
 			if matches!(culls, LodSceneCulls::None) {
-				culls_none += 1;
 				continue;
 			}
 
-			let mut roots_entity = None;
-			for child in host_children.iter() {
-				if level_roots_heads.contains(child) {
-					roots_entity = Some(child);
-					break;
-				}
-			}
-			let Some(roots_entity) = roots_entity else {
+			let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads)
+			else {
 				continue;
 			};
 			let Ok(root_children) = level_roots_heads.get(roots_entity) else {
@@ -115,7 +90,6 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				let Ok(root) = root_keys.get(child) else {
 					continue;
 				};
-				roots_seen += 1;
 				if root.0 == *current {
 					continue;
 				}
@@ -124,18 +98,9 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				}
 				if culls.should_cull(root.0) {
 					enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
-					enqueued += 1;
 				}
 			}
 		}
-	}
-
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if enqueued > 0 {
-		info!(
-			"[lod.cull] region_enqueue: regions={regions_n} hosts={hosts_touched} \
-			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
-		);
 	}
 }
 
@@ -158,9 +123,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

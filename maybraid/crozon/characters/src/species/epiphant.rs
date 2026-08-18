@@ -4,7 +4,8 @@
 //! meerkat head, Epiphant ears, trunkish nose, and cat tail.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Epiphant;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -12,12 +13,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::EpiphantAssets;
 use sliders::EpiphantSliders;
 
 pub use assets::{EpiphantBodyMesh, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh};
@@ -48,6 +47,19 @@ impl Default for EpiphantColors {
 }
 
 impl EpiphantColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig => self.head.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Nose => self.nose.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> EpiphantColor {
 		self.body
 	}
@@ -134,12 +146,14 @@ impl EpiphantConfig {
 	}
 }
 
-impl SpeciesConfig for EpiphantConfig {
-	fn species_name(&self) -> &'static str {
-		"epiphant"
+impl CharacterRecipe for EpiphantConfig {
+	type Components = Epiphant;
+
+	fn components(&self) -> Self::Components {
+		Epiphant::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		EpiphantAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

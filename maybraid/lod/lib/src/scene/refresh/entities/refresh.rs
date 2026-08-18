@@ -30,18 +30,13 @@ pub fn refresh_lod_host_levels<T>(
 			.or_insert(msg.level);
 	}
 
-	let mut changed = 0u32;
 	for (entity, level) in best {
 		let Ok(mut current) = hosts.get_mut(entity) else {
 			continue;
 		};
 		if *current != level {
 			*current = level;
-			changed += 1;
 		}
-	}
-	if changed > 0 {
-		info!("[lod.refresh] refresh_lod_host_levels: changed={changed}");
 	}
 }
 
@@ -58,9 +53,7 @@ where
 	T: Component + LodScene + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

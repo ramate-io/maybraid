@@ -24,6 +24,12 @@ pub enum PanelGeometry {
 	TessellatedTriangle(crate::panels::TessellatedTriangle),
 }
 
+impl Default for PanelGeometry {
+	fn default() -> Self {
+		Self::rectangle()
+	}
+}
+
 impl PanelGeometry {
 	pub fn rectangle() -> Self {
 		Self::Rectangle(Rectangle)

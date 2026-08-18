@@ -6,7 +6,7 @@
 use std::f32::consts::TAU;
 
 /// Repeating in-phase wing flap.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Flapping {
 	/// Flaps per second when `progress` is elapsed time in seconds.
 	pub speed: f32,

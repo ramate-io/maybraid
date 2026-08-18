@@ -32,7 +32,7 @@ use lod::gen::{
 	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
 };
 use lod::lod_ref::LodRef;
-use lod::lod_scene_host::lod_host_scene;
+use lod::lod_host_scene_pending;
 use procedural_common::NoiseParams;
 
 use richmond_building_components::floors::FloorNode;
@@ -216,8 +216,12 @@ impl LodScene for WizardsTower {
 		}
 	}
 
+	fn scene_bounds(&self) -> bevy_math::bounding::Aabb3d {
+		self.constraints.aabb
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		lod_host_scene(level, self.constraints.aabb, self.scene_with_level(lod_ref, level))
+		lod_host_scene_pending(level, self.constraints.aabb)
 	}
 }

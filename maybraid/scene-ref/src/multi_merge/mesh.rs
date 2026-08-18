@@ -84,8 +84,9 @@ fn retain_common_attributes(meshes: &mut [Mesh]) {
 		return;
 	}
 
-	let mut common: Option<HashMap<MeshVertexAttributeId, std::mem::Discriminant<VertexAttributeValues>>> =
-		None;
+	let mut common: Option<
+		HashMap<MeshVertexAttributeId, std::mem::Discriminant<VertexAttributeValues>>,
+	> = None;
 	for mesh in meshes.iter() {
 		let mut attrs = HashMap::default();
 		for (attr, values) in mesh.attributes() {
@@ -93,10 +94,7 @@ fn retain_common_attributes(meshes: &mut [Mesh]) {
 		}
 		common = Some(match common.take() {
 			None => attrs,
-			Some(prev) => prev
-				.into_iter()
-				.filter(|(id, key)| attrs.get(id) == Some(key))
-				.collect(),
+			Some(prev) => prev.into_iter().filter(|(id, key)| attrs.get(id) == Some(key)).collect(),
 		});
 	}
 
@@ -108,9 +106,7 @@ fn retain_common_attributes(meshes: &mut [Mesh]) {
 		let drop: Vec<_> = mesh
 			.attributes()
 			.filter(|(attr, values)| {
-				common
-					.get(&attr.id)
-					.is_none_or(|key| *key != std::mem::discriminant(*values))
+				common.get(&attr.id).is_none_or(|key| *key != std::mem::discriminant(*values))
 			})
 			.map(|(attr, _)| attr.id)
 			.collect();

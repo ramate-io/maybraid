@@ -1,6 +1,6 @@
 # Incremental LOD scene chunks
 
-Backwards-compatible alternative to eager [`fulfill_lod_level_spawn`](../lib/src/scene/refresh.rs): amortize spawning a level root across frames under a weight budget.
+Amortize spawning a level root across frames under a weight budget.
 
 ## API
 
@@ -16,7 +16,7 @@ Optional override:
 fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk;
 ```
 
-Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit, same cost shape as eager fulfill (full scene build still happens up front).
+Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit (full scene build still happens up front unless overridden).
 
 ## Lifecycle
 
@@ -33,10 +33,14 @@ Cancel: if the desired level changes, pending roots for other levels are despawn
 ```rust
 add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 // or
-add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe writes level)
+add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe / region writes level)
+// or Avian region stack (see chico sbs-trees-playground `vegetation_lod.rs`)
 ```
 
-Optional eager fulfill ([`LodSceneRefreshEagerSyncPlugin`](../lib/src/scene/refresh.rs)) remains available for hosts that do not need amortization; chunk fulfill is the default sync path.
+Pending hosts use [`LodScene::host`](../lib/src/scene/lod_scene.rs) (core pending
+shell + [`host_contents`](../lib/src/scene/lod_scene.rs)); chunk fulfill streams
+[`scene_chunks_with_level`](../lib/src/scene/lod_scene.rs). Domain types override
+`host_contents` only — do not re-stamp `lod_host_scene_pending`.
 
 ## Future: coalescing and compaction
 

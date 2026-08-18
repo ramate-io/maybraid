@@ -20,8 +20,8 @@ use malo_animations::{
 use crate::character::CharacterConfig;
 use crate::skinning::{BoneMap, CharacterRig};
 
-const RUN_CYCLE_SPEED: f32 = 0.5;
-const WALK_CYCLE_SPEED: f32 = 0.35;
+const RUN_CYCLE_SPEED: f32 = 1.4;
+const WALK_CYCLE_SPEED: f32 = 0.9;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;

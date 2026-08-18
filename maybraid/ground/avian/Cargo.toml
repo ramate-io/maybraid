@@ -1,0 +1,18 @@
+[package]
+name = "ground-avian"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+avian3d = { workspace = true }
+bevy = { workspace = true }
+ground = { workspace = true }
+
+[lints]
+workspace = true

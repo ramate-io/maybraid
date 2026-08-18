@@ -4,20 +4,18 @@
 //! species-owned assets, baseline proportions, presets, and slider resolution
 //! before the full Braidman matrix is implemented.
 
-pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Braidman;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
-use assets::BraidmanAssets;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::BraidmanSliders;
 
@@ -52,6 +50,18 @@ impl Default for BraidmanColors {
 }
 
 impl BraidmanColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | Spine | Tail => self.body.color(),
+			HeadMesh | HeadRig | Nose | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -169,12 +179,16 @@ impl BraidmanConfig {
 	}
 }
 
-impl SpeciesConfig for BraidmanConfig {
-	fn species_name(&self) -> &'static str {
-		"braidman"
+impl CharacterRecipe for BraidmanConfig {
+	type Components = Braidman;
+
+	fn components(&self) -> Self::Components {
+		Braidman::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		BraidmanAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

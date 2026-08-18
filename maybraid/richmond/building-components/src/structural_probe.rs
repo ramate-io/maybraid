@@ -7,8 +7,8 @@
 //! Footprints are authored in the host's **local** XZ. Fine-phase updates map the
 //! viewer into that local frame via [`GlobalTransform`] so gallery offsets work.
 
-use bevy::prelude::{Component, GlobalTransform, Query, Res, Transform, With};
-use bevy_math::bounding::Aabb2d;
+use bevy::prelude::{Component, GlobalTransform, Query, Transform, With};
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -108,6 +108,24 @@ impl BuildingStructuralLodProbe {
 		} else {
 			LodSceneStatus::Changed(curr)
 		}
+	}
+
+	/// Coarse local AABB covering all XZ footprints (unit height when empty).
+	pub fn footprint_aabb(&self) -> Aabb3d {
+		if self.footprints.is_empty() {
+			return Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		}
+		let mut min_x = f32::INFINITY;
+		let mut max_x = f32::NEG_INFINITY;
+		let mut min_z = f32::INFINITY;
+		let mut max_z = f32::NEG_INFINITY;
+		for rect in &self.footprints {
+			min_x = min_x.min(rect.min.x);
+			max_x = max_x.max(rect.max.x);
+			min_z = min_z.min(rect.min.y);
+			max_z = max_z.max(rect.max.y);
+		}
+		Aabb3d::from_min_max(Vec3::new(min_x, 0.0, min_z), Vec3::new(max_x, 1.0, max_z))
 	}
 }
 

@@ -5,21 +5,17 @@
 //! uses body-rig asset normalization (~0.15×), not per-bone root scale.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tipple;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::TippleAssets;
 
 pub use assets::{TippleBeakMesh, TippleHeadMesh};
 pub use palette::{TippleBeakColor, TippleEyeColor, TipplePlumageColor};
@@ -48,6 +44,16 @@ impl Default for TippleColors {
 }
 
 impl TippleColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -110,12 +116,16 @@ impl TippleConfig {
 	}
 }
 
-impl SpeciesConfig for TippleConfig {
-	fn species_name(&self) -> &'static str {
-		"tipple"
+impl CharacterRecipe for TippleConfig {
+	type Components = Tipple;
+
+	fn components(&self) -> Self::Components {
+		Tipple::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TippleAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

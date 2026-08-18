@@ -4,7 +4,7 @@ use crozon_characters::CharacterPartSlot;
 
 use crate::{
 	preview::{PreviewAssetTarget, PreviewTarget},
-	skinning::{CharacterPart, NeedsSocketPlacement},
+	skinning::CharacterPart,
 	ui::CreatorUiState,
 };
 
@@ -15,16 +15,13 @@ pub fn animate_focused_preview_asset(
 	mut commands: Commands,
 	time: Res<Time>,
 	ui_state: Res<CreatorUiState>,
-	mut parts: Query<
-		(
-			Entity,
-			&PreviewAssetTarget,
-			&CharacterPart,
-			&mut Transform,
-			Option<&PreviewFocusBaseScale>,
-		),
-		Without<NeedsSocketPlacement>,
-	>,
+	mut parts: Query<(
+		Entity,
+		&PreviewAssetTarget,
+		&CharacterPart,
+		&mut Transform,
+		Option<&PreviewFocusBaseScale>,
+	)>,
 ) {
 	let focus = ui_state.focused_target();
 	for (entity, target, part, mut transform, base) in &mut parts {

@@ -4,21 +4,17 @@
 //! small flank ears, and igny snout. Soft blue skin with light contrasting accents.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Spibmom;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::SpibmomAssets;
 
 pub use assets::{SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh};
 pub use palette::{
@@ -56,6 +52,20 @@ impl Default for SpibmomColors {
 }
 
 impl SpibmomColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Horns => self.crown.color(),
+			Spine => self.spine.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -119,12 +129,16 @@ impl SpibmomConfig {
 	}
 }
 
-impl SpeciesConfig for SpibmomConfig {
-	fn species_name(&self) -> &'static str {
-		"spibmom"
+impl CharacterRecipe for SpibmomConfig {
+	type Components = Spibmom;
+
+	fn components(&self) -> Self::Components {
+		Spibmom::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		SpibmomAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

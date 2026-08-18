@@ -7,7 +7,7 @@ use crate::rigs::quadruped::apply::{apply_neck, apply_spine};
 use crate::rigs::quadruped::gait::{
 	apply_front_leg_stride, apply_hind_leg_stride, KneeTuning, LegStrideTuning,
 };
-use crate::{Animation, Effects, Progress};
+use crate::{Animation, Progress};
 
 /// The full cycle spans two bounds; each leg strikes once per bound, so a leg's
 /// phase covers two strikes per cycle.
@@ -22,13 +22,13 @@ const PAIR_STAGGER: f32 = 0.06;
 const SPINE_GATHER_CENTER: f32 = 0.06;
 
 impl<R: QuadrupedRig> Animation<R> for Gallop {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		QuadrupedGallop::from_gallop(self).apply(rig, progress)
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		QuadrupedGallop::from_gallop(self).apply_for(rig, progress)
 	}
 }
 
 impl<R: QuadrupedRig> Animation<R> for QuadrupedGallop<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let cycle = Progress(progress).cycle();
 		let bound_u = (cycle * BOUNDS_PER_CYCLE).fract();
 		let tuning = leg_tuning(self);
@@ -55,8 +55,6 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedGallop<R> {
 		let spine_flex = bound_spine_flex(bound_u, self.hind_bound_pitch, self.front_bound_pitch);
 		apply_spine(rig, spine_flex * 0.35, spine_flex);
 		apply_neck(rig, -spine_flex * self.neck_follow);
-
-		Effects::default()
 	}
 }
 

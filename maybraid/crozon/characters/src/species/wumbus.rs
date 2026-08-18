@@ -4,21 +4,17 @@
 //! dark fur colors with lighter contrasting features, and optional harrowed crown.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Wumbus;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::WumbusAssets;
 
 pub use assets::{WumbusHeadMesh, WumbusHornMesh, WumbusMouthMesh};
 pub use palette::{
@@ -56,6 +52,20 @@ impl Default for WumbusColors {
 }
 
 impl WumbusColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig => self.skin.color(),
+			Horns => self.horns.color(),
+			Spine => self.spine.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			EarLeft | EarRight => self.ears.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -120,12 +130,16 @@ impl WumbusConfig {
 	}
 }
 
-impl SpeciesConfig for WumbusConfig {
-	fn species_name(&self) -> &'static str {
-		"wumbus"
+impl CharacterRecipe for WumbusConfig {
+	type Components = Wumbus;
+
+	fn components(&self) -> Self::Components {
+		Wumbus::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		WumbusAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

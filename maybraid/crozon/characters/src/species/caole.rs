@@ -4,19 +4,18 @@
 //! flank ears, cat tail, and cow snout. Head mesh is Caole or Cowder.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Caole;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::EyeMesh;
-use assets::CaoleAssets;
 use crozon_character_items::ItemColor;
 use sliders::CaoleSliders;
 
@@ -47,6 +46,18 @@ impl Default for CaoleColors {
 }
 
 impl CaoleColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | EarLeft | EarRight => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -127,12 +138,14 @@ impl CaoleConfig {
 	}
 }
 
-impl SpeciesConfig for CaoleConfig {
-	fn species_name(&self) -> &'static str {
-		"caole"
+impl CharacterRecipe for CaoleConfig {
+	type Components = Caole;
+
+	fn components(&self) -> Self::Components {
+		Caole::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		CaoleAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

@@ -6,6 +6,12 @@ pub enum DoorGeometry {
 	Leaf(DoorLeaf),
 }
 
+impl Default for DoorGeometry {
+	fn default() -> Self {
+		Self::leaf()
+	}
+}
+
 impl DoorGeometry {
 	pub fn frame_15() -> Self {
 		Self::Frame15(DoorFrame15)

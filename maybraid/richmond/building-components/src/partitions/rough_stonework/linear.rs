@@ -5,7 +5,7 @@ use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
 
 /// Linear wall segment for radial subdividers and straight partitions.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, bevy::prelude::Component)]
 pub struct RoughStoneworkLinear;
 
 impl_partition_mesh_lod_scene!(

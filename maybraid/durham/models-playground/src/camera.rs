@@ -2,6 +2,7 @@ use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
+use lod::LodViewer;
 use std::f32::consts::PI;
 
 use crate::player::PlaygroundMode;
@@ -29,6 +30,7 @@ pub fn setup_camera(
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 40_000.0, ..default() }),
 		CameraController { speed: 80.0, sensitivity: 0.005, yaw, pitch },
+		LodViewer,
 		Msaa::Off,
 		DepthPrepass,
 	));
