@@ -19,13 +19,16 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::torch_tree::{
-	stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_for,
-};
+use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low};
 use canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 	MEDIUM_STICK_BANDS,
 };
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -108,10 +111,17 @@ impl VegetationComponents for StorybookTree {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(structural_lod_for(
-			self.structural_center(),
-			self.footprint_radius(),
-			self.geometry.height(),
-		))
+		Some(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.geometry.height(),
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

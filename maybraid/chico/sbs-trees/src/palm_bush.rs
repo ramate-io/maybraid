@@ -25,10 +25,15 @@ use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
+	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
 	world_space_frond_shape,
 };
 use crown::frond_shape_for_ring;
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Palm Bush.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -106,25 +111,32 @@ impl VegetationComponents for PalmBush {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let rings = self.ring_shapes();
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				Layers::from_free(frond_collection_nodes(self.ring_shapes()))
+				let (center, radius) = crown_lod_probe(&rings, None);
+				Layers::from_free(frond_collection_nodes(&rings, center, radius))
 			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+				let (min, max) = crown_aabb_from_rings(&rings);
 				Layers::from_free(layered_proxy_balls(min, max))
 			}
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
-		let center = (min + max) * 0.5;
-		let radius = ((max - min) * 0.5).max_element().max(1e-3);
-		Some(palm_structural_lod(center, radius))
+		let rings = self.ring_shapes();
+		let (center, radius) = crown_lod_probe(&rings, None);
+		Some(
+			StructuralLod::new(center, radius).with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }
 
@@ -145,6 +157,7 @@ mod tests {
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection");
 		assert!(collection.runs.len() <= FRONDS_PER_COLLECTION);
 		assert!(collection.runs[0].segments.len() >= 4, "authored rachis segments kept");
+		crate::palm_tree::assert_high_collections_match_structural_lod(&built);
 		Ok(())
 	}
 

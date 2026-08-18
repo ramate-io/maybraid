@@ -4,9 +4,9 @@
 //! which implements [`VegetationComponents`].
 //!
 //! Structural LOD (tree-radius bands):
-//! - **High** — within `3 ×` tree radius: full sticks; dense azimuth×height layered canopy
-//! - **Medium** — `3…12 ×` radius: trunk + band-sampled sticks; layered outer foliage + mid proxy
-//! - **Low** — `12…24 ×` radius: trunk + ~1/4 descenders; cheap-ball outer foliage + mid proxy
+//! - **High** — within `8 ×` tree radius: full sticks; dense azimuth×height layered canopy
+//! - **Medium** — `8…20 ×` radius: trunk + band-sampled sticks; layered outer foliage + mid proxy
+//! - **Low** — `20…32 ×` radius: trunk + ~1/4 descenders; cheap-ball outer foliage + mid proxy
 
 mod canopy;
 mod stick;
@@ -27,6 +27,11 @@ use canopy::{
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
 
 /// Authoring / CLI parameters for Sope's Banyan.
 #[derive(Component, Clone, Args, Debug)]
@@ -160,9 +165,12 @@ impl VegetationComponents for SopesBanyan {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(StructuralLod::new(
-			self.structural_center(),
-			self.footprint_radius(),
-		))
+		Some(
+			StructuralLod::new(self.structural_center(), self.footprint_radius()).with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

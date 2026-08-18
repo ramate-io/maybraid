@@ -1,8 +1,9 @@
 //! **Palm Crown** — stacked frond rings as [`VegetationComponents`].
 //!
 //! High / Medium emit one [`FrondCollection`] per frond with a multi-segment rachis run;
-//! fine-phase collection merge does Medium decimation. Per-frond collections keep merge
-//! LOD on rachis-scale extents. Low / UltraLow drop the fronds and keep two rotated
+//! fine-phase collection merge does Medium decimation. Collections stay per-frond so
+//! UltraLow merge cannot chord the whole crown; the LOD probe is the parent crown
+//! (same unit as structural LOD). Low / UltraLow drop the fronds and keep two rotated
 //! layered-ball proxies fit to the High crown AABB.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
@@ -26,7 +27,7 @@ pub use spawn::FROND_RING_SEED_SALT;
 
 /// High when `distance / crown_radius ≤` this (rachis / full frond topology).
 const PALM_CROWN_STRUCTURAL_HIGH_FACTOR: f32 = 36.0;
-/// Medium outer edge (chord fronds; no multi-segment rachis).
+/// Medium outer edge (fine-phase merge; same frond IR as High).
 const PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR: f32 = 54.0;
 /// Low outer edge (layered-ball proxy).
 const PALM_CROWN_STRUCTURAL_LOW_FACTOR: f32 = 100.0;
@@ -260,12 +261,14 @@ impl PalmCrown {
 
 	/// One [`FrondCollection`] per frond (single run).
 	///
-	/// Ring-wide collections make the LOD extent the crown diameter, so UltraLow merge
-	/// collapses to an oversized chord; per-frond collections keep extent ≈ rachis length.
+	/// Ring-wide collections make UltraLow merge chord the whole crown; per-frond
+	/// collections keep merge extent ≈ rachis length. LOD probe is the parent crown
+	/// ([`Self::crown_center`] / [`Self::structural_radius`]), not the run AABB.
 	///
-	/// When `collapse_rachis`, each multi-segment spine becomes a single base→tip chord
-	/// (Medium structural band).
+	/// When `collapse_rachis`, each multi-segment spine becomes a single base→tip chord.
 	fn frond_nodes(&self, collapse_rachis: bool) -> Vec<FoliageNode> {
+		let probe_center = self.crown_center();
+		let probe_radius = self.structural_radius();
 		let mut nodes = Vec::new();
 		for (index, anchor) in self.anchors.iter().enumerate() {
 			let shape = self.ring_shape(index as u32);
@@ -287,7 +290,7 @@ impl PalmCrown {
 					frond_run = FrondRun::new([chord]);
 				}
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new([frond_run]).bake_bounds_from_runs(),
+					FrondCollection::new([frond_run]).with_probe(probe_center, probe_radius),
 					Placement::IDENTITY,
 				));
 			}
@@ -427,9 +430,16 @@ mod tests {
 		let collection = nodes[0].geometry.as_frond_collection().expect("collection");
 		assert_eq!(collection.runs.len(), 1);
 		assert_eq!(collection.runs[0].segments.len(), 4);
-		let (_, extent) = collection.center_and_extent();
-		// Per-frond extent stays on rachis scale, not the full crown diameter.
-		assert!(extent < built.shape.length * 1.5);
+		let (center, extent) = collection.center_and_extent();
+		let probe = built.structural_lod().expect("probe");
+		assert!((center - probe.center).length() < 1e-4);
+		assert!((extent - probe.tree_radius).abs() < 1e-4);
+		let baked = FrondCollection::new(collection.runs.clone()).bake_bounds_from_runs();
+		let (_, baked_extent) = baked.center_and_extent();
+		assert!(
+			extent > baked_extent,
+			"crown probe {extent} should exceed one-frond AABB {baked_extent}"
+		);
 		Ok(())
 	}
 
