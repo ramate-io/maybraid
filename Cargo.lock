@@ -2841,6 +2841,7 @@ dependencies = [
  "game-commands",
  "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "render-item",
 ]
@@ -3016,6 +3017,7 @@ dependencies = [
  "durham-terrain",
  "jersey-terrain-stamps",
  "lod",
+ "lod-avian",
  "log",
  "marazion-watersheds",
  "noise",
@@ -3038,6 +3040,7 @@ dependencies = [
  "game-commands",
  "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "render-item",
 ]

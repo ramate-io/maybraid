@@ -5,9 +5,13 @@
 //! itself after one pass). Instead the scene marks roots with
 //! [`TerrainTrimeshCollider`], and this module queues
 //! [`ColliderConstructor::TrimeshFromMesh`] on mesh descendants when they appear.
+//!
+//! Constructed trimeshes use [`PhysicsInteractionLayer::Fixed`] so they contact
+//! Animated movers only — not other Fixed geometry or LOD Host volumes.
 
 use avian3d::prelude::{Collider, ColliderConstructor};
 use bevy::prelude::*;
+use lod_avian::PhysicsInteractionLayer;
 
 /// Marks a terrain presentation root whose mesh descendants should get trimesh colliders.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -24,7 +28,10 @@ pub fn queue_terrain_trimesh_colliders(
 	for root in &roots {
 		for descendant in children.iter_descendants(root) {
 			if mesh_entities.get(descendant).is_ok() {
-				commands.entity(descendant).insert(ColliderConstructor::TrimeshFromMesh);
+				commands.entity(descendant).insert((
+					ColliderConstructor::TrimeshFromMesh,
+					PhysicsInteractionLayer::fixed_layers(),
+				));
 			}
 		}
 	}
