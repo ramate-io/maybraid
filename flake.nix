@@ -29,6 +29,7 @@
 
         # An LLVM build environment
         dependencies = with pkgs; [
+          tracy
           gh
           protobuf
           grpcurl

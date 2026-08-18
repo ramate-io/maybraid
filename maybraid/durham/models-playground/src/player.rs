@@ -9,6 +9,7 @@ use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use durham_terrain_models::TerrainCellLayout;
 use game_commands::command::TextEntryFocus;
+use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
 use crate::camera::CameraController;
@@ -128,8 +129,10 @@ fn spawn_player(
 			Visibility::default(),
 			RigidBody::Dynamic,
 			collider,
+			PhysicsInteractionLayer::animated_layers(),
 			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-				.with_max_distance(GROUND_CAST_DISTANCE),
+				.with_max_distance(GROUND_CAST_DISTANCE)
+				.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 			LockedAxes::ROTATION_LOCKED,
 		))
 		.insert((

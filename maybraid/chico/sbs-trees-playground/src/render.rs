@@ -4,16 +4,16 @@ use chico_ball_components::tuft::{
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams, ChristmasTaigaParams,
-	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
-	ForlornSavannaParams, GoettingenFollowParams, HighBushParams, JerrysChaparralParams,
-	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
-	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
-	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
-	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
-	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
-	TropicalUndergrowthParams, UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
-	WildGrassParams,
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
+	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
+	DateGroveParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, HighBushParams,
+	JerrysChaparralParams, JungleLowerMassivesParams, JungleMassivesParams, LeewardParams,
+	LevantineScrubParams, LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams,
+	RiparianGeneralParams, RiparianMixParams, RiverineGreenParams, RollingOaksParams,
+	ShamanhomeParams, SpottyBushesParams, StorytellersParams, StrangeOasisParams, TallGrassParams,
+	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
+	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
+	WanderingAcaciaParams, WildGrassParams,
 };
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
@@ -27,9 +27,6 @@ use chico_sbs_trees::palm_bush::PalmBushParams;
 use chico_sbs_trees::penmarch_torch::PenmarchTorchParams;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrainedParams;
 use chico_sbs_trees::sopes_banyan::SopesBanyanParams;
-use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
-};
 use chico_sbs_trees::storybook_tree::StorybookTreeParams;
 use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
@@ -39,6 +36,9 @@ use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
 	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
+};
+use chico_vegetation_components::{
+	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
 };
 use chico_vegetation_shaders::ChicoStickMaterial;
 use chunk::cascade::CascadeChunk;
@@ -1101,7 +1101,7 @@ impl RenderSubject {
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
-			},
+			}
 			Self::LowBush(item) => {
 				let grove = item.build();
 				let bounds = grove
@@ -1237,7 +1237,7 @@ impl RenderSubject {
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
-			},
+			}
 			Self::TradeWinds(item) => {
 				let grove = item.build();
 				let bounds = grove
@@ -1245,7 +1245,7 @@ impl RenderSubject {
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
-			},
+			}
 			Self::WanderingAcacia(item) => {
 				let grove = item.build();
 				let bounds = grove
@@ -1253,7 +1253,7 @@ impl RenderSubject {
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
-			},
+			}
 			Self::Leeward(item) => {
 				let grove = item.build();
 				let bounds = grove
@@ -1285,7 +1285,7 @@ impl RenderSubject {
 					.map(|p| p.footprint_aabb())
 					.unwrap_or_else(|| vegetation_bounds(&grove));
 				spawn_lod_scene_host(commands, &grove, transform, bounds)
-			},
+			}
 			Self::RiparianGeneral(item) => {
 				let grove = item.build();
 				let bounds = grove

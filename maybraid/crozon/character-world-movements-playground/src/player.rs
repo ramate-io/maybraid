@@ -5,6 +5,7 @@ use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use durham_terrain_models::TerrainCellLayout;
 use game_commands::command::TextEntryFocus;
+use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
 use crate::camera::CameraController;
@@ -138,9 +139,13 @@ pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: V
 			Visibility::default(),
 			RigidBody::Dynamic,
 			collider,
+			PhysicsInteractionLayer::animated_layers(),
 			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-				.with_max_distance(GROUND_CAST_DISTANCE),
+				.with_max_distance(GROUND_CAST_DISTANCE)
+				.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 			LockedAxes::ROTATION_LOCKED,
+		))
+		.insert((
 			MovementAcceleration(MOVE_ACCEL),
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
@@ -176,6 +181,7 @@ pub(crate) fn park_player_for_stampede(
 	**velocity = Vec3::ZERO;
 	commands.entity(player).remove::<CharacterController>();
 	commands.entity(player).remove::<Collider>();
+	commands.entity(player).remove::<CollisionLayers>();
 	commands.entity(player).remove::<ShapeCaster>();
 	commands.entity(player).remove::<CameraFollow>();
 	commands.entity(player).insert(GravityScale(0.0));
@@ -189,8 +195,10 @@ pub(crate) fn restore_player_controller(commands: &mut Commands, player: Entity)
 	commands.entity(player).insert((
 		CharacterController,
 		collider,
+		PhysicsInteractionLayer::animated_layers(),
 		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-			.with_max_distance(GROUND_CAST_DISTANCE),
+			.with_max_distance(GROUND_CAST_DISTANCE)
+			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 		GravityScale(1.25),
 		CameraFollow,
 	));

@@ -21,6 +21,7 @@ crozon-characters = { workspace = true }
 ground-avian = { workspace = true }
 lod = { workspace = true }
 avian3d = { workspace = true }
+lod-avian = { workspace = true }
 render-item = { workspace = true }
 chunk = { workspace = true }
 clap = { workspace = true }

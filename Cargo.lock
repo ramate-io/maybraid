@@ -2331,6 +2331,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-vegetation-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "chico-groves",
+ "chico-sbs-trees-playground",
+ "chico-vegetation-components",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "log",
+ "render-item",
+]
+
+[[package]]
 name = "chico-vegetation-shaders"
 version = "0.0.1"
 dependencies = [
@@ -2824,6 +2841,7 @@ dependencies = [
  "game-commands",
  "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "render-item",
 ]
@@ -2999,6 +3017,7 @@ dependencies = [
  "durham-terrain",
  "jersey-terrain-stamps",
  "lod",
+ "lod-avian",
  "log",
  "marazion-watersheds",
  "noise",
@@ -3021,6 +3040,7 @@ dependencies = [
  "game-commands",
  "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "render-item",
 ]

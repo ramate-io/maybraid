@@ -147,8 +147,8 @@ impl PlaygroundDiag {
 
 	/// Bevy `LogPlugin` filter: quiet `lod` info unless `lod` is enabled.
 	pub fn log_filter(self) -> String {
-		let base = std::env::var("RUST_LOG")
-			.unwrap_or_else(|_| bevy::log::DEFAULT_FILTER.to_string());
+		let base =
+			std::env::var("RUST_LOG").unwrap_or_else(|_| bevy::log::DEFAULT_FILTER.to_string());
 		if self.lod || base.contains("lod=") {
 			base
 		} else {
@@ -304,10 +304,7 @@ where
 		if ms < self.threshold_ms {
 			return;
 		}
-		let name = ext
-			.get::<SystemName>()
-			.map(|n| n.0.as_str())
-			.unwrap_or("<unknown>");
+		let name = ext.get::<SystemName>().map(|n| n.0.as_str()).unwrap_or("<unknown>");
 		eprintln!("[lod.commands] system_commands apply={ms:.2}ms system={name}");
 	}
 }

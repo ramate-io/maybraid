@@ -12,6 +12,11 @@ status() {
     fi
 }
 
+if [ -n "$PRE_COMMIT_DISABLE" ]; then
+    echo "Pre-commit hooks disabled. Skipping..."
+    exit 0
+fi
+
 echo "Running pre-commit hooks..."
 
 # Directory containing pre-commit scripts

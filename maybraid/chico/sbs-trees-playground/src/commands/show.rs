@@ -1,31 +1,32 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
+use crate::monster_grass_plain::spawn_monster_grass_plain;
 use bevy::prelude::*;
 use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams, ChristmasTaigaParams,
-	CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams, DateGroveParams, DrylandParams,
-	ForlornSavannaParams, GoettingenFollowParams, GroveExtent, HighBushParams, JerrysChaparralParams,
-	JungleLowerMassivesParams, JungleMassivesParams, LeewardParams, LevantineScrubParams,
-	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
-	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams, SpottyBushesParams,
-	StorytellersParams, StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams,
-	TemperateMassivesParams, TradeWindsParams, TropicalThicketParams, TropicalTuftsParams,
-	TropicalUndergrowthParams, UnendingJungleParams, VineyardParams, WanderingAcaciaParams,
-	WildGrassParams, DEFAULT_GROVE_EXTENT_XZ,
+	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
+	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
+	DateGroveParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent,
+	HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams, JungleMassivesParams,
+	LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams, OrchardParams,
+	PalmShadeParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams,
+	RollingOaksParams, ShamanhomeParams, SpottyBushesParams, StorytellersParams,
+	StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams, TemperateMassivesParams,
+	TradeWindsParams, TropicalThicketParams, TropicalTuftsParams, TropicalUndergrowthParams,
+	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
+	DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::monster_grass_plain::spawn_monster_grass_plain;
 use chico_sbs_trees::{
-	BraidOakTreeParams, DatePalmParams, FriendsConiferParams, HighBushShootsParams, HonuBanyanParams,
-	JungleStorybookTreeParams, KamakuraTorchParams, LiamsConiferParams, NorthernConiferParams,
-	PalmBushParams, PalmCrownParams, PenmarchTorchParams, RorysHeadTrainedParams,
-	SimplemansHedgeParams, SopesBanyanParams, StorybookTreeParams, TemperateConiferParams,
-	TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
+	BraidOakTreeParams, DatePalmParams, FriendsConiferParams, HighBushShootsParams,
+	HonuBanyanParams, JungleStorybookTreeParams, KamakuraTorchParams, LiamsConiferParams,
+	NorthernConiferParams, PalmBushParams, PalmCrownParams, PenmarchTorchParams,
+	RorysHeadTrainedParams, SimplemansHedgeParams, SopesBanyanParams, StorybookTreeParams,
+	TemperateConiferParams, TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
 	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
 };
-use lod::gen::LodScene;
 use clap::{Args, Subcommand};
+use lod::gen::LodScene;
 
 use crate::render::SbsRenderItem;
 
@@ -305,7 +306,6 @@ impl ShowMonsterGrass {
 	}
 }
 
-
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowBraidGrass {
@@ -410,7 +410,6 @@ impl ShowWildGrass {
 		grass
 	}
 }
-
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
@@ -601,7 +600,6 @@ impl ShowForlornSavanna {
 	}
 }
 
-
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowGoettingenFollow {
@@ -685,7 +683,6 @@ impl ShowLeeward {
 		grove
 	}
 }
-
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
@@ -939,7 +936,6 @@ impl ShowUnendingJungle {
 	}
 }
 
-
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowJerrysChaparral {
@@ -1023,7 +1019,6 @@ impl ShowChristmasTaiga {
 		grove
 	}
 }
-
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
@@ -1354,35 +1349,28 @@ pub fn sync_show(
 		}
 		Some(ShowSubject::StorybookTree(t)) => Some(format!("storybook-tree:{:?}", t.geometry)),
 		Some(ShowSubject::VaseTree(t)) => Some(format!("vase-tree:{:?}", t.geometry)),
-		Some(ShowSubject::NorthernConifer(t)) => {
-			Some(format!(
-				"northern-conifer:{:?}|splay={}|spawn={}|apex={}",
-				t.geometry,
-				t.splay_radius_fraction_of_height,
-				t.splay_spawn_fraction,
-				t.apex_canopy_spawn_fraction
-			))
-		}
+		Some(ShowSubject::NorthernConifer(t)) => Some(format!(
+			"northern-conifer:{:?}|splay={}|spawn={}|apex={}",
+			t.geometry,
+			t.splay_radius_fraction_of_height,
+			t.splay_spawn_fraction,
+			t.apex_canopy_spawn_fraction
+		)),
 		Some(ShowSubject::LiamsConifer(t)) => Some(format!("liams-conifer:{:?}", t.geometry)),
 		Some(ShowSubject::TemperateConifer(t)) => Some(format!(
 			"temperate-conifer:{:?}|fronds={:?}|len={:?}|spawn={}",
-			t.geometry.inner,
-			t.fronds_per_joint,
-			t.frond_length_fraction,
-			t.frond_spawn_fraction
+			t.geometry.inner, t.fronds_per_joint, t.frond_length_fraction, t.frond_spawn_fraction
 		)),
-		Some(ShowSubject::HonuBanyan(t)) => Some(format!(
-			"honu-banyan:{:?}|growth={}",
-			t.geometry, t.growth_spawn_fraction
-		)),
+		Some(ShowSubject::HonuBanyan(t)) => {
+			Some(format!("honu-banyan:{:?}|growth={}", t.geometry, t.growth_spawn_fraction))
+		}
 		Some(ShowSubject::JungleStorybookTree(t)) => Some(format!(
 			"jungle-storybook-tree:{:?}|growth={}",
 			t.geometry, t.growth_spawn_fraction
 		)),
-		Some(ShowSubject::BraidOakTree(t)) => Some(format!(
-			"braid-oak-tree:{:?}|stick={:?}",
-			t.geometry, t.stick_surface_noise
-		)),
+		Some(ShowSubject::BraidOakTree(t)) => {
+			Some(format!("braid-oak-tree:{:?}|stick={:?}", t.geometry, t.stick_surface_noise))
+		}
 		Some(ShowSubject::SimplemansHedge(t)) => Some(format!(
 			"simplemans-hedge:h={}|xz={}|d={}|seed={}|clumps={}",
 			t.height, t.footprint_xz, t.density, t.seed, t.clump_count
@@ -1703,7 +1691,9 @@ pub fn sync_show(
 		ShowSubject::TallGrass(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::WildGrass(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::BushScrub(params) => spawn_show_grove(&mut commands, &params.build()),
-		ShowSubject::TropicalUndergrowth(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TropicalUndergrowth(params) => {
+			spawn_show_grove(&mut commands, &params.build())
+		}
 		ShowSubject::LevantineScrub(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::StrangeOasis(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1727,7 +1717,9 @@ pub fn sync_show(
 		ShowSubject::RiverineGreen(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::LowBush(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::JungleMassives(params) => spawn_show_grove(&mut commands, &params.build()),
-		ShowSubject::JungleLowerMassives(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::JungleLowerMassives(params) => {
+			spawn_show_grove(&mut commands, &params.build())
+		}
 		ShowSubject::UnendingJungle(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::JerrysChaparral(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::RiparianMix(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1770,10 +1762,7 @@ mod tests {
 	fn show_monster_grass_plains_parses() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line("show monster-grass-plains")
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
-		assert!(matches!(
-			cmd,
-			crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)
-		));
+		assert!(matches!(cmd, crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)));
 		Ok(())
 	}
 

@@ -35,7 +35,7 @@ pub use palette::{PaletteColor, PaletteMix, PaletteSlot};
 pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
-pub use terrain::{FlatTerrainSample, GroveWorldSample, PlacementConstraints};
+pub use terrain::{FlatTerrainSample, FnHeightSample, GroveWorldSample, PlacementConstraints};
 pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
@@ -181,7 +181,7 @@ impl<V: Clone> Grove<V> {
 		if !extent.contains_xz(candidate) {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
-		let position = Vec3::new(candidate.x, world.elevation_at(candidate), candidate.z);
+		let position = Vec3::new(candidate.x, world.height_at(candidate), candidate.z);
 		if !world.allows_placement_at(position) {
 			return GroveCellOutcome::Rejected { position };
 		}

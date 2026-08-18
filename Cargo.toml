@@ -48,6 +48,7 @@ members = [
   "maybraid/chico/shaders",
   "maybraid/chico/sbs-trees",
   "maybraid/chico/sbs-trees-playground",
+  "maybraid/chico/vegetation-on-terrain-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",

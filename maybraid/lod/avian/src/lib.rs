@@ -6,40 +6,28 @@
 //! [`PatchSceneBounds`](lod::PatchSceneBounds) with
 //! [`AvianLodSceneBoundsMarshaller`] to stamp volumes from
 //! [`LodScene::scene_bounds`](lod::LodScene::scene_bounds).
+//!
+//! Host volumes use [`PhysicsInteractionLayer::Host`] with empty filters so they
+//! do not enter narrowphase against terrain / buildings ([`layers`]).
+
+mod layers;
+
+pub use layers::{AvianLodHostVolume, PhysicsInteractionLayer};
 
 use std::marker::PhantomData;
 
-use avian3d::prelude::{Collider, ColliderAabb, SpatialQuery};
+use avian3d::prelude::{ColliderAabb, SpatialQuery};
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
-use lod::{
-	LodSceneBoundsMarshaller, LodSceneHost, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
-	PatchSceneBounds,
-};
+use lod::{LodSceneHost, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer, PatchSceneBounds};
 
-/// [`LodSceneBoundsMarshaller`] that inserts a query-only Avian [`Collider`] on the host.
+/// [`LodSceneBoundsMarshaller`](lod::LodSceneBoundsMarshaller) that inserts a
+/// query-only Avian [`avian3d::prelude::Collider`] + Host [`CollisionLayers`](avian3d::prelude::CollisionLayers).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AvianLodSceneBoundsMarshaller;
-
-impl LodSceneBoundsMarshaller for AvianLodSceneBoundsMarshaller {
-	type Volume = Collider;
-
-	fn volume_from_bounds(bounds: Aabb3d) -> Self::Volume {
-		let min = Vec3::from(bounds.min);
-		let max = Vec3::from(bounds.max);
-		let center = (min + max) * 0.5;
-		let size = (max - min).max(Vec3::splat(1e-3));
-		let cuboid = Collider::cuboid(size.x, size.y, size.z);
-		if center.length_squared() <= 1e-8 {
-			cuboid
-		} else {
-			Collider::compound(vec![(center, Quat::IDENTITY, cuboid)])
-		}
-	}
-}
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 ///

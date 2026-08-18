@@ -210,11 +210,14 @@ impl ConiferMassivesCell {
 
 #[cfg(feature = "render")]
 mod vc {
+	use crate::grove::FlatTerrainSample;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use crate::grove::FlatTerrainSample;
-	use chico_sbs_trees::{FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams, NorthernConifer, NorthernConiferParams, TemperateConifer, TemperateConiferParams};
+	use chico_sbs_trees::{
+		FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams, NorthernConifer,
+		NorthernConiferParams, TemperateConifer, TemperateConiferParams,
+	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -322,11 +325,31 @@ mod vc {
 			if let Some(ref resolved) = self.resolved_placements {
 				return resolved.clone();
 			}
-			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+			self.placements_on(&self.terrain)
+		}
+
+		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn placements_on(
+			&self,
+			world: &impl crate::GroveWorldSample,
+		) -> Vec<GroveCellVariant<ConiferMassivesCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, world)
 		}
 
 		pub fn build(&self) -> ConiferMassives {
-			ConiferMassives::from_placements(&self.placements(), self.grove.noise, &self.extent)
+			self.build_on(&self.terrain)
+		}
+
+		/// Grow placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn build_on(&self, world: &impl crate::GroveWorldSample) -> ConiferMassives {
+			ConiferMassives::from_placements(
+				&self.placements_on(world),
+				self.grove.noise,
+				&self.extent,
+			)
 		}
 	}
 
@@ -363,12 +386,7 @@ mod vc {
 		) -> Self {
 			let plants = placements.iter().map(|placed| grow_plant(placed, grove_noise)).collect();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
-			Self {
-				plants,
-				structural_center,
-				footprint_radius,
-				extent: *extent,
-			}
+			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
 		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
@@ -490,13 +508,7 @@ mod vc {
 			}
 		};
 
-		ConiferMassivesPlant {
-			placement,
-			kind,
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		ConiferMassivesPlant { placement, kind, stick_material, ball_material, frond_material }
 	}
 
 	impl VegetationComponents for ConiferMassives {
@@ -512,20 +524,19 @@ mod vc {
 				}
 				LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => layers_from_nodes(
-					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
-				),
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
+					&self.canopy_sites(),
+					ULTRA_LOW_CANOPY_BIN_METERS,
+				)),
 			}
 		}
 
 		fn structural_lod(&self) -> Option<StructuralLod> {
-			Some(
-				StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
-					CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR,
-					CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
-					CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR,
-				),
-			)
+			Some(StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
+				CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR,
+				CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
+				CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR,
+			))
 		}
 	}
 
@@ -554,7 +565,10 @@ mod vc {
 				None => {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
 					chico_vegetation_components::append_component_scenes(
-						self, lod_ref, level, &mut children,
+						self,
+						lod_ref,
+						level,
+						&mut children,
 					);
 					chico_vegetation_components::scene_children(children)
 				}
@@ -579,10 +593,10 @@ mod vc {
 
 #[cfg(feature = "render")]
 pub use vc::{
-	ConiferMassives, ConiferMassivesParams, ConiferMassivesPlant, CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR,
-	CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR, CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
+	ConiferMassives, ConiferMassivesParams, ConiferMassivesPlant,
+	CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR, CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR,
+	CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
 };
-
 
 #[cfg(test)]
 mod tests {

@@ -56,13 +56,7 @@ pub fn setup_render_materials(
 		tuft: tuft.clone(),
 	});
 
-	attach_render_materials(
-		&mut config.subject,
-		&stick,
-		&conifer_stick,
-		&leaf,
-		&tuft,
-	);
+	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
 }
 
 fn attach_render_materials(

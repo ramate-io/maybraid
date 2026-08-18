@@ -220,7 +220,6 @@ impl TropicalTuftsCell {
 	}
 }
 
-
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
@@ -234,15 +233,15 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, TropicalTuftsCell, TropicalTuftsItem};
-	use crate::grove::{
-		flatten_foliage_nodes, frond_material_from_palette, placement_noise, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-	};
 	use crate::grove::vc_tuft::{
 		grow_tuft_plants, material_from_palette, patch_variant_index, single_blade_patch_params,
 		stamp_foliage_noise, tuft_grove_stick_nodes, unit_plant_from_params, variant_noise,
 		TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
 		TUFT_GROVE_STRUCTURAL_LOW_FACTOR, TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
+	};
+	use crate::grove::{
+		flatten_foliage_nodes, frond_material_from_palette, placement_noise, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const TROPICAL_TUFTS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -320,26 +319,39 @@ mod vc {
 			if let Some(ref resolved) = self.resolved_placements {
 				return resolved.clone();
 			}
-			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+			self.placements_on(&self.terrain)
+		}
+
+		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn placements_on(
+			&self,
+			world: &impl crate::GroveWorldSample,
+		) -> Vec<GroveCellVariant<TropicalTuftsCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, world)
 		}
 
 		pub fn build(&self) -> TropicalTufts {
+			self.build_on(&self.terrain)
+		}
+
+		/// Grow placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn build_on(&self, world: &impl crate::GroveWorldSample) -> TropicalTufts {
 			let foliage_noise = self.foliage_noise;
 			let variants = self.patch_variants.max(1);
 			let mut tuft_grown = Vec::new();
 			let mut palms = Vec::new();
-			for placed in self.placements() {
+			for placed in self.placements_on(world) {
 				let mix = placed.variant.palette_mix();
 				match placed.variant.item() {
 					TropicalTuftsItem::Tuft(clump) => {
 						let variant = patch_variant_index(placed.position, variants);
 						let noise = variant_noise(foliage_noise, variant);
-						let params = single_blade_patch_params(
-							clump.build_with_noise(noise),
-							foliage_noise,
-						);
-						let material =
-							material_from_palette(mix, placed.position, foliage_noise);
+						let params =
+							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise);
+						let material = material_from_palette(mix, placed.position, foliage_noise);
 						tuft_grown.push(unit_plant_from_params(
 							params,
 							variant,
@@ -353,8 +365,7 @@ mod vc {
 						let noise = variant_noise(foliage_noise, variant);
 						let params =
 							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise);
-						let material =
-							material_from_palette(mix, placed.position, foliage_noise);
+						let material = material_from_palette(mix, placed.position, foliage_noise);
 						tuft_grown.push(unit_plant_from_params(
 							params,
 							variant,
@@ -368,10 +379,8 @@ mod vc {
 						let geometry = palm.build_with_noise(noise);
 						let mut params = PalmBushParams::default();
 						params.geometry = geometry;
-						let material =
-							material_from_palette(mix, placed.position, foliage_noise);
-						let frond_material =
-							frond_material_from_palette(Some(mix), noise.seed);
+						let material = material_from_palette(mix, placed.position, foliage_noise);
+						let frond_material = frond_material_from_palette(Some(mix), noise.seed);
 						palms.push(TropicalTuftsPalm {
 							placement: Placement::new(placed.position, 0.0)
 								.with_scale(Vec3::splat(placed.scale.max(1e-4))),
@@ -449,7 +458,6 @@ pub use vc::{
 	TropicalTufts, TropicalTuftsParams, TROPICAL_TUFTS_STRUCTURAL_HIGH_FACTOR,
 	TROPICAL_TUFTS_STRUCTURAL_LOW_FACTOR, TROPICAL_TUFTS_STRUCTURAL_MEDIUM_FACTOR,
 };
-
 
 #[cfg(test)]
 mod tests {
