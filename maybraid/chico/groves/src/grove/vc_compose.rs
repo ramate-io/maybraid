@@ -6,7 +6,8 @@ use bevy::prelude::{Color, Vec3};
 use bevy::scene::prelude::Scene;
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, components_only_host, FoliageGeometry,
-	FoliageNode, Layers, Placement, PlacedVegetation, StickNode, StructuralLod, VegetationComponents,
+	FoliageNode, Layers, PlacedVegetation, Placement, StickNode, StructuralLod,
+	VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -140,9 +141,7 @@ pub fn canopy_proxy_site(
 ) -> Option<CanopyProxySite> {
 	let lod = plant.structural_lod()?;
 	let scale = plant_placement.scale.abs().max_element().max(1e-4);
-	let center = plant_placement
-		.compose_child(Placement::new(lod.center, 0.0))
-		.translation;
+	let center = plant_placement.compose_child(Placement::new(lod.center, 0.0)).translation;
 	Some(CanopyProxySite {
 		center,
 		radius: (lod.tree_radius * scale).max(0.25),
@@ -183,9 +182,9 @@ pub fn foliage_ultra_low_merged_balls(
 	for site in sites {
 		let ix = (site.center.x / bin).floor() as i32;
 		let iz = (site.center.z / bin).floor() as i32;
-		let entry = bins.entry((ix, iz)).or_insert_with(|| {
-			(Vec3::ZERO, 0.0, site.material.clone(), 0)
-		});
+		let entry = bins
+			.entry((ix, iz))
+			.or_insert_with(|| (Vec3::ZERO, 0.0, site.material.clone(), 0));
 		entry.0 += site.center;
 		entry.1 = entry.1.max(site.radius);
 		entry.3 = entry.3.saturating_add(1);
@@ -275,8 +274,8 @@ pub fn grove_lod_status(band: StructuralLod, lod_ref: &LodRef) -> LodSceneStatus
 }
 
 pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
-	let factor = lod_ref.current_transform.translation.distance(band.center)
-		/ band.tree_radius.max(1e-4);
+	let factor =
+		lod_ref.current_transform.translation.distance(band.center) / band.tree_radius.max(1e-4);
 	cull_offset_bands_from_factor(factor, band.high_factor, band.medium_factor, band.low_factor)
 }
 

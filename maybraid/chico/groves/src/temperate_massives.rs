@@ -176,7 +176,10 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{BraidOakTree, BraidOakTreeParams, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree, StorybookTreeParams};
+	use chico_sbs_trees::{
+		BraidOakTree, BraidOakTreeParams, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
+		StorybookTreeParams,
+	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -193,8 +196,8 @@ mod vc {
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -284,12 +287,28 @@ mod vc {
 			if let Some(ref resolved) = self.resolved_placements {
 				return resolved.clone();
 			}
-			self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
+			self.placements_on(&self.terrain)
+		}
+
+		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn placements_on(
+			&self,
+			world: &impl crate::GroveWorldSample,
+		) -> Vec<GroveCellVariant<TemperateMassivesCell>> {
+			if let Some(ref resolved) = self.resolved_placements {
+				return resolved.clone();
+			}
+			self.grove.assemble(definition()).populate(&self.extent, world)
 		}
 
 		pub fn build(&self) -> TemperateMassives {
+			self.build_on(&self.terrain)
+		}
+
+		/// Grow placements against `world` ([`crate::GroveWorldSample::height_at`]).
+		pub fn build_on(&self, world: &impl crate::GroveWorldSample) -> TemperateMassives {
 			TemperateMassives::from_placements(
-				&self.placements(),
+				&self.placements_on(world),
 				self.grove.noise,
 				self.stick_surface_noise,
 				&self.extent,
@@ -333,12 +352,7 @@ mod vc {
 				.map(|placed| grow_plant(placed, grove_noise, stick_surface_noise))
 				.collect();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
-			Self {
-				plants,
-				structural_center,
-				footprint_radius,
-				extent: *extent,
-			}
+			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
 		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
@@ -418,8 +432,7 @@ mod vc {
 				let geometry = oak.build_with_noise(build_noise);
 				let mut params = BraidOakTreeParams::default();
 				params.geometry = geometry;
-				params.stick_surface_noise =
-					placement_noise(stick_surface_noise, placed.position);
+				params.stick_surface_noise = placement_noise(stick_surface_noise, placed.position);
 				TemperateMassivesKind::Oak(params.build())
 			}
 			TemperateMassivesItem::Storybook(story) => {
@@ -436,13 +449,7 @@ mod vc {
 			}
 		};
 
-		TemperateMassivesPlant {
-			placement,
-			kind,
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		TemperateMassivesPlant { placement, kind, stick_material, ball_material, frond_material }
 	}
 
 	impl VegetationComponents for TemperateMassives {
@@ -458,20 +465,19 @@ mod vc {
 				}
 				LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => layers_from_nodes(
-					foliage_ultra_low_merged_balls(&self.canopy_sites(), ULTRA_LOW_CANOPY_BIN_METERS),
-				),
+				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
+					&self.canopy_sites(),
+					ULTRA_LOW_CANOPY_BIN_METERS,
+				)),
 			}
 		}
 
 		fn structural_lod(&self) -> Option<StructuralLod> {
-			Some(
-				StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
-					TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR,
-					TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
-					TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR,
-				),
-			)
+			Some(StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
+				TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR,
+				TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
+				TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR,
+			))
 		}
 	}
 
@@ -500,7 +506,10 @@ mod vc {
 				None => {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
 					chico_vegetation_components::append_component_scenes(
-						self, lod_ref, level, &mut children,
+						self,
+						lod_ref,
+						level,
+						&mut children,
 					);
 					chico_vegetation_components::scene_children(children)
 				}
@@ -525,10 +534,10 @@ mod vc {
 
 #[cfg(feature = "render")]
 pub use vc::{
-	TemperateMassives, TemperateMassivesParams, TemperateMassivesPlant, TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR,
-	TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR, TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
+	TemperateMassives, TemperateMassivesParams, TemperateMassivesPlant,
+	TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR, TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR,
+	TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR,
 };
-
 
 #[cfg(test)]
 mod tests {

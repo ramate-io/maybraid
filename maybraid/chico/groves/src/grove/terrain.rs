@@ -4,9 +4,13 @@ use bevy_math::bounding::{Aabb3d, BoundingVolume};
 use bevy_math::{Vec3, Vec3A};
 use procedural_common::UnitRange;
 
-/// Normalized elevation, steepness, and placement exclusion at world positions.
+/// World-space height, steepness, and placement exclusion at positions.
+///
+/// [`Self::height_at`] is world metres (plant Y). Constraint bands stay authored on
+/// buckets but are not evaluated here — normalization is forest/region policy.
 pub trait GroveWorldSample {
-	fn elevation_at(&self, position: Vec3) -> f32;
+	/// Surface height in world metres at `position` (XZ).
+	fn height_at(&self, position: Vec3) -> f32;
 	fn steepness_at(&self, position: Vec3) -> f32;
 
 	/// Axis-aligned regions where grove items must not be placed.
@@ -21,6 +25,8 @@ pub trait GroveWorldSample {
 }
 
 /// Uniform world sample for CLI previews and isolation tests.
+///
+/// `elevation` is a constant world-metre height (CLI flag kept for existing scripts).
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "render", derive(clap::Args))]
 #[cfg_attr(feature = "render", command(next_help_heading = "Terrain"))]
@@ -37,8 +43,21 @@ impl Default for FlatTerrainSample {
 	}
 }
 
+/// World-metre height from a function (Durham adapter, tests).
+pub struct FnHeightSample<F>(pub F);
+
+impl<F: Fn(Vec3) -> f32> GroveWorldSample for FnHeightSample<F> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		(self.0)(position)
+	}
+
+	fn steepness_at(&self, _position: Vec3) -> f32 {
+		0.0
+	}
+}
+
 impl GroveWorldSample for FlatTerrainSample {
-	fn elevation_at(&self, _position: Vec3) -> f32 {
+	fn height_at(&self, _position: Vec3) -> f32 {
 		self.elevation
 	}
 
@@ -111,7 +130,7 @@ mod tests {
 		}
 
 		impl GroveWorldSample for SampleWithExclusion {
-			fn elevation_at(&self, _position: Vec3) -> f32 {
+			fn height_at(&self, _position: Vec3) -> f32 {
 				0.5
 			}
 

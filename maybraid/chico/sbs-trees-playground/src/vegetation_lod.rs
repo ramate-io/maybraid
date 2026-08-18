@@ -5,21 +5,22 @@
 //! share the same region channels. Cull uses a rotating [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
+use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
 use chico_groves::{
-	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts, ConiferMassives,
-	ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow, HighBush,
-	JerrysChaparral, JungleLowerMassives, JungleMassives, Leeward, LevantineScrub, LowBush,
-	MonsterGrass, OasisDatePalm, Orchard, PalmShade, RiparianGeneral, RiparianMix, RiverineGreen,
-	RollingOaks, Shamanhome, SpottyBushes, Storytellers, StrangeOasis, TallGrass,
+	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
+	ConiferMassives, ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow,
+	HighBush, JerrysChaparral, JungleLowerMassives, JungleMassives, Leeward, LevantineScrub,
+	LowBush, MonsterGrass, OasisDatePalm, Orchard, PalmShade, RiparianGeneral, RiparianMix,
+	RiverineGreen, RollingOaks, Shamanhome, SpottyBushes, Storytellers, StrangeOasis, TallGrass,
 	TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket, TropicalTufts,
 	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 use chico_sbs_trees::{
-	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree, KamakuraTorch,
-	LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch, RorysHeadTrained,
-	SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch, VaseTree,
-	WaialeaPalm,
+	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree,
+	KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch,
+	RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch,
+	VaseTree, WaialeaPalm,
 };
 use chico_vegetation_components::{ComponentsOnly, FoliageNode, PlacedVegetation, StickNode};
 use lod::{
@@ -44,10 +45,10 @@ pub struct VegetationCull;
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-			AvianLodSceneRefreshPlugin::<$ty, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneRefreshPlugin::<$ty, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
-		));
+					AvianLodSceneRefreshPlugin::<$ty, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
+					AvianLodSceneRefreshPlugin::<$ty, VegetationSpotlight, With<Camera>>::without_full_scan_cull(),
+					AvianLodSceneCullPlugin::<$ty, VegetationCull, With<Camera>>::default(),
+				));
 	}};
 }
 
@@ -63,7 +64,10 @@ pub struct VegetationLodRefreshPlugin;
 
 impl Plugin for VegetationLodRefreshPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(PhysicsPlugins::default());
+		// Same sentinel as Durham `TerrainPlugin`: `PhysicsPlugins` is a group.
+		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
+			app.add_plugins(PhysicsPlugins::default());
+		}
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
 		}

@@ -2331,6 +2331,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-vegetation-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "chico-groves",
+ "chico-sbs-trees-playground",
+ "chico-vegetation-components",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "log",
+ "render-item",
+]
+
+[[package]]
 name = "chico-vegetation-shaders"
 version = "0.0.1"
 dependencies = [

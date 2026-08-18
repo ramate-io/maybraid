@@ -76,10 +76,7 @@ pub fn patch_variant_index(position: Vec3, variants: u32) -> u32 {
 
 /// Noise keyed by variant id (not world position) so the same archetype rebuilds identically.
 pub fn variant_noise(base: NoiseParams, variant: u32) -> NoiseParams {
-	NoiseParams {
-		seed: base.seed ^ (variant as i32).wrapping_mul(0x45d9f3b),
-		..base
-	}
+	NoiseParams { seed: base.seed ^ (variant as i32).wrapping_mul(0x45d9f3b), ..base }
 }
 
 /// Palette → green standard material for one placement.
@@ -143,24 +140,16 @@ pub fn grow_tuft_plants(
 	if merge_collections == 0 {
 		return grown
 			.into_iter()
-			.map(|(placement, patch, material)| TuftGrovePlant {
-				placement,
-				patch,
-				material,
-			})
+			.map(|(placement, patch, material)| TuftGrovePlant { placement, patch, material })
 			.collect();
 	}
 	let pairs: Vec<(Placement, TuftPatch)> =
 		grown.iter().map(|(p, patch, _)| (*p, patch.clone())).collect();
 	let materials: Vec<MaterialRef> = grown.into_iter().map(|(_, _, m)| m).collect();
-	let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> = pairs
-		.into_iter()
-		.zip(materials)
-		.map(|((p, patch), m)| (p, patch, m))
-		.collect();
+	let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> =
+		pairs.into_iter().zip(materials).map(|((p, patch), m)| (p, patch, m)).collect();
 	remaining.sort_by(|a, b| {
-		a.0
-			.translation
+		a.0.translation
 			.x
 			.total_cmp(&b.0.translation.x)
 			.then(a.0.translation.z.total_cmp(&b.0.translation.z))
@@ -179,11 +168,7 @@ pub fn grow_tuft_plants(
 			next.apply_placement(placement);
 			merged.merge(next);
 		}
-		plants.push(TuftGrovePlant {
-			placement: Placement::IDENTITY,
-			patch: merged,
-			material,
-		});
+		plants.push(TuftGrovePlant { placement: Placement::IDENTITY, patch: merged, material });
 	}
 	plants
 }
@@ -268,8 +253,7 @@ impl TuftGroveBody {
 			let patch = &plant.patch;
 			let width = clump_proxy_width(patch);
 			for anchor in &patch.anchors {
-				let world =
-					plant.placement.compose_child(Placement::new(*anchor, 0.0)).translation;
+				let world = plant.placement.compose_child(Placement::new(*anchor, 0.0)).translation;
 				let ix = ((world.x - origin.x) / bin_x).floor() as i32;
 				let iz = ((world.z - origin.z) / bin_z).floor() as i32;
 				let entry = bins.entry((ix, iz)).or_insert((Vec3::ZERO, 0.0, 0));
@@ -279,11 +263,7 @@ impl TuftGroveBody {
 			}
 		}
 
-		let material = self
-			.plants
-			.first()
-			.map(|p| p.material.clone())
-			.unwrap_or_default();
+		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
 		let mut runs = Vec::with_capacity(bins.len());
 		for ((ix, iz), (sum_pos, sum_width, count)) in bins {
 			let n = (count as f32).max(1.0);
@@ -300,11 +280,7 @@ impl TuftGroveBody {
 	}
 
 	pub fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
-		let material = self
-			.plants
-			.first()
-			.map(|p| p.material.clone())
-			.unwrap_or_default();
+		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
 		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra)
 			.into_iter()
 			.map(|placement| {
@@ -318,9 +294,9 @@ impl TuftGroveBody {
 			LodSceneLevel::High => self.foliage_high(),
 			LodSceneLevel::Medium => self.foliage_medium(),
 			LodSceneLevel::Low => self.foliage_low(),
-			LodSceneLevel::UltraLow
-			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => self.foliage_ultra_low(),
+			LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+				self.foliage_ultra_low()
+			}
 		};
 		Layers::from_free(nodes)
 	}
