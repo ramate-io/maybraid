@@ -32,12 +32,9 @@ pub mod sticks {
 	pub mod standard {
 		use super::AssetPath;
 
-		pub const HIGH: AssetPath =
-			AssetPath::new("vegetation/sticks/standard/001_high_res.glb");
-		pub const MID: AssetPath =
-			AssetPath::new("vegetation/sticks/standard/001_mid_res.glb");
-		pub const LOW: AssetPath =
-			AssetPath::new("vegetation/sticks/standard/001_low_res.glb");
+		pub const HIGH: AssetPath = AssetPath::new("vegetation/sticks/standard/001_high_res.glb");
+		pub const MID: AssetPath = AssetPath::new("vegetation/sticks/standard/001_mid_res.glb");
+		pub const LOW: AssetPath = AssetPath::new("vegetation/sticks/standard/001_low_res.glb");
 
 		/// Trunk geometry variant (`trunk_001_*`) — same style kit, longer mesh-LOD lifetime.
 		pub mod trunk {
@@ -84,14 +81,11 @@ pub mod foliage {
 			AssetPath::new("vegetation/foliage/standard/straight_frond_001_low_res.glb");
 
 		/// Square-ended segment: \(Y \in [0, 1]\), \(X \in [-0.1, 0.1]\), \(Z\) negligible.
-		pub const STRAIGHT_FROND_SEGMENT_HIGH: AssetPath = AssetPath::new(
-			"vegetation/foliage/standard/straight_frond_segment_001_high_res.glb",
-		);
-		pub const STRAIGHT_FROND_SEGMENT_MID: AssetPath = AssetPath::new(
-			"vegetation/foliage/standard/straight_frond_segment_001_mid_res.glb",
-		);
-		pub const STRAIGHT_FROND_SEGMENT_LOW: AssetPath = AssetPath::new(
-			"vegetation/foliage/standard/straight_frond_segment_001_low_res.glb",
-		);
+		pub const STRAIGHT_FROND_SEGMENT_HIGH: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_segment_001_high_res.glb");
+		pub const STRAIGHT_FROND_SEGMENT_MID: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_segment_001_mid_res.glb");
+		pub const STRAIGHT_FROND_SEGMENT_LOW: AssetPath =
+			AssetPath::new("vegetation/foliage/standard/straight_frond_segment_001_low_res.glb");
 	}
 }

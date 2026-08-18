@@ -17,13 +17,19 @@ pub mod structural_lod;
 
 pub use assets::AssetPath;
 pub use foliage::{
-	update_foliage_host_levels, FoliageGeometry, FoliageLodProbe, FoliageNode, FoliageStyle,
-	FrondCollection, FrondKit, FrondMember, FrondRun, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
+	update_foliage_host_levels, CheapBallCollection, FoliageGeometry, FoliageLodProbe, FoliageNode,
+	FoliageStyle, FrondCollection, FrondKit, FrondMember, FrondRun,
+	CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
+	CHEAP_BALL_COLLECTION_MEDIUM_METERS, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
 	FOLIAGE_MEDIUM_FACTOR, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_HIGH_METERS,
 	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_FACTOR,
 	FROND_COLLECTION_MEDIUM_METERS,
 };
 pub use layer::{Layer, Layers};
+pub use lod_host::{posed_frond_multi_scene_merge, posed_material_asset_tier};
+pub use materials::{
+	chico_leaf_material_ref, chico_stick_material_ref, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+};
 pub use placed::Placement;
 pub use placed_vegetation::PlacedVegetation;
 pub use procedural::{
@@ -31,14 +37,9 @@ pub use procedural::{
 };
 pub use scene_children::{pose, posed_mesh, posed_mesh_material_ref, scene_children, with_pose};
 pub use sticks::{
-	update_stick_host_levels, StickGeometry, StickLodProbe, StickNode, StickStyle, STICK_HIGH_FACTOR,
-	STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
-};
-pub use lod_host::{
-	posed_frond_multi_scene_merge, posed_material_asset_tier,
-};
-pub use materials::{
-	chico_leaf_material_ref, chico_stick_material_ref, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+	update_stick_host_levels, StickCollection, StickGeometry, StickLodProbe, StickMember,
+	StickNode, StickStyle, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
+	STICK_COLLECTION_MEDIUM_METERS, STICK_HIGH_FACTOR, STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
 pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
@@ -50,9 +51,7 @@ use bevy::prelude::{Commands, CommandsSceneExt, Component, Entity, Transform, Vi
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::{
-	cull_offset_bands_from_factor, lod_host_scene_pending, SceneChunk,
-};
+use lod::{cull_offset_bands_from_factor, lod_host_scene_pending, SceneChunk};
 
 /// Domain IR exposed by a tree (or vegetation part) for structural composition.
 pub trait VegetationComponents {
@@ -226,10 +225,7 @@ pub fn component_only_scene(
 /// Nest a [`ComponentsOnly`] host (pending level roots + typed component).
 ///
 /// Uses [`template`] so `T` need not implement [`Default`] (unlike [`LodScene::host`]).
-pub fn components_only_host<T>(
-	vegetation: T,
-	lod_ref: &LodRef,
-) -> impl Scene + 'static
+pub fn components_only_host<T>(vegetation: T, lod_ref: &LodRef) -> impl Scene + 'static
 where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
 {
@@ -316,6 +312,14 @@ pub fn vegetation_bounds(vegetation: &impl VegetationComponents) -> Aabb3d {
 	let mut max = bevy::math::Vec3::splat(f32::NEG_INFINITY);
 	let mut any = false;
 	for node in vegetation.stick_nodes_for_level(LodSceneLevel::High).flatten() {
+		if let Some(collection) = &node.collection {
+			if let Some((cmin, cmax)) = collection.aabb() {
+				min = min.min(cmin);
+				max = max.max(cmax);
+				any = true;
+				continue;
+			}
+		}
 		let c = crate::lod_band::placement_center(&node.placement);
 		let e = crate::lod_band::characteristic_extent_abs(&node.placement);
 		min = min.min(c - bevy::math::Vec3::splat(e));
@@ -324,6 +328,14 @@ pub fn vegetation_bounds(vegetation: &impl VegetationComponents) -> Aabb3d {
 	}
 	for node in vegetation.foliage_nodes_for_level(LodSceneLevel::High).flatten() {
 		if let Some(collection) = node.geometry.as_frond_collection() {
+			if let Some((cmin, cmax)) = collection.aabb() {
+				min = min.min(cmin);
+				max = max.max(cmax);
+				any = true;
+				continue;
+			}
+		}
+		if let Some(collection) = node.geometry.as_cheap_ball_collection() {
 			if let Some((cmin, cmax)) = collection.aabb() {
 				min = min.min(cmin);
 				max = max.max(cmax);

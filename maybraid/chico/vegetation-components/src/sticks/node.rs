@@ -1,19 +1,26 @@
 //! Stick IR node: style + geometry + placement.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Component, Visibility, Vec3};
+use bevy::prelude::{Component, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, Scene};
-use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+use lod::gen::{
+	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,
+};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;
+use scene_ref::{MultiSceneMerge, MultiScenePart};
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::posed_material_asset_tier;
+use crate::lod_host::{posed_frond_multi_scene_merge, posed_material_asset_tier};
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
-use crate::scene_children::{pose, posed_mesh_material_ref};
+use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
+use crate::sticks::collection::{
+	StickCollection, StickMember, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
+	STICK_COLLECTION_MEDIUM_METERS,
+};
 use crate::sticks::geometry::StickGeometry;
 use crate::sticks::probe::StickLodProbe;
 use crate::sticks::style::StickStyle;
@@ -27,16 +34,13 @@ pub struct StickNode {
 	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
 	/// higher-order types set stick / palette as needed.
 	pub material: MaterialRef,
+	/// When set, this node is one merged collection (geometry is unused for emission).
+	pub collection: Option<StickCollection>,
 }
 
 impl StickNode {
 	pub fn new(style: StickStyle, geometry: StickGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-			material: MaterialRef::default(),
-		}
+		Self { style, geometry, placement, material: MaterialRef::default(), collection: None }
 	}
 
 	pub fn with_material(mut self, material: MaterialRef) -> Self {
@@ -87,7 +91,46 @@ impl StickNode {
 		Self::new(StickStyle::Standard, geometry, placement)
 	}
 
+	/// Stick collection under one LOD parent (merge thinning by collection extent).
+	///
+	/// Parent [`Placement`] is usually identity when members are already posed.
+	pub fn collection(collection: StickCollection, placement: Placement) -> Self {
+		Self {
+			style: StickStyle::Standard,
+			geometry: StickGeometry::Segment,
+			placement,
+			material: MaterialRef::default(),
+			collection: Some(collection),
+		}
+	}
+
+	/// Fold standard stick nodes into one collection (shared material, baked probe).
+	pub fn merge_standard(nodes: impl IntoIterator<Item = Self>) -> Option<Self> {
+		let nodes: Vec<Self> = nodes.into_iter().collect();
+		let material = nodes.first()?.material.clone();
+		let mut members = Vec::with_capacity(nodes.len());
+		for node in &nodes {
+			if let Some(existing) = &node.collection {
+				members.extend(existing.members.iter().copied());
+			} else {
+				members.push(StickMember { geometry: node.geometry, placement: node.placement });
+			}
+		}
+		if members.is_empty() {
+			return None;
+		}
+		let collection = StickCollection::new(members).bake_bounds_from_members();
+		Some(Self::collection(collection, Placement::IDENTITY).with_material(material))
+	}
+
 	fn probe(&self) -> StickLodProbe {
+		if let Some(collection) = &self.collection {
+			let (local_center, local_radius) = collection.center_and_extent();
+			let world_center =
+				self.placement.compose_child(Placement::new(local_center, 0.0)).translation;
+			let scale = self.placement.scale.abs().max_element().max(1e-4);
+			return StickLodProbe { center: world_center, extent: local_radius * scale };
+		}
 		StickLodProbe::from_stick(&self.placement, self.geometry)
 	}
 
@@ -96,6 +139,10 @@ impl StickNode {
 			StickStyle::NoisyCylinder => None,
 			StickStyle::Standard => self.geometry.standard_glb_for_level(level),
 		}
+	}
+
+	fn member_glb(member: &StickMember, level: LodSceneLevel) -> Option<AssetPath> {
+		member.geometry.standard_glb_for_level(level)
 	}
 
 	fn procedural_scene(&self) -> impl Scene + 'static {
@@ -113,16 +160,66 @@ impl StickNode {
 		}
 	}
 
-	fn content_for_level(&self, level: LodSceneLevel) -> impl Scene + 'static {
+	fn collection_multi_scene_merge(
+		&self,
+		collection: &StickCollection,
+		level: LodSceneLevel,
+	) -> Option<MultiSceneMerge> {
+		let members = collection.members_for_level(level);
+		if members.is_empty() {
+			return None;
+		}
+		let mut parts = Vec::with_capacity(members.len());
+		for member in &members {
+			let asset = Self::member_glb(member, level)?;
+			parts.push(MultiScenePart::new(asset.scene_ref(), pose(member.placement)));
+		}
+		Some(MultiSceneMerge::new(parts))
+	}
+
+	fn collection_content(
+		&self,
+		collection: &StickCollection,
+		level: LodSceneLevel,
+	) -> Box<dyn Scene> {
+		if matches!(level, LodSceneLevel::UltraLow) {
+			return Box::new(Self::empty_scene());
+		}
+		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
+			return Box::new(posed_frond_multi_scene_merge(
+				merge,
+				pose(self.placement),
+				self.material.clone(),
+			));
+		}
+		let children: Vec<Box<dyn Scene>> = collection
+			.members_for_level(level)
+			.into_iter()
+			.map(|member| {
+				Box::new(posed_mesh_material_ref(
+					VegetationProceduralAssets::stick_cylinder(),
+					VegetationProceduralAssets::stick_material(),
+					self.material.clone(),
+					pose(self.placement.compose_child(member.placement)),
+				)) as Box<dyn Scene>
+			})
+			.collect();
+		Box::new(scene_children(children))
+	}
+
+	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if let Some(collection) = &self.collection {
+			return self.collection_content(collection, level);
+		}
 		match level {
-			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()) as Box<dyn Scene>,
+			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()),
 			_ => match self.glb_for_level(level) {
 				Some(asset) => Box::new(posed_material_asset_tier(
 					Some(asset),
 					pose(self.placement),
 					Some(self.material.clone()),
-				)) as Box<dyn Scene>,
-				None => Box::new(self.procedural_scene()) as Box<dyn Scene>,
+				)),
+				None => Box::new(self.procedural_scene()),
 			},
 		}
 	}
@@ -137,7 +234,20 @@ impl LodScene for StickNode {
 		self.probe().status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		if self.collection.is_some() {
+			let probe = self.probe();
+			let distance = lod_ref.current_transform.translation.distance(probe.center);
+			if distance <= STICK_COLLECTION_HIGH_METERS {
+				return LodSceneCulls::None;
+			}
+			return cull_offset_bands_from_factor(
+				distance,
+				STICK_COLLECTION_HIGH_METERS,
+				STICK_COLLECTION_MEDIUM_METERS,
+				STICK_COLLECTION_LOW_METERS,
+			);
+		}
 		warm_mesh_lod_culls(current)
 	}
 
@@ -150,8 +260,15 @@ impl LodScene for StickNode {
 	}
 
 	fn scene_bounds(&self) -> Aabb3d {
-		let center = crate::lod_band::placement_center(&self.placement);
-		let extent = crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0);
+		let (center, extent) = if self.collection.is_some() {
+			let probe = self.probe();
+			(probe.center, probe.extent.max(1.0))
+		} else {
+			(
+				crate::lod_band::placement_center(&self.placement),
+				crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0),
+			)
+		};
 		let half = Vec3::splat(extent);
 		Aabb3d::from_min_max(center - half, center + half)
 	}

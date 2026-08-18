@@ -33,17 +33,17 @@ impl StickGeometry {
 			Self::Segment => match level {
 				LodSceneLevel::High => Some(stick_assets::standard::HIGH),
 				LodSceneLevel::Medium => Some(stick_assets::standard::MID),
-				LodSceneLevel::Low
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => Some(stick_assets::standard::LOW),
+				LodSceneLevel::Low | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+					Some(stick_assets::standard::LOW)
+				}
 				LodSceneLevel::UltraLow => None,
 			},
 			Self::Trunk => match level {
 				LodSceneLevel::High => Some(stick_assets::standard::trunk::HIGH),
 				LodSceneLevel::Medium => Some(stick_assets::standard::trunk::MID),
-				LodSceneLevel::Low
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => Some(stick_assets::standard::trunk::LOW),
+				LodSceneLevel::Low | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+					Some(stick_assets::standard::trunk::LOW)
+				}
 				LodSceneLevel::UltraLow => None,
 			},
 		}

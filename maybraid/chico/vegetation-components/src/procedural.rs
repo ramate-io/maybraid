@@ -5,8 +5,8 @@
 use std::sync::OnceLock;
 
 use bevy::mesh::primitives::{MeshBuilder, Meshable};
-use bevy::mesh::{SphereKind, SphereMeshBuilder};
 use bevy::mesh::VertexAttributeValues;
+use bevy::mesh::{SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
 
 /// Half-extent of stick kit on \(X/Z\) (\(X = Z \in [-\texttt{STICK\_KIT\_HALF}, \texttt{STICK\_KIT\_HALF}]\)).

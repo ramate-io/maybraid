@@ -64,9 +64,14 @@ impl FoliageLodProbe {
 	/// [`FROND_COLLECTION_LOW_FACTOR`] in [`crate::foliage::collection`].
 	pub fn for_frond_collection(collection: &FrondCollection) -> Self {
 		let (center, extent) = collection.center_and_extent();
+		Self::for_kit_collection(center, extent)
+	}
+
+	/// Shared spawn bands for frond / cheap-ball collections (`distance / radius`).
+	pub fn for_kit_collection(center: Vec3, radius: f32) -> Self {
 		Self {
 			center,
-			extent,
+			extent: radius.max(1e-4),
 			high_factor: FROND_COLLECTION_HIGH_FACTOR,
 			medium_factor: FROND_COLLECTION_MEDIUM_FACTOR,
 			low_factor: FROND_COLLECTION_LOW_FACTOR,

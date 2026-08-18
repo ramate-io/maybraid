@@ -5,8 +5,9 @@
 //! Forest-layer attachment remains a follow-up.
 //!
 //! Under `render`, High/Medium flatten posed Storybook stick/ball nodes onto the grove
-//! host (no per-tree nested LOD hosts). Low ≈ one canopy ball per tree; UltraLow bins
-//! those sites at [`ULTRA_LOW_CANOPY_BIN_METERS`].
+//! host, then fold each tree into one stick collection and one cheap-ball
+//! collection (MultiSceneMerge, no per-primitive LOD hosts). Low ≈ one
+//! canopy ball per tree; UltraLow bins those sites at [`ULTRA_LOW_CANOPY_BIN_METERS`].
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
@@ -298,28 +299,33 @@ mod vc {
 			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
-		/// Pose every tree's stick nodes into grove space (High/Medium only).
+		/// Pose every tree's sticks into grove space and merge them into one collection.
 		fn flatten_plant_sticks(&self, level: LodSceneLevel) -> Vec<StickNode> {
 			self.plants
 				.iter()
-				.flat_map(|plant| {
-					flatten_stick_nodes(&plant.tree, plant.placement, &plant.stick_material, level)
+				.filter_map(|plant| {
+					StickNode::merge_standard(flatten_stick_nodes(
+						&plant.tree,
+						plant.placement,
+						&plant.stick_material,
+						level,
+					))
 				})
 				.collect()
 		}
 
-		/// Pose every tree's foliage nodes into grove space (High/Medium only).
+		/// Pose every tree's cheap balls into grove space and merge them into one collection.
 		fn flatten_plant_foliage(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
 			self.plants
 				.iter()
-				.flat_map(|plant| {
-					flatten_foliage_nodes(
+				.filter_map(|plant| {
+					FoliageNode::merge_cheap_balls(flatten_foliage_nodes(
 						&plant.tree,
 						plant.placement,
 						&plant.ball_material,
 						&plant.frond_material,
 						level,
-					)
+					))
 				})
 				.collect()
 		}
@@ -613,23 +619,26 @@ mod tests {
 			let grove = small_grove();
 			assert!(!grove.plants.is_empty(), "expected placed orchard trees");
 
-			let high_sticks = grove.stick_nodes_for_level(LodSceneLevel::High).len();
-			let high_foliage = grove.foliage_nodes_for_level(LodSceneLevel::High).len();
-			assert!(high_sticks > 0, "High should emit flattened stick nodes");
-			assert!(high_foliage > 0, "High should emit flattened foliage nodes");
+			let high_sticks = grove.stick_nodes_for_level(LodSceneLevel::High);
+			let high_foliage = grove.foliage_nodes_for_level(LodSceneLevel::High);
+			assert_eq!(high_sticks.len(), grove.plants.len());
+			assert_eq!(high_foliage.len(), grove.plants.len());
+			assert!(
+				high_sticks.flatten().iter().all(|n| n.collection.is_some()),
+				"High sticks should be per-tree collections"
+			);
+			assert!(
+				high_foliage
+					.flatten()
+					.iter()
+					.all(|n| n.geometry.as_cheap_ball_collection().is_some()),
+				"High foliage should be per-tree cheap-ball collections"
+			);
 
 			let medium_sticks = grove.stick_nodes_for_level(LodSceneLevel::Medium).len();
 			let medium_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Medium).len();
-			assert!(medium_sticks > 0);
-			assert!(medium_foliage > 0);
-			assert!(
-				medium_sticks <= high_sticks,
-				"Medium sticks {medium_sticks} should not exceed High {high_sticks}"
-			);
-			assert!(
-				medium_foliage <= high_foliage,
-				"Medium foliage {medium_foliage} should not exceed High {high_foliage}"
-			);
+			assert_eq!(medium_sticks, grove.plants.len());
+			assert_eq!(medium_foliage, grove.plants.len());
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
