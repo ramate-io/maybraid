@@ -1,7 +1,7 @@
 //! Shared VegetationComponents host for blade / tuft-patch groves (Monster Grass pattern).
 //!
 //! Grow placements into unit [`TuftPatch`] plants (optional merge fold); emit High/Medium frond
-//! collections, Low upright proxies, and UltraLow XZ carpets.
+//! collections, Low upright proxies, and UltraLow carpets tilted to the plant heightfield.
 
 use std::collections::HashMap;
 
@@ -25,7 +25,7 @@ pub const TUFT_GROVE_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 /// Keep every Nth plant for Medium (¼ density).
 const MEDIUM_TUFT_STRIDE: usize = 4;
-/// World-space vertical thickness for UltraLow XZ carpets (local Z → up).
+/// World-space thickness for UltraLow carpets (local Z → surface normal).
 const ULTRA_CARPET_THICKNESS: f32 = 0.35;
 const ULTRA_GRID: u32 = 2;
 /// Square bin side in placement-cell units so area ≈ 8 cells (`√8 × √8` = `2√2`).
@@ -248,6 +248,9 @@ impl TuftGroveBody {
 		let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 		let origin = self.extent.min();
 		let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
+		let samples = surface_samples_from_plants(
+			self.plants.iter().map(|p| (&p.placement, &p.patch)),
+		);
 
 		for plant in &self.plants {
 			let patch = &plant.patch;
@@ -265,14 +268,18 @@ impl TuftGroveBody {
 
 		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
 		let mut runs = Vec::with_capacity(bins.len());
+		let normal_eps = bin_x.max(bin_z) * 0.5;
 		for ((ix, iz), (sum_pos, sum_width, count)) in bins {
 			let n = (count as f32).max(1.0);
 			let mean = sum_pos / n;
 			let width = (sum_width / n).max(bin_x.max(bin_z) * 0.5) * n.sqrt();
 			let cx = origin.x + (ix as f32 + 0.5) * bin_x;
 			let cz = origin.z + (iz as f32 + 0.5) * bin_z;
-			let base = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
-			if let Some(run) = upright_proxy_run(base, width, height) {
+			// Prefer bin center on XZ; keep plant mean Y so proxies sit on terrain.
+			let base_xz = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
+			let base = Vec3::new(base_xz.x, mean.y, base_xz.z);
+			let up = surface_normal_at(&samples, base.x, base.z, normal_eps);
+			if let Some(run) = upright_proxy_run(base, up, width, height) {
 				runs.push(run);
 			}
 		}
@@ -281,7 +288,10 @@ impl TuftGroveBody {
 
 	pub fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra)
+		let samples = surface_samples_from_plants(
+			self.plants.iter().map(|p| (&p.placement, &p.patch)),
+		);
+		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra, &samples)
 			.into_iter()
 			.map(|placement| {
 				FoliageNode::straight_frond_segment(placement).with_material(material.clone())
@@ -321,16 +331,94 @@ fn clump_proxy_width(patch: &TuftPatch) -> f32 {
 	}
 }
 
-fn upright_proxy_run(base: Vec3, width: f32, height: f32) -> Option<FrondRun> {
-	let start = Vec3::new(base.x, 0.0, base.z);
-	Placement::frond_segment(start, Vec3::Y, height, width.max(1e-3))
+/// World-space plant roots / anchors used to lift and tilt Low / UltraLow proxies.
+pub(crate) fn surface_samples_from_plants<'a>(
+	plants: impl Iterator<Item = (&'a Placement, &'a TuftPatch)>,
+) -> Vec<Vec3> {
+	let mut out = Vec::new();
+	for (placement, patch) in plants {
+		out.push(placement.translation);
+		for anchor in &patch.anchors {
+			out.push(placement.compose_child(Placement::new(*anchor, 0.0)).translation);
+		}
+	}
+	out
+}
+
+/// Inverse-distance height from surface samples (empty → 0).
+pub(crate) fn surface_height_at(samples: &[Vec3], x: f32, z: f32) -> f32 {
+	if samples.is_empty() {
+		return 0.0;
+	}
+	let mut w_sum = 0.0;
+	let mut h_sum = 0.0;
+	for p in samples {
+		let dx = p.x - x;
+		let dz = p.z - z;
+		let w = 1.0 / (dx * dx + dz * dz).max(1e-2);
+		w_sum += w;
+		h_sum += w * p.y;
+	}
+	h_sum / w_sum
+}
+
+/// Unit surface normal from a heightfield finite difference on [`surface_height_at`].
+pub(crate) fn surface_normal_at(samples: &[Vec3], x: f32, z: f32, eps: f32) -> Vec3 {
+	if samples.is_empty() {
+		return Vec3::Y;
+	}
+	let eps = eps.max(1e-2);
+	let h = surface_height_at(samples, x, z);
+	let dhdx = (surface_height_at(samples, x + eps, z) - h) / eps;
+	let dhdz = (surface_height_at(samples, x, z + eps) - h) / eps;
+	let n = Vec3::new(-dhdx, 1.0, -dhdz);
+	let len = n.length();
+	if len < 1e-8 {
+		Vec3::Y
+	} else {
+		n / len
+	}
+}
+
+/// Carpet basis matching flat `from_cols(Z, X, Y)` when `normal == Y`.
+fn carpet_basis(normal: Vec3) -> Mat3 {
+	let n = {
+		let len = normal.length();
+		if len < 1e-8 {
+			Vec3::Y
+		} else {
+			normal / len
+		}
+	};
+	let mut tangent = Vec3::X - n * n.dot(Vec3::X);
+	if tangent.length_squared() < 1e-8 {
+		tangent = Vec3::Z - n * n.dot(Vec3::Z);
+	}
+	let tangent = tangent.normalize();
+	let bitangent = tangent.cross(n).normalize();
+	Mat3::from_cols(bitangent, tangent, n)
+}
+
+/// Upright Low proxy: base on the surface, rachis along `up` (terrain normal).
+pub(crate) fn upright_proxy_run(
+	base: Vec3,
+	up: Vec3,
+	width: f32,
+	height: f32,
+) -> Option<FrondRun> {
+	Placement::frond_segment(base, up, height, width.max(1e-3))
 		.map(|p| FrondRun::from_placements([p]))
 }
 
-fn horizontal_grid_proxy_placements(
+/// Slope-aligned XZ carpet tiles: rachis along projected +X, thin along surface normal.
+///
+/// Do not use [`Placement::frond_segment`] with `dir = X` and cell-sized `width` —
+/// that path leaves kit width near world up and turns carpets into walls.
+pub(crate) fn horizontal_grid_proxy_placements(
 	extent: &GroveExtent,
 	divisions: u32,
 	height: f32,
+	samples: &[Vec3],
 ) -> Vec<Placement> {
 	let divisions = divisions.max(1);
 	let min = extent.min();
@@ -338,18 +426,22 @@ fn horizontal_grid_proxy_placements(
 	let span = max - min;
 	let cell_x = (span.x / divisions as f32).max(1e-3);
 	let cell_z = (span.z / divisions as f32).max(1e-3);
-	let rotation = Quat::from_mat3(&Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y));
 	let scale_x = (cell_z * 0.5 / FROND_KIT_HALF_X).max(1e-4);
 	let scale_z = (ULTRA_CARPET_THICKNESS / FROND_KIT_HALF_X).max(1e-4);
-	let y = height * 0.5;
+	let lift = height * 0.5;
+	let normal_eps = cell_x.max(cell_z) * 0.5;
 	let mut out = Vec::with_capacity((divisions * divisions) as usize);
 	for ix in 0..divisions {
 		for iz in 0..divisions {
 			let x0 = min.x + ix as f32 * cell_x;
 			let z0 = min.z + iz as f32 * cell_z;
 			let cz = z0 + cell_z * 0.5;
+			let ground_y = surface_height_at(samples, x0, cz);
+			let normal = surface_normal_at(samples, x0, cz, normal_eps);
+			let rotation = Quat::from_mat3(&carpet_basis(normal));
+			let origin = Vec3::new(x0, ground_y, cz) + normal * lift;
 			out.push(
-				Placement::new(Vec3::new(x0, y, cz), 0.0)
+				Placement::new(origin, 0.0)
 					.with_rotation(rotation)
 					.with_scale(Vec3::new(scale_x, cell_x, scale_z)),
 			);
@@ -406,4 +498,57 @@ where
 		})
 		.collect();
 	grow_tuft_plants(grown, merge_collections)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn surface_normal_tilts_against_ramp_along_x() {
+		// Plane y = 0.5 x → normal ∝ (-0.5, 1, 0).
+		let samples: Vec<Vec3> = (0..21)
+			.map(|i| {
+				let x = i as f32 - 10.0;
+				Vec3::new(x, 0.5 * x, 0.0)
+			})
+			.collect();
+		let n = surface_normal_at(&samples, 0.0, 0.0, 1.0);
+		assert!(n.x < -0.3, "expected uphill tilt, got {n:?}");
+		assert!(n.y > 0.8, "expected mostly upright, got {n:?}");
+		assert!(n.z.abs() < 0.05, "expected no Z lean, got {n:?}");
+	}
+
+	#[test]
+	fn ultra_carpets_follow_plant_heightfield() {
+		let extent = GroveExtent::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(20.0, 1.0, 20.0));
+		let samples: Vec<Vec3> = (0..11)
+			.flat_map(|ix| {
+				(0..11).map(move |iz| {
+					let x = ix as f32 * 2.0;
+					let z = iz as f32 * 2.0;
+					Vec3::new(x, 0.25 * x + 5.0, z)
+				})
+			})
+			.collect();
+		let placements = horizontal_grid_proxy_placements(&extent, 2, 0.6, &samples);
+		assert_eq!(placements.len(), 4);
+		for p in &placements {
+			assert!(
+				p.translation.y > 4.0,
+				"carpet should sit near plant heights, got {}",
+				p.translation.y
+			);
+			let up = p.rotation() * Vec3::Z;
+			assert!(
+				up.x < -0.1,
+				"carpet thickness axis should tilt with slope, got {up:?}"
+			);
+			assert!(up.y > 0.85, "carpet up should stay mostly upright, got {up:?}");
+			assert!(
+				(up.dot(Vec3::Y) - 1.0).abs() > 1e-3,
+				"carpet should not be world-horizontal on a slope"
+			);
+		}
+	}
 }
