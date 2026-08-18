@@ -86,8 +86,19 @@ impl Placement {
 	}
 
 	/// Uniform foliage ball / splay at `center` with world radius `radius`.
+	///
+	/// Orientation is a spatial hash of `center`: independent yaw / pitch / roll in
+	/// \([0, 2\pi)\) so cheap-ball cards do not share a grove-wide frame. Nearby
+	/// positions stay uncorrelated (white, not band-limited noise).
 	pub fn foliage_uniform(center: Vec3, radius: f32) -> Self {
-		Self::new(center, 0.0).with_scale(Vec3::splat(radius.max(1e-4)))
+		let (yaw, pitch, roll) = hashed_ball_euler(center);
+		Self {
+			translation: center,
+			yaw,
+			pitch,
+			roll,
+			scale: Vec3::splat(radius.max(1e-4)),
+		}
 	}
 
 	/// Straight frond segment: base at `start`, \(+Y\) along `dir`, blade width along kit \(X\).
@@ -115,6 +126,63 @@ impl Placement {
 impl Default for Placement {
 	fn default() -> Self {
 		Self::IDENTITY
+	}
+}
+
+/// White-noise Euler from position bits. Lanes keep yaw / pitch / roll uncorrelated.
+fn hashed_ball_euler(p: Vec3) -> (f32, f32, f32) {
+	const TAU: f32 = std::f32::consts::TAU;
+	(unit_hash(p, 1) * TAU, unit_hash(p, 2) * TAU, unit_hash(p, 3) * TAU)
+}
+
+/// Deterministic sample in `[0, 1)` from `p`'s IEEE bits and a decorrelation lane.
+///
+/// Integer mixing (lowbias32) so nearby positions and large-magnitude float seeds
+/// stay distinct — the same class of failure as `chico_ball_components` jitter.
+fn unit_hash(p: Vec3, lane: u32) -> f32 {
+	let mut h = p.x.to_bits()
+		^ p.y.to_bits().rotate_left(11)
+		^ p.z.to_bits().rotate_left(22)
+		^ lane.wrapping_mul(0x9E37_79B9);
+	h ^= h >> 16;
+	h = h.wrapping_mul(0x7FEB_352D);
+	h ^= h >> 15;
+	h = h.wrapping_mul(0x846C_A68B);
+	h ^= h >> 16;
+	(h >> 8) as f32 / (1 << 24) as f32
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn foliage_uniform_is_deterministic() {
+		let a = Placement::foliage_uniform(Vec3::new(1.25, 4.0, -2.5), 0.8);
+		let b = Placement::foliage_uniform(Vec3::new(1.25, 4.0, -2.5), 0.8);
+		assert_eq!(a, b);
+		assert_eq!(a.translation, Vec3::new(1.25, 4.0, -2.5));
+		assert!((a.scale - Vec3::splat(0.8)).abs().max_element() < 1e-6);
+	}
+
+	#[test]
+	fn foliage_uniform_axes_are_uncorrelated() {
+		let p = Placement::foliage_uniform(Vec3::new(3.0, 1.0, 7.0), 1.0);
+		assert!((p.yaw - p.pitch).abs() > 1e-3, "yaw collided with pitch");
+		assert!((p.yaw - p.roll).abs() > 1e-3, "yaw collided with roll");
+		assert!((p.pitch - p.roll).abs() > 1e-3, "pitch collided with roll");
+		for angle in [p.yaw, p.pitch, p.roll] {
+			assert!((0.0..std::f32::consts::TAU).contains(&angle), "out of range: {angle}");
+		}
+	}
+
+	#[test]
+	fn nearby_centers_do_not_share_a_frame() {
+		let a = Placement::foliage_uniform(Vec3::new(0.0, 2.0, 0.0), 1.0);
+		let b = Placement::foliage_uniform(Vec3::new(0.05, 2.0, 0.0), 1.0);
+		assert!((a.yaw - b.yaw).abs() > 1e-3, "yaw correlated");
+		assert!((a.pitch - b.pitch).abs() > 1e-3, "pitch correlated");
+		assert!((a.roll - b.roll).abs() > 1e-3, "roll correlated");
 	}
 }
 
