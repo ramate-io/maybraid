@@ -2,11 +2,13 @@
 
 pub mod camera;
 pub mod commands;
+pub mod diagnostics;
 mod groves;
 mod ui;
 
 pub use camera::CameraController;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::camera::visibility::VisibilitySystems;
@@ -108,6 +110,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 					}),
 			);
 		register_vegetation_view(app);
+		if !app.is_plugin_added::<diagnostics::PlaygroundTimingPlugin>() {
+			app.add_plugins(diagnostics::PlaygroundTimingPlugin);
+		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
