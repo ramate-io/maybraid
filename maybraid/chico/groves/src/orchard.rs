@@ -3,6 +3,10 @@
 //!
 //! Compact fruiting and pale-bloom storybook forms on low-slope terrain with tight cell offset.
 //! Forest-layer attachment remains a follow-up.
+//!
+//! Under `render`, High/Medium flatten posed Storybook stick/ball nodes onto the grove
+//! host (no per-tree nested LOD hosts). Low ≈ one canopy ball per tree; UltraLow bins
+//! those sites at [`ULTRA_LOW_CANOPY_BIN_METERS`].
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
@@ -135,7 +139,8 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{StorybookTree, StorybookTreeParams};
 	use chico_vegetation_components::{
-		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+		vegetation_scene_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -146,11 +151,11 @@ mod vc {
 
 	use super::{definition, OrchardCell, OrchardItem};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		canopy_ball_material_from_palette, canopy_proxy_site, flatten_foliage_nodes,
+		flatten_stick_nodes, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
+		frond_material_from_palette, grove_detail_level, grove_lod_culls, grove_lod_level,
+		grove_lod_status, grove_structural_footprint, layers_from_nodes, placement_noise,
+		stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
 		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
@@ -293,17 +298,27 @@ mod vc {
 			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
-		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+		/// Pose every tree's stick nodes into grove space (High/Medium only).
+		fn flatten_plant_sticks(&self, level: LodSceneLevel) -> Vec<StickNode> {
 			self.plants
 				.iter()
-				.map(|plant| {
-					nest_placed_plant_chunk(
-						plant.tree.clone(),
+				.flat_map(|plant| {
+					flatten_stick_nodes(&plant.tree, plant.placement, &plant.stick_material, level)
+				})
+				.collect()
+		}
+
+		/// Pose every tree's foliage nodes into grove space (High/Medium only).
+		fn flatten_plant_foliage(&self, level: LodSceneLevel) -> Vec<FoliageNode> {
+			self.plants
+				.iter()
+				.flat_map(|plant| {
+					flatten_foliage_nodes(
+						&plant.tree,
 						plant.placement,
-						&plant.stick_material,
 						&plant.ball_material,
 						&plant.frond_material,
-						lod_ref,
+						level,
 					)
 				})
 				.collect()
@@ -352,22 +367,25 @@ mod vc {
 	}
 
 	impl VegetationComponents for Orchard {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			match grove_detail_level(level) {
+				Some(detail) => layers_from_nodes(self.flatten_plant_sticks(detail)),
+				None => Layers::new(),
+			}
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-			match level {
-				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => {
-					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
-				}
-				LodSceneLevel::UltraLow
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
-					&self.canopy_sites(),
-					ULTRA_LOW_CANOPY_BIN_METERS,
-				)),
+			match grove_detail_level(level) {
+				Some(detail) => layers_from_nodes(self.flatten_plant_foliage(detail)),
+				None => match level {
+					LodSceneLevel::Low => {
+						layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
+					}
+					_ => layers_from_nodes(foliage_ultra_low_merged_balls(
+						&self.canopy_sites(),
+						ULTRA_LOW_CANOPY_BIN_METERS,
+					)),
+				},
 			}
 		}
 
@@ -400,23 +418,18 @@ mod vc {
 		}
 
 		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-			match grove_detail_level(level) {
-				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
-				None => {
-					let mut children: Vec<Box<dyn Scene>> = Vec::new();
-					chico_vegetation_components::append_component_scenes(
-						self,
-						lod_ref,
-						level,
-						&mut children,
-					);
-					chico_vegetation_components::scene_children(children)
-				}
-			}
+			let mut children: Vec<Box<dyn Scene>> = Vec::new();
+			chico_vegetation_components::append_component_scenes(
+				self,
+				lod_ref,
+				level,
+				&mut children,
+			);
+			chico_vegetation_components::scene_children(children)
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+			vegetation_scene_chunks(self, lod_ref, level)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {
@@ -580,5 +593,49 @@ mod tests {
 		assert_eq!(a, b);
 		assert!(!a.is_empty());
 		Ok(())
+	}
+
+	#[cfg(feature = "render")]
+	mod render_tests {
+		use super::*;
+		use crate::orchard::OrchardParams;
+		use chico_vegetation_components::VegetationComponents;
+		use lod::gen::LodSceneLevel;
+
+		fn small_grove() -> crate::orchard::Orchard {
+			OrchardParams::default()
+				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(33.0, 1.0, 33.0)))
+				.build()
+		}
+
+		#[test]
+		fn high_medium_flatten_plant_nodes_onto_grove() -> Result<()> {
+			let grove = small_grove();
+			assert!(!grove.plants.is_empty(), "expected placed orchard trees");
+
+			let high_sticks = grove.stick_nodes_for_level(LodSceneLevel::High).len();
+			let high_foliage = grove.foliage_nodes_for_level(LodSceneLevel::High).len();
+			assert!(high_sticks > 0, "High should emit flattened stick nodes");
+			assert!(high_foliage > 0, "High should emit flattened foliage nodes");
+
+			let medium_sticks = grove.stick_nodes_for_level(LodSceneLevel::Medium).len();
+			let medium_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Medium).len();
+			assert!(medium_sticks > 0);
+			assert!(medium_foliage > 0);
+			assert!(
+				medium_sticks <= high_sticks,
+				"Medium sticks {medium_sticks} should not exceed High {high_sticks}"
+			);
+			assert!(
+				medium_foliage <= high_foliage,
+				"Medium foliage {medium_foliage} should not exceed High {high_foliage}"
+			);
+
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
+			assert_eq!(low_foliage, grove.plants.len());
+			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
+			Ok(())
+		}
 	}
 }

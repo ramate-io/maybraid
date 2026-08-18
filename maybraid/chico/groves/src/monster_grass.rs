@@ -585,9 +585,8 @@ mod vc {
 			let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 			let origin = self.extent.min();
 			let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
-			let samples = surface_samples_from_plants(
-				self.plants.iter().map(|p| (&p.placement, &p.patch)),
-			);
+			let samples =
+				surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
 
 			for plant in &self.plants {
 				let patch = &plant.patch;
@@ -632,20 +631,14 @@ mod vc {
 		/// large “width” onto world up and turns carpets into walls.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 			let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-			let samples = surface_samples_from_plants(
-				self.plants.iter().map(|p| (&p.placement, &p.patch)),
-			);
-			horizontal_grid_proxy_placements(
-				&self.extent,
-				ULTRA_GRID,
-				PROXY_HEIGHT_ULTRA,
-				&samples,
-			)
-			.into_iter()
-			.map(|placement| {
-				FoliageNode::straight_frond_segment(placement).with_material(material.clone())
-			})
-			.collect()
+			let samples =
+				surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
+			horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA, &samples)
+				.into_iter()
+				.map(|placement| {
+					FoliageNode::straight_frond_segment(placement).with_material(material.clone())
+				})
+				.collect()
 		}
 	}
 
