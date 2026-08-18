@@ -6,6 +6,10 @@ use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
+use crate::foliage::ball_collection::{
+	CheapBallCollection, CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
+	CHEAP_BALL_COLLECTION_MEDIUM_METERS,
+};
 use crate::foliage::collection::{
 	FrondCollection, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR,
 	FROND_COLLECTION_MEDIUM_FACTOR,
@@ -67,7 +71,7 @@ impl FoliageLodProbe {
 		Self::for_kit_collection(center, extent)
 	}
 
-	/// Shared spawn bands for frond / cheap-ball collections (`distance / radius`).
+	/// Shared spawn bands for frond collections (`distance / radius`).
 	pub fn for_kit_collection(center: Vec3, radius: f32) -> Self {
 		Self {
 			center,
@@ -75,6 +79,29 @@ impl FoliageLodProbe {
 			high_factor: FROND_COLLECTION_HIGH_FACTOR,
 			medium_factor: FROND_COLLECTION_MEDIUM_FACTOR,
 			low_factor: FROND_COLLECTION_LOW_FACTOR,
+			preserve_ultra_low: true,
+		}
+	}
+
+	/// Cheap-ball collection probe: High/Medium/Low edges are **absolute meters**
+	/// ([`CHEAP_BALL_COLLECTION_HIGH_METERS`], …) encoded as `meters / radius`.
+	///
+	/// A tight baked canopy AABB (~2–4 m) must not use frond `5×/10×/50×` spawn
+	/// factors — that drops the host to UltraLow (one ball) a few dozen meters out
+	/// and looks like a flicker-then-gone merge.
+	pub fn for_cheap_ball_collection(collection: &CheapBallCollection) -> Self {
+		let (center, radius) = collection.center_and_extent();
+		Self::for_cheap_ball_probe(center, radius)
+	}
+
+	pub fn for_cheap_ball_probe(center: Vec3, radius: f32) -> Self {
+		let extent = radius.max(1e-4);
+		Self {
+			center,
+			extent,
+			high_factor: (CHEAP_BALL_COLLECTION_HIGH_METERS / extent).max(1.0),
+			medium_factor: (CHEAP_BALL_COLLECTION_MEDIUM_METERS / extent).max(1.0),
+			low_factor: (CHEAP_BALL_COLLECTION_LOW_METERS / extent).max(1.0),
 			preserve_ultra_low: true,
 		}
 	}
@@ -184,6 +211,27 @@ mod tests {
 		assert_eq!(
 			probe.level_for(&Transform::from_translation(Vec3::new(1_000.0, 0.0, 0.0))),
 			LodSceneLevel::UltraLow
+		);
+	}
+
+	#[test]
+	fn cheap_ball_collection_stays_high_across_a_grove() {
+		use crate::placed::Placement;
+
+		let collection = CheapBallCollection::new([
+			Placement::foliage_uniform(Vec3::new(0.0, 4.0, 0.0), 0.3),
+			Placement::foliage_uniform(Vec3::new(2.0, 5.0, 1.0), 0.3),
+		])
+		.bake_bounds_from_placements();
+		let probe = FoliageLodProbe::for_cheap_ball_collection(&collection);
+		assert!(probe.extent < 8.0, "baked canopy should stay tree-scale, got {}", probe.extent);
+		assert_eq!(
+			probe.level_for(&Transform::from_translation(Vec3::new(80.0, 2.0, 0.0))),
+			LodSceneLevel::High
+		);
+		assert_eq!(
+			probe.level_for(&Transform::from_translation(Vec3::new(600.0, 2.0, 0.0))),
+			LodSceneLevel::Medium
 		);
 	}
 }

@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use bevy::prelude::{Color, Vec3};
 use bevy::scene::prelude::Scene;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, chico_stick_material_ref, components_only_host, FoliageGeometry,
-	FoliageNode, Layers, PlacedVegetation, Placement, StickNode, StructuralLod,
-	VegetationComponents,
+	chico_leaf_material_ref, chico_stick_material_ref, components_only_host,
+	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
+	Placement, StickNode, StructuralLod, VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -255,6 +255,57 @@ where
 	SceneChunk::weighted(
 		1,
 		nest_placed_plant_host(
+			plant,
+			placement,
+			stick_material,
+			ball_material,
+			frond_material,
+			lod_ref,
+		),
+	)
+}
+
+/// Nest one posed plant as [`chico_vegetation_components::FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
+///
+/// Kit nodes spawn as posed content (no per-stick / per-ball LOD hosts).
+pub fn nest_flattened_plant_host<T>(
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	lod_ref: &LodRef,
+) -> impl Scene + 'static
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	flattened_components_only_host(
+		PlacedVegetation::new(
+			plant,
+			placement,
+			stick_material.clone(),
+			ball_material.clone(),
+			frond_material.clone(),
+		),
+		lod_ref,
+	)
+}
+
+/// Weighted chunk wrapping [`nest_flattened_plant_host`].
+pub fn nest_flattened_plant_chunk<T>(
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	lod_ref: &LodRef,
+) -> SceneChunk
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	SceneChunk::weighted(
+		1,
+		nest_flattened_plant_host(
 			plant,
 			placement,
 			stick_material,

@@ -22,7 +22,9 @@ use chico_sbs_trees::{
 	RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch,
 	VaseTree, WaialeaPalm,
 };
-use chico_vegetation_components::{ComponentsOnly, FoliageNode, PlacedVegetation, StickNode};
+use chico_vegetation_components::{
+	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
+};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
@@ -172,6 +174,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<DatePalm>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<PenmarchTorch>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<StorybookTree>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<StorybookTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);

@@ -174,6 +174,101 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 	}
 }
 
+/// Same as [`ComponentsOnly`], but kit nodes spawn as posed content (no nested
+/// [`FoliageNode`] / [`StickNode`] LOD hosts).
+///
+/// One Avian volume per plant. Cheap-ball instance [`Transform`]s stay kit-local
+/// so object-space leaf breakup still works after grove flatten.
+#[derive(Debug, Clone, PartialEq, Component)]
+pub struct FlattenedComponentsOnly<T: Send + Sync + 'static>(pub T);
+
+impl<T: Send + Sync + 'static> FlattenedComponentsOnly<T> {
+	pub fn into_inner(self) -> T {
+		self.0
+	}
+}
+
+impl<T: Send + Sync + 'static> From<T> for FlattenedComponentsOnly<T> {
+	fn from(value: T) -> Self {
+		Self(value)
+	}
+}
+
+impl<T: Send + Sync + 'static> std::ops::Deref for FlattenedComponentsOnly<T> {
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		&self.0
+	}
+}
+
+impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents
+	for FlattenedComponentsOnly<T>
+{
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		self.0.stick_nodes_for_level(level)
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		self.0.foliage_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		self.0.structural_lod()
+	}
+}
+
+impl<T: VegetationComponents + Send + Sync + 'static> LodScene for FlattenedComponentsOnly<T> {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.0
+			.structural_lod()
+			.map(|p| p.level_for(lod_ref.current_transform))
+			.unwrap_or(LodSceneLevel::High)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		match self.0.structural_lod() {
+			Some(band) => band.status_for_lod_ref(lod_ref),
+			None => LodSceneStatus::Unchanged,
+		}
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		match self.0.structural_lod() {
+			Some(band) => {
+				let factor = lod_ref.current_transform.translation.distance(band.center)
+					/ band.tree_radius.max(1e-4);
+				cull_offset_bands_from_factor(
+					factor,
+					band.high_factor,
+					band.medium_factor,
+					band.low_factor,
+				)
+			}
+			None => LodSceneCulls::None,
+		}
+	}
+
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		flattened_component_scene(&self.0, lod_ref, level)
+	}
+
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		flattened_vegetation_scene_chunks(&self.0, lod_ref, level)
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		self.0
+			.structural_lod()
+			.map(|p| p.footprint_aabb())
+			.unwrap_or_else(|| vegetation_bounds(&self.0))
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+	}
+}
+
 /// Weighted chunks for one structural level: each stick/foliage node is a nested LOD host.
 pub fn vegetation_scene_chunks(
 	vegetation: &impl VegetationComponents,
@@ -222,6 +317,41 @@ pub fn component_only_scene(
 	scene_children(children)
 }
 
+/// Append posed kit *content* (GLB / merge scenes), not nested [`LodScene`] hosts.
+pub fn append_flattened_component_scenes(
+	vegetation: &impl VegetationComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+	children: &mut Vec<Box<dyn Scene>>,
+) {
+	for node in vegetation.stick_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.scene_with_level(lod_ref, level)));
+	}
+	for node in vegetation.foliage_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.scene_with_level(lod_ref, level)));
+	}
+}
+
+/// All kit content for `level` as siblings under one parent (no fine-phase hosts).
+pub fn flattened_component_scene(
+	vegetation: &impl VegetationComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> impl Scene + 'static {
+	let mut children: Vec<Box<dyn Scene>> = Vec::new();
+	append_flattened_component_scenes(vegetation, lod_ref, level, &mut children);
+	scene_children(children)
+}
+
+/// One primitive: every stick/foliage node at `level` as posed content.
+pub fn flattened_vegetation_scene_chunks(
+	vegetation: &impl VegetationComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> SceneChunk {
+	SceneChunk::primitive(flattened_component_scene(vegetation, lod_ref, level))
+}
+
 /// Nest a [`ComponentsOnly`] host (pending level roots + typed component).
 ///
 /// Uses [`template`] so `T` need not implement [`Default`] (unlike [`LodScene::host`]).
@@ -230,6 +360,23 @@ where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
 {
 	let host = ComponentsOnly(vegetation);
+	let level = host.scene_lod_level(lod_ref);
+	let bounds = host.scene_bounds();
+	let host_for_template = host.clone();
+	(
+		lod_host_scene_pending(level, bounds),
+		bsn! {
+			template(move |_ctx| Ok(host_for_template.clone()))
+		},
+	)
+}
+
+/// Nest a [`FlattenedComponentsOnly`] host (pending level roots + typed component).
+pub fn flattened_components_only_host<T>(vegetation: T, lod_ref: &LodRef) -> impl Scene + 'static
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let host = FlattenedComponentsOnly(vegetation);
 	let level = host.scene_lod_level(lod_ref);
 	let bounds = host.scene_bounds();
 	let host_for_template = host.clone();
@@ -353,5 +500,45 @@ pub fn vegetation_bounds(vegetation: &impl VegetationComponents) -> Aabb3d {
 		Aabb3d::from_min_max(min, max)
 	} else {
 		Aabb3d::from_min_max(bevy::math::Vec3::ZERO, bevy::math::Vec3::ONE)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy::prelude::{Entity, Transform, Vec3};
+
+	#[derive(Clone)]
+	struct TwoBalls;
+
+	impl VegetationComponents for TwoBalls {
+		fn foliage_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FoliageNode> {
+			Layers::from_free(vec![
+				FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::ZERO, 0.3)),
+				FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::Y, 0.3)),
+			])
+		}
+	}
+
+	#[test]
+	fn flattened_chunks_are_one_primitive() {
+		let camera = Transform::from_translation(Vec3::new(0.0, 2.0, 8.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		assert!(matches!(
+			flattened_vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High),
+			SceneChunk::Primitive { .. }
+		));
+		let SceneChunk::SubChunks(children) =
+			vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
+		else {
+			panic!("expected one nested host chunk per ball");
+		};
+		assert_eq!(children.len(), 2);
 	}
 }

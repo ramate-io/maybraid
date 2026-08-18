@@ -115,6 +115,15 @@ impl FoliageNode {
 		Some(Self::cheap_ball_collection(collection, Placement::IDENTITY).with_material(material))
 	}
 
+	/// Expand the cheap-ball collection probe to at least `radius` around `center`.
+	pub fn with_cheap_ball_probe(mut self, center: Vec3, radius: f32) -> Self {
+		if let FoliageGeometry::CheapBallCollection(collection) = &mut self.geometry {
+			collection.center = center;
+			collection.radius = radius.max(collection.radius).max(1e-4);
+		}
+		self
+	}
+
 	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, geometry, placement)
 	}
@@ -122,26 +131,27 @@ impl FoliageNode {
 	fn probe(&self) -> FoliageLodProbe {
 		match &self.geometry {
 			FoliageGeometry::FrondCollection(collection) => {
-				self.composed_collection_probe(collection.center_and_extent())
+				let (local_center, local_radius) = collection.center_and_extent();
+				let (center, extent) = self.composed_collection_extent(local_center, local_radius);
+				let mut probe = FoliageLodProbe::for_kit_collection(center, extent);
+				probe.center = center;
+				probe.extent = extent;
+				probe
 			}
 			FoliageGeometry::CheapBallCollection(collection) => {
-				self.composed_collection_probe(collection.center_and_extent())
+				let (local_center, local_radius) = collection.center_and_extent();
+				let (center, extent) = self.composed_collection_extent(local_center, local_radius);
+				FoliageLodProbe::for_cheap_ball_probe(center, extent)
 			}
 			_ => FoliageLodProbe::from_placement(&self.placement),
 		}
 	}
 
-	fn composed_collection_probe(
-		&self,
-		(local_center, local_radius): (Vec3, f32),
-	) -> FoliageLodProbe {
+	fn composed_collection_extent(&self, local_center: Vec3, local_radius: f32) -> (Vec3, f32) {
 		let world_center =
 			self.placement.compose_child(Placement::new(local_center, 0.0)).translation;
 		let scale = self.placement.scale.abs().max_element().max(1e-4);
-		let mut probe = FoliageLodProbe::for_kit_collection(local_center, local_radius);
-		probe.center = world_center;
-		probe.extent = local_radius * scale;
-		probe
+		(world_center, (local_radius * scale).max(1e-4))
 	}
 
 	fn standard_ball_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
@@ -326,6 +336,15 @@ impl FoliageNode {
 }
 
 impl LodScene for FoliageNode {
+	fn host_contents(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
+		let host = self.clone();
+		let probe = self.probe();
+		bsn! {
+			template_value(host)
+			template_value(probe)
+		}
+	}
+
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		self.probe().level_for(lod_ref.current_transform)
 	}
