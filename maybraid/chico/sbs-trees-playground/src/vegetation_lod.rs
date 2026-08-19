@@ -89,6 +89,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 			spawn_weights_per_frame: 256,
 			cull_weights_per_frame: 128,
 			begins_per_frame: 48,
+			begin_weights_per_frame: 256,
 		})
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),

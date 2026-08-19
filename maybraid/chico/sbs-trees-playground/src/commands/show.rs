@@ -1,6 +1,7 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
 use crate::monster_grass_plain::spawn_monster_grass_plain;
+use crate::vast_orchards::spawn_vast_orchards;
 use bevy::prelude::*;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
@@ -97,6 +98,8 @@ pub enum Show {
 	RollingOaks(ShowRollingOaks),
 	/// Orchard grove via VegetationComponents / LodScene.
 	Orchard(ShowOrchard),
+	/// Centered radius-10 tile of default Orchard groves (21×21) for scale testing.
+	VastOrchards,
 	/// Riparian General grove via VegetationComponents / LodScene.
 	RiparianGeneral(ShowRiparianGeneral),
 	/// Forlorn Savanna grove via VegetationComponents / LodScene.
@@ -1195,6 +1198,7 @@ impl Show {
 			Self::TropicalThicket(args) => ShowSubject::TropicalThicket(args.configured()),
 			Self::RollingOaks(args) => ShowSubject::RollingOaks(args.configured()),
 			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
+			Self::VastOrchards => ShowSubject::VastOrchards,
 			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
 			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
 			Self::GoettingenFollow(args) => ShowSubject::GoettingenFollow(args.configured()),
@@ -1271,6 +1275,7 @@ pub enum ShowSubject {
 	TropicalThicket(TropicalThicketParams),
 	RollingOaks(RollingOaksParams),
 	Orchard(OrchardParams),
+	VastOrchards,
 	RiparianGeneral(RiparianGeneralParams),
 	ForlornSavanna(ForlornSavannaParams),
 	GoettingenFollow(GoettingenFollowParams),
@@ -1471,6 +1476,7 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
+		Some(ShowSubject::VastOrchards) => Some("vast-orchards".into()),
 		Some(ShowSubject::RiparianGeneral(g)) => Some(format!(
 			"riparian-general:extent={:?}|cell={:?}|terrain={:?}",
 			g.extent,
@@ -1699,6 +1705,11 @@ pub fn sync_show(
 		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::RollingOaks(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::Orchard(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::VastOrchards => {
+			for entity in spawn_vast_orchards(&mut commands, Transform::IDENTITY) {
+				commands.entity(entity).insert(ShowRoot);
+			}
+		}
 		ShowSubject::RiparianGeneral(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::ForlornSavanna(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::GoettingenFollow(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1763,6 +1774,14 @@ mod tests {
 		let cmd = crate::commands::PlaygroundCommand::parse_line("show monster-grass-plains")
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert!(matches!(cmd, crate::commands::PlaygroundCommand::Show(Show::MonsterGrassPlains)));
+		Ok(())
+	}
+
+	#[test]
+	fn show_vast_orchards_parses() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show vast-orchards")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert!(matches!(cmd, crate::commands::PlaygroundCommand::Show(Show::VastOrchards)));
 		Ok(())
 	}
 

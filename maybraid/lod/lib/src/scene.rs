@@ -21,12 +21,12 @@ pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
 pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
-	begin_chunk_lod_fulfill, complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, drain_lod_cull,
-	enqueue_lod_cull, reset_lod_chunk_budget, resume_desired_pending_roots, LodChunkBudgetClock,
-	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillSystems,
-	LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	begin_chunk_lod_fulfill, cancel_unstarted_cull_for_desired_pending_roots,
+	complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
+	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
+	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
+	LodCullRequest, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
 	closest_available_lod_level, cull_bands_with_adjacent_depth, cull_named_from_factor,

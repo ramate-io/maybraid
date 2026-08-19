@@ -2,6 +2,7 @@
 //!
 //! One host scan builds candidate lists; admission walks those lists in class order.
 //! Active begin quota is rolled into Desired (begins only start desired-level jobs).
+//! Each admitted job also charges shared begin weight (sum of primitive weights).
 
 use std::time::Instant;
 
@@ -18,7 +19,7 @@ use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
 use super::super::super::viewer::LodViewer;
-use super::schedule::{admit_begin, LevelBand};
+use super::schedule::{admit_begin, charge_begin_weight, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed,
@@ -296,7 +297,9 @@ fn admit_candidates<T: Component + LodScene>(
 			};
 			scene.scene_chunks_with_level(lod_ref, candidate.level)
 		};
+		let begin_weight = chunk.total_weight();
 		let queue = chunk.into_primitives();
+		charge_begin_weight(begin_clock, begin_weight);
 		let chunks_ms = ms(t_chunks);
 		stats.chunks_ms_total += chunks_ms;
 		let expected = queue.len();

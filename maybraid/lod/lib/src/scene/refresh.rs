@@ -54,13 +54,13 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill, complete_chunk_lod_fulfill,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill,
+	cancel_unstarted_cull_for_desired_pending_roots, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
-	reset_lod_chunk_budget, resume_desired_pending_roots, LodChunkBudgetClock,
-	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillDiag,
-	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodCullRequest,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
+	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillSystems, LodChunkFulfillment,
+	LodCullInFlight, LodCullRequest, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use viewer::LodViewer;
 

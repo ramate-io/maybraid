@@ -83,11 +83,21 @@ pub struct LodChunkFulfillBudget {
 	pub cull_weights_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
+	/// Relative weight charged when starting fulfill jobs (sum of primitive weights).
+	///
+	/// Caps how much [`crate::SceneChunk`] work begin may materialize per frame,
+	/// independent of [`Self::begins_per_frame`] count admission.
+	pub begin_weights_per_frame: u32,
 }
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
-		Self { spawn_weights_per_frame: 512, cull_weights_per_frame: 64, begins_per_frame: 48 }
+		Self {
+			spawn_weights_per_frame: 512,
+			cull_weights_per_frame: 64,
+			begins_per_frame: 48,
+			begin_weights_per_frame: 512,
+		}
 	}
 }
 
@@ -114,6 +124,8 @@ pub struct LodChunkBeginClock {
 	pub desired_remaining: u32,
 	/// Reserved for symmetry with drain; begin rolls this into Desired.
 	pub active_remaining: u32,
+	/// Shared begin cost remaining ([`LodChunkFulfillBudget::begin_weights_per_frame`]).
+	pub weight_remaining: u32,
 	/// Which class the begin systems try first this frame.
 	pub first_class: FulfillClass,
 }
