@@ -241,7 +241,7 @@ fn drain_one(
 		if *remaining == 0 {
 			break;
 		}
-		let Some((weight, scene)) = job.queue.pop_front() else {
+		let Some((weight, scene)) = crate::scene::chunk::pull_primitive(&mut job.queue) else {
 			break;
 		};
 		let children = vec![scene];

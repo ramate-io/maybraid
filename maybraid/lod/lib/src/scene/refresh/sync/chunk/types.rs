@@ -39,9 +39,11 @@ pub struct LodCullInFlight {
 /// Remaining weighted primitives for a pending level root.
 ///
 /// Frozen at begin: host mutability does not rewrite this queue mid-job.
+/// May still contain [`crate::SceneChunk::Lazy`] / [`crate::SceneChunk::SubChunks`]
+/// until drain / begin prefill expands them.
 #[derive(Component)]
 pub struct LodChunkFulfillment {
-	pub queue: VecDeque<(u32, Box<dyn bevy::scene::Scene>)>,
+	pub queue: VecDeque<crate::scene::chunk::SceneChunk>,
 	/// Primitive count at job begin (content-Streamed when `spawned == expected`).
 	pub expected: usize,
 	pub spawned: usize,
@@ -83,11 +85,15 @@ pub struct LodChunkFulfillBudget {
 	pub cull_weights_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
-	/// Relative weight charged when starting fulfill jobs (sum of primitive weights).
+	/// Relative weight charged when starting fulfill jobs (sum of **prefilled**
+	/// primitive weights). Lazy tails are charged later by drain.
 	///
 	/// Caps how much [`crate::SceneChunk`] work begin may materialize per frame,
 	/// independent of [`Self::begins_per_frame`] count admission.
 	pub begin_weights_per_frame: u32,
+	/// Max weight begin may materialize into primitives for a single new job
+	/// (rest stays [`crate::SceneChunk::Lazy`] for drain).
+	pub begin_prefill_weights_per_job: u32,
 }
 
 impl Default for LodChunkFulfillBudget {
@@ -97,6 +103,7 @@ impl Default for LodChunkFulfillBudget {
 			cull_weights_per_frame: 64,
 			begins_per_frame: 48,
 			begin_weights_per_frame: 512,
+			begin_prefill_weights_per_job: 8,
 		}
 	}
 }

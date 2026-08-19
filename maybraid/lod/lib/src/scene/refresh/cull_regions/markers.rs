@@ -29,6 +29,22 @@ pub struct LodNestedRefreshBlocked;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodHostHasCullableRoots;
 
+/// Cap how many nested-refresh gate stamps run per frame.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct LodNestedRefreshSyncBudget {
+	pub hosts_per_frame: u32,
+}
+
+impl Default for LodNestedRefreshSyncBudget {
+	fn default() -> Self {
+		Self { hosts_per_frame: 256 }
+	}
+}
+
+/// Overflow dirty hosts not yet stamped this frame.
+#[derive(Resource, Debug, Default)]
+pub(crate) struct LodNestedRefreshPending(Vec<Entity>);
+
 fn set_nested_refresh_gate(
 	commands: &mut Commands,
 	entity: Entity,
@@ -87,15 +103,18 @@ fn collect_descendant_hosts(
 }
 
 /// On new / ungated hosts + when any host level or root visibility changes, refresh gate markers.
+#[allow(private_interfaces)]
 pub fn sync_nested_refresh_allowed(
 	mut commands: Commands,
+	budget: Res<LodNestedRefreshSyncBudget>,
+	mut pending: ResMut<LodNestedRefreshPending>,
 	added: Query<Entity, Added<LodSceneHost>>,
 	ungated: Query<
 		Entity,
 		(With<LodSceneHost>, Without<LodNestedRefreshAllowed>, Without<LodNestedRefreshBlocked>),
 	>,
 	changed_levels: Query<Entity, (With<LodSceneHost>, Changed<LodSceneLevel>)>,
-	changed_root_vis: Query<&ChildOf, (With<LodLevelRoot>, Changed<Visibility>)>,
+	changed_root_vis: Query<(Entity, &ChildOf), (With<LodLevelRoot>, Changed<Visibility>)>,
 	children_q: Query<&Children>,
 	hosts: Query<(), With<LodSceneHost>>,
 	child_of: Query<&ChildOf>,
@@ -106,13 +125,16 @@ pub fn sync_nested_refresh_allowed(
 	allowed: Query<(), With<LodNestedRefreshAllowed>>,
 	blocked: Query<(), With<LodNestedRefreshBlocked>>,
 ) {
-	let mut dirty: Vec<Entity> = added.iter().chain(ungated.iter()).collect();
+	let mut dirty: Vec<Entity> = std::mem::take(&mut pending.0);
+	dirty.extend(added.iter());
+	dirty.extend(ungated.iter());
 	for entity in &changed_levels {
 		dirty.push(entity);
 		collect_descendant_hosts(entity, &children_q, &hosts, &mut dirty);
 	}
-	// Warm-hold / complete flips root Visibility — re-gate nested hosts under that host.
-	for root_of in &changed_root_vis {
+	// Warm-hold / complete flips root Visibility — re-gate nested hosts under
+	// **that root only** (not every descendant of the owning host).
+	for (root, root_of) in &changed_root_vis {
 		let bag = root_of.parent();
 		let Ok(bag_of) = child_of.get(bag) else {
 			continue;
@@ -120,15 +142,25 @@ pub fn sync_nested_refresh_allowed(
 		let host = bag_of.parent();
 		if hosts.contains(host) {
 			dirty.push(host);
-			collect_descendant_hosts(host, &children_q, &hosts, &mut dirty);
 		}
+		collect_descendant_hosts(root, &children_q, &hosts, &mut dirty);
 	}
 	if dirty.is_empty() {
 		return;
 	}
 	dirty.sort_unstable();
 	dirty.dedup();
-	for entity in dirty {
+
+	let limit = budget.hosts_per_frame as usize;
+	let (this_frame, rest) = if dirty.len() > limit {
+		let rest = dirty.split_off(limit);
+		(dirty, rest)
+	} else {
+		(dirty, Vec::new())
+	};
+	pending.0 = rest;
+
+	for entity in this_frame {
 		set_nested_refresh_gate(
 			&mut commands,
 			entity,
@@ -225,16 +257,18 @@ pub struct LodCullMarkerPlugin;
 impl Plugin for LodCullMarkerPlugin {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		app.add_systems(
-			Update,
-			(
-				sync_nested_refresh_allowed
-					.after(LodRefreshSystems::UpdateLevels)
-					.before(LodRefreshSystems::Cull),
-				sync_cullable_roots_marker
-					.after(LodRefreshSystems::SyncRoots)
-					.before(LodRefreshSystems::Cull),
-			),
-		);
+		app.init_resource::<LodNestedRefreshSyncBudget>()
+			.init_resource::<LodNestedRefreshPending>()
+			.add_systems(
+				Update,
+				(
+					sync_nested_refresh_allowed
+						.after(LodRefreshSystems::UpdateLevels)
+						.before(LodRefreshSystems::Cull),
+					sync_cullable_roots_marker
+						.after(LodRefreshSystems::SyncRoots)
+						.before(LodRefreshSystems::Cull),
+				),
+			);
 	}
 }

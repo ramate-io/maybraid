@@ -18,7 +18,7 @@ pub mod refresh;
 pub mod region_index;
 
 pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
-pub use chunk::{SceneChunk, DEFAULT_CHUNK_WEIGHT};
+pub use chunk::{materialize_front, pull_primitive, SceneChunk, DEFAULT_CHUNK_WEIGHT};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
 	begin_chunk_lod_fulfill, cancel_unstarted_cull_for_desired_pending_roots,
@@ -47,10 +47,11 @@ pub use refresh::{
 	refresh_lod_host_levels, sync_cullable_roots_marker, sync_nested_refresh_allowed,
 	update_lod_host_levels, Bullseye, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodHostBounds, LodHostHasCullableRoots, LodNestedRefreshAllowed,
-	LodNestedRefreshBlocked, LodRefreshCorePlugin, LodRefreshProductionPlugin, LodRefreshRegions,
-	LodRefreshRegionsError, LodRefreshRegionsStatus, LodRefreshSystems, LodSceneCullRegion,
-	LodSceneCullRegionPlugin, LodSceneRefreshEntitiesPlugin, LodSceneRefreshLevel,
-	LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin, LodSceneRefreshRegion,
-	LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
+	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodRefreshCorePlugin,
+	LodRefreshProductionPlugin, LodRefreshRegions, LodRefreshRegionsError, LodRefreshRegionsStatus,
+	LodRefreshSystems, LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRefreshEntitiesPlugin,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
+	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer,
+	OpenLattice, Spotlight,
 };
 pub use region_index::LodSceneRegionIndex;

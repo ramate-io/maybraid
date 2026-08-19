@@ -72,6 +72,7 @@ impl Plugin for BuildingsLodRefreshPlugin {
 			cull_weights_per_frame: 128,
 			begins_per_frame: 48,
 			begin_weights_per_frame: 256,
+			begin_prefill_weights_per_job: 8,
 		})
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, BuildingsBullseye>::default(),

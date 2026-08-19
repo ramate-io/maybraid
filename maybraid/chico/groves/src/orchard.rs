@@ -134,6 +134,8 @@ impl OrchardCell {
 
 #[cfg(feature = "render")]
 mod vc {
+	use std::sync::Arc;
+
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
@@ -281,7 +283,7 @@ mod vc {
 
 	#[derive(Clone, Component)]
 	pub struct Orchard {
-		pub plants: Vec<OrchardPlant>,
+		pub plants: Arc<[OrchardPlant]>,
 		pub structural_center: Vec3,
 		pub footprint_radius: f32,
 		pub extent: GroveExtent,
@@ -293,25 +295,48 @@ mod vc {
 			grove_noise: NoiseParams,
 			extent: &GroveExtent,
 		) -> Self {
-			let plants = placements.iter().map(|placed| grow_plant(placed, grove_noise)).collect();
+			let plants: Arc<[OrchardPlant]> = placements
+				.iter()
+				.map(|placed| grow_plant(placed, grove_noise))
+				.collect::<Vec<_>>()
+				.into();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
 			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
+		/// High/Medium plant hosts — one lazy producer so begin does not clone every tree.
 		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
-			self.plants
-				.iter()
-				.map(|plant| {
-					nest_flattened_plant_chunk(
-						plant.tree.clone(),
-						plant.placement,
-						&plant.stick_material,
-						&plant.ball_material,
-						&plant.frond_material,
-						lod_ref,
-					)
-				})
-				.collect()
+			if self.plants.is_empty() {
+				return Vec::new();
+			}
+			let n = self.plants.len();
+			let plants = Arc::clone(&self.plants);
+			let prev = *lod_ref.previous_transform;
+			let curr = *lod_ref.current_transform;
+			let bounds = *lod_ref.bounds;
+			let entity = lod_ref.entity;
+			let mut index = 0usize;
+			vec![SceneChunk::lazy(n as u32, n, move || {
+				if index >= plants.len() {
+					return None;
+				}
+				let plant = &plants[index];
+				index += 1;
+				let plant_lod = LodRef {
+					entity,
+					previous_transform: &prev,
+					current_transform: &curr,
+					bounds: &bounds,
+				};
+				Some(nest_flattened_plant_chunk(
+					plant.tree.clone(),
+					plant.placement,
+					&plant.stick_material,
+					&plant.ball_material,
+					&plant.frond_material,
+					&plant_lod,
+				))
+			})]
 		}
 
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
@@ -622,10 +647,16 @@ mod tests {
 				bounds: &bounds,
 			};
 			let high = grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High);
-			let lod::SceneChunk::SubChunks(plants) = high else {
-				anyhow::bail!("High orchard should nest one chunk per tree");
+			let lod::SceneChunk::SubChunks(parts) = high else {
+				anyhow::bail!("High orchard should wrap plant chunks");
 			};
-			assert_eq!(plants.len(), grove.plants.len());
+			assert_eq!(parts.len(), 1, "expected one lazy plant producer");
+			let lod::SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } = &parts[0]
+			else {
+				anyhow::bail!("High orchard plants should be SceneChunk::Lazy");
+			};
+			assert_eq!(*remaining_primitives, grove.plants.len());
+			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();

@@ -16,6 +16,7 @@ pub use enqueue::{produce_lod_cull_for_region, LodSceneRegionCullPlugin};
 pub use markers::{
 	sync_cullable_roots_marker, sync_nested_refresh_allowed, LodCullMarkerPlugin,
 	LodHostHasCullableRoots, LodNestedRefreshAllowed, LodNestedRefreshBlocked,
+	LodNestedRefreshSyncBudget,
 };
 pub use open_lattice::OpenLattice;
 pub use produce::{

@@ -40,8 +40,8 @@ pub use cull_regions::{
 	produce_lod_cull_for_region, produce_lod_cull_regions, sync_cullable_roots_marker,
 	sync_nested_refresh_allowed, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
-	LodNestedRefreshBlocked, LodSceneCullRegion, LodSceneCullRegionPlugin,
-	LodSceneRegionCullPlugin, OpenLattice,
+	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodSceneCullRegion,
+	LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
 };
 pub use entities::{
 	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels,

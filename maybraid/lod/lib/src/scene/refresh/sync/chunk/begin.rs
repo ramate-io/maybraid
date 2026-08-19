@@ -2,7 +2,8 @@
 //!
 //! One host scan builds candidate lists; admission walks those lists in class order.
 //! Active begin quota is rolled into Desired (begins only start desired-level jobs).
-//! Each admitted job also charges shared begin weight (sum of primitive weights).
+//! Each admitted job charges shared begin weight for **prefilled** primitives only
+//! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
 use std::time::Instant;
 
@@ -21,10 +22,11 @@ use crate::scene::LodScene;
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, charge_begin_weight, LevelBand};
 use super::types::{
-	FulfillClass, LodChunkBeginClock, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
-	LodLevelRootPending, LodLevelRootStreamed,
+	FulfillClass, LodChunkBeginClock, LodChunkFulfillBudget, LodChunkFulfillDiag,
+	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
 };
 use super::util::{has_present_root, ms};
+use crate::scene::chunk::materialize_front;
 
 #[derive(Clone, Copy)]
 struct BeginCandidate {
@@ -62,6 +64,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 	mut diag: ResMut<LodChunkFulfillDiag>,
 	mut begin_clock: ResMut<LodChunkBeginClock>,
+	budget: Res<LodChunkFulfillBudget>,
 	mut host_sets: ParamSet<(
 		Query<(Entity, &LodLevelSpawnRequest), (With<LodSceneHost>, With<T>)>,
 		Query<&'static T, With<LodSceneHost>>,
@@ -180,6 +183,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -190,6 +194,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -201,6 +206,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -211,6 +217,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -222,6 +229,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -232,6 +240,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -243,6 +252,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -253,6 +263,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&lod_ref,
 			&mut diag,
 			&mut begin_clock,
+			&budget,
 			&mut host_sets,
 			&mut stats,
 		);
@@ -278,6 +289,7 @@ fn admit_candidates<T: Component + LodScene>(
 	lod_ref: &LodRef,
 	diag: &mut LodChunkFulfillDiag,
 	begin_clock: &mut LodChunkBeginClock,
+	budget: &LodChunkFulfillBudget,
 	host_sets: &mut ParamSet<(
 		Query<(Entity, &LodLevelSpawnRequest), (With<LodSceneHost>, With<T>)>,
 		Query<&'static T, With<LodSceneHost>>,
@@ -297,14 +309,15 @@ fn admit_candidates<T: Component + LodScene>(
 			};
 			scene.scene_chunks_with_level(lod_ref, candidate.level)
 		};
-		let begin_weight = chunk.total_weight();
-		let queue = chunk.into_primitives();
-		charge_begin_weight(begin_clock, begin_weight);
+		let expected = chunk.total_primitives();
+		let mut queue = chunk.into_fulfill_queue();
+		let prefill = begin_clock.weight_remaining.min(budget.begin_prefill_weights_per_job);
+		let begin_weight = materialize_front(&mut queue, prefill);
+		charge_begin_weight(begin_clock, begin_weight.max(1));
 		let chunks_ms = ms(t_chunks);
 		stats.chunks_ms_total += chunks_ms;
-		let expected = queue.len();
 		diag.last_scene_chunks_ms = chunks_ms;
-		diag.last_level = Some(candidate.level);
+		diag.last_level.replace(candidate.level);
 
 		let t_spawn = Instant::now();
 		let level = candidate.level;
