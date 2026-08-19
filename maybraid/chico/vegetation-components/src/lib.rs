@@ -345,25 +345,43 @@ pub fn flattened_component_scene(
 
 /// Weighted chunks: one posed kit per stick/foliage node (no nested LOD hosts).
 ///
-/// Weight is 1 per kit so fulfill can stream a High canopy instead of spawning
-/// every ball in one `spawn_scene`.
+/// Kits are produced lazily so begin does not box every `scene_with_level` up front.
+/// Weight is 1 per kit so fulfill can stream a High canopy under the drain budget.
 pub fn flattened_vegetation_scene_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
-	let mut chunks = Vec::new();
-	for node in vegetation.stick_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.scene_with_level(lod_ref, level)));
+	let sticks = vegetation.stick_nodes_for_level(level).flatten();
+	let foliage = vegetation.foliage_nodes_for_level(level).flatten();
+	let n = sticks.len() + foliage.len();
+	if n == 0 {
+		return SceneChunk::primitive(scene_children(Vec::new()));
 	}
-	for node in vegetation.foliage_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.scene_with_level(lod_ref, level)));
-	}
-	if chunks.is_empty() {
-		SceneChunk::primitive(scene_children(Vec::new()))
-	} else {
-		SceneChunk::chunks(chunks)
-	}
+
+	let prev = *lod_ref.previous_transform;
+	let curr = *lod_ref.current_transform;
+	let bounds = *lod_ref.bounds;
+	let entity = lod_ref.entity;
+	let n_sticks = sticks.len();
+	let mut index = 0usize;
+
+	SceneChunk::lazy(n as u32, n, move || {
+		let kit_lod =
+			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
+		if index < n_sticks {
+			let node = &sticks[index];
+			index += 1;
+			return Some(SceneChunk::weighted(1, node.scene_with_level(&kit_lod, level)));
+		}
+		let fi = index - n_sticks;
+		if fi < foliage.len() {
+			let node = &foliage[fi];
+			index += 1;
+			return Some(SceneChunk::weighted(1, node.scene_with_level(&kit_lod, level)));
+		}
+		None
+	})
 }
 
 /// Nest a [`ComponentsOnly`] host (pending level roots + typed component).
@@ -544,13 +562,13 @@ mod tests {
 			current_transform: &camera,
 			bounds: &bounds,
 		};
-		let SceneChunk::SubChunks(flat) =
+		let SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } =
 			flattened_vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
 		else {
-			panic!("expected one content chunk per ball");
+			panic!("expected lazy kit producer");
 		};
-		assert_eq!(flat.len(), 2);
-		assert!(flat.iter().all(|c| matches!(c, SceneChunk::Primitive { weight: 1, .. })));
+		assert_eq!(remaining_primitives, 2);
+		assert_eq!(remaining_weight, 2);
 		let SceneChunk::SubChunks(nested) =
 			vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
 		else {
