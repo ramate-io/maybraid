@@ -343,13 +343,27 @@ pub fn flattened_component_scene(
 	scene_children(children)
 }
 
-/// One primitive: every stick/foliage node at `level` as posed content.
+/// Weighted chunks: one posed kit per stick/foliage node (no nested LOD hosts).
+///
+/// Weight is 1 per kit so fulfill can stream a High canopy instead of spawning
+/// every ball in one `spawn_scene`.
 pub fn flattened_vegetation_scene_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
-	SceneChunk::primitive(flattened_component_scene(vegetation, lod_ref, level))
+	let mut chunks = Vec::new();
+	for node in vegetation.stick_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.scene_with_level(lod_ref, level)));
+	}
+	for node in vegetation.foliage_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.scene_with_level(lod_ref, level)));
+	}
+	if chunks.is_empty() {
+		SceneChunk::primitive(scene_children(Vec::new()))
+	} else {
+		SceneChunk::chunks(chunks)
+	}
 }
 
 /// Nest a [`ComponentsOnly`] host (pending level roots + typed component).
@@ -521,7 +535,7 @@ mod tests {
 	}
 
 	#[test]
-	fn flattened_chunks_are_one_primitive() {
+	fn flattened_chunks_are_one_weight_per_kit() {
 		let camera = Transform::from_translation(Vec3::new(0.0, 2.0, 8.0));
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		let lod_ref = LodRef {
@@ -530,15 +544,18 @@ mod tests {
 			current_transform: &camera,
 			bounds: &bounds,
 		};
-		assert!(matches!(
-			flattened_vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High),
-			SceneChunk::Primitive { .. }
-		));
-		let SceneChunk::SubChunks(children) =
+		let SceneChunk::SubChunks(flat) =
+			flattened_vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
+		else {
+			panic!("expected one content chunk per ball");
+		};
+		assert_eq!(flat.len(), 2);
+		assert!(flat.iter().all(|c| matches!(c, SceneChunk::Primitive { weight: 1, .. })));
+		let SceneChunk::SubChunks(nested) =
 			vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
 		else {
 			panic!("expected one nested host chunk per ball");
 		};
-		assert_eq!(children.len(), 2);
+		assert_eq!(nested.len(), 2);
 	}
 }
