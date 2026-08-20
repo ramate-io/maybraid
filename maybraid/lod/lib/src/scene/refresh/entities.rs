@@ -1,4 +1,4 @@
-//! Entity refresh: fold level messages → write [`LodSceneLevel`].
+//! Untyped fold of level messages → write [`LodSceneLevel`] on any host.
 
 mod refresh;
 mod update;

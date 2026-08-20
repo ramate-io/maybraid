@@ -8,13 +8,14 @@ use bevy::scene::prelude::Scene;
 use crate::lod_ref::LodRef;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
-use crate::scene::region_index::LodSceneRegionIndex;
+use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
 
 use super::super::{
 	Bullseye, LodCullRegionCursor, LodHostBounds, LodRefreshCorePlugin, LodRefreshSystems,
 	LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRefreshEntitiesPlugin,
-	LodSceneRefreshLevelsPlugin, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodViewer,
+	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin, LodSceneRefreshRegion,
+	LodSceneRefreshRegionPlugin, LodViewer,
 	OpenLattice, Spotlight,
 };
 
@@ -49,27 +50,19 @@ impl LodScene for Probe {
 	fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
 }
 
-/// Brute-force [`LodSceneRegionIndex`]: world AABB from translation + local bounds.
+/// Untyped scan of every [`LodSceneHost`] volume (produce-cache fill).
 #[derive(SystemParam)]
-pub struct ScanIndex<'w, 's, T: Component + LodScene + 'static> {
-	hosts: Query<
-		'w,
-		's,
-		(Entity, &'static T, &'static Transform, &'static LodHostBounds),
-		With<LodSceneHost>,
-	>,
+pub struct ScanHostIndex<'w, 's> {
+	hosts: Query<'w, 's, (Entity, &'static Transform, &'static LodHostBounds), With<LodSceneHost>>,
 }
 
-impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T> for ScanIndex<'_, '_, T> {
-	fn hosts_in_region<'a>(
-		&'a mut self,
-		region: Aabb3d,
-	) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
-		self.hosts.iter().filter_map(move |(entity, scene, transform, bounds)| {
+impl LodSceneHostIndex for ScanHostIndex<'_, '_> {
+	fn hosts_in_region<'a>(&'a mut self, region: Aabb3d) -> impl Iterator<Item = Entity> + 'a {
+		self.hosts.iter().filter_map(move |(entity, transform, bounds)| {
 			let t = transform.translation;
 			let world =
 				Aabb3d::from_min_max(Vec3::from(bounds.0.min) + t, Vec3::from(bounds.0.max) + t);
-			world.intersects(&region).then_some((entity, scene))
+			world.intersects(&region).then_some(entity)
 		})
 	}
 }
@@ -178,12 +171,8 @@ pub fn app_spotlight_levels() -> App {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(Spotlight::new(200.0))
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
-		.add_plugins(LodSceneRefreshLevelsPlugin::<
-			ScanIndex<Probe>,
-			SpotChan,
-			Probe,
-			With<LodViewer>,
-		>::default())
+		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex, With<LodViewer>>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.add_systems(Update, capture_regions::<SpotChan>.after(LodRefreshSystems::ProduceRegions));
 	app
@@ -197,18 +186,8 @@ pub fn app_dual_channel_levels() -> App {
 		.insert_resource(Bullseye::new(50.0, 500.0))
 		.add_plugins(LodSceneRefreshRegionPlugin::<Spotlight, With<LodViewer>, SpotChan>::default())
 		.add_plugins(LodSceneRefreshRegionPlugin::<Bullseye, With<LodViewer>, BullChan>::default())
-		.add_plugins(LodSceneRefreshLevelsPlugin::<
-			ScanIndex<Probe>,
-			SpotChan,
-			Probe,
-			With<LodViewer>,
-		>::default())
-		.add_plugins(LodSceneRefreshLevelsPlugin::<
-			ScanIndex<Probe>,
-			BullChan,
-			Probe,
-			With<LodViewer>,
-		>::default())
+		.add_plugins(LodSceneRefreshLevelsFillPlugin::<ScanHostIndex, With<LodViewer>>::default())
+		.add_plugins(LodSceneRefreshLevelsPlugin::<Probe>::default())
 		.init_resource::<NewRegions<SpotChan>>()
 		.init_resource::<NewRegions<BullChan>>()
 		.add_systems(
@@ -222,7 +201,7 @@ pub fn app_dual_channel_levels() -> App {
 pub fn app_entities_only() -> App {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins)
-		.add_plugins(LodSceneRefreshEntitiesPlugin::<Probe>::default());
+		.add_plugins(LodSceneRefreshEntitiesPlugin);
 	app
 }
 
