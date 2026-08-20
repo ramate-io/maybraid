@@ -8,8 +8,8 @@ use crate::lod_chunk_trace;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use super::types::{
-	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
-	LodSceneHostStreamed,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed,
 };
 use super::util::{count_nested_hosts, ms};
 
@@ -18,6 +18,8 @@ use super::util::{count_nested_hosts, ms};
 ///
 /// Nested readiness uses [`LodChunkFulfillment::nested_streamed`] /
 /// [`LodChunkFulfillment::nested_required`] (initialized once at content-complete).
+/// Visibility swaps are capped by [`LodChunkFulfillBudget::completes_per_frame`];
+/// Streamed / nested bookkeeping still runs so parent jobs can catch up.
 pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut pending: Query<
@@ -32,16 +34,22 @@ pub fn complete_chunk_lod_fulfill(
 	pending_marker: Query<(), With<LodLevelRootPending>>,
 	child_of: Query<&ChildOf>,
 	mut visibilities: Query<&mut Visibility>,
+	budget: Res<LodChunkFulfillBudget>,
 ) {
 	let t0 = Instant::now();
 	let mut completed = 0u32;
 	let mut waiting_nested = 0u32;
+	let mut remaining = budget.completes_per_frame;
 	for (root_entity, fulfillment, root_child_of, content_streamed) in &mut pending {
 		let Some(mut fulfillment) = fulfillment else {
 			// Pending without a plan — treat as content-complete mesh placeholder.
 			if !content_streamed {
 				commands.entity(root_entity).insert(LodLevelRootStreamed);
 			}
+			if remaining == 0 {
+				continue;
+			}
+			remaining -= 1;
 			commands.entity(root_entity).remove::<LodLevelRootPending>();
 			finish_root(
 				&mut commands,
@@ -73,6 +81,10 @@ pub fn complete_chunk_lod_fulfill(
 			waiting_nested += 1;
 			continue;
 		}
+		if remaining == 0 {
+			continue;
+		}
+		remaining -= 1;
 
 		commands
 			.entity(root_entity)

@@ -94,6 +94,13 @@ pub struct LodChunkFulfillBudget {
 	/// Max weight begin may materialize into primitives for a single new job
 	/// (rest stays [`crate::SceneChunk::Lazy`] for drain).
 	pub begin_prefill_weights_per_job: u32,
+	/// Max warm-swaps (`Visibility::Inherited` on the ready root, `Hidden` on siblings)
+	/// per frame.
+	///
+	/// Content-[`LodLevelRootStreamed`] and nested-host bookkeeping still run for
+	/// every ready job; only the visibility swap is capped so a completion wave
+	/// does not reveal hundreds of already-built subtrees in one propagate.
+	pub completes_per_frame: u32,
 }
 
 impl Default for LodChunkFulfillBudget {
@@ -104,6 +111,7 @@ impl Default for LodChunkFulfillBudget {
 			begins_per_frame: 48,
 			begin_weights_per_frame: 512,
 			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 16,
 		}
 	}
 }
@@ -161,9 +169,17 @@ pub struct LodChunkDrainCursor {
 	pub active: LodChunkBandCursors,
 }
 
-/// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
+/// Last drain wave (primitives queued this frame) plus scene-build timing.
+///
+/// [`Self::last_drain_spawned`] is written by drain **before** ApplyDeferred.
+/// Count `Added<>` hosts / `ChildOf` / scene-refs **after** drain to see what
+/// those commands actually inserted.
 #[derive(Resource, Debug, Default)]
 pub struct LodChunkFulfillDiag {
 	pub last_scene_chunks_ms: f64,
 	pub last_level: Option<LodSceneLevel>,
+	pub last_drain_spawned: u32,
+	pub last_drain_weight: u32,
+	pub last_drain_jobs: u32,
+	pub last_drain_newly_streamed: u32,
 }

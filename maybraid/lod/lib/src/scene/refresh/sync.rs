@@ -12,11 +12,11 @@ use super::viewer::LodViewer;
 pub use chunk::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, begin_chunk_lod_fulfill,
 	cancel_unstarted_cull_for_desired_pending_roots, complete_chunk_lod_fulfill,
-	drain_chunk_lod_fulfill, reset_lod_chunk_budget, FulfillClass, LodChunkBeginClock,
-	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillSystems, LodChunkFulfillment,
-	LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
+	drain_chunk_lod_fulfill, log_lod_chunk_drain_apply, reset_lod_chunk_budget, FulfillClass,
+	LodChunkBeginClock, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
+	LodChunkDrainCursor, LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillSystems,
+	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
 	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullRequest,

@@ -30,6 +30,7 @@ use lod::{
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
 use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use scene_ref::SceneRefAdmitBudget;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -86,12 +87,14 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
-			spawn_weights_per_frame: 256,
+			spawn_weights_per_frame: 512,
 			cull_weights_per_frame: 128,
 			begins_per_frame: 48,
 			begin_weights_per_frame: 256,
 			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 16,
 		})
+		.insert_resource(SceneRefAdmitBudget { per_frame: 64 })
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),

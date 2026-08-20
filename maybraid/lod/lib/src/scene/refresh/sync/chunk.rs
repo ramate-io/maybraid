@@ -13,6 +13,7 @@
 //! Begin admits by count ([`LodChunkFulfillBudget::begins_per_frame`]) and shared
 //! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
 //! primitive weights). Active begin quota folds into Desired.
+//! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
 //! Frame parity rotates class order; leftovers cascade.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
@@ -40,7 +41,7 @@ use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull,
 
 pub use begin::begin_chunk_lod_fulfill;
 pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
-pub use drain::drain_chunk_lod_fulfill;
+pub use drain::{drain_chunk_lod_fulfill, log_lod_chunk_drain_apply};
 pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
@@ -141,6 +142,9 @@ impl Plugin for LodChunkBudgetPlugin {
 					cancel_unstarted_cull_for_desired_pending_roots
 						.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
+					log_lod_chunk_drain_apply
+						.in_set(LodChunkFulfillSystems::Complete)
+						.before(bump_nested_streamed_progress),
 					bump_nested_streamed_progress
 						.in_set(LodChunkFulfillSystems::Complete)
 						.before(complete_chunk_lod_fulfill),

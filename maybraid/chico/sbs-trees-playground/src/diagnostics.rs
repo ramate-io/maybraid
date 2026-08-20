@@ -5,6 +5,11 @@
 //! - `commands` — `[lod.commands]` system_commands apply (needs bevy `trace`)
 //! - `render` — top `[veg.render]` elapsed_gpu/cpu paths with the FPS line
 //! - `lod` — allow `lod` crate `info` (`[lod.fine]` / `[lod.chunk]`); otherwise `lod=warn`
+//!
+//! Drain ApplyDeferred waves also log `[lod.drain_apply]` (`warn` when
+//! `spawned ≥ 32` or `Added<ChildOf> ≥ 200`): primitive counts plus new hosts /
+//! pending roots / `ChildOf`. Playground adds `scene_refs` / `world_assets` in
+//! PostUpdate (after scene-ref fulfill).
 //! - `all` — `fps,commands,render,lod`
 //! - `ms=<f64>` — min ms to report for `commands` / `render` (default **1.0**)
 //!
@@ -29,6 +34,9 @@ use bevy::log::tracing_subscriber::registry::LookupSpan;
 use bevy::log::tracing_subscriber::Layer;
 use bevy::log::BoxedLayer;
 use bevy::prelude::*;
+use bevy::world_serialization::WorldAssetRoot;
+use lod::refresh::LodChunkFulfillDiag;
+use scene_ref::{MultiSceneMergeRoot, SceneRefRoot};
 
 const ENV_DIAG: &str = "CHICO_SBS_DIAG";
 const ENV_DIAG_MS: &str = "CHICO_SBS_DIAG_MS";
@@ -192,7 +200,27 @@ impl Plugin for PlaygroundTimingPlugin {
 			}
 			app.add_systems(Update, log_frame_and_render_timing);
 		}
+		app.add_systems(PostUpdate, log_drain_apply_scene_refs);
 	}
+}
+
+/// Scene-ref / world-instance admit counts for the same wave as `[lod.drain_apply]`.
+fn log_drain_apply_scene_refs(
+	diag: Res<LodChunkFulfillDiag>,
+	scene_refs: Query<(), Added<SceneRefRoot>>,
+	merges: Query<(), Added<MultiSceneMergeRoot>>,
+	world_assets: Query<(), Added<WorldAssetRoot>>,
+) {
+	let scene_refs = scene_refs.iter().count();
+	let merges = merges.iter().count();
+	let world_assets = world_assets.iter().count();
+	let heavy = diag.last_drain_spawned >= 32 || scene_refs >= 32 || world_assets >= 32;
+	if !heavy {
+		return;
+	}
+	warn!(
+		"[lod.drain_apply] scene_refs=+{scene_refs} merges=+{merges} world_assets=+{world_assets}"
+	);
 }
 
 fn log_frame_and_render_timing(

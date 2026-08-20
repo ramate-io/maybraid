@@ -357,10 +357,17 @@ pub fn flattened_component_scene(
 	scene_children(children)
 }
 
+/// Drain weight for one posed kit ([`scene_ref::SceneRef`] + later WorldAsset admit).
+///
+/// Weight 1 treated a GLB instance like an empty transform; vast-orchard hitches
+/// were 512 kits per frame at the spawn cap.
+pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 8;
+
 /// Weighted chunks: one posed kit per stick/foliage node (no nested LOD hosts).
 ///
 /// Kits are produced lazily so begin does not box every `scene_with_level` up front.
-/// Weight is 1 per kit so fulfill can stream a High canopy under the drain budget.
+/// Each kit costs [`FLATTENED_KIT_CHUNK_WEIGHT`] so drain does not admit a full
+/// SceneRef / instance wave in one frame.
 pub fn flattened_vegetation_scene_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
@@ -380,19 +387,20 @@ pub fn flattened_vegetation_scene_chunks(
 	let n_sticks = sticks.len();
 	let mut index = 0usize;
 
-	SceneChunk::lazy(n as u32, n, move || {
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	SceneChunk::lazy(n as u32 * kit_w, n, move || {
 		let kit_lod =
 			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
 		if index < n_sticks {
 			let node = &sticks[index];
 			index += 1;
-			return Some(SceneChunk::weighted(1, node.scene_with_level(&kit_lod, level)));
+			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
 		}
 		let fi = index - n_sticks;
 		if fi < foliage.len() {
 			let node = &foliage[fi];
 			index += 1;
-			return Some(SceneChunk::weighted(1, node.scene_with_level(&kit_lod, level)));
+			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
 		}
 		None
 	})
@@ -567,7 +575,7 @@ mod tests {
 	}
 
 	#[test]
-	fn flattened_chunks_are_one_weight_per_kit() {
+	fn flattened_chunks_charge_kit_scene_ref_weight() {
 		let camera = Transform::from_translation(Vec3::new(0.0, 2.0, 8.0));
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
 		let lod_ref = LodRef {
@@ -582,7 +590,7 @@ mod tests {
 			panic!("expected lazy kit producer");
 		};
 		assert_eq!(remaining_primitives, 2);
-		assert_eq!(remaining_weight, 2);
+		assert_eq!(remaining_weight, 2 * FLATTENED_KIT_CHUNK_WEIGHT);
 		let SceneChunk::SubChunks(nested) =
 			vegetation_scene_chunks(&TwoBalls, &lod_ref, LodSceneLevel::High)
 		else {

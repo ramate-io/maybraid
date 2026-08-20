@@ -12,7 +12,6 @@
 use std::time::Instant;
 
 use bevy::prelude::*;
-use bevy::scene::prelude::bsn;
 
 use crate::lod_chunk_trace;
 use crate::scene::host::{lod_root_is_shown, LodLevelRoot, LodSceneHost};
@@ -21,8 +20,8 @@ use crate::scene::level::LodSceneLevel;
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
+	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
 use super::util::{count_nested_hosts, ms};
 
@@ -89,6 +88,7 @@ pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
 	budget: Res<LodChunkFulfillBudget>,
+	mut diag: ResMut<LodChunkFulfillDiag>,
 	mut cursor: ResMut<LodChunkDrainCursor>,
 	mut jobs: DrainJobs,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
@@ -169,6 +169,10 @@ pub fn drain_chunk_lod_fulfill(
 	}
 
 	clock.spawn_remaining = remaining;
+	diag.last_drain_spawned = stats.spawned;
+	diag.last_drain_weight = stats.weight_spent;
+	diag.last_drain_jobs = stats.jobs_touched;
+	diag.last_drain_newly_streamed = stats.newly_streamed;
 
 	if lod_chunk_trace() && (stats.spawned > 0 || stats.newly_streamed > 0) {
 		info!(
@@ -184,6 +188,41 @@ pub fn drain_chunk_lod_fulfill(
 			order[0],
 			ms(t0),
 		);
+	}
+}
+
+/// After drain ApplyDeferred: count what those commands inserted.
+///
+/// Logs when the wave is large (`spawned ≥ 32` or `Added<ChildOf> ≥ 200`) or
+/// when [`lod_chunk_trace`] is on and drain spawned anything.
+pub fn log_lod_chunk_drain_apply(
+	diag: Res<LodChunkFulfillDiag>,
+	added_hosts: Query<(), Added<LodSceneHost>>,
+	added_pending: Query<(), Added<LodLevelRootPending>>,
+	added_streamed: Query<(), Added<LodLevelRootStreamed>>,
+	added_child_of: Query<(), Added<ChildOf>>,
+) {
+	let hosts = added_hosts.iter().count();
+	let pending = added_pending.iter().count();
+	let streamed = added_streamed.iter().count();
+	let child_of = added_child_of.iter().count();
+	let heavy = diag.last_drain_spawned >= 32 || child_of >= 200;
+	let trace = lod_chunk_trace() && diag.last_drain_spawned > 0;
+	if !heavy && !trace {
+		return;
+	}
+	let line = format!(
+		"[lod.drain_apply] spawned={} weight={} jobs={} newly_streamed={} \
+		 hosts=+{hosts} pending=+{pending} streamed=+{streamed} child_of=+{child_of}",
+		diag.last_drain_spawned,
+		diag.last_drain_weight,
+		diag.last_drain_jobs,
+		diag.last_drain_newly_streamed,
+	);
+	if heavy {
+		warn!("{line}");
+	} else {
+		info!("{line}");
 	}
 }
 
@@ -244,13 +283,9 @@ fn drain_one(
 		let Some((weight, scene)) = crate::scene::chunk::pull_primitive(&mut job.queue) else {
 			break;
 		};
-		let children = vec![scene];
-		let piece = bsn! {
-			Transform::default()
-			Visibility::Inherited
-			Children [ {children} ]
-		};
-		let child = commands.spawn_scene(piece).id();
+		// Spawn the primitive as-is. An identity wrapper (Transform/Visibility +
+		// Children) doubled the entity/`ChildOf` cost without changing pose.
+		let child = commands.spawn_scene(scene).id();
 		commands.entity(entity).add_child(child);
 		let w = weight.max(1);
 		*remaining = remaining.saturating_sub(w);

@@ -18,7 +18,7 @@ mod multi_merge;
 mod scene_ref;
 mod world_asset;
 
-use bevy::prelude::{App, Plugin, Update};
+use bevy::prelude::{App, Plugin, Resource, Update};
 
 pub use handles::SceneRefHandles;
 pub use mirror::{mirror_mesh, mirror_transform};
@@ -29,6 +29,22 @@ pub use scene_ref::{MirrorAxis, SceneRef, SceneRefRoot};
 
 use fulfill::{fulfill_multi_scene_merge_roots, fulfill_scene_ref_roots};
 
+/// Per-frame cap on new [`bevy::world_serialization::WorldAssetRoot`] inserts.
+///
+/// Drain can emit many [`SceneRefRoot`]s in one apply; instance spawn is uncapped
+/// unless this binds. Default is unlimited so other hosts stay unchanged.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct SceneRefAdmitBudget {
+	/// Max SceneRef / MultiSceneMerge roots fulfilled this frame (each path).
+	pub per_frame: u32,
+}
+
+impl Default for SceneRefAdmitBudget {
+	fn default() -> Self {
+		Self { per_frame: u32::MAX }
+	}
+}
+
 /// Installs handle caches and fulfills scene / merge roots → [`WorldAssetRoot`].
 pub struct SceneRefPlugin;
 
@@ -36,6 +52,7 @@ impl Plugin for SceneRefPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<SceneRefHandles>()
 			.init_resource::<MultiSceneMergeHandles>()
+			.init_resource::<SceneRefAdmitBudget>()
 			.add_systems(Update, (fulfill_scene_ref_roots, fulfill_multi_scene_merge_roots));
 	}
 }
