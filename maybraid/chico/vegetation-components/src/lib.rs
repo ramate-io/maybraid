@@ -361,7 +361,7 @@ pub fn flattened_component_scene(
 ///
 /// Weight 1 treated a GLB instance like an empty transform; vast-orchard hitches
 /// were 512 kits per frame at the spawn cap.
-pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 8;
+pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
 
 /// Weighted chunks: one posed kit per stick/foliage node (no nested LOD hosts).
 ///

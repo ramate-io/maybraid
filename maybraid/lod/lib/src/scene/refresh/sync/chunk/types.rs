@@ -111,7 +111,7 @@ impl Default for LodChunkFulfillBudget {
 			begins_per_frame: 48,
 			begin_weights_per_frame: 512,
 			begin_prefill_weights_per_job: 8,
-			completes_per_frame: 16,
+			completes_per_frame: 128,
 		}
 	}
 }
