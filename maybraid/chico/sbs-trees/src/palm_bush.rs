@@ -18,7 +18,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::PalmBushSbs;
 use chico_vegetation_components::{
-	FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
+	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -130,13 +130,11 @@ impl VegetationComponents for PalmBush {
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		let rings = self.ring_shapes();
 		let (center, radius) = crown_lod_probe(&rings, None);
-		Some(
-			StructuralLod::new(center, radius).with_factors(
-				STRUCTURAL_HIGH_FACTOR,
-				STRUCTURAL_MEDIUM_FACTOR,
-				STRUCTURAL_LOW_FACTOR,
-			),
-		)
+		Some(StructuralLod::new(center, radius).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		))
 	}
 }
 

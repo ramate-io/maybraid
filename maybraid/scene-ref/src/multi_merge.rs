@@ -1,4 +1,8 @@
 //! Merge multiple [`SceneRef`] worlds into one mesh [`WorldAsset`].
+//!
+//! Per-part transforms are baked into `POSITION`. Kit-local positions are copied
+//! into `COLOR` first so object-space materials can still see a unit kit after
+//! the merge.
 
 mod mesh;
 mod transform_key;

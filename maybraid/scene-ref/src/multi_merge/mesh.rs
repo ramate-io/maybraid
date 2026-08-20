@@ -54,12 +54,29 @@ pub(crate) fn merge_meshes(mut prepared: Vec<Mesh>) -> Option<Mesh> {
 }
 
 fn bake_mesh(mesh: &Mesh, transform: Transform) -> Mesh {
+	let kit_local = kit_local_colors(mesh);
 	let mut out = mesh.clone();
+	if let Some(colors) = kit_local {
+		out.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+	}
 	out.transform_by(transform);
 	if transform.scale.x * transform.scale.y * transform.scale.z < 0.0 {
 		let _ = out.invert_winding();
 	}
 	out
+}
+
+/// Pre-bake [`POSITION`](Mesh::ATTRIBUTE_POSITION) as [`COLOR`](Mesh::ATTRIBUTE_COLOR).
+///
+/// Object-space materials treat `local_pos` as a unit kit. Merge bakes part
+/// transforms into `POSITION`, so those shaders read this channel instead when
+/// `VERTEX_COLORS` is set.
+fn kit_local_colors(mesh: &Mesh) -> Option<Vec<[f32; 4]>> {
+	let VertexAttributeValues::Float32x3(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)?
+	else {
+		return None;
+	};
+	Some(positions.iter().map(|p| [p[0], p[1], p[2], 1.0]).collect())
 }
 
 /// Local-to-scene-root transform by walking [`ChildOf`] + [`Transform`].
@@ -164,6 +181,25 @@ mod tests {
 			anyhow::bail!("expected positions");
 		};
 		assert!((positions[0][0] - 2.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn bake_packs_kit_local_into_color() -> anyhow::Result<()> {
+		let baked = bake_mesh(&triangle([0.3, 0.0, 0.0]), Transform::from_xyz(2.0, 0.0, 0.0));
+		let Some(VertexAttributeValues::Float32x4(colors)) = baked.attribute(Mesh::ATTRIBUTE_COLOR)
+		else {
+			anyhow::bail!("expected colors");
+		};
+		assert!((colors[0][0] - 0.3).abs() < 1e-5);
+		assert!((colors[1][0] - 1.3).abs() < 1e-5);
+		assert!((colors[0][3] - 1.0).abs() < 1e-5);
+		let Some(VertexAttributeValues::Float32x3(positions)) =
+			baked.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			anyhow::bail!("expected positions");
+		};
+		assert!((positions[0][0] - 2.3).abs() < 1e-5);
 		Ok(())
 	}
 

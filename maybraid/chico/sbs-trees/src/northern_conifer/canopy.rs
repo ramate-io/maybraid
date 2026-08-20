@@ -64,10 +64,7 @@ fn collect_candidates(
 			if !mix_seed_below_fraction(idx, node.position, splay_spawn_fraction) {
 				return None;
 			}
-			Some(FoliageCandidate {
-				position: node.position,
-				radius: node.radius,
-			})
+			Some(FoliageCandidate { position: node.position, radius: node.radius })
 		})
 		.collect()
 }
@@ -77,8 +74,7 @@ fn banded_from_candidates(
 	bands: AzimuthHeightBands,
 	splay_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
 	sampled
 		.into_iter()
 		.map(|s| foliage_node_from_candidate(s.item, splay_radius_world))
@@ -94,10 +90,7 @@ fn maybe_apex_ball(
 	if !mix_seed_below_fraction(0, tip.position, apex_spawn_fraction) {
 		return None;
 	}
-	Some(FoliageNode::cheap_ball(Placement::foliage_uniform(
-		tip.position,
-		apex_radius_world,
-	)))
+	Some(FoliageNode::cheap_ball(Placement::foliage_uniform(tip.position, apex_radius_world)))
 }
 
 /// Thin layered proxy: full canopy height (top-anchored at stalk tip), reduced XZ.
@@ -129,9 +122,7 @@ fn thin_full_height_proxy_ball(
 	let mut center = (min + max) * 0.5;
 	// Hold the top of the stretched proxy at the canopy tip.
 	center.y = top_y - half_extents.y;
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, yaw).with_scale(half_extents),
-	))
+	Some(FoliageNode::layered_ball(Placement::new(center, yaw).with_scale(half_extents)))
 }
 
 fn apex_pad(splay_radius_world: f32) -> f32 {
@@ -151,13 +142,8 @@ fn with_proxy_and_apex(
 	let mut nodes = banded_from_candidates(candidates, bands, splay_radius_world);
 	let n = proxy_count.max(1);
 	for i in 0..n {
-		let yaw = if n > 1 {
-			std::f32::consts::FRAC_PI_2 * (i as f32)
-		} else {
-			0.0
-		};
-		if let Some(proxy) =
-			thin_full_height_proxy_ball(candidates, splay_radius_world, chain, yaw)
+		let yaw = if n > 1 { std::f32::consts::FRAC_PI_2 * (i as f32) } else { 0.0 };
+		if let Some(proxy) = thin_full_height_proxy_ball(candidates, splay_radius_world, chain, yaw)
 		{
 			nodes.push(proxy);
 		}

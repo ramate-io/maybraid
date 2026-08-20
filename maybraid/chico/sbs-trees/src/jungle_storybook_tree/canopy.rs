@@ -151,11 +151,7 @@ pub(crate) fn foliage_nodes_for_level(
 ) -> Vec<FoliageNode> {
 	let plan = lod_plan(level);
 	let (growth, canopy) = collect_candidates(chain, growth_spawn_fraction, leaf_radius_world);
-	let proxy = if plan.include_proxy {
-		full_canopy_proxy(&growth, &canopy)
-	} else {
-		None
-	};
+	let proxy = if plan.include_proxy { full_canopy_proxy(&growth, &canopy) } else { None };
 	emit_jungle_canopy_lod(
 		&growth,
 		&canopy,

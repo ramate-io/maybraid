@@ -2,12 +2,12 @@
 //!
 //! High / Medium / Low outer-sample only — no layered mass proxies.
 
+use bevy::prelude::Vec3;
 use chico_sbs_geometry::{
 	sample_max_horizontal_radius_by_azimuth_height, AzimuthHeightBands, BallStickChain,
 	StorybookTreeChain,
 };
 use chico_vegetation_components::{FoliageNode, Placement};
-use bevy::prelude::Vec3;
 
 /// High foliage: densest azimuth × height outer samples (still drops near-duplicates).
 pub(crate) const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(48, 16);
@@ -40,10 +40,7 @@ fn foliage_node_from_candidate(c: &FoliageCandidate, leaf_radius_world: f32) -> 
 fn collect_candidates(chain: &BallStickChain<StorybookTreeChain>) -> Vec<FoliageCandidate> {
 	chain
 		.nodes()
-		.map(|node| FoliageCandidate {
-			position: node.position,
-			radius: node.radius,
-		})
+		.map(|node| FoliageCandidate { position: node.position, radius: node.radius })
 		.collect()
 }
 
@@ -52,8 +49,7 @@ fn banded_from_candidates(
 	bands: AzimuthHeightBands,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
 	sampled
 		.into_iter()
 		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))

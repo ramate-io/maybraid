@@ -37,11 +37,7 @@ pub struct TuftPatchParams {
 
 impl Default for TuftPatchParams {
 	fn default() -> Self {
-		Self {
-			clump_count: 5,
-			patch_extent_xz: 1.5,
-			shape: BladeTuftShape::default(),
-		}
+		Self { clump_count: 5, patch_extent_xz: 1.5, shape: BladeTuftShape::default() }
 	}
 }
 
@@ -63,11 +59,7 @@ impl TuftPatchParams {
 	/// at the default unless the caller sets it after.
 	pub fn unit_from_num_shaped(num: u32, mut shape: BladeTuftShape) -> Self {
 		shape.seed = num as i32;
-		Self {
-			clump_count: Self::default().clump_count,
-			patch_extent_xz: 1.0,
-			shape,
-		}
+		Self { clump_count: Self::default().clump_count, patch_extent_xz: 1.0, shape }
 	}
 
 	/// Normalize this params set to unit footprint keyed by `num`.
@@ -131,10 +123,7 @@ impl TuftPatch {
 		let anchors = params.clump_anchors();
 		let mut runs = Vec::new();
 		for (index, anchor) in anchors.iter().enumerate() {
-			runs.extend(Self::clump_runs_from(
-				&params.clump_shape(index as u32),
-				*anchor,
-			));
+			runs.extend(Self::clump_runs_from(&params.clump_shape(index as u32), *anchor));
 		}
 		Self {
 			clump_count: params.clump_count,
@@ -224,8 +213,7 @@ impl TuftPatch {
 				.collect();
 		}
 		remaining.sort_by(|a, b| {
-			a.0
-				.translation
+			a.0.translation
 				.x
 				.total_cmp(&b.0.translation.x)
 				.then(a.0.translation.z.total_cmp(&b.0.translation.z))
@@ -451,11 +439,7 @@ mod tests {
 		let params = TuftPatchParams {
 			clump_count: 3,
 			patch_extent_xz: 4.0,
-			shape: BladeTuftShape {
-				blade_length: 2.0,
-				seed: 0,
-				..BladeTuftShape::default()
-			},
+			shape: BladeTuftShape { blade_length: 2.0, seed: 0, ..BladeTuftShape::default() },
 		};
 		let (unit, size) = params.into_unit_from_num(3);
 		assert!((size - 4.0).abs() < 1e-5);

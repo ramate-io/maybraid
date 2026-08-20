@@ -193,7 +193,13 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
 #endif
 
 #ifdef VERTEX_POSITIONS
-    out.local_pos = vertex.position;
+#ifdef VERTEX_COLORS
+    // Merged kits: COLOR is pre-bake unit-kit position; POSITION is collection space.
+    let kit_local = vertex.color.xyz;
+#else
+    let kit_local = vertex.position;
+#endif
+    out.local_pos = kit_local;
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
@@ -202,7 +208,7 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     let scale = instance_scale(mesh_world_from_local);
     out.world_position += vec4<f32>(
         canopy_sway(
-            vertex.position,
+            kit_local,
             out.world_position.xyz,
             out.world_normal,
             centroid,

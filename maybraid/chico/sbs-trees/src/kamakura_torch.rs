@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, KamakuraTorchChain, KamakuraTorchSbs};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -53,16 +53,12 @@ pub struct KamakuraTorch {
 
 impl KamakuraTorch {
 	pub fn from_params(params: &KamakuraTorchParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -90,9 +86,7 @@ impl VegetationComponents for KamakuraTorch {
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		let leaf_r = self.leaf_radius_world();
 		let nodes = match level {
-			LodSceneLevel::High => {
-				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
-			}
+			LodSceneLevel::High => foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r),
 			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, leaf_r),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow

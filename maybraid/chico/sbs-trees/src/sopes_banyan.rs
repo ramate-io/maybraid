@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -64,10 +64,7 @@ pub struct SopesBanyan {
 
 impl SopesBanyan {
 	pub fn from_params(params: &SopesBanyanParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn footprint_radius(&self) -> f32 {
@@ -165,12 +162,10 @@ impl VegetationComponents for SopesBanyan {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(
-			StructuralLod::new(self.structural_center(), self.footprint_radius()).with_factors(
-				STRUCTURAL_HIGH_FACTOR,
-				STRUCTURAL_MEDIUM_FACTOR,
-				STRUCTURAL_LOW_FACTOR,
-			),
-		)
+		Some(StructuralLod::new(self.structural_center(), self.footprint_radius()).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		))
 	}
 }

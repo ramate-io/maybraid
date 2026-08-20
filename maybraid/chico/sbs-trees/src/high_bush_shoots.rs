@@ -11,12 +11,10 @@
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, HighBushChain};
-use chico_tree_components::{
-	should_allocate_foliage, HighBushFoliageStyle, HighBushShootsShape,
-};
+use chico_tree_components::{should_allocate_foliage, HighBushFoliageStyle, HighBushShootsShape};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, Placement, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -65,10 +63,7 @@ pub struct HighBushShoots {
 
 impl HighBushShoots {
 	pub fn from_params(params: &HighBushShootsParams) -> Self {
-		Self {
-			shape: params.shape.clone(),
-			chain: params.shape.build_chain(),
-		}
+		Self { shape: params.shape.clone(), chain: params.shape.build_chain() }
 	}
 
 	fn leaf_radius_world(&self) -> f32 {
