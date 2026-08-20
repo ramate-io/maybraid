@@ -4,7 +4,6 @@ pub mod camera;
 pub mod checkerboard_material;
 mod chico_material_lib;
 pub mod commands;
-pub mod diagnostics;
 mod ground;
 mod monster_grass_plain;
 mod render;
@@ -107,8 +106,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
 		register_vegetation_view(app);
-		app.add_plugins(diagnostics::PlaygroundTimingPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)

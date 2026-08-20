@@ -9,21 +9,18 @@
 //! Budget ~¼ / ~⅜ / ~⅜ with leftovers cascading. Within each class, jobs drain by
 //! `(parent_desired, self_level)` High→… (RR per tuple).
 
-use std::time::Instant;
-
 use bevy::prelude::*;
 
-use crate::lod_chunk_trace;
 use crate::scene::host::{lod_root_is_shown, LodLevelRoot, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
-use super::util::{count_nested_hosts, ms};
+use super::util::count_nested_hosts;
 
 struct TupleBuckets {
 	bands: [Vec<Entity>; LOD_CHUNK_TUPLE_BAND_COUNT],
@@ -68,14 +65,6 @@ impl JobBuckets {
 	}
 }
 
-struct DrainStats {
-	spawned: u32,
-	weight_spent: u32,
-	newly_streamed: u32,
-	jobs_touched: u32,
-	paused_skipped: u32,
-}
-
 type DrainJobs<'w, 's> = Query<
 	'w,
 	's,
@@ -87,8 +76,6 @@ type DrainJobs<'w, 's> = Query<
 pub fn drain_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
-	budget: Res<LodChunkFulfillBudget>,
-	mut diag: ResMut<LodChunkFulfillDiag>,
 	mut cursor: ResMut<LodChunkDrainCursor>,
 	mut jobs: DrainJobs,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
@@ -97,26 +84,22 @@ pub fn drain_chunk_lod_fulfill(
 	nested_hosts: Query<(), With<LodSceneHost>>,
 	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
 ) {
-	let t0 = Instant::now();
 	let total = clock.spawn_remaining;
 	if total == 0 {
 		return;
 	}
 
 	let mut buckets = JobBuckets::default();
-	let mut paused_skipped = 0u32;
 	for (entity, root, job) in &jobs {
 		if job.queue.is_empty() {
 			continue;
 		}
 		let Ok(desired) = host_levels.get(job.host) else {
-			paused_skipped += 1;
 			continue;
 		};
 		let shown = visibilities.get(entity).ok().is_some_and(|v| lod_root_is_shown(*v));
 		let class = if job.cold {
 			if root.0 != *desired {
-				paused_skipped += 1;
 				continue;
 			}
 			FulfillClass::Presence
@@ -125,7 +108,6 @@ pub fn drain_chunk_lod_fulfill(
 		} else if shown {
 			FulfillClass::Active
 		} else {
-			paused_skipped += 1;
 			continue;
 		};
 		buckets.for_class_mut(class).push(entity, job.parent_desired, root.0);
@@ -133,13 +115,6 @@ pub fn drain_chunk_lod_fulfill(
 
 	let (presence_share, desired_share, active_share) = split_presence_desired_active(total);
 	let order = class_order(cursor.frame);
-	let mut stats = DrainStats {
-		spawned: 0,
-		weight_spent: 0,
-		newly_streamed: 0,
-		jobs_touched: 0,
-		paused_skipped,
-	};
 
 	let share = |c: FulfillClass| match c {
 		FulfillClass::Presence => presence_share,
@@ -161,7 +136,6 @@ pub fn drain_chunk_lod_fulfill(
 			buckets.for_class(class),
 			cursors,
 			&mut remaining,
-			&mut stats,
 			&children_q,
 			&nested_hosts,
 			&streamed_hosts,
@@ -169,61 +143,6 @@ pub fn drain_chunk_lod_fulfill(
 	}
 
 	clock.spawn_remaining = remaining;
-	diag.last_drain_spawned = stats.spawned;
-	diag.last_drain_weight = stats.weight_spent;
-	diag.last_drain_jobs = stats.jobs_touched;
-	diag.last_drain_newly_streamed = stats.newly_streamed;
-
-	if lod_chunk_trace() && (stats.spawned > 0 || stats.newly_streamed > 0) {
-		info!(
-			"[lod.chunk] drain: queued_spawns={} weight_spent={} budget={} \
-			 jobs_touched={} newly_streamed={} paused_skipped={} first={:?} \
-			 queue_cmds={:.2}ms (rest={remaining})",
-			stats.spawned,
-			stats.weight_spent,
-			budget.spawn_weights_per_frame,
-			stats.jobs_touched,
-			stats.newly_streamed,
-			stats.paused_skipped,
-			order[0],
-			ms(t0),
-		);
-	}
-}
-
-/// After drain ApplyDeferred: count what those commands inserted.
-///
-/// Logs when the wave is large (`spawned ≥ 32` or `Added<ChildOf> ≥ 200`) or
-/// when [`lod_chunk_trace`] is on and drain spawned anything.
-pub fn log_lod_chunk_drain_apply(
-	diag: Res<LodChunkFulfillDiag>,
-	added_hosts: Query<(), Added<LodSceneHost>>,
-	added_pending: Query<(), Added<LodLevelRootPending>>,
-	added_streamed: Query<(), Added<LodLevelRootStreamed>>,
-	added_child_of: Query<(), Added<ChildOf>>,
-) {
-	let hosts = added_hosts.iter().count();
-	let pending = added_pending.iter().count();
-	let streamed = added_streamed.iter().count();
-	let child_of = added_child_of.iter().count();
-	let heavy = diag.last_drain_spawned >= 32 || child_of >= 200;
-	let trace = lod_chunk_trace() && diag.last_drain_spawned > 0;
-	if !heavy && !trace {
-		return;
-	}
-	let line = format!(
-		"[lod.drain_apply] spawned={} weight={} jobs={} newly_streamed={} \
-		 hosts=+{hosts} pending=+{pending} streamed=+{streamed} child_of=+{child_of}",
-		diag.last_drain_spawned,
-		diag.last_drain_weight,
-		diag.last_drain_jobs,
-		diag.last_drain_newly_streamed,
-	);
-	if heavy {
-		warn!("{line}");
-	} else {
-		info!("{line}");
-	}
 }
 
 fn drain_tuple_bands(
@@ -232,7 +151,6 @@ fn drain_tuple_bands(
 	buckets: &TupleBuckets,
 	cursors: &mut LodChunkBandCursors,
 	remaining: &mut u32,
-	stats: &mut DrainStats,
 	children_q: &Query<&Children>,
 	nested_hosts: &Query<(), With<LodSceneHost>>,
 	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
@@ -247,7 +165,6 @@ fn drain_tuple_bands(
 				jobs,
 				entity,
 				remaining,
-				stats,
 				children_q,
 				nested_hosts,
 				streamed_hosts,
@@ -261,7 +178,6 @@ fn drain_one(
 	jobs: &mut DrainJobs,
 	entity: Entity,
 	remaining: &mut u32,
-	stats: &mut DrainStats,
 	children_q: &Query<&Children>,
 	nested_hosts: &Query<(), With<LodSceneHost>>,
 	streamed_hosts: &Query<(), With<LodSceneHostStreamed>>,
@@ -275,7 +191,6 @@ fn drain_one(
 	if job.queue.is_empty() {
 		return true;
 	}
-	stats.jobs_touched += 1;
 	while !job.queue.is_empty() {
 		if *remaining == 0 {
 			break;
@@ -289,13 +204,10 @@ fn drain_one(
 		commands.entity(entity).add_child(child);
 		let w = weight.max(1);
 		*remaining = remaining.saturating_sub(w);
-		stats.weight_spent += w;
-		stats.spawned += 1;
 		job.spawned += 1;
 	}
 	if job.is_content_complete() {
 		commands.entity(entity).insert(LodLevelRootStreamed);
-		stats.newly_streamed += 1;
 		if job.nested_required.is_none() {
 			let (required, streamed) =
 				count_nested_hosts(entity, children_q, nested_hosts, streamed_hosts);

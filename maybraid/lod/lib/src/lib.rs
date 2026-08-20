@@ -7,11 +7,8 @@ pub use lod_cascade_system as cascade_system;
 
 pub mod gen;
 pub mod lod_ref;
-pub mod log_thresh;
 pub mod presentation;
 pub mod scene;
-
-pub use log_thresh::lod_chunk_trace;
 
 /// Compatibility module paths (prefer [`scene`] / [`presentation`] / [`lod_ref`]).
 pub use scene::chunk as scene_chunk;

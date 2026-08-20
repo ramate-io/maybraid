@@ -5,16 +5,12 @@
 //! This path only clears [`LodCullInFlight`] so a pending root re-enters drain
 //! before teardown [`LodCullInFlight::started`].
 
-use std::time::Instant;
-
 use bevy::prelude::*;
 
-use crate::lod_chunk_trace;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::types::{LodCullInFlight, LodLevelRootPending};
-use super::util::ms;
 
 /// If a pending root is desired again and cull teardown has not started, clear
 /// [`LodCullInFlight`] so spawn drain may continue the frozen fulfill queue.
@@ -25,8 +21,6 @@ pub fn cancel_unstarted_cull_for_desired_pending_roots(
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 ) {
-	let t0 = Instant::now();
-	let mut resumed = 0u32;
 	for (entity, cull, root) in &cull_inflight {
 		if cull.started {
 			continue;
@@ -50,9 +44,5 @@ pub fn cancel_unstarted_cull_for_desired_pending_roots(
 			continue;
 		}
 		commands.entity(entity).remove::<LodCullInFlight>();
-		resumed += 1;
-	}
-	if lod_chunk_trace() && resumed > 0 {
-		info!("[lod.chunk] cancel_unstarted_cull: resumed={resumed} in {:.2}ms", ms(t0));
 	}
 }

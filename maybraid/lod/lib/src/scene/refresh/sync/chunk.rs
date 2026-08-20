@@ -42,12 +42,12 @@ use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull,
 
 pub use begin::begin_chunk_lod_fulfill;
 pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
-pub use drain::{drain_chunk_lod_fulfill, log_lod_chunk_drain_apply};
+pub use drain::drain_chunk_lod_fulfill;
 pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
@@ -112,7 +112,6 @@ impl Plugin for LodChunkBudgetPlugin {
 			.init_resource::<LodChunkBudgetClock>()
 			.init_resource::<LodChunkBeginClock>()
 			.init_resource::<LodChunkDrainCursor>()
-			.init_resource::<LodChunkFulfillDiag>()
 			.add_message::<LodCullRequest>()
 			.configure_sets(
 				Update,
@@ -143,9 +142,6 @@ impl Plugin for LodChunkBudgetPlugin {
 					cancel_unstarted_cull_for_desired_pending_roots
 						.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
-					log_lod_chunk_drain_apply
-						.in_set(LodChunkFulfillSystems::Complete)
-						.before(bump_nested_streamed_progress),
 					bump_nested_streamed_progress
 						.in_set(LodChunkFulfillSystems::Complete)
 						.before(complete_chunk_lod_fulfill),

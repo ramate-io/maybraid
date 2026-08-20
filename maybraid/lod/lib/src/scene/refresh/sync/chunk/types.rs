@@ -176,17 +176,3 @@ pub struct LodChunkDrainCursor {
 	pub active: LodChunkBandCursors,
 }
 
-/// Last drain wave (primitives queued this frame) plus scene-build timing.
-///
-/// [`Self::last_drain_spawned`] is written by drain **before** ApplyDeferred.
-/// Count `Added<>` hosts / `ChildOf` / scene-refs **after** drain to see what
-/// those commands actually inserted.
-#[derive(Resource, Debug, Default)]
-pub struct LodChunkFulfillDiag {
-	pub last_scene_chunks_ms: f64,
-	pub last_level: Option<LodSceneLevel>,
-	pub last_drain_spawned: u32,
-	pub last_drain_weight: u32,
-	pub last_drain_jobs: u32,
-	pub last_drain_newly_streamed: u32,
-}

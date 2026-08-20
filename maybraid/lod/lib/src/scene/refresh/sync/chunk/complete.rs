@@ -1,17 +1,14 @@
 //! Warm-swap completion once content + nested hosts are Streamed.
 
-use std::time::Instant;
-
 use bevy::prelude::*;
 
-use crate::lod_chunk_trace;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use super::types::{
 	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
 	LodLevelRootStreamed, LodSceneHostStreamed,
 };
-use super::util::{count_nested_hosts, ms};
+use super::util::count_nested_hosts;
 
 /// Finish pending roots that are content-[`LodLevelRootStreamed`] and whose nested
 /// hosts are [`LodSceneHostStreamed`]: clear pending, show root, hide siblings.
@@ -36,9 +33,6 @@ pub fn complete_chunk_lod_fulfill(
 	mut visibilities: Query<&mut Visibility>,
 	budget: Res<LodChunkFulfillBudget>,
 ) {
-	let t0 = Instant::now();
-	let mut completed = 0u32;
-	let mut waiting_nested = 0u32;
 	let mut remaining = budget.completes_per_frame;
 	for (root_entity, fulfillment, root_child_of, content_streamed) in &mut pending {
 		let Some(mut fulfillment) = fulfillment else {
@@ -61,7 +55,6 @@ pub fn complete_chunk_lod_fulfill(
 				&child_of,
 				&mut visibilities,
 			);
-			completed += 1;
 			continue;
 		};
 
@@ -78,7 +71,6 @@ pub fn complete_chunk_lod_fulfill(
 			fulfillment.nested_streamed = fulfillment.nested_streamed.max(streamed);
 		}
 		if !fulfillment.nested_ready() {
-			waiting_nested += 1;
 			continue;
 		}
 		if remaining == 0 {
@@ -99,14 +91,6 @@ pub fn complete_chunk_lod_fulfill(
 			&pending_marker,
 			&child_of,
 			&mut visibilities,
-		);
-		completed += 1;
-	}
-	if lod_chunk_trace() && (completed > 0 || waiting_nested > 0) {
-		info!(
-			"[lod.chunk] complete: {completed} roots swapped, {waiting_nested} waiting nested \
-			 in {:.2}ms",
-			ms(t0)
 		);
 	}
 }

@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use bevy::log::LogPlugin;
 use bevy::prelude::*;
-use chico_sbs_trees_playground::diagnostics::{command_apply_timing_layer, PlaygroundDiag};
 use chico_sbs_trees_playground::{
 	PendingStartupCommand, PlaygroundCommand, SbsTreesPlaygroundPlugin,
 };
@@ -22,12 +20,6 @@ fn main() {
 		println!("SBS trees playground — press / for commands.");
 	}
 
-	let diag = PlaygroundDiag::from_env();
-	println!(
-		"Diagnostics: {} (CHICO_SBS_DIAG=fps|commands|render|lod|all|ms=<f64>; CHICO_SBS_DIAG_MS).",
-		diag.summary()
-	);
-
 	let assets_path = assets_root();
 	App::new()
 		.add_plugins(
@@ -40,12 +32,7 @@ fn main() {
 					}),
 					..default()
 				})
-				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
-				.set(LogPlugin {
-					filter: diag.log_filter(),
-					custom_layer: command_apply_timing_layer,
-					..default()
-				}),
+				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 		)
 		.insert_resource(ClearColor(Color::srgb(0.82, 0.88, 0.92)))
 		.insert_resource(PendingStartupCommand(startup))
