@@ -83,6 +83,20 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 	}
 }
 
+impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for std::sync::Arc<T> {
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		(**self).stick_nodes_for_level(level)
+	}
+
+	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		(**self).foliage_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		(**self).structural_lod()
+	}
+}
+
 /// Newtype: present a [`VegetationComponents`] value as an [`LodScene`] host component.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct ComponentsOnly<T: Send + Sync + 'static>(pub T);

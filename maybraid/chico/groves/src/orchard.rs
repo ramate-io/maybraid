@@ -275,7 +275,7 @@ mod vc {
 	#[derive(Clone)]
 	pub struct OrchardPlant {
 		pub placement: Placement,
-		tree: StorybookTree,
+		tree: Arc<StorybookTree>,
 		stick_material: MaterialRef,
 		ball_material: MaterialRef,
 		frond_material: MaterialRef,
@@ -329,7 +329,7 @@ mod vc {
 					bounds: &bounds,
 				};
 				Some(nest_flattened_plant_chunk(
-					plant.tree.clone(),
+					Arc::clone(&plant.tree),
 					plant.placement,
 					&plant.stick_material,
 					&plant.ball_material,
@@ -374,7 +374,7 @@ mod vc {
 
 		OrchardPlant {
 			placement,
-			tree: params.build(),
+			tree: Arc::new(params.build()),
 			stick_material,
 			ball_material,
 			frond_material,

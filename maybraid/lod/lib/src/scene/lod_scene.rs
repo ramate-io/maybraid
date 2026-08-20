@@ -130,3 +130,37 @@ pub trait LodScene {
 		Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)
 	}
 }
+
+impl<T: LodScene + Send + Sync + 'static> LodScene for std::sync::Arc<T> {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		(**self).scene_lod_level(lod_ref)
+	}
+
+	fn scene_lod_level_from_levels(&self, lod_refs: &[LodRef]) -> LodSceneLevel {
+		(**self).scene_lod_level_from_levels(lod_refs)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		(**self).scene_lod_status(lod_ref)
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		(**self).scene_lod_culls(lod_ref, current)
+	}
+
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		(**self).scene_with_level(lod_ref, level)
+	}
+
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		(**self).scene_chunks_with_level(lod_ref, level)
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		(**self).scene_with_lod(lod_ref)
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		(**self).scene_bounds()
+	}
+}

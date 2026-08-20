@@ -2,9 +2,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
-use chico_sbs_trees_playground::diagnostics::{
-	command_apply_timing_layer, PlaygroundDiag,
-};
+use chico_sbs_trees_playground::diagnostics::{command_apply_timing_layer, PlaygroundDiag};
 use chico_sbs_trees_playground::{
 	PendingStartupCommand, PlaygroundCommand, SbsTreesPlaygroundPlugin,
 };
