@@ -10,11 +10,16 @@
 //! - **Desired** (~⅜): warm jobs for the host's desired level root.
 //! - **Active** (~⅜): warm jobs on a shown (non-Hidden) non-desired root — warm-hold.
 //! Drain ranks `(parent_desired, self_level)` High→… within each class.
-//! Begin uses Presence + Desired (Active begin quota folds into Desired).
+//! Begin admits by count ([`LodChunkFulfillBudget::begins_per_frame`]) and shared
+//! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
+//! primitive weights). Active begin quota folds into Desired.
+//! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
+//! Cull drain uses a shallow nested-host scan and recursive-despawns ready roots.
 //! Frame parity rotates class order; leftovers cascade.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):
-//! reset budget → resume desired cull-inflight → begin (per `T`) → drain → complete.
+//! reset budget → cancel unstarted cull on desired pending → begin (per `T`) →
+//! drain → complete.
 
 mod begin;
 mod complete;
@@ -38,11 +43,11 @@ use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull,
 pub use begin::begin_chunk_lod_fulfill;
 pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
 pub use drain::drain_chunk_lod_fulfill;
-pub use resume::resume_desired_pending_roots;
+pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillDiag, LodChunkFulfillment, LodCullInFlight,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
 	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
@@ -87,7 +92,7 @@ pub enum LodChunkCullSystems {
 /// plugins only add [`begin_chunk_lod_fulfill`] into [`Self::Begin`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodChunkFulfillSystems {
-	/// Resume desired pending roots that had a cull request before teardown started.
+	/// Cancel unstarted [`LodCullInFlight`] on desired pending roots.
 	Resume,
 	/// Per-`T` [`begin_chunk_lod_fulfill`].
 	Begin,
@@ -107,7 +112,6 @@ impl Plugin for LodChunkBudgetPlugin {
 			.init_resource::<LodChunkBudgetClock>()
 			.init_resource::<LodChunkBeginClock>()
 			.init_resource::<LodChunkDrainCursor>()
-			.init_resource::<LodChunkFulfillDiag>()
 			.add_message::<LodCullRequest>()
 			.configure_sets(
 				Update,
@@ -135,7 +139,8 @@ impl Plugin for LodChunkBudgetPlugin {
 				Update,
 				(
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
-					resume_desired_pending_roots.in_set(LodChunkFulfillSystems::Resume),
+					cancel_unstarted_cull_for_desired_pending_roots
+						.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
 					bump_nested_streamed_progress
 						.in_set(LodChunkFulfillSystems::Complete)

@@ -22,12 +22,15 @@ use chico_sbs_trees::{
 	RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch,
 	VaseTree, WaialeaPalm,
 };
-use chico_vegetation_components::{ComponentsOnly, FoliageNode, PlacedVegetation, StickNode};
+use chico_vegetation_components::{
+	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
+};
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
 use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use scene_ref::SceneRefAdmitBudget;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -84,10 +87,15 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
-			spawn_weights_per_frame: 256,
+			spawn_weights_per_frame: 512,
 			cull_weights_per_frame: 128,
+			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
+			begin_weights_per_frame: 256,
+			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 512,
 		})
+		.insert_resource(SceneRefAdmitBudget { per_frame: 256 })
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),
@@ -172,6 +180,8 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<DatePalm>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<PenmarchTorch>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<StorybookTree>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<StorybookTree>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<StorybookTree>>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);

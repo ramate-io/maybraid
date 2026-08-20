@@ -1,5 +1,6 @@
 //! Foliage continuous forms.
 
+use crate::foliage::ball_collection::CheapBallCollection;
 use crate::foliage::collection::FrondCollection;
 
 /// Foliage footprint / construction.
@@ -22,6 +23,8 @@ pub enum FoliageGeometry {
 	StraightFrondSegment,
 	/// Many placed frond kits under one LOD parent (merge thinning by distance).
 	FrondCollection(FrondCollection),
+	/// Many placed cheap-ball kits under one LOD parent (merge thinning by distance).
+	CheapBallCollection(CheapBallCollection),
 }
 
 impl Default for FoliageGeometry {
@@ -55,6 +58,10 @@ impl FoliageGeometry {
 		Self::FrondCollection(collection)
 	}
 
+	pub fn cheap_ball_collection(collection: CheapBallCollection) -> Self {
+		Self::CheapBallCollection(collection)
+	}
+
 	pub fn is_layered_ball(&self) -> bool {
 		matches!(self, Self::LayeredBall)
 	}
@@ -72,5 +79,16 @@ impl FoliageGeometry {
 			Self::FrondCollection(c) => Some(c),
 			_ => None,
 		}
+	}
+
+	pub fn as_cheap_ball_collection(&self) -> Option<&CheapBallCollection> {
+		match self {
+			Self::CheapBallCollection(c) => Some(c),
+			_ => None,
+		}
+	}
+
+	pub fn is_kit_collection(&self) -> bool {
+		matches!(self, Self::FrondCollection(_) | Self::CheapBallCollection(_))
 	}
 }

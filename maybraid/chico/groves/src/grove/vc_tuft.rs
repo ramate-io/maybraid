@@ -248,9 +248,8 @@ impl TuftGroveBody {
 		let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 		let origin = self.extent.min();
 		let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
-		let samples = surface_samples_from_plants(
-			self.plants.iter().map(|p| (&p.placement, &p.patch)),
-		);
+		let samples =
+			surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
 
 		for plant in &self.plants {
 			let patch = &plant.patch;
@@ -288,9 +287,8 @@ impl TuftGroveBody {
 
 	pub fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-		let samples = surface_samples_from_plants(
-			self.plants.iter().map(|p| (&p.placement, &p.patch)),
-		);
+		let samples =
+			surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
 		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra, &samples)
 			.into_iter()
 			.map(|placement| {
@@ -400,12 +398,7 @@ fn carpet_basis(normal: Vec3) -> Mat3 {
 }
 
 /// Upright Low proxy: base on the surface, rachis along `up` (terrain normal).
-pub(crate) fn upright_proxy_run(
-	base: Vec3,
-	up: Vec3,
-	width: f32,
-	height: f32,
-) -> Option<FrondRun> {
+pub(crate) fn upright_proxy_run(base: Vec3, up: Vec3, width: f32, height: f32) -> Option<FrondRun> {
 	Placement::frond_segment(base, up, height, width.max(1e-3))
 		.map(|p| FrondRun::from_placements([p]))
 }
@@ -540,10 +533,7 @@ mod tests {
 				p.translation.y
 			);
 			let up = p.rotation() * Vec3::Z;
-			assert!(
-				up.x < -0.1,
-				"carpet thickness axis should tilt with slope, got {up:?}"
-			);
+			assert!(up.x < -0.1, "carpet thickness axis should tilt with slope, got {up:?}");
 			assert!(up.y > 0.85, "carpet up should stay mostly upright, got {up:?}");
 			assert!(
 				(up.dot(Vec3::Y) - 1.0).abs() > 1e-3,

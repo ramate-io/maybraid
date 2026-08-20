@@ -14,7 +14,7 @@ name = "richmond-buildings-playground"
 path = "src/main.rs"
 
 [dependencies]
-# `trace` enables bevy_ecs `system_commands` spans used to time command apply.
+# `trace` enables Bevy Tracy zones (`system` / `system_commands` / `par_for_each`).
 avian3d = { workspace = true }
 bevy = { workspace = true, features = ["trace"] }
 bevy_math = { workspace = true }

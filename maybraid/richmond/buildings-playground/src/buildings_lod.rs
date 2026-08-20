@@ -70,7 +70,11 @@ impl Plugin for BuildingsLodRefreshPlugin {
 		.insert_resource(LodChunkFulfillBudget {
 			spawn_weights_per_frame: 256,
 			cull_weights_per_frame: 128,
+			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
+			begin_weights_per_frame: 256,
+			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 128,
 		})
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, BuildingsBullseye>::default(),

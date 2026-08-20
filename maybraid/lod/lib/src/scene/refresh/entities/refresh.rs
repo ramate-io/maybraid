@@ -1,24 +1,26 @@
 //! Fold [`LodSceneRefreshLevel`] impulses and write host [`LodSceneLevel`].
 
 use std::collections::HashMap;
-use std::marker::PhantomData;
 
 use bevy::prelude::*;
 
 use crate::scene::host::LodSceneHost;
 use crate::scene::level::LodSceneLevel;
-use crate::scene::LodScene;
 
+use super::super::ensure_refresh_core;
 use super::super::levels::LodSceneRefreshLevel;
-use super::super::{ensure_refresh_core, LodRefreshSystems};
 
-/// Keep the max [`LodSceneLevel`] per entity, then write once onto hosts `T`.
-pub fn refresh_lod_host_levels<T>(
+/// Keep the max [`LodSceneLevel`] per entity, then write once onto any host.
+///
+/// The bus is already untyped (`entity` + `level`). A per-`T` fold would re-read
+/// every message, allocate, and `get_mut`-miss for every other host type.
+pub fn refresh_lod_host_levels(
 	mut reader: MessageReader<LodSceneRefreshLevel>,
-	mut hosts: Query<&mut LodSceneLevel, (With<LodSceneHost>, With<T>)>,
-) where
-	T: Component + LodScene + 'static,
-{
+	mut hosts: Query<&mut LodSceneLevel, With<LodSceneHost>>,
+) {
+	if reader.is_empty() {
+		return;
+	}
 	let mut best: HashMap<Entity, LodSceneLevel> = HashMap::new();
 	for msg in reader.read() {
 		best.entry(msg.entity)
@@ -40,32 +42,14 @@ pub fn refresh_lod_host_levels<T>(
 	}
 }
 
-/// Fold [`LodSceneRefreshLevel`] → [`LodSceneLevel`] on hosts `T`.
-pub struct LodSceneRefreshEntitiesPlugin<T>
-where
-	T: Component + LodScene + 'static,
-{
-	_marker: PhantomData<fn() -> T>,
-}
+/// Fold [`LodSceneRefreshLevel`] → [`LodSceneLevel`] on [`LodSceneHost`]s.
+///
+/// The system lives on [`crate::scene::refresh::LodRefreshCorePlugin`]; this plugin
+/// only ensures that core is present (tests / standalone fold).
+pub struct LodSceneRefreshEntitiesPlugin;
 
-impl<T> Default for LodSceneRefreshEntitiesPlugin<T>
-where
-	T: Component + LodScene + 'static,
-{
-	fn default() -> Self {
-		Self { _marker: PhantomData }
-	}
-}
-
-impl<T> Plugin for LodSceneRefreshEntitiesPlugin<T>
-where
-	T: Component + LodScene + 'static,
-{
+impl Plugin for LodSceneRefreshEntitiesPlugin {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		app.add_message::<LodSceneRefreshLevel>().add_systems(
-			Update,
-			refresh_lod_host_levels::<T>.in_set(LodRefreshSystems::UpdateLevels),
-		);
 	}
 }

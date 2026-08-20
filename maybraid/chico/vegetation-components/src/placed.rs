@@ -92,13 +92,7 @@ impl Placement {
 	/// positions stay uncorrelated (white, not band-limited noise).
 	pub fn foliage_uniform(center: Vec3, radius: f32) -> Self {
 		let (yaw, pitch, roll) = hashed_ball_euler(center);
-		Self {
-			translation: center,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::splat(radius.max(1e-4)),
-		}
+		Self { translation: center, yaw, pitch, roll, scale: Vec3::splat(radius.max(1e-4)) }
 	}
 
 	/// Straight frond segment: base at `start`, \(+Y\) along `dir`, blade width along kit \(X\).
@@ -185,4 +179,3 @@ mod tests {
 		assert!((a.roll - b.roll).abs() > 1e-3, "roll correlated");
 	}
 }
-

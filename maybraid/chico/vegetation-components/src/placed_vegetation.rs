@@ -43,13 +43,7 @@ impl<T: Send + Sync + 'static> PlacedVegetation<T> {
 		ball_material: MaterialRef,
 		frond_material: MaterialRef,
 	) -> Self {
-		Self {
-			vegetation,
-			placement,
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		Self { vegetation, placement, stick_material, ball_material, frond_material }
 	}
 }
 
@@ -90,10 +84,7 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for P
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		let lod = self.vegetation.structural_lod()?;
 		let scale = self.placement.scale.abs().max_element().max(1e-4);
-		let center = self
-			.placement
-			.compose_child(Placement::new(lod.center, 0.0))
-			.translation;
+		let center = self.placement.compose_child(Placement::new(lod.center, 0.0)).translation;
 		Some(
 			StructuralLod::new(center, (lod.tree_radius * scale).max(1e-4))
 				.with_factors(lod.high_factor, lod.medium_factor, lod.low_factor)

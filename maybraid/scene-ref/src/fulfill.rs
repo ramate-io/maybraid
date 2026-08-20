@@ -9,6 +9,7 @@ use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 use crate::handles::SceneRefHandles;
 use crate::multi_merge::{MultiSceneMergeHandles, MultiSceneMergeRoot};
 use crate::scene_ref::SceneRefRoot;
+use crate::SceneRefAdmitBudget;
 
 pub(crate) fn fulfill_scene_ref_roots(
 	mut commands: Commands,
@@ -18,8 +19,13 @@ pub(crate) fn fulfill_scene_ref_roots(
 	mut world_assets: ResMut<Assets<WorldAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	type_registry: Res<AppTypeRegistry>,
+	budget: Res<SceneRefAdmitBudget>,
 ) {
+	let mut remaining = budget.per_frame;
 	for (entity, root) in &query {
+		if remaining == 0 {
+			break;
+		}
 		if let Some(handle) = handles.try_resolve(
 			&root.0,
 			&asset_server,
@@ -28,6 +34,7 @@ pub(crate) fn fulfill_scene_ref_roots(
 			&type_registry,
 		) {
 			commands.entity(entity).insert(WorldAssetRoot(handle));
+			remaining -= 1;
 		}
 	}
 }
@@ -42,8 +49,13 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	type_registry: Res<AppTypeRegistry>,
+	budget: Res<SceneRefAdmitBudget>,
 ) {
+	let mut remaining = budget.per_frame;
 	for (entity, root) in &query {
+		if remaining == 0 {
+			break;
+		}
 		if let Some(handle) = merge_handles.try_resolve(
 			&root.0,
 			&mut scene_handles,
@@ -54,6 +66,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 			&type_registry,
 		) {
 			commands.entity(entity).insert(WorldAssetRoot(handle));
+			remaining -= 1;
 		}
 	}
 }

@@ -148,9 +148,7 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
-		.map(|(root_level, asset)| {
-			mesh_level_root(*root_level, *asset, level == *root_level, None)
-		})
+		.map(|(root_level, asset)| mesh_level_root(*root_level, *asset, level == *root_level, None))
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }

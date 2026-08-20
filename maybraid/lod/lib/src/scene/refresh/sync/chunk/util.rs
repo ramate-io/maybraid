@@ -1,16 +1,10 @@
 //! Small helpers shared by begin / drain / complete.
 
-use std::time::Instant;
-
 use bevy::prelude::*;
 
 use crate::scene::host::{LodLevelRoot, LodSceneHost};
 
 use super::types::{LodCullInFlight, LodSceneHostStreamed};
-
-pub(super) fn ms(start: Instant) -> f64 {
-	start.elapsed().as_secs_f64() * 1000.0
-}
 
 /// True when the host already has any non-culling level root (ready **or** pending).
 ///

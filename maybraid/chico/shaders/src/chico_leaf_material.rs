@@ -56,11 +56,11 @@ impl Material for ChicoLeafMaterial {
 
 	fn alpha_mode(&self) -> AlphaMode {
 		// `fwidth` coverage; falls back to discard when MSAA is off.
-		AlphaMode::AlphaToCoverage
+		AlphaMode::Opaque
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {
-		true
+		false
 	}
 
 	fn enable_prepass() -> bool {

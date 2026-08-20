@@ -96,12 +96,19 @@ pub fn reset_lod_chunk_budget(
 		presence_remaining: presence,
 		desired_remaining: desired,
 		active_remaining: active,
+		weight_remaining: budget.begin_weights_per_frame,
 		first_class: class_order(drain_cursor.frame)[0],
 	};
 }
 
-/// Try to admit one begin into `class`. Returns false if that class's quota is empty.
+/// Try to admit one begin into `class`.
+///
+/// Requires both that class's count quota and shared [`LodChunkBeginClock::weight_remaining`].
+/// Call [`charge_begin_weight`] after materializing the job's chunk plan.
 pub(super) fn admit_begin(clock: &mut LodChunkBeginClock, class: FulfillClass) -> bool {
+	if clock.weight_remaining == 0 {
+		return false;
+	}
 	let slot = match class {
 		FulfillClass::Presence => &mut clock.presence_remaining,
 		FulfillClass::Desired => &mut clock.desired_remaining,
@@ -112,6 +119,11 @@ pub(super) fn admit_begin(clock: &mut LodChunkBeginClock, class: FulfillClass) -
 	}
 	*slot -= 1;
 	true
+}
+
+/// Charge begin cost after a job's [`crate::SceneChunk`] plan is built.
+pub(super) fn charge_begin_weight(clock: &mut LodChunkBeginClock, weight: u32) {
+	clock.weight_remaining = clock.weight_remaining.saturating_sub(weight.max(1));
 }
 
 /// Round-robin walk of `items`, invoking `visit` until it returns `false` (budget empty).
@@ -150,5 +162,27 @@ mod tests {
 			LevelBand::tuple_rank(LevelBand::High, LevelBand::UltraLow)
 				< LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High)
 		);
+	}
+
+	#[test]
+	fn admit_begin_requires_weight() {
+		let mut clock = LodChunkBeginClock {
+			presence_remaining: 0,
+			desired_remaining: 2,
+			active_remaining: 0,
+			weight_remaining: 0,
+			first_class: FulfillClass::Desired,
+		};
+		assert!(!admit_begin(&mut clock, FulfillClass::Desired));
+		assert_eq!(clock.desired_remaining, 2);
+
+		clock.weight_remaining = 10;
+		assert!(admit_begin(&mut clock, FulfillClass::Desired));
+		assert_eq!(clock.desired_remaining, 1);
+		charge_begin_weight(&mut clock, 7);
+		assert_eq!(clock.weight_remaining, 3);
+		charge_begin_weight(&mut clock, 10);
+		assert_eq!(clock.weight_remaining, 0);
+		assert!(!admit_begin(&mut clock, FulfillClass::Desired));
 	}
 }

@@ -39,9 +39,11 @@ pub struct LodCullInFlight {
 /// Remaining weighted primitives for a pending level root.
 ///
 /// Frozen at begin: host mutability does not rewrite this queue mid-job.
+/// May still contain [`crate::SceneChunk::Lazy`] / [`crate::SceneChunk::SubChunks`]
+/// until drain / begin prefill expands them.
 #[derive(Component)]
 pub struct LodChunkFulfillment {
-	pub queue: VecDeque<(u32, Box<dyn bevy::scene::Scene>)>,
+	pub queue: VecDeque<crate::scene::chunk::SceneChunk>,
 	/// Primitive count at job begin (content-Streamed when `spawned == expected`).
 	pub expected: usize,
 	pub spawned: usize,
@@ -80,14 +82,44 @@ pub struct LodChunkFulfillBudget {
 	/// Relative weight units for drain each frame.
 	pub spawn_weights_per_frame: u32,
 	/// Relative weight units for cull drain each frame.
+	///
+	/// Ready roots charge [`LodChunkFulfillment::spawned`] (or child count) against
+	/// this when the whole entity is despawned in one command.
 	pub cull_weights_per_frame: u32,
+	/// Max ready roots/hosts that may recursive-despawn in one frame even when
+	/// their spawned weight exceeds [`Self::cull_weights_per_frame`].
+	pub cull_root_despawns_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
+	/// Relative weight charged when starting fulfill jobs (sum of **prefilled**
+	/// primitive weights). Lazy tails are charged later by drain.
+	///
+	/// Caps how much [`crate::SceneChunk`] work begin may materialize per frame,
+	/// independent of [`Self::begins_per_frame`] count admission.
+	pub begin_weights_per_frame: u32,
+	/// Max weight begin may materialize into primitives for a single new job
+	/// (rest stays [`crate::SceneChunk::Lazy`] for drain).
+	pub begin_prefill_weights_per_job: u32,
+	/// Max warm-swaps (`Visibility::Inherited` on the ready root, `Hidden` on siblings)
+	/// per frame.
+	///
+	/// Content-[`LodLevelRootStreamed`] and nested-host bookkeeping still run for
+	/// every ready job; only the visibility swap is capped so a completion wave
+	/// does not reveal hundreds of already-built subtrees in one propagate.
+	pub completes_per_frame: u32,
 }
 
 impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
-		Self { spawn_weights_per_frame: 512, cull_weights_per_frame: 64, begins_per_frame: 48 }
+		Self {
+			spawn_weights_per_frame: 512,
+			cull_weights_per_frame: 64,
+			cull_root_despawns_per_frame: 2,
+			begins_per_frame: 48,
+			begin_weights_per_frame: 512,
+			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 512,
+		}
 	}
 }
 
@@ -114,6 +146,8 @@ pub struct LodChunkBeginClock {
 	pub desired_remaining: u32,
 	/// Reserved for symmetry with drain; begin rolls this into Desired.
 	pub active_remaining: u32,
+	/// Shared begin cost remaining ([`LodChunkFulfillBudget::begin_weights_per_frame`]).
+	pub weight_remaining: u32,
 	/// Which class the begin systems try first this frame.
 	pub first_class: FulfillClass,
 }
@@ -142,9 +176,3 @@ pub struct LodChunkDrainCursor {
 	pub active: LodChunkBandCursors,
 }
 
-/// Diagnostic: last `scene_chunks_with_level` timing (scene build, not apply).
-#[derive(Resource, Debug, Default)]
-pub struct LodChunkFulfillDiag {
-	pub last_scene_chunks_ms: f64,
-	pub last_level: Option<LodSceneLevel>,
-}
