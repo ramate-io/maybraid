@@ -14,6 +14,7 @@
 //! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
 //! primitive weights). Active begin quota folds into Desired.
 //! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
+//! Cull drain uses a shallow nested-host scan and recursive-despawns ready roots.
 //! Frame parity rotates class order; leftovers cascade.
 //!
 //! Pipeline (within [`crate::LodRefreshSystems::Fulfill`]):

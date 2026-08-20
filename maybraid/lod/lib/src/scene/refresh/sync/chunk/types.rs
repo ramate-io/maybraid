@@ -82,7 +82,13 @@ pub struct LodChunkFulfillBudget {
 	/// Relative weight units for drain each frame.
 	pub spawn_weights_per_frame: u32,
 	/// Relative weight units for cull drain each frame.
+	///
+	/// Ready roots charge [`LodChunkFulfillment::spawned`] (or child count) against
+	/// this when the whole entity is despawned in one command.
 	pub cull_weights_per_frame: u32,
+	/// Max ready roots/hosts that may recursive-despawn in one frame even when
+	/// their spawned weight exceeds [`Self::cull_weights_per_frame`].
+	pub cull_root_despawns_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
 	/// Relative weight charged when starting fulfill jobs (sum of **prefilled**
@@ -108,10 +114,11 @@ impl Default for LodChunkFulfillBudget {
 		Self {
 			spawn_weights_per_frame: 512,
 			cull_weights_per_frame: 64,
+			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
 			begin_weights_per_frame: 512,
 			begin_prefill_weights_per_job: 8,
-			completes_per_frame: 128,
+			completes_per_frame: 512,
 		}
 	}
 }
