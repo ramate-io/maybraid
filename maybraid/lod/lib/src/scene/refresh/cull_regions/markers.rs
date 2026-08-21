@@ -186,10 +186,14 @@ pub fn sync_nested_refresh_allowed(
 	} else {
 		(stamp, Vec::new())
 	};
-	pending.stamp = rest;
+	pending.stamp = rest.into_iter().filter(|e| hosts.contains(*e)).collect();
 	pending.expand = expand;
 
 	for entity in this_frame {
+		// Pending stamps can outlive a cull despawn; skip before `insert`.
+		if !hosts.contains(entity) {
+			continue;
+		}
 		set_nested_refresh_gate(
 			&mut commands,
 			entity,

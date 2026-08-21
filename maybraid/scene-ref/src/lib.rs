@@ -33,15 +33,21 @@ use fulfill::{fulfill_multi_scene_merge_roots, fulfill_scene_ref_roots};
 ///
 /// Drain can emit many [`SceneRefRoot`]s in one apply; instance spawn is uncapped
 /// unless this binds. Default is unlimited so other hosts stay unchanged.
+///
+/// [`Self::new_merge_meshes_per_frame`] is a separate cap on **first-time**
+/// [`MultiSceneMerge`] bakes (`meshes.add`). Cache hits still fulfill under
+/// [`Self::per_frame`] only.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct SceneRefAdmitBudget {
 	/// Max SceneRef / MultiSceneMerge roots fulfilled this frame (each path).
 	pub per_frame: u32,
+	/// Max new merged mesh assets created this frame. `u32::MAX` = unlimited.
+	pub new_merge_meshes_per_frame: u32,
 }
 
 impl Default for SceneRefAdmitBudget {
 	fn default() -> Self {
-		Self { per_frame: u32::MAX }
+		Self { per_frame: u32::MAX, new_merge_meshes_per_frame: u32::MAX }
 	}
 }
 
@@ -133,6 +139,13 @@ mod tests {
 			other => anyhow::bail!("unexpected indices: {other:?}"),
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn admit_budget_default_is_unlimited() {
+		let budget = SceneRefAdmitBudget::default();
+		assert_eq!(budget.per_frame, u32::MAX);
+		assert_eq!(budget.new_merge_meshes_per_frame, u32::MAX);
 	}
 
 	#[test]

@@ -17,8 +17,8 @@ use crate::scene::level::LodSceneLevel;
 use super::schedule::{class_order, for_each_rr, split_presence_desired_active, LevelBand};
 use super::types::{
 	FulfillClass, LodChunkBandCursors, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillment, LodCullInFlight,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
+	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LOD_CHUNK_TUPLE_BAND_COUNT,
 };
 use super::util::count_nested_hosts;
 
@@ -160,15 +160,7 @@ fn drain_tuple_bands(
 			return;
 		}
 		for_each_rr(&buckets.bands[rank], &mut cursors.bands[rank], |&entity| {
-			drain_one(
-				commands,
-				jobs,
-				entity,
-				remaining,
-				children_q,
-				nested_hosts,
-				streamed_hosts,
-			)
+			drain_one(commands, jobs, entity, remaining, children_q, nested_hosts, streamed_hosts)
 		});
 	}
 }

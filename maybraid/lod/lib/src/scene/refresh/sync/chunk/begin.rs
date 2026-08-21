@@ -239,7 +239,6 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&mut host_sets,
 		);
 	}
-
 }
 
 fn admit_candidates<T: Component + LodScene>(

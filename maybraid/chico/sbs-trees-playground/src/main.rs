@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use chico_sbs_trees_playground::{
-	PendingStartupCommand, PlaygroundCommand, SbsTreesPlaygroundPlugin,
+	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, SbsTreesPlaygroundPlugin,
 };
 
 fn assets_root() -> PathBuf {
@@ -14,11 +14,13 @@ fn main() {
 		eprintln!("{e}");
 		std::process::exit(2);
 	});
+	let diag = PlaygroundDiag::from_env();
 	if startup.is_some() {
 		println!("Startup command from argv (same as in-game / text).");
 	} else {
 		println!("SBS trees playground — press / for commands.");
 	}
+	println!("Diagnostics: {} (CHICO_SBS_DIAG=fps|off).", diag.summary());
 
 	let assets_path = assets_root();
 	App::new()

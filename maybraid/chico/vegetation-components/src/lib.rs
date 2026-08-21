@@ -26,7 +26,9 @@ pub use foliage::{
 	FROND_COLLECTION_MEDIUM_METERS,
 };
 pub use layer::{Layer, Layers};
-pub use lod_host::{posed_frond_multi_scene_merge, posed_material_asset_tier};
+pub use lod_host::{
+	posed_foliage_multi_scene_merge, posed_frond_multi_scene_merge, posed_material_asset_tier,
+};
 pub use materials::{
 	chico_leaf_material_ref, chico_stick_material_ref, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
 };

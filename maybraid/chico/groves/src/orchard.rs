@@ -167,7 +167,7 @@ mod vc {
 
 	pub const ORCHARD_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
 	pub const ORCHARD_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
-	pub const ORCHARD_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	pub const ORCHARD_STRUCTURAL_LOW_FACTOR: f32 = 12.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
