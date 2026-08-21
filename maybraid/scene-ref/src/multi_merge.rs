@@ -1,8 +1,9 @@
 //! Merge multiple [`SceneRef`] worlds into one mesh [`WorldAsset`].
 //!
 //! Per-part transforms are baked into `POSITION`. Kit-local positions are copied
-//! into `COLOR` first so object-space materials can still see a unit kit after
-//! the merge.
+//! into `COLOR.xyz` first so object-space materials can still see a unit kit after
+//! the merge. `COLOR.w` is the part's uniform bake scale so sway can recover
+//! per-kit amplitude (`instance_scale * color.w`).
 
 mod mesh;
 mod transform_key;

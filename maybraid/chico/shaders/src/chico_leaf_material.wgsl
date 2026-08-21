@@ -194,18 +194,26 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
 
 #ifdef VERTEX_POSITIONS
 #ifdef VERTEX_COLORS
-    // Merged kits: COLOR is pre-bake unit-kit position; POSITION is collection space.
+    // Merged kits: COLOR.xyz is pre-bake unit-kit position; COLOR.w is part scale.
+    // POSITION is collection space. Recover per-ball sway (not the tree instance).
     let kit_local = vertex.color.xyz;
+    let part_scale = max(vertex.color.w, 1e-4);
+    let ball_local = vertex.position - kit_local * part_scale;
+    let centroid = mesh_functions::mesh_position_local_to_world(
+        world_from_local,
+        vec4<f32>(ball_local, 1.0),
+    ).xyz;
+    let scale = instance_scale(mesh_world_from_local) * part_scale;
 #else
     let kit_local = vertex.position;
+    let centroid = mesh_world_from_local[3].xyz;
+    let scale = instance_scale(mesh_world_from_local);
 #endif
     out.local_pos = kit_local;
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
-    let centroid = mesh_world_from_local[3].xyz;
-    let scale = instance_scale(mesh_world_from_local);
     out.world_position += vec4<f32>(
         canopy_sway(
             kit_local,

@@ -54,7 +54,7 @@ pub(crate) fn merge_meshes(mut prepared: Vec<Mesh>) -> Option<Mesh> {
 }
 
 fn bake_mesh(mesh: &Mesh, transform: Transform) -> Mesh {
-	let kit_local = kit_local_colors(mesh);
+	let kit_local = kit_local_colors(mesh, part_scale(&transform));
 	let mut out = mesh.clone();
 	if let Some(colors) = kit_local {
 		out.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
@@ -66,17 +66,21 @@ fn bake_mesh(mesh: &Mesh, transform: Transform) -> Mesh {
 	out
 }
 
+fn part_scale(transform: &Transform) -> f32 {
+	transform.scale.abs().max_element().max(1e-4)
+}
+
 /// Pre-bake [`POSITION`](Mesh::ATTRIBUTE_POSITION) as [`COLOR`](Mesh::ATTRIBUTE_COLOR).
 ///
 /// Object-space materials treat `local_pos` as a unit kit. Merge bakes part
-/// transforms into `POSITION`, so those shaders read this channel instead when
-/// `VERTEX_COLORS` is set.
-fn kit_local_colors(mesh: &Mesh) -> Option<Vec<[f32; 4]>> {
+/// transforms into `POSITION`, so those shaders read `COLOR.xyz` instead when
+/// `VERTEX_COLORS` is set. `COLOR.w` is the part bake scale (max axis).
+fn kit_local_colors(mesh: &Mesh, scale: f32) -> Option<Vec<[f32; 4]>> {
 	let VertexAttributeValues::Float32x3(positions) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)?
 	else {
 		return None;
 	};
-	Some(positions.iter().map(|p| [p[0], p[1], p[2], 1.0]).collect())
+	Some(positions.iter().map(|p| [p[0], p[1], p[2], scale]).collect())
 }
 
 /// Local-to-scene-root transform by walking [`ChildOf`] + [`Transform`].
@@ -200,6 +204,23 @@ mod tests {
 			anyhow::bail!("expected positions");
 		};
 		assert!((positions[0][0] - 2.3).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn bake_packs_part_scale_into_color_w() -> anyhow::Result<()> {
+		let transform = Transform {
+			translation: bevy::prelude::Vec3::new(2.0, 0.0, 0.0),
+			scale: bevy::prelude::Vec3::splat(0.25),
+			..Transform::IDENTITY
+		};
+		let baked = bake_mesh(&triangle([0.3, 0.0, 0.0]), transform);
+		let Some(VertexAttributeValues::Float32x4(colors)) = baked.attribute(Mesh::ATTRIBUTE_COLOR)
+		else {
+			anyhow::bail!("expected colors");
+		};
+		assert!((colors[0][0] - 0.3).abs() < 1e-5);
+		assert!((colors[0][3] - 0.25).abs() < 1e-5);
 		Ok(())
 	}
 
