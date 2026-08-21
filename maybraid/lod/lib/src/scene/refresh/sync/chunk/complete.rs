@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{LodLevelRoot, LodLevelRootOverlap, LodSceneHost};
 
 use super::types::{
 	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
@@ -11,9 +11,11 @@ use super::types::{
 use super::util::count_nested_hosts;
 
 /// Finish pending roots that are content-[`LodLevelRootStreamed`] and whose nested
-/// hosts are [`LodSceneHostStreamed`]: clear pending, show root, hide siblings.
+/// hosts are [`LodSceneHostStreamed`]: clear pending and show the root.
 ///
-/// Nested readiness uses [`LodChunkFulfillment::nested_streamed`] /
+/// Sibling hide is deferred one frame ([`LodLevelRootOverlap`]) so extract still
+/// has last frame's meshes. Nested readiness uses
+/// [`LodChunkFulfillment::nested_streamed`] /
 /// [`LodChunkFulfillment::nested_required`] (initialized once at content-complete).
 /// Visibility swaps are capped by [`LodChunkFulfillBudget::completes_per_frame`];
 /// Streamed / nested bookkeeping still runs so parent jobs can catch up.
@@ -23,12 +25,9 @@ pub fn complete_chunk_lod_fulfill(
 		(Entity, Option<&mut LodChunkFulfillment>, Option<&ChildOf>, Has<LodLevelRootStreamed>),
 		(With<LodLevelRootPending>, Without<LodCullInFlight>),
 	>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	children_q: Query<&Children>,
 	nested_hosts: Query<(), With<LodSceneHost>>,
 	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
-	root_keys: Query<&LodLevelRoot>,
-	pending_marker: Query<(), With<LodLevelRootPending>>,
 	child_of: Query<&ChildOf>,
 	mut visibilities: Query<&mut Visibility>,
 	budget: Res<LodChunkFulfillBudget>,
@@ -45,16 +44,7 @@ pub fn complete_chunk_lod_fulfill(
 			}
 			remaining -= 1;
 			commands.entity(root_entity).remove::<LodLevelRootPending>();
-			finish_root(
-				&mut commands,
-				root_entity,
-				root_child_of,
-				&level_roots_heads,
-				&root_keys,
-				&pending_marker,
-				&child_of,
-				&mut visibilities,
-			);
+			finish_root(&mut commands, root_entity, root_child_of, &child_of, &mut visibilities);
 			continue;
 		};
 
@@ -82,16 +72,7 @@ pub fn complete_chunk_lod_fulfill(
 			.entity(root_entity)
 			.remove::<LodChunkFulfillment>()
 			.remove::<LodLevelRootPending>();
-		finish_root(
-			&mut commands,
-			root_entity,
-			root_child_of,
-			&level_roots_heads,
-			&root_keys,
-			&pending_marker,
-			&child_of,
-			&mut visibilities,
-		);
+		finish_root(&mut commands, root_entity, root_child_of, &child_of, &mut visibilities);
 	}
 }
 
@@ -99,9 +80,6 @@ fn finish_root(
 	commands: &mut Commands,
 	root_entity: Entity,
 	root_child_of: Option<&ChildOf>,
-	level_roots_heads: &Query<&Children, With<LodLevelRoots>>,
-	root_keys: &Query<&LodLevelRoot>,
-	pending_marker: &Query<(), With<LodLevelRootPending>>,
 	child_of: &Query<&ChildOf>,
 	visibilities: &mut Query<&mut Visibility>,
 ) {
@@ -114,21 +92,10 @@ fn finish_root(
 	};
 	let roots_bag = root_child_of.0;
 	if let Ok(host_of) = child_of.get(roots_bag) {
-		commands.entity(host_of.0).insert(LodSceneHostStreamed);
-	}
-
-	let Ok(siblings) = level_roots_heads.get(roots_bag) else {
-		return;
-	};
-	for sibling in siblings.iter() {
-		if sibling == root_entity {
-			continue;
-		}
-		if root_keys.contains(sibling) || pending_marker.contains(sibling) {
-			if let Ok(mut vis) = visibilities.get_mut(sibling) {
-				*vis = Visibility::Hidden;
-			}
-		}
+		commands
+			.entity(host_of.0)
+			.insert(LodSceneHostStreamed)
+			.insert(LodLevelRootOverlap);
 	}
 }
 
