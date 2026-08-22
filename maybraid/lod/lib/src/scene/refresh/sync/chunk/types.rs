@@ -17,6 +17,15 @@ pub struct LodLevelRootPending;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct LodLevelRootStreamed;
 
+/// Descendant still waiting for instance mesh + material (kit SceneRef / merge).
+///
+/// Stamped on the loading entity by vegetation BSN helpers. A removers outside
+/// `lod` pops it when self or a descendant has `Mesh3d` and
+/// `MaterialRefApplied`. [`super::complete::complete_chunk_lod_fulfill`] will
+/// not warm-swap while any descendant still has this marker.
+#[derive(Debug, Clone, Copy, Default, Component)]
+pub struct LodLazyPending;
+
 /// This [`crate::LodSceneHost`] has a full scene representation available (Streamed).
 ///
 /// Means at least one level root finished content streaming and its next-level

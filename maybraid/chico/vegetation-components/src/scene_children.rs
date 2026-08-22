@@ -4,6 +4,7 @@ use bevy::prelude::{
 	Children, Handle, Mesh, Mesh3d, MeshMaterial3d, StandardMaterial, Transform, Visibility,
 };
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot};
 
 use crate::placed::Placement;
@@ -55,6 +56,7 @@ pub fn posed_mesh_material_ref(
 		Mesh3d({mesh})
 		MeshMaterial3d::<StandardMaterial>({placeholder})
 		template_value(MaterialRefRoot(material))
+		LodLazyPending
 		template_value(transform)
 		Visibility::default()
 	}

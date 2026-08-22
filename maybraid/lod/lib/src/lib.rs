@@ -40,7 +40,7 @@ pub use scene::{
 	sync_nested_refresh_allowed, update_lod_host_levels, Bullseye, LodChunkBudgetClock,
 	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillSystems,
 	LodChunkFulfillment, LodCullInFlight, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
-	LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots,
+	LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots, LodLazyPending,
 	LodLevelProduceSystems, LodLevelRoot, LodLevelRootOverlap, LodLevelRootPending,
 	LodLevelRootStreamed, LodLevelRoots, LodLevelSpawnRequest, LodNestedRefreshAllowed,
 	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodProduceCache, LodRefreshCorePlugin,

@@ -5,10 +5,10 @@ use bevy::prelude::*;
 use crate::scene::host::{LodLevelRoot, LodLevelRootOverlap, LodSceneHost};
 
 use super::types::{
-	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLazyPending,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
-use super::util::count_nested_hosts;
+use super::util::{count_nested_hosts, subtree_has_lod_lazy_pending};
 
 /// Finish pending roots that are content-[`LodLevelRootStreamed`] and whose nested
 /// hosts are [`LodSceneHostStreamed`]: clear pending and show the root.
@@ -17,8 +17,10 @@ use super::util::count_nested_hosts;
 /// has last frame's meshes. Nested readiness uses
 /// [`LodChunkFulfillment::nested_streamed`] /
 /// [`LodChunkFulfillment::nested_required`] (initialized once at content-complete).
-/// Visibility swaps are capped by [`LodChunkFulfillBudget::completes_per_frame`];
-/// Streamed / nested bookkeeping still runs so parent jobs can catch up.
+/// A descendant [`LodLazyPending`] also blocks the swap until kit mesh + material
+/// exist. Visibility swaps are capped by
+/// [`LodChunkFulfillBudget::completes_per_frame`]; Streamed / nested bookkeeping
+/// still runs so parent jobs can catch up.
 pub fn complete_chunk_lod_fulfill(
 	mut commands: Commands,
 	mut pending: Query<
@@ -28,6 +30,7 @@ pub fn complete_chunk_lod_fulfill(
 	children_q: Query<&Children>,
 	nested_hosts: Query<(), With<LodSceneHost>>,
 	streamed_hosts: Query<(), With<LodSceneHostStreamed>>,
+	lazy_pending: Query<(), With<LodLazyPending>>,
 	child_of: Query<&ChildOf>,
 	mut visibilities: Query<&mut Visibility>,
 	budget: Res<LodChunkFulfillBudget>,
@@ -38,6 +41,9 @@ pub fn complete_chunk_lod_fulfill(
 			// Pending without a plan — treat as content-complete mesh placeholder.
 			if !content_streamed {
 				commands.entity(root_entity).insert(LodLevelRootStreamed);
+			}
+			if subtree_has_lod_lazy_pending(root_entity, &children_q, &lazy_pending) {
+				continue;
 			}
 			if remaining == 0 {
 				continue;
@@ -61,6 +67,9 @@ pub fn complete_chunk_lod_fulfill(
 			fulfillment.nested_streamed = fulfillment.nested_streamed.max(streamed);
 		}
 		if !fulfillment.nested_ready() {
+			continue;
+		}
+		if subtree_has_lod_lazy_pending(root_entity, &children_q, &lazy_pending) {
 			continue;
 		}
 		if remaining == 0 {
@@ -121,5 +130,35 @@ pub fn bump_nested_streamed_progress(
 			}
 			current = parent;
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::scene::refresh::sync::chunk::types::LodChunkFulfillBudget;
+
+	fn app() -> App {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<LodChunkFulfillBudget>()
+			.add_systems(Update, complete_chunk_lod_fulfill);
+		app
+	}
+
+	#[test]
+	fn complete_waits_for_lazy_descendant() {
+		let mut app = app();
+		let root = app
+			.world_mut()
+			.spawn((LodLevelRootPending, Visibility::Hidden, Transform::default()))
+			.id();
+		let lazy = app.world_mut().spawn((LodLazyPending, ChildOf(root))).id();
+		app.update();
+		assert!(app.world().get::<LodLevelRootPending>(root).is_some());
+
+		app.world_mut().entity_mut(lazy).remove::<LodLazyPending>();
+		app.update();
+		assert!(app.world().get::<LodLevelRootPending>(root).is_none());
 	}
 }
