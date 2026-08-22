@@ -28,7 +28,8 @@ use crate::northern_conifer::canopy::{
 };
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 pub use canopy::{
-	FRIENDS_SPLAY_CORE_RADIUS, FRIENDS_SPLAY_LEAF_DISC_RADIUS, FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
+	FRIENDS_SPLAY_CORE_RADIUS, FRIENDS_SPLAY_LEAF_DISC_RADIUS,
+	FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
 };
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
@@ -111,9 +112,8 @@ impl FriendsConifer {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {

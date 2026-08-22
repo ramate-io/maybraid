@@ -52,6 +52,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 	budget: Res<SceneRefAdmitBudget>,
 ) {
 	let mut remaining = budget.per_frame;
+	let mut miss_budget = budget.new_merge_meshes_per_frame;
 	for (entity, root) in &query {
 		if remaining == 0 {
 			break;
@@ -64,6 +65,7 @@ pub(crate) fn fulfill_multi_scene_merge_roots(
 			&mut meshes,
 			&mut materials,
 			&type_registry,
+			&mut miss_budget,
 		) {
 			commands.entity(entity).insert(WorldAssetRoot(handle));
 			remaining -= 1;

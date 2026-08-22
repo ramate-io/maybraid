@@ -1,4 +1,9 @@
 //! Merge multiple [`SceneRef`] worlds into one mesh [`WorldAsset`].
+//!
+//! Per-part transforms are baked into `POSITION`. Kit-local positions are copied
+//! into `COLOR.xyz` first so object-space materials can still see a unit kit after
+//! the merge. `COLOR.w` is the part's uniform bake scale so sway can recover
+//! per-kit amplitude (`instance_scale * color.w`).
 
 mod mesh;
 mod transform_key;
@@ -89,8 +94,10 @@ impl MultiSceneMergeHandles {
 	/// Resolve `merge` to a cached handle when every part is ready.
 	///
 	/// Returns [`None`] until all part [`SceneRef`]s resolve and their mesh
-	/// dependencies are loaded. Pipelines through [`SceneRefHandles`] so mirrors
-	/// rebuild before merge.
+	/// dependencies are loaded, or when `miss_budget` is `0` and this key is
+	/// not cached yet (retry next frame). Cache hits do not consume
+	/// `miss_budget`. Pipelines through [`SceneRefHandles`] so mirrors rebuild
+	/// before merge.
 	fn default_material(
 		&mut self,
 		materials: &mut Assets<StandardMaterial>,
@@ -116,9 +123,13 @@ impl MultiSceneMergeHandles {
 		meshes: &mut Assets<Mesh>,
 		materials: &mut Assets<StandardMaterial>,
 		type_registry: &AppTypeRegistry,
+		miss_budget: &mut u32,
 	) -> Option<Handle<WorldAsset>> {
 		if let Some(handle) = self.cache.get(merge) {
 			return Some(handle.clone());
+		}
+		if *miss_budget == 0 {
+			return None;
 		}
 
 		let mut part_handles = Vec::with_capacity(merge.parts.len());
@@ -150,6 +161,7 @@ impl MultiSceneMergeHandles {
 		let world_asset = world_asset_from_mesh(mesh_handle, material);
 		let handle = world_assets.add(world_asset);
 		self.cache.insert(merge.clone(), handle.clone());
+		*miss_budget = miss_budget.saturating_sub(1);
 		Some(handle)
 	}
 

@@ -9,6 +9,8 @@ use bevy::mesh::VertexAttributeValues;
 use bevy::mesh::{SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
 
+use crate::lod_host::inherit_not_shadow_caster_on_meshes;
+
 /// Half-extent of stick kit on \(X/Z\) (\(X = Z \in [-\texttt{STICK\_KIT\_HALF}, \texttt{STICK\_KIT\_HALF}]\)).
 pub const STICK_KIT_HALF: f32 = 0.2;
 
@@ -23,7 +25,8 @@ impl Plugin for VegetationProceduralPlugin {
 	fn build(&self, app: &mut App) {
 		// Level updates are owned by lod refresh (region → level → sync). This plugin
 		// only registers procedural assets.
-		app.add_systems(Startup, init_procedural_assets);
+		app.add_systems(Startup, init_procedural_assets)
+			.add_systems(PostUpdate, inherit_not_shadow_caster_on_meshes);
 	}
 }
 

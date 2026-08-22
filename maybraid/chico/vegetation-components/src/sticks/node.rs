@@ -1,5 +1,6 @@
 //! Stick IR node: style + geometry + placement.
 
+use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Vec3, Visibility};
 use bevy::scene::prelude::{bsn, Scene};
@@ -13,7 +14,7 @@ use scene_ref::{MultiSceneMerge, MultiScenePart};
 
 use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
-use crate::lod_host::{posed_frond_multi_scene_merge, posed_material_asset_tier};
+use crate::lod_host::{posed_foliage_multi_scene_merge, posed_material_asset_tier};
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
@@ -186,7 +187,7 @@ impl StickNode {
 			return Box::new(Self::empty_scene());
 		}
 		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
-			return Box::new(posed_frond_multi_scene_merge(
+			return Box::new(posed_foliage_multi_scene_merge(
 				merge,
 				pose(self.placement),
 				self.material.clone(),
@@ -204,7 +205,7 @@ impl StickNode {
 				)) as Box<dyn Scene>
 			})
 			.collect();
-		Box::new(scene_children(children))
+		Box::new((bsn! { NotShadowCaster }, scene_children(children)))
 	}
 
 	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
@@ -214,12 +215,15 @@ impl StickNode {
 		match level {
 			LodSceneLevel::UltraLow => Box::new(Self::empty_scene()),
 			_ => match self.glb_for_level(level) {
-				Some(asset) => Box::new(posed_material_asset_tier(
-					Some(asset),
-					pose(self.placement),
-					Some(self.material.clone()),
+				Some(asset) => Box::new((
+					bsn! { NotShadowCaster },
+					posed_material_asset_tier(
+						Some(asset),
+						pose(self.placement),
+						Some(self.material.clone()),
+					),
 				)),
-				None => Box::new(self.procedural_scene()),
+				None => Box::new((bsn! { NotShadowCaster }, self.procedural_scene())),
 			},
 		}
 	}

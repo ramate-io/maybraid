@@ -23,7 +23,7 @@ use chico_sbs_geometry::{
 };
 use chico_vegetation_components::{
 	chico_stick_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -157,9 +157,8 @@ impl TemperateConifer {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -199,11 +198,7 @@ impl TemperateConifer {
 			.collect()
 	}
 
-	fn rotated_frond_runs(
-		origin: Vec3,
-		rotation: Quat,
-		shape: &FrondCrownShape,
-	) -> Vec<FrondRun> {
+	fn rotated_frond_runs(origin: Vec3, rotation: Quat, shape: &FrondCrownShape) -> Vec<FrondRun> {
 		shape
 			.frond_runs_at(Vec3::ZERO)
 			.into_iter()
@@ -304,7 +299,6 @@ impl TemperateConifer {
 			})
 			.collect()
 	}
-
 }
 
 impl VegetationComponents for TemperateConifer {

@@ -69,10 +69,7 @@ fn collect_candidates(
 			if !qualifies_for_foliage(idx, h, chain, upper_foliage_ring_u) {
 				return None;
 			}
-			Some(FoliageCandidate {
-				position: node.position,
-				radius: node.radius,
-			})
+			Some(FoliageCandidate { position: node.position, radius: node.radius })
 		})
 		.collect()
 }
@@ -82,8 +79,7 @@ fn banded_from_candidates(
 	bands: AzimuthHeightBands,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
 	sampled
 		.into_iter()
 		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
@@ -132,9 +128,7 @@ fn mid_canopy_proxy_ball(
 	let center = (min + max) * 0.5;
 	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
 	half_extents.y *= PROXY_HEIGHT_SCALE;
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
-	))
+	Some(FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents)))
 }
 
 /// Banded joint foliage plus apex ball (always).

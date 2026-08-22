@@ -15,8 +15,7 @@ use super::super::{
 	Bullseye, LodCullRegionCursor, LodHostBounds, LodRefreshCorePlugin, LodRefreshSystems,
 	LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRefreshEntitiesPlugin,
 	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin, LodSceneRefreshRegion,
-	LodSceneRefreshRegionPlugin, LodViewer,
-	OpenLattice, Spotlight,
+	LodSceneRefreshRegionPlugin, LodViewer, OpenLattice, Spotlight,
 };
 
 /// Channel marker for spotlight region / level tests.
@@ -200,8 +199,7 @@ pub fn app_dual_channel_levels() -> App {
 
 pub fn app_entities_only() -> App {
 	let mut app = App::new();
-	app.add_plugins(MinimalPlugins)
-		.add_plugins(LodSceneRefreshEntitiesPlugin);
+	app.add_plugins(MinimalPlugins).add_plugins(LodSceneRefreshEntitiesPlugin);
 	app
 }
 

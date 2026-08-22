@@ -91,9 +91,11 @@ pub(crate) fn stick_nodes_banded(
 	}
 	let sampled =
 		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.sample_at, bands);
-	trunk.extend(sampled.into_iter().filter_map(|s| {
-		StickNode::from_segment(s.item.start, s.item.end, s.item.radius)
-	}));
+	trunk.extend(
+		sampled
+			.into_iter()
+			.filter_map(|s| StickNode::from_segment(s.item.start, s.item.end, s.item.radius)),
+	);
 	trunk
 }
 

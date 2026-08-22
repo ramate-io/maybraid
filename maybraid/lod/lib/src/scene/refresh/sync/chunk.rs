@@ -47,8 +47,8 @@ pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`LodScene`] host type.

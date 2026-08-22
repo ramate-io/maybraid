@@ -175,4 +175,3 @@ pub struct LodChunkDrainCursor {
 	pub desired: LodChunkBandCursors,
 	pub active: LodChunkBandCursors,
 }
-

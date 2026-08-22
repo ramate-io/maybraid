@@ -17,15 +17,15 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, BraidOakTreeSbs, StorybookTreeChain};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
 
 use crate::storybook_tree::canopy::{
-	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium_with_proxy, HIGH_FOLIAGE_BANDS,
-	BRAID_MEDIUM_STICK_BANDS,
+	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium_with_proxy,
+	BRAID_MEDIUM_STICK_BANDS, HIGH_FOLIAGE_BANDS,
 };
 use crate::torch_tree::{stick_nodes_banded, stick_nodes_low, HIGH_STICK_BANDS};
 use stick::stick_nodes_high_crook;
@@ -90,9 +90,8 @@ impl BraidOakTree {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -107,11 +106,9 @@ impl BraidOakTree {
 impl VegetationComponents for BraidOakTree {
 	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
 		let nodes = match level {
-			LodSceneLevel::High => stick_nodes_high_crook(
-				&self.chain,
-				self.stick_surface_noise,
-				HIGH_STICK_BANDS,
-			),
+			LodSceneLevel::High => {
+				stick_nodes_high_crook(&self.chain, self.stick_surface_noise, HIGH_STICK_BANDS)
+			}
 			LodSceneLevel::Medium => stick_nodes_banded(&self.chain, BRAID_MEDIUM_STICK_BANDS),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow

@@ -24,7 +24,8 @@ use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
 use crate::foliage::style::FoliageStyle;
 use crate::lod_host::{
-	posed_foliage_asset_tier, posed_frond_asset_tier, posed_frond_multi_scene_merge,
+	posed_foliage_asset_tier, posed_foliage_multi_scene_merge, posed_frond_asset_tier,
+	posed_frond_multi_scene_merge,
 };
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
@@ -280,7 +281,7 @@ impl FoliageNode {
 		level: LodSceneLevel,
 	) -> Box<dyn Scene> {
 		if let Some(merge) = self.cheap_ball_multi_scene_merge(collection, level) {
-			return Box::new(posed_frond_multi_scene_merge(
+			return Box::new(posed_foliage_multi_scene_merge(
 				merge,
 				pose(self.placement),
 				self.material.clone(),
@@ -298,12 +299,25 @@ impl FoliageNode {
 				)) as Box<dyn Scene>
 			})
 			.collect();
-		Box::new(scene_children(children))
+		Box::new((bsn! { NotShadowCaster }, scene_children(children)))
 	}
 
 	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
 		match (&self.style, &self.geometry) {
-			(FoliageStyle::Standard, FoliageGeometry::LayeredBall | FoliageGeometry::CheapBall) => {
+			(FoliageStyle::Standard, FoliageGeometry::CheapBall) => {
+				match self.standard_ball_glb_for_level(level) {
+					Some(asset) => Box::new((
+						bsn! { NotShadowCaster },
+						posed_foliage_asset_tier(
+							Some(asset),
+							pose(self.placement),
+							self.material.clone(),
+						),
+					)),
+					None => Box::new((bsn! { NotShadowCaster }, self.procedural_ball_scene())),
+				}
+			}
+			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
 				match self.standard_ball_glb_for_level(level) {
 					Some(asset) => Box::new(posed_foliage_asset_tier(
 						Some(asset),

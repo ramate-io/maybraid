@@ -154,9 +154,7 @@ fn mid_canopy_proxy_ball(
 	let center = (min + max) * 0.5;
 	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
 	half_extents.y *= PROXY_HEIGHT_SCALE;
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
-	))
+	Some(FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents)))
 }
 
 fn lod_plan(level: LodSceneLevel) -> JungleCanopyLodPlan {

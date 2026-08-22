@@ -105,18 +105,10 @@ where
 			geometry: role.stick_geometry(),
 		});
 	}
-	let sampled = sample_max_horizontal_radius_by_azimuth_height(
-		&candidates,
-		|c| c.mid,
-		MEDIUM_STICK_BANDS,
-	);
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.mid, MEDIUM_STICK_BANDS);
 	trunk.extend(sampled.into_iter().filter_map(|s| {
-		StickNode::from_segment_geometry(
-			s.item.start,
-			s.item.end,
-			s.item.radius,
-			s.item.geometry,
-		)
+		StickNode::from_segment_geometry(s.item.start, s.item.end, s.item.radius, s.item.geometry)
 	}));
 	trunk
 }

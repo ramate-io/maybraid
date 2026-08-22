@@ -21,7 +21,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use chico_vegetation_components::{
-	chico_stick_material_ref, FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
+	chico_stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -78,10 +78,7 @@ pub struct DatePalm {
 
 impl DatePalm {
 	pub fn from_params(params: &DatePalmParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn foliage_seed(&self) -> i32 {
@@ -105,9 +102,8 @@ impl DatePalm {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 }
 
@@ -139,17 +135,13 @@ impl VegetationComponents for DatePalm {
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		let rings = self.ring_shapes();
-		let (center, radius) = crown_lod_probe(
-			&rings,
-			Some((self.footprint_radius(), self.geometry.height())),
-		);
-		Some(
-			StructuralLod::new(center, radius).with_factors(
-				STRUCTURAL_HIGH_FACTOR,
-				STRUCTURAL_MEDIUM_FACTOR,
-				STRUCTURAL_LOW_FACTOR,
-			),
-		)
+		let (center, radius) =
+			crown_lod_probe(&rings, Some((self.footprint_radius(), self.geometry.height())));
+		Some(StructuralLod::new(center, radius).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		))
 	}
 }
 

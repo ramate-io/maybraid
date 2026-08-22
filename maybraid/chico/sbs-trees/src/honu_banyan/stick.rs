@@ -115,15 +115,9 @@ where
 			geometry: role.stick_geometry(),
 		});
 	}
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.mid, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(&candidates, |c| c.mid, bands);
 	kept.extend(sampled.into_iter().filter_map(|s| {
-		StickNode::from_segment_geometry(
-			s.item.start,
-			s.item.end,
-			s.item.radius,
-			s.item.geometry,
-		)
+		StickNode::from_segment_geometry(s.item.start, s.item.end, s.item.radius, s.item.geometry)
 	}));
 	kept
 }

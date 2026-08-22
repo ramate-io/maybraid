@@ -15,15 +15,13 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::conifer_canopy_apex::NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
-use canopy::{
-	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
-};
+use canopy::{foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS};
 use stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 
 pub use canopy::{
@@ -115,9 +113,8 @@ impl NorthernConifer {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
