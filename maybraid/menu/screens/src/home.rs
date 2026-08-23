@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::{
-	republish_menu_activate, set_description_for_menu, MenuFocus, TextMenu, TextMenuColumn,
-	TextMenuDescription, TextMenuInputLock, TextMenuPlugin, TextMenuSystems,
+	republish_menu_activate, set_description_for_menu, set_hint_for_menu, MenuFocus, TextMenu,
+	TextMenuColumn, TextMenuDescription, TextMenuHint, TextMenuHintLabel, TextMenuInputLock,
+	TextMenuPlugin, TextMenuSystems,
 };
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -58,6 +59,16 @@ impl HomeMenuChoice {
 			Self::Settings => "Adjust user and system settings to your liking.",
 		}
 	}
+
+	pub fn hint(self) -> &'static str {
+		match self {
+			Self::Discovery => "Enter to roam the world.",
+			Self::Reliquary => "Enter to raid and return.",
+			Self::Characters => "Enter to open your roster.",
+			Self::TrainingGround => "Enter to spar in the arena.",
+			Self::Settings => "Enter to tune the game.",
+		}
+	}
 }
 
 impl HomeScreen {
@@ -70,6 +81,7 @@ impl HomeScreen {
 				)
 				.scene(),
 			),
+			Box::new(TextMenuHint::scene(HomeMenuChoice::Discovery.hint())),
 			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovery.description())),
 		];
 		bsn! {
@@ -80,6 +92,7 @@ impl HomeScreen {
 			}
 			Pickable::IGNORE
 			on(sync_home_description)
+			on(sync_home_hint)
 			on(republish_menu_activate::<HomeMenuChoice>)
 			Children [ {children} ]
 		}
@@ -139,14 +152,30 @@ fn sync_home_description(
 	);
 }
 
+fn sync_home_hint(
+	focus: On<MenuFocus<HomeMenuChoice>>,
+	menus: Query<&ChildOf, With<TextMenu>>,
+	children: Query<&Children>,
+	mut lines: Query<&mut Text, With<TextMenuHintLabel>>,
+) {
+	set_hint_for_menu(
+		focus.event().entity,
+		focus.event().choice.hint(),
+		&menus,
+		&children,
+		&mut lines,
+	);
+}
+
 #[cfg(test)]
 mod tests {
 	use super::HomeMenuChoice;
 
 	#[test]
-	fn descriptions_are_nonempty() {
+	fn descriptions_and_hints_are_nonempty() {
 		for choice in HomeMenuChoice::ALL {
 			assert!(!choice.description().is_empty());
+			assert!(!choice.hint().is_empty());
 		}
 	}
 }

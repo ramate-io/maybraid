@@ -7,10 +7,14 @@
 //! [`Message`].
 
 pub mod description;
+pub mod hint;
 pub mod text_menu;
 pub mod theme;
 
 pub use description::{set_description_for_menu, TextMenuDescription};
+pub use hint::{
+	blink_hint_icons, set_hint_for_menu, TextMenuHint, TextMenuHintIcon, TextMenuHintLabel,
+};
 pub use text_menu::{
 	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_focus, navigate_text_menus,
 	republish_menu_activate, select_text_menu_item_on_over, sync_text_menu_item_colors,
@@ -38,6 +42,7 @@ impl Plugin for MenuComponentsPlugin {
 		app.init_resource::<TextMenuInputLock>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
 			.add_observer(select_text_menu_item_on_over)
+			.add_systems(Update, blink_hint_icons)
 			.add_systems(
 				Update,
 				(navigate_text_menus, sync_text_menu_item_colors)
