@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::{
-	activate_selected_text_menu_items, emit_menu_choice, MenuComponentsPlugin, TextMenuColumn,
-	TextMenuInputLock, TextMenuSystems,
+	activate_selected_text_menu_items, emit_menu_choice, emit_menu_over,
+	emit_menu_over_on_selection, MenuComponentsPlugin, MenuOver, TextMenuColumn,
+	TextMenuDescription, TextMenuInputLock, TextMenuSystems,
 };
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -18,7 +19,7 @@ pub struct HomeScreen;
 
 /// Home destinations. Each pickable row stamps this as a component; [`emit_menu_choice`]
 /// copies the clicked (or Enter-selected) value onto the message bus. Screens do
-/// not navigate yet.
+/// not navigate yet. [`emit_menu_over`] reroutes [`Pointer<Over>`] as [`MenuOver<Self>`].
 #[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
 pub enum HomeMenuChoice {
 	#[default]
@@ -42,18 +43,43 @@ impl HomeMenuChoice {
 			Self::Settings => "Settings",
 		}
 	}
+
+	pub fn description(self) -> &'static str {
+		match self {
+			Self::Discovery => {
+				"Roam the world of Maybraid. Find the remnants of the hidden thread. Grow within the world."
+			}
+			Self::Reliquary => {
+				"Team up to gather and return artifacts from an opponent's reliquary. Move fast. Wager yourself."
+			}
+			Self::Characters => "Create and edit your characters. Check your inventory.",
+			Self::TrainingGround => "Run around with your characters in a small arena.",
+			Self::Settings => "Adjust user and system settings to your liking.",
+		}
+	}
 }
 
 impl HomeScreen {
 	pub fn scene() -> impl Scene + 'static {
-		(
-			bsn! { HomeScreen },
-			TextMenuColumn::new(
-				"Maybraid",
-				HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
-			)
-			.scene(),
-		)
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(
+				TextMenuColumn::new(
+					"Maybraid",
+					HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
+				)
+				.scene(),
+			),
+			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovegitry.description())),
+		];
+		bsn! {
+			HomeScreen
+			Node {
+				width: percent(100),
+				height: percent(100),
+			}
+			Pickable::IGNORE
+			Children [ {children} ]
+		}
 	}
 }
 
@@ -69,11 +95,18 @@ impl Plugin for HomeScreenPlugin {
 			app.add_plugins(MenuComponentsPlugin);
 		}
 		app.add_message::<HomeMenuChoice>()
+			.add_message::<MenuOver<HomeMenuChoice>>()
 			.add_observer(emit_menu_choice::<HomeMenuChoice>)
+			.add_observer(emit_menu_over::<HomeMenuChoice>)
 			.add_systems(Update, sync_text_menu_input_lock.in_set(TextMenuSystems::InputLock))
 			.add_systems(
 				Update,
-				(apply_show_home, activate_selected_text_menu_items::<HomeMenuChoice>),
+				(
+					apply_show_home,
+					emit_menu_over_on_selection::<HomeMenuChoice>,
+					sync_home_description,
+					activate_selected_text_menu_items::<HomeMenuChoice>,
+				),
 			);
 	}
 }
@@ -100,4 +133,28 @@ fn apply_show_home(
 		commands.entity(entity).despawn();
 	}
 	commands.spawn_scene(HomeScreen::scene());
+}
+
+fn sync_home_description(
+	mut overs: MessageReader<MenuOver<HomeMenuChoice>>,
+	mut lines: Query<&mut Text, With<TextMenuDescription>>,
+) {
+	let Some(MenuOver(choice)) = overs.read().last().copied() else {
+		return;
+	};
+	for mut text in &mut lines {
+		text.0 = choice.description().to_string();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::HomeMenuChoice;
+
+	#[test]
+	fn descriptions_are_nonempty() {
+		for choice in HomeMenuChoice::ALL {
+			assert!(!choice.description().is_empty());
+		}
+	}
 }

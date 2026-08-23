@@ -9,8 +9,8 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::FontSourceTemplate;
 
 use crate::theme::{
-	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_INSET, HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM,
-	ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, HEADER_FONT_SIZE,
+	HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER,
 };
 
 /// When `true`, arrow keys, Enter, and pick activations stay with the command line.
@@ -141,7 +141,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 			Node {
 				position_type: PositionType::Absolute,
 				left: px(COLUMN_INSET),
-				bottom: px(COLUMN_INSET),
+				bottom: px(COLUMN_BOTTOM),
 				flex_direction: FlexDirection::Column,
 				align_items: AlignItems::FlexStart,
 				row_gap: px(ITEM_ROW_GAP),
@@ -166,6 +166,37 @@ pub fn select_text_menu_item_on_over(
 		return;
 	}
 	menu.selected = item.index.min(menu.item_count - 1);
+}
+
+/// Pointer-over payload, rerouted from a pickable row to a screen-specific `E`.
+#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MenuOver<E>(pub E);
+
+/// Copy the choice component on the hovered row onto [`MenuOver<E>`].
+pub fn emit_menu_over<E: Component + Copy + Send + Sync + 'static>(
+	over: On<Pointer<Over>>,
+	choices: Query<&E, With<TextMenuItem>>,
+	mut writer: MessageWriter<MenuOver<E>>,
+) {
+	let Ok(choice) = choices.get(over.entity) else {
+		return;
+	};
+	writer.write(MenuOver(*choice));
+}
+
+/// Copy the selected row’s choice onto [`MenuOver<E>`] when keyboard focus moves.
+pub fn emit_menu_over_on_selection<E: Component + Copy + Send + Sync + 'static>(
+	menus: Query<(Entity, &TextMenu), Changed<TextMenu>>,
+	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	mut writer: MessageWriter<MenuOver<E>>,
+) {
+	for (menu_entity, menu) in &menus {
+		for (item, choice, child_of) in &items {
+			if child_of.parent() == menu_entity && item.index == menu.selected {
+				writer.write(MenuOver(*choice));
+			}
+		}
+	}
 }
 
 /// Copy the choice component on the clicked row onto the message bus.
