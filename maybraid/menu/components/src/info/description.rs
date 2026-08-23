@@ -5,8 +5,8 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
-	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BOTTOM, DESCRIPTION_FONT_SIZE,
-	DESCRIPTION_PANE_LEFT_PERCENT, TEXT_YELLOW_FAINT,
+	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BAND_HEIGHT, DESCRIPTION_BOTTOM,
+	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, TEXT_YELLOW_FAINT,
 };
 
 /// Marker on the description [`Text`]. Screens write the string.
@@ -29,18 +29,24 @@ impl TextMenuDescription {
 			}
 			Pickable::IGNORE
 			Children [(
-				TextMenuDescription
-				template_value(Text::new(initial))
-				TextFont {
-					font: FontSourceTemplate::Handle(BARLOW_REGULAR),
-					font_size: px(DESCRIPTION_FONT_SIZE),
-				}
-				TextColor(TEXT_YELLOW_FAINT)
-				TextLayout::new(Justify::Center, LineBreak::WordBoundary)
 				Node {
-					max_width: percent(80),
+					width: percent(80),
+					height: px(DESCRIPTION_BAND_HEIGHT),
+					justify_content: JustifyContent::Center,
+					align_items: AlignItems::Center,
 				}
 				Pickable::IGNORE
+				Children [(
+					TextMenuDescription
+					template_value(Text::new(initial))
+					TextFont {
+						font: FontSourceTemplate::Handle(BARLOW_REGULAR),
+						font_size: px(DESCRIPTION_FONT_SIZE),
+					}
+					TextColor(TEXT_YELLOW_FAINT)
+					TextLayout::new(Justify::Center, LineBreak::WordBoundary)
+					Pickable::IGNORE
+				)]
 			)]
 		}
 	}
@@ -56,27 +62,27 @@ pub fn set_description_for_menu(
 	children: &Query<&Children>,
 	lines: &mut Query<&mut Text, With<TextMenuDescription>>,
 ) {
-	if let Ok(mut text) = lines.get_mut(root) {
-		text.0 = value.into();
-		return;
-	}
-	let Ok(root_children) = children.get(root) else {
-		return;
-	};
 	let value = value.into();
-	for child in root_children {
-		if let Ok(mut text) = lines.get_mut(*child) {
-			text.0 = value;
-			return;
-		}
-		let Ok(nested) = children.get(*child) else {
-			continue;
-		};
-		for nested_child in nested {
-			if let Ok(mut text) = lines.get_mut(*nested_child) {
-				text.0 = value;
-				return;
-			}
+	set_description_under(root, &value, children, lines);
+}
+
+fn set_description_under(
+	entity: Entity,
+	value: &str,
+	children: &Query<&Children>,
+	lines: &mut Query<&mut Text, With<TextMenuDescription>>,
+) -> bool {
+	if let Ok(mut text) = lines.get_mut(entity) {
+		text.0 = value.to_string();
+		return true;
+	}
+	let Ok(kids) = children.get(entity) else {
+		return false;
+	};
+	for child in kids {
+		if set_description_under(*child, value, children, lines) {
+			return true;
 		}
 	}
+	false
 }
