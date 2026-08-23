@@ -9,7 +9,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
-use menu_screens::{HomeMenuChoice, HomeScreenPlugin};
+use menu_screens::{HomeMenuChoice, HomeScreenPlugin, LoadingScreenPlugin};
 
 pub struct MenuPlaygroundPlugin;
 
@@ -23,7 +23,7 @@ impl Plugin for MenuPlaygroundPlugin {
 					..default()
 				}),
 		)
-		.add_plugins(HomeScreenPlugin)
+		.add_plugins((HomeScreenPlugin, LoadingScreenPlugin))
 		.add_systems(Startup, setup_camera)
 		.add_systems(
 			Update,

@@ -1,10 +1,12 @@
 //! In-game clap command hierarchy.
 
+pub mod loading;
 pub mod show;
 
 use bevy::prelude::*;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
+pub use loading::Loading;
 pub use show::Show;
 
 pub const PLAYGROUND_CLI_NAME: &str = "menu";
@@ -23,6 +25,8 @@ pub enum PlaygroundCommand {
 	Script(Script),
 	#[command(subcommand)]
 	Show(Show),
+	#[command(subcommand)]
+	Loading(Loading),
 }
 
 impl PlaygroundCommand {
@@ -47,10 +51,12 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Show(show) => {
 				let label = match show {
 					Show::Home => "home",
+					Show::Loading => "loading",
 				};
 				show.react(commands);
 				*console = format!("show {label}: pending");
 			}
+			PlaygroundCommand::Loading(loading) => loading.react(commands, console),
 		}
 	}
 
@@ -75,6 +81,21 @@ mod tests {
 	fn parse_line_show_home() {
 		let cmd = PlaygroundCommand::parse_line("show home").expect("parse");
 		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Home)));
+	}
+
+	#[test]
+	fn parse_line_show_loading() {
+		let cmd = PlaygroundCommand::parse_line("show loading").expect("parse");
+		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Loading)));
+	}
+
+	#[test]
+	fn parse_line_loading_progress() {
+		let cmd = PlaygroundCommand::parse_line("loading progress 0.4").expect("parse");
+		assert!(matches!(
+			cmd,
+			PlaygroundCommand::Loading(super::Loading::Progress { value }) if (value - 0.4).abs() < f32::EPSILON
+		));
 	}
 
 	#[test]

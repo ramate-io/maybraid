@@ -1,8 +1,10 @@
 //! Maybraid HUD mark, as a sized [`ImageNode`].
 
 pub mod animated;
+pub mod spinning;
 
 pub use animated::{blink_animated_icons, AnimatedIcon};
+pub use spinning::{spin_icons, SpinningIcon};
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};

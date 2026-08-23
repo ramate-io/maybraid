@@ -8,6 +8,8 @@ use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::single_select::{republish_menu_activate, MenuFocus, TextMenuInputLock};
 use menu_components::{TextMenuPlugin, TextMenuSystems};
 
+use crate::MenuScreen;
+
 /// Queue a home-screen spawn (despawns any existing home UI first).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestShowHome;
@@ -74,6 +76,7 @@ impl HomeScreen {
 		];
 		bsn! {
 			HomeScreen
+			MenuScreen
 			Node {
 				width: percent(100),
 				height: percent(100),
@@ -110,7 +113,7 @@ fn sync_text_menu_input_lock(
 fn apply_show_home(
 	mut commands: Commands,
 	requests: Query<Entity, With<RequestShowHome>>,
-	existing: Query<Entity, With<HomeScreen>>,
+	existing: Query<Entity, With<MenuScreen>>,
 ) {
 	if requests.is_empty() {
 		return;

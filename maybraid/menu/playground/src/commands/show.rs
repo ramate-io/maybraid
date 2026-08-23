@@ -2,19 +2,22 @@
 
 use bevy::prelude::*;
 use clap::Subcommand;
-use menu_screens::request_show_home;
+use menu_screens::{request_show_home, request_show_loading};
 
 #[derive(Clone, Copy, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Show {
 	/// Spawn the Maybraid home screen (bottom-left text menu).
 	Home,
+	/// Spawn the standard loading page (spinning mark, bar, explainer).
+	Loading,
 }
 
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		match self {
 			Show::Home => request_show_home(commands),
+			Show::Loading => request_show_loading(commands),
 		}
 	}
 }

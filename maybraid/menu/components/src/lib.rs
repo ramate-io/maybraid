@@ -8,13 +8,18 @@
 
 pub mod icons;
 pub mod info;
+pub mod loading;
 pub mod single_select;
 pub mod theme;
 
-pub use icons::{blink_animated_icons, AnimatedIcon, Icon};
+pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
 	set_description_for_menu, set_hint_for_menu, TextMenuDescription, TextMenuHint,
 	TextMenuHintLabel,
+};
+pub use loading::{
+	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,
+	LoadingExplainer, LoadingPanel, LoadingStack,
 };
 pub use single_select::{
 	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_focus, navigate_text_menus,
@@ -44,7 +49,7 @@ impl Plugin for MenuComponentsPlugin {
 		app.init_resource::<TextMenuInputLock>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
 			.add_observer(select_text_menu_item_on_over)
-			.add_systems(Update, blink_animated_icons)
+			.add_systems(Update, (blink_animated_icons, spin_icons, sync_loading_bar_fill))
 			.add_systems(
 				Update,
 				(navigate_text_menus, sync_text_menu_item_colors, sync_text_cursor_icons)
