@@ -1,15 +1,15 @@
-//! Faint description strip along the bottom of the screen.
+//! Description copy in the remainder of the screen, to the right of the menu.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
-use crate::single_select::text_menu::TextMenu;
 use crate::theme::{
-	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BOTTOM, DESCRIPTION_FONT_SIZE, TEXT_YELLOW_FAINT,
+	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BOTTOM, DESCRIPTION_FONT_SIZE,
+	DESCRIPTION_PANE_LEFT_PERCENT, TEXT_YELLOW_FAINT,
 };
 
-/// Marker on the bottom description [`Text`]. Screens write the string.
+/// Marker on the description [`Text`]. Screens write the string.
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextMenuDescription;
 
@@ -17,44 +17,66 @@ impl TextMenuDescription {
 	pub fn scene(initial: impl Into<String>) -> impl Scene + 'static {
 		let initial = initial.into();
 		bsn! {
-			TextMenuDescription
-			template_value(Text::new(initial))
-			TextFont {
-				font: FontSourceTemplate::Handle(BARLOW_REGULAR),
-				font_size: px(DESCRIPTION_FONT_SIZE),
-			}
-			TextColor(TEXT_YELLOW_FAINT)
-			TextLayout::new(Justify::Left, LineBreak::WordBoundary)
 			Node {
 				position_type: PositionType::Absolute,
-				left: px(COLUMN_INSET),
+				left: percent(DESCRIPTION_PANE_LEFT_PERCENT),
 				right: px(COLUMN_INSET),
+				top: px(COLUMN_INSET),
 				bottom: px(DESCRIPTION_BOTTOM),
+				flex_direction: FlexDirection::Column,
+				align_items: AlignItems::Center,
+				justify_content: JustifyContent::FlexEnd,
 			}
 			Pickable::IGNORE
+			Children [(
+				TextMenuDescription
+				template_value(Text::new(initial))
+				TextFont {
+					font: FontSourceTemplate::Handle(BARLOW_REGULAR),
+					font_size: px(DESCRIPTION_FONT_SIZE),
+				}
+				TextColor(TEXT_YELLOW_FAINT)
+				TextLayout::new(Justify::Center, LineBreak::WordBoundary)
+				Node {
+					max_width: percent(80),
+				}
+				Pickable::IGNORE
+			)]
 		}
 	}
 }
 
-/// Write `value` onto the [`TextMenuDescription`] that shares a screen with `menu`.
+/// Write `value` onto the [`TextMenuDescription`] under `root` (the screen).
+///
+/// [`crate::single_select::MenuFocus`] bubbles, so `entity` on a screen observer
+/// is the screen, not the menu.
 pub fn set_description_for_menu(
-	menu: Entity,
+	root: Entity,
 	value: impl Into<String>,
-	menus: &Query<&ChildOf, With<TextMenu>>,
 	children: &Query<&Children>,
 	lines: &mut Query<&mut Text, With<TextMenuDescription>>,
 ) {
-	let Ok(child_of) = menus.get(menu) else {
+	if let Ok(mut text) = lines.get_mut(root) {
+		text.0 = value.into();
 		return;
-	};
-	let Ok(screen_children) = children.get(child_of.parent()) else {
+	}
+	let Ok(root_children) = children.get(root) else {
 		return;
 	};
 	let value = value.into();
-	for child in screen_children {
+	for child in root_children {
 		if let Ok(mut text) = lines.get_mut(*child) {
 			text.0 = value;
 			return;
+		}
+		let Ok(nested) = children.get(*child) else {
+			continue;
+		};
+		for nested_child in nested {
+			if let Ok(mut text) = lines.get_mut(*nested_child) {
+				text.0 = value;
+				return;
+			}
 		}
 	}
 }

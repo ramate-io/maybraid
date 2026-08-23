@@ -5,9 +5,7 @@ use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
-use menu_components::single_select::{
-	republish_menu_activate, MenuFocus, TextMenu, TextMenuInputLock,
-};
+use menu_components::single_select::{republish_menu_activate, MenuFocus, TextMenuInputLock};
 use menu_components::{TextMenuPlugin, TextMenuSystems};
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -128,14 +126,12 @@ fn apply_show_home(
 
 fn sync_home_description(
 	focus: On<MenuFocus<HomeMenuChoice>>,
-	menus: Query<&ChildOf, With<TextMenu>>,
 	children: Query<&Children>,
 	mut lines: Query<&mut Text, With<TextMenuDescription>>,
 ) {
 	set_description_for_menu(
 		focus.event().entity,
 		focus.event().choice.description(),
-		&menus,
 		&children,
 		&mut lines,
 	);

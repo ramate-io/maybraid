@@ -5,7 +5,6 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::icons::maybraid::AnimatedIcon;
-use crate::single_select::text_menu::TextMenu;
 use crate::theme::{
 	BARLOW_REGULAR, COLUMN_INSET, HINT_BOTTOM, HINT_FONT_SIZE, HINT_ICON_GAP, HINT_ICON_SIZE,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT,
@@ -57,27 +56,31 @@ fn hint_label_scene(initial: String) -> impl Scene {
 	}
 }
 
-/// Write `value` onto the [`TextMenuHintLabel`] that shares a screen with `menu`.
+/// Write `value` onto the [`TextMenuHintLabel`] under `root` (the screen).
 pub fn set_hint_for_menu(
-	menu: Entity,
+	root: Entity,
 	value: impl Into<String>,
-	menus: &Query<&ChildOf, With<TextMenu>>,
 	children: &Query<&Children>,
 	lines: &mut Query<&mut Text, With<TextMenuHintLabel>>,
 ) {
-	let Ok(child_of) = menus.get(menu) else {
+	if let Ok(mut text) = lines.get_mut(root) {
+		text.0 = value.into();
 		return;
-	};
-	let Ok(screen_children) = children.get(child_of.parent()) else {
+	}
+	let Ok(root_children) = children.get(root) else {
 		return;
 	};
 	let value = value.into();
-	for child in screen_children {
-		let Ok(hint_children) = children.get(*child) else {
+	for child in root_children {
+		if let Ok(mut text) = lines.get_mut(*child) {
+			text.0 = value;
+			return;
+		}
+		let Ok(nested) = children.get(*child) else {
 			continue;
 		};
-		for hint_child in hint_children {
-			if let Ok(mut text) = lines.get_mut(*hint_child) {
+		for nested_child in nested {
+			if let Ok(mut text) = lines.get_mut(*nested_child) {
 				text.0 = value;
 				return;
 			}

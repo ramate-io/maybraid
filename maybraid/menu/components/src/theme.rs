@@ -58,8 +58,12 @@ pub const ICON_BLINK_ALPHA_MIN: f32 = 0.18;
 /// Animated-mark alpha at the bright end of the blink.
 pub const ICON_BLINK_ALPHA_MAX: f32 = 0.92;
 
-/// Inset from the bottom of the window for the description strip.
+/// Inset from the bottom of the window for the description pane.
 pub const DESCRIPTION_BOTTOM: f32 = 24.0;
+
+/// Left edge of the right-hand info pane, as a percent of the window.
+/// The menu occupies the left; this remainder is for description (and later display).
+pub const DESCRIPTION_PANE_LEFT_PERCENT: f32 = 40.0;
 
 /// Hint strip sits above the description so wrapped copy does not collide.
 pub const HINT_BOTTOM: f32 = 76.0;
