@@ -144,10 +144,7 @@ pub fn build_params(
 		Overhang::Fixed(overhang_fixed)
 	};
 	params.end_cap = if end_cap_gable {
-		EndCap::Gable {
-			ridge: Overhang::Fixed(gable_ridge),
-			eave: Overhang::Fixed(gable_eave),
-		}
+		EndCap::Gable { ridge: Overhang::Fixed(gable_ridge), eave: Overhang::Fixed(gable_eave) }
 	} else {
 		EndCap::Hip
 	};

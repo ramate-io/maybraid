@@ -11,9 +11,7 @@ use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
-use crate::fit::{
-	aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-};
+use crate::fit::{aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::usage_areas::hall_connected_suites::{
 	HallEnclosedSuites, HallSuiteEncloseParams, HallSuitePackParams,
@@ -40,16 +38,11 @@ impl LivableApartmentsParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let fp = aabb_xz_extent(&confines.bounds);
 		if fp.x + EPS < MIN_ROOM || fp.y + EPS < MIN_ROOM {
-			return Err(FitError::TooSmall {
-				reason: "livable_apartments_host",
-			});
+			return Err(FitError::TooSmall { reason: "livable_apartments_host" });
 		}
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		Ok(Self {
-			hall_width: None,
-			targets: generate_apartment_targets(&cfg, c),
-		})
+		Ok(Self { hall_width: None, targets: generate_apartment_targets(&cfg, c) })
 	}
 
 	pub fn with_hall_width(mut self, hall_width: Option<f32>) -> Self {
@@ -67,10 +60,7 @@ pub struct LivableApartmentsOptions {
 
 impl Default for LivableApartmentsOptions {
 	fn default() -> Self {
-		Self {
-			hall_width: None,
-			targets: None,
-		}
+		Self { hall_width: None, targets: None }
 	}
 }
 
@@ -114,9 +104,7 @@ impl LivableApartments {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		if params.targets.is_empty() {
-			return Err(FitError::InvalidConfines {
-				reason: "livable_apartments_empty_targets",
-			});
+			return Err(FitError::InvalidConfines { reason: "livable_apartments_empty_targets" });
 		}
 
 		let enclosed = HallEnclosedSuites::from_confines(
@@ -128,10 +116,7 @@ impl LivableApartments {
 				min_room: MIN_ROOM,
 				min_connectivity: MIN_GROUP_CONNECTIVITY,
 			},
-			HallSuiteEncloseParams {
-				scope: SCOPE,
-				..Default::default()
-			},
+			HallSuiteEncloseParams { scope: SCOPE, ..Default::default() },
 		)?;
 
 		// No residual rooms → try the whole host as one apartment.
@@ -169,18 +154,8 @@ impl LivableApartments {
 		}
 
 		Ok((
-			Self {
-				confines: host,
-				parameterized: params,
-				halls,
-				apartments,
-				walls,
-				hall_width,
-			},
-			FillableRegions {
-				within: residual_within,
-				atop: Vec::new(),
-			},
+			Self { confines: host, parameterized: params, halls, apartments, walls, hall_width },
+			FillableRegions { within: residual_within, atop: Vec::new() },
 		))
 	}
 }
@@ -273,12 +248,7 @@ fn singleton_host(
 	enclosed: HallEnclosedSuites,
 	noise: NoiseParams,
 ) -> Result<(LivableApartments, FillableRegions), FitError> {
-	let HallEnclosedSuites {
-		halls,
-		hall_width,
-		mut residual_within,
-		..
-	} = enclosed;
+	let HallEnclosedSuites { halls, hall_width, mut residual_within, .. } = enclosed;
 	match LivableApartment::from_confines(0, confines, noise) {
 		Ok((mut apt, nested)) => {
 			apt.shell = None;
@@ -292,17 +262,11 @@ fn singleton_host(
 					walls: Vec::new(),
 					hall_width,
 				},
-				FillableRegions {
-					within: residual_within,
-					atop: Vec::new(),
-				},
+				FillableRegions { within: residual_within, atop: Vec::new() },
 			))
 		}
 		Err(FitError::TooSmall { .. }) => {
-			residual_within.push(FillRegion::new(
-				SpaceKind::InternalSpace,
-				confines.clone(),
-			));
+			residual_within.push(FillRegion::new(SpaceKind::InternalSpace, confines.clone()));
 			Ok((
 				LivableApartments {
 					confines: confines.clone(),
@@ -312,10 +276,7 @@ fn singleton_host(
 					walls: Vec::new(),
 					hall_width,
 				},
-				FillableRegions {
-					within: residual_within,
-					atop: Vec::new(),
-				},
+				FillableRegions { within: residual_within, atop: Vec::new() },
 			))
 		}
 		Err(err) => Err(err),
@@ -325,47 +286,35 @@ fn singleton_host(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use richmond_building_components::Layer;
-	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 
 	fn host_with_shafts_and_passage() -> Confines {
 		let mut openings = Openings::new();
 		openings.insert(
 			OpeningId::new("s0"),
 			Opening::new(
-				Aabb3d::from_min_max(
-					Vec3::new(-6.0, 0.0, -1.0),
-					Vec3::new(-4.0, 3.0, 1.0),
-				),
+				Aabb3d::from_min_max(Vec3::new(-6.0, 0.0, -1.0), Vec3::new(-4.0, 3.0, 1.0)),
 				OpeningLabel::Shaft,
 			),
 		);
 		openings.insert(
 			OpeningId::new("s1"),
 			Opening::new(
-				Aabb3d::from_min_max(
-					Vec3::new(4.0, 0.0, -1.0),
-					Vec3::new(6.0, 3.0, 1.0),
-				),
+				Aabb3d::from_min_max(Vec3::new(4.0, 0.0, -1.0), Vec3::new(6.0, 3.0, 1.0)),
 				OpeningLabel::Shaft,
 			),
 		);
 		openings.insert(
 			OpeningId::new("p0"),
 			Opening::new(
-				Aabb3d::from_min_max(
-					Vec3::new(-0.6, 0.0, 7.7),
-					Vec3::new(0.6, 2.2, 8.1),
-				),
+				Aabb3d::from_min_max(Vec3::new(-0.6, 0.0, 7.7), Vec3::new(0.6, 2.2, 8.1)),
 				OpeningLabel::Passage,
 			),
 		);
 		Confines::new(
-			Aabb3d::from_min_max(
-				Vec3::new(-12.0, 0.0, -8.0),
-				Vec3::new(12.0, 3.5, 8.0),
-			),
+			Aabb3d::from_min_max(Vec3::new(-12.0, 0.0, -8.0), Vec3::new(12.0, 3.5, 8.0)),
 			0.0,
 			openings,
 		)
@@ -407,10 +356,7 @@ mod tests {
 		let confines = host_with_shafts_and_passage();
 		let (block, _) = LivableApartments::from_confines_with(
 			&confines,
-			NoiseParams {
-				seed: 3,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed: 3, ..NoiseParams::default() },
 			LivableApartmentsOptions {
 				hall_width: Some(2.5),
 				targets: Some(vec![55.0, 48.0, 40.0, 30.0]),
@@ -435,26 +381,17 @@ mod tests {
 			},
 		)
 		.unwrap();
-		assert!(
-			!block.walls.is_empty(),
-			"fixture needs suite-divider walls to exercise LOD"
-		);
+		assert!(!block.walls.is_empty(), "fixture needs suite-divider walls to exercise LOD");
 		let high = block.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(
-			high.labeled
-				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			high.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 			"High should tag suite / apartment internal walls"
 		);
 		let medium = block.panel_nodes_for_level(LodSceneLevel::Medium);
 		assert!(
-			!medium
-				.labeled
-				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			!medium.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 			"Medium should drop suite-divider and nested internal walls"
 		);
-		assert!(
-			medium.len() < high.len(),
-			"Medium should emit fewer panels than High"
-		);
+		assert!(medium.len() < high.len(), "Medium should emit fewer panels than High");
 	}
 }

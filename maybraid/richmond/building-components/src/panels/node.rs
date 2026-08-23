@@ -56,14 +56,7 @@ impl PanelNode {
 						let (high, mid, low) = self.style.rectangle_lod()?;
 						Some(Box::new(with_pose(
 							transform,
-							lod_quad_scene(
-								high,
-								mid,
-								low,
-								PANEL_ULTRA_LOW_RECTANGLE,
-								level,
-								None,
-							),
+							lod_quad_scene(high, mid, low, PANEL_ULTRA_LOW_RECTANGLE, level, None),
 						)) as Box<dyn Scene>)
 					}
 					PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
@@ -118,11 +111,7 @@ impl LodScene for PanelNode {
 		warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		self.content_for_level(level)
 	}
 

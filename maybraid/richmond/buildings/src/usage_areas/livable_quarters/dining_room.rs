@@ -28,13 +28,29 @@ impl DiningRoom {
 			.packed
 			.tables
 			.iter()
-			.map(|aabb| furniture_fill(style, "DiningTable", aabb, confines.roll, FurnitureNode::bedroom_furniture))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"DiningTable",
+					aabb,
+					confines.roll,
+					FurnitureNode::bedroom_furniture,
+				)
+			})
 			.collect();
 		let fillers = plan
 			.packed
 			.fillers
 			.iter()
-			.map(|aabb| furniture_fill(style, "DiningFiller", aabb, confines.roll, FurnitureNode::nightstand))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"DiningFiller",
+					aabb,
+					confines.roll,
+					FurnitureNode::nightstand,
+				)
+			})
 			.collect();
 		Self {
 			room_type: label_filling_aabb(
@@ -83,12 +99,8 @@ impl BuildingComponents for DiningRoom {
 
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
-		out.extend(Layers::from_free(
-			self.tables.iter().map(|f| f.furniture.clone()).collect(),
-		));
-		out.extend(Layers::from_free(
-			self.fillers.iter().map(|f| f.furniture.clone()).collect(),
-		));
+		out.extend(Layers::from_free(self.tables.iter().map(|f| f.furniture.clone()).collect()));
+		out.extend(Layers::from_free(self.fillers.iter().map(|f| f.furniture.clone()).collect()));
 		out
 	}
 }

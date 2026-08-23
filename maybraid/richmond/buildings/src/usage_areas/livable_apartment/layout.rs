@@ -51,9 +51,7 @@ use bevy_math::{Vec2, Vec3};
 use procedural_common::{aabb2_area, inflate_aabb2, NoiseParams};
 use richmond_building_components::labels::{LabelNode, LabelStyle};
 
-use crate::fit::{
-	Confines, FillRegion, FillableRegions, FitError, MultiConfines, SpaceKind,
-};
+use crate::fit::{Confines, FillRegion, FillableRegions, FitError, MultiConfines, SpaceKind};
 use crate::openings::Openings;
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
@@ -67,9 +65,7 @@ use crate::usage_areas::rectangular_livable_area::{
 	RectangularLivableAreaParameterized, DEFAULT_CLOSED_MAX_AREA,
 };
 
-use super::entry::{
-	collect_work_rects, find_entry_door, partition_entry_and_body, push_entryway,
-};
+use super::entry::{collect_work_rects, find_entry_door, partition_entry_and_body, push_entryway};
 use super::program::{distribute_program, full_kind_list, program_from_area};
 use super::room::ApartmentRoom;
 use super::{LivableApartment, EPS, SCOPE};
@@ -103,11 +99,8 @@ pub(crate) fn fit_from_multi(
 	let y1 = Vec3::from(cells.parts[0].confines.bounds.max).y;
 	let roll = cells.parts[0].confines.roll;
 	let apt_noise = noise_for_cell(noise, region_id as i32);
-	let program = program_from_area(
-		total_footprint_area(cells),
-		apt_noise,
-		cells.parts[0].confines.center(),
-	);
+	let program =
+		program_from_area(total_footprint_area(cells), apt_noise, cells.parts[0].confines.center());
 
 	let mut rooms = Vec::new();
 	let mut residual_within = Vec::new();
@@ -157,9 +150,7 @@ pub(crate) fn fit_from_multi(
 			scope: SCOPE,
 		},
 	)
-	.ok_or(FitError::TooSmall {
-		reason: "livable_no_rects",
-	})?;
+	.ok_or(FitError::TooSmall { reason: "livable_no_rects" })?;
 
 	let kind_list = full_kind_list(program);
 	let slices = distribute_program(&kind_list, &cluster.rects, apt_noise);
@@ -195,9 +186,7 @@ pub(crate) fn fit_from_multi(
 	);
 
 	if rooms.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "livable_no_quarters",
-		});
+		return Err(FitError::TooSmall { reason: "livable_no_quarters" });
 	}
 
 	normalize_apartment_circulation(&mut rooms, entry_xz, access, &walkways, y0, y1, roll);
@@ -212,10 +201,7 @@ pub(crate) fn fit_from_multi(
 			max_rects: cluster.rects,
 			shell: None,
 		},
-		FillableRegions {
-			within: residual_within,
-			atop: Vec::new(),
-		},
+		FillableRegions { within: residual_within, atop: Vec::new() },
 	))
 }
 
@@ -225,32 +211,24 @@ pub(crate) fn fit_from_multi(
 
 fn validate_envelope(cells: &MultiConfines, access: PlanAccessParams) -> Result<(), FitError> {
 	if cells.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "livable_empty",
-		});
+		return Err(FitError::TooSmall { reason: "livable_empty" });
 	}
 	let mut has_body = false;
 	for part in cells.iter() {
 		let height = (part.confines.bounds.max.y - part.confines.bounds.min.y).max(0.0);
 		let xz = host_xz(&part.confines.bounds);
 		if !access.is_walkable(xz) {
-			return Err(FitError::TooSmall {
-				reason: "livable_footprint",
-			});
+			return Err(FitError::TooSmall { reason: "livable_footprint" });
 		}
 		if access.is_room_rect(xz) {
 			has_body = true;
 		}
 		if height < MIN_CEILING {
-			return Err(FitError::TooSmall {
-				reason: "livable_height",
-			});
+			return Err(FitError::TooSmall { reason: "livable_height" });
 		}
 	}
 	if !has_body {
-		return Err(FitError::TooSmall {
-			reason: "livable_no_body_cell",
-		});
+		return Err(FitError::TooSmall { reason: "livable_no_body_cell" });
 	}
 	Ok(())
 }
@@ -274,9 +252,7 @@ fn early_entry_only(
 	residual_within: Vec<FillRegion>,
 ) -> Result<(LivableApartment, FillableRegions), FitError> {
 	if rooms.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "livable_no_body",
-		});
+		return Err(FitError::TooSmall { reason: "livable_no_body" });
 	}
 	Ok((
 		LivableApartment {
@@ -288,10 +264,7 @@ fn early_entry_only(
 			max_rects: Vec::new(),
 			shell: None,
 		},
-		FillableRegions {
-			within: residual_within,
-			atop: Vec::new(),
-		},
+		FillableRegions { within: residual_within, atop: Vec::new() },
 	))
 }
 
@@ -316,8 +289,7 @@ fn fit_rla_per_max_rect(
 ) -> Result<(), FitError> {
 	for (ri, rect) in cluster.rects.iter().enumerate() {
 		let confines = cluster.confines_ensured(ri, entry_xz);
-		let cell_noise =
-			noise_for_cell(apt_noise, (region_id as i32).wrapping_add(ri as i32 * 17));
+		let cell_noise = noise_for_cell(apt_noise, (region_id as i32).wrapping_add(ri as i32 * 17));
 		match RectangularLivableArea::fit_with_circulation(
 			&confines,
 			cell_noise,
@@ -335,12 +307,7 @@ fn fit_rla_per_max_rect(
 			}
 			Err(FitError::TooSmall { .. }) => {
 				rooms.push(ApartmentRoom::OpenHall {
-					label: label_filling_aabb(
-						LabelStyle::Cyan,
-						"OpenHall",
-						&confines.bounds,
-						roll,
-					),
+					label: label_filling_aabb(LabelStyle::Cyan, "OpenHall", &confines.bounds, roll),
 					confines: confines.clone(),
 				});
 				walkways.push(*rect);
@@ -497,12 +464,7 @@ fn normalize_apartment_circulation(
 			}
 		} else {
 			ApartmentRoom::OpenHall {
-				label: label_filling_aabb(
-					LabelStyle::Cyan,
-					"OpenHall",
-					&confines.bounds,
-					roll,
-				),
+				label: label_filling_aabb(LabelStyle::Cyan, "OpenHall", &confines.bounds, roll),
 				confines,
 			}
 		};

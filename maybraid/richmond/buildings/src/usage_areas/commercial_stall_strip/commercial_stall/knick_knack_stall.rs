@@ -88,11 +88,7 @@ mod tests {
 				Vec3::new(3.0, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)), 0.0, openings)
 	}
 
 	#[test]
@@ -100,10 +96,7 @@ mod tests {
 		let confines = roomy_south();
 		let (stall, regions) = KnickKnackStall::fit_to_confines(
 			&confines,
-			NoiseParams {
-				seed: 3,
-				..Default::default()
-			},
+			NoiseParams { seed: 3, ..Default::default() },
 		)
 		.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "KnickKnackStall");

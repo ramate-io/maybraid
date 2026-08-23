@@ -2,22 +2,18 @@
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
 use bevy_math::{Vec2, Vec3};
-use procedural_common::{aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseParams, PlanAxes, PlanOpeningFace};
+use procedural_common::{
+	aabb2_area, aabb3_to_plan, Aabb2dPack, NoiseParams, PlanAxes, PlanOpeningFace,
+};
 
 use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::usage_areas::clearance::PassageClearance;
-use crate::usage_areas::livable_quarters::dining_room::{
-	DiningRoomParameterized, DiningRoomPlan,
-};
+use crate::usage_areas::livable_quarters::dining_room::{DiningRoomParameterized, DiningRoomPlan};
 use crate::usage_areas::livable_quarters::kitchen::{KitchenParameterized, KitchenPlan};
-use crate::usage_areas::plan_geom::{
-	confines_from_xz, connecting_passage, host_xz, DOOR_WIDTH,
-};
+use crate::usage_areas::plan_geom::{confines_from_xz, connecting_passage, host_xz, DOOR_WIDTH};
 
-use super::parameterized::{
-	EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE,
-};
+use super::parameterized::{EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE};
 
 /// Minimum combined footprint for a kitchen+dining split (m²).
 /// Roughly kitchen [`MIN_AREA`](crate::usage_areas::livable_quarters::kitchen::layout::MIN_AREA)
@@ -35,10 +31,7 @@ impl EatingAreaPlan {
 		noise: NoiseParams,
 	) -> Result<Self, FitError> {
 		let packed = pack_eating_area(&params, confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }
 
@@ -79,11 +72,8 @@ fn try_kitchen_dining(
 			continue;
 		}
 		// Prefer kitchen on the larger half when areas differ a lot.
-		let orders = if aabb2_area(a) >= aabb2_area(b) {
-			[(a, b), (b, a)]
-		} else {
-			[(b, a), (a, b)]
-		};
+		let orders =
+			if aabb2_area(a) >= aabb2_area(b) { [(a, b), (b, a)] } else { [(b, a), (a, b)] };
 		for (k_xz, d_xz) in orders {
 			let k_open = child_openings(confines, k_xz, d_xz, y0, y1, true);
 			let d_open = child_openings(confines, d_xz, k_xz, y0, y1, false);
@@ -95,7 +85,8 @@ fn try_kitchen_dining(
 				occupancy: params.occupancy,
 				layout: params.kitchen_layout,
 			};
-			let d_params = DiningRoomParameterized::with_fill(params.spaciousness, params.occupancy);
+			let d_params =
+				DiningRoomParameterized::with_fill(params.spaciousness, params.occupancy);
 			let Ok(kitchen) = KitchenPlan::from_parameterized(k_params, &k_conf, noise) else {
 				continue;
 			};
@@ -191,24 +182,13 @@ fn child_openings(
 	}
 	// Shared-edge door so both halves clear placer passage keep-outs.
 	if let Some((along_x, lo, hi, mid)) = shared_edge(self_xz, neighbor_xz) {
-		if let Some((oid, opening)) = connecting_passage(
-			SCOPE,
-			"pair",
-			along_x,
-			lo,
-			hi,
-			mid,
-			y0,
-			y1,
-			format!("{tag}"),
-		) {
+		if let Some((oid, opening)) =
+			connecting_passage(SCOPE, "pair", along_x, lo, hi, mid, y0, y1, format!("{tag}"))
+		{
 			openings.insert(oid, opening);
 		}
 	}
-	if openings
-		.iter()
-		.any(|(_, o)| matches!(o.label, OpeningLabel::Passage))
-	{
+	if openings.iter().any(|(_, o)| matches!(o.label, OpeningLabel::Passage)) {
 		return openings;
 	}
 	// Last resort: edge door on the half itself.
@@ -224,35 +204,21 @@ fn half_span_on_wall(half: Aabb2d, face: PlanOpeningFace) -> Option<(bool, f32, 
 		if !on_min && !on_max {
 			return None;
 		}
-		Some((
-			false,
-			half.min.y,
-			half.max.y,
-			if on_min { half.min.x } else { half.max.x },
-		))
+		Some((false, half.min.y, half.max.y, if on_min { half.min.x } else { half.max.x }))
 	} else {
 		let on_min = (half.min.y - face.thru).abs() <= T;
 		let on_max = (half.max.y - face.thru).abs() <= T;
 		if !on_min && !on_max {
 			return None;
 		}
-		Some((
-			true,
-			half.min.x,
-			half.max.x,
-			if on_min { half.min.y } else { half.max.y },
-		))
+		Some((true, half.min.x, half.max.x, if on_min { half.min.y } else { half.max.y }))
 	}
 }
 
 fn shared_edge(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	let touch_x = (a.max.x - b.min.x).abs() <= EPS || (b.max.x - a.min.x).abs() <= EPS;
 	if touch_x {
-		let mid = if (a.max.x - b.min.x).abs() <= EPS {
-			a.max.x
-		} else {
-			b.max.x
-		};
+		let mid = if (a.max.x - b.min.x).abs() <= EPS { a.max.x } else { b.max.x };
 		let lo = a.min.y.max(b.min.y);
 		let hi = a.max.y.min(b.max.y);
 		if hi - lo > EPS {
@@ -261,11 +227,7 @@ fn shared_edge(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	}
 	let touch_y = (a.max.y - b.min.y).abs() <= EPS || (b.max.y - a.min.y).abs() <= EPS;
 	if touch_y {
-		let mid = if (a.max.y - b.min.y).abs() <= EPS {
-			a.max.y
-		} else {
-			b.max.y
-		};
+		let mid = if (a.max.y - b.min.y).abs() <= EPS { a.max.y } else { b.max.y };
 		let lo = a.min.x.max(b.min.x);
 		let hi = a.max.x.min(b.max.x);
 		if hi - lo > EPS {
@@ -302,4 +264,3 @@ fn edge_passage(xz: Aabb2d, y0: f32, y1: f32, tag: u32, openings: &mut Openings)
 		Opening::new(bounds, OpeningLabel::Passage),
 	);
 }
-

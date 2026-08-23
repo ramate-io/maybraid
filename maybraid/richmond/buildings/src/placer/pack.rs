@@ -36,8 +36,7 @@ pub struct PackHost {
 impl PackHost {
 	/// Push a placed solid's plan footprint into passage keep-outs.
 	pub fn commit_footprint(&mut self, solid: &Aabb3d) {
-		self.clearances
-			.push(aabb3_to_plan(solid, PlanAxes::XZ));
+		self.clearances.push(aabb3_to_plan(solid, PlanAxes::XZ));
 	}
 
 	/// Clearances plus padded door approaches — use for fillers that tend to
@@ -79,9 +78,7 @@ pub fn init_host_with(confines: &Confines, opts: InitHostOpts) -> Result<PackHos
 	// that otherwise start inset at the inner door volume.
 	let passage_faces = PassageClearance::collect_faces_wall_snapped(confines, host);
 	if passage_faces.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "passage",
-		});
+		return Err(FitError::TooSmall { reason: "passage" });
 	}
 	let mut passage_bands = PassageClearance::bands_std(host, &passage_faces);
 	if opts.passage_wall_lip {
@@ -93,13 +90,7 @@ pub fn init_host_with(confines: &Confines, opts: InitHostOpts) -> Result<PackHos
 	}
 	let clearances = passage_bands.clone();
 	let room_area = aabb2_area(host).max(1e-4);
-	Ok(PackHost {
-		host3,
-		host,
-		clearances,
-		passage_bands,
-		room_area,
-	})
+	Ok(PackHost { host3, host, clearances, passage_bands, room_area })
 }
 
 /// Plan-area of an AABB footprint on XZ.
@@ -114,13 +105,12 @@ pub fn soft_goal_from_placed<Kind: Copy + PartialEq>(
 	placed: &[(Kind, Aabb3d)],
 ) -> bool {
 	placed.iter().any(|(kind, _)| {
-		catalog
-			.iter()
-			.find(|s| s.id == *kind)
-			.is_some_and(|s| matches!(
+		catalog.iter().find(|s| s.id == *kind).is_some_and(|s| {
+			matches!(
 				s.soft_goal,
 				SoftGoalRole::ClosetLike | SoftGoalRole::Appointed | SoftGoalRole::Ensuite
-			))
+			)
+		})
 	})
 }
 
@@ -141,14 +131,7 @@ pub fn propose_from_spec<Kind>(
 	let short_span = span_x.min(span_z);
 
 	match spec.propose {
-		ProposeKnobs::FreeExtent {
-			min_x,
-			max_x,
-			min_z,
-			max_z,
-			height,
-			prefer_wall,
-		} => {
+		ProposeKnobs::FreeExtent { min_x, max_x, min_z, max_z, height, prefer_wall } => {
 			let sx = cfg.sample_range_f32_4d(
 				min_x * spaciousness,
 				max_x * spaciousness,
@@ -238,13 +221,7 @@ pub fn propose_from_spec<Kind>(
 			}
 			None
 		}
-		ProposeKnobs::WallLong {
-			along_min,
-			along_max,
-			depth_min,
-			depth_max,
-			height,
-		} => {
+		ProposeKnobs::WallLong { along_min, along_max, depth_min, depth_max, height } => {
 			let along = cfg.sample_range_f32_4d(
 				along_min * spaciousness,
 				along_max * spaciousness,
@@ -339,13 +316,8 @@ pub fn pack_kinds<Kind: Copy + PartialEq>(
 			break;
 		}
 		let soft_goal_met = soft_goal_from_placed(catalog, &placed);
-		let Some(kind) = pick_kind(
-			catalog,
-			&cfg,
-			step,
-			soft_goal_met,
-			|k| count_kind(&placed, k),
-		) else {
+		let Some(kind) = pick_kind(catalog, &cfg, step, soft_goal_met, |k| count_kind(&placed, k))
+		else {
 			break;
 		};
 		let Some(spec) = catalog.iter().find(|s| s.id == kind) else {

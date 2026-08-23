@@ -5,11 +5,11 @@ use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 
-use crate::usage_areas::clearance::PassageClearance;
 use super::super::stall_layout::parts::{
 	PartsPacked, PartsRegions, PARTS_DOOR_HEADER_MIN, PARTS_DOOR_HEIGHT_MAX, PARTS_DOOR_HEIGHT_MIN,
 	PARTS_DOOR_WIDTH_MAX, PARTS_DOOR_WIDTH_MIN, PARTS_OFFICE_MIN, PARTS_REGION_MIN,
 };
+use crate::usage_areas::clearance::PassageClearance;
 
 /// Noise / style knobs for [`super::PartsStall`].
 #[derive(Debug, Clone, PartialEq)]
@@ -28,9 +28,7 @@ impl PartsStallParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		if PassageClearance::collect_faces(confines, host).is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "parts passage",
-			});
+			return Err(FitError::TooSmall { reason: "parts passage" });
 		}
 
 		let cfg = NoiseConfig::new(noise);
@@ -61,8 +59,8 @@ impl PartsStallParameterized {
 		);
 		let door_along_t = cfg.sample_range_f32_4d(0.15, 0.85, c.x, c.y, c.z, 75.0);
 		let host_h = (confines.bounds.max.y - confines.bounds.min.y).max(1.0);
-		let door_hi = PARTS_DOOR_HEIGHT_MAX
-			.min((host_h - PARTS_DOOR_HEADER_MIN).max(PARTS_DOOR_HEIGHT_MIN));
+		let door_hi =
+			PARTS_DOOR_HEIGHT_MAX.min((host_h - PARTS_DOOR_HEADER_MIN).max(PARTS_DOOR_HEIGHT_MIN));
 		let door_height = cfg.sample_range_f32_4d(
 			PARTS_DOOR_HEIGHT_MIN.min(door_hi),
 			door_hi,
@@ -111,9 +109,6 @@ impl PartsStallPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = params.regions().pack(confines)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

@@ -4327,6 +4327,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "menu-components"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "menu-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "clap",
+ "game-commands",
+ "menu-screens",
+]
+
+[[package]]
+name = "menu-screens"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "game-commands",
+ "menu-components",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,20 @@
+//! `/show` subcommand: spawn a menu screen.
+
+use bevy::prelude::*;
+use clap::Subcommand;
+use menu_screens::request_show_home;
+
+#[derive(Clone, Copy, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Show {
+	/// Spawn the Maybraid home screen (bottom-left text menu).
+	Home,
+}
+
+impl Show {
+	pub fn react(self, commands: &mut Commands) {
+		match self {
+			Show::Home => request_show_home(commands),
+		}
+	}
+}

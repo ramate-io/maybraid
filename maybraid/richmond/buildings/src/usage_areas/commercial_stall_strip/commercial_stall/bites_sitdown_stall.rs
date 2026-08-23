@@ -83,16 +83,16 @@ impl BuildingComponents for BitesSitdownStall {
 
 #[cfg(test)]
 mod tests {
+	use super::super::bites_stall::BitesStallParameterized;
+	use super::super::stall_layout::bites::BITES_SEATING_FACE_CONTACT;
+	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
 	use super::*;
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use procedural_common::{
 		aabb2_area, aabb3_to_plan, OptionalFaceBand, PlanAxes, PlanOpeningFace,
 	};
-	use super::super::bites_stall::BitesStallParameterized;
-	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
-	use super::super::stall_layout::bites::BITES_SEATING_FACE_CONTACT;
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();
@@ -110,11 +110,7 @@ mod tests {
 				Vec3::new(9.0, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 8.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 8.0)), 0.0, openings)
 	}
 
 	fn roomy_params(seating_area_target: f32) -> BitesSitdownParameterized {
@@ -146,8 +142,7 @@ mod tests {
 	#[test]
 	fn sitdown_emits_counters_seating_kitchen() {
 		let confines = roomy_south();
-		let plan =
-			BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
+		let plan = BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
 		let stall = BitesSitdownStall::from_plan(plan, &confines);
 		assert!(!stall.bites_counters.is_empty());
 		assert_eq!(stall.stall_type.text, "BitesSitdownStall");
@@ -161,8 +156,7 @@ mod tests {
 	#[test]
 	fn seating_shares_one_meter_opening_face() {
 		let confines = roomy_south();
-		let plan =
-			BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
+		let plan = BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
 		let seating = plan.seating_aabb;
 		let seat2 = aabb3_to_plan(&seating, PlanAxes::XZ);
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
@@ -170,7 +164,8 @@ mod tests {
 			if !matches!(o.label, OpeningLabel::Passage) {
 				return false;
 			}
-			let Some(face) = PlanOpeningFace::from_passage(host, aabb3_to_plan(&o.bounds, PlanAxes::XZ))
+			let Some(face) =
+				PlanOpeningFace::from_passage(host, aabb3_to_plan(&o.bounds, PlanAxes::XZ))
 			else {
 				return false;
 			};
@@ -183,8 +178,7 @@ mod tests {
 	fn seating_grows_toward_area_target() {
 		let confines = roomy_south();
 		let target = 40.0_f32;
-		let plan =
-			BitesSitdownPlan::from_parameterized(roomy_params(target), &confines).unwrap();
+		let plan = BitesSitdownPlan::from_parameterized(roomy_params(target), &confines).unwrap();
 		let seat_area = aabb2_area(aabb3_to_plan(&plan.seating_aabb, PlanAxes::XZ));
 		let kit_area = aabb2_area(aabb3_to_plan(&plan.kitchen_aabb, PlanAxes::XZ));
 		assert!(

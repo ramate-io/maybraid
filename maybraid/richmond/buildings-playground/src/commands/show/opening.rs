@@ -67,36 +67,20 @@ pub fn parse_opening_arg(s: &str) -> Result<OpeningArg, String> {
 	if let Some(t_str) = rest.strip_prefix("t=") {
 		let (t_part, ring) = split_t_and_ring(t_str.trim())?;
 		let t: f32 = t_part.parse().map_err(|e| format!("t=: {e}"))?;
-		return Ok(OpeningArg::ArcT {
-			id: id.to_string(),
-			label,
-			t,
-			ring,
-		});
+		return Ok(OpeningArg::ArcT { id: id.to_string(), label, t, ring });
 	}
 	if let Some(side_str) = rest.strip_prefix("side=") {
 		let side = parse_ortho_side(side_str.trim())?;
-		return Ok(OpeningArg::OrthoSide {
-			id: id.to_string(),
-			label,
-			side,
-		});
+		return Ok(OpeningArg::OrthoSide { id: id.to_string(), label, side });
 	}
 	// min:max where each is x,y,z — rest may be "x,y,z:x,y,z"
 	let aabb_parts: Vec<_> = rest.splitn(2, ':').collect();
 	if aabb_parts.len() != 2 {
-		return Err(format!(
-			"expected minx,miny,minz:maxx,maxy,maxz after label, got {rest:?}"
-		));
+		return Err(format!("expected minx,miny,minz:maxx,maxy,maxz after label, got {rest:?}"));
 	}
 	let min = parse_vec3_csv(aabb_parts[0].trim())?;
 	let max = parse_vec3_csv(aabb_parts[1].trim())?;
-	Ok(OpeningArg::Aabb {
-		id: id.to_string(),
-		label,
-		min,
-		max,
-	})
+	Ok(OpeningArg::Aabb { id: id.to_string(), label, min, max })
 }
 
 /// Preferred ring when resolving `t=` openings on a circular ring shell.
@@ -108,23 +92,9 @@ pub enum CircRingPreference {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpeningArg {
-	Aabb {
-		id: String,
-		label: OpeningLabel,
-		min: Vec3,
-		max: Vec3,
-	},
-	ArcT {
-		id: String,
-		label: OpeningLabel,
-		t: f32,
-		ring: Option<CircRingPreference>,
-	},
-	OrthoSide {
-		id: String,
-		label: OpeningLabel,
-		side: RectFloorSide,
-	},
+	Aabb { id: String, label: OpeningLabel, min: Vec3, max: Vec3 },
+	ArcT { id: String, label: OpeningLabel, t: f32, ring: Option<CircRingPreference> },
+	OrthoSide { id: String, label: OpeningLabel, side: RectFloorSide },
 }
 
 fn split_t_and_ring(s: &str) -> Result<(&str, Option<CircRingPreference>), String> {
@@ -135,15 +105,11 @@ fn split_t_and_ring(s: &str) -> Result<(&str, Option<CircRingPreference>), Strin
 				"outer" | "o" => CircRingPreference::Outer,
 				"inner" | "i" => CircRingPreference::Inner,
 				other => {
-					return Err(format!(
-						"unknown ring {other:?}; expected outer|inner"
-					));
+					return Err(format!("unknown ring {other:?}; expected outer|inner"));
 				}
 			}
 		} else {
-			return Err(format!(
-				"expected t=…,ring=outer|inner after t=, got {s:?}"
-			));
+			return Err(format!("expected t=…,ring=outer|inner after t=, got {s:?}"));
 		};
 		Ok((t_part.trim(), Some(ring)))
 	} else {
@@ -160,10 +126,7 @@ impl OpeningArg {
 		}
 	}
 
-	pub fn resolve_aabb(
-		self,
-		arc: Option<ArcOpeningContext>,
-	) -> Result<PreviewOpening, String> {
+	pub fn resolve_aabb(self, arc: Option<ArcOpeningContext>) -> Result<PreviewOpening, String> {
 		self.resolve(arc, None)
 	}
 
@@ -246,9 +209,7 @@ pub fn parse_ortho_side(s: &str) -> Result<RectFloorSide, String> {
 		"east" | "e" => Ok(RectFloorSide::East),
 		"south" | "s" => Ok(RectFloorSide::South),
 		"west" | "w" => Ok(RectFloorSide::West),
-		other => Err(format!(
-			"unknown side {other:?}; expected north|east|south|west"
-		)),
+		other => Err(format!("unknown side {other:?}; expected north|east|south|west")),
 	}
 }
 
@@ -284,11 +245,7 @@ pub fn trazaloid_openings(
 	door_west: bool,
 ) -> Result<Vec<PreviewOpening>, String> {
 	if !args.is_empty() {
-		return args
-			.iter()
-			.cloned()
-			.map(|a| a.resolve_aabb(None))
-			.collect();
+		return args.iter().cloned().map(|a| a.resolve_aabb(None)).collect();
 	}
 	let mut out = Vec::new();
 	for (enabled, side, id) in [
@@ -324,11 +281,7 @@ pub fn ortho_openings(
 	door_west: bool,
 ) -> Result<Vec<PreviewOpening>, String> {
 	if !args.is_empty() {
-		return args
-			.iter()
-			.cloned()
-			.map(|a| a.resolve(None, Some(ctx)))
-			.collect();
+		return args.iter().cloned().map(|a| a.resolve(None, Some(ctx))).collect();
 	}
 	let mut out = Vec::new();
 	for (enabled, side, id) in [
@@ -372,9 +325,8 @@ pub fn i_floor_openings(
 		for arg in args.iter().cloned() {
 			match arg {
 				OpeningArg::OrthoSide { id, label, side } => {
-					let edge = nearest_edge_for_side(shell, side).ok_or_else(|| {
-						format!("i-floor has no edge near side={side:?}")
-					})?;
+					let edge = nearest_edge_for_side(shell, side)
+						.ok_or_else(|| format!("i-floor has no edge near side={side:?}"))?;
 					let opening = match label {
 						OpeningLabel::Aperture => IFloor::edge_aperture_opening(
 							edge,
@@ -426,7 +378,7 @@ fn nearest_edge_for_side(
 	shell: &IFloor,
 	side: RectFloorSide,
 ) -> Option<richmond_buildings::shells::ortho::WallEdge> {
-	use richmond_buildings::shells::ortho::WallEdge as WallEdge;
+	use richmond_buildings::shells::ortho::WallEdge;
 	let edges = shell.edges();
 	if edges.is_empty() {
 		return None;
@@ -449,15 +401,12 @@ fn nearest_edge_for_side(
 			Vec3::new(x, shell.params().center_xz.y + shell.params().storey_height * 0.5, 0.0)
 		}
 	};
-	edges
-		.iter()
-		.copied()
-		.min_by(|a: &WallEdge, b: &WallEdge| {
-			a.mid()
-				.distance_squared(target)
-				.partial_cmp(&b.mid().distance_squared(target))
-				.unwrap_or(std::cmp::Ordering::Equal)
-		})
+	edges.iter().copied().min_by(|a: &WallEdge, b: &WallEdge| {
+		a.mid()
+			.distance_squared(target)
+			.partial_cmp(&b.mid().distance_squared(target))
+			.unwrap_or(std::cmp::Ordering::Equal)
+	})
 }
 
 #[cfg(test)]

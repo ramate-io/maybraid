@@ -12,9 +12,7 @@ use procedural_common::{aabb2_area, NoiseConfig, NoiseParams};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
-use crate::fit::{
-	aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-};
+use crate::fit::{aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningLabel, Openings};
 use crate::usage_areas::plan_cells::subtract_aabb2;
 use crate::usage_areas::plan_geom::host_xz;
@@ -62,9 +60,7 @@ impl HallsToShafts {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let footprint = aabb_xz_extent(&confines.bounds);
 		if footprint.x + EPS < MIN_HOST || footprint.y + EPS < MIN_HOST {
-			return Err(FitError::TooSmall {
-				reason: "halls_to_shafts_host",
-			});
+			return Err(FitError::TooSmall { reason: "halls_to_shafts_host" });
 		}
 
 		let host = host_xz(&confines.bounds);
@@ -72,16 +68,12 @@ impl HallsToShafts {
 		let y1 = Vec3::from(confines.bounds.max).y;
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		let hall_width = options.hall_width.unwrap_or_else(|| {
-			cfg.sample_range_f32_4d(
-				MIN_HALL_WIDTH,
-				MAX_HALL_WIDTH,
-				c.x,
-				c.y,
-				c.z,
-				110.0,
-			)
-		}).clamp(MIN_HALL_WIDTH * 0.5, MAX_HALL_WIDTH * 1.5);
+		let hall_width = options
+			.hall_width
+			.unwrap_or_else(|| {
+				cfg.sample_range_f32_4d(MIN_HALL_WIDTH, MAX_HALL_WIDTH, c.x, c.y, c.z, 110.0)
+			})
+			.clamp(MIN_HALL_WIDTH * 0.5, MAX_HALL_WIDTH * 1.5);
 		let beta = cfg.sample_range_f32_4d(1.0, 3.0, c.x, c.y, c.z, 111.0);
 
 		let terminals = collect_terminals(&confines.openings, host);
@@ -130,15 +122,8 @@ impl HallsToShafts {
 		}
 
 		Ok((
-			Self {
-				confines: confines.clone(),
-				hall_bands,
-				hall_width,
-			},
-			FillableRegions {
-				within,
-				atop: Vec::new(),
-			},
+			Self { confines: confines.clone(), hall_bands, hall_width },
+			FillableRegions { within, atop: Vec::new() },
 		))
 	}
 }
@@ -157,17 +142,11 @@ impl Fit for HallsToShafts {
 fn opening_xz(opening: &Opening) -> Aabb2d {
 	let min = Vec3::from(opening.bounds.min);
 	let max = Vec3::from(opening.bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
+	Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }
 }
 
 fn aabb2_to_aabb3(a: Aabb2d, y0: f32, y1: f32) -> Aabb3d {
-	Aabb3d::from_min_max(
-		Vec3::new(a.min.x, y0, a.min.y),
-		Vec3::new(a.max.x, y1, a.max.y),
-	)
+	Aabb3d::from_min_max(Vec3::new(a.min.x, y0, a.min.y), Vec3::new(a.max.x, y1, a.max.y))
 }
 
 fn aabb2_intersects(a: Aabb2d, b: Aabb2d, eps: f32) -> bool {
@@ -187,10 +166,7 @@ fn aabb2_touches(a: Aabb2d, b: Aabb2d, eps: f32) -> bool {
 }
 
 fn clamp_point(p: Vec2, host: Aabb2d) -> Vec2 {
-	Vec2::new(
-		p.x.clamp(host.min.x, host.max.x),
-		p.y.clamp(host.min.y, host.max.y),
-	)
+	Vec2::new(p.x.clamp(host.min.x, host.max.x), p.y.clamp(host.min.y, host.max.y))
 }
 
 fn clamp_aabb2(a: Aabb2d, host: Aabb2d) -> Option<Aabb2d> {
@@ -213,10 +189,7 @@ struct Terminal {
 fn collect_terminals(openings: &Openings, host: Aabb2d) -> Vec<Terminal> {
 	let mut out = Vec::new();
 	for (_, opening) in openings.iter() {
-		if !matches!(
-			opening.label,
-			OpeningLabel::Shaft | OpeningLabel::Passage
-		) {
+		if !matches!(opening.label, OpeningLabel::Shaft | OpeningLabel::Passage) {
 			continue;
 		}
 		let xz = opening_xz(opening);
@@ -224,9 +197,7 @@ fn collect_terminals(openings: &Openings, host: Aabb2d) -> Vec<Terminal> {
 			continue;
 		}
 		let center = 0.5 * (xz.min + xz.max);
-		out.push(Terminal {
-			anchor: clamp_point(center, host),
-		});
+		out.push(Terminal { anchor: clamp_point(center, host) });
 	}
 	out
 }
@@ -263,10 +234,7 @@ fn shaft_clearance_bands(openings: &Openings, host: Aabb2d, clearance: f32) -> V
 		if !aabb2_intersects(xz, host, -EPS) {
 			continue;
 		}
-		let expanded = Aabb2d {
-			min: xz.min - pad,
-			max: xz.max + pad,
-		};
+		let expanded = Aabb2d { min: xz.min - pad, max: xz.max + pad };
 		if let Some(c) = clamp_aabb2(expanded, host) {
 			// Degenerate if the shaft already fills the host.
 			if aabb2_area(c) > EPS * EPS {
@@ -290,10 +258,7 @@ fn openings_intersecting(openings: &Openings, region: Aabb2d) -> Openings {
 fn openings_touching(openings: &Openings, region: Aabb2d) -> Openings {
 	let mut out = Openings::new();
 	for (id, opening) in openings.iter() {
-		if !matches!(
-			opening.label,
-			OpeningLabel::Shaft | OpeningLabel::Passage
-		) {
+		if !matches!(opening.label, OpeningLabel::Shaft | OpeningLabel::Passage) {
 			continue;
 		}
 		if aabb2_touches(opening_xz(opening), region, EPS) {
@@ -333,7 +298,8 @@ fn connect_terminals(
 	let mut pair_path: Vec<Vec<Option<Vec<Segment>>>> = vec![vec![None; n]; n];
 	for i in 0..n {
 		for j in (i + 1)..n {
-			if let Some((cost, path)) = graph.shortest_path(terminals[i].anchor, terminals[j].anchor)
+			if let Some((cost, path)) =
+				graph.shortest_path(terminals[i].anchor, terminals[j].anchor)
 			{
 				pair_cost[i][j] = cost;
 				pair_cost[j][i] = cost;
@@ -429,13 +395,7 @@ impl HananGraph {
 			}
 		}
 
-		Self {
-			xs: xs.to_vec(),
-			zs: zs.to_vec(),
-			nx,
-			nz,
-			adj,
-		}
+		Self { xs: xs.to_vec(), zs: zs.to_vec(), nx, nz, adj }
 	}
 
 	fn nearest_node(&self, p: Vec2) -> usize {
@@ -493,10 +453,7 @@ impl HananGraph {
 		let mut parent = vec![None; n];
 		let mut heap = BinaryHeap::new();
 		dist[start] = 0.0;
-		heap.push(State {
-			cost: 0.0,
-			node: start,
-		});
+		heap.push(State { cost: 0.0, node: start });
 
 		while let Some(State { cost, node }) = heap.pop() {
 			if cost > dist[node] + 1e-6 {
@@ -510,10 +467,7 @@ impl HananGraph {
 				if next_cost + 1e-6 < dist[next] {
 					dist[next] = next_cost;
 					parent[next] = Some(node);
-					heap.push(State {
-						cost: next_cost,
-						node: next,
-					});
+					heap.push(State { cost: next_cost, node: next });
 				}
 			}
 		}
@@ -538,10 +492,7 @@ impl HananGraph {
 			segs.push(Segment { a, b: first });
 		}
 		for w in nodes.windows(2) {
-			segs.push(Segment {
-				a: self.point(w[0]),
-				b: self.point(w[1]),
-			});
+			segs.push(Segment { a: self.point(w[0]), b: self.point(w[1]) });
 		}
 		let last = self.point(*nodes.last().unwrap());
 		if (b - last).length() > EPS {
@@ -566,10 +517,7 @@ struct UnionFind {
 
 impl UnionFind {
 	fn new(n: usize) -> Self {
-		Self {
-			parent: (0..n).collect(),
-			rank: vec![0; n],
-		}
+		Self { parent: (0..n).collect(), rank: vec![0; n] }
 	}
 
 	fn find(&mut self, mut x: usize) -> usize {
@@ -614,19 +562,13 @@ fn thicken_paths(paths: &[Vec<Segment>], hall_width: f32, host: Aabb2d) -> Vec<A
 				let x0 = seg.a.x.min(seg.b.x) - half;
 				let x1 = seg.a.x.max(seg.b.x) + half;
 				let z = 0.5 * (seg.a.y + seg.b.y);
-				Aabb2d {
-					min: Vec2::new(x0, z - half),
-					max: Vec2::new(x1, z + half),
-				}
+				Aabb2d { min: Vec2::new(x0, z - half), max: Vec2::new(x1, z + half) }
 			} else {
 				// Vertical (along Z).
 				let z0 = seg.a.y.min(seg.b.y) - half;
 				let z1 = seg.a.y.max(seg.b.y) + half;
 				let x = 0.5 * (seg.a.x + seg.b.x);
-				Aabb2d {
-					min: Vec2::new(x - half, z0),
-					max: Vec2::new(x + half, z1),
-				}
+				Aabb2d { min: Vec2::new(x - half, z0), max: Vec2::new(x + half, z1) }
 			};
 			if let Some(c) = clamp_aabb2(band, host) {
 				bands.push(c);
@@ -772,28 +714,17 @@ mod tests {
 		let mut openings = Openings::new();
 		let (id, o) = shaft("s0", 0.0, 0.0, 2.0);
 		openings.insert(id, o);
-		let confines = rect_confines(
-			Vec3::new(-10.0, 0.0, -10.0),
-			Vec3::new(10.0, 3.0, 10.0),
-			openings,
-		);
+		let confines =
+			rect_confines(Vec3::new(-10.0, 0.0, -10.0), Vec3::new(10.0, 3.0, 10.0), openings);
 		let (hts, regions) = HallsToShafts::from_confines_with(
 			&confines,
 			NoiseParams::default(),
-			HallsToShaftsOptions {
-				hall_width: Some(2.5),
-			},
+			HallsToShaftsOptions { hall_width: Some(2.5) },
 		)
 		.unwrap();
 		assert!(!hts.hall_bands.is_empty(), "shaft clearance should be hallway");
-		assert!(regions
-			.within
-			.iter()
-			.any(|r| r.kind == SpaceKind::Hallway));
-		assert!(regions
-			.within
-			.iter()
-			.any(|r| r.kind == SpaceKind::InternalSpace));
+		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::Hallway));
+		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::InternalSpace));
 		assert_residuals_clear_of_shafts(&regions, &confines.openings, 2.5);
 	}
 
@@ -804,18 +735,13 @@ mod tests {
 		let (b, ob) = shaft("s1", 6.0, 6.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -12.0),
-			Vec3::new(12.0, 3.0, 12.0),
-			openings,
-		);
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -12.0), Vec3::new(12.0, 3.0, 12.0), openings);
 		let hall_width = 2.5;
 		let (_hts, regions) = HallsToShafts::from_confines_with(
 			&confines,
 			NoiseParams::default(),
-			HallsToShaftsOptions {
-				hall_width: Some(hall_width),
-			},
+			HallsToShaftsOptions { hall_width: Some(hall_width) },
 		)
 		.unwrap();
 		assert_residuals_clear_of_shafts(&regions, &confines.openings, hall_width);
@@ -837,10 +763,7 @@ mod tests {
 					continue;
 				}
 				let shaft = opening_xz(opening);
-				let keepout = Aabb2d {
-					min: shaft.min - pad,
-					max: shaft.max + pad,
-				};
+				let keepout = Aabb2d { min: shaft.min - pad, max: shaft.max + pad };
 				// Boundary touch with the clearance ring is fine; forbid interior overlap.
 				assert!(
 					!aabb2_intersects(room, keepout, EPS),
@@ -859,21 +782,13 @@ mod tests {
 		let (b, ob) = shaft("s1", 6.0, 6.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -12.0),
-			Vec3::new(12.0, 3.0, 12.0),
-			openings,
-		);
-		let (hts, regions) = HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -12.0), Vec3::new(12.0, 3.0, 12.0), openings);
+		let (hts, regions) =
+			HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!hts.hall_bands.is_empty());
-		assert!(regions
-			.within
-			.iter()
-			.any(|r| r.kind == SpaceKind::Hallway));
-		assert!(regions
-			.within
-			.iter()
-			.any(|r| r.kind == SpaceKind::InternalSpace));
+		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::Hallway));
+		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::InternalSpace));
 	}
 
 	#[test]
@@ -883,12 +798,10 @@ mod tests {
 		let (b, ob) = passage("p0", 10.0, 0.0, 1.2, 0.4);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -8.0),
-			Vec3::new(12.0, 3.0, 8.0),
-			openings,
-		);
-		let (hts, regions) = HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -8.0), Vec3::new(12.0, 3.0, 8.0), openings);
+		let (hts, regions) =
+			HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!hts.hall_bands.is_empty());
 		let hall_area: f32 = hts.hall_bands.iter().map(|b| aabb2_area(*b)).sum();
 		assert!(hall_area > 0.0);
@@ -902,22 +815,17 @@ mod tests {
 		let (b, ob) = shaft("s1", 5.0, 0.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -8.0),
-			Vec3::new(12.0, 3.0, 8.0),
-			openings,
-		);
-		let (hts, regions) = HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -8.0), Vec3::new(12.0, 3.0, 8.0), openings);
+		let (hts, regions) =
+			HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
 		for region in &regions.within {
 			if region.kind != SpaceKind::InternalSpace {
 				continue;
 			}
 			let rz = host_xz(&region.confines.bounds);
 			for band in &hts.hall_bands {
-				assert!(
-					!aabb2_intersects(rz, *band, EPS),
-					"room overlaps hall"
-				);
+				assert!(!aabb2_intersects(rz, *band, EPS), "room overlaps hall");
 			}
 		}
 	}
@@ -930,27 +838,19 @@ mod tests {
 		let (b, ob) = shaft("s1", 0.0, 6.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -12.0),
-			Vec3::new(12.0, 3.0, 12.0),
-			openings,
-		);
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -12.0), Vec3::new(12.0, 3.0, 12.0), openings);
 		let width = 3.0;
 		let (hts, _) = HallsToShafts::from_confines_with(
 			&confines,
 			NoiseParams::default(),
-			HallsToShaftsOptions {
-				hall_width: Some(width),
-			},
+			HallsToShaftsOptions { hall_width: Some(width) },
 		)
 		.unwrap();
 		assert!((hts.hall_width - width).abs() < 1e-4);
 		let half = width * 0.5;
 		// Corner square of the L must be covered (not a half-width indent).
-		let corner = Aabb2d {
-			min: Vec2::new(-half, -half),
-			max: Vec2::new(half, half),
-		};
+		let corner = Aabb2d { min: Vec2::new(-half, -half), max: Vec2::new(half, half) };
 		let covered: f32 = hts
 			.hall_bands
 			.iter()
@@ -975,17 +875,12 @@ mod tests {
 		let (b, ob) = shaft("s1", 5.0, 0.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-12.0, 0.0, -8.0),
-			Vec3::new(12.0, 3.0, 8.0),
-			openings,
-		);
+		let confines =
+			rect_confines(Vec3::new(-12.0, 0.0, -8.0), Vec3::new(12.0, 3.0, 8.0), openings);
 		let (hts, _) = HallsToShafts::from_confines_with(
 			&confines,
 			NoiseParams::default(),
-			HallsToShaftsOptions {
-				hall_width: Some(3.5),
-			},
+			HallsToShaftsOptions { hall_width: Some(3.5) },
 		)
 		.unwrap();
 		assert!((hts.hall_width - 3.5).abs() < 1e-4);
@@ -998,16 +893,10 @@ mod tests {
 				continue;
 			}
 			let w = sx.min(sy);
-			assert!(
-				(w - 3.5).abs() < 0.05,
-				"expected ~3.5m clear width, got {w}"
-			);
+			assert!((w - 3.5).abs() < 0.05, "expected ~3.5m clear width, got {w}");
 			corridor_checked += 1;
 		}
-		assert!(
-			corridor_checked > 0,
-			"expected at least one corridor-width hall band"
-		);
+		assert!(corridor_checked > 0, "expected at least one corridor-width hall band");
 	}
 
 	#[test]
@@ -1018,17 +907,12 @@ mod tests {
 		let (b, ob) = shaft("s1", 10.0, 10.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
-		let confines = rect_confines(
-			Vec3::new(-16.0, 0.0, -16.0),
-			Vec3::new(16.0, 3.0, 16.0),
-			openings,
-		);
+		let confines =
+			rect_confines(Vec3::new(-16.0, 0.0, -16.0), Vec3::new(16.0, 3.0, 16.0), openings);
 		let (hts, regions) = HallsToShafts::from_confines_with(
 			&confines,
 			NoiseParams::default(),
-			HallsToShaftsOptions {
-				hall_width: Some(2.5),
-			},
+			HallsToShaftsOptions { hall_width: Some(2.5) },
 		)
 		.unwrap();
 		assert!(!hts.hall_bands.is_empty());
@@ -1040,15 +924,9 @@ mod tests {
 			moment += a * (0.5 * (b.min + b.max));
 		}
 		let centroid = moment / area.max(EPS);
-		assert!(
-			centroid.length() < 10.0,
-			"expected interior-biased halls, centroid={centroid:?}"
-		);
+		assert!(centroid.length() < 10.0, "expected interior-biased halls, centroid={centroid:?}");
 		// SE façade corner pocket should remain residual (not a perimeter L).
-		let se_pocket = Aabb2d {
-			min: Vec2::new(12.0, -16.0),
-			max: Vec2::new(16.0, -12.0),
-		};
+		let se_pocket = Aabb2d { min: Vec2::new(12.0, -16.0), max: Vec2::new(16.0, -12.0) };
 		let residual_on_se: f32 = regions
 			.within
 			.iter()

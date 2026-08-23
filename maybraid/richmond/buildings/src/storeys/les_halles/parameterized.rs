@@ -164,8 +164,7 @@ impl LesHallesParameterized {
 		// Mid-side shafts grow with the short footprint axis (room for stairs).
 		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
 		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
-		let mid_shaft_side =
-			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+		let mid_shaft_side = cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
 		let doors = generate_stall_doors(&cfg, c);
@@ -225,8 +224,7 @@ impl LesHallesParameterized {
 			c.z,
 			SALT_STALL_SHARE,
 		);
-		let (gallery_width, balcony_width) =
-			split_ring_budget_livable(ring_budget, stall_share)?;
+		let (gallery_width, balcony_width) = split_ring_budget_livable(ring_budget, stall_share)?;
 
 		let ring = gallery_width + balcony_width;
 		if extent_x < 2.0 * ring + MIN_COURTYARD || extent_z < 2.0 * ring + MIN_COURTYARD {
@@ -242,8 +240,7 @@ impl LesHallesParameterized {
 
 		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
 		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
-		let mid_shaft_side =
-			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+		let mid_shaft_side = cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
 		let doors = generate_stall_doors(&cfg, c);
@@ -304,8 +301,7 @@ impl LesHallesParameterized {
 			c.z,
 			SALT_STALL_SHARE,
 		);
-		let (gallery_width, balcony_width) =
-			split_ring_budget_monotower(ring_budget, stall_share)?;
+		let (gallery_width, balcony_width) = split_ring_budget_monotower(ring_budget, stall_share)?;
 
 		let ring = gallery_width + balcony_width;
 		if extent_x < 2.0 * ring + MIN_MONOTOWER_COURTYARD
@@ -323,8 +319,7 @@ impl LesHallesParameterized {
 
 		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
 		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
-		let mid_shaft_side =
-			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+		let mid_shaft_side = cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
 		let doors = generate_stall_doors(&cfg, c);
@@ -439,12 +434,7 @@ impl LesHallesParameterized {
 /// Split a rim budget into gallery + balcony using `stall_share`, then clamp to
 /// absolute min/max depths while staying inside `ring_budget`.
 fn split_ring_budget(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
-	split_ring_budget_with(
-		ring_budget,
-		stall_share,
-		MIN_GALLERY_WIDTH,
-		MAX_GALLERY_WIDTH,
-	)
+	split_ring_budget_with(ring_budget, stall_share, MIN_GALLERY_WIDTH, MAX_GALLERY_WIDTH)
 }
 
 fn split_ring_budget_livable(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
@@ -474,10 +464,9 @@ fn split_ring_budget_with(
 	if ring_budget + 1e-4 < min_gallery + MIN_BALCONY_WIDTH {
 		return Err(FitError::TooSmall { reason: "footprint" });
 	}
-	let max_gallery = max_gallery_abs
-		.min(ring_budget - MIN_BALCONY_WIDTH)
-		.max(min_gallery);
-	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(min_gallery, max_gallery);
+	let max_gallery = max_gallery_abs.min(ring_budget - MIN_BALCONY_WIDTH).max(min_gallery);
+	let target_gallery =
+		(ring_budget * stall_share.clamp(0.0, 1.0)).clamp(min_gallery, max_gallery);
 	let rem = (ring_budget - target_gallery).max(0.0);
 	let max_balcony = MAX_BALCONY_WIDTH.min(rem).max(MIN_BALCONY_WIDTH);
 	let balcony_width = rem.clamp(MIN_BALCONY_WIDTH, max_balcony);
@@ -506,14 +495,10 @@ pub(crate) fn footprint_extents(confines: &Confines) -> Result<(f32, f32, f32), 
 	let extent_z = max.z - min.z;
 	let height = max.y - min.y;
 	if !extent_x.is_finite() || !extent_z.is_finite() || !height.is_finite() {
-		return Err(FitError::InvalidConfines {
-			reason: "non_finite_bounds",
-		});
+		return Err(FitError::InvalidConfines { reason: "non_finite_bounds" });
 	}
 	if extent_x <= 0.0 || extent_z <= 0.0 || height <= 0.0 {
-		return Err(FitError::InvalidConfines {
-			reason: "empty_bounds",
-		});
+		return Err(FitError::InvalidConfines { reason: "empty_bounds" });
 	}
 	Ok((extent_x, extent_z, height))
 }
@@ -524,26 +509,10 @@ mod tests {
 
 	fn doors_catalog() -> Vec<LesHallesStallDoor> {
 		vec![
-			LesHallesStallDoor {
-				door_width: 3.5,
-				jamb_min: 0.25,
-				allowed_error: 0.35,
-			},
-			LesHallesStallDoor {
-				door_width: 3.0,
-				jamb_min: 0.25,
-				allowed_error: 0.3,
-			},
-			LesHallesStallDoor {
-				door_width: 2.4,
-				jamb_min: 0.2,
-				allowed_error: 0.25,
-			},
-			LesHallesStallDoor {
-				door_width: 1.8,
-				jamb_min: 0.2,
-				allowed_error: 0.2,
-			},
+			LesHallesStallDoor { door_width: 3.5, jamb_min: 0.25, allowed_error: 0.35 },
+			LesHallesStallDoor { door_width: 3.0, jamb_min: 0.25, allowed_error: 0.3 },
+			LesHallesStallDoor { door_width: 2.4, jamb_min: 0.2, allowed_error: 0.25 },
+			LesHallesStallDoor { door_width: 1.8, jamb_min: 0.2, allowed_error: 0.2 },
 		]
 	}
 
@@ -553,8 +522,11 @@ mod tests {
 			bevy_math::Vec3::new(-24.0, 0.0, -18.0),
 			bevy_math::Vec3::new(24.0, 4.0, 18.0),
 		));
-		let params = LesHallesParameterized::sample(&confines, NoiseParams { seed: 42, ..NoiseParams::default() })
-			.unwrap();
+		let params = LesHallesParameterized::sample(
+			&confines,
+			NoiseParams { seed: 42, ..NoiseParams::default() },
+		)
+		.unwrap();
 		let extent_min = 36.0_f32;
 		let ring = params.ring_width();
 		let courtyard = extent_min - 2.0 * ring;
@@ -598,16 +570,8 @@ mod tests {
 			mid_shaft_side: 3.0,
 			opening_density: 0.5,
 			doors: vec![
-				LesHallesStallDoor {
-					door_width: 10.0,
-					jamb_min: 0.5,
-					allowed_error: 0.1,
-				},
-				LesHallesStallDoor {
-					door_width: 2.0,
-					jamb_min: 0.2,
-					allowed_error: 0.2,
-				},
+				LesHallesStallDoor { door_width: 10.0, jamb_min: 0.5, allowed_error: 0.1 },
+				LesHallesStallDoor { door_width: 2.0, jamb_min: 0.2, allowed_error: 0.2 },
 			],
 			windows: Vec::new(),
 		};
@@ -639,10 +603,7 @@ mod tests {
 		));
 		let params = LesHallesParameterized::sample_livable(
 			&confines,
-			NoiseParams {
-				seed: 42,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed: 42, ..NoiseParams::default() },
 		)
 		.unwrap();
 		assert!(

@@ -5,10 +5,10 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};
 use crate::paneling::rect_crease::joint_along_fitted_bay_crease;
 use crate::paneling::rect_fit::{FittedRect, RectInset};
-use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
 
 /// One bay of a [`ClippedFittedRectangularStrip`].
 #[derive(Debug, Clone, PartialEq)]
@@ -128,10 +128,9 @@ impl ClippedFittedRectangularStrip {
 				)));
 			}
 			Some(inset) => {
-				self.pieces
-					.push(ClippedFittedRectangularStripPiece::Clipped(ClippedFittedRectangle::new(
-						self.style, prev_a, rail_a, prev_b, rail_b, inset,
-					)));
+				self.pieces.push(ClippedFittedRectangularStripPiece::Clipped(
+					ClippedFittedRectangle::new(self.style, prev_a, rail_a, prev_b, rail_b, inset),
+				));
 			}
 		}
 		self
@@ -151,9 +150,12 @@ impl ClippedFittedRectangularStrip {
 			let prev = &self.pieces[i];
 			let next = &self.pieces[i + 1];
 			let thickness = (prev.end_thickness() + next.start_thickness()) * 0.5;
-			if let Some(j) =
-				joint_along_fitted_bay_crease(prev.fitted(), next.fitted(), thickness, self.joint_policy)
-			{
+			if let Some(j) = joint_along_fitted_bay_crease(
+				prev.fitted(),
+				next.fitted(),
+				thickness,
+				self.joint_policy,
+			) {
 				out.push(j);
 			}
 		}
@@ -190,16 +192,8 @@ mod tests {
 
 	#[test]
 	fn middle_inset_splits_pieces() {
-		let a = [
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = [
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 4.0),
-		];
+		let a = [Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let b = [Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0), Vec3::new(2.0, 0.0, 4.0)];
 		let s = ClippedFittedRectangularStrip::from_lines(
 			PanelStyle::RoughStonework,
 			a,
@@ -207,10 +201,7 @@ mod tests {
 			[Some(RectInset::uniform(0.35)), None],
 		);
 		assert_eq!(s.pieces().len(), 2);
-		assert!(matches!(
-			s.pieces()[0],
-			ClippedFittedRectangularStripPiece::Clipped(_)
-		));
+		assert!(matches!(s.pieces()[0], ClippedFittedRectangularStripPiece::Clipped(_)));
 		assert!(matches!(s.pieces()[1], ClippedFittedRectangularStripPiece::Solid(_)));
 		let clipped = match &s.pieces()[0] {
 			ClippedFittedRectangularStripPiece::Clipped(c) => c,

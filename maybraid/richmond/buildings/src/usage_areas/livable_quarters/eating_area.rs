@@ -3,9 +3,7 @@
 mod layout;
 mod parameterized;
 
-pub use parameterized::{
-	EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE,
-};
+pub use parameterized::{EatingAreaPacked, EatingAreaParameterized, EatingAreaPlan, SCOPE};
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -37,12 +35,7 @@ impl EatingArea {
 		let y1 = Vec3::from(confines.bounds.max).y;
 		let roll = confines.roll;
 		match plan.packed {
-			Packed::KitchenDining {
-				kitchen,
-				dining,
-				kitchen_xz,
-				dining_xz,
-			} => {
+			Packed::KitchenDining { kitchen, dining, kitchen_xz, dining_xz } => {
 				let k_conf = Confines::new(
 					Aabb3d::from_min_max(
 						Vec3::new(kitchen_xz.min.x, y0, kitchen_xz.min.y),
@@ -170,26 +163,20 @@ mod tests {
 				OpeningLabel::Passage,
 			),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(sx, 3.0, sz)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(sx, 3.0, sz)), 0.0, openings)
 	}
 
 	#[test]
 	fn large_host_gets_kitchen_and_dining() {
 		let confines = host_with_south_door(8.0, 10.0);
-		let (area, _) =
-			EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		let (area, _) = EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(area.has_dining(), "expected dining beside kitchen");
 	}
 
 	#[test]
 	fn small_host_falls_back_to_kitchen() {
 		let confines = host_with_south_door(3.5, 4.0);
-		let (area, _) =
-			EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		let (area, _) = EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!area.has_dining(), "expected kitchen-only fallback");
 	}
 
@@ -197,11 +184,11 @@ mod tests {
 	fn compact_galley_host_still_gets_kitchen() {
 		// Near kitchen layout MIN_AREA (2.4×2.0); should kitchen-only, not fail.
 		let confines = host_with_south_door(2.6, 2.5);
-		let (area, _) =
-			EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		let (area, _) = EatingArea::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!area.has_dining());
 		assert!(
-			!area.kitchen.counter_runs.is_empty() || area.kitchen.room_type.text == "Kitchen"
+			!area.kitchen.counter_runs.is_empty()
+				|| area.kitchen.room_type.text == "Kitchen"
 				|| area.room_type.text.contains("Eating"),
 			"expected a fitted kitchen in a compact host"
 		);
@@ -210,14 +197,9 @@ mod tests {
 	#[test]
 	fn large_host_kitchen_footprint_is_generous() {
 		let confines = host_with_south_door(12.0, 10.0);
-		let (area, _) = EatingArea::fit_to_confines(
-			&confines,
-			NoiseParams {
-				seed: 11,
-				..Default::default()
-			},
-		)
-		.unwrap();
+		let (area, _) =
+			EatingArea::fit_to_confines(&confines, NoiseParams { seed: 11, ..Default::default() })
+				.unwrap();
 		let k = &area.kitchen.room_type.placement.scale;
 		let kitchen_a = k.x * k.z;
 		// On a 120 m² host, kitchen half / kitchen-only should not stay galley-tiny.

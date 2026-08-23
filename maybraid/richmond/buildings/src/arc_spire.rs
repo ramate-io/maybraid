@@ -111,7 +111,6 @@ impl BuildingComponents for ArcSpire {
 	}
 }
 
-
 /// Best-fit ascending tread tops from target bindings.
 ///
 /// Returns `(fitted_tops, missed_bindings)`.

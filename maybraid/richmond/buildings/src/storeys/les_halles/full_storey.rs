@@ -82,10 +82,7 @@ mod tests {
 
 	#[test]
 	fn full_storey_fills_external_strips_with_labels() {
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(-24.0, 0.0, -18.0),
-			Vec3::new(24.0, 4.0, 18.0),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(-24.0, 0.0, -18.0), Vec3::new(24.0, 4.0, 18.0));
 		let empty = Confines::from_bounds(bounds);
 		let noise = NoiseParams::default();
 		let params = LesHallesParameterized::sample(&empty, noise).unwrap();
@@ -94,17 +91,11 @@ mod tests {
 		let (plan, _) = LesHallesFloorPlan::from_parameterized(params, &confines).unwrap();
 		let (storey, regions) = LesHallesFullStorey::from_floor_plan(plan, noise).unwrap();
 		assert!(!storey.stall_strips().is_empty());
-		assert!(regions
-			.within
-			.iter()
-			.all(|r| r.kind != SpaceKind::ExternalSpace));
+		assert!(regions.within.iter().all(|r| r.kind != SpaceKind::ExternalSpace));
 		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::Walkway));
 		assert_eq!(regions.atop.len(), 1);
 		assert!(storey.floor_plan.gallery.wall_count() >= 4);
-		assert!(!storey
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!storey.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 		let panels = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(!panels.is_empty());
 	}

@@ -15,14 +15,10 @@ impl ResidentialBathroomPacked {
 	pub fn pack(confines: &Confines) -> Result<Self, FitError> {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		if aabb2_area(host) + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "residential bathroom",
-			});
+			return Err(FitError::TooSmall { reason: "residential bathroom" });
 		}
 		if PassageClearance::collect_faces(confines, host).is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "residential bathroom passage",
-			});
+			return Err(FitError::TooSmall { reason: "residential bathroom passage" });
 		}
 		Ok(Self {})
 	}

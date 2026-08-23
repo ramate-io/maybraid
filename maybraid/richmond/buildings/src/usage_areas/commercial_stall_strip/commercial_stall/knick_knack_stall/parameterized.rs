@@ -22,9 +22,7 @@ impl KnickKnackStallParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		if PassageClearance::collect_faces(confines, host).is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "knick knack passage",
-			});
+			return Err(FitError::TooSmall { reason: "knick knack passage" });
 		}
 
 		let cfg = NoiseConfig::new(noise);
@@ -71,9 +69,7 @@ impl KnickKnackStallParameterized {
 	}
 
 	fn regions(&self) -> KnickKnackRegions {
-		KnickKnackRegions {
-			displays: self.displays.clone(),
-		}
+		KnickKnackRegions { displays: self.displays.clone() }
 	}
 }
 
@@ -90,9 +86,6 @@ impl KnickKnackStallPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = params.regions().pack(confines)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

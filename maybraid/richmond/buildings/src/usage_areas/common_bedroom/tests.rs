@@ -1,26 +1,19 @@
 use super::*;
-use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
 use crate::fit::Fit;
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::usage_areas::clearance::PASSAGE_CLEARANCE;
 use crate::usage_areas::livable_quarters::ResidentialBathroom;
+use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
 use procedural_common::{aabb3_to_plan, PlanAxes};
 
 fn roomy_south() -> Confines {
 	let mut openings = Openings::new();
 	openings.insert(
 		OpeningId::new("door_a"),
-		Opening::passage(Aabb3d::from_min_max(
-			Vec3::new(1.5, 0.0, -0.2),
-			Vec3::new(2.5, 2.2, 0.2),
-		)),
+		Opening::passage(Aabb3d::from_min_max(Vec3::new(1.5, 0.0, -0.2), Vec3::new(2.5, 2.2, 0.2))),
 	);
-	Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.0, 6.0)),
-		0.0,
-		openings,
-	)
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.0, 6.0)), 0.0, openings)
 }
 
 #[test]
@@ -28,20 +21,14 @@ fn common_bedroom_places_bed_and_tracks_partition_doors() {
 	let confines = roomy_south();
 	let (room, regions) = CommonBedroom::fit_with_fill(
 		&confines,
-		NoiseParams {
-			seed: 7,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 7, ..NoiseParams::default() },
 		CommonBedroomParameterized::with_fill(1.0, 0.7),
 	)
 	.unwrap();
 	assert_eq!(room.room_type.text.as_str(), "CommonBedroom");
 	assert!(!room.beds.is_empty());
 	assert!(room.beds.iter().all(|b| b.label.text.as_str() == "Bed"));
-	assert!(room
-		.nightstands
-		.iter()
-		.all(|n| n.label.text.as_str() == "Nightstand"));
+	assert!(room.nightstands.iter().all(|n| n.label.text.as_str() == "Nightstand"));
 	assert!(room
 		.small_bedroom_furniture
 		.iter()
@@ -52,10 +39,7 @@ fn common_bedroom_places_bed_and_tracks_partition_doors() {
 		.bedroom_furniture
 		.iter()
 		.all(|b| b.label.text.as_str() == "BedroomFurniture"));
-	assert!(room
-		.walk_in_closets
-		.iter()
-		.all(|c| c.label.text.as_str() == "WalkInCloset"));
+	assert!(room.walk_in_closets.iter().all(|c| c.label.text.as_str() == "WalkInCloset"));
 	assert_eq!(
 		regions.within.len(),
 		room.closets.len() + room.walk_in_closets.len() + room.ensuites.len()
@@ -79,10 +63,8 @@ fn common_bedroom_places_bed_and_tracks_partition_doors() {
 
 #[test]
 fn common_bedroom_at_most_one_ensuite() {
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -92,32 +74,22 @@ fn common_bedroom_at_most_one_ensuite() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	for seed in 0..20 {
 		let (room, _) = CommonBedroom::fit_with_fill(
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			CommonBedroomParameterized::with_fill(1.0, 0.9),
 		)
 		.unwrap();
-		assert!(
-			room.ensuites.len() <= 1,
-			"seed={seed} placed {} ensuites",
-			room.ensuites.len()
-		);
+		assert!(room.ensuites.len() <= 1, "seed={seed} placed {} ensuites", room.ensuites.len());
 	}
 }
 
 #[test]
 fn common_bedroom_can_place_wardrobe_or_dresser() {
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -127,16 +99,12 @@ fn common_bedroom_can_place_wardrobe_or_dresser() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let mut saw_storage = false;
 	for seed in 0..48 {
 		let (room, _) = CommonBedroom::fit_with_fill(
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			CommonBedroomParameterized::with_fill(1.25, 0.85),
 		)
 		.unwrap();
@@ -151,10 +119,8 @@ fn common_bedroom_can_place_wardrobe_or_dresser() {
 #[test]
 fn common_bedroom_storage_long_face_on_wall_and_sep() {
 	use procedural_common::{inflate_aabb2, intersects_aabb2};
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -164,18 +130,14 @@ fn common_bedroom_storage_long_face_on_wall_and_sep() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 	let mut saw_storage = false;
 	for seed in 0..80 {
 		let plan = CommonBedroomPlan::from_parameterized(
 			CommonBedroomParameterized::with_fill(1.25, 0.85),
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 		)
 		.unwrap();
 		let storage: Vec<_> = plan
@@ -222,10 +184,7 @@ fn common_bedroom_nightstands_abut_beds() {
 	let plan = CommonBedroomPlan::from_parameterized(
 		params,
 		&confines,
-		NoiseParams {
-			seed: 7,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 7, ..NoiseParams::default() },
 	)
 	.unwrap();
 	for ns in &plan.packed.nightstands {
@@ -261,10 +220,7 @@ fn common_bedroom_bed_against_wall_prefers_host_edge() {
 	let plan = CommonBedroomPlan::from_parameterized(
 		params,
 		&confines,
-		NoiseParams {
-			seed: 5,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 5, ..NoiseParams::default() },
 	)
 	.unwrap();
 	let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
@@ -280,10 +236,8 @@ fn common_bedroom_bed_against_wall_prefers_host_edge() {
 #[test]
 fn common_bedroom_partitions_keep_sep_gap() {
 	use procedural_common::inflate_aabb2;
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -293,16 +247,12 @@ fn common_bedroom_partitions_keep_sep_gap() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let params = CommonBedroomParameterized::with_fill(1.0, 0.9);
 	let plan = CommonBedroomPlan::from_parameterized(
 		params,
 		&confines,
-		NoiseParams {
-			seed: 3,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 3, ..NoiseParams::default() },
 	)
 	.unwrap();
 	let parts: Vec<_> = plan
@@ -327,10 +277,8 @@ fn common_bedroom_partitions_keep_sep_gap() {
 #[test]
 fn common_bedroom_ensuite_grows_toward_area_target() {
 	use procedural_common::aabb2_area;
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.2, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.2, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -340,8 +288,7 @@ fn common_bedroom_ensuite_grows_toward_area_target() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let mut params = CommonBedroomParameterized::with_fill(1.25, 0.7);
 	params.ensuite_area_target = 70.0;
 	params.bedroom_area_reserve = 40.0;
@@ -352,10 +299,7 @@ fn common_bedroom_ensuite_grows_toward_area_target() {
 		let plan = CommonBedroomPlan::from_parameterized(
 			params.clone(),
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 		)
 		.unwrap();
 		if let Some(ensuite) = plan.packed.ensuites.first() {
@@ -365,10 +309,7 @@ fn common_bedroom_ensuite_grows_toward_area_target() {
 		}
 	}
 	let (area, bounds) = found.expect("expected an ensuite in a large room");
-	assert!(
-		area + 1e-3 >= 2.6 * 1.8,
-		"ensuite area {area} below enlarged mins"
-	);
+	assert!(area + 1e-3 >= 2.6 * 1.8, "ensuite area {area} below enlarged mins");
 	assert!(
 		area + 0.5 >= host_area * 0.12,
 		"ensuite area {area} should grow past mins in host {host_area}"
@@ -382,22 +323,14 @@ fn common_bedroom_ensuite_grows_toward_area_target() {
 	let ed = bounds.max.y - bounds.min.y;
 	let hw = host.max.x - host.min.x;
 	let hd = host.max.y - host.min.y;
-	assert!(
-		ew <= hw * 0.5 + 1e-2,
-		"ensuite X span {ew} exceeds half host width {hw}"
-	);
-	assert!(
-		ed <= hd * 0.5 + 1e-2,
-		"ensuite Z span {ed} exceeds half host depth {hd}"
-	);
+	assert!(ew <= hw * 0.5 + 1e-2, "ensuite X span {ew} exceeds half host width {hw}");
+	assert!(ed <= hd * 0.5 + 1e-2, "ensuite Z span {ed} exceeds half host depth {hd}");
 }
 
 #[test]
 fn common_bedroom_large_room_prefers_enclosure_before_filler() {
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -407,17 +340,13 @@ fn common_bedroom_large_room_prefers_enclosure_before_filler() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let mut saw_enclosure = false;
 	let mut saw_walk_in_or_furniture = false;
 	for seed in 0..64 {
 		let (room, _) = CommonBedroom::fit_with_fill(
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			CommonBedroomParameterized::with_fill(1.3, 0.7),
 		)
 		.unwrap();
@@ -439,10 +368,7 @@ fn common_bedroom_large_room_prefers_enclosure_before_filler() {
 		}
 	}
 	assert!(saw_enclosure, "expected enclosure in a large room");
-	assert!(
-		saw_walk_in_or_furniture,
-		"expected WalkInCloset or BedroomFurniture across seeds"
-	);
+	assert!(saw_walk_in_or_furniture, "expected WalkInCloset or BedroomFurniture across seeds");
 }
 
 #[test]
@@ -456,10 +382,7 @@ fn common_bedroom_avoids_passage_clearance() {
 	let plan = CommonBedroomPlan::from_parameterized(
 		params,
 		&confines,
-		NoiseParams {
-			seed: 42,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 42, ..NoiseParams::default() },
 	)
 	.unwrap();
 	assert!(!plan.packed.beds.is_empty());
@@ -477,10 +400,8 @@ fn common_bedroom_avoids_passage_clearance() {
 #[test]
 fn common_bedroom_furniture_avoids_partition_door_clear() {
 	use procedural_common::{inflate_aabb2, intersects_aabb2};
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -490,17 +411,13 @@ fn common_bedroom_furniture_avoids_partition_door_clear() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let mut saw_partition = false;
 	for seed in 0..48 {
 		let plan = CommonBedroomPlan::from_parameterized(
 			CommonBedroomParameterized::with_fill(1.3, 0.7),
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 		)
 		.unwrap();
 		let parts: Vec<_> = plan
@@ -540,10 +457,8 @@ fn common_bedroom_furniture_avoids_partition_door_clear() {
 
 #[test]
 fn common_bedroom_soft_fails_tiny_cell() {
-	let confines = Confines::from_bounds(Aabb3d::from_min_max(
-		Vec3::ZERO,
-		Vec3::new(1.5, 2.5, 1.5),
-	));
+	let confines =
+		Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1.5, 2.5, 1.5)));
 	assert!(matches!(
 		CommonBedroom::fit_to_confines(&confines, NoiseParams::default()),
 		Err(FitError::TooSmall { .. })
@@ -568,19 +483,12 @@ fn common_bedroom_gallery_like_rooms_place_enclosures() {
 				Vec3::new(extent.x * 0.65, 2.2, 0.2),
 			)),
 		);
-		let confines = Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, extent),
-			0.0,
-			openings,
-		);
+		let confines = Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings);
 		let mut params = CommonBedroomParameterized::with_fill(space, occ);
 		params.bed_against_wall = true;
 		let (room, _) = CommonBedroom::fit_with_fill(
 			&confines,
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			params,
 		)
 		.unwrap();
@@ -594,10 +502,8 @@ fn common_bedroom_gallery_like_rooms_place_enclosures() {
 
 #[test]
 fn common_bedroom_ensuite_within_fits_residential_bathroom() {
-	let confines = Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.2, 12.0)),
-		0.0,
-		{
+	let confines =
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.2, 12.0)), 0.0, {
 			let mut openings = Openings::new();
 			openings.insert(
 				OpeningId::new("door_a"),
@@ -607,8 +513,7 @@ fn common_bedroom_ensuite_within_fits_residential_bathroom() {
 				)),
 			);
 			openings
-		},
-	);
+		});
 	let mut params = CommonBedroomParameterized::with_fill(1.25, 0.7);
 	params.ensuite_area_target = 70.0;
 	params.bedroom_area_reserve = 40.0;
@@ -616,10 +521,7 @@ fn common_bedroom_ensuite_within_fits_residential_bathroom() {
 
 	let mut found = false;
 	for seed in 0..48 {
-		let noise = NoiseParams {
-			seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let (room, regions) =
 			CommonBedroom::fit_with_fill(&confines, noise, params.clone()).unwrap();
 		if room.ensuites.is_empty() {
@@ -632,9 +534,10 @@ fn common_bedroom_ensuite_within_fits_residential_bathroom() {
 			"seed={seed}: expected bathroom for each ensuite"
 		);
 		for ensuite in &room.ensuites {
-			let region = regions.within.iter().find(|r| {
-				r.confines.openings.get(&ensuite.door_id).is_some()
-			});
+			let region = regions
+				.within
+				.iter()
+				.find(|r| r.confines.openings.get(&ensuite.door_id).is_some());
 			let region = region.expect("missing within region for ensuite door");
 			assert!(
 				region.confines.openings.get(&ensuite.door_id).is_some(),

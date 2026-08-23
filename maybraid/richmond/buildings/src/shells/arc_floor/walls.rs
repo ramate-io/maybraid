@@ -6,7 +6,7 @@ use richmond_building_components::partitions::{
 };
 use richmond_building_components::Placement;
 
-use super::ring::{aabb3d_intersects, EPS, SEG_DEG, SECTORS};
+use super::ring::{aabb3d_intersects, EPS, SECTORS, SEG_DEG};
 use super::ArcFloorParams;
 
 /// Drop footer/header strips thinner than this fraction of storey height.
@@ -35,7 +35,9 @@ impl SectorCuts {
 
 impl ArcFloorParams {
 	/// Resolve Layer 1 wall partitions from the opening plan.
-	pub(super) fn resolve_wall_sweeps(&self) -> ([SectorCuts; SECTORS as usize], Vec<PartitionNode>) {
+	pub(super) fn resolve_wall_sweeps(
+		&self,
+	) -> ([SectorCuts; SECTORS as usize], Vec<PartitionNode>) {
 		let y0 = self.center_xz.y;
 		let y1 = y0 + self.storey_height;
 		let mut sectors = std::array::from_fn(|_| SectorCuts::default());
@@ -87,15 +89,7 @@ fn emit_wall_partitions(
 			);
 			i += run;
 		} else {
-			emit_cut_sector(
-				&mut partitions,
-				params,
-				i,
-				&sectors[i as usize],
-				y0,
-				y1,
-				min_h,
-			);
+			emit_cut_sector(&mut partitions, params, i, &sectors[i as usize], y0, y1, min_h);
 			i += 1;
 		}
 	}

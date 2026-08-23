@@ -95,26 +95,10 @@ impl TrazaloidParams {
 		let waist_z = (silhouette_z - inset).max(EXTENT_EPS);
 
 		[
-			PlanRect {
-				y: 0.0,
-				half_x: foot_x,
-				half_z: foot_z,
-			},
-			PlanRect {
-				y: lower_h,
-				half_x: waist_x,
-				half_z: waist_z,
-			},
-			PlanRect {
-				y: lower_h + gap,
-				half_x: waist_x,
-				half_z: waist_z,
-			},
-			PlanRect {
-				y: lower_h + gap + upper_h,
-				half_x: ridge_x,
-				half_z: ridge_z,
-			},
+			PlanRect { y: 0.0, half_x: foot_x, half_z: foot_z },
+			PlanRect { y: lower_h, half_x: waist_x, half_z: waist_z },
+			PlanRect { y: lower_h + gap, half_x: waist_x, half_z: waist_z },
+			PlanRect { y: lower_h + gap + upper_h, half_x: ridge_x, half_z: ridge_z },
 		]
 	}
 
@@ -131,28 +115,12 @@ impl TrazaloidParams {
 
 		for i in 0..4 {
 			let radial = (foot_c[i] - Vec3::new(0.0, foot_c[i].y, 0.0)).normalize_or_zero();
-			let radial = if radial.length_squared() > 0.0 {
-				radial
-			} else {
-				Vec3::X
-			};
-			posts.push(PostSegment {
-				start: foot_c[i],
-				end: waist_c[i],
-				radial_hint: radial,
-			});
+			let radial = if radial.length_squared() > 0.0 { radial } else { Vec3::X };
+			posts.push(PostSegment { start: foot_c[i], end: waist_c[i], radial_hint: radial });
 			if gap > GAP_EPS {
-				posts.push(PostSegment {
-					start: waist_c[i],
-					end: upper_c[i],
-					radial_hint: radial,
-				});
+				posts.push(PostSegment { start: waist_c[i], end: upper_c[i], radial_hint: radial });
 			}
-			posts.push(PostSegment {
-				start: upper_c[i],
-				end: ridge_c[i],
-				radial_hint: radial,
-			});
+			posts.push(PostSegment { start: upper_c[i], end: ridge_c[i], radial_hint: radial });
 		}
 
 		let n = self.face_post_count;
@@ -196,10 +164,6 @@ fn push_face_posts(
 		let u = i as f32 / denom;
 		let start = a0.lerp(b0, u);
 		let end = a1.lerp(b1, u);
-		posts.push(PostSegment {
-			start,
-			end,
-			radial_hint,
-		});
+		posts.push(PostSegment { start, end, radial_hint });
 	}
 }

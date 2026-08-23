@@ -57,7 +57,9 @@ impl LivingRoom {
 			.packed
 			.fillers
 			.iter()
-			.map(|aabb| furniture_fill(style, "LivingFiller", aabb, confines.roll, FurnitureNode::dresser))
+			.map(|aabb| {
+				furniture_fill(style, "LivingFiller", aabb, confines.roll, FurnitureNode::dresser)
+			})
 			.collect();
 		Self {
 			room_type: label_filling_aabb(
@@ -109,20 +111,12 @@ impl BuildingComponents for LivingRoom {
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
 		out.extend(Layers::from_free(
-			self.primary_seating
-				.iter()
-				.map(|f| f.furniture.clone())
-				.collect(),
+			self.primary_seating.iter().map(|f| f.furniture.clone()).collect(),
 		));
 		out.extend(Layers::from_free(
-			self.secondary_seating
-				.iter()
-				.map(|f| f.furniture.clone())
-				.collect(),
+			self.secondary_seating.iter().map(|f| f.furniture.clone()).collect(),
 		));
-		out.extend(Layers::from_free(
-			self.fillers.iter().map(|f| f.furniture.clone()).collect(),
-		));
+		out.extend(Layers::from_free(self.fillers.iter().map(|f| f.furniture.clone()).collect()));
 		out
 	}
 }

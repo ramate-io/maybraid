@@ -99,26 +99,13 @@ pub fn inject_shared_boundary_from(
 	};
 	let y0 = Vec3::from(neighbor.bounds.min).y;
 	let y1 = Vec3::from(neighbor.bounds.max).y;
-	insert_boundary_edge(
-		&mut neighbor.openings,
-		scope,
-		tag,
-		along_x,
-		lo,
-		hi,
-		mid,
-		y0,
-		y1,
-	);
+	insert_boundary_edge(&mut neighbor.openings, scope, tag, along_x, lo, hi, mid, y0, y1);
 }
 
 fn host_xz_of(c: &Confines) -> Aabb2d {
 	let min = Vec3::from(c.bounds.min);
 	let max = Vec3::from(c.bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
+	Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }
 }
 
 /// Four faces of an XZ host: `(along_x, mid_perp, lo_along, hi_along)`.
@@ -132,13 +119,7 @@ pub fn host_face_spans(host: Aabb2d) -> [(bool, f32, f32, f32); 4] {
 }
 
 /// True when a Boundary/Exclusion opening covers this plan edge span.
-pub fn plan_edge_excluded(
-	openings: &Openings,
-	along_x: bool,
-	lo: f32,
-	hi: f32,
-	mid: f32,
-) -> bool {
+pub fn plan_edge_excluded(openings: &Openings, along_x: bool, lo: f32, hi: f32, mid: f32) -> bool {
 	let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
 	let span = (hi - lo).max(0.0);
 	if span < EPS {
@@ -146,10 +127,7 @@ pub fn plan_edge_excluded(
 	}
 	let mut covered = 0.0_f32;
 	for (_id, o) in openings.iter() {
-		if !matches!(
-			o.label,
-			OpeningLabel::Boundary | OpeningLabel::Exclusion
-		) {
+		if !matches!(o.label, OpeningLabel::Boundary | OpeningLabel::Exclusion) {
 			continue;
 		}
 		let omin = Vec3::from(o.bounds.min);
@@ -172,11 +150,7 @@ pub fn plan_edge_excluded(
 }
 
 fn subtract_span(spans: &[(f32, f32)], cut_lo: f32, cut_hi: f32) -> Vec<(f32, f32)> {
-	let (cut_lo, cut_hi) = if cut_lo <= cut_hi {
-		(cut_lo, cut_hi)
-	} else {
-		(cut_hi, cut_lo)
-	};
+	let (cut_lo, cut_hi) = if cut_lo <= cut_hi { (cut_lo, cut_hi) } else { (cut_hi, cut_lo) };
 	let mut out = Vec::new();
 	for &(lo, hi) in spans {
 		if cut_hi <= lo + EPS || cut_lo >= hi - EPS {
@@ -199,32 +173,12 @@ mod tests {
 
 	#[test]
 	fn exterior_leaves_shared_edge_unmarked() {
-		let stem = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(4.0, 4.0),
-		};
-		let flange = Aabb2d {
-			min: Vec2::new(0.0, 4.0),
-			max: Vec2::new(10.0, 8.0),
-		};
+		let stem = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(4.0, 4.0) };
+		let flange = Aabb2d { min: Vec2::new(0.0, 4.0), max: Vec2::new(10.0, 8.0) };
 		let mut openings = Openings::new();
-		inject_exterior_boundaries(
-			stem,
-			&[flange],
-			0.0,
-			3.0,
-			"test",
-			"stem",
-			&mut openings,
-		);
+		inject_exterior_boundaries(stem, &[flange], 0.0, 3.0, "test", "stem", &mut openings);
 		// Shared north edge of stem should NOT be fully Boundary-covered.
-		assert!(!plan_edge_excluded(
-			&openings,
-			true,
-			0.0,
-			4.0,
-			4.0,
-		));
+		assert!(!plan_edge_excluded(&openings, true, 0.0, 4.0, 4.0,));
 		// South exterior should be covered.
 		assert!(plan_edge_excluded(&openings, true, 0.0, 4.0, 0.0));
 	}

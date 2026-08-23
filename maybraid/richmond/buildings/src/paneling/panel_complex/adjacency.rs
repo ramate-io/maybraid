@@ -41,12 +41,7 @@ pub fn shared_edges(
 	for ((a, b), tris) in incidences {
 		match tris.as_slice() {
 			[] | [_] => {}
-			[tri0, tri1] => shared.push(SharedEdge {
-				a,
-				b,
-				tri0: *tri0,
-				tri1: *tri1,
-			}),
+			[tri0, tri1] => shared.push(SharedEdge { a, b, tri0: *tri0, tri1: *tri1 }),
 			_ => non_manifold.push((a, b)),
 		}
 	}

@@ -20,7 +20,9 @@ pub use connecting_hall::ConnectingHall;
 pub use i_floor::{IFloor, IFloorParams, IFloorPlanRect, IFloorSlab};
 pub use pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 pub use rect_floor::{RectFloor, RectFloorParams, RectFloorSide, RectFloorSlab};
-pub use rect_ring_floor::{RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab};
+pub use rect_ring_floor::{
+	RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab,
+};
 pub use rectangular_pitched_roof_complex::{
 	EndCap, Overhang, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
 	RidgeJunction, ValleySegment,

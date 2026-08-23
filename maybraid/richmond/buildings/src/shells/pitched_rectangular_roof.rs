@@ -97,26 +97,16 @@ impl PitchedRoofParams {
 		let ridge_half = (half_x - ridge_inset).max(0.0);
 		let wall_z = (half_z - OVERHANG).max(0.0);
 
-		let ridge = (
-			Vec3::new(-ridge_half, ridge_height, 0.0),
-			Vec3::new(ridge_half, ridge_height, 0.0),
-		);
-		let eave_pos = (
-			Vec3::new(-half_x, eave_height, half_z),
-			Vec3::new(half_x, eave_height, half_z),
-		);
-		let eave_neg = (
-			Vec3::new(-half_x, eave_height, -half_z),
-			Vec3::new(half_x, eave_height, -half_z),
-		);
-		let wall_pos = (
-			Vec3::new(-half_x, eave_height, wall_z),
-			Vec3::new(half_x, eave_height, wall_z),
-		);
-		let wall_neg = (
-			Vec3::new(-half_x, eave_height, -wall_z),
-			Vec3::new(half_x, eave_height, -wall_z),
-		);
+		let ridge =
+			(Vec3::new(-ridge_half, ridge_height, 0.0), Vec3::new(ridge_half, ridge_height, 0.0));
+		let eave_pos =
+			(Vec3::new(-half_x, eave_height, half_z), Vec3::new(half_x, eave_height, half_z));
+		let eave_neg =
+			(Vec3::new(-half_x, eave_height, -half_z), Vec3::new(half_x, eave_height, -half_z));
+		let wall_pos =
+			(Vec3::new(-half_x, eave_height, wall_z), Vec3::new(half_x, eave_height, wall_z));
+		let wall_neg =
+			(Vec3::new(-half_x, eave_height, -wall_z), Vec3::new(half_x, eave_height, -wall_z));
 
 		let ends = (true, true);
 		let pos = RoofHalf::new(ridge, eave_pos, wall_pos)
@@ -191,20 +181,9 @@ impl PitchedRoof {
 				pitch_clips[0].clone(),
 				gable_clips.clone(),
 			),
-			params.halves[1].resolve(
-				style,
-				joint_policy,
-				pitch_clips[1].clone(),
-				gable_clips,
-			),
+			params.halves[1].resolve(style, joint_policy, pitch_clips[1].clone(), gable_clips),
 		];
-		Self {
-			params,
-			joint_policy,
-			halves,
-			openings,
-			mapped,
-		}
+		Self { params, joint_policy, halves, openings, mapped }
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {

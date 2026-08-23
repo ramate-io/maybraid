@@ -7,9 +7,10 @@ use crate::fit::{Confines, FitError};
 use crate::usage_areas::clearance::PassageClearance;
 
 use super::super::stall_layout::public_restroom::{
-	PublicRestroomPacked, PublicRestroomRegions, RESTROOM_DOOR_HEADER_MIN, RESTROOM_DOOR_HEIGHT_MAX,
-	RESTROOM_DOOR_HEIGHT_MIN, RESTROOM_DOOR_WIDTH_MAX, RESTROOM_DOOR_WIDTH_MIN,
-	RESTROOM_SINK_DEPTH_MAX, RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_MIN, RESTROOM_STALLS_MIN,
+	PublicRestroomPacked, PublicRestroomRegions, RESTROOM_DOOR_HEADER_MIN,
+	RESTROOM_DOOR_HEIGHT_MAX, RESTROOM_DOOR_HEIGHT_MIN, RESTROOM_DOOR_WIDTH_MAX,
+	RESTROOM_DOOR_WIDTH_MIN, RESTROOM_SINK_DEPTH_MAX, RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_MIN,
+	RESTROOM_STALLS_MIN,
 };
 
 /// Noise / style knobs for [`super::PublicRestroom`].
@@ -31,9 +32,7 @@ impl PublicRestroomParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		if PassageClearance::collect_faces(confines, host).is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "restroom passage",
-			});
+			return Err(FitError::TooSmall { reason: "restroom passage" });
 		}
 
 		let cfg = NoiseConfig::new(noise);
@@ -139,9 +138,6 @@ impl PublicRestroomPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = params.regions().pack(confines)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

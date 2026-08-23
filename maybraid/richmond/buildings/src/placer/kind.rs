@@ -19,22 +19,9 @@ pub enum SoftGoalRole {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProposeKnobs {
 	/// Free-standing AABB sampled in the host.
-	FreeExtent {
-		min_x: f32,
-		max_x: f32,
-		min_z: f32,
-		max_z: f32,
-		height: f32,
-		prefer_wall: bool,
-	},
+	FreeExtent { min_x: f32, max_x: f32, min_z: f32, max_z: f32, height: f32, prefer_wall: bool },
 	/// Long face against a host wall.
-	WallLong {
-		along_min: f32,
-		along_max: f32,
-		depth_min: f32,
-		depth_max: f32,
-		height: f32,
-	},
+	WallLong { along_min: f32, along_max: f32, depth_min: f32, depth_max: f32, height: f32 },
 	/// Free extent as fractions of host long/short plan spans.
 	FreeExtentFrac {
 		long_frac_min: f32,

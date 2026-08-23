@@ -15,13 +15,13 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 
-use crate::openings::{
-	MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,
-};
+use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
-use crate::shells::ortho::{edge_score_for_bounds, standing_face_opening, OrthoSide, WallEdge, EPS};
+use crate::shells::ortho::{
+	edge_score_for_bounds, standing_face_opening, OrthoSide, WallEdge, EPS,
+};
 
 use super::{RectRingFloor, RectRingFloorParams};
 
@@ -167,25 +167,19 @@ impl RectRingFloorParams {
 			assigned.sort_by(|a, b| {
 				connectable_priority(&b.opening.label)
 					.cmp(&connectable_priority(&a.opening.label))
-					.then_with(|| {
-						a.s_lo
-							.partial_cmp(&b.s_lo)
-							.unwrap_or(std::cmp::Ordering::Equal)
-					})
+					.then_with(|| a.s_lo.partial_cmp(&b.s_lo).unwrap_or(std::cmp::Ordering::Equal))
 			});
 			let mut kept = Vec::new();
 			for op in assigned {
-				if kept.iter().any(|k: &EdgeOpening| spans_overlap(k.s_lo, k.s_hi, op.s_lo, op.s_hi))
+				if kept
+					.iter()
+					.any(|k: &EdgeOpening| spans_overlap(k.s_lo, k.s_hi, op.s_lo, op.s_hi))
 				{
 					continue;
 				}
 				kept.push(op);
 			}
-			kept.sort_by(|a, b| {
-				a.s_lo
-					.partial_cmp(&b.s_lo)
-					.unwrap_or(std::cmp::Ordering::Equal)
-			});
+			kept.sort_by(|a, b| a.s_lo.partial_cmp(&b.s_lo).unwrap_or(std::cmp::Ordering::Equal));
 			for op in &kept {
 				mapped.insert(op.id.clone(), op.mapped.clone());
 				openings.insert(op.id.clone(), op.opening.clone());
@@ -225,21 +219,12 @@ fn truncate_opening_to_edge_span(
 	let along_x = tang.x.abs() > tang.z.abs();
 	let p0 = edge.start + tang * s_lo;
 	let p1 = edge.start + tang * s_hi;
-	let (a0, a1) = if along_x {
-		(p0.x.min(p1.x), p0.x.max(p1.x))
-	} else {
-		(p0.z.min(p1.z), p0.z.max(p1.z))
-	};
+	let (a0, a1) =
+		if along_x { (p0.x.min(p1.x), p0.x.max(p1.x)) } else { (p0.z.min(p1.z), p0.z.max(p1.z)) };
 	opening.bounds = if along_x {
-		Aabb3d::from_min_max(
-			Vec3::new(a0, omin.y, omin.z),
-			Vec3::new(a1, omax.y, omax.z),
-		)
+		Aabb3d::from_min_max(Vec3::new(a0, omin.y, omin.z), Vec3::new(a1, omax.y, omax.z))
 	} else {
-		Aabb3d::from_min_max(
-			Vec3::new(omin.x, omin.y, a0),
-			Vec3::new(omax.x, omax.y, a1),
-		)
+		Aabb3d::from_min_max(Vec3::new(omin.x, omin.y, a0), Vec3::new(omax.x, omax.y, a1))
 	};
 	opening
 }
@@ -277,12 +262,7 @@ fn wall_strip_for_edge(
 
 	for op in openings {
 		if op.s_lo > cursor + EPS {
-			nodes.push(RectangularStripNode::new(
-				edge.start + tang * op.s_lo,
-				h,
-				t,
-				0.0,
-			));
+			nodes.push(RectangularStripNode::new(edge.start + tang * op.s_lo, h, t, 0.0));
 			insets.push(None);
 			cursor = op.s_lo;
 		}

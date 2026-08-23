@@ -22,12 +22,8 @@ impl StudyParameterized {
 		let c = confines.center();
 		Ok(Self {
 			style: LabelStyle::Blue,
-			spaciousness: cfg
-				.sample_range_f32_4d(0.9, 1.25, c.x, c.y, c.z, 70.0)
-				.clamp(0.75, 1.5),
-			occupancy: cfg
-				.sample_range_f32_4d(0.2, 0.42, c.x, c.y, c.z, 71.0)
-				.clamp(0.1, 0.65),
+			spaciousness: cfg.sample_range_f32_4d(0.9, 1.25, c.x, c.y, c.z, 70.0).clamp(0.75, 1.5),
+			occupancy: cfg.sample_range_f32_4d(0.2, 0.42, c.x, c.y, c.z, 71.0).clamp(0.1, 0.65),
 		})
 	}
 
@@ -52,14 +48,9 @@ impl StudyPlan {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<Self, FitError> {
-		let regions = StudyRegions {
-			spaciousness: params.spaciousness,
-			occupancy: params.occupancy,
-		};
+		let regions =
+			StudyRegions { spaciousness: params.spaciousness, occupancy: params.occupancy };
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

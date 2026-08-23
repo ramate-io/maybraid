@@ -52,31 +52,17 @@ pub(super) fn decompose_volumes(volumes: &[Aabb3d]) -> Vec<Aabb3d> {
 fn plan_rect(a: &Aabb3d) -> PlanRect {
 	let min = Vec3::from(a.min);
 	let max = Vec3::from(a.max);
-	PlanRect {
-		min_x: min.x,
-		min_z: min.z,
-		max_x: max.x,
-		max_z: max.z,
-	}
+	PlanRect { min_x: min.x, min_z: min.z, max_x: max.x, max_z: max.z }
 }
 
-fn try_split_cross(
-	a: Aabb3d,
-	b: Aabb3d,
-	ra: PlanRect,
-	rb: PlanRect,
-) -> Option<[Aabb3d; 4]> {
+fn try_split_cross(a: Aabb3d, b: Aabb3d, ra: PlanRect, rb: PlanRect) -> Option<[Aabb3d; 4]> {
 	let ax = LongAxis::from_extents(ra.max_x - ra.min_x, ra.max_z - ra.min_z);
 	let bx = LongAxis::from_extents(rb.max_x - rb.min_x, rb.max_z - rb.min_z);
 	if ax == bx {
 		return None;
 	}
 
-	let (hx, hz, rx, rz) = if ax == LongAxis::X {
-		(a, b, ra, rb)
-	} else {
-		(b, a, rb, ra)
-	};
+	let (hx, hz, rx, rz) = if ax == LongAxis::X { (a, b, ra, rb) } else { (b, a, rb, ra) };
 
 	let overlap = rx.overlap(rz)?;
 	let a_pos = rx.max_x > overlap.max_x + EPS;
@@ -89,11 +75,7 @@ fn try_split_cross(
 
 	let cx = 0.5 * (rz.min_x + rz.max_x);
 	let cz = 0.5 * (rx.min_z + rx.max_z);
-	if rx.max_x - cx < EPS
-		|| cx - rx.min_x < EPS
-		|| rz.max_z - cz < EPS
-		|| cz - rz.min_z < EPS
-	{
+	if rx.max_x - cx < EPS || cx - rx.min_x < EPS || rz.max_z - cz < EPS || cz - rz.min_z < EPS {
 		return None;
 	}
 
@@ -112,12 +94,7 @@ fn try_split_cross(
 
 /// Longer+narrower under shorter+wider → keep the higher/wider box, split the
 /// lower into two wings that butt its end gables.
-fn try_split_coaxial(
-	a: Aabb3d,
-	b: Aabb3d,
-	ra: PlanRect,
-	rb: PlanRect,
-) -> Option<Vec<Aabb3d>> {
+fn try_split_coaxial(a: Aabb3d, b: Aabb3d, ra: PlanRect, rb: PlanRect) -> Option<Vec<Aabb3d>> {
 	let ax = LongAxis::from_extents(ra.max_x - ra.min_x, ra.max_z - ra.min_z);
 	let bx = LongAxis::from_extents(rb.max_x - rb.min_x, rb.max_z - rb.min_z);
 	if ax != bx {
@@ -150,11 +127,7 @@ fn try_split_coaxial(
 	}
 
 	// Higher/wider = larger short span; lower/runner = longer long span.
-	let (cap, run, rc, rr) = if span_a > span_b {
-		(a, b, ra, rb)
-	} else {
-		(b, a, rb, ra)
-	};
+	let (cap, run, rc, rr) = if span_a > span_b { (a, b, ra, rb) } else { (b, a, rb, ra) };
 	let cap_long = match ax {
 		LongAxis::X => rc.max_x - rc.min_x,
 		LongAxis::Z => rc.max_z - rc.min_z,

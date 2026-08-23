@@ -65,11 +65,7 @@ impl LodScene for FurnitureNode {
 		LodSceneCulls::None
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		match self.style {
 			FurnitureStyle::Placeholder => {
 				let mesh = FurnitureWireframeAssets::unit_cube();

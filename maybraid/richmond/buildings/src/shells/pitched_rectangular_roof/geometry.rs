@@ -24,11 +24,7 @@ pub struct RoofHalf {
 }
 
 impl RoofHalf {
-	pub fn new(
-		ridge_line: (Vec3, Vec3),
-		eave_line: (Vec3, Vec3),
-		wall_line: (Vec3, Vec3),
-	) -> Self {
+	pub fn new(ridge_line: (Vec3, Vec3), eave_line: (Vec3, Vec3), wall_line: (Vec3, Vec3)) -> Self {
 		Self {
 			ridge_line,
 			eave_line,
@@ -146,10 +142,9 @@ impl RoofHalf {
 		// Gable walling stays in the vertical plane of the wall end. Ridge/eave may
 		// project past that plane for barge overhang; only the pitch uses those ends.
 		let wall_long = (w1 - w0).normalize_or_zero();
-		for (end, draw) in [
-			(0usize, self.draw_in_half_gable_end.0),
-			(1, self.draw_in_half_gable_end.1),
-		] {
+		for (end, draw) in
+			[(0usize, self.draw_in_half_gable_end.0), (1, self.draw_in_half_gable_end.1)]
+		{
 			if !draw {
 				continue;
 			}
@@ -170,12 +165,7 @@ impl RoofHalf {
 			);
 		}
 
-		ResolvedRoofHalf {
-			pitch,
-			wall,
-			hips,
-			gables,
-		}
+		ResolvedRoofHalf { pitch, wall, hips, gables }
 	}
 }
 

@@ -35,20 +35,10 @@ impl ConnectingHall {
 		match build_stations(end_a, end_b) {
 			Some((midpoint, stations)) => {
 				let tube = Tube::from_nodes(style, stations);
-				Self {
-					style,
-					end_a,
-					end_b,
-					midpoint,
-					stations,
-					tube,
-				}
+				Self { style, end_a, end_b, midpoint, stations, tube }
 			}
 			None => {
-				debug_assert!(
-					false,
-					"ConnectingHall: orientation rays do not meet in plan"
-				);
+				debug_assert!(false, "ConnectingHall: orientation rays do not meet in plan");
 				Self {
 					style,
 					end_a,
@@ -71,8 +61,8 @@ impl ConnectingHall {
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
-		self.tube =
-			std::mem::replace(&mut self.tube, Tube::new(self.style)).with_joint_policy(joint_policy);
+		self.tube = std::mem::replace(&mut self.tube, Tube::new(self.style))
+			.with_joint_policy(joint_policy);
 		self
 	}
 
@@ -329,12 +319,7 @@ mod tests {
 		let top = hall.stations()[0]
 			.top_middle
 			.ok_or_else(|| anyhow::anyhow!("top_middle missing"))?;
-		assert!(
-			(top.y - (lintel_y + 0.3)).abs() < 1e-3,
-			"top.y={} lintel={}",
-			top.y,
-			lintel_y
-		);
+		assert!((top.y - (lintel_y + 0.3)).abs() < 1e-3, "top.y={} lintel={}", top.y, lintel_y);
 		assert!((hall.stations()[0].height - 2.3).abs() < 1e-3);
 		Ok(())
 	}

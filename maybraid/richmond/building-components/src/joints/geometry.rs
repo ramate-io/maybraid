@@ -68,11 +68,7 @@ impl JointPost {
 		let yaw = yaw_in + 0.5 * wrap_pi(yaw_out - yaw_in);
 		Placed {
 			geom: JointGeometry::post(),
-			placement: Placement::new(cur, yaw).with_scale(Vec3::new(
-				xz,
-				height.max(1e-4),
-				xz,
-			)),
+			placement: Placement::new(cur, yaw).with_scale(Vec3::new(xz, height.max(1e-4), xz)),
 		}
 	}
 
@@ -108,13 +104,7 @@ impl JointPost {
 		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
 		// Kit \(X,Z\) span is 1 before scale → `thickness` is the world diameter.
 		let xz = (thickness / JOINT_KIT_XZ).max(1e-4);
-		Some(Placement {
-			translation: start,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::new(xz, len, xz),
-		})
+		Some(Placement { translation: start, yaw, pitch, roll, scale: Vec3::new(xz, len, xz) })
 	}
 }
 

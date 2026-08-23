@@ -18,9 +18,9 @@ use super::bites_sitdown_stall::BitesSitdownStall;
 use super::bites_stall::BitesStall;
 use super::knick_knack_stall::KnickKnackStall;
 use super::lounge::Lounge;
+use super::mini_mart::MiniMart;
 use super::parts_stall::PartsStall;
 use super::public_restroom::PublicRestroom;
-use super::mini_mart::MiniMart;
 
 /// Selected commercial stall interior.
 #[derive(Debug, Clone, PartialEq)]
@@ -66,11 +66,7 @@ fn interior_catalog() -> TypedBucketThrow<InteriorKind> {
 }
 
 fn subtype_noise(noise: NoiseParams) -> NoiseParams {
-	NoiseParams {
-		noise_type: NoiseType::Cellular,
-		frequency: 0.35,
-		..noise
-	}
+	NoiseParams { noise_type: NoiseType::Cellular, frequency: 0.35, ..noise }
 }
 
 fn try_fit_kind(
@@ -151,16 +147,13 @@ impl BuildingComponents for CommercialStallInterior {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::openings::{Opening, OpeningId, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, Openings};
 
 	#[test]
 	fn cellular_pick_varies_across_neighbors() {
-		let a = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(4.0, 3.0, 5.0),
-		));
+		let a = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 5.0)));
 		let b = Confines::from_bounds(Aabb3d::from_min_max(
 			Vec3::new(8.0, 0.0, 0.0),
 			Vec3::new(12.0, 3.0, 5.0),
@@ -173,14 +166,8 @@ mod tests {
 		};
 		let (ia, _) = CommercialStallInterior::fit_to_confines(&a, noise).unwrap();
 		let (ib, _) = CommercialStallInterior::fit_to_confines(&b, noise).unwrap();
-		assert!(!ia
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
-		assert!(!ib
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!ia.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+		assert!(!ib.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -212,14 +199,8 @@ mod tests {
 	#[test]
 	fn interior_fit_never_errors() {
 		// Even a degenerate bay must resolve (catalog or Lounge).
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(1.0, 2.0, 1.0),
-		));
-		assert!(CommercialStallInterior::fit_to_confines(
-			&confines,
-			NoiseParams::default()
-		)
-		.is_ok());
+		let confines =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1.0, 2.0, 1.0)));
+		assert!(CommercialStallInterior::fit_to_confines(&confines, NoiseParams::default()).is_ok());
 	}
 }

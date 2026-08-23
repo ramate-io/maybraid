@@ -28,11 +28,9 @@ impl RoundedRectFloorParams {
 		radius: f32,
 	) -> SlabParts {
 		match slab {
-			RoundedRectFloorSlab::None => SlabParts {
-				core: None,
-				edges: Vec::new(),
-				quarters: Vec::new(),
-			},
+			RoundedRectFloorSlab::None => {
+				SlabParts { core: None, edges: Vec::new(), quarters: Vec::new() }
+			}
 			RoundedRectFloorSlab::Solid => {
 				let cutting: Vec<_> = self
 					.openings
@@ -73,11 +71,7 @@ impl RoundedRectFloorParams {
 						}
 					}
 				}
-				SlabParts {
-					core,
-					edges,
-					quarters,
-				}
+				SlabParts { core, edges, quarters }
 			}
 		}
 	}
@@ -117,9 +111,9 @@ fn resolve_piece(
 	match merge_slab_insets(plan, cutting.iter().copied()) {
 		None => Some(RoundedSlabPiece::Solid(solid_rect(style, plan, thickness))),
 		Some(None) => None,
-		Some(Some(inset)) => Some(RoundedSlabPiece::Clipped(clipped_rect(
-			style, plan, thickness, inset,
-		))),
+		Some(Some(inset)) => {
+			Some(RoundedSlabPiece::Clipped(clipped_rect(style, plan, thickness, inset)))
+		}
 	}
 }
 

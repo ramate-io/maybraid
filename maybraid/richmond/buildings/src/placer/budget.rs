@@ -29,11 +29,7 @@ impl OccupiedBudget {
 
 	/// Whether `add` fits under the appropriate cap.
 	pub fn accepts(&self, add: f32, is_structure: bool) -> bool {
-		let cap = if is_structure {
-			self.structure_occupancy
-		} else {
-			self.furniture_occupancy
-		};
+		let cap = if is_structure { self.structure_occupancy } else { self.furniture_occupancy };
 		(self.occupied + add) / self.room_area <= cap + 1e-3
 	}
 

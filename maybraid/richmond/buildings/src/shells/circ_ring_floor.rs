@@ -74,13 +74,7 @@ impl Default for CircRingFloorParams {
 
 impl CircRingFloorParams {
 	pub fn new(center_xz: Vec3, outer_radius: f32, inner_radius: f32, storey_height: f32) -> Self {
-		Self {
-			center_xz,
-			outer_radius,
-			inner_radius,
-			storey_height,
-			..Self::default()
-		}
+		Self { center_xz, outer_radius, inner_radius, storey_height, ..Self::default() }
 	}
 
 	pub fn floor(mut self, floor: CircRingFloorSlab) -> Self {
@@ -139,28 +133,14 @@ impl CircRingFloor {
 		let (outer_radius, inner_radius) = sanitize_radii(params.outer_radius, params.inner_radius);
 		let storey_height = params.storey_height.max(1e-4);
 		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let params = CircRingFloorParams {
-			center_xz,
-			outer_radius,
-			inner_radius,
-			storey_height,
-			..params
-		};
+		let params =
+			CircRingFloorParams { center_xz, outer_radius, inner_radius, storey_height, ..params };
 
 		let (outer_wall, inner_wall, openings, mapped) = params.resolve_walls();
 		let floor = params.resolve_slab(params.floor, center_xz);
-		let ceiling =
-			params.resolve_slab(params.ceiling, center_xz + Vec3::Y * storey_height);
+		let ceiling = params.resolve_slab(params.ceiling, center_xz + Vec3::Y * storey_height);
 
-		Self {
-			params,
-			outer_wall,
-			inner_wall,
-			floor,
-			ceiling,
-			openings,
-			mapped,
-		}
+		Self { params, outer_wall, inner_wall, floor, ceiling, openings, mapped }
 	}
 
 	pub fn params(&self) -> &CircRingFloorParams {

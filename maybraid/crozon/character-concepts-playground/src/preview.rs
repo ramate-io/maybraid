@@ -10,7 +10,7 @@ use bevy::scene::prelude::bsn;
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	assembly::CharacterPartSlot,
-	character_bounds, ComponentsOnly,
+	character_bounds,
 	species::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
@@ -42,8 +42,9 @@ use crozon_characters::{
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		ylter::YilterConfig,
 	},
-	AnimRef, AnimRefRoot, CharacterComponents, CharacterMembers, CharacterRecipe, MaterialRefRoot,
-	PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied, SocketRefRoot,
+	AnimRef, AnimRefRoot, CharacterComponents, CharacterMembers, CharacterRecipe, ComponentsOnly,
+	MaterialRefRoot, PartNode, RigId, RigNode, SkinRefApplied, SkinRefRoot, SocketRefApplied,
+	SocketRefRoot,
 };
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -1216,11 +1217,9 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert((
-		ConceptPreviewRoot,
-		PreviewAwaitingReveal,
-		Visibility::Hidden,
-	));
+	commands
+		.entity(entity)
+		.insert((ConceptPreviewRoot, PreviewAwaitingReveal, Visibility::Hidden));
 }
 
 /// Stamp preview-only UI markers onto nested hosts after membership, and write

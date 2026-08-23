@@ -42,12 +42,7 @@ impl OpeningId {
 	/// Use for openings authored by a floor plan / typology. Inbound confine
 	/// openings keep their original ids.
 	pub fn scoped(scope: impl AsRef<str>, role: impl AsRef<str>, slot: impl AsRef<str>) -> Self {
-		Self::new(format!(
-			"{}_{}_{}",
-			scope.as_ref(),
-			role.as_ref(),
-			slot.as_ref()
-		))
+		Self::new(format!("{}_{}_{}", scope.as_ref(), role.as_ref(), slot.as_ref()))
 	}
 
 	pub fn as_str(&self) -> &str {
@@ -92,10 +87,7 @@ impl OpeningLabel {
 
 	/// Labels that may cut floor / ceiling slabs (not wall passages / apertures).
 	pub fn cuts_slab(&self) -> bool {
-		matches!(
-			self,
-			Self::Boundary | Self::Exclusion | Self::Shaft | Self::Custom(_)
-		)
+		matches!(self, Self::Boundary | Self::Exclusion | Self::Shaft | Self::Custom(_))
 	}
 }
 
@@ -182,27 +174,12 @@ pub struct MappedOpeningQuad {
 }
 
 impl MappedOpeningQuad {
-	pub fn new(
-		lower_left: Vec3,
-		lower_right: Vec3,
-		upper_left: Vec3,
-		upper_right: Vec3,
-	) -> Self {
-		Self {
-			lower_left,
-			lower_right,
-			upper_left,
-			upper_right,
-		}
+	pub fn new(lower_left: Vec3, lower_right: Vec3, upper_left: Vec3, upper_right: Vec3) -> Self {
+		Self { lower_left, lower_right, upper_left, upper_right }
 	}
 
 	pub fn corners(self) -> (Vec3, Vec3, Vec3, Vec3) {
-		(
-			self.lower_left,
-			self.lower_right,
-			self.upper_left,
-			self.upper_right,
-		)
+		(self.lower_left, self.lower_right, self.upper_left, self.upper_right)
 	}
 }
 
@@ -277,11 +254,8 @@ impl MappedOpening {
 		let bottom_mid = (bl + br) * 0.5;
 		let top_mid = (tl + tr) * 0.5;
 		let face_up = (top_mid - bottom_mid).normalize_or_zero();
-		let lift = if face_up.length_squared() > 0.0 {
-			face_up * overrun
-		} else {
-			Vec3::Y * overrun
-		};
+		let lift =
+			if face_up.length_squared() > 0.0 { face_up * overrun } else { Vec3::Y * overrun };
 		Self {
 			face: MappedOpeningQuad::new(bl, br, tl + lift, tr + lift),
 			orientation: self.orientation,
@@ -322,10 +296,7 @@ pub trait MapsOpenings {
 ///
 /// Shaft / Exclusion / other labels are kept as authored. Wall-mapped connectables
 /// from `shell` overwrite plan entries so truncated leaves match the geometry.
-pub fn sync_connectable_openings_from_mapped(
-	openings: &mut Openings,
-	shell: &impl MapsOpenings,
-) {
+pub fn sync_connectable_openings_from_mapped(openings: &mut Openings, shell: &impl MapsOpenings) {
 	openings.openings.retain(|id, opening| match opening.label {
 		OpeningLabel::Passage | OpeningLabel::Aperture => shell.mapped_opening(id).is_some(),
 		_ => true,

@@ -30,11 +30,7 @@ pub struct ApproximatedCircle {
 
 impl ApproximatedCircle {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		let clip = if self.solid || self.clip <= 1e-6 {
-			None
-		} else {
-			Some(self.clip)
-		};
+		let clip = if self.solid || self.clip <= 1e-6 { None } else { Some(self.clip) };
 		(
 			PreviewSubject::ApproximatedCircle {
 				center: self.center,

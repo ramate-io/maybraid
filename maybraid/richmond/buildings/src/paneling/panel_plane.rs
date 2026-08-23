@@ -40,14 +40,7 @@ pub fn panel_plane_frame(a: Vec3, b: Vec3, c: Vec3) -> Option<PanelPlaneFrame> {
 	if (b2.x * c2.y - b2.y * c2.x).abs() < 1e-12 {
 		return None;
 	}
-	Some(PanelPlaneFrame {
-		origin: a,
-		e0,
-		normal,
-		e1,
-		b2,
-		c2,
-	})
+	Some(PanelPlaneFrame { origin: a, e0, normal, e1, b2, c2 })
 }
 
 impl PanelPlaneFrame {
@@ -71,12 +64,6 @@ impl PanelPlaneFrame {
 	pub fn placement(&self) -> Placement {
 		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, self.normal, self.e1));
 		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
-		Placement {
-			translation: self.origin,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::ONE,
-		}
+		Placement { translation: self.origin, yaw, pitch, roll, scale: Vec3::ONE }
 	}
 }

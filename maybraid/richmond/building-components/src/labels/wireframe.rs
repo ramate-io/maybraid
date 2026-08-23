@@ -30,9 +30,7 @@ impl LabelWireframeAssets {
 	/// Unlit material for a label style's wireframe.
 	pub fn material_for(style: LabelStyle) -> Handle<StandardMaterial> {
 		let key = pack_color(style.color());
-		let map = MATERIALS
-			.get()
-			.expect("LabelWireframePlugin must run before label scenes");
+		let map = MATERIALS.get().expect("LabelWireframePlugin must run before label scenes");
 		let guard = map.lock().expect("label wireframe material map");
 		guard
 			.get(&key)
@@ -128,7 +126,5 @@ fn init_label_wireframes(
 	mut commands: Commands,
 ) {
 	LabelWireframeAssets::init(&mut meshes, &mut materials);
-	commands.insert_resource(LabelWireframeAssets {
-		unit_cube: LabelWireframeAssets::unit_cube(),
-	});
+	commands.insert_resource(LabelWireframeAssets { unit_cube: LabelWireframeAssets::unit_cube() });
 }

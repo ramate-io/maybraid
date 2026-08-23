@@ -71,9 +71,6 @@ impl FittedRectangle {
 			),
 			None => (self.a0, self.a1, self.b0, self.b1),
 		};
-		(
-			PreviewSubject::FittedRectangle { a0, a1, b0, b1 },
-			self.transform.transform(),
-		)
+		(PreviewSubject::FittedRectangle { a0, a1, b0, b1 }, self.transform.transform())
 	}
 }

@@ -7,9 +7,7 @@ use richmond_building_components::BuildingComponents;
 use crate::openings::{MapsOpenings, OpeningId, Openings};
 use crate::paneling::ClippedRectangularStripPiece;
 
-use super::{
-	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab,
-};
+use super::{RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab};
 
 #[test]
 fn default_has_straights_and_arc_corners() {
@@ -26,10 +24,7 @@ fn default_has_straights_and_arc_corners() {
 	for c in r.corners() {
 		let corner = c.as_ref().expect("corner arc present");
 		assert!(!corner.partitions.is_empty());
-		assert!(corner
-			.partitions
-			.iter()
-			.any(|p| matches!(p.geometry, Partition::Arc(_))));
+		assert!(corner.partitions.iter().any(|p| matches!(p.geometry, Partition::Arc(_))));
 	}
 	let south = &r.straights()[RoundedRectFloorSide::South.face_index()];
 	let len = match &south.pieces()[0] {
@@ -77,17 +72,11 @@ fn south_passage_clips_straight() {
 
 #[test]
 fn solid_floor_emits_core_edges_and_quarters() {
-	let r = RoundedRectFloorParams::default()
-		.floor(RoundedRectFloorSlab::Solid)
-		.build();
+	let r = RoundedRectFloorParams::default().floor(RoundedRectFloorSlab::Solid).build();
 	assert!(r.has_floor());
 	// 4 wall straights + core + 4 edge strips + quarter fans → well above walls alone.
 	let panels = r.panel_nodes_for_level(LodSceneLevel::High);
-	assert!(
-		panels.len() > 8,
-		"expected core + edge strips + quarters, got {}",
-		panels.len()
-	);
+	assert!(panels.len() > 8, "expected core + edge strips + quarters, got {}", panels.len());
 	let parts = r.partition_nodes_for_level(LodSceneLevel::High);
 	assert!(!parts.is_empty(), "arc corners should emit partitions");
 }

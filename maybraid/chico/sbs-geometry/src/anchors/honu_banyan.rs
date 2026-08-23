@@ -370,4 +370,3 @@ mod tests {
 		assert!(b.x.abs() > 0.85);
 	}
 }
-

@@ -33,26 +33,18 @@ impl RoundedRectCorner {
 	pub fn center(self, plan: PlanRect, radius: f32) -> Vec3 {
 		let r = radius.max(0.0);
 		match self {
-			Self::SouthEast => Vec3::new(
-				plan.center.x + plan.half_x - r,
-				plan.y,
-				plan.center.z - plan.half_z + r,
-			),
-			Self::NorthEast => Vec3::new(
-				plan.center.x + plan.half_x - r,
-				plan.y,
-				plan.center.z + plan.half_z - r,
-			),
-			Self::NorthWest => Vec3::new(
-				plan.center.x - plan.half_x + r,
-				plan.y,
-				plan.center.z + plan.half_z - r,
-			),
-			Self::SouthWest => Vec3::new(
-				plan.center.x - plan.half_x + r,
-				plan.y,
-				plan.center.z - plan.half_z + r,
-			),
+			Self::SouthEast => {
+				Vec3::new(plan.center.x + plan.half_x - r, plan.y, plan.center.z - plan.half_z + r)
+			}
+			Self::NorthEast => {
+				Vec3::new(plan.center.x + plan.half_x - r, plan.y, plan.center.z + plan.half_z - r)
+			}
+			Self::NorthWest => {
+				Vec3::new(plan.center.x - plan.half_x + r, plan.y, plan.center.z + plan.half_z - r)
+			}
+			Self::SouthWest => {
+				Vec3::new(plan.center.x - plan.half_x + r, plan.y, plan.center.z - plan.half_z + r)
+			}
 		}
 	}
 
@@ -136,12 +128,7 @@ impl RoundedRectFloorParams {
 			]
 		};
 
-		RoundedRectGeom {
-			plan,
-			radius: r,
-			height,
-			straights,
-		}
+		RoundedRectGeom { plan, radius: r, height, straights }
 	}
 }
 

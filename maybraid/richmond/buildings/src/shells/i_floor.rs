@@ -84,12 +84,7 @@ impl Default for IFloorParams {
 
 impl IFloorParams {
 	pub fn new(center_xz: Vec3, central_rectangle: Vec2, storey_height: f32) -> Self {
-		Self {
-			center_xz,
-			central_rectangle,
-			storey_height,
-			..Self::default()
-		}
+		Self { center_xz, central_rectangle, storey_height, ..Self::default() }
 	}
 
 	pub fn top_left_length(mut self, length: Option<f32>) -> Self {
@@ -190,18 +185,12 @@ impl IFloor {
 	}
 
 	fn from_params(params: IFloorParams) -> Self {
-		let central = Vec2::new(
-			params.central_rectangle.x.max(1e-4),
-			params.central_rectangle.y.max(1e-4),
-		);
+		let central =
+			Vec2::new(params.central_rectangle.x.max(1e-4), params.central_rectangle.y.max(1e-4));
 		let storey_height = params.storey_height.max(1e-4);
 		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let params = IFloorParams {
-			center_xz,
-			central_rectangle: central,
-			storey_height,
-			..params
-		};
+		let params =
+			IFloorParams { center_xz, central_rectangle: central, storey_height, ..params };
 
 		let geom = params.resolve_geometry();
 		let (walls, openings, mapped) = params.resolve_walls(&geom.edges);
@@ -209,15 +198,7 @@ impl IFloor {
 		let ceiling_pieces =
 			params.resolve_slab_pieces(params.ceiling, &geom.slab_rects, geom.y0 + storey_height);
 
-		Self {
-			params,
-			walls,
-			edges: geom.edges,
-			floor_pieces,
-			ceiling_pieces,
-			openings,
-			mapped,
-		}
+		Self { params, walls, edges: geom.edges, floor_pieces, ceiling_pieces, openings, mapped }
 	}
 
 	pub fn params(&self) -> &IFloorParams {

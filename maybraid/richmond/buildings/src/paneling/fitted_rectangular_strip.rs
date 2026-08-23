@@ -5,9 +5,9 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};
 use crate::paneling::rect_crease::joint_along_fitted_bay_crease;
-use crate::paneling::fitted_rectangle::FittedRectangle;
 
 /// Equal-station strip; each bay is an independently fitted rectangle kit.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,10 +49,7 @@ impl FittedRectangularStrip {
 		let rail_a: Vec<PanelPoint> = rail_a.into_iter().map(Into::into).collect();
 		let rail_b: Vec<PanelPoint> = rail_b.into_iter().map(Into::into).collect();
 		if rail_a.len() != rail_b.len() || rail_a.len() < 2 {
-			debug_assert!(
-				false,
-				"FittedRectangularStrip::from_lines requires equal lengths >= 2"
-			);
+			debug_assert!(false, "FittedRectangularStrip::from_lines requires equal lengths >= 2");
 			return Self::new(style);
 		}
 		let mut strip = Self::new(style);
@@ -74,8 +71,7 @@ impl FittedRectangularStrip {
 			return self;
 		}
 		let (prev_a, prev_b) = self.authored[self.authored.len() - 2];
-		self.bays
-			.push(FittedRectangle::new(self.style, prev_a, rail_a, prev_b, rail_b));
+		self.bays.push(FittedRectangle::new(self.style, prev_a, rail_a, prev_b, rail_b));
 		self
 	}
 
@@ -93,9 +89,12 @@ impl FittedRectangularStrip {
 			let prev = &self.bays[i];
 			let next = &self.bays[i + 1];
 			let thickness = (prev.end_thickness() + next.start_thickness()) * 0.5;
-			if let Some(j) =
-				joint_along_fitted_bay_crease(&prev.fitted, &next.fitted, thickness, self.joint_policy)
-			{
+			if let Some(j) = joint_along_fitted_bay_crease(
+				&prev.fitted,
+				&next.fitted,
+				thickness,
+				self.joint_policy,
+			) {
 				out.push(j);
 			}
 		}
@@ -125,16 +124,8 @@ mod tests {
 
 	#[test]
 	fn three_stations_two_rectangle_kits() {
-		let a = [
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = [
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 4.0),
-		];
+		let a = [Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let b = [Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0), Vec3::new(2.0, 0.0, 4.0)];
 		let s = FittedRectangularStrip::from_lines(PanelStyle::RoughStonework, a, b);
 		assert_eq!(s.bays().len(), 2);
 		assert!(s
@@ -147,16 +138,8 @@ mod tests {
 
 	#[test]
 	fn folded_strip_emits_crease_joint() {
-		let a = [
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = [
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 1.5, 4.0),
-		];
+		let a = [Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let b = [Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0), Vec3::new(2.0, 1.5, 4.0)];
 		let s = FittedRectangularStrip::from_lines(PanelStyle::RoughStonework, a, b);
 		assert_eq!(s.joint_nodes().len(), 1);
 		let muted = s.clone().with_joint_policy(PanelComplexJointPolicy::never());

@@ -21,10 +21,10 @@ impl lod::gen::LodScene for RoughStoneworkJoint {
 
 	fn scene_lod_status(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneStatus {
 		let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
-		let prev_factor = lod_ref.previous_transform.translation.distance(probe.center)
-			/ probe.extent.max(1e-4);
-		let curr_factor = lod_ref.current_transform.translation.distance(probe.center)
-			/ probe.extent.max(1e-4);
+		let prev_factor =
+			lod_ref.previous_transform.translation.distance(probe.center) / probe.extent.max(1e-4);
+		let curr_factor =
+			lod_ref.current_transform.translation.distance(probe.center) / probe.extent.max(1e-4);
 		let prev = JointLod::band_from_distance_factor(prev_factor);
 		let curr = JointLod::band_from_distance_factor(curr_factor);
 		if prev == curr {

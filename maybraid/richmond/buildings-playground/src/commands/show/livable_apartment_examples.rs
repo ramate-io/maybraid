@@ -15,9 +15,6 @@ pub struct LivableApartmentExamples {
 
 impl LivableApartmentExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::LivableApartmentExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::LivableApartmentExamples, self.transform.transform())
 	}
 }

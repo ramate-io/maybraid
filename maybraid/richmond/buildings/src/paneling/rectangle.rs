@@ -10,9 +10,7 @@ use richmond_building_components::panels::{PanelGeometry, PanelNode, PanelStyle}
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
-use crate::paneling::rect_fit::{
-	fallback_oriented, orient_rectangle, OrientedRect, RectInset,
-};
+use crate::paneling::rect_fit::{fallback_oriented, orient_rectangle, OrientedRect, RectInset};
 
 /// Solid oriented rectangle → one [`PanelGeometry::Rectangle`] kit.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,41 +37,16 @@ impl Rectangle {
 		roll: f32,
 	) -> Self {
 		let height = height.max(1e-4);
-		let thickness = if thickness > 1e-6 {
-			thickness
-		} else {
-			DEFAULT_PANEL_THICKNESS
-		};
-		let oriented =
-			orient_rectangle(origin, edge, height, roll).unwrap_or_else(|| {
-				fallback_oriented(origin, edge, height)
-			});
-		let panel = PanelNode::new(
-			style,
-			PanelGeometry::rectangle(),
-			oriented.solid_placement(thickness),
-		);
-		Self {
-			style,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-			oriented,
-			panel,
-		}
+		let thickness = if thickness > 1e-6 { thickness } else { DEFAULT_PANEL_THICKNESS };
+		let oriented = orient_rectangle(origin, edge, height, roll)
+			.unwrap_or_else(|| fallback_oriented(origin, edge, height));
+		let panel =
+			PanelNode::new(style, PanelGeometry::rectangle(), oriented.solid_placement(thickness));
+		Self { style, origin, edge, height, thickness, roll, oriented, panel }
 	}
 
 	pub fn rough_stone(origin: Vec3, edge: Vec3, height: f32, thickness: f32, roll: f32) -> Self {
-		Self::new(
-			PanelStyle::RoughStonework,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-		)
+		Self::new(PanelStyle::RoughStonework, origin, edge, height, thickness, roll)
 	}
 
 	pub fn shepherds_thatch(
@@ -83,14 +56,7 @@ impl Rectangle {
 		thickness: f32,
 		roll: f32,
 	) -> Self {
-		Self::new(
-			PanelStyle::ShepherdsThatch,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-		)
+		Self::new(PanelStyle::ShepherdsThatch, origin, edge, height, thickness, roll)
 	}
 
 	pub fn panel_node(&self) -> &PanelNode {
@@ -129,15 +95,9 @@ impl ClippedRectangle {
 		inset: RectInset,
 	) -> Self {
 		let height = height.max(1e-4);
-		let thickness = if thickness > 1e-6 {
-			thickness
-		} else {
-			DEFAULT_PANEL_THICKNESS
-		};
-		let oriented =
-			orient_rectangle(origin, edge, height, roll).unwrap_or_else(|| {
-				fallback_oriented(origin, edge, height)
-			});
+		let thickness = if thickness > 1e-6 { thickness } else { DEFAULT_PANEL_THICKNESS };
+		let oriented = orient_rectangle(origin, edge, height, roll)
+			.unwrap_or_else(|| fallback_oriented(origin, edge, height));
 		let panels = inset
 			.frame_pieces(oriented.width, oriented.depth)
 			.into_iter()
@@ -149,17 +109,7 @@ impl ClippedRectangle {
 				)
 			})
 			.collect();
-		Self {
-			style,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-			oriented,
-			inset,
-			panels,
-		}
+		Self { style, origin, edge, height, thickness, roll, oriented, inset, panels }
 	}
 
 	pub fn rough_stone(
@@ -170,15 +120,7 @@ impl ClippedRectangle {
 		roll: f32,
 		inset: RectInset,
 	) -> Self {
-		Self::new(
-			PanelStyle::RoughStonework,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-			inset,
-		)
+		Self::new(PanelStyle::RoughStonework, origin, edge, height, thickness, roll, inset)
 	}
 
 	pub fn shepherds_thatch(
@@ -189,15 +131,7 @@ impl ClippedRectangle {
 		roll: f32,
 		inset: RectInset,
 	) -> Self {
-		Self::new(
-			PanelStyle::ShepherdsThatch,
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-			inset,
-		)
+		Self::new(PanelStyle::ShepherdsThatch, origin, edge, height, thickness, roll, inset)
 	}
 
 	pub fn panels(&self) -> &[PanelNode] {
@@ -234,9 +168,6 @@ mod tests {
 			RectInset::uniform(0.25),
 		);
 		assert_eq!(r.panels().len(), 4);
-		assert!(r
-			.panels()
-			.iter()
-			.all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
+		assert!(r.panels().iter().all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
 	}
 }

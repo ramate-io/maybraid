@@ -94,15 +94,11 @@ impl TrazaloidParams {
 			let (a0, b0) = face_bottom_pair(side, foot);
 			let (a1, b1) = face_bottom_pair(side, waist);
 			let face_width = a0.distance(b0).max(1e-4);
-			let (width, height) = door_dims_from_bounds(&opening.bounds, side, face_width, face_height);
+			let (width, height) =
+				door_dims_from_bounds(&opening.bounds, side, face_width, face_height);
 			let clip = ground_door_clip(a0, b0, a1, b1, width, height);
 			let mapped = mapped_from_outside_clip(&clip, side.orientation());
-			out[idx] = Some(SidePassageMap {
-				clip,
-				id,
-				opening,
-				mapped,
-			});
+			out[idx] = Some(SidePassageMap { clip, id, opening, mapped });
 		}
 		out
 	}
@@ -164,10 +160,7 @@ fn best_side_for_bounds(bounds: &Aabb3d, foot: PlanRect) -> Option<TrazaloidSide
 /// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; map wants looking **out**.
 fn mapped_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> MappedOpening {
 	debug_assert!(clip.len() >= 4);
-	MappedOpening::new(
-		MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]),
-		orientation,
-	)
+	MappedOpening::new(MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]), orientation)
 }
 
 /// Centered door opening on the face, flush with the ground, sized in meters.

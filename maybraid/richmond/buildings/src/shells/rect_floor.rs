@@ -76,12 +76,7 @@ impl Default for RectFloorParams {
 
 impl RectFloorParams {
 	pub fn new(center_xz: Vec3, footprint: Vec2, storey_height: f32) -> Self {
-		Self {
-			center_xz,
-			footprint,
-			storey_height,
-			..Self::default()
-		}
+		Self { center_xz, footprint, storey_height, ..Self::default() }
 	}
 
 	pub fn floor(mut self, floor: RectFloorSlab) -> Self {
@@ -153,12 +148,7 @@ impl RectFloor {
 		let footprint = Vec2::new(params.footprint.x.max(1e-4), params.footprint.y.max(1e-4));
 		let storey_height = params.storey_height.max(1e-4);
 		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let params = RectFloorParams {
-			center_xz,
-			footprint,
-			storey_height,
-			..params
-		};
+		let params = RectFloorParams { center_xz, footprint, storey_height, ..params };
 
 		let plan = params.plan();
 		let (side_insets, openings, mapped) = params.resolve_wall_openings(plan);
@@ -188,14 +178,7 @@ impl RectFloor {
 			),
 		);
 
-		Self {
-			params,
-			walls,
-			floor,
-			ceiling,
-			openings,
-			mapped,
-		}
+		Self { params, walls, floor, ceiling, openings, mapped }
 	}
 
 	pub fn params(&self) -> &RectFloorParams {
@@ -216,10 +199,7 @@ impl RectFloor {
 }
 
 fn station_at(plan: PlanRect, y: f32, thickness: f32) -> RectangularNTubeStation {
-	let p = PlanRect {
-		y,
-		..plan
-	};
+	let p = PlanRect { y, ..plan };
 	RectangularNTubeStation::new([
 		RectangularNTubeCorner::new(p.sw(), thickness),
 		RectangularNTubeCorner::new(p.se(), thickness),

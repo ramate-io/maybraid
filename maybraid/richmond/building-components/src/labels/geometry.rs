@@ -17,9 +17,7 @@ impl Default for LabelGeometry {
 
 impl LabelGeometry {
 	pub fn rectangle(extents: Vec3) -> Self {
-		Self::Rectangle {
-			extents: extents.max(Vec3::splat(1e-4)),
-		}
+		Self::Rectangle { extents: extents.max(Vec3::splat(1e-4)) }
 	}
 
 	pub fn extents(self) -> Vec3 {

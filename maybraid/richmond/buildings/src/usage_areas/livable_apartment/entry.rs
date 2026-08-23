@@ -32,10 +32,7 @@ pub(crate) fn collect_work_rects(cells: &MultiConfines) -> (usize, Vec<Aabb2d>) 
 			break;
 		}
 	}
-	let rects = cells
-		.iter()
-		.map(|p| host_xz(&p.confines.bounds))
-		.collect();
+	let rects = cells.iter().map(|p| host_xz(&p.confines.bounds)).collect();
 	(door_ci, rects)
 }
 
@@ -78,19 +75,13 @@ pub(crate) fn partition_entry_and_body(
 	access: PlanAccessParams,
 ) -> EntryBodyPartition {
 	let mut entry_bands = Vec::new();
-	let mut pending: Vec<Aabb2d> = work
-		.into_iter()
-		.filter(|r| aabb2_area(*r) > EPS * EPS)
-		.collect();
+	let mut pending: Vec<Aabb2d> =
+		work.into_iter().filter(|r| aabb2_area(*r) > EPS * EPS).collect();
 
 	if let Some(door) = door {
-		if let Some((mut entry, rem)) =
-			carve_entryway(door_cell, door, ENTRY_DEPTH, ENTRY_WIDTH)
-		{
-			let usable_rem: Vec<Aabb2d> = rem
-				.into_iter()
-				.filter(|r| access.is_room_rect(*r))
-				.collect();
+		if let Some((mut entry, rem)) = carve_entryway(door_cell, door, ENTRY_DEPTH, ENTRY_WIDTH) {
+			let usable_rem: Vec<Aabb2d> =
+				rem.into_iter().filter(|r| access.is_room_rect(*r)).collect();
 			if usable_rem.is_empty() {
 				entry = door_cell;
 			}
@@ -115,19 +106,14 @@ pub(crate) fn partition_entry_and_body(
 		guard += 1;
 		let Some(idx) = rest.iter().position(|r| {
 			access.is_access_corridor(*r)
-				&& (touches_access(*r, &entry_bands, access)
-					|| touches_access(*r, &body, access))
+				&& (touches_access(*r, &entry_bands, access) || touches_access(*r, &body, access))
 		}) else {
 			break;
 		};
 		entry_bands.push(rest.remove(idx));
 	}
 
-	EntryBodyPartition {
-		entry_bands,
-		body,
-		scraps: rest,
-	}
+	EntryBodyPartition { entry_bands, body, scraps: rest }
 }
 
 fn carve_entryway(

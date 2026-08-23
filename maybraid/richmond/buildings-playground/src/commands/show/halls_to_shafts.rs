@@ -46,16 +46,9 @@ impl HallsToShafts {
 	}
 }
 
-fn resolve_openings(
-	args: &[OpeningArg],
-	extent: Vec3,
-) -> Result<Vec<PreviewOpening>, String> {
+fn resolve_openings(args: &[OpeningArg], extent: Vec3) -> Result<Vec<PreviewOpening>, String> {
 	if !args.is_empty() {
-		return args
-			.iter()
-			.cloned()
-			.map(|a| a.resolve_aabb(None))
-			.collect();
+		return args.iter().cloned().map(|a| a.resolve_aabb(None)).collect();
 	}
 	Ok(default_demo_openings(extent))
 }

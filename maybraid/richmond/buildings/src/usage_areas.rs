@@ -37,8 +37,8 @@ pub use clearance::{
 pub use commercial_stall_strip::commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall,
-	KnickKnackStallParameterized, KnickKnackStallPlan, Lounge, MiniMart, PartsStall, PublicRestroom,
-	PublicRestroomParameterized, PublicRestroomPlan,
+	KnickKnackStallParameterized, KnickKnackStallPlan, Lounge, MiniMart, PartsStall,
+	PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan,
 };
 pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,
@@ -50,9 +50,7 @@ pub use enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 pub use hall_connected_suites::{
 	HallConnectedGroups, HallEnclosedSuites, HallSuiteEncloseParams, HallSuitePackParams,
 };
-pub use halls_to_shafts::{
-	HallsToShafts, HallsToShaftsOptions, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
-};
+pub use halls_to_shafts::{HallsToShafts, HallsToShaftsOptions, MAX_HALL_WIDTH, MIN_HALL_WIDTH};
 pub use janitorial::Janitorial;
 pub use livable_apartment::LivableApartment;
 pub use livable_apartments::{
@@ -81,7 +79,7 @@ pub use plan_cells::{
 pub use plan_geom::{confines_from_xz, host_xz};
 pub use rect_passage_cluster::{RectPassageCluster, RectPassageClusterParams};
 pub use rectangular_livable_area::{
-	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
-	RectangularLivableAreaParameterized, RectangularLivableAreaPlan, SCOPE as RECT_LIVABLE_SCOPE,
-	passages_on_faces, DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
+	passages_on_faces, CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind,
+	RectangularLivableArea, RectangularLivableAreaParameterized, RectangularLivableAreaPlan,
+	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL, SCOPE as RECT_LIVABLE_SCOPE,
 };

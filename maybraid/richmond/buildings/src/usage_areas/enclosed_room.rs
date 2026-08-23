@@ -25,10 +25,7 @@ pub struct EnclosedRoomMins {
 
 impl EnclosedRoomMins {
 	pub fn square(min: f32) -> Self {
-		Self {
-			long: min,
-			short: min,
-		}
+		Self { long: min, short: min }
 	}
 
 	pub fn ok(self, room: Aabb2d) -> bool {
@@ -96,13 +93,7 @@ impl EnclosedRoomParams {
 		host: Aabb2d,
 		clearances: &[Aabb2d],
 	) -> Option<EnclosedRoom> {
-		self.pack_filtered(
-			host3,
-			host,
-			clearances,
-			|_| Some(Vec::new()),
-			|_, _| true,
-		)
+		self.pack_filtered(host3, host, clearances, |_| Some(Vec::new()), |_, _| true)
 	}
 
 	/// Like [`Self::pack`], but:
@@ -180,9 +171,7 @@ impl EnclosedRoomParams {
 				}) as u8
 			};
 			blocked(*a).cmp(&blocked(*b)).then_with(|| {
-				b.along_len()
-					.partial_cmp(&a.along_len())
-					.unwrap_or(std::cmp::Ordering::Equal)
+				b.along_len().partial_cmp(&a.along_len()).unwrap_or(std::cmp::Ordering::Equal)
 			})
 		});
 
@@ -261,16 +250,8 @@ impl EnclosedRoomParams {
 		let door_face = PlanOpeningFace {
 			thru_is_x: seed_face.thru_is_x,
 			thru: divider_thru,
-			along0: if seed_face.thru_is_x {
-				room2.min.y
-			} else {
-				room2.min.x
-			},
-			along1: if seed_face.thru_is_x {
-				room2.max.y
-			} else {
-				room2.max.x
-			},
+			along0: if seed_face.thru_is_x { room2.min.y } else { room2.min.x },
+			along1: if seed_face.thru_is_x { room2.max.y } else { room2.max.x },
 			inward_positive: seed_face.inward_positive,
 		};
 		let door_face = door_face.clip_to_host(host)?;
@@ -309,12 +290,7 @@ impl EnclosedRoomParams {
 		let u1 = ((door1 - door_face.along0) / along_len).clamp(0.0, 1.0);
 
 		let mut walls = Vec::new();
-		for face in [
-			FaceKind::Front,
-			FaceKind::Back,
-			FaceKind::Left,
-			FaceKind::Right,
-		] {
+		for face in [FaceKind::Front, FaceKind::Back, FaceKind::Left, FaceKind::Right] {
 			if face == sales_face || side_on_host(room2, host, face) {
 				continue;
 			}
@@ -373,11 +349,7 @@ impl EnclosedRoomParams {
 			)
 		};
 
-		Some(EnclosureGeom {
-			walls,
-			door_clear,
-			door: Opening::passage(door_bounds),
-		})
+		Some(EnclosureGeom { walls, door_clear, door: Opening::passage(door_bounds) })
 	}
 }
 
@@ -476,12 +448,7 @@ fn snap_near_host_sides(
 	}
 
 	// Lateral faces only (not sales).
-	for face in [
-		FaceKind::Front,
-		FaceKind::Back,
-		FaceKind::Left,
-		FaceKind::Right,
-	] {
+	for face in [FaceKind::Front, FaceKind::Back, FaceKind::Left, FaceKind::Right] {
 		if face == sales {
 			continue;
 		}

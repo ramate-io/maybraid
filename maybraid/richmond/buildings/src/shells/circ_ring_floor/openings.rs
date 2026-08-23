@@ -107,10 +107,7 @@ fn collect_ring_clips(
 	let mut openings = Openings::new();
 	let mut mapped = MappedOpenings::new();
 	for (_score, t0, t1, id, opening, m) in candidates {
-		if intervals
-			.iter()
-			.any(|&(a, b)| intervals_overlap(a, b, t0, t1))
-		{
+		if intervals.iter().any(|&(a, b)| intervals_overlap(a, b, t0, t1)) {
 			continue;
 		}
 		intervals.push((t0, t1));
@@ -214,28 +211,16 @@ fn angular_span(ts: &[f32]) -> Option<(f32, f32)> {
 	let mut gap_after = 0usize;
 	for i in 0..sorted.len() {
 		let a = sorted[i];
-		let b = if i + 1 < sorted.len() {
-			sorted[i + 1]
-		} else {
-			sorted[0] + 1.0
-		};
+		let b = if i + 1 < sorted.len() { sorted[i + 1] } else { sorted[0] + 1.0 };
 		let gap = b - a;
 		if gap > max_gap {
 			max_gap = gap;
 			gap_after = i;
 		}
 	}
-	let t_start = if gap_after + 1 < sorted.len() {
-		sorted[gap_after + 1]
-	} else {
-		sorted[0]
-	};
+	let t_start = if gap_after + 1 < sorted.len() { sorted[gap_after + 1] } else { sorted[0] };
 	let t_end_raw = sorted[gap_after];
-	let t_end = if t_end_raw < t_start - 1e-6 {
-		t_end_raw + 1.0
-	} else {
-		t_end_raw
-	};
+	let t_end = if t_end_raw < t_start - 1e-6 { t_end_raw + 1.0 } else { t_end_raw };
 
 	// ClippedArcSweep clips do not wrap; keep the majority non-wrapping piece.
 	if t_end > 1.0 {

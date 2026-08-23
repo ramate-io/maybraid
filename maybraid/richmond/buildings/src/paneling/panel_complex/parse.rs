@@ -70,16 +70,12 @@ pub(super) fn parse_points(
 			.find('=')
 			.ok_or_else(|| err(format!("expected `id=(x,y,z)` near `{rest}`")))?;
 		let id_src = rest[..eq].trim();
-		let id: u32 = id_src
-			.parse()
-			.map_err(|_| err(format!("invalid point id `{id_src}`")))?;
+		let id: u32 = id_src.parse().map_err(|_| err(format!("invalid point id `{id_src}`")))?;
 		rest = rest[eq + 1..].trim_start();
 		if !rest.starts_with('(') {
 			return Err(err(format!("expected `(` after id {id}")));
 		}
-		let close = rest
-			.find(')')
-			.ok_or_else(|| err(format!("unclosed `(` for point {id}")))?;
+		let close = rest.find(')').ok_or_else(|| err(format!("unclosed `(` for point {id}")))?;
 		let inner = &rest[1..close];
 		let point = parse_point_tuple(inner, id)?;
 		out.push((PanelPointId(id), point));
@@ -87,9 +83,7 @@ pub(super) fn parse_points(
 		if rest.starts_with(',') {
 			rest = rest[1..].trim_start();
 		} else if !rest.is_empty() {
-			return Err(err(format!(
-				"expected `,` between points near `{rest}`"
-			)));
+			return Err(err(format!("expected `,` between points near `{rest}`")));
 		}
 	}
 	Ok(out)
@@ -106,15 +100,12 @@ fn parse_point_tuple(inner: &str, id: u32) -> Result<PanelPoint, ParsePanelCompl
 			let position = Vec3::new(parse_f32(x, id)?, parse_f32(y, id)?, parse_f32(z, id)?);
 			Ok(PanelPoint::new(position, parse_f32(t, id)?))
 		}
-		_ => Err(err(format!(
-			"point {id}: expected (x,y,z) or (x,y,z,thickness), got ({inner})"
-		))),
+		_ => Err(err(format!("point {id}: expected (x,y,z) or (x,y,z,thickness), got ({inner})"))),
 	}
 }
 
 fn parse_f32(s: &str, id: u32) -> Result<f32, ParsePanelComplexError> {
-	s.parse::<f32>()
-		.map_err(|_| err(format!("point {id}: invalid number `{s}`")))
+	s.parse::<f32>().map_err(|_| err(format!("point {id}: invalid number `{s}`")))
 }
 
 /// Parse `{id,…}` faces requiring exactly `arity` ids each.
@@ -129,15 +120,11 @@ pub(super) fn parse_faces(
 		if !rest.starts_with('{') {
 			return Err(err(format!("expected `{{…}}` face near `{rest}`")));
 		}
-		let close = rest
-			.find('}')
-			.ok_or_else(|| err(format!("unclosed `{{` near `{rest}`")))?;
+		let close = rest.find('}').ok_or_else(|| err(format!("unclosed `{{` near `{rest}`")))?;
 		let inner = &rest[1..close];
 		let parts: Vec<_> = inner.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
 		if parts.len() != arity {
-			return Err(err(format!(
-				"face expects {arity} ids, got {{{inner}}}"
-			)));
+			return Err(err(format!("face expects {arity} ids, got {{{inner}}}")));
 		}
 		let mut ids = Vec::with_capacity(arity);
 		for p in parts {
@@ -155,9 +142,7 @@ pub(super) fn parse_faces(
 }
 
 fn parse_face_id(s: &str) -> Result<PanelPointId, ParsePanelComplexError> {
-	let id: u32 = s
-		.parse()
-		.map_err(|_| err(format!("invalid face point id `{s}`")))?;
+	let id: u32 = s.parse().map_err(|_| err(format!("invalid face point id `{s}`")))?;
 	Ok(PanelPointId(id))
 }
 
@@ -167,10 +152,9 @@ mod tests {
 
 	#[test]
 	fn parses_mild_trapezoid() {
-		let c: PanelComplex =
-			"1=(0.5,0,0),2=(2.5,0,0),3=(0,0.3,3),4=(3,0,3) ... {1,2,4},{1,4,3}"
-				.parse()
-				.expect("parse");
+		let c: PanelComplex = "1=(0.5,0,0),2=(2.5,0,0),3=(0,0.3,3),4=(3,0,3) ... {1,2,4},{1,4,3}"
+			.parse()
+			.expect("parse");
 		assert_eq!(c.points().count(), 4);
 		assert_eq!(c.triangles().len(), 2);
 		assert_eq!(c.shared_edges().len(), 1);
@@ -180,9 +164,8 @@ mod tests {
 
 	#[test]
 	fn parses_thickness_fourth_component() {
-		let c: PanelComplex = "1=(0,0,0,0.2),2=(1,0,0,0.6),3=(0,0,1) ... {1,2,3}"
-			.parse()
-			.expect("parse");
+		let c: PanelComplex =
+			"1=(0,0,0,0.2),2=(1,0,0,0.6),3=(0,0,1) ... {1,2,3}".parse().expect("parse");
 		assert!((c.point(PanelPointId(1)).unwrap().thickness - 0.2).abs() < 1e-5);
 		assert!((c.point(PanelPointId(2)).unwrap().thickness - 0.6).abs() < 1e-5);
 	}

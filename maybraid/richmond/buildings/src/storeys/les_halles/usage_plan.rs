@@ -58,13 +58,7 @@ impl LesHallesUsagePlan for LesHallesCommercialUsage {
 				Err(err) => return Err(err),
 			}
 		}
-		Ok((
-			Self { stall_strips },
-			FillableRegions {
-				within: residual_within,
-				atop: regions.atop,
-			},
-		))
+		Ok((Self { stall_strips }, FillableRegions { within: residual_within, atop: regions.atop }))
 	}
 }
 

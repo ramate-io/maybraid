@@ -5,9 +5,7 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::{
-	cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus,
-};
+use lod::gen::{cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 
 use crate::placed::Placement;
 

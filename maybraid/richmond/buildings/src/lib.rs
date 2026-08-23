@@ -15,12 +15,12 @@ pub mod arcs;
 pub mod constraints;
 pub mod demos;
 pub mod fit;
+pub mod monotower;
 pub mod openings;
 pub mod paneling;
 pub mod placer;
 pub mod portals;
 pub mod shells;
-pub mod monotower;
 pub mod stacked_rings;
 pub mod storeys;
 pub mod usage_areas;
@@ -55,6 +55,7 @@ pub use fit::{
 	aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError, FitTarget,
 	MultiConfines, MultiFit, SpaceKind, StackRegion,
 };
+pub use monotower::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};
 pub use openings::{
 	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows,
 	sync_connectable_openings_from_mapped, BaySpec, MappedOpening, MappedOpeningQuad,
@@ -93,7 +94,6 @@ pub use shells::{
 	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab,
 	Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
 };
-pub use monotower::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
@@ -104,27 +104,25 @@ pub use storeys::les_halles::{
 	LesHallesStallDoor, LesHallesUsagePlan, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
-	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
-	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan, CommonBedroom,
-	CommonBedroomParameterized, CommonBedroomPlan, DiningRoom, DiningRoomParameterized,
-	DiningRoomPlan, EatingArea, EatingAreaParameterized, EatingAreaPlan, EnclosedRoom,
-	EnclosedRoomMins, EnclosedRoomParams, HallConnectedGroups, HallEnclosedSuites,
+	passages_on_faces, BitesSitdownStall, BitesStall, CardinalFace, CommercialStall,
+	CommercialStallInterior, CommercialStallParameterized, CommercialStallPlan,
+	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,
+	CommonBedroom, CommonBedroomParameterized, CommonBedroomPlan, DiningRoom,
+	DiningRoomParameterized, DiningRoomPlan, EatingArea, EatingAreaParameterized, EatingAreaPlan,
+	EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams, HallConnectedGroups, HallEnclosedSuites,
 	HallSuiteEncloseParams, HallSuitePackParams, HallsToShafts, HallsToShaftsOptions, Janitorial,
-	Kitchen,
-	KitchenCounterLayout, KitchenParameterized, KitchenPlan, KnickKnackStall,
-	KnickKnackStallParameterized, KnickKnackStallPlan,
-	LivableApartment, LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized,
-	LivingRoom, LivingRoomParameterized, LivingRoomPlan, MAX_HALL_WIDTH, MIN_HALL_WIDTH, MiniMart,
-	PASSAGE_CLEARANCE, PartsStall, PassageClearance, PlanCell, PlanHost, PublicRestroom,
-	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
-	RectangularLivableAreaParameterized, RectangularLivableAreaPlan, passages_on_faces,
-	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL, RECT_LIVABLE_SCOPE,
-	PublicRestroomParameterized, PublicRestroomPlan, ResidentialBathroom,
-	ResidentialBathroomParameterized, ResidentialBathroomPlan, ResidentialHalfBathroom,
-	ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SittingRoom,
-	SittingRoomParameterized, SittingRoomPlan, Study, StudyParameterized, StudyPlan,
-	COMMON_BEDROOM_SCOPE, DINING_ROOM_SCOPE, EATING_AREA_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE,
-	RESIDENTIAL_BATHROOM_SCOPE, RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
+	Kitchen, KitchenCounterLayout, KitchenParameterized, KitchenPlan, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan, LivableApartment, LivableApartments,
+	LivableApartmentsOptions, LivableApartmentsParameterized, LivingRoom, LivingRoomParameterized,
+	LivingRoomPlan, MiniMart, PartsStall, PassageClearance, PlanCell, PlanHost, PublicRestroom,
+	PublicRestroomParameterized, PublicRestroomPlan, RectAreaRoom, RectLivableStrategy,
+	RectQuarterKind, RectangularLivableArea, RectangularLivableAreaParameterized,
+	RectangularLivableAreaPlan, ResidentialBathroom, ResidentialBathroomParameterized,
+	ResidentialBathroomPlan, ResidentialHalfBathroom, ResidentialHalfBathroomParameterized,
+	ResidentialHalfBathroomPlan, SittingRoom, SittingRoomParameterized, SittingRoomPlan, Study,
+	StudyParameterized, StudyPlan, COMMON_BEDROOM_SCOPE, DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
+	DINING_ROOM_SCOPE, EATING_AREA_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE, MAX_HALL_WIDTH,
+	MIN_HALL_WIDTH, PASSAGE_CLEARANCE, RECT_LIVABLE_SCOPE, RESIDENTIAL_BATHROOM_SCOPE,
+	RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

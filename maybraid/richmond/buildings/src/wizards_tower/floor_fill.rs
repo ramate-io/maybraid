@@ -100,11 +100,7 @@ fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
 	let origin = Vec3::new(center.x - 0.5 * width_x, center.y, center.z - 0.5 * depth_z);
 	FloorNode::rough_stone(
 		Floor::rectangle(),
-		Placement::new(origin, 0.0).with_scale(Vec3::new(
-			width_x,
-			FLOOR_SLAB_Y_SCALE,
-			depth_z,
-		)),
+		Placement::new(origin, 0.0).with_scale(Vec3::new(width_x, FLOOR_SLAB_Y_SCALE, depth_z)),
 	)
 }
 

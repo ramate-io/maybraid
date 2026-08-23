@@ -41,12 +41,7 @@ impl LabelNode {
 		text: impl Into<String>,
 		placement: Placement,
 	) -> Self {
-		Self {
-			style,
-			geometry,
-			text: text.into(),
-			placement,
-		}
+		Self { style, geometry, text: text.into(), placement }
 	}
 
 	/// Rectangle label whose placement scale matches geometry extents.
@@ -76,11 +71,7 @@ impl LodScene for LabelNode {
 		LodSceneCulls::None
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let mesh = LabelWireframeAssets::unit_cube();
 		let material = LabelWireframeAssets::material_for(self.style);
 		// Unit cube is 1³; placement.scale carries full extents.

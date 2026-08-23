@@ -54,9 +54,7 @@ pub fn fit_windows_on_run(
 		return Vec::new();
 	}
 	let n = windows.len();
-	let take = ((n as f32) * opening_density.clamp(0.15, 1.0))
-		.ceil()
-		.max(1.0) as usize;
+	let take = ((n as f32) * opening_density.clamp(0.15, 1.0)).ceil().max(1.0) as usize;
 	let take = take.min(n);
 	fit_bays_on_run(&windows[..take], run_length, false)
 }
@@ -127,11 +125,7 @@ pub fn generate_bay_catalog(
 				center.z,
 				salt + 0.5,
 			);
-			BaySpec {
-				door_width: dw,
-				jamb_min: jamb,
-				allowed_error: e,
-			}
+			BaySpec { door_width: dw, jamb_min: jamb, allowed_error: e }
 		})
 		.collect()
 }
@@ -179,18 +173,10 @@ fn force_one_bay(bays: &[BaySpec], run_length: f32) -> Vec<PlacedBay> {
 			return Vec::new();
 		}
 		let jamb = ((run_length - w) * 0.5).max(0.05);
-		return vec![PlacedBay {
-			along: jamb,
-			width: w,
-			allowed_error: 0.25,
-		}];
+		return vec![PlacedBay { along: jamb, width: w, allowed_error: 0.25 }];
 	};
 	if let Some((_pack, door_w, jamb)) = pack_span(spec, run_length) {
-		vec![PlacedBay {
-			along: jamb,
-			width: door_w,
-			allowed_error: spec.allowed_error,
-		}]
+		vec![PlacedBay { along: jamb, width: door_w, allowed_error: spec.allowed_error }]
 	} else {
 		Vec::new()
 	}
@@ -206,11 +192,7 @@ fn pack_span(spec: BaySpec, remaining: f32) -> Option<(f32, f32, f32)> {
 		return None;
 	}
 	let nominal = spec.door_width + 2.0 * jamb;
-	let pack = if remaining >= nominal {
-		nominal
-	} else {
-		remaining
-	};
+	let pack = if remaining >= nominal { nominal } else { remaining };
 	let door_w = (pack - 2.0 * jamb)
 		.clamp(door_lo, door_hi)
 		.min(pack - 0.05)
@@ -226,21 +208,9 @@ mod tests {
 	#[test]
 	fn fit_bays_places_multiple_on_long_run() {
 		let bays = [
-			BaySpec {
-				door_width: 3.5,
-				jamb_min: 0.25,
-				allowed_error: 0.35,
-			},
-			BaySpec {
-				door_width: 3.0,
-				jamb_min: 0.25,
-				allowed_error: 0.3,
-			},
-			BaySpec {
-				door_width: 2.4,
-				jamb_min: 0.2,
-				allowed_error: 0.25,
-			},
+			BaySpec { door_width: 3.5, jamb_min: 0.25, allowed_error: 0.35 },
+			BaySpec { door_width: 3.0, jamb_min: 0.25, allowed_error: 0.3 },
+			BaySpec { door_width: 2.4, jamb_min: 0.2, allowed_error: 0.25 },
 		];
 		let placed = fit_bays_on_run(&bays, 14.0, true);
 		assert!(placed.len() >= 2);
@@ -248,11 +218,7 @@ mod tests {
 
 	#[test]
 	fn fit_windows_respects_low_density() {
-		let windows = [BaySpec {
-			door_width: 2.0,
-			jamb_min: 0.2,
-			allowed_error: 0.2,
-		}];
+		let windows = [BaySpec { door_width: 2.0, jamb_min: 0.2, allowed_error: 0.2 }];
 		assert!(fit_windows_on_run(&windows, 0.05, 20.0).is_empty());
 	}
 }

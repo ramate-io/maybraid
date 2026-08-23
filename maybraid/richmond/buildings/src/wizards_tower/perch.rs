@@ -130,11 +130,7 @@ impl LodScene for WizardsTowerPerch {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
 		self.emit_internal_features(&mut children, lod_ref);

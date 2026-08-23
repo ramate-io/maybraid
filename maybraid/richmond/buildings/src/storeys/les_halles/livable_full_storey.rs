@@ -112,19 +112,13 @@ mod tests {
 	use richmond_building_components::{BuildingComponents, Layer};
 
 	fn large_bounds() -> Aabb3d {
-		Aabb3d::from_min_max(
-			Vec3::new(-36.0, 0.0, -27.0),
-			Vec3::new(36.0, 4.0, 27.0),
-		)
+		Aabb3d::from_min_max(Vec3::new(-36.0, 0.0, -27.0), Vec3::new(36.0, 4.0, 27.0))
 	}
 
 	fn storey_with_shafts(seed: i32) -> (LesHallesLivableFullStorey, FillableRegions) {
 		let bounds = large_bounds();
 		let empty = Confines::from_bounds(bounds);
-		let noise = NoiseParams {
-			seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let params = LesHallesParameterized::sample_livable(&empty, noise).unwrap();
 		let openings = LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty);
 		let confines = Confines::new(bounds, 0.0, openings);
@@ -136,20 +130,12 @@ mod tests {
 	fn livable_full_storey_fills_external_strips() {
 		let (storey, regions) = storey_with_shafts(1337);
 		assert!(!storey.areas().is_empty());
-		assert!(regions
-			.within
-			.iter()
-			.all(|r| r.kind != SpaceKind::ExternalSpace));
+		assert!(regions.within.iter().all(|r| r.kind != SpaceKind::ExternalSpace));
 		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::Walkway));
 		assert_eq!(regions.atop.len(), 1);
 		assert!(storey.floor_plan.gallery.wall_count() >= 4);
-		assert!(!storey
-			.panel_nodes_for_level(LodSceneLevel::High)
-			.is_empty());
-		assert!(!storey
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!storey.panel_nodes_for_level(LodSceneLevel::High).is_empty());
+		assert!(!storey.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -157,10 +143,7 @@ mod tests {
 		let (storey, _) = storey_with_shafts(7);
 		assert!(storey.areas().iter().any(|a| !a.rooms.is_empty()));
 		assert!(
-			storey
-				.areas()
-				.iter()
-				.all(|a| a.plan.chosen != RectLivableStrategy::SpineHall),
+			storey.areas().iter().all(|a| a.plan.chosen != RectLivableStrategy::SpineHall),
 			"Les Halles livable path must not choose SpineHall"
 		);
 	}
@@ -185,14 +168,12 @@ mod tests {
 		let (storey, _) = storey_with_shafts(1337);
 		let high = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(
-			high.labeled
-				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			high.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 			"High should keep internal_walls"
 		);
 		let mid = storey.panel_nodes_for_level(LodSceneLevel::Medium);
 		assert!(
-			!mid.labeled
-				.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+			!mid.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 			"Medium should drop internal_walls"
 		);
 	}
@@ -210,9 +191,6 @@ mod tests {
 		let (usage, residual) =
 			LesHallesLivableUsage::paint(regions, NoiseParams::default()).unwrap();
 		assert!(usage.areas.is_empty());
-		assert!(residual
-			.within
-			.iter()
-			.any(|r| r.kind == SpaceKind::ExternalSpace));
+		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
 	}
 }

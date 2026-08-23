@@ -27,11 +27,7 @@ impl PlanAabb {
 
 	pub fn to_plan_rect(self, y: f32) -> PlanRect {
 		PlanRect::new(
-			Vec3::new(
-				0.5 * (self.min_x + self.max_x),
-				y,
-				0.5 * (self.min_z + self.max_z),
-			),
+			Vec3::new(0.5 * (self.min_x + self.max_x), y, 0.5 * (self.min_z + self.max_z)),
 			(self.max_x - self.min_x).max(EPS),
 			(self.max_z - self.min_z).max(EPS),
 		)
@@ -109,12 +105,7 @@ impl RectRingFloorParams {
 			slab_rects.push(PlanAabb::new(ix1, ox1, iz0, iz1)); // East
 		}
 
-		RectRingGeom {
-			y0,
-			height,
-			slab_rects,
-			edges,
-		}
+		RectRingGeom { y0, height, slab_rects, edges }
 	}
 }
 

@@ -59,7 +59,8 @@ impl JointLod {
 	/// Level from a lone-joint [`LodRef`] (AABB probe; unit-kit previews).
 	pub fn level_for_lod_ref(lod_ref: &LodRef) -> LodSceneLevel {
 		let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
-		let factor = lod_ref.current_transform.translation.distance(probe.center) / probe.extent.max(1e-4);
+		let factor =
+			lod_ref.current_transform.translation.distance(probe.center) / probe.extent.max(1e-4);
 		match Self::band_from_distance_factor(factor) {
 			PartitionLodBand::High => LodSceneLevel::High,
 			PartitionLodBand::Medium => LodSceneLevel::Medium,

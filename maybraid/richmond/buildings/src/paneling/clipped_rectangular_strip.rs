@@ -81,18 +81,12 @@ impl ClippedRectangularStrip {
 		let nodes: Vec<RectangularStripNode> = nodes.into_iter().collect();
 		let mut insets: Vec<Option<RectInset>> = insets.into_iter().collect();
 		if nodes.len() < 2 {
-			debug_assert!(
-				false,
-				"ClippedRectangularStrip::from_nodes requires at least 2 nodes"
-			);
+			debug_assert!(false, "ClippedRectangularStrip::from_nodes requires at least 2 nodes");
 			return Self::new(style);
 		}
 		let bay_count = nodes.len() - 1;
 		if insets.len() != bay_count {
-			debug_assert!(
-				false,
-				"ClippedRectangularStrip::from_nodes insets/bay mismatch"
-			);
+			debug_assert!(false, "ClippedRectangularStrip::from_nodes insets/bay mismatch");
 			insets.resize_with(bay_count, || None);
 		}
 		let mut strip = Self::new(style);
@@ -202,10 +196,7 @@ mod tests {
 			[Some(RectInset::uniform(0.35)), None],
 		);
 		assert_eq!(s.pieces().len(), 2);
-		assert!(matches!(
-			s.pieces()[0],
-			ClippedRectangularStripPiece::Clipped(_)
-		));
+		assert!(matches!(s.pieces()[0], ClippedRectangularStripPiece::Clipped(_)));
 		assert!(matches!(s.pieces()[1], ClippedRectangularStripPiece::Solid(_)));
 		let clipped = match &s.pieces()[0] {
 			ClippedRectangularStripPiece::Clipped(c) => c,

@@ -78,16 +78,9 @@ impl DiningRoomRegions {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<DiningRoomPacked, FitError> {
-		let mut host = init_host_with(
-			confines,
-			InitHostOpts {
-				passage_wall_lip: true,
-			},
-		)?;
+		let mut host = init_host_with(confines, InitHostOpts { passage_wall_lip: true })?;
 		if host.room_area + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "dining room",
-			});
+			return Err(FitError::TooSmall { reason: "dining room" });
 		}
 		let mut packed = DiningRoomPacked::default();
 		let placed = pack_kinds(
@@ -109,9 +102,7 @@ impl DiningRoomRegions {
 			}
 		}
 		if packed.tables.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "dining table",
-			});
+			return Err(FitError::TooSmall { reason: "dining table" });
 		}
 		Ok(packed)
 	}

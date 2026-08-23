@@ -48,9 +48,7 @@ impl KnickKnackRegions {
 		let host = aabb3_to_plan(host3, PlanAxes::XZ);
 		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "knick knack passage",
-			});
+			return Err(FitError::TooSmall { reason: "knick knack passage" });
 		}
 
 		let mut hard = PassageClearance::bands_std(host, &passage_faces);
@@ -58,10 +56,10 @@ impl KnickKnackRegions {
 
 		// Sampled display choices first (one attempt per host wall).
 		for spec in &self.displays {
-			let depth = spec.display.depth.clamp(
-				KNICK_KNACK_DISPLAY_DEPTH_MIN,
-				KNICK_KNACK_DISPLAY_DEPTH_MAX,
-			);
+			let depth = spec
+				.display
+				.depth
+				.clamp(KNICK_KNACK_DISPLAY_DEPTH_MIN, KNICK_KNACK_DISPLAY_DEPTH_MAX);
 			let choice = OptionalFaceBand {
 				place: spec.display.place,
 				along: spec.display.along,
@@ -88,10 +86,9 @@ impl KnickKnackRegions {
 				.iter()
 				.find(|s| PlanHost::same_wall(s.face, face))
 				.map(|s| {
-					s.display.depth.clamp(
-						KNICK_KNACK_DISPLAY_DEPTH_MIN,
-						KNICK_KNACK_DISPLAY_DEPTH_MAX,
-					)
+					s.display
+						.depth
+						.clamp(KNICK_KNACK_DISPLAY_DEPTH_MIN, KNICK_KNACK_DISPLAY_DEPTH_MAX)
 				})
 				.unwrap_or(0.75);
 			for _ in 0..8 {
@@ -101,11 +98,7 @@ impl KnickKnackRegions {
 					break;
 				};
 				let avail = seg1 - seg0;
-				let seg_face = PlanOpeningFace {
-					along0: seg0,
-					along1: seg1,
-					..face
-				};
+				let seg_face = PlanOpeningFace { along0: seg0, along1: seg1, ..face };
 				let Some(band) = seg_face.band(host, avail, depth, 0.5) else {
 					break;
 				};
@@ -121,16 +114,11 @@ impl KnickKnackRegions {
 		}
 
 		if displays.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "knick knack display",
-			});
+			return Err(FitError::TooSmall { reason: "knick knack display" });
 		}
 
 		Ok(KnickKnackPacked {
-			displays: displays
-				.into_iter()
-				.map(|d| plan_to_aabb3(host3, d, PlanAxes::XZ))
-				.collect(),
+			displays: displays.into_iter().map(|d| plan_to_aabb3(host3, d, PlanAxes::XZ)).collect(),
 		})
 	}
 }

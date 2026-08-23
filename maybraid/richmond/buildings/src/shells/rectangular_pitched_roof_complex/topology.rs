@@ -17,12 +17,7 @@ impl PlanRect {
 	pub fn from_candidate(c: &VolumeCandidate) -> Self {
 		let (min_x, min_z) = c.plan_min();
 		let (max_x, max_z) = c.plan_max();
-		Self {
-			min_x,
-			min_z,
-			max_x,
-			max_z,
-		}
+		Self { min_x, min_z, max_x, max_z }
 	}
 
 	pub fn overlap(self, other: Self) -> Option<Self> {
@@ -33,12 +28,7 @@ impl PlanRect {
 		if max_x + EPS < min_x || max_z + EPS < min_z {
 			return None;
 		}
-		Some(Self {
-			min_x,
-			min_z,
-			max_x: max_x.max(min_x),
-			max_z: max_z.max(min_z),
-		})
+		Some(Self { min_x, min_z, max_x: max_x.max(min_x), max_z: max_z.max(min_z) })
 	}
 }
 

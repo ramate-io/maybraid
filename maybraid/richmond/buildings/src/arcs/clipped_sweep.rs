@@ -41,15 +41,8 @@ impl ClippedArcSweep {
 		let storey_height = storey_height.max(1e-4);
 		let sweep_degrees = sweep_degrees.clamp(1e-2, 360.0);
 		let clips = normalize_clips(clip_intervals);
-		let partitions = tessellate(
-			center_xz,
-			radius,
-			storey_height,
-			sweep_degrees,
-			start_yaw,
-			style,
-			&clips,
-		);
+		let partitions =
+			tessellate(center_xz, radius, storey_height, sweep_degrees, start_yaw, style, &clips);
 		Self {
 			center_xz,
 			radius,
@@ -129,15 +122,7 @@ fn tessellate(
 	let mut partitions = Vec::new();
 
 	if clips.is_empty() {
-		push_solid(
-			&mut partitions,
-			center_xz,
-			ring_scale,
-			start_yaw,
-			0.0,
-			sweep_degrees,
-			style,
-		);
+		push_solid(&mut partitions, center_xz, ring_scale, start_yaw, 0.0, sweep_degrees, style);
 		return partitions;
 	}
 
@@ -196,11 +181,8 @@ fn tessellate(
 			style,
 		);
 		let solid_start = t1 * sweep_degrees;
-		let solid_end = if i + 1 < clips.len() {
-			clips[i + 1].0 * sweep_degrees
-		} else {
-			sweep_degrees
-		};
+		let solid_end =
+			if i + 1 < clips.len() { clips[i + 1].0 * sweep_degrees } else { sweep_degrees };
 		push_solid(
 			&mut partitions,
 			center_xz,
@@ -264,19 +246,8 @@ mod tests {
 
 	#[test]
 	fn middle_clip_yields_slice_and_solids() {
-		let a = ClippedArcSweep::rough_stone(
-			Vec3::ZERO,
-			4.0,
-			3.0,
-			180.0,
-			0.0,
-			[(0.25, 0.4)],
-		);
-		let arcs = a
-			.partitions
-			.iter()
-			.filter(|p| matches!(p.geometry, Partition::Arc(_)))
-			.count();
+		let a = ClippedArcSweep::rough_stone(Vec3::ZERO, 4.0, 3.0, 180.0, 0.0, [(0.25, 0.4)]);
+		let arcs = a.partitions.iter().filter(|p| matches!(p.geometry, Partition::Arc(_))).count();
 		let slices = a
 			.partitions
 			.iter()

@@ -32,14 +32,10 @@ impl Janitorial {
 		let footprint = Vec2::new((max.x - min.x).max(0.0), (max.z - min.z).max(0.0));
 		let height = (max.y - min.y).max(0.0);
 		if footprint.x + 1e-3 < MIN_JANITORIAL.x || footprint.y + 1e-3 < MIN_JANITORIAL.y {
-			return Err(FitError::TooSmall {
-				reason: "janitorial_footprint",
-			});
+			return Err(FitError::TooSmall { reason: "janitorial_footprint" });
 		}
 		if height + 1e-3 < MIN_HEIGHT {
-			return Err(FitError::TooSmall {
-				reason: "janitorial_height",
-			});
+			return Err(FitError::TooSmall { reason: "janitorial_height" });
 		}
 		let center_xz = Vec3::new(0.5 * (min.x + max.x), min.y, 0.5 * (min.z + max.z));
 		let shell = RectFloor::new(RectFloorParams {
@@ -51,13 +47,7 @@ impl Janitorial {
 			ceiling: RectFloorSlab::None,
 			..RectFloorParams::default()
 		});
-		Ok((
-			Self {
-				confines: confines.clone(),
-				shell,
-			},
-			FillableRegions::empty(),
-		))
+		Ok((Self { confines: confines.clone(), shell }, FillableRegions::empty()))
 	}
 }
 
@@ -83,8 +73,8 @@ impl BuildingComponents for Janitorial {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
 	use crate::openings::Openings;
+	use bevy_math::bounding::Aabb3d;
 
 	#[test]
 	fn fits_minimum_closet() {
@@ -104,9 +94,6 @@ mod tests {
 			0.0,
 			Openings::new(),
 		);
-		assert!(matches!(
-			Janitorial::from_confines(&confines),
-			Err(FitError::TooSmall { .. })
-		));
+		assert!(matches!(Janitorial::from_confines(&confines), Err(FitError::TooSmall { .. })));
 	}
 }

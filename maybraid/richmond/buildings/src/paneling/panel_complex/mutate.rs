@@ -144,12 +144,7 @@ impl PanelComplex {
 	}
 
 	/// Append a triangle. Unknown ids or degeneracy → debug assert and skip.
-	pub fn add_triangle(
-		&mut self,
-		a: PanelPointId,
-		b: PanelPointId,
-		c: PanelPointId,
-	) -> &mut Self {
+	pub fn add_triangle(&mut self, a: PanelPointId, b: PanelPointId, c: PanelPointId) -> &mut Self {
 		if self.point(a).is_none() || self.point(b).is_none() || self.point(c).is_none() {
 			debug_assert!(false, "add_triangle: unknown point id");
 			return self;
@@ -163,12 +158,7 @@ impl PanelComplex {
 	}
 
 	/// Alias of [`Self::add_triangle`].
-	pub fn triangle(
-		&mut self,
-		a: PanelPointId,
-		b: PanelPointId,
-		c: PanelPointId,
-	) -> &mut Self {
+	pub fn triangle(&mut self, a: PanelPointId, b: PanelPointId, c: PanelPointId) -> &mut Self {
 		self.add_triangle(a, b, c)
 	}
 

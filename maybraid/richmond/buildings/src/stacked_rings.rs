@@ -60,4 +60,3 @@ impl BuildingComponents for StackedRings {
 		out
 	}
 }
-
