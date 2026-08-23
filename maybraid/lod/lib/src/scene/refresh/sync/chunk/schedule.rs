@@ -101,6 +101,31 @@ pub fn reset_lod_chunk_budget(
 	};
 }
 
+/// Remaining begin count slots (Presence + Desired + Active).
+pub(super) fn remaining_begin_slots(clock: &LodChunkBeginClock) -> u32 {
+	clock
+		.presence_remaining
+		.saturating_add(clock.desired_remaining)
+		.saturating_add(clock.active_remaining)
+}
+
+/// How many spawn-request hosts this begin system may classify.
+///
+/// Zero when the shared clock is empty so later host `T`s skip their scan.
+/// Otherwise a small multiple of remaining slots, capped by
+/// [`LodChunkFulfillBudget::begin_scan_per_frame`] (at least `slots`).
+pub(super) fn begin_scan_limit(budget: &LodChunkFulfillBudget, clock: &LodChunkBeginClock) -> u32 {
+	if clock.weight_remaining == 0 {
+		return 0;
+	}
+	let slots = remaining_begin_slots(clock);
+	if slots == 0 {
+		return 0;
+	}
+	const MULTIPLE: u32 = 4;
+	slots.saturating_mul(MULTIPLE).min(budget.begin_scan_per_frame.max(slots))
+}
+
 /// Try to admit one begin into `class`.
 ///
 /// Requires both that class's count quota and shared [`LodChunkBeginClock::weight_remaining`].
@@ -162,6 +187,49 @@ mod tests {
 			LevelBand::tuple_rank(LevelBand::High, LevelBand::UltraLow)
 				< LevelBand::tuple_rank(LevelBand::Medium, LevelBand::High)
 		);
+	}
+
+	#[test]
+	fn begin_scan_limit_skips_empty_clock() {
+		let budget = LodChunkFulfillBudget::default();
+		let empty = LodChunkBeginClock {
+			presence_remaining: 12,
+			desired_remaining: 18,
+			active_remaining: 0,
+			weight_remaining: 0,
+			first_class: FulfillClass::Desired,
+		};
+		assert_eq!(begin_scan_limit(&budget, &empty), 0);
+		let no_slots = LodChunkBeginClock {
+			presence_remaining: 0,
+			desired_remaining: 0,
+			active_remaining: 0,
+			weight_remaining: 10,
+			first_class: FulfillClass::Desired,
+		};
+		assert_eq!(begin_scan_limit(&budget, &no_slots), 0);
+	}
+
+	#[test]
+	fn begin_scan_limit_is_slot_multiple_capped() {
+		let budget = LodChunkFulfillBudget { begin_scan_per_frame: 192, ..Default::default() };
+		let clock = LodChunkBeginClock {
+			presence_remaining: 12,
+			desired_remaining: 18,
+			active_remaining: 0,
+			weight_remaining: 256,
+			first_class: FulfillClass::Desired,
+		};
+		assert_eq!(remaining_begin_slots(&clock), 30);
+		assert_eq!(begin_scan_limit(&budget, &clock), 120);
+		let leftover = LodChunkBeginClock {
+			presence_remaining: 0,
+			desired_remaining: 5,
+			active_remaining: 0,
+			weight_remaining: 256,
+			first_class: FulfillClass::Desired,
+		};
+		assert_eq!(begin_scan_limit(&budget, &leftover), 20);
 	}
 
 	#[test]

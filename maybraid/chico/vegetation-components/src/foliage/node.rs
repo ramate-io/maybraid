@@ -116,6 +116,27 @@ impl FoliageNode {
 		Some(Self::cheap_ball_collection(collection, Placement::IDENTITY).with_material(material))
 	}
 
+	/// Fold every cheap ball into one collection; leave fronds and other geometries as-is.
+	///
+	/// Grove Low / UltraLow canopy proxies use this so a tile is one posed kit, not
+	/// one [`lod::LodScene`] host per plant.
+	pub fn merge_canopy_proxies(nodes: impl IntoIterator<Item = Self>) -> Vec<Self> {
+		let mut cheap = Vec::new();
+		let mut rest = Vec::new();
+		for node in nodes {
+			match &node.geometry {
+				FoliageGeometry::CheapBall | FoliageGeometry::CheapBallCollection(_) => {
+					cheap.push(node)
+				}
+				_ => rest.push(node),
+			}
+		}
+		if let Some(merged) = Self::merge_cheap_balls(cheap) {
+			rest.insert(0, merged);
+		}
+		rest
+	}
+
 	/// Expand the cheap-ball collection probe to at least `radius` around `center`.
 	pub fn with_cheap_ball_probe(mut self, center: Vec3, radius: f32) -> Self {
 		if let FoliageGeometry::CheapBallCollection(collection) = &mut self.geometry {

@@ -206,7 +206,7 @@ mod vc {
 		StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
-		vegetation_scene_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+		flattened_canopy_proxy_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
 		VegetationComponents,
 	};
 	use clap::Args;
@@ -596,7 +596,7 @@ mod vc {
 						SceneChunk::chunks(chunks)
 					}
 				}
-				None => vegetation_scene_chunks(self, lod_ref, level),
+				None => flattened_canopy_proxy_chunks(self, lod_ref, level),
 			}
 		}
 
