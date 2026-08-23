@@ -30,17 +30,3 @@ pub const ITEM_ROW_GAP: f32 = 6.0;
 
 /// Inset from the bottom-left of the window.
 pub const COLUMN_INSET: f32 = 48.0;
-
-/// Loaded Barlow faces used by text-menu widgets.
-#[derive(Resource, Clone)]
-pub struct MenuFonts {
-	pub header: Handle<Font>,
-	pub item: Handle<Font>,
-}
-
-impl FromWorld for MenuFonts {
-	fn from_world(world: &mut World) -> Self {
-		let assets = world.resource::<AssetServer>();
-		Self { header: assets.load(BARLOW_BLACK), item: assets.load(BARLOW_SEMIBOLD) }
-	}
-}

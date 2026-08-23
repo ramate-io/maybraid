@@ -1,10 +1,10 @@
 //! Maybraid home screen: bottom-left title plus destination labels.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::{
-	activate_clicked_text_menu_items, activate_selected_text_menu_items, spawn_text_menu_header,
-	spawn_text_menu_item, text_menu_column_node, MenuComponentsPlugin, MenuFonts, TextMenu,
+	activate_selected_text_menu_items, emit_menu_choice, MenuComponentsPlugin, TextMenuColumn,
 	TextMenuInputLock, TextMenuSystems,
 };
 
@@ -13,12 +13,15 @@ use menu_components::{
 pub struct RequestShowHome;
 
 /// Marker on the spawned home-screen root.
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HomeScreen;
 
-/// Home-menu destinations. Screens emit these; they do not navigate yet.
-#[derive(Clone, Copy, Debug, Message, PartialEq, Eq)]
+/// Home destinations. Each pickable row stamps this as a component; [`emit_menu_choice`]
+/// copies the clicked (or Enter-selected) value onto the message bus. Screens do
+/// not navigate yet.
+#[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
 pub enum HomeMenuChoice {
+	#[default]
 	Discovery,
 	Reliquary,
 	Characters,
@@ -41,6 +44,19 @@ impl HomeMenuChoice {
 	}
 }
 
+impl HomeScreen {
+	pub fn scene() -> impl Scene + 'static {
+		(
+			bsn! { HomeScreen },
+			TextMenuColumn::new(
+				"Maybraid",
+				HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
+			)
+			.scene(),
+		)
+	}
+}
+
 pub fn request_show_home(commands: &mut Commands) {
 	commands.spawn(RequestShowHome);
 }
@@ -53,14 +69,11 @@ impl Plugin for HomeScreenPlugin {
 			app.add_plugins(MenuComponentsPlugin);
 		}
 		app.add_message::<HomeMenuChoice>()
+			.add_observer(emit_menu_choice::<HomeMenuChoice>)
 			.add_systems(Update, sync_text_menu_input_lock.in_set(TextMenuSystems::InputLock))
 			.add_systems(
 				Update,
-				(
-					apply_show_home,
-					activate_clicked_text_menu_items::<HomeMenuChoice>,
-					activate_selected_text_menu_items::<HomeMenuChoice>,
-				),
+				(apply_show_home, activate_selected_text_menu_items::<HomeMenuChoice>),
 			);
 	}
 }
@@ -76,7 +89,6 @@ fn apply_show_home(
 	mut commands: Commands,
 	requests: Query<Entity, With<RequestShowHome>>,
 	existing: Query<Entity, With<HomeScreen>>,
-	fonts: Res<MenuFonts>,
 ) {
 	if requests.is_empty() {
 		return;
@@ -87,16 +99,5 @@ fn apply_show_home(
 	for entity in &requests {
 		commands.entity(entity).despawn();
 	}
-	spawn_home_screen(&mut commands, &fonts);
-}
-
-fn spawn_home_screen(commands: &mut Commands, fonts: &MenuFonts) {
-	commands
-		.spawn((HomeScreen, TextMenu::new(HomeMenuChoice::ALL.len()), text_menu_column_node()))
-		.with_children(|column| {
-			spawn_text_menu_header(column, fonts, "Maybraid");
-			for (index, choice) in HomeMenuChoice::ALL.iter().copied().enumerate() {
-				spawn_text_menu_item(column, fonts, index, choice.label(), choice);
-			}
-		});
+	commands.spawn_scene(HomeScreen::scene());
 }
