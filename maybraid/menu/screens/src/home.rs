@@ -4,9 +4,8 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::{
-	activate_selected_text_menu_items, emit_menu_choice, emit_menu_over,
-	emit_menu_over_on_selection, MenuComponentsPlugin, MenuOver, TextMenuColumn,
-	TextMenuDescription, TextMenuInputLock, TextMenuSystems,
+	activate_selected_text_menu_items, emit_menu_choice, emit_menu_focus, MenuComponentsPlugin,
+	MenuFocus, TextMenu, TextMenuColumn, TextMenuDescription, TextMenuInputLock, TextMenuSystems,
 };
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -17,9 +16,10 @@ pub struct RequestShowHome;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct HomeScreen;
 
-/// Home destinations. Each pickable row stamps this as a component; [`emit_menu_choice`]
-/// copies the clicked (or Enter-selected) value onto the message bus. Screens do
-/// not navigate yet. [`emit_menu_over`] reroutes [`Pointer<Over>`] as [`MenuOver<Self>`].
+/// Home destinations. Each pickable row stamps this as a component.
+///
+/// In-screen: [`MenuFocus<Self>`] is triggered on the [`TextMenu`] and bubbles
+/// here. Outside the screen: click / Enter copies this value as a [`Message`].
 #[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
 pub enum HomeMenuChoice {
 	#[default]
@@ -69,7 +69,7 @@ impl HomeScreen {
 				)
 				.scene(),
 			),
-			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovegitry.description())),
+			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovery.description())),
 		];
 		bsn! {
 			HomeScreen
@@ -78,6 +78,7 @@ impl HomeScreen {
 				height: percent(100),
 			}
 			Pickable::IGNORE
+			on(sync_home_description)
 			Children [ {children} ]
 		}
 	}
@@ -95,16 +96,13 @@ impl Plugin for HomeScreenPlugin {
 			app.add_plugins(MenuComponentsPlugin);
 		}
 		app.add_message::<HomeMenuChoice>()
-			.add_message::<MenuOver<HomeMenuChoice>>()
 			.add_observer(emit_menu_choice::<HomeMenuChoice>)
-			.add_observer(emit_menu_over::<HomeMenuChoice>)
 			.add_systems(Update, sync_text_menu_input_lock.in_set(TextMenuSystems::InputLock))
 			.add_systems(
 				Update,
 				(
 					apply_show_home,
-					emit_menu_over_on_selection::<HomeMenuChoice>,
-					sync_home_description,
+					emit_menu_focus::<HomeMenuChoice>.after(TextMenuSystems::Navigate),
 					activate_selected_text_menu_items::<HomeMenuChoice>,
 				),
 			);
@@ -136,14 +134,21 @@ fn apply_show_home(
 }
 
 fn sync_home_description(
-	mut overs: MessageReader<MenuOver<HomeMenuChoice>>,
+	focus: On<MenuFocus<HomeMenuChoice>>,
+	parents: Query<&ChildOf, With<TextMenu>>,
+	children: Query<&Children>,
 	mut lines: Query<&mut Text, With<TextMenuDescription>>,
 ) {
-	let Some(MenuOver(choice)) = overs.read().last().copied() else {
+	let Ok(child_of) = parents.get(focus.event().entity) else {
 		return;
 	};
-	for mut text in &mut lines {
-		text.0 = choice.description().to_string();
+	let Ok(siblings) = children.get(child_of.parent()) else {
+		return;
+	};
+	for child in siblings {
+		if let Ok(mut text) = lines.get_mut(*child) {
+			text.0 = focus.event().choice.description().to_string();
+		}
 	}
 }
 

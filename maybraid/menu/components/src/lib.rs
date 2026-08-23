@@ -1,8 +1,9 @@
 //! Reusable Maybraid HUD widgets.
 //!
 //! Widgets expose [`Scene`] constructors (`bsn!`). Screens stamp an API-specific
-//! choice component onto each pickable row; picking copies that component out
-//! as a [`Message`].
+//! choice component onto each pickable row. Selection triggers [`MenuFocus`]
+//! on the menu (in-screen observers). Click / Enter copies the choice as a
+//! [`Message`] for listeners outside the screen.
 
 pub mod description;
 pub mod text_menu;
@@ -10,10 +11,9 @@ pub mod theme;
 
 pub use description::TextMenuDescription;
 pub use text_menu::{
-	activate_selected_text_menu_items, emit_menu_choice, emit_menu_over,
-	emit_menu_over_on_selection, navigate_text_menus, select_text_menu_item_on_over,
-	sync_text_menu_item_colors, MenuOver, TextMenu, TextMenuColumn, TextMenuHeader,
-	TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
+	activate_selected_text_menu_items, emit_menu_choice, emit_menu_focus, navigate_text_menus,
+	select_text_menu_item_on_over, sync_text_menu_item_colors, MenuFocus, TextMenu, TextMenuColumn,
+	TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,
 };
 pub use theme::{
 	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW,

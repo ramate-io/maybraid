@@ -1,8 +1,8 @@
 //! Bottom-left text column, authored as BSN [`Scene`]s.
 //!
-//! Pickable rows stamp a screen-specific choice component `E`. [`emit_menu_choice`]
-//! copies that component onto the message bus when the row is clicked. Enter
-//! uses the same `E` on the keyboard-selected row.
+//! Pickable rows stamp a screen-specific choice component `E`. Selection changes
+//! trigger [`MenuFocus<E>`] on the [`TextMenu`] (propagates to the screen).
+//! [`emit_menu_choice`] copies `E` onto the message bus on click or Enter.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -168,32 +168,24 @@ pub fn select_text_menu_item_on_over(
 	menu.selected = item.index.min(menu.item_count - 1);
 }
 
-/// Pointer-over payload, rerouted from a pickable row to a screen-specific `E`.
-#[derive(Message, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MenuOver<E>(pub E);
-
-/// Copy the choice component on the hovered row onto [`MenuOver<E>`].
-pub fn emit_menu_over<E: Component + Copy + Send + Sync + 'static>(
-	over: On<Pointer<Over>>,
-	choices: Query<&E, With<TextMenuItem>>,
-	mut writer: MessageWriter<MenuOver<E>>,
-) {
-	let Ok(choice) = choices.get(over.entity) else {
-		return;
-	};
-	writer.write(MenuOver(*choice));
+/// In-screen focus: triggered on the [`TextMenu`], bubbles to the screen root.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+#[entity_event(propagate, auto_propagate)]
+pub struct MenuFocus<E> {
+	pub entity: Entity,
+	pub choice: E,
 }
 
-/// Copy the selected row’s choice onto [`MenuOver<E>`] when keyboard focus moves.
-pub fn emit_menu_over_on_selection<E: Component + Copy + Send + Sync + 'static>(
+/// Trigger [`MenuFocus<E>`] on a menu when its [`TextMenu::selected`] changes.
+pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 	menus: Query<(Entity, &TextMenu), Changed<TextMenu>>,
 	items: Query<(&TextMenuItem, &E, &ChildOf)>,
-	mut writer: MessageWriter<MenuOver<E>>,
+	mut commands: Commands,
 ) {
 	for (menu_entity, menu) in &menus {
 		for (item, choice, child_of) in &items {
 			if child_of.parent() == menu_entity && item.index == menu.selected {
-				writer.write(MenuOver(*choice));
+				commands.trigger(MenuFocus { entity: menu_entity, choice: *choice });
 			}
 		}
 	}
