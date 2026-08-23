@@ -201,6 +201,16 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<KamakuraTorch>>>);
 		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<HighBushShoots>>>);
 		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<TuftPatch>>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<FriendsConifer>>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<LiamsConifer>>>);
+		avian_host!(
+			app,
+			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<NorthernConifer>>>
+		);
+		avian_host!(
+			app,
+			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<TemperateConifer>>>
+		);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);

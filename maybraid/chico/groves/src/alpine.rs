@@ -192,6 +192,8 @@ impl AlpineCell {
 
 #[cfg(feature = "render")]
 mod vc {
+	use std::sync::Arc;
+
 	use super::variants::alpine_friends_conifer::FriendsConiferSamples;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
@@ -208,13 +210,15 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, AlpineCell, AlpineItem};
+	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const ALPINE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -260,6 +264,11 @@ mod vc {
 		#[command(flatten, next_help_heading = "Terrain")]
 		pub terrain: FlatTerrainSample,
 
+		/// Number of unit-height plant archetypes (`unit_from_num(0..n)`). Caps unique
+		/// merged-mesh handles for High/Medium.
+		#[arg(long, default_value_t = 100)]
+		pub tree_variants: u32,
+
 		#[arg(skip)]
 		resolved_placements: Option<Vec<GroveCellVariant<AlpineCell>>>,
 	}
@@ -276,6 +285,7 @@ mod vc {
 					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
 				),
 				terrain: FlatTerrainSample { elevation: 0.35, steepness: 0.15 },
+				tree_variants: 100,
 				resolved_placements: None,
 			}
 		}
@@ -324,14 +334,19 @@ mod vc {
 
 		/// Grow placements against `world` ([`crate::GroveWorldSample::height_at`]).
 		pub fn build_on(&self, world: &impl crate::GroveWorldSample) -> Alpine {
-			Alpine::from_placements(&self.placements_on(world), self.grove.noise, &self.extent)
+			Alpine::from_placements(
+				&self.placements_on(world),
+				self.grove.noise,
+				&self.extent,
+				self.tree_variants,
+			)
 		}
 	}
 
 	#[derive(Clone)]
 	enum AlpineKind {
-		Friends(FriendsConifer),
-		Liams(LiamsConifer),
+		Friends(Arc<FriendsConifer>),
+		Liams(Arc<LiamsConifer>),
 	}
 
 	#[derive(Clone)]
@@ -345,7 +360,7 @@ mod vc {
 
 	#[derive(Clone, Component)]
 	pub struct Alpine {
-		pub plants: Vec<AlpinePlant>,
+		pub plants: Arc<[AlpinePlant]>,
 		pub structural_center: Vec3,
 		pub footprint_radius: f32,
 		pub extent: GroveExtent,
@@ -356,34 +371,59 @@ mod vc {
 			placements: &[GroveCellVariant<AlpineCell>],
 			grove_noise: NoiseParams,
 			extent: &GroveExtent,
+			tree_variants: u32,
 		) -> Self {
-			let plants = placements.iter().map(|placed| grow_plant(placed, grove_noise)).collect();
+			let plants: Arc<[AlpinePlant]> = placements
+				.iter()
+				.map(|placed| grow_plant(placed, grove_noise, tree_variants))
+				.collect::<Vec<_>>()
+				.into();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
 			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
 
 		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
-			self.plants
-				.iter()
-				.map(|plant| match &plant.kind {
-					AlpineKind::Friends(t) => nest_placed_plant_chunk(
-						t.clone(),
+			if self.plants.is_empty() {
+				return Vec::new();
+			}
+			let n = self.plants.len();
+			let plants = Arc::clone(&self.plants);
+			let prev = *lod_ref.previous_transform;
+			let curr = *lod_ref.current_transform;
+			let bounds = *lod_ref.bounds;
+			let entity = lod_ref.entity;
+			let mut index = 0usize;
+			vec![SceneChunk::lazy(n as u32, n, move || {
+				if index >= plants.len() {
+					return None;
+				}
+				let plant = &plants[index];
+				index += 1;
+				let plant_lod = LodRef {
+					entity,
+					previous_transform: &prev,
+					current_transform: &curr,
+					bounds: &bounds,
+				};
+				Some(match &plant.kind {
+					AlpineKind::Friends(t) => nest_flattened_plant_chunk(
+						Arc::clone(t),
 						plant.placement,
 						&plant.stick_material,
 						&plant.ball_material,
 						&plant.frond_material,
-						lod_ref,
+						&plant_lod,
 					),
-					AlpineKind::Liams(t) => nest_placed_plant_chunk(
-						t.clone(),
+					AlpineKind::Liams(t) => nest_flattened_plant_chunk(
+						Arc::clone(t),
 						plant.placement,
 						&plant.stick_material,
 						&plant.ball_material,
 						&plant.frond_material,
-						lod_ref,
+						&plant_lod,
 					),
 				})
-				.collect()
+			})]
 		}
 
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
@@ -400,10 +440,16 @@ mod vc {
 		}
 	}
 
-	fn grow_plant(placed: &GroveCellVariant<AlpineCell>, grove_noise: NoiseParams) -> AlpinePlant {
-		let build_noise = placement_noise(grove_noise, placed.position);
-		let stick_seed = build_noise.seed;
-		let canopy_seed = build_noise.seed.wrapping_add(31);
+	fn grow_plant(
+		placed: &GroveCellVariant<AlpineCell>,
+		grove_noise: NoiseParams,
+		tree_variants: u32,
+	) -> AlpinePlant {
+		let variant = patch_variant_index(placed.position, tree_variants);
+		let build_noise = variant_noise(grove_noise, variant);
+		let palette_noise = placement_noise(grove_noise, placed.position);
+		let stick_seed = palette_noise.seed;
+		let canopy_seed = palette_noise.seed.wrapping_add(31);
 		let stick_material =
 			stick_material_from_palette(Some(placed.variant.stick_palette_mix()), stick_seed);
 		let ball_material = canopy_ball_material_from_palette(
@@ -412,10 +458,8 @@ mod vc {
 		);
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
-		let placement =
-			Placement::new(placed.position, 0.0).with_scale(Vec3::splat(placed.scale.max(1e-4)));
 
-		let kind = match placed.variant.item() {
+		match placed.variant.item() {
 			AlpineItem::FriendsConifer(conifer) => {
 				let samples =
 					BuildWithNoise::<FriendsConiferSamples>::build_with_noise(conifer, build_noise);
@@ -423,17 +467,31 @@ mod vc {
 				params.geometry = samples.geometry;
 				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
 				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				AlpineKind::Friends(params.build())
+				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				AlpinePlant {
+					placement: Placement::new(placed.position, 0.0)
+						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					kind: AlpineKind::Friends(Arc::new(unit_params.build())),
+					stick_material,
+					ball_material,
+					frond_material,
+				}
 			}
 			AlpineItem::LiamsConifer(conifer) => {
 				let geometry = conifer.build_with_noise(build_noise);
 				let mut params = LiamsConiferParams::default();
 				params.geometry = geometry;
-				AlpineKind::Liams(params.build())
+				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				AlpinePlant {
+					placement: Placement::new(placed.position, 0.0)
+						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					kind: AlpineKind::Liams(Arc::new(unit_params.build())),
+					stick_material,
+					ball_material,
+					frond_material,
+				}
 			}
-		};
-
-		AlpinePlant { placement, kind, stick_material, ball_material, frond_material }
+		}
 	}
 
 	impl VegetationComponents for Alpine {
@@ -512,6 +570,96 @@ mod vc {
 
 		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+		use super::*;
+		use anyhow::Result;
+
+		fn small_grove() -> Alpine {
+			AlpineParams::default()
+				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(220.0, 1.0, 220.0)))
+				.build()
+		}
+
+		fn plant_height(plant: &AlpinePlant) -> f32 {
+			match &plant.kind {
+				AlpineKind::Friends(t) => t.geometry.height(),
+				AlpineKind::Liams(t) => t.geometry.scale.stalk_height,
+			}
+		}
+
+		fn plant_seed(plant: &AlpinePlant) -> i32 {
+			match &plant.kind {
+				AlpineKind::Friends(t) => t.geometry.canopy_noise.seed,
+				AlpineKind::Liams(t) => t.geometry.canopy_noise.seed,
+			}
+		}
+
+		#[test]
+		fn high_medium_nest_one_flattened_host_per_tree() -> Result<()> {
+			let grove = small_grove();
+			assert!(!grove.plants.is_empty(), "expected placed alpine plants");
+
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::High).len(), 0);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::High).len(), 0);
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Medium).len(), 0);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 0);
+
+			let camera = Transform::from_translation(Vec3::new(40.0, 2.0, 40.0));
+			let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+			let lod_ref = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &camera,
+				current_transform: &camera,
+				bounds: &bounds,
+			};
+			let high = grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High);
+			let lod::SceneChunk::SubChunks(parts) = high else {
+				anyhow::bail!("High alpine should wrap plant chunks");
+			};
+			assert_eq!(parts.len(), 1, "expected one lazy plant producer");
+			let lod::SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } = &parts[0]
+			else {
+				anyhow::bail!("High alpine plants should be SceneChunk::Lazy");
+			};
+			assert_eq!(*remaining_primitives, grove.plants.len());
+			assert_eq!(*remaining_weight as usize, grove.plants.len());
+
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
+			assert_eq!(low_foliage, grove.plants.len());
+			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
+			let lod::SceneChunk::Primitive { weight, .. } =
+				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
+			else {
+				anyhow::bail!("Low alpine should emit one flattened canopy collection");
+			};
+			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			Ok(())
+		}
+
+		#[test]
+		fn tree_variants_quantize_archetypes() -> Result<()> {
+			use std::collections::HashSet;
+
+			let mut params = AlpineParams::default()
+				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(220.0, 1.0, 220.0)));
+			params.tree_variants = 4;
+			let grove = params.build();
+			assert!(!grove.plants.is_empty(), "expected placed alpine plants");
+			for plant in grove.plants.iter() {
+				assert!(
+					(plant_height(plant) - 1.0).abs() < 1e-4,
+					"expected unit height, got {}",
+					plant_height(plant)
+				);
+			}
+			let seeds: HashSet<i32> = grove.plants.iter().map(plant_seed).collect();
+			assert!(seeds.len() <= 4, "expected ≤4 unique unit seeds, got {}", seeds.len());
+			Ok(())
 		}
 	}
 }
