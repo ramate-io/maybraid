@@ -6,6 +6,12 @@
 //! with a layered-ball Low proxy) using the Common High Bush ball-selection rule
 //! (terminals, upper canopy, or branch order > 1) — not plane-splay.
 //!
+//! [`HighBushShoots::unit_from_num`] / [`HighBushShootsParams::into_unit_from_num`]
+//! normalize to unit height and key chain noise by a variant index so many plants
+//! share one archetypal mesh (world size goes on [`Placement`] scale). Emission
+//! folds sticks into a collection; cheap balls merge when that style is selected.
+//! Layered balls stay separate nodes (shared GLBs).
+//!
 //! Legacy [`chico_tree_components::HighBushShoots`] RenderItem still uses
 //! [`HighBushFoliageStyle::PlaneSplay`] / Tuft via ball-components.
 
@@ -18,6 +24,8 @@ use chico_vegetation_components::{
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
+
+use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 
 /// High when `distance / footprint_radius ≤` this.
 const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -52,6 +60,23 @@ impl HighBushShootsParams {
 	pub fn build(&self) -> HighBushShoots {
 		HighBushShoots::from_params(self)
 	}
+
+	/// Unit-height bush whose chain noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	///
+	/// Lengths and radii on [`HighBushShootsShape`] are already height fractions.
+	/// Only `height` is world-sized; world size returns for grove [`Placement`] scale.
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut shape = self.shape;
+		let size = shape.height.max(1e-4);
+		shape.height = 1.0;
+		shape.chain_noise.seed = num as i32;
+		(Self { shape }, size)
+	}
 }
 
 /// Built high bush: shape plus grown ball-stick chain.
@@ -64,6 +89,11 @@ pub struct HighBushShoots {
 impl HighBushShoots {
 	pub fn from_params(params: &HighBushShootsParams) -> Self {
 		Self { shape: params.shape.clone(), chain: params.shape.build_chain() }
+	}
+
+	/// Unit-height bush whose chain noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&HighBushShootsParams::unit_from_num(num))
 	}
 
 	fn leaf_radius_world(&self) -> f32 {
@@ -133,8 +163,12 @@ impl VegetationComponents for HighBushShoots {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => 4,
 		};
-		Layers::from_free(self.stick_nodes(stride))
+		let nodes: Vec<_> = self
+			.stick_nodes(stride)
+			.into_iter()
 			.map(|n| n.with_material(chico_stick_material_ref()))
+			.collect();
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -147,8 +181,12 @@ impl VegetationComponents for HighBushShoots {
 			| LodSceneLevel::Resolution(_) => (3, true),
 		};
 		// PlaneSplay / CheapBall / LayeredBall / Tuft all map to ball kits on the VC path.
-		Layers::from_free(self.foliage_nodes(stride, low))
+		let nodes: Vec<_> = self
+			.foliage_nodes(stride, low)
+			.into_iter()
 			.map(|n| n.with_material(chico_leaf_material_ref()))
+			.collect();
+		Layers::from_free(merge_cheap_ball_foliage(nodes))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -171,6 +209,7 @@ impl VegetationComponents for HighBushShoots {
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use chico_vegetation_components::FoliageGeometry;
 
 	#[test]
 	fn default_vc_uses_layered_ball_style() -> Result<()> {
@@ -185,7 +224,8 @@ mod tests {
 	fn high_emits_sticks_and_canopy_layered_balls() -> Result<()> {
 		let built = HighBushShootsParams::default().build();
 		let sticks = built.stick_nodes_for_level(LodSceneLevel::High).flatten();
-		assert!(!sticks.is_empty());
+		assert_eq!(sticks.len(), 1);
+		assert!(sticks[0].collection.is_some());
 		let foliage = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		assert!(!foliage.is_empty());
 		// RFC ball selection fills more than graph terminals alone.
@@ -202,11 +242,35 @@ mod tests {
 	}
 
 	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = HighBushShoots::unit_from_num(3);
+		let b = HighBushShoots::unit_from_num(3);
+		let c = HighBushShoots::unit_from_num(4);
+		assert!((a.shape.height - 1.0).abs() < 1e-5);
+		assert_eq!(a.shape.chain_noise.seed, 3);
+		assert_eq!(a.shape.chain_noise.seed, b.shape.chain_noise.seed);
+		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
+		assert_ne!(a.shape.chain_noise.seed, c.shape.chain_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = HighBushShootsParams::default();
+		params.shape.height = 8.0;
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 8.0).abs() < 1e-5);
+		assert!((unit.shape.height - 1.0).abs() < 1e-5);
+		assert_eq!(unit.shape.chain_noise.seed, 7);
+		Ok(())
+	}
+
+	#[test]
 	fn medium_subsamples_sticks_low_uses_layered() -> Result<()> {
 		let built = HighBushShootsParams::default().build();
-		let high = built.stick_nodes_for_level(LodSceneLevel::High).flatten();
-		let medium = built.stick_nodes_for_level(LodSceneLevel::Medium).flatten();
-		let low_sticks = built.stick_nodes_for_level(LodSceneLevel::Low).flatten();
+		let high = built.stick_nodes(1);
+		let medium = built.stick_nodes(2);
+		let low_sticks = built.stick_nodes(4);
 		assert!(medium.len() <= high.len());
 		assert!(low_sticks.len() <= medium.len());
 
@@ -222,10 +286,8 @@ mod tests {
 		params.shape.foliage_style = HighBushFoliageStyle::CheapBall;
 		let built = params.build();
 		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert!(high.iter().all(|n| matches!(
-			n.geometry,
-			chico_vegetation_components::FoliageGeometry::CheapBall
-		)));
+		assert_eq!(high.len(), 1);
+		assert!(matches!(high[0].geometry, FoliageGeometry::CheapBallCollection(_)));
 		Ok(())
 	}
 
