@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
+use crate::text_menu::TextMenu;
 use crate::theme::{
 	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BOTTOM, DESCRIPTION_FONT_SIZE, TEXT_YELLOW_FAINT,
 };
@@ -31,6 +32,29 @@ impl TextMenuDescription {
 				bottom: px(DESCRIPTION_BOTTOM),
 			}
 			Pickable::IGNORE
+		}
+	}
+}
+
+/// Write `value` onto the [`TextMenuDescription`] that shares a screen with `menu`.
+pub fn set_description_for_menu(
+	menu: Entity,
+	value: impl Into<String>,
+	menus: &Query<&ChildOf, With<TextMenu>>,
+	children: &Query<&Children>,
+	lines: &mut Query<&mut Text, With<TextMenuDescription>>,
+) {
+	let Ok(child_of) = menus.get(menu) else {
+		return;
+	};
+	let Ok(screen_children) = children.get(child_of.parent()) else {
+		return;
+	};
+	let value = value.into();
+	for child in screen_children {
+		if let Ok(mut text) = lines.get_mut(*child) {
+			text.0 = value;
+			return;
 		}
 	}
 }

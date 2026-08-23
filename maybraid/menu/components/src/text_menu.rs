@@ -1,8 +1,9 @@
 //! Bottom-left text column, authored as BSN [`Scene`]s.
 //!
-//! Pickable rows stamp a screen-specific choice component `E`. Selection changes
-//! trigger [`MenuFocus<E>`] on the [`TextMenu`] (propagates to the screen).
-//! [`emit_menu_choice`] copies `E` onto the message bus on click or Enter.
+//! Pickable rows stamp a screen-specific choice component `E`. Selection
+//! triggers [`MenuFocus<E>`] on the [`TextMenu`]; click / Enter trigger
+//! [`MenuActivate<E>`]. Both bubble to the screen. [`republish_menu_activate`]
+//! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -51,7 +52,7 @@ impl TextMenuItem {
 		Self { index, idle: TEXT_YELLOW, active: TEXT_YELLOW_HOVER }
 	}
 
-	/// Pickable row that carries `action` as a component for [`emit_menu_choice`].
+	/// Pickable row that stamps `action` for [`MenuFocus`] / [`MenuActivate`].
 	pub fn scene<E>(self, label: impl Into<String>, action: E) -> impl Scene + 'static
 	where
 		E: Component + Copy + Default + Unpin + Send + Sync + 'static,
@@ -176,6 +177,24 @@ pub struct MenuFocus<E> {
 	pub choice: E,
 }
 
+/// In-screen activate: triggered on the [`TextMenu`], bubbles to the screen root.
+#[derive(EntityEvent, Clone, Copy, Debug)]
+#[entity_event(propagate, auto_propagate)]
+pub struct MenuActivate<E> {
+	pub entity: Entity,
+	pub choice: E,
+}
+
+fn selected_choice<E: Component + Copy>(
+	menu_entity: Entity,
+	menu: &TextMenu,
+	items: &Query<(&TextMenuItem, &E, &ChildOf)>,
+) -> Option<E> {
+	items.iter().find_map(|(item, choice, child_of)| {
+		(child_of.parent() == menu_entity && item.index == menu.selected).then_some(*choice)
+	})
+}
+
 /// Trigger [`MenuFocus<E>`] on a menu when its [`TextMenu::selected`] changes.
 pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 	menus: Query<(Entity, &TextMenu), Changed<TextMenu>>,
@@ -183,28 +202,52 @@ pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 	mut commands: Commands,
 ) {
 	for (menu_entity, menu) in &menus {
-		for (item, choice, child_of) in &items {
-			if child_of.parent() == menu_entity && item.index == menu.selected {
-				commands.trigger(MenuFocus { entity: menu_entity, choice: *choice });
-			}
+		if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+			commands.trigger(MenuFocus { entity: menu_entity, choice });
 		}
 	}
 }
 
-/// Copy the choice component on the clicked row onto the message bus.
-pub fn emit_menu_choice<E: Message + Component + Copy>(
+/// Trigger [`MenuActivate<E>`] on the row’s parent menu.
+pub fn emit_menu_activate_on_click<E: Component + Copy>(
 	click: On<Pointer<Click>>,
 	lock: Res<TextMenuInputLock>,
-	choices: Query<&E, With<TextMenuItem>>,
-	mut writer: MessageWriter<E>,
+	items: Query<(&E, &ChildOf), With<TextMenuItem>>,
+	mut commands: Commands,
 ) {
 	if lock.0 {
 		return;
 	}
-	let Ok(choice) = choices.get(click.entity) else {
+	let Ok((choice, child_of)) = items.get(click.entity) else {
 		return;
 	};
-	writer.write(*choice);
+	commands.trigger(MenuActivate { entity: child_of.parent(), choice: *choice });
+}
+
+/// Trigger [`MenuActivate<E>`] for the keyboard-selected row.
+pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
+	keyboard: Res<ButtonInput<KeyCode>>,
+	lock: Res<TextMenuInputLock>,
+	menus: Query<(Entity, &TextMenu)>,
+	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	mut commands: Commands,
+) {
+	if lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
+		return;
+	}
+	for (menu_entity, menu) in &menus {
+		if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+			commands.trigger(MenuActivate { entity: menu_entity, choice });
+		}
+	}
+}
+
+/// Screen-boundary adapter: [`MenuActivate<E>`] → [`Message<E>`].
+pub fn republish_menu_activate<E: Message + Copy>(
+	activate: On<MenuActivate<E>>,
+	mut writer: MessageWriter<E>,
+) {
+	writer.write(activate.event().choice);
 }
 
 pub fn navigate_text_menus(
@@ -240,25 +283,6 @@ pub fn sync_text_menu_item_colors(
 		for child in children {
 			if let Ok(mut text_color) = labels.get_mut(*child) {
 				text_color.0 = color;
-			}
-		}
-	}
-}
-
-pub fn activate_selected_text_menu_items<E: Message + Component + Copy>(
-	keyboard: Res<ButtonInput<KeyCode>>,
-	lock: Res<TextMenuInputLock>,
-	menus: Query<(Entity, &TextMenu)>,
-	items: Query<(&TextMenuItem, &E, &ChildOf)>,
-	mut writer: MessageWriter<E>,
-) {
-	if lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
-		return;
-	}
-	for (menu_entity, menu) in &menus {
-		for (item, choice, child_of) in &items {
-			if child_of.parent() == menu_entity && item.index == menu.selected {
-				writer.write(*choice);
 			}
 		}
 	}

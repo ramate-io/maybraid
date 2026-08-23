@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
 use menu_components::{
-	activate_selected_text_menu_items, emit_menu_choice, emit_menu_focus, MenuComponentsPlugin,
-	MenuFocus, TextMenu, TextMenuColumn, TextMenuDescription, TextMenuInputLock, TextMenuSystems,
+	republish_menu_activate, set_description_for_menu, MenuFocus, TextMenu, TextMenuColumn,
+	TextMenuDescription, TextMenuInputLock, TextMenuPlugin, TextMenuSystems,
 };
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -18,8 +18,9 @@ pub struct HomeScreen;
 
 /// Home destinations. Each pickable row stamps this as a component.
 ///
-/// In-screen: [`MenuFocus<Self>`] is triggered on the [`TextMenu`] and bubbles
-/// here. Outside the screen: click / Enter copies this value as a [`Message`].
+/// In-screen: [`MenuFocus<Self>`] / [`menu_components::MenuActivate<Self>`] bubble
+/// to this root. Outside the screen: [`republish_menu_activate`] copies activate
+/// as a [`Message`].
 #[derive(Clone, Copy, Debug, Default, Message, Component, PartialEq, Eq)]
 pub enum HomeMenuChoice {
 	#[default]
@@ -79,6 +80,7 @@ impl HomeScreen {
 			}
 			Pickable::IGNORE
 			on(sync_home_description)
+			on(republish_menu_activate::<HomeMenuChoice>)
 			Children [ {children} ]
 		}
 	}
@@ -92,20 +94,9 @@ pub struct HomeScreenPlugin;
 
 impl Plugin for HomeScreenPlugin {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<MenuComponentsPlugin>() {
-			app.add_plugins(MenuComponentsPlugin);
-		}
-		app.add_message::<HomeMenuChoice>()
-			.add_observer(emit_menu_choice::<HomeMenuChoice>)
+		app.add_plugins(TextMenuPlugin::<HomeMenuChoice>::default())
 			.add_systems(Update, sync_text_menu_input_lock.in_set(TextMenuSystems::InputLock))
-			.add_systems(
-				Update,
-				(
-					apply_show_home,
-					emit_menu_focus::<HomeMenuChoice>.after(TextMenuSystems::Navigate),
-					activate_selected_text_menu_items::<HomeMenuChoice>,
-				),
-			);
+			.add_systems(Update, apply_show_home);
 	}
 }
 
@@ -135,21 +126,17 @@ fn apply_show_home(
 
 fn sync_home_description(
 	focus: On<MenuFocus<HomeMenuChoice>>,
-	parents: Query<&ChildOf, With<TextMenu>>,
+	menus: Query<&ChildOf, With<TextMenu>>,
 	children: Query<&Children>,
 	mut lines: Query<&mut Text, With<TextMenuDescription>>,
 ) {
-	let Ok(child_of) = parents.get(focus.event().entity) else {
-		return;
-	};
-	let Ok(siblings) = children.get(child_of.parent()) else {
-		return;
-	};
-	for child in siblings {
-		if let Ok(mut text) = lines.get_mut(*child) {
-			text.0 = focus.event().choice.description().to_string();
-		}
-	}
+	set_description_for_menu(
+		focus.event().entity,
+		focus.event().choice.description(),
+		&menus,
+		&children,
+		&mut lines,
+	);
 }
 
 #[cfg(test)]
