@@ -186,6 +186,12 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<StorybookTree>>);
 		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<StorybookTree>>);
 		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<StorybookTree>>>);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<VaseTree>>>);
+		avian_host!(
+			app,
+			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<JungleStorybookTree>>>
+		);
+		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<BraidOakTree>>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);

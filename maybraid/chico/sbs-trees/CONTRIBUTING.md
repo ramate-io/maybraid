@@ -1,6 +1,6 @@
 # Contributing (`chico-sbs-trees`)
 
-Merge + quantization is how a construction stays cheap when a grove instances it many times. Canonical tree: [`src/storybook_tree.rs`](src/storybook_tree.rs). Canonical tuft: [`src/tuft_patch.rs`](src/tuft_patch.rs). Grove wiring lives in [`chico-groves` CONTRIBUTING](../groves/CONTRIBUTING.md).
+Merge + quantization is how a construction stays cheap when a grove instances it many times. Canonical tree: [`src/storybook_tree.rs`](src/storybook_tree.rs). Also done: [`src/vase_tree.rs`](src/vase_tree.rs), [`src/jungle_storybook_tree.rs`](src/jungle_storybook_tree.rs), [`src/braid_oak_tree.rs`](src/braid_oak_tree.rs). Canonical tuft: [`src/tuft_patch.rs`](src/tuft_patch.rs). Grove wiring lives in [`chico-groves` CONTRIBUTING](../groves/CONTRIBUTING.md).
 
 Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_variants` default **100**.
 

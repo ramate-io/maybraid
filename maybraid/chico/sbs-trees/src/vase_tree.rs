@@ -3,6 +3,11 @@
 //! [`VaseTreeParams::build`] grows the ball-stick chain once into [`VaseTree`],
 //! which implements [`VegetationComponents`].
 //!
+//! [`VaseTree::unit_from_num`] / [`VaseTreeParams::into_unit_from_num`] normalize to
+//! unit height and key layout noise by a variant index so many plants share one
+//! archetypal mesh (world size goes on [`Placement`](chico_vegetation_components::Placement)
+//! scale). Emission folds sticks and cheap balls into collections.
+//!
 //! Structural / stick LOD matches Penmarch Torch (`torch_tree`); foliage uses cheap-ball
 //! banding on upper / outer joints, a stalk-tip apex, and a Low mid-canopy layered proxy.
 
@@ -17,6 +22,8 @@ use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
 	StructuralLod, VegetationComponents,
 };
+
+use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
@@ -64,6 +71,34 @@ impl VaseTreeParams {
 	pub fn apply_bush_preset(&mut self) {
 		self.geometry.apply_bush_preset();
 	}
+
+	/// Unit-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	///
+	/// Returns `(unit_params, world_size)` where `world_size` is the pre-normalize
+	/// height to apply on the plant [`Placement`](chico_vegetation_components::Placement).
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut geometry = self.geometry;
+		let size = geometry.height().max(1e-4);
+		let inv = 1.0 / size;
+		geometry.scale.tree_height = 1.0;
+		if let Some(radius) = geometry.scale.stalk_base_radius {
+			geometry.scale.stalk_base_radius = Some((radius * inv).max(1e-6));
+		}
+		geometry.canopy_noise.seed = num as i32;
+		geometry.anchor_perturbation.noise.seed = num as i32;
+		(
+			Self {
+				geometry,
+				apex_ball_radius_fraction_of_height: self.apex_ball_radius_fraction_of_height,
+			},
+			size,
+		)
+	}
 }
 
 /// Built Vase Tree: params plus a single grown [`BallStickChain`].
@@ -103,6 +138,11 @@ impl VaseTree {
 	fn upper_foliage_ring_u(&self) -> f32 {
 		self.geometry.canopy.upper_foliage_ring_u
 	}
+
+	/// Unit-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&VaseTreeParams::unit_from_num(num))
+	}
 }
 
 impl VegetationComponents for VaseTree {
@@ -115,7 +155,9 @@ impl VegetationComponents for VaseTree {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
-		Layers::from_free(nodes).map(|n| n.with_material(chico_stick_material_ref()))
+		let nodes: Vec<_> =
+			nodes.into_iter().map(|n| n.with_material(chico_stick_material_ref())).collect();
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -132,7 +174,9 @@ impl VegetationComponents for VaseTree {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => foliage_nodes_low(&self.chain, leaf_r, upper_u, apex_r),
 		};
-		Layers::from_free(nodes).map(|n| n.with_material(chico_leaf_material_ref()))
+		let nodes: Vec<_> =
+			nodes.into_iter().map(|n| n.with_material(chico_leaf_material_ref())).collect();
+		Layers::from_free(merge_cheap_ball_foliage(nodes))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -148,5 +192,50 @@ impl VegetationComponents for VaseTree {
 				STRUCTURAL_LOW_FACTOR,
 			),
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+	use chico_vegetation_components::FoliageGeometry;
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = VaseTree::unit_from_num(3);
+		let b = VaseTree::unit_from_num(3);
+		let c = VaseTree::unit_from_num(4);
+		assert!((a.geometry.height() - 1.0).abs() < 1e-5);
+		assert_eq!(a.geometry.canopy_noise.seed, 3);
+		assert_eq!(a.geometry.canopy_noise.seed, b.geometry.canopy_noise.seed);
+		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
+		assert_ne!(a.geometry.canopy_noise.seed, c.geometry.canopy_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = VaseTreeParams::default();
+		params.geometry.scale.tree_height = 8.0;
+		params.geometry.scale.stalk_base_radius = Some(0.4);
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 8.0).abs() < 1e-5);
+		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
+		assert!((unit.geometry.scale.stalk_base_radius.unwrap() - 0.05).abs() < 1e-5);
+		assert_eq!(unit.geometry.canopy_noise.seed, 7);
+		Ok(())
+	}
+
+	#[test]
+	fn high_emits_merged_stick_and_cheap_ball_collections() -> Result<()> {
+		let tree = VaseTree::unit_from_num(1);
+		let sticks = tree.stick_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(sticks.len(), 1);
+		assert!(sticks[0].collection.is_some());
+		let foliage = tree.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(foliage.len(), 1);
+		assert!(matches!(foliage[0].geometry, FoliageGeometry::CheapBallCollection(_)));
+		Ok(())
 	}
 }
