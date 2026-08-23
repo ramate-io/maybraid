@@ -180,3 +180,36 @@ Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** 
 Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.
 
 Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
+
+## Performance diagnostics (Tracy first)
+
+Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.
+
+Do **not** add hitch loggers to `lod`, playgrounds, or `ApplyDeferred` paths. Those scans (`Added<ChildOf>`, `Added<SceneRefRoot>`, …) showed up as hundreds of microseconds on the frames they were meant to explain.
+
+If you need text logs again (composition of a drain wave, command-apply ms, FPS):
+
+1. Put them in a **dedicated diagnostic crate** (for example `maybraid/lod/diagnostics`), not in `lod`’s fulfill systems.
+2. Gate the crate and every subscriber behind a **Cargo feature** (compiler flag), default-off. An env var is fine as a secondary switch once the feature is on.
+3. Keep playgrounds free of `PlaygroundDiag` / `system_commands` tracing layers. Wire the crate from `main` only when the feature is enabled.
+
+Copies of Tracy CSVs and hitch logs from the orchard work (`frame_*.csv`, `*tracy-zones*.csv`, `vast-orchard-hitch.log`) were removed from the tree. Recover the same kind of capture from **git history** on this branch if you need a worked example of the problems (drain apply, cull DFS, per-type produce, visibility reveal).
+
+## Migrating a grove to the orchard (flattened) approach
+
+Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made `/show vast-orchards` scale: one Avian volume per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
+
+Canonical example: [`maybraid/chico/groves/src/orchard.rs`](maybraid/chico/groves/src/orchard.rs) (`nest_plant_chunks`) plus helpers in [`grove/vc_compose.rs`](maybraid/chico/groves/src/grove/vc_compose.rs).
+
+1. **Compose with `nest_flattened_plant_chunk`**, not `nest_placed_plant_chunk`. Placed hosts wrap [`ComponentsOnly`](maybraid/chico/vegetation-components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/chico/vegetation-components/src/foliage/node.rs) / [`StickNode`](maybraid/chico/vegetation-components/src/sticks/node.rs) LOD hosts. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and emit posed kits only.
+2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in the playground:
+   `avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);`
+   in [`vegetation_lod.rs`](maybraid/chico/sbs-trees-playground/src/vegetation_lod.rs). Keep `ComponentsOnly<PlacedVegetation<YourTree>>` only if some other grove still nests the fine-phase path.
+3. **Lazy `SceneChunk` for the plant list.** Build one `SceneChunk::lazy(n, n, …)` that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
+4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for the High/Medium plant hosts.
+5. **Charge kit weight.** Flattened kits use [`FLATTENED_KIT_CHUNK_WEIGHT`](maybraid/chico/vegetation-components/src/lib.rs) so drain does not admit a full SceneRef / `WorldAssetRoot` wave in one frame.
+6. **Do not add a second produce plugin per region channel.** `AvianLodSceneRefreshPlugin<T, M, F>` can still be added for bullseye and spotlight; fill/emit are registered once per `T`. Cull stays typed (`AvianLodSceneCullPlugin`).
+
+7. **Quantize + merge kits on the plant.** Orchard Storybook trees go through [`StorybookTree::unit_from_num`](maybraid/chico/sbs-trees/src/storybook_tree.rs) (`tree_variants`, default 100). Emission folds sticks and cheap balls into [`MultiSceneMerge`](maybraid/scene-ref) collections. Merge packs kit-local positions into vertex color so [`ChicoLeafMaterial`](maybraid/chico/shaders/src/chico_leaf_material.wgsl) breakup still works. World size stays on the plant [`Placement`](maybraid/chico/vegetation-components/src/placed.rs) scale.
+
+A grove that still uses `nest_placed_plant_chunk` will pay per-node hosts, per-type produce, and a larger visibility/transform wave. Flatten when the plants are kit instances (shared meshes) and fine-phase LOD on each stick/ball is not required.

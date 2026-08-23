@@ -46,100 +46,169 @@ pub mod wild_grass;
 
 pub use grove::{
 	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
-	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveCellVariant,
-	GroveDefinition, GroveDistribution, GroveExtent, GroveFrontend, GrovePlacementRanges,
-	GroveWorldSample, PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
-	PreparedGroveDistribution, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
+	FlatTerrainSample, FnHeightSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome,
+	GroveCellVariant, GroveDefinition, GroveDistribution, GroveExtent, GroveFrontend,
+	GrovePlacementRanges, GroveWorldSample, PaletteColor, PaletteMix, PaletteSlot,
+	PlacementConstraints, PlacementSample, PreparedGroveDistribution, VariantWeightOverrides,
+	DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]
 pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 
+#[cfg(feature = "render")]
+pub use alpine::{Alpine, AlpineParams};
 pub use alpine::{AlpineCell, AlpineFriendsConifer, AlpineItem, AlpineLiamsConifer};
+#[cfg(feature = "render")]
+pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingParams};
 pub use arid_conifer_sapling::{
 	AridConiferSaplingCell, AridConiferSaplingFriendsConifer, AridConiferSaplingItem,
 	AridConiferSaplingLiamsConifer, AridConiferSaplingNorthernConifer,
 };
+#[cfg(feature = "render")]
+pub use braid_grass::{BraidGrass, BraidGrassParams};
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
+#[cfg(feature = "render")]
+pub use bush_scrub::{BushScrub, BushScrubParams};
 pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
+#[cfg(feature = "render")]
+pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaParams};
 pub use christmas_taiga::{ChristmasTaigaCell, ChristmasTaigaItem, ChristmasTaigaNorthernConifer};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
+#[cfg(feature = "render")]
+pub use common_tufts::{CommonTufts, CommonTuftsParams};
+#[cfg(feature = "render")]
+pub use conifer_massives::{ConiferMassives, ConiferMassivesParams};
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
 };
+#[cfg(feature = "render")]
+pub use conifer_sapling::{ConiferSapling, ConiferSaplingParams};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
-	ConiferSaplingNorthernConifer,
+	ConiferSaplingNorthernConifer, SaplingFlatTerrain,
 };
+#[cfg(feature = "render")]
+pub use date_grove::{DateGrove, DateGroveParams};
 pub use date_grove::{DateGroveCell, DateGroveDatePalm, DateGroveItem};
+#[cfg(feature = "render")]
+pub use dryland::{Dryland, DrylandParams};
 pub use dryland::{DrylandCell, DrylandItem, DrylandLiamsConifer, DrylandVaseTree};
+#[cfg(feature = "render")]
+pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaParams};
 pub use forlorn_savanna::{
 	ForlornSavannaCell, ForlornSavannaHighBush, ForlornSavannaItem, ForlornSavannaRory,
 	ForlornSavannaStorybook,
 };
+#[cfg(feature = "render")]
+pub use goettingen_follow::{GoettingenFollow, GoettingenFollowParams};
 pub use goettingen_follow::{
 	GoettingenFollowBraidOak, GoettingenFollowCell, GoettingenFollowItem, GoettingenFollowStorybook,
 };
+#[cfg(feature = "render")]
+pub use high_bush::{HighBush, HighBushParams};
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use jerrys_chaparral::{
-	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer, JerrysChaparralItem,
-	JerrysChaparralRoryHead,
+	ChaparralFlatTerrain, JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer,
+	JerrysChaparralItem, JerrysChaparralRoryHead,
 };
+#[cfg(feature = "render")]
+pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralParams};
+#[cfg(feature = "render")]
+pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesParams};
 pub use jungle_lower_massives::{
 	JungleLowerMassivesBanyan, JungleLowerMassivesBraidOak, JungleLowerMassivesCell,
 	JungleLowerMassivesItem, JungleLowerMassivesJungleStorybook, JungleLowerMassivesWaialeaPalm,
 };
+#[cfg(feature = "render")]
+pub use jungle_massives::{JungleMassives, JungleMassivesParams};
 pub use jungle_massives::{
 	JungleMassivesBanyan, JungleMassivesCell, JungleMassivesItem, JungleMassivesJungleStorybook,
 };
+#[cfg(feature = "render")]
+pub use leeward::{Leeward, LeewardParams};
 pub use leeward::{LeewardCell, LeewardItem, LeewardStorybook, LeewardTemperateConifer};
+#[cfg(feature = "render")]
+pub use levantine_scrub::{LevantineScrub, LevantineScrubParams};
 pub use levantine_scrub::{
 	LevantineScrubBraidOak, LevantineScrubBush, LevantineScrubCell, LevantineScrubHedge,
 	LevantineScrubItem, LevantineScrubRoryHead, LevantineScrubTorch, LevantineScrubVaseTree,
 };
+#[cfg(feature = "render")]
+pub use low_bush::{LowBush, LowBushParams};
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
-pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassParams};
+pub use monster_grass::{MonsterGrassCell, MonsterGrassClump};
+#[cfg(feature = "render")]
+pub use orchard::{Orchard, OrchardParams};
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
+#[cfg(feature = "render")]
+pub use palm_shade::{PalmShade, PalmShadeParams};
 pub use palm_shade::{PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm};
+#[cfg(feature = "render")]
+pub use riparian_general::{RiparianGeneral, RiparianGeneralParams};
 pub use riparian_general::{
 	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
 	RiparianGeneralStorybook,
 };
+#[cfg(feature = "render")]
+pub use riparian_mix::{RiparianMix, RiparianMixParams};
 pub use riparian_mix::{
 	RiparianMixBraidOak, RiparianMixCell, RiparianMixFriendsConifer, RiparianMixItem,
 	RiparianMixStorybook, RiparianMixTemperateConifer,
 };
+#[cfg(feature = "render")]
+pub use riverine_green::{RiverineGreen, RiverineGreenParams};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
+#[cfg(feature = "render")]
+pub use rolling_oaks::{RollingOaks, RollingOaksParams};
 pub use rolling_oaks::{
 	RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
 };
+#[cfg(feature = "render")]
+pub use shamanhome::{Shamanhome, ShamanhomeParams};
 pub use shamanhome::{
 	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
 };
+#[cfg(feature = "render")]
+pub use spotty_bushes::{SpottyBushes, SpottyBushesParams};
 pub use spotty_bushes::{SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
+#[cfg(feature = "render")]
+pub use storytellers::{Storytellers, StorytellersParams};
 pub use storytellers::{
 	StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
 	StorytellersTorch,
 };
+#[cfg(feature = "render")]
+pub use strange_oasis::{OasisDatePalm, StrangeOasis, StrangeOasisParams};
 pub use strange_oasis::{
 	StrangeOasisCell, StrangeOasisDatePalm, StrangeOasisItem, StrangeOasisStorybook,
 	StrangeOasisTorch,
 };
+#[cfg(feature = "render")]
+pub use tall_grass::{TallGrass, TallGrassParams};
 pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
+#[cfg(feature = "render")]
+pub use temperate_lower_massives::{TemperateLowerMassives, TemperateLowerMassivesParams};
 pub use temperate_lower_massives::{
 	TemperateLowerMassivesBraidOak, TemperateLowerMassivesCell, TemperateLowerMassivesItem,
 	TemperateLowerMassivesRory, TemperateLowerMassivesStorybook,
 };
+#[cfg(feature = "render")]
+pub use temperate_massives::{TemperateMassives, TemperateMassivesParams};
 pub use temperate_massives::{
 	TemperateMassivesBraidOak, TemperateMassivesCell, TemperateMassivesItem, TemperateMassivesRory,
 	TemperateMassivesStorybook,
 };
+#[cfg(feature = "render")]
+pub use trade_winds::{TradeWinds, TradeWindsParams};
 pub use trade_winds::{
 	TradeWindsBanyan, TradeWindsCell, TradeWindsItem, TradeWindsStorybook, TradeWindsWaialeaPalm,
 };
+#[cfg(feature = "render")]
+pub use tropical_thicket::{TropicalThicket, TropicalThicketParams};
 pub use tropical_thicket::{
 	TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell, TropicalThicketItem,
 	TropicalThicketPalm,
@@ -147,19 +216,31 @@ pub use tropical_thicket::{
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
+#[cfg(feature = "render")]
+pub use tropical_tufts::{TropicalTufts, TropicalTuftsParams};
+#[cfg(feature = "render")]
+pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthParams};
 pub use tropical_undergrowth::{
 	TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
 	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
 	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
 };
+#[cfg(feature = "render")]
+pub use unending_jungle::{UnendingJungle, UnendingJungleParams};
 pub use unending_jungle::{
 	UnendingJungleBanyan, UnendingJungleCell, UnendingJungleItem, UnendingJungleJungleStorybook,
 	UnendingJungleRoryHead, UnendingJungleStorybook, UnendingJungleTorch,
 	UnendingJungleWaialeaPalm,
 };
+#[cfg(feature = "render")]
+pub use vineyard::{Vineyard, VineyardParams};
 pub use vineyard::{VineyardCell, VineyardItem, VineyardRory};
+#[cfg(feature = "render")]
+pub use wandering_acacia::{WanderingAcacia, WanderingAcaciaParams};
 pub use wandering_acacia::{
 	WanderingAcaciaBanyan, WanderingAcaciaCell, WanderingAcaciaHighBush, WanderingAcaciaItem,
 	WanderingAcaciaTorch, WanderingAcaciaVaseTree,
 };
+#[cfg(feature = "render")]
+pub use wild_grass::{WildGrass, WildGrassParams};
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};

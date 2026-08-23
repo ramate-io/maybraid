@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 lod = { workspace = true }
+lod-avian = { workspace = true }
 procedural-common = { workspace = true }
 sdf = { workspace = true }
 chunk = { workspace = true }

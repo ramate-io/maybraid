@@ -56,29 +56,20 @@ pub fn setup_render_materials(
 		tuft: tuft.clone(),
 	});
 
-	attach_render_materials(
-		&mut config.subject,
-		&stick,
-		&conifer_stick,
-		&leaf,
-		&tuft,
-	);
+	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
 }
 
 fn attach_render_materials(
 	subject: &mut RenderSubject,
 	stick: &Handle<ChicoStickMaterial>,
-	conifer_stick: &Handle<ChicoStickMaterial>,
-	leaf: &Handle<ChicoLeafMaterial>,
+	_conifer_stick: &Handle<ChicoStickMaterial>,
+	_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
 		RenderSubject::SopesBanyan(_tree) => {}
 		RenderSubject::LiamsConifer(_tree) => {}
-		RenderSubject::FriendsConifer(tree) => {
-			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
-			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
-		}
+		RenderSubject::FriendsConifer(_) => {}
 		RenderSubject::NorthernConifer(_tree) => {}
 		RenderSubject::TemperateConifer(_tree) => {}
 		RenderSubject::DatePalm(_tree) => {}
@@ -99,162 +90,47 @@ fn attach_render_materials(
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::TuftPatch(_t) => {}
-		RenderSubject::BraidGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TropicalTufts(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::CommonTufts(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::BushScrub(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TropicalUndergrowth(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TropicalThicket(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::JerrysChaparral(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::LevantineScrub(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TallGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::WildGrass(g) => {
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::BraidGrass(_) => {}
+		RenderSubject::TropicalTufts(_) => {}
+		RenderSubject::CommonTufts(_) => {}
+		RenderSubject::BushScrub(_) => {}
+		RenderSubject::TropicalUndergrowth(_) => {}
+		RenderSubject::TropicalThicket(_) => {}
+		RenderSubject::JerrysChaparral(_) => {}
+		RenderSubject::LevantineScrub(_) => {}
+		RenderSubject::TallGrass(_) => {}
+		RenderSubject::WildGrass(_) => {}
 		RenderSubject::MonsterGrass(_) => {}
-		RenderSubject::RiverineGreen(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::LowBush(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::HighBush(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::SpottyBushes(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::UnendingJungle(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::JungleLowerMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::JungleMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TemperateLowerMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::PalmShade(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::RiparianMix(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Alpine(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Dryland(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Storytellers(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TradeWinds(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::WanderingAcacia(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Leeward(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::ChristmasTaiga(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::ConiferMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::TemperateMassives(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::RiparianGeneral(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::RollingOaks(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::ForlornSavanna(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Orchard(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Vineyard(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::DateGrove(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::StrangeOasis(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::Shamanhome(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::GoettingenFollow(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::ConiferSapling(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
-		RenderSubject::AridConiferSapling(g) => {
-			g.stick_material.mesh = MeshMaterial3d(stick.clone());
-			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
-		}
+		RenderSubject::RiverineGreen(_) => {}
+		RenderSubject::LowBush(_) => {}
+		RenderSubject::HighBush(_) => {}
+		RenderSubject::SpottyBushes(_) => {}
+		RenderSubject::UnendingJungle(_) => {}
+		RenderSubject::JungleLowerMassives(_) => {}
+		RenderSubject::JungleMassives(_) => {}
+		RenderSubject::TemperateLowerMassives(_) => {}
+		RenderSubject::PalmShade(_) => {}
+		RenderSubject::RiparianMix(_) => {}
+		RenderSubject::Alpine(_) => {}
+		RenderSubject::Dryland(_) => {}
+		RenderSubject::Storytellers(_) => {}
+		RenderSubject::TradeWinds(_) => {}
+		RenderSubject::WanderingAcacia(_) => {}
+		RenderSubject::Leeward(_) => {}
+		RenderSubject::ChristmasTaiga(_) => {}
+		RenderSubject::ConiferMassives(_) => {}
+		RenderSubject::TemperateMassives(_) => {}
+		RenderSubject::RiparianGeneral(_) => {}
+		RenderSubject::RollingOaks(_) => {}
+		RenderSubject::ForlornSavanna(_) => {}
+		RenderSubject::Orchard(_) => {}
+		RenderSubject::Vineyard(_) => {}
+		RenderSubject::DateGrove(_) => {}
+		RenderSubject::StrangeOasis(_) => {}
+		RenderSubject::Shamanhome(_) => {}
+		RenderSubject::GoettingenFollow(_) => {}
+		RenderSubject::ConiferSapling(_) => {}
+		RenderSubject::AridConiferSapling(_) => {}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

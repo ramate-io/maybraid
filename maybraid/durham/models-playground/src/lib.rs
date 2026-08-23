@@ -1,8 +1,10 @@
 //! Interactive Durham terrain models playground.
 
 pub mod camera;
+pub mod character;
 pub mod commands;
 mod debug_bounds;
+mod pitch;
 mod player;
 mod ui;
 
@@ -15,13 +17,15 @@ use avian3d::prelude::LinearVelocity;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
+use character::{apply_set_character, drive_player_locomotion};
+use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree,
 };
+use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{
-	draw_chunk_boundary_boxes, setup_cell_location_hud, toggle_bounds_overlay,
-	update_bounds_legend_visibility, update_cell_location_hud, PlaygroundDebugOverlay,
+	setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
@@ -34,7 +38,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
-use player::{respawn_player_on_layout, Player, PlayerPlugin};
+use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
@@ -110,6 +114,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					}),
 			)
 			.add_plugins(PlayerPlugin)
+			.add_plugins(CharacterHostsPlugin)
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
@@ -132,14 +137,20 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 				(
 					camera_controller,
 					apply_cell_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					apply_mode_commands.after(apply_cell_commands),
+					apply_set_character.after(apply_cell_commands),
+					apply_mode_commands.after(apply_set_character),
 					apply_mesh_stats.after(apply_mode_commands),
 					generate_cells.after(apply_mesh_stats),
 					present_cells.after(generate_cells),
-					toggle_bounds_overlay,
-					update_bounds_legend_visibility.after(toggle_bounds_overlay),
-					draw_chunk_boundary_boxes.after(present_cells),
-					update_cell_location_hud.after(draw_chunk_boundary_boxes),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
+					update_cell_location_hud.after(present_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

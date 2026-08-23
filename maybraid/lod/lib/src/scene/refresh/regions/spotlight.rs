@@ -50,11 +50,7 @@ mod tests {
 	use super::*;
 	use bevy::prelude::Transform;
 
-	fn lod_ref_at<'a>(
-		prev: &'a Transform,
-		curr: &'a Transform,
-		bounds: &'a Aabb3d,
-	) -> LodRef<'a> {
+	fn lod_ref_at<'a>(prev: &'a Transform, curr: &'a Transform, bounds: &'a Aabb3d) -> LodRef<'a> {
 		LodRef {
 			entity: Entity::from_bits(1),
 			previous_transform: prev,

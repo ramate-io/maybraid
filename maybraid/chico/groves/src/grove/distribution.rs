@@ -37,14 +37,11 @@ impl<V> GroveBucket<V> {
 	}
 
 	/// Whether this bucket may occupy `position` on `terrain`. `None` buckets always pass.
+	///
+	/// Authored [`PlacementConstraints`] are kept on the bucket but not applied — elevation
+	/// / steepness bands need a forest-layer normalization domain.
 	pub fn valid_at(&self, position: Vec3, world: &impl GroveWorldSample) -> bool {
-		if self.item.is_none() {
-			return true;
-		}
-		world.allows_placement_at(position)
-			&& self
-				.constraints
-				.allows(world.elevation_at(position), world.steepness_at(position))
+		self.item.is_none() || world.allows_placement_at(position)
 	}
 }
 
@@ -253,19 +250,12 @@ mod tests {
 	}
 
 	#[test]
-	fn first_fit_falls_back_to_valid_variant() -> Result<()> {
-		let dist = GroveDistribution::new(vec![
-			GroveBucket::placed(
-				1.0,
-				PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
-				"high_only",
-			),
-			GroveBucket::placed(
-				1.0,
-				PlacementConstraints::new(UnitRange::new(0.0, 0.5), UnitRange::new(0.0, 0.5)),
-				"flat",
-			),
-		]);
+	fn constraints_are_not_evaluated() -> Result<()> {
+		let dist = GroveDistribution::new(vec![GroveBucket::placed(
+			1.0,
+			PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
+			"high_only",
+		)]);
 		let outcome = prepared(dist).select_from(
 			0,
 			Vec3::new(5.0, 0.0, 5.0),
@@ -274,8 +264,8 @@ mod tests {
 			&flat(0.3, 0.2),
 		);
 		match outcome {
-			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
-			other => anyhow::bail!("expected Placed flat, got {other:?}"),
+			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "high_only"),
+			other => anyhow::bail!("expected Placed high_only, got {other:?}"),
 		}
 		Ok(())
 	}
@@ -302,18 +292,35 @@ mod tests {
 	}
 
 	#[test]
-	fn all_buckets_invalid_rejects() -> Result<()> {
+	fn exclusion_zone_rejects_placed_buckets() -> Result<()> {
+		use bevy_math::bounding::Aabb3d;
+
+		struct Blocked {
+			zones: Vec<Aabb3d>,
+		}
+		impl GroveWorldSample for Blocked {
+			fn height_at(&self, _position: Vec3) -> f32 {
+				0.0
+			}
+			fn steepness_at(&self, _position: Vec3) -> f32 {
+				0.0
+			}
+			fn exclusion_zones(&self) -> &[Aabb3d] {
+				&self.zones
+			}
+		}
+
 		let dist = GroveDistribution::new(vec![GroveBucket::placed(
 			1.0,
-			PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
-			"high_only",
+			PlacementConstraints::UNCONSTRAINED,
+			"tree",
 		)]);
 		let outcome = prepared(dist).select_at(
-			Vec3::ZERO,
+			Vec3::new(0.5, 0.0, 0.5),
 			1.0,
 			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
 			NoiseParams::default(),
-			&flat(0.1, 0.5),
+			&Blocked { zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)] },
 		);
 		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())

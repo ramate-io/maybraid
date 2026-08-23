@@ -47,8 +47,30 @@ impl Progress {
 /// For cyclic animations, progress wraps by taking `progress.fract()`. Values above `1.0`
 /// are valid (e.g. `1.5` samples halfway through the next cycle). One-shot animations
 /// clamp progress to `[0.0, 1.0]`.
+///
+/// Split so a mailbox can write bones and root-motion independently (LOD markers):
+///
+/// - [`Self::apply_for`] mutates bone pose only.
+/// - [`Self::effects_for`] is read-only (rest lengths + time) and returns armature
+///   [`Effects`].
+/// - [`Self::apply`] is the compatibility wrapper: `apply_for` then `effects_for`.
+///
+/// Composites ([`crate::animations::Mix`], [`crate::animations::Transition`]) must
+/// call the split on children — do not go through [`Self::apply`] and discard half.
 pub trait Animation<Rig> {
-	fn apply(&self, rig: &mut Rig, progress: f32) -> Effects;
+	/// Write bone pose. Do not apply armature root-motion here.
+	fn apply_for(&self, rig: &mut Rig, progress: f32);
+
+	/// Armature side effects from rest lengths and `progress`. Must not write bones.
+	fn effects_for(&self, _rig: &Rig, _progress: f32) -> Effects {
+		Effects::default()
+	}
+
+	/// Compatibility: [`Self::apply_for`] then [`Self::effects_for`].
+	fn apply(&self, rig: &mut Rig, progress: f32) -> Effects {
+		self.apply_for(rig, progress);
+		self.effects_for(rig, progress)
+	}
 }
 
 /// Animation playback state owned by the controller.

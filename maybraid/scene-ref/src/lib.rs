@@ -5,11 +5,11 @@
 //! transform) into one mesh [`WorldAsset`].
 //!
 //! [`SceneRefPlugin`] installs [`SceneRefHandles`] and [`MultiSceneMergeHandles`],
-//! which memoize [`Handle<WorldAsset>`]s. Mirrored refs rebuild meshes (axis flip +
-//! winding reverse) and reflect instance [`Transform`]s into a distinct cached
-//! asset before merge sees them.
-//! Use [`SceneRef::scene`] / [`SceneRefRoot`] or [`MultiSceneMerge::scene`] /
-//! [`MultiSceneMergeRoot`]; fulfill systems insert [`WorldAssetRoot`] when ready.
+//! which memoize [`Handle<WorldAsset>`]s. [`SceneRef::mirrored`] rebuilds meshes
+//! (axis flip + winding reverse); [`SceneRef::reflected`] also conjugates instance
+//! transforms. Both are distinct cache keys. Use [`SceneRef::scene`] /
+//! [`SceneRefRoot`] or [`MultiSceneMerge::scene`] / [`MultiSceneMergeRoot`];
+//! fulfill systems insert [`WorldAssetRoot`] when ready.
 
 mod fulfill;
 mod handles;
@@ -18,7 +18,7 @@ mod multi_merge;
 mod scene_ref;
 mod world_asset;
 
-use bevy::prelude::{App, Plugin, Update};
+use bevy::prelude::{App, Plugin, Resource, Update};
 
 pub use handles::SceneRefHandles;
 pub use mirror::{mirror_mesh, mirror_transform};
@@ -29,6 +29,28 @@ pub use scene_ref::{MirrorAxis, SceneRef, SceneRefRoot};
 
 use fulfill::{fulfill_multi_scene_merge_roots, fulfill_scene_ref_roots};
 
+/// Per-frame cap on new [`bevy::world_serialization::WorldAssetRoot`] inserts.
+///
+/// Drain can emit many [`SceneRefRoot`]s in one apply; instance spawn is uncapped
+/// unless this binds. Default is unlimited so other hosts stay unchanged.
+///
+/// [`Self::new_merge_meshes_per_frame`] is a separate cap on **first-time**
+/// [`MultiSceneMerge`] bakes (`meshes.add`). Cache hits still fulfill under
+/// [`Self::per_frame`] only.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct SceneRefAdmitBudget {
+	/// Max SceneRef / MultiSceneMerge roots fulfilled this frame (each path).
+	pub per_frame: u32,
+	/// Max new merged mesh assets created this frame. `u32::MAX` = unlimited.
+	pub new_merge_meshes_per_frame: u32,
+}
+
+impl Default for SceneRefAdmitBudget {
+	fn default() -> Self {
+		Self { per_frame: u32::MAX, new_merge_meshes_per_frame: u32::MAX }
+	}
+}
+
 /// Installs handle caches and fulfills scene / merge roots → [`WorldAssetRoot`].
 pub struct SceneRefPlugin;
 
@@ -36,6 +58,7 @@ impl Plugin for SceneRefPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<SceneRefHandles>()
 			.init_resource::<MultiSceneMergeHandles>()
+			.init_resource::<SceneRefAdmitBudget>()
 			.add_systems(Update, (fulfill_scene_ref_roots, fulfill_multi_scene_merge_roots));
 	}
 }
@@ -65,9 +88,14 @@ mod tests {
 	fn mirror_changes_cache_key() -> anyhow::Result<()> {
 		let base = SceneRef::glb("urban/foo.glb");
 		let mirrored = base.clone().mirrored(MirrorAxis::X);
+		let reflected = base.clone().reflected(MirrorAxis::X);
 		assert_ne!(base, mirrored);
+		assert_ne!(mirrored, reflected);
 		assert_eq!(base.labeled_path(), mirrored.labeled_path());
 		assert_eq!(mirrored.mirror, Some(MirrorAxis::X));
+		assert!(!mirrored.reflect_instance);
+		assert_eq!(reflected.mirror, Some(MirrorAxis::X));
+		assert!(reflected.reflect_instance);
 		Ok(())
 	}
 
@@ -111,6 +139,13 @@ mod tests {
 			other => anyhow::bail!("unexpected indices: {other:?}"),
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn admit_budget_default_is_unlimited() {
+		let budget = SceneRefAdmitBudget::default();
+		assert_eq!(budget.per_frame, u32::MAX);
+		assert_eq!(budget.new_merge_meshes_per_frame, u32::MAX);
 	}
 
 	#[test]

@@ -6,14 +6,16 @@ use crate::rigs::humanoid::apply::{apply_leg, apply_root};
 use crate::{Animation, Effects};
 
 impl<R: HumanoidRig> Animation<R> for Squat<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let femur_swing = self.femur_swing(progress);
 		let shin_flex = self.shin_flex(progress);
 
 		apply_leg(rig, Side::Left, femur_swing, shin_flex);
 		apply_leg(rig, Side::Right, femur_swing, shin_flex);
 		apply_root(rig, self.root_swing(progress));
+	}
 
+	fn effects_for(&self, rig: &R, progress: f32) -> Effects {
 		let drop = self.vertical_drop(progress, rig.segment_lengths());
 		Effects {
 			r#move: (drop > f32::EPSILON)

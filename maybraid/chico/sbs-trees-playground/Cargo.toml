@@ -10,8 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-# `trace` enables bevy_ecs `system_commands` spans used to time command apply
-# (see main.rs `[lod.commands]`; same as richmond-buildings-playground / PR #595).
+# `trace` enables Bevy Tracy zones (`system` / `system_commands` / `par_for_each`).
 bevy = { workspace = true, features = ["trace", "debug"] }
 chunk = { workspace = true }
 clap = { workspace = true }
@@ -23,7 +22,6 @@ chico-sbs-trees = { workspace = true }
 chico-tree-components = { workspace = true, features = ["clap"] }
 chico-sbs-geometry = { workspace = true, features = ["clap"] }
 chico-ball-components = { workspace = true, features = ["clap"] }
-chico-grove-render-items = { workspace = true, features = ["render"] }
 chico-groves = { workspace = true, features = ["render"] }
 chico-sdf = { workspace = true }
 chico-stick-components = { workspace = true }

@@ -22,10 +22,7 @@ pub struct LodSceneCullRegion<M: Send + Sync + 'static> {
 
 impl<M: Send + Sync + 'static> LodSceneCullRegion<M> {
 	pub fn new(region: Aabb3d) -> Self {
-		Self {
-			region,
-			_marker: PhantomData,
-		}
+		Self { region, _marker: PhantomData }
 	}
 }
 
@@ -45,7 +42,7 @@ pub enum LodCullRegionsStatus {
 pub trait LodCullRegions: Send + Sync + 'static {
 	fn lod_cull_regions(
 		&self,
-		lod_refs: &[&LodRef],
+		lod_refs: &[LodRef],
 		cursor: &mut LodCullRegionCursor,
 	) -> LodCullRegionsStatus;
 }
@@ -65,11 +62,13 @@ pub fn produce_lod_cull_regions<P, F, M>(
 	if nodes.is_empty() {
 		return;
 	}
+	if producer.is_changed() {
+		cursor.invalidate_cells();
+	}
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let ref_refs: Vec<&LodRef> = refs.iter().collect();
 
-	let LodCullRegionsStatus::Changed(regions) = producer.lod_cull_regions(&ref_refs, &mut cursor)
+	let LodCullRegionsStatus::Changed(regions) = producer.lod_cull_regions(&refs, &mut cursor)
 	else {
 		return;
 	};
@@ -96,9 +95,7 @@ where
 	M: Send + Sync + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 

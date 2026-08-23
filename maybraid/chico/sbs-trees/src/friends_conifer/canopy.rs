@@ -1,4 +1,8 @@
 //! [`PlaneSplay`] at every ball-stick joint ([#236](https://github.com/ramate-io/maybraid/issues/236), RFC §3.1.7.14).
+//!
+//! Legacy RenderItem helpers kept for constants / possible restore; VC uses Northern cheap-ball banding.
+
+#![allow(dead_code)]
 
 use bevy::prelude::*;
 use chico_ball_components::plane_splay::PlaneSplay;

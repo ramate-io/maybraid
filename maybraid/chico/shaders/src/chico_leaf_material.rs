@@ -1,7 +1,8 @@
-//! Canopy leaf [`Material`] — UV fractal noise silhouettes + PBR (`leaf_material` lineage).
+//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, double-sided PBR.
 
 use bevy::{
 	asset::embedded_asset,
+	light::NotShadowCaster,
 	mesh::MeshVertexBufferLayoutRef,
 	pbr::{MaterialPipeline, MaterialPipelineKey},
 	prelude::*,
@@ -19,6 +20,16 @@ impl Plugin for ChicoLeafMaterialPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "chico_leaf_material.wgsl");
 		app.add_plugins(MaterialPlugin::<ChicoLeafMaterial>::default());
+		app.add_systems(PostUpdate, disable_leaf_shadow_casters);
+	}
+}
+
+fn disable_leaf_shadow_casters(
+	mut commands: Commands,
+	query: Query<Entity, (With<MeshMaterial3d<ChicoLeafMaterial>>, Without<NotShadowCaster>)>,
+) {
+	for entity in &query {
+		commands.entity(entity).insert(NotShadowCaster);
 	}
 }
 
@@ -35,16 +46,21 @@ impl Default for ChicoLeafMaterial {
 }
 
 impl Material for ChicoLeafMaterial {
+	fn vertex_shader() -> ShaderRef {
+		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chico_leaf_material.wgsl").into()
+	}
+
 	fn fragment_shader() -> ShaderRef {
 		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "chico_leaf_material.wgsl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
+		// `fwidth` coverage; falls back to discard when MSAA is off.
 		AlphaMode::Opaque
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {
-		true
+		false
 	}
 
 	fn enable_prepass() -> bool {

@@ -10,7 +10,7 @@ use bevy::world_serialization::WorldAsset;
 use crate::mirror::mirror_world_asset;
 use crate::scene_ref::SceneRef;
 
-/// Memoized [`Handle<WorldAsset>`]s keyed by [`SceneRef`] (path + mirror).
+/// Memoized [`Handle<WorldAsset>`]s keyed by [`SceneRef`] (path + mirror + reflect).
 #[derive(Resource, Default)]
 pub struct SceneRefHandles {
 	cache: HashMap<SceneRef, Handle<WorldAsset>>,
@@ -72,7 +72,13 @@ impl SceneRefHandles {
 					return None;
 				}
 				let source = world_assets.get(&source_handle)?;
-				let mirrored = mirror_world_asset(source, axis, meshes, type_registry)?;
+				let mirrored = mirror_world_asset(
+					source,
+					axis,
+					scene_ref.reflect_instance,
+					meshes,
+					type_registry,
+				)?;
 				let handle = world_assets.add(mirrored);
 				self.cache.insert(scene_ref.clone(), handle.clone());
 				Some(handle)

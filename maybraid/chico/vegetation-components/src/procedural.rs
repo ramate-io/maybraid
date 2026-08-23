@@ -1,12 +1,15 @@
-//! Procedural style backends for vegetation IR (unit stick / ball meshes + plane-splay fulfill).
+//! Procedural style backends for vegetation IR (unit stick / ball meshes).
 //!
 //! Named as style variants until GLBs under `maybraid/art/vegetation/` replace them.
 
 use std::sync::OnceLock;
 
-use bevy::mesh::primitives::{MeshBuilder, Meshable, SphereKind, SphereMeshBuilder};
-use bevy::mesh::{Indices, VertexAttributeValues};
+use bevy::mesh::primitives::{MeshBuilder, Meshable};
+use bevy::mesh::VertexAttributeValues;
+use bevy::mesh::{SphereKind, SphereMeshBuilder};
 use bevy::prelude::*;
+
+use crate::lod_host::inherit_not_shadow_caster_on_meshes;
 
 /// Half-extent of stick kit on \(X/Z\) (\(X = Z \in [-\texttt{STICK\_KIT\_HALF}, \texttt{STICK\_KIT\_HALF}]\)).
 pub const STICK_KIT_HALF: f32 = 0.2;
@@ -15,15 +18,15 @@ pub const STICK_KIT_HALF: f32 = 0.2;
 /// Kit length is \(Y \in [0, 1]\); \(Z\) is authored negligible (flat blade).
 pub const FROND_KIT_HALF_X: f32 = 0.1;
 
-/// Registers shared procedural meshes / materials and fulfills [`PendingPlaneSplay`].
+/// Registers shared procedural meshes / materials for vegetation IR fallbacks.
 pub struct VegetationProceduralPlugin;
 
 impl Plugin for VegetationProceduralPlugin {
 	fn build(&self, app: &mut App) {
 		// Level updates are owned by lod refresh (region → level → sync). This plugin
-		// only registers procedural assets and plane-splay fulfill.
+		// only registers procedural assets.
 		app.add_systems(Startup, init_procedural_assets)
-			.add_systems(Update, fulfill_plane_splay);
+			.add_systems(PostUpdate, inherit_not_shadow_caster_on_meshes);
 	}
 }
 
@@ -99,99 +102,4 @@ fn stick_kit_cylinder_mesh() -> Mesh {
 		}
 	}
 	mesh
-}
-
-/// Marker: build plane-splay core + plates under this entity after spawn.
-#[derive(Component, Clone, Debug, Default)]
-pub struct PendingPlaneSplay {
-	pub icosphere_subdivisions: u32,
-	pub core_radius: f32,
-	pub leaf_disc_radius: f32,
-}
-
-#[derive(Component)]
-struct PlaneSplayFulfilled;
-
-fn fulfill_plane_splay(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	pending: Query<(Entity, &PendingPlaneSplay), Without<PlaneSplayFulfilled>>,
-) {
-	let material = VegetationProceduralAssets::foliage_material();
-	for (entity, splay) in &pending {
-		let subdiv = splay.icosphere_subdivisions.min(4);
-		let core_mesh =
-			SphereMeshBuilder::new(splay.core_radius, SphereKind::Ico { subdivisions: subdiv })
-				.build();
-		let plate_mesh = plate_shell_mesh(&core_mesh, splay.leaf_disc_radius);
-		let core_handle = meshes.add(core_mesh);
-		commands.entity(entity).insert(PlaneSplayFulfilled).with_children(|parent| {
-			parent.spawn((
-				Mesh3d(core_handle),
-				MeshMaterial3d(material.clone()),
-				Transform::IDENTITY,
-				Visibility::default(),
-			));
-			if let Some(plate) = plate_mesh {
-				parent.spawn((
-					Mesh3d(meshes.add(plate)),
-					MeshMaterial3d(material.clone()),
-					Transform::IDENTITY,
-					Visibility::default(),
-				));
-			}
-		});
-	}
-}
-
-fn tangent_basis(u: Vec3) -> (Vec3, Vec3) {
-	let up = if u.y.abs() < 0.92 { Vec3::Y } else { Vec3::Z };
-	let mut e1 = up.cross(u);
-	if e1.length_squared() < 1e-10 {
-		e1 = Vec3::X.cross(u);
-	}
-	e1 = e1.normalize();
-	let e2 = u.cross(e1).normalize();
-	(e1, e2)
-}
-
-fn plate_shell_mesh(core: &Mesh, leaf_disc_radius: f32) -> Option<Mesh> {
-	let positions = core.attribute(Mesh::ATTRIBUTE_POSITION)?;
-	let VertexAttributeValues::Float32x3(pos) = positions else {
-		return None;
-	};
-	let indices = core.indices()?;
-	let Indices::U32(idx) = indices else {
-		return None;
-	};
-
-	let mut plates: Option<Mesh> = None;
-	for (fi, tri) in idx.chunks_exact(3).enumerate() {
-		let a = Vec3::from_array(pos[tri[0] as usize]);
-		let b = Vec3::from_array(pos[tri[1] as usize]);
-		let c = Vec3::from_array(pos[tri[2] as usize]);
-		let centroid = (a + b + c) * (1.0 / 3.0);
-		if centroid.length_squared() < 1e-12 {
-			continue;
-		}
-		let radial = centroid.normalize();
-		let (e1, e2) = tangent_basis(radial);
-		let phi = (fi as f32) * 0.754_877_666_246_693_7 * std::f32::consts::TAU;
-		let (cos_p, sin_p) = (phi.cos(), phi.sin());
-		let e1r = cos_p * e1 + sin_p * e2;
-		let e2r = -sin_p * e1 + cos_p * e2;
-		let r = leaf_disc_radius;
-		let v0 = r * e1r;
-		let ang = std::f32::consts::TAU / 3.0;
-		let v1 = r * (ang.cos() * e1r + ang.sin() * e2r);
-		let v2 = r * ((2.0 * ang).cos() * e1r + (2.0 * ang).sin() * e2r);
-		let piece = Triangle3d::new(v0, v1, v2).mesh().build();
-		match &mut plates {
-			None => plates = Some(piece),
-			Some(acc) => {
-				let _ = acc.merge(&piece);
-			}
-		}
-	}
-	plates
 }

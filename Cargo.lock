@@ -2204,27 +2204,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chico-grove-render-items"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "bevy_math",
- "chico-ball-components",
- "chico-groves",
- "chico-sbs-geometry",
- "chico-sbs-trees",
- "chico-tree-components",
- "chico-vegetation-components",
- "chico-vegetation-shaders",
- "clap",
- "gimme-gen",
- "log",
- "procedural-common",
- "render-item",
-]
-
-[[package]]
 name = "chico-groves"
 version = "0.0.1"
 dependencies = [
@@ -2241,6 +2220,7 @@ dependencies = [
  "gimme-gen",
  "lod",
  "log",
+ "material-ref",
  "procedural-common",
 ]
 
@@ -2284,7 +2264,6 @@ dependencies = [
  "avian3d",
  "bevy",
  "chico-ball-components",
- "chico-grove-render-items",
  "chico-groves",
  "chico-sbs-geometry",
  "chico-sbs-trees",
@@ -2349,6 +2328,23 @@ dependencies = [
  "lod",
  "material-ref",
  "scene-ref",
+]
+
+[[package]]
+name = "chico-vegetation-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "chico-groves",
+ "chico-sbs-trees-playground",
+ "chico-vegetation-components",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "log",
+ "render-item",
 ]
 
 [[package]]
@@ -2779,6 +2775,7 @@ dependencies = [
  "game-commands",
  "lod",
  "malo-animations",
+ "material-ref",
  "scene-ref",
 ]
 
@@ -2790,6 +2787,18 @@ dependencies = [
  "bevy_math",
  "character-ui-menu",
  "clap",
+]
+
+[[package]]
+name = "crozon-character-motion"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "crozon-rigs",
+ "ground",
+ "lod",
+ "malo-animations",
 ]
 
 [[package]]
@@ -2819,6 +2828,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "crozon-character-world-movements-playground"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "chunk",
+ "clap",
+ "crozon-characters",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "ground-avian",
+ "lod",
+ "lod-avian",
+ "log",
+ "render-item",
+]
+
+[[package]]
 name = "crozon-characters"
 version = "0.0.1"
 dependencies = [
@@ -2828,8 +2856,10 @@ dependencies = [
  "character-ui-menu",
  "clap",
  "crozon-character-items",
+ "crozon-character-motion",
  "crozon-rigs",
  "lod",
+ "material-ref",
  "scene-ref",
 ]
 
@@ -2987,6 +3017,7 @@ dependencies = [
  "durham-terrain",
  "jersey-terrain-stamps",
  "lod",
+ "lod-avian",
  "log",
  "marazion-watersheds",
  "noise",
@@ -3003,10 +3034,13 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "crozon-characters",
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",
+ "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "render-item",
 ]
@@ -3559,6 +3593,22 @@ name = "grid"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9e2d4c0a8296178d8802098410ca05d86b17a10bb5ab559b3fb404c1f948220"
+
+[[package]]
+name = "ground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "ground-avian"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "ground",
+]
 
 [[package]]
 name = "guillotiere"

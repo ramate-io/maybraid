@@ -3,11 +3,12 @@
 //! [`SocketRef`] names a bone on a semantic [`RigId`]. Fulfill parents the host
 //! under that bone once the target rig's [`crate::rig::BoneMap`] is ready.
 //! [`SkinRef`] names the rig that should receive a part's joint remap.
+//! Lookups are scoped to the same [`crate::member::CharacterMembers`] set.
 
 use bevy::prelude::*;
 
-use crate::assembly::SocketRig;
-use crate::rig::{BoneMap, CharacterRig, CharacterRigRole, LodCharacterRig};
+use crate::member::{find_member_rig, CharacterMembers, MemberOf};
+use crate::rig::{BoneMap, CharacterRig, CharacterRigRole};
 
 /// Semantic rig identity used at scene-build time (entities do not exist yet).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -24,26 +25,6 @@ impl RigId {
 			Self::Body => CharacterRigRole::Body,
 			Self::Neck => CharacterRigRole::Neck,
 			Self::Head => CharacterRigRole::Head,
-		}
-	}
-}
-
-impl From<SocketRig> for RigId {
-	fn from(rig: SocketRig) -> Self {
-		match rig {
-			SocketRig::Body => Self::Body,
-			SocketRig::Neck => Self::Neck,
-			SocketRig::Head => Self::Head,
-		}
-	}
-}
-
-impl From<RigId> for SocketRig {
-	fn from(id: RigId) -> Self {
-		match id {
-			RigId::Body => Self::Body,
-			RigId::Neck => Self::Neck,
-			RigId::Head => Self::Head,
 		}
 	}
 }
@@ -101,13 +82,32 @@ pub struct SkinRefRoot(pub SkinRef);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct SkinRefApplied;
 
+/// Drop [`SocketRefApplied`] when the identity changes so fulfill re-parents.
+pub fn invalidate_changed_socket_ref_roots(
+	mut commands: Commands,
+	changed: Query<Entity, (Changed<SocketRefRoot>, With<SocketRefApplied>)>,
+) {
+	for entity in &changed {
+		commands.entity(entity).remove::<SocketRefApplied>();
+	}
+}
+
 pub fn fulfill_socket_ref_roots(
 	mut commands: Commands,
 	mut pending: Query<(Entity, &SocketRefRoot, &mut Transform), Without<SocketRefApplied>>,
-	rigs: Query<(&CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	member_of: Query<&MemberOf>,
+	members: Query<&CharacterMembers>,
+	rigs: Query<(Entity, &CharacterRig, &BoneMap)>,
 ) {
 	for (entity, SocketRefRoot(socket), mut transform) in &mut pending {
-		if attach_to_socket(&mut commands, entity, &mut transform, socket, &rigs) {
+		let Ok(MemberOf(root)) = member_of.get(entity) else {
+			continue;
+		};
+		let Ok(character_members) = members.get(*root) else {
+			continue;
+		};
+		if attach_to_socket(&mut commands, entity, &mut transform, socket, character_members, &rigs)
+		{
 			commands.entity(entity).insert(SocketRefApplied);
 		}
 	}
@@ -118,10 +118,10 @@ pub(crate) fn attach_to_socket(
 	entity: Entity,
 	transform: &mut Transform,
 	socket: &SocketRef,
-	rigs: &Query<(&CharacterRig, &BoneMap), With<LodCharacterRig>>,
+	members: &CharacterMembers,
+	rigs: &Query<(Entity, &CharacterRig, &BoneMap)>,
 ) -> bool {
-	let role = socket.rig.role();
-	let Some((_, map)) = rigs.iter().find(|(rig, _)| rig.role == role) else {
+	let Some((_, map)) = find_member_rig(members, socket.rig.role(), rigs) else {
 		return false;
 	};
 	let Some(&bone_entity) = map.by_name.get(socket.bone) else {

@@ -1,11 +1,16 @@
 //! Foliage domain: style + geometry + placement → [`FoliageNode`].
 
+pub mod ball_collection;
 pub mod collection;
 pub mod geometry;
 pub mod node;
 pub mod probe;
 pub mod style;
 
+pub use ball_collection::{
+	CheapBallCollection, CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
+	CHEAP_BALL_COLLECTION_MEDIUM_METERS,
+};
 pub use collection::{
 	FrondCollection, FrondKit, FrondMember, FrondRun, FROND_COLLECTION_HIGH_FACTOR,
 	FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_LOW_METERS,

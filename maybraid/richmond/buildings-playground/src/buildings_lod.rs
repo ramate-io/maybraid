@@ -5,6 +5,7 @@
 //! share the same region channels. Cull uses a rotating [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
+use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
@@ -47,7 +48,10 @@ pub struct BuildingsLodRefreshPlugin;
 
 impl Plugin for BuildingsLodRefreshPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(PhysicsPlugins::default());
+		// Same sentinel as Durham `TerrainPlugin`: `PhysicsPlugins` is a group.
+		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
+			app.add_plugins(PhysicsPlugins::default());
+		}
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
 		}
@@ -66,7 +70,11 @@ impl Plugin for BuildingsLodRefreshPlugin {
 		.insert_resource(LodChunkFulfillBudget {
 			spawn_weights_per_frame: 256,
 			cull_weights_per_frame: 128,
+			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
+			begin_weights_per_frame: 256,
+			begin_prefill_weights_per_job: 8,
+			completes_per_frame: 128,
 		})
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, BuildingsBullseye>::default(),

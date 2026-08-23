@@ -4,18 +4,17 @@
 //! thorn eyes, and thick braids as a short mane. No intermediate neck armature.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Sonyak;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
-use assets::SonyakAssets;
 use crozon_character_items::ItemColor;
 use sliders::SonyakSliders;
 
@@ -46,6 +45,19 @@ impl Default for SonyakColors {
 }
 
 impl SonyakColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig => self.head.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Hair => self.hair.color(),
+			Mouth => self.mouth.color(),
+			Tail => self.tail.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
@@ -118,12 +130,14 @@ impl SonyakConfig {
 	}
 }
 
-impl SpeciesConfig for SonyakConfig {
-	fn species_name(&self) -> &'static str {
-		"sonyak"
+impl CharacterRecipe for SonyakConfig {
+	type Components = Sonyak;
+
+	fn components(&self) -> Self::Components {
+		Sonyak::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		SonyakAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		Vec::new()
 	}
 }

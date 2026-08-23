@@ -1,0 +1,30 @@
+[package]
+name = "chico-vegetation-on-terrain-playground"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[bin]]
+name = "chico-vegetation-on-terrain"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+durham-terrain = { workspace = true }
+durham-terrain-models = { workspace = true }
+chico-groves = { workspace = true, features = ["render"] }
+chico-vegetation-components = { workspace = true }
+chico-sbs-trees-playground = { path = "../sbs-trees-playground" }
+lod = { workspace = true }
+render-item = { workspace = true }
+clap = { workspace = true }
+game-commands = { workspace = true }
+log = { workspace = true }
+
+[lints]
+workspace = true

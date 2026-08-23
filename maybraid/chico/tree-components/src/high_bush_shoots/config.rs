@@ -9,12 +9,21 @@ use procedural_common::{NoiseConfig, NoiseParams};
 use super::preset::common_high_bush_shape;
 
 /// Terminal foliage style for playground and composing recipes.
+///
+/// [`Self::PlaneSplay`] / [`Self::Tuft`] drive the legacy RenderItem path
+/// ([`super::HighBushShoots`](super::assembly::HighBushShoots)).
+/// [`Self::CheapBall`] / [`Self::LayeredBall`] are VegetationComponents kits (sbs-trees);
+/// RenderItem maps both to the plane-splay canopy for now.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum HighBushFoliageStyle {
 	#[default]
 	PlaneSplay,
 	Tuft,
+	/// Cheap-ball terminals (VegetationComponents); RenderItem falls back to plane-splay.
+	CheapBall,
+	/// Layered-ball terminals (VegetationComponents); RenderItem falls back to plane-splay.
+	LayeredBall,
 }
 
 /// Configurable high-bush construction ([RFC §3.1.6.3](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/03-high-bushes-and-shoots/README.md)).

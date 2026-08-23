@@ -20,6 +20,11 @@ mod sampling;
 mod terrain;
 mod tuft_patch;
 
+#[cfg(feature = "render")]
+pub mod vc_compose;
+#[cfg(feature = "render")]
+pub mod vc_tuft;
+
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,
 	VariantWeightOverrides,
@@ -30,11 +35,22 @@ pub use palette::{PaletteColor, PaletteMix, PaletteSlot};
 pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
-pub use terrain::{FlatTerrainSample, GroveWorldSample, PlacementConstraints};
+pub use terrain::{FlatTerrainSample, FnHeightSample, GroveWorldSample, PlacementConstraints};
 pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+#[cfg(feature = "render")]
+pub use vc_compose::{
+	canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_site_nested,
+	flatten_foliage_nodes, flatten_foliage_nodes_nested, flatten_stick_nodes,
+	foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+	grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+	grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
+	nest_flattened_plant_host, nest_placed_plant_chunk, nest_placed_plant_host,
+	stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite,
+	ULTRA_LOW_CANOPY_BIN_METERS,
+};
 
 use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;
@@ -166,7 +182,7 @@ impl<V: Clone> Grove<V> {
 		if !extent.contains_xz(candidate) {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
-		let position = Vec3::new(candidate.x, world.elevation_at(candidate), candidate.z);
+		let position = Vec3::new(candidate.x, world.height_at(candidate), candidate.z);
 		if !world.allows_placement_at(position) {
 			return GroveCellOutcome::Rejected { position };
 		}

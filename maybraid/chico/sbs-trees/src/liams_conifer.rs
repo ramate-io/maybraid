@@ -15,7 +15,7 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
@@ -24,10 +24,11 @@ use crate::northern_conifer::canopy::{
 	foliage_nodes_banded, foliage_nodes_low_single_proxy, foliage_nodes_medium_no_proxy,
 	HIGH_FOLIAGE_BANDS,
 };
-use crate::northern_conifer::stick::{
-	stick_nodes_high, stick_nodes_low, stick_nodes_medium_liams,
-};
-use crate::torch_tree::structural_lod_for;
+use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium_liams};
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for Liam's Conifer.
 #[derive(Component, Clone, Args, Debug)]
@@ -58,16 +59,12 @@ pub struct LiamsConifer {
 
 impl LiamsConifer {
 	pub fn from_params(params: &LiamsConiferParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -107,18 +104,23 @@ impl VegetationComponents for LiamsConifer {
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				foliage_nodes_low_single_proxy(&self.chain, tuft_r, 1.0)
-			}
+			| LodSceneLevel::Resolution(_) => foliage_nodes_low_single_proxy(&self.chain, tuft_r, 1.0),
 		};
 		Layers::from_free(nodes).map(|n| n.with_material(chico_leaf_material_ref()))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(structural_lod_for(
-			self.structural_center(),
-			self.footprint_radius(),
-			self.height(),
-		))
+		Some(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.height(),
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

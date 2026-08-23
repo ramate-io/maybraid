@@ -10,8 +10,16 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		self.apply_at(rig, progress, progress)
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		blend_poses(rig, &self.from, &self.to, progress, progress, self.weight);
+	}
+
+	fn effects_for(&self, rig: &R, progress: f32) -> Effects {
+		mix_effects(
+			self.from.effects_for(rig, progress),
+			self.to.effects_for(rig, progress),
+			self.weight,
+		)
 	}
 }
 
@@ -32,8 +40,23 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		self.apply_at(rig, progress, progress)
+	fn apply_for(&self, rig: &mut R, progress: f32) {
+		blend_poses(
+			rig,
+			&self.from,
+			&self.to,
+			progress,
+			progress,
+			crate::animations::smoothstep(self.weight),
+		);
+	}
+
+	fn effects_for(&self, rig: &R, progress: f32) -> Effects {
+		mix_effects(
+			self.from.effects_for(rig, progress),
+			self.to.effects_for(rig, progress),
+			crate::animations::smoothstep(self.weight),
+		)
 	}
 }
 
@@ -68,11 +91,26 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
+	blend_poses(rig, from, to, from_progress, to_progress, weight);
+	mix_effects(from.effects_for(rig, from_progress), to.effects_for(rig, to_progress), weight)
+}
+
+fn blend_poses<A, B, R>(
+	rig: &mut R,
+	from: &A,
+	to: &B,
+	from_progress: f32,
+	to_progress: f32,
+	weight: f32,
+) where
+	A: Animation<R>,
+	B: Animation<R>,
+	R: HumanoidRig,
+{
 	let rest = snapshot_pose(rig);
-	let (from_pose, from_effects) = sample(from, rig, &rest, from_progress);
-	let (to_pose, to_effects) = sample(to, rig, &rest, to_progress);
+	let from_pose = sample_pose(from, rig, &rest, from_progress);
+	let to_pose = sample_pose(to, rig, &rest, to_progress);
 	blend_pose(rig, &from_pose, &to_pose, weight);
-	mix_effects(from_effects, to_effects, weight)
 }
 
 pub(crate) fn snapshot_pose<R: HumanoidRig>(rig: &R) -> RigPose {
@@ -99,9 +137,19 @@ pub(crate) fn sample<A: Animation<R>, R: HumanoidRig>(
 	rest: &RigPose,
 	progress: f32,
 ) -> (RigPose, Effects) {
+	let pose = sample_pose(anim, rig, rest, progress);
+	(pose, anim.effects_for(rig, progress))
+}
+
+fn sample_pose<A: Animation<R>, R: HumanoidRig>(
+	anim: &A,
+	rig: &mut R,
+	rest: &RigPose,
+	progress: f32,
+) -> RigPose {
 	restore_pose(rig, rest);
-	let effects = anim.apply(rig, progress);
-	(snapshot_pose(rig), effects)
+	anim.apply_for(rig, progress);
+	snapshot_pose(rig)
 }
 
 pub(crate) fn blend_pose<R: HumanoidRig>(rig: &mut R, from: &RigPose, to: &RigPose, weight: f32) {

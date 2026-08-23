@@ -1,9 +1,9 @@
 //! Budgeted level-root / host teardown per [`LodScene::scene_lod_culls`].
 //!
 //! Unwanted roots are enqueued via [`LodCullRequest`] + [`LodCullInFlight`] (not
-//! hard-despawned). [`drain_lod_cull`] tears down leaf-first under the shared
-//! [`super::chunk::LodChunkBudgetClock`]: nested [`LodSceneHost`]s must finish
-//! before a parent despawns chunks, then itself.
+//! hard-despawned). [`drain_lod_cull`] waits on **next-level** nested hosts /
+//! bag roots (same shallow scan as fulfill streaming), then recursive-despawns
+//! a ready entity in one command under [`super::chunk::LodChunkBudgetClock`].
 
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
@@ -14,13 +14,15 @@ use crate::lod_ref::{
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
+	lod_level_roots_entity, nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots,
+	LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
 
 use super::chunk::{
-	LodChunkBudgetClock, LodChunkFulfillment, LodLevelRootPending, LodCullInFlight,
+	LodChunkBudgetClock, LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
+	LodLevelRootPending,
 };
 
 /// Impulse: tear down `entity` under budgeted cull ([`LodCullInFlight`]).
@@ -95,15 +97,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	}
 	let refs = lod_refs_from_snapshots(&snapshots);
 
-	let t0 = std::time::Instant::now();
-	let mut enqueued = 0u32;
-	let mut hosts_scanned = 0u32;
-	let mut parent_skip = 0u32;
-	let mut culls_none = 0u32;
-	let mut roots_seen = 0u32;
-
 	for (host, scene, current) in &hosts {
-		hosts_scanned += 1;
 		if !nested_host_parent_allows_refresh(
 			host,
 			&child_of,
@@ -113,7 +107,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			&level_roots_bags,
 			&visibilities,
 		) {
-			parent_skip += 1;
 			continue;
 		}
 		// Viewer-only ref (no per-host dominant level vote).
@@ -122,21 +115,13 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		};
 		let culls = scene.scene_lod_culls(lod_ref, *current);
 		if matches!(culls, LodSceneCulls::None) {
-			culls_none += 1;
 			continue;
 		}
 
 		let Ok(host_children) = children_q.get(host) else {
 			continue;
 		};
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_bags.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
-		}
-		let Some(roots_entity) = roots_entity else {
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_bags) else {
 			continue;
 		};
 		let Ok(root_children) = children_q.get(roots_entity) else {
@@ -144,9 +129,10 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		};
 
 		// Active warm-swap pending (not already tearing down).
-		if root_children.iter().any(|child| {
-			pending.contains(child) && !wants_cull.contains(child)
-		}) {
+		if root_children
+			.iter()
+			.any(|child| pending.contains(child) && !wants_cull.contains(child))
+		{
 			continue;
 		}
 
@@ -154,7 +140,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			let Ok(root) = root_keys.get(child) else {
 				continue;
 			};
-			roots_seen += 1;
 			if root.0 == *current {
 				continue;
 			}
@@ -163,177 +148,135 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 			}
 			if culls.should_cull(root.0) {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, child, &wants_cull);
-				enqueued += 1;
 			}
 		}
 	}
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	// Activity-gated: duration alone was spamming every frame on large host sets.
-	if enqueued > 0 {
-		info!(
-			"[lod.refresh] cull_lod_level_roots: hosts={hosts_scanned} parent_skip={parent_skip} \
-			 culls_none={culls_none} roots={roots_seen} enqueued={enqueued} in {elapsed_ms:.2}ms"
-		);
-	}
 }
 
-fn collect_nested_hosts(
+/// Next-level [`LodSceneHost`]s under `root` (direct child, or one pose hop).
+///
+/// Same contract as fulfill streaming (`count_nested_hosts`) — does not DFS kits.
+fn shallow_nested_hosts(
 	root: Entity,
 	children_q: &Query<&Children>,
 	hosts: &Query<(), With<LodSceneHost>>,
-	out: &mut Vec<Entity>,
-) {
+) -> Vec<Entity> {
 	let Ok(children) = children_q.get(root) else {
-		return;
+		return Vec::new();
 	};
+	let mut out = Vec::new();
 	for child in children.iter() {
 		if hosts.contains(child) {
-			out.push(child);
+			if child != root {
+				out.push(child);
+			}
+			continue;
 		}
-		collect_nested_hosts(child, children_q, hosts, out);
+		let Ok(kids) = children_q.get(child) else {
+			continue;
+		};
+		for kid in kids.iter() {
+			if hosts.contains(kid) && kid != root {
+				out.push(kid);
+			}
+		}
 	}
+	out
 }
 
-fn collect_level_roots(
-	root: Entity,
+/// [`LodLevelRoot`]s in this host's [`LodLevelRoots`] bag (not a content DFS).
+fn bag_level_roots(
+	host: Entity,
 	children_q: &Query<&Children>,
+	bags: &Query<(), With<LodLevelRoots>>,
 	level_roots: &Query<(), With<LodLevelRoot>>,
-	out: &mut Vec<Entity>,
-) {
-	let Ok(children) = children_q.get(root) else {
-		return;
+) -> Vec<Entity> {
+	let Ok(host_children) = children_q.get(host) else {
+		return Vec::new();
 	};
-	for child in children.iter() {
-		if level_roots.contains(child) {
-			out.push(child);
-		}
-		collect_level_roots(child, children_q, level_roots, out);
-	}
+	let Some(bag) = lod_level_roots_entity(host_children, bags) else {
+		return Vec::new();
+	};
+	let Ok(roots) = children_q.get(bag) else {
+		return Vec::new();
+	};
+	roots.iter().filter(|child| level_roots.contains(*child)).collect()
 }
 
-/// Budgeted leaf-first teardown for [`LodCullInFlight`] entities.
+/// Budgeted teardown for [`LodCullInFlight`] entities.
 ///
-/// - If the subtree still has nested [`LodSceneHost`]s, enqueue those hosts and wait.
-/// - [`LodSceneHost`]: enqueue all nested [`LodLevelRoot`]s; when none remain, despawn
-///   remaining children then self.
-/// - Otherwise: drop any frozen fulfill plan once teardown starts, despawn direct
-///   children under [`LodChunkBudgetClock`] (weight [`DEFAULT_CHUNK_WEIGHT`] each),
-///   then despawn self.
-fn entity_depth(entity: Entity, child_of: &Query<&ChildOf>) -> u32 {
-	let mut depth = 0u32;
-	let mut current = entity;
-	while let Ok(parent) = child_of.get(current) {
-		depth = depth.saturating_add(1);
-		current = parent.parent();
-	}
-	depth
-}
-
+/// - Level root: enqueue next-level nested hosts (shallow) and wait.
+/// - [`LodSceneHost`]: enqueue bag [`LodLevelRoot`]s and wait.
+/// - Ready: recursive-despawn the entity when spawned/child weight fits
+///   [`LodChunkBudgetClock::cull_remaining`], or when a
+///   [`LodChunkFulfillBudget::cull_root_despawns_per_frame`] slot remains.
+///   Already-[`Visibility::Hidden`] roots that do not fit stay for a later frame.
 pub fn drain_lod_cull(
 	mut commands: Commands,
 	mut clock: ResMut<LodChunkBudgetClock>,
+	budget: Res<LodChunkFulfillBudget>,
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	mut culling: Query<(Entity, &mut LodCullInFlight, Option<&mut LodChunkFulfillment>)>,
 	children_q: Query<&Children>,
-	child_of: Query<&ChildOf>,
 	hosts: Query<(), With<LodSceneHost>>,
+	bags: Query<(), With<LodLevelRoots>>,
 	level_roots: Query<(), With<LodLevelRoot>>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
 ) {
-	if clock.cull_remaining == 0 {
+	let mut root_despawns = budget.cull_root_despawns_per_frame;
+	if clock.cull_remaining == 0 && root_despawns == 0 {
 		return;
 	}
 
-	let t0 = std::time::Instant::now();
-	let mut despawned = 0u32;
-	let mut weight_spent = 0u32;
-	let mut waiting_nested = 0u32;
-	let mut targets: Vec<(Entity, u32)> = culling
-		.iter()
-		.map(|(e, _, _)| (e, entity_depth(e, &child_of)))
-		.collect();
-	// Deeper first so nested hosts / roots run before parents in one pass.
-	targets.sort_by_key(|(_, depth)| std::cmp::Reverse(*depth));
+	let targets: Vec<Entity> = culling.iter().map(|(e, _, _)| e).collect();
 
-	for (entity, _) in targets {
-		if clock.cull_remaining == 0 {
-			break;
-		}
+	for entity in targets {
 		let Ok((_, mut cull, fulfillment)) = culling.get_mut(entity) else {
 			continue;
 		};
 
-		let mut nested_hosts = Vec::new();
-		collect_nested_hosts(entity, &children_q, &hosts, &mut nested_hosts);
-		// Hosts under this entity (not counting self).
-		nested_hosts.retain(|h| *h != entity);
-
+		let nested_hosts = shallow_nested_hosts(entity, &children_q, &hosts);
 		if !nested_hosts.is_empty() {
 			for host in nested_hosts {
 				enqueue_lod_cull(&mut commands, &mut cull_writer, host, &wants_cull);
 			}
-			waiting_nested += 1;
 			continue;
 		}
 
 		if hosts.contains(entity) {
-			let mut roots = Vec::new();
-			collect_level_roots(entity, &children_q, &level_roots, &mut roots);
+			let roots = bag_level_roots(entity, &children_q, &bags, &level_roots);
 			if !roots.is_empty() {
 				for root in roots {
 					enqueue_lod_cull(&mut commands, &mut cull_writer, root, &wants_cull);
 				}
-				waiting_nested += 1;
 				continue;
 			}
 		}
 
+		let spawned = fulfillment.as_ref().map(|f| f.spawned).unwrap_or(0);
 		if !cull.started {
 			cull.started = true;
 			if let Some(mut fulfillment) = fulfillment {
 				fulfillment.queue.clear();
 			}
-			commands
-				.entity(entity)
-				.remove::<LodChunkFulfillment>()
-				.remove::<LodLevelRootPending>();
 		}
 
-		let child_ids: Vec<Entity> = children_q
-			.get(entity)
-			.map(|c| c.iter().collect())
-			.unwrap_or_default();
-
-		if child_ids.is_empty() {
-			let w = DEFAULT_CHUNK_WEIGHT.max(1);
-			commands.entity(entity).despawn();
-			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
-			weight_spent += w;
-			despawned += 1;
+		let child_count = children_q.get(entity).map(|c| c.len()).unwrap_or(0);
+		let weight = (spawned.max(child_count) as u32).max(DEFAULT_CHUNK_WEIGHT).max(1);
+		let fits_weight = weight <= clock.cull_remaining;
+		if !fits_weight && root_despawns == 0 {
 			continue;
 		}
 
-		let mut despawned_this = false;
-		for child in child_ids {
-			if clock.cull_remaining == 0 && despawned_this {
-				break;
-			}
-			let w = DEFAULT_CHUNK_WEIGHT.max(1);
-			commands.entity(child).despawn();
-			clock.cull_remaining = clock.cull_remaining.saturating_sub(w);
-			weight_spent += w;
-			despawned += 1;
-			despawned_this = true;
+		commands
+			.entity(entity)
+			.remove::<LodChunkFulfillment>()
+			.remove::<LodLevelRootPending>();
+		commands.entity(entity).despawn();
+		if fits_weight {
+			clock.cull_remaining = clock.cull_remaining.saturating_sub(weight);
+		} else {
+			root_despawns -= 1;
 		}
-	}
-
-	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
-	if despawned > 0 || waiting_nested > 0 {
-		info!(
-			"[lod.chunk] drain_cull: despawned={despawned} weight_spent={weight_spent} \
-			 waiting_nested={waiting_nested} budget_left={} queue_cmds={elapsed_ms:.2}ms \
-			 (apply cost: watch [lod.commands] system_commands)",
-			clock.cull_remaining
-		);
 	}
 }

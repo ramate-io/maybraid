@@ -11,14 +11,19 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
 use crate::storybook_tree::canopy::MEDIUM_STICK_BANDS;
-use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low, structural_lod_for};
+use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low};
+use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for Jungle Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -77,9 +82,8 @@ impl JungleStorybookTree {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -126,10 +130,17 @@ impl VegetationComponents for JungleStorybookTree {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(structural_lod_for(
-			self.structural_center(),
-			self.footprint_radius(),
-			self.height(),
-		))
+		Some(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.height(),
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

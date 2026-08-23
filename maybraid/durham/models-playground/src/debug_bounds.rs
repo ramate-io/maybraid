@@ -1,29 +1,23 @@
-//! Optional debug visualization of Terrain / jersey / Marazion leaf bounds and a cell HUD.
+//! Optional cell HUD for Terrain / jersey / Marazion inspection.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, JerseyControllerLayouts, MarazionBandPass, MarazionLeafKind,
+	cascade_chunk_for_cell, JerseyControllerLayouts, MarazionLeafKind,
 	PlateauLowPassControllerLayout, Terrain, TerrainCellLayout,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-use crate::WorldBaseTerrain;
-
-/// Half-height of surface-fitted jersey boxes (world units).
-const JERSEY_BOX_HALF_HEIGHT: f32 = 30.0;
-
-/// Playground debug overlays (wire bounds + cell HUD).
+/// Playground debug overlays (cell HUD).
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct PlaygroundDebugOverlay {
-	pub show_bounds: bool,
 	pub show_cell_hud: bool,
 	pub log_cell_changes: bool,
 }
 
 impl Default for PlaygroundDebugOverlay {
 	fn default() -> Self {
-		Self { show_bounds: false, show_cell_hud: false, log_cell_changes: false }
+		Self { show_cell_hud: false, log_cell_changes: false }
 	}
 }
 
@@ -32,12 +26,6 @@ pub(crate) struct CellLocationHudText;
 
 #[derive(Component)]
 pub(crate) struct CellLocationHudRoot;
-
-#[derive(Component)]
-pub(crate) struct BoundsLegendHudRoot;
-
-#[derive(Component)]
-pub(crate) struct BoundsLegendHudText;
 
 #[derive(Resource, Default)]
 pub(crate) struct LastLoggedCellLocation {
@@ -74,117 +62,6 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 				CellLocationHudText,
 			));
 		});
-
-	commands
-		.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				bottom: Val::Px(12.0),
-				left: Val::Px(12.0),
-				padding: UiRect::axes(Val::Px(10.0), Val::Px(8.0)),
-				flex_direction: FlexDirection::Column,
-				row_gap: Val::Px(2.0),
-				..default()
-			},
-			BackgroundColor(Color::srgba(0.05, 0.08, 0.12, 0.82)),
-			Visibility::Visible,
-			BoundsLegendHudRoot,
-		))
-		.with_children(|parent| {
-			parent.spawn((
-				Text::new(bounds_legend_text()),
-				TextFont { font_size: bevy::text::FontSize::Px(12.0), ..default() },
-				TextColor(Color::srgb(0.92, 0.96, 1.0)),
-				BoundsLegendHudText,
-			));
-		});
-}
-
-fn bounds_legend_text() -> String {
-	"pocket water leaves (B toggle)\n\
-	 blue=lake  cyan=stream  olive=bog  gray=empty\n\
-	 high-pass boxes are dimmer than low-pass"
-		.into()
-}
-
-/// Toggle wire bounds with `B`.
-pub fn toggle_bounds_overlay(
-	keys: Res<ButtonInput<KeyCode>>,
-	mut overlay: ResMut<PlaygroundDebugOverlay>,
-) {
-	if keys.just_pressed(KeyCode::KeyB) {
-		overlay.show_bounds = !overlay.show_bounds;
-	}
-}
-
-/// Sync bottom legend visibility with the bounds overlay.
-pub fn update_bounds_legend_visibility(
-	overlay: Res<PlaygroundDebugOverlay>,
-	mut legend: Query<&mut Visibility, With<BoundsLegendHudRoot>>,
-) {
-	if let Ok(mut visibility) = legend.single_mut() {
-		*visibility = if overlay.show_bounds { Visibility::Visible } else { Visibility::Hidden };
-	}
-}
-
-/// Draw wire AABBs when [`PlaygroundDebugOverlay::show_bounds`] is on.
-pub fn draw_chunk_boundary_boxes(
-	mut gizmos: Gizmos,
-	overlay: Res<PlaygroundDebugOverlay>,
-	terrains: Query<&Terrain>,
-	layout: Res<TerrainCellLayout>,
-	jersey_layouts: Res<JerseyControllerLayouts>,
-	base: Res<WorldBaseTerrain>,
-) {
-	if !overlay.show_bounds {
-		return;
-	}
-
-	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
-	let leaf_color = Color::srgb(0.25, 0.9, 0.35);
-	for terrain in &terrains {
-		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
-		let extent = chunk.extent_vec();
-		let aabb = Aabb3d::from_min_max(chunk.origin, chunk.origin + extent);
-		gizmos.aabb_3d(aabb, Transform::IDENTITY, terrain_color);
-		for leaf in &terrain.jersey_leaves {
-			let aabb = surface_footprint_box(leaf, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, leaf_color);
-		}
-		for leaf in &terrain.marazion_leaves {
-			let mut color = leaf.kind.debug_color();
-			if leaf.band == MarazionBandPass::High {
-				// Dim high-pass so low-pass partition reads first.
-				let srgba = color.to_srgba();
-				color = Color::srgba(
-					srgba.red * 0.65 + 0.2,
-					srgba.green * 0.65 + 0.2,
-					srgba.blue * 0.65 + 0.2,
-					0.85,
-				);
-			}
-			let aabb = surface_footprint_box(&leaf.cell, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, color);
-		}
-	}
-
-	// Low-pass plateau controller grid as a representative family grid overlay.
-	let plateau_layout = &jersey_layouts.plateau_low_pass;
-	let controller_color = Color::srgb(0.2, 0.85, 1.0);
-	let region = layout.request_region();
-	let grid_region = plateau_layout.region_in_grid_space(region);
-	let size = plateau_layout.grid.cell_size.max(1e-3);
-	let min_x = (grid_region.min.x / size).floor() as i32;
-	let max_x = (grid_region.max.x / size).ceil() as i32 - 1;
-	let min_z = (grid_region.min.z / size).floor() as i32;
-	let max_z = (grid_region.max.z / size).ceil() as i32 - 1;
-	for ix in min_x..=max_x {
-		for iz in min_z..=max_z {
-			let cell = plateau_layout.cell_bounds(ix, iz);
-			let aabb = surface_footprint_box(&cell, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, controller_color);
-		}
-	}
 }
 
 /// Update the top HUD with terrain / jersey cell under the camera.
@@ -436,16 +313,4 @@ fn cells_match_xz(a: &Aabb3d, b: &Aabb3d) -> bool {
 
 fn point_in_xz(p: Vec3, cell: &Aabb3d) -> bool {
 	p.x >= cell.min.x && p.x < cell.max.x && p.z >= cell.min.z && p.z < cell.max.z
-}
-
-fn surface_footprint_box(cell: &Aabb3d, base: &durham_terrain_models::BaseTerrainNoise) -> Aabb3d {
-	let min = Vec3::from(cell.min);
-	let max = Vec3::from(cell.max);
-	let cx = (min.x + max.x) * 0.5;
-	let cz = (min.z + max.z) * 0.5;
-	let y = base.height_at(cx, cz);
-	Aabb3d::from_min_max(
-		Vec3::new(min.x, y - JERSEY_BOX_HALF_HEIGHT, min.z),
-		Vec3::new(max.x, y + JERSEY_BOX_HALF_HEIGHT, max.z),
-	)
 }

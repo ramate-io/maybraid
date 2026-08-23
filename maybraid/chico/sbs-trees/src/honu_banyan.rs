@@ -16,12 +16,21 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, HonuBanyanChain, HonuBanyanSbs};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use canopy::{foliage_nodes_for_level, DEFAULT_HONU_GROWTH_RADIUS_SCALE};
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
+
+use canopy::foliage_nodes_for_level;
+pub use canopy::{
+	jungle_growth_radius_scale_for_height, DEFAULT_HONU_GROWTH_RADIUS_SCALE,
+	HONU_GROWTH_REFERENCE_HEIGHT,
+};
 use stick::{
 	keep_stick_on_low, stick_node_for_segment, stick_nodes_medium_banded, stick_role_for_segment,
 };
@@ -58,6 +67,13 @@ impl HonuBanyanParams {
 	pub fn build(&self) -> HonuBanyan {
 		HonuBanyan::from_params(self)
 	}
+
+	/// Set [`Self::jungle_growth_radius_scale`] from authored tree height.
+	pub fn with_growth_scale_for_height(mut self) -> Self {
+		self.jungle_growth_radius_scale =
+			jungle_growth_radius_scale_for_height(self.geometry.scale.tree_height);
+		self
+	}
 }
 
 /// Built Honu Banyan: params plus a single grown [`BallStickChain`].
@@ -80,9 +96,8 @@ impl HonuBanyan {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.to_stalk().stalk_base_radius.max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.to_stalk().stalk_base_radius.max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -154,9 +169,10 @@ impl VegetationComponents for HonuBanyan {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(StructuralLod::new(
-			self.structural_center(),
-			self.footprint_radius(),
+		Some(StructuralLod::new(self.structural_center(), self.footprint_radius()).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
 		))
 	}
 }

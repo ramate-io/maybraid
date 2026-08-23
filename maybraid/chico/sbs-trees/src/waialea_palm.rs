@@ -15,18 +15,22 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, WaialeaPalmChain, WaialeaPalmSbs};
 use chico_vegetation_components::{
-	chico_stick_material_ref, FoliageNode, Layers, StickNode, VegetationComponents, StructuralLod,
+	chico_stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::FROND_RING_SEED_SALT;
 use crate::palm_tree::{
-	crown_aabb_from_rings, frond_collection_nodes, layered_proxy_balls, palm_structural_lod,
+	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
 	trunk_stick_nodes, world_space_frond_shape,
 };
-use crate::torch_tree::structural_tree_radius;
 use crown::frond_shape_for_ring;
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Waialea Palm.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -57,10 +61,7 @@ pub struct WaialeaPalm {
 
 impl WaialeaPalm {
 	pub fn from_params(params: &WaialeaPalmParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn foliage_seed(&self) -> i32 {
@@ -84,9 +85,8 @@ impl WaialeaPalm {
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 }
 
@@ -97,26 +97,57 @@ impl VegetationComponents for WaialeaPalm {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
+		let rings = self.ring_shapes();
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				Layers::from_free(frond_collection_nodes(self.ring_shapes()))
+				let (center, radius) = crown_lod_probe(
+					&rings,
+					Some((self.footprint_radius(), self.geometry.height())),
+				);
+				Layers::from_free(frond_collection_nodes(&rings, center, radius))
 			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(self.ring_shapes());
+				let (min, max) = crown_aabb_from_rings(&rings);
 				Layers::from_free(layered_proxy_balls(min, max))
 			}
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let (min, max) = crown_aabb_from_rings(self.ring_shapes());
-		let crown_center = (min + max) * 0.5;
-		let crown_r = ((max - min) * 0.5).max_element();
-		let radius = structural_tree_radius(self.footprint_radius(), self.geometry.height())
-			.max(crown_r);
-		Some(palm_structural_lod(crown_center, radius))
+		let rings = self.ring_shapes();
+		let (center, radius) =
+			crown_lod_probe(&rings, Some((self.footprint_radius(), self.geometry.height())));
+		Some(StructuralLod::new(center, radius).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+	use lod::gen::LodSceneLevel;
+
+	#[test]
+	fn high_collections_use_structural_crown_probe() -> Result<()> {
+		crate::palm_tree::assert_high_collections_match_structural_lod(
+			&WaialeaPalmParams::default().build(),
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn low_is_two_layered_balls() -> Result<()> {
+		let built = WaialeaPalmParams::default().build();
+		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+		assert_eq!(low.len(), 2);
+		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
 	}
 }

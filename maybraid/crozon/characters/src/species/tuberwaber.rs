@@ -5,7 +5,8 @@
 //! fixed harrowed crown, and a colorful cool-toned skin palette (no ears).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tuberwaber;
 pub mod palette;
 pub mod pose;
 pub mod presets;
@@ -13,12 +14,10 @@ pub mod sliders;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::SpeciesConfig,
-	ResolvedCharacterAssembly,
+	CharacterRecipe, ClothingLayer,
 };
 
 use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
-use assets::TuberwaberAssets;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::TuberwaberSliders;
 
@@ -56,6 +55,19 @@ impl Default for TuberwaberColors {
 }
 
 impl TuberwaberColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh => self.body.color(),
+			HeadMesh | HeadRig | Nose => self.skin_color().color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Horns => self.horns.color(),
+			Hair => self.hair.color(),
+			_ => self.body.color(),
+		}
+	}
+
 	pub fn skin_color(&self) -> TuberwaberColor {
 		self.body
 	}
@@ -165,12 +177,16 @@ impl TuberwaberConfig {
 	}
 }
 
-impl SpeciesConfig for TuberwaberConfig {
-	fn species_name(&self) -> &'static str {
-		"tuberwaber"
+impl CharacterRecipe for TuberwaberConfig {
+	type Components = Tuberwaber;
+
+	fn components(&self) -> Self::Components {
+		Tuberwaber::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TuberwaberAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

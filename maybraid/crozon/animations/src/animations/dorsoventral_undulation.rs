@@ -3,7 +3,7 @@
 use std::f32::consts::TAU;
 
 /// Traveling pitch wave along the post-cranial axis.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DorsoventralUndulation {
 	/// Wave cycles per second when `progress` is elapsed time.
 	pub speed: f32,

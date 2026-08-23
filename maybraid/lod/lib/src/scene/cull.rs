@@ -17,12 +17,8 @@
 use crate::scene::level::LodSceneLevel;
 
 /// Named presentation bands ordered **near → far** (detail → silhouette).
-pub const NAMED_BANDS_NEAR_TO_FAR: [LodSceneLevel; 4] = [
-	LodSceneLevel::High,
-	LodSceneLevel::Medium,
-	LodSceneLevel::Low,
-	LodSceneLevel::UltraLow,
-];
+pub const NAMED_BANDS_NEAR_TO_FAR: [LodSceneLevel; 4] =
+	[LodSceneLevel::High, LodSceneLevel::Medium, LodSceneLevel::Low, LodSceneLevel::UltraLow];
 
 /// One cull target: a concrete level or an open-ended custom category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -147,7 +143,9 @@ pub fn closest_available_lod_level(
 		let candidate = (dist, ready_idx, level);
 		best_named = Some(match best_named {
 			None => candidate,
-			Some(prev) if candidate.0 < prev.0 || (candidate.0 == prev.0 && candidate.1 < prev.1) => {
+			Some(prev)
+				if candidate.0 < prev.0 || (candidate.0 == prev.0 && candidate.1 < prev.1) =>
+			{
 				candidate
 			}
 			Some(prev) => prev,
@@ -234,12 +232,7 @@ pub fn cull_offset_bands(current: LodSceneLevel, progress_into_band: f32) -> Lod
 ///
 /// Thresholds are the far edges of High / Medium / Low (same convention as
 /// domain probes: `factor ≤ high` → High, etc.).
-pub fn named_band_progress(
-	factor: f32,
-	high: f32,
-	medium: f32,
-	low: f32,
-) -> (LodSceneLevel, f32) {
+pub fn named_band_progress(factor: f32, high: f32, medium: f32, low: f32) -> (LodSceneLevel, f32) {
 	let factor = factor.max(0.0);
 	if factor <= high {
 		let progress = if high > 1e-4 { (factor / high).clamp(0.0, 1.0) } else { 1.0 };

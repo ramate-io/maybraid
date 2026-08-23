@@ -20,10 +20,9 @@ pub fn mirror_mesh(mesh: &Mesh, axis: MirrorAxis) -> Mesh {
 
 /// Reflect `transform` through `axis` so it matches a parent scale-flip.
 ///
-/// Vertex-only mirroring is not enough: GLB node translations still sit on the
-/// source side of the axis. Conjugating each local TRS (`S M S`) plus
-/// [`mirror_mesh`] is equivalent to a parent `scale(axis)` with positive scale
-/// at the caller.
+/// Vertex-only mirroring leaves GLB node translations on the source side of the
+/// axis. Conjugating each local TRS (`S M S`) plus [`mirror_mesh`] is equivalent
+/// to a parent `scale(axis)` with positive scale at the caller.
 pub fn mirror_transform(transform: Transform, axis: MirrorAxis) -> Transform {
 	let s = axis.scale();
 	Transform {
@@ -43,13 +42,14 @@ fn mirror_rotation(rotation: Quat, axis: MirrorAxis) -> Quat {
 
 /// Clone `source` and rewrite every `Mesh3d` to a newly registered mirrored mesh.
 ///
-/// Also reflects every [`Transform`] (and [`GlobalTransform`] if present) so
-/// hierarchy offsets match a parent axis-flip. Caller must ensure the source
-/// handle is [`AssetServer::is_loaded_with_dependencies`] so mesh bytes are in
-/// `Assets<Mesh>`.
+/// When `reflect_instance` is set, also conjugate every [`Transform`] (and
+/// [`GlobalTransform`] if present) so hierarchy offsets match a parent axis-flip.
+/// Caller must ensure the source handle is
+/// [`AssetServer::is_loaded_with_dependencies`] so mesh bytes are in `Assets<Mesh>`.
 pub(crate) fn mirror_world_asset(
 	source: &WorldAsset,
 	axis: MirrorAxis,
+	reflect_instance: bool,
 	meshes: &mut Assets<Mesh>,
 	type_registry: &AppTypeRegistry,
 ) -> Option<WorldAsset> {
@@ -61,7 +61,7 @@ pub(crate) fn mirror_world_asset(
 		if let Some(mesh3d) = entity.get::<Mesh3d>() {
 			mesh_entities.push((entity.id(), mesh3d.0.clone()));
 		}
-		if entity.get::<Transform>().is_some() {
+		if reflect_instance && entity.get::<Transform>().is_some() {
 			transform_entities.push(entity.id());
 		}
 	}

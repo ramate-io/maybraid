@@ -5,21 +5,17 @@
 //! normalization (~0.30×); thin proportions via BraidmanSliders.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Tapp;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::TappAssets;
 
 pub use assets::{TappBeakMesh, TappHeadMesh};
 pub use palette::{TappBeakColor, TappEyeColor, TappPlumageColor};
@@ -48,6 +44,16 @@ impl Default for TappColors {
 }
 
 impl TappColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -110,12 +116,16 @@ impl TappConfig {
 	}
 }
 
-impl SpeciesConfig for TappConfig {
-	fn species_name(&self) -> &'static str {
-		"tapp"
+impl CharacterRecipe for TappConfig {
+	type Components = Tapp;
+
+	fn components(&self) -> Self::Components {
+		Tapp::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		TappAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

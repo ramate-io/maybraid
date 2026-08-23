@@ -1,69 +1,48 @@
-//! Resume pending roots that are desired again after a cull request was applied
-//! but teardown has not started.
+//! Cancel unstarted LOD cull on pending roots that are desired again.
 //!
-//! Not-desired fulfill jobs are **paused** by drain/begin (desired check) — they are
-//! not marked for cull here. Queue and `LodChunkFulfillment` stay intact.
-
-use std::time::Instant;
+//! Soft-paused not-desired fulfill jobs need no system here: drain skips them
+//! while `root != desired` and continues automatically when desired matches.
+//! This path only clears [`LodCullInFlight`] so a pending root re-enters drain
+//! before teardown [`LodCullInFlight::started`].
 
 use bevy::prelude::*;
 
-use crate::lod_chunk_trace;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 
 use super::types::{LodCullInFlight, LodLevelRootPending};
-use super::util::ms;
 
 /// If a pending root is desired again and cull teardown has not started, clear
 /// [`LodCullInFlight`] so spawn drain may continue the frozen fulfill queue.
-pub fn resume_desired_pending_roots(
+pub fn cancel_unstarted_cull_for_desired_pending_roots(
 	mut commands: Commands,
-	hosts: Query<(Entity, &LodSceneLevel, Option<&Children>), With<LodSceneHost>>,
-	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
-	pending_roots: Query<&LodLevelRoot, With<LodLevelRootPending>>,
-	cull_inflight: Query<&LodCullInFlight>,
+	cull_inflight: Query<(Entity, &LodCullInFlight, &LodLevelRoot), With<LodLevelRootPending>>,
+	child_of: Query<&ChildOf>,
+	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
+	level_roots_bags: Query<(), With<LodLevelRoots>>,
 ) {
-	let t0 = Instant::now();
-	let mut resumed = 0u32;
-	for (_host, desired, host_children) in &hosts {
-		let Some(host_children) = host_children else {
+	for (entity, cull, root) in &cull_inflight {
+		if cull.started {
 			continue;
-		};
-		let mut roots_entity = None;
-		for child in host_children.iter() {
-			if level_roots_heads.contains(child) {
-				roots_entity = Some(child);
-				break;
-			}
 		}
-		let Some(roots_entity) = roots_entity else {
+		// root → LodLevelRoots bag → LodSceneHost
+		let Ok(bag_of) = child_of.get(entity) else {
 			continue;
 		};
-		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+		let bag = bag_of.parent();
+		if !level_roots_bags.contains(bag) {
 			continue;
-		};
-		for child in root_children.iter() {
-			let Ok(root) = pending_roots.get(child) else {
-				continue;
-			};
-			if root.0 != *desired {
-				continue;
-			}
-			let Ok(cull) = cull_inflight.get(child) else {
-				continue;
-			};
-			if cull.started {
-				continue;
-			}
-			commands.entity(child).remove::<LodCullInFlight>();
-			resumed += 1;
 		}
-	}
-	if lod_chunk_trace() && resumed > 0 {
-		info!(
-			"[lod.chunk] resume_desired: resumed={resumed} in {:.2}ms",
-			ms(t0)
-		);
+		let Ok(host_of) = child_of.get(bag) else {
+			continue;
+		};
+		let host = host_of.parent();
+		let Ok(desired) = host_levels.get(host) else {
+			continue;
+		};
+		if root.0 != *desired {
+			continue;
+		}
+		commands.entity(entity).remove::<LodCullInFlight>();
 	}
 }

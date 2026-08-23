@@ -6,82 +6,58 @@
 //! [`PatchSceneBounds`](lod::PatchSceneBounds) with
 //! [`AvianLodSceneBoundsMarshaller`] to stamp volumes from
 //! [`LodScene::scene_bounds`](lod::LodScene::scene_bounds).
+//!
+//! Host volumes use [`PhysicsInteractionLayer::Host`] with empty filters so they
+//! do not enter narrowphase against terrain / buildings ([`layers`]).
 
-use std::any::type_name;
-use std::collections::HashSet;
+mod layers;
+
+pub use layers::{AvianLodHostVolume, PhysicsInteractionLayer};
+
 use std::marker::PhantomData;
-use std::time::Instant;
 
-use avian3d::prelude::{Collider, ColliderAabb, SpatialQuery};
+use avian3d::prelude::{ColliderAabb, SpatialQuery};
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::LodScene;
 use lod::{
-	lod_log_min_ms, LodSceneBoundsMarshaller, LodSceneHost, LodSceneRegionIndex,
-	LodSceneRefreshPlugin, LodViewer, PatchSceneBounds,
+	LodSceneHost, LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
+	PatchSceneBounds,
 };
 
-/// Frame-aggregated timing for Avian `aabb_intersections_with_aabb` in LOD refresh.
-#[derive(Resource, Debug, Default)]
-pub struct AvianLodSpatialQueryDiag {
-	pub queries: u32,
-	pub hits: u32,
-	pub total_ms: f64,
-	pub last_query_ms: f64,
-	pub last_hits: u32,
-}
-
-impl AvianLodSpatialQueryDiag {
-	fn record(&mut self, query_ms: f64, hits: usize) {
-		let hits = hits as u32;
-		self.queries = self.queries.saturating_add(1);
-		self.hits = self.hits.saturating_add(hits);
-		self.total_ms += query_ms;
-		self.last_query_ms = query_ms;
-		self.last_hits = hits;
-	}
-
-	fn take_frame(&mut self) -> (u32, u32, f64) {
-		let out = (self.queries, self.hits, self.total_ms);
-		self.queries = 0;
-		self.hits = 0;
-		self.total_ms = 0.0;
-		out
-	}
-}
-
-/// [`LodSceneBoundsMarshaller`] that inserts a query-only Avian [`Collider`] on the host.
+/// [`LodSceneBoundsMarshaller`](lod::LodSceneBoundsMarshaller) that inserts a
+/// query-only Avian [`avian3d::prelude::Collider`] + Host [`CollisionLayers`](avian3d::prelude::CollisionLayers).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AvianLodSceneBoundsMarshaller;
 
-impl LodSceneBoundsMarshaller for AvianLodSceneBoundsMarshaller {
-	type Volume = Collider;
+/// Untyped Avian host lookup for the shared produce cache.
+///
+/// Only colliders on the host entity itself count (physics children do not enroll
+/// the host in LOD refresh).
+#[derive(SystemParam)]
+pub struct AvianLodSceneHostIndex<'w, 's> {
+	spatial: SpatialQuery<'w, 's>,
+	hosts: Query<'w, 's, Entity, With<LodSceneHost>>,
+}
 
-	fn volume_from_bounds(bounds: Aabb3d) -> Self::Volume {
-		let min = Vec3::from(bounds.min);
-		let max = Vec3::from(bounds.max);
-		let center = (min + max) * 0.5;
-		let size = (max - min).max(Vec3::splat(1e-3));
-		let cuboid = Collider::cuboid(size.x, size.y, size.z);
-		if center.length_squared() <= 1e-8 {
-			cuboid
-		} else {
-			Collider::compound(vec![(center, Quat::IDENTITY, cuboid)])
-		}
+impl LodSceneHostIndex for AvianLodSceneHostIndex<'_, '_> {
+	fn hosts_in_region<'a>(&'a mut self, region: Aabb3d) -> impl Iterator<Item = Entity> + 'a {
+		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
+		let hits = self.spatial.aabb_intersections_with_aabb(collider);
+		hits.into_iter().filter(|entity| self.hosts.contains(*entity))
 	}
 }
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 ///
 /// Only colliders on the host entity itself count (physics children do not enroll
-/// the host in LOD refresh).
+/// the host in LOD refresh). Used by region-scoped cull.
 #[derive(SystemParam)]
 pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + LodScene + 'static> {
 	spatial: SpatialQuery<'w, 's>,
-	hosts: Query<'w, 's, (Entity, &'static T), With<LodSceneHost>>,
-	diag: ResMut<'w, AvianLodSpatialQueryDiag>,
+	hosts: Query<'w, 's, &'static T, With<LodSceneHost>>,
 }
 
 impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
@@ -92,56 +68,22 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 		region: Aabb3d,
 	) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
 		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
-		let t0 = Instant::now();
-		let hit: HashSet<Entity> =
-			self.spatial.aabb_intersections_with_aabb(collider).into_iter().collect();
-		let query_ms = t0.elapsed().as_secs_f64() * 1000.0;
-		self.diag.record(query_ms, hit.len());
-		if query_ms >= lod_log_min_ms() {
-			info!(
-				"[lod.refresh] spatial.query: host={} hits={} aabb_ms={query_ms:.2}",
-				type_name::<T>(),
-				hit.len()
-			);
-		}
-		self.hosts
-			.iter()
-			.filter(move |(entity, _)| hit.contains(entity))
-			.map(|(entity, scene)| (entity, scene))
+		let hits = self.spatial.aabb_intersections_with_aabb(collider);
+		hits.into_iter()
+			.filter_map(|entity| self.hosts.get(entity).ok().map(|scene| (entity, scene)))
 	}
 }
 
-fn log_avian_spatial_query_diag(mut diag: ResMut<AvianLodSpatialQueryDiag>) {
-	let (queries, hits, total_ms) = diag.take_frame();
-	if queries == 0 {
-		return;
-	}
-	if total_ms >= lod_log_min_ms() || queries > 1 {
-		let avg = total_ms / f64::from(queries.max(1));
-		info!(
-			"[lod.refresh] spatial.frame: queries={queries} hits={hits} \
-			 total_ms={total_ms:.2} avg_ms={avg:.2} last_ms={:.2}",
-			diag.last_query_ms
-		);
+fn ensure_avian_host_bounds<T: Component + LodScene + 'static>(app: &mut App) {
+	if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
+		app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
 	}
 }
 
-/// Ensures [`AvianLodSpatialQueryDiag`] + once-per-frame summary logging.
-struct AvianLodSpatialDiagPlugin;
-
-impl Plugin for AvianLodSpatialDiagPlugin {
-	fn build(&self, app: &mut App) {
-		app.init_resource::<AvianLodSpatialQueryDiag>().add_systems(
-			Update,
-			log_avian_spatial_query_diag.after(lod::LodRefreshSystems::ProduceLevels),
-		);
-	}
-}
-
-/// [`LodSceneRefreshPlugin`] with [`AvianLodSceneRegionIndex`] + host volume patch.
+/// [`LodSceneRefreshPlugin`] with [`AvianLodSceneHostIndex`] + host volume patch.
 ///
-/// `T` listens for [`lod::LodSceneRefreshRegion`] on channel `M`; levels use
-/// [`LodNode`]s filtered by `F` (default: [`LodViewer`]).
+/// Fill is once per (`I`, `F`); emit is once per `T`. Channel `M` is accepted so
+/// existing dual bullseye/spotlight plugin adds stay valid.
 ///
 /// Use [`Self::without_full_scan_cull`] with [`AvianLodSceneCullPlugin`] for
 /// OpenLattice (or other) region-scoped cull enqueue.
@@ -162,10 +104,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -176,10 +115,7 @@ where
 	F: QueryFilter + 'static,
 {
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 
@@ -190,24 +126,16 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<AvianLodSpatialDiagPlugin>() {
-			app.add_plugins(AvianLodSpatialDiagPlugin);
-		}
-		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
-		}
+		ensure_avian_host_bounds::<T>(app);
 		if self.full_scan_cull {
-			app.add_plugins(LodSceneRefreshPlugin::<
-				T,
-				M,
-				AvianLodSceneRegionIndex<'_, '_, T>,
-				F,
-			>::default());
+			app.add_plugins(
+				LodSceneRefreshPlugin::<T, M, AvianLodSceneHostIndex<'_, '_>, F>::default(),
+			);
 		} else {
 			app.add_plugins(LodSceneRefreshPlugin::<
 				T,
 				M,
-				AvianLodSceneRegionIndex<'_, '_, T>,
+				AvianLodSceneHostIndex<'_, '_>,
 				F,
 			>::without_full_scan_cull());
 		}
@@ -231,9 +159,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
@@ -244,12 +170,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {
-		if !app.is_plugin_added::<AvianLodSpatialDiagPlugin>() {
-			app.add_plugins(AvianLodSpatialDiagPlugin);
-		}
-		if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
-			app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
-		}
+		ensure_avian_host_bounds::<T>(app);
 		app.add_plugins(lod::LodSceneRegionCullPlugin::<
 			AvianLodSceneRegionIndex<'_, '_, T>,
 			M,

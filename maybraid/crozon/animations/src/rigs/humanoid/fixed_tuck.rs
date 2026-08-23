@@ -11,8 +11,8 @@ impl<R: HumanoidRig> FixedPosition<R> for FixedTuck<R> {
 }
 
 impl<R: HumanoidRig> Animation<R> for FixedTuck<R> {
-	fn apply(&self, rig: &mut R, _progress: f32) -> Effects {
-		self.apply_fixed(rig)
+	fn apply_for(&self, rig: &mut R, _progress: f32) {
+		let _ = self.apply_fixed(rig);
 	}
 }
 

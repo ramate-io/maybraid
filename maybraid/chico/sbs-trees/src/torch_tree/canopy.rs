@@ -87,8 +87,7 @@ fn banded_from_candidates(
 	bands: AzimuthHeightBands,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
 	sampled
 		.into_iter()
 		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
@@ -117,11 +116,8 @@ fn canopy_extent_proxy_ball(
 	let trunkward = trunkward.clamp(0.0, 1.0);
 	center.x *= 1.0 - trunkward;
 	center.z *= 1.0 - trunkward;
-	let half_extents =
-		((max - min) * 0.5 * extent_scale.max(1e-3)).max(Vec3::splat(1e-4));
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
-	))
+	let half_extents = ((max - min) * 0.5 * extent_scale.max(1e-3)).max(Vec3::splat(1e-4));
+	Some(FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents)))
 }
 
 /// Medium samples plus a trunk-biased, reduced-extent layered proxy.

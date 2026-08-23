@@ -4,21 +4,17 @@
 //! ears, species-owned fur/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Mygr;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::MygrAssets;
 
 pub use assets::{MygrHeadMesh, MygrMouthMesh};
 pub use palette::{MygrEyeColor, MygrSkinColor};
@@ -47,6 +43,17 @@ impl Default for MygrColors {
 }
 
 impl MygrColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | EarLeft | EarRight | Tail => self.skin.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.mouth.color(),
+			Hair => self.hair.color(),
+			_ => self.skin.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -106,12 +113,16 @@ impl MygrConfig {
 	}
 }
 
-impl SpeciesConfig for MygrConfig {
-	fn species_name(&self) -> &'static str {
-		"mygr"
+impl CharacterRecipe for MygrConfig {
+	type Components = Mygr;
+
+	fn components(&self) -> Self::Components {
+		Mygr::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		MygrAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

@@ -1,5 +1,7 @@
 //! Preview subject sync. Viewer tracking lives in [`lod::LodRefreshCorePlugin`].
 
+use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
+use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::Aabb3d;
@@ -16,41 +18,37 @@ use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
 use richmond_building_components::{pose, BuildingComponents, LabelNode};
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
+use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
-use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
+use richmond_buildings::stacked_rings::StackedRings;
+use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
+use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
+use richmond_buildings::wizards_tower::WizardsTower;
+use richmond_buildings::{
+	passages_on_faces, BitesSitdownStall, BitesStall, CardinalFace, CellConstraints,
+	CommercialStall, CommercialStallStrip, CommonBedroom, Confines, DiningRoom, FillRegion,
+	FillableRegions, Fit, FitError, HallsToShafts as HallsToShaftsFit, HallsToShaftsOptions,
+	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
+	LesHallesShaftPlacement, LivableApartment, LivableApartments, LivableApartmentsOptions,
+	LivingRoom, MiniMart, MixedUseLesHallesMonotower, MultiConfines, PartsStall, PublicRestroom,
+	RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
+	RectangularLivableAreaParameterized, ResidentialBathroom, ResidentialHalfBathroom, SittingRoom,
+	SpaceKind, Study,
+};
 use richmond_buildings::{
 	ApproximatedCircle, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams,
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
-	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, Opening,
-	OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
-	RectFloorSlab,
-	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularPitchedRoofComplex,
-	RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch,
-	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
-	DEFAULT_PANEL_THICKNESS,
-};
-use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
-use richmond_buildings::stacked_rings::StackedRings;
-use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
-use richmond_buildings::portals::{MustAssignPortal, Portal};
-use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
-use richmond_buildings::wizards_tower::WizardsTower;
-use richmond_buildings::{
-	BitesSitdownStall, BitesStall, CellConstraints, CommercialStall, CommercialStallStrip,
-	CommonBedroom, Confines, DiningRoom, FillableRegions, FillRegion, Fit, FitError,
-	HallsToShafts as HallsToShaftsFit, HallsToShaftsOptions, IApartmentFloorPlan,
-	IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall, LesHallesFloorPlan,
-	LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesParameterized,
-	LesHallesShaftPlacement, LivableApartment, LivableApartments,
-	MixedUseLesHallesMonotower,
-	LivableApartmentsOptions, LivingRoom, MiniMart, MultiConfines, PartsStall, PublicRestroom,
-	CardinalFace, RectAreaRoom, RectLivableStrategy, RectQuarterKind, RectangularLivableArea,
-	RectangularLivableAreaParameterized, passages_on_faces, ResidentialBathroom,
-	ResidentialHalfBathroom, SittingRoom, SpaceKind, Study,
+	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells,
+	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad,
+	MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams,
+	RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor, RectRingFloorParams,
+	RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
+	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
+	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
+	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, DEFAULT_PANEL_THICKNESS,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -493,11 +491,7 @@ pub struct PreviewConfig {
 
 impl Default for PreviewConfig {
 	fn default() -> Self {
-		Self {
-			label_text: true,
-			subject: PreviewSubject::None,
-			transform: Transform::IDENTITY,
-		}
+		Self { label_text: true, subject: PreviewSubject::None, transform: Transform::IDENTITY }
 	}
 }
 
@@ -1102,9 +1096,7 @@ impl PreviewConfig {
 			| PreviewSubject::MiniMart { extent, .. }
 			| PreviewSubject::PartsStall { extent, .. }
 			| PreviewSubject::KnickKnackStall { extent, .. }
-			| PreviewSubject::PublicRestroom { extent, .. } => {
-				Aabb3d::from_min_max(Vec3::ZERO, *extent)
-			}
+			| PreviewSubject::PublicRestroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
 			PreviewSubject::BitesExamples => bites_examples_bounds(),
 			PreviewSubject::MiniMartExamples => mini_mart_examples_bounds(),
 			PreviewSubject::PartsExamples => parts_examples_bounds(),
@@ -1127,9 +1119,7 @@ impl PreviewConfig {
 			| PreviewSubject::MixedUseLesHallesMonotower { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
 			| PreviewSubject::IApartmentFullStorey { extent, .. }
-			| PreviewSubject::HallsToShafts { extent, .. } => {
-				les_halles_confines_bounds(*extent)
-			}
+			| PreviewSubject::HallsToShafts { extent, .. } => les_halles_confines_bounds(*extent),
 			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
 				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
 				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
@@ -1158,32 +1148,20 @@ impl PreviewConfig {
 				let max = a0.max(*a1).max(*b0).max(*b1) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
-			PreviewSubject::Rectangle {
-				origin,
-				edge,
-				height,
-				..
-			}
-			| PreviewSubject::ClippedRectangle {
-				origin,
-				edge,
-				height,
-				..
-			} => {
+			PreviewSubject::Rectangle { origin, edge, height, .. }
+			| PreviewSubject::ClippedRectangle { origin, edge, height, .. } => {
 				let end = *origin + *edge;
 				let up = Vec3::Y * (*height);
 				let min = origin.min(end).min(*origin + up).min(end + up) - Vec3::splat(0.2);
 				let max = origin.max(end).max(*origin + up).max(end + up) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
-			PreviewSubject::ClippedFittedRectangularStrip { .. } => Aabb3d::from_min_max(
-				Vec3::new(-0.5, -0.5, -0.5),
-				Vec3::new(3.5, 3.0, 7.0),
-			),
-			PreviewSubject::RectangularNTube { .. } => Aabb3d::from_min_max(
-				Vec3::new(-2.0, -0.5, -0.5),
-				Vec3::new(2.0, 2.5, 7.0),
-			),
+			PreviewSubject::ClippedFittedRectangularStrip { .. } => {
+				Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(3.5, 3.0, 7.0))
+			}
+			PreviewSubject::RectangularNTube { .. } => {
+				Aabb3d::from_min_max(Vec3::new(-2.0, -0.5, -0.5), Vec3::new(2.0, 2.5, 7.0))
+			}
 			PreviewSubject::Polyline => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
 			}
@@ -1193,37 +1171,24 @@ impl PreviewConfig {
 			}
 			PreviewSubject::Tube { .. } => {
 				// Demo polyline bends +X/+Y along +Z with ~1.3 half-widths / ~2.4 height.
-				Aabb3d::from_min_max(
-					Vec3::new(-2.0, -0.5, -0.5),
-					Vec3::new(7.0, 4.0, 9.0),
-				)
+				Aabb3d::from_min_max(Vec3::new(-2.0, -0.5, -0.5), Vec3::new(7.0, 4.0, 9.0))
 			}
 			PreviewSubject::ConnectingHall => {
 				Aabb3d::from_min_max(Vec3::new(-5.0, -0.5, -5.0), Vec3::new(5.0, 4.0, 5.0))
 			}
-			PreviewSubject::ArcFloor {
-				radius,
-				storey_height,
-				..
-			} => {
+			PreviewSubject::ArcFloor { radius, storey_height, .. } => {
 				let r = radius.max(1e-4) + 0.5;
 				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
 			}
-			PreviewSubject::ArcTower {
-				radius,
-				floor_count,
-				storey_height,
-				..
-			} => {
+			PreviewSubject::ArcTower { radius, floor_count, storey_height, .. } => {
 				let r = radius.max(1e-4) + 0.5;
 				let h = (*floor_count as f32) * storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
 			}
-			PreviewSubject::ConnectingShells => Aabb3d::from_min_max(
-				Vec3::new(-19.0, -0.2, -5.0),
-				Vec3::new(5.0, 10.0, 5.0),
-			),
+			PreviewSubject::ConnectingShells => {
+				Aabb3d::from_min_max(Vec3::new(-19.0, -0.2, -5.0), Vec3::new(5.0, 10.0, 5.0))
+			}
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -1251,17 +1216,9 @@ impl PreviewConfig {
 			PreviewSubject::RectangularPitchedRoofComplex { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-10.0, -0.2, -10.0), Vec3::new(10.0, 6.0, 10.0))
 			}
-			PreviewSubject::RectFloor {
-				footprint_x,
-				footprint_z,
-				storey_height,
-				..
-			}
+			PreviewSubject::RectFloor { footprint_x, footprint_z, storey_height, .. }
 			| PreviewSubject::RoundedRectFloor {
-				footprint_x,
-				footprint_z,
-				storey_height,
-				..
+				footprint_x, footprint_z, storey_height, ..
 			} => {
 				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
@@ -1285,36 +1242,19 @@ impl PreviewConfig {
 				let flange_t = central_x.max(1e-4);
 				let hx = half_w + left.max(right) + 0.5;
 				let hz = half_d
-					+ if top_left.is_some() || top_right.is_some() {
-						flange_t
-					} else {
-						0.0
-					}
-					+ if bottom_left.is_some() || bottom_right.is_some() {
-						flange_t
-					} else {
-						0.0
-					}
+					+ if top_left.is_some() || top_right.is_some() { flange_t } else { 0.0 }
+					+ if bottom_left.is_some() || bottom_right.is_some() { flange_t } else { 0.0 }
 					+ 0.5;
 				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
-			PreviewSubject::RectRingFloor {
-				outer_x,
-				outer_z,
-				storey_height,
-				..
-			} => {
+			PreviewSubject::RectRingFloor { outer_x, outer_z, storey_height, .. } => {
 				let hx = outer_x.max(1e-4) * 0.5 + 0.5;
 				let hz = outer_z.max(1e-4) * 0.5 + 0.5;
 				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
-			PreviewSubject::CircRingFloor {
-				outer_radius,
-				storey_height,
-				..
-			} => {
+			PreviewSubject::CircRingFloor { outer_radius, storey_height, .. } => {
 				let r = outer_radius.max(1e-4) + 0.5;
 				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
@@ -1382,14 +1322,8 @@ struct BedroomExampleCell {
 /// One cell in [`PreviewSubject::ResidentialBathroomExamples`].
 #[derive(Clone)]
 enum ResidentialBathroomExampleCell {
-	Full {
-		offset: Vec3,
-		room: ResidentialBathroom,
-	},
-	Half {
-		offset: Vec3,
-		room: ResidentialHalfBathroom,
-	},
+	Full { offset: Vec3, room: ResidentialBathroom },
+	Half { offset: Vec3, room: ResidentialHalfBathroom },
 }
 
 /// One cell in livable-quarters example galleries.
@@ -1487,14 +1421,8 @@ struct MiniMartExampleCell {
 /// One cell in [`PreviewSubject::BitesExamples`].
 #[derive(Clone)]
 enum BitesExampleCell {
-	Stall {
-		offset: Vec3,
-		stall: BitesStall,
-	},
-	Sitdown {
-		offset: Vec3,
-		stall: BitesSitdownStall,
-	},
+	Stall { offset: Vec3, stall: BitesStall },
+	Sitdown { offset: Vec3, stall: BitesSitdownStall },
 }
 
 impl CachedPreview {
@@ -1559,10 +1487,8 @@ impl CachedPreview {
 			PreviewSubject::Bedroom { extent, noise, spaciousness, occupancy, door } => {
 				let confines = demo_common_bedroom_confines(*extent, *door);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let seed = NoiseParams {
-					seed: (*noise * 1_000_000.0) as i32,
-					..NoiseParams::default()
-				};
+				let seed =
+					NoiseParams { seed: (*noise * 1_000_000.0) as i32, ..NoiseParams::default() };
 				match CommonBedroom::fit_with_fill(
 					&confines,
 					seed,
@@ -1583,10 +1509,7 @@ impl CachedPreview {
 			PreviewSubject::ResidentialBathroom { extent, seed, door } => {
 				let confines = demo_common_bedroom_confines(*extent, *door);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match ResidentialBathroom::fit_to_confines(&confines, noise) {
 					Ok((room, _)) => self.residential_bathroom = Some(room),
 					Err(err) => bevy::log::error!("residential-bathroom fit failed: {err}"),
@@ -1595,10 +1518,7 @@ impl CachedPreview {
 			PreviewSubject::ResidentialHalfBathroom { extent, seed, door } => {
 				let confines = demo_common_bedroom_confines(*extent, *door);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match ResidentialHalfBathroom::fit_to_confines(&confines, noise) {
 					Ok((room, _)) => self.residential_half_bathroom = Some(room),
 					Err(err) => bevy::log::error!("residential-half-bathroom fit failed: {err}"),
@@ -1652,10 +1572,7 @@ impl CachedPreview {
 			}
 			PreviewSubject::CommercialStall { extent, seed } => {
 				let confines = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, *extent));
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match CommercialStall::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.commercial_stall = Some(stall),
 					Err(err) => bevy::log::error!("commercial-stall fit failed: {err}"),
@@ -1663,42 +1580,25 @@ impl CachedPreview {
 			}
 			PreviewSubject::CommercialStallStrip { extent, seed } => {
 				let confines = demo_commercial_stall_strip_confines(*extent, *seed);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match CommercialStallStrip::fit_to_confines(&confines, noise) {
 					Ok((strip, _)) => self.commercial_stall_strip = Some(strip),
 					Err(err) => bevy::log::error!("commercial-stall-strip fit failed: {err}"),
 				}
 			}
-			PreviewSubject::BitesStall {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::BitesStall { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match BitesStall::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.bites_stall = Some(stall),
 					Err(err) => bevy::log::error!("bites-stall fit failed: {err}"),
 				}
 			}
-			PreviewSubject::BitesSitdownStall {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::BitesSitdownStall { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match BitesSitdownStall::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.bites_sitdown_stall = Some(stall),
 					Err(err) => bevy::log::error!("bites-sitdown-stall fit failed: {err}"),
@@ -1709,17 +1609,10 @@ impl CachedPreview {
 				self.bites_examples = cells;
 				self.bites_passages = passages;
 			}
-			PreviewSubject::MiniMart {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::MiniMart { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match MiniMart::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.mini_mart = Some(stall),
 					Err(err) => bevy::log::error!("mini-mart fit failed: {err}"),
@@ -1730,17 +1623,10 @@ impl CachedPreview {
 				self.mini_mart_examples = cells;
 				self.bites_passages = passages;
 			}
-			PreviewSubject::PartsStall {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::PartsStall { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match PartsStall::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.parts_stall = Some(stall),
 					Err(err) => bevy::log::error!("parts-stall fit failed: {err}"),
@@ -1751,17 +1637,10 @@ impl CachedPreview {
 				self.parts_examples = cells;
 				self.bites_passages = passages;
 			}
-			PreviewSubject::KnickKnackStall {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::KnickKnackStall { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match KnickKnackStall::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.knick_knack_stall = Some(stall),
 					Err(err) => bevy::log::error!("knick-knack-stall fit failed: {err}"),
@@ -1772,17 +1651,10 @@ impl CachedPreview {
 				self.knick_knack_examples = cells;
 				self.bites_passages = passages;
 			}
-			PreviewSubject::PublicRestroom {
-				extent,
-				seed,
-				door_side,
-			} => {
+			PreviewSubject::PublicRestroom { extent, seed, door_side } => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
 				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match PublicRestroom::fit_to_confines(&confines, noise) {
 					Ok((stall, _)) => self.public_restroom = Some(stall),
 					Err(err) => bevy::log::error!("public-restroom fit failed: {err}"),
@@ -1793,12 +1665,7 @@ impl CachedPreview {
 				self.public_restroom_examples = cells;
 				self.bites_passages = passages;
 			}
-			PreviewSubject::LesHallesFloorPlan {
-				extent,
-				seed,
-				ceiling,
-				openings,
-			} => {
+			PreviewSubject::LesHallesFloorPlan { extent, seed, ceiling, openings } => {
 				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => self.les_halles_floor_plan = Some(plan),
 					Err(err) => {
@@ -1809,18 +1676,10 @@ impl CachedPreview {
 			PreviewSubject::LesHallesFloorPlanExamples => {
 				self.les_halles_floor_plan_examples = build_les_halles_floor_plan_examples();
 			}
-			PreviewSubject::LesHallesFullStorey {
-				extent,
-				seed,
-				ceiling,
-				openings,
-			} => {
+			PreviewSubject::LesHallesFullStorey { extent, seed, ceiling, openings } => {
 				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => {
-						let noise = NoiseParams {
-							seed: *seed,
-							..NoiseParams::default()
-						};
+						let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 						match LesHallesFullStorey::from_floor_plan(plan, noise) {
 							Ok((storey, _)) => self.les_halles_full_storey = Some(storey),
 							Err(err) => {
@@ -1833,18 +1692,10 @@ impl CachedPreview {
 					}
 				}
 			}
-			PreviewSubject::LesHallesLivableFullStorey {
-				extent,
-				seed,
-				ceiling,
-				openings,
-			} => {
+			PreviewSubject::LesHallesLivableFullStorey { extent, seed, ceiling, openings } => {
 				match fit_les_halles_livable_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => {
-						let noise = NoiseParams {
-							seed: *seed,
-							..NoiseParams::default()
-						};
+						let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 						match LesHallesLivableFullStorey::from_floor_plan(plan, noise) {
 							Ok((storey, _)) => self.les_halles_livable_full_storey = Some(storey),
 							Err(err) => {
@@ -1863,11 +1714,7 @@ impl CachedPreview {
 				self.les_halles_livable_full_storey_examples =
 					build_les_halles_livable_full_storey_examples();
 			}
-			PreviewSubject::MixedUseLesHallesMonotower {
-				extent,
-				seed,
-				openings,
-			} => {
+			PreviewSubject::MixedUseLesHallesMonotower { extent, seed, openings } => {
 				match fit_mixed_use_les_halles_monotower(*extent, *seed, openings) {
 					Ok(tower) => self.mixed_use_les_halles_monotower = Some(tower),
 					Err(err) => {
@@ -1875,12 +1722,7 @@ impl CachedPreview {
 					}
 				}
 			}
-			PreviewSubject::IApartmentFloorPlan {
-				extent,
-				seed,
-				ceiling,
-				openings,
-			} => {
+			PreviewSubject::IApartmentFloorPlan { extent, seed, ceiling, openings } => {
 				match fit_i_apartment_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => self.i_apartment_floor_plan = Some(plan),
 					Err(err) => {
@@ -1903,18 +1745,10 @@ impl CachedPreview {
 			PreviewSubject::LivableRectanglesExamples => {
 				self.livable_rectangles_examples = build_livable_rectangles_examples();
 			}
-			PreviewSubject::IApartmentFullStorey {
-				extent,
-				seed,
-				ceiling,
-				openings,
-			} => {
+			PreviewSubject::IApartmentFullStorey { extent, seed, ceiling, openings } => {
 				match fit_i_apartment_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => {
-						let noise = NoiseParams {
-							seed: *seed,
-							..NoiseParams::default()
-						};
+						let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 						match IApartmentFullStorey::from_floor_plan(plan, noise) {
 							Ok((storey, _)) => self.i_apartment_full_storey = Some(storey),
 							Err(err) => {
@@ -1927,17 +1761,14 @@ impl CachedPreview {
 					}
 				}
 			}
-			PreviewSubject::HallsToShafts {
-				extent,
-				seed,
-				hall_width,
-				openings,
-			} => match fit_halls_to_shafts(*extent, *seed, *hall_width, openings) {
-				Ok(preview) => self.halls_to_shafts = Some(preview),
-				Err(err) => {
-					bevy::log::error!("halls-to-shafts fit failed: {err}");
+			PreviewSubject::HallsToShafts { extent, seed, hall_width, openings } => {
+				match fit_halls_to_shafts(*extent, *seed, *hall_width, openings) {
+					Ok(preview) => self.halls_to_shafts = Some(preview),
+					Err(err) => {
+						bevy::log::error!("halls-to-shafts fit failed: {err}");
+					}
 				}
-			},
+			}
 			_ => {}
 		}
 	}
@@ -1981,14 +1812,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.bedroom_examples {
 				out.extend(
-					cell.room
-						.label_nodes_for_level(LodSceneLevel::High)
-						.flatten()
-						.into_iter()
-						.map(|mut label| {
+					cell.room.label_nodes_for_level(LodSceneLevel::High).flatten().into_iter().map(
+						|mut label| {
 							label.placement.translation += cell.offset;
 							label
-						}),
+						},
+					),
 				);
 			}
 			return out;
@@ -1997,14 +1826,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.residential_bathroom_examples {
 				let (offset, labels) = match cell {
-					ResidentialBathroomExampleCell::Full { offset, room } => (
-						*offset,
-						room.label_nodes_for_level(LodSceneLevel::High).flatten(),
-					),
-					ResidentialBathroomExampleCell::Half { offset, room } => (
-						*offset,
-						room.label_nodes_for_level(LodSceneLevel::High).flatten(),
-					),
+					ResidentialBathroomExampleCell::Full { offset, room } => {
+						(*offset, room.label_nodes_for_level(LodSceneLevel::High).flatten())
+					}
+					ResidentialBathroomExampleCell::Half { offset, room } => {
+						(*offset, room.label_nodes_for_level(LodSceneLevel::High).flatten())
+					}
 				};
 				out.extend(labels.into_iter().map(|mut label| {
 					label.placement.translation += offset;
@@ -2032,14 +1859,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.bites_examples {
 				let (offset, labels) = match cell {
-					BitesExampleCell::Stall { offset, stall } => (
-						*offset,
-						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
-					),
-					BitesExampleCell::Sitdown { offset, stall } => (
-						*offset,
-						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
-					),
+					BitesExampleCell::Stall { offset, stall } => {
+						(*offset, stall.label_nodes_for_level(LodSceneLevel::High).flatten())
+					}
+					BitesExampleCell::Sitdown { offset, stall } => {
+						(*offset, stall.label_nodes_for_level(LodSceneLevel::High).flatten())
+					}
 				};
 				out.extend(labels.into_iter().map(|mut label| {
 					label.placement.translation += offset;
@@ -2119,14 +1944,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.les_halles_floor_plan_examples {
 				out.extend(
-					cell.plan
-						.label_nodes_for_level(LodSceneLevel::High)
-						.flatten()
-						.into_iter()
-						.map(|mut label| {
+					cell.plan.label_nodes_for_level(LodSceneLevel::High).flatten().into_iter().map(
+						|mut label| {
 							label.placement.translation += cell.offset;
 							label
-						}),
+						},
+					),
 				);
 			}
 			return out;
@@ -2160,14 +1983,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.i_apartment_floor_plan_examples {
 				out.extend(
-					cell.plan
-						.label_nodes_for_level(LodSceneLevel::High)
-						.flatten()
-						.into_iter()
-						.map(|mut label| {
+					cell.plan.label_nodes_for_level(LodSceneLevel::High).flatten().into_iter().map(
+						|mut label| {
 							label.placement.translation += cell.offset;
 							label
-						}),
+						},
+					),
 				);
 			}
 			return out;
@@ -2230,14 +2051,12 @@ impl CachedPreview {
 			let mut out = Vec::new();
 			for cell in &self.livable_rectangles_examples {
 				out.extend(
-					cell.area
-						.label_nodes_for_level(LodSceneLevel::High)
-						.flatten()
-						.into_iter()
-						.map(|mut label| {
+					cell.area.label_nodes_for_level(LodSceneLevel::High).flatten().into_iter().map(
+						|mut label| {
 							label.placement.translation += cell.offset;
 							label
-						}),
+						},
+					),
 				);
 			}
 			return out;
@@ -2246,23 +2065,21 @@ impl CachedPreview {
 	}
 }
 
-fn gallery_example_labels<T: BuildingComponents>(cells: &[GalleryExampleCell<T>]) -> Option<Vec<LabelNode>> {
+fn gallery_example_labels<T: BuildingComponents>(
+	cells: &[GalleryExampleCell<T>],
+) -> Option<Vec<LabelNode>> {
 	use lod::gen::LodSceneLevel;
 	if cells.is_empty() {
 		return None;
 	}
 	let mut out = Vec::new();
 	for cell in cells {
-		out.extend(
-			cell.room
-				.label_nodes_for_level(LodSceneLevel::High)
-				.flatten()
-				.into_iter()
-				.map(|mut label| {
-					label.placement.translation += cell.offset;
-					label
-				}),
-		);
+		out.extend(cell.room.label_nodes_for_level(LodSceneLevel::High).flatten().into_iter().map(
+			|mut label| {
+				label.placement.translation += cell.offset;
+				label
+			},
+		));
 	}
 	Some(out)
 }
@@ -2335,10 +2152,7 @@ fn build_fit_gallery<T>(
 		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
 		let confines = demo_bites_stall_confines(*extent, *door_side);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match fit(&confines, noise) {
 			Ok(stall) => cells.push((offset, stall)),
 			Err(err) => {
@@ -2405,12 +2219,10 @@ fn parts_examples_bounds() -> Aabb3d {
 }
 
 fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let (cells, passages) = build_fit_gallery(
-		"parts-examples",
-		&parts_examples_specs(),
-		3,
-		|confines, noise| PartsStall::fit_to_confines(confines, noise).map(|(s, _)| s),
-	);
+	let (cells, passages) =
+		build_fit_gallery("parts-examples", &parts_examples_specs(), 3, |confines, noise| {
+			PartsStall::fit_to_confines(confines, noise).map(|(s, _)| s)
+		});
 	(
 		cells
 			.into_iter()
@@ -2455,18 +2267,15 @@ fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
 		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		let mut params =
 			richmond_buildings::CommonBedroomParameterized::with_fill(*spaciousness, *occupancy);
 		params.bed_against_wall = *bed_against_wall;
 		match CommonBedroom::fit_with_fill(&confines, noise, params) {
 			Ok((room, _)) => cells.push(BedroomExampleCell { offset, room }),
-			Err(err) => bevy::log::error!(
-				"bedroom-examples ({extent:?} seed={seed}) failed: {err}"
-			),
+			Err(err) => {
+				bevy::log::error!("bedroom-examples ({extent:?} seed={seed}) failed: {err}")
+			}
 		}
 	}
 	(cells, passages)
@@ -2488,10 +2297,7 @@ fn build_livable_quarters_examples<T, P>(
 		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match fit(&confines, noise, params(*spaciousness, *occupancy)) {
 			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
 			Err(err) => bevy::log::error!("{label} ({extent:?} seed={seed}) failed: {err}"),
@@ -2538,17 +2344,14 @@ fn build_kitchen_examples() -> (Vec<GalleryExampleCell<Kitchen>>, Vec<(Aabb3d, V
 		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, 3, gap);
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		let params = richmond_buildings::KitchenParameterized::with_fill(*spaciousness, *occupancy)
 			.with_layout(layouts[i % layouts.len()]);
 		match Kitchen::fit_with_fill(&confines, noise, params) {
 			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
-			Err(err) => bevy::log::error!(
-				"kitchen-examples ({extent:?} seed={seed}) failed: {err}"
-			),
+			Err(err) => {
+				bevy::log::error!("kitchen-examples ({extent:?} seed={seed}) failed: {err}")
+			}
 		}
 	}
 	(cells, passages)
@@ -2686,24 +2489,17 @@ fn build_residential_bathroom_examples(
 		let offset = gallery_grid_offset(|j| specs[j].1, specs.len(), i, cols, gap);
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		if *half {
 			match ResidentialHalfBathroom::fit_to_confines(&confines, noise) {
-				Ok((room, _)) => {
-					cells.push(ResidentialBathroomExampleCell::Half { offset, room })
-				}
+				Ok((room, _)) => cells.push(ResidentialBathroomExampleCell::Half { offset, room }),
 				Err(err) => bevy::log::error!(
 					"residential-bathroom-examples half ({extent:?} seed={seed}) failed: {err}"
 				),
 			}
 		} else {
 			match ResidentialBathroom::fit_to_confines(&confines, noise) {
-				Ok((room, _)) => {
-					cells.push(ResidentialBathroomExampleCell::Full { offset, room })
-				}
+				Ok((room, _)) => cells.push(ResidentialBathroomExampleCell::Full { offset, room }),
 				Err(err) => bevy::log::error!(
 					"residential-bathroom-examples full ({extent:?} seed={seed}) failed: {err}"
 				),
@@ -2803,10 +2599,7 @@ fn build_bites_examples() -> (Vec<BitesExampleCell>, Vec<(Aabb3d, Vec3)>) {
 		let offset = gallery_grid_offset(|j| specs[j].1, specs.len(), i, cols, gap);
 		let confines = demo_bites_stall_confines(*extent, *door_side);
 		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		if *sitdown {
 			match BitesSitdownStall::fit_to_confines(&confines, noise) {
 				Ok((stall, _)) => cells.push(BitesExampleCell::Sitdown { offset, stall }),
@@ -2849,11 +2642,7 @@ fn demo_common_bedroom_confines(extent: Vec3, door: bool) -> Confines {
 			)),
 		);
 	}
-	Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, extent),
-		0.0,
-		openings,
-	)
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
 }
 
 /// Demo bites stall with long Passage(s) on the chosen façade.
@@ -2868,10 +2657,9 @@ fn demo_bites_stall_confines(extent: Vec3, door_side: BitesDoorSide) -> Confines
 	let band = 0.25_f32;
 	let mk = |a0: f32, a1: f32| -> Aabb3d {
 		match door_side {
-			BitesDoorSide::South => Aabb3d::from_min_max(
-				Vec3::new(a0, 0.0, -band),
-				Vec3::new(a1, door_h, band),
-			),
+			BitesDoorSide::South => {
+				Aabb3d::from_min_max(Vec3::new(a0, 0.0, -band), Vec3::new(a1, door_h, band))
+			}
 			BitesDoorSide::North => Aabb3d::from_min_max(
 				Vec3::new(a0, 0.0, extent.z - band),
 				Vec3::new(a1, door_h, extent.z + band),
@@ -2880,10 +2668,9 @@ fn demo_bites_stall_confines(extent: Vec3, door_side: BitesDoorSide) -> Confines
 				Vec3::new(extent.x - band, 0.0, a0),
 				Vec3::new(extent.x + band, door_h, a1),
 			),
-			BitesDoorSide::West => Aabb3d::from_min_max(
-				Vec3::new(-band, 0.0, a0),
-				Vec3::new(band, door_h, a1),
-			),
+			BitesDoorSide::West => {
+				Aabb3d::from_min_max(Vec3::new(-band, 0.0, a0), Vec3::new(band, door_h, a1))
+			}
 		}
 	};
 	if along >= 6.0 {
@@ -2893,10 +2680,7 @@ fn demo_bites_stall_confines(extent: Vec3, door_side: BitesDoorSide) -> Confines
 		);
 		openings.insert(
 			OpeningId::new("demo_bites_door_b"),
-			Opening::passage(mk(
-				along * 0.58,
-				(along - 0.4).max(along * 0.58 + 2.5),
-			)),
+			Opening::passage(mk(along * 0.58, (along - 0.4).max(along * 0.58 + 2.5))),
 		);
 	} else {
 		openings.insert(
@@ -2931,10 +2715,7 @@ fn demo_commercial_stall_strip_confines(extent: Vec3, seed: i32) -> Confines {
 				Vec3::new(0.25, door_h, mid + half_w),
 			)
 		};
-		openings.insert(
-			OpeningId::new(format!("demo_door_{i}")),
-			Opening::passage(bounds),
-		);
+		openings.insert(OpeningId::new(format!("demo_door_{i}")), Opening::passage(bounds));
 	}
 	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
 }
@@ -2945,16 +2726,10 @@ fn fit_mixed_use_les_halles_monotower(
 	openings: &[PreviewOpening],
 ) -> Result<MixedUseLesHallesMonotower, richmond_buildings::FitError> {
 	let bounds = les_halles_confines_bounds(extent);
-	let inbound = if openings.is_empty() {
-		Openings::new()
-	} else {
-		openings_from_preview(openings)
-	};
+	let inbound =
+		if openings.is_empty() { Openings::new() } else { openings_from_preview(openings) };
 	let confines = Confines::new(bounds, 0.0, inbound);
-	let noise = NoiseParams {
-		seed,
-		..NoiseParams::default()
-	};
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).map(|(tower, _)| tower)
 }
 
@@ -2977,10 +2752,7 @@ fn fit_les_halles_floor_plan_sampled(
 ) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
 	let bounds = les_halles_confines_bounds(extent);
 	let empty = Confines::from_bounds(bounds);
-	let noise = NoiseParams {
-		seed,
-		..NoiseParams::default()
-	};
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	let mut params = if livable {
 		LesHallesParameterized::sample_livable(&empty, noise)?
 	} else {
@@ -2996,11 +2768,7 @@ fn fit_les_halles_floor_plan_sampled(
 		openings_from_preview(openings)
 	};
 	let confines = Confines::new(bounds, 0.0, inbound);
-	let ceiling = if ceiling {
-		RectRingFloorSlab::Solid
-	} else {
-		RectRingFloorSlab::None
-	};
+	let ceiling = if ceiling { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None };
 	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
 }
@@ -3009,8 +2777,8 @@ const LES_HALLES_FLOOR_PLAN_GALLERY_COLS: usize = 3;
 const LES_HALLES_FLOOR_PLAN_GALLERY_GAP: f32 = 14.0;
 
 /// `(extent, seed, livable_sample, forced shaft placement)`.
-fn les_halles_floor_plan_examples_specs(
-) -> Vec<(Vec3, i32, bool, Option<LesHallesShaftPlacement>)> {
+fn les_halles_floor_plan_examples_specs() -> Vec<(Vec3, i32, bool, Option<LesHallesShaftPlacement>)>
+{
 	vec![
 		// Commercial sampling, natural shaft placement.
 		(Vec3::new(48.0, 4.0, 36.0), 1337, false, None),
@@ -3018,30 +2786,10 @@ fn les_halles_floor_plan_examples_specs(
 		(Vec3::new(56.0, 4.0, 40.0), 42, false, None),
 		(Vec3::new(40.0, 4.0, 40.0), 3, false, None),
 		// Same footprint, forced corner vs mid-side (strip topology contrast).
-		(
-			Vec3::new(72.0, 4.0, 54.0),
-			11,
-			true,
-			Some(LesHallesShaftPlacement::Corners),
-		),
-		(
-			Vec3::new(72.0, 4.0, 54.0),
-			11,
-			true,
-			Some(LesHallesShaftPlacement::MidSides),
-		),
-		(
-			Vec3::new(64.0, 4.0, 64.0),
-			19,
-			true,
-			Some(LesHallesShaftPlacement::Corners),
-		),
-		(
-			Vec3::new(64.0, 4.0, 64.0),
-			19,
-			true,
-			Some(LesHallesShaftPlacement::MidSides),
-		),
+		(Vec3::new(72.0, 4.0, 54.0), 11, true, Some(LesHallesShaftPlacement::Corners)),
+		(Vec3::new(72.0, 4.0, 54.0), 11, true, Some(LesHallesShaftPlacement::MidSides)),
+		(Vec3::new(64.0, 4.0, 64.0), 19, true, Some(LesHallesShaftPlacement::Corners)),
+		(Vec3::new(64.0, 4.0, 64.0), 19, true, Some(LesHallesShaftPlacement::MidSides)),
 		// Extra livable natural samples.
 		(Vec3::new(80.0, 4.0, 60.0), 5, true, None),
 		(Vec3::new(88.0, 4.0, 56.0), 23, true, None),
@@ -3067,14 +2815,7 @@ fn build_les_halles_floor_plan_examples() -> Vec<LesHallesFloorPlanExampleCell> 
 	let specs = les_halles_floor_plan_examples_specs();
 	let mut fitted = Vec::new();
 	for (extent, seed, livable, placement) in &specs {
-		match fit_les_halles_floor_plan_sampled(
-			*extent,
-			*seed,
-			false,
-			&[],
-			*livable,
-			*placement,
-		) {
+		match fit_les_halles_floor_plan_sampled(*extent, *seed, false, &[], *livable, *placement) {
 			Ok(plan) => fitted.push(plan),
 			Err(err) => {
 				bevy::log::error!(
@@ -3083,10 +2824,7 @@ fn build_les_halles_floor_plan_examples() -> Vec<LesHallesFloorPlanExampleCell> 
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(les_halles_plan_footprint_aabb)
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> = fitted.iter().map(les_halles_plan_footprint_aabb).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3113,10 +2851,7 @@ fn fit_les_halles_livable_floor_plan(
 ) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
 	let bounds = les_halles_confines_bounds(extent);
 	let empty = Confines::from_bounds(bounds);
-	let noise = NoiseParams {
-		seed,
-		..NoiseParams::default()
-	};
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	let params = LesHallesParameterized::sample_livable(&empty, noise)?;
 	let inbound = if openings.is_empty() {
 		LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty)
@@ -3124,11 +2859,7 @@ fn fit_les_halles_livable_floor_plan(
 		openings_from_preview(openings)
 	};
 	let confines = Confines::new(bounds, 0.0, inbound);
-	let ceiling = if ceiling {
-		RectRingFloorSlab::Solid
-	} else {
-		RectRingFloorSlab::None
-	};
+	let ceiling = if ceiling { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None };
 	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
 }
@@ -3151,11 +2882,8 @@ fn les_halles_plan_footprint_aabb(plan: &LesHallesFloorPlan) -> (Vec3, Vec3) {
 	let hx = plan.outer.x * 0.5;
 	let hz = plan.outer.y * 0.5;
 	let min = Vec3::new(plan.center_xz.x - hx, 0.0, plan.center_xz.z - hz);
-	let extent = Vec3::new(
-		plan.outer.x.max(1.0),
-		plan.storey_height.max(1.0),
-		plan.outer.y.max(1.0),
-	);
+	let extent =
+		Vec3::new(plan.outer.x.max(1.0), plan.storey_height.max(1.0), plan.outer.y.max(1.0));
 	(min, extent)
 }
 
@@ -3178,10 +2906,7 @@ fn build_les_halles_livable_full_storey_examples() -> Vec<LesHallesLivableFullSt
 	for (extent, seed) in &specs {
 		match fit_les_halles_livable_floor_plan(*extent, *seed, false, &[]) {
 			Ok(plan) => {
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
+				let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 				match LesHallesLivableFullStorey::from_floor_plan(plan, noise) {
 					Ok((storey, _)) => fitted.push(storey),
 					Err(err) => {
@@ -3198,10 +2923,8 @@ fn build_les_halles_livable_full_storey_examples() -> Vec<LesHallesLivableFullSt
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(|s| les_halles_plan_footprint_aabb(&s.floor_plan))
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> =
+		fitted.iter().map(|s| les_halles_plan_footprint_aabb(&s.floor_plan)).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3229,10 +2952,7 @@ fn fit_i_apartment_floor_plan(
 	use richmond_buildings::IFloorSlab;
 	let bounds = les_halles_confines_bounds(extent);
 	let empty = Confines::from_bounds(bounds);
-	let noise = NoiseParams {
-		seed,
-		..NoiseParams::default()
-	};
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	let params = IApartmentParameterized::sample(&empty, noise)?;
 	let inbound = if openings.is_empty() {
 		// Demo default: one shaft request per primary rect (9-pocket mapped).
@@ -3241,11 +2961,7 @@ fn fit_i_apartment_floor_plan(
 		openings_from_preview(openings)
 	};
 	let confines = Confines::new(bounds, 0.0, inbound);
-	let ceiling = if ceiling {
-		IFloorSlab::Solid
-	} else {
-		IFloorSlab::None
-	};
+	let ceiling = if ceiling { IFloorSlab::Solid } else { IFloorSlab::None };
 	IApartmentFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
 }
@@ -3265,20 +2981,13 @@ fn fit_halls_to_shafts(
 		openings_from_preview(openings)
 	};
 	let confines = Confines::new(host, 0.0, inbound);
-	let noise = NoiseParams {
-		seed,
-		..NoiseParams::default()
-	};
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	let (fit, regions) = HallsToShaftsFit::from_confines_with(
 		&confines,
 		noise,
 		HallsToShaftsOptions { hall_width },
 	)?;
-	Ok(HallsToShaftsPreview {
-		fit,
-		regions,
-		host,
-	})
+	Ok(HallsToShaftsPreview { fit, regions, host })
 }
 
 /// Curated (extent, seed) cells: same Fit path as production; seed/aspect vary I / T / L.
@@ -3311,11 +3020,8 @@ fn i_apartment_plan_footprint_aabb(plan: &IApartmentFloorPlan) -> (Vec3, Vec3) {
 		min_z = min_z.min(rect.min_z);
 		max_z = max_z.max(rect.max_z);
 	}
-	let extent = Vec3::new(
-		(max_x - min_x).max(1.0),
-		plan.storey_height.max(1.0),
-		(max_z - min_z).max(1.0),
-	);
+	let extent =
+		Vec3::new((max_x - min_x).max(1.0), plan.storey_height.max(1.0), (max_z - min_z).max(1.0));
 	let min = Vec3::new(min_x, 0.0, min_z);
 	(min, extent)
 }
@@ -3339,13 +3045,9 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 	for (extent, seed) in &specs {
 		let bounds = les_halles_confines_bounds(*extent);
 		let empty = Confines::from_bounds(bounds);
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match IApartmentParameterized::sample(&empty, noise).and_then(|params| {
-			let inbound =
-				IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
+			let inbound = IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
 			let confines = Confines::new(bounds, 0.0, inbound);
 			IApartmentFloorPlan::from_parameterized(params, &confines).map(|(plan, _)| plan)
 		}) {
@@ -3357,10 +3059,7 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(i_apartment_plan_footprint_aabb)
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> = fitted.iter().map(i_apartment_plan_footprint_aabb).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3399,13 +3098,9 @@ fn build_i_apartment_full_storey_examples() -> Vec<IApartmentFullStoreyExampleCe
 	for (extent, seed) in &specs {
 		let bounds = les_halles_confines_bounds(*extent);
 		let empty = Confines::from_bounds(bounds);
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match IApartmentParameterized::sample(&empty, noise).and_then(|params| {
-			let inbound =
-				IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
+			let inbound = IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
 			let confines = Confines::new(bounds, 0.0, inbound);
 			IApartmentFloorPlan::from_parameterized(params, &confines)
 				.and_then(|(plan, _)| IApartmentFullStorey::from_floor_plan(plan, noise))
@@ -3419,10 +3114,8 @@ fn build_i_apartment_full_storey_examples() -> Vec<IApartmentFullStoreyExampleCe
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(|s| i_apartment_plan_footprint_aabb(&s.floor_plan))
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> =
+		fitted.iter().map(|s| i_apartment_plan_footprint_aabb(&s.floor_plan)).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3448,40 +3141,15 @@ const LIVABLE_APARTMENTS_GALLERY_GAP: f32 = 8.0;
 /// Larger catalog targets encourage multi-cell (L / non-rect) apartment groups.
 fn livable_apartments_examples_specs() -> Vec<(Vec3, i32, Option<f32>, Option<Vec<f32>>)> {
 	vec![
-		(
-			Vec3::new(24.0, 3.5, 18.0),
-			1337,
-			Some(2.5),
-			Some(vec![55.0, 48.0, 40.0, 30.0]),
-		),
+		(Vec3::new(24.0, 3.5, 18.0), 1337, Some(2.5), Some(vec![55.0, 48.0, 40.0, 30.0])),
 		(Vec3::new(24.0, 3.5, 18.0), 0, None, None),
-		(
-			Vec3::new(30.0, 3.5, 22.0),
-			3,
-			Some(3.0),
-			Some(vec![55.0, 48.0, 40.0, 30.0]),
-		),
+		(Vec3::new(30.0, 3.5, 22.0), 3, Some(3.0), Some(vec![55.0, 48.0, 40.0, 30.0])),
 		(Vec3::new(20.0, 3.5, 16.0), 7, Some(2.0), None),
-		(
-			Vec3::new(28.0, 3.5, 20.0),
-			11,
-			None,
-			Some(vec![60.0, 50.0, 42.0, 35.0, 28.0]),
-		),
+		(Vec3::new(28.0, 3.5, 20.0), 11, None, Some(vec![60.0, 50.0, 42.0, 35.0, 28.0])),
 		(Vec3::new(36.0, 3.5, 24.0), 19, Some(3.5), None),
-		(
-			Vec3::new(22.0, 3.5, 22.0),
-			42,
-			Some(2.5),
-			Some(vec![55.0, 48.0, 40.0]),
-		),
+		(Vec3::new(22.0, 3.5, 22.0), 42, Some(2.5), Some(vec![55.0, 48.0, 40.0])),
 		(Vec3::new(32.0, 3.5, 18.0), 55, None, None),
-		(
-			Vec3::new(26.0, 3.5, 26.0),
-			77,
-			Some(2.8),
-			Some(vec![58.0, 50.0, 42.0, 32.0]),
-		),
+		(Vec3::new(26.0, 3.5, 26.0), 77, Some(2.8), Some(vec![58.0, 50.0, 42.0, 32.0])),
 	]
 }
 
@@ -3513,17 +3181,11 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 			&crate::commands::show::halls_to_shafts::default_demo_openings(*extent),
 		);
 		let confines = Confines::new(host, 0.0, inbound);
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match LivableApartments::from_confines_with(
 			&confines,
 			noise,
-			LivableApartmentsOptions {
-				hall_width: *hall_width,
-				targets: targets.clone(),
-			},
+			LivableApartmentsOptions { hall_width: *hall_width, targets: targets.clone() },
 		) {
 			Ok((block, _)) => {
 				let multi = block.apartments.iter().filter(|a| a.cells.len() >= 2).count();
@@ -3541,10 +3203,7 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(livable_apartments_host_footprint)
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> = fitted.iter().map(livable_apartments_host_footprint).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3571,29 +3230,16 @@ enum LivableApartmentExampleShape {
 	/// Single rectangular host with a south hall door.
 	Rect { extent: Vec3 },
 	/// L: stem along +X, bar along +Z (door on stem south).
-	LStem {
-		stem: Vec2,
-		bar: Vec2,
-		height: f32,
-	},
+	LStem { stem: Vec2, bar: Vec2, height: f32 },
 	/// T: crossbar along +X, stem along +Z from mid (door on stem south tip).
-	TBar {
-		bar: Vec2,
-		stem: Vec2,
-		height: f32,
-	},
+	TBar { bar: Vec2, stem: Vec2, height: f32 },
 }
 
 /// Curated `(shape, seed)` hosts — small stress cases through larger well-formed plans.
 fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)> {
 	vec![
 		// Small / tight
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(8.0, 3.0, 6.5),
-			},
-			7,
-		),
+		(LivableApartmentExampleShape::Rect { extent: Vec3::new(8.0, 3.0, 6.5) }, 7),
 		(
 			LivableApartmentExampleShape::LStem {
 				stem: Vec2::new(8.0, 4.5),
@@ -3602,12 +3248,7 @@ fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)
 			},
 			11,
 		),
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(12.0, 3.0, 9.0),
-			},
-			21,
-		),
+		(LivableApartmentExampleShape::Rect { extent: Vec3::new(12.0, 3.0, 9.0) }, 21),
 		// Medium
 		(
 			LivableApartmentExampleShape::TBar {
@@ -3625,19 +3266,9 @@ fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)
 			},
 			42,
 		),
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(18.0, 3.2, 14.0),
-			},
-			55,
-		),
+		(LivableApartmentExampleShape::Rect { extent: Vec3::new(18.0, 3.2, 14.0) }, 55),
 		// Larger / well-formed
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(22.0, 3.2, 16.0),
-			},
-			77,
-		),
+		(LivableApartmentExampleShape::Rect { extent: Vec3::new(22.0, 3.2, 16.0) }, 77),
 		(
 			LivableApartmentExampleShape::LStem {
 				stem: Vec2::new(16.0, 7.0),
@@ -3654,12 +3285,7 @@ fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)
 			},
 			1337,
 		),
-		(
-			LivableApartmentExampleShape::Rect {
-				extent: Vec3::new(28.0, 3.4, 20.0),
-			},
-			19,
-		),
+		(LivableApartmentExampleShape::Rect { extent: Vec3::new(28.0, 3.4, 20.0) }, 19),
 		(
 			LivableApartmentExampleShape::LStem {
 				stem: Vec2::new(20.0, 9.0),
@@ -3741,10 +3367,7 @@ fn livable_apartment_example_multi(shape: LivableApartmentExampleShape) -> Multi
 			demo_multi_confines_with_south_door(
 				&[
 					(Vec3::ZERO, Vec3::new(stem.x, height, stem.y)),
-					(
-						Vec3::new(0.0, 0.0, stem.y),
-						Vec3::new(bar.x, height, stem.y + bar.y),
-					),
+					(Vec3::new(0.0, 0.0, stem.y), Vec3::new(bar.x, height, stem.y + bar.y)),
 				],
 				0,
 			)
@@ -3754,14 +3377,8 @@ fn livable_apartment_example_multi(shape: LivableApartmentExampleShape) -> Multi
 			let stem_x0 = (bar.x - stem.x) * 0.5;
 			demo_multi_confines_with_south_door(
 				&[
-					(
-						Vec3::new(stem_x0, 0.0, 0.0),
-						Vec3::new(stem_x0 + stem.x, height, stem.y),
-					),
-					(
-						Vec3::new(0.0, 0.0, stem.y),
-						Vec3::new(bar.x, height, stem.y + bar.y),
-					),
+					(Vec3::new(stem_x0, 0.0, 0.0), Vec3::new(stem_x0 + stem.x, height, stem.y)),
+					(Vec3::new(0.0, 0.0, stem.y), Vec3::new(bar.x, height, stem.y + bar.y)),
 				],
 				0,
 			)
@@ -3774,10 +3391,7 @@ fn build_livable_apartment_examples() -> Vec<LivableApartmentExampleCell> {
 	let mut fitted = Vec::new();
 	for (shape, seed) in &specs {
 		let multi = livable_apartment_example_multi(*shape);
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: *seed, ..NoiseParams::default() };
 		match LivableApartment::from_multi(0, &multi, noise) {
 			Ok((apt, _)) => fitted.push(apt),
 			Err(err) => {
@@ -3785,10 +3399,7 @@ fn build_livable_apartment_examples() -> Vec<LivableApartmentExampleCell> {
 			}
 		}
 	}
-	let layout: Vec<(Vec3, Vec3)> = fitted
-		.iter()
-		.map(livable_apartment_host_footprint)
-		.collect();
+	let layout: Vec<(Vec3, Vec3)> = fitted.iter().map(livable_apartment_host_footprint).collect();
 	fitted
 		.into_iter()
 		.enumerate()
@@ -3828,16 +3439,9 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 	// Max-rect hosts (decomposition).
 	let max_c = Color::srgb(0.55, 0.65, 0.95);
 	for (ri, r) in apt.max_rects.iter().enumerate() {
-		let color = if ri % 2 == 0 {
-			max_c
-		} else {
-			Color::srgb(0.45, 0.55, 0.9)
-		};
+		let color = if ri % 2 == 0 { max_c } else { Color::srgb(0.45, 0.55, 0.9) };
 		gizmos.aabb_3d(
-			Aabb3d::from_min_max(
-				Vec3::new(r.min.x, y0, r.min.y),
-				Vec3::new(r.max.x, y1, r.max.y),
-			),
+			Aabb3d::from_min_max(Vec3::new(r.min.x, y0, r.min.y), Vec3::new(r.max.x, y1, r.max.y)),
 			tf,
 			color,
 		);
@@ -3845,11 +3449,7 @@ fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf
 	// Walkway / open hall bands.
 	let walk = Color::srgb(0.95, 0.85, 0.25);
 	for (wi, band) in apt.walkways.iter().enumerate() {
-		let color = if wi % 2 == 0 {
-			walk
-		} else {
-			Color::srgb(0.9, 0.7, 0.2)
-		};
+		let color = if wi % 2 == 0 { walk } else { Color::srgb(0.9, 0.7, 0.2) };
 		gizmos.aabb_3d(
 			Aabb3d::from_min_max(
 				Vec3::new(band.min.x, y0, band.min.y),
@@ -4026,16 +3626,10 @@ fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
 	let specs = livable_rectangles_examples_specs();
 	let mut fitted = Vec::new();
 	for (si, spec) in specs.iter().enumerate() {
-		let host = bevy_math::bounding::Aabb2d {
-			min: Vec2::ZERO,
-			max: spec.extent,
-		};
+		let host = bevy_math::bounding::Aabb2d { min: Vec2::ZERO, max: spec.extent };
 		let openings = passages_on_faces(host, 0.0, spec.height, spec.ports);
 		let confines = Confines::new(
-			Aabb3d::from_min_max(
-				Vec3::ZERO,
-				Vec3::new(spec.extent.x, spec.height, spec.extent.y),
-			),
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(spec.extent.x, spec.height, spec.extent.y)),
 			0.0,
 			openings,
 		);
@@ -4044,10 +3638,7 @@ fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
 			min_hall: 1.0,
 			closed_max_area: 36.0,
 		};
-		let noise = NoiseParams {
-			seed: spec.seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed: spec.seed, ..NoiseParams::default() };
 		match RectangularLivableArea::fit_with_params(&confines, noise, params, spec.program) {
 			Ok((area, _)) => fitted.push(area),
 			Err(err) => {
@@ -4077,10 +3668,7 @@ fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
 				LIVABLE_RECT_GALLERY_COLS,
 				LIVABLE_RECT_GALLERY_GAP,
 			);
-			LivableRectangleExampleCell {
-				offset: cell_origin,
-				area,
-			}
+			LivableRectangleExampleCell { offset: cell_origin, area }
 		})
 		.collect()
 }
@@ -4101,11 +3689,8 @@ fn draw_livable_rectangle_gizmos(
 	}
 	// Hall bands
 	for (wi, band) in area.walkways.iter().enumerate() {
-		let color = if wi % 2 == 0 {
-			Color::srgb(0.95, 0.85, 0.25)
-		} else {
-			Color::srgb(0.9, 0.7, 0.2)
-		};
+		let color =
+			if wi % 2 == 0 { Color::srgb(0.95, 0.85, 0.25) } else { Color::srgb(0.9, 0.7, 0.2) };
 		gizmos.aabb_3d(
 			Aabb3d::from_min_max(
 				Vec3::new(band.min.x, y0, band.min.y),
@@ -4123,9 +3708,7 @@ fn draw_livable_rectangle_gizmos(
 			RectAreaRoom::HouseholdCloset { confines, .. } => {
 				(confines.bounds, Color::srgb(0.55, 0.55, 0.6))
 			}
-			RectAreaRoom::Bedroom(r) => {
-				(label_bounds(&r.room_type), Color::srgb(0.35, 0.55, 0.95))
-			}
+			RectAreaRoom::Bedroom(r) => (label_bounds(&r.room_type), Color::srgb(0.35, 0.55, 0.95)),
 			RectAreaRoom::Living(r) => (label_bounds(&r.room_type), Color::srgb(0.95, 0.55, 0.25)),
 			RectAreaRoom::Eating(r) => (label_bounds(&r.room_type), Color::srgb(0.4, 0.88, 0.4)),
 			RectAreaRoom::Kitchen(r) => (label_bounds(&r.room_type), Color::srgb(0.35, 0.9, 0.45)),
@@ -4133,12 +3716,8 @@ fn draw_livable_rectangle_gizmos(
 			RectAreaRoom::Bathroom(r) => {
 				(label_bounds(&r.room_type), Color::srgb(0.55, 0.75, 0.95))
 			}
-			RectAreaRoom::HalfBath(r) => {
-				(label_bounds(&r.room_type), Color::srgb(0.65, 0.8, 0.95))
-			}
-			RectAreaRoom::Sitting(r) => {
-				(label_bounds(&r.room_type), Color::srgb(0.95, 0.65, 0.35))
-			}
+			RectAreaRoom::HalfBath(r) => (label_bounds(&r.room_type), Color::srgb(0.65, 0.8, 0.95)),
+			RectAreaRoom::Sitting(r) => (label_bounds(&r.room_type), Color::srgb(0.95, 0.65, 0.35)),
 			RectAreaRoom::Study(r) => (label_bounds(&r.room_type), Color::srgb(0.75, 0.45, 0.85)),
 		};
 		gizmos.aabb_3d(bounds, tf, color);
@@ -4171,11 +3750,7 @@ fn draw_livable_apartments_block_gizmos(
 			Vec3::new(band.min.x, y0, band.min.y),
 			Vec3::new(band.max.x, y1, band.max.y),
 		);
-		let color = if hi % 2 == 0 {
-			lime
-		} else {
-			Color::srgb(0.2, 0.8, 0.55)
-		};
+		let color = if hi % 2 == 0 { lime } else { Color::srgb(0.2, 0.8, 0.55) };
 		gizmos.aabb_3d(bounds, tf, color);
 	}
 
@@ -4193,11 +3768,7 @@ fn draw_livable_apartments_block_gizmos(
 	for (_id, opening) in block.confines.openings.iter() {
 		match opening.label {
 			OpeningLabel::Shaft => {
-				let color = if shaft_i % 2 == 0 {
-					magenta
-				} else {
-					Color::srgb(0.75, 0.35, 1.0)
-				};
+				let color = if shaft_i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 				gizmos.aabb_3d(opening.bounds, tf, color);
 				shaft_i += 1;
 			}
@@ -4219,11 +3790,8 @@ fn draw_i_apartment_primary_rect_gizmos(
 	let y0 = plan.center_xz.y;
 	let y1 = y0 + plan.storey_height;
 	for (i, rect) in plan.primary_rects.iter().enumerate() {
-		let color = if i % 2 == 0 {
-			Color::srgb(0.25, 0.55, 0.95)
-		} else {
-			Color::srgb(0.35, 0.8, 0.55)
-		};
+		let color =
+			if i % 2 == 0 { Color::srgb(0.25, 0.55, 0.95) } else { Color::srgb(0.35, 0.8, 0.55) };
 		let bounds = Aabb3d::from_min_max(
 			Vec3::new(rect.min_x, y0, rect.min_z),
 			Vec3::new(rect.max_x, y1, rect.max_z),
@@ -4320,21 +3888,9 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 			let panel = TessellatedTrianglePanel::rough_stone(*a, *b, *c);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&panel,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &panel, &lod_ref);
 		}
-		PreviewSubject::ClippedTessellatedTriangle {
-			a,
-			b,
-			c,
-			clip,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::ClippedTessellatedTriangle { a, b, c, clip, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -4343,22 +3899,9 @@ pub fn present_preview_lod(
 			let complex = ClippedTessellatedTriangle::rough_stone(*a, *b, *c, clip.clone())
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&complex,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 		}
-		PreviewSubject::ClippedQuadPanel {
-			a0,
-			a1,
-			b0,
-			b1,
-			clip,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::ClippedQuadPanel { a0, a1, b0, b1, clip, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -4367,17 +3910,9 @@ pub fn present_preview_lod(
 			let complex = ClippedQuadPanel::rough_stone(*a0, *a1, *b0, *b1, clip.clone())
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&complex,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 		}
-		PreviewSubject::ClippedRuledStrip {
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::ClippedRuledStrip { min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -4408,12 +3943,7 @@ pub fn present_preview_lod(
 				[None, Some(mid_clip), None],
 			)
 			.with_joint_policy(policy);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&strip,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &strip, &lod_ref);
 		}
 		PreviewSubject::Tube {
 			min_dihedral,
@@ -4443,39 +3973,11 @@ pub fn present_preview_lod(
 			}
 			// Level start, then plan bend + pitch; slight roll on the kink station.
 			let nodes = [
-				TubeCrossSectionNode::new(
-					Vec3::new(0.0, 0.0, 0.0),
-					1.2,
-					1.2,
-					2.2,
-					1.0,
-					1.0,
-				),
-				TubeCrossSectionNode::new(
-					Vec3::new(0.0, 0.0, 3.0),
-					1.2,
-					1.2,
-					2.2,
-					1.0,
-					1.0,
-				),
-				TubeCrossSectionNode::new(
-					Vec3::new(2.0, 0.5, 6.0),
-					1.3,
-					1.1,
-					2.4,
-					1.1,
-					0.9,
-				)
-				.with_roll(0.15),
-				TubeCrossSectionNode::new(
-					Vec3::new(5.0, 1.0, 8.0),
-					1.2,
-					1.2,
-					2.2,
-					1.0,
-					1.0,
-				),
+				TubeCrossSectionNode::new(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, 2.2, 1.0, 1.0),
+				TubeCrossSectionNode::new(Vec3::new(0.0, 0.0, 3.0), 1.2, 1.2, 2.2, 1.0, 1.0),
+				TubeCrossSectionNode::new(Vec3::new(2.0, 0.5, 6.0), 1.3, 1.1, 2.4, 1.1, 0.9)
+					.with_roll(0.15),
+				TubeCrossSectionNode::new(Vec3::new(5.0, 1.0, 8.0), 1.2, 1.2, 2.2, 1.0, 1.0),
 			];
 			// Opening on the left wall of the middle bay (between stations 1–2).
 			let left_clip = vec![
@@ -4494,53 +3996,24 @@ pub fn present_preview_lod(
 			)
 			.with_joint_policy(policy)
 			.with_faces(faces);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&tube,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &tube, &lod_ref);
 		}
 		PreviewSubject::ConnectingHall => {
 			let (end_a, end_b) = connecting_hall_demo_endpoints();
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&hall,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
-		PreviewSubject::ArcFloor {
-			radius,
-			storey_height,
-			floor,
-			ceiling,
-			openings,
-		} => {
+		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
 				radius: *radius,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					ArcFloorSlab::Solid
-				} else {
-					ArcFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					ArcFloorSlab::Solid
-				} else {
-					ArcFloorSlab::None
-				},
+				floor: if *floor { ArcFloorSlab::Solid } else { ArcFloorSlab::None },
+				ceiling: if *ceiling { ArcFloorSlab::Solid } else { ArcFloorSlab::None },
 				..ArcFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&floor_shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &floor_shell, &lod_ref);
 		}
 		PreviewSubject::ArcTower {
 			radius,
@@ -4557,14 +4030,8 @@ pub fn present_preview_lod(
 				("window_e", 0.5, OpeningLabel::Aperture),  // −X
 				("window_n", 0.75, OpeningLabel::Aperture), // +Z
 			] {
-				let (id, opening) = ArcFloor::plan_opening_at_t(
-					id,
-					label,
-					Vec3::ZERO,
-					*radius,
-					*storey_height,
-					t,
-				);
+				let (id, opening) =
+					ArcFloor::plan_opening_at_t(id, label, Vec3::ZERO, *radius, *storey_height, t);
 				openings.insert(id, opening);
 			}
 			let tower = ArcTower::new(ArcTowerParams {
@@ -4573,35 +4040,17 @@ pub fn present_preview_lod(
 				floor_count: *floor_count,
 				storey_height: *storey_height,
 				openings,
-				base_floor: if *no_base_floor {
-					ArcFloorSlab::None
-				} else {
-					ArcFloorSlab::Solid
-				},
+				base_floor: if *no_base_floor { ArcFloorSlab::None } else { ArcFloorSlab::Solid },
 				intermediate_floors: ArcFloorSlab::Solid,
-				top_ceiling: if *no_ceiling {
-					ArcFloorSlab::None
-				} else {
-					ArcFloorSlab::Solid
-				},
+				top_ceiling: if *no_ceiling { ArcFloorSlab::None } else { ArcFloorSlab::Solid },
 				intermediate_floor_hole: *floor_hole,
 				..ArcTowerParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&tower,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &tower, &lod_ref);
 		}
 		PreviewSubject::ConnectingShells => {
 			let demo = ConnectingShells::new();
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&demo,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &demo, &lod_ref);
 		}
 		PreviewSubject::Trazaloid {
 			footprint_x,
@@ -4625,25 +4074,12 @@ pub fn present_preview_lod(
 				band_vertical_offset: *band_vertical_offset,
 				waist_horizontal_offset: *waist_horizontal_offset,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					TrazaloidSlab::Solid
-				} else {
-					TrazaloidSlab::None
-				},
-				ceiling: if *no_ceiling {
-					TrazaloidSlab::None
-				} else {
-					TrazaloidSlab::Solid
-				},
+				floor: if *floor { TrazaloidSlab::Solid } else { TrazaloidSlab::None },
+				ceiling: if *no_ceiling { TrazaloidSlab::None } else { TrazaloidSlab::Solid },
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::PitchedRectangularRoof {
 			footprint_x,
@@ -4667,12 +4103,7 @@ pub fn present_preview_lod(
 				*no_hips,
 				openings,
 			);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::RectFloor {
 			footprint_x,
@@ -4687,24 +4118,11 @@ pub fn present_preview_lod(
 				footprint: Vec2::new(*footprint_x, *footprint_z),
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					RectFloorSlab::Solid
-				} else {
-					RectFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					RectFloorSlab::Solid
-				} else {
-					RectFloorSlab::None
-				},
+				floor: if *floor { RectFloorSlab::Solid } else { RectFloorSlab::None },
+				ceiling: if *ceiling { RectFloorSlab::Solid } else { RectFloorSlab::None },
 				..RectFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::RoundedRectFloor {
 			footprint_x,
@@ -4735,12 +4153,7 @@ pub fn present_preview_lod(
 				},
 				..RoundedRectFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::IFloor {
 			central_x,
@@ -4763,24 +4176,11 @@ pub fn present_preview_lod(
 				bottom_right_length: *bottom_right,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					IFloorSlab::Solid
-				} else {
-					IFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					IFloorSlab::Solid
-				} else {
-					IFloorSlab::None
-				},
+				floor: if *floor { IFloorSlab::Solid } else { IFloorSlab::None },
+				ceiling: if *ceiling { IFloorSlab::Solid } else { IFloorSlab::None },
 				..IFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::RectRingFloor {
 			outer_x,
@@ -4798,24 +4198,11 @@ pub fn present_preview_lod(
 				inner: Vec2::new(*inner_x, *inner_z),
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					RectRingFloorSlab::Solid
-				} else {
-					RectRingFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					RectRingFloorSlab::Solid
-				} else {
-					RectRingFloorSlab::None
-				},
+				floor: if *floor { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None },
+				ceiling: if *ceiling { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None },
 				..RectRingFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::CircRingFloor {
 			outer_radius,
@@ -4831,24 +4218,11 @@ pub fn present_preview_lod(
 				inner_radius: *inner_radius,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					CircRingFloorSlab::Solid
-				} else {
-					CircRingFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					CircRingFloorSlab::Solid
-				} else {
-					CircRingFloorSlab::None
-				},
+				floor: if *floor { CircRingFloorSlab::Solid } else { CircRingFloorSlab::None },
+				ceiling: if *ceiling { CircRingFloorSlab::Solid } else { CircRingFloorSlab::None },
 				..CircRingFloorParams::default()
 			});
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
 		PreviewSubject::RectangularPitchedRoofComplex {
 			preset,
@@ -4871,33 +4245,12 @@ pub fn present_preview_lod(
 				*skylight,
 			);
 			let shell = RectangularPitchedRoofComplex::new(params);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&shell,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &shell, &lod_ref);
 		}
-		PreviewSubject::Rectangle {
-			origin,
-			edge,
-			height,
-			thickness,
-			roll,
-		} => {
+		PreviewSubject::Rectangle { origin, edge, height, thickness, roll } => {
 			let rect = Rectangle::rough_stone(*origin, *edge, *height, *thickness, *roll);
-			let corners = [
-				rect.oriented.a0,
-				rect.oriented.a1,
-				rect.oriented.b0,
-				rect.oriented.b1,
-			];
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&rect,
-				&lod_ref,
-			);
+			let corners = [rect.oriented.a0, rect.oriented.a1, rect.oriented.b0, rect.oriented.b1];
+			spawn_building_preview(&mut commands, transform, &rect, &lod_ref);
 			spawn_rectangle_debug_balls(
 				&mut commands,
 				&mut meshes,
@@ -4925,18 +4278,9 @@ pub fn present_preview_lod(
 				*roll,
 				RectInset::new(*left, *right, *bottom, *top),
 			);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&rect,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &rect, &lod_ref);
 		}
-		PreviewSubject::ClippedRectangularStrip {
-			inset,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::ClippedRectangularStrip { inset, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -4955,27 +4299,12 @@ pub fn present_preview_lod(
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&strip,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &strip, &lod_ref);
 		}
 		PreviewSubject::FittedRectangle { a0, a1, b0, b1 } => {
 			let rect = FittedRectangle::rough_stone(*a0, *a1, *b0, *b1);
-			let corners = [
-				rect.fitted.a0,
-				rect.fitted.a1,
-				rect.fitted.b0,
-				rect.fitted.b1,
-			];
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&rect,
-				&lod_ref,
-			);
+			let corners = [rect.fitted.a0, rect.fitted.a1, rect.fitted.b0, rect.fitted.b1];
+			spawn_building_preview(&mut commands, transform, &rect, &lod_ref);
 			spawn_rectangle_debug_balls(
 				&mut commands,
 				&mut meshes,
@@ -4984,16 +4313,7 @@ pub fn present_preview_lod(
 				corners,
 			);
 		}
-		PreviewSubject::ClippedFittedRectangle {
-			a0,
-			a1,
-			b0,
-			b1,
-			left,
-			right,
-			bottom,
-			top,
-		} => {
+		PreviewSubject::ClippedFittedRectangle { a0, a1, b0, b1, left, right, bottom, top } => {
 			let rect = ClippedFittedRectangle::rough_stone(
 				*a0,
 				*a1,
@@ -5001,18 +4321,9 @@ pub fn present_preview_lod(
 				*b1,
 				RectInset::new(*left, *right, *bottom, *top),
 			);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&rect,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &rect, &lod_ref);
 		}
-		PreviewSubject::ClippedFittedRectangularStrip {
-			inset,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::ClippedFittedRectangularStrip { inset, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -5038,19 +4349,9 @@ pub fn present_preview_lod(
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&strip,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &strip, &lod_ref);
 		}
-		PreviewSubject::RectangularNTube {
-			inset,
-			min_dihedral,
-			no_joint,
-			omit_faces,
-		} => {
+		PreviewSubject::RectangularNTube { inset, min_dihedral, no_joint, omit_faces } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -5078,33 +4379,13 @@ pub fn present_preview_lod(
 			)
 			.without_face_edges(omit_faces.iter().copied())
 			.with_joint_policy(policy);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&tube,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &tube, &lod_ref);
 		}
-		PreviewSubject::ApproximatedCircle {
-			center,
-			radius,
-			segments,
-			clip,
-		} => {
+		PreviewSubject::ApproximatedCircle { center, radius, segments, clip } => {
 			let disk = ApproximatedCircle::rough_stone(*center, *radius, *segments, *clip);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&disk,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &disk, &lod_ref);
 		}
-		PreviewSubject::ArcSweep {
-			radius,
-			height,
-			sweep_degrees,
-			start_yaw_deg,
-		} => {
+		PreviewSubject::ArcSweep { radius, height, sweep_degrees, start_yaw_deg } => {
 			let sweep = ArcSweep::rough_stone(
 				Vec3::ZERO,
 				*radius,
@@ -5112,19 +4393,9 @@ pub fn present_preview_lod(
 				*sweep_degrees,
 				start_yaw_deg.to_radians(),
 			);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&sweep,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &sweep, &lod_ref);
 		}
-		PreviewSubject::ClippedArcSweep {
-			radius,
-			height,
-			sweep_degrees,
-			start_yaw_deg,
-		} => {
+		PreviewSubject::ClippedArcSweep { radius, height, sweep_degrees, start_yaw_deg } => {
 			let sweep = ClippedArcSweep::rough_stone(
 				Vec3::ZERO,
 				*radius,
@@ -5133,12 +4404,7 @@ pub fn present_preview_lod(
 				start_yaw_deg.to_radians(),
 				[(0.2, 0.35), (0.6, 0.72)],
 			);
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&sweep,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &sweep, &lod_ref);
 		}
 		PreviewSubject::QuadPanel {
 			a0,
@@ -5165,18 +4431,9 @@ pub fn present_preview_lod(
 			)
 			.with_joint_policy(policy)
 			.into_complex();
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&complex,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 		}
-		PreviewSubject::PanelComplex {
-			mesh,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::PanelComplex { mesh, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -5185,23 +4442,14 @@ pub fn present_preview_lod(
 			match mesh.parse::<PanelComplex>() {
 				Ok(complex) => {
 					let complex = complex.with_joint_policy(policy);
-					spawn_building_preview(
-						&mut commands,
-						transform,
-						&complex,
-						&lod_ref,
-					);
+					spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 				}
 				Err(e) => {
 					warn!("panel-complex parse failed: {e}");
 				}
 			}
 		}
-		PreviewSubject::QuadPanelComplex {
-			mesh,
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::QuadPanelComplex { mesh, min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -5210,22 +4458,14 @@ pub fn present_preview_lod(
 			match mesh.parse::<QuadPanelComplex>() {
 				Ok(quads) => {
 					let complex = quads.with_joint_policy(policy).into_complex();
-					spawn_building_preview(
-						&mut commands,
-						transform,
-						&complex,
-						&lod_ref,
-					);
+					spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 				}
 				Err(e) => {
 					warn!("quad-panel-complex parse failed: {e}");
 				}
 			}
 		}
-		PreviewSubject::RuledPitch {
-			min_dihedral,
-			no_joint,
-		} => {
+		PreviewSubject::RuledPitch { min_dihedral, no_joint } => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
@@ -5251,12 +4491,7 @@ pub fn present_preview_lod(
 				.with_lines(eave, ridge)
 				.with_joint_policy(policy)
 				.into_complex();
-			spawn_building_preview(
-				&mut commands,
-				transform,
-				&complex,
-				&lod_ref,
-			);
+			spawn_building_preview(&mut commands, transform, &complex, &lod_ref);
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(
@@ -5274,12 +4509,7 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::NoisyRectangularWall { .. } => {
 			if let Some(wall) = cache.noisy_wall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					wall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, wall, &lod_ref);
 			}
 		}
 		PreviewSubject::WizardsTower { .. } => {
@@ -5298,61 +4528,37 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::StackedRings { .. } => {
 			if let Some(rings) = cache.stacked_rings.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					rings,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, rings, &lod_ref);
 			}
 		}
 		PreviewSubject::Bedroom { .. } => {
 			if let Some(bedroom) = cache.bedroom.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					bedroom,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, bedroom, &lod_ref);
 			}
 		}
 		PreviewSubject::BedroomExamples => {
 			for cell in &cache.bedroom_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.room,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.room, &lod_ref);
 			}
 		}
 		PreviewSubject::ResidentialBathroom { .. } => {
 			if let Some(room) = cache.residential_bathroom.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					room,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, room, &lod_ref);
 			}
 		}
 		PreviewSubject::ResidentialHalfBathroom { .. } => {
 			if let Some(room) = cache.residential_half_bathroom.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					room,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, room, &lod_ref);
 			}
 		}
 		PreviewSubject::ResidentialBathroomExamples => {
 			for cell in &cache.residential_bathroom_examples {
-				let tf = transform * Transform::from_translation(match cell {
-					ResidentialBathroomExampleCell::Full { offset, .. }
-					| ResidentialBathroomExampleCell::Half { offset, .. } => *offset,
-				});
+				let tf = transform
+					* Transform::from_translation(match cell {
+						ResidentialBathroomExampleCell::Full { offset, .. }
+						| ResidentialBathroomExampleCell::Half { offset, .. } => *offset,
+					});
 				match cell {
 					ResidentialBathroomExampleCell::Full { room, .. } => {
 						spawn_building_preview(&mut commands, tf, room, &lod_ref);
@@ -5364,7 +4570,12 @@ pub fn present_preview_lod(
 			}
 		}
 		PreviewSubject::KitchenExamples => {
-			spawn_livable_quarters_gallery(&mut commands, transform, &cache.kitchen_examples, &lod_ref);
+			spawn_livable_quarters_gallery(
+				&mut commands,
+				transform,
+				&cache.kitchen_examples,
+				&lod_ref,
+			);
 		}
 		PreviewSubject::DiningRoomExamples => {
 			spawn_livable_quarters_gallery(
@@ -5391,139 +4602,82 @@ pub fn present_preview_lod(
 			);
 		}
 		PreviewSubject::StudyExamples => {
-			spawn_livable_quarters_gallery(&mut commands, transform, &cache.study_examples, &lod_ref);
+			spawn_livable_quarters_gallery(
+				&mut commands,
+				transform,
+				&cache.study_examples,
+				&lod_ref,
+			);
 		}
 		PreviewSubject::CommercialStall { .. } => {
 			if let Some(stall) = cache.commercial_stall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::CommercialStallStrip { .. } => {
 			if let Some(strip) = cache.commercial_stall_strip.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					strip,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, strip, &lod_ref);
 			}
 		}
 		PreviewSubject::BitesStall { .. } => {
 			if let Some(stall) = cache.bites_stall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::BitesSitdownStall { .. } => {
 			if let Some(stall) = cache.bites_sitdown_stall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::MiniMart { .. } => {
 			if let Some(stall) = cache.mini_mart.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::MiniMartExamples => {
 			for cell in &cache.mini_mart_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.stall, &lod_ref);
 			}
 		}
 		PreviewSubject::PartsStall { .. } => {
 			if let Some(stall) = cache.parts_stall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::PartsExamples => {
 			for cell in &cache.parts_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.stall, &lod_ref);
 			}
 		}
 		PreviewSubject::KnickKnackStall { .. } => {
 			if let Some(stall) = cache.knick_knack_stall.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::KnickKnackExamples => {
 			for cell in &cache.knick_knack_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.stall, &lod_ref);
 			}
 		}
 		PreviewSubject::PublicRestroom { .. } => {
 			if let Some(stall) = cache.public_restroom.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, stall, &lod_ref);
 			}
 		}
 		PreviewSubject::PublicRestroomExamples => {
 			for cell in &cache.public_restroom_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.stall,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.stall, &lod_ref);
 			}
 		}
 		PreviewSubject::BitesExamples => {
 			for cell in &cache.bites_examples {
 				let local = match cell {
 					BitesExampleCell::Stall { offset, .. }
-					| BitesExampleCell::Sitdown { offset, .. } => {
-						Transform::from_translation(*offset)
-					}
+					| BitesExampleCell::Sitdown { offset, .. } => Transform::from_translation(*offset),
 				};
 				let tf = transform * local;
 				match cell {
@@ -5538,139 +4692,74 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::LesHallesFloorPlan { .. } => {
 			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					plan,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, plan, &lod_ref);
 			}
 		}
 		PreviewSubject::LesHallesFloorPlanExamples => {
 			for cell in &cache.les_halles_floor_plan_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.plan,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.plan, &lod_ref);
 			}
 		}
 		PreviewSubject::LesHallesFullStorey { .. } => {
 			if let Some(storey) = cache.les_halles_full_storey.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					storey,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, storey, &lod_ref);
 			}
 		}
 		PreviewSubject::LesHallesLivableFullStorey { .. } => {
 			if let Some(storey) = cache.les_halles_livable_full_storey.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					storey,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, storey, &lod_ref);
 			}
 		}
 		PreviewSubject::MixedUseLesHallesMonotower { .. } => {
 			if let Some(tower) = cache.mixed_use_les_halles_monotower.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					tower,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, tower, &lod_ref);
 			}
 		}
 		PreviewSubject::LesHallesLivableFullStoreyExamples => {
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.storey,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.storey, &lod_ref);
 			}
 		}
 		PreviewSubject::IApartmentFloorPlan { .. } => {
 			if let Some(plan) = cache.i_apartment_floor_plan.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					plan,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, plan, &lod_ref);
 			}
 		}
 		PreviewSubject::IApartmentFloorPlanExamples => {
 			for cell in &cache.i_apartment_floor_plan_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.plan,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.plan, &lod_ref);
 			}
 		}
 		PreviewSubject::IApartmentFullStorey { .. } => {
 			if let Some(storey) = cache.i_apartment_full_storey.as_ref() {
-				spawn_building_preview(
-					&mut commands,
-					transform,
-					storey,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, transform, storey, &lod_ref);
 			}
 		}
 		PreviewSubject::IApartmentFullStoreyExamples => {
 			for cell in &cache.i_apartment_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.storey,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.storey, &lod_ref);
 			}
 		}
 		PreviewSubject::LivableApartmentsExamples => {
 			for cell in &cache.livable_apartments_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.block,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.block, &lod_ref);
 			}
 		}
 		PreviewSubject::LivableApartmentExamples => {
 			for cell in &cache.livable_apartment_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.apartment,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.apartment, &lod_ref);
 			}
 		}
 		PreviewSubject::LivableRectanglesExamples => {
 			for cell in &cache.livable_rectangles_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
-				spawn_building_preview(
-					&mut commands,
-					tf,
-					&cell.area,
-					&lod_ref,
-				);
+				spawn_building_preview(&mut commands, tf, &cell.area, &lod_ref);
 			}
 		}
 		PreviewSubject::HallsToShafts { .. } => {
@@ -5776,13 +4865,7 @@ pub fn draw_opening_plan_gizmos(
 	let magenta = Color::srgb(0.95, 0.25, 0.85);
 
 	match &config.subject {
-		PreviewSubject::ArcFloor {
-			radius,
-			storey_height,
-			floor,
-			ceiling,
-			openings,
-		} => {
+		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			if openings.is_empty() {
 				return;
 			}
@@ -5795,16 +4878,8 @@ pub fn draw_opening_plan_gizmos(
 				radius: *radius,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					ArcFloorSlab::Solid
-				} else {
-					ArcFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					ArcFloorSlab::Solid
-				} else {
-					ArcFloorSlab::None
-				},
+				floor: if *floor { ArcFloorSlab::Solid } else { ArcFloorSlab::None },
+				ceiling: if *ceiling { ArcFloorSlab::Solid } else { ArcFloorSlab::None },
 				..ArcFloorParams::default()
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &floor_shell, lime, orange);
@@ -5838,16 +4913,8 @@ pub fn draw_opening_plan_gizmos(
 				band_vertical_offset: *band_vertical_offset,
 				waist_horizontal_offset: *waist_horizontal_offset,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					TrazaloidSlab::Solid
-				} else {
-					TrazaloidSlab::None
-				},
-				ceiling: if *no_ceiling {
-					TrazaloidSlab::None
-				} else {
-					TrazaloidSlab::Solid
-				},
+				floor: if *floor { TrazaloidSlab::Solid } else { TrazaloidSlab::None },
+				ceiling: if *no_ceiling { TrazaloidSlab::None } else { TrazaloidSlab::Solid },
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
@@ -5873,16 +4940,8 @@ pub fn draw_opening_plan_gizmos(
 				footprint: Vec2::new(*footprint_x, *footprint_z),
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					RectFloorSlab::Solid
-				} else {
-					RectFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					RectFloorSlab::Solid
-				} else {
-					RectFloorSlab::None
-				},
+				floor: if *floor { RectFloorSlab::Solid } else { RectFloorSlab::None },
+				ceiling: if *ceiling { RectFloorSlab::Solid } else { RectFloorSlab::None },
 				..RectFloorParams::default()
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
@@ -5953,16 +5012,8 @@ pub fn draw_opening_plan_gizmos(
 				bottom_right_length: *bottom_right,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					IFloorSlab::Solid
-				} else {
-					IFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					IFloorSlab::Solid
-				} else {
-					IFloorSlab::None
-				},
+				floor: if *floor { IFloorSlab::Solid } else { IFloorSlab::None },
+				ceiling: if *ceiling { IFloorSlab::Solid } else { IFloorSlab::None },
 				..IFloorParams::default()
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
@@ -6021,16 +5072,8 @@ pub fn draw_opening_plan_gizmos(
 				inner: Vec2::new(*inner_x, *inner_z),
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					RectRingFloorSlab::Solid
-				} else {
-					RectRingFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					RectRingFloorSlab::Solid
-				} else {
-					RectRingFloorSlab::None
-				},
+				floor: if *floor { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None },
+				ceiling: if *ceiling { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None },
 				..RectRingFloorParams::default()
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
@@ -6056,16 +5099,8 @@ pub fn draw_opening_plan_gizmos(
 				inner_radius: *inner_radius,
 				storey_height: *storey_height,
 				openings: openings_from_preview(openings),
-				floor: if *floor {
-					CircRingFloorSlab::Solid
-				} else {
-					CircRingFloorSlab::None
-				},
-				ceiling: if *ceiling {
-					CircRingFloorSlab::Solid
-				} else {
-					CircRingFloorSlab::None
-				},
+				floor: if *floor { CircRingFloorSlab::Solid } else { CircRingFloorSlab::None },
+				ceiling: if *ceiling { CircRingFloorSlab::Solid } else { CircRingFloorSlab::None },
 				..CircRingFloorParams::default()
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
@@ -6077,18 +5112,8 @@ pub fn draw_opening_plan_gizmos(
 			let plan = cache
 				.les_halles_floor_plan
 				.as_ref()
-				.or_else(|| {
-					cache
-						.les_halles_full_storey
-						.as_ref()
-						.map(|s| &s.floor_plan)
-				})
-				.or_else(|| {
-					cache
-						.les_halles_livable_full_storey
-						.as_ref()
-						.map(|s| &s.floor_plan)
-				})
+				.or_else(|| cache.les_halles_full_storey.as_ref().map(|s| &s.floor_plan))
+				.or_else(|| cache.les_halles_livable_full_storey.as_ref().map(|s| &s.floor_plan))
 				.or_else(|| {
 					cache
 						.mixed_use_les_halles_monotower
@@ -6099,9 +5124,8 @@ pub fn draw_opening_plan_gizmos(
 			let red = Color::srgb(0.95, 0.2, 0.2);
 			// Inbound preview openings (accepted → cyan/amber, rejected → red).
 			for (i, opening) in openings.iter().enumerate() {
-				let accepted = plan
-					.map(|p| les_halles_opening_accepted(p, opening))
-					.unwrap_or(false);
+				let accepted =
+					plan.map(|p| les_halles_opening_accepted(p, opening)).unwrap_or(false);
 				let color = if !accepted {
 					red
 				} else if i % 2 == 0 {
@@ -6124,11 +5148,7 @@ pub fn draw_opening_plan_gizmos(
 					passage_i += 1;
 				}
 				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, tf, color);
 				}
 			}
@@ -6148,11 +5168,7 @@ pub fn draw_opening_plan_gizmos(
 					strip_i += 1;
 				}
 				for (i, shaft) in cell.plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
 			}
@@ -6161,27 +5177,20 @@ pub fn draw_opening_plan_gizmos(
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let cell_tf = tf * Transform::from_translation(cell.offset);
 				for (i, shaft) in cell.storey.floor_plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
 			}
 		}
 		PreviewSubject::IApartmentFloorPlan { openings, .. }
 		| PreviewSubject::IApartmentFullStorey { openings, .. } => {
-			let plan = cache.i_apartment_floor_plan.as_ref().or_else(|| {
-				cache
-					.i_apartment_full_storey
-					.as_ref()
-					.map(|s| &s.floor_plan)
-			});
+			let plan = cache
+				.i_apartment_floor_plan
+				.as_ref()
+				.or_else(|| cache.i_apartment_full_storey.as_ref().map(|s| &s.floor_plan));
 			for (i, opening) in openings.iter().enumerate() {
-				let accepted = plan
-					.map(|p| i_apartment_opening_accepted(p, opening))
-					.unwrap_or(false);
+				let accepted =
+					plan.map(|p| i_apartment_opening_accepted(p, opening)).unwrap_or(false);
 				let color = if !accepted {
 					Color::srgb(0.95, 0.2, 0.2)
 				} else if i % 2 == 0 {
@@ -6194,11 +5203,7 @@ pub fn draw_opening_plan_gizmos(
 			if let Some(plan) = plan {
 				draw_i_apartment_primary_rect_gizmos(&mut gizmos, plan, tf);
 				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, tf, color);
 				}
 			}
@@ -6208,11 +5213,7 @@ pub fn draw_opening_plan_gizmos(
 				let cell_tf = tf * Transform::from_translation(cell.offset);
 				draw_i_apartment_primary_rect_gizmos(&mut gizmos, &cell.plan, cell_tf);
 				for (i, shaft) in cell.plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
 			}
@@ -6222,17 +5223,9 @@ pub fn draw_opening_plan_gizmos(
 			let sky = Color::srgb(0.35, 0.7, 1.0);
 			for cell in &cache.i_apartment_full_storey_examples {
 				let cell_tf = tf * Transform::from_translation(cell.offset);
-				draw_i_apartment_primary_rect_gizmos(
-					&mut gizmos,
-					&cell.storey.floor_plan,
-					cell_tf,
-				);
+				draw_i_apartment_primary_rect_gizmos(&mut gizmos, &cell.storey.floor_plan, cell_tf);
 				for (i, shaft) in cell.storey.floor_plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
+					let color = if i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
 				for (pi, (_id, opening)) in cell
@@ -6254,11 +5247,7 @@ pub fn draw_opening_plan_gizmos(
 							Vec3::new(band.min.x, y0, band.min.y),
 							Vec3::new(band.max.x, y1, band.max.y),
 						);
-						let color = if hi % 2 == 0 {
-							lime
-						} else {
-							Color::srgb(0.2, 0.8, 0.55)
-						};
+						let color = if hi % 2 == 0 { lime } else { Color::srgb(0.2, 0.8, 0.55) };
 						gizmos.aabb_3d(bounds, cell_tf, color);
 					}
 					for apt in &block.apartments {
@@ -6371,11 +5360,7 @@ fn draw_halls_to_shafts_gizmos(
 			Vec3::new(band.min.x, y0, band.min.y),
 			Vec3::new(band.max.x, y1, band.max.y),
 		);
-		let color = if i % 2 == 0 {
-			lime
-		} else {
-			Color::srgb(0.2, 0.8, 0.55)
-		};
+		let color = if i % 2 == 0 { lime } else { Color::srgb(0.2, 0.8, 0.55) };
 		gizmos.aabb_3d(bounds, tf, color);
 	}
 
@@ -6392,11 +5377,7 @@ fn draw_halls_to_shafts_gizmos(
 	for (_id, opening) in preview.fit.confines.openings.iter() {
 		match opening.label {
 			OpeningLabel::Shaft => {
-				let color = if shaft_i % 2 == 0 {
-					magenta
-				} else {
-					Color::srgb(0.75, 0.35, 1.0)
-				};
+				let color = if shaft_i % 2 == 0 { magenta } else { Color::srgb(0.75, 0.35, 1.0) };
 				gizmos.aabb_3d(opening.bounds, tf, color);
 				shaft_i += 1;
 			}
@@ -6479,12 +5460,7 @@ pub fn draw_label_text_gizmos(
 				extents.x,
 				extents.z,
 			),
-			(
-				Vec3::new(0.0, 0.0, 0.5),
-				Quat::IDENTITY,
-				extents.x,
-				extents.y,
-			),
+			(Vec3::new(0.0, 0.0, 0.5), Quat::IDENTITY, extents.x, extents.y),
 			(
 				Vec3::new(0.0, 0.0, -0.5),
 				Quat::from_rotation_y(std::f32::consts::PI),
@@ -6633,16 +5609,8 @@ fn pitched_roof_from_preview(
 	};
 	for half in &mut params.halves {
 		half.draw_in_wall_line = !no_walls;
-		half.draw_in_half_hip = if no_hips {
-			(false, false)
-		} else {
-			(true, true)
-		};
-		half.draw_in_half_gable_end = if gables {
-			(true, true)
-		} else {
-			(false, false)
-		};
+		half.draw_in_half_hip = if no_hips { (false, false) } else { (true, true) };
+		half.draw_in_half_gable_end = if gables { (true, true) } else { (false, false) };
 	}
 	params.openings = openings_from_preview(openings);
 	PitchedRoof::new(params)
@@ -6665,9 +5633,7 @@ fn draw_mapped_opening_overlays<M: MapsOpenings>(
 		let (bl, br, ..) = mapped.endpoint_corners();
 		let mid = (bl + br) * 0.5;
 		let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y).normalize_or_zero();
-		gizmos
-			.arrow(map(mid), map(mid + dir * 1.25), orange)
-			.with_tip_length(0.2);
+		gizmos.arrow(map(mid), map(mid + dir * 1.25), orange).with_tip_length(0.2);
 	}
 }
 
@@ -6711,9 +5677,7 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 	let arrow_len = 1.5;
 	let a_dir = Vec3::new(end_a.orientation.x, 0.0, end_a.orientation.y).normalize_or_zero();
 	let b_dir = Vec3::new(end_b.orientation.x, 0.0, end_b.orientation.y).normalize_or_zero();
-	gizmos
-		.arrow(map(a_c), map(a_c + a_dir * arrow_len), lime)
-		.with_tip_length(0.25);
+	gizmos.arrow(map(a_c), map(a_c + a_dir * arrow_len), lime).with_tip_length(0.25);
 	gizmos
 		.arrow(map(b_c), map(b_c + b_dir * arrow_len), orange)
 		.with_tip_length(0.25);
@@ -6755,10 +5719,7 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 	let demo = ConnectingShells::new();
 	let floor = demo.tower().storey(0).expect("ground storey");
 	let connect = OpeningId::new("connect");
-	let end_tower_raw = floor
-		.mapped_opening(&connect)
-		.expect("ground door")
-		.clone();
+	let end_tower_raw = floor.mapped_opening(&connect).expect("ground door").clone();
 	let (end_tower_wide, end_traz) = demo.hall().endpoints();
 	let door_t = 0.5;
 	let seg = floor.segment_t();
@@ -6774,11 +5735,7 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 	for i in 0..24 {
 		let t = i as f32 / 24.0;
 		let p = floor.ring_point_at(t);
-		gizmos.sphere(
-			Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))),
-			0.06,
-			white,
-		);
+		gizmos.sphere(Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))), 0.06, white);
 	}
 
 	// One 15° segment clockwise of portal t (decreasing t).
@@ -6786,22 +5743,10 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 	let j_hi = floor.ring_point_at(door_t - seg);
 	let j_mid = floor.ring_point_at(door_t - 1.5 * seg);
 	for p in [j_lo, j_hi] {
-		gizmos.sphere(
-			Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))),
-			0.14,
-			lime,
-		);
+		gizmos.sphere(Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))), 0.14, lime);
 	}
-	gizmos.line(
-		map(Vec3::new(j_lo.x, y, j_lo.z)),
-		map(Vec3::new(j_hi.x, y, j_hi.z)),
-		lime,
-	);
-	gizmos.sphere(
-		Isometry3d::from_translation(map(Vec3::new(j_mid.x, y, j_mid.z))),
-		0.1,
-		orange,
-	);
+	gizmos.line(map(Vec3::new(j_lo.x, y, j_lo.z)), map(Vec3::new(j_hi.x, y, j_hi.z)), lime);
+	gizmos.sphere(Isometry3d::from_translation(map(Vec3::new(j_mid.x, y, j_mid.z))), 0.1, orange);
 
 	draw_opening_gizmos(&mut gizmos, map, end_tower_raw, lime);
 	draw_opening_gizmos(&mut gizmos, map, end_tower_wide, cyan);
@@ -6809,11 +5754,9 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 
 	let (bl, br, ..) = end_tower_wide.endpoint_corners();
 	let mid = (bl + br) * 0.5;
-	let dir =
-		Vec3::new(end_tower_wide.orientation.x, 0.0, end_tower_wide.orientation.y).normalize_or_zero();
-	gizmos
-		.arrow(map(mid), map(mid + dir * 2.0), cyan)
-		.with_tip_length(0.3);
+	let dir = Vec3::new(end_tower_wide.orientation.x, 0.0, end_tower_wide.orientation.y)
+		.normalize_or_zero();
+	gizmos.arrow(map(mid), map(mid + dir * 2.0), cyan).with_tip_length(0.3);
 }
 
 /// Authored bay corners as colored spheres (a0 red, a1 orange, b0 green, b1 cyan).
@@ -6832,11 +5775,8 @@ fn spawn_rectangle_debug_balls(
 		Color::srgb(0.15, 0.75, 0.95),
 	];
 	for (p, color) in corners.into_iter().zip(colors) {
-		let material = materials.add(StandardMaterial {
-			base_color: color,
-			unlit: true,
-			..default()
-		});
+		let material =
+			materials.add(StandardMaterial { base_color: color, unlit: true, ..default() });
 		commands.spawn((
 			Mesh3d(mesh.clone()),
 			MeshMaterial3d(material),
@@ -6846,6 +5786,3 @@ fn spawn_rectangle_debug_balls(
 		));
 	}
 }
-
-
-

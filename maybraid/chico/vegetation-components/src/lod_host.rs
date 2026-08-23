@@ -1,6 +1,10 @@
 //! Warm [`LodSceneHost`] scaffolding for vegetation content.
 
-use bevy::prelude::{Children, Component, Transform, Visibility};
+use bevy::light::NotShadowCaster;
+use bevy::prelude::{
+	Added, ChildOf, Children, Commands, Component, Entity, Mesh3d, Query, Transform, Visibility,
+	With, Without,
+};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::LodSceneLevel;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
@@ -83,6 +87,49 @@ pub fn posed_frond_multi_scene_merge(
 	)
 }
 
+/// Cheap-ball collection merge: same as [`posed_frond_multi_scene_merge`], plus
+/// [`NotShadowCaster`] on the root (mesh children inherit via
+/// [`inherit_not_shadow_caster_on_meshes`]).
+pub fn posed_foliage_multi_scene_merge(
+	merge: MultiSceneMerge,
+	transform: Transform,
+	material: MaterialRef,
+) -> impl Scene + 'static {
+	(
+		bsn! {
+			NotShadowCaster
+			template_value(MaterialRefRoot(material))
+			PropagateToDescendants
+		},
+		merge.scene_at(transform),
+	)
+}
+
+/// Copy ancestor [`NotShadowCaster`] onto newly spawned `Mesh3d` children.
+///
+/// Merged [`scene_ref::WorldAsset`](bevy::world_serialization::WorldAsset) instances
+/// put `Mesh3d` on a child; Bevy only honors the marker on the mesh entity.
+pub fn inherit_not_shadow_caster_on_meshes(
+	mut commands: Commands,
+	added: Query<Entity, (Added<Mesh3d>, Without<NotShadowCaster>)>,
+	parents: Query<&ChildOf>,
+	marked: Query<(), With<NotShadowCaster>>,
+) {
+	for entity in &added {
+		let mut cursor = entity;
+		loop {
+			let Ok(child_of) = parents.get(cursor) else {
+				break;
+			};
+			cursor = child_of.parent();
+			if marked.contains(cursor) {
+				commands.entity(entity).insert(NotShadowCaster);
+				break;
+			}
+		}
+	}
+}
+
 /// Warm host whose level roots are arbitrary scene content.
 pub fn warm_content_host<P: Component + Clone + Default + Unpin>(
 	level: LodSceneLevel,
@@ -148,9 +195,7 @@ pub fn warm_mesh_level_host<P: Component + Clone + Default + Unpin>(
 	let root_list: Vec<(LodSceneLevel, Option<AssetPath>)> = roots.into_iter().collect();
 	let root_scenes: Vec<Box<dyn Scene>> = root_list
 		.iter()
-		.map(|(root_level, asset)| {
-			mesh_level_root(*root_level, *asset, level == *root_level, None)
-		})
+		.map(|(root_level, asset)| mesh_level_root(*root_level, *asset, level == *root_level, None))
 		.collect();
 	host_with_probe_only(level, probe, transform, root_scenes)
 }

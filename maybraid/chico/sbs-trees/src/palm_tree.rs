@@ -5,17 +5,11 @@ use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
-	StickNode, StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR,
-	STRUCTURAL_MEDIUM_FACTOR,
+	StickNode, StructuralLod,
 };
 
-/// Medium outer edge: default structural Medium × 3 (same as [`crate::PalmCrown`]).
-pub(crate) const PALM_STRUCTURAL_MEDIUM_FACTOR: f32 = STRUCTURAL_MEDIUM_FACTOR * 3.0;
-/// Keep Low beyond Medium so band ordering stays valid.
-pub(crate) const PALM_STRUCTURAL_LOW_FACTOR: f32 = STRUCTURAL_LOW_FACTOR * 3.0;
-
-/// Target fronds (runs) per [`FrondCollection`] — small groups keep merge extent
-/// rachis-scale without the oversized UltraLow chord of a full ring.
+/// Target fronds (runs) per [`FrondCollection`]. Batches stay small so UltraLow merge
+/// cannot chord the whole crown; LOD probe is the parent crown, not this batch AABB.
 pub(crate) const FRONDS_PER_COLLECTION: usize = 3;
 
 /// Bake mesh-local frond shape into world units (keeps authored rachis segment count).
@@ -33,13 +27,17 @@ pub(crate) fn world_space_frond_shape(
 }
 
 /// [`FrondCollection`]s of ~[`FRONDS_PER_COLLECTION`] fronds each at every ring anchor.
+///
+/// `probe_center` / `probe_radius` are the parent crown (same unit as structural LOD).
 pub(crate) fn frond_collection_nodes(
-	rings: impl IntoIterator<Item = (Vec3, FrondCrownShape)>,
+	rings: &[(Vec3, FrondCrownShape)],
+	probe_center: Vec3,
+	probe_radius: f32,
 ) -> Vec<FoliageNode> {
 	let mut nodes = Vec::new();
 	for (anchor, shape) in rings {
 		let mut batch: Vec<FrondRun> = Vec::with_capacity(FRONDS_PER_COLLECTION);
-		for run in shape.frond_runs_at(anchor) {
+		for run in shape.frond_runs_at(*anchor) {
 			let placements: Vec<Placement> = run
 				.into_iter()
 				.filter_map(|seg| {
@@ -52,14 +50,15 @@ pub(crate) fn frond_collection_nodes(
 			batch.push(FrondRun::from_placements(placements));
 			if batch.len() >= FRONDS_PER_COLLECTION {
 				nodes.push(FoliageNode::frond_collection(
-					FrondCollection::new(std::mem::take(&mut batch)).bake_bounds_from_runs(),
+					FrondCollection::new(std::mem::take(&mut batch))
+						.with_probe(probe_center, probe_radius),
 					Placement::IDENTITY,
 				));
 			}
 		}
 		if !batch.is_empty() {
 			nodes.push(FoliageNode::frond_collection(
-				FrondCollection::new(batch).bake_bounds_from_runs(),
+				FrondCollection::new(batch).with_probe(probe_center, probe_radius),
 				Placement::IDENTITY,
 			));
 		}
@@ -67,15 +66,33 @@ pub(crate) fn frond_collection_nodes(
 	nodes
 }
 
+/// Parent-crown LOD probe: AABB center, radius at least the crown half-extent.
+///
+/// When `footprint_and_height` is set, also floors radius with
+/// [`StructuralLod::characteristic_radius`].
+pub(crate) fn crown_lod_probe(
+	rings: &[(Vec3, FrondCrownShape)],
+	footprint_and_height: Option<(f32, f32)>,
+) -> (Vec3, f32) {
+	let (min, max) = crown_aabb_from_rings(rings);
+	let center = (min + max) * 0.5;
+	let crown_r = ((max - min) * 0.5).max_element().max(1e-3);
+	let radius = match footprint_and_height {
+		Some((footprint, height)) => {
+			StructuralLod::characteristic_radius(footprint, height).max(crown_r)
+		}
+		None => crown_r,
+	};
+	(center, radius)
+}
+
 /// AABB of rachis polylines for the given ring shapes / anchors.
-pub(crate) fn crown_aabb_from_rings(
-	rings: impl IntoIterator<Item = (Vec3, FrondCrownShape)>,
-) -> (Vec3, Vec3) {
+pub(crate) fn crown_aabb_from_rings(rings: &[(Vec3, FrondCrownShape)]) -> (Vec3, Vec3) {
 	let mut min = Vec3::splat(f32::INFINITY);
 	let mut max = Vec3::splat(f32::NEG_INFINITY);
 	let mut any = false;
 	for (anchor, shape) in rings {
-		for run in shape.frond_runs_at(anchor) {
+		for run in shape.frond_runs_at(*anchor) {
 			for seg in run {
 				let tip = seg.start + seg.direction * seg.length;
 				let half_w = seg.width * 0.5;
@@ -120,17 +137,6 @@ pub(crate) fn layered_proxy_balls(min: Vec3, max: Vec3) -> Vec<FoliageNode> {
 	]
 }
 
-pub(crate) fn palm_structural_lod(
-	center: Vec3,
-	tree_radius: f32,
-) -> StructuralLod {
-	StructuralLod::new(center, tree_radius.max(1e-3)).with_factors(
-		STRUCTURAL_HIGH_FACTOR,
-		PALM_STRUCTURAL_MEDIUM_FACTOR,
-		PALM_STRUCTURAL_LOW_FACTOR,
-	)
-}
-
 /// All chain segments as trunk kits (date / Waialea columnar or arched trunks).
 pub(crate) fn trunk_stick_nodes<C: Hysteresis>(chain: &BallStickChain<C>) -> Vec<StickNode> {
 	chain
@@ -144,4 +150,21 @@ pub(crate) fn trunk_stick_nodes<C: Hysteresis>(chain: &BallStickChain<C>) -> Vec
 			)
 		})
 		.collect()
+}
+
+#[cfg(test)]
+pub(crate) fn assert_high_collections_match_structural_lod(
+	built: &impl chico_vegetation_components::VegetationComponents,
+) {
+	use lod::gen::LodSceneLevel;
+
+	let probe = built.structural_lod().expect("structural probe");
+	let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+	assert!(!nodes.is_empty());
+	for node in &nodes {
+		let collection = node.geometry.as_frond_collection().expect("collection");
+		let (center, radius) = collection.center_and_extent();
+		assert!((center - probe.center).length() < 1e-4);
+		assert!((radius - probe.tree_radius).abs() < 1e-4);
+	}
 }

@@ -11,6 +11,7 @@ use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose, LodRef,
 };
 
+use super::super::levels::LodSceneRefreshAabb;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 
 /// Impulse: refresh hosts overlapping `region` (type `M` scopes the channel).
@@ -22,10 +23,7 @@ pub struct LodSceneRefreshRegion<M: Send + Sync + 'static> {
 
 impl<M: Send + Sync + 'static> LodSceneRefreshRegion<M> {
 	pub fn new(region: Aabb3d) -> Self {
-		Self {
-			region,
-			_marker: PhantomData,
-		}
+		Self { region, _marker: PhantomData }
 	}
 }
 
@@ -57,7 +55,7 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 	/// Fold many drivers into one max-extent AABB (or [`Unchanged`] / [`Empty`]).
 	fn lod_refresh_regions_for(
 		&self,
-		lod_refs: &[&LodRef],
+		lod_refs: &[LodRef],
 	) -> Result<LodRefreshRegionsStatus, LodRefreshRegionsError> {
 		if lod_refs.is_empty() {
 			return Err(LodRefreshRegionsError::Empty);
@@ -100,6 +98,7 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 		(With<LodNode>, Changed<LodNodePose>, F),
 	>,
 	mut writer: MessageWriter<LodSceneRefreshRegion<M>>,
+	mut bus: MessageWriter<LodSceneRefreshAabb>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
@@ -110,15 +109,14 @@ pub fn produce_lod_refresh_regions<P, F, M>(
 	}
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let ref_refs: Vec<&LodRef> = refs.iter().collect();
 
-	let Ok(LodRefreshRegionsStatus::Changed(region)) =
-		producer.lod_refresh_regions_for(&ref_refs)
+	let Ok(LodRefreshRegionsStatus::Changed(region)) = producer.lod_refresh_regions_for(&refs)
 	else {
 		return;
 	};
 
 	writer.write(LodSceneRefreshRegion::<M>::new(region));
+	bus.write(LodSceneRefreshAabb { region });
 }
 
 /// Produce [`LodSceneRefreshRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
@@ -141,9 +139,7 @@ where
 	M: Send + Sync + 'static,
 {
 	fn default() -> Self {
-		Self {
-			_marker: PhantomData,
-		}
+		Self { _marker: PhantomData }
 	}
 }
 
@@ -157,6 +153,7 @@ where
 		ensure_refresh_core(app);
 		app.init_resource::<P>()
 			.add_message::<LodSceneRefreshRegion<M>>()
+			.add_message::<LodSceneRefreshAabb>()
 			.add_systems(
 				Update,
 				produce_lod_refresh_regions::<P, F, M>.in_set(LodRefreshSystems::ProduceRegions),

@@ -1,5 +1,6 @@
 //! Foliage continuous forms.
 
+use crate::foliage::ball_collection::CheapBallCollection;
 use crate::foliage::collection::FrondCollection;
 
 /// Foliage footprint / construction.
@@ -22,12 +23,8 @@ pub enum FoliageGeometry {
 	StraightFrondSegment,
 	/// Many placed frond kits under one LOD parent (merge thinning by distance).
 	FrondCollection(FrondCollection),
-	/// Plane-splay cluster parameters (local units before placement scale).
-	PlaneSplay {
-		icosphere_subdivisions: u32,
-		core_radius: f32,
-		leaf_disc_radius: f32,
-	},
+	/// Many placed cheap-ball kits under one LOD parent (merge thinning by distance).
+	CheapBallCollection(CheapBallCollection),
 }
 
 impl Default for FoliageGeometry {
@@ -61,16 +58,8 @@ impl FoliageGeometry {
 		Self::FrondCollection(collection)
 	}
 
-	pub fn plane_splay(
-		icosphere_subdivisions: u32,
-		core_radius: f32,
-		leaf_disc_radius: f32,
-	) -> Self {
-		Self::PlaneSplay { icosphere_subdivisions, core_radius, leaf_disc_radius }
-	}
-
-	pub fn default_plane_splay() -> Self {
-		Self::plane_splay(0, 0.8, 0.9)
+	pub fn cheap_ball_collection(collection: CheapBallCollection) -> Self {
+		Self::CheapBallCollection(collection)
 	}
 
 	pub fn is_layered_ball(&self) -> bool {
@@ -90,5 +79,16 @@ impl FoliageGeometry {
 			Self::FrondCollection(c) => Some(c),
 			_ => None,
 		}
+	}
+
+	pub fn as_cheap_ball_collection(&self) -> Option<&CheapBallCollection> {
+		match self {
+			Self::CheapBallCollection(c) => Some(c),
+			_ => None,
+		}
+	}
+
+	pub fn is_kit_collection(&self) -> bool {
+		matches!(self, Self::FrondCollection(_) | Self::CheapBallCollection(_))
 	}
 }

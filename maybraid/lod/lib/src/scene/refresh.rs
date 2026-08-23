@@ -3,18 +3,19 @@
 //! Submodules:
 //! - [`regions`] — strategy `P` + nodes `F` → [`LodSceneRefreshRegion<M>`]
 //! - [`cull_regions`] — rotating cull lattice → [`LodSceneCullRegion<M>`] + enqueue
-//! - [`levels`] — region + index → [`LodSceneRefreshLevel`]
-//! - [`entities`] — fold max level → write [`crate::LodSceneLevel`]
+//! - [`levels`] — untyped region AABB → shared host-hit cache → per-`T` levels
+//! - [`entities`] — one untyped fold: max level → write [`crate::LodSceneLevel`]
 //! - [`sync`] — root sync, chunk fulfill, cull
 //!
 //! Plugins:
-//! - [`LodRefreshCorePlugin`] — sets, node track, root sync (once)
+//! - [`LodRefreshCorePlugin`] — sets, node track, untyped level fold, root sync (once)
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
 //! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
-//! - [`LodSceneRefreshLevelsPlugin<I, M, T, F>`] — level production (+ entities)
+//! - [`LodSceneRefreshLevelsFillPlugin<I, F>`] — once: snapshots + host hits
+//! - [`LodSceneRefreshLevelsPlugin<T>`] — per-type emit from the shared cache
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
 //! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — index-scoped cull enqueue
-//! - [`LodSceneRefreshPlugin<T, M, I, F>`] — levels + entities + sync (region separate)
+//! - [`LodSceneRefreshPlugin<T, M, I, F>`] — fill + emit + sync (region separate)
 
 mod bounds;
 pub mod cull_regions;
@@ -32,7 +33,7 @@ use bevy::prelude::*;
 
 use crate::lod_ref::track_lod_nodes;
 use crate::scene::host::sync_lod_level_roots;
-use crate::scene::region_index::LodSceneRegionIndex;
+use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
 
 pub use bounds::LodHostBounds;
@@ -40,14 +41,16 @@ pub use cull_regions::{
 	produce_lod_cull_for_region, produce_lod_cull_regions, sync_cullable_roots_marker,
 	sync_nested_refresh_allowed, LodCullMarkerPlugin, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
-	LodNestedRefreshBlocked, LodSceneCullRegion,
+	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodSceneCullRegion,
 	LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
 };
 pub use entities::{
-	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels, LodSceneRefreshEntitiesPlugin,
+	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels,
+	LodSceneRefreshEntitiesPlugin,
 };
 pub use levels::{
-	produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
+	fill_lod_produce_cache, produce_lod_refresh_levels, LodProduceCache, LodSceneRefreshAabb,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
@@ -55,13 +58,13 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill, complete_chunk_lod_fulfill,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill,
+	cancel_unstarted_cull_for_desired_pending_roots, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
-	reset_lod_chunk_budget, resume_desired_pending_roots, LodChunkBudgetClock,
-	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillDiag,
-	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodCullRequest,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
+	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
+	LodCullRequest, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use viewer::LodViewer;
 
@@ -84,6 +87,15 @@ pub enum LodRefreshSystems {
 	Cull,
 }
 
+/// Order inside [`LodRefreshSystems::ProduceLevels`]: fill the shared cache, then emit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum LodLevelProduceSystems {
+	/// Snapshots + untyped host hits ([`fill_lod_produce_cache`]).
+	FillCache,
+	/// Per-`T` [`produce_lod_refresh_levels`].
+	Emit,
+}
+
 pub(crate) fn configure_refresh_sets(app: &mut App) {
 	app.configure_sets(
 		Update,
@@ -98,6 +110,12 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 		)
 			.chain(),
 	);
+	app.configure_sets(
+		Update,
+		(LodLevelProduceSystems::FillCache, LodLevelProduceSystems::Emit)
+			.chain()
+			.in_set(LodRefreshSystems::ProduceLevels),
+	);
 }
 
 pub(crate) fn ensure_refresh_core(app: &mut App) {
@@ -106,25 +124,31 @@ pub(crate) fn ensure_refresh_core(app: &mut App) {
 	}
 }
 
-/// Untyped refresh infrastructure: sets, node tracking, root sync.
+/// Untyped refresh infrastructure: sets, node tracking, level fold, root sync.
 pub struct LodRefreshCorePlugin;
 
 impl Plugin for LodRefreshCorePlugin {
 	fn build(&self, app: &mut App) {
 		configure_refresh_sets(app);
-		app.add_systems(
-			Update,
-			(
-				track_lod_nodes.in_set(LodRefreshSystems::Track),
-				sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
-			),
-		);
+		app.init_resource::<LodProduceCache>()
+			.add_message::<LodSceneRefreshAabb>()
+			.add_message::<LodSceneRefreshLevel>()
+			.add_systems(
+				Update,
+				(
+					track_lod_nodes.in_set(LodRefreshSystems::Track),
+					refresh_lod_host_levels.in_set(LodRefreshSystems::UpdateLevels),
+					sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
+				),
+			);
 	}
 }
 
-/// Levels + entities + chunk sync for host `T` listening on region channel `M`.
+/// Fill + per-`T` emit + chunk sync. `I` is an untyped [`LodSceneHostIndex`].
 ///
-/// Add [`LodSceneRefreshRegionPlugin`] separately for region production.
+/// Channel `M` is kept so existing `AvianLodSceneRefreshPlugin<T, M, F>` adds
+/// stay valid; produce itself is registered once per `T`. Add
+/// [`LodSceneRefreshRegionPlugin`] separately for region production.
 /// Use [`Self::without_full_scan_cull`] with [`LodSceneRegionCullPlugin`] for
 /// lattice-scoped cull enqueue.
 pub struct LodSceneRefreshPlugin<T, M, I, F = With<LodViewer>>
@@ -146,10 +170,7 @@ where
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
-		Self {
-			full_scan_cull: true,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: true, _marker: PhantomData }
 	}
 }
 
@@ -161,10 +182,7 @@ where
 	F: QueryFilter + 'static,
 {
 	pub fn without_full_scan_cull() -> Self {
-		Self {
-			full_scan_cull: false,
-			_marker: PhantomData,
-		}
+		Self { full_scan_cull: false, _marker: PhantomData }
 	}
 }
 
@@ -174,12 +192,15 @@ where
 	M: Send + Sync + 'static,
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,
-	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
+	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
-		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<I, M, T, F>>() {
-			app.add_plugins(LodSceneRefreshLevelsPlugin::<I, M, T, F>::default());
+		if !app.is_plugin_added::<LodSceneRefreshLevelsFillPlugin<I, F>>() {
+			app.add_plugins(LodSceneRefreshLevelsFillPlugin::<I, F>::default());
+		}
+		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
+			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
 		}
 		if !app.is_plugin_added::<LodSceneRefreshSyncPlugin<T, F>>() {
 			if self.full_scan_cull {
@@ -193,3 +214,6 @@ where
 
 /// Compatibility alias for [`LodSceneRefreshRegionPlugin`].
 pub type LodRefreshProductionPlugin<P, F, M> = LodSceneRefreshRegionPlugin<P, F, M>;
+
+#[cfg(test)]
+mod tests;

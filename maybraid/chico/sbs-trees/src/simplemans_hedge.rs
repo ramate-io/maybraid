@@ -10,11 +10,17 @@ pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, VegetationComponents,
+	chico_leaf_material_ref, FoliageNode, Layers, Placement, StickNode, StructuralLod,
+	VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
 
 /// Authoring / CLI parameters for Simpleman's Hedge.
 #[derive(Component, Clone, Args, Debug, PartialEq)]
@@ -43,25 +49,13 @@ pub struct SimplemansHedgeParams {
 
 impl Default for SimplemansHedgeParams {
 	fn default() -> Self {
-		Self {
-			clump_count: 9,
-			height: 1.2,
-			footprint_xz: 1.2,
-			density: 0.5,
-			seed: 0,
-		}
+		Self { clump_count: 9, height: 1.2, footprint_xz: 1.2, density: 0.5, seed: 0 }
 	}
 }
 
 impl SimplemansHedgeParams {
 	pub fn new(height: f32, footprint_xz: f32, density: f32, seed: u32) -> Self {
-		Self {
-			clump_count: 9,
-			height,
-			footprint_xz,
-			density,
-			seed,
-		}
+		Self { clump_count: 9, height, footprint_xz, density, seed }
 	}
 
 	/// RFC `hedge_radius = 0.08 * H`, widened slightly by authored density.
@@ -211,7 +205,9 @@ impl SimplemansHedge {
 			.filter(|(i, _)| i % 2 == 0)
 			.map(|(i, anchor)| {
 				let ball = self.clump_ball_transform(i as u32, *anchor);
-				FoliageNode::layered_ball(Placement::new(ball.translation, 0.0).with_scale(ball.scale))
+				FoliageNode::layered_ball(
+					Placement::new(ball.translation, 0.0).with_scale(ball.scale),
+				)
 			})
 			.collect()
 	}
@@ -230,10 +226,25 @@ impl VegetationComponents for SimplemansHedge {
 			}
 			LodSceneLevel::Low => Layers::from_free(self.foliage_nodes_low())
 				.map(|n| n.with_material(chico_leaf_material_ref())),
-			LodSceneLevel::UltraLow
-			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => Layers::new(),
+			LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+				Layers::new()
+			}
 		}
+	}
+
+	fn structural_lod(&self) -> Option<StructuralLod> {
+		Some(
+			StructuralLod::from_extent(
+				Vec3::new(0.0, self.height * 0.5, 0.0),
+				self.footprint_xz * 0.5,
+				self.height,
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }
 
@@ -248,12 +259,9 @@ mod tests {
 
 	#[test]
 	fn hedge_radius_follows_rfc() -> Result<()> {
-		let h = SimplemansHedgeParams {
-			height: 2.0,
-			density: 0.0,
-			..SimplemansHedgeParams::default()
-		}
-		.build();
+		let h =
+			SimplemansHedgeParams { height: 2.0, density: 0.0, ..SimplemansHedgeParams::default() }
+				.build();
 		assert!((h.hedge_radius() - 0.144).abs() < 1e-5);
 		Ok(())
 	}

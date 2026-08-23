@@ -5,21 +5,17 @@
 //! small plumage-tinted featherhawk crest.
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Lidder;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::LidderAssets;
 
 pub use assets::{LidderBeakMesh, LidderHeadMesh};
 pub use palette::{LidderBeakColor, LidderEyeColor, LidderPlumageColor};
@@ -49,6 +45,16 @@ impl Default for LidderColors {
 }
 
 impl LidderColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -111,12 +117,16 @@ impl LidderConfig {
 	}
 }
 
-impl SpeciesConfig for LidderConfig {
-	fn species_name(&self) -> &'static str {
-		"lidder"
+impl CharacterRecipe for LidderConfig {
+	type Components = Lidder;
+
+	fn components(&self) -> Self::Components {
+		Lidder::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		LidderAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

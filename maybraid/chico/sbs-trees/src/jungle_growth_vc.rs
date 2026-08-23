@@ -123,8 +123,8 @@ fn frond_runs_to_collection_runs(
 
 /// Two nearly-vertical spear fronds (Buddha-hand stand-in).
 fn spear_frond_runs(params: JungleGrowthVcParams) -> Vec<FrondRun> {
-	let origin = params.position
-		+ Vec3::Y * (params.assembly_scale() * INNER_BALL_SCALE * SPEAR_Y_FRACTION);
+	let origin =
+		params.position + Vec3::Y * (params.assembly_scale() * INNER_BALL_SCALE * SPEAR_Y_FRACTION);
 	let len = 0.55 * params.foliage_world_scale() * BUDDHA_HAND_SCALE;
 	let width = 0.04 * params.foliage_world_scale() * BUDDHA_HAND_SCALE;
 	let mut runs = Vec::with_capacity(SPEAR_COUNT as usize);
@@ -148,7 +148,8 @@ fn spear_frond_runs(params: JungleGrowthVcParams) -> Vec<FrondRun> {
 pub(crate) fn jungle_growth_foliage_nodes(params: JungleGrowthVcParams) -> Vec<FoliageNode> {
 	let frond_origin = params.position
 		+ Vec3::Y * (params.assembly_scale() * INNER_BALL_SCALE * FROND_CROWN_Y_FRACTION);
-	let mut runs = frond_runs_to_collection_runs(palm_frond_shape(params).frond_runs_at(frond_origin));
+	let mut runs =
+		frond_runs_to_collection_runs(palm_frond_shape(params).frond_runs_at(frond_origin));
 	runs.extend(spear_frond_runs(params));
 	if runs.is_empty() {
 		return Vec::new();

@@ -4,7 +4,7 @@
 //! cycle phase in `[0, 1)`. Quadruped rigs convert to [`QuadrupedGallop`](super::QuadrupedGallop)
 //! before applying bound-style joint articulation.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Gallop {
 	/// Thigh forward/back stride amplitude (radians).
 	pub stride: f32,

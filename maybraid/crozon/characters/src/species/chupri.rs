@@ -6,21 +6,17 @@
 //! ~2 m biped), not per-bone root scale (pelvis/buttocks are root siblings).
 
 pub mod assets;
-pub mod bsn;
+pub mod recipe;
+pub use recipe::Chupri;
 pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		common::{EyeMesh, HairMesh},
-		SpeciesConfig,
-	},
-	ResolvedCharacterAssembly,
+	species::common::{EyeMesh, HairMesh},
+	CharacterRecipe, ClothingLayer,
 };
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
-
-use assets::ChupriAssets;
 
 pub use assets::{ChupriBeakMesh, ChupriHeadMesh};
 pub use palette::{ChupriBeakColor, ChupriEyeColor, ChupriPlumageColor};
@@ -50,6 +46,16 @@ impl Default for ChupriColors {
 }
 
 impl ChupriColors {
+	pub fn color_for_slot(&self, slot: crate::CharacterPartSlot) -> bevy::prelude::Color {
+		use crate::CharacterPartSlot::*;
+		match slot {
+			BodyMesh | HeadMesh | HeadRig | Hair => self.plumage.color(),
+			EyeLeft | EyeRight => self.eyes.color(),
+			Mouth => self.beak.color(),
+			_ => self.plumage.color(),
+		}
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -112,12 +118,16 @@ impl ChupriConfig {
 	}
 }
 
-impl SpeciesConfig for ChupriConfig {
-	fn species_name(&self) -> &'static str {
-		"chupri"
+impl CharacterRecipe for ChupriConfig {
+	type Components = Chupri;
+
+	fn components(&self) -> Self::Components {
+		Chupri::from_config(self)
 	}
 
-	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ChupriAssets::resolve(self)
+	fn clothing_layers(&self) -> Vec<ClothingLayer> {
+		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+			self.colors.clothing_color(mesh)
+		})
 	}
 }

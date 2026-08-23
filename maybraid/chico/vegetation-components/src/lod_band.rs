@@ -62,5 +62,6 @@ pub fn characteristic_extent_abs(placement: &Placement) -> f32 {
 
 /// Mid-height of a placed stick kit (base + half length).
 pub fn placement_center(placement: &Placement) -> Vec3 {
-	placement.translation + placement.rotation() * Vec3::new(0.0, placement.scale.y.abs() * 0.5, 0.0)
+	placement.translation
+		+ placement.rotation() * Vec3::new(0.0, placement.scale.y.abs() * 0.5, 0.0)
 }

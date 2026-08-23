@@ -12,17 +12,18 @@ use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, RorysHeadTrainedSbs, StorybookTreeChain};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, StickNode,
-	VegetationComponents, StructuralLod,
+	StructuralLod, VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::torch_tree::{
-	stick_nodes_high, stick_nodes_low, stick_nodes_medium, structural_lod_for,
-};
-use canopy::{
-	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
-};
+use crate::torch_tree::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+use canopy::{foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS};
+
+/// Structural band edges as `distance / tree_radius` (High / Medium / Low).
+const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 /// Authoring / CLI parameters for Rory's Head-trained.
 #[derive(Component, Clone, Args, Debug)]
@@ -60,16 +61,12 @@ pub struct RorysHeadTrained {
 
 impl RorysHeadTrained {
 	pub fn from_params(params: &RorysHeadTrainedParams) -> Self {
-		Self {
-			geometry: params.geometry.clone(),
-			chain: params.geometry.build_chain(),
-		}
+		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
 	}
 
 	fn footprint_radius(&self) -> f32 {
-		self.chain.footprint_radius_at_least(
-			self.geometry.scale.stalk_base_radius_or_default().max(1e-3),
-		)
+		self.chain
+			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
 	}
 
 	fn structural_center(&self) -> Vec3 {
@@ -97,9 +94,7 @@ impl VegetationComponents for RorysHeadTrained {
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		let leaf_r = self.leaf_radius_world();
 		let nodes = match level {
-			LodSceneLevel::High => {
-				foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r)
-			}
+			LodSceneLevel::High => foliage_nodes_banded(&self.chain, HIGH_FOLIAGE_BANDS, leaf_r),
 			LodSceneLevel::Medium => foliage_nodes_medium(&self.chain, leaf_r),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
@@ -110,10 +105,17 @@ impl VegetationComponents for RorysHeadTrained {
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(structural_lod_for(
-			self.structural_center(),
-			self.footprint_radius(),
-			self.geometry.height(),
-		))
+		Some(
+			StructuralLod::from_extent(
+				self.structural_center(),
+				self.footprint_radius(),
+				self.geometry.height(),
+			)
+			.with_factors(
+				STRUCTURAL_HIGH_FACTOR,
+				STRUCTURAL_MEDIUM_FACTOR,
+				STRUCTURAL_LOW_FACTOR,
+			),
+		)
 	}
 }

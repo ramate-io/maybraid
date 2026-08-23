@@ -67,10 +67,7 @@ fn collect_candidates(chain: &BallStickChain<StorybookTreeChain>) -> Vec<Foliage
 			if !should_allocate_foliage(idx, h, chain) {
 				return None;
 			}
-			Some(FoliageCandidate {
-				position: node.position,
-				radius: node.radius,
-			})
+			Some(FoliageCandidate { position: node.position, radius: node.radius })
 		})
 		.collect()
 }
@@ -80,8 +77,7 @@ fn banded_from_candidates(
 	bands: AzimuthHeightBands,
 	leaf_radius_world: f32,
 ) -> Vec<FoliageNode> {
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
+	let sampled = sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.position, bands);
 	sampled
 		.into_iter()
 		.map(|s| foliage_node_from_candidate(s.item, leaf_radius_world))
@@ -108,9 +104,7 @@ fn full_canopy_proxy_ball(
 	let mut half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
 	half_extents.x *= FULL_CANOPY_PROXY_RADIUS_SCALE;
 	half_extents.z *= FULL_CANOPY_PROXY_RADIUS_SCALE;
-	Some(FoliageNode::layered_ball(
-		Placement::new(center, 0.0).with_scale(half_extents),
-	))
+	Some(FoliageNode::layered_ball(Placement::new(center, 0.0).with_scale(half_extents)))
 }
 
 /// Outermost foliage candidates per azimuth × height cell.

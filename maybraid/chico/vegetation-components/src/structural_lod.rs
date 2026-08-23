@@ -11,12 +11,13 @@ use lod::lod_ref::LodRef;
 
 use crate::lod_band::DistanceLodBand;
 
-/// High when `distance / tree_radius ≤` this (Sope default: 3).
-pub const STRUCTURAL_HIGH_FACTOR: f32 = 3.0;
-/// Medium when at or below this multiple of tree radius (Sope default: 12).
-pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 12.0;
-/// Low when at or below this multiple of tree radius (Sope default: 24).
-pub const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+/// High when `distance / tree_radius ≤` this. Trees that call [`StructuralLod::new`]
+/// without [`StructuralLod::with_factors`] inherit these; most trees author their own.
+pub const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
+/// Medium when at or below this multiple of tree radius.
+pub const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+/// Low when at or below this multiple of tree radius.
+pub const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
 
 /// Viewer distance band for whole-tree structural thinning.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,6 +55,18 @@ impl StructuralLod {
 			low_factor: STRUCTURAL_LOW_FACTOR,
 			preserve_ultra_low: false,
 		}
+	}
+
+	/// Distance unit: max(horizontal footprint, half height) so a tall narrow tree
+	/// stays High while it still fills the view.
+	pub fn characteristic_radius(footprint_radius: f32, height: f32) -> f32 {
+		footprint_radius.max(height * 0.5).max(1e-4)
+	}
+
+	/// [`Self::new`] with [`Self::characteristic_radius`]. Chain [`Self::with_factors`]
+	/// at the tree to set High / Medium / Low edges.
+	pub fn from_extent(center: Vec3, footprint_radius: f32, height: f32) -> Self {
+		Self::new(center, Self::characteristic_radius(footprint_radius, height))
 	}
 
 	pub fn with_factors(mut self, high: f32, medium: f32, low: f32) -> Self {

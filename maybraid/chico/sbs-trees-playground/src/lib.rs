@@ -10,18 +10,23 @@ mod monster_grass_plain;
 mod render;
 mod render_materials;
 mod ui;
-mod vegetation_lod;
+mod vast_orchards;
+pub mod vegetation_lod;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin};
 pub use game_commands::command::PendingStartupCommand;
 pub use monster_grass_plain::PLAIN_GROVE_RADIUS;
 pub use render::{RenderConfig, RenderSubject};
+pub use vast_orchards::VAST_ORCHARD_RADIUS;
+pub use vegetation_lod::VegetationLodRefreshPlugin;
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
+use chico_material_lib::ChicoMaterialRefPlugin;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
@@ -36,11 +41,9 @@ use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as
 use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
 use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
+use chico_vegetation_components::{FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
-};
-use chico_vegetation_components::{
-	FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin,
 };
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
@@ -48,12 +51,55 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::LodSceneHost;
-use vegetation_lod::VegetationLodRefreshPlugin;
-use chico_material_lib::ChicoMaterialRefPlugin;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{setup_render_materials, sync_render_material_handles};
 use scene_ref::SceneRefPlugin;
+
+/// Shaders, materials, tree render items, and vegetation LOD refresh.
+///
+/// Shared by the SBS trees playground and vegetation-on-terrain.
+pub fn register_vegetation_view(app: &mut App) {
+	if !app.is_plugin_added::<SceneRefPlugin>() {
+		app.add_plugins(SceneRefPlugin);
+	}
+	if !app.is_plugin_added::<VegetationProceduralPlugin>() {
+		app.add_plugins(VegetationProceduralPlugin);
+	}
+	if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
+		app.add_plugins(VegetationLodRefreshPlugin);
+	}
+	ensure_honu_banyan_render_plugins(app);
+	ensure_liams_conifer_render_plugins(app);
+	ensure_friends_conifer_render_plugins(app);
+	ensure_northern_conifer_render_plugins(app);
+	ensure_temperate_conifer_render_plugins(app);
+	ensure_date_palm_render_plugins(app);
+	ensure_palm_bush_render_plugins(app);
+	ensure_waialea_palm_render_plugins(app);
+	ensure_storybook_tree_render_plugins(app);
+	ensure_simplemans_hedge_render_plugins(app);
+	ensure_vase_tree_render_plugins(app);
+	ensure_braid_oak_tree_render_plugins(app);
+	ensure_jungle_storybook_tree_render_plugins(app);
+	if !app.is_plugin_added::<TuftRenderItemPlugin>() {
+		app.add_plugins(TuftRenderItemPlugin::default());
+	}
+	if !app.is_plugin_added::<FrondRenderItemPlugin>() {
+		app.add_plugins(FrondRenderItemPlugin::default());
+	}
+	app.add_plugins(ChicoVegetationShadersPlugin);
+	if !app.is_plugin_added::<ChicoMaterialRefPlugin>() {
+		app.add_plugins(ChicoMaterialRefPlugin);
+	}
+	ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
+	ensure_enforce_caching_plugin::<CrookCylinder, ChicoStickMaterial>(app);
+	ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
+	ensure_enforce_caching_plugin::<NoisyBall, ChicoStickMaterial>(app);
+	if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
+		app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
+	}
+}
 
 pub struct SbsTreesPlaygroundPlugin;
 
@@ -61,47 +107,11 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
-		if !app.is_plugin_added::<SceneRefPlugin>() {
-			app.add_plugins(SceneRefPlugin);
+		register_vegetation_view(app);
+		if !app.is_plugin_added::<diagnostics::PlaygroundTimingPlugin>() {
+			app.add_plugins(diagnostics::PlaygroundTimingPlugin);
 		}
-		if !app.is_plugin_added::<VegetationProceduralPlugin>() {
-			app.add_plugins(VegetationProceduralPlugin);
-		}
-		if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
-			app.add_plugins(VegetationLodRefreshPlugin);
-		}
-		ensure_honu_banyan_render_plugins(app);
-		ensure_liams_conifer_render_plugins(app);
-		ensure_friends_conifer_render_plugins(app);
-		ensure_northern_conifer_render_plugins(app);
-		ensure_temperate_conifer_render_plugins(app);
-		ensure_date_palm_render_plugins(app);
-		ensure_palm_bush_render_plugins(app);
-		ensure_waialea_palm_render_plugins(app);
-		ensure_storybook_tree_render_plugins(app);
-		ensure_simplemans_hedge_render_plugins(app);
-		ensure_vase_tree_render_plugins(app);
-		ensure_braid_oak_tree_render_plugins(app);
-		ensure_jungle_storybook_tree_render_plugins(app);
-		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
-			app.add_plugins(TuftRenderItemPlugin::default());
-		}
-		if !app.is_plugin_added::<FrondRenderItemPlugin>() {
-			app.add_plugins(FrondRenderItemPlugin::default());
-		}
-		app.add_plugins(ChicoVegetationShadersPlugin);
-		if !app.is_plugin_added::<ChicoMaterialRefPlugin>() {
-			app.add_plugins(ChicoMaterialRefPlugin);
-		}
-		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
-		ensure_enforce_caching_plugin::<CrookCylinder, ChicoStickMaterial>(app);
-		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
-		ensure_enforce_caching_plugin::<NoisyBall, ChicoStickMaterial>(app);
-		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
-			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
-		}
-		app.add_plugins(diagnostics::PlaygroundTimingPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
@@ -197,12 +207,13 @@ where
 
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
+	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
+		DirectionalLight { illuminance: 3500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }

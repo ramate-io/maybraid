@@ -3,5 +3,6 @@
 mod produce;
 
 pub use produce::{
-	produce_lod_refresh_levels, LodSceneRefreshLevel, LodSceneRefreshLevelsPlugin,
+	fill_lod_produce_cache, produce_lod_refresh_levels, LodProduceCache, LodSceneRefreshAabb,
+	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };

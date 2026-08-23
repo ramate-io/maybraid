@@ -11,10 +11,10 @@ use crozon_rigs::Side;
 
 use crate::animations::Jab;
 use crate::rigs::humanoid::apply::apply_leg;
-use crate::{Animation, Effects};
+use crate::Animation;
 
 impl<R: HumanoidRig> Animation<R> for Jab<R> {
-	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+	fn apply_for(&self, rig: &mut R, progress: f32) {
 		let jab_side = self.side;
 		let guard_side = self.opposite_side();
 
@@ -50,8 +50,6 @@ impl<R: HumanoidRig> Animation<R> for Jab<R> {
 			0.0,
 			self.guard_elbow(progress),
 		);
-
-		Effects::default()
 	}
 }
 

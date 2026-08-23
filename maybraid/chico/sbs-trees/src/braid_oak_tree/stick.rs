@@ -101,20 +101,12 @@ pub(crate) fn crook_polyline_stick_nodes(
 
 	let strength = bend_strength(segment, parent, stick_surface_noise);
 	let key = segment_key(segment);
-	let crook = ChicoCrookStick::new(
-		strength,
-		key,
-		MeshMaterial3d::<StandardMaterial>::default(),
-	);
+	let crook = ChicoCrookStick::new(strength, key, MeshMaterial3d::<StandardMaterial>::default());
 	let cyl = crook.crook_cylinder();
 	let xz_scale = UNIT_TARGET_BASE_RADIUS / cyl.base_radius.max(1e-6);
 	let s = Vec3::new(radius * xz_scale, length, radius * xz_scale);
 
-	let geometry = if is_stalk(parent) {
-		StickGeometry::Trunk
-	} else {
-		StickGeometry::Segment
-	};
+	let geometry = if is_stalk(parent) { StickGeometry::Trunk } else { StickGeometry::Segment };
 
 	let mut points = Vec::with_capacity(CROOK_POLYLINE_SAMPLES);
 	let mut radii = Vec::with_capacity(CROOK_POLYLINE_SAMPLES);
@@ -158,11 +150,7 @@ pub(crate) fn stick_nodes_high_crook(
 
 	for (segment, parent, _) in chain.segments_with_hysteresis() {
 		if is_stalk(parent) {
-			nodes.extend(crook_polyline_stick_nodes(
-				&segment,
-				parent,
-				stick_surface_noise,
-			));
+			nodes.extend(crook_polyline_stick_nodes(&segment, parent, stick_surface_noise));
 			continue;
 		}
 		let start = segment.start.position;
@@ -177,24 +165,14 @@ pub(crate) fn stick_nodes_high_crook(
 		});
 	}
 
-	let sampled = sample_max_horizontal_radius_by_azimuth_height(
-		&branch_candidates,
-		|c| c.sample_at,
-		bands,
-	);
+	let sampled =
+		sample_max_horizontal_radius_by_azimuth_height(&branch_candidates, |c| c.sample_at, bands);
 	for sample in sampled {
 		let owned = sample.item;
 		let start_node = chico_sbs_geometry::BallStickNode::new(owned.start, owned.start_radius);
 		let end_node = chico_sbs_geometry::BallStickNode::new(owned.end, owned.end_radius);
-		let segment = BallStickSegment {
-			start: &start_node,
-			end: &end_node,
-		};
-		nodes.extend(crook_polyline_stick_nodes(
-			&segment,
-			&owned.parent,
-			stick_surface_noise,
-		));
+		let segment = BallStickSegment { start: &start_node, end: &end_node };
+		nodes.extend(crook_polyline_stick_nodes(&segment, &owned.parent, stick_surface_noise));
 	}
 	nodes
 }
