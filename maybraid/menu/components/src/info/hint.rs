@@ -1,25 +1,19 @@
-//! Hint strip: Maybraid mark plus faint copy, above the description.
-
-use std::f32::consts::TAU;
+//! Hint strip: animated mark plus faint copy.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
-use crate::text_menu::TextMenu;
+use crate::icons::maybraid::AnimatedIcon;
+use crate::single_select::text_menu::TextMenu;
 use crate::theme::{
-	BARLOW_REGULAR, COLUMN_INSET, HINT_BOTTOM, HINT_FONT_SIZE, HINT_ICON_ALPHA_MAX,
-	HINT_ICON_ALPHA_MIN, HINT_ICON_BLINK_SECS, HINT_ICON_GAP, HINT_ICON_SIZE, MAYBRAID_LOGO,
+	BARLOW_REGULAR, COLUMN_INSET, HINT_BOTTOM, HINT_FONT_SIZE, HINT_ICON_GAP, HINT_ICON_SIZE,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 /// Row that holds the blinking mark and the hint [`Text`].
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextMenuHint;
-
-/// Marker on the hint mark [`ImageNode`].
-#[derive(Component, Debug, Default, Clone, Copy)]
-pub struct TextMenuHintIcon;
 
 /// Marker on the hint copy [`Text`]. Screens write the string.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -28,6 +22,10 @@ pub struct TextMenuHintLabel;
 impl TextMenuHint {
 	pub fn scene(initial: impl Into<String>) -> impl Scene + 'static {
 		let initial = initial.into();
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(AnimatedIcon::maybraid_scene(HINT_ICON_SIZE, TEXT_YELLOW)),
+			Box::new(hint_label_scene(initial)),
+		];
 		bsn! {
 			TextMenuHint
 			Node {
@@ -40,33 +38,22 @@ impl TextMenuHint {
 				column_gap: px(HINT_ICON_GAP),
 			}
 			Pickable::IGNORE
-			Children [
-				(
-					TextMenuHintIcon
-					ImageNode {
-						image: MAYBRAID_LOGO,
-						color: TEXT_YELLOW_FAINT,
-					}
-					Node {
-						width: px(HINT_ICON_SIZE),
-						height: px(HINT_ICON_SIZE),
-						flex_shrink: 0.0,
-					}
-					Pickable::IGNORE
-				),
-				(
-					TextMenuHintLabel
-					template_value(Text::new(initial))
-					TextFont {
-						font: FontSourceTemplate::Handle(BARLOW_REGULAR),
-						font_size: px(HINT_FONT_SIZE),
-					}
-					TextColor(TEXT_YELLOW_FAINT)
-					TextLayout::new(Justify::Left, LineBreak::WordBoundary)
-					Pickable::IGNORE
-				),
-			]
+			Children [ {children} ]
 		}
+	}
+}
+
+fn hint_label_scene(initial: String) -> impl Scene {
+	bsn! {
+		TextMenuHintLabel
+		template_value(Text::new(initial))
+		TextFont {
+			font: FontSourceTemplate::Handle(BARLOW_REGULAR),
+			font_size: px(HINT_FONT_SIZE),
+		}
+		TextColor(TEXT_YELLOW_FAINT)
+		TextLayout::new(Justify::Left, LineBreak::WordBoundary)
+		Pickable::IGNORE
 	}
 }
 
@@ -95,15 +82,5 @@ pub fn set_hint_for_menu(
 				return;
 			}
 		}
-	}
-}
-
-/// Pulse the hint mark alpha so it reads as a blinking light.
-pub fn blink_hint_icons(time: Res<Time>, mut icons: Query<&mut ImageNode, With<TextMenuHintIcon>>) {
-	let phase = (time.elapsed_secs() * TAU / HINT_ICON_BLINK_SECS).sin().mul_add(0.5, 0.5);
-	let alpha = HINT_ICON_ALPHA_MIN + (HINT_ICON_ALPHA_MAX - HINT_ICON_ALPHA_MIN) * phase;
-	let color = TEXT_YELLOW.with_alpha(alpha);
-	for mut image in &mut icons {
-		image.color = color;
 	}
 }

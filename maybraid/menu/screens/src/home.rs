@@ -3,11 +3,12 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use game_commands::command::TextEntryFocus;
-use menu_components::{
-	republish_menu_activate, set_description_for_menu, set_hint_for_menu, MenuFocus, TextMenu,
-	TextMenuColumn, TextMenuDescription, TextMenuHint, TextMenuHintLabel, TextMenuInputLock,
-	TextMenuPlugin, TextMenuSystems,
+use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::single_select::text_cursor::TextCursorColumn;
+use menu_components::single_select::{
+	republish_menu_activate, MenuFocus, TextMenu, TextMenuInputLock,
 };
+use menu_components::{TextMenuPlugin, TextMenuSystems};
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -59,29 +60,18 @@ impl HomeMenuChoice {
 			Self::Settings => "Adjust user and system settings to your liking.",
 		}
 	}
-
-	pub fn hint(self) -> &'static str {
-		match self {
-			Self::Discovery => "Enter to roam the world.",
-			Self::Reliquary => "Enter to raid and return.",
-			Self::Characters => "Enter to open your roster.",
-			Self::TrainingGround => "Enter to spar in the arena.",
-			Self::Settings => "Enter to tune the game.",
-		}
-	}
 }
 
 impl HomeScreen {
 	pub fn scene() -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = vec![
 			Box::new(
-				TextMenuColumn::new(
+				TextCursorColumn::new(
 					"Maybraid",
 					HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
 				)
 				.scene(),
 			),
-			Box::new(TextMenuHint::scene(HomeMenuChoice::Discovery.hint())),
 			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovery.description())),
 		];
 		bsn! {
@@ -92,7 +82,6 @@ impl HomeScreen {
 			}
 			Pickable::IGNORE
 			on(sync_home_description)
-			on(sync_home_hint)
 			on(republish_menu_activate::<HomeMenuChoice>)
 			Children [ {children} ]
 		}
@@ -152,30 +141,14 @@ fn sync_home_description(
 	);
 }
 
-fn sync_home_hint(
-	focus: On<MenuFocus<HomeMenuChoice>>,
-	menus: Query<&ChildOf, With<TextMenu>>,
-	children: Query<&Children>,
-	mut lines: Query<&mut Text, With<TextMenuHintLabel>>,
-) {
-	set_hint_for_menu(
-		focus.event().entity,
-		focus.event().choice.hint(),
-		&menus,
-		&children,
-		&mut lines,
-	);
-}
-
 #[cfg(test)]
 mod tests {
 	use super::HomeMenuChoice;
 
 	#[test]
-	fn descriptions_and_hints_are_nonempty() {
+	fn descriptions_are_nonempty() {
 		for choice in HomeMenuChoice::ALL {
 			assert!(!choice.description().is_empty());
-			assert!(!choice.hint().is_empty());
 		}
 	}
 }

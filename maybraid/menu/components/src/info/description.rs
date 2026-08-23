@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
-use crate::text_menu::TextMenu;
+use crate::single_select::text_menu::TextMenu;
 use crate::theme::{
 	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BOTTOM, DESCRIPTION_FONT_SIZE, TEXT_YELLOW_FAINT,
 };

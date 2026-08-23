@@ -89,15 +89,22 @@ pub struct TextMenuItemLabel;
 /// Non-interactive title above the options.
 pub struct TextMenuHeader {
 	pub label: String,
+	pub margin_left: f32,
 }
 
 impl TextMenuHeader {
 	pub fn new(label: impl Into<String>) -> Self {
-		Self { label: label.into() }
+		Self { label: label.into(), margin_left: 0.0 }
+	}
+
+	pub fn with_margin_left(mut self, margin_left: f32) -> Self {
+		self.margin_left = margin_left;
+		self
 	}
 
 	pub fn scene(self) -> impl Scene + 'static {
 		let label = self.label;
+		let margin_left = self.margin_left;
 		bsn! {
 			template_value(Text::new(label))
 			TextFont {
@@ -106,7 +113,7 @@ impl TextMenuHeader {
 			}
 			TextColor(TEXT_YELLOW)
 			Node {
-				margin: UiRect::bottom(px(HEADER_MARGIN_BOTTOM)),
+				margin: UiRect::new(px(margin_left), px(0.0), px(0.0), px(HEADER_MARGIN_BOTTOM)),
 			}
 			Pickable::IGNORE
 		}

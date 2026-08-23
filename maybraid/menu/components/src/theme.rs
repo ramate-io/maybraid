@@ -40,17 +40,23 @@ pub const HINT_ICON_SIZE: f32 = 24.0;
 /// Gap between the hint mark and the hint copy.
 pub const HINT_ICON_GAP: f32 = 10.0;
 
+/// Mark beside a text-cursor row (sits against [`ITEM_FONT_SIZE`] labels).
+pub const CURSOR_ICON_SIZE: f32 = 36.0;
+
+/// Gap between the cursor mark and the row label.
+pub const CURSOR_ICON_GAP: f32 = 12.0;
+
 /// Maybraid mark, under `maybraid/assets`. Author file: `art/iconography/maybraid_logo_icon.blend`.
 pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo_icon.png";
 
-/// Blink period for the hint mark, in seconds.
-pub const HINT_ICON_BLINK_SECS: f32 = 1.2;
+/// Blink period for animated marks, in seconds.
+pub const ICON_BLINK_SECS: f32 = 1.2;
 
-/// Hint-mark alpha at the dim end of the blink.
-pub const HINT_ICON_ALPHA_MIN: f32 = 0.18;
+/// Animated-mark alpha at the dim end of the blink.
+pub const ICON_BLINK_ALPHA_MIN: f32 = 0.18;
 
-/// Hint-mark alpha at the bright end of the blink.
-pub const HINT_ICON_ALPHA_MAX: f32 = 0.92;
+/// Animated-mark alpha at the bright end of the blink.
+pub const ICON_BLINK_ALPHA_MAX: f32 = 0.92;
 
 /// Inset from the bottom of the window for the description strip.
 pub const DESCRIPTION_BOTTOM: f32 = 24.0;
@@ -67,5 +73,5 @@ pub const ITEM_ROW_GAP: f32 = 6.0;
 /// Inset from the left of the window.
 pub const COLUMN_INSET: f32 = 48.0;
 
-/// Menu column sits above the hint strip.
-pub const COLUMN_BOTTOM: f32 = 116.0;
+/// Menu column sits above the description strip.
+pub const COLUMN_BOTTOM: f32 = 88.0;
