@@ -11,7 +11,8 @@ pub mod loading;
 pub use home::{request_show_home, HomeMenuChoice, HomeScreen, HomeScreenPlugin, RequestShowHome};
 pub use loading::{
 	request_loading_explainer, request_loading_progress, request_show_loading,
-	LoadingExplainerText, LoadingProgress, LoadingScreen, LoadingScreenPlugin, RequestShowLoading,
+	LoadingExplainerText, LoadingProgress, LoadingScreen, LoadingScreenPlugin,
+	LoadingScreenSystems, RequestShowLoading,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

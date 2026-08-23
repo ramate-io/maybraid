@@ -56,6 +56,11 @@ pub fn request_loading_explainer(commands: &mut Commands, explainer: impl Into<S
 	commands.write_message(LoadingExplainerText(explainer.into()));
 }
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LoadingScreenSystems {
+	Apply,
+}
+
 pub struct LoadingScreenPlugin;
 
 impl Plugin for LoadingScreenPlugin {
@@ -67,7 +72,9 @@ impl Plugin for LoadingScreenPlugin {
 			.add_message::<LoadingExplainerText>()
 			.add_systems(
 				Update,
-				(apply_show_loading, apply_loading_progress, apply_loading_explainer),
+				(apply_show_loading, apply_loading_progress, apply_loading_explainer)
+					.chain()
+					.in_set(LoadingScreenSystems::Apply),
 			);
 	}
 }

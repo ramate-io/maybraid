@@ -1,5 +1,6 @@
 //! `/show` subcommand: spawn a menu screen.
 
+use crate::loading_demo::LoadingDemo;
 use bevy::prelude::*;
 use clap::Subcommand;
 use menu_screens::{request_show_home, request_show_loading};
@@ -17,7 +18,10 @@ impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		match self {
 			Show::Home => request_show_home(commands),
-			Show::Loading => request_show_loading(commands),
+			Show::Loading => {
+				request_show_loading(commands);
+				commands.insert_resource(LoadingDemo::default());
+			}
 		}
 	}
 }

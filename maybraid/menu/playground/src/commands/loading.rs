@@ -1,5 +1,6 @@
 //! `/loading` subcommand: drive the loading page while it is shown.
 
+use crate::loading_demo::LoadingDemo;
 use bevy::prelude::*;
 use clap::Subcommand;
 use menu_screens::{request_loading_explainer, request_loading_progress};
@@ -18,6 +19,7 @@ pub enum Loading {
 
 impl Loading {
 	pub fn react(self, commands: &mut Commands, console: &mut String) {
+		commands.remove_resource::<LoadingDemo>();
 		match self {
 			Loading::Progress { value } => {
 				request_loading_progress(commands, value);

@@ -86,13 +86,13 @@ pub const COLUMN_INSET: f32 = 48.0;
 pub const COLUMN_BOTTOM: f32 = 88.0;
 
 /// Loading-page Maybraid mark.
-pub const LOADING_ICON_SIZE: f32 = 96.0;
+pub const LOADING_ICON_SIZE: f32 = 192.0;
 
 /// Seconds per revolution of the loading mark.
 pub const LOADING_SPIN_SECS: f32 = 2.5;
 
 /// Width of the loading track.
-pub const LOADING_BAR_WIDTH: f32 = 320.0;
+pub const LOADING_BAR_WIDTH: f32 = 400.0;
 
 /// Thickness of the loading track.
 pub const LOADING_BAR_HEIGHT: f32 = 4.0;

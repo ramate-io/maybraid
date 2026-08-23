@@ -1,6 +1,7 @@
 //! Command-driven playground for Maybraid HUD menu screens.
 
 pub mod commands;
+mod loading_demo;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -9,7 +10,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
-use menu_screens::{HomeMenuChoice, HomeScreenPlugin, LoadingScreenPlugin};
+use menu_screens::{HomeMenuChoice, HomeScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems};
 
 pub struct MenuPlaygroundPlugin;
 
@@ -29,6 +30,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			Update,
 			(
 				echo_home_choice,
+				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
 		);
