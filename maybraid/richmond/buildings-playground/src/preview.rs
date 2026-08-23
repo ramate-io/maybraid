@@ -1066,202 +1066,6 @@ impl PreviewConfig {
 			}
 		}
 	}
-
-	fn subject_bounds(&self) -> Aabb3d {
-		match &self.subject {
-			PreviewSubject::StackedRings { radius, floor_count, floor_height } => {
-				let r = (*radius).max(1e-4);
-				let h = (*floor_count as f32) * (*floor_height).max(1e-4);
-				Aabb3d::from_min_max(Vec3::new(-r, 0.0, -r), Vec3::new(r, h, r))
-			}
-			PreviewSubject::WizardsTower { .. } => {
-				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
-			}
-			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
-			PreviewSubject::BedroomExamples => bedroom_examples_bounds(),
-			PreviewSubject::ResidentialBathroom { extent, .. }
-			| PreviewSubject::ResidentialHalfBathroom { extent, .. } => {
-				Aabb3d::from_min_max(Vec3::ZERO, *extent)
-			}
-			PreviewSubject::ResidentialBathroomExamples => residential_bathroom_examples_bounds(),
-			PreviewSubject::KitchenExamples => kitchen_examples_bounds(),
-			PreviewSubject::DiningRoomExamples => dining_room_examples_bounds(),
-			PreviewSubject::LivingRoomExamples => living_room_examples_bounds(),
-			PreviewSubject::SittingRoomExamples => sitting_room_examples_bounds(),
-			PreviewSubject::StudyExamples => study_examples_bounds(),
-			PreviewSubject::CommercialStall { extent, .. }
-			| PreviewSubject::CommercialStallStrip { extent, .. }
-			| PreviewSubject::BitesStall { extent, .. }
-			| PreviewSubject::BitesSitdownStall { extent, .. }
-			| PreviewSubject::MiniMart { extent, .. }
-			| PreviewSubject::PartsStall { extent, .. }
-			| PreviewSubject::KnickKnackStall { extent, .. }
-			| PreviewSubject::PublicRestroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
-			PreviewSubject::BitesExamples => bites_examples_bounds(),
-			PreviewSubject::MiniMartExamples => mini_mart_examples_bounds(),
-			PreviewSubject::PartsExamples => parts_examples_bounds(),
-			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
-			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
-			PreviewSubject::IApartmentFloorPlanExamples => i_apartment_floor_plan_examples_bounds(),
-			PreviewSubject::IApartmentFullStoreyExamples => {
-				i_apartment_full_storey_examples_bounds()
-			}
-			PreviewSubject::LesHallesFloorPlanExamples => les_halles_floor_plan_examples_bounds(),
-			PreviewSubject::LesHallesLivableFullStoreyExamples => {
-				les_halles_livable_full_storey_examples_bounds()
-			}
-			PreviewSubject::LivableApartmentsExamples => livable_apartments_examples_bounds(),
-			PreviewSubject::LivableApartmentExamples => livable_apartment_examples_bounds(),
-			PreviewSubject::LivableRectanglesExamples => livable_rectangles_examples_bounds(),
-			PreviewSubject::LesHallesFloorPlan { extent, .. }
-			| PreviewSubject::LesHallesFullStorey { extent, .. }
-			| PreviewSubject::LesHallesLivableFullStorey { extent, .. }
-			| PreviewSubject::MixedUseLesHallesMonotower { extent, .. }
-			| PreviewSubject::IApartmentFloorPlan { extent, .. }
-			| PreviewSubject::IApartmentFullStorey { extent, .. }
-			| PreviewSubject::HallsToShafts { extent, .. } => les_halles_confines_bounds(*extent),
-			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
-				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
-				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
-				let len = length.unwrap_or(0.0);
-				let x_max = (left_w + len + right_w).max(1e-4);
-				let run = (*run).max(1e-4);
-				let rise = (*rise).max(0.0);
-				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -run), Vec3::new(x_max, rise + 0.2, 0.0))
-			}
-			PreviewSubject::TessellatedTriangle { a, b, c, .. } => {
-				let min_x = a.x.min(b.x).min(c.x) - 0.2;
-				let max_x = a.x.max(b.x).max(c.x) + 0.2;
-				let min_z = a.y.min(b.y).min(c.y) - 0.2;
-				let max_z = a.y.max(b.y).max(c.y) + 0.2;
-				Aabb3d::from_min_max(Vec3::new(min_x, -0.2, min_z), Vec3::new(max_x, 0.2, max_z))
-			}
-			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
-				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
-				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
-				Aabb3d::from_min_max(min, max)
-			}
-			PreviewSubject::QuadPanel { a0, a1, b0, b1, .. }
-			| PreviewSubject::FittedRectangle { a0, a1, b0, b1, .. }
-			| PreviewSubject::ClippedFittedRectangle { a0, a1, b0, b1, .. } => {
-				let min = a0.min(*a1).min(*b0).min(*b1) - Vec3::splat(0.2);
-				let max = a0.max(*a1).max(*b0).max(*b1) + Vec3::splat(0.2);
-				Aabb3d::from_min_max(min, max)
-			}
-			PreviewSubject::Rectangle { origin, edge, height, .. }
-			| PreviewSubject::ClippedRectangle { origin, edge, height, .. } => {
-				let end = *origin + *edge;
-				let up = Vec3::Y * (*height);
-				let min = origin.min(end).min(*origin + up).min(end + up) - Vec3::splat(0.2);
-				let max = origin.max(end).max(*origin + up).max(end + up) + Vec3::splat(0.2);
-				Aabb3d::from_min_max(min, max)
-			}
-			PreviewSubject::ClippedFittedRectangularStrip { .. } => {
-				Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -0.5), Vec3::new(3.5, 3.0, 7.0))
-			}
-			PreviewSubject::RectangularNTube { .. } => {
-				Aabb3d::from_min_max(Vec3::new(-2.0, -0.5, -0.5), Vec3::new(2.0, 2.5, 7.0))
-			}
-			PreviewSubject::Polyline => {
-				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
-			}
-			PreviewSubject::NoisyRectangularWall { distance, .. } => {
-				let r = (*distance).max(4.0);
-				Aabb3d::from_min_max(Vec3::new(-r, -r * 0.5, -r), Vec3::new(r, r * 0.5 + 3.0, r))
-			}
-			PreviewSubject::Tube { .. } => {
-				// Demo polyline bends +X/+Y along +Z with ~1.3 half-widths / ~2.4 height.
-				Aabb3d::from_min_max(Vec3::new(-2.0, -0.5, -0.5), Vec3::new(7.0, 4.0, 9.0))
-			}
-			PreviewSubject::ConnectingHall => {
-				Aabb3d::from_min_max(Vec3::new(-5.0, -0.5, -5.0), Vec3::new(5.0, 4.0, 5.0))
-			}
-			PreviewSubject::ArcFloor { radius, storey_height, .. } => {
-				let r = radius.max(1e-4) + 0.5;
-				let h = storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
-			}
-			PreviewSubject::ArcTower { radius, floor_count, storey_height, .. } => {
-				let r = radius.max(1e-4) + 0.5;
-				let h = (*floor_count as f32) * storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
-			}
-			PreviewSubject::ConnectingShells => {
-				Aabb3d::from_min_max(Vec3::new(-19.0, -0.2, -5.0), Vec3::new(5.0, 10.0, 5.0))
-			}
-			PreviewSubject::Trazaloid {
-				footprint_x,
-				footprint_z,
-				lower_height,
-				upper_height,
-				band_vertical_offset,
-				..
-			} => {
-				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
-				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
-				let h = lower_height + band_vertical_offset + upper_height + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
-			}
-			PreviewSubject::PitchedRectangularRoof {
-				footprint_x,
-				footprint_z,
-				ridge_height,
-				..
-			} => {
-				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
-				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
-				let h = ridge_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
-			}
-			PreviewSubject::RectangularPitchedRoofComplex { .. } => {
-				Aabb3d::from_min_max(Vec3::new(-10.0, -0.2, -10.0), Vec3::new(10.0, 6.0, 10.0))
-			}
-			PreviewSubject::RectFloor { footprint_x, footprint_z, storey_height, .. }
-			| PreviewSubject::RoundedRectFloor {
-				footprint_x, footprint_z, storey_height, ..
-			} => {
-				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
-				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
-				let h = storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
-			}
-			PreviewSubject::IFloor {
-				central_x,
-				central_z,
-				storey_height,
-				top_left,
-				top_right,
-				bottom_left,
-				bottom_right,
-				..
-			} => {
-				let half_w = central_x.max(1e-4) * 0.5;
-				let half_d = central_z.max(1e-4) * 0.5;
-				let left = top_left.unwrap_or(0.0).max(bottom_left.unwrap_or(0.0));
-				let right = top_right.unwrap_or(0.0).max(bottom_right.unwrap_or(0.0));
-				let flange_t = central_x.max(1e-4);
-				let hx = half_w + left.max(right) + 0.5;
-				let hz = half_d
-					+ if top_left.is_some() || top_right.is_some() { flange_t } else { 0.0 }
-					+ if bottom_left.is_some() || bottom_right.is_some() { flange_t } else { 0.0 }
-					+ 0.5;
-				let h = storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
-			}
-			PreviewSubject::RectRingFloor { outer_x, outer_z, storey_height, .. } => {
-				let hx = outer_x.max(1e-4) * 0.5 + 0.5;
-				let hz = outer_z.max(1e-4) * 0.5 + 0.5;
-				let h = storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
-			}
-			PreviewSubject::CircRingFloor { outer_radius, storey_height, .. } => {
-				let r = outer_radius.max(1e-4) + 0.5;
-				let h = storey_height.max(1e-4) + 0.5;
-				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
-			}
-			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
-		}
-	}
 }
 
 /// Authored preview payload kept across LOD flips (stable noise / geometry).
@@ -2123,21 +1927,6 @@ fn gallery_grid_offset(
 	Vec3::new(x, 0.0, z)
 }
 
-fn gallery_grid_bounds(
-	extent_at: impl Fn(usize) -> Vec3,
-	len: usize,
-	cols: usize,
-	gap: f32,
-) -> Aabb3d {
-	let mut max = Vec3::ZERO;
-	for i in 0..len {
-		let extent = extent_at(i);
-		let offset = gallery_grid_offset(&extent_at, len, i, cols, gap);
-		max = max.max(offset + extent);
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
-}
-
 /// Fit each `(extent, seed, door_side)` cell; collect successes + passage gizmos.
 fn build_fit_gallery<T>(
 	label: &str,
@@ -2181,11 +1970,6 @@ fn bites_examples_specs() -> Vec<(bool, Vec3, i32, BitesDoorSide)> {
 	]
 }
 
-fn bites_examples_bounds() -> Aabb3d {
-	let specs = bites_examples_specs();
-	gallery_grid_bounds(|i| specs[i].1, specs.len(), 5, STALL_GALLERY_GAP)
-}
-
 fn mini_mart_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 	vec![
 		(Vec3::new(14.0, 3.2, 12.0), 11, BitesDoorSide::South),
@@ -2197,11 +1981,6 @@ fn mini_mart_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 	]
 }
 
-fn mini_mart_examples_bounds() -> Aabb3d {
-	let specs = mini_mart_examples_specs();
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
-}
-
 fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 	vec![
 		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
@@ -2211,11 +1990,6 @@ fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
 		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::South),
 	]
-}
-
-fn parts_examples_bounds() -> Aabb3d {
-	let specs = parts_examples_specs();
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
@@ -2248,11 +2022,6 @@ fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool, bool)> {
 		(Vec3::new(12.0, 3.2, 12.0), 17, 1.4, 0.45, true, true),
 		(Vec3::new(14.0, 3.2, 11.0), 33, 1.45, 0.55, true, false),
 	]
-}
-
-fn bedroom_examples_bounds() -> Aabb3d {
-	let specs = bedroom_examples_specs();
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
@@ -2306,10 +2075,6 @@ fn build_livable_quarters_examples<T, P>(
 	(cells, passages)
 }
 
-fn livable_quarters_examples_bounds(specs: &[LivableQuartersExampleSpec], cols: usize) -> Aabb3d {
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), cols, STALL_GALLERY_GAP)
-}
-
 fn kitchen_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 	vec![
 		(Vec3::new(4.0, 2.8, 3.0), 7, 1.1, 0.4, true),
@@ -2319,10 +2084,6 @@ fn kitchen_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 		(Vec3::new(5.5, 3.0, 5.0), 55, 1.35, 0.42, true),
 		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.35, true),
 	]
-}
-
-fn kitchen_examples_bounds() -> Aabb3d {
-	livable_quarters_examples_bounds(&kitchen_examples_specs(), 3)
 }
 
 fn build_kitchen_examples() -> (Vec<GalleryExampleCell<Kitchen>>, Vec<(Aabb3d, Vec3)>) {
@@ -2370,10 +2131,6 @@ fn dining_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 	]
 }
 
-fn dining_room_examples_bounds() -> Aabb3d {
-	livable_quarters_examples_bounds(&dining_room_examples_specs(), 3)
-}
-
 fn build_dining_room_examples() -> (Vec<GalleryExampleCell<DiningRoom>>, Vec<(Aabb3d, Vec3)>) {
 	build_livable_quarters_examples(
 		"dining-room-examples",
@@ -2393,10 +2150,6 @@ fn living_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 		(Vec3::new(8.0, 3.0, 6.0), 55, 1.35, 0.35, true),
 		(Vec3::new(9.0, 3.0, 7.0), 99, 1.4, 0.4, true),
 	]
-}
-
-fn living_room_examples_bounds() -> Aabb3d {
-	livable_quarters_examples_bounds(&living_room_examples_specs(), 3)
 }
 
 fn build_living_room_examples() -> (Vec<GalleryExampleCell<LivingRoom>>, Vec<(Aabb3d, Vec3)>) {
@@ -2420,10 +2173,6 @@ fn sitting_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 	]
 }
 
-fn sitting_room_examples_bounds() -> Aabb3d {
-	livable_quarters_examples_bounds(&sitting_room_examples_specs(), 3)
-}
-
 fn build_sitting_room_examples() -> (Vec<GalleryExampleCell<SittingRoom>>, Vec<(Aabb3d, Vec3)>) {
 	build_livable_quarters_examples(
 		"sitting-room-examples",
@@ -2443,10 +2192,6 @@ fn study_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 		(Vec3::new(6.0, 3.0, 5.0), 55, 1.35, 0.35, true),
 		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.42, true),
 	]
-}
-
-fn study_examples_bounds() -> Aabb3d {
-	livable_quarters_examples_bounds(&study_examples_specs(), 3)
 }
 
 fn build_study_examples() -> (Vec<GalleryExampleCell<Study>>, Vec<(Aabb3d, Vec3)>) {
@@ -2471,11 +2216,6 @@ fn residential_bathroom_examples_specs() -> Vec<(bool, Vec3, i32, bool)> {
 		(true, Vec3::new(2.0, 2.8, 1.6), 42, true),
 		(true, Vec3::new(1.9, 2.8, 1.7), 55, true),
 	]
-}
-
-fn residential_bathroom_examples_bounds() -> Aabb3d {
-	let specs = residential_bathroom_examples_specs();
-	gallery_grid_bounds(|i| specs[i].1, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_residential_bathroom_examples(
@@ -2520,11 +2260,6 @@ fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 	]
 }
 
-fn knick_knack_examples_bounds() -> Aabb3d {
-	let specs = knick_knack_examples_specs();
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
-}
-
 fn build_knick_knack_examples() -> (Vec<KnickKnackExampleCell>, Vec<(Aabb3d, Vec3)>) {
 	let (cells, passages) = build_fit_gallery(
 		"knick-knack-examples",
@@ -2550,11 +2285,6 @@ fn public_restroom_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
 		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::West),
 	]
-}
-
-fn public_restroom_examples_bounds() -> Aabb3d {
-	let specs = public_restroom_examples_specs();
-	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_public_restroom_examples() -> (Vec<PublicRestroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
@@ -2798,19 +2528,6 @@ fn les_halles_floor_plan_examples_specs() -> Vec<(Vec3, i32, bool, Option<LesHal
 	]
 }
 
-fn les_halles_floor_plan_examples_bounds() -> Aabb3d {
-	let cells = build_les_halles_floor_plan_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| les_halles_plan_footprint_aabb(&cells[i].plan).1,
-		cells.len(),
-		LES_HALLES_FLOOR_PLAN_GALLERY_COLS,
-		LES_HALLES_FLOOR_PLAN_GALLERY_GAP,
-	)
-}
-
 fn build_les_halles_floor_plan_examples() -> Vec<LesHallesFloorPlanExampleCell> {
 	let specs = les_halles_floor_plan_examples_specs();
 	let mut fitted = Vec::new();
@@ -2885,19 +2602,6 @@ fn les_halles_plan_footprint_aabb(plan: &LesHallesFloorPlan) -> (Vec3, Vec3) {
 	let extent =
 		Vec3::new(plan.outer.x.max(1.0), plan.storey_height.max(1.0), plan.outer.y.max(1.0));
 	(min, extent)
-}
-
-fn les_halles_livable_full_storey_examples_bounds() -> Aabb3d {
-	let cells = build_les_halles_livable_full_storey_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| les_halles_plan_footprint_aabb(&cells[i].storey.floor_plan).1,
-		cells.len(),
-		LES_HALLES_LIVABLE_GALLERY_COLS,
-		LES_HALLES_LIVABLE_GALLERY_GAP,
-	)
 }
 
 fn build_les_halles_livable_full_storey_examples() -> Vec<LesHallesLivableFullStoreyExampleCell> {
@@ -3026,19 +2730,6 @@ fn i_apartment_plan_footprint_aabb(plan: &IApartmentFloorPlan) -> (Vec3, Vec3) {
 	(min, extent)
 }
 
-fn i_apartment_floor_plan_examples_bounds() -> Aabb3d {
-	let cells = build_i_apartment_floor_plan_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| i_apartment_plan_footprint_aabb(&cells[i].plan).1,
-		cells.len(),
-		I_APARTMENT_GALLERY_COLS,
-		I_APARTMENT_GALLERY_GAP,
-	)
-}
-
 fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell> {
 	let specs = i_apartment_floor_plan_examples_specs();
 	let mut fitted = Vec::new();
@@ -3077,19 +2768,6 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 			IApartmentFloorPlanExampleCell { offset, plan }
 		})
 		.collect()
-}
-
-fn i_apartment_full_storey_examples_bounds() -> Aabb3d {
-	let cells = build_i_apartment_full_storey_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| i_apartment_plan_footprint_aabb(&cells[i].storey.floor_plan).1,
-		cells.len(),
-		I_APARTMENT_GALLERY_COLS,
-		I_APARTMENT_GALLERY_GAP,
-	)
 }
 
 fn build_i_apartment_full_storey_examples() -> Vec<IApartmentFullStoreyExampleCell> {
@@ -3157,19 +2835,6 @@ fn livable_apartments_host_footprint(block: &LivableApartments) -> (Vec3, Vec3) 
 	let min = Vec3::from(block.confines.bounds.min);
 	let max = Vec3::from(block.confines.bounds.max);
 	(min, max - min)
-}
-
-fn livable_apartments_examples_bounds() -> Aabb3d {
-	let cells = build_livable_apartments_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| livable_apartments_host_footprint(&cells[i].block).1,
-		cells.len(),
-		LIVABLE_APARTMENTS_GALLERY_COLS,
-		LIVABLE_APARTMENTS_GALLERY_GAP,
-	)
 }
 
 fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
@@ -3318,19 +2983,6 @@ fn livable_apartment_host_footprint(apt: &LivableApartment) -> (Vec3, Vec3) {
 		return (Vec3::ZERO, Vec3::splat(1.0));
 	}
 	(min, max - min)
-}
-
-fn livable_apartment_examples_bounds() -> Aabb3d {
-	let cells = build_livable_apartment_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| livable_apartment_host_footprint(&cells[i].apartment).1,
-		cells.len(),
-		LIVABLE_APARTMENT_GALLERY_COLS,
-		LIVABLE_APARTMENT_GALLERY_GAP,
-	)
 }
 
 fn demo_multi_confines_with_south_door(parts: &[(Vec3, Vec3)], door_part: usize) -> MultiConfines {
@@ -3600,26 +3252,6 @@ fn livable_rectangles_examples_specs() -> Vec<LivableRectangleExampleSpec> {
 			program: &[Eating, Living, Sitting],
 		},
 	]
-}
-
-fn livable_rectangles_examples_bounds() -> Aabb3d {
-	let cells = build_livable_rectangles_examples();
-	if cells.is_empty() {
-		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
-	}
-	gallery_grid_bounds(
-		|i| {
-			let e = cells[i].area.confines.footprint();
-			let h = {
-				let b = cells[i].area.confines.bounds;
-				Vec3::from(b.max).y - Vec3::from(b.min).y
-			};
-			Vec3::new(e.x, h, e.y)
-		},
-		cells.len(),
-		LIVABLE_RECT_GALLERY_COLS,
-		LIVABLE_RECT_GALLERY_GAP,
-	)
 }
 
 fn build_livable_rectangles_examples() -> Vec<LivableRectangleExampleCell> {
