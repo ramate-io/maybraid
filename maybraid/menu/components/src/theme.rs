@@ -40,8 +40,8 @@ pub const HINT_ICON_SIZE: f32 = 24.0;
 /// Gap between the hint mark and the hint copy.
 pub const HINT_ICON_GAP: f32 = 10.0;
 
-/// Maybraid mark, under `maybraid/assets`. Author file: `art/iconography/maybraid_logo.png`.
-pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo.png";
+/// Maybraid mark, under `maybraid/assets`. Author file: `art/iconography/maybraid_logo_icon.blend`.
+pub const MAYBRAID_LOGO: &str = "iconography/maybraid_logo_icon.png";
 
 /// Blink period for the hint mark, in seconds.
 pub const HINT_ICON_BLINK_SECS: f32 = 1.2;

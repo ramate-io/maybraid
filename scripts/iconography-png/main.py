@@ -6,23 +6,27 @@ Invoked headlessly:
 
 Batch wrapper: ``scripts/iconography-png/render.sh``.
 
-Author icons in the XY plane inside a 2×2 square (X,Y ∈ [−1, +1]). This
+Author icons in the XZ plane inside a 2×2 square (X,Z ∈ [−1, +1]). This
 script frames a 2.2×2.2 square so ±1 sits inside a 10% antialias margin:
 
-    Camera: orthographic, scale 2.2, location (0, 0, 10), rotation (0, 0, 0)
+    Camera: orthographic, scale 2.2, location (0, −10, 0), rotation (90°, 0, 0)
+    View: from −Y toward the origin (Blender front), +Z up
     Output: 512 × 512 PNG with a transparent film
 
 Requires Blender's bundled Python (``bpy``).
 """
 
+import math
 import os
 import sys
 
 RESOLUTION = 512
 ORTHO_SCALE = 2.2
 CAMERA_NAME = "IconRenderCamera"
-CAMERA_LOCATION = (0.0, 0.0, 10.0)
-CAMERA_ROTATION = (0.0, 0.0, 0.0)
+# Blender cameras look along local −Z. At (0, −10, 0) with +90° around X,
+# that look axis is world +Y, so the camera views the XZ icon from −Y.
+CAMERA_LOCATION = (0.0, -10.0, 0.0)
+CAMERA_ROTATION = (math.radians(90.0), 0.0, 0.0)
 
 
 def _output_path() -> str:

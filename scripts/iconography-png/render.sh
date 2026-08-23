@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Render each .blend under maybraid/art/iconography to a matching .png.
+# Render each .blend under maybraid/art/iconography to a matching assets PNG.
 #
 #   scripts/iconography-png/render.sh
 #
-# Icons are authored in XY, X/Y ∈ [−1, +1]. The render uses an orthographic
-# camera with scale 2.2 (10% margin) at (0, 0, 10), 512×512, transparent PNG.
+#   maybraid/art/iconography/foo.blend → maybraid/assets/iconography/foo.png
+#
+# Icons are authored in XZ, X/Z ∈ [−1, +1]. The render uses an orthographic
+# camera with scale 2.2 (10% margin) at (0, −10, 0), rotation (90°, 0, 0),
+# looking from −Y, 512×512, transparent PNG.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RENDER_SCRIPT="$REPO_ROOT/scripts/iconography-png/main.py"
 ICON_DIR="$REPO_ROOT/maybraid/art/iconography"
+ASSETS_DIR="$REPO_ROOT/maybraid/assets/iconography"
 
 if ! command -v blender >/dev/null 2>&1; then
     echo "blender command not found." >&2
@@ -34,7 +38,9 @@ found=0
 while IFS= read -r blend; do
     [ -z "$blend" ] && continue
     found=1
-    out="${blend%.blend}.png"
+    rel="${blend#"$ICON_DIR"/}"
+    out="$ASSETS_DIR/${rel%.blend}.png"
+    mkdir -p "$(dirname "$out")"
     echo "Rendering ${blend} → ${out}"
     if ! blender --background "$blend" --python "$RENDER_SCRIPT" -- "$out"; then
         echo "Failed to render ${blend}" >&2
