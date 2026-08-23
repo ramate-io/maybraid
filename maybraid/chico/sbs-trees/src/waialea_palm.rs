@@ -3,6 +3,10 @@
 //! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
 //! implements [`VegetationComponents`]: trunk sticks; per-frond collections at High/Medium;
 //! dual layered-ball crown proxy at Low/UltraLow.
+//!
+//! [`WaialeaPalm::unit_from_num`] / [`WaialeaPalmParams::into_unit_from_num`] normalize
+//! the trunk to unit height and key trunk noise by a variant index. Emission folds
+//! trunk sticks into a collection; frond collections stay separate.
 
 mod crown;
 pub mod render_item_plugin;
@@ -25,6 +29,7 @@ use crate::palm_tree::{
 	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
 	trunk_stick_nodes, world_space_frond_shape,
 };
+use crate::storybook_tree::merge_kit_sticks;
 use crown::frond_shape_for_ring;
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
@@ -50,6 +55,24 @@ impl WaialeaPalmParams {
 	pub fn build(&self) -> WaialeaPalm {
 		WaialeaPalm::from_params(self)
 	}
+
+	/// Unit-height palm whose trunk noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut geometry = self.geometry;
+		let size = geometry.height().max(1e-4);
+		let inv = 1.0 / size;
+		geometry.scale.stalk_height = 1.0;
+		if let Some(radius) = geometry.scale.stalk_base_radius {
+			geometry.scale.stalk_base_radius = Some((radius * inv).max(1e-6));
+		}
+		geometry.trunk_noise.seed = num as i32;
+		(Self { geometry }, size)
+	}
 }
 
 /// Built Waialea Palm: geometry plus a single grown arched trunk chain.
@@ -62,6 +85,11 @@ pub struct WaialeaPalm {
 impl WaialeaPalm {
 	pub fn from_params(params: &WaialeaPalmParams) -> Self {
 		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
+	}
+
+	/// Unit-height palm whose trunk noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&WaialeaPalmParams::unit_from_num(num))
 	}
 
 	fn foliage_seed(&self) -> i32 {
@@ -92,8 +120,11 @@ impl WaialeaPalm {
 
 impl VegetationComponents for WaialeaPalm {
 	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-		Layers::from_free(trunk_stick_nodes(&self.chain))
+		let nodes: Vec<_> = trunk_stick_nodes(&self.chain)
+			.into_iter()
 			.map(|n| n.with_material(chico_stick_material_ref()))
+			.collect();
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -148,6 +179,44 @@ mod tests {
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), 2);
 		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
+	}
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = WaialeaPalm::unit_from_num(3);
+		let b = WaialeaPalm::unit_from_num(3);
+		let c = WaialeaPalm::unit_from_num(4);
+		assert!((a.geometry.height() - 1.0).abs() < 1e-5);
+		assert_eq!(a.geometry.trunk_noise.seed, 3);
+		assert_eq!(a.geometry.trunk_noise.seed, b.geometry.trunk_noise.seed);
+		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
+		assert_ne!(a.geometry.trunk_noise.seed, c.geometry.trunk_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = WaialeaPalmParams::default();
+		params.geometry.scale.stalk_height = 8.0;
+		params.geometry.scale.stalk_base_radius = Some(0.4);
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 8.0).abs() < 1e-5);
+		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
+		assert!((unit.geometry.scale.stalk_base_radius.unwrap() - 0.05).abs() < 1e-5);
+		assert_eq!(unit.geometry.trunk_noise.seed, 7);
+		Ok(())
+	}
+
+	#[test]
+	fn high_emits_merged_stick_collection() -> Result<()> {
+		let tree = WaialeaPalm::unit_from_num(1);
+		let sticks = tree.stick_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(sticks.len(), 1);
+		assert!(sticks[0].collection.is_some());
+		let foliage = tree.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!foliage.is_empty());
+		assert!(foliage.iter().all(|n| n.geometry.is_frond_collection()));
 		Ok(())
 	}
 }

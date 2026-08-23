@@ -4,6 +4,10 @@
 //! [`VegetationComponents`]: per-frond collections at High/Medium; dual layered-ball proxy
 //! at Low/UltraLow (no sticks).
 //!
+//! [`PalmBush::unit_from_num`] / [`PalmBushParams::into_unit_from_num`] normalize to
+//! unit height and key foliage noise by a variant index. No sticks; frond collections
+//! stay separate nodes.
+//!
 //! Standalone unit crowns (grove Placement scale) prefer
 //! [`PalmCrownParams::unit_detail_for_height_from_num`](crate::PalmCrownParams::unit_detail_for_height_from_num).
 //! [`PalmBushParams::unit_detail_from_num`] is a thin SBS bridge that keys foliage noise and
@@ -68,6 +72,20 @@ impl PalmBushParams {
 		params
 	}
 
+	/// Unit-height bush whose foliage noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut geometry = self.geometry;
+		let size = geometry.height().max(1e-4);
+		geometry.scale.height = 1.0;
+		geometry.foliage_noise.seed = num as i32;
+		(Self { geometry }, size)
+	}
+
 	pub fn build(&self) -> PalmBush {
 		PalmBush::from_params(self)
 	}
@@ -82,6 +100,11 @@ pub struct PalmBush {
 impl PalmBush {
 	pub fn from_params(params: &PalmBushParams) -> Self {
 		Self { geometry: params.geometry.clone() }
+	}
+
+	/// Unit-height bush whose foliage noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&PalmBushParams::unit_from_num(num))
 	}
 
 	fn foliage_seed(&self) -> i32 {
@@ -165,6 +188,29 @@ mod tests {
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), 2);
 		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
+	}
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = PalmBush::unit_from_num(3);
+		let b = PalmBush::unit_from_num(3);
+		let c = PalmBush::unit_from_num(4);
+		assert!((a.geometry.height() - 1.0).abs() < 1e-5);
+		assert_eq!(a.geometry.foliage_noise.seed, 3);
+		assert_eq!(a.geometry.foliage_noise.seed, b.geometry.foliage_noise.seed);
+		assert_ne!(a.geometry.foliage_noise.seed, c.geometry.foliage_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = PalmBushParams::default();
+		params.geometry.scale.height = 2.5;
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 2.5).abs() < 1e-5);
+		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
+		assert_eq!(unit.geometry.foliage_noise.seed, 7);
 		Ok(())
 	}
 }
