@@ -3,19 +3,25 @@
 pub mod character;
 pub mod commands;
 mod loading_demo;
+mod preview;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
+use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
+use crozon_character_playground::camera;
 use crozon_character_ui_menus::MenuEvent;
+use crozon_characters::CharacterHostsPlugin;
 use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
+use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use menu_screens::{HomeMenuChoice, HomeScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems};
 
-use crate::character::{CharacterMenuState, CharacterScreenPlugin};
+use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
+use crate::preview::CharacterPreviewPlugin;
 
 pub struct MenuPlaygroundPlugin;
 
@@ -29,11 +35,26 @@ impl Plugin for MenuPlaygroundPlugin {
 					..default()
 				}),
 		)
-		.add_plugins((HomeScreenPlugin, LoadingScreenPlugin, CharacterScreenPlugin))
-		.add_systems(Startup, setup_camera)
+		.add_plugins(CharacterHostsPlugin)
+		.add_plugins(CameraLookPlugin::new(CameraLookConfig {
+			enabled_at_start: false,
+			toggle_keys: Vec::new(),
+			..CameraLookConfig::default()
+		}))
+		.add_plugins((
+			HomeScreenPlugin,
+			LoadingScreenPlugin,
+			CharacterScreenPlugin,
+			CharacterPreviewPlugin,
+		))
+		.add_systems(
+			Startup,
+			(camera::setup_camera, add_lod_viewer_to_camera.after(camera::setup_camera)),
+		)
 		.add_systems(
 			Update,
 			(
+				camera::camera_controller.run_if(character_screen_closed),
 				echo_home_choice,
 				echo_character_menu,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
@@ -43,11 +64,17 @@ impl Plugin for MenuPlaygroundPlugin {
 	}
 }
 
-fn setup_camera(mut commands: Commands) {
-	commands.spawn((
-		Camera3d::default(),
-		Transform::from_xyz(0.0, 1.6, 3.5).looking_at(Vec3::new(0.0, 1.0, 0.0), Vec3::Y),
-	));
+fn add_lod_viewer_to_camera(
+	mut commands: Commands,
+	cameras: Query<Entity, (With<Camera3d>, Without<LodViewer>)>,
+) {
+	for entity in &cameras {
+		commands.entity(entity).insert(LodViewer);
+	}
+}
+
+fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
+	screens.is_empty()
 }
 
 fn echo_home_choice(

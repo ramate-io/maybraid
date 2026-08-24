@@ -4347,10 +4347,14 @@ name = "menu-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "camera-controls",
  "character-ui-menu",
  "clap",
+ "crozon-character-playground",
  "crozon-character-ui-menus",
+ "crozon-characters",
  "game-commands",
+ "lod",
  "maybraid-character-ui-menu-renderer",
  "menu-components",
  "menu-screens",
