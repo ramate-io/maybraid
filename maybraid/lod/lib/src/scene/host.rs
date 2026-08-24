@@ -197,6 +197,114 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 	}
 }
 
+/// Host currently shows more than one ready level root.
+///
+/// Inserted when a newly revealed ready desired overlaps last frame's shown
+/// band so extract still has meshes. [`settle_lod_level_root_visibility`] runs
+/// at the start of the next frame and hides extras.
+#[derive(Debug, Clone, Copy, Default, Component)]
+pub struct LodLevelRootOverlap;
+
+/// Whether this level root should be Inherited given desired + overlap.
+pub(crate) fn lod_root_should_show(
+	root_level: LodSceneLevel,
+	desired: LodSceneLevel,
+	is_pending: bool,
+	has_ready_desired: bool,
+	has_ready_any: bool,
+	warm_hold_level: Option<LodSceneLevel>,
+	desired_was_shown: bool,
+	this_was_shown_ready: bool,
+) -> bool {
+	if root_level == desired && !is_pending {
+		return true;
+	}
+	if root_level == desired && is_pending && !has_ready_any {
+		return true;
+	}
+	if !is_pending && warm_hold_level == Some(root_level) {
+		return true;
+	}
+	// One-frame overlap: first reveal of a ready desired keeps the previously
+	// shown ready band so extract still has last frame's meshes.
+	if has_ready_desired && !desired_was_shown && !is_pending && this_was_shown_ready {
+		return true;
+	}
+	false
+}
+
+fn apply_lod_level_root_visibility(
+	desired: LodSceneLevel,
+	child_ids: &[Entity],
+	root_keys: &Query<&LodLevelRoot>,
+	pending: &Query<(), With<crate::LodLevelRootPending>>,
+	wants_cull: &Query<(), With<crate::LodCullInFlight>>,
+	visibilities: &mut Query<&mut Visibility>,
+) -> bool {
+	let mut has_ready_desired = false;
+	let mut ready_levels: Vec<LodSceneLevel> = Vec::new();
+	let mut desired_was_shown = false;
+	let mut shown_ready: Vec<Entity> = Vec::new();
+	for &child in child_ids {
+		let Ok(root) = root_keys.get(child) else {
+			continue;
+		};
+		if wants_cull.contains(child) {
+			continue;
+		}
+		let is_pending = pending.contains(child);
+		if !is_pending {
+			ready_levels.push(root.0);
+			if root.0 == desired {
+				has_ready_desired = true;
+			}
+			if visibilities.get(child).is_ok_and(|v| lod_root_is_shown(*v)) {
+				shown_ready.push(child);
+				if root.0 == desired {
+					desired_was_shown = true;
+				}
+			}
+		}
+	}
+
+	let warm_hold_level = if !has_ready_desired {
+		closest_available_lod_level(desired, ready_levels.iter().copied())
+	} else {
+		None
+	};
+	let has_ready_any = !ready_levels.is_empty();
+
+	let mut shown_ready_after = 0usize;
+	for &child in child_ids {
+		let Ok(root) = root_keys.get(child) else {
+			continue;
+		};
+		let Ok(mut visibility) = visibilities.get_mut(child) else {
+			continue;
+		};
+		if wants_cull.contains(child) {
+			*visibility = Visibility::Hidden;
+			continue;
+		}
+		let is_pending = pending.contains(child);
+		let show = lod_root_should_show(
+			root.0,
+			desired,
+			is_pending,
+			has_ready_desired,
+			has_ready_any,
+			warm_hold_level,
+			desired_was_shown,
+			shown_ready.contains(&child),
+		);
+		*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
+		if show && !is_pending {
+			shown_ready_after += 1;
+		}
+	}
+	shown_ready_after > 1
+}
+
 /// After [`LodSceneLevel`] changes on a host: request missing roots and flip visibility.
 ///
 /// Flow per host:
@@ -207,11 +315,15 @@ pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scen
 ///    - desired not ready yet + **warm** (some other ready root exists) → show the
 ///      single ready root [`closest_available_lod_level`] to desired (not every warm
 ///      root), including the frame *before* fulfill creates the pending desired root
+///    - first frame a ready desired is revealed → also keep the previously shown
+///      ready band ([`LodLevelRootOverlap`]); next frame
+///      [`settle_lod_level_root_visibility`] hides extras
 /// 3. If no matching root exists yet, insert [`LodLevelSpawnRequest`].
 ///
 /// Pending roots ([`crate::LodLevelRootPending`]) count as present for spawn
 /// requests. Roots with [`crate::LodCullInFlight`] count as absent (dying).
-/// Warm-swap reveal is owned by chunk fulfill completion.
+/// Warm-swap reveal is owned by chunk fulfill completion (which also leaves the
+/// prior ready band shown for one frame).
 pub fn sync_lod_level_roots(
 	mut commands: Commands,
 	hosts: Query<
@@ -244,8 +356,6 @@ pub fn sync_lod_level_roots(
 
 		let child_ids: Vec<Entity> = root_children.iter().collect();
 		let mut found_desired = false;
-		let mut has_ready_desired = false;
-		let mut ready_levels: Vec<LodSceneLevel> = Vec::new();
 		for &child in &child_ids {
 			let Ok(root) = root_keys.get(child) else {
 				continue;
@@ -253,53 +363,22 @@ pub fn sync_lod_level_roots(
 			if wants_cull.contains(child) {
 				continue;
 			}
-			let is_pending = pending.contains(child);
-			if !is_pending {
-				ready_levels.push(root.0);
-				if root.0 == desired {
-					has_ready_desired = true;
-					found_desired = true;
-				}
-			} else if root.0 == desired {
+			if root.0 == desired {
 				found_desired = true;
 			}
 		}
 
-		// Warm hold while desired is pending *or* not spawned yet (SyncRoots runs
-		// before Fulfill begin — requiring an existing pending root hid the prior
-		// ready root for a frame and caused empty swaps).
-		let warm_hold_level = if !has_ready_desired {
-			closest_available_lod_level(desired, ready_levels.iter().copied())
+		if apply_lod_level_root_visibility(
+			desired,
+			&child_ids,
+			&root_keys,
+			&pending,
+			&wants_cull,
+			&mut visibilities,
+		) {
+			commands.entity(host).insert(LodLevelRootOverlap);
 		} else {
-			None
-		};
-		let has_ready_any = !ready_levels.is_empty();
-
-		for child in child_ids {
-			let Ok(root) = root_keys.get(child) else {
-				continue;
-			};
-			let Ok(mut visibility) = visibilities.get_mut(child) else {
-				continue;
-			};
-			if wants_cull.contains(child) {
-				*visibility = Visibility::Hidden;
-				continue;
-			}
-			let is_pending = pending.contains(child);
-			let show = if root.0 == desired && !is_pending {
-				// Ready desired.
-				true
-			} else if root.0 == desired && is_pending && !has_ready_any {
-				// Cold: stream the pending desired root.
-				true
-			} else if !is_pending && warm_hold_level == Some(root.0) {
-				// Warm hold: single closest ready band until desired is ready.
-				true
-			} else {
-				false
-			};
-			*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
+			commands.entity(host).remove::<LodLevelRootOverlap>();
 		}
 
 		// Desired root present (ready or pending) → drop stale spawn request.
@@ -312,10 +391,115 @@ pub fn sync_lod_level_roots(
 	}
 }
 
+/// Hide extra ready roots after a one-frame overlap.
+///
+/// Runs at the start of [`crate::LodRefreshSystems::SyncRoots`], before
+/// [`sync_lod_level_roots`], so a same-frame settle cannot undo the overlap
+/// that sync just created. Chunk fulfill inserts [`LodLevelRootOverlap`] when
+/// it first shows a completed root without hiding siblings.
+pub fn settle_lod_level_root_visibility(
+	mut commands: Commands,
+	hosts: Query<
+		(Entity, &LodSceneLevel, Option<&Children>),
+		(With<LodSceneHost>, With<LodLevelRootOverlap>),
+	>,
+	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
+	root_keys: Query<&LodLevelRoot>,
+	pending: Query<(), With<crate::LodLevelRootPending>>,
+	wants_cull: Query<(), With<crate::LodCullInFlight>>,
+	mut visibilities: Query<&mut Visibility>,
+) {
+	for (host, level, host_children) in &hosts {
+		let Some(host_children) = host_children else {
+			commands.entity(host).remove::<LodLevelRootOverlap>();
+			continue;
+		};
+		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
+			commands.entity(host).remove::<LodLevelRootOverlap>();
+			continue;
+		};
+		let Ok(root_children) = level_roots_heads.get(roots_entity) else {
+			continue;
+		};
+		let child_ids: Vec<Entity> = root_children.iter().collect();
+		if !apply_lod_level_root_visibility(
+			*level,
+			&child_ids,
+			&root_keys,
+			&pending,
+			&wants_cull,
+			&mut visibilities,
+		) {
+			commands.entity(host).remove::<LodLevelRootOverlap>();
+		}
+	}
+}
+
 /// Plugin: marker types only. Prefer [`crate::LodRefreshCorePlugin`] for runtime systems
 /// (track / sync / fulfill ordering).
 pub struct LodSceneHostPlugin;
 
 impl Plugin for LodSceneHostPlugin {
 	fn build(&self, _app: &mut App) {}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn ready_desired_always_shown() {
+		assert!(lod_root_should_show(
+			LodSceneLevel::High,
+			LodSceneLevel::High,
+			false,
+			true,
+			true,
+			None,
+			true,
+			true,
+		));
+	}
+
+	#[test]
+	fn overlap_keeps_previous_until_desired_was_shown() {
+		assert!(lod_root_should_show(
+			LodSceneLevel::Medium,
+			LodSceneLevel::High,
+			false,
+			true,
+			true,
+			None,
+			false,
+			true,
+		));
+	}
+
+	#[test]
+	fn after_desired_was_shown_previous_hides() {
+		assert!(!lod_root_should_show(
+			LodSceneLevel::Medium,
+			LodSceneLevel::High,
+			false,
+			true,
+			true,
+			None,
+			true,
+			true,
+		));
+	}
+
+	#[test]
+	fn warm_hold_shows_closest_ready() {
+		assert!(lod_root_should_show(
+			LodSceneLevel::Medium,
+			LodSceneLevel::High,
+			false,
+			false,
+			true,
+			Some(LodSceneLevel::Medium),
+			false,
+			true,
+		));
+	}
 }

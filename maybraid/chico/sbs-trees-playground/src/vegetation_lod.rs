@@ -30,6 +30,7 @@ use lod::{
 	LodSceneCullRegionPlugin, LodSceneRefreshRegionPlugin, OpenLattice, Spotlight,
 };
 use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefAdmitBudget;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
@@ -197,5 +198,9 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, ComponentsOnly<PlacedVegetation<JungleStorybookTree>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<FriendsConifer>>);
 		avian_host!(app, ComponentsOnly<PlacedVegetation<NorthernConifer>>);
+
+		if !app.is_plugin_added::<LodLazyRefsPlugin>() {
+			app.add_plugins(LodLazyRefsPlugin);
+		}
 	}
 }

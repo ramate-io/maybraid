@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::scene::host::{LodLevelRoot, LodSceneHost};
 
-use super::types::{LodCullInFlight, LodSceneHostStreamed};
+use super::types::{LodCullInFlight, LodLazyPending, LodSceneHostStreamed};
 
 /// True when the host already has any non-culling level root (ready **or** pending).
 ///
@@ -71,4 +71,28 @@ pub(super) fn count_nested_hosts(
 		}
 	}
 	(required, streamed)
+}
+
+/// True when `root` or any descendant still holds [`LodLazyPending`].
+pub(super) fn subtree_has_lod_lazy_pending(
+	root: Entity,
+	children_q: &Query<&Children>,
+	lazy: &Query<(), With<LodLazyPending>>,
+) -> bool {
+	if lazy.contains(root) {
+		return true;
+	}
+	let mut stack: Vec<Entity> = match children_q.get(root) {
+		Ok(children) => children.iter().collect(),
+		Err(_) => return false,
+	};
+	while let Some(entity) = stack.pop() {
+		if lazy.contains(entity) {
+			return true;
+		}
+		if let Ok(kids) = children_q.get(entity) {
+			stack.extend(kids.iter());
+		}
+	}
+	false
 }

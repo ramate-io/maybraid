@@ -6,6 +6,6 @@ pub use crate::scene::refresh::sync::{
 	complete_chunk_lod_fulfill, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
 	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
 	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
-	LodCullRequest, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
+	LodCullRequest, LodLazyPending, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
