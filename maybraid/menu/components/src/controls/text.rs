@@ -1,7 +1,7 @@
 //! Labels, body copy, and the reserved cursor gutter.
 
 use bevy::prelude::*;
-use bevy::text::Justify;
+use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 
 use crate::icons::maybraid::AnimatedIcon;
 use crate::single_select::TextCursorSlot;
@@ -22,6 +22,38 @@ pub fn spawn_panel_title(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, la
 		TEXT_YELLOW,
 		Justify::Left,
 	);
+}
+
+/// Header title plus an optional trailing value in one text run.
+///
+/// Sibling `Text` nodes do not share a glyph baseline in Bevy UI; mixed
+/// sizes have to live in one text block via `TextSpan`.
+pub fn spawn_header_line(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	title: &str,
+	value: Option<&str>,
+	title_size: f32,
+) {
+	parent
+		.spawn((
+			Text::new(menu_display_name(title)),
+			fonts.header(title_size),
+			TextColor(TEXT_YELLOW),
+			TextLayout::new(Justify::Left, LineBreak::NoWrap),
+			LineHeight::RelativeToFont(1.0),
+			Pickable::IGNORE,
+		))
+		.with_children(|text| {
+			if let Some(value) = value.filter(|value| !value.is_empty()) {
+				text.spawn((
+					TextSpan::new(format!("  {}", menu_display_name(value))),
+					fonts.body(PANEL_ITEM_FONT_SIZE),
+					TextColor(TEXT_YELLOW_FAINT),
+					LineHeight::RelativeToFont(1.0),
+				));
+			}
+		});
 }
 
 /// Block title above a field group (`Eyes`, `Hair`).
@@ -58,6 +90,7 @@ pub fn spawn_hud_text(
 		font,
 		TextColor(color),
 		TextLayout::new(justify, bevy::text::LineBreak::WordBoundary),
+		LineHeight::RelativeToFont(1.0),
 		Pickable::IGNORE,
 	));
 }

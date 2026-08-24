@@ -4,13 +4,9 @@ use bevy::prelude::*;
 
 use crate::icons::AnimatedIcon;
 use crate::single_select::TextCursorSlot;
-use crate::theme::{
-	PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-};
+use crate::theme::{PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE};
 
-use super::display::menu_display_name;
-use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
+use super::text::{spawn_cursor_slot_sized, spawn_header_line};
 use super::HudFonts;
 
 /// Marker on a header that opens an overlay select.
@@ -49,7 +45,7 @@ pub fn spawn_section_header(
 				padding: UiRect::axes(Val::Px(0.0), Val::Px(4.0)),
 				flex_direction: FlexDirection::Row,
 				justify_content: justify,
-				align_items: AlignItems::FlexEnd,
+				align_items: AlignItems::Center,
 				column_gap: Val::Px(PANEL_CURSOR_ICON_GAP),
 				..default()
 			},
@@ -57,35 +53,7 @@ pub fn spawn_section_header(
 		))
 		.with_children(|row| {
 			spawn_cursor_slot_sized(row, fonts, false, PANEL_HEADER_CURSOR_ICON_SIZE);
-			let title = menu_display_name(label);
-			let value = value.map(menu_display_name);
-			row.spawn((
-				Node {
-					flex_direction: FlexDirection::Row,
-					column_gap: Val::Px(PANEL_CURSOR_ICON_GAP),
-					align_items: AlignItems::Baseline,
-					..default()
-				},
-				Pickable::IGNORE,
-			))
-			.with_children(|pair| {
-				spawn_hud_text(
-					pair,
-					fonts.header(PANEL_HEADER_FONT_SIZE),
-					&title,
-					TEXT_YELLOW,
-					bevy::text::Justify::Left,
-				);
-				if let Some(value) = value.as_deref() {
-					spawn_hud_text(
-						pair,
-						fonts.body(PANEL_ITEM_FONT_SIZE),
-						value,
-						TEXT_YELLOW_FAINT,
-						bevy::text::Justify::Left,
-					);
-				}
-			});
+			spawn_header_line(row, fonts, label, value, PANEL_HEADER_FONT_SIZE);
 		});
 }
 
