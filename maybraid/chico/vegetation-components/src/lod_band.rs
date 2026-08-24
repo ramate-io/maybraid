@@ -1,6 +1,5 @@
 //! Shared distance / extent banding for vegetation LOD probes.
 
-use bevy::math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::{cull_bands_with_adjacent_depth, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 
@@ -59,12 +58,6 @@ pub fn characteristic_extent_abs(placement: &Placement) -> f32 {
 		.max(placement.scale.y.abs())
 		.max(placement.scale.z.abs())
 		.max(1e-4)
-}
-
-/// AABB around a placement whose scale is full edge lengths (label boxes).
-pub fn placement_bounds(placement: &Placement) -> Aabb3d {
-	let half = placement.scale.abs() * 0.5;
-	Aabb3d::from_min_max(placement.translation - half, placement.translation + half)
 }
 
 /// Mid-height of a placed stick kit (base + half length).

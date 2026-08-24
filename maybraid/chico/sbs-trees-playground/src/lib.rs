@@ -41,9 +41,7 @@ use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as
 use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
 use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
-use chico_vegetation_components::{
-	pose, FoliageLodProbe, LabelNode, StickLodProbe, VegetationProceduralPlugin,
-};
+use chico_vegetation_components::{FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
@@ -133,7 +131,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					draw_vegetation_label_text,
 				),
 			)
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
@@ -205,25 +202,6 @@ where
 {
 	if !app.is_plugin_added::<EnforceCachingPlugin<T, M>>() {
 		app.add_plugins(EnforceCachingPlugin::<T, M>::default());
-	}
-}
-
-/// Stroke-font names for [`LabelNode`] wireframes (Trade Winds plant types).
-fn draw_vegetation_label_text(mut gizmos: Gizmos, labels: Query<(&LabelNode, &GlobalTransform)>) {
-	for (label, host) in &labels {
-		if label.text.is_empty() {
-			continue;
-		}
-		let posed = host.mul_transform(pose(label.placement));
-		let top = posed.transform_point(Vec3::new(0.0, 0.55, 0.0));
-		let font = (label.geometry.extents().max_element() * 0.08).clamp(0.6, 3.5);
-		gizmos.text(
-			Isometry3d::from_translation(top),
-			&label.text,
-			font,
-			Vec2::ZERO,
-			label.style.color(),
-		);
 	}
 }
 

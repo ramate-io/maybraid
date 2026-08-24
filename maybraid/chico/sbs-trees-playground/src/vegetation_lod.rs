@@ -23,7 +23,7 @@ use chico_sbs_trees::{
 	VaseTree, WaialeaPalm,
 };
 use chico_vegetation_components::{
-	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, LabelNode, PlacedVegetation, StickNode,
+	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
 };
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
@@ -110,7 +110,6 @@ impl Plugin for VegetationLodRefreshPlugin {
 		// Fine-phase domain hosts nested under structural roots.
 		avian_host!(app, FoliageNode);
 		avian_host!(app, StickNode);
-		avian_host!(app, LabelNode);
 
 		// Structural grove hosts (Monster Grass still flattens via ComponentsOnly).
 		avian_host!(app, ComponentsOnly<MonsterGrass>);

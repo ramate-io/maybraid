@@ -6,7 +6,6 @@ use material_ref::MaterialRef;
 
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
-use crate::labels::LabelNode;
 use crate::layer::Layers;
 use crate::placed::Placement;
 use crate::sticks::node::StickNode;
@@ -77,20 +76,6 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for P
 					self.ball_material.clone()
 				};
 				node.with_material(material)
-			})
-			.collect::<Vec<_>>();
-		Layers::from_free(nodes)
-	}
-
-	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
-		let nodes = self
-			.vegetation
-			.label_nodes_for_level(level)
-			.flatten()
-			.into_iter()
-			.map(|mut node| {
-				node.placement = self.placement.compose_child(node.placement);
-				node
 			})
 			.collect::<Vec<_>>();
 		Layers::from_free(nodes)
