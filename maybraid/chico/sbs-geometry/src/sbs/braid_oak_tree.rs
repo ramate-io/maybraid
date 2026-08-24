@@ -15,8 +15,9 @@ use crate::anchors::braid_oak::{
 	BRAID_PROJECTION_MIN_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT,
 	BRAID_STALK_BASE_RADIUS_FRACTION, BRAID_STALK_HEIGHT_FRACTION,
 };
-use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
+use crate::anchors::storybook_tree::{DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_TREE_HEIGHT};
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{stalk_radius_scaled_range, stalk_scaled_range};
 use crate::sbs::storybook_tree::{
 	apply_storybook_field_preset, apply_unit_range_preset, StorybookCanopyParams,
 	StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams, StorybookTreeSbs,
@@ -173,8 +174,20 @@ impl BraidOakTreeSbs {
 	}
 
 	pub fn to_anchors(&self) -> BraidOakTreeAnchors {
-		BraidOakTreeAnchors::new(self.to_proto())
-			.with_perturbation(self.anchor_perturbation.to_perturbation())
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let scaled = stalk_scaled_range(
+			UnitRange::new(perturbation.vertical_offset.start, perturbation.vertical_offset.end),
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * BRAID_STALK_HEIGHT_FRACTION,
+		);
+		perturbation.vertical_offset = scaled.start..scaled.end;
+		let radius_scaled = stalk_radius_scaled_range(
+			UnitRange::new(perturbation.radius_offset.start, perturbation.radius_offset.end),
+			self.scale.stalk_base_radius_or_default(),
+			DEFAULT_TREE_HEIGHT * BRAID_STALK_BASE_RADIUS_FRACTION,
+		);
+		perturbation.radius_offset = radius_scaled.start..radius_scaled.end;
+		BraidOakTreeAnchors::new(self.to_proto()).with_perturbation(perturbation)
 	}
 
 	pub fn build_chain(&self) -> BallStickChain<StorybookTreeChain> {
@@ -228,6 +241,20 @@ mod tests {
 	fn leaf_radius_scales_with_tree_height() -> Result<()> {
 		let sbs = BraidOakTreeSbs::default();
 		assert!((sbs.leaf_radius_world() - BRAID_LEAF_RADIUS_FRACTION * sbs.height()).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_height_scales_anchor_perturbation() -> Result<()> {
+		let mut geometry = BraidOakTreeSbs::default();
+		geometry.scale.tree_height = 1.0;
+		geometry.scale.stalk_base_radius = Some(BRAID_STALK_BASE_RADIUS_FRACTION);
+		let anchors = geometry.to_anchors();
+		let v = anchors.perturbation.vertical_offset;
+		assert!(
+			v.start.abs() < 0.12 && v.end.abs() < 0.12,
+			"unit oak vertical perturbation should shrink with stalk, got {v:?}"
+		);
 		Ok(())
 	}
 }

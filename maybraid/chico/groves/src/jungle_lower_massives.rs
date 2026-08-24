@@ -246,7 +246,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, BraidOakTreeParams, HonuBanyan, HonuBanyanParams, JungleStorybookTree,
+		BraidOakTree, HonuBanyan, HonuBanyanParams, JungleStorybookTree,
 		JungleStorybookTreeParams, SopesBanyan, SopesBanyanParams, WaialeaPalm, WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
@@ -535,7 +535,7 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<JungleLowerMassivesCell>,
 		grove_noise: NoiseParams,
-		stick_surface_noise: NoiseParams,
+		_stick_surface_noise: NoiseParams,
 		tree_variants: u32,
 	) -> JungleLowerMassivesPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
@@ -614,15 +614,11 @@ mod vc {
 				}
 			}
 			JungleLowerMassivesItem::BraidOak(oak) => {
-				let geometry = oak.build_with_noise(build_noise);
-				let mut params = BraidOakTreeParams::default();
-				params.geometry = geometry;
-				params.stick_surface_noise = variant_noise(stick_surface_noise, variant);
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = oak.build_with_noise(build_noise).height();
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::Oak(Arc::new(unit_params.build())),
+					kind: JungleLowerMassivesKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,

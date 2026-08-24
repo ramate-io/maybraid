@@ -203,6 +203,16 @@ mod tests {
 		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
 		assert_ne!(a.geometry.canopy_noise.seed, c.geometry.canopy_noise.seed);
 		assert_eq!(a.stick_surface_noise.seed, 3);
+		let max_xz = a
+			.chain
+			.nodes
+			.iter()
+			.map(|n| (n.position.x * n.position.x + n.position.z * n.position.z).sqrt())
+			.fold(0.0_f32, f32::max);
+		assert!(
+			max_xz < 1.5,
+			"unit oak footprint should stay near the braid dome, got {max_xz}"
+		);
 		Ok(())
 	}
 
