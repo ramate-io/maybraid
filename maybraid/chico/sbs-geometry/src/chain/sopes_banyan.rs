@@ -9,6 +9,14 @@ use super::BranchOut;
 use super::DepthBudget;
 use super::Hysteresis;
 
+/// Authored stalk height the leftover meter hop / radius constants were written against.
+pub const AUTHORED_STALK_HEIGHT: f32 = 20.0;
+
+/// Scale a length authored in meters on the 20 m default stalk.
+pub fn at_stalk(stalk_height: f32, meters_at_default: f32) -> f32 {
+	meters_at_default * (stalk_height / AUTHORED_STALK_HEIGHT).max(1e-6)
+}
+
 /// Flair-up segment: one biased [`BranchOut`] step from the current joint.
 #[derive(Clone)]
 pub struct StartFlairUp {
@@ -19,6 +27,7 @@ impl StartFlairUp {
 	pub fn sample_from_candidate(
 		phase: SopesBanyanPhase,
 		_noise: &NoiseConfig,
+		stalk_height: f32,
 	) -> SopesBanyanPhase {
 		match phase {
 			SopesBanyanPhase::BranchOut(budget) if budget.remaining < 2 => {
@@ -33,8 +42,8 @@ impl StartFlairUp {
 							inner.incoming_ray,
 						)
 						.with_ray_degrees_of_freedom(dof * 0.35)
-						.with_radius_range(0.11..0.12)
-						.with_length(1.0..4.0)
+						.with_radius_range(at_stalk(stalk_height, 0.11)..at_stalk(stalk_height, 0.12))
+						.with_length(at_stalk(stalk_height, 1.0)..at_stalk(stalk_height, 4.0))
 						.with_bias_blend(0.7)
 						.single_child(),
 				})
@@ -63,6 +72,7 @@ impl StartDescender {
 	pub fn sample_from_candidate(
 		phase: SopesBanyanPhase,
 		noise: &NoiseConfig,
+		stalk_height: f32,
 		banyan_height: f32,
 		descender_threshold: f32,
 	) -> SopesBanyanPhase {
@@ -82,7 +92,9 @@ impl StartDescender {
 								inner.incoming_ray,
 							)
 							.with_ray_degrees_of_freedom(0.0)
-							.with_radius_range(0.10..0.2)
+							.with_radius_range(
+								at_stalk(stalk_height, 0.10)..at_stalk(stalk_height, 0.2),
+							)
 							.single_child()
 							.with_length(drop_len * 0.92..drop_len * 1.08),
 					})
@@ -148,13 +160,24 @@ impl SopesBanyanPhase {
 	pub fn candidate_into(
 		self,
 		noise: &NoiseConfig,
+		stalk_height: f32,
 		banyan_height: f32,
 		descender_threshold: f32,
 	) -> Self {
 		match self {
 			Self::BranchOut(b) => {
-				let p = StartFlairUp::sample_from_candidate(Self::BranchOut(b.clone()), noise);
-				StartDescender::sample_from_candidate(p, noise, banyan_height, descender_threshold)
+				let p = StartFlairUp::sample_from_candidate(
+					Self::BranchOut(b.clone()),
+					noise,
+					stalk_height,
+				);
+				StartDescender::sample_from_candidate(
+					p,
+					noise,
+					stalk_height,
+					banyan_height,
+					descender_threshold,
+				)
 			}
 			other => other,
 		}
@@ -165,6 +188,7 @@ impl SopesBanyanPhase {
 #[derive(Clone)]
 pub struct SopesBanyanChain {
 	pub noise: NoiseConfig,
+	pub stalk_height: f32,
 	pub banyan_height: f32,
 	pub descender_threshold: f32,
 	pub phase: SopesBanyanPhase,
@@ -173,17 +197,19 @@ pub struct SopesBanyanChain {
 impl SopesBanyanChain {
 	pub fn new(
 		noise: NoiseConfig,
+		stalk_height: f32,
 		banyan_height: f32,
 		descender_threshold: f32,
 		phase: SopesBanyanPhase,
 	) -> Self {
-		Self { noise, banyan_height, descender_threshold, phase }
+		Self { noise, stalk_height, banyan_height, descender_threshold, phase }
 	}
 
 	fn with_phase(&self, phase: SopesBanyanPhase) -> Self {
 		Self {
 			phase,
 			noise: self.noise.clone(),
+			stalk_height: self.stalk_height,
 			banyan_height: self.banyan_height,
 			descender_threshold: self.descender_threshold,
 		}
@@ -197,7 +223,12 @@ impl SopesBanyanChain {
 			.into_iter()
 			.map(SopesBanyanPhase::BranchOut)
 			.map(|phase| {
-				phase.candidate_into(&self.noise, self.banyan_height, self.descender_threshold)
+				phase.candidate_into(
+					&self.noise,
+					self.stalk_height,
+					self.banyan_height,
+					self.descender_threshold,
+				)
 			})
 			.map(|phase| self.with_phase(phase))
 			.collect()
@@ -259,6 +290,7 @@ mod tests {
 			SopesBanyanChain::new(
 				noise.clone(),
 				20.0,
+				40.0,
 				0.12,
 				SopesBanyanPhase::BranchOut(DepthBudget {
 					inner: BranchOut::up(BallStickNode::new(Vec3::ZERO, 0.05))

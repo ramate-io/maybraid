@@ -23,7 +23,7 @@ Add `unit_from_num` / `into_unit_from_num` on params and the built type (see `St
 3. Key layout / canopy / tuft **seed by `num`**, not by world position.
 4. Return `(unit_params, world_size)`. World size goes on plant [`Placement`](../vegetation-components/src/placed.rs) scale in the grove.
 
-Same `num` must rebuild the same chain. Different `num` must differ. Test both.
+Same `num` must rebuild the same chain. Different `num` must differ. Test both. The grown chain AABB must also be unit-sized — hop lengths and stick radii authored in meters for a default height (Sope flair `1..4` on a 20 m stalk) have to be fractions of that height, not leftover world meters.
 
 Do **not** bake world height into the mesh. Grove placement scale (`placed.scale * world_size`) is the instance size.
 

@@ -378,7 +378,25 @@ mod tests {
 		let seeds = sbs.hysteresis_seeds();
 
 		assert_eq!(sbs.to_anchors().proto().stalk.stalk_height, 12.0);
+		assert!(seeds.iter().all(|seed| seed.stalk_height == 12.0));
 		assert!(seeds.iter().all(|seed| seed.banyan_height == 30.0));
+	}
+
+	#[test]
+	fn unit_stalk_chain_scales_from_default() {
+		let full = SopesBanyanSbs::default().build_chain();
+		let mut unit = SopesBanyanSbs::default();
+		unit.scale.stalk_height = 1.0;
+		unit.scale.canopy_height = 2.0;
+		unit.scale.stalk_base_radius = 0.75 / 20.0;
+		let unit = unit.build_chain();
+		let full_max_y = full.nodes.iter().map(|n| n.position.y).fold(0.0f32, f32::max);
+		let unit_max_y = unit.nodes.iter().map(|n| n.position.y).fold(0.0f32, f32::max);
+		assert!(unit_max_y < 2.5, "unit Sope crown should stay near unit height, got {unit_max_y}");
+		assert!(
+			(full_max_y / 20.0 - unit_max_y).abs() < 0.75,
+			"default max y {full_max_y} should be ~20× unit {unit_max_y}"
+		);
 	}
 
 	#[test]

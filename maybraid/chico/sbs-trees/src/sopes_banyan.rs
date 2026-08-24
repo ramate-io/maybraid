@@ -4,8 +4,10 @@
 //! which implements [`VegetationComponents`].
 //!
 //! [`SopesBanyan::unit_from_num`] / [`SopesBanyanParams::into_unit_from_num`] normalize
-//! to unit stalk height (canopy height and base radius scale with it) and key layout
-//! noise by a variant index. Emission folds sticks into a collection; High/Medium
+//! to unit stalk height (canopy height, base radius, and meter perturbation scale
+//! with it) and key layout noise by a variant index. Chain flair hops and stick
+//! radii are fractions of stalk height so the grown mesh is actually unit-sized.
+//! Emission folds sticks into a collection; High/Medium
 //! layered canopy stays separate. Cheap-ball Low foliage merges.
 //!
 //! Structural LOD (tree-radius bands):
@@ -73,6 +75,12 @@ impl SopesBanyanParams {
 		geometry.scale.stalk_height = 1.0;
 		geometry.scale.canopy_height = (geometry.scale.canopy_height * inv).max(1e-4);
 		geometry.scale.stalk_base_radius = (geometry.scale.stalk_base_radius * inv).max(1e-6);
+		let v = geometry.anchor_perturbation.vertical_offset;
+		geometry.anchor_perturbation.vertical_offset =
+			procedural_common::UnitRange::new(v.start * inv, v.end * inv);
+		let r = geometry.anchor_perturbation.radius_offset;
+		geometry.anchor_perturbation.radius_offset =
+			procedural_common::UnitRange::new(r.start * inv, r.end * inv);
 		geometry.canopy_noise.seed = num as i32;
 		geometry.anchor_perturbation.noise.seed = num as i32;
 		(Self { geometry }, size)
@@ -214,6 +222,10 @@ mod tests {
 		let b = SopesBanyan::unit_from_num(3);
 		let c = SopesBanyan::unit_from_num(4);
 		assert!((a.geometry.scale.stalk_height - 1.0).abs() < 1e-5);
+		let max_y = a.chain.nodes.iter().map(|n| n.position.y).fold(0.0f32, f32::max);
+		let max_xz = a.chain.nodes.iter().map(|n| n.horizontal_radius()).fold(0.0f32, f32::max);
+		assert!(max_y < 2.5, "unit Sope chain height {max_y} should stay near 1");
+		assert!(max_xz < 3.0, "unit Sope footprint {max_xz} should stay near 1");
 		assert_eq!(a.geometry.canopy_noise.seed, 3);
 		assert_eq!(a.geometry.canopy_noise.seed, b.geometry.canopy_noise.seed);
 		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
@@ -232,6 +244,8 @@ mod tests {
 		assert!((unit.geometry.scale.stalk_height - 1.0).abs() < 1e-5);
 		assert!((unit.geometry.scale.canopy_height - 2.0).abs() < 1e-5);
 		assert!((unit.geometry.scale.stalk_base_radius - 0.04).abs() < 1e-5);
+		assert!((unit.geometry.anchor_perturbation.vertical_offset.start + 0.05).abs() < 1e-5);
+		assert!((unit.geometry.anchor_perturbation.vertical_offset.end - 0.05).abs() < 1e-5);
 		assert_eq!(unit.geometry.canopy_noise.seed, 7);
 		Ok(())
 	}

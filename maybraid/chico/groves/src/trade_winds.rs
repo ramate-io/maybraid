@@ -236,7 +236,8 @@ mod vc {
 		HonuBanyan, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm, WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
-		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
+		FoliageNode, LabelNode, LabelStyle, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -396,6 +397,26 @@ mod vc {
 		stick_material: MaterialRef,
 		ball_material: MaterialRef,
 		frond_material: MaterialRef,
+		/// Inspectable wireframe box naming the varietal (playground / debug).
+		pub label: LabelNode,
+	}
+
+	fn plant_debug_label(cell: TradeWindsCell, placement: Placement) -> LabelNode {
+		let (text, style) = match cell {
+			TradeWindsCell::TradeStorybook => ("Storybook", LabelStyle::Green),
+			TradeWindsCell::TradeSopesBanyan => ("Sope", LabelStyle::Magenta),
+			TradeWindsCell::TradeHonuBanyan => ("Honu", LabelStyle::Cyan),
+			TradeWindsCell::RareTallTradeStorybook => ("TallStorybook", LabelStyle::Yellow),
+			TradeWindsCell::RareTradeWaialeaPalm => ("Waialea", LabelStyle::Orange),
+		};
+		let size = placement.scale.abs().max_element().max(1.0);
+		LabelNode::rectangle(
+			style,
+			text,
+			placement.translation + Vec3::Y * (size * 0.5),
+			Vec3::splat(size),
+			placement.yaw,
+		)
 	}
 
 	#[derive(Clone, Component)]
@@ -445,7 +466,7 @@ mod vc {
 					current_transform: &curr,
 					bounds: &bounds,
 				};
-				Some(match &plant.kind {
+				let plant_chunk = match &plant.kind {
 					TradeWindsKind::Storybook(t) => nest_flattened_plant_chunk(
 						Arc::clone(t),
 						plant.placement,
@@ -478,7 +499,11 @@ mod vc {
 						&plant.frond_material,
 						&plant_lod,
 					),
-				})
+				};
+				Some(SceneChunk::chunks(vec![
+					plant_chunk,
+					SceneChunk::weighted(1, plant.label.host(&plant_lod)),
+				]))
 			})]
 		}
 
@@ -527,9 +552,11 @@ mod vc {
 				let mut params = StorybookTreeParams::default();
 				params.geometry = geometry;
 				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					label: plant_debug_label(placed.variant, placement),
+					placement,
 					kind: TradeWindsKind::Storybook(Arc::new(unit_params.build())),
 					stick_material,
 					ball_material,
@@ -544,9 +571,11 @@ mod vc {
 				.geometry
 				.scale
 				.tree_height;
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					label: plant_debug_label(placed.variant, placement),
+					placement,
 					kind: TradeWindsKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
@@ -561,9 +590,11 @@ mod vc {
 				.geometry
 				.scale
 				.stalk_height;
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					label: plant_debug_label(placed.variant, placement),
+					placement,
 					kind: TradeWindsKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
@@ -575,9 +606,11 @@ mod vc {
 				let mut params = WaialeaPalmParams::default();
 				params.geometry = geometry;
 				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let placement = Placement::new(placed.position, 0.0)
+					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					label: plant_debug_label(placed.variant, placement),
+					placement,
 					kind: TradeWindsKind::Waialea(Arc::new(unit_params.build())),
 					stick_material,
 					ball_material,
@@ -605,6 +638,10 @@ mod vc {
 					ULTRA_LOW_CANOPY_BIN_METERS,
 				)),
 			}
+		}
+
+		fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
+			Layers::from_free(self.plants.iter().map(|plant| plant.label.clone()).collect())
 		}
 
 		fn structural_lod(&self) -> Option<StructuralLod> {
@@ -702,6 +739,12 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::High).len(), 0);
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::High).len(), 0);
+			let labels = grove.label_nodes_for_level(LodSceneLevel::High).flatten();
+			assert_eq!(labels.len(), grove.plants.len());
+			for (label, plant) in labels.iter().zip(grove.plants.iter()) {
+				assert_eq!(label.text, plant.label.text);
+				assert!(!label.text.is_empty());
+			}
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Medium).len(), 0);
 			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 0);
 

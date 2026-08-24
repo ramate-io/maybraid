@@ -20,7 +20,7 @@ use super::stalk_perturbation::{
 };
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
-use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
+use crate::chain::sopes_banyan::{at_stalk, SopesBanyanChain, SopesBanyanPhase};
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::BranchOut;
@@ -123,6 +123,7 @@ impl SopesBanyanProtoAnchors {
 		let mut out = Vec::new();
 		let n = self.ring_count.max(1);
 		let k = self.anchors_per_ring.max(1);
+		let stalk_h = self.stalk.stalk_height;
 		let radial_eps = (self.stalk.stalk_base_radius * 0.08).max(1e-4);
 
 		for r in 0..n {
@@ -137,17 +138,18 @@ impl SopesBanyanProtoAnchors {
 				let offset = radial * radial_eps;
 				let pos = self.stalk.centroid_at_height_fraction(y_frac) + offset;
 
-				let seed_node = BallStickNode::new(pos, 0.1);
+				let seed_node = BallStickNode::new(pos, at_stalk(stalk_h, 0.1));
 				let noise = chain_noise.clone();
 				let mut h = SopesBanyanChain::new(
 					noise.clone().with_frequency(noise.params().frequency * 10.0),
+					stalk_h,
 					banyan_height,
 					descender_threshold,
 					SopesBanyanPhase::BranchOut(DepthBudget {
 						inner: BranchOut::radial_out_horizontal(seed_node, radial)
 							.with_hysteresis_context(noise, 0, radial)
-							.with_ball_radius(0.25)
-							.with_radius_range(0.24..0.28)
+							.with_ball_radius(at_stalk(stalk_h, 0.25))
+							.with_radius_range(at_stalk(stalk_h, 0.24)..at_stalk(stalk_h, 0.28))
 							.with_radius_range_child_scale((0.9, 0.95))
 							.with_child_count(1..2)
 							.with_ray_degrees_of_freedom(0.3),
@@ -169,6 +171,7 @@ impl SopesBanyanProtoAnchors {
 		out.extend(stalk_anchors.into_iter().map(|a| {
 			SopesBanyanChain::new(
 				chain_noise.clone(),
+				stalk_h,
 				banyan_height,
 				descender_threshold,
 				SopesBanyanPhase::Stalk(a),

@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod foliage;
+pub mod labels;
 pub mod layer;
 pub mod lod_band;
 pub mod lod_host;
@@ -26,6 +27,9 @@ pub use foliage::{
 	FROND_COLLECTION_MEDIUM_METERS,
 };
 pub use layer::{Layer, Layers};
+pub use labels::{
+	LabelGeometry, LabelNode, LabelStyle, LabelWireframeAssets, LabelWireframePlugin,
+};
 pub use lod_host::{
 	posed_foliage_multi_scene_merge, posed_frond_multi_scene_merge, posed_material_asset_tier,
 };
@@ -37,7 +41,9 @@ pub use placed_vegetation::PlacedVegetation;
 pub use procedural::{
 	VegetationProceduralAssets, VegetationProceduralPlugin, FROND_KIT_HALF_X, STICK_KIT_HALF,
 };
-pub use scene_children::{pose, posed_mesh, posed_mesh_material_ref, scene_children, with_pose};
+pub use scene_children::{
+	pose, posed_mesh, posed_mesh_material_ref, scene_children, wireframe_box_with_handles, with_pose,
+};
 pub use sticks::{
 	update_stick_host_levels, StickCollection, StickGeometry, StickLodProbe, StickMember,
 	StickNode, StickStyle, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
@@ -65,6 +71,10 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
+	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
+		Layers::new()
+	}
+
 	/// When set, drives structural [`LodScene`] banding / bounds for [`ComponentsOnly`].
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		None
@@ -80,6 +90,10 @@ impl<T: VegetationComponents + ?Sized> VegetationComponents for &T {
 		(**self).foliage_nodes_for_level(level)
 	}
 
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		(**self).label_nodes_for_level(level)
+	}
+
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		(**self).structural_lod()
 	}
@@ -92,6 +106,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for s
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		(**self).foliage_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		(**self).label_nodes_for_level(level)
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -130,6 +148,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents for C
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		self.0.foliage_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		self.0.label_nodes_for_level(level)
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -230,6 +252,10 @@ impl<T: VegetationComponents + Send + Sync + 'static> VegetationComponents
 		self.0.foliage_nodes_for_level(level)
 	}
 
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		self.0.label_nodes_for_level(level)
+	}
+
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		self.0.structural_lod()
 	}
@@ -299,6 +325,9 @@ pub fn vegetation_scene_chunks(
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
+	for node in vegetation.label_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
 	if chunks.is_empty() {
 		SceneChunk::primitive(scene_children(Vec::new()))
 	} else {
@@ -362,6 +391,9 @@ pub fn append_component_scenes(
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
+	for node in vegetation.label_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.host(lod_ref)));
+	}
 }
 
 /// Scene whose children are nested stick/foliage [`LodScene`] hosts at `level`.
@@ -386,6 +418,9 @@ pub fn append_flattened_component_scenes(
 		children.push(Box::new(node.scene_with_level(lod_ref, level)));
 	}
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.scene_with_level(lod_ref, level)));
+	}
+	for node in vegetation.label_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_level(lod_ref, level)));
 	}
 }
@@ -413,7 +448,8 @@ pub fn flattened_vegetation_scene_chunks(
 ) -> SceneChunk {
 	let sticks = vegetation.stick_nodes_for_level(level).flatten();
 	let foliage = vegetation.foliage_nodes_for_level(level).flatten();
-	let n = sticks.len() + foliage.len();
+	let labels = vegetation.label_nodes_for_level(level).flatten();
+	let n = sticks.len() + foliage.len() + labels.len();
 	if n == 0 {
 		return SceneChunk::primitive(scene_children(Vec::new()));
 	}
@@ -423,6 +459,7 @@ pub fn flattened_vegetation_scene_chunks(
 	let bounds = *lod_ref.bounds;
 	let entity = lod_ref.entity;
 	let n_sticks = sticks.len();
+	let n_foliage = foliage.len();
 	let mut index = 0usize;
 
 	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
@@ -435,8 +472,14 @@ pub fn flattened_vegetation_scene_chunks(
 			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
 		}
 		let fi = index - n_sticks;
-		if fi < foliage.len() {
+		if fi < n_foliage {
 			let node = &foliage[fi];
+			index += 1;
+			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
+		}
+		let li = index - n_sticks - n_foliage;
+		if li < labels.len() {
+			let node = &labels[li];
 			index += 1;
 			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
 		}

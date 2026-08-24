@@ -46,6 +46,22 @@ pub fn posed_mesh(
 }
 
 /// Procedural mesh with a placeholder [`StandardMaterial`] and deferred [`MaterialRefRoot`].
+/// Posed line-list cube using pre-registered mesh/material handles.
+///
+/// Unit mesh spans \([-0.5, 0.5]^3\); use transform scale as full edge lengths.
+pub fn wireframe_box_with_handles(
+	mesh: Handle<Mesh>,
+	material: Handle<StandardMaterial>,
+	transform: Transform,
+) -> impl Scene + 'static {
+	bsn! {
+		Mesh3d({mesh})
+		MeshMaterial3d::<StandardMaterial>({material})
+		template_value(transform)
+		Visibility::default()
+	}
+}
+
 pub fn posed_mesh_material_ref(
 	mesh: Handle<Mesh>,
 	placeholder: Handle<StandardMaterial>,
