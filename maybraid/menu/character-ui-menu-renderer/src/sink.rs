@@ -7,13 +7,13 @@ use character_ui_menu::{
 };
 use menu_components::{
 	spawn_asset_tile, spawn_block_label, spawn_group_label, spawn_hud_text, spawn_labeled_row,
-	spawn_section_header, spawn_select_row, spawn_stepper, spawn_swatch, spawn_swatch_row,
-	spawn_tile_grid, HudFonts, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	spawn_section_header, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid, HudFonts,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 use crate::justify::MenuJustify;
-use crate::overlay::{overlay_select_label, spawn_overlay_summary};
-use crate::widgets::{MenuButton, ToggleSectionKey};
+use crate::overlay::{overlay_summary_value, primary_select};
+use crate::widgets::{MenuButton, OpenSelectKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
 pub trait MenuThumbnailContext {
@@ -76,11 +76,14 @@ pub trait MenuSink<E: Copy + Send + Sync + 'static> {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MaybraidMenuSink {
 	pub justify: MenuJustify,
+	/// When true, catalogs paint inline (inside an overlay). The panel path
+	/// only stamps headers that open a picker.
+	pub interior: bool,
 }
 
 impl MaybraidMenuSink {
 	pub fn new(justify: MenuJustify) -> Self {
-		Self { justify }
+		Self { justify, interior: false }
 	}
 }
 
@@ -95,46 +98,20 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			MenuNode::Fragment(children) => self.render_nodes(children, parent, context),
 			MenuNode::Section { label, children } => self.section(label, children, parent, context),
 			MenuNode::SectionSelect { label, groups, children } => {
-				if overlay_select_label(label) {
-					spawn_overlay_summary(
+				if self.interior {
+					self.select_grid(groups, parent, context);
+				} else {
+					let value = overlay_summary_value(node);
+					spawn_section_header(
 						parent,
 						context.fonts,
 						label,
-						node,
+						Some(value.as_str()),
 						self.justify.content(),
+						OpenSelectKey(label),
 					);
-				} else {
-					spawn_block_label(parent, context.fonts, label);
-					for group in groups {
-						if let Some(group_label) = group.label {
-							spawn_group_label(parent, context.fonts, group_label);
-						}
-						parent
-							.spawn((
-								Node {
-									width: Val::Percent(100.0),
-									flex_direction: FlexDirection::Column,
-									align_items: self.justify.items(),
-									row_gap: Val::Px(4.0),
-									..default()
-								},
-								Pickable::IGNORE,
-							))
-							.with_children(|list| {
-								for choice in &group.choices {
-									spawn_select_row(
-										list,
-										context.fonts,
-										choice.label,
-										choice.selected,
-										self.justify.content(),
-										MenuButton(choice.event),
-									);
-								}
-							});
-					}
+					self.render_nodes(children, parent, context);
 				}
-				self.render_nodes(children, parent, context);
 			}
 			MenuNode::LabeledCycle { label, value, minus, plus } => {
 				self.labeled_control(parent, context.fonts, label, |row| {
@@ -168,15 +145,7 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 				});
 			}
 			MenuNode::BlockAsset { label, preview, choices } => {
-				if overlay_select_label(label) {
-					spawn_overlay_summary(
-						parent,
-						context.fonts,
-						label,
-						node,
-						self.justify.content(),
-					);
-				} else {
+				if self.interior {
 					spawn_block_label(parent, context.fonts, label);
 					let preview = bevy_color(*preview);
 					spawn_tile_grid(parent, self.justify.content(), |grid| {
@@ -192,22 +161,34 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 							);
 						}
 					});
-				}
-			}
-			MenuNode::ItemMultiSelect { label, rows } => {
-				if overlay_select_label(label) {
-					spawn_overlay_summary(
+				} else {
+					let value = overlay_summary_value(node);
+					spawn_section_header(
 						parent,
 						context.fonts,
 						label,
-						node,
+						Some(value.as_str()),
 						self.justify.content(),
+						OpenSelectKey(label),
 					);
-				} else {
+				}
+			}
+			MenuNode::ItemMultiSelect { label, rows } => {
+				if self.interior {
 					spawn_block_label(parent, context.fonts, label);
 					for row in rows {
 						self.item_row(row, parent, context);
 					}
+				} else {
+					let value = overlay_summary_value(node);
+					spawn_section_header(
+						parent,
+						context.fonts,
+						label,
+						Some(value.as_str()),
+						self.justify.content(),
+						OpenSelectKey(label),
+					);
 				}
 			}
 		}
@@ -241,31 +222,44 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		let open = context.sections.is_open(label);
-		parent
-			.spawn((
-				Node {
-					width: Val::Percent(100.0),
-					flex_direction: FlexDirection::Column,
-					align_items: self.justify.items(),
-					row_gap: Val::Px(PANEL_ROW_GAP),
-					..default()
-				},
-				Pickable::IGNORE,
-			))
-			.with_children(|section| {
-				spawn_section_header(
-					section,
-					context.fonts,
-					label,
-					open,
-					self.justify.content(),
-					ToggleSectionKey(label),
-				);
-				if open {
-					self.render_nodes(children, section, context);
+		if self.interior {
+			self.render_nodes(children, parent, context);
+			return;
+		}
+		let value = primary_select(children).map(overlay_summary_value);
+		spawn_section_header(
+			parent,
+			context.fonts,
+			label,
+			value.as_deref(),
+			self.justify.content(),
+			OpenSelectKey(label),
+		);
+	}
+
+	fn select_grid<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		groups: &[character_ui_menu::SelectGroup<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		for group in groups {
+			if let Some(group_label) = group.label {
+				spawn_group_label(parent, context.fonts, group_label);
+			}
+			spawn_tile_grid(parent, self.justify.content(), |grid| {
+				for choice in &group.choices {
+					spawn_asset_tile(
+						grid,
+						context.fonts,
+						choice.label,
+						choice.selected,
+						None,
+						MenuButton(choice.event),
+					);
 				}
 			});
+		}
 	}
 
 	fn item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(

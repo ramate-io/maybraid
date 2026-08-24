@@ -2,15 +2,15 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
-use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionId, SectionOpenState};
+use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionOpenState};
 use game_commands::command::TextEntryFocus;
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterMenuEvent, CloseOverlaySelect, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
 	MenuButton, MenuJustify, MenuSink, NoThumbnails, OpenSelectKey, OverlaySelectRoot,
-	OverlaySelectViewport, RenderContext, ToggleSectionKey,
+	OverlaySelectViewport, RenderContext,
 };
-use menu_components::{spawn_scroll_pane, HudFonts, PANEL_ROW_GAP};
+use menu_components::{spawn_scroll_pane, ActiveOverlayKey, HudFonts, PANEL_ROW_GAP};
 use menu_screens::MenuScreen;
 
 const PANEL_WIDTH: f32 = 480.0;
@@ -41,18 +41,18 @@ pub struct CharacterUiState {
 
 impl Default for CharacterUiState {
 	fn default() -> Self {
-		Self { sections: SectionOpenState::default(), layout_revision: 0 }
-	}
-}
-
-impl CharacterUiState {
-	fn bump_layout_revision(&mut self) {
-		self.layout_revision += 1;
-	}
-
-	fn toggle_section(&mut self, section: SectionId) {
-		self.sections.toggle(section);
-		self.bump_layout_revision();
+		Self {
+			sections: SectionOpenState {
+				presets_open: false,
+				head_open: false,
+				body_open: false,
+				head_features_open: false,
+				hair_open: false,
+				clothing_open: false,
+				animation_open: false,
+			},
+			layout_revision: 0,
+		}
 	}
 }
 
@@ -114,6 +114,7 @@ fn apply_show_character(
 	mut sync_state: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
+	mut active_overlay: ResMut<ActiveOverlayKey>,
 ) {
 	if requests.is_empty() {
 		return;
@@ -127,6 +128,7 @@ fn apply_show_character(
 	overlay.open = None;
 	overlay_sync.open = None;
 	overlay_sync.menu_dirty = false;
+	active_overlay.0 = None;
 	sync_state.layout_revision = ui_state.layout_revision;
 	sync_state.menu_dirty = false;
 	let viewport = spawn_character_ui_shell(&mut commands);
@@ -321,18 +323,14 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 fn dispatch_character_interactions(
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<CharacterMenu>>,
-	mut ui_state: ResMut<CharacterUiState>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
+	mut active_overlay: ResMut<ActiveOverlayKey>,
 	screens: Query<Entity, With<CharacterScreen>>,
-	mut section_interactions: Query<
-		(&Interaction, &ToggleSectionKey),
-		(Changed<Interaction>, With<Button>),
-	>,
 	mut open_interactions: Query<
 		(&Interaction, &OpenSelectKey),
-		(Changed<Interaction>, With<Button>, Without<ToggleSectionKey>),
+		(Changed<Interaction>, With<Button>),
 	>,
 	mut close_interactions: Query<
 		&Interaction,
@@ -340,36 +338,24 @@ fn dispatch_character_interactions(
 	>,
 	mut menu_interactions: Query<
 		(&Interaction, &MenuButton<MenuEvent>),
-		(
-			Changed<Interaction>,
-			With<Button>,
-			Without<ToggleSectionKey>,
-			Without<OpenSelectKey>,
-			Without<CloseOverlaySelect>,
-		),
+		(Changed<Interaction>, With<Button>, Without<OpenSelectKey>, Without<CloseOverlaySelect>),
 	>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
-	for (interaction, toggle) in &mut section_interactions {
-		if *interaction != Interaction::Pressed {
-			continue;
-		}
-		if let Some(section) = section_id_for_label(toggle.0) {
-			ui_state.toggle_section(section);
-		}
-	}
 
 	for (interaction, open) in &mut open_interactions {
 		if *interaction == Interaction::Pressed {
 			overlay.open = Some(open.0);
+			active_overlay.0 = Some(open.0);
 		}
 	}
 
 	for interaction in &mut close_interactions {
 		if *interaction == Interaction::Pressed {
 			overlay.open = None;
+			active_overlay.0 = None;
 		}
 	}
 
@@ -388,8 +374,10 @@ fn dispatch_character_interactions(
 		overlay_sync.menu_dirty = true;
 		menu_events.write(CharacterMenuEvent::MenuUpdate(menu_state.0.clone()));
 		if let Some(key) = overlay.open {
-			if overlay_closes_on_pick(key) {
+			let nodes = menu_state.0.menu_nodes();
+			if find_overlay_node(&nodes, key).is_some_and(overlay_closes_on_pick) {
 				overlay.open = None;
+				active_overlay.0 = None;
 			}
 		}
 	}
@@ -399,6 +387,7 @@ fn close_overlay_on_escape(
 	keys: Res<ButtonInput<KeyCode>>,
 	focus: Option<Res<TextEntryFocus>>,
 	mut overlay: ResMut<OverlaySelectState>,
+	mut active_overlay: ResMut<ActiveOverlayKey>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() || overlay.open.is_none() {
@@ -409,18 +398,6 @@ fn close_overlay_on_escape(
 	}
 	if keys.just_pressed(KeyCode::Escape) {
 		overlay.open = None;
-	}
-}
-
-fn section_id_for_label(label: &'static str) -> Option<SectionId> {
-	match label {
-		"Presets" => Some(SectionId::Presets),
-		"Head" => Some(SectionId::Head),
-		"Body" => Some(SectionId::Body),
-		"Head & Features" => Some(SectionId::HeadFeatures),
-		"Hair" => Some(SectionId::Hair),
-		"Clothing" => Some(SectionId::Clothing),
-		"Animation" => Some(SectionId::Animation),
-		_ => None,
+		active_overlay.0 = None;
 	}
 }

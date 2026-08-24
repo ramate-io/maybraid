@@ -22,7 +22,10 @@ pub use scroll::{
 	on_hud_scroll, send_hud_scroll_events, spawn_scroll_pane, sync_hud_scrollbars, HudScroll,
 	HudScrollThumb, HudScrollTrack, HudScrollViewport,
 };
-pub use section::spawn_section_header;
+pub use section::{
+	spawn_section_header, sync_overlay_header_cursors, ActiveOverlayKey, OverlayHeader,
+	OverlayHeaderKey,
+};
 pub use select_list::spawn_select_row;
 pub use stepper::spawn_stepper;
 pub use summary::spawn_select_summary;

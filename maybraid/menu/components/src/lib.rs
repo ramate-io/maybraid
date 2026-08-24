@@ -18,8 +18,9 @@ pub use controls::{
 	spawn_cursor_slot, spawn_cursor_slot_sized, spawn_group_label, spawn_hud_text,
 	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
 	spawn_select_row, spawn_select_summary, spawn_stepper, spawn_swatch, spawn_swatch_row,
-	spawn_text_button, spawn_tile_grid, sync_hud_scrollbars, HudFonts, HudScroll, HudScrollThumb,
-	HudScrollTrack, HudScrollViewport,
+	spawn_text_button, spawn_tile_grid, sync_hud_scrollbars, sync_overlay_header_cursors,
+	ActiveOverlayKey, HudFonts, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	OverlayHeader, OverlayHeaderKey,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -57,6 +58,7 @@ pub struct MenuComponentsPlugin;
 impl Plugin for MenuComponentsPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TextMenuInputLock>()
+			.init_resource::<ActiveOverlayKey>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
 			.add_observer(select_text_menu_item_on_over)
 			.add_observer(on_hud_scroll)
@@ -68,6 +70,7 @@ impl Plugin for MenuComponentsPlugin {
 					sync_loading_bar_fill,
 					send_hud_scroll_events,
 					sync_hud_scrollbars,
+					sync_overlay_header_cursors,
 				),
 			)
 			.add_systems(

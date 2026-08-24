@@ -1,25 +1,69 @@
-//! Overlay routing for long catalogs. The IR stays `MenuNode`; this crate
-//! decides which labels open a picker screen.
+//! Overlay routing. The IR stays `MenuNode`; this crate decides what opens
+//! a picker and what paints inside it.
 
 use bevy::prelude::*;
 use character_ui_menu::{ItemRow, MenuNode, SelectGroup};
 
-use crate::sink::{asset_thumbnail, bevy_color, MenuThumbnailContext, RenderContext};
+use crate::sink::{
+	asset_thumbnail, bevy_color, MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext,
+};
 use crate::widgets::{CloseOverlaySelect, MenuButton};
 use crate::MenuJustify;
 use menu_components::{
-	spawn_asset_tile, spawn_group_label, spawn_panel_title, spawn_select_summary, spawn_swatch,
-	spawn_swatch_row, spawn_text_button, spawn_tile_grid, HudFonts, PANEL_ROW_GAP,
+	spawn_asset_tile, spawn_group_label, spawn_panel_title, spawn_swatch, spawn_swatch_row,
+	spawn_text_button, spawn_tile_grid, HudFonts, PANEL_ROW_GAP,
 };
 
-/// Labels that paint a summary row and open a full-grid picker.
-pub fn overlay_select_label(label: &'static str) -> bool {
-	matches!(label, "Species" | "Clothing" | "Animation" | "Clip")
+/// Catalog nodes that can show a selected name on a header.
+pub fn is_select_node<E>(node: &MenuNode<E>) -> bool {
+	matches!(
+		node,
+		MenuNode::SectionSelect { .. }
+			| MenuNode::BlockAsset { .. }
+			| MenuNode::ItemMultiSelect { .. }
+	)
 }
 
-/// Single-select overlays close after a pick; clothing stays open.
-pub fn overlay_closes_on_pick(label: &'static str) -> bool {
-	label != "Clothing"
+/// Flatten fragments so a section's real children can be inspected.
+pub fn flatten_nodes<E>(nodes: &[MenuNode<E>]) -> Vec<&MenuNode<E>> {
+	let mut out = Vec::new();
+	flatten_into(nodes, &mut out);
+	out
+}
+
+fn flatten_into<'a, E>(nodes: &'a [MenuNode<E>], out: &mut Vec<&'a MenuNode<E>>) {
+	for node in nodes {
+		match node {
+			MenuNode::Fragment(children) => flatten_into(children, out),
+			other => out.push(other),
+		}
+	}
+}
+
+/// The lone catalog under a section, if there is exactly one.
+pub fn primary_select<'a, E>(children: &'a [MenuNode<E>]) -> Option<&'a MenuNode<E>> {
+	let selects: Vec<_> = flatten_nodes(children)
+		.into_iter()
+		.filter(|node| is_select_node(node))
+		.collect();
+	(selects.len() == 1).then(|| selects[0])
+}
+
+/// True when the overlay is only a single catalog (no sliders/swatches).
+pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
+	match node {
+		MenuNode::SectionSelect { .. } | MenuNode::BlockAsset { .. } => true,
+		MenuNode::ItemMultiSelect { .. } => false,
+		MenuNode::Section { children, .. } => {
+			let flat = flatten_nodes(children);
+			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
+		}
+		_ => false,
+	}
+}
+
+pub fn overlay_closes_on_pick<E>(node: &MenuNode<E>) -> bool {
+	is_picker_only(node)
 }
 
 /// Walk a normalized tree for the node whose label matches `key`.
@@ -35,7 +79,13 @@ pub fn find_overlay_node<'a, E>(nodes: &'a [MenuNode<E>], key: &str) -> Option<&
 fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<E>> {
 	match node {
 		MenuNode::Fragment(children) => find_overlay_node(children, key),
-		MenuNode::Section { children, .. } => find_overlay_node(children, key),
+		MenuNode::Section { label, children } => {
+			if *label == key {
+				Some(node)
+			} else {
+				find_overlay_node(children, key)
+			}
+		}
 		MenuNode::SectionSelect { label, children, .. } => {
 			if *label == key {
 				Some(node)
@@ -54,6 +104,9 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 
 pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 	match node {
+		MenuNode::Section { children, .. } => {
+			primary_select(children).map(overlay_summary_value).unwrap_or_default()
+		}
 		MenuNode::SectionSelect { groups, .. } => {
 			selected_select_label(groups).unwrap_or("—").to_string()
 		}
@@ -66,7 +119,7 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 			let worn = rows.iter().filter(|row| row.asset.selected).count();
 			format!("{worn} worn")
 		}
-		_ => "—".into(),
+		_ => String::new(),
 	}
 }
 
@@ -76,23 +129,6 @@ fn selected_select_label<E>(groups: &[SelectGroup<E>]) -> Option<&'static str> {
 		.flat_map(|group| group.choices.iter())
 		.find(|choice| choice.selected)
 		.map(|choice| choice.label)
-}
-
-pub fn spawn_overlay_summary<E: Copy + Send + Sync + 'static>(
-	parent: &mut ChildSpawnerCommands,
-	fonts: &HudFonts,
-	label: &'static str,
-	node: &MenuNode<E>,
-	justify: JustifyContent,
-) {
-	spawn_select_summary(
-		parent,
-		fonts,
-		label,
-		&overlay_summary_value(node),
-		justify,
-		crate::widgets::OpenSelectKey(label),
-	);
 }
 
 /// Full-screen picker chrome. The host fills the returned viewport.
@@ -177,6 +213,14 @@ pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailCont
 	justify: MenuJustify,
 ) {
 	match node {
+		MenuNode::Section { children, .. } => {
+			if let Some(select) = picker_only_child(children) {
+				render_overlay_body(select, parent, context, justify);
+			} else {
+				MaybraidMenuSink { justify, interior: true }
+					.render_nodes(children, parent, context);
+			}
+		}
 		MenuNode::SectionSelect { groups, .. } => {
 			for group in groups {
 				if let Some(group_label) = group.label {
@@ -217,8 +261,15 @@ pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailCont
 				overlay_item_row(row, parent, context, justify);
 			}
 		}
-		_ => {}
+		other => {
+			MaybraidMenuSink { justify, interior: true }.render_node(other, parent, context);
+		}
 	}
+}
+
+fn picker_only_child<'a, E>(children: &'a [MenuNode<E>]) -> Option<&'a MenuNode<E>> {
+	let flat = flatten_nodes(children);
+	(flat.len() == 1 && is_picker_only(flat[0])).then(|| flat[0])
 }
 
 fn overlay_item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -266,44 +317,44 @@ fn overlay_item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 
 #[cfg(test)]
 mod tests {
-	use super::{find_overlay_node, overlay_closes_on_pick, overlay_select_label};
-	use character_ui_menu::{MenuNode, SelectChoice, SelectGroup};
+	use super::{
+		find_overlay_node, is_picker_only, overlay_closes_on_pick, overlay_summary_value,
+		primary_select,
+	};
+	use character_ui_menu::{MenuNode, PreviewColor, SelectChoice, SelectGroup};
 
-	#[test]
-	fn long_catalogs_use_overlay() {
-		assert!(overlay_select_label("Species"));
-		assert!(overlay_select_label("Clothing"));
-		assert!(overlay_select_label("Animation"));
-		assert!(overlay_select_label("Clip"));
-		assert!(!overlay_select_label("Eyes"));
-		assert!(!overlay_select_label("Hair"));
+	fn clip() -> MenuNode<u8> {
+		MenuNode::BlockAsset { label: "Clip", preview: PreviewColor::WHITE, choices: vec![] }
 	}
 
 	#[test]
-	fn clothing_stays_open() {
-		assert!(!overlay_closes_on_pick("Clothing"));
-		assert!(overlay_closes_on_pick("Species"));
+	fn animation_section_is_a_picker() {
+		let section = MenuNode::<u8>::Section { label: "Animation", children: vec![clip()] };
+		assert!(is_picker_only(&section));
+		assert!(overlay_closes_on_pick(&section));
 	}
 
 	#[test]
-	fn finds_nested_block() {
-		let tree = [MenuNode::<u8>::Section {
-			label: "Animation",
-			children: vec![MenuNode::BlockAsset {
-				label: "Clip",
-				preview: character_ui_menu::PreviewColor::WHITE,
-				choices: vec![],
-			}],
-		}];
-		assert!(matches!(
-			find_overlay_node(&tree, "Clip"),
-			Some(MenuNode::BlockAsset { label: "Clip", .. })
-		));
+	fn mixed_section_stays_open() {
+		let section = MenuNode::<u8>::Section {
+			label: "Hair",
+			children: vec![
+				clip(),
+				MenuNode::LabeledSwatch { label: "Hair Color", choices: vec![] },
+			],
+		};
+		assert!(!is_picker_only(&section));
+		assert!(!overlay_closes_on_pick(&section));
+		assert!(primary_select(match &section {
+			MenuNode::Section { children, .. } => children,
+			_ => unreachable!(),
+		})
+		.is_some());
 	}
 
 	#[test]
-	fn finds_section_select() {
-		let tree = [MenuNode::<u8>::SectionSelect {
+	fn species_header_shows_selected_name() {
+		let node = MenuNode::<u8>::SectionSelect {
 			label: "Species",
 			groups: vec![SelectGroup::unlabeled(vec![SelectChoice {
 				label: "braidman",
@@ -311,10 +362,22 @@ mod tests {
 				event: 1,
 			}])],
 			children: vec![],
-		}];
+		};
+		assert_eq!(overlay_summary_value(&node), "braidman");
+	}
+
+	#[test]
+	fn empty_section_has_no_primary_select() {
+		assert!(primary_select::<u8>(&[]).is_none());
+		assert!(!is_picker_only(&MenuNode::<u8>::Section { label: "Head", children: vec![] }));
+	}
+
+	#[test]
+	fn finds_section() {
+		let tree = [MenuNode::<u8>::Section { label: "Head", children: vec![] }];
 		assert!(matches!(
-			find_overlay_node(&tree, "Species"),
-			Some(MenuNode::SectionSelect { label: "Species", .. })
+			find_overlay_node(&tree, "Head"),
+			Some(MenuNode::Section { label: "Head", .. })
 		));
 	}
 }

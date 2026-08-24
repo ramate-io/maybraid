@@ -1,28 +1,47 @@
-//! Collapsible section title.
+//! Overlay-opening section header.
 
 use bevy::prelude::*;
 
+use crate::icons::AnimatedIcon;
+use crate::single_select::TextCursorSlot;
 use crate::theme::{
-	PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE, TEXT_YELLOW,
-	TEXT_YELLOW_HOVER,
+	PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
 use super::HudFonts;
 
-/// Pickable section header. `extra` is typically `ToggleSectionKey`.
+/// Marker on a header that opens an overlay select.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct OverlayHeader;
+
+/// Label key for [`ActiveOverlayKey`] matching.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct OverlayHeaderKey(pub &'static str);
+
+/// Currently open overlay key; empty means the panel is idle.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ActiveOverlayKey(pub Option<&'static str>);
+
+/// Pickable header. `extra` is typically `OpenSelectKey`.
+///
+/// `value` is the selected name when this header is a single catalog pick.
+/// The cursor starts hidden; [`sync_overlay_header_cursors`] shows it when
+/// the row is hovered or its overlay is open.
 pub fn spawn_section_header(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
-	label: &str,
-	open: bool,
+	label: &'static str,
+	value: Option<&str>,
 	justify: JustifyContent,
 	extra: impl Bundle,
 ) {
-	let title = format!("{} {label}", if open { "v" } else { ">" });
 	parent
 		.spawn((
 			Button,
+			OverlayHeader,
+			OverlayHeaderKey(label),
 			extra,
 			Node {
 				width: Val::Percent(100.0),
@@ -36,13 +55,48 @@ pub fn spawn_section_header(
 			BackgroundColor(Color::NONE),
 		))
 		.with_children(|row| {
-			spawn_cursor_slot_sized(row, fonts, open, PANEL_HEADER_CURSOR_ICON_SIZE);
+			spawn_cursor_slot_sized(row, fonts, false, PANEL_HEADER_CURSOR_ICON_SIZE);
 			spawn_hud_text(
 				row,
 				fonts.header(PANEL_HEADER_FONT_SIZE),
-				&title,
-				if open { TEXT_YELLOW } else { TEXT_YELLOW_HOVER },
+				label,
+				TEXT_YELLOW,
 				bevy::text::Justify::Left,
 			);
+			if let Some(value) = value {
+				spawn_hud_text(
+					row,
+					fonts.body(PANEL_ITEM_FONT_SIZE),
+					value,
+					TEXT_YELLOW_FAINT,
+					bevy::text::Justify::Left,
+				);
+			}
 		});
+}
+
+/// Wink the header mark only while hovered or that overlay is open.
+pub fn sync_overlay_header_cursors(
+	active: Res<ActiveOverlayKey>,
+	headers: Query<(&Interaction, &OverlayHeaderKey, &Children), With<OverlayHeader>>,
+	slots: Query<(), With<TextCursorSlot>>,
+	children: Query<&Children>,
+	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
+) {
+	for (interaction, key, header_children) in &headers {
+		let show = *interaction == Interaction::Hovered || active.0 == Some(key.0);
+		for child in header_children {
+			if slots.get(*child).is_err() {
+				continue;
+			}
+			let Ok(slot_children) = children.get(*child) else {
+				continue;
+			};
+			for icon_entity in slot_children {
+				if let Ok(mut visibility) = icons.get_mut(*icon_entity) {
+					*visibility = if show { Visibility::Inherited } else { Visibility::Hidden };
+				}
+			}
+		}
+	}
 }
