@@ -88,7 +88,7 @@ impl JungleStorybookTreeParams {
 			Self {
 				geometry,
 				growth_spawn_fraction: self.growth_spawn_fraction,
-				jungle_growth_radius_scale: self.jungle_growth_radius_scale,
+				jungle_growth_radius_scale: (self.jungle_growth_radius_scale * inv).max(1e-6),
 			},
 			size,
 		)
@@ -218,6 +218,10 @@ mod tests {
 		assert!((size - 8.0).abs() < 1e-5);
 		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
 		assert!((unit.geometry.scale.stalk_base_radius.unwrap() - 0.05).abs() < 1e-5);
+		assert!(
+			(unit.jungle_growth_radius_scale - DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE / 8.0).abs()
+				< 1e-5
+		);
 		assert_eq!(unit.geometry.canopy_noise.seed, 7);
 		Ok(())
 	}

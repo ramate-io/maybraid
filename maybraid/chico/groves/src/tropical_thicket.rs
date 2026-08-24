@@ -273,8 +273,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HighBushShoots, HighBushShootsParams, HonuBanyan, HonuBanyanParams, PalmBush,
-		PalmBushParams,
+		HighBushShoots, HighBushShootsParams, HonuBanyan, PalmBush, PalmBushParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -613,17 +612,11 @@ mod vc {
 				}
 			}
 			TropicalThicketItem::Banyan(banyan) => {
-				let samples = banyan.build_with_noise(build_noise);
-				let mut params = HonuBanyanParams::default();
-				params.geometry = samples.geometry;
-				params.growth_spawn_fraction = samples.growth_spawn_fraction;
-				// Mini Honu (~2–4 m) must not keep full-canopy growth radius (4.0).
-				params = params.with_growth_scale_for_height();
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = banyan.build_with_noise(build_noise).geometry.scale.tree_height;
 				TropicalThicketPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalThicketKind::Banyan(Arc::new(unit_params.build())),
+					kind: TropicalThicketKind::Banyan(Arc::new(HonuBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,

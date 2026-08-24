@@ -261,7 +261,7 @@ mod vc {
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
 		HighBushShoots, HighBushShootsParams, KamakuraTorch, KamakuraTorchParams, PenmarchTorch,
-		PenmarchTorchParams, SopesBanyan, SopesBanyanParams, VaseTree, VaseTreeParams,
+		PenmarchTorchParams, SopesBanyan, VaseTree, VaseTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -583,14 +583,11 @@ mod vc {
 				}
 			}
 			WanderingAcaciaItem::Sope(banyan) => {
-				let samples = banyan.build_with_noise(build_noise);
-				let mut params = SopesBanyanParams::default();
-				params.geometry = samples.geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = banyan.build_with_noise(build_noise).geometry.scale.stalk_height;
 				WanderingAcaciaPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Sope(Arc::new(unit_params.build())),
+					kind: WanderingAcaciaKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,

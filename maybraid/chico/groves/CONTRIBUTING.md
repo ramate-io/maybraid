@@ -13,7 +13,7 @@ If the tree or tuft still emits one node per stick/ball and has no `into_unit_fr
 1. Add `tree_variants: u32` (woody) or `patch_variants: u32` (tuft) on params, default `100`.
 2. At grow, map placement → archetype with [`patch_variant_index`](src/grove/vc_tuft.rs) (stable hash of world XZ).
 3. Key construction noise with [`variant_noise`](src/grove/vc_tuft.rs) so the same index rebuilds identically.
-4. Call `params.into_unit_from_num(variant)` (or `unit_from_num`). Keep **palette / leaf color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Braid Oak groves instance [`BraidOakTree::unit_from_num`](../sbs-trees/src/braid_oak_tree.rs) and put sampled cell height on `Placement` only — do not remix grove SBS projection or stalk onto the mesh.
+4. Call `params.into_unit_from_num(variant)` (or `unit_from_num`). Keep **palette / leaf color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Preset silhouettes instance the default unit and put sampled cell height on `Placement` only — do not remix grove SBS projection, descenders, or leaf balls onto the mesh. That is [`BraidOakTree::unit_from_num`](../sbs-trees/src/braid_oak_tree.rs), [`HonuBanyan::unit_from_num`](../sbs-trees/src/honu_banyan.rs), [`SopesBanyan::unit_from_num`](../sbs-trees/src/sopes_banyan.rs), and [`JungleStorybookTree::unit_from_num`](../sbs-trees/src/jungle_storybook_tree.rs). Ordinary Storybook (and similar) still remix height + span onto params, then `into_unit_from_num`.
 5. Put world size on [`Placement`](../vegetation-components/src/placed.rs):
 
    `Placement::new(position, 0.0).with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)))`

@@ -77,4 +77,4 @@ Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUT
 
 ## Grove construction
 
-Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Braid Oak is the default unit oak scaled by placement: groves must not grow a remixed `BraidOakTreeSbs` and then `into_unit_from_num`.
+Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Preset silhouettes (Braid Oak, Honu, Sope, Jungle Storybook) instance `unit_from_num` and put sampled height on placement: groves must not remix SBS projection / descenders / growth onto those meshes and then `into_unit_from_num`. Jungle Storybook `into_unit_from_num` must divide `jungle_growth_radius_scale` by height so fronds stay proportional after placement scale.

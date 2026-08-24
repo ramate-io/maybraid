@@ -262,9 +262,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{
-		BraidOakTree, DatePalm, DatePalmParams, SopesBanyan, SopesBanyanParams,
-	};
+	use chico_sbs_trees::{BraidOakTree, DatePalm, DatePalmParams, SopesBanyan};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -566,15 +564,17 @@ mod vc {
 				}
 			}
 			ShamanhomeItem::SopeBanyan(banyan) => {
-				let samples =
-					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
-				let mut params = SopesBanyanParams::default();
-				params.geometry = samples.geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
+					banyan,
+					build_noise,
+				)
+				.geometry
+				.scale
+				.stalk_height;
 				ShamanhomePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ShamanhomeKind::Sope(Arc::new(unit_params.build())),
+					kind: ShamanhomeKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,

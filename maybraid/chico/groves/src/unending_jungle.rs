@@ -334,9 +334,9 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HonuBanyan, HonuBanyanParams, JungleStorybookTree, JungleStorybookTreeParams,
-		PenmarchTorch, PenmarchTorchParams, RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan,
-		SopesBanyanParams, StorybookTree, StorybookTreeParams, WaialeaPalm, WaialeaPalmParams,
+		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, RorysHeadTrained,
+		RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
+		WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -665,31 +665,34 @@ mod vc {
 
 		match placed.variant.item() {
 			UnendingJungleItem::Honu(banyan) => {
-				let samples =
-					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
-				let mut params = HonuBanyanParams::default();
-				params.geometry = samples.geometry;
-				params.growth_spawn_fraction = samples.growth_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(
+					banyan,
+					build_noise,
+				)
+				.geometry
+				.scale
+				.tree_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Honu(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
 			UnendingJungleItem::Sope(banyan) => {
-				let samples =
-					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
-				let mut params = SopesBanyanParams::default();
-				params.geometry = samples.geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
+					banyan,
+					build_noise,
+				)
+				.geometry
+				.scale
+				.stalk_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Sope(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -710,15 +713,13 @@ mod vc {
 				}
 			}
 			UnendingJungleItem::JungleStorybook(jungle) => {
-				let samples = jungle.build_with_noise(build_noise);
-				let mut params = JungleStorybookTreeParams::default();
-				params.geometry = samples.geometry;
-				params.growth_spawn_fraction = samples.growth_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = jungle.build_with_noise(build_noise).geometry.height();
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::JungleStorybook(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::JungleStorybook(Arc::new(
+						JungleStorybookTree::unit_from_num(variant),
+					)),
 					stick_material,
 					ball_material,
 					frond_material,
