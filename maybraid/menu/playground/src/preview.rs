@@ -44,7 +44,7 @@ impl Plugin for CharacterPreviewPlugin {
 				brightness: 200.0,
 				..default()
 			})
-			.add_systems(Startup, (setup_lighting, setup_ground))
+			.add_systems(Startup, setup_lighting)
 			.add_systems(
 				Update,
 				(
@@ -74,20 +74,6 @@ fn setup_lighting(mut commands: Commands) {
 		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
-}
-
-fn setup_ground(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-	let mesh = meshes.add(Plane3d::default().mesh().size(24.0, 24.0));
-	let material = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.12, 0.14, 0.18),
-		perceptual_roughness: 0.95,
-		..default()
-	});
-	commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY));
 }
 
 fn sync_preview(
