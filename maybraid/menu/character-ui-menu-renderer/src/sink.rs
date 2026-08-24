@@ -6,9 +6,9 @@ use character_ui_menu::{
 	ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_block_label, spawn_group_label, spawn_hud_text, spawn_labeled_row,
-	spawn_section_header, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid, HudFonts,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	menu_display_name, spawn_asset_tile, spawn_block_label, spawn_group_label, spawn_hud_text,
+	spawn_labeled_row, spawn_section_header, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_tile_grid, HudFonts, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 use crate::justify::MenuJustify;
@@ -79,11 +79,17 @@ pub struct MaybraidMenuSink {
 	/// When true, catalogs paint inline (inside an overlay). The panel path
 	/// only stamps headers that open a picker.
 	pub interior: bool,
+	/// Skip a block title that repeats the overlay / section name.
+	pub omit_block_label: Option<&'static str>,
 }
 
 impl MaybraidMenuSink {
 	pub fn new(justify: MenuJustify) -> Self {
-		Self { justify, interior: false }
+		Self { justify, interior: false, omit_block_label: None }
+	}
+
+	fn paints_block_label(&self, label: &str) -> bool {
+		self.omit_block_label != Some(label)
 	}
 }
 
@@ -146,7 +152,9 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			}
 			MenuNode::BlockAsset { label, preview, choices } => {
 				if self.interior {
-					spawn_block_label(parent, context.fonts, label);
+					if self.paints_block_label(label) {
+						spawn_block_label(parent, context.fonts, label);
+					}
 					let preview = bevy_color(*preview);
 					spawn_tile_grid(parent, self.justify.content(), |grid| {
 						for choice in choices {
@@ -175,7 +183,9 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			}
 			MenuNode::ItemMultiSelect { label, rows } => {
 				if self.interior {
-					spawn_block_label(parent, context.fonts, label);
+					if self.paints_block_label(label) {
+						spawn_block_label(parent, context.fonts, label);
+					}
 					for row in rows {
 						self.item_row(row, parent, context);
 					}
@@ -207,7 +217,7 @@ impl MaybraidMenuSink {
 			spawn_hud_text(
 				row,
 				fonts.item(PANEL_LABEL_FONT_SIZE),
-				label,
+				&menu_display_name(label),
 				TEXT_YELLOW,
 				bevy::text::Justify::Left,
 			);

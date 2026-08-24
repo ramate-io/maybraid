@@ -4,6 +4,7 @@
 //! Full-screen home / loading screens keep using BSN [`Scene`]s.
 
 pub mod button;
+pub mod display;
 pub mod fonts;
 pub mod row;
 pub mod scroll;
@@ -16,6 +17,7 @@ pub mod text;
 pub mod tile;
 
 pub use button::spawn_text_button;
+pub use display::menu_display_name;
 pub use fonts::HudFonts;
 pub use row::spawn_labeled_row;
 pub use scroll::{

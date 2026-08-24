@@ -6,6 +6,7 @@ use bevy::text::Justify;
 use crate::theme::{PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
 use super::button::spawn_text_button;
+use super::display::menu_display_name;
 use super::text::spawn_hud_text;
 use super::HudFonts;
 
@@ -34,7 +35,7 @@ pub fn spawn_stepper(
 			spawn_hud_text(
 				row,
 				fonts.item(PANEL_VALUE_FONT_SIZE),
-				value,
+				&menu_display_name(value),
 				TEXT_YELLOW,
 				Justify::Center,
 			);

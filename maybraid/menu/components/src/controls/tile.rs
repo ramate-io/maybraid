@@ -8,6 +8,7 @@ use crate::theme::{
 	TEXT_YELLOW_HOVER,
 };
 
+use super::display::menu_display_name;
 use super::HudFonts;
 
 const TILE_LABEL_MAX_CHARS: usize = 16;
@@ -61,7 +62,7 @@ pub fn spawn_asset_tile(
 			}
 			let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
 			button.spawn((
-				Text::new(tile_label(label)),
+				Text::new(tile_label(&menu_display_name(label))),
 				fonts.item(PANEL_ITEM_FONT_SIZE),
 				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),

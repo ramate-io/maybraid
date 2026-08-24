@@ -213,11 +213,11 @@ pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailCont
 	justify: MenuJustify,
 ) {
 	match node {
-		MenuNode::Section { children, .. } => {
+		MenuNode::Section { label, children } => {
 			if let Some(select) = picker_only_child(children) {
 				render_overlay_body(select, parent, context, justify);
 			} else {
-				MaybraidMenuSink { justify, interior: true }
+				MaybraidMenuSink { justify, interior: true, omit_block_label: Some(label) }
 					.render_nodes(children, parent, context);
 			}
 		}
@@ -262,7 +262,8 @@ pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailCont
 			}
 		}
 		other => {
-			MaybraidMenuSink { justify, interior: true }.render_node(other, parent, context);
+			MaybraidMenuSink { justify, interior: true, omit_block_label: None }
+				.render_node(other, parent, context);
 		}
 	}
 }

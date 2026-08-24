@@ -10,16 +10,29 @@ use crate::theme::{
 	PANEL_ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
+use super::display::menu_display_name;
 use super::HudFonts;
 
 /// Largest panel title: section chrome and overlay picker headers.
 pub fn spawn_panel_title(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
-	spawn_hud_text(parent, fonts.header(PANEL_HEADER_FONT_SIZE), label, TEXT_YELLOW, Justify::Left);
+	spawn_hud_text(
+		parent,
+		fonts.header(PANEL_HEADER_FONT_SIZE),
+		&menu_display_name(label),
+		TEXT_YELLOW,
+		Justify::Left,
+	);
 }
 
 /// Block title above a field group (`Eyes`, `Hair`).
 pub fn spawn_block_label(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
-	spawn_hud_text(parent, fonts.header(PANEL_BLOCK_FONT_SIZE), label, TEXT_YELLOW, Justify::Left);
+	spawn_hud_text(
+		parent,
+		fonts.header(PANEL_BLOCK_FONT_SIZE),
+		&menu_display_name(label),
+		TEXT_YELLOW,
+		Justify::Left,
+	);
 }
 
 /// Muted subheading above a grouped select list.
@@ -27,7 +40,7 @@ pub fn spawn_group_label(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, la
 	spawn_hud_text(
 		parent,
 		fonts.body(PANEL_GROUP_FONT_SIZE),
-		label,
+		&menu_display_name(label),
 		TEXT_YELLOW_FAINT,
 		Justify::Left,
 	);
@@ -80,5 +93,11 @@ pub fn spawn_item_label(
 	label: &str,
 	color: Color,
 ) {
-	spawn_hud_text(parent, fonts.item(PANEL_ITEM_FONT_SIZE), label, color, Justify::Left);
+	spawn_hud_text(
+		parent,
+		fonts.item(PANEL_ITEM_FONT_SIZE),
+		&menu_display_name(label),
+		color,
+		Justify::Left,
+	);
 }
