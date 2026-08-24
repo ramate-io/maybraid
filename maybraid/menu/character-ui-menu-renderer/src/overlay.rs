@@ -8,7 +8,7 @@ use crate::sink::{asset_thumbnail, bevy_color, MenuThumbnailContext, RenderConte
 use crate::widgets::{CloseOverlaySelect, MenuButton};
 use crate::MenuJustify;
 use menu_components::{
-	spawn_asset_tile, spawn_block_label, spawn_group_label, spawn_select_summary, spawn_swatch,
+	spawn_asset_tile, spawn_group_label, spawn_panel_title, spawn_select_summary, spawn_swatch,
 	spawn_swatch_row, spawn_text_button, spawn_tile_grid, HudFonts, PANEL_ROW_GAP,
 };
 
@@ -156,7 +156,7 @@ pub fn spawn_overlay_shell(
 						Pickable::IGNORE,
 					))
 					.with_children(|header| {
-						spawn_block_label(header, fonts, title);
+						spawn_panel_title(header, fonts, title);
 						spawn_text_button(header, fonts, "back", CloseOverlaySelect);
 					});
 				viewport = menu_components::spawn_scroll_pane(

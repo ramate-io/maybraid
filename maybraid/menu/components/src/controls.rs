@@ -27,5 +27,8 @@ pub use select_list::spawn_select_row;
 pub use stepper::spawn_stepper;
 pub use summary::spawn_select_summary;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};
-pub use text::{spawn_block_label, spawn_cursor_slot, spawn_group_label, spawn_hud_text};
+pub use text::{
+	spawn_block_label, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_group_label,
+	spawn_hud_text, spawn_panel_title,
+};
 pub use tile::{spawn_asset_tile, spawn_tile_grid};

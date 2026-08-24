@@ -2,9 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::theme::{PANEL_CURSOR_ICON_GAP, PANEL_LABEL_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT};
+use crate::theme::{
+	PANEL_BLOCK_FONT_SIZE, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE,
+	PANEL_ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+};
 
-use super::text::{spawn_cursor_slot, spawn_hud_text};
+use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
 use super::HudFonts;
 
 /// Pickable row: label, current value, cursor. `extra` is typically `OpenSelectKey`.
@@ -32,17 +35,17 @@ pub fn spawn_select_summary(
 			BackgroundColor(Color::NONE),
 		))
 		.with_children(|row| {
-			spawn_cursor_slot(row, fonts, true);
+			spawn_cursor_slot_sized(row, fonts, true, PANEL_HEADER_CURSOR_ICON_SIZE);
 			spawn_hud_text(
 				row,
-				fonts.item(PANEL_LABEL_FONT_SIZE),
+				fonts.header(PANEL_BLOCK_FONT_SIZE),
 				label,
 				TEXT_YELLOW,
 				bevy::text::Justify::Left,
 			);
 			spawn_hud_text(
 				row,
-				fonts.body(PANEL_LABEL_FONT_SIZE),
+				fonts.body(PANEL_ITEM_FONT_SIZE),
 				value,
 				TEXT_YELLOW_FAINT,
 				bevy::text::Justify::Left,

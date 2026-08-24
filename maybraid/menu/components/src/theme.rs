@@ -103,23 +103,29 @@ pub const LOADING_STACK_GAP: f32 = 28.0;
 /// Explainer under the loading bar.
 pub const LOADING_EXPLAINER_FONT_SIZE: f32 = DESCRIPTION_FONT_SIZE;
 
-/// Mid-size HUD header for inspector-style panels (character creator).
-pub const PANEL_HEADER_FONT_SIZE: f32 = 32.0;
+/// Collapsible section titles and overlay picker titles.
+pub const PANEL_HEADER_FONT_SIZE: f32 = 36.0;
 
-/// Mid-size option / control label in a panel.
-pub const PANEL_ITEM_FONT_SIZE: f32 = 26.0;
+/// Block titles above a field group (`Eyes`, `Hair`) and overlay summary names.
+pub const PANEL_BLOCK_FONT_SIZE: f32 = 28.0;
 
-/// Inline field label beside a stepper or swatch row.
+/// Inline field name beside a stepper or swatch row.
 pub const PANEL_LABEL_FONT_SIZE: f32 = 22.0;
 
+/// Option rows, tiles, and stepper values — smaller than headers.
+pub const PANEL_ITEM_FONT_SIZE: f32 = 20.0;
+
 /// Numeric or cycled value in a stepper.
-pub const PANEL_VALUE_FONT_SIZE: f32 = 24.0;
+pub const PANEL_VALUE_FONT_SIZE: f32 = PANEL_ITEM_FONT_SIZE;
 
 /// Subheading above a grouped select list.
-pub const PANEL_GROUP_FONT_SIZE: f32 = 18.0;
+pub const PANEL_GROUP_FONT_SIZE: f32 = 16.0;
 
-/// Cursor mark beside a selected panel row.
-pub const PANEL_CURSOR_ICON_SIZE: f32 = 22.0;
+/// Cursor mark beside a field or option row.
+pub const PANEL_CURSOR_ICON_SIZE: f32 = 20.0;
+
+/// Cursor mark beside a section or overlay-summary header.
+pub const PANEL_HEADER_CURSOR_ICON_SIZE: f32 = 28.0;
 
 /// Gap between the panel cursor mark and the row label.
 pub const PANEL_CURSOR_ICON_GAP: f32 = 10.0;

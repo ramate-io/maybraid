@@ -15,10 +15,11 @@ pub mod theme;
 
 pub use controls::{
 	color_from_hex, on_hud_scroll, send_hud_scroll_events, spawn_asset_tile, spawn_block_label,
-	spawn_cursor_slot, spawn_group_label, spawn_hud_text, spawn_labeled_row, spawn_scroll_pane,
-	spawn_section_header, spawn_select_row, spawn_select_summary, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_text_button, spawn_tile_grid, sync_hud_scrollbars, HudFonts, HudScroll,
-	HudScrollThumb, HudScrollTrack, HudScrollViewport,
+	spawn_cursor_slot, spawn_cursor_slot_sized, spawn_group_label, spawn_hud_text,
+	spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
+	spawn_select_row, spawn_select_summary, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_text_button, spawn_tile_grid, sync_hud_scrollbars, HudFonts, HudScroll, HudScrollThumb,
+	HudScrollTrack, HudScrollViewport,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{

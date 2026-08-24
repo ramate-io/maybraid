@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, TextBounds};
 
 use crate::theme::{
-	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_TILE_MIN_HEIGHT, PANEL_TILE_MIN_WIDTH,
-	TEXT_YELLOW, TEXT_YELLOW_HOVER,
+	PANEL_CHIP_GAP, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT, PANEL_TILE_MIN_WIDTH, TEXT_YELLOW,
+	TEXT_YELLOW_HOVER,
 };
 
 use super::HudFonts;
@@ -62,7 +62,7 @@ pub fn spawn_asset_tile(
 			let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
 			button.spawn((
 				Text::new(tile_label(label)),
-				fonts.item(PANEL_GROUP_FONT_SIZE),
+				fonts.item(PANEL_ITEM_FONT_SIZE),
 				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 				TextBounds::new(bounds, bounds),

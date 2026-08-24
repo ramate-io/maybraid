@@ -2,9 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::theme::{PANEL_CURSOR_ICON_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER};
+use crate::theme::{
+	PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE, TEXT_YELLOW,
+	TEXT_YELLOW_HOVER,
+};
 
-use super::text::{spawn_cursor_slot, spawn_item_label};
+use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
 use super::HudFonts;
 
 /// Pickable section header. `extra` is typically `ToggleSectionKey`.
@@ -33,12 +36,13 @@ pub fn spawn_section_header(
 			BackgroundColor(Color::NONE),
 		))
 		.with_children(|row| {
-			spawn_cursor_slot(row, fonts, open);
-			spawn_item_label(
+			spawn_cursor_slot_sized(row, fonts, open, PANEL_HEADER_CURSOR_ICON_SIZE);
+			spawn_hud_text(
 				row,
-				fonts,
+				fonts.header(PANEL_HEADER_FONT_SIZE),
 				&title,
 				if open { TEXT_YELLOW } else { TEXT_YELLOW_HOVER },
+				bevy::text::Justify::Left,
 			);
 		});
 }

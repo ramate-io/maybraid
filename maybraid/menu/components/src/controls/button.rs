@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::text::Justify;
 
-use crate::theme::{PANEL_ITEM_FONT_SIZE, TEXT_YELLOW};
+use crate::theme::{PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
 use super::text::spawn_hud_text;
 use super::HudFonts;
@@ -31,7 +31,7 @@ pub fn spawn_text_button(
 		.with_children(|button| {
 			spawn_hud_text(
 				button,
-				fonts.item(PANEL_ITEM_FONT_SIZE),
+				fonts.item(PANEL_VALUE_FONT_SIZE),
 				label,
 				TEXT_YELLOW,
 				Justify::Center,
