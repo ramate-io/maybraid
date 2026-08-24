@@ -15,19 +15,14 @@ use super::HudFonts;
 
 /// Largest panel title: section chrome and overlay picker headers.
 pub fn spawn_panel_title(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
-	spawn_hud_text(
-		parent,
-		fonts.header(PANEL_HEADER_FONT_SIZE),
-		&menu_display_name(label),
-		TEXT_YELLOW,
-		Justify::Left,
-	);
+	spawn_header_line(parent, fonts, label, None, PANEL_HEADER_FONT_SIZE);
 }
 
 /// Header title plus an optional trailing value in one text run.
 ///
 /// Sibling `Text` nodes do not share a glyph baseline in Bevy UI; mixed
-/// sizes have to live in one text block via `TextSpan`.
+/// sizes have to live in one text block via `TextSpan`. The value uses the
+/// same size as the title so the line reads as one face.
 pub fn spawn_header_line(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
@@ -48,7 +43,7 @@ pub fn spawn_header_line(
 			if let Some(value) = value.filter(|value| !value.is_empty()) {
 				text.spawn((
 					TextSpan::new(format!("  {}", menu_display_name(value))),
-					fonts.body(PANEL_ITEM_FONT_SIZE),
+					fonts.body(title_size),
 					TextColor(TEXT_YELLOW_FAINT),
 					LineHeight::RelativeToFont(1.0),
 				));
@@ -58,13 +53,7 @@ pub fn spawn_header_line(
 
 /// Block title above a field group (`Eyes`, `Hair`).
 pub fn spawn_block_label(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
-	spawn_hud_text(
-		parent,
-		fonts.header(PANEL_BLOCK_FONT_SIZE),
-		&menu_display_name(label),
-		TEXT_YELLOW,
-		Justify::Left,
-	);
+	spawn_hud_text(parent, fonts.header(PANEL_BLOCK_FONT_SIZE), label, TEXT_YELLOW, Justify::Left);
 }
 
 /// Muted subheading above a grouped select list.
@@ -72,7 +61,7 @@ pub fn spawn_group_label(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, la
 	spawn_hud_text(
 		parent,
 		fonts.body(PANEL_GROUP_FONT_SIZE),
-		&menu_display_name(label),
+		label,
 		TEXT_YELLOW_FAINT,
 		Justify::Left,
 	);
@@ -86,7 +75,7 @@ pub fn spawn_hud_text(
 	justify: Justify,
 ) {
 	parent.spawn((
-		Text::new(value.to_string()),
+		Text::new(menu_display_name(value)),
 		font,
 		TextColor(color),
 		TextLayout::new(justify, bevy::text::LineBreak::WordBoundary),
@@ -126,11 +115,5 @@ pub fn spawn_item_label(
 	label: &str,
 	color: Color,
 ) {
-	spawn_hud_text(
-		parent,
-		fonts.item(PANEL_ITEM_FONT_SIZE),
-		&menu_display_name(label),
-		color,
-		Justify::Left,
-	);
+	spawn_hud_text(parent, fonts.item(PANEL_ITEM_FONT_SIZE), label, color, Justify::Left);
 }

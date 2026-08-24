@@ -6,6 +6,7 @@ use crate::icons::AnimatedIcon;
 use crate::single_select::TextCursorSlot;
 use crate::theme::{PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE};
 
+use super::hud_menu::{HudMenu, HudMenuItem};
 use super::text::{spawn_cursor_slot_sized, spawn_header_line};
 use super::HudFonts;
 
@@ -57,16 +58,19 @@ pub fn spawn_section_header(
 		});
 }
 
-/// Wink the header mark only while hovered or that overlay is open.
+/// Wink the header mark while that row is focused or its overlay is open.
 pub fn sync_overlay_header_cursors(
 	active: Res<ActiveOverlayKey>,
-	headers: Query<(&Interaction, &OverlayHeaderKey, &Children), With<OverlayHeader>>,
+	headers: Query<(&OverlayHeaderKey, Option<&HudMenuItem>, &Children), With<OverlayHeader>>,
+	menus: Query<&HudMenu>,
 	slots: Query<(), With<TextCursorSlot>>,
 	children: Query<&Children>,
 	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
 ) {
-	for (interaction, key, header_children) in &headers {
-		let show = *interaction == Interaction::Hovered || active.0 == Some(key.0);
+	for (key, item, header_children) in &headers {
+		let focused = item
+			.is_some_and(|item| menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index));
+		let show = focused || active.0 == Some(key.0);
 		for child in header_children {
 			if slots.get(*child).is_err() {
 				continue;

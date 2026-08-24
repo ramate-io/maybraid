@@ -2,16 +2,13 @@
 //! a picker and what paints inside it.
 
 use bevy::prelude::*;
-use character_ui_menu::{ItemRow, MenuNode, SelectGroup};
+use character_ui_menu::{MenuNode, SelectGroup};
 
-use crate::sink::{
-	asset_thumbnail, bevy_color, MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext,
-};
-use crate::widgets::{CloseOverlaySelect, MenuButton};
+use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
+use crate::widgets::CloseOverlaySelect;
 use crate::MenuJustify;
 use menu_components::{
-	spawn_asset_tile, spawn_group_label, spawn_panel_title, spawn_swatch, spawn_swatch_row,
-	spawn_text_button, spawn_tile_grid, HudFonts, PANEL_ROW_GAP,
+	spawn_header_line, spawn_text_button, HudFonts, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP,
 };
 
 /// Catalog nodes that can show a selected name on a header.
@@ -192,7 +189,7 @@ pub fn spawn_overlay_shell(
 						Pickable::IGNORE,
 					))
 					.with_children(|header| {
-						spawn_panel_title(header, fonts, title);
+						spawn_header_line(header, fonts, title, None, PANEL_HEADER_FONT_SIZE);
 						spawn_text_button(header, fonts, "back", CloseOverlaySelect);
 					});
 				viewport = menu_components::spawn_scroll_pane(
@@ -206,114 +203,14 @@ pub fn spawn_overlay_shell(
 	viewport
 }
 
+/// Overlay interiors are the sink with catalogs painted inline.
 pub fn render_overlay_body<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	node: &MenuNode<E>,
 	parent: &mut ChildSpawnerCommands,
 	context: &mut RenderContext<'_, C>,
 	justify: MenuJustify,
 ) {
-	match node {
-		MenuNode::Section { label, children } => {
-			if let Some(select) = picker_only_child(children) {
-				render_overlay_body(select, parent, context, justify);
-			} else {
-				MaybraidMenuSink { justify, interior: true, omit_block_label: Some(label) }
-					.render_nodes(children, parent, context);
-			}
-		}
-		MenuNode::SectionSelect { groups, .. } => {
-			for group in groups {
-				if let Some(group_label) = group.label {
-					spawn_group_label(parent, context.fonts, group_label);
-				}
-				spawn_tile_grid(parent, justify.content(), |grid| {
-					for choice in &group.choices {
-						spawn_asset_tile(
-							grid,
-							context.fonts,
-							choice.label,
-							choice.selected,
-							None,
-							MenuButton(choice.event),
-						);
-					}
-				});
-			}
-		}
-		MenuNode::BlockAsset { preview, choices, .. } => {
-			let preview = bevy_color(*preview);
-			spawn_tile_grid(parent, justify.content(), |grid| {
-				for choice in choices {
-					let thumbnail = asset_thumbnail(choice, preview, context);
-					spawn_asset_tile(
-						grid,
-						context.fonts,
-						choice.label,
-						choice.selected,
-						thumbnail,
-						MenuButton(choice.event),
-					);
-				}
-			});
-		}
-		MenuNode::ItemMultiSelect { rows, .. } => {
-			for row in rows {
-				overlay_item_row(row, parent, context, justify);
-			}
-		}
-		other => {
-			MaybraidMenuSink { justify, interior: true, omit_block_label: None }
-				.render_node(other, parent, context);
-		}
-	}
-}
-
-fn picker_only_child<'a, E>(children: &'a [MenuNode<E>]) -> Option<&'a MenuNode<E>> {
-	let flat = flatten_nodes(children);
-	(flat.len() == 1 && is_picker_only(flat[0])).then(|| flat[0])
-}
-
-fn overlay_item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
-	row: &ItemRow<E>,
-	parent: &mut ChildSpawnerCommands,
-	context: &mut RenderContext<'_, C>,
-	justify: MenuJustify,
-) {
-	let thumbnail = asset_thumbnail(&row.asset, bevy_color(row.preview), context);
-	parent
-		.spawn((
-			Node {
-				width: Val::Percent(100.0),
-				flex_direction: FlexDirection::Row,
-				column_gap: Val::Px(PANEL_ROW_GAP),
-				row_gap: Val::Px(PANEL_ROW_GAP),
-				align_items: AlignItems::Center,
-				justify_content: justify.content(),
-				flex_wrap: FlexWrap::Wrap,
-				..default()
-			},
-			Pickable::IGNORE,
-		))
-		.with_children(|item| {
-			spawn_asset_tile(
-				item,
-				context.fonts,
-				row.asset.label,
-				row.asset.selected,
-				thumbnail,
-				MenuButton(row.asset.event),
-			);
-			spawn_swatch_row(item, justify.content(), |swatches| {
-				for choice in &row.colors {
-					spawn_swatch(
-						swatches,
-						choice.color_hex,
-						choice.selected,
-						MenuButton(choice.event),
-					);
-				}
-			});
-		});
+	MaybraidMenuSink::overlay(justify).render_node(node, parent, context);
 }
 
 #[cfg(test)]

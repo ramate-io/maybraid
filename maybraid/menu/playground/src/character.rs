@@ -2,15 +2,17 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
-use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionOpenState};
-use game_commands::command::TextEntryFocus;
+use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
-	CharacterMenuEvent, CloseOverlaySelect, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
-	MenuButton, MenuJustify, MenuSink, NoThumbnails, OpenSelectKey, OverlaySelectRoot,
+	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
+	MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
 	OverlaySelectViewport, RenderContext,
 };
-use menu_components::{spawn_scroll_pane, ActiveOverlayKey, HudFonts, PANEL_ROW_GAP};
+use menu_components::{
+	spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate,
+	MenuFocus, PANEL_ROW_GAP,
+};
 use menu_screens::MenuScreen;
 
 const PANEL_WIDTH: f32 = 480.0;
@@ -33,32 +35,8 @@ impl Default for CharacterMenuState {
 	}
 }
 
-#[derive(Resource, Debug)]
-pub struct CharacterUiState {
-	pub sections: SectionOpenState,
-	layout_revision: u64,
-}
-
-impl Default for CharacterUiState {
-	fn default() -> Self {
-		Self {
-			sections: SectionOpenState {
-				presets_open: false,
-				head_open: false,
-				body_open: false,
-				head_features_open: false,
-				hair_open: false,
-				clothing_open: false,
-				animation_open: false,
-			},
-			layout_revision: 0,
-		}
-	}
-}
-
 #[derive(Resource, Default)]
 struct CharacterUiSyncState {
-	layout_revision: u64,
 	menu_dirty: bool,
 }
 
@@ -84,22 +62,20 @@ pub struct CharacterScreenPlugin;
 
 impl Plugin for CharacterScreenPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(MaybraidCharacterMenuRendererPlugin::<CharacterMenu>::default())
+		app.add_plugins(MaybraidCharacterMenuRendererPlugin::<MenuEvent>::default())
 			.init_resource::<CharacterMenuState>()
-			.init_resource::<CharacterUiState>()
 			.init_resource::<CharacterUiSyncState>()
 			.init_resource::<OverlaySelectState>()
 			.init_resource::<OverlayUiSyncState>()
+			.add_observer(on_overlay_open)
+			.add_observer(on_overlay_close)
+			.add_observer(on_menu_activate)
+			.add_observer(on_menu_focus)
 			.add_systems(
 				Update,
-				(
-					apply_show_character,
-					dispatch_character_interactions,
-					close_overlay_on_escape,
-					sync_character_ui,
-					sync_overlay_select,
-				)
-					.chain(),
+				(apply_show_character, sync_character_ui, sync_overlay_select)
+					.chain()
+					.in_set(CharacterHudSystems::Sync),
 			);
 	}
 }
@@ -110,7 +86,6 @@ fn apply_show_character(
 	requests: Query<Entity, With<RequestShowCharacter>>,
 	existing: Query<Entity, With<MenuScreen>>,
 	menu_state: Res<CharacterMenuState>,
-	ui_state: Res<CharacterUiState>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
@@ -129,15 +104,14 @@ fn apply_show_character(
 	overlay_sync.open = None;
 	overlay_sync.menu_dirty = false;
 	active_overlay.0 = None;
-	sync_state.layout_revision = ui_state.layout_revision;
 	sync_state.menu_dirty = false;
 	let viewport = spawn_character_ui_shell(&mut commands);
 	rebuild_character_ui_panel(
 		&mut commands,
 		&HudFonts::load(asset_server.as_ref()),
 		menu_state.as_ref(),
-		ui_state.as_ref(),
 		[viewport],
+		&[],
 	);
 }
 
@@ -146,26 +120,24 @@ fn sync_character_ui(
 	asset_server: Res<AssetServer>,
 	screens: Query<Entity, With<CharacterScreen>>,
 	menu_state: Res<CharacterMenuState>,
-	ui_state: Res<CharacterUiState>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
-	viewports: Query<Entity, With<CharacterPanelViewport>>,
+	viewports: Query<(Entity, Option<&HudMenu>), With<CharacterPanelViewport>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
-	let layout_changed = sync_state.layout_revision != ui_state.layout_revision;
-	let menu_changed = sync_state.menu_dirty || menu_state.is_changed();
-	if !layout_changed && !menu_changed {
+	if !sync_state.menu_dirty && !menu_state.is_changed() {
 		return;
 	}
-	sync_state.layout_revision = ui_state.layout_revision;
 	sync_state.menu_dirty = false;
+	let previous: Vec<(Entity, Option<HudMenu>)> =
+		viewports.iter().map(|(entity, menu)| (entity, menu.copied())).collect();
 	rebuild_character_ui_panel(
 		&mut commands,
 		&HudFonts::load(asset_server.as_ref()),
 		menu_state.as_ref(),
-		ui_state.as_ref(),
-		&viewports,
+		previous.iter().map(|(entity, _)| *entity),
+		&previous,
 	);
 }
 
@@ -209,15 +181,22 @@ fn rebuild_character_ui_panel(
 	commands: &mut Commands,
 	fonts: &HudFonts,
 	menu_state: &CharacterMenuState,
-	ui_state: &CharacterUiState,
 	viewports: impl IntoIterator<Item = Entity>,
+	previous: &[(Entity, Option<HudMenu>)],
 ) {
 	let mut prewarm = Vec::new();
 	for viewport in viewports {
+		let keep = previous
+			.iter()
+			.find(|(entity, _)| *entity == viewport)
+			.and_then(|(_, menu)| *menu);
 		commands.entity(viewport).despawn_related::<Children>();
+		let mut item_count = 0;
 		commands.entity(viewport).with_children(|panel| {
-			populate_character_ui_panel(panel, fonts, menu_state, ui_state, &mut prewarm);
+			item_count =
+				populate_character_ui_panel(panel, fonts, menu_state, viewport, &mut prewarm);
 		});
+		commands.entity(viewport).insert(HudMenu::retain(item_count, keep));
 	}
 }
 
@@ -225,22 +204,24 @@ fn populate_character_ui_panel(
 	panel: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	menu_state: &CharacterMenuState,
-	ui_state: &CharacterUiState,
+	hud_menu: Entity,
 	prewarm: &mut Vec<character_ui_menu::ThumbnailRequest>,
-) {
+) -> usize {
 	let mut thumbnails = NoThumbnails;
 	let mut context = RenderContext {
 		fonts,
-		sections: &ui_state.sections,
 		thumbnails: &mut thumbnails,
 		asset_thumbnails: AssetThumbnailDisplay::None,
 		prewarm,
+		hud_menu,
+		hud_item_count: 0,
 	};
 	MaybraidMenuSink::new(MenuJustify::Right).render_nodes(
 		&menu_state.0.menu_nodes(),
 		panel,
 		&mut context,
 	);
+	context.hud_item_count
 }
 
 fn sync_overlay_select(
@@ -248,9 +229,8 @@ fn sync_overlay_select(
 	asset_server: Res<AssetServer>,
 	screens: Query<Entity, With<CharacterScreen>>,
 	overlays: Query<Entity, With<OverlaySelectRoot>>,
-	viewports: Query<Entity, With<OverlaySelectViewport>>,
+	viewports: Query<(Entity, Option<&HudMenu>), With<OverlaySelectViewport>>,
 	menu_state: Res<CharacterMenuState>,
-	ui_state: Res<CharacterUiState>,
 	overlay: Res<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 ) {
@@ -289,12 +269,12 @@ fn sync_overlay_select(
 		commands.entity(screen).with_children(|root| {
 			viewport = spawn_overlay_shell(root, &fonts, key);
 		});
-		populate_overlay_viewport(&mut commands, viewport, &fonts, node, ui_state.as_ref());
+		populate_overlay_viewport(&mut commands, viewport, &fonts, node, None);
 		return;
 	}
 
-	for viewport in &viewports {
-		populate_overlay_viewport(&mut commands, viewport, &fonts, node, ui_state.as_ref());
+	for (viewport, menu) in &viewports {
+		populate_overlay_viewport(&mut commands, viewport, &fonts, node, menu.copied());
 	}
 }
 
@@ -303,101 +283,94 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	viewport: Entity,
 	fonts: &HudFonts,
 	node: &character_ui_menu::MenuNode<E>,
-	ui_state: &CharacterUiState,
+	previous: Option<HudMenu>,
 ) {
 	let mut prewarm = Vec::new();
 	let mut thumbnails = NoThumbnails;
 	commands.entity(viewport).despawn_related::<Children>();
+	let mut item_count = 0;
 	commands.entity(viewport).with_children(|body| {
 		let mut context = RenderContext {
 			fonts,
-			sections: &ui_state.sections,
 			thumbnails: &mut thumbnails,
 			asset_thumbnails: AssetThumbnailDisplay::None,
 			prewarm: &mut prewarm,
+			hud_menu: viewport,
+			hud_item_count: 0,
 		};
 		render_overlay_body(node, body, &mut context, MenuJustify::Left);
+		item_count = context.hud_item_count;
 	});
+	commands
+		.entity(viewport)
+		.insert((HudMenu::retain(item_count, previous), HudOverlayMenu));
 }
 
-fn dispatch_character_interactions(
+fn on_overlay_open(
+	open: On<OverlayOpen>,
+	mut overlay: ResMut<OverlaySelectState>,
+	mut active_overlay: ResMut<ActiveOverlayKey>,
+	screens: Query<Entity, With<CharacterScreen>>,
+) {
+	if screens.is_empty() {
+		return;
+	}
+	overlay.open = Some(open.event().key);
+	active_overlay.0 = Some(open.event().key);
+}
+
+fn on_overlay_close(
+	_close: On<OverlayClose>,
+	mut overlay: ResMut<OverlaySelectState>,
+	mut active_overlay: ResMut<ActiveOverlayKey>,
+	screens: Query<Entity, With<CharacterScreen>>,
+) {
+	if screens.is_empty() {
+		return;
+	}
+	overlay.open = None;
+	active_overlay.0 = None;
+}
+
+fn on_menu_activate(
+	activate: On<MenuActivate<MenuEvent>>,
 	mut menu_state: ResMut<CharacterMenuState>,
-	mut menu_events: MessageWriter<CharacterMenuEvent<CharacterMenu>>,
+	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 	screens: Query<Entity, With<CharacterScreen>>,
-	mut open_interactions: Query<
-		(&Interaction, &OpenSelectKey),
-		(Changed<Interaction>, With<Button>),
-	>,
-	mut close_interactions: Query<
-		&Interaction,
-		(Changed<Interaction>, With<Button>, With<CloseOverlaySelect>),
-	>,
-	mut menu_interactions: Query<
-		(&Interaction, &MenuButton<MenuEvent>),
-		(Changed<Interaction>, With<Button>, Without<OpenSelectKey>, Without<CloseOverlaySelect>),
-	>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
-
-	for (interaction, open) in &mut open_interactions {
-		if *interaction == Interaction::Pressed {
-			overlay.open = Some(open.0);
-			active_overlay.0 = Some(open.0);
-		}
+	let event = activate.event().choice;
+	if !menu_state.0.apply(event) {
+		return;
 	}
-
-	for interaction in &mut close_interactions {
-		if *interaction == Interaction::Pressed {
+	ui_sync.menu_dirty = true;
+	overlay_sync.menu_dirty = true;
+	menu_events.write(CharacterMenuEvent::Menu(event));
+	if let Some(key) = overlay.open {
+		let nodes = menu_state.0.menu_nodes();
+		if find_overlay_node(&nodes, key).is_some_and(overlay_closes_on_pick) {
 			overlay.open = None;
 			active_overlay.0 = None;
 		}
 	}
-
-	for (interaction, button) in &mut menu_interactions {
-		if *interaction != Interaction::Pressed {
-			continue;
-		}
-		let event = button.0;
-		if let Some(focus) = menu_state.0.camera_focus_for_event(event) {
-			menu_events.write(CharacterMenuEvent::CameraFocus(focus));
-		}
-		if !menu_state.0.apply(event) {
-			continue;
-		}
-		ui_sync.menu_dirty = true;
-		overlay_sync.menu_dirty = true;
-		menu_events.write(CharacterMenuEvent::MenuUpdate(menu_state.0.clone()));
-		if let Some(key) = overlay.open {
-			let nodes = menu_state.0.menu_nodes();
-			if find_overlay_node(&nodes, key).is_some_and(overlay_closes_on_pick) {
-				overlay.open = None;
-				active_overlay.0 = None;
-			}
-		}
-	}
 }
 
-fn close_overlay_on_escape(
-	keys: Res<ButtonInput<KeyCode>>,
-	focus: Option<Res<TextEntryFocus>>,
-	mut overlay: ResMut<OverlaySelectState>,
-	mut active_overlay: ResMut<ActiveOverlayKey>,
+fn on_menu_focus(
+	focus: On<MenuFocus<MenuEvent>>,
+	menu_state: Res<CharacterMenuState>,
+	mut menu_events: MessageWriter<CharacterMenuEvent<MenuEvent>>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
-	if screens.is_empty() || overlay.open.is_none() {
+	if screens.is_empty() {
 		return;
 	}
-	if focus.is_some_and(|focus| focus.0) {
-		return;
-	}
-	if keys.just_pressed(KeyCode::Escape) {
-		overlay.open = None;
-		active_overlay.0 = None;
+	if let Some(camera) = menu_state.0.camera_focus_for_event(focus.event().choice) {
+		menu_events.write(CharacterMenuEvent::CameraFocus(camera));
 	}
 }

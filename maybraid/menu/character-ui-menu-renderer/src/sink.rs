@@ -2,13 +2,13 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SwatchChoice,
+	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SwatchChoice,
 	ThumbnailRequest,
 };
 use menu_components::{
-	menu_display_name, spawn_asset_tile, spawn_block_label, spawn_group_label, spawn_hud_text,
-	spawn_labeled_row, spawn_section_header, spawn_stepper, spawn_swatch, spawn_swatch_row,
-	spawn_tile_grid, HudFonts, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	spawn_asset_tile, spawn_group_label, spawn_hud_text, spawn_labeled_row, spawn_section_header,
+	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 use crate::justify::MenuJustify;
@@ -45,10 +45,23 @@ impl MenuThumbnailContext for NoThumbnails {
 /// Per-rebuild rendering state shared across the whole node tree.
 pub struct RenderContext<'a, T> {
 	pub fonts: &'a HudFonts,
-	pub sections: &'a dyn SectionOpen,
 	pub thumbnails: &'a mut T,
 	pub asset_thumbnails: AssetThumbnailDisplay,
 	pub prewarm: &'a mut Vec<ThumbnailRequest>,
+	pub hud_menu: Entity,
+	pub hud_item_count: usize,
+}
+
+impl<T> RenderContext<'_, T> {
+	pub fn stamp_hud_item(&mut self) -> HudMenuItem {
+		let item = HudMenuItem { index: self.hud_item_count, menu: self.hud_menu };
+		self.hud_item_count += 1;
+		item
+	}
+
+	pub fn hud_menu(&self, previous: Option<HudMenu>) -> HudMenu {
+		HudMenu::retain(self.hud_item_count, previous)
+	}
 }
 
 /// Forward dispatcher over [`MenuNode`] trees.
@@ -79,17 +92,15 @@ pub struct MaybraidMenuSink {
 	/// When true, catalogs paint inline (inside an overlay). The panel path
 	/// only stamps headers that open a picker.
 	pub interior: bool,
-	/// Skip a block title that repeats the overlay / section name.
-	pub omit_block_label: Option<&'static str>,
 }
 
 impl MaybraidMenuSink {
 	pub fn new(justify: MenuJustify) -> Self {
-		Self { justify, interior: false, omit_block_label: None }
+		Self { justify, interior: false }
 	}
 
-	fn paints_block_label(&self, label: &str) -> bool {
-		self.omit_block_label != Some(label)
+	pub fn overlay(justify: MenuJustify) -> Self {
+		Self { justify, interior: true }
 	}
 }
 
@@ -107,54 +118,43 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 				if self.interior {
 					self.select_grid(groups, parent, context);
 				} else {
-					let value = overlay_summary_value(node);
-					spawn_section_header(
-						parent,
-						context.fonts,
-						label,
-						Some(value.as_str()),
-						self.justify.content(),
-						OpenSelectKey(label),
-					);
+					self.header(parent, context, label, Some(overlay_summary_value(node)));
 					self.render_nodes(children, parent, context);
 				}
 			}
 			MenuNode::LabeledCycle { label, value, minus, plus } => {
-				self.labeled_control(parent, context.fonts, label, |row| {
+				self.labeled_control(parent, context, label, |row, context| {
 					spawn_stepper(
 						row,
 						context.fonts,
 						"<",
 						">",
 						value,
-						MenuButton(*minus),
-						MenuButton(*plus),
+						(MenuButton(*minus), context.stamp_hud_item()),
+						(MenuButton(*plus), context.stamp_hud_item()),
 					);
 				});
 			}
 			MenuNode::LabeledSlider { label, value, decrease, increase } => {
-				self.labeled_control(parent, context.fonts, label, |row| {
+				self.labeled_control(parent, context, label, |row, context| {
 					spawn_stepper(
 						row,
 						context.fonts,
 						"−",
 						"+",
 						&format!("{value:.2}"),
-						MenuButton(*decrease),
-						MenuButton(*increase),
+						(MenuButton(*decrease), context.stamp_hud_item()),
+						(MenuButton(*increase), context.stamp_hud_item()),
 					);
 				});
 			}
 			MenuNode::LabeledSwatch { label, choices } => {
-				self.labeled_control(parent, context.fonts, label, |row| {
-					self.swatch_row(row, choices);
+				self.labeled_control(parent, context, label, |row, context| {
+					self.swatch_row(row, context, choices);
 				});
 			}
 			MenuNode::BlockAsset { label, preview, choices } => {
 				if self.interior {
-					if self.paints_block_label(label) {
-						spawn_block_label(parent, context.fonts, label);
-					}
 					let preview = bevy_color(*preview);
 					spawn_tile_grid(parent, self.justify.content(), |grid| {
 						for choice in choices {
@@ -165,40 +165,21 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 								choice.label,
 								choice.selected,
 								thumbnail,
-								MenuButton(choice.event),
+								(MenuButton(choice.event), context.stamp_hud_item()),
 							);
 						}
 					});
 				} else {
-					let value = overlay_summary_value(node);
-					spawn_section_header(
-						parent,
-						context.fonts,
-						label,
-						Some(value.as_str()),
-						self.justify.content(),
-						OpenSelectKey(label),
-					);
+					self.header(parent, context, label, Some(overlay_summary_value(node)));
 				}
 			}
 			MenuNode::ItemMultiSelect { label, rows } => {
 				if self.interior {
-					if self.paints_block_label(label) {
-						spawn_block_label(parent, context.fonts, label);
-					}
 					for row in rows {
 						self.item_row(row, parent, context);
 					}
 				} else {
-					let value = overlay_summary_value(node);
-					spawn_section_header(
-						parent,
-						context.fonts,
-						label,
-						Some(value.as_str()),
-						self.justify.content(),
-						OpenSelectKey(label),
-					);
+					self.header(parent, context, label, Some(overlay_summary_value(node)));
 				}
 			}
 		}
@@ -206,22 +187,39 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 }
 
 impl MaybraidMenuSink {
-	fn labeled_control(
+	fn header<C>(
 		&self,
 		parent: &mut ChildSpawnerCommands,
-		fonts: &HudFonts,
+		context: &mut RenderContext<'_, C>,
+		label: &'static str,
+		value: Option<String>,
+	) {
+		spawn_section_header(
+			parent,
+			context.fonts,
+			label,
+			value.as_deref(),
+			self.justify.content(),
+			(OpenSelectKey(label), context.stamp_hud_item()),
+		);
+	}
+
+	fn labeled_control<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
 		label: &str,
-		controls: impl FnOnce(&mut ChildSpawnerCommands),
+		controls: impl FnOnce(&mut ChildSpawnerCommands, &mut RenderContext<'_, C>),
 	) {
 		spawn_labeled_row(parent, self.justify.content(), |row| {
 			spawn_hud_text(
 				row,
-				fonts.item(PANEL_LABEL_FONT_SIZE),
-				&menu_display_name(label),
+				context.fonts.item(PANEL_LABEL_FONT_SIZE),
+				label,
 				TEXT_YELLOW,
 				bevy::text::Justify::Left,
 			);
-			controls(row);
+			controls(row, context);
 		});
 	}
 
@@ -237,14 +235,7 @@ impl MaybraidMenuSink {
 			return;
 		}
 		let value = primary_select(children).map(overlay_summary_value);
-		spawn_section_header(
-			parent,
-			context.fonts,
-			label,
-			value.as_deref(),
-			self.justify.content(),
-			OpenSelectKey(label),
-		);
+		self.header(parent, context, label, value);
 	}
 
 	fn select_grid<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -265,7 +256,7 @@ impl MaybraidMenuSink {
 						choice.label,
 						choice.selected,
 						None,
-						MenuButton(choice.event),
+						(MenuButton(choice.event), context.stamp_hud_item()),
 					);
 				}
 			});
@@ -300,20 +291,26 @@ impl MaybraidMenuSink {
 					row.asset.label,
 					row.asset.selected,
 					thumbnail,
-					MenuButton(row.asset.event),
+					(MenuButton(row.asset.event), context.stamp_hud_item()),
 				);
-				self.swatch_row(item, &row.colors);
+				self.swatch_row(item, context, &row.colors);
 			});
 	}
 
-	fn swatch_row<E: Copy + Send + Sync + 'static>(
+	fn swatch_row<E: Copy + Send + Sync + 'static, C>(
 		&self,
 		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
 		choices: &[SwatchChoice<E>],
 	) {
 		spawn_swatch_row(parent, self.justify.content(), |row| {
 			for choice in choices {
-				spawn_swatch(row, choice.color_hex, choice.selected, MenuButton(choice.event));
+				spawn_swatch(
+					row,
+					choice.color_hex,
+					choice.selected,
+					(MenuButton(choice.event), context.stamp_hud_item()),
+				);
 			}
 		});
 	}

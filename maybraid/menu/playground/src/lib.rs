@@ -9,7 +9,7 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
-use crozon_character_ui_menus::CharacterMenu;
+use crozon_character_ui_menus::MenuEvent;
 use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
@@ -60,13 +60,13 @@ fn echo_home_choice(
 }
 
 fn echo_character_menu(
-	mut events: MessageReader<CharacterMenuEvent<CharacterMenu>>,
+	mut events: MessageReader<CharacterMenuEvent<MenuEvent>>,
 	menu_state: Res<CharacterMenuState>,
 	mut console: ResMut<CommandConsoleOutput>,
 ) {
 	for event in events.read() {
 		match event {
-			CharacterMenuEvent::MenuUpdate(_) => {
+			CharacterMenuEvent::Menu(_) => {
 				console.0 = format!("character: {}", menu_state.0.species.value.label());
 			}
 			CharacterMenuEvent::CameraFocus(focus) => {
