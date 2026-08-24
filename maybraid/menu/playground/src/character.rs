@@ -1,21 +1,20 @@
 //! Right-justified character-creator panel over the playground camera.
 
-use bevy::ecs::event::EntityEvent;
-use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
-use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionId, SectionOpenState};
+use game_commands::command::TextEntryFocus;
 use maybraid_character_ui_menu_renderer::{
-	CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink, MenuButton,
-	MenuJustify, MenuSink, NoThumbnails, RenderContext, ToggleSectionKey,
+	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
+	CharacterMenuEvent, CloseOverlaySelect, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
+	MenuButton, MenuJustify, MenuSink, NoThumbnails, OpenSelectKey, OverlaySelectRoot,
+	OverlaySelectViewport, RenderContext, ToggleSectionKey,
 };
-use menu_components::{HudFonts, PANEL_ROW_GAP};
+use menu_components::{spawn_scroll_pane, HudFonts, PANEL_ROW_GAP};
 use menu_screens::MenuScreen;
 
 const PANEL_WIDTH: f32 = 480.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
-const SCROLL_LINE_PX: f32 = 14.0;
 
 /// Queue a character-panel spawn (despawns any existing menu screen first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -63,15 +62,19 @@ struct CharacterUiSyncState {
 	menu_dirty: bool,
 }
 
-#[derive(Component)]
-struct CharacterUiScrollViewport;
-
-#[derive(EntityEvent, Debug)]
-#[entity_event(propagate, auto_propagate)]
-struct CharacterUiScroll {
-	entity: Entity,
-	delta: Vec2,
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+struct OverlaySelectState {
+	open: Option<&'static str>,
 }
+
+#[derive(Resource, Default)]
+struct OverlayUiSyncState {
+	open: Option<&'static str>,
+	menu_dirty: bool,
+}
+
+#[derive(Component)]
+struct CharacterPanelViewport;
 
 pub fn request_show_character(commands: &mut Commands) {
 	commands.spawn(RequestShowCharacter);
@@ -85,17 +88,19 @@ impl Plugin for CharacterScreenPlugin {
 			.init_resource::<CharacterMenuState>()
 			.init_resource::<CharacterUiState>()
 			.init_resource::<CharacterUiSyncState>()
+			.init_resource::<OverlaySelectState>()
+			.init_resource::<OverlayUiSyncState>()
 			.add_systems(
 				Update,
 				(
 					apply_show_character,
 					dispatch_character_interactions,
+					close_overlay_on_escape,
 					sync_character_ui,
-					send_character_ui_scroll_events,
+					sync_overlay_select,
 				)
 					.chain(),
-			)
-			.add_observer(on_character_ui_scroll);
+			);
 	}
 }
 
@@ -107,6 +112,8 @@ fn apply_show_character(
 	menu_state: Res<CharacterMenuState>,
 	ui_state: Res<CharacterUiState>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
+	mut overlay: ResMut<OverlaySelectState>,
+	mut overlay_sync: ResMut<OverlayUiSyncState>,
 ) {
 	if requests.is_empty() {
 		return;
@@ -117,6 +124,9 @@ fn apply_show_character(
 	for entity in &requests {
 		commands.entity(entity).despawn();
 	}
+	overlay.open = None;
+	overlay_sync.open = None;
+	overlay_sync.menu_dirty = false;
 	sync_state.layout_revision = ui_state.layout_revision;
 	sync_state.menu_dirty = false;
 	let viewport = spawn_character_ui_shell(&mut commands);
@@ -136,7 +146,7 @@ fn sync_character_ui(
 	menu_state: Res<CharacterMenuState>,
 	ui_state: Res<CharacterUiState>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
-	viewports: Query<Entity, With<CharacterUiScrollViewport>>,
+	viewports: Query<Entity, With<CharacterPanelViewport>>,
 ) {
 	if screens.is_empty() {
 		return;
@@ -182,24 +192,12 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> Entity {
 				Pickable::IGNORE,
 			))
 			.with_children(|shell| {
-				viewport = shell
-					.spawn((
-						Node {
-							width: Val::Percent(100.0),
-							flex_grow: 1.0,
-							flex_shrink: 1.0,
-							min_height: Val::Px(0.0),
-							flex_direction: FlexDirection::Column,
-							align_items: AlignItems::FlexEnd,
-							row_gap: Val::Px(PANEL_ROW_GAP),
-							overflow: Overflow::scroll_y(),
-							..default()
-						},
-						ScrollPosition::default(),
-						Pickable::default(),
-						CharacterUiScrollViewport,
-					))
-					.id();
+				viewport = spawn_scroll_pane(
+					shell,
+					CharacterPanelViewport,
+					AlignItems::FlexEnd,
+					PANEL_ROW_GAP,
+				);
 			});
 		});
 	viewport
@@ -243,19 +241,112 @@ fn populate_character_ui_panel(
 	);
 }
 
+fn sync_overlay_select(
+	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+	screens: Query<Entity, With<CharacterScreen>>,
+	overlays: Query<Entity, With<OverlaySelectRoot>>,
+	viewports: Query<Entity, With<OverlaySelectViewport>>,
+	menu_state: Res<CharacterMenuState>,
+	ui_state: Res<CharacterUiState>,
+	overlay: Res<OverlaySelectState>,
+	mut overlay_sync: ResMut<OverlayUiSyncState>,
+) {
+	let Ok(screen) = screens.single() else {
+		return;
+	};
+	let menu_changed = overlay_sync.menu_dirty || menu_state.is_changed();
+	let open_changed = overlay_sync.open != overlay.open;
+	if !open_changed && !menu_changed {
+		return;
+	}
+	overlay_sync.open = overlay.open;
+	overlay_sync.menu_dirty = false;
+
+	let Some(key) = overlay.open else {
+		for entity in &overlays {
+			commands.entity(entity).despawn();
+		}
+		return;
+	};
+
+	let fonts = HudFonts::load(asset_server.as_ref());
+	let nodes = menu_state.0.menu_nodes();
+	let Some(node) = find_overlay_node(&nodes, key) else {
+		for entity in &overlays {
+			commands.entity(entity).despawn();
+		}
+		return;
+	};
+
+	if overlays.is_empty() || open_changed {
+		for entity in &overlays {
+			commands.entity(entity).despawn();
+		}
+		let mut viewport = Entity::PLACEHOLDER;
+		commands.entity(screen).with_children(|root| {
+			viewport = spawn_overlay_shell(root, &fonts, key);
+		});
+		populate_overlay_viewport(&mut commands, viewport, &fonts, node, ui_state.as_ref());
+		return;
+	}
+
+	for viewport in &viewports {
+		populate_overlay_viewport(&mut commands, viewport, &fonts, node, ui_state.as_ref());
+	}
+}
+
+fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
+	commands: &mut Commands,
+	viewport: Entity,
+	fonts: &HudFonts,
+	node: &character_ui_menu::MenuNode<E>,
+	ui_state: &CharacterUiState,
+) {
+	let mut prewarm = Vec::new();
+	let mut thumbnails = NoThumbnails;
+	commands.entity(viewport).despawn_related::<Children>();
+	commands.entity(viewport).with_children(|body| {
+		let mut context = RenderContext {
+			fonts,
+			sections: &ui_state.sections,
+			thumbnails: &mut thumbnails,
+			asset_thumbnails: AssetThumbnailDisplay::None,
+			prewarm: &mut prewarm,
+		};
+		render_overlay_body(node, body, &mut context, MenuJustify::Left);
+	});
+}
+
 fn dispatch_character_interactions(
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<CharacterMenu>>,
 	mut ui_state: ResMut<CharacterUiState>,
 	mut ui_sync: ResMut<CharacterUiSyncState>,
+	mut overlay: ResMut<OverlaySelectState>,
+	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	screens: Query<Entity, With<CharacterScreen>>,
 	mut section_interactions: Query<
 		(&Interaction, &ToggleSectionKey),
 		(Changed<Interaction>, With<Button>),
 	>,
+	mut open_interactions: Query<
+		(&Interaction, &OpenSelectKey),
+		(Changed<Interaction>, With<Button>, Without<ToggleSectionKey>),
+	>,
+	mut close_interactions: Query<
+		&Interaction,
+		(Changed<Interaction>, With<Button>, With<CloseOverlaySelect>),
+	>,
 	mut menu_interactions: Query<
 		(&Interaction, &MenuButton<MenuEvent>),
-		(Changed<Interaction>, With<Button>, Without<ToggleSectionKey>),
+		(
+			Changed<Interaction>,
+			With<Button>,
+			Without<ToggleSectionKey>,
+			Without<OpenSelectKey>,
+			Without<CloseOverlaySelect>,
+		),
 	>,
 ) {
 	if screens.is_empty() {
@@ -267,6 +358,18 @@ fn dispatch_character_interactions(
 		}
 		if let Some(section) = section_id_for_label(toggle.0) {
 			ui_state.toggle_section(section);
+		}
+	}
+
+	for (interaction, open) in &mut open_interactions {
+		if *interaction == Interaction::Pressed {
+			overlay.open = Some(open.0);
+		}
+	}
+
+	for interaction in &mut close_interactions {
+		if *interaction == Interaction::Pressed {
+			overlay.open = None;
 		}
 	}
 
@@ -282,59 +385,30 @@ fn dispatch_character_interactions(
 			continue;
 		}
 		ui_sync.menu_dirty = true;
+		overlay_sync.menu_dirty = true;
 		menu_events.write(CharacterMenuEvent::MenuUpdate(menu_state.0.clone()));
-	}
-}
-
-fn send_character_ui_scroll_events(
-	mut mouse_wheel_reader: MessageReader<MouseWheel>,
-	hover_map: Res<HoverMap>,
-	mut commands: Commands,
-	screens: Query<Entity, With<CharacterScreen>>,
-) {
-	if screens.is_empty() {
-		return;
-	}
-	for mouse_wheel in mouse_wheel_reader.read() {
-		let mut delta = -Vec2::new(mouse_wheel.x, mouse_wheel.y);
-		if mouse_wheel.unit == MouseScrollUnit::Line {
-			delta *= SCROLL_LINE_PX;
-		}
-		for pointer_map in hover_map.values() {
-			for entity in pointer_map.keys().copied() {
-				commands.trigger(CharacterUiScroll { entity, delta });
+		if let Some(key) = overlay.open {
+			if overlay_closes_on_pick(key) {
+				overlay.open = None;
 			}
 		}
 	}
 }
 
-fn on_character_ui_scroll(
-	mut scroll: On<CharacterUiScroll>,
-	mut query: Query<(&mut ScrollPosition, &Node, &ComputedNode), With<CharacterUiScrollViewport>>,
+fn close_overlay_on_escape(
+	keys: Res<ButtonInput<KeyCode>>,
+	focus: Option<Res<TextEntryFocus>>,
+	mut overlay: ResMut<OverlaySelectState>,
+	screens: Query<Entity, With<CharacterScreen>>,
 ) {
-	let Ok((mut scroll_position, node, computed)) = query.get_mut(scroll.entity) else {
+	if screens.is_empty() || overlay.open.is_none() {
 		return;
-	};
-	let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
-	let delta = &mut scroll.delta;
-	if node.overflow.x == OverflowAxis::Scroll && delta.x != 0. {
-		let max =
-			if delta.x > 0. { scroll_position.x >= max_offset.x } else { scroll_position.x <= 0. };
-		if !max {
-			scroll_position.x += delta.x;
-			delta.x = 0.;
-		}
 	}
-	if node.overflow.y == OverflowAxis::Scroll && delta.y != 0. {
-		let max =
-			if delta.y > 0. { scroll_position.y >= max_offset.y } else { scroll_position.y <= 0. };
-		if !max {
-			scroll_position.y += delta.y;
-			delta.y = 0.;
-		}
+	if focus.is_some_and(|focus| focus.0) {
+		return;
 	}
-	if *delta == Vec2::ZERO {
-		scroll.propagate(false);
+	if keys.just_pressed(KeyCode::Escape) {
+		overlay.open = None;
 	}
 }
 

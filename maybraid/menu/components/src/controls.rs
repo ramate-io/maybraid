@@ -6,9 +6,11 @@
 pub mod button;
 pub mod fonts;
 pub mod row;
+pub mod scroll;
 pub mod section;
 pub mod select_list;
 pub mod stepper;
+pub mod summary;
 pub mod swatch;
 pub mod text;
 pub mod tile;
@@ -16,9 +18,14 @@ pub mod tile;
 pub use button::spawn_text_button;
 pub use fonts::HudFonts;
 pub use row::spawn_labeled_row;
+pub use scroll::{
+	on_hud_scroll, send_hud_scroll_events, spawn_scroll_pane, sync_hud_scrollbars, HudScroll,
+	HudScrollThumb, HudScrollTrack, HudScrollViewport,
+};
 pub use section::spawn_section_header;
 pub use select_list::spawn_select_row;
 pub use stepper::spawn_stepper;
+pub use summary::spawn_select_summary;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};
 pub use text::{spawn_block_label, spawn_cursor_slot, spawn_group_label, spawn_hud_text};
 pub use tile::{spawn_asset_tile, spawn_tile_grid};

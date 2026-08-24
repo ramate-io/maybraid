@@ -12,6 +12,7 @@ use menu_components::{
 };
 
 use crate::justify::MenuJustify;
+use crate::overlay::{overlay_select_label, spawn_overlay_summary};
 use crate::widgets::{MenuButton, ToggleSectionKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
@@ -94,34 +95,44 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			MenuNode::Fragment(children) => self.render_nodes(children, parent, context),
 			MenuNode::Section { label, children } => self.section(label, children, parent, context),
 			MenuNode::SectionSelect { label, groups, children } => {
-				spawn_block_label(parent, context.fonts, label);
-				for group in groups {
-					if let Some(group_label) = group.label {
-						spawn_group_label(parent, context.fonts, group_label);
+				if overlay_select_label(label) {
+					spawn_overlay_summary(
+						parent,
+						context.fonts,
+						label,
+						node,
+						self.justify.content(),
+					);
+				} else {
+					spawn_block_label(parent, context.fonts, label);
+					for group in groups {
+						if let Some(group_label) = group.label {
+							spawn_group_label(parent, context.fonts, group_label);
+						}
+						parent
+							.spawn((
+								Node {
+									width: Val::Percent(100.0),
+									flex_direction: FlexDirection::Column,
+									align_items: self.justify.items(),
+									row_gap: Val::Px(4.0),
+									..default()
+								},
+								Pickable::IGNORE,
+							))
+							.with_children(|list| {
+								for choice in &group.choices {
+									spawn_select_row(
+										list,
+										context.fonts,
+										choice.label,
+										choice.selected,
+										self.justify.content(),
+										MenuButton(choice.event),
+									);
+								}
+							});
 					}
-					parent
-						.spawn((
-							Node {
-								width: Val::Percent(100.0),
-								flex_direction: FlexDirection::Column,
-								align_items: self.justify.items(),
-								row_gap: Val::Px(4.0),
-								..default()
-							},
-							Pickable::IGNORE,
-						))
-						.with_children(|list| {
-							for choice in &group.choices {
-								spawn_select_row(
-									list,
-									context.fonts,
-									choice.label,
-									choice.selected,
-									self.justify.content(),
-									MenuButton(choice.event),
-								);
-							}
-						});
 				}
 				self.render_nodes(children, parent, context);
 			}
@@ -157,26 +168,46 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 				});
 			}
 			MenuNode::BlockAsset { label, preview, choices } => {
-				spawn_block_label(parent, context.fonts, label);
-				let preview = bevy_color(*preview);
-				spawn_tile_grid(parent, self.justify.content(), |grid| {
-					for choice in choices {
-						let thumbnail = asset_thumbnail(choice, preview, context);
-						spawn_asset_tile(
-							grid,
-							context.fonts,
-							choice.label,
-							choice.selected,
-							thumbnail,
-							MenuButton(choice.event),
-						);
-					}
-				});
+				if overlay_select_label(label) {
+					spawn_overlay_summary(
+						parent,
+						context.fonts,
+						label,
+						node,
+						self.justify.content(),
+					);
+				} else {
+					spawn_block_label(parent, context.fonts, label);
+					let preview = bevy_color(*preview);
+					spawn_tile_grid(parent, self.justify.content(), |grid| {
+						for choice in choices {
+							let thumbnail = asset_thumbnail(choice, preview, context);
+							spawn_asset_tile(
+								grid,
+								context.fonts,
+								choice.label,
+								choice.selected,
+								thumbnail,
+								MenuButton(choice.event),
+							);
+						}
+					});
+				}
 			}
 			MenuNode::ItemMultiSelect { label, rows } => {
-				spawn_block_label(parent, context.fonts, label);
-				for row in rows {
-					self.item_row(row, parent, context);
+				if overlay_select_label(label) {
+					spawn_overlay_summary(
+						parent,
+						context.fonts,
+						label,
+						node,
+						self.justify.content(),
+					);
+				} else {
+					spawn_block_label(parent, context.fonts, label);
+					for row in rows {
+						self.item_row(row, parent, context);
+					}
 				}
 			}
 		}
@@ -284,7 +315,7 @@ impl MaybraidMenuSink {
 	}
 }
 
-fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+pub(crate) fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	choice: &AssetChoice<E>,
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
@@ -307,7 +338,7 @@ fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	}
 }
 
-fn bevy_color(preview: PreviewColor) -> Color {
+pub(crate) fn bevy_color(preview: PreviewColor) -> Color {
 	Color::srgba(preview.red, preview.green, preview.blue, preview.alpha)
 }
 

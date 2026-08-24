@@ -7,12 +7,20 @@
 
 pub mod event;
 pub mod justify;
+pub mod overlay;
 pub mod plugin;
 pub mod sink;
 pub mod widgets;
 
 pub use event::CharacterMenuEvent;
 pub use justify::MenuJustify;
+pub use overlay::{
+	find_overlay_node, overlay_closes_on_pick, overlay_select_label, overlay_summary_value,
+	render_overlay_body, spawn_overlay_shell, spawn_overlay_summary,
+};
 pub use plugin::MaybraidCharacterMenuRendererPlugin;
 pub use sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, NoThumbnails, RenderContext};
-pub use widgets::{MenuButton, ToggleSectionKey};
+pub use widgets::{
+	CloseOverlaySelect, MenuButton, OpenSelectKey, OverlaySelectRoot, OverlaySelectViewport,
+	ToggleSectionKey,
+};

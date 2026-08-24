@@ -138,3 +138,12 @@ pub const PANEL_ROW_GAP: f32 = 10.0;
 
 /// Gap between swatches or tiles in a wrapping row.
 pub const PANEL_CHIP_GAP: f32 = 8.0;
+
+/// Visible scrollbar thickness when a HUD pane overflows.
+pub const SCROLLBAR_WIDTH: f32 = 6.0;
+
+/// Track behind the scrollbar thumb.
+pub const SCROLLBAR_TRACK: Color = Color::srgba(1.0, 0.86, 0.22, 0.16);
+
+/// Thumb on a HUD scrollbar.
+pub const SCROLLBAR_THUMB: Color = Color::srgba(1.0, 0.86, 0.22, 0.72);
