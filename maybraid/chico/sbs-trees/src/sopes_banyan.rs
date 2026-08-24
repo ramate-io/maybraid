@@ -3,6 +3,11 @@
 //! [`SopesBanyanParams::build`] grows the ball-stick chain once into [`SopesBanyan`],
 //! which implements [`VegetationComponents`].
 //!
+//! [`SopesBanyan::unit_from_num`] / [`SopesBanyanParams::into_unit_from_num`] normalize
+//! to unit stalk height (canopy height and base radius scale with it) and key layout
+//! noise by a variant index. Emission folds sticks into a collection; High/Medium
+//! layered canopy stays separate. Cheap-ball Low foliage merges.
+//!
 //! Structural LOD (tree-radius bands):
 //! - **High** — within `8 ×` tree radius: full sticks; dense azimuth×height layered canopy
 //! - **Medium** — `8…20 ×` radius: trunk + band-sampled sticks; layered outer foliage + mid proxy
@@ -20,6 +25,7 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
+use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 use canopy::{
 	banded_outer_canopy_balls, banded_outer_canopy_with_proxy, CanopyBallKit, HIGH_FOLIAGE_BANDS,
 	LOW_FOLIAGE_BANDS, MEDIUM_FOLIAGE_BANDS,
@@ -53,6 +59,24 @@ impl SopesBanyanParams {
 	pub fn build(&self) -> SopesBanyan {
 		SopesBanyan::from_params(self)
 	}
+
+	/// Unit-stalk-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit stalk height keyed by `num`.
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut geometry = self.geometry;
+		let size = geometry.scale.stalk_height.max(1e-4);
+		let inv = 1.0 / size;
+		geometry.scale.stalk_height = 1.0;
+		geometry.scale.canopy_height = (geometry.scale.canopy_height * inv).max(1e-4);
+		geometry.scale.stalk_base_radius = (geometry.scale.stalk_base_radius * inv).max(1e-6);
+		geometry.canopy_noise.seed = num as i32;
+		geometry.anchor_perturbation.noise.seed = num as i32;
+		(Self { geometry }, size)
+	}
 }
 
 /// Built Sope's Banyan: params plus a single grown [`BallStickChain`].
@@ -65,6 +89,11 @@ pub struct SopesBanyan {
 impl SopesBanyan {
 	pub fn from_params(params: &SopesBanyanParams) -> Self {
 		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
+	}
+
+	/// Unit-stalk-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&SopesBanyanParams::unit_from_num(num))
 	}
 
 	fn footprint_radius(&self) -> f32 {
@@ -146,7 +175,9 @@ impl VegetationComponents for SopesBanyan {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => self.stick_nodes_low(),
 		};
-		Layers::from_free(nodes).map(|n| n.with_material(chico_stick_material_ref()))
+		let nodes: Vec<_> =
+			nodes.into_iter().map(|n| n.with_material(chico_stick_material_ref())).collect();
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -158,7 +189,9 @@ impl VegetationComponents for SopesBanyan {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => self.foliage_nodes_low(),
 		};
-		Layers::from_free(nodes).map(|n| n.with_material(chico_leaf_material_ref()))
+		let nodes: Vec<_> =
+			nodes.into_iter().map(|n| n.with_material(chico_leaf_material_ref())).collect();
+		Layers::from_free(merge_cheap_ball_foliage(nodes))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -167,5 +200,51 @@ impl VegetationComponents for SopesBanyan {
 			STRUCTURAL_MEDIUM_FACTOR,
 			STRUCTURAL_LOW_FACTOR,
 		))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = SopesBanyan::unit_from_num(3);
+		let b = SopesBanyan::unit_from_num(3);
+		let c = SopesBanyan::unit_from_num(4);
+		assert!((a.geometry.scale.stalk_height - 1.0).abs() < 1e-5);
+		assert_eq!(a.geometry.canopy_noise.seed, 3);
+		assert_eq!(a.geometry.canopy_noise.seed, b.geometry.canopy_noise.seed);
+		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
+		assert_ne!(a.geometry.canopy_noise.seed, c.geometry.canopy_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = SopesBanyanParams::default();
+		params.geometry.scale.stalk_height = 20.0;
+		params.geometry.scale.canopy_height = 40.0;
+		params.geometry.scale.stalk_base_radius = 0.8;
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 20.0).abs() < 1e-5);
+		assert!((unit.geometry.scale.stalk_height - 1.0).abs() < 1e-5);
+		assert!((unit.geometry.scale.canopy_height - 2.0).abs() < 1e-5);
+		assert!((unit.geometry.scale.stalk_base_radius - 0.04).abs() < 1e-5);
+		assert_eq!(unit.geometry.canopy_noise.seed, 7);
+		Ok(())
+	}
+
+	#[test]
+	fn high_emits_merged_stick_collection() -> Result<()> {
+		let tree = SopesBanyan::unit_from_num(1);
+		let sticks = tree.stick_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(sticks.len(), 1);
+		assert!(sticks[0].collection.is_some());
+		let foliage = tree.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!foliage.is_empty());
+		assert!(foliage.iter().all(|n| n.geometry.is_layered_ball()));
+		Ok(())
 	}
 }
