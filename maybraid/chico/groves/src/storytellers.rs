@@ -413,8 +413,8 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
-		BraidOakTree, KamakuraTorch, KamakuraTorchParams, PenmarchTorch,
-		PenmarchTorchParams, StorybookTree, StorybookTreeParams,
+		BraidOakTree, KamakuraTorch, KamakuraTorchParams, PenmarchTorch, PenmarchTorchParams,
+		StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -427,6 +427,7 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, StorytellersCell, StorytellersItem};
+	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
@@ -436,11 +437,10 @@ mod vc {
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 
-	pub const STORYTELLERS_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const STORYTELLERS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
-	pub const STORYTELLERS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	pub const STORYTELLERS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const STORYTELLERS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+	pub const STORYTELLERS_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
