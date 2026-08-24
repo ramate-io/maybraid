@@ -63,7 +63,7 @@ Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + 
 That path is shared. Any construction that emits `CheapBall` / `CheapBallCollection` with `chico_leaf_material_ref()` gets it. To push another tree’s High the same way:
 
 1. Confirm High foliage is merged cheap balls on `ChicoLeafMaterial` (not layered / frond / a custom WGSL).
-2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (Storybook is `10 / 30 / 50`). Do not copy Storybook’s numbers blindly — they are `distance / tree_radius`.
+2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (tall woody constructions share Storybook’s `10 / 30 / 50`). Bushes and hedges stay tighter. Do not copy those numbers blindly — they are `distance / tree_radius`.
 3. Profile `ChicoLeafMaterial` **fragment** time, not triangle count. If it is still hot, thin High `AzimuthHeightBands` (card count) before adding another material.
 4. A plant-specific shader must copy the distance bands itself. Sticks and fronds do not need this.
 

@@ -41,9 +41,9 @@ use crate::palm_tree::world_space_frond_shape;
 use foliage::{branch_direction, frond_shape_for_joint};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// High: denser structural joint samples before ring packing (~+15% vs prior 24×8).
 const HIGH_JOINT_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(28, 9);

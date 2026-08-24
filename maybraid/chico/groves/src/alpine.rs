@@ -221,9 +221,9 @@ mod vc {
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const ALPINE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const ALPINE_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
-	pub const ALPINE_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	pub const ALPINE_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const ALPINE_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+	pub const ALPINE_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]

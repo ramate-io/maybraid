@@ -27,9 +27,9 @@ use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low};
 use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// Authoring / CLI parameters for Jungle Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
