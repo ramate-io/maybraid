@@ -6,12 +6,18 @@
 //! observes those events; [`republish_menu_activate`] copies activate out as a
 //! [`Message`].
 
+pub mod controls;
 pub mod icons;
 pub mod info;
 pub mod loading;
 pub mod single_select;
 pub mod theme;
 
+pub use controls::{
+	color_from_hex, spawn_asset_tile, spawn_block_label, spawn_cursor_slot, spawn_group_label,
+	spawn_hud_text, spawn_labeled_row, spawn_section_header, spawn_select_row, spawn_stepper,
+	spawn_swatch, spawn_swatch_row, spawn_text_button, spawn_tile_grid, HudFonts,
+};
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
 	set_description_for_menu, set_hint_for_menu, TextMenuDescription, TextMenuHint,
@@ -29,8 +35,9 @@ pub use single_select::{
 	TextMenuItemLabel,
 };
 pub use theme::{
-	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
 
 use bevy::prelude::*;

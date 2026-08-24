@@ -69,6 +69,29 @@ impl AnimatedIcon {
 			Pickable::IGNORE
 		}
 	}
+
+	/// Imperative spawn for sinks that walk a dynamic tree.
+	pub fn spawn(
+		icon: Icon,
+		animated: Self,
+		parent: &mut ChildSpawnerCommands,
+		image: Handle<Image>,
+		visibility: Visibility,
+	) {
+		parent.spawn((
+			icon,
+			animated,
+			visibility,
+			ImageNode { image, color: icon.color, ..default() },
+			Node {
+				width: Val::Px(icon.size),
+				height: Val::Px(icon.size),
+				flex_shrink: 0.0,
+				..default()
+			},
+			Pickable::IGNORE,
+		));
+	}
 }
 
 pub fn blink_animated_icons(time: Res<Time>, mut icons: Query<(&AnimatedIcon, &mut ImageNode)>) {

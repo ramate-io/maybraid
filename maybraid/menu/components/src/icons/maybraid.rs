@@ -51,4 +51,25 @@ impl Icon {
 			Pickable::IGNORE
 		}
 	}
+
+	/// Imperative spawn for sinks that walk a dynamic tree.
+	pub fn spawn(
+		self,
+		parent: &mut ChildSpawnerCommands,
+		image: Handle<Image>,
+		visibility: Visibility,
+	) {
+		parent.spawn((
+			self,
+			visibility,
+			ImageNode { image, color: self.color, ..default() },
+			Node {
+				width: Val::Px(self.size),
+				height: Val::Px(self.size),
+				flex_shrink: 0.0,
+				..default()
+			},
+			Pickable::IGNORE,
+		));
+	}
 }

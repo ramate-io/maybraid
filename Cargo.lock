@@ -4312,6 +4312,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-character-ui-menu-renderer"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "character-ui-menu",
+ "menu-components",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4338,8 +4347,12 @@ name = "menu-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "character-ui-menu",
  "clap",
+ "crozon-character-ui-menus",
  "game-commands",
+ "maybraid-character-ui-menu-renderer",
+ "menu-components",
  "menu-screens",
 ]
 

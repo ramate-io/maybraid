@@ -52,6 +52,7 @@ impl PlaygroundCommand {
 				let label = match show {
 					Show::Home => "home",
 					Show::Loading => "loading",
+					Show::Character => "character",
 				};
 				show.react(commands);
 				*console = format!("show {label}: pending");
@@ -87,6 +88,12 @@ mod tests {
 	fn parse_line_show_loading() {
 		let cmd = PlaygroundCommand::parse_line("show loading").expect("parse");
 		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Loading)));
+	}
+
+	#[test]
+	fn parse_line_show_character() {
+		let cmd = PlaygroundCommand::parse_line("show character").expect("parse");
+		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Character)));
 	}
 
 	#[test]

@@ -1,5 +1,6 @@
 //! `/show` subcommand: spawn a menu screen.
 
+use crate::character::request_show_character;
 use crate::loading_demo::LoadingDemo;
 use bevy::prelude::*;
 use clap::Subcommand;
@@ -12,6 +13,8 @@ pub enum Show {
 	Home,
 	/// Spawn the standard loading page (spinning mark, bar, explainer).
 	Loading,
+	/// Spawn the Maybraid character-creator panel (right-justified HUD).
+	Character,
 }
 
 impl Show {
@@ -22,6 +25,7 @@ impl Show {
 				request_show_loading(commands);
 				commands.insert_resource(LoadingDemo::default());
 			}
+			Show::Character => request_show_character(commands),
 		}
 	}
 }

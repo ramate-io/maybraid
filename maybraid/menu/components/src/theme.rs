@@ -102,3 +102,39 @@ pub const LOADING_STACK_GAP: f32 = 28.0;
 
 /// Explainer under the loading bar.
 pub const LOADING_EXPLAINER_FONT_SIZE: f32 = DESCRIPTION_FONT_SIZE;
+
+/// Mid-size HUD header for inspector-style panels (character creator).
+pub const PANEL_HEADER_FONT_SIZE: f32 = 32.0;
+
+/// Mid-size option / control label in a panel.
+pub const PANEL_ITEM_FONT_SIZE: f32 = 26.0;
+
+/// Inline field label beside a stepper or swatch row.
+pub const PANEL_LABEL_FONT_SIZE: f32 = 22.0;
+
+/// Numeric or cycled value in a stepper.
+pub const PANEL_VALUE_FONT_SIZE: f32 = 24.0;
+
+/// Subheading above a grouped select list.
+pub const PANEL_GROUP_FONT_SIZE: f32 = 18.0;
+
+/// Cursor mark beside a selected panel row.
+pub const PANEL_CURSOR_ICON_SIZE: f32 = 22.0;
+
+/// Gap between the panel cursor mark and the row label.
+pub const PANEL_CURSOR_ICON_GAP: f32 = 10.0;
+
+/// Color chip size in a panel swatch row.
+pub const PANEL_SWATCH_SIZE: f32 = 22.0;
+
+/// Minimum asset-tile width when thumbnails are off.
+pub const PANEL_TILE_MIN_WIDTH: f32 = 88.0;
+
+/// Minimum asset-tile height when thumbnails are off.
+pub const PANEL_TILE_MIN_HEIGHT: f32 = 56.0;
+
+/// Vertical rhythm inside a panel.
+pub const PANEL_ROW_GAP: f32 = 10.0;
+
+/// Gap between swatches or tiles in a wrapping row.
+pub const PANEL_CHIP_GAP: f32 = 8.0;
