@@ -202,9 +202,10 @@ mod vc {
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const JUNGLE_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-	pub const JUNGLE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
-	pub const JUNGLE_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
+	/// Typical large types ~180 m (jungle storybook / honu). `grove_bands_for_typical_height(180)`.
+	pub const JUNGLE_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+	pub const JUNGLE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 55.0;
+	pub const JUNGLE_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 85.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]

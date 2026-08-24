@@ -213,9 +213,10 @@ mod vc {
 	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 
+	/// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
 	pub const FORLORN_SAVANNA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-	pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
-	pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
+	pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
+	pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 15.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]

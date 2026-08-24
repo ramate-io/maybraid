@@ -154,7 +154,8 @@ mod vc {
 
 	use super::{definition, DrylandCell, DrylandItem};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_site,
+		foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
@@ -374,7 +375,7 @@ mod vc {
 				.filter_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
-						DrylandKind::Liams(t) => canopy_proxy_site(t, plant.placement, material),
+						DrylandKind::Liams(t) => canopy_proxy_column(t, plant.placement, material),
 						DrylandKind::Vase(t) => canopy_proxy_site(t, plant.placement, material),
 					}
 				})

@@ -221,10 +221,10 @@ mod vc {
 	use super::{definition, StrangeOasisCell, StrangeOasisItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		stick_material_from_palette, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
 		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -491,7 +491,7 @@ mod vc {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						StrangeOasisKind::DatePalm(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_crown(t, plant.placement, material)
 						}
 						StrangeOasisKind::Torch(t) => {
 							canopy_proxy_site(t, plant.placement, material)

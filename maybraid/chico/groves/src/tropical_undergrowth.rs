@@ -696,11 +696,11 @@ mod vc {
 		let scale = placement.scale.abs().max_element().max(1e-4);
 		let height = (patch.shape.blade_length * scale).max(0.15);
 		let footprint = (patch.patch_extent_xz * 0.5 * scale).max(height * 0.35);
-		CanopyProxySite {
-			center: placement.translation + Vec3::Y * (height * 0.4),
-			radius: footprint.max(0.25),
-			material: material.clone(),
-		}
+		CanopyProxySite::from_radius(
+			placement.translation + Vec3::Y * (height * 0.4),
+			footprint.max(0.25),
+			material.clone(),
+		)
 	}
 
 	fn woody_materials(

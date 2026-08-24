@@ -351,7 +351,8 @@ mod vc {
 	use super::{definition, UnendingJungleCell, UnendingJungleItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
+		foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
@@ -635,7 +636,7 @@ mod vc {
 							canopy_proxy_site(t, plant.placement, material)
 						}
 						UnendingJungleKind::Waialea(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_crown(t, plant.placement, material)
 						}
 					}
 				})

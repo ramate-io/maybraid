@@ -2,7 +2,7 @@
 
 Woody High/Medium plants should be **posed kit instances** of a quantized, merged construction — not a nest of per-stick / per-ball LOD hosts. Canonical woody grove: [`src/orchard.rs`](src/orchard.rs). Also flattened: [`src/goettingen_follow.rs`](src/goettingen_follow.rs), [`src/rolling_oaks.rs`](src/rolling_oaks.rs), [`src/vineyard.rs`](src/vineyard.rs), [`src/storytellers.rs`](src/storytellers.rs), [`src/high_bush.rs`](src/high_bush.rs), [`src/low_bush.rs`](src/low_bush.rs), [`src/spotty_bushes.rs`](src/spotty_bushes.rs), [`src/riverine_green.rs`](src/riverine_green.rs), [`src/forlorn_savanna.rs`](src/forlorn_savanna.rs), [`src/bush_scrub.rs`](src/bush_scrub.rs), [`src/riparian_general.rs`](src/riparian_general.rs), [`src/alpine.rs`](src/alpine.rs), [`src/christmas_taiga.rs`](src/christmas_taiga.rs), [`src/conifer_sapling.rs`](src/conifer_sapling.rs), [`src/arid_conifer_sapling.rs`](src/arid_conifer_sapling.rs), [`src/conifer_massives.rs`](src/conifer_massives.rs), [`src/dryland.rs`](src/dryland.rs), [`src/leeward.rs`](src/leeward.rs), [`src/jerrys_chaparral.rs`](src/jerrys_chaparral.rs), [`src/riparian_mix.rs`](src/riparian_mix.rs), [`src/levantine_scrub.rs`](src/levantine_scrub.rs), [`src/date_grove.rs`](src/date_grove.rs), [`src/palm_shade.rs`](src/palm_shade.rs), [`src/strange_oasis.rs`](src/strange_oasis.rs), [`src/tropical_undergrowth.rs`](src/tropical_undergrowth.rs), [`src/wandering_acacia.rs`](src/wandering_acacia.rs), [`src/trade_winds.rs`](src/trade_winds.rs), [`src/shamanhome.rs`](src/shamanhome.rs), [`src/tropical_thicket.rs`](src/tropical_thicket.rs), [`src/jungle_massives.rs`](src/jungle_massives.rs), [`src/jungle_lower_massives.rs`](src/jungle_lower_massives.rs), [`src/unending_jungle.rs`](src/unending_jungle.rs), [`src/temperate_massives.rs`](src/temperate_massives.rs), [`src/temperate_lower_massives.rs`](src/temperate_lower_massives.rs). Canonical tuft grove: [`src/monster_grass.rs`](src/monster_grass.rs). Plant-type merge / `unit_from_num` lives in [`chico-sbs-trees` CONTRIBUTING](../sbs-trees/CONTRIBUTING.md).
 
-Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_variants` default **100**. Grove **tile** bands stay independent of the plant’s own structural factors (Orchard High / Medium / Low is `2 / 5 / 12`; Storytellers is `5 / 20 / 30`; plants use `10 / 30 / 50`). Plant High can be wide: [`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) cheapens far cheap-ball cheese — see [sbs-trees CONTRIBUTING §4](../sbs-trees/CONTRIBUTING.md#4-widening-high-is-a-shader-problem-then-a-factor). Large-tree groves extend the **tile Medium** band — see [Tile bands for large trees](#tile-bands-for-large-trees).
+Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_variants` default **100**. Grove **tile** bands stay independent of the plant’s own structural factors (Orchard High / Medium / Low is `2 / 5 / 12`; Storytellers is `5 / 20 / 30`; plants use `10 / 30 / 50`). Do **not** copy Storytellers or Goettingen onto every woody grove — size Medium from the trees that grove actually plants ([`grove_bands_for_typical_height`](src/grove/vc_compose.rs)). Plant High can be wide: [`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) cheapens far cheap-ball cheese — see [sbs-trees CONTRIBUTING §4](../sbs-trees/CONTRIBUTING.md#4-widening-high-is-a-shader-problem-then-a-factor). Large-tree groves extend the **tile Medium** band — see [Tile bands for large trees](#tile-bands-for-large-trees).
 
 ## Plant type first
 
@@ -27,20 +27,26 @@ Orchard `grow_plant` is the woody template. Tuft groves use [`unit_plant_from_pa
 1. Compose plants with [`nest_flattened_plant_chunk`](src/grove/vc_compose.rs), not `nest_placed_plant_chunk`. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and spawn posed kits only.
 2. Lazy `SceneChunk` for the plant list (`SceneChunk::lazy(n, n, …)` yielding one flattened chunk per plant). Begin must not box every `scene_with_level` up front. See Orchard `nest_plant_chunks`.
 3. Feed that list through [`woody_grove_scene_chunks`](src/grove/vc_compose.rs) (or the tuft equivalent).
-4. Low / UltraLow still author canopy proxies (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`) but emit them through [`flattened_canopy_proxy_chunks`](../vegetation-components/src/lib.rs) (one cheap-ball collection kit, no per-plant `FoliageNode` hosts). `woody_grove_scene_chunks` does this on the Low branch.
+4. Low / UltraLow still author canopy proxies (`canopy_proxy_site` for broadleaf spheres, `canopy_proxy_column` for conifers, `canopy_proxy_crown` for palms; `ULTRA_LOW_CANOPY_BIN_METERS`) but emit them through [`flattened_canopy_proxy_chunks`](../vegetation-components/src/lib.rs) (one cheap-ball collection kit, no per-plant `FoliageNode` hosts). `woody_grove_scene_chunks` does this on the Low branch. Proxies must match silhouette: a 160 m fir is a tall thin ellipsoid, not a 80 m sphere; a palm is a ball at the frond cluster, not a mid-trunk sphere.
 5. Flattened kits already charge [`FLATTENED_KIT_CHUNK_WEIGHT`](../vegetation-components/src/lib.rs). Do not treat a GLB instance as weight 1.
 
 ## Tile bands for large trees
 
 Woody High and Medium both nest plant hosts; Low swaps the tile to canopy proxies. The plant→blob edge is `medium_factor × tile_radius`, not High. Default preview / vast tiles stay near [`DEFAULT_GROVE_EXTENT_XZ`](src/grove/extent.rs) (100 m, radius 50 m) unless placement cells or an RFC patch need more room.
 
-When typical trees are large, **extend Medium** (and raise Low so UltraLow does not slam in right after). Do not grow grove extent to fake a longer band — bigger tiles make one pop cover more ground and the center-based probe sits farther from edge trees. Do not copy plant factors onto the tile.
+When typical trees are large, **extend Medium** (and raise Low so UltraLow does not slam in right after). Do not grow grove extent to fake a longer band — bigger tiles make one pop cover more ground and the center-based probe sits farther from edge trees. Do not copy plant factors onto the tile. Do not lock every large grove into Storytellers `5 / 20 / 30` or Goettingen `5 / 10 / 20`.
 
 Rule of thumb: keep kits until a typical plant on that grove would itself be past plant Medium, including a tree on the far edge of the tile:
 
 `medium_factor × tile_radius ≳ plant_medium_factor × (typical_height / 2) + tile_radius`
 
-Worked example: [Storytellers](src/storytellers.rs) `5 / 20 / 30` on a 100 m tile keeps plants to 1 km (`20 × 50`) and proxies through 1.5 km. Use that for massives and tall oak / palm / alpine groves. Follow / mid-canopy (Goettingen, lower massives, ~10–24 m) can stay `5 / 10 / 20`. Orchard `2 / 5 / 12` is fine for small fruit trees and bushes.
+[`grove_bands_for_typical_height`](src/grove/vc_compose.rs) (and `_and_plant_medium` for palms at 36) is that floor, rounded to a 5-step. Use the **typical height of the primary large types on that grove**, not a global pair of buckets.
+
+Worked examples on a 100 m tile (`tile_radius` 50 m, plant Medium 30 unless noted):
+
+- [Jungle Massives](src/jungle_massives.rs) ~180 m → `10 / 55 / 85` (kits to 2.75 km). Temperate Massives ~170 m uses the same. [Conifer Massives](src/conifer_massives.rs) ~160 m → `10 / 50 / 75`.
+- [Palm Shade](src/palm_shade.rs) ~32 m with plant Medium 36 → `5 / 15 / 25`. Rolling oaks / alpine / trade winds ~36 m → `5 / 15 / 25`.
+- [Storytellers](src/storytellers.rs) stays authored `5 / 20 / 30` (comfort above the ~10 floor for 30 m trees). [Goettingen](src/goettingen_follow.rs) stays `5 / 10 / 20`. Orchard `2 / 5 / 12` is fine for small fruit trees and bushes.
 
 ## Playground host
 
