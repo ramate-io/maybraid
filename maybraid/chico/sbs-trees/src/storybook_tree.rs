@@ -33,8 +33,8 @@ use canopy::{
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 /// High is wide; the leaf shader cheapens cheese / sway with camera distance.
 const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 30.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// Authoring / CLI parameters for Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
