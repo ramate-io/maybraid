@@ -100,6 +100,10 @@ pub struct LodChunkFulfillBudget {
 	pub cull_root_despawns_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
+	/// Max hosts with [`crate::LodLevelSpawnRequest`] one begin system may
+	/// classify this frame (round-robin). Admission still uses
+	/// [`Self::begins_per_frame`]. Empty clocks skip the scan entirely.
+	pub begin_scan_per_frame: u32,
 	/// Relative weight charged when starting fulfill jobs (sum of **prefilled**
 	/// primitive weights). Lazy tails are charged later by drain.
 	///
@@ -125,6 +129,7 @@ impl Default for LodChunkFulfillBudget {
 			cull_weights_per_frame: 64,
 			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
+			begin_scan_per_frame: 192,
 			begin_weights_per_frame: 512,
 			begin_prefill_weights_per_job: 8,
 			completes_per_frame: 512,

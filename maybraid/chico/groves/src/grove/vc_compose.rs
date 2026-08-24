@@ -345,6 +345,8 @@ pub fn woody_grove_scene_chunks(
 				SceneChunk::chunks(plant_chunks)
 			}
 		}
-		None => chico_vegetation_components::vegetation_scene_chunks(vegetation, lod_ref, level),
+		None => {
+			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
+		}
 	}
 }

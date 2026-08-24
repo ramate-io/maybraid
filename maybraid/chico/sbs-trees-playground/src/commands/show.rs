@@ -1,7 +1,7 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
 use crate::monster_grass_plain::spawn_monster_grass_plain;
-use crate::vast_orchards::spawn_vast_orchards;
+use crate::vast::{parse_vast_grove_name, spawn_vast_grove};
 use bevy::prelude::*;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
@@ -98,6 +98,8 @@ pub enum Show {
 	RollingOaks(ShowRollingOaks),
 	/// Orchard grove via VegetationComponents / LodScene.
 	Orchard(ShowOrchard),
+	/// Centered radius-10 tile of a named grove (21×21) for scale testing.
+	Vast(ShowVast),
 	/// Centered radius-10 tile of default Orchard groves (21×21) for scale testing.
 	VastOrchards,
 	/// Riparian General grove via VegetationComponents / LodScene.
@@ -559,6 +561,14 @@ impl ShowOrchard {
 		grove.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
 		grove
 	}
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowVast {
+	/// Grove construction kebab-case name (`orchard`, `goettingen-follow`, `rolling-oaks`, …).
+	#[arg(long, value_parser = parse_vast_grove_name)]
+	pub grove_name: String,
 }
 
 #[derive(Clone, Args)]
@@ -1198,7 +1208,8 @@ impl Show {
 			Self::TropicalThicket(args) => ShowSubject::TropicalThicket(args.configured()),
 			Self::RollingOaks(args) => ShowSubject::RollingOaks(args.configured()),
 			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
-			Self::VastOrchards => ShowSubject::VastOrchards,
+			Self::Vast(args) => ShowSubject::Vast { grove_name: args.grove_name },
+			Self::VastOrchards => ShowSubject::Vast { grove_name: "orchard".into() },
 			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
 			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
 			Self::GoettingenFollow(args) => ShowSubject::GoettingenFollow(args.configured()),
@@ -1275,7 +1286,7 @@ pub enum ShowSubject {
 	TropicalThicket(TropicalThicketParams),
 	RollingOaks(RollingOaksParams),
 	Orchard(OrchardParams),
-	VastOrchards,
+	Vast { grove_name: String },
 	RiparianGeneral(RiparianGeneralParams),
 	ForlornSavanna(ForlornSavannaParams),
 	GoettingenFollow(GoettingenFollowParams),
@@ -1476,7 +1487,7 @@ pub fn sync_show(
 			g.cell_extent_xz(),
 			g.terrain
 		)),
-		Some(ShowSubject::VastOrchards) => Some("vast-orchards".into()),
+		Some(ShowSubject::Vast { grove_name }) => Some(format!("vast:{grove_name}")),
 		Some(ShowSubject::RiparianGeneral(g)) => Some(format!(
 			"riparian-general:extent={:?}|cell={:?}|terrain={:?}",
 			g.extent,
@@ -1705,9 +1716,14 @@ pub fn sync_show(
 		ShowSubject::TropicalThicket(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::RollingOaks(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::Orchard(params) => spawn_show_grove(&mut commands, &params.build()),
-		ShowSubject::VastOrchards => {
-			for entity in spawn_vast_orchards(&mut commands, Transform::IDENTITY) {
-				commands.entity(entity).insert(ShowRoot);
+		ShowSubject::Vast { grove_name } => {
+			match spawn_vast_grove(&mut commands, Transform::IDENTITY, grove_name) {
+				Ok(entities) => {
+					for entity in entities {
+						commands.entity(entity).insert(ShowRoot);
+					}
+				}
+				Err(msg) => bevy::log::error!("show vast: {msg}"),
 			}
 		}
 		ShowSubject::RiparianGeneral(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1783,6 +1799,36 @@ mod tests {
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert!(matches!(cmd, crate::commands::PlaygroundCommand::Show(Show::VastOrchards)));
 		Ok(())
+	}
+
+	#[test]
+	fn show_vast_parses_grove_name() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show vast --grove-name orchard")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::Vast(args)) = cmd else {
+			anyhow::bail!("expected show vast command");
+		};
+		assert_eq!(args.grove_name, "orchard");
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"show vast --grove-name goettingen-follow",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::Vast(args)) = cmd else {
+			anyhow::bail!("expected show vast command");
+		};
+		assert_eq!(args.grove_name, "goettingen-follow");
+		Ok(())
+	}
+
+	#[test]
+	fn show_vast_rejects_unknown_grove() -> Result<()> {
+		match crate::commands::PlaygroundCommand::parse_line("show vast --grove-name not-a-grove") {
+			Ok(_) => anyhow::bail!("unknown grove should fail parse"),
+			Err(err) => {
+				assert!(err.contains("unknown grove") || err.contains("not-a-grove"));
+				Ok(())
+			}
+		}
 	}
 
 	#[test]
