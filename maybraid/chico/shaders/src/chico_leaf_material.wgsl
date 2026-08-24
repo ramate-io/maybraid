@@ -48,6 +48,8 @@ struct LeafVertexOutput {
     @location(7) @interpolate(flat) visibility_range_dither: i32,
 #endif
     @location(8) local_pos: vec3<f32>,
+    /// Camera distance to this card's world centroid (coherent per cheap-ball).
+    @location(9) view_dist: f32,
 }
 
 // --------------------------------------------------------
@@ -102,6 +104,19 @@ fn fbm_3d(p: vec3<f32>) -> f32 {
     return value / norm;
 }
 
+/// Two-octave FBM for the mid-distance cheese path.
+fn fbm_3d_2(p: vec3<f32>) -> f32 {
+    let a = value_noise_3d(p) * 0.5;
+    let b = value_noise_3d(p * 2.03) * 0.25;
+    return (a + b) / 0.75;
+}
+
+// Camera-distance bands (meters, card centroid). Near keeps full cheese;
+// mid drops octaves; far skips discard so overlapping cards keep early-Z.
+const LEAF_NEAR_DIST: f32 = 16.0;
+const LEAF_MID_DIST: f32 = 32.0;
+const LEAF_SWAY_CUT_DIST: f32 = 24.0;
+
 fn instance_scale(world_from_local: mat4x4<f32>) -> f32 {
     return max(
         length(world_from_local[0].xyz),
@@ -111,22 +126,23 @@ fn instance_scale(world_from_local: mat4x4<f32>) -> f32 {
 
 fn canopy_sway(
     local_pos: vec3<f32>,
-    world_pos: vec3<f32>,
     world_normal: vec3<f32>,
     centroid: vec3<f32>,
     scale: f32,
+    view_dist: f32,
 ) -> vec3<f32> {
+    if (view_dist >= LEAF_SWAY_CUT_DIST) {
+        return vec3<f32>(0.0);
+    }
     let r = min(length(local_pos), 1.0);
     let t = globals.time;
     let phase = dot(centroid, vec3<f32>(0.07, 0.03, 0.11));
     let gust = sin(t * 0.85 + phase) * sin(t * 0.31 + phase * 1.7);
     let flutter = sin(t * 2.15 + local_pos.x * 3.0 + phase);
-    let dist = length(world_pos - view.world_position);
-    let dist_fade = min(1.0, 24.0 / max(dist, 24.0));
     let wind_dir = vec3<f32>(0.92, 0.08, 0.38);
     var offset = wind_dir * (gust * r * 0.08 * scale);
     offset += world_normal * (flutter * r * 0.028 * scale);
-    return offset * dist_fade;
+    return offset;
 }
 
 #ifdef MORPH_TARGETS
@@ -162,6 +178,7 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     var out: LeafVertexOutput;
     out.local_pos = vec3<f32>(0.0, 0.0, 0.0);
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
+    out.view_dist = 0.0;
 
 #ifdef MORPH_TARGETS
     var vertex = morph_vertex(vertex_no_morph, vertex_no_morph.instance_index);
@@ -210,6 +227,8 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     let scale = instance_scale(mesh_world_from_local);
 #endif
     out.local_pos = kit_local;
+    // Placement may be baked into vertices (grove flatten); centroid is world-space.
+    out.view_dist = length(centroid - view.world_position);
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
@@ -217,10 +236,10 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     out.world_position += vec4<f32>(
         canopy_sway(
             kit_local,
-            out.world_position.xyz,
             out.world_normal,
             centroid,
             scale,
+            out.view_dist,
         ),
         0.0,
     );
@@ -274,6 +293,7 @@ fn fragment(
     let world_pos = mesh.world_position.xyz;
     let local_pos = mesh.local_pos;
     let r = saturate(length(local_pos));
+    let view_dist = mesh.view_dist;
 
     // ----------------------------------------------------
     // Object-space swiss cheese + radial hub
@@ -282,43 +302,75 @@ fn fragment(
     // cards do not share tunnels. UV adds per-plane bites.
     // World coarse is a weak shared bias only — it cannot
     // open a hole by itself.
+    //
+    // Distance bands (instance origin): near = full 4-octave cheese;
+    // mid = 2 octaves, no world/speckle extras; far = 1 noise, no
+    // discard (overlapping cards keep early-Z).
 
-    let medium = fbm_3d(local_pos * 3.25);
-    let fine = fbm_3d(local_pos * 8.50);
+    var hole_alpha = 1.0;
+    var radial_alpha = 1.0;
+    var tint_noise = 0.5;
+    var speckle = 0.5;
+
+    if (view_dist >= LEAF_MID_DIST) {
+        let field = value_noise_3d(local_pos * 3.25);
+        let rim_w = max(fwidth(r) * 2.0, 0.08);
+        radial_alpha = smoothstep(0.0, rim_w, 0.70 - r);
+        hole_alpha = mix(0.85, 1.0, field);
+        tint_noise = value_noise_3d(local_pos * 1.75);
+    } else if (view_dist >= LEAF_NEAR_DIST) {
+        let medium = fbm_3d_2(local_pos * 3.25);
+        let fine = fbm_3d_2(local_pos * 8.50);
+        let hole = medium * 0.65 + fine * 0.35;
+        let hub = 1.0 - smoothstep(0.22, 0.62, r);
+        let threshold = mix(0.18, 0.46, 1.0 - hub);
+        let fw = max(fwidth(hole) * 1.35, 0.01);
+        hole_alpha = smoothstep(threshold - fw, threshold + fw, hole);
+        let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
+        let rim_w = max(fwidth(r) * 2.0, 0.08);
+        radial_alpha = smoothstep(0.0, rim_w, blot - r);
+        tint_noise = fbm_3d_2(local_pos * 1.75);
+        if (hole_alpha * radial_alpha < 0.08) {
+            discard;
+        }
+    } else {
+        let medium = fbm_3d(local_pos * 3.25);
+        let fine = fbm_3d(local_pos * 8.50);
 #ifdef VERTEX_UVS_A
-    let uv_bite = fbm_3d(vec3<f32>(mesh.uv * 6.0, 0.17));
-    let hole = medium * 0.48 + fine * 0.22 + uv_bite * 0.30;
+        let uv_bite = fbm_3d(vec3<f32>(mesh.uv * 6.0, 0.17));
+        let hole = medium * 0.48 + fine * 0.22 + uv_bite * 0.30;
 #else
-    let hole = medium * 0.65 + fine * 0.35;
+        let hole = medium * 0.65 + fine * 0.35;
 #endif
-    let local_coarse = (fbm_3d(local_pos * 1.15) - 0.5) * 0.10;
-    let world_bias = (fbm_3d(world_pos * 0.45) - 0.5) * 0.05;
-    let field = hole + local_coarse + world_bias;
+        let local_coarse = (fbm_3d(local_pos * 1.15) - 0.5) * 0.10;
+        let world_bias = (fbm_3d(world_pos * 0.45) - 0.5) * 0.05;
+        let field = hole + local_coarse + world_bias;
 
-    // Hub stays mostly solid; cheese starts well inside the kit so the
-    // quad / ico outline is not the silhouette.
-    let hub = 1.0 - smoothstep(0.22, 0.62, r);
-    let threshold = mix(0.18, 0.46, 1.0 - hub);
+        // Hub stays mostly solid; cheese starts well inside the kit so the
+        // quad / ico outline is not the silhouette.
+        let hub = 1.0 - smoothstep(0.22, 0.62, r);
+        let threshold = mix(0.18, 0.46, 1.0 - hub);
 
-    let fw = max(fwidth(field) * 1.35, 0.01);
-    let hole_alpha = smoothstep(threshold - fw, threshold + fw, field);
+        let fw = max(fwidth(field) * 1.35, 0.01);
+        hole_alpha = smoothstep(threshold - fw, threshold + fw, field);
 
-    // Noisy blot radius: thick object-space rim, not a 1px mesh edge.
-    let blot = 0.52 + 0.38 * fbm_3d(local_pos * 2.4);
-    let rim_w = max(fwidth(r) * 2.0, 0.08);
-    let radial_alpha = smoothstep(0.0, rim_w, blot - r);
+        // Noisy blot radius: thick object-space rim, not a 1px mesh edge.
+        let blot = 0.52 + 0.38 * fbm_3d(local_pos * 2.4);
+        let rim_w = max(fwidth(r) * 2.0, 0.08);
+        radial_alpha = smoothstep(0.0, rim_w, blot - r);
+
+        tint_noise = fbm_3d(local_pos * 1.75);
+        speckle = fbm_3d(local_pos * 12.0);
+        if (hole_alpha * radial_alpha < 0.08) {
+            discard;
+        }
+    }
 
     let alpha = hole_alpha * radial_alpha;
-    if (alpha < 0.08) {
-        discard;
-    }
 
     // ----------------------------------------------------
     // Color variation + pigment thinning at hole edges
     // ----------------------------------------------------
-
-    let tint_noise = fbm_3d(local_pos * 1.75);
-    let speckle = fbm_3d(local_pos * 12.0);
 
     let warm_cool = mix(
         vec3<f32>(0.82, 0.95, 0.72),

@@ -1,4 +1,7 @@
 //! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, double-sided PBR.
+//!
+//! Fragment work (FBM cheese + `discard`) short-circuits by camera distance to
+//! the card centroid so a wider High structural band stays cheaper on far trees.
 
 use bevy::{
 	asset::embedded_asset,

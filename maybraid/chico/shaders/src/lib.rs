@@ -2,6 +2,7 @@
 //!
 //! - [`ChicoStickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
 //! - [`ChicoLeafMaterial`] — object-space leafy breakup + vertex sway + double-sided PBR.
+//!   Far fragments drop FBM octaves and `discard` (see `chico_leaf_material.wgsl`).
 
 use bevy::prelude::*;
 
