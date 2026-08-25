@@ -520,10 +520,10 @@ fn spawn_short_text_modal(commands: &mut Commands, fonts: &HudFonts, session: &S
 					LineHeight::RelativeToFont(1.0),
 					Pickable::IGNORE,
 				));
-				spawn_text_button(card, fonts, "submit", ShortTextSubmit);
 				if show_pad {
 					spawn_short_text_pad(card, fonts, session.shift);
 				} else {
+					spawn_text_button(card, fonts, "submit", ShortTextSubmit);
 					spawn_hud_text(
 						card,
 						fonts.body(PANEL_ITEM_FONT_SIZE),
@@ -635,6 +635,7 @@ fn spawn_pad_action_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
 			spawn_pad_key(row, fonts, "shift", PAD_WIDE_KEY, ShortTextPadKey::Shift, None);
 			spawn_pad_key(row, fonts, "space", PAD_WIDE_KEY * 2.0, ShortTextPadKey::Space, None);
 			spawn_pad_key(row, fonts, "back", PAD_WIDE_KEY, ShortTextPadKey::Backspace, None);
+			spawn_pad_key(row, fonts, "submit", PAD_WIDE_KEY, ShortTextSubmit, None);
 		});
 }
 
