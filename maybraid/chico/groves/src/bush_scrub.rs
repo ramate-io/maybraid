@@ -223,6 +223,8 @@ impl BushScrubCell {
 
 #[cfg(feature = "render")]
 mod vc {
+	use std::sync::Arc;
+
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
@@ -247,7 +249,7 @@ mod vc {
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_placed_plant_chunk, placement_noise, stick_material_from_palette,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
 		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
 		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -298,6 +300,11 @@ mod vc {
 		#[arg(long, default_value_t = 100)]
 		pub patch_variants: u32,
 
+		/// Number of unit-height bush archetypes (`unit_from_num(0..n)`). Caps unique
+		/// merged-mesh handles for High/Medium bushes.
+		#[arg(long, default_value_t = 100)]
+		pub tree_variants: u32,
+
 		#[arg(skip)]
 		resolved_placements: Option<Vec<GroveCellVariant<BushScrubCell>>>,
 	}
@@ -315,6 +322,7 @@ mod vc {
 				),
 				terrain: FlatTerrainSample::default(),
 				patch_variants: 100,
+				tree_variants: 100,
 				resolved_placements: None,
 			}
 		}
@@ -369,6 +377,7 @@ mod vc {
 				self.bush_chain_noise,
 				self.leaf_surface_noise,
 				self.patch_variants,
+				self.tree_variants,
 				&self.extent,
 			)
 		}
@@ -376,8 +385,8 @@ mod vc {
 
 	#[derive(Clone)]
 	enum BushScrubKind {
-		Tuft(TuftPatch),
-		Bush(HighBushShoots),
+		Tuft(Arc<TuftPatch>),
+		Bush(Arc<HighBushShoots>),
 	}
 
 	#[derive(Clone)]
@@ -391,7 +400,7 @@ mod vc {
 
 	#[derive(Clone, Component)]
 	pub struct BushScrub {
-		plants: Vec<BushScrubPlant>,
+		plants: Arc<[BushScrubPlant]>,
 		structural_center: Vec3,
 		footprint_radius: f32,
 		pub extent: GroveExtent,
@@ -404,15 +413,25 @@ mod vc {
 			bush_chain_noise: NoiseParams,
 			leaf_surface_noise: NoiseParams,
 			patch_variants: u32,
+			tree_variants: u32,
 			extent: &GroveExtent,
 		) -> Self {
-			let variants = patch_variants.max(1);
-			let plants = placements
+			let patch_variants = patch_variants.max(1);
+			let tree_variants = tree_variants.max(1);
+			let plants: Arc<[BushScrubPlant]> = placements
 				.iter()
 				.map(|placed| {
-					grow_plant(placed, grove_noise, bush_chain_noise, leaf_surface_noise, variants)
+					grow_plant(
+						placed,
+						grove_noise,
+						bush_chain_noise,
+						leaf_surface_noise,
+						patch_variants,
+						tree_variants,
+					)
 				})
-				.collect();
+				.collect::<Vec<_>>()
+				.into();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
 			Self { plants, structural_center, footprint_radius, extent: *extent }
 		}
@@ -422,27 +441,47 @@ mod vc {
 		}
 
 		fn nest_plant_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
-			self.plants
-				.iter()
-				.map(|plant| match &plant.kind {
-					BushScrubKind::Tuft(t) => nest_placed_plant_chunk(
-						t.clone(),
+			if self.plants.is_empty() {
+				return Vec::new();
+			}
+			let n = self.plants.len();
+			let plants = Arc::clone(&self.plants);
+			let prev = *lod_ref.previous_transform;
+			let curr = *lod_ref.current_transform;
+			let bounds = *lod_ref.bounds;
+			let entity = lod_ref.entity;
+			let mut index = 0usize;
+			vec![SceneChunk::lazy(n as u32, n, move || {
+				if index >= plants.len() {
+					return None;
+				}
+				let plant = &plants[index];
+				index += 1;
+				let plant_lod = LodRef {
+					entity,
+					previous_transform: &prev,
+					current_transform: &curr,
+					bounds: &bounds,
+				};
+				Some(match &plant.kind {
+					BushScrubKind::Tuft(t) => nest_flattened_plant_chunk(
+						Arc::clone(t),
 						plant.placement,
 						&plant.stick_material,
 						&plant.ball_material,
 						&plant.frond_material,
-						lod_ref,
+						&plant_lod,
 					),
-					BushScrubKind::Bush(t) => nest_placed_plant_chunk(
-						t.clone(),
+					BushScrubKind::Bush(t) => nest_flattened_plant_chunk(
+						Arc::clone(t),
 						plant.placement,
 						&plant.stick_material,
 						&plant.ball_material,
 						&plant.frond_material,
-						lod_ref,
+						&plant_lod,
 					),
 				})
-				.collect()
+			})]
 		}
 
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
@@ -480,13 +519,12 @@ mod vc {
 		grove_noise: NoiseParams,
 		bush_chain_noise: NoiseParams,
 		leaf_surface_noise: NoiseParams,
-		variants: u32,
+		patch_variants: u32,
+		tree_variants: u32,
 	) -> BushScrubPlant {
-		let placement =
-			Placement::new(placed.position, 0.0).with_scale(Vec3::splat(placed.scale.max(1e-4)));
 		match placed.variant.item() {
 			BushScrubItem::Tuft(tuft) => {
-				let variant = patch_variant_index(placed.position, variants);
+				let variant = patch_variant_index(placed.position, patch_variants);
 				let noise = variant_noise(leaf_surface_noise, variant);
 				let params =
 					single_blade_patch_params(tuft.build_with_noise(noise), leaf_surface_noise);
@@ -504,14 +542,14 @@ mod vc {
 				);
 				BushScrubPlant {
 					placement,
-					kind: BushScrubKind::Tuft(patch),
+					kind: BushScrubKind::Tuft(Arc::new(patch)),
 					stick_material: MaterialRef::default(),
 					ball_material: material.clone(),
 					frond_material: material,
 				}
 			}
 			BushScrubItem::Patch(patch) => {
-				let variant = patch_variant_index(placed.position, variants);
+				let variant = patch_variant_index(placed.position, patch_variants);
 				let noise = variant_noise(leaf_surface_noise, variant);
 				let params = stamp_foliage_noise(patch.build_tuft_patch(noise), leaf_surface_noise);
 				let material = material_from_palette(
@@ -528,22 +566,27 @@ mod vc {
 				);
 				BushScrubPlant {
 					placement,
-					kind: BushScrubKind::Tuft(patch),
+					kind: BushScrubKind::Tuft(Arc::new(patch)),
 					stick_material: MaterialRef::default(),
 					ball_material: material.clone(),
 					frond_material: material,
 				}
 			}
 			BushScrubItem::Bush(bush) => {
-				let build_noise = placement_noise(grove_noise, placed.position);
-				let chain_noise = placement_noise(bush_chain_noise, placed.position);
-				let stick_seed = chain_noise.seed;
-				let canopy_seed = build_noise.seed.wrapping_add(31);
+				let variant = patch_variant_index(placed.position, tree_variants);
+				let build_noise = variant_noise(grove_noise, variant);
+				let chain_noise = variant_noise(bush_chain_noise, variant);
+				let palette_noise = placement_noise(grove_noise, placed.position);
+				let stick_seed = palette_noise.seed;
+				let canopy_seed = palette_noise.seed.wrapping_add(31);
 				let mut shape = bush.build_with_noise(build_noise);
 				shape.chain_noise = chain_noise;
+				let (unit_params, world_size) =
+					HighBushShootsParams::new(shape).into_unit_from_num(variant);
 				BushScrubPlant {
-					placement,
-					kind: BushScrubKind::Bush(HighBushShootsParams::new(shape).build()),
+					placement: Placement::new(placed.position, 0.0)
+						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+					kind: BushScrubKind::Bush(Arc::new(unit_params.build())),
 					stick_material: stick_material_from_palette(
 						Some(placed.variant.stick_palette_mix()),
 						stick_seed,
@@ -637,6 +680,97 @@ mod vc {
 
 		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+		}
+	}
+
+	#[cfg(test)]
+	mod tests {
+		use super::*;
+		use anyhow::Result;
+
+		fn small_grove() -> BushScrub {
+			BushScrubParams::default()
+				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0)))
+				.build()
+		}
+
+		fn plant_unit_size(plant: &BushScrubPlant) -> f32 {
+			match &plant.kind {
+				BushScrubKind::Tuft(t) => t.patch_extent_xz.max(t.shape.blade_length),
+				BushScrubKind::Bush(t) => t.shape.height,
+			}
+		}
+
+		fn plant_seed(plant: &BushScrubPlant) -> i32 {
+			match &plant.kind {
+				BushScrubKind::Tuft(t) => t.shape.seed,
+				BushScrubKind::Bush(t) => t.shape.chain_noise.seed,
+			}
+		}
+
+		#[test]
+		fn high_medium_nest_one_flattened_host_per_tree() -> Result<()> {
+			let grove = small_grove();
+			assert!(!grove.plants.is_empty(), "expected placed bush-scrub plants");
+
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::High).len(), 0);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::High).len(), 0);
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Medium).len(), 0);
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Medium).len(), 0);
+
+			let camera = Transform::from_translation(Vec3::new(40.0, 2.0, 40.0));
+			let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+			let lod_ref = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &camera,
+				current_transform: &camera,
+				bounds: &bounds,
+			};
+			let high = grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High);
+			let lod::SceneChunk::SubChunks(parts) = high else {
+				anyhow::bail!("High bush-scrub should wrap plant chunks");
+			};
+			assert_eq!(parts.len(), 1, "expected one lazy plant producer");
+			let lod::SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } = &parts[0]
+			else {
+				anyhow::bail!("High bush-scrub plants should be SceneChunk::Lazy");
+			};
+			assert_eq!(*remaining_primitives, grove.plants.len());
+			assert_eq!(*remaining_weight as usize, grove.plants.len());
+
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
+			assert_eq!(low_foliage, grove.plants.len());
+			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
+			let lod::SceneChunk::Primitive { weight, .. } =
+				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
+			else {
+				anyhow::bail!("Low bush-scrub should emit one flattened canopy collection");
+			};
+			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			Ok(())
+		}
+
+		#[test]
+		fn tree_variants_quantize_archetypes() -> Result<()> {
+			use std::collections::HashSet;
+
+			let mut params = BushScrubParams::default()
+				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0)));
+			params.patch_variants = 4;
+			params.tree_variants = 4;
+			let grove = params.build();
+			assert!(!grove.plants.is_empty(), "expected placed bush-scrub plants");
+			for plant in grove.plants.iter() {
+				assert!(
+					(plant_unit_size(plant) - 1.0).abs() < 1e-4,
+					"expected unit size, got {}",
+					plant_unit_size(plant)
+				);
+			}
+			let seeds: HashSet<i32> = grove.plants.iter().map(plant_seed).collect();
+			assert!(seeds.len() <= 4, "expected ≤4 unique unit seeds, got {}", seeds.len());
+			Ok(())
 		}
 	}
 }

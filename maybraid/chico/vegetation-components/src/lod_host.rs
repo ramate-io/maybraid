@@ -8,6 +8,7 @@ use bevy::prelude::{
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::LodSceneLevel;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
+use lod::LodLazyPending;
 use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::MultiSceneMerge;
 
@@ -43,6 +44,7 @@ fn material_asset_scene(asset: AssetPath, material: Option<MaterialRef>) -> Box<
 			bsn! {
 				template_value(MaterialRefRoot(material))
 				PropagateToDescendants
+				LodLazyPending
 			},
 			scene,
 		)),
@@ -82,6 +84,7 @@ pub fn posed_frond_multi_scene_merge(
 		bsn! {
 			template_value(MaterialRefRoot(material))
 			PropagateToDescendants
+			LodLazyPending
 		},
 		merge.scene_at(transform),
 	)
@@ -100,6 +103,7 @@ pub fn posed_foliage_multi_scene_merge(
 			NotShadowCaster
 			template_value(MaterialRefRoot(material))
 			PropagateToDescendants
+			LodLazyPending
 		},
 		merge.scene_at(transform),
 	)

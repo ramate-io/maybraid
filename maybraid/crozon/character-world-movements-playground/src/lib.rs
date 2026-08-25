@@ -197,15 +197,11 @@ fn apply_mode_commands(
 				.unwrap_or_else(|| base.0.height_at(center.x, center.z));
 			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 		}
-		respawn_stampede_members(
-			&layout,
-			|x, z| {
-				store
-					.composed_height_at(&layout, x, z)
-					.unwrap_or_else(|| base.0.height_at(x, z))
-			},
-			&mut herd,
-		);
+		respawn_stampede_members(&layout, |x, z| {
+			store
+				.composed_height_at(&layout, x, z)
+				.unwrap_or_else(|| base.0.height_at(x, z))
+		}, &mut herd);
 		commands.entity(entity).despawn();
 	}
 }
@@ -268,11 +264,11 @@ fn generate_cells(
 			.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
 		respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 	}
-	respawn_stampede_members(
-		&layout,
-		|x, z| index.composed_height_at(x, z).unwrap_or_else(|| world_base.0.height_at(x, z)),
-		&mut herd,
-	);
+	respawn_stampede_members(&layout, |x, z| {
+		index
+			.composed_height_at(x, z)
+			.unwrap_or_else(|| world_base.0.height_at(x, z))
+	}, &mut herd);
 
 	if *mode == PlaygroundMode::Free {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {

@@ -165,7 +165,11 @@ pub fn apply_anim_mailbox(
 			Option<&mut QuadrupedV0Rig>,
 			Option<&mut ForelimbedV0Rig>,
 		),
-		(With<AnimMailbox>, Without<AnimBone>, Or<(With<AnimateBones>, With<AnimateEffects>)>),
+		(
+			With<AnimMailbox>,
+			Without<AnimBone>,
+			Or<(With<AnimateBones>, With<AnimateEffects>)>,
+		),
 	>,
 	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {
@@ -249,6 +253,7 @@ pub fn apply_anim_mailbox(
 		}
 	}
 }
+
 
 fn rest_pose(
 	bone_map: &BoneMap,

@@ -43,17 +43,10 @@ fn preload(mut handles: ResMut<SceneRefHandles>, assets: Res<AssetServer>) {
 ```
 
 [`SceneRef::glb`] accepts a path relative to the Bevy asset root. If no `#SceneN`
-<<<<<<< HEAD
-label is present, scene `0` is used. Optional [`MirrorAxis`] rebuilds positions,
-normals, and tangents with reversed winding, and reflects each entity
-`Transform`, so the instance matches a parent axis-flip without negative
-Transform scale at the caller.
-=======
 label is present, scene `0` is used. [`SceneRef::mirrored`] rebuilds positions,
 normals, and tangents with reversed winding (caller places the instance).
 [`SceneRef::reflected`] does that and conjugates each entity `Transform`, matching
 a parent axis-flip without negative Transform scale at the caller.
->>>>>>> 0b6f2fd11e0d10c635cfbd9893e4343cb0e947d4
 
 [`MultiSceneMerge`] resolves each part through [`SceneRefHandles`] (including mirrors),
 bakes each mesh entity’s hierarchy transform plus the part transform into vertices,

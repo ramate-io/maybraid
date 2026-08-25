@@ -31,9 +31,10 @@ use canopy::{
 };
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+/// High is wide; the leaf shader cheapens cheese / sway with camera distance.
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// Authoring / CLI parameters for Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -110,11 +111,11 @@ impl StorybookTree {
 	}
 }
 
-fn merge_storybook_sticks(nodes: Vec<StickNode>) -> Vec<StickNode> {
+pub(crate) fn merge_kit_sticks(nodes: Vec<StickNode>) -> Vec<StickNode> {
 	StickNode::merge_standard(nodes).into_iter().collect()
 }
 
-fn merge_storybook_foliage(nodes: Vec<FoliageNode>) -> Vec<FoliageNode> {
+pub(crate) fn merge_cheap_ball_foliage(nodes: Vec<FoliageNode>) -> Vec<FoliageNode> {
 	let mut cheap = Vec::new();
 	let mut rest = Vec::new();
 	for node in nodes {
@@ -143,7 +144,7 @@ impl VegetationComponents for StorybookTree {
 		};
 		let nodes: Vec<_> =
 			nodes.into_iter().map(|n| n.with_material(chico_stick_material_ref())).collect();
-		Layers::from_free(merge_storybook_sticks(nodes))
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -158,7 +159,7 @@ impl VegetationComponents for StorybookTree {
 		};
 		let nodes: Vec<_> =
 			nodes.into_iter().map(|n| n.with_material(chico_leaf_material_ref())).collect();
-		Layers::from_free(merge_storybook_foliage(nodes))
+		Layers::from_free(merge_cheap_ball_foliage(nodes))
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {

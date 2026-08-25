@@ -32,7 +32,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::lod_ref::track_lod_nodes;
-use crate::scene::host::sync_lod_level_roots;
+use crate::scene::host::{settle_lod_level_root_visibility, sync_lod_level_roots};
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
 
@@ -63,8 +63,8 @@ pub use sync::{
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
 	reset_lod_chunk_budget, LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems,
 	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
-	LodCullRequest, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
-	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
+	LodCullRequest, LodLazyPending, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed, LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use viewer::LodViewer;
 
@@ -138,6 +138,9 @@ impl Plugin for LodRefreshCorePlugin {
 				(
 					track_lod_nodes.in_set(LodRefreshSystems::Track),
 					refresh_lod_host_levels.in_set(LodRefreshSystems::UpdateLevels),
+					settle_lod_level_root_visibility
+						.before(sync_lod_level_roots)
+						.in_set(LodRefreshSystems::SyncRoots),
 					sync_lod_level_roots.in_set(LodRefreshSystems::SyncRoots),
 				),
 			);

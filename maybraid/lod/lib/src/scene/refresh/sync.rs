@@ -15,8 +15,8 @@ pub use chunk::{
 	drain_chunk_lod_fulfill, reset_lod_chunk_budget, FulfillClass, LodChunkBeginClock,
 	LodChunkBudgetClock, LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkDrainCursor,
 	LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshSyncPlugin,
+	LodLazyPending, LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	LodSceneRefreshChunkPlugin, LodSceneRefreshSyncPlugin,
 };
 pub use cull::{
 	apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, enqueue_lod_cull, LodCullRequest,

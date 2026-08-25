@@ -5,6 +5,11 @@
 //! into [`TemperateConifer`], which implements [`VegetationComponents`]. Sticks reuse Northern /
 //! Liam banding; High/Medium/Low foliage structurally samples joints, then packs one
 //! [`FrondCollection`] per branch ring (collections scale out — no mass proxy).
+//!
+//! [`TemperateConifer::unit_from_num`] / [`TemperateConiferParams::into_unit_from_num`]
+//! apply the temperate preset, normalize to unit height, and key layout noise by a
+//! variant index. Emission folds sticks into a collection; frond collections stay
+//! separate nodes.
 
 mod foliage;
 #[allow(dead_code)]
@@ -30,6 +35,7 @@ use lod::gen::LodSceneLevel;
 use procedural_common::{parse_unit_range, UnitRange};
 
 use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
+use crate::storybook_tree::merge_kit_sticks;
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 use crate::palm_tree::world_space_frond_shape;
 use foliage::{branch_direction, frond_shape_for_joint};
@@ -127,6 +133,38 @@ impl TemperateConiferParams {
 	pub fn build(&self) -> TemperateConifer {
 		TemperateConifer::from_params(self)
 	}
+
+	/// Unit-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	///
+	/// Applies the temperate preset first so world size is the post-preset height.
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let mut geometry = self.geometry;
+		geometry.inner.apply_temperate_preset();
+		let size = geometry.height().max(1e-4);
+		let inv = 1.0 / size;
+		geometry.inner.scale.stalk_height = 1.0;
+		if let Some(radius) = geometry.inner.scale.stalk_base_radius {
+			geometry.inner.scale.stalk_base_radius = Some((radius * inv).max(1e-6));
+		}
+		geometry.inner.canopy_noise.seed = num as i32;
+		geometry.inner.anchor_perturbation.noise.seed = num as i32;
+		(
+			Self {
+				geometry,
+				frond_world_scale: self.frond_world_scale,
+				fronds_per_joint: self.fronds_per_joint,
+				frond_length_fraction: self.frond_length_fraction,
+				frond_spawn_fraction: self.frond_spawn_fraction,
+				apex_canopy_spawn_fraction: self.apex_canopy_spawn_fraction,
+			},
+			size,
+		)
+	}
 }
 
 /// Built Temperate Conifer: params plus a single grown [`BallStickChain`].
@@ -154,6 +192,11 @@ impl TemperateConifer {
 			frond_spawn_fraction: params.frond_spawn_fraction,
 			apex_canopy_spawn_fraction: params.apex_canopy_spawn_fraction,
 		}
+	}
+
+	/// Unit-height tree whose layout noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&TemperateConiferParams::unit_from_num(num))
 	}
 
 	fn footprint_radius(&self) -> f32 {
@@ -311,7 +354,9 @@ impl VegetationComponents for TemperateConifer {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => stick_nodes_low(&self.chain),
 		};
-		Layers::from_free(nodes).map(|n| n.with_material(chico_stick_material_ref()))
+		let nodes: Vec<_> =
+			nodes.into_iter().map(|n| n.with_material(chico_stick_material_ref())).collect();
+		Layers::from_free(merge_kit_sticks(nodes))
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -339,5 +384,49 @@ impl VegetationComponents for TemperateConifer {
 				STRUCTURAL_LOW_FACTOR,
 			),
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = TemperateConifer::unit_from_num(3);
+		let b = TemperateConifer::unit_from_num(3);
+		let c = TemperateConifer::unit_from_num(4);
+		assert!((a.geometry.height() - 1.0).abs() < 1e-5);
+		assert_eq!(a.geometry.canopy_noise.seed, 3);
+		assert_eq!(a.geometry.canopy_noise.seed, b.geometry.canopy_noise.seed);
+		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
+		assert_ne!(a.geometry.canopy_noise.seed, c.geometry.canopy_noise.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let mut params = TemperateConiferParams::default();
+		params.geometry.inner.scale.stalk_height = 8.0;
+		params.geometry.inner.scale.stalk_base_radius = Some(0.4);
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 8.0).abs() < 1e-5);
+		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
+		assert!((unit.geometry.inner.scale.stalk_base_radius.unwrap() - 0.05).abs() < 1e-5);
+		assert_eq!(unit.geometry.canopy_noise.seed, 7);
+		Ok(())
+	}
+
+	#[test]
+	fn high_emits_merged_stick_collection() -> Result<()> {
+		let tree = TemperateConifer::unit_from_num(1);
+		let sticks = tree.stick_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(sticks.len(), 1);
+		assert!(sticks[0].collection.is_some());
+		let foliage = tree.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!foliage.is_empty());
+		assert!(foliage.iter().all(|n| n.geometry.is_frond_collection()));
+		Ok(())
 	}
 }

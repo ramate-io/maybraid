@@ -2277,6 +2277,7 @@ dependencies = [
  "game-commands",
  "lod",
  "lod-avian",
+ "lod-lazy-refs",
  "log",
  "material-ref",
  "procedural-common",
@@ -4236,6 +4237,16 @@ dependencies = [
  "anyhow",
  "bevy",
  "lod-cascade",
+]
+
+[[package]]
+name = "lod-lazy-refs"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod",
+ "material-ref",
 ]
 
 [[package]]

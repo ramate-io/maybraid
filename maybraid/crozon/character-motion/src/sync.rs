@@ -69,8 +69,7 @@ fn motion_level(
 	visibilities: &Query<&Visibility>,
 	desired: &Query<&LodSceneLevel, With<LodSceneHost>>,
 ) -> LodSceneLevel {
-	if let Some(root) = shown_level_root(host, children, level_roots_bags, root_keys, visibilities)
-	{
+	if let Some(root) = shown_level_root(host, children, level_roots_bags, root_keys, visibilities) {
 		if let Ok(key) = root_keys.get(root) {
 			return key.0;
 		}

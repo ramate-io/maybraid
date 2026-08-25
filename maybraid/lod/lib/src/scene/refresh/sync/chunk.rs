@@ -12,7 +12,9 @@
 //! Drain ranks `(parent_desired, self_level)` High→… within each class.
 //! Begin admits by count ([`LodChunkFulfillBudget::begins_per_frame`]) and shared
 //! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
-//! primitive weights). Active begin quota folds into Desired.
+//! primitive weights). The per-`T` candidate scan is capped
+//! ([`LodChunkFulfillBudget::begin_scan_per_frame`]) and skipped when the clock
+//! is empty. Active begin quota folds into Desired.
 //! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
 //! Cull drain uses a shallow nested-host scan and recursive-despawns ready roots.
 //! Frame parity rotates class order; leftovers cascade.
@@ -47,8 +49,8 @@ pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
 	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed,
+	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLazyPending,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`LodScene`] host type.

@@ -4,6 +4,11 @@
 //! [`SimplemansHedgeParams::build`] grows clump anchors once into [`SimplemansHedge`], which
 //! implements [`VegetationComponents`]: empty sticks; foliage is one layered ball plus one
 //! cheap ball (splay silhouette) per clump.
+//!
+//! [`SimplemansHedge::unit_from_num`] / [`SimplemansHedgeParams::into_unit_from_num`]
+//! normalize to unit height (footprint scales with it) and key clump scatter by a
+//! variant index. Emission folds cheap-ball splays into one collection; layered
+//! cores stay separate.
 
 #[allow(dead_code)]
 pub mod render_item_plugin;
@@ -16,6 +21,8 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+
+use crate::storybook_tree::merge_cheap_ball_foliage;
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
@@ -121,6 +128,30 @@ impl SimplemansHedgeParams {
 	pub fn build(&self) -> SimplemansHedge {
 		SimplemansHedge::from_params(self)
 	}
+
+	/// Unit-height hedge whose scatter seed is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::default().into_unit_from_num(num).0
+	}
+
+	/// Normalize this params set to unit height keyed by `num`.
+	///
+	/// Returns `(unit_params, world_size)` where `world_size` is the pre-normalize
+	/// height to apply on the plant [`Placement`](chico_vegetation_components::Placement).
+	pub fn into_unit_from_num(self, num: u32) -> (Self, f32) {
+		let size = self.height.max(1e-4);
+		let inv = 1.0 / size;
+		(
+			Self {
+				clump_count: self.clump_count,
+				height: 1.0,
+				footprint_xz: (self.footprint_xz * inv).max(1e-4),
+				density: self.density,
+				seed: num,
+			},
+			size,
+		)
+	}
 }
 
 /// Built Simpleman's Hedge: params plus resolved clump anchors.
@@ -144,6 +175,11 @@ impl SimplemansHedge {
 			seed: params.seed,
 			anchors: params.clump_anchors(),
 		}
+	}
+
+	/// Unit-height hedge whose scatter seed is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&SimplemansHedgeParams::unit_from_num(num))
 	}
 
 	fn as_params(&self) -> SimplemansHedgeParams {
@@ -221,8 +257,12 @@ impl VegetationComponents for SimplemansHedge {
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				Layers::from_free(self.foliage_nodes_all_clumps())
+				let nodes: Vec<_> = self
+					.foliage_nodes_all_clumps()
+					.into_iter()
 					.map(|n| n.with_material(chico_leaf_material_ref()))
+					.collect();
+				Layers::from_free(merge_cheap_ball_foliage(nodes))
 			}
 			LodSceneLevel::Low => Layers::from_free(self.foliage_nodes_low())
 				.map(|n| n.with_material(chico_leaf_material_ref())),
@@ -252,6 +292,7 @@ impl VegetationComponents for SimplemansHedge {
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use chico_vegetation_components::FoliageGeometry;
 
 	fn hedge(seed: u32) -> SimplemansHedge {
 		SimplemansHedgeParams { seed, ..SimplemansHedgeParams::default() }.build()
@@ -339,13 +380,46 @@ mod tests {
 	}
 
 	#[test]
-	fn high_emits_ball_and_splay_per_clump() -> Result<()> {
-		let built = SimplemansHedgeParams::default().build();
+	fn high_emits_merged_cheap_balls_and_layered_cores() -> Result<()> {
+		let built = SimplemansHedge::unit_from_num(1);
 		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(high.len(), built.clump_count as usize * 2);
+		let cheap = high
+			.iter()
+			.filter(|n| matches!(n.geometry, FoliageGeometry::CheapBallCollection(_)))
+			.count();
+		let layered = high.iter().filter(|n| n.geometry.is_layered_ball()).count();
+		assert_eq!(cheap, 1);
+		assert_eq!(layered, built.clump_count as usize);
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), (built.clump_count as usize + 1) / 2);
 		assert!(built.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn unit_from_num_is_unit_height_and_stable() -> Result<()> {
+		let a = SimplemansHedge::unit_from_num(3);
+		let b = SimplemansHedge::unit_from_num(3);
+		let c = SimplemansHedge::unit_from_num(4);
+		assert!((a.height - 1.0).abs() < 1e-5);
+		assert_eq!(a.seed, 3);
+		assert_eq!(a.anchors, b.anchors);
+		assert_ne!(a.seed, c.seed);
+		Ok(())
+	}
+
+	#[test]
+	fn into_unit_from_num_returns_world_size() -> Result<()> {
+		let params = SimplemansHedgeParams {
+			height: 2.4,
+			footprint_xz: 3.6,
+			..SimplemansHedgeParams::default()
+		};
+		let (unit, size) = params.into_unit_from_num(7);
+		assert!((size - 2.4).abs() < 1e-5);
+		assert!((unit.height - 1.0).abs() < 1e-5);
+		assert!((unit.footprint_xz - 1.5).abs() < 1e-5);
+		assert_eq!(unit.seed, 7);
 		Ok(())
 	}
 }

@@ -306,6 +306,47 @@ pub fn vegetation_scene_chunks(
 	}
 }
 
+/// Drain weight for one posed kit ([`scene_ref::SceneRef`] + later WorldAsset admit).
+///
+/// Weight 1 treated a GLB instance like an empty transform; vast-orchard hitches
+/// were 512 kits per frame at the spawn cap.
+pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
+
+/// Low / UltraLow canopy proxies as posed kit content (no nested [`LodScene`] hosts).
+///
+/// Cheap balls fold through [`FoliageNode::merge_canopy_proxies`] so a grove tile
+/// is one (or a few) [`FLATTENED_KIT_CHUNK_WEIGHT`] kits, not one host per plant.
+/// Sticks, if any, are flattened the same way and not hosted.
+pub fn flattened_canopy_proxy_chunks(
+	vegetation: &impl VegetationComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> SceneChunk {
+	let sticks = vegetation.stick_nodes_for_level(level).flatten();
+	let foliage =
+		FoliageNode::merge_canopy_proxies(vegetation.foliage_nodes_for_level(level).flatten());
+	let n = sticks.len() + foliage.len();
+	if n == 0 {
+		return SceneChunk::primitive(scene_children(Vec::new()));
+	}
+
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	let mut chunks = Vec::with_capacity(n);
+	for node in sticks {
+		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
+	}
+	for node in foliage {
+		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
+	}
+	if chunks.len() == 1 {
+		chunks
+			.pop()
+			.unwrap_or_else(|| SceneChunk::primitive(scene_children(Vec::new())))
+	} else {
+		SceneChunk::chunks(chunks)
+	}
+}
+
 /// Append every domain node from `vegetation` at `level` as nested [`LodScene`] hosts.
 ///
 /// Each child is embedded via [`LodScene::host`] (pending host + typed component).
@@ -359,12 +400,6 @@ pub fn flattened_component_scene(
 	append_flattened_component_scenes(vegetation, lod_ref, level, &mut children);
 	scene_children(children)
 }
-
-/// Drain weight for one posed kit ([`scene_ref::SceneRef`] + later WorldAsset admit).
-///
-/// Weight 1 treated a GLB instance like an empty transform; vast-orchard hitches
-/// were 512 kits per frame at the spawn cap.
-pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
 
 /// Weighted chunks: one posed kit per stick/foliage node (no nested LOD hosts).
 ///
@@ -600,5 +635,23 @@ mod tests {
 			panic!("expected one nested host chunk per ball");
 		};
 		assert_eq!(nested.len(), 2);
+	}
+
+	#[test]
+	fn canopy_proxy_chunks_merge_balls_and_do_not_host() {
+		let camera = Transform::from_translation(Vec3::new(0.0, 2.0, 8.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		let SceneChunk::Primitive { weight, .. } =
+			flattened_canopy_proxy_chunks(&TwoBalls, &lod_ref, LodSceneLevel::Low)
+		else {
+			panic!("expected one merged cheap-ball kit");
+		};
+		assert_eq!(weight, FLATTENED_KIT_CHUNK_WEIGHT);
 	}
 }

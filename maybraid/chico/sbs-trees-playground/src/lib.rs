@@ -10,7 +10,7 @@ mod monster_grass_plain;
 mod render;
 mod render_materials;
 mod ui;
-mod vast_orchards;
+mod vast;
 pub mod vegetation_lod;
 
 pub use camera::CameraController;
@@ -19,7 +19,7 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin};
 pub use game_commands::command::PendingStartupCommand;
 pub use monster_grass_plain::PLAIN_GROVE_RADIUS;
 pub use render::{RenderConfig, RenderSubject};
-pub use vast_orchards::VAST_ORCHARD_RADIUS;
+pub use vast::{VAST_GROVE_RADIUS, VAST_ORCHARD_RADIUS};
 pub use vegetation_lod::VegetationLodRefreshPlugin;
 
 use bevy::camera::visibility::VisibilitySystems;

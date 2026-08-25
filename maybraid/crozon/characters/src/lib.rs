@@ -37,8 +37,8 @@ pub use anim::{
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
-	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
-	ClothingLayer, ComponentsOnly,
+	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed, ClothingLayer,
+	ComponentsOnly,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{

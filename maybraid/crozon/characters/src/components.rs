@@ -139,7 +139,10 @@ impl<T: Default + Send + Sync + 'static> Default for ComponentsOnly<T> {
 
 impl<T: Default> Default for Clothed<T> {
 	fn default() -> Self {
-		Self { inner: T::default(), clothing: Vec::new() }
+		Self {
+			inner: T::default(),
+			clothing: Vec::new(),
+		}
 	}
 }
 
