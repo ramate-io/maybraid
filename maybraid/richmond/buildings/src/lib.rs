@@ -47,7 +47,8 @@ pub use arc_spire::{
 };
 pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
 pub use connecting::{
-	ConnectingHall, ConnectingStairwell, HallOpening, StairwellOpening, RUN_IN_M,
+	ConnectingHall, ConnectingStairwell, HallOpening, StairwellLanding, StairwellOpening,
+	LANDING_THICKNESS_M, RUN_IN_M,
 };
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,

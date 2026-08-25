@@ -49,6 +49,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			.add_systems(
 				Update,
 				(
+					camera::release_stuck_input_on_focus_loss.before(camera::camera_controller),
 					camera::camera_controller.before(LodRefreshSystems::Track),
 					present_preview_lod
 						.after(LodRefreshSystems::Track)

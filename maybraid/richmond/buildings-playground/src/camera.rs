@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
@@ -31,11 +32,36 @@ pub fn setup_camera(mut commands: Commands) {
 	));
 }
 
+/// OS screenshot chords (⌘⇧3/4/5) steal the window; the Shift key-up never
+/// arrives and Shift-as-descend would keep the fly-cam falling.
+pub fn release_stuck_input_on_focus_loss(
+	mut focused: MessageReader<WindowFocused>,
+	mut keyboard: ResMut<ButtonInput<KeyCode>>,
+	mut mouse: ResMut<ButtonInput<MouseButton>>,
+) {
+	if focused.read().any(|event| !event.focused) {
+		keyboard.release_all();
+		mouse.release_all();
+	}
+}
+
+fn os_shortcut_modifiers_held(keyboard: &ButtonInput<KeyCode>) -> bool {
+	keyboard.any_pressed([
+		KeyCode::SuperLeft,
+		KeyCode::SuperRight,
+		KeyCode::ControlLeft,
+		KeyCode::ControlRight,
+		KeyCode::AltLeft,
+		KeyCode::AltRight,
+	])
+}
+
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
+	windows: Query<&Window>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
@@ -55,7 +81,10 @@ pub fn camera_controller(
 	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
 	transform.rotation = yaw_quat * pitch_quat;
 
-	if text_focus.0 {
+	if text_focus.0
+		|| os_shortcut_modifiers_held(&keyboard_input)
+		|| !windows.iter().any(|window| window.focused)
+	{
 		return;
 	}
 

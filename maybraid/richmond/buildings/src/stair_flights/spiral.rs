@@ -49,6 +49,75 @@ impl SpiralFlight {
 	pub fn stairs(&self) -> &StairNode {
 		&self.stairs
 	}
+
+	/// Centerline of the last tessellated tread in XZ.
+	pub fn last_tread_xz(&self) -> bevy_math::Vec2 {
+		self.tread_xz_at(self.last_turn_frac())
+	}
+
+	/// Unit XZ in the last tread's travel direction (ascent / kit \(+X\)).
+	pub fn last_tread_travel_xz(&self) -> bevy_math::Vec2 {
+		let theta = self.last_turn_frac() * TAU;
+		let (s, c) = theta.sin_cos();
+		// Local \(+θ\): derivative of \((\cosθ,\ -sinθ)\).
+		self.world_xz(-s, -c)
+	}
+
+	/// Last tread leading-edge corners \((\mathrm{outer},\ \mathrm{inner})\) in XZ.
+	///
+	/// Kit \(+X\) is travel (depth); \(+Z\) is the width axis. Outward is the
+	/// in-plane CCW perpendicular of travel.
+	pub fn last_tread_leading_xz(&self) -> (bevy_math::Vec2, bevy_math::Vec2) {
+		let Stair::Spiral(g) = &self.stairs.geometry else {
+			let p = self.last_tread_xz();
+			return (p, p);
+		};
+		let last = self.last_tread_xz();
+		let travel = self.last_tread_travel_xz();
+		let radial = bevy_math::Vec2::new(-travel.y, travel.x);
+		let lead = last + travel * (0.5 * g.tread_depth);
+		(lead + radial * (0.5 * g.tread_width), lead - radial * (0.5 * g.tread_width))
+	}
+
+	/// Plan center and local top \(Y\) of each tessellated tread.
+	pub fn tread_stations(&self) -> Vec<(bevy_math::Vec2, f32)> {
+		let Stair::Spiral(g) = &self.stairs.geometry else {
+			return Vec::new();
+		};
+		let n = g.tread_count().max(1);
+		let tops = g.effective_tread_tops();
+		(0..n)
+			.map(|i| {
+				let frac = i as f32 / n as f32 * g.turns;
+				let top = tops.get(i as usize).copied().unwrap_or(g.height);
+				(self.tread_xz_at(frac), top)
+			})
+			.collect()
+	}
+
+	pub(crate) fn last_turn_frac(&self) -> f32 {
+		let Stair::Spiral(g) = &self.stairs.geometry else {
+			return 0.0;
+		};
+		let n = g.tread_count().max(1) as f32;
+		(n - 1.0) / n * g.turns
+	}
+
+	pub(crate) fn tread_xz_at(&self, turns: f32) -> bevy_math::Vec2 {
+		let Stair::Spiral(g) = &self.stairs.geometry else {
+			return xz(self.stairs.placement.translation);
+		};
+		let theta = turns * TAU;
+		let (s, c) = theta.sin_cos();
+		let p = self.world_xz(c * g.radius, -s * g.radius);
+		bevy_math::Vec2::new(self.stairs.placement.translation.x, self.stairs.placement.translation.z)
+			+ p
+	}
+
+	fn world_xz(&self, lx: f32, lz: f32) -> bevy_math::Vec2 {
+		let (ys, yc) = self.stairs.placement.yaw.sin_cos();
+		bevy_math::Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz)
+	}
 }
 
 impl BuildingComponents for SpiralFlight {

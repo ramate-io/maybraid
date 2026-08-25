@@ -5,6 +5,7 @@ use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
+use richmond_buildings::LANDING_THICKNESS_M;
 
 /// Named shaft pairs that stress spiral fit (inscription, center, arrive).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -58,7 +59,7 @@ impl ConnectingStairwellCase {
 			Self::Offset => "spiral centered between the two holes, not in either",
 			Self::NearOffset => "spiral centered on the upper hole; ~10 cm bleed on +X of lower",
 			Self::Mismatch => "outer rail on the 1.2 m upper hole; floats inside the lower",
-			Self::Opposite => "first tread south, last should face the north walk-on",
+			Self::Opposite => "landing is a short pad off the last tread in its travel direction",
 			Self::SameY => "18 cm spiral on the ground between two floor-level holes",
 			Self::Tall => "tight 9 m helix; still inscribed if stacked",
 			Self::Huge => "wide ring in a 6×6 hole; outer rail on the edge",
@@ -72,12 +73,25 @@ pub struct ConnectingStairwell {
 	/// Pathological shaft pair. Default is the stacked 2.4×2.4 demo.
 	#[arg(long, value_enum, default_value_t = ConnectingStairwellCase::Stacked)]
 	pub case: ConnectingStairwellCase,
+	/// Skip the upper landing (a follow-on stairwell would own it).
+	#[arg(long, default_value_t = false)]
+	pub no_upper_landing: bool,
+	/// Upper-landing slab thickness (meters).
+	#[arg(long, default_value_t = LANDING_THICKNESS_M)]
+	pub landing_thickness: f32,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
 
 impl ConnectingStairwell {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(PreviewSubject::ConnectingStairwell { case: self.case }, self.transform.transform())
+		(
+			PreviewSubject::ConnectingStairwell {
+				case: self.case,
+				upper_landing: !self.no_upper_landing,
+				landing_thickness: self.landing_thickness,
+			},
+			self.transform.transform(),
+		)
 	}
 }
