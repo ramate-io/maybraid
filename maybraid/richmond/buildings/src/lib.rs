@@ -12,6 +12,7 @@
 
 pub mod arc_spire;
 pub mod arcs;
+pub mod connecting;
 pub mod constraints;
 pub mod demos;
 pub mod fit;
@@ -22,6 +23,7 @@ pub mod placer;
 pub mod portals;
 pub mod shells;
 pub mod stacked_rings;
+pub mod stair_flights;
 pub mod storeys;
 pub mod usage_areas;
 pub mod wall_demo;
@@ -44,6 +46,9 @@ pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
 pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
+pub use connecting::{
+	ConnectingHall, ConnectingStairwell, HallOpening, StairwellOpening, RUN_IN_M,
+};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
@@ -86,15 +91,19 @@ pub use portals::{
 };
 pub use shells::{
 	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, CircRingFloor,
-	CircRingFloorParams, CircRingFloorSlab, ConnectingHall, EndCap, IFloor, IFloorParams,
-	IFloorPlanRect, IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor,
-	RectFloorParams, RectFloorSide, RectFloorSlab, RectRingFloor, RectRingFloorParams,
-	RectRingFloorSide, RectRingFloorSlab, RectangularPitchedRoofComplex,
-	RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf, RoundedRectCorner,
-	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab,
-	Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
+	CircRingFloorParams, CircRingFloorSlab, EndCap, IFloor, IFloorParams, IFloorPlanRect,
+	IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
+	RectFloorSide, RectFloorSlab, RectRingFloor, RectRingFloorParams, RectRingFloorSide,
+	RectRingFloorSlab, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
+	RidgeJunction, RoofHalf, RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams,
+	RoundedRectFloorSide, RoundedRectFloorSlab, Trazaloid, TrazaloidParams, TrazaloidSide,
+	TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
+pub use stair_flights::{
+	FlightPolyline, FlightStation, RectangularSpiralFlight, RunAndLandingFlight, SpiralFlight,
+	SpiralFlightFit,
+};
 pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };

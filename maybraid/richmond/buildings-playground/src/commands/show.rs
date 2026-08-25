@@ -24,6 +24,7 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod connecting_hall;
 pub mod connecting_shells;
+pub mod connecting_stairwell;
 pub mod dining_room_examples;
 pub mod fitted_rectangle;
 pub mod halls_to_shafts;
@@ -116,6 +117,8 @@ pub enum Show {
 	Tube(tube::Tube),
 	/// One-kink tube between two oriented openings.
 	ConnectingHall(connecting_hall::ConnectingHall),
+	/// Run-in floor + spiral flight between a lower and upper opening.
+	ConnectingStairwell(connecting_stairwell::ConnectingStairwell),
 	/// One circular storey shell with optional `--opening` plan entries.
 	ArcFloor(arc_floor::ArcFloor),
 	/// Stacked circular storey shell (explicit openings; no noise).
@@ -267,6 +270,7 @@ impl Show {
 			Self::ClippedRuledStrip(cmd) => Ok(cmd.into_preview()),
 			Self::Tube(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingHall(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingStairwell(cmd) => Ok(cmd.into_preview()),
 			Self::ArcFloor(cmd) => cmd.into_preview(),
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),

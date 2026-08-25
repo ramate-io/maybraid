@@ -42,10 +42,10 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells,
-	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad,
-	MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams,
-	RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor, RectRingFloorParams,
-	RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
+	ConnectingStairwell, FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening,
+	MappedOpeningQuad, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof,
+	PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor,
+	RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
 	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
 	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, DEFAULT_PANEL_THICKNESS,
@@ -117,6 +117,7 @@ pub enum PreviewSubject {
 		no_right: bool,
 	},
 	ConnectingHall,
+	ConnectingStairwell,
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -559,6 +560,9 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
+			PreviewSubject::ConnectingStairwell => {
+				"preview: connecting-stairwell (run-in + spiral flight)".into()
+			}
 			PreviewSubject::ArcFloor {
 				radius,
 				storey_height,
@@ -3635,6 +3639,11 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
+		PreviewSubject::ConnectingStairwell => {
+			let (lower, upper) = connecting_stairwell_demo_endpoints();
+			let well = ConnectingStairwell::rough_stone(lower, upper);
+			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
+		}
 		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
@@ -4449,6 +4458,30 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 			},
 		))
 		.insert(PreviewRoot);
+}
+
+/// Demo landings: south-facing walk-on at \(y=0\), east-facing landing at \(y=3\).
+pub fn connecting_stairwell_demo_endpoints() -> (MappedOpening, MappedOpening) {
+	// Lower south-facing walk-on at y=0; upper east-facing landing at y=3.
+	let lower = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(-1.2, 0.0, -3.0),
+			Vec3::new(1.2, 0.0, -3.0),
+			Vec3::new(-1.2, 2.2, -3.0),
+			Vec3::new(1.2, 2.2, -3.0),
+		),
+		Vec2::Y,
+	);
+	let upper = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(3.0, 3.0, -1.2),
+			Vec3::new(3.0, 3.0, 1.2),
+			Vec3::new(3.0, 5.2, -1.2),
+			Vec3::new(3.0, 5.2, 1.2),
+		),
+		-Vec2::X,
+	);
+	(lower, upper)
 }
 
 /// Demo openings: south facing +Z, east facing −X (mild kink near the origin).
@@ -5315,6 +5348,56 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 		.with_tip_length(0.25);
 }
 
+/// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
+/// orientation arrows, and the flight polyline.
+pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	if !matches!(config.subject, PreviewSubject::ConnectingStairwell) {
+		return;
+	}
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+
+	let (lower, upper) = connecting_stairwell_demo_endpoints();
+	let well = ConnectingStairwell::rough_stone(lower, upper);
+
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let yellow = Color::srgb(1.0, 0.9, 0.2);
+	let white = Color::srgb(0.95, 0.95, 0.95);
+
+	draw_opening_gizmos(&mut gizmos, map, lower, cyan);
+	draw_opening_gizmos(&mut gizmos, map, upper, magenta);
+
+	let (bl, br, ..) = lower.endpoint_corners();
+	gizmos.line(map(bl), map(br), lime);
+	let (ubl, ubr, ..) = upper.endpoint_corners();
+	gizmos.line(map(ubl), map(ubr), yellow);
+
+	let stations = &well.polyline().stations;
+	for pair in stations.windows(2) {
+		gizmos.line(map(pair[0].center), map(pair[1].center), white);
+	}
+	for (i, station) in stations.iter().enumerate() {
+		let color = if i == 0 {
+			lime
+		} else if i + 1 == stations.len() {
+			magenta
+		} else {
+			yellow
+		};
+		gizmos.sphere(Isometry3d::from_translation(map(station.center)), 0.12, color);
+	}
+
+	let arrow_len = 1.5;
+	let a = well.lower().walk_on_mid();
+	let b = well.upper().walk_on_mid();
+	let a_dir = Vec3::new(lower.orientation.x, 0.0, lower.orientation.y).normalize_or_zero();
+	let b_dir = Vec3::new(upper.orientation.x, 0.0, upper.orientation.y).normalize_or_zero();
+	gizmos.arrow(map(a), map(a + a_dir * arrow_len), lime).with_tip_length(0.25);
+	gizmos.arrow(map(b), map(b + b_dir * arrow_len), magenta).with_tip_length(0.25);
+}
+
 fn draw_opening_gizmos(
 	gizmos: &mut Gizmos,
 	map: impl Fn(Vec3) -> Vec3,
@@ -5381,8 +5464,8 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 	gizmos.sphere(Isometry3d::from_translation(map(Vec3::new(j_mid.x, y, j_mid.z))), 0.1, orange);
 
 	draw_opening_gizmos(&mut gizmos, map, end_tower_raw, lime);
-	draw_opening_gizmos(&mut gizmos, map, end_tower_wide, cyan);
-	draw_opening_gizmos(&mut gizmos, map, end_traz, magenta);
+	draw_opening_gizmos(&mut gizmos, map, end_tower_wide.mapped(), cyan);
+	draw_opening_gizmos(&mut gizmos, map, end_traz.mapped(), magenta);
 
 	let (bl, br, ..) = end_tower_wide.endpoint_corners();
 	let mid = (bl + br) * 0.5;

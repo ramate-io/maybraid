@@ -15,10 +15,10 @@ use richmond_building_components::panels::PanelNode;
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::connecting::hall::ConnectingHall;
 use crate::openings::{MapsOpenings, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorSlab};
 use crate::shells::arc_tower::{ArcTower, ArcTowerParams};
-use crate::shells::connecting_hall::ConnectingHall;
 use crate::shells::trazaloid::{Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab};
 
 /// Shared contract id for the hall join on both shells.

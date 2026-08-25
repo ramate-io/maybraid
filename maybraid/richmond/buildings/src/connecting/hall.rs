@@ -1,11 +1,13 @@
 //! One-kink hall connecting two oriented openings via a [`Tube`].
 //!
-//! Each end is a [`MappedOpening`] (outward quad + XZ facing). Rays along those
-//! orientations meet in plan; the junction height and cross-section are
-//! length-weighted lerps of the two ends.
+//! Each end is a [`HallOpening`] (wrapper over [`MappedOpening`]: outward quad +
+//! XZ facing). Rays along those orientations meet in plan; the junction height
+//! and cross-section are length-weighted lerps of the two ends.
 //!
 //! Prefer preparing ends with [`MappedOpening::widened`] (jamb overrun) and
 //! [`MappedOpening::raised`] (header clearance) before constructing the hall.
+
+use std::ops::Deref;
 
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
@@ -13,25 +15,61 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::connecting::geom::{
+	lerp_tube_nodes, normalize_xz, opening_to_tube_node, plan_kink, EPS,
+};
 use crate::openings::MappedOpening;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::tube::{Tube, TubeCrossSectionNode, TubeFaces};
 
-const EPS: f32 = 1e-5;
+/// Horizontal connector opening: same contact as [`MappedOpening`], typed for
+/// [`ConnectingHall`] so it cannot be confused with a stairwell end.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HallOpening(MappedOpening);
+
+impl HallOpening {
+	pub fn new(mapped: MappedOpening) -> Self {
+		Self(mapped)
+	}
+
+	pub fn mapped(self) -> MappedOpening {
+		self.0
+	}
+}
+
+impl From<MappedOpening> for HallOpening {
+	fn from(mapped: MappedOpening) -> Self {
+		Self(mapped)
+	}
+}
+
+impl Deref for HallOpening {
+	type Target = MappedOpening;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
 
 /// Small connector: two openings → one-kink plan path → [`Tube`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectingHall {
 	style: PanelStyle,
-	end_a: MappedOpening,
-	end_b: MappedOpening,
+	end_a: HallOpening,
+	end_b: HallOpening,
 	midpoint: Vec3,
 	stations: [TubeCrossSectionNode; 3],
 	tube: Tube,
 }
 
 impl ConnectingHall {
-	pub fn new(style: PanelStyle, end_a: MappedOpening, end_b: MappedOpening) -> Self {
+	pub fn new(
+		style: PanelStyle,
+		end_a: impl Into<HallOpening>,
+		end_b: impl Into<HallOpening>,
+	) -> Self {
+		let end_a = end_a.into();
+		let end_b = end_b.into();
 		match build_stations(end_a, end_b) {
 			Some((midpoint, stations)) => {
 				let tube = Tube::from_nodes(style, stations);
@@ -51,7 +89,7 @@ impl ConnectingHall {
 		}
 	}
 
-	pub fn rough_stone(end_a: MappedOpening, end_b: MappedOpening) -> Self {
+	pub fn rough_stone(end_a: impl Into<HallOpening>, end_b: impl Into<HallOpening>) -> Self {
 		Self::new(PanelStyle::RoughStonework, end_a, end_b)
 	}
 
@@ -74,7 +112,7 @@ impl ConnectingHall {
 		self.midpoint
 	}
 
-	pub fn endpoints(&self) -> (MappedOpening, MappedOpening) {
+	pub fn endpoints(&self) -> (HallOpening, HallOpening) {
 		(self.end_a, self.end_b)
 	}
 
@@ -94,24 +132,21 @@ impl BuildingComponents for ConnectingHall {
 }
 
 fn build_stations(
-	end_a: MappedOpening,
-	end_b: MappedOpening,
+	end_a: HallOpening,
+	end_b: HallOpening,
 ) -> Option<(Vec3, [TubeCrossSectionNode; 3])> {
-	let node_a = endpoint_to_node(end_a)?;
-	let node_b = endpoint_to_node(end_b)?;
+	let node_a = opening_to_tube_node(end_a.mapped())?;
+	let node_b = opening_to_tube_node(end_b.mapped())?;
 
 	let p_a = Vec2::new(node_a.bottom_middle.x, node_a.bottom_middle.z);
 	let p_b = Vec2::new(node_b.bottom_middle.x, node_b.bottom_middle.z);
-	let d_a = normalize_xz(end_a.orientation)?;
-	let d_b = normalize_xz(end_b.orientation)?;
+	let d_a = normalize_xz(end_a.orientation);
+	let d_b = normalize_xz(end_b.orientation);
 
 	// Prefer the plan kink where the opening rays meet. When openings are skewed
 	// (e.g. an arc-door chord offset from the facing axis) the forward rays may
 	// miss — fall back to the midpoint between the openings.
-	let m_xz = match ray_intersect_xz(p_a, d_a, p_b, d_b) {
-		Some((t, s, m)) if t >= -EPS && s >= -EPS => m,
-		_ => (p_a + p_b) * 0.5,
-	};
+	let m_xz = plan_kink(p_a, d_a, p_b, d_b);
 
 	let l_a = (m_xz - p_a).length().max(EPS);
 	let l_b = (m_xz - p_b).length().max(EPS);
@@ -121,118 +156,9 @@ fn build_stations(
 
 	let h_m = w_a * node_a.bottom_middle.y + w_b * node_b.bottom_middle.y;
 	let mid = Vec3::new(m_xz.x, h_m, m_xz.y);
-	let node_mid = lerp_nodes(node_a, node_b, w_a, w_b, mid);
+	let node_mid = lerp_tube_nodes(node_a, node_b, w_a, w_b, mid);
 
 	Some((mid, [node_a, node_mid, node_b]))
-}
-
-fn endpoint_to_node(end: MappedOpening) -> Option<TubeCrossSectionNode> {
-	let (bl, br, tl, tr) = end.endpoint_corners();
-	let orient = normalize_xz(end.orientation)?;
-	let right = Vec3::new(-orient.y, 0.0, orient.x);
-
-	let bottom_middle = (bl + br) * 0.5;
-	let top_middle = (tl + tr) * 0.5;
-	// Vertical span for mid-station lerp; pitched offset is carried by `top_middle`.
-	let height = (top_middle.y - bottom_middle.y).abs().max(EPS);
-
-	let bottom_left_width = signed_width(bl, bottom_middle, right);
-	let bottom_right_width = signed_width(br, bottom_middle, right);
-	let top_left_width = signed_width(tl, top_middle, right);
-	let top_right_width = signed_width(tr, top_middle, right);
-
-	Some(
-		TubeCrossSectionNode::new(
-			bottom_middle,
-			bottom_left_width,
-			bottom_right_width,
-			height,
-			top_left_width,
-			top_right_width,
-		)
-		.with_top_middle(top_middle),
-	)
-}
-
-fn signed_width(corner: Vec3, middle: Vec3, right: Vec3) -> f32 {
-	let d = corner - middle;
-	let along = d.dot(right);
-	// Widths are positive extents along ±right from middle.
-	along.abs().max(0.0)
-}
-
-fn lerp_nodes(
-	a: TubeCrossSectionNode,
-	b: TubeCrossSectionNode,
-	w_a: f32,
-	w_b: f32,
-	bottom_middle: Vec3,
-) -> TubeCrossSectionNode {
-	let mut mid = TubeCrossSectionNode::new(
-		bottom_middle,
-		w_a * a.bottom_left_width + w_b * b.bottom_left_width,
-		w_a * a.bottom_right_width + w_b * b.bottom_right_width,
-		w_a * a.height + w_b * b.height,
-		w_a * a.top_left_width + w_b * b.top_left_width,
-		w_a * a.top_right_width + w_b * b.top_right_width,
-	);
-	match (a.top_middle, b.top_middle) {
-		(Some(ta), Some(tb)) => {
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(Some(ta), None) => {
-			let tb = b.bottom_middle + Vec3::Y * b.height;
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(None, Some(tb)) => {
-			let ta = a.bottom_middle + Vec3::Y * a.height;
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(None, None) => {}
-	}
-	mid
-}
-
-fn normalize_xz(v: Vec2) -> Option<Vec2> {
-	let len = v.length();
-	if len < EPS {
-		None
-	} else {
-		Some(v / len)
-	}
-}
-
-/// Intersect rays `p_a + t d_a` and `p_b + s d_b` in XZ. Returns `(t, s, point)`.
-///
-/// Collinear anti-parallel openings (facing each other on one line) use the
-/// plan midpoint — a zero-kink special case of the one-kink connector.
-fn ray_intersect_xz(p_a: Vec2, d_a: Vec2, p_b: Vec2, d_b: Vec2) -> Option<(f32, f32, Vec2)> {
-	let delta = p_b - p_a;
-	// det([d_a, -d_b]) = d_b.x*d_a.y - d_a.x*d_b.y
-	let det = d_a.y * d_b.x - d_a.x * d_b.y;
-	if det.abs() < EPS {
-		// Parallel: only succeed when collinear and facing each other.
-		let cross = d_a.x * delta.y - d_a.y * delta.x;
-		if cross.abs() > EPS {
-			return None;
-		}
-		if d_a.dot(d_b) > -EPS {
-			return None;
-		}
-		let to_b = delta.dot(d_a);
-		let to_a = (-delta).dot(d_b);
-		if to_b < -EPS || to_a < -EPS {
-			return None;
-		}
-		let point = (p_a + p_b) * 0.5;
-		let t = (point - p_a).dot(d_a);
-		let s = (point - p_b).dot(d_b);
-		return Some((t.max(0.0), s.max(0.0), point));
-	}
-	let t = (delta.y * d_b.x - delta.x * d_b.y) / det;
-	let s = (delta.y * d_a.x - delta.x * d_a.y) / det;
-	let point = p_a + d_a * t;
-	Some((t, s, point))
 }
 
 #[cfg(test)]
