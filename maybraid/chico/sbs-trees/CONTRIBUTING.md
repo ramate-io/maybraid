@@ -58,7 +58,7 @@ Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::
 
 Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds use [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (palette + tip-weighted sway, opaque — no cheese / `discard`).
 
-[`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) already short-circuits by camera distance to each card centroid (`LEAF_NEAR_DIST` 16 m / `LEAF_MID_DIST` 32 m / sway cut 24 m): full 4-octave swiss cheese up close, two octaves in the mid band, one noise and **no `discard`** farther out so overlapping cards keep early-Z.
+[`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) short-circuits by camera distance to each card centroid **in ball-radii** (`LEAF_MID_DIST` 32 / sway cut 24, floored so 48 m is never “near”). Inside that band: cheap rim reject, then a 2-octave hole plus one `* 8.5` bite and `discard`. Farther: one noise and **no `discard`** so overlapping cards keep early-Z. Lighting is directional wrap, not clustered PBR. Opaque — alpha-to-coverage looked like a window screen.
 
 That path is shared. Any construction that emits `CheapBall` / `CheapBallCollection` with `chico_leaf_material_ref()` gets it. To push another tree’s High the same way:
 

@@ -1,10 +1,11 @@
 //---------------------------------------------------------
 // Chico canopy leaf: object-space leafy breakup on cheap-ball
-// cards (planes through a centroid) + vertex sway + PBR.
+// cards (planes through a centroid) + vertex sway + wrap light.
 //
-// Holes are glued to each card (object / UV space) so they ride
-// with wind. Radial density keeps the hub connected; rims take
-// the swiss cheese. Coarse world-space is a weak bias only.
+// Holes are glued to each card (kit space) so they ride with
+// wind. Radial density keeps the hub connected; rims take the
+// swiss cheese. Near/mid share a 2-octave hole; far skips
+// discard so overlapping cards keep early-Z.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -15,9 +16,7 @@
     forward_io::Vertex,
     view_transformations::position_world_to_clip,
     mesh_view_bindings::{view, globals, lights},
-    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
-    pbr_bindings,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
@@ -48,7 +47,7 @@ struct LeafVertexOutput {
     @location(7) @interpolate(flat) visibility_range_dither: i32,
 #endif
     @location(8) local_pos: vec3<f32>,
-    /// Camera distance to this card's world centroid (coherent per cheap-ball).
+    /// Centroid distance in ball-radii, floored by abs/48 m (coherent per card).
     @location(9) view_dist: f32,
 }
 
@@ -88,34 +87,21 @@ fn value_noise_3d(p: vec3<f32>) -> f32 {
     return mix(nxy0, nxy1, f.z);
 }
 
-fn fbm_3d(p: vec3<f32>) -> f32 {
-    var value = 0.0;
-    var amplitude = 0.5;
-    var frequency = 1.0;
-    var norm = 0.0;
-
-    for (var i = 0; i < 4; i++) {
-        value += value_noise_3d(p * frequency) * amplitude;
-        norm += amplitude;
-        frequency *= 2.03;
-        amplitude *= 0.5;
-    }
-
-    return value / norm;
-}
-
-/// Two-octave FBM for the mid-distance cheese path.
+/// Two-octave FBM — near and mid cheese (4 octaves do not read under overlap).
 fn fbm_3d_2(p: vec3<f32>) -> f32 {
     let a = value_noise_3d(p) * 0.5;
     let b = value_noise_3d(p * 2.03) * 0.25;
     return (a + b) / 0.75;
 }
 
-// Camera-distance bands (meters, card centroid). Near keeps full cheese;
-// mid drops octaves; far skips discard so overlapping cards keep early-Z.
-const LEAF_NEAR_DIST: f32 = 16.0;
+// Cheese / sway bands in ball-radii (`abs / scale`, floored by abs / cap).
+// Unit-radius kits match the old meter cuts. Huge puffs never stay "near"
+// past LEAF_ABS_CAP meters.
 const LEAF_MID_DIST: f32 = 32.0;
 const LEAF_SWAY_CUT_DIST: f32 = 24.0;
+const LEAF_ABS_CAP: f32 = 48.0;
+/// Blot radius ceiling (`0.52 + 0.38`); outside this, skip hole FBM.
+const LEAF_RIM_CUT: f32 = 0.92;
 
 fn instance_scale(world_from_local: mat4x4<f32>) -> f32 {
     return max(
@@ -227,8 +213,10 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     let scale = instance_scale(mesh_world_from_local);
 #endif
     out.local_pos = kit_local;
-    // Placement may be baked into vertices (grove flatten); centroid is world-space.
-    out.view_dist = length(centroid - view.world_position);
+    // Placement may be baked into vertices (grove flatten). LOD is angular
+    // with a meter floor so UltraLow proxies do not keep discard at 80 m.
+    let abs_dist = length(centroid - view.world_position);
+    out.view_dist = max(abs_dist / max(scale, 1e-4), abs_dist / LEAF_ABS_CAP);
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
@@ -288,147 +276,73 @@ fn fragment(
     @builtin(front_facing) is_front: bool,
     mesh: LeafVertexOutput,
 ) -> @location(0) vec4<f32> {
-    var pbr_input: PbrInput = pbr_input_new();
-
-    let world_pos = mesh.world_position.xyz;
     let local_pos = mesh.local_pos;
     let r = saturate(length(local_pos));
     let view_dist = mesh.view_dist;
+    let cheese = view_dist < LEAF_MID_DIST;
 
-    // ----------------------------------------------------
-    // Object-space swiss cheese + radial hub
-    // ----------------------------------------------------
-    // Medium/fine live in kit space so overlapping cheap-ball
-    // cards do not share tunnels. UV adds per-plane bites.
-    // World coarse is a weak shared bias only — it cannot
-    // open a hole by itself.
-    //
-    // Distance bands (instance origin): near = full 4-octave cheese;
-    // mid = 2 octaves, no world/speckle extras; far = 1 noise, no
-    // discard (overlapping cards keep early-Z).
+    // Rim first: blot never reaches past LEAF_RIM_CUT, so skip hole FBM.
+    if (cheese && r > LEAF_RIM_CUT) {
+        discard;
+    }
 
     var hole_alpha = 1.0;
     var radial_alpha = 1.0;
     var tint_noise = 0.5;
-    var speckle = 0.5;
 
-    if (view_dist >= LEAF_MID_DIST) {
+    if (cheese) {
+        let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
+        let rim_w = max(fwidth(r) * 2.0, 0.08);
+        radial_alpha = smoothstep(0.0, rim_w, blot - r);
+        if (radial_alpha < 0.08) {
+            discard;
+        }
+        // Coarse 2-octave hole + one high-freq bite so mid cards do not
+        // read as a lattice. Opaque + discard (no A2C). Hub stays solid.
+        let hole = fbm_3d_2(local_pos * 3.25) * 0.62 + value_noise_3d(local_pos * 8.5) * 0.38;
+        let hub = 1.0 - smoothstep(0.22, 0.62, r);
+        let threshold = mix(0.22, 0.52, 1.0 - hub);
+        let fw = max(fwidth(hole) * 1.35, 0.01);
+        hole_alpha = smoothstep(threshold - fw, threshold + fw, hole);
+        tint_noise = value_noise_3d(local_pos * 1.75);
+        if (hole_alpha * radial_alpha < 0.08) {
+            discard;
+        }
+    } else {
         let field = value_noise_3d(local_pos * 3.25);
         let rim_w = max(fwidth(r) * 2.0, 0.08);
         radial_alpha = smoothstep(0.0, rim_w, 0.70 - r);
         hole_alpha = mix(0.85, 1.0, field);
         tint_noise = value_noise_3d(local_pos * 1.75);
-    } else if (view_dist >= LEAF_NEAR_DIST) {
-        let medium = fbm_3d_2(local_pos * 3.25);
-        let fine = fbm_3d_2(local_pos * 8.50);
-        let hole = medium * 0.65 + fine * 0.35;
-        let hub = 1.0 - smoothstep(0.22, 0.62, r);
-        let threshold = mix(0.18, 0.46, 1.0 - hub);
-        let fw = max(fwidth(hole) * 1.35, 0.01);
-        hole_alpha = smoothstep(threshold - fw, threshold + fw, hole);
-        let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
-        let rim_w = max(fwidth(r) * 2.0, 0.08);
-        radial_alpha = smoothstep(0.0, rim_w, blot - r);
-        tint_noise = fbm_3d_2(local_pos * 1.75);
-        if (hole_alpha * radial_alpha < 0.08) {
-            discard;
-        }
-    } else {
-        let medium = fbm_3d(local_pos * 3.25);
-        let fine = fbm_3d(local_pos * 8.50);
-#ifdef VERTEX_UVS_A
-        let uv_bite = fbm_3d(vec3<f32>(mesh.uv * 6.0, 0.17));
-        let hole = medium * 0.48 + fine * 0.22 + uv_bite * 0.30;
-#else
-        let hole = medium * 0.65 + fine * 0.35;
-#endif
-        let local_coarse = (fbm_3d(local_pos * 1.15) - 0.5) * 0.10;
-        let world_bias = (fbm_3d(world_pos * 0.45) - 0.5) * 0.05;
-        let field = hole + local_coarse + world_bias;
-
-        // Hub stays mostly solid; cheese starts well inside the kit so the
-        // quad / ico outline is not the silhouette.
-        let hub = 1.0 - smoothstep(0.22, 0.62, r);
-        let threshold = mix(0.18, 0.46, 1.0 - hub);
-
-        let fw = max(fwidth(field) * 1.35, 0.01);
-        hole_alpha = smoothstep(threshold - fw, threshold + fw, field);
-
-        // Noisy blot radius: thick object-space rim, not a 1px mesh edge.
-        let blot = 0.52 + 0.38 * fbm_3d(local_pos * 2.4);
-        let rim_w = max(fwidth(r) * 2.0, 0.08);
-        radial_alpha = smoothstep(0.0, rim_w, blot - r);
-
-        tint_noise = fbm_3d(local_pos * 1.75);
-        speckle = fbm_3d(local_pos * 12.0);
-        if (hole_alpha * radial_alpha < 0.08) {
-            discard;
-        }
     }
 
     let alpha = hole_alpha * radial_alpha;
-
-    // ----------------------------------------------------
-    // Color variation + pigment thinning at hole edges
-    // ----------------------------------------------------
-
     let warm_cool = mix(
         vec3<f32>(0.82, 0.95, 0.72),
         vec3<f32>(1.12, 1.04, 0.78),
         tint_noise,
     );
-
-    let brightness = mix(0.78, 1.18, speckle);
+    let brightness = mix(0.82, 1.12, tint_noise);
     let wash = mix(0.72, 1.0, saturate(min(alpha, radial_alpha) * 1.25));
-
-    let base_rgb = vec3<f32>(
-        base_color.x,
-        base_color.y,
-        base_color.z,
-    );
-
-    pbr_input.material.base_color = vec4<f32>(
-        base_rgb * warm_cool * brightness * wash,
-        alpha,
-    );
-
-    // Matte dielectric — default roughness 0.5 reads as plastic in shadow.
-    pbr_input.material.perceptual_roughness = 1.0;
-    pbr_input.material.metallic = 0.0;
-    pbr_input.material.reflectance = vec3<f32>(0.12, 0.12, 0.12);
-
-    // ----------------------------------------------------
-    // PBR setup — both sides light toward the camera
-    // ----------------------------------------------------
-
-    pbr_input.material.flags = pbr_input.material.flags | STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
-
-    pbr_input.frag_coord = mesh.position;
-    pbr_input.world_position = mesh.world_position;
-    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
+    let albedo = vec3<f32>(base_color.x, base_color.y, base_color.z)
+        * warm_cool
+        * brightness
+        * wash;
 
     let prepared_normal = fns::prepare_world_normal(
         mesh.world_normal,
         true,
         is_front,
     );
-
-    // Soften ico/card faceting; wrap keeps N·L from going fully black.
     let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.4));
-    pbr_input.world_normal = n;
-    pbr_input.N = n;
-
-    let lit_color = fns::apply_pbr_lighting(pbr_input);
-
-    var wrap = 0.5;
-    var back = 0.0;
+    var wrap = 0.55;
+    var back = 0.12;
     if (lights.n_directional_lights > 0u) {
         let L = lights.directional_lights[0].direction_to_light;
         wrap = saturate(dot(n, L) * 0.5 + 0.5);
         back = saturate(-dot(n, L));
     }
-    let lifted = lit_color.rgb + base_rgb * (0.16 + 0.22 * wrap + 0.28 * back);
+    let lifted = albedo * (0.36 + 0.44 * wrap + 0.30 * back);
 
     return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
 }
