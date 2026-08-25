@@ -77,6 +77,7 @@ pub mod stacked_rings;
 pub mod study_examples;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
+pub mod triangular_panels;
 pub mod transform;
 pub mod trazaloid;
 pub mod tube;
@@ -103,6 +104,8 @@ pub enum Show {
 	Slice90(slice_90::Slice90),
 	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
 	Pitch(pitch::Pitch),
+	/// Isolated right-triangle kits (floor pair + wall + solo); prints live LOD.
+	TriangularPanels(triangular_panels::TriangularPanels),
 	/// Arbitrary panel-space triangle filled with right-triangle kits.
 	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
 	/// World-space triangle → 2D panel tessellation → posed onto the plane.
@@ -263,6 +266,7 @@ impl Show {
 			Self::Arc180(cmd) => Ok(cmd.into_preview()),
 			Self::Slice90(cmd) => Ok(cmd.into_preview()),
 			Self::Pitch(cmd) => Ok(cmd.into_preview()),
+			Self::TriangularPanels(cmd) => Ok(cmd.into_preview()),
 			Self::TessellatedTriangle(cmd) => Ok(cmd.into_preview()),
 			Self::TessellatedTriangle3d(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedTessellatedTriangle(cmd) => Ok(cmd.into_preview()),

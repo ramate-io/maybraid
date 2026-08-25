@@ -9,7 +9,9 @@ use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
 use lod::{point_bounds, LodNode, LodNodeBounds, LodNodePose, LodRef, LodViewer};
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
-use richmond_building_components::panels::{PanelGeometry, PanelNode, TessellatedTriangle};
+use richmond_building_components::panels::{
+	PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle,
+};
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
 };
@@ -76,6 +78,11 @@ pub enum PreviewSubject {
 		tile_width: f32,
 		left: Option<f32>,
 		right: Option<f32>,
+	},
+	/// Isolated right-triangle kit hosts (not a tessellated fill).
+	TriangularPanels {
+		style: PanelStyle,
+		scale: f32,
 	},
 	TessellatedTriangle {
 		a: Vec2,
@@ -515,6 +522,9 @@ impl PreviewConfig {
 				format!(
 					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
 				)
+			}
+			PreviewSubject::TriangularPanels { style, scale } => {
+				format!("preview: triangular-panels (style={style:?} scale={scale:.2})")
 			}
 			PreviewSubject::TessellatedTriangle { a, b, c } => {
 				format!("preview: tessellated-triangle (a={a:?} b={b:?} c={c:?})")
@@ -3515,6 +3525,9 @@ pub fn present_preview_lod(
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.host(&lod_ref));
 		}
+		PreviewSubject::TriangularPanels { style, scale } => {
+			spawn_triangular_panel_hosts(&mut commands, transform, *style, *scale, &lod_ref);
+		}
 		PreviewSubject::TessellatedTriangle { a, b, c } => {
 			let panel = PanelNode::rough_stone(
 				PanelGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
@@ -4445,6 +4458,96 @@ fn spawn_building_preview<T>(
 		let mut children: Vec<Box<dyn bevy::scene::Scene>> = Vec::new();
 		append_component_scenes(building, lod_ref, lod::gen::LodSceneLevel::High, &mut children);
 		spawn_preview(commands, transform, scene_children(children));
+	}
+}
+
+/// Name tag on each isolated right-triangle host from [`PreviewSubject::TriangularPanels`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TriangularPanelTag(pub &'static str);
+
+fn spawn_triangular_panel_hosts(
+	commands: &mut Commands,
+	transform: Transform,
+	style: PanelStyle,
+	scale: f32,
+	lod_ref: &lod::lod_ref::LodRef<'_>,
+) {
+	use std::f32::consts::{FRAC_PI_2, PI};
+	let s = scale.max(1e-3);
+	let kits = [
+		("floor-a", Placement::IDENTITY.with_scale(Vec3::new(s, 1.0, s))),
+		("floor-b", Placement::new(Vec3::new(s, 0.0, -s), PI).with_scale(Vec3::new(s, 1.0, s))),
+		("solo", Placement::new(Vec3::new(s + 1.5, 0.0, 0.0), 0.0).with_scale(Vec3::new(s, 1.0, s))),
+		(
+			"wall",
+			Placement::new(Vec3::new(0.0, 0.0, s + 1.5), 0.0)
+				.with_pitch(FRAC_PI_2)
+				.with_scale(Vec3::new(s, 1.0, s)),
+		),
+	];
+	for (name, placement) in kits {
+		let panel = PanelNode::new(style, PanelGeometry::right_triangle(None), placement);
+		commands
+			.spawn_scene((
+				panel.host(lod_ref),
+				bsn! {
+					template_value(transform)
+					Visibility::default()
+				},
+			))
+			.insert((PreviewRoot, TriangularPanelTag(name)));
+	}
+}
+
+/// Live LOD line for `/show triangular-panels` (also logs when a host band changes).
+pub fn print_triangular_panel_lod(
+	config: Res<PreviewConfig>,
+	tagged: Query<(&TriangularPanelTag, &lod::gen::LodSceneLevel)>,
+	untagged: Query<(&PanelNode, &lod::gen::LodSceneLevel), Without<TriangularPanelTag>>,
+	mut status: ResMut<game_commands::ui::GameCommandStatusText>,
+	mut last: Local<String>,
+) {
+	let PreviewSubject::TriangularPanels { style, scale } = config.subject else {
+		return;
+	};
+	let mut rows: Vec<(String, String)> = tagged
+		.iter()
+		.map(|(tag, level)| (tag.0.to_string(), format_lod_level(*level)))
+		.collect();
+	if rows.is_empty() {
+		rows = untagged
+			.iter()
+			.map(|(node, level)| {
+				(
+					format!("panel@{:?}", node.placement.translation),
+					format_lod_level(*level),
+				)
+			})
+			.collect();
+	}
+	rows.sort_by(|a, b| a.0.cmp(&b.0));
+	let body = if rows.is_empty() {
+		"(no panel hosts yet)".into()
+	} else {
+		rows.into_iter().map(|(name, level)| format!("  {name}: {level}")).collect::<Vec<_>>().join("\n")
+	};
+	let text = format!("triangular-panels style={style:?} scale={scale:.2}\n{body}");
+	if *last != text {
+		info!("{text}");
+		*last = text.clone();
+	}
+	status.0 = text;
+}
+
+fn format_lod_level(level: lod::gen::LodSceneLevel) -> String {
+	use lod::gen::LodSceneLevel;
+	match level {
+		LodSceneLevel::UltraLow => "UltraLow".into(),
+		LodSceneLevel::Low => "Low".into(),
+		LodSceneLevel::Medium => "Medium".into(),
+		LodSceneLevel::High => "High".into(),
+		LodSceneLevel::Distance(d) => format!("Distance({:.0}m)", d.to_meters()),
+		LodSceneLevel::Resolution(r) => format!("Resolution({r})"),
 	}
 }
 

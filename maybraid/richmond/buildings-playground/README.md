@@ -46,6 +46,8 @@ cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --eave
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --length 4 --left 1 --right -0.5
 cargo run -p richmond-buildings-playground -- show tessellated-triangle
 cargo run -p richmond-buildings-playground -- show tessellated-triangle --a 0,0 --b 3,0 --c 0,2
+cargo run -p richmond-buildings-playground -- show triangular-panels
+cargo run -p richmond-buildings-playground -- show triangular-panels --style flat --size 2
 # Triangle / quad / strip with clips:
 cargo run -p richmond-buildings-playground -- show clipped-tessellated-triangle
 cargo run -p richmond-buildings-playground -- show clipped-quad-panel
@@ -107,6 +109,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `help`
 - `show linear|arc-90|arc-180|slice-90` — partition leaves (`panels/.../rectangle_001`, `arcs/.../arc_*`)
 - `show pitch [--rise R] [--run R] [--length L] [--tile-width W] [--left B] [--right B] | [--eave E --ridge R]` — shepherd's-thatch pitched face; omit `--length`/`--left`/`--right` for optional regions; `--eave`+`--ridge` uses equal end triangles
+- `show triangular-panels [--style STYLE] [--size M]` — isolated right-triangle kits (floor pair + solo + wall); console prints each host's live LOD (`High` / `Medium` / `Low` / `UltraLow`)
 - `show tessellated-triangle [--a X,Z] [--b X,Z] [--c X,Z]` — rough-stone floor fill of a panel-space triangle
 - `show clipped-tessellated-triangle [--a|--b|--c X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — world triangle − closed clip (clipped to bounds) → `PanelComplex`
 - `show clipped-quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — ruled quad − closed clip

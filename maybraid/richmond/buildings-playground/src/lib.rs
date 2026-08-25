@@ -23,7 +23,7 @@ use lod::LodRefreshSystems;
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_connecting_stairwell_gizmos,
 	draw_label_text_gizmos, draw_opening_plan_gizmos, draw_roof_complex_gizmos,
-	present_preview_lod, CachedPreview,
+	present_preview_lod, print_triangular_panel_lod, CachedPreview,
 };
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
@@ -61,6 +61,9 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					draw_roof_complex_gizmos.after(present_preview_lod),
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+					print_triangular_panel_lod
+						.after(ui::sync_command_status_text)
+						.before(game_commands::ui::update_debug_ui),
 				),
 			)
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
@@ -114,19 +117,14 @@ fn apply_mesh_stats(
 
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
-	// Key light (casts shadows).
+	// Same key / fill / ambient as `vegetation-on-terrain-playground`.
+	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 5.0, 0.0)),
+		DirectionalLight { illuminance: 12_000.0, shadow_maps_enabled: true, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
-	// Fill from the opposite side (no shadows) to soften contrast.
 	commands.spawn((
-		DirectionalLight { illuminance: 3500.0, shadow_maps_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 5.0, -PI / 4.0, 0.0)),
-	));
-	// Soft bounce / skylight fill.
-	commands.spawn((
-		DirectionalLight { illuminance: 1800.0, shadow_maps_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 6.0, PI + PI / 3.0, 0.0)),
+		DirectionalLight { illuminance: 2_500.0, shadow_maps_enabled: false, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }
