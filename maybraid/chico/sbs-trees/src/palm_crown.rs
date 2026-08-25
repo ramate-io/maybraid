@@ -173,12 +173,12 @@ impl PalmCrownParams {
 		self.shape.frond_count = LOW_STAR_FROND_COUNT;
 		self.shape.spine_segments = 1;
 		self.shape.leaflet_count = 2;
-		self.shape.droop = 0.55;
-		self.shape.arch_lift = 0.28;
+		self.shape.droop = (self.shape.length * 0.85).max(1e-4);
+		self.shape.arch_lift = self.shape.length * 0.2;
 		self.shape.twist = 0.0;
-		self.shape.downward_tilt_radians = 0.55;
+		self.shape.downward_tilt_radians = 0.70;
 		self.shape.outward_spread_radians = 0.0;
-		self.shape.emission_lift_radians = 0.32;
+		self.shape.emission_lift_radians = 0.0;
 		self.shape.seed = 0;
 	}
 

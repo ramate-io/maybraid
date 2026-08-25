@@ -18,6 +18,13 @@ pub(crate) const FRONDS_PER_COLLECTION: usize = 3;
 /// (UltraLow) fat chord — singleton collections keep the star. Seed is fixed so every
 /// unit palm shares the same kit poses; world size / yaw live on [`Placement`].
 pub(crate) const LOW_STAR_FROND_COUNT: u32 = 5;
+/// Fill the High crown disk: five blades need more width than a High rachis.
+const LOW_STAR_WIDTH_FACTOR: f32 = 2.4;
+/// Reach the outer High ring so the star does not sit in an empty halo.
+const LOW_STAR_LENGTH_FACTOR: f32 = 1.2;
+/// Hang each chord (~−40°). Authored direction — do not sample a 1-segment droop spine
+/// through `from_rotation_arc`, which rolls some blades into the XZ plane.
+const LOW_STAR_DROOP_PITCH: f32 = -0.70;
 
 /// Bake mesh-local frond shape into world units (keeps authored rachis segment count).
 pub(crate) fn world_space_frond_shape(
@@ -75,7 +82,8 @@ pub(crate) fn frond_collection_nodes(
 
 /// Shared Low palm crown: five singleton chord collections at `anchor`.
 ///
-/// `length` / `width` are world (or unit) metres. Probe is the parent crown so banding
+/// `length` / `width` are world (or unit) metres (High mid-band). The star thickens and
+/// lengthens those so five blades fill the crown. Probe is the parent crown so banding
 /// matches High. Do not put these five runs in one collection.
 pub(crate) fn low_star_collection_nodes(
 	anchor: Vec3,
@@ -84,24 +92,24 @@ pub(crate) fn low_star_collection_nodes(
 	probe_center: Vec3,
 	probe_radius: f32,
 ) -> Vec<FoliageNode> {
-	let shape = low_star_shape(length, width);
+	let length = (length * LOW_STAR_LENGTH_FACTOR).max(1e-4);
+	let width = (width * LOW_STAR_WIDTH_FACTOR).max(1e-6);
+	let pitch = LOW_STAR_DROOP_PITCH;
+	let n = LOW_STAR_FROND_COUNT as f32;
 	let mut nodes = Vec::with_capacity(LOW_STAR_FROND_COUNT as usize);
-	for run in shape.frond_runs_at(anchor) {
-		let placements: Vec<Placement> = run
-			.into_iter()
-			.filter_map(|seg| {
-				Placement::frond_segment(seg.start, seg.direction, seg.length, seg.width)
-			})
-			.collect();
-		if placements.is_empty() {
+	for i in 0..LOW_STAR_FROND_COUNT {
+		let azimuth = i as f32 * std::f32::consts::TAU / n;
+		let dir = Vec3::new(
+			pitch.cos() * azimuth.cos(),
+			pitch.sin(),
+			pitch.cos() * azimuth.sin(),
+		);
+		let Some(placement) = Placement::frond_segment(anchor, dir, length, width) else {
 			continue;
-		}
-		let mut frond_run = FrondRun::from_placements(placements);
-		if let Some(chord) = frond_run.collapse_to_chord(1.0) {
-			frond_run = FrondRun::new([chord]);
-		}
+		};
 		nodes.push(FoliageNode::frond_collection(
-			FrondCollection::new([frond_run]).with_probe(probe_center, probe_radius),
+			FrondCollection::new([FrondRun::from_placements([placement])])
+				.with_probe(probe_center, probe_radius),
 			Placement::IDENTITY,
 		));
 	}
@@ -120,20 +128,25 @@ pub(crate) fn low_star_nodes_for_rings(
 	low_star_collection_nodes(anchor, length, width, center, radius)
 }
 
-/// One ring, five even-ish chords, seed 0 (shared mesh key).
+/// Authored Low-star shape (docs / [`crate::PalmCrownParams::unit_low_star`]).
+///
+/// Emit through [`low_star_collection_nodes`], not [`FrondCrownShape::frond_runs_at`]: a
+/// 1-segment droop spine plus `from_rotation_arc` rolls some blades flat.
 pub(crate) fn low_star_shape(length: f32, width: f32) -> FrondCrownShape {
+	let length = (length * LOW_STAR_LENGTH_FACTOR).max(1e-4);
+	let width = (width * LOW_STAR_WIDTH_FACTOR).max(1e-6);
 	FrondCrownShape {
 		frond_count: LOW_STAR_FROND_COUNT,
-		length: length.max(1e-4),
-		width: width.max(1e-6),
-		droop: 0.55,
-		arch_lift: 0.28,
+		length,
+		width,
+		droop: (length * 0.85).max(1e-4),
+		arch_lift: length * 0.2,
 		twist: 0.0,
 		leaflet_count: 2,
 		spine_segments: 1,
-		downward_tilt_radians: 0.55,
+		downward_tilt_radians: LOW_STAR_DROOP_PITCH.abs(),
 		outward_spread_radians: 0.0,
-		emission_lift_radians: 0.32,
+		emission_lift_radians: 0.0,
 		seed: 0,
 		..FrondCrownShape::default()
 	}
@@ -252,6 +265,11 @@ mod tests {
 			assert_eq!(collection.runs[0].segments.len(), 1);
 			assert!((collection.center - Vec3::Y).length() < 1e-4);
 			assert!((collection.radius - 0.5).abs() < 1e-4);
+			let dir = collection.runs[0].segments[0].placement.rotation() * Vec3::Y;
+			assert!(
+				dir.y < -0.5,
+				"low-star chord should hang, not stick out: {dir:?}"
+			);
 		}
 		let a = low_star_shape(0.4, 0.05);
 		let b = low_star_shape(0.4, 0.05);
