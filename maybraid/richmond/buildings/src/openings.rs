@@ -186,8 +186,9 @@ impl MappedOpeningQuad {
 /// An opening mapped onto shell contact geometry.
 ///
 /// `orientation` is the outward facing in plan (\(x, z\)). Connectors wrap this
-/// type as [`crate::HallOpening`] / [`crate::StairwellOpening`]; the stairwell
-/// reads the lower edge as the floor-space walk-on.
+/// type as [`crate::HallOpening`] (vertical wall quad) or
+/// [`crate::StairwellOpening`] (horizontal shaft quad). The stairwell reads the
+/// lower edge as the floor-space walk-on on that landing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MappedOpening {
 	pub face: MappedOpeningQuad,

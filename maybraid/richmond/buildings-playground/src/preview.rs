@@ -4462,24 +4462,24 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 
 /// Demo landings: south-facing walk-on at \(y=0\), east-facing landing at \(y=3\).
 pub fn connecting_stairwell_demo_endpoints() -> (MappedOpening, MappedOpening) {
-	// Lower south-facing walk-on at y=0; upper east-facing landing at y=3.
+	// Horizontal shaft faces: 2.4×2.4 m well, walk-on on −Z, open at y=3.
 	let lower = MappedOpening::new(
 		MappedOpeningQuad::new(
-			Vec3::new(-1.2, 0.0, -3.0),
-			Vec3::new(1.2, 0.0, -3.0),
-			Vec3::new(-1.2, 2.2, -3.0),
-			Vec3::new(1.2, 2.2, -3.0),
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 0.0, -1.2),
+			Vec3::new(-1.2, 0.0, 1.2),
+			Vec3::new(1.2, 0.0, 1.2),
 		),
 		Vec2::Y,
 	);
 	let upper = MappedOpening::new(
 		MappedOpeningQuad::new(
-			Vec3::new(3.0, 3.0, -1.2),
-			Vec3::new(3.0, 3.0, 1.2),
-			Vec3::new(3.0, 5.2, -1.2),
-			Vec3::new(3.0, 5.2, 1.2),
+			Vec3::new(-1.2, 3.0, -1.2),
+			Vec3::new(1.2, 3.0, -1.2),
+			Vec3::new(-1.2, 3.0, 1.2),
+			Vec3::new(1.2, 3.0, 1.2),
 		),
-		-Vec2::X,
+		Vec2::Y,
 	);
 	(lower, upper)
 }
@@ -5501,3 +5501,4 @@ fn spawn_rectangle_debug_balls(
 		));
 	}
 }
+

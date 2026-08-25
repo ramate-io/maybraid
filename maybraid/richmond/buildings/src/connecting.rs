@@ -1,7 +1,7 @@
 //! Connectors between mapped shell openings (sibling of [`crate::shells`]).
 //!
 //! [`hall`] joins two same-storey wall quads with a one-kink [`crate::Tube`].
-//! [`stairwell`] joins a floor-space anchor opening to an upper landing: owned
+//! [`stairwell`] joins two horizontal shaft faces (a vertical well): owned
 //! run-in floor and a fitted stair flight (no well walls).
 
 mod geom;

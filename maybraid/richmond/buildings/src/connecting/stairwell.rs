@@ -1,15 +1,16 @@
-//! Two-opening stairwell: owned run-in floor and a fitted stair flight.
+//! Two-opening stairwell: horizontal shaft faces → run-in + fitted stair flight.
 //!
-//! [`StairwellOpening`] wraps the same [`MappedOpening`] contact as a hall end.
-//! The **lower** edge of each quad is the floor-space-connected walk-on (anchor
-//! at [`ConnectingStairwell::new`]'s `lower` argument). The **upper** edge is
-//! not floor-connected (lintel). Circulation is sided: start at the lower
-//! opening's `lower_left`, arrive at the upper opening's `lower_right`.
+//! Each [`StairwellOpening`] is a **horizontal** [`MappedOpening`] (shaft
+//! cross-section). The pair describes a vertical well: `lower` is the floor-space
+//! anchor landing, `upper` is the open top landing. On each quad the **lower**
+//! edge is the walk-on (host-floor-connected); the **upper** edge is the far
+//! side of the hole. `orientation` is XZ walk-off from that walk-on into the
+//! well.
 //!
-//! The well owns a short floor run-in at the anchor and fills the volume up to
-//! the top landing with composed [`StairNode`]s. It does not author walls or
-//! emit shaft opening labels. A [`FlightPolyline`] absorbs plan offset between
-//! the ends; v1 always fits a [`SpiralFlight`].
+//! The well owns a short floor run-in at the lower walk-on and fills the shaft
+//! with composed [`StairNode`]s. It does not author walls or emit shaft opening
+//! labels. A [`FlightPolyline`] along face centers absorbs plan offset; v1
+//! always fits a [`SpiralFlight`] inside the lower opening.
 
 use std::ops::Deref;
 
@@ -21,23 +22,24 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::connecting::geom::{normalize_xz, opening_to_tube_node, plan_kink, EPS};
+use crate::connecting::geom::{normalize_xz, EPS};
 use crate::openings::MappedOpening;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::tube::{Tube, TubeCrossSectionNode, TubeFaces};
 use crate::stair_flights::{FlightPolyline, FlightStation, SpiralFlight, SpiralFlightFit};
 
-/// Aesthetic run-in depth along the lower opening's outward orientation (meters).
+/// Aesthetic run-in depth from the lower walk-on into the shaft (meters).
 pub const RUN_IN_M: f32 = 0.75;
 
-/// Plan separation below which the polyline stays a single vertical-ish segment.
+/// Plan separation below which the polyline stays a single vertical segment.
 const PLAN_KINK_EPS: f32 = 0.15;
 
-/// Vertical connector opening: same contact as [`MappedOpening`], typed for
-/// [`ConnectingStairwell`].
+/// Thin tube height so the run-in presents as a floor, not a wall.
+const RUN_IN_THICK: f32 = 0.05;
+
+/// Horizontal shaft-face opening, typed for [`ConnectingStairwell`].
 ///
-/// Lower quad edge = walk-on (floor-space-connected). `orientation` is XZ
-/// outward into the well.
+/// The quad lies in plan. Lower edge = walk-on. `orientation` is XZ into the well.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StairwellOpening(MappedOpening);
 
@@ -48,6 +50,12 @@ impl StairwellOpening {
 
 	pub fn mapped(self) -> MappedOpening {
 		self.0
+	}
+
+	/// Centroid of the horizontal shaft face.
+	pub fn face_center(self) -> Vec3 {
+		let (bl, br, tl, tr) = self.endpoint_corners();
+		(bl + br + tl + tr) * 0.25
 	}
 
 	/// Midpoint of the walk-on (lower) edge.
@@ -62,12 +70,13 @@ impl StairwellOpening {
 		bl.distance(br)
 	}
 
-	/// Clear headroom from walk-on mid to lintel mid (meters).
-	pub fn headroom(self) -> f32 {
+	/// Half-extent along the walk-on and from walk-on to the far edge.
+	pub fn plan_half_extents(self) -> (f32, f32) {
 		let (bl, br, tl, tr) = self.endpoint_corners();
-		let bottom = (bl + br) * 0.5;
-		let top = (tl + tr) * 0.5;
-		(top.y - bottom.y).abs().max(EPS)
+		let walk = 0.5 * bl.distance(br);
+		let far_mid = (tl + tr) * 0.5;
+		let depth = 0.5 * self.walk_on_mid().distance(far_mid);
+		(walk.max(EPS), depth.max(EPS))
 	}
 }
 
@@ -85,7 +94,7 @@ impl Deref for StairwellOpening {
 	}
 }
 
-/// Two wall openings → run-in floor + spiral flight (no well walls).
+/// Two horizontal shaft faces → run-in floor + spiral flight (no well walls).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectingStairwell {
 	style: PanelStyle,
@@ -97,7 +106,7 @@ pub struct ConnectingStairwell {
 }
 
 impl ConnectingStairwell {
-	/// `lower` is the floor-space anchor even when both walk-ons share a Y.
+	/// `lower` is the floor-space anchor even when both faces share a Y.
 	pub fn new(
 		style: PanelStyle,
 		lower: impl Into<StairwellOpening>,
@@ -107,14 +116,20 @@ impl ConnectingStairwell {
 		let upper = upper.into();
 		let polyline = build_polyline(lower, upper);
 		let run_in = build_run_in(style, lower);
+		let (lower_hw, lower_hd) = lower.plan_half_extents();
+		let (upper_hw, upper_hd) = upper.plan_half_extents();
 		let flight = SpiralFlight::fit(
 			polyline.clone(),
 			SpiralFlightFit {
+				lower_center: lower.face_center(),
+				upper_center: upper.face_center(),
 				lower_walk_on: lower.walk_on_mid(),
 				upper_walk_on: upper.walk_on_mid(),
 				lower_out: lower.orientation,
-				lower_width: lower.walk_on_width(),
-				upper_width: upper.walk_on_width(),
+				lower_half_width: lower_hw,
+				lower_half_depth: lower_hd,
+				upper_half_width: upper_hw,
+				upper_half_depth: upper_hd,
 			},
 		);
 		Self { style, lower, upper, polyline, run_in, flight }
@@ -173,50 +188,33 @@ impl BuildingComponents for ConnectingStairwell {
 }
 
 fn build_polyline(lower: StairwellOpening, upper: StairwellOpening) -> FlightPolyline {
-	let a = lower.walk_on_mid();
-	let b = upper.walk_on_mid();
+	let a = lower.face_center();
+	let b = upper.face_center();
 	let p_a = Vec2::new(a.x, a.z);
 	let p_b = Vec2::new(b.x, b.z);
-	let d_a = normalize_xz(lower.orientation);
-	let d_b = normalize_xz(upper.orientation);
-	let h_a = lower.headroom();
-	let h_b = upper.headroom();
+	let rise = (b.y - a.y).abs().max(EPS);
 
-	let mut stations = vec![FlightStation { center: a, height: h_a }];
+	let mut stations = vec![FlightStation { center: a, height: rise }];
 	if (p_a - p_b).length() > PLAN_KINK_EPS {
-		let m_xz = plan_kink(p_a, d_a, p_b, d_b);
-		let l_a = (m_xz - p_a).length().max(EPS);
-		let l_b = (m_xz - p_b).length().max(EPS);
-		let inv = 1.0 / (l_a + l_b);
-		let w_a = l_b * inv;
-		let w_b = l_a * inv;
-		let y = w_a * a.y + w_b * b.y;
-		let height = w_a * h_a + w_b * h_b;
-		stations.push(FlightStation { center: Vec3::new(m_xz.x, y, m_xz.y), height });
+		// Horizontal faces do not cast wall rays; a plan midpoint covers offset shafts.
+		let m_xz = (p_a + p_b) * 0.5;
+		let y = 0.5 * (a.y + b.y);
+		stations.push(FlightStation { center: Vec3::new(m_xz.x, y, m_xz.y), height: rise });
 	}
-	stations.push(FlightStation { center: b, height: h_b });
+	stations.push(FlightStation { center: b, height: rise });
 	FlightPolyline { stations }
 }
 
 fn build_run_in(style: PanelStyle, lower: StairwellOpening) -> Tube {
-	let Some(node0) = opening_to_tube_node(lower.mapped()) else {
-		return Tube::new(style);
-	};
 	let Some(out) = normalize_xz(lower.orientation) else {
 		return Tube::new(style);
 	};
+	let walk = lower.walk_on_mid();
+	let half_w = (0.5 * lower.walk_on_width()).max(EPS);
 	let out3 = Vec3::new(out.x, 0.0, out.y) * RUN_IN_M;
-	let mut node1 = TubeCrossSectionNode::new(
-		node0.bottom_middle + out3,
-		node0.bottom_left_width,
-		node0.bottom_right_width,
-		node0.height,
-		node0.top_left_width,
-		node0.top_right_width,
-	);
-	if let Some(top) = node0.top_middle {
-		node1 = node1.with_top_middle(top + out3);
-	}
+	let node0 = TubeCrossSectionNode::new(walk, half_w, half_w, RUN_IN_THICK, half_w, half_w);
+	let node1 =
+		TubeCrossSectionNode::new(walk + out3, half_w, half_w, RUN_IN_THICK, half_w, half_w);
 	Tube::from_nodes(style, [node0, node1]).with_faces(TubeFaces {
 		floor: true,
 		ceiling: false,
@@ -230,27 +228,30 @@ mod tests {
 	use super::*;
 	use richmond_building_components::stairs::Stair;
 
-	fn opening_facing(
+	/// Horizontal shaft face: `center` in the hole, walk-on on the −orientation side.
+	fn shaft_opening(
 		center: Vec3,
 		half_w: f32,
-		half_h: f32,
+		half_d: f32,
 		orient: Vec2,
 	) -> anyhow::Result<MappedOpening> {
 		let d = normalize_xz(orient)
 			.ok_or_else(|| anyhow::anyhow!("orientation too short: {orient:?}"))?;
 		let right = Vec3::new(-d.y, 0.0, d.x);
-		let up = Vec3::Y;
-		let bl = center - right * half_w;
-		let br = center + right * half_w;
-		let tl = bl + up * (half_h * 2.0);
-		let tr = br + up * (half_h * 2.0);
+		let out = Vec3::new(d.x, 0.0, d.y);
+		let walk = center - out * half_d;
+		let far = center + out * half_d;
+		let bl = walk - right * half_w;
+		let br = walk + right * half_w;
+		let tl = far - right * half_w;
+		let tr = far + right * half_w;
 		Ok(MappedOpening::from_corners(bl, br, tl, tr, orient))
 	}
 
 	#[test]
-	fn stacked_openings_use_two_polyline_stations() -> anyhow::Result<()> {
-		let lower = opening_facing(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.1, Vec2::X)?;
-		let upper = opening_facing(Vec3::new(0.0, 3.0, 0.0), 1.0, 1.1, Vec2::X)?;
+	fn stacked_shafts_use_two_polyline_stations() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		assert_eq!(well.polyline().stations.len(), 2);
 		assert!((well.polyline().stations[0].center.y).abs() < 1e-3);
@@ -260,64 +261,71 @@ mod tests {
 	}
 
 	#[test]
-	fn plan_offset_inserts_kink_station() -> anyhow::Result<()> {
-		let lower = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y)?;
-		let upper = opening_facing(Vec3::new(3.0, 3.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+	fn plan_offset_inserts_midpoint_station() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, -3.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(3.0, 3.0, 0.0), 1.2, 1.2, -Vec2::X)?;
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		assert_eq!(well.polyline().stations.len(), 3);
 		let mid = well.polyline().stations[1].center;
-		assert!(mid.x.abs() < 1e-3 && mid.z.abs() < 1e-3, "mid={mid:?}");
+		assert!((mid.x - 1.5).abs() < 1e-3 && (mid.z + 1.5).abs() < 1e-3, "mid={mid:?}");
 		assert!((mid.y - 1.5).abs() < 1e-3, "mid.y={}", mid.y);
 		Ok(())
 	}
 
 	#[test]
-	fn run_in_has_floor_and_no_ceiling() -> anyhow::Result<()> {
-		let lower = opening_facing(Vec3::new(-2.0, 0.0, 0.0), 1.0, 1.0, Vec2::X)?;
-		let upper = opening_facing(Vec3::new(2.0, 3.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+	fn run_in_follows_walk_off_into_shaft() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::X)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::X)?;
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		assert!(well.run_in().faces().floor);
 		assert!(!well.run_in().faces().ceiling);
 		assert!(!well.run_in().floor().pieces().is_empty());
-		assert_eq!(well.run_in().nodes().len(), 2);
 		let inward =
 			well.run_in().nodes()[1].bottom_middle - well.run_in().nodes()[0].bottom_middle;
-		assert!(inward.x > 0.5, "run-in should follow +X orientation, got {inward:?}");
+		assert!(inward.x > 0.5, "run-in should follow +X into the shaft, got {inward:?}");
 		Ok(())
 	}
 
 	#[test]
-	fn fills_spiral_stairs_not_walls() -> anyhow::Result<()> {
-		let lower = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y)?;
-		let upper = opening_facing(Vec3::new(3.0, 3.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+	fn fills_spiral_inside_shaft() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		let stairs = well.stair_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(stairs.len(), 1);
-		assert!(matches!(&stairs[0].geometry, Stair::Spiral(g) if g.height > 2.9));
-		let wall_panels = well.panel_nodes_for_level(LodSceneLevel::High).flatten().len();
-		// Run-in floor only — no side-wall tubes.
-		assert!(wall_panels > 0);
+		assert!(
+			matches!(&stairs[0].geometry, Stair::Spiral(g) if g.height > 2.9 && (g.radius - 1.2).abs() < 1e-3)
+		);
+		let center = stairs[0].placement.translation;
+		assert!(
+			center.x.abs() < 0.2 && center.z.abs() < 0.2,
+			"spiral should sit in the shaft, got {center:?}"
+		);
 		assert!(well.run_in().faces().left == false && well.run_in().faces().right == false);
 		Ok(())
 	}
 
 	#[test]
 	fn same_y_keeps_explicit_lower_as_anchor() -> anyhow::Result<()> {
-		let a = opening_facing(Vec3::new(-2.0, 1.0, 0.0), 1.0, 1.0, Vec2::X)?;
-		let b = opening_facing(Vec3::new(2.0, 1.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+		let a = shaft_opening(Vec3::new(-2.0, 1.0, 0.0), 1.0, 1.0, Vec2::X)?;
+		let b = shaft_opening(Vec3::new(2.0, 1.0, 0.0), 1.0, 1.0, -Vec2::X)?;
 		let well = ConnectingStairwell::rough_stone(a, b);
-		assert!((well.lower().walk_on_mid().x + 2.0).abs() < 1e-3);
-		assert!((well.upper().walk_on_mid().x - 2.0).abs() < 1e-3);
+		assert!((well.lower().face_center().x + 2.0).abs() < 1e-3);
+		assert!((well.upper().face_center().x - 2.0).abs() < 1e-3);
 		assert!(well.polyline().rise().abs() < 1e-3);
 		Ok(())
 	}
 
 	#[test]
-	fn walk_on_is_lower_edge() -> anyhow::Result<()> {
-		let opening = opening_facing(Vec3::new(0.0, 1.5, 0.0), 1.0, 1.0, Vec2::X)?;
+	fn walk_on_is_lower_edge_of_horizontal_face() -> anyhow::Result<()> {
+		let opening = shaft_opening(Vec3::new(0.0, 1.5, 0.0), 1.0, 1.2, Vec2::X)?;
 		let end = StairwellOpening::new(opening);
-		assert!((end.walk_on_mid() - Vec3::new(0.0, 1.5, 0.0)).length() < 1e-3);
-		assert!((end.headroom() - 2.0).abs() < 1e-3);
+		let walk = end.walk_on_mid();
+		assert!((walk.y - 1.5).abs() < 1e-3);
+		assert!(walk.x < end.face_center().x - 0.5, "walk-on should sit on −X of an +X opening");
+		let (hw, hd) = end.plan_half_extents();
+		assert!((hw - 1.0).abs() < 1e-3);
+		assert!((hd - 1.2).abs() < 1e-3);
 		Ok(())
 	}
 }
