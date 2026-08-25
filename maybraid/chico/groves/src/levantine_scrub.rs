@@ -323,7 +323,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, BraidOakTreeParams, HighBushShoots, HighBushShootsParams, PenmarchTorch,
+		BraidOakTree, HighBushShoots, HighBushShootsParams, PenmarchTorch,
 		PenmarchTorchParams, RorysHeadTrained, RorysHeadTrainedParams, SimplemansHedge,
 		SimplemansHedgeParams, VaseTree, VaseTreeParams,
 	};
@@ -664,7 +664,7 @@ mod vc {
 		placed: &GroveCellVariant<LevantineScrubCell>,
 		grove_noise: NoiseParams,
 		tree_chain_noise: NoiseParams,
-		stick_surface_noise: NoiseParams,
+		_stick_surface_noise: NoiseParams,
 		tree_variants: u32,
 	) -> LevantineScrubPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
@@ -738,15 +738,11 @@ mod vc {
 				}
 			}
 			LevantineScrubItem::BraidOak(oak) => {
-				let geometry = oak.build_with_noise(build_noise);
-				let mut params = BraidOakTreeParams::default();
-				params.geometry = geometry;
-				params.stick_surface_noise = variant_noise(stick_surface_noise, variant);
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = oak.build_with_noise(build_noise).height();
 				LevantineScrubPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Oak(Arc::new(unit_params.build())),
+					kind: LevantineScrubKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,

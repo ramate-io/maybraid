@@ -8,8 +8,10 @@
 //! archetypal mesh (world size goes on [`Placement`](chico_vegetation_components::Placement)
 //! scale). Emission folds sticks and cheap balls into collections.
 //!
-//! Stick LOD: High crook-centerline polylines (3 samples / 2 segments per crook); Medium uses
-//! denser banded straight sticks (+20% vs storybook) with a layered canopy proxy; Low is stalk-only.
+//! Stick LOD: High and Medium share crook-centerline trunk polylines (3 samples / 2 segments
+//! per hop) so the axis does not hop to the ball-stick chord. High crooks banded branches;
+//! Medium uses denser straight branch samples (+20% vs storybook) with a layered canopy proxy;
+//! Low is stalk-only.
 
 #[allow(dead_code)]
 mod canopy;
@@ -33,8 +35,8 @@ use crate::storybook_tree::canopy::{
 	BRAID_MEDIUM_STICK_BANDS, HIGH_FOLIAGE_BANDS,
 };
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
-use crate::torch_tree::{stick_nodes_banded, stick_nodes_low, HIGH_STICK_BANDS};
-use stick::stick_nodes_high_crook;
+use crate::torch_tree::{stick_nodes_low, HIGH_STICK_BANDS};
+use stick::{stick_nodes_high_crook, stick_nodes_medium_crook_trunk};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -49,7 +51,7 @@ pub struct BraidOakTreeParams {
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: BraidOakTreeSbs,
 
-	/// Stick-surface noise driving crook bend strength (High stick polylines).
+	/// Stick-surface noise driving crook bend strength (High / Medium trunk polylines).
 	#[arg(
 		long,
 		default_value = "0,1,0.05,1",
@@ -144,7 +146,11 @@ impl VegetationComponents for BraidOakTree {
 			LodSceneLevel::High => {
 				stick_nodes_high_crook(&self.chain, self.stick_surface_noise, HIGH_STICK_BANDS)
 			}
-			LodSceneLevel::Medium => stick_nodes_banded(&self.chain, BRAID_MEDIUM_STICK_BANDS),
+			LodSceneLevel::Medium => stick_nodes_medium_crook_trunk(
+				&self.chain,
+				self.stick_surface_noise,
+				BRAID_MEDIUM_STICK_BANDS,
+			),
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
@@ -203,6 +209,16 @@ mod tests {
 		assert_eq!(a.chain.nodes.len(), b.chain.nodes.len());
 		assert_ne!(a.geometry.canopy_noise.seed, c.geometry.canopy_noise.seed);
 		assert_eq!(a.stick_surface_noise.seed, 3);
+		let max_xz = a
+			.chain
+			.nodes
+			.iter()
+			.map(|n| (n.position.x * n.position.x + n.position.z * n.position.z).sqrt())
+			.fold(0.0_f32, f32::max);
+		assert!(
+			max_xz < 1.5,
+			"unit oak footprint should stay near the braid dome, got {max_xz}"
+		);
 		Ok(())
 	}
 
@@ -228,6 +244,32 @@ mod tests {
 		let foliage = tree.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(foliage.len(), 1);
 		assert!(matches!(foliage[0].geometry, FoliageGeometry::CheapBallCollection(_)));
+		Ok(())
+	}
+
+	fn trunk_member_count(nodes: &[StickNode]) -> usize {
+		nodes
+			.first()
+			.and_then(|n| n.collection.as_ref())
+			.map(|c| c.members.iter().filter(|m| m.is_trunk()).count())
+			.unwrap_or(0)
+	}
+
+	#[test]
+	fn medium_keeps_high_crook_trunk_members() -> Result<()> {
+		let tree = BraidOakTree::unit_from_num(1);
+		let high = tree.stick_nodes_for_level(LodSceneLevel::High).flatten();
+		let medium = tree.stick_nodes_for_level(LodSceneLevel::Medium).flatten();
+		let high_trunks = trunk_member_count(&high);
+		let medium_trunks = trunk_member_count(&medium);
+		assert!(high_trunks > 0, "expected crook trunk members");
+		assert_eq!(
+			high_trunks, medium_trunks,
+			"Medium must keep the High crook trunk, not redraw hops as chords"
+		);
+		let high_n = high[0].collection.as_ref().map(|c| c.members.len()).unwrap_or(0);
+		let medium_n = medium[0].collection.as_ref().map(|c| c.members.len()).unwrap_or(0);
+		assert!(medium_n < high_n, "Medium should thin branches, high {high_n} medium {medium_n}");
 		Ok(())
 	}
 }

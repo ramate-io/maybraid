@@ -1,7 +1,7 @@
 //! Crook-cylinder stick helpers for Braid Oak VegetationComponents + legacy RenderItem rule.
 //!
-//! High LOD samples the crook centerline into a short StickNode polyline. Medium / Low reuse
-//! torch banded / stalk-only emission (straight sticks).
+//! High and Medium share the same crook trunk polylines. High crooks banded outer branches;
+//! Medium draws those branches as straight sticks. Low is stalk-only (straight).
 
 use std::marker::PhantomData;
 
@@ -139,18 +139,17 @@ struct BranchCandidate {
 	parent: StorybookTreeChain,
 }
 
-/// High: crook polylines on all stalk segments + banded outer branches (also crook'd).
-pub(crate) fn stick_nodes_high_crook(
+/// Crook trunk hops plus unbanded branch candidates. High and Medium share the trunk so the
+/// axis does not hop from the crook path to the ball-stick chord.
+fn crook_trunk_and_branch_candidates(
 	chain: &BallStickChain<StorybookTreeChain>,
 	stick_surface_noise: NoiseParams,
-	bands: AzimuthHeightBands,
-) -> Vec<StickNode> {
-	let mut nodes = Vec::new();
+) -> (Vec<StickNode>, Vec<BranchCandidate>) {
+	let mut trunk = Vec::new();
 	let mut branch_candidates = Vec::new();
-
 	for (segment, parent, _) in chain.segments_with_hysteresis() {
 		if is_stalk(parent) {
-			nodes.extend(crook_polyline_stick_nodes(&segment, parent, stick_surface_noise));
+			trunk.extend(crook_polyline_stick_nodes(&segment, parent, stick_surface_noise));
 			continue;
 		}
 		let start = segment.start.position;
@@ -164,15 +163,43 @@ pub(crate) fn stick_nodes_high_crook(
 			parent: parent.clone(),
 		});
 	}
+	(trunk, branch_candidates)
+}
 
-	let sampled =
-		sample_max_horizontal_radius_by_azimuth_height(&branch_candidates, |c| c.sample_at, bands);
-	for sample in sampled {
-		let owned = sample.item;
+fn banded_branches(candidates: &[BranchCandidate], bands: AzimuthHeightBands) -> Vec<&BranchCandidate> {
+	sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.sample_at, bands)
+		.into_iter()
+		.map(|s| s.item)
+		.collect()
+}
+
+/// High: crook trunk + crook'd outermost branches per azimuth × height cell.
+pub(crate) fn stick_nodes_high_crook(
+	chain: &BallStickChain<StorybookTreeChain>,
+	stick_surface_noise: NoiseParams,
+	bands: AzimuthHeightBands,
+) -> Vec<StickNode> {
+	let (mut nodes, candidates) = crook_trunk_and_branch_candidates(chain, stick_surface_noise);
+	for owned in banded_branches(&candidates, bands) {
 		let start_node = chico_sbs_geometry::BallStickNode::new(owned.start, owned.start_radius);
 		let end_node = chico_sbs_geometry::BallStickNode::new(owned.end, owned.end_radius);
 		let segment = BallStickSegment { start: &start_node, end: &end_node };
 		nodes.extend(crook_polyline_stick_nodes(&segment, &owned.parent, stick_surface_noise));
+	}
+	nodes
+}
+
+/// Medium: the same crook trunk as High, plus straight outermost branches (thinner bands).
+pub(crate) fn stick_nodes_medium_crook_trunk(
+	chain: &BallStickChain<StorybookTreeChain>,
+	stick_surface_noise: NoiseParams,
+	bands: AzimuthHeightBands,
+) -> Vec<StickNode> {
+	let (mut nodes, candidates) = crook_trunk_and_branch_candidates(chain, stick_surface_noise);
+	for owned in banded_branches(&candidates, bands) {
+		if let Some(node) = StickNode::from_segment(owned.start, owned.end, owned.start_radius) {
+			nodes.push(node);
+		}
 	}
 	nodes
 }

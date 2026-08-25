@@ -52,9 +52,24 @@ Leave layered / frond / procedural fallbacks as separate nodes. Low canopy proxi
 
 ### 3. LOD bands stay local
 
-Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::stick_nodes_high` (or similar) if that hides another construction’s cell counts. Declare High / Medium / Low band constants on **this** module.
+Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::stick_nodes_high` (or similar) if that hides another construction’s cell counts. Declare High / Medium / Low band constants on **this** module. If High draws a crook (or otherwise posed) trunk, Medium must emit those same trunk members and only thin branches — do not redraw the axis as ball-stick chords.
 
-### 4. Tests
+### 4. Widening High is a shader problem, then a factor
+
+Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds stay cheap because they do not run that shader.
+
+[`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) already short-circuits by camera distance to each card centroid (`LEAF_NEAR_DIST` 16 m / `LEAF_MID_DIST` 32 m / sway cut 24 m): full 4-octave swiss cheese up close, two octaves in the mid band, one noise and **no `discard`** farther out so overlapping cards keep early-Z.
+
+That path is shared. Any construction that emits `CheapBall` / `CheapBallCollection` with `chico_leaf_material_ref()` gets it. To push another tree’s High the same way:
+
+1. Confirm High foliage is merged cheap balls on `ChicoLeafMaterial` (not layered / frond / a custom WGSL).
+2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (Storybook is `10 / 30 / 50`). Do not copy Storybook’s numbers blindly — they are `distance / tree_radius`.
+3. Profile `ChicoLeafMaterial` **fragment** time, not triangle count. If it is still hot, thin High `AzimuthHeightBands` (card count) before adding another material.
+4. A plant-specific shader must copy the distance bands itself. Sticks and fronds do not need this.
+
+Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUTING.md)).
+
+### 5. Tests
 
 - `unit_from_num(n)` is unit-sized and deterministic.
 - `into_unit_from_num` returns the pre-normalize world size.
@@ -62,4 +77,4 @@ Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::
 
 ## Grove construction
 
-Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`.
+Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Braid Oak is the default unit oak scaled by placement: groves must not grow a remixed `BraidOakTreeSbs` and then `into_unit_from_num`.

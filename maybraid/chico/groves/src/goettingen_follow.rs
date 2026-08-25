@@ -240,7 +240,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{BraidOakTree, BraidOakTreeParams, StorybookTree, StorybookTreeParams};
+	use chico_sbs_trees::{BraidOakTree, StorybookTree, StorybookTreeParams};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -252,6 +252,7 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, GoettingenFollowCell, GoettingenFollowItem};
+	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
@@ -261,10 +262,9 @@ mod vc {
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 
-	pub const GOETTINGEN_FOLLOW_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const GOETTINGEN_FOLLOW_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const GOETTINGEN_FOLLOW_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const GOETTINGEN_FOLLOW_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	pub const GOETTINGEN_FOLLOW_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	#[derive(Clone, Debug, Args)]
@@ -491,7 +491,7 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<GoettingenFollowCell>,
 		grove_noise: NoiseParams,
-		stick_surface_noise: NoiseParams,
+		_stick_surface_noise: NoiseParams,
 		tree_variants: u32,
 	) -> GoettingenFollowPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
@@ -510,15 +510,11 @@ mod vc {
 
 		match placed.variant.item() {
 			GoettingenFollowItem::BraidOak(oak) => {
-				let geometry = oak.build_with_noise(build_noise);
-				let mut params = BraidOakTreeParams::default();
-				params.geometry = geometry;
-				params.stick_surface_noise = variant_noise(stick_surface_noise, variant);
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = oak.build_with_noise(build_noise).height();
 				GoettingenFollowPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: GoettingenFollowKind::Oak(Arc::new(unit_params.build())),
+					kind: GoettingenFollowKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,
