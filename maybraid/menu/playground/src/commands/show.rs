@@ -4,9 +4,9 @@ use crate::character::request_show_character;
 use crate::loading_demo::LoadingDemo;
 use bevy::prelude::*;
 use clap::Subcommand;
-use menu_screens::{request_show_home, request_show_loading};
+use menu_screens::{request_show_home, request_show_in_game_with_mode, request_show_loading};
 
-#[derive(Clone, Copy, Subcommand)]
+#[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Show {
 	/// Spawn the Maybraid home screen (bottom-left text menu).
@@ -15,6 +15,12 @@ pub enum Show {
 	Loading,
 	/// Spawn the Maybraid character-creator panel (right-justified HUD).
 	Character,
+	/// Spawn the in-game pause menu (actions plus Maybraid - mode).
+	InGame {
+		/// Label after Maybraid in the upper-left title.
+		#[arg(default_value = "Discovery")]
+		mode: String,
+	},
 }
 
 impl Show {
@@ -26,6 +32,7 @@ impl Show {
 				commands.insert_resource(LoadingDemo::default());
 			}
 			Show::Character => request_show_character(commands),
+			Show::InGame { mode } => request_show_in_game_with_mode(commands, mode),
 		}
 	}
 }

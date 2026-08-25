@@ -7,6 +7,7 @@ use menu_components::{
 	MenuComponentsPlugin,
 };
 
+use crate::show::take_menu_show_request;
 use crate::MenuScreen;
 
 /// Queue a loading-screen spawn (despawns any existing menu screen first).
@@ -84,14 +85,8 @@ fn apply_show_loading(
 	requests: Query<Entity, With<RequestShowLoading>>,
 	existing: Query<Entity, With<MenuScreen>>,
 ) {
-	if requests.is_empty() {
+	if !take_menu_show_request(&mut commands, &requests, &existing) {
 		return;
-	}
-	for entity in &existing {
-		commands.entity(entity).despawn();
-	}
-	for entity in &requests {
-		commands.entity(entity).despawn();
 	}
 	commands.spawn_scene(LoadingScreen::scene(0.0, "Loading…"));
 }

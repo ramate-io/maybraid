@@ -18,7 +18,10 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use menu_screens::{HomeMenuChoice, HomeScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems};
+use menu_screens::{
+	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
+	LoadingScreenSystems,
+};
 
 use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
 use crate::preview::CharacterPreviewPlugin;
@@ -43,6 +46,7 @@ impl Plugin for MenuPlaygroundPlugin {
 		}))
 		.add_plugins((
 			HomeScreenPlugin,
+			InGameScreenPlugin,
 			LoadingScreenPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
@@ -56,6 +60,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			(
 				camera::camera_controller.run_if(character_screen_closed),
 				echo_home_choice,
+				echo_in_game_choice,
 				echo_character_menu,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
@@ -83,6 +88,15 @@ fn echo_home_choice(
 ) {
 	for choice in choices.read() {
 		console.0 = format!("home: {}", choice.label());
+	}
+}
+
+fn echo_in_game_choice(
+	mut choices: MessageReader<InGameMenuChoice>,
+	mut console: ResMut<CommandConsoleOutput>,
+) {
+	for choice in choices.read() {
+		console.0 = format!("in-game: {}", choice.label());
 	}
 }
 

@@ -4,16 +4,16 @@ use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
-	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
 	MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
-	OverlaySelectViewport, RenderContext,
+	OverlaySelectViewport, RenderContext, find_overlay_node, overlay_closes_on_pick,
+	render_overlay_body, spawn_overlay_shell,
 };
 use menu_components::{
-	spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate,
-	MenuFocus, ShortTextChange, PANEL_ROW_GAP,
+	ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate, MenuFocus, PANEL_ROW_GAP,
+	ShortTextChange, spawn_scroll_pane,
 };
-use menu_screens::MenuScreen;
+use menu_screens::{MenuScreen, take_menu_show_request};
 
 const PANEL_WIDTH: f32 = 480.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
@@ -92,14 +92,8 @@ fn apply_show_character(
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
 	mut active_overlay: ResMut<ActiveOverlayKey>,
 ) {
-	if requests.is_empty() {
+	if !take_menu_show_request(&mut commands, &requests, &existing) {
 		return;
-	}
-	for entity in &existing {
-		commands.entity(entity).despawn();
-	}
-	for entity in &requests {
-		commands.entity(entity).despawn();
 	}
 	overlay.open = None;
 	overlay_sync.open = None;

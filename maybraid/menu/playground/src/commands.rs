@@ -49,10 +49,11 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Show(show) => {
-				let label = match show {
-					Show::Home => "home",
-					Show::Loading => "loading",
-					Show::Character => "character",
+				let label = match &show {
+					Show::Home => "home".to_string(),
+					Show::Loading => "loading".to_string(),
+					Show::Character => "character".to_string(),
+					Show::InGame { mode } => format!("in-game ({mode})"),
 				};
 				show.react(commands);
 				*console = format!("show {label}: pending");
@@ -94,6 +95,24 @@ mod tests {
 	fn parse_line_show_character() {
 		let cmd = PlaygroundCommand::parse_line("show character").expect("parse");
 		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Character)));
+	}
+
+	#[test]
+	fn parse_line_show_in_game() {
+		let cmd = PlaygroundCommand::parse_line("show in-game").expect("parse");
+		assert!(matches!(
+			cmd,
+			PlaygroundCommand::Show(Show::InGame { ref mode }) if mode == "Discovery"
+		));
+	}
+
+	#[test]
+	fn parse_line_show_in_game_mode() {
+		let cmd = PlaygroundCommand::parse_line("show in-game Reliquary").expect("parse");
+		assert!(matches!(
+			cmd,
+			PlaygroundCommand::Show(Show::InGame { ref mode }) if mode == "Reliquary"
+		));
 	}
 
 	#[test]

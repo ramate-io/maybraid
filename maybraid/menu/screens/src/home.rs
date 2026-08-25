@@ -2,12 +2,13 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use game_commands::command::{TextEntryBlocked, TextEntryFocus};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
-use menu_components::single_select::{republish_menu_activate, MenuFocus, TextMenuInputLock};
-use menu_components::{TextMenuPlugin, TextMenuSystems};
+use menu_components::single_select::{republish_menu_activate, MenuFocus};
+use menu_components::TextMenuPlugin;
 
+use crate::input::add_menu_input;
+use crate::show::take_menu_show_request;
 use crate::MenuScreen;
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
@@ -97,31 +98,10 @@ pub struct HomeScreenPlugin;
 
 impl Plugin for HomeScreenPlugin {
 	fn build(&self, app: &mut App) {
+		add_menu_input(app);
 		app.add_plugins(TextMenuPlugin::<HomeMenuChoice>::default())
-			.add_systems(Update, sync_text_menu_input_lock.in_set(TextMenuSystems::InputLock))
 			.add_systems(Update, apply_show_home);
 	}
-}
-
-fn sync_text_menu_input_lock(
-	mut focus: Option<ResMut<TextEntryFocus>>,
-	mut blocked: Option<ResMut<TextEntryBlocked>>,
-	modal: Res<menu_components::ShortTextModal>,
-	fields: Query<&menu_components::ShortTextField>,
-	mut lock: ResMut<TextMenuInputLock>,
-) {
-	let short = modal.is_open() || fields.iter().any(|field| field.editing);
-	if let Some(blocked) = blocked.as_mut() {
-		blocked.0 = short;
-	}
-	if short {
-		if let Some(focus) = focus.as_mut() {
-			focus.0 = false;
-		}
-		lock.0 = true;
-		return;
-	}
-	lock.0 = focus.as_ref().is_some_and(|focus| focus.0);
 }
 
 fn apply_show_home(
@@ -129,14 +109,8 @@ fn apply_show_home(
 	requests: Query<Entity, With<RequestShowHome>>,
 	existing: Query<Entity, With<MenuScreen>>,
 ) {
-	if requests.is_empty() {
+	if !take_menu_show_request(&mut commands, &requests, &existing) {
 		return;
-	}
-	for entity in &existing {
-		commands.entity(entity).despawn();
-	}
-	for entity in &requests {
-		commands.entity(entity).despawn();
 	}
 	commands.spawn_scene(HomeScreen::scene());
 }

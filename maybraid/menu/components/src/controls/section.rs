@@ -6,9 +6,9 @@ use crate::icons::AnimatedIcon;
 use crate::single_select::TextCursorSlot;
 use crate::theme::{PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE};
 
-use super::HudFonts;
 use super::hud_menu::{HudMenu, HudMenuItem};
 use super::text::{spawn_cursor_slot_sized, spawn_header_line};
+use super::HudFonts;
 
 /// Marker on a header that opens an overlay select.
 #[derive(Component, Debug, Default, Clone, Copy)]

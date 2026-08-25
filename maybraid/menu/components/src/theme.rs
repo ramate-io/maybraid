@@ -82,6 +82,9 @@ pub const ITEM_ROW_GAP: f32 = 6.0;
 /// Inset from the left of the window.
 pub const COLUMN_INSET: f32 = 48.0;
 
+/// Upper-corner brand / mode line (`Maybraid - Discovery`).
+pub const BRAND_MODE_FONT_SIZE: f32 = 36.0;
+
 /// Menu column sits above the description strip.
 pub const COLUMN_BOTTOM: f32 = 88.0;
 

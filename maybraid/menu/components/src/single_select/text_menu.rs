@@ -1,4 +1,4 @@
-//! Bottom-left text column, authored as BSN [`Scene`]s.
+//! Text column, authored as BSN [`Scene`]s. Default anchor is bottom-left.
 //!
 //! Pickable rows stamp a screen-specific choice component `E`. Selection
 //! triggers [`MenuFocus<E>`] on the [`TextMenu`]; click / Enter trigger
@@ -6,8 +6,8 @@
 //! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
-use bevy::text::FontSourceTemplate;
+use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, HEADER_FONT_SIZE,
@@ -53,19 +53,26 @@ impl TextMenuItem {
 	}
 
 	/// Pickable row that stamps `action` for [`MenuFocus`] / [`MenuActivate`].
-	pub fn scene<E>(self, label: impl Into<String>, action: E) -> impl Scene + 'static
+	pub fn scene<E>(
+		self,
+		label: impl Into<String>,
+		action: E,
+		align: TextColumnAlign,
+	) -> impl Scene + 'static
 	where
 		E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 	{
 		let label = label.into();
+		let justify_content = align.justify_content();
+		let text_justify = align.text_justify();
 		bsn! {
 			Button
 			template_value(self)
 			template_value(action)
 			Node {
 				padding: UiRect::axes(px(0.0), px(2.0)),
-				justify_content: JustifyContent::FlexStart,
-				align_items: AlignItems::FlexStart,
+				justify_content: justify_content,
+				align_items: AlignItems::Center,
 			}
 			BackgroundColor(Color::NONE)
 			Children [(
@@ -75,6 +82,7 @@ impl TextMenuItem {
 					font_size: px(ITEM_FONT_SIZE),
 				}
 				TextColor(TEXT_YELLOW)
+				TextLayout::new(text_justify, bevy::text::LineBreak::NoWrap)
 				TextMenuItemLabel
 				Pickable::IGNORE
 			)]
@@ -120,10 +128,78 @@ impl TextMenuHeader {
 	}
 }
 
-/// Header plus labeled actions, pinned to the bottom-left.
+/// Where a shrink-wrapped text column sits on the screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextColumnAnchor {
+	/// Home-style: inset from the bottom-left.
+	#[default]
+	BottomLeft,
+	/// Pause-style: shrink-wrap and let the parent flex-center this node.
+	Center,
+}
+
+/// How labels sit inside the column and inside each row.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextColumnAlign {
+	/// Reserved cursor gutter; labels share a left edge.
+	#[default]
+	Start,
+	/// Each label is centered on the column axis.
+	Center,
+}
+
+impl TextColumnAlign {
+	pub fn items(self) -> AlignItems {
+		match self {
+			Self::Start => AlignItems::FlexStart,
+			Self::Center => AlignItems::Center,
+		}
+	}
+
+	pub fn justify_content(self) -> JustifyContent {
+		match self {
+			Self::Start => JustifyContent::FlexStart,
+			Self::Center => JustifyContent::Center,
+		}
+	}
+
+	pub fn text_justify(self) -> Justify {
+		match self {
+			Self::Start => Justify::Left,
+			Self::Center => Justify::Center,
+		}
+	}
+}
+
+impl TextColumnAnchor {
+	pub fn node(self, align: TextColumnAlign) -> Node {
+		let align_items = align.items();
+		match self {
+			Self::BottomLeft => Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(COLUMN_INSET),
+				bottom: Val::Px(COLUMN_BOTTOM),
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
+			Self::Center => Node {
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
+		}
+	}
+}
+
+/// Header plus labeled actions.
 pub struct TextMenuColumn<E> {
 	pub header: String,
 	pub items: Vec<(String, E)>,
+	pub anchor: TextColumnAnchor,
+	pub align: TextColumnAlign,
 }
 
 impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColumn<E> {
@@ -134,7 +210,19 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 		Self {
 			header: header.into(),
 			items: items.into_iter().map(|(label, action)| (label.into(), action)).collect(),
+			anchor: TextColumnAnchor::BottomLeft,
+			align: TextColumnAlign::Start,
 		}
+	}
+
+	pub fn anchored(mut self, anchor: TextColumnAnchor) -> Self {
+		self.anchor = anchor;
+		self
+	}
+
+	pub fn aligned(mut self, align: TextColumnAlign) -> Self {
+		self.align = align;
+		self
 	}
 
 	pub fn scene(self) -> impl Scene + 'static {
@@ -142,18 +230,12 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 		let mut children: Vec<Box<dyn Scene>> = Vec::with_capacity(item_count + 1);
 		children.push(Box::new(TextMenuHeader::new(self.header).scene()));
 		for (index, (label, action)) in self.items.into_iter().enumerate() {
-			children.push(Box::new(TextMenuItem::yellow(index).scene(label, action)));
+			children.push(Box::new(TextMenuItem::yellow(index).scene(label, action, self.align)));
 		}
+		let node = self.anchor.node(self.align);
 		bsn! {
 			template_value(TextMenu::new(item_count))
-			Node {
-				position_type: PositionType::Absolute,
-				left: px(COLUMN_INSET),
-				bottom: px(COLUMN_BOTTOM),
-				flex_direction: FlexDirection::Column,
-				align_items: AlignItems::FlexStart,
-				row_gap: px(ITEM_ROW_GAP),
-			}
+			template_value(node)
 			Children [ {children} ]
 		}
 	}
@@ -297,7 +379,18 @@ pub fn sync_text_menu_item_colors(
 
 #[cfg(test)]
 mod tests {
-	use super::TextMenu;
+	use super::{TextColumnAlign, TextMenu};
+	use bevy::prelude::{AlignItems, JustifyContent};
+	use bevy::text::Justify;
+
+	#[test]
+	fn center_align_centers_items_and_text() {
+		assert_eq!(TextColumnAlign::Center.items(), AlignItems::Center);
+		assert_eq!(TextColumnAlign::Center.justify_content(), JustifyContent::Center);
+		assert_eq!(TextColumnAlign::Center.text_justify(), Justify::Center);
+		assert_eq!(TextColumnAlign::Start.items(), AlignItems::FlexStart);
+		assert_eq!(TextColumnAlign::Start.text_justify(), Justify::Left);
+	}
 
 	#[test]
 	fn step_wraps() {
