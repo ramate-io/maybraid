@@ -1,5 +1,6 @@
 //! Preview subject sync. Viewer tracking lives in [`lod::LodRefreshCorePlugin`].
 
+use crate::commands::show::connecting_stairwell::ConnectingStairwellCase;
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use bevy::prelude::*;
@@ -124,7 +125,9 @@ pub enum PreviewSubject {
 		no_right: bool,
 	},
 	ConnectingHall,
-	ConnectingStairwell,
+	ConnectingStairwell {
+		case: ConnectingStairwellCase,
+	},
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -570,8 +573,8 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
-			PreviewSubject::ConnectingStairwell => {
-				"preview: connecting-stairwell (run-in + spiral flight)".into()
+			PreviewSubject::ConnectingStairwell { case } => {
+				format!("preview: connecting-stairwell --case {} ({})", case.slug(), case.look_for())
 			}
 			PreviewSubject::ArcFloor {
 				radius,
@@ -3652,8 +3655,8 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
-		PreviewSubject::ConnectingStairwell => {
-			let (lower, upper) = connecting_stairwell_demo_endpoints();
+		PreviewSubject::ConnectingStairwell { case } => {
+			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
 			let well = ConnectingStairwell::rough_stone(lower, upper);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
 		}
@@ -4563,28 +4566,69 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 		.insert(PreviewRoot);
 }
 
-/// Demo landings: south-facing walk-on at \(y=0\), east-facing landing at \(y=3\).
-pub fn connecting_stairwell_demo_endpoints() -> (MappedOpening, MappedOpening) {
-	// Horizontal shaft faces: 2.4×2.4 m well, walk-on on −Z, open at y=3.
-	let lower = MappedOpening::new(
-		MappedOpeningQuad::new(
-			Vec3::new(-1.2, 0.0, -1.2),
-			Vec3::new(1.2, 0.0, -1.2),
-			Vec3::new(-1.2, 0.0, 1.2),
-			Vec3::new(1.2, 0.0, 1.2),
+/// Horizontal shaft face: `center` in the hole, walk-on on the −orientation side.
+fn stairwell_shaft_opening(center: Vec3, half_w: f32, half_d: f32, orient: Vec2) -> MappedOpening {
+	let d = orient.normalize_or_zero();
+	let d = if d.length_squared() < 1e-8 { Vec2::Y } else { d };
+	let right = Vec3::new(-d.y, 0.0, d.x);
+	let out = Vec3::new(d.x, 0.0, d.y);
+	let walk = center - out * half_d;
+	let far = center + out * half_d;
+	MappedOpening::from_corners(
+		walk - right * half_w,
+		walk + right * half_w,
+		far - right * half_w,
+		far + right * half_w,
+		orient,
+	)
+}
+
+/// Pathological shaft pairs for `/show connecting-stairwell --case`.
+pub fn connecting_stairwell_demo_endpoints(
+	case: ConnectingStairwellCase,
+) -> (MappedOpening, MappedOpening) {
+	match case {
+		ConnectingStairwellCase::Stacked => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y),
 		),
-		Vec2::Y,
-	);
-	let upper = MappedOpening::new(
-		MappedOpeningQuad::new(
-			Vec3::new(-1.2, 3.0, -1.2),
-			Vec3::new(1.2, 3.0, -1.2),
-			Vec3::new(-1.2, 3.0, 1.2),
-			Vec3::new(1.2, 3.0, 1.2),
+		ConnectingStairwellCase::NarrowSlot => (
+			stairwell_shaft_opening(Vec3::ZERO, 0.4, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 0.4, 1.2, Vec2::Y),
 		),
-		Vec2::Y,
-	);
-	(lower, upper)
+		ConnectingStairwellCase::Shallow => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.6, 0.5, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.6, 0.5, Vec2::Y),
+		),
+		ConnectingStairwellCase::Offset => (
+			stairwell_shaft_opening(Vec3::new(0.0, 0.0, -3.0), 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(3.0, 3.0, 0.0), 1.2, 1.2, -Vec2::X),
+		),
+		ConnectingStairwellCase::NearOffset => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.1, 3.0, 0.0), 1.2, 1.2, Vec2::Y),
+		),
+		ConnectingStairwellCase::Mismatch => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 0.6, 0.6, Vec2::Y),
+		),
+		ConnectingStairwellCase::Opposite => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, -Vec2::Y),
+		),
+		ConnectingStairwellCase::SameY => (
+			stairwell_shaft_opening(Vec3::new(-2.0, 0.0, 0.0), 1.0, 1.0, Vec2::X),
+			stairwell_shaft_opening(Vec3::new(2.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X),
+		),
+		ConnectingStairwellCase::Tall => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 9.0, 0.0), 1.2, 1.2, Vec2::Y),
+		),
+		ConnectingStairwellCase::Huge => (
+			stairwell_shaft_opening(Vec3::ZERO, 3.0, 3.0, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 3.0, 3.0, Vec2::Y),
+		),
+	}
 }
 
 /// Demo openings: south facing +Z, east facing −X (mild kink near the origin).
@@ -5454,13 +5498,13 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 /// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
 /// orientation arrows, and the flight polyline.
 pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	if !matches!(config.subject, PreviewSubject::ConnectingStairwell) {
+	let PreviewSubject::ConnectingStairwell { case } = config.subject else {
 		return;
-	}
+	};
 	let tf = config.transform;
 	let map = |p: Vec3| tf.transform_point(p);
 
-	let (lower, upper) = connecting_stairwell_demo_endpoints();
+	let (lower, upper) = connecting_stairwell_demo_endpoints(case);
 	let well = ConnectingStairwell::rough_stone(lower, upper);
 
 	let cyan = Color::srgb(0.2, 0.9, 0.95);
