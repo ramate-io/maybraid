@@ -1,6 +1,6 @@
 //---------------------------------------------------------
 // Chico canopy leaf: object-space leafy breakup on cheap-ball
-// cards (planes through a centroid) + vertex sway + wrap light.
+// cards (planes through a centroid) + vertex sway + split light.
 //
 // Holes are glued to each card (kit space) so they ride with
 // wind. A noisy rim discard runs at every distance so far cards
@@ -49,6 +49,8 @@ struct LeafVertexOutput {
     @location(8) local_pos: vec3<f32>,
     /// Centroid distance in ball-radii; remapped so CAP meters == MID.
     @location(9) view_dist: f32,
+    /// Plant instance origin (flat) — canopy outward for fake occlusion.
+    @location(10) @interpolate(flat) plant_origin: vec3<f32>,
 }
 
 // --------------------------------------------------------
@@ -165,6 +167,7 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     out.local_pos = vec3<f32>(0.0, 0.0, 0.0);
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
     out.view_dist = 0.0;
+    out.plant_origin = vec3<f32>(0.0, 0.0, 0.0);
 
 #ifdef MORPH_TARGETS
     var vertex = morph_vertex(vertex_no_morph, vertex_no_morph.instance_index);
@@ -173,6 +176,7 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
 #endif
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
+    out.plant_origin = mesh_world_from_local[3].xyz;
 
 #ifdef SKINNED
     var world_from_local = skinning::skin_model(
@@ -317,34 +321,42 @@ fn fragment(
     }
 
     let alpha = hole_alpha * radial_alpha;
+    let base_rgb = vec3<f32>(base_color.x, base_color.y, base_color.z);
+    // Hue wobble only — old 0.82/0.72 ramps read as dirt, not leaf.
     let warm_cool = mix(
-        vec3<f32>(0.82, 0.95, 0.72),
-        vec3<f32>(1.12, 1.04, 0.78),
+        vec3<f32>(0.94, 1.02, 0.96),
+        vec3<f32>(1.08, 1.04, 0.94),
         tint_noise,
     );
-    let brightness = mix(0.82, 1.12, tint_noise);
-    let wash = mix(0.72, 1.0, saturate(min(alpha, radial_alpha) * 1.25));
-    let albedo = vec3<f32>(base_color.x, base_color.y, base_color.z)
-        * warm_cool
-        * brightness
-        * wash;
+    let brightness = mix(0.94, 1.08, tint_noise);
+    let wash = mix(0.90, 1.0, saturate(min(alpha, radial_alpha) * 1.25));
+    let albedo = base_rgb * warm_cool * brightness * wash;
 
     let prepared_normal = fns::prepare_world_normal(
         mesh.world_normal,
         true,
         is_front,
     );
-    let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.4));
-    var wrap = 0.55;
-    var back = 0.12;
+    let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.15));
+    var ndl = 0.55;
     if (lights.n_directional_lights > 0u) {
         let L = lights.directional_lights[0].direction_to_light;
-        wrap = saturate(dot(n, L) * 0.5 + 0.5);
-        back = saturate(-dot(n, L));
+        ndl = saturate(dot(n, L));
     }
-    // Wrap + hemi fill — replaces clustered PBR so palettes stay as authored.
-    let hemi = mix(0.10, 0.20, saturate(n.y * 0.5 + 0.5));
-    let lifted = albedo * (0.50 + 0.55 * wrap + 0.35 * back + hemi);
+    let sun = ndl * 0.95 + 0.14;
+    let sky = mix(0.38, 0.55, saturate(n.y));
+    let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
+    // Fake canopy shadow: inward faces + puff hubs. Fade out with distance
+    // so far cards stay green instead of reading as black.
+    let outward = mesh.world_position.xyz - mesh.plant_origin;
+    let olen = length(outward);
+    var occ = mix(0.72, 1.0, r);
+    if (olen > 1e-3) {
+        let shade = saturate(dot(n, outward / olen));
+        occ *= mix(0.68, 1.0, shade * shade);
+    }
+    occ = mix(occ, 1.0, saturate((view_dist - 32.0) / 48.0));
+    let lifted = (albedo * sun + albedo * sky * sky_rgb) * occ;
 
     return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
 }

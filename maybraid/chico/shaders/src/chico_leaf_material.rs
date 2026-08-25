@@ -1,8 +1,8 @@
-//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, wrap light.
+//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, split light.
 //!
 //! A noisy rim `discard` runs at every distance (Opaque ignores alpha).
 //! Interior holes are near/mid only (80 radii, remapped so 140 m is never near).
-//! Wrap + hemi fill, not clustered PBR.
+//! Lambert + sky, plus fake canopy occlusion (inward faces / puff hubs).
 
 use bevy::{
 	asset::embedded_asset,
