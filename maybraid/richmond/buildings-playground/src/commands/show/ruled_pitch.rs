@@ -25,10 +25,7 @@ pub struct RuledPitch {
 impl RuledPitch {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		(
-			PreviewSubject::RuledPitch {
-				min_dihedral: self.min_dihedral,
-				no_joint: self.no_joint,
-			},
+			PreviewSubject::RuledPitch { min_dihedral: self.min_dihedral, no_joint: self.no_joint },
 			self.transform.transform(),
 		)
 	}

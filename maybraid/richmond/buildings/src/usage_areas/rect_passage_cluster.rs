@@ -123,17 +123,7 @@ impl RectPassageCluster {
 			openings[b].insert(id, opening);
 		}
 
-		Some(Self {
-			rects,
-			openings,
-			root,
-			tree_edges,
-			params,
-			y0,
-			y1,
-			roll,
-			region_id,
-		})
+		Some(Self { rects, openings, root, tree_edges, params, y0, y1, roll, region_id })
 	}
 
 	/// Confines for rect `i`, ensuring at least one passage (synthetic if needed).
@@ -181,10 +171,7 @@ impl RectPassageCluster {
 				format!("{}_{i}_tip", self.region_id),
 			);
 		}
-		let has = confines
-			.openings
-			.iter()
-			.any(|(_, o)| matches!(o.label, OpeningLabel::Passage));
+		let has = confines.openings.iter().any(|(_, o)| matches!(o.label, OpeningLabel::Passage));
 		if has {
 			return confines;
 		}
@@ -245,8 +232,7 @@ fn ensure_door_onto(
 	if wall_has_passage(confines, rect, along_x, mid) {
 		return false;
 	}
-	let Some((id, opening)) =
-		connecting_passage(scope, kind, along_x, lo, hi, mid, y0, y1, id_tag)
+	let Some((id, opening)) = connecting_passage(scope, kind, along_x, lo, hi, mid, y0, y1, id_tag)
 	else {
 		return false;
 	};
@@ -282,9 +268,7 @@ fn pick_root_rect(rects: &[Aabb2d], hint: Option<Aabb2d>) -> usize {
 	let mut best = 0usize;
 	let mut best_score = f32::NEG_INFINITY;
 	for (i, r) in rects.iter().enumerate() {
-		let score = shared_edge_span(hint, *r)
-			.map(|(_, lo, hi, _)| hi - lo)
-			.unwrap_or(0.0)
+		let score = shared_edge_span(hint, *r).map(|(_, lo, hi, _)| hi - lo).unwrap_or(0.0)
 			+ 1.0 / (1.0 + (hint.center() - r.center()).length());
 		if score > best_score {
 			best_score = score;
@@ -346,14 +330,8 @@ mod tests {
 	#[test]
 	fn l_shape_yields_linked_rects() {
 		let parts = [
-			Aabb2d {
-				min: Vec2::ZERO,
-				max: Vec2::new(8.0, 4.0),
-			},
-			Aabb2d {
-				min: Vec2::new(0.0, 4.0),
-				max: Vec2::new(4.0, 10.0),
-			},
+			Aabb2d { min: Vec2::ZERO, max: Vec2::new(8.0, 4.0) },
+			Aabb2d { min: Vec2::new(0.0, 4.0), max: Vec2::new(4.0, 10.0) },
 		];
 		let cluster = RectPassageCluster::from_parts(
 			&parts,
@@ -362,10 +340,7 @@ mod tests {
 			3.0,
 			0.0,
 			1,
-			RectPassageClusterParams {
-				scope: "test",
-				..Default::default()
-			},
+			RectPassageClusterParams { scope: "test", ..Default::default() },
 		)
 		.expect("cluster");
 		assert!(cluster.rects.len() >= 2);

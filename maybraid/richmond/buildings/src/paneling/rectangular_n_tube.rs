@@ -30,10 +30,7 @@ pub struct RectangularNTubeCorner {
 
 impl RectangularNTubeCorner {
 	pub fn new(position: Vec3, thickness: f32) -> Self {
-		Self {
-			position,
-			thickness,
-		}
+		Self { position, thickness }
 	}
 }
 
@@ -45,9 +42,7 @@ pub struct RectangularNTubeStation {
 
 impl RectangularNTubeStation {
 	pub fn new(corners: impl IntoIterator<Item = RectangularNTubeCorner>) -> Self {
-		Self {
-			corners: corners.into_iter().collect(),
-		}
+		Self { corners: corners.into_iter().collect() }
 	}
 
 	pub fn n(&self) -> usize {
@@ -113,18 +108,11 @@ impl RectangularNTube {
 		}
 		let n = stations[0].n();
 		if n < 3 {
-			debug_assert!(
-				false,
-				"RectangularNTube::from_stations requires n >= 3 (got {})",
-				n
-			);
+			debug_assert!(false, "RectangularNTube::from_stations requires n >= 3 (got {})", n);
 			return Self::new(style);
 		}
 		if stations.iter().any(|s| s.n() != n) {
-			debug_assert!(
-				false,
-				"RectangularNTube::from_stations requires equal corner counts"
-			);
+			debug_assert!(false, "RectangularNTube::from_stations requires equal corner counts");
 			return Self::new(style);
 		}
 
@@ -156,8 +144,7 @@ impl RectangularNTube {
 
 		let mut faces = Vec::with_capacity(n);
 		for i in 0..n {
-			let mut strip_nodes: Vec<RectangularStripNode> =
-				Vec::with_capacity(stations.len());
+			let mut strip_nodes: Vec<RectangularStripNode> = Vec::with_capacity(stations.len());
 			for (k, station) in stations.iter().enumerate() {
 				let a = &station.corners[i];
 				let a_next = &station.corners[(i + 1) % n];
@@ -202,11 +189,7 @@ impl RectangularNTube {
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
 		self.joint_policy = joint_policy;
-		self.faces = self
-			.faces
-			.into_iter()
-			.map(|f| f.with_joint_policy(joint_policy))
-			.collect();
+		self.faces = self.faces.into_iter().map(|f| f.with_joint_policy(joint_policy)).collect();
 		self
 	}
 
@@ -221,10 +204,7 @@ impl RectangularNTube {
 			if i < n {
 				self.emit_face[i] = false;
 			} else {
-				debug_assert!(
-					false,
-					"RectangularNTube::without_face_edges index {i} >= n={n}"
-				);
+				debug_assert!(false, "RectangularNTube::without_face_edges index {i} >= n={n}");
 			}
 		}
 		self
@@ -237,10 +217,7 @@ impl RectangularNTube {
 
 	/// Cross-section edge indices currently omitted from presentation.
 	pub fn omitted_face_edges(&self) -> impl Iterator<Item = usize> + '_ {
-		self.emit_face
-			.iter()
-			.enumerate()
-			.filter_map(|(i, emit)| (!emit).then_some(i))
+		self.emit_face.iter().enumerate().filter_map(|(i, emit)| (!emit).then_some(i))
 	}
 
 	pub fn stations(&self) -> &[RectangularNTubeStation] {
@@ -377,10 +354,7 @@ mod tests {
 				vec![None, None, None],
 			],
 		);
-		assert!(matches!(
-			tube.faces()[1].pieces()[1],
-			ClippedRectangularStripPiece::Clipped(_)
-		));
+		assert!(matches!(tube.faces()[1].pieces()[1], ClippedRectangularStripPiece::Clipped(_)));
 		let clipped = match &tube.faces()[1].pieces()[1] {
 			ClippedRectangularStripPiece::Clipped(c) => c,
 			_ => unreachable!(),
@@ -416,10 +390,7 @@ mod tests {
 
 		let full = RectangularNTube::from_stations(
 			PanelStyle::RoughStonework,
-			[
-				square_station(0.0, 1.0, 2.0),
-				square_station(2.0, 1.0, 2.0),
-			],
+			[square_station(0.0, 1.0, 2.0), square_station(2.0, 1.0, 2.0)],
 		);
 		// Square: 0 = floor (BL→BR), 2 = ceiling (TR→TL).
 		let open = full.clone().without_face_edges([0, 2]);

@@ -26,8 +26,8 @@ use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS};
 
-use geometry::{face_bottom_pair, PlanRect, PostSegment};
 pub use geometry::TrazaloidSide;
+use geometry::{face_bottom_pair, PlanRect, PostSegment};
 
 /// Horizontal footprint / ridge slab presentation for towering ownership.
 ///
@@ -103,13 +103,7 @@ impl Default for TrazaloidParams {
 
 impl TrazaloidParams {
 	pub fn new(footprint: Vec2, ridge: Vec2, lower_height: f32, upper_height: f32) -> Self {
-		Self {
-			footprint,
-			ridge,
-			lower_height,
-			upper_height,
-			..Self::default()
-		}
+		Self { footprint, ridge, lower_height, upper_height, ..Self::default() }
 	}
 
 	pub fn band_vertical_offset(mut self, gap: f32) -> Self {
@@ -194,13 +188,15 @@ impl Trazaloid {
 			let (a0, b0) = face_bottom_pair(side, foot);
 			let (a1, b1) = face_bottom_pair(side, waist);
 			let clip = side_clip[side as usize].clone();
-			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [clip]).with_joint_policy(policy)
+			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [clip])
+				.with_joint_policy(policy)
 		});
 
 		let upper_walls = TrazaloidSide::all().map(|side| {
 			let (a0, b0) = face_bottom_pair(side, upper_bot);
 			let (a1, b1) = face_bottom_pair(side, ridge);
-			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [None]).with_joint_policy(policy)
+			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [None])
+				.with_joint_policy(policy)
 		});
 
 		let floor = params.resolve_floor_slab(style, policy, foot);
@@ -256,8 +252,7 @@ impl Trazaloid {
 
 	/// Foot, waist, upper-bottom, ridge full extents and heights.
 	pub fn plan_levels(&self) -> [(f32, Vec2); 4] {
-		self.rects
-			.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
+		self.rects.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
 	}
 }
 

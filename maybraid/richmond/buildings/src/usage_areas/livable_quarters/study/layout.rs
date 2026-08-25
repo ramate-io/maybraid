@@ -45,7 +45,11 @@ impl StudyRegions {
 					depth_max: 0.75,
 					height: 0.75,
 				},
-				predicates: &[Predicate::InHost, Predicate::ClearOfKeepOuts, Predicate::LongFaceOnWall],
+				predicates: &[
+					Predicate::InHost,
+					Predicate::ClearOfKeepOuts,
+					Predicate::LongFaceOnWall,
+				],
 				commit: CommitEffect::SolidFootprint,
 				structure_budget: false,
 			},
@@ -62,7 +66,11 @@ impl StudyRegions {
 					depth_max: 0.5,
 					height: 1.8,
 				},
-				predicates: &[Predicate::InHost, Predicate::ClearOfKeepOuts, Predicate::LongFaceOnWall],
+				predicates: &[
+					Predicate::InHost,
+					Predicate::ClearOfKeepOuts,
+					Predicate::LongFaceOnWall,
+				],
 				commit: CommitEffect::SolidFootprint,
 				structure_budget: false,
 			},
@@ -73,9 +81,7 @@ impl StudyRegions {
 	pub fn pack(&self, confines: &Confines, noise: NoiseParams) -> Result<StudyPacked, FitError> {
 		let mut host = init_host(confines)?;
 		if host.room_area + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "study",
-			});
+			return Err(FitError::TooSmall { reason: "study" });
 		}
 		let mut packed = StudyPacked::default();
 		let placed = pack_kinds(
@@ -97,9 +103,7 @@ impl StudyRegions {
 			}
 		}
 		if packed.desks.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "study desk",
-			});
+			return Err(FitError::TooSmall { reason: "study desk" });
 		}
 		Ok(packed)
 	}

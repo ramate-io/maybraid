@@ -172,11 +172,8 @@ pub fn try_peninsula_from_run(
 	if !in_host(host, plan, 1e-3) || !plans_touch(plan, p) {
 		return None;
 	}
-	let others: Vec<Aabb2d> = clearances
-		.iter()
-		.copied()
-		.filter(|c| !aabb2_near_eq(*c, p, 1e-3))
-		.collect();
+	let others: Vec<Aabb2d> =
+		clearances.iter().copied().filter(|c| !aabb2_near_eq(*c, p, 1e-3)).collect();
 	if !clear_of_keep_outs(plan, &others) {
 		return None;
 	}

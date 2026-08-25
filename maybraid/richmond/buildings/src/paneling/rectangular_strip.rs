@@ -24,12 +24,7 @@ pub struct RectangularStripNode {
 
 impl RectangularStripNode {
 	pub fn new(position: Vec3, height: f32, thickness: f32, roll: f32) -> Self {
-		Self {
-			position,
-			height,
-			thickness,
-			roll,
-		}
+		Self { position, height, thickness, roll }
 	}
 }
 
@@ -71,10 +66,7 @@ impl RectangularStrip {
 	) -> Self {
 		let nodes: Vec<RectangularStripNode> = nodes.into_iter().collect();
 		if nodes.len() < 2 {
-			debug_assert!(
-				false,
-				"RectangularStrip::from_nodes requires at least 2 nodes"
-			);
+			debug_assert!(false, "RectangularStrip::from_nodes requires at least 2 nodes");
 			return Self::new(style);
 		}
 		let mut strip = Self::new(style);
@@ -106,12 +98,9 @@ impl RectangularStrip {
 			let prev = &self.bays[i];
 			let next = &self.bays[i + 1];
 			let thickness = (prev.thickness + next.thickness) * 0.5;
-			if let Some(j) = joint_along_bay_crease(
-				&prev.oriented,
-				&next.oriented,
-				thickness,
-				self.joint_policy,
-			) {
+			if let Some(j) =
+				joint_along_bay_crease(&prev.oriented, &next.oriented, thickness, self.joint_policy)
+			{
 				out.push(j);
 			}
 		}
@@ -126,15 +115,12 @@ impl RectangularStrip {
 	}
 }
 
-fn bay_from_nodes(style: PanelStyle, a: &RectangularStripNode, b: &RectangularStripNode) -> Rectangle {
-	Rectangle::new(
-		style,
-		a.position,
-		b.position - a.position,
-		a.height,
-		a.thickness,
-		a.roll,
-	)
+fn bay_from_nodes(
+	style: PanelStyle,
+	a: &RectangularStripNode,
+	b: &RectangularStripNode,
+) -> Rectangle {
+	Rectangle::new(style, a.position, b.position - a.position, a.height, a.thickness, a.roll)
 }
 
 impl BuildingComponents for RectangularStrip {

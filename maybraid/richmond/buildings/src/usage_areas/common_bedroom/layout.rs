@@ -15,14 +15,12 @@ use procedural_common::{
 use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::Rectangle;
-use crate::usage_areas::clearance::{
-	commit_door_clear, PassageClearance, PASSAGE_APPROACH_PAD,
-};
-use crate::usage_areas::enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 use crate::placer::{
 	enclosure_soft_goal_met, pick_kind, propose_from_spec, try_free_extent, CommitEffect,
 	FreeExtentKnobs, KindSpec, OccupiedBudget, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole,
 };
+use crate::usage_areas::clearance::{commit_door_clear, PassageClearance, PASSAGE_APPROACH_PAD};
+use crate::usage_areas::enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 
 use super::parameterized::SCOPE;
 
@@ -127,9 +125,7 @@ impl CommonBedroomRegions {
 				soft_goal: SoftGoalRole::Ensuite,
 				propose: ProposeKnobs::EnclosedRoom,
 				predicates: &[],
-				commit: CommitEffect::WalledWithDoor {
-					door_approach_pad: PASSAGE_APPROACH_PAD,
-				},
+				commit: CommitEffect::WalledWithDoor { door_approach_pad: PASSAGE_APPROACH_PAD },
 				structure_budget: true,
 			},
 			KindSpec {
@@ -140,9 +136,7 @@ impl CommonBedroomRegions {
 				soft_goal: SoftGoalRole::ClosetLike,
 				propose: ProposeKnobs::EnclosedRoom,
 				predicates: &[],
-				commit: CommitEffect::WalledWithDoor {
-					door_approach_pad: PASSAGE_APPROACH_PAD,
-				},
+				commit: CommitEffect::WalledWithDoor { door_approach_pad: PASSAGE_APPROACH_PAD },
 				structure_budget: true,
 			},
 			KindSpec {
@@ -153,9 +147,7 @@ impl CommonBedroomRegions {
 				soft_goal: SoftGoalRole::ClosetLike,
 				propose: ProposeKnobs::EnclosedRoom,
 				predicates: &[],
-				commit: CommitEffect::WalledWithDoor {
-					door_approach_pad: PASSAGE_APPROACH_PAD,
-				},
+				commit: CommitEffect::WalledWithDoor { door_approach_pad: PASSAGE_APPROACH_PAD },
 				structure_budget: true,
 			},
 			KindSpec {
@@ -207,7 +199,11 @@ impl CommonBedroomRegions {
 					depth_max: 0.6,
 					height: 2.1,
 				},
-				predicates: &[Predicate::InHost, Predicate::ClearOfKeepOuts, Predicate::LongFaceOnWall],
+				predicates: &[
+					Predicate::InHost,
+					Predicate::ClearOfKeepOuts,
+					Predicate::LongFaceOnWall,
+				],
 				commit: CommitEffect::SolidFootprint,
 				structure_budget: false,
 			},
@@ -224,7 +220,11 @@ impl CommonBedroomRegions {
 					depth_max: 0.5,
 					height: 0.9,
 				},
-				predicates: &[Predicate::InHost, Predicate::ClearOfKeepOuts, Predicate::LongFaceOnWall],
+				predicates: &[
+					Predicate::InHost,
+					Predicate::ClearOfKeepOuts,
+					Predicate::LongFaceOnWall,
+				],
 				commit: CommitEffect::SolidFootprint,
 				structure_budget: false,
 			},
@@ -263,11 +263,7 @@ impl CommonBedroomRegions {
 		let cfg = NoiseConfig::new(noise);
 
 		let mut packed = CommonBedroomPacked::default();
-		let mut budget = OccupiedBudget::new(
-			room_area,
-			self.occupancy,
-			self.occupancy.max(0.78),
-		);
+		let mut budget = OccupiedBudget::new(room_area, self.occupancy, self.occupancy.max(0.78));
 
 		if let Some(bed) = place_bed(
 			&host3,
@@ -283,9 +279,7 @@ impl CommonBedroomRegions {
 			clearances.push(aabb3_to_plan(&bed, PlanAxes::XZ));
 			packed.beds.push(bed);
 		} else {
-			return Err(FitError::TooSmall {
-				reason: "common bedroom bed",
-			});
+			return Err(FitError::TooSmall { reason: "common bedroom bed" });
 		}
 
 		for step in 1..PACK_STEPS {
@@ -296,24 +290,14 @@ impl CommonBedroomRegions {
 				!packed.ensuites.is_empty(),
 				packed.closets.len() + packed.walk_in_closets.len(),
 			);
-			let eligible = eligible_catalog(
-				Self::catalog(),
-				soft_goal,
-				room_area,
-				step,
-				packed.beds.len(),
-			);
-			let Some(kind) = pick_kind(
-				&eligible,
-				&cfg,
-				step,
-				soft_goal,
-				|k| count_kind(&packed, k),
-			) else {
+			let eligible =
+				eligible_catalog(Self::catalog(), soft_goal, room_area, step, packed.beds.len());
+			let Some(kind) =
+				pick_kind(&eligible, &cfg, step, soft_goal, |k| count_kind(&packed, k))
+			else {
 				continue;
 			};
-			let Some(placed) =
-				self.try_place(kind, &host3, host, &clearances, &packed, &cfg, step)
+			let Some(placed) = self.try_place(kind, &host3, host, &clearances, &packed, &cfg, step)
 			else {
 				continue;
 			};
@@ -386,9 +370,9 @@ impl CommonBedroomRegions {
 					salt,
 				)
 				.map(Placed::BedroomFurniture),
-			BedroomKind::Closet => self
-				.try_place_closet(host3, host, clearances, packed)
-				.map(Placed::Closet),
+			BedroomKind::Closet => {
+				self.try_place_closet(host3, host, clearances, packed).map(Placed::Closet)
+			}
 			BedroomKind::WalkInCloset => {
 				if !packed.walk_in_closets.is_empty() {
 					return None;
@@ -407,8 +391,7 @@ impl CommonBedroomRegions {
 				) {
 					return Some(Placed::WalkIn(part));
 				}
-				self.try_place_closet(host3, host, clearances, packed)
-					.map(Placed::Closet)
+				self.try_place_closet(host3, host, clearances, packed).map(Placed::Closet)
 			}
 			BedroomKind::Ensuite => {
 				if !packed.ensuites.is_empty() {
@@ -441,8 +424,7 @@ impl CommonBedroomRegions {
 				) {
 					return Some(Placed::Ensuite(part));
 				}
-				self.try_place_closet(host3, host, clearances, packed)
-					.map(Placed::Closet)
+				self.try_place_closet(host3, host, clearances, packed).map(Placed::Closet)
 			}
 		}
 	}
@@ -464,16 +446,8 @@ impl CommonBedroomRegions {
 			host3.min.y,
 			(host.min.y + host.max.y) * 0.5,
 		);
-		let candidate = propose_from_spec(
-			spec,
-			self.spaciousness,
-			host3,
-			host,
-			clearances,
-			cfg,
-			salt,
-			center,
-		)?;
+		let candidate =
+			propose_from_spec(spec, self.spaciousness, host3, host, clearances, cfg, salt, center)?;
 		if collides_solids(&candidate, packed) {
 			return None;
 		}
@@ -707,10 +681,7 @@ fn partition_from_enclosed(host3: &Aabb3d, enclosed: EnclosedRoom) -> BedroomPar
 	}
 }
 
-fn partition_pack_clearances(
-	clearances: &[Aabb2d],
-	packed: &CommonBedroomPacked,
-) -> Vec<Aabb2d> {
+fn partition_pack_clearances(clearances: &[Aabb2d], packed: &CommonBedroomPacked) -> Vec<Aabb2d> {
 	let mut out = clearances.to_vec();
 	for part in packed
 		.closets
@@ -724,10 +695,7 @@ fn partition_pack_clearances(
 	out
 }
 
-fn storage_pack_clearances(
-	clearances: &[Aabb2d],
-	packed: &CommonBedroomPacked,
-) -> Vec<Aabb2d> {
+fn storage_pack_clearances(clearances: &[Aabb2d], packed: &CommonBedroomPacked) -> Vec<Aabb2d> {
 	let mut out = clearances.to_vec();
 	for solid in packed.wardrobes.iter().chain(packed.dressers.iter()) {
 		out.push(inflate_aabb2(aabb3_to_plan(solid, PlanAxes::XZ), STORAGE_SEP));
@@ -934,7 +902,8 @@ fn place_small_box(
 ) -> Option<Placed> {
 	let extent = base_nightstand_extent(spaciousness);
 	let gap = 0.08_f32 * spaciousness;
-	if let Some(ns) = place_adjacent_to_bed(host3, host, clearances, packed, noise, salt, extent, gap)
+	if let Some(ns) =
+		place_adjacent_to_bed(host3, host, clearances, packed, noise, salt, extent, gap)
 	{
 		return Some(Placed::Nightstand(ns));
 	}
@@ -944,12 +913,7 @@ fn place_small_box(
 		clearances,
 		noise,
 		salt,
-		FreeExtentKnobs {
-			extent,
-			prefer_wall: false,
-			wall_eps: WALL_EPS,
-			attempts: 10,
-		},
+		FreeExtentKnobs { extent, prefer_wall: false, wall_eps: WALL_EPS, attempts: 10 },
 	)
 	.filter(|c| !collides_solids(c, packed))
 	.map(Placed::SmallFurniture)
@@ -968,12 +932,9 @@ fn place_adjacent_to_bed(
 	for (bi, bed) in packed.beds.iter().enumerate() {
 		let bed_w = bed.max.x - bed.min.x;
 		let bed_d = bed.max.z - bed.min.z;
-		let long_sides: [u32; 2] = if bed_w + 1e-3 >= bed_d {
-			[2, 3]
-		} else {
-			[0, 1]
-		};
-		let start = (noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) * 2.0).floor() as usize % 2;
+		let long_sides: [u32; 2] = if bed_w + 1e-3 >= bed_d { [2, 3] } else { [0, 1] };
+		let start =
+			(noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) * 2.0).floor() as usize % 2;
 		for k in 0..2usize {
 			let side = long_sides[(start + k) % 2];
 			let mid_x = bed.min.x + bed_w * 0.5 - extent.x * 0.5;
@@ -985,8 +946,7 @@ fn place_adjacent_to_bed(
 				_ => Vec3::new(mid_x, host3.min.y, bed.min.z - gap - extent.z),
 			};
 			let candidate = Aabb3d::from_min_max(min, min + extent);
-			if fits(&candidate, host3, host, clearances, packed)
-				&& abuts_bed(&candidate, bed, gap)
+			if fits(&candidate, host3, host, clearances, packed) && abuts_bed(&candidate, bed, gap)
 			{
 				return Some(candidate);
 			}

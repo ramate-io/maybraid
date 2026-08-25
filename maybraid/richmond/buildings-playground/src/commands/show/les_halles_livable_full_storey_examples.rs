@@ -15,9 +15,6 @@ pub struct LesHallesLivableFullStoreyExamples {
 
 impl LesHallesLivableFullStoreyExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::LesHallesLivableFullStoreyExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::LesHallesLivableFullStoreyExamples, self.transform.transform())
 	}
 }

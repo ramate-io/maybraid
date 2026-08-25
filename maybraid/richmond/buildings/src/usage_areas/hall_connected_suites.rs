@@ -14,18 +14,14 @@ use bevy_math::{Vec2, Vec3};
 use procedural_common::NoiseParams;
 use richmond_building_components::panels::PanelStyle;
 
-use crate::fit::{
-	aabb_xz_extent, Confines, FillRegion, FitError, MultiConfines, SpaceKind,
-};
+use crate::fit::{aabb_xz_extent, Confines, FillRegion, FitError, MultiConfines, SpaceKind};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
 use crate::shells::ortho::{standing_face_opening, WallEdge};
-use crate::usage_areas::boundary_openings::{
-	host_face_spans, plan_edge_excluded,
-};
+use crate::usage_areas::boundary_openings::{host_face_spans, plan_edge_excluded};
 use crate::usage_areas::halls_to_shafts::{HallsToShafts, HallsToShaftsOptions};
 use crate::usage_areas::plan_access::PlanAccessParams;
 use crate::usage_areas::plan_cells::{
@@ -78,10 +74,7 @@ pub struct HallSuiteEncloseParams {
 
 impl Default for HallSuiteEncloseParams {
 	fn default() -> Self {
-		Self {
-			scope: "hall_connected_suites",
-			door_width: DEFAULT_DOOR_WIDTH,
-		}
+		Self { scope: "hall_connected_suites", door_width: DEFAULT_DOOR_WIDTH }
 	}
 }
 
@@ -110,22 +103,16 @@ impl HallConnectedGroups {
 		let min_room = params.min_room.max(EPS);
 		let fp = aabb_xz_extent(&confines.bounds);
 		if fp.x + EPS < min_room || fp.y + EPS < min_room {
-			return Err(FitError::TooSmall {
-				reason: "hall_suites_host",
-			});
+			return Err(FitError::TooSmall { reason: "hall_suites_host" });
 		}
 		if params.targets.is_empty() {
-			return Err(FitError::InvalidConfines {
-				reason: "hall_suites_empty_targets",
-			});
+			return Err(FitError::InvalidConfines { reason: "hall_suites_empty_targets" });
 		}
 
 		let (halls, hts_regions) = HallsToShafts::from_confines_with(
 			confines,
 			noise,
-			HallsToShaftsOptions {
-				hall_width: params.hall_width,
-			},
+			HallsToShaftsOptions { hall_width: params.hall_width },
 		)?;
 		let hall_width = halls.hall_width;
 		let hall_bands = halls.hall_bands.clone();
@@ -166,21 +153,12 @@ impl HallConnectedGroups {
 
 		let min_room_v = Vec2::splat(min_room);
 		let mut cells = split_toward_min_room(&seed_cells, min_room_v, &mut next_id);
-		let min_target = params
-			.targets
-			.iter()
-			.copied()
-			.fold(f32::INFINITY, f32::min)
-			.max(12.0);
+		let min_target = params.targets.iter().copied().fold(f32::INFINITY, f32::min).max(12.0);
 		let max_cell_area = (min_target * 0.55).max(min_room * min_room * 2.0);
 		cells = split_oversized_cells(&cells, max_cell_area, min_room_v, &mut next_id);
 
-		let mut groups = pack_apartments_to_targets(
-			&cells,
-			&hall_bands,
-			&params.targets,
-			params.access(),
-		);
+		let mut groups =
+			pack_apartments_to_targets(&cells, &hall_bands, &params.targets, params.access());
 		if groups.is_empty() {
 			groups = cells.iter().map(|c| vec![c.id]).collect();
 		}
@@ -213,10 +191,7 @@ pub struct HallEnclosedSuites {
 }
 
 impl HallEnclosedSuites {
-	pub fn from_groups(
-		packed: HallConnectedGroups,
-		enclose: HallSuiteEncloseParams,
-	) -> Self {
+	pub fn from_groups(packed: HallConnectedGroups, enclose: HallSuiteEncloseParams) -> Self {
 		let HallConnectedGroups {
 			confines,
 			halls,
@@ -241,11 +216,8 @@ impl HallEnclosedSuites {
 		}
 
 		let hall_bands = halls.hall_bands.clone();
-		let cell_by_id: HashMap<u32, usize> = cells
-			.iter()
-			.enumerate()
-			.map(|(i, c)| (c.id, i))
-			.collect();
+		let cell_by_id: HashMap<u32, usize> =
+			cells.iter().enumerate().map(|(i, c)| (c.id, i)).collect();
 		let group_of: HashMap<u32, usize> = groups
 			.iter()
 			.enumerate()
@@ -268,10 +240,7 @@ impl HallEnclosedSuites {
 				continue;
 			};
 			door_openings.insert(door.0.clone(), door.1.clone());
-			cell_openings
-				.entry(door.2)
-				.or_insert_with(Openings::new)
-				.insert(door.0, door.1);
+			cell_openings.entry(door.2).or_insert_with(Openings::new).insert(door.0, door.1);
 		}
 
 		let host = host_xz(&confines.bounds);
@@ -318,14 +287,7 @@ impl HallEnclosedSuites {
 			));
 		}
 
-		Self {
-			confines,
-			halls,
-			hall_width,
-			suites,
-			walls,
-			residual_within,
-		}
+		Self { confines, halls, hall_width, suites, walls, residual_within }
 	}
 
 	/// Pack + enclose in one step.
@@ -341,10 +303,7 @@ impl HallEnclosedSuites {
 }
 
 fn aabb2_to_aabb3(a: Aabb2d, y0: f32, y1: f32) -> Aabb3d {
-	Aabb3d::from_min_max(
-		Vec3::new(a.min.x, y0, a.min.y),
-		Vec3::new(a.max.x, y1, a.max.y),
-	)
+	Aabb3d::from_min_max(Vec3::new(a.min.x, y0, a.min.y), Vec3::new(a.max.x, y1, a.max.y))
 }
 
 /// One hall door for the whole group, authored on the best frontage cell.
@@ -385,9 +344,7 @@ fn group_hall_door(
 					Some((_, _, _, _, _, be, ba, bl)) => {
 						min_ext > be + EPS
 							|| ((min_ext - be).abs() <= EPS && area > ba + EPS)
-							|| ((min_ext - be).abs() <= EPS
-								&& (area - ba).abs() <= EPS
-								&& len > bl)
+							|| ((min_ext - be).abs() <= EPS && (area - ba).abs() <= EPS && len > bl)
 					}
 				};
 				if better {
@@ -440,23 +397,14 @@ struct WallSpan {
 
 fn inherit_host_boundaries(dst: &mut Openings, host: &Openings, cell: Aabb2d) {
 	for (id, o) in host.iter() {
-		if !matches!(
-			o.label,
-			OpeningLabel::Boundary | OpeningLabel::Exclusion
-		) {
+		if !matches!(o.label, OpeningLabel::Boundary | OpeningLabel::Exclusion) {
 			continue;
 		}
 		let omin = Vec3::from(o.bounds.min);
 		let omax = Vec3::from(o.bounds.max);
-		let ox = Aabb2d {
-			min: Vec2::new(omin.x, omin.z),
-			max: Vec2::new(omax.x, omax.z),
-		};
+		let ox = Aabb2d { min: Vec2::new(omin.x, omin.z), max: Vec2::new(omax.x, omax.z) };
 		// Keep if the opening overlaps this cell's inflated footprint.
-		let infl = Aabb2d {
-			min: cell.min - Vec2::splat(0.2),
-			max: cell.max + Vec2::splat(0.2),
-		};
+		let infl = Aabb2d { min: cell.min - Vec2::splat(0.2), max: cell.max + Vec2::splat(0.2) };
 		if ox.max.x < infl.min.x
 			|| ox.min.x > infl.max.x
 			|| ox.max.y < infl.min.y
@@ -492,10 +440,7 @@ fn enclosure_walls(
 		if hi - lo < EPS {
 			return;
 		}
-		let key = WallLineKey {
-			along_x,
-			mid_mm: (mid * 1000.0).round() as i32,
-		};
+		let key = WallLineKey { along_x, mid_mm: (mid * 1000.0).round() as i32 };
 		pending.entry(key).or_default().push(WallSpan { lo, hi, outward });
 	};
 
@@ -524,14 +469,7 @@ fn enclosure_walls(
 				if along_x { 0.5 * (lo + hi) } else { mid },
 				if along_x { mid } else { 0.5 * (lo + hi) },
 			);
-			push_span(
-				&mut pending,
-				along_x,
-				lo,
-				hi,
-				mid,
-				outward_toward(from, toward, along_x),
-			);
+			push_span(&mut pending, along_x, lo, hi, mid, outward_toward(from, toward, along_x));
 		}
 	}
 
@@ -553,14 +491,7 @@ fn enclosure_walls(
 				if along_x { mid } else { 0.5 * (lo + hi) },
 			);
 			let toward = 0.5 * (hall.min + hall.max);
-			push_span(
-				&mut pending,
-				along_x,
-				lo,
-				hi,
-				mid,
-				outward_toward(from, toward, along_x),
-			);
+			push_span(&mut pending, along_x, lo, hi, mid, outward_toward(from, toward, along_x));
 		}
 
 		// Host-perimeter boxing: wall faces on the primary-rect boundary unless
@@ -575,15 +506,9 @@ fn enclosure_walls(
 				continue;
 			}
 			let (lo, hi) = if along_x {
-				(
-					cell.bounds.min.x.max(flo),
-					cell.bounds.max.x.min(fhi),
-				)
+				(cell.bounds.min.x.max(flo), cell.bounds.max.x.min(fhi))
 			} else {
-				(
-					cell.bounds.min.y.max(flo),
-					cell.bounds.max.y.min(fhi),
-				)
+				(cell.bounds.min.y.max(flo), cell.bounds.max.y.min(fhi))
 			};
 			if hi - lo < EPS {
 				continue;
@@ -757,22 +682,12 @@ fn wall_strip_with_openings(
 	let mut cursor = 0.0_f32;
 	for (s_lo, s_hi, sill, header) in cuts {
 		if s_lo > cursor + EPS {
-			nodes.push(RectangularStripNode::new(
-				edge.start + tang * s_lo,
-				h,
-				thickness,
-				0.0,
-			));
+			nodes.push(RectangularStripNode::new(edge.start + tang * s_lo, h, thickness, 0.0));
 			insets.push(None);
 			cursor = s_lo;
 		}
 		let s_hi = s_hi.max(cursor + EPS);
-		nodes.push(RectangularStripNode::new(
-			edge.start + tang * s_hi,
-			h,
-			thickness,
-			0.0,
-		));
+		nodes.push(RectangularStripNode::new(edge.start + tang * s_hi, h, thickness, 0.0));
 		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
 		insets.push(Some(RectInset::new(sill, header, jamb, jamb)));
 		cursor = s_hi;
@@ -789,35 +704,20 @@ fn wall_strip_with_openings(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec2;
 	use crate::usage_areas::plan_cells::PlanCell;
+	use bevy_math::Vec2;
 
 	#[test]
 	fn hall_door_prefers_fatter_frontage_cell() {
 		// Fat seed + thin long strip both touch the hall. Door must land on the
 		// fat cell even though the strip has a longer hall edge.
 		let cells = vec![
-			PlanCell::new(
-				0,
-				Aabb2d {
-					min: Vec2::new(0.0, 0.0),
-					max: Vec2::new(6.0, 5.0),
-				},
-			),
-			PlanCell::new(
-				1,
-				Aabb2d {
-					min: Vec2::new(6.0, 0.0),
-					max: Vec2::new(8.0, 9.0),
-				},
-			),
+			PlanCell::new(0, Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(6.0, 5.0) }),
+			PlanCell::new(1, Aabb2d { min: Vec2::new(6.0, 0.0), max: Vec2::new(8.0, 9.0) }),
 		];
-		let halls = [Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(8.0, 0.0),
-		}];
-		let door = group_hall_door(&[0, 1], &cells, &halls, 0, 0.0, 3.0, "test", 1.0)
-			.expect("door");
+		let halls = [Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(8.0, 0.0) }];
+		let door =
+			group_hall_door(&[0, 1], &cells, &halls, 0, 0.0, 3.0, "test", 1.0).expect("door");
 		assert_eq!(door.2, 0, "door should prefer deep cell 0, got cell {}", door.2);
 	}
 }

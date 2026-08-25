@@ -84,10 +84,8 @@ impl LesHallesUsagePlan for LesHallesLivableUsage {
 					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
 				Err(FitError::TooSmall { .. }) => {
-					residual_within.push(FillRegion::new(
-						SpaceKind::ExternalSpace,
-						region.confines,
-					));
+					residual_within
+						.push(FillRegion::new(SpaceKind::ExternalSpace, region.confines));
 				}
 				Err(err) => return Err(err),
 			}
@@ -99,10 +97,7 @@ impl LesHallesUsagePlan for LesHallesLivableUsage {
 
 		Ok((
 			Self { areas, party_walls },
-			FillableRegions {
-				within: residual_within,
-				atop: regions.atop,
-			},
+			FillableRegions { within: residual_within, atop: regions.atop },
 		))
 	}
 }
@@ -205,9 +200,7 @@ fn fill_strip_bays(
 
 	let passages = collect_passages_along(&confines.openings, along_x, min, along);
 	if passages.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "no passage",
-		});
+		return Err(FitError::TooSmall { reason: "no passage" });
 	}
 
 	let min_bay = sample_min_bay_along(confines, noise, depth, along);
@@ -219,17 +212,9 @@ fn sample_min_bay_along(confines: &Confines, noise: NoiseParams, depth: f32, alo
 	let area_driven = (TARGET_BAY_AREA / depth.max(EPS)).clamp(MIN_BAY_ALONG, MAX_BAY_ALONG);
 	let cfg = NoiseConfig::new(noise);
 	let c = confines.center();
-	let sampled = cfg.sample_range_f32_4d(
-		MIN_BAY_ALONG,
-		MAX_BAY_ALONG,
-		c.x,
-		c.y,
-		c.z,
-		SALT_BAY_ALONG,
-	);
-	sampled
-		.max(area_driven)
-		.clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
+	let sampled =
+		cfg.sample_range_f32_4d(MIN_BAY_ALONG, MAX_BAY_ALONG, c.x, c.y, c.z, SALT_BAY_ALONG);
+	sampled.max(area_driven).clamp(MIN_BAY_ALONG, along.max(MIN_BAY_ALONG))
 }
 
 fn rla_params(strategy: RectLivableStrategy) -> RectangularLivableAreaParameterized {
@@ -289,18 +274,9 @@ fn fit_areas_covering_strip(
 			Err(FitError::TooSmall { .. }) => {
 				if let Some((prev_bay, prev_area)) = fitted.last_mut() {
 					prev_bay.merge_with(bay);
-					let (area, nested) = fit_rla_bay(
-						confines,
-						along_x,
-						strip_min,
-						strip_max,
-						prev_bay,
-						noise,
-						i,
-					)
-					.map_err(|_| FitError::TooSmall {
-						reason: "areas cover",
-					})?;
+					let (area, nested) =
+						fit_rla_bay(confines, along_x, strip_min, strip_max, prev_bay, noise, i)
+							.map_err(|_| FitError::TooSmall { reason: "areas cover" })?;
 					residual_within.extend(nested.within);
 					*prev_area = area;
 				} else {
@@ -314,18 +290,9 @@ fn fit_areas_covering_strip(
 	if let Some(tail) = carry {
 		if let Some((prev_bay, prev_area)) = fitted.last_mut() {
 			prev_bay.merge_with(tail);
-			let (area, nested) = fit_rla_bay(
-				confines,
-				along_x,
-				strip_min,
-				strip_max,
-				prev_bay,
-				noise,
-				0,
-			)
-			.map_err(|_| FitError::TooSmall {
-				reason: "areas cover",
-			})?;
+			let (area, nested) =
+				fit_rla_bay(confines, along_x, strip_min, strip_max, prev_bay, noise, 0)
+					.map_err(|_| FitError::TooSmall { reason: "areas cover" })?;
 			residual_within.extend(nested.within);
 			*prev_area = area;
 		} else {
@@ -351,10 +318,7 @@ fn fit_areas_covering_strip(
 	Ok((
 		fitted.into_iter().map(|(_, area)| area).collect(),
 		party_walls,
-		FillableRegions {
-			within: residual_within,
-			atop: Vec::new(),
-		},
+		FillableRegions { within: residual_within, atop: Vec::new() },
 	))
 }
 
@@ -391,9 +355,7 @@ fn fit_rla_bay(
 		fp.x * fp.y
 	};
 	let passages = bay.passage_ids.len();
-	let mut last = FitError::TooSmall {
-		reason: "rla_bay_exhausted",
-	};
+	let mut last = FitError::TooSmall { reason: "rla_bay_exhausted" };
 	for strategy in les_halles_strategies(area_m2, passages) {
 		let program = bay_program_for_strategy(area_m2, passages, strategy);
 		match RectangularLivableArea::fit_with_params(
@@ -462,10 +424,7 @@ fn collect_passages_along(
 		if c < -0.5 || c > along + 0.5 {
 			continue;
 		}
-		out.push(PassageAlong {
-			id: id.clone(),
-			center: c.clamp(0.0, along),
-		});
+		out.push(PassageAlong { id: id.clone(), center: c.clamp(0.0, along) });
 	}
 	out.sort_by(|a, b| {
 		a.center
@@ -605,18 +564,8 @@ fn noisy_cross_strip_party_walls(
 			if hi - lo + EPS < MIN_CROSS_STRIP_SPAN {
 				continue;
 			}
-			let y0 = a
-				.confines
-				.bounds
-				.min
-				.y
-				.max(b.confines.bounds.min.y);
-			let y1 = a
-				.confines
-				.bounds
-				.max
-				.y
-				.min(b.confines.bounds.max.y);
+			let y0 = a.confines.bounds.min.y.max(b.confines.bounds.min.y);
+			let y1 = a.confines.bounds.max.y.min(b.confines.bounds.max.y);
 			let height = y1 - y0;
 			if height < EPS {
 				continue;
@@ -664,26 +613,16 @@ fn solid_party_wall(start: Vec3, end: Vec3, height: f32) -> Option<ClippedRectan
 mod tests {
 	use super::*;
 
-#[test]
+	#[test]
 	fn partition_merges_short_voronoi_cells() {
 		let passages = vec![
-			PassageAlong {
-				id: OpeningId::new("a"),
-				center: 2.0,
-			},
-			PassageAlong {
-				id: OpeningId::new("b"),
-				center: 4.0,
-			},
-			PassageAlong {
-				id: OpeningId::new("c"),
-				center: 12.0,
-			},
+			PassageAlong { id: OpeningId::new("a"), center: 2.0 },
+			PassageAlong { id: OpeningId::new("b"), center: 4.0 },
+			PassageAlong { id: OpeningId::new("c"), center: 12.0 },
 		];
 		let bays = partition_bays_for_passages(&passages, 16.0, 5.0);
 		assert!(bays.len() < 3);
 		assert!((bays.first().unwrap().along0).abs() < EPS);
 		assert!((bays.last().unwrap().along1 - 16.0).abs() < EPS);
 	}
-
-	}
+}

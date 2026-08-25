@@ -107,10 +107,7 @@ impl PitchedRoofParams {
 		let mut best: Vec<(OpeningFace, f32, OpeningId, Opening)> = Vec::new();
 
 		for (id, opening) in self.openings.iter() {
-			if !matches!(
-				opening.label,
-				OpeningLabel::Passage | OpeningLabel::Aperture
-			) {
+			if !matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
 				continue;
 			}
 			let Some(face) = best_face_for_bounds(&opening.bounds, &self.halves, &faces) else {
@@ -139,29 +136,18 @@ impl PitchedRoofParams {
 					let clip = centered_pitch_clip(roof_half, u, v, width, height);
 					let orientation = RoofHalf::outward_orientation(roof_half.eave_line);
 					let mapped = mapped_from_outside_clip(&clip, orientation);
-					pitch[half] = Some(PitchOpeningMap {
-						half,
-						clip,
-						id,
-						opening,
-						mapped,
-					});
+					pitch[half] = Some(PitchOpeningMap { half, clip, id, opening, mapped });
 				}
 				OpeningFace::GableEnd(end) => {
 					let (e_pos, e_neg, ridge) = gable_end_corners(&self.halves, end);
-					let (width, height) = opening_dims_on_gable(&opening.bounds, e_pos, e_neg, ridge);
+					let (width, height) =
+						opening_dims_on_gable(&opening.bounds, e_pos, e_neg, ridge);
 					let clip = centered_gable_clip(e_pos, e_neg, ridge, width, height);
 					let (eave_x, _) = RoofHalf::eave_frame(self.halves[0].eave_line);
 					let outward = if end == 0 { -eave_x } else { eave_x };
 					let orientation = Vec2::new(outward.x, outward.z);
 					let mapped = mapped_from_outside_clip(&clip, orientation);
-					gable[end] = Some(GableOpeningMap {
-						end,
-						clip,
-						id,
-						opening,
-						mapped,
-					});
+					gable[end] = Some(GableOpeningMap { end, clip, id, opening, mapped });
 				}
 			}
 		}
@@ -345,8 +331,5 @@ pub(crate) fn centered_gable_clip(
 /// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; map wants looking **out**.
 fn mapped_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> MappedOpening {
 	debug_assert!(clip.len() >= 4);
-	MappedOpening::new(
-		MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]),
-		orientation,
-	)
+	MappedOpening::new(MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]), orientation)
 }

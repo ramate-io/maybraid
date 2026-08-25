@@ -55,11 +55,7 @@ impl TessellatedTrianglePanel {
 	/// [`PanelNode`] with plane placement, or [`None`] if degenerate.
 	pub fn panel_node(&self) -> Option<PanelNode> {
 		let (tri, placement) = self.panel_plane()?;
-		Some(PanelNode::new(
-			self.style,
-			PanelGeometry::tessellated_triangle(tri),
-			placement,
-		))
+		Some(PanelNode::new(self.style, PanelGeometry::tessellated_triangle(tri), placement))
 	}
 }
 

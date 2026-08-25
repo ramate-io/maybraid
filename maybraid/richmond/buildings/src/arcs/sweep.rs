@@ -45,15 +45,7 @@ impl ArcSweep {
 		} else {
 			Vec::new()
 		};
-		Self {
-			center_xz,
-			radius,
-			storey_height,
-			sweep_degrees,
-			start_yaw,
-			style,
-			partitions,
-		}
+		Self { center_xz, radius, storey_height, sweep_degrees, start_yaw, style, partitions }
 	}
 
 	pub fn rough_stone(

@@ -11,7 +11,9 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::clipped_quad_panel::ClippedQuadPanel;
-use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId};
+use crate::paneling::panel_complex::{
+	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
+};
 
 /// One flushed region of a [`ClippedRuledStrip`].
 #[derive(Debug, Clone, PartialEq)]
@@ -134,8 +136,7 @@ impl ClippedRuledStrip {
 	) -> &mut Self {
 		let rail_a = rail_a.into();
 		let rail_b = rail_b.into();
-		let clip: Option<Vec<Vec3>> =
-			clip.map(|c| c.into_iter().map(Into::into).collect());
+		let clip: Option<Vec<Vec3>> = clip.map(|c| c.into_iter().map(Into::into).collect());
 
 		if self.authored.is_empty() {
 			self.authored.push((rail_a, rail_b));
@@ -149,15 +150,8 @@ impl ClippedRuledStrip {
 			None => self.append_solid_bay(prev_a, rail_a, prev_b, rail_b),
 			Some(c) => {
 				self.flush_open_solid();
-				let q = ClippedQuadPanel::new(
-					self.style,
-					prev_a,
-					rail_a,
-					prev_b,
-					rail_b,
-					c,
-				)
-				.with_joint_policy(self.joint_policy);
+				let q = ClippedQuadPanel::new(self.style, prev_a, rail_a, prev_b, rail_b, c)
+					.with_joint_policy(self.joint_policy);
 				self.pieces.push(ClippedStripPiece::Clipped(q));
 				self
 			}
@@ -250,28 +244,15 @@ mod tests {
 	use super::*;
 
 	fn rails_3() -> (Vec<Vec3>, Vec<Vec3>) {
-		let a = vec![
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = vec![
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 4.0),
-		];
+		let a = vec![Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let b = vec![Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0), Vec3::new(2.0, 0.0, 4.0)];
 		(a, b)
 	}
 
 	#[test]
 	fn all_solid_one_piece() {
 		let (a, b) = rails_3();
-		let strip = ClippedRuledStrip::from_lines(
-			PanelStyle::RoughStonework,
-			a,
-			b,
-			[None, None],
-		);
+		let strip = ClippedRuledStrip::from_lines(PanelStyle::RoughStonework, a, b, [None, None]);
 		assert_eq!(strip.pieces().len(), 1);
 		assert!(matches!(strip.pieces()[0], ClippedStripPiece::Solid(_)));
 		assert_eq!(strip.pieces()[0].as_complex().triangles().len(), 4); // 2 bays × 2
@@ -287,12 +268,8 @@ mod tests {
 			Vec3::new(1.5, 0.0, 1.5),
 			Vec3::new(0.5, 0.0, 1.5),
 		];
-		let strip = ClippedRuledStrip::from_lines(
-			PanelStyle::RoughStonework,
-			a,
-			b,
-			[Some(clip), None],
-		);
+		let strip =
+			ClippedRuledStrip::from_lines(PanelStyle::RoughStonework, a, b, [Some(clip), None]);
 		assert_eq!(strip.pieces().len(), 2);
 		assert!(matches!(strip.pieces()[0], ClippedStripPiece::Clipped(_)));
 		assert!(matches!(strip.pieces()[1], ClippedStripPiece::Solid(_)));
@@ -307,12 +284,7 @@ mod tests {
 		via.add_pair(a[1], b[1], None::<Vec<Vec3>>);
 		via.add_pair(a[2], b[2], None::<Vec<Vec3>>);
 		via.finish();
-		let bulk = ClippedRuledStrip::from_lines(
-			PanelStyle::RoughStonework,
-			a,
-			b,
-			[None, None],
-		);
+		let bulk = ClippedRuledStrip::from_lines(PanelStyle::RoughStonework, a, b, [None, None]);
 		assert_eq!(via.pieces().len(), bulk.pieces().len());
 		assert_eq!(
 			via.pieces()[0].as_complex().triangles().len(),

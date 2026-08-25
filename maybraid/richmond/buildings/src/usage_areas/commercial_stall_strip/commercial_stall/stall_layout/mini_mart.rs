@@ -105,9 +105,7 @@ impl MiniMartRegions {
 		let host = aabb3_to_plan(host3, PlanAxes::XZ);
 		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "mini mart passage",
-			});
+			return Err(FitError::TooSmall { reason: "mini mart passage" });
 		}
 
 		let mut clearances = PassageClearance::bands_std(host, &passage_faces);
@@ -139,46 +137,27 @@ impl MiniMartRegions {
 			door_id: OpeningId::scoped(SCOPE, "office_door", "0"),
 		}
 		.pack(host3, host, &clearances)
-		.ok_or(FitError::TooSmall {
-			reason: "mini mart office",
-		})?;
-		crate::usage_areas::clearance::commit_door_clear(
-			&mut clearances,
-			enclosed.door_clear,
-			0.0,
-		);
+		.ok_or(FitError::TooSmall { reason: "mini mart office" })?;
+		crate::usage_areas::clearance::commit_door_clear(&mut clearances, enclosed.door_clear, 0.0);
 		let office2 = enclosed.room;
 
 		let register2 = self
 			.pack_register(host, &passage_faces, &clearances, office2)
-			.ok_or(FitError::TooSmall {
-				reason: "mini mart register",
-			})?;
+			.ok_or(FitError::TooSmall { reason: "mini mart register" })?;
 
 		let aisles2 = self
 			.pack_aisles(host, &clearances, office2, register2)
-			.ok_or(FitError::TooSmall {
-				reason: "mini mart aisles",
-			})?;
+			.ok_or(FitError::TooSmall { reason: "mini mart aisles" })?;
 
 		let shelves = self.pack_shelves(host, &clearances, office2, register2, &aisles2);
 
 		Ok(MiniMartPacked {
 			office: plan_to_aabb3(host3, office2, PlanAxes::XZ),
 			register: plan_to_aabb3(host3, register2, PlanAxes::XZ),
-			aisles: aisles2
-				.into_iter()
-				.map(|a| plan_to_aabb3(host3, a, PlanAxes::XZ))
-				.collect(),
-			shelves: shelves
-				.into_iter()
-				.map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ))
-				.collect(),
+			aisles: aisles2.into_iter().map(|a| plan_to_aabb3(host3, a, PlanAxes::XZ)).collect(),
+			shelves: shelves.into_iter().map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ)).collect(),
 			office_walls: enclosed.walls,
-			office_door: MiniMartOfficeDoor {
-				id: enclosed.door_id,
-				opening: enclosed.door,
-			},
+			office_door: MiniMartOfficeDoor { id: enclosed.door_id, opening: enclosed.door },
 		})
 	}
 
@@ -254,7 +233,8 @@ impl MiniMartRegions {
 				break;
 			};
 			let grown = seed.grow_into(host, &hard);
-			let Some(extra) = clamp_min_size2(grown, Vec2::splat(MINI_MART_AISLES_EXTRA_MIN)) else {
+			let Some(extra) = clamp_min_size2(grown, Vec2::splat(MINI_MART_AISLES_EXTRA_MIN))
+			else {
 				break;
 			};
 			if !extra.is_clear_of(&hard) {
@@ -282,10 +262,8 @@ impl MiniMartRegions {
 
 		// Sampled shelf choices first.
 		for spec in &self.shelves {
-			let depth = spec
-				.shelf
-				.depth
-				.clamp(MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_DEPTH_MAX);
+			let depth =
+				spec.shelf.depth.clamp(MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_DEPTH_MAX);
 			let choice = OptionalFaceBand {
 				place: spec.shelf.place,
 				along: spec.shelf.along,
@@ -312,24 +290,17 @@ impl MiniMartRegions {
 				.shelves
 				.iter()
 				.find(|s| PlanHost::same_wall(s.face, face))
-				.map(|s| {
-					s.shelf
-						.depth
-						.clamp(MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_DEPTH_MAX)
-				})
+				.map(|s| s.shelf.depth.clamp(MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_DEPTH_MAX))
 				.unwrap_or(0.75);
 			// Recompute free segments as shelves are accepted.
 			for _ in 0..8 {
-				let Some((seg0, seg1)) = face.longest_free_segment(&hard, MINI_MART_SHELF_ALONG_MIN)
+				let Some((seg0, seg1)) =
+					face.longest_free_segment(&hard, MINI_MART_SHELF_ALONG_MIN)
 				else {
 					break;
 				};
 				let avail = seg1 - seg0;
-				let seg_face = PlanOpeningFace {
-					along0: seg0,
-					along1: seg1,
-					..face
-				};
+				let seg_face = PlanOpeningFace { along0: seg0, along1: seg1, ..face };
 				let Some(band) = seg_face.band(host, avail, depth, 0.5) else {
 					break;
 				};
@@ -348,10 +319,6 @@ impl MiniMartRegions {
 }
 
 fn inset_face(face: PlanOpeningFace, depth: f32) -> PlanOpeningFace {
-	let thru = if face.inward_positive {
-		face.thru + depth
-	} else {
-		face.thru - depth
-	};
+	let thru = if face.inward_positive { face.thru + depth } else { face.thru - depth };
 	PlanOpeningFace { thru, ..face }
 }

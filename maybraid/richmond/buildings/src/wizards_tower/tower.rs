@@ -165,11 +165,7 @@ impl LodScene for WizardsTowerColumn {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = self
 			.floors
 			.iter()

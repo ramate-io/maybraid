@@ -30,10 +30,7 @@ pub struct BuildingStructuralLodProbe {
 
 impl Default for BuildingStructuralLodProbe {
 	fn default() -> Self {
-		Self {
-			footprints: Vec::new(),
-			high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS,
-		}
+		Self { footprints: Vec::new(), high_outside_meters: STRUCTURAL_HIGH_OUTSIDE_METERS }
 	}
 }
 
@@ -46,10 +43,7 @@ impl BuildingStructuralLodProbe {
 	}
 
 	pub fn from_aabb3d_xz(min: Vec3, max: Vec3) -> Self {
-		Self::new([Aabb2d {
-			min: Vec2::new(min.x, min.z),
-			max: Vec2::new(max.x, max.z),
-		}])
+		Self::new([Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }])
 	}
 
 	pub fn with_high_outside_meters(mut self, meters: f32) -> Self {
@@ -93,10 +87,7 @@ impl BuildingStructuralLodProbe {
 		viewer_world: Vec3,
 		host_global: &GlobalTransform,
 	) -> LodSceneLevel {
-		let viewer_local = host_global
-			.affine()
-			.inverse()
-			.transform_point3(viewer_world);
+		let viewer_local = host_global.affine().inverse().transform_point3(viewer_world);
 		self.level_for_local(viewer_local)
 	}
 
@@ -169,11 +160,7 @@ pub fn distance_outside_footprints(p: Vec3, footprints: &[Aabb2d]) -> f32 {
 pub fn update_building_structural_host_levels(
 	viewer: Query<&lod::LodNodePose, With<lod::LodViewer>>,
 	mut hosts: Query<
-		(
-			&BuildingStructuralLodProbe,
-			&GlobalTransform,
-			&mut LodSceneLevel,
-		),
+		(&BuildingStructuralLodProbe, &GlobalTransform, &mut LodSceneLevel),
 		With<LodSceneHost>,
 	>,
 ) {

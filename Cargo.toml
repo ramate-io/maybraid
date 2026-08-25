@@ -9,6 +9,11 @@ members = [
   "maybraid/richmond/buildings",
   "maybraid/richmond/buildings-playground",
 
+  "maybraid/menu/components",
+  "maybraid/menu/character-ui-menu-renderer",
+  "maybraid/menu/screens",
+  "maybraid/menu/playground",
+
   "maybraid/scene-ref",
   "maybraid/material-ref",
 
@@ -198,6 +203,11 @@ marazion-watersheds = { path = "maybraid/durham/marazion" }
 richmond-building-components = { path = "maybraid/richmond/building-components" }
 richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
+
+menu-components = { path = "maybraid/menu/components" }
+maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }
+menu-screens = { path = "maybraid/menu/screens" }
+menu-playground = { path = "maybraid/menu/playground" }
 
 scene-ref = { path = "maybraid/scene-ref" }
 material-ref = { path = "maybraid/material-ref" }

@@ -89,12 +89,7 @@ pub struct TubeFaces {
 }
 
 impl TubeFaces {
-	pub const ALL: Self = Self {
-		floor: true,
-		ceiling: true,
-		left: true,
-		right: true,
-	};
+	pub const ALL: Self = Self { floor: true, ceiling: true, left: true, right: true };
 
 	pub fn without_floor(mut self) -> Self {
 		self.floor = false;
@@ -218,12 +213,15 @@ impl Tube {
 			bottom_right.clone(),
 			floor_clips,
 		);
-		let ceiling =
-			ClippedRuledStrip::from_lines(style, top_left.clone(), top_right.clone(), ceiling_clips);
+		let ceiling = ClippedRuledStrip::from_lines(
+			style,
+			top_left.clone(),
+			top_right.clone(),
+			ceiling_clips,
+		);
 		let left =
 			ClippedRuledStrip::from_lines(style, bottom_left.clone(), top_left.clone(), left_clips);
-		let right =
-			ClippedRuledStrip::from_lines(style, bottom_right, top_right, right_clips);
+		let right = ClippedRuledStrip::from_lines(style, bottom_right, top_right, right_clips);
 
 		Self {
 			style,
@@ -372,9 +370,7 @@ fn corners_at_framed(
 ) -> TubeCorners {
 	let node = &nodes[index];
 	let frame = path_frame::path_frame(positions, index, node.roll);
-	let top_middle = node
-		.top_middle
-		.unwrap_or_else(|| node.bottom_middle + frame.up * node.height);
+	let top_middle = node.top_middle.unwrap_or_else(|| node.bottom_middle + frame.up * node.height);
 	TubeCorners {
 		bottom_left: node.bottom_middle - frame.right * node.bottom_left_width,
 		bottom_right: node.bottom_middle + frame.right * node.bottom_right_width,
@@ -393,23 +389,13 @@ mod tests {
 	}
 
 	fn level_node(z: f32, half_w: f32, height: f32) -> TubeCrossSectionNode {
-		TubeCrossSectionNode::new(
-			Vec3::new(0.0, 0.0, z),
-			half_w,
-			half_w,
-			height,
-			half_w,
-			half_w,
-		)
+		TubeCrossSectionNode::new(Vec3::new(0.0, 0.0, z), half_w, half_w, height, half_w, half_w)
 	}
 
 	#[test]
 	fn level_straight_cardinal_corners() {
-		let nodes = vec![
-			level_node(0.0, 1.0, 2.0),
-			level_node(2.0, 1.0, 2.0),
-			level_node(4.0, 1.0, 2.0),
-		];
+		let nodes =
+			vec![level_node(0.0, 1.0, 2.0), level_node(2.0, 1.0, 2.0), level_node(4.0, 1.0, 2.0)];
 		let tube = Tube::from_nodes(PanelStyle::RoughStonework, nodes);
 		assert_eq!(tube.nodes().len(), 3);
 
@@ -420,10 +406,7 @@ mod tests {
 		assert!(approx_eq(c0.top_right, Vec3::new(1.0, 2.0, 0.0)));
 
 		assert_eq!(tube.floor().pieces().len(), 1);
-		assert!(matches!(
-			tube.floor().pieces()[0],
-			ClippedStripPiece::Solid(_)
-		));
+		assert!(matches!(tube.floor().pieces()[0], ClippedStripPiece::Solid(_)));
 		// 2 bays × 2 triangles
 		assert_eq!(tube.floor().pieces()[0].as_complex().triangles().len(), 4);
 		assert_eq!(tube.ceiling().pieces().len(), 1);
@@ -441,12 +424,10 @@ mod tests {
 		];
 		let frame = frame_at(&nodes, 1);
 		assert!(frame.up.z.abs() > 0.1, "up should tilt with pitch, got {:?}", frame.up);
+		assert!(frame.up.x.abs() < 1e-4, "pitch in YZ should keep up.x ~ 0, got {:?}", frame.up);
 		assert!(
-			frame.up.x.abs() < 1e-4,
-			"pitch in YZ should keep up.x ~ 0, got {:?}",
-			frame.up
+			approx_eq(frame.right, Vec3::X) || approx_eq(frame.right, Vec3::new(1.0, 0.0, 0.0))
 		);
-		assert!(approx_eq(frame.right, Vec3::X) || approx_eq(frame.right, Vec3::new(1.0, 0.0, 0.0)));
 		// right stays horizontal for a pure YZ pitch
 		assert!(frame.right.y.abs() < 1e-4);
 	}
@@ -484,10 +465,7 @@ mod tests {
 	#[test]
 	#[cfg(not(debug_assertions))]
 	fn short_input_yields_empty() {
-		let tube = Tube::from_nodes(
-			PanelStyle::RoughStonework,
-			[level_node(0.0, 1.0, 1.0)],
-		);
+		let tube = Tube::from_nodes(PanelStyle::RoughStonework, [level_node(0.0, 1.0, 1.0)]);
 		assert!(tube.nodes().is_empty());
 		assert!(tube.floor().pieces().is_empty());
 	}
@@ -496,10 +474,7 @@ mod tests {
 	#[cfg(debug_assertions)]
 	#[should_panic(expected = "at least 2 stations")]
 	fn short_input_debug_asserts() {
-		let _ = Tube::from_nodes(
-			PanelStyle::RoughStonework,
-			[level_node(0.0, 1.0, 1.0)],
-		);
+		let _ = Tube::from_nodes(PanelStyle::RoughStonework, [level_node(0.0, 1.0, 1.0)]);
 	}
 
 	#[test]
@@ -520,9 +495,7 @@ mod tests {
 
 		let nodes = [level_node(0.0, 1.0, 1.0), level_node(2.0, 1.0, 1.0)];
 		let full = Tube::from_nodes(PanelStyle::RoughStonework, nodes);
-		let open = full
-			.clone()
-			.with_faces(TubeFaces::ALL.without_ceiling().without_floor());
+		let open = full.clone().with_faces(TubeFaces::ALL.without_ceiling().without_floor());
 		assert!(open.faces().floor == false && open.faces().ceiling == false);
 		assert!(open.faces().left && open.faces().right);
 		// Strips still authored.

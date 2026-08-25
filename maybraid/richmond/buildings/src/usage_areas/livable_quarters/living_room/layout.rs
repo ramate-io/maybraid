@@ -6,8 +6,7 @@ use procedural_common::NoiseParams;
 use crate::fit::{Confines, FitError};
 use crate::placer::{
 	init_host_with, pack_kinds, CommitEffect, InitHostOpts, KindSpec, PackKnobs, Predicate,
-	ProgramTier, ProposeKnobs,
-	SoftGoalRole,
+	ProgramTier, ProposeKnobs, SoftGoalRole,
 };
 
 pub const MIN_AREA: f32 = 3.0 * 3.0;
@@ -104,16 +103,9 @@ impl LivingRoomRegions {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<LivingRoomPacked, FitError> {
-		let mut host = init_host_with(
-			confines,
-			InitHostOpts {
-				passage_wall_lip: true,
-			},
-		)?;
+		let mut host = init_host_with(confines, InitHostOpts { passage_wall_lip: true })?;
 		if host.room_area + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "living room",
-			});
+			return Err(FitError::TooSmall { reason: "living room" });
 		}
 		let mut packed = LivingRoomPacked::default();
 		let placed = pack_kinds(
@@ -136,9 +128,7 @@ impl LivingRoomRegions {
 			}
 		}
 		if packed.primary_seating.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "living room seating",
-			});
+			return Err(FitError::TooSmall { reason: "living room seating" });
 		}
 		Ok(packed)
 	}

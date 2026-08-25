@@ -38,9 +38,7 @@ fn default_has_ceiling_no_floor_no_openings() -> anyhow::Result<()> {
 	}
 	assert!(t.floor().is_none());
 	assert!(t.openings().is_empty());
-	let ceiling = t
-		.ceiling()
-		.ok_or_else(|| anyhow::anyhow!("default solid ceiling missing"))?;
+	let ceiling = t.ceiling().ok_or_else(|| anyhow::anyhow!("default solid ceiling missing"))?;
 	assert!(!ceiling.pieces().is_empty());
 	Ok(())
 }
@@ -64,13 +62,8 @@ fn can_omit_ceiling_and_cut_floor_with_shaft() -> anyhow::Result<()> {
 		.openings(openings)
 		.build();
 	assert!(t.ceiling().is_none());
-	let floor = t
-		.floor()
-		.ok_or_else(|| anyhow::anyhow!("floor present expected"))?;
-	assert!(matches!(
-		floor.pieces()[0],
-		ClippedStripPiece::Clipped(_)
-	));
+	let floor = t.floor().ok_or_else(|| anyhow::anyhow!("floor present expected"))?;
+	assert!(matches!(floor.pieces()[0], ClippedStripPiece::Clipped(_)));
 	Ok(())
 }
 
@@ -83,9 +76,7 @@ fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
 			Trazaloid::side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
 		))
 		.build();
-	let floor = t
-		.floor()
-		.ok_or_else(|| anyhow::anyhow!("solid floor expected"))?;
+	let floor = t.floor().ok_or_else(|| anyhow::anyhow!("solid floor expected"))?;
 	assert!(matches!(floor.pieces()[0], ClippedStripPiece::Solid(_)));
 	Ok(())
 }
@@ -97,14 +88,8 @@ fn south_door_makes_clipped_lower_piece() -> anyhow::Result<()> {
 		Trazaloid::side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
 	));
 	let t = Trazaloid::new(params);
-	assert!(matches!(
-		t.lower_walls()[2].pieces()[0],
-		ClippedStripPiece::Clipped(_)
-	));
-	assert!(matches!(
-		t.lower_walls()[0].pieces()[0],
-		ClippedStripPiece::Solid(_)
-	));
+	assert!(matches!(t.lower_walls()[2].pieces()[0], ClippedStripPiece::Clipped(_)));
+	assert!(matches!(t.lower_walls()[0].pieces()[0], ClippedStripPiece::Solid(_)));
 	Ok(())
 }
 
@@ -136,14 +121,9 @@ fn aperture_does_not_map_or_clip() -> anyhow::Result<()> {
 	let mut aperture = Trazaloid::side_passage_opening(TrazaloidSide::North, footprint, 1.5, 1.2);
 	aperture.label = OpeningLabel::Aperture;
 	openings.insert("win", aperture);
-	let t = TrazaloidParams::default()
-		.openings(openings)
-		.build();
+	let t = TrazaloidParams::default().openings(openings).build();
 	assert!(t.mapped_opening(&OpeningId::new("win")).is_none());
-	assert!(matches!(
-		t.lower_walls()[0].pieces()[0],
-		ClippedStripPiece::Solid(_)
-	));
+	assert!(matches!(t.lower_walls()[0].pieces()[0], ClippedStripPiece::Solid(_)));
 	Ok(())
 }
 

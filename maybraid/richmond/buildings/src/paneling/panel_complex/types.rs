@@ -78,11 +78,9 @@ impl PanelTriangle {
 	/// Vertex opposite an undirected edge, if that edge is on this triangle.
 	pub fn opposite(self, u: PanelPointId, v: PanelPointId) -> Option<PanelPointId> {
 		let key = canonical_edge(u, v)?;
-		for &(a, b, opp) in &[
-			(self.a, self.b, self.c),
-			(self.b, self.c, self.a),
-			(self.c, self.a, self.b),
-		] {
+		for &(a, b, opp) in
+			&[(self.a, self.b, self.c), (self.b, self.c, self.a), (self.c, self.a, self.b)]
+		{
 			if canonical_edge(a, b) == Some(key) {
 				return Some(opp);
 			}

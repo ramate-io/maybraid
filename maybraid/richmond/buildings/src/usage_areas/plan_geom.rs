@@ -17,19 +17,13 @@ pub use super::plan_access::{DOOR_WIDTH, MIN_ROOM};
 pub fn host_xz(bounds: &Aabb3d) -> Aabb2d {
 	let min = Vec3::from(bounds.min);
 	let max = Vec3::from(bounds.max);
-	Aabb2d {
-		min: Vec2::new(min.x, min.z),
-		max: Vec2::new(max.x, max.z),
-	}
+	Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) }
 }
 
 /// Lift an XZ rect into confines at height `[y0, y1]`.
 pub fn confines_from_xz(xz: Aabb2d, y0: f32, y1: f32, roll: f32, openings: &Openings) -> Confines {
 	Confines::new(
-		Aabb3d::from_min_max(
-			Vec3::new(xz.min.x, y0, xz.min.y),
-			Vec3::new(xz.max.x, y1, xz.max.y),
-		),
+		Aabb3d::from_min_max(Vec3::new(xz.min.x, y0, xz.min.y), Vec3::new(xz.max.x, y1, xz.max.y)),
 		roll,
 		openings.clone(),
 	)
@@ -37,10 +31,7 @@ pub fn confines_from_xz(xz: Aabb2d, y0: f32, y1: f32, roll: f32, openings: &Open
 
 /// Deterministic per-cell noise offset.
 pub fn noise_for_cell(noise: NoiseParams, cell: i32) -> NoiseParams {
-	NoiseParams {
-		seed: noise.seed.wrapping_add(cell.wrapping_mul(97)),
-		..noise
-	}
+	NoiseParams { seed: noise.seed.wrapping_add(cell.wrapping_mul(97)), ..noise }
 }
 
 /// Approximate equality for plan AABBs (entry carve bookkeeping).
@@ -85,10 +76,7 @@ pub fn connecting_passage(
 			Vec3::new(mid + half_d, y0 + door_h, door_hi),
 		)
 	};
-	Some((
-		OpeningId::scoped(scope, kind, id_tag),
-		Opening::new(bounds, OpeningLabel::Passage),
-	))
+	Some((OpeningId::scoped(scope, kind, id_tag), Opening::new(bounds, OpeningLabel::Passage)))
 }
 
 /// South-face synthetic passage so a rect always has a port for open packing.

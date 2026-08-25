@@ -14,10 +14,7 @@ const MIN_SPAN: f32 = 1e-3;
 /// Inflate `a` uniformly by `pad` on both axes.
 pub fn inflate_aabb2(a: Aabb2d, pad: f32) -> Aabb2d {
 	let pad = pad.max(0.0);
-	Aabb2d {
-		min: a.min - Vec2::splat(pad),
-		max: a.max + Vec2::splat(pad),
-	}
+	Aabb2d { min: a.min - Vec2::splat(pad), max: a.max + Vec2::splat(pad) }
 }
 
 /// Inset `a` uniformly by `pad`. Returns [`None`] if either axis collapses.
@@ -75,11 +72,7 @@ pub fn max_empty_rect2_with_clearance(
 	excludes: &[Aabb2d],
 	clearance: f32,
 ) -> Option<Aabb2d> {
-	let cuts: Vec<Aabb2d> = excludes
-		.iter()
-		.copied()
-		.map(|e| inflate_aabb2(e, clearance))
-		.collect();
+	let cuts: Vec<Aabb2d> = excludes.iter().copied().map(|e| inflate_aabb2(e, clearance)).collect();
 	max_empty_rect2(host, &cuts)
 }
 
@@ -110,10 +103,8 @@ pub fn max_empty_rect2_by(
 					if xs[j] - xs[i] < MIN_SPAN || ys[l] - ys[k] < MIN_SPAN {
 						continue;
 					}
-					let cand = Aabb2d {
-						min: Vec2::new(xs[i], ys[k]),
-						max: Vec2::new(xs[j], ys[l]),
-					};
+					let cand =
+						Aabb2d { min: Vec2::new(xs[i], ys[k]), max: Vec2::new(xs[j], ys[l]) };
 					if excludes.iter().any(|e| intersects_aabb2(cand, *e)) {
 						continue;
 					}
@@ -144,18 +135,9 @@ pub fn aabb3_to_plan(a: &Aabb3d, axes: PlanAxes) -> Aabb2d {
 	let min = Vec3::from(a.min);
 	let max = Vec3::from(a.max);
 	match axes {
-		PlanAxes::XZ => Aabb2d {
-			min: Vec2::new(min.x, min.z),
-			max: Vec2::new(max.x, max.z),
-		},
-		PlanAxes::XY => Aabb2d {
-			min: Vec2::new(min.x, min.y),
-			max: Vec2::new(max.x, max.y),
-		},
-		PlanAxes::YZ => Aabb2d {
-			min: Vec2::new(min.y, min.z),
-			max: Vec2::new(max.y, max.z),
-		},
+		PlanAxes::XZ => Aabb2d { min: Vec2::new(min.x, min.z), max: Vec2::new(max.x, max.z) },
+		PlanAxes::XY => Aabb2d { min: Vec2::new(min.x, min.y), max: Vec2::new(max.x, max.y) },
+		PlanAxes::YZ => Aabb2d { min: Vec2::new(min.y, min.z), max: Vec2::new(max.y, max.z) },
 	}
 }
 
@@ -205,10 +187,7 @@ fn x_overlap_open(a: Aabb2d, b: Aabb2d) -> bool {
 /// Assumes `seed` ⊂ `host` and does not intersect `excludes`. Result always
 /// contains `seed`. Iterates axis expansions so growing one axis can unlock another.
 pub fn grow_aabb2(host: Aabb2d, seed: Aabb2d, excludes: &[Aabb2d]) -> Aabb2d {
-	let mut r = Aabb2d {
-		min: seed.min.max(host.min),
-		max: seed.max.min(host.max),
-	};
+	let mut r = Aabb2d { min: seed.min.max(host.min), max: seed.max.min(host.max) };
 	if r.max.x - r.min.x < MIN_SPAN || r.max.y - r.min.y < MIN_SPAN {
 		return seed;
 	}
@@ -296,19 +275,10 @@ mod tests {
 
 	#[test]
 	fn max_empty_claims_gap_and_band_behind_two_excludes() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 6.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 6.0) };
 		let excludes = [
-			Aabb2d {
-				min: Vec2::new(1.0, 0.0),
-				max: Vec2::new(2.5, 1.0),
-			},
-			Aabb2d {
-				min: Vec2::new(5.5, 0.0),
-				max: Vec2::new(7.0, 1.0),
-			},
+			Aabb2d { min: Vec2::new(1.0, 0.0), max: Vec2::new(2.5, 1.0) },
+			Aabb2d { min: Vec2::new(5.5, 0.0), max: Vec2::new(7.0, 1.0) },
 		];
 		let free = max_empty_rect2_with_clearance(host, &excludes, 1.0).unwrap();
 		// Behind both (y ≥ 2) should win as a wide band.
@@ -319,10 +289,7 @@ mod tests {
 	#[test]
 	fn xz_plan_roundtrip_preserves_height() {
 		let host = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 5.0));
-		let obstacle = Aabb3d::from_min_max(
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(4.0, 3.0, 1.0),
-		);
+		let obstacle = Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 1.0));
 		let free = max_empty_aabb3_plan(&host, &[obstacle], PlanAxes::XZ, 1.0).unwrap();
 		assert!((Vec3::from(free.min).y - 0.0).abs() < 1e-4);
 		assert!((Vec3::from(free.max).y - 3.0).abs() < 1e-4);
@@ -331,27 +298,15 @@ mod tests {
 
 	#[test]
 	fn inset_collapses_to_none() {
-		let a = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(1.0, 1.0),
-		};
+		let a = Aabb2d { min: Vec2::ZERO, max: Vec2::new(1.0, 1.0) };
 		assert!(inset_aabb2(a, 0.6).is_none());
 	}
 
 	#[test]
 	fn grow_fills_dead_space_beside_seed() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 6.0),
-		};
-		let wall = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(10.0, 1.0),
-		};
-		let seed = Aabb2d {
-			min: Vec2::new(4.0, 1.0),
-			max: Vec2::new(6.0, 2.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 6.0) };
+		let wall = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(10.0, 1.0) };
+		let seed = Aabb2d { min: Vec2::new(4.0, 1.0), max: Vec2::new(6.0, 2.0) };
 		let grown = grow_aabb2(host, seed, &[wall]);
 		assert!((grown.min.x - 0.0).abs() < 1e-3);
 		assert!((grown.max.x - 10.0).abs() < 1e-3);
@@ -361,18 +316,9 @@ mod tests {
 
 	#[test]
 	fn grow_pair_splits_remainder() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 6.0),
-		};
-		let a = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(2.0, 2.0),
-		};
-		let b = Aabb2d {
-			min: Vec2::new(8.0, 4.0),
-			max: Vec2::new(10.0, 6.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 6.0) };
+		let a = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(2.0, 2.0) };
+		let b = Aabb2d { min: Vec2::new(8.0, 4.0), max: Vec2::new(10.0, 6.0) };
 		let (ga, gb) = grow_aabb2_pair(host, a, b, &[], &[], 8);
 		// Together they should cover the host (axis-aligned pair grow).
 		assert!(aabb2_area(ga) + aabb2_area(gb) >= 10.0 * 6.0 - 1.0);

@@ -23,12 +23,7 @@ impl CircRingFloorParams {
 		match slab {
 			CircRingFloorSlab::None => None,
 			CircRingFloorSlab::Solid => {
-				if annulus_erased(
-					center,
-					self.outer_radius,
-					self.inner_radius,
-					&self.openings,
-				) {
+				if annulus_erased(center, self.outer_radius, self.inner_radius, &self.openings) {
 					None
 				} else {
 					Some(ApproximatedCircle::horizontal(
@@ -44,23 +39,10 @@ impl CircRingFloorParams {
 	}
 }
 
-fn annulus_erased(
-	center: Vec3,
-	outer_r: f32,
-	inner_r: f32,
-	openings: &Openings,
-) -> bool {
+fn annulus_erased(center: Vec3, outer_r: f32, inner_r: f32, openings: &Openings) -> bool {
 	let slab_aabb = Aabb3d::from_min_max(
-		Vec3::new(
-			center.x - outer_r,
-			center.y - SLAB_Y_HALF,
-			center.z - outer_r,
-		),
-		Vec3::new(
-			center.x + outer_r,
-			center.y + SLAB_Y_HALF,
-			center.z + outer_r,
-		),
+		Vec3::new(center.x - outer_r, center.y - SLAB_Y_HALF, center.z - outer_r),
+		Vec3::new(center.x + outer_r, center.y + SLAB_Y_HALF, center.z + outer_r),
 	);
 	let band = (outer_r - inner_r).max(EPS);
 	for (_id, opening) in openings.iter() {

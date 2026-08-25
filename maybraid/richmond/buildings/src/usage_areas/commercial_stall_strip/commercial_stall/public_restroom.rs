@@ -58,12 +58,7 @@ impl PublicRestroom {
 			),
 			stall_walls: plan.packed.stall_walls,
 			stalls_bounds,
-			toilet_stalls: label_filling_aabb(
-				style,
-				"ToiletStalls",
-				&stalls_bounds,
-				confines.roll,
-			),
+			toilet_stalls: label_filling_aabb(style, "ToiletStalls", &stalls_bounds, confines.roll),
 			sink_bounds,
 			sinks,
 			stalls_door_id: id,
@@ -74,10 +69,7 @@ impl PublicRestroom {
 	pub fn stalls_fill_region(&self, roll: f32) -> FillRegion {
 		let mut openings = Openings::new();
 		openings.insert(self.stalls_door_id.clone(), self.stalls_door.clone());
-		FillRegion::new(
-			SpaceKind::InternalSpace,
-			Confines::new(self.stalls_bounds, roll, openings),
-		)
+		FillRegion::new(SpaceKind::InternalSpace, Confines::new(self.stalls_bounds, roll, openings))
 	}
 }
 
@@ -134,42 +126,28 @@ mod tests {
 				Vec3::new(3.0, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)), 0.0, openings)
 	}
 
 	#[test]
 	fn restroom_fits_walled_stalls_door_and_sinks() {
-		use procedural_common::{aabb2_area, intersects_aabb2};
 		use bevy_math::bounding::Aabb2d;
 		use bevy_math::Vec2;
+		use procedural_common::{aabb2_area, intersects_aabb2};
 
 		let confines = roomy_south();
 		let (stall, regions) = PublicRestroom::fit_to_confines(
 			&confines,
-			NoiseParams {
-				seed: 3,
-				..Default::default()
-			},
+			NoiseParams { seed: 3, ..Default::default() },
 		)
 		.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "PublicRestroom");
 		assert!(!stall.sinks.is_empty());
 		assert!(!stall.stall_walls.is_empty());
-		assert_eq!(
-			stall.stalls_door_id,
-			OpeningId::scoped(SCOPE, "stalls_door", "0")
-		);
+		assert_eq!(stall.stalls_door_id, OpeningId::scoped(SCOPE, "stalls_door", "0"));
 		assert!(matches!(stall.stalls_door.label, OpeningLabel::Passage));
 		assert_eq!(regions.within.len(), 1);
-		assert!(regions.within[0]
-			.confines
-			.openings
-			.get(&stall.stalls_door_id)
-			.is_some());
+		assert!(regions.within[0].confines.openings.get(&stall.stalls_door_id).is_some());
 
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		let stalls = aabb3_to_plan(&stall.stalls_bounds, PlanAxes::XZ);
@@ -192,10 +170,7 @@ mod tests {
 				sink_near_door = true;
 			}
 		}
-		assert!(
-			sink_near_door,
-			"stalls door should connect into the sinks area"
-		);
+		assert!(sink_near_door, "stalls door should connect into the sinks area");
 	}
 
 	#[test]
@@ -237,10 +212,9 @@ mod tests {
 		let mut openings = Openings::new();
 		let mk = |a0: f32, a1: f32| -> Aabb3d {
 			match side {
-				DemoDoor::South => Aabb3d::from_min_max(
-					Vec3::new(a0, 0.0, -band),
-					Vec3::new(a1, door_h, band),
-				),
+				DemoDoor::South => {
+					Aabb3d::from_min_max(Vec3::new(a0, 0.0, -band), Vec3::new(a1, door_h, band))
+				}
 				DemoDoor::North => Aabb3d::from_min_max(
 					Vec3::new(a0, 0.0, extent.z - band),
 					Vec3::new(a1, door_h, extent.z + band),
@@ -249,10 +223,9 @@ mod tests {
 					Vec3::new(extent.x - band, 0.0, a0),
 					Vec3::new(extent.x + band, door_h, a1),
 				),
-				DemoDoor::West => Aabb3d::from_min_max(
-					Vec3::new(-band, 0.0, a0),
-					Vec3::new(band, door_h, a1),
-				),
+				DemoDoor::West => {
+					Aabb3d::from_min_max(Vec3::new(-band, 0.0, a0), Vec3::new(band, door_h, a1))
+				}
 			}
 		};
 		if along >= 6.0 {
@@ -262,10 +235,7 @@ mod tests {
 			);
 			openings.insert(
 				OpeningId::new("demo_bites_door_b"),
-				Opening::passage(mk(
-					along * 0.58,
-					(along - 0.4).max(along * 0.58 + 2.5),
-				)),
+				Opening::passage(mk(along * 0.58, (along - 0.4).max(along * 0.58 + 2.5))),
 			);
 		} else {
 			openings.insert(
@@ -291,14 +261,10 @@ mod tests {
 			let confines = demo_doors(extent, side);
 			let (stall, _) = PublicRestroom::fit_to_confines(
 				&confines,
-				NoiseParams {
-					seed,
-					..Default::default()
-				},
+				NoiseParams { seed, ..Default::default() },
 			)
 			.unwrap_or_else(|e| panic!("gallery ({extent:?} seed={seed}) failed: {e}"));
 			assert!(!stall.sink_bounds.is_empty());
 		}
 	}
 }
-

@@ -100,12 +100,7 @@ impl Default for ArcFloorParams {
 
 impl ArcFloorParams {
 	pub fn new(center_xz: Vec3, radius: f32, storey_height: f32) -> Self {
-		Self {
-			center_xz,
-			radius,
-			storey_height,
-			..Self::default()
-		}
+		Self { center_xz, radius, storey_height, ..Self::default() }
 	}
 
 	pub fn floor(mut self, floor: ArcFloorSlab) -> Self {
@@ -155,26 +150,14 @@ impl ArcFloor {
 		let radius = params.radius.max(1e-4);
 		let storey_height = params.storey_height.max(1e-4);
 		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let params = ArcFloorParams {
-			center_xz,
-			radius,
-			storey_height,
-			..params
-		};
+		let params = ArcFloorParams { center_xz, radius, storey_height, ..params };
 
 		let (sectors, wall_partitions) = params.resolve_wall_sweeps();
 		let (openings, mapped) = params.map_connectable_openings(&sectors);
 		let floor_nodes = params.resolve_floor_nodes();
 		let ceiling_nodes = params.resolve_ceiling_nodes();
 
-		Self {
-			params,
-			wall_partitions,
-			floor_nodes,
-			ceiling_nodes,
-			openings,
-			mapped,
-		}
+		Self { params, wall_partitions, floor_nodes, ceiling_nodes, openings, mapped }
 	}
 
 	pub fn params(&self) -> &ArcFloorParams {

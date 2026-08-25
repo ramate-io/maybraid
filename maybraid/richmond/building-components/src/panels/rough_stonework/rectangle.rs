@@ -9,9 +9,7 @@ use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 
 use crate::assets::panels::rough_stonework::{RECTANGLE_HIGH, RECTANGLE_LOW, RECTANGLE_MID};
-use crate::panels::lod::{
-	panel_scene_ref_for_level, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE,
-};
+use crate::panels::lod::{panel_scene_ref_for_level, PanelLodProbe, PANEL_ULTRA_LOW_RECTANGLE};
 
 /// Unit rectangle \(X, Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
 #[derive(Debug, Clone, Copy, PartialEq, Default, Component)]
@@ -30,11 +28,7 @@ impl LodScene for RoughStonePanelRectangle {
 		crate::lod_band::warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		panel_scene_ref_for_level(
 			RECTANGLE_HIGH.scene_ref(),
 			RECTANGLE_MID.scene_ref(),

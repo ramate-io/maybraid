@@ -7,9 +7,7 @@
 
 use bevy_math::Vec3;
 
-use crate::openings::{
-	MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,
-};
+use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::shells::pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams};
 
 use super::RectangularPitchedRoofComplex;
@@ -25,10 +23,7 @@ pub(super) fn apply_openings(
 
 	let mut buckets: Vec<Openings> = (0..roofs.len()).map(|_| Openings::new()).collect();
 	for (id, opening) in authored.iter() {
-		if !matches!(
-			opening.label,
-			OpeningLabel::Passage | OpeningLabel::Aperture
-		) {
+		if !matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
 			continue;
 		}
 		let Some(ri) = nearest_roof_index(opening, &roofs) else {
@@ -105,22 +100,13 @@ fn pitch_centroid(eave: (Vec3, Vec3), ridge: (Vec3, Vec3)) -> Vec3 {
 	(eave.0 + eave.1 + ridge.0 + ridge.1) * 0.25
 }
 
-fn gable_centroid(halves: &[crate::shells::pitched_rectangular_roof::RoofHalf; 2], end: usize) -> Vec3 {
-	let e_pos = if end == 0 {
-		halves[0].eave_line.0
-	} else {
-		halves[0].eave_line.1
-	};
-	let e_neg = if end == 0 {
-		halves[1].eave_line.0
-	} else {
-		halves[1].eave_line.1
-	};
-	let ridge = if end == 0 {
-		halves[0].ridge_line.0
-	} else {
-		halves[0].ridge_line.1
-	};
+fn gable_centroid(
+	halves: &[crate::shells::pitched_rectangular_roof::RoofHalf; 2],
+	end: usize,
+) -> Vec3 {
+	let e_pos = if end == 0 { halves[0].eave_line.0 } else { halves[0].eave_line.1 };
+	let e_neg = if end == 0 { halves[1].eave_line.0 } else { halves[1].eave_line.1 };
+	let ridge = if end == 0 { halves[0].ridge_line.0 } else { halves[0].ridge_line.1 };
 	(e_pos + e_neg + ridge) / 3.0
 }
 
@@ -154,13 +140,7 @@ impl RectangularPitchedRoofComplex {
 		label: OpeningLabel,
 	) -> Option<Opening> {
 		let roof = self.roofs.get(roof)?;
-		Some(PitchedRoof::gable_end_opening(
-			&roof.params().halves,
-			end,
-			width,
-			height,
-			label,
-		))
+		Some(PitchedRoof::gable_end_opening(&roof.params().halves, end, width, height, label))
 	}
 }
 

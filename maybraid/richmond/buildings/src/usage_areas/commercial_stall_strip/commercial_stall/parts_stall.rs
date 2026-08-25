@@ -17,9 +17,7 @@ use procedural_common::NoiseParams;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
-use crate::fit::{
-	Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningId, Openings};
 use crate::paneling::Rectangle;
 
@@ -57,12 +55,7 @@ impl PartsStall {
 			),
 			office_walls: plan.packed.office_walls,
 			office_bounds,
-			parts_office: label_filling_aabb(
-				style,
-				"PartsOffice",
-				&office_bounds,
-				confines.roll,
-			),
+			parts_office: label_filling_aabb(style, "PartsOffice", &office_bounds, confines.roll),
 			parts,
 			office_door_id: id,
 			office_door: opening,
@@ -72,10 +65,7 @@ impl PartsStall {
 	pub fn office_fill_region(&self, roll: f32) -> FillRegion {
 		let mut openings = Openings::new();
 		openings.insert(self.office_door_id.clone(), self.office_door.clone());
-		FillRegion::new(
-			SpaceKind::InternalSpace,
-			Confines::new(self.office_bounds, roll, openings),
-		)
+		FillRegion::new(SpaceKind::InternalSpace, Confines::new(self.office_bounds, roll, openings))
 	}
 }
 
@@ -114,8 +104,8 @@ impl BuildingComponents for PartsStall {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec3;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+	use bevy_math::Vec3;
 	use procedural_common::{aabb3_to_plan, PlanAxes};
 
 	use super::super::stall_layout::parts::{PARTS_OFFICE_MIN, SCOPE};
@@ -129,11 +119,7 @@ mod tests {
 				Vec3::new(3.0, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)), 0.0, openings)
 	}
 
 	#[test]
@@ -144,17 +130,10 @@ mod tests {
 				.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "PartsStall");
 		assert!(!stall.parts.is_empty());
-		assert_eq!(
-			stall.office_door_id,
-			OpeningId::scoped(SCOPE, "office_door", "0")
-		);
+		assert_eq!(stall.office_door_id, OpeningId::scoped(SCOPE, "office_door", "0"));
 		assert!(matches!(stall.office_door.label, OpeningLabel::Passage));
 		assert_eq!(regions.within.len(), 1);
-		assert!(regions.within[0]
-			.confines
-			.openings
-			.get(&stall.office_door_id)
-			.is_some());
+		assert!(regions.within[0].confines.openings.get(&stall.office_door_id).is_some());
 
 		let office = aabb3_to_plan(&stall.office_bounds, PlanAxes::XZ);
 		assert!(office.max.x - office.min.x + 1e-3 >= PARTS_OFFICE_MIN);

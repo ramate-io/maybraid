@@ -20,10 +20,7 @@ pub struct PanelQuadMesh {
 }
 
 impl PanelQuadMesh {
-	pub fn new(
-		points: Vec<(PanelPointId, PanelPoint)>,
-		quads: Vec<[PanelPointId; 4]>,
-	) -> Self {
+	pub fn new(points: Vec<(PanelPointId, PanelPoint)>, quads: Vec<[PanelPointId; 4]>) -> Self {
 		Self { points, quads }
 	}
 
@@ -34,10 +31,7 @@ impl PanelQuadMesh {
 			triangles.push((a0, a1, b1));
 			triangles.push((a0, b1, b0));
 		}
-		super::mesh::PanelMesh {
-			points: self.points.clone(),
-			triangles,
-		}
+		super::mesh::PanelMesh { points: self.points.clone(), triangles }
 	}
 }
 
@@ -126,9 +120,7 @@ mod tests {
 	#[test]
 	fn quad_mesh_string_parses() {
 		let mesh: PanelQuadMesh =
-			"1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}"
-				.parse()
-				.expect("parse");
+			"1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}".parse().expect("parse");
 		assert_eq!(mesh.quads.len(), 1);
 		let c = PanelComplex::from_quad_mesh(PanelStyle::RoughStonework, mesh);
 		assert_eq!(c.triangles().len(), 2);

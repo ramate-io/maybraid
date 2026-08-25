@@ -34,7 +34,9 @@ impl Study {
 			.packed
 			.bookcases
 			.iter()
-			.map(|aabb| furniture_fill(style, "Bookcase", aabb, confines.roll, FurnitureNode::wardrobe))
+			.map(|aabb| {
+				furniture_fill(style, "Bookcase", aabb, confines.roll, FurnitureNode::wardrobe)
+			})
 			.collect();
 		Self {
 			room_type: label_filling_aabb(
@@ -83,12 +85,8 @@ impl BuildingComponents for Study {
 
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
-		out.extend(Layers::from_free(
-			self.desks.iter().map(|f| f.furniture.clone()).collect(),
-		));
-		out.extend(Layers::from_free(
-			self.bookcases.iter().map(|f| f.furniture.clone()).collect(),
-		));
+		out.extend(Layers::from_free(self.desks.iter().map(|f| f.furniture.clone()).collect()));
+		out.extend(Layers::from_free(self.bookcases.iter().map(|f| f.furniture.clone()).collect()));
 		out
 	}
 }

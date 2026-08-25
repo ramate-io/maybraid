@@ -30,19 +30,22 @@ pub(crate) fn resolve_horizontal_slab(
 	match slab {
 		RectFloorSlab::None => None,
 		RectFloorSlab::Solid => {
-			let cutting = openings.iter().filter_map(|(_id, o)| {
-				if o.label.cuts_slab() {
-					Some(o.bounds)
-				} else {
-					None
-				}
-			});
+			let cutting =
+				openings.iter().filter_map(
+					|(_id, o)| {
+						if o.label.cuts_slab() {
+							Some(o.bounds)
+						} else {
+							None
+						}
+					},
+				);
 			match merge_slab_insets(plan, cutting) {
 				None => Some(RectFloorSlabGeom::Solid(solid_slab(style, plan, thickness))),
 				Some(None) => None,
-				Some(Some(inset)) => Some(RectFloorSlabGeom::Clipped(clipped_slab(
-					style, plan, thickness, inset,
-				))),
+				Some(Some(inset)) => {
+					Some(RectFloorSlabGeom::Clipped(clipped_slab(style, plan, thickness, inset)))
+				}
 			}
 		}
 	}

@@ -10,8 +10,7 @@ use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
 /// Default: mild kinked trapezoid as one quad.
-const DEFAULT_MESH: &str =
-	"1=(0.5,0,0),2=(2.5,0,0),3=(0,0.3,3),4=(3,0,3) ... {1,2,3,4}";
+const DEFAULT_MESH: &str = "1=(0.5,0,0),2=(2.5,0,0),3=(0,0.3,3),4=(3,0,3) ... {1,2,3,4}";
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]

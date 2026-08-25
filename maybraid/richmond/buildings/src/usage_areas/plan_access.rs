@@ -212,9 +212,7 @@ mod tests {
 
 	#[test]
 	fn builders_override_fields() {
-		let a = PlanAccessParams::residential()
-			.with_room_min(3.0)
-			.with_group_connect(1.5);
+		let a = PlanAccessParams::residential().with_room_min(3.0).with_group_connect(1.5);
 		assert!((a.room_min - 3.0).abs() < 1e-4);
 		assert!((a.group_connect - 1.5).abs() < 1e-4);
 	}

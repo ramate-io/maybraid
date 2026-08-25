@@ -33,11 +33,7 @@ pub struct Confines {
 
 impl Confines {
 	pub fn new(bounds: Aabb3d, roll: f32, openings: Openings) -> Self {
-		Self {
-			bounds,
-			roll,
-			openings,
-		}
+		Self { bounds, roll, openings }
 	}
 
 	pub fn from_bounds(bounds: Aabb3d) -> Self {
@@ -202,9 +198,7 @@ pub struct MultiConfines {
 
 impl MultiConfines {
 	pub fn new(parts: impl IntoIterator<Item = FillRegion>) -> Self {
-		Self {
-			parts: parts.into_iter().collect(),
-		}
+		Self { parts: parts.into_iter().collect() }
 	}
 
 	pub fn empty() -> Self {
@@ -225,11 +219,7 @@ impl MultiConfines {
 
 	/// Build from untyped confines (all [`SpaceKind::InternalSpace`]).
 	pub fn from_confines(parts: impl IntoIterator<Item = Confines>) -> Self {
-		Self::new(
-			parts
-				.into_iter()
-				.map(|c| FillRegion::new(SpaceKind::InternalSpace, c)),
-		)
+		Self::new(parts.into_iter().map(|c| FillRegion::new(SpaceKind::InternalSpace, c)))
 	}
 }
 
@@ -266,10 +256,7 @@ pub struct MultiFit<T> {
 
 impl<T> MultiFit<T> {
 	pub fn empty() -> Self {
-		Self {
-			fitted: Vec::new(),
-			residual: FillableRegions::empty(),
-		}
+		Self { fitted: Vec::new(), residual: FillableRegions::empty() }
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -313,9 +300,7 @@ pub enum FitError {
 		reason: &'static str,
 	},
 	/// Confines are malformed or otherwise unusable.
-	InvalidConfines {
-		reason: &'static str,
-	},
+	InvalidConfines { reason: &'static str },
 }
 
 impl std::fmt::Display for FitError {
@@ -384,17 +369,13 @@ pub trait Fit: Sized {
 	fn fit_to(target: &FitTarget, noise: NoiseParams) -> Result<MultiFit<Self>, FitError> {
 		match target {
 			FitTarget::Single(confines) => match Self::fit_to_confines(confines, noise) {
-				Ok((value, nested)) => Ok(MultiFit {
-					fitted: vec![(value, nested.clone())],
-					residual: nested,
-				}),
+				Ok((value, nested)) => {
+					Ok(MultiFit { fitted: vec![(value, nested.clone())], residual: nested })
+				}
 				Err(FitError::TooSmall { .. }) => Ok(MultiFit {
 					fitted: Vec::new(),
 					residual: FillableRegions {
-						within: vec![FillRegion::new(
-							SpaceKind::InternalSpace,
-							confines.clone(),
-						)],
+						within: vec![FillRegion::new(SpaceKind::InternalSpace, confines.clone())],
 						atop: Vec::new(),
 					},
 				}),
@@ -421,9 +402,7 @@ mod tests {
 		) -> Result<(Self, FillableRegions), FitError> {
 			let fp = confines.footprint();
 			if fp.x < 4.0 || fp.y < 4.0 {
-				return Err(FitError::TooSmall {
-					reason: "min_footprint",
-				});
+				return Err(FitError::TooSmall { reason: "min_footprint" });
 			}
 			Ok((Self, FillableRegions::empty()))
 		}
@@ -437,17 +416,12 @@ mod tests {
 			_confines: &Confines,
 			_noise: NoiseParams,
 		) -> Result<(Self, FillableRegions), FitError> {
-			Err(FitError::InvalidConfines {
-				reason: "bad",
-			})
+			Err(FitError::InvalidConfines { reason: "bad" })
 		}
 	}
 
 	fn square(side: f32) -> Confines {
-		Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(side, 3.0, side),
-		))
+		Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(side, 3.0, side)))
 	}
 
 	#[test]

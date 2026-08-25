@@ -48,14 +48,7 @@ impl CommercialStallStripParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Self {
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		let bay = cfg.sample_range_f32_4d(
-			MIN_STALL_ALONG,
-			MAX_STALL_ALONG,
-			c.x,
-			c.y,
-			c.z,
-			21.0,
-		);
+		let bay = cfg.sample_range_f32_4d(MIN_STALL_ALONG, MAX_STALL_ALONG, c.x, c.y, c.z, 21.0);
 		Self { bay_width: bay }
 	}
 }
@@ -89,20 +82,13 @@ impl CommercialStallStripPlan {
 
 		let passages = collect_passages_along(&confines.openings, along_x, min, along);
 		if passages.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "no passage",
-			});
+			return Err(FitError::TooSmall { reason: "no passage" });
 		}
 
-		let min_bay = params
-			.bay_width
-			.clamp(MIN_STALL_ALONG, along.max(MIN_STALL_ALONG));
+		let min_bay = params.bay_width.clamp(MIN_STALL_ALONG, along.max(MIN_STALL_ALONG));
 		let bays = partition_bays_for_passages(&passages, along, min_bay);
 		let stalls = fit_stalls_covering_strip(confines, along_x, min, max, &bays, noise)?;
-		Ok(Self {
-			parameterized: params,
-			stalls,
-		})
+		Ok(Self { parameterized: params, stalls })
 	}
 }
 
@@ -164,17 +150,9 @@ fn fit_stalls_covering_strip(
 					// Orphan / failed run: extend the last stall over it.
 					prev_bay.merge_with(bay);
 					*prev_stall = fit_stall_bay(
-						confines,
-						along_x,
-						strip_min,
-						strip_max,
-						prev_bay,
-						noise,
-						*prev_i,
+						confines, along_x, strip_min, strip_max, prev_bay, noise, *prev_i,
 					)
-					.map_err(|_| FitError::TooSmall {
-						reason: "stalls cover",
-					})?;
+					.map_err(|_| FitError::TooSmall { reason: "stalls cover" })?;
 				} else {
 					carry = Some(bay);
 				}
@@ -186,18 +164,9 @@ fn fit_stalls_covering_strip(
 	if let Some(tail) = carry {
 		if let Some((prev_bay, prev_stall, prev_i)) = fitted.last_mut() {
 			prev_bay.merge_with(tail);
-			*prev_stall = fit_stall_bay(
-				confines,
-				along_x,
-				strip_min,
-				strip_max,
-				prev_bay,
-				noise,
-				*prev_i,
-			)
-			.map_err(|_| FitError::TooSmall {
-				reason: "stalls cover",
-			})?;
+			*prev_stall =
+				fit_stall_bay(confines, along_x, strip_min, strip_max, prev_bay, noise, *prev_i)
+					.map_err(|_| FitError::TooSmall { reason: "stalls cover" })?;
 		} else {
 			// Single merged bay for the whole strip.
 			let stall = fit_stall_bay(confines, along_x, strip_min, strip_max, &tail, noise, 0)?;
@@ -270,10 +239,7 @@ fn collect_passages_along(
 		if c < -0.5 || c > along + 0.5 {
 			continue;
 		}
-		out.push(PassageAlong {
-			id: id.clone(),
-			center: c.clamp(0.0, along),
-		});
+		out.push(PassageAlong { id: id.clone(), center: c.clamp(0.0, along) });
 	}
 	out.sort_by(|a, b| {
 		a.center
@@ -414,9 +380,9 @@ impl BuildingComponents for CommercialStallStrip {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::openings::Opening;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::Opening;
 
 	fn strip_with_doors(door_mids: &[f32], extent_x: f32) -> Confines {
 		let mut openings = Openings::new();
@@ -446,14 +412,8 @@ mod tests {
 				.unwrap();
 		assert_eq!(plan.stalls.len(), 3);
 		let strip = CommercialStallStrip::from_plan(plan);
-		assert!(!strip
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
-		assert!(!strip
-			.panel_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!strip.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+		assert!(!strip.panel_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -472,8 +432,7 @@ mod tests {
 				Vec3::new(bay.along0, 0.0, 0.0),
 				Vec3::new(bay.along1, 3.5, 5.0),
 			);
-			let cell_openings =
-				openings_for_bay(&confines.openings, &bay_bounds, &bay.passage_ids);
+			let cell_openings = openings_for_bay(&confines.openings, &bay_bounds, &bay.passage_ids);
 			let cell_passages: std::collections::HashSet<_> = cell_openings
 				.iter()
 				.filter(|(_, o)| matches!(o.label, OpeningLabel::Passage))
@@ -498,12 +457,10 @@ mod tests {
 
 	#[test]
 	fn without_passage_strip_fails() {
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(12.0, 3.5, 5.0),
-		));
-		let err = CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default())
-			.unwrap_err();
+		let confines =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.5, 5.0)));
+		let err =
+			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap_err();
 		assert!(matches!(err, FitError::TooSmall { reason } if reason.contains("passage")));
 	}
 
@@ -531,25 +488,15 @@ mod tests {
 		let max = Vec3::new(40.0, 3.5, 5.0);
 		let passages = collect_passages_along(&confines.openings, true, min, 40.0);
 		let bays = partition_bays_for_passages(&passages, 40.0, 3.5);
-		let stalls = fit_stalls_covering_strip(
-			&confines,
-			true,
-			min,
-			max,
-			&bays,
-			NoiseParams::default(),
-		)
-		.unwrap();
+		let stalls =
+			fit_stalls_covering_strip(&confines, true, min, max, &bays, NoiseParams::default())
+				.unwrap();
 		assert_eq!(stalls.len(), bays.len());
 		let mut seen = std::collections::HashSet::new();
 		for bay in &bays {
 			assert!(!bay.passage_ids.is_empty());
 			for id in &bay.passage_ids {
-				assert!(
-					seen.insert(id.clone()),
-					"passage {} claimed twice",
-					id.as_str()
-				);
+				assert!(seen.insert(id.clone()), "passage {} claimed twice", id.as_str());
 			}
 		}
 		assert_eq!(seen.len(), passages.len());

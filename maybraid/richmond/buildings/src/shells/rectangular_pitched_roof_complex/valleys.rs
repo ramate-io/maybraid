@@ -60,16 +60,8 @@ fn build_perp_valley(
 
 	let (cx, cz) = corner.corner_xz;
 	let y_eave = a.eave[corner.side_a].a.y.min(b.eave[corner.side_b].a.y);
-	let eave_x = if corner.side_b == 1 {
-		cx + b.side_overhang
-	} else {
-		cx - b.side_overhang
-	};
-	let eave_z = if corner.side_a == 1 {
-		cz + a.side_overhang
-	} else {
-		cz - a.side_overhang
-	};
+	let eave_x = if corner.side_b == 1 { cx + b.side_overhang } else { cx - b.side_overhang };
+	let eave_z = if corner.side_a == 1 { cz + a.side_overhang } else { cz - a.side_overhang };
 	let eave_point = Vec3::new(eave_x, y_eave, eave_z);
 	let eave_on_valley = closest_point_on_line(origin, dir, eave_point);
 	let ridge_point = ridge_junction_point(a, b, junction);
@@ -110,10 +102,7 @@ fn build_coaxial_end_valley(
 			let z = run.ridge.a.z;
 			let y_run = run.ridge.a.y;
 			let y_cap = cap.ridge.a.y;
-			(
-				Vec3::new(x, y_run.min(y_cap), z),
-				Vec3::new(x, y_run.max(y_cap), z),
-			)
+			(Vec3::new(x, y_run.min(y_cap), z), Vec3::new(x, y_run.max(y_cap), z))
 		}
 		LongAxis::Z => {
 			let z = match end {
@@ -123,10 +112,7 @@ fn build_coaxial_end_valley(
 			let x = run.ridge.a.x;
 			let y_run = run.ridge.a.y;
 			let y_cap = cap.ridge.a.y;
-			(
-				Vec3::new(x, y_run.min(y_cap), z),
-				Vec3::new(x, y_run.max(y_cap), z),
-			)
+			(Vec3::new(x, y_run.min(y_cap), z), Vec3::new(x, y_run.max(y_cap), z))
 		}
 	};
 
@@ -160,10 +146,7 @@ fn outside_eave_corner(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> O
 fn plan_touches(vol: &VolumeCandidate, x: f32, z: f32) -> bool {
 	let (min_x, min_z) = vol.plan_min();
 	let (max_x, max_z) = vol.plan_max();
-	x >= min_x - EPS
-		&& x <= max_x + EPS
-		&& z >= min_z - EPS
-		&& z <= max_z + EPS
+	x >= min_x - EPS && x <= max_x + EPS && z >= min_z - EPS && z <= max_z + EPS
 }
 
 fn truncate_for_perp(
@@ -173,20 +156,8 @@ fn truncate_for_perp(
 ) {
 	let ridge_join = valley.ridge_point;
 
-	truncate_long_x(
-		&mut volumes[corner.vol_a],
-		corner.side_a,
-		corner.end_a,
-		valley,
-		ridge_join,
-	);
-	truncate_long_z(
-		&mut volumes[corner.vol_b],
-		corner.side_b,
-		corner.end_b,
-		valley,
-		ridge_join,
-	);
+	truncate_long_x(&mut volumes[corner.vol_a], corner.side_a, corner.end_a, valley, ridge_join);
+	truncate_long_z(&mut volumes[corner.vol_b], corner.side_b, corner.end_b, valley, ridge_join);
 
 	// Close the outside hip only for true L footprints (both boxes share the
 	// convex corner). Decomposed cross arms skip this.
@@ -196,10 +167,8 @@ fn truncate_for_perp(
 			let outer_b = 1 - corner.side_b;
 			let ya = volumes[corner.vol_a].eave[outer_a].end(end_a).y;
 			let yb = volumes[corner.vol_b].eave[outer_b].end(end_b).y;
-			volumes[corner.vol_a].eave[outer_a]
-				.set_end(end_a, Vec3::new(outer.x, ya, outer.z));
-			volumes[corner.vol_b].eave[outer_b]
-				.set_end(end_b, Vec3::new(outer.x, yb, outer.z));
+			volumes[corner.vol_a].eave[outer_a].set_end(end_a, Vec3::new(outer.x, ya, outer.z));
+			volumes[corner.vol_b].eave[outer_b].set_end(end_b, Vec3::new(outer.x, yb, outer.z));
 			let wa = volumes[corner.vol_a].wall[outer_a].end(end_a);
 			let wb = volumes[corner.vol_b].wall[outer_b].end(end_b);
 			let (cx, cz) = corner_massing_outside(volumes, corner);
@@ -216,16 +185,8 @@ fn corner_massing_outside(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -
 	let (amax_x, _) = a.plan_max();
 	let (bmin_x, bmin_z) = b.plan_min();
 	let (_, bmax_z) = b.plan_max();
-	let x = if corner.side_b == 1 {
-		amin_x.min(bmin_x)
-	} else {
-		amax_x.max(b.plan_max().0)
-	};
-	let z = if corner.side_a == 1 {
-		amin_z.min(bmin_z)
-	} else {
-		a.plan_max().1.max(bmax_z)
-	};
+	let x = if corner.side_b == 1 { amin_x.min(bmin_x) } else { amax_x.max(b.plan_max().0) };
+	let z = if corner.side_a == 1 { amin_z.min(bmin_z) } else { a.plan_max().1.max(bmax_z) };
 	(x, z)
 }
 
@@ -244,10 +205,7 @@ fn truncate_long_x(
 
 	// Facing eave lands on the valley (true valley edge).
 	let ey = vol.eave[side].end(end).y;
-	vol.eave[side].set_end(
-		end,
-		Vec3::new(valley.eave_point.x, ey, valley.eave_point.z),
-	);
+	vol.eave[side].set_end(end, Vec3::new(valley.eave_point.x, ey, valley.eave_point.z));
 	// Outer eave / both walls: parallel long-axis clip only.
 	let outer = 1 - side;
 	let mut eo = vol.eave[outer].end(end);
@@ -274,10 +232,7 @@ fn truncate_long_z(
 	vol.ridge.set_end(end, ridge_end);
 
 	let ey = vol.eave[side].end(end).y;
-	vol.eave[side].set_end(
-		end,
-		Vec3::new(valley.eave_point.x, ey, valley.eave_point.z),
-	);
+	vol.eave[side].set_end(end, Vec3::new(valley.eave_point.x, ey, valley.eave_point.z));
 	let outer = 1 - side;
 	let mut eo = vol.eave[outer].end(end);
 	eo.z = ridge_end.z;

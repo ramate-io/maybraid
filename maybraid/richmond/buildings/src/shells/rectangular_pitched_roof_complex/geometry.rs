@@ -53,7 +53,6 @@ impl LineSeg {
 			self.b = p;
 		}
 	}
-
 }
 
 /// Unconstrained roof rails for one massing box (before junction truncation).
@@ -103,14 +102,8 @@ impl VolumeCandidate {
 					Vec3::new(max.x, y_ridge, z_mid),
 				);
 				let wall = [
-					LineSeg::new(
-						Vec3::new(min.x, y_wall, min.z),
-						Vec3::new(max.x, y_wall, min.z),
-					),
-					LineSeg::new(
-						Vec3::new(min.x, y_wall, max.z),
-						Vec3::new(max.x, y_wall, max.z),
-					),
+					LineSeg::new(Vec3::new(min.x, y_wall, min.z), Vec3::new(max.x, y_wall, min.z)),
+					LineSeg::new(Vec3::new(min.x, y_wall, max.z), Vec3::new(max.x, y_wall, max.z)),
 				];
 				let eave = [
 					LineSeg::new(
@@ -131,14 +124,8 @@ impl VolumeCandidate {
 					Vec3::new(x_mid, y_ridge, max.z),
 				);
 				let wall = [
-					LineSeg::new(
-						Vec3::new(min.x, y_wall, min.z),
-						Vec3::new(min.x, y_wall, max.z),
-					),
-					LineSeg::new(
-						Vec3::new(max.x, y_wall, min.z),
-						Vec3::new(max.x, y_wall, max.z),
-					),
+					LineSeg::new(Vec3::new(min.x, y_wall, min.z), Vec3::new(min.x, y_wall, max.z)),
+					LineSeg::new(Vec3::new(max.x, y_wall, min.z), Vec3::new(max.x, y_wall, max.z)),
 				];
 				let eave = [
 					LineSeg::new(

@@ -15,10 +15,11 @@ pub struct ResidentialBathroomParameterized {
 }
 
 impl ResidentialBathroomParameterized {
-	pub fn sample(_confines: &Confines, _noise: procedural_common::NoiseParams) -> Result<Self, FitError> {
-		Ok(Self {
-			style: LabelStyle::Cyan,
-		})
+	pub fn sample(
+		_confines: &Confines,
+		_noise: procedural_common::NoiseParams,
+	) -> Result<Self, FitError> {
+		Ok(Self { style: LabelStyle::Cyan })
 	}
 }
 
@@ -34,9 +35,6 @@ impl ResidentialBathroomPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = ResidentialBathroomPacked::pack(confines)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

@@ -53,10 +53,7 @@ pub enum EndCap {
 	/// Banked hips on free ends.
 	Hip,
 	/// Gable ends; ridge / eave may project past the massing by the given overhangs.
-	Gable {
-		ridge: Overhang,
-		eave: Overhang,
-	},
+	Gable { ridge: Overhang, eave: Overhang },
 }
 
 impl Default for EndCap {
@@ -129,10 +126,7 @@ impl RectangularPitchedRoofComplexParams {
 	pub fn single(extent_x: f32, extent_z: f32, y0: f32, y1: f32) -> Self {
 		let hx = extent_x * 0.5;
 		let hz = extent_z * 0.5;
-		Self::new(vec![Aabb3d::from_min_max(
-			Vec3::new(-hx, y0, -hz),
-			Vec3::new(hx, y1, hz),
-		)])
+		Self::new(vec![Aabb3d::from_min_max(Vec3::new(-hx, y0, -hz), Vec3::new(hx, y1, hz))])
 	}
 
 	/// L: long-X bar + long-Z stem sharing the −X/−Z corner.
@@ -181,18 +175,13 @@ impl RectangularPitchedRoofComplexParams {
 	///
 	/// Hall: lower eaves, higher ridge. Bays: higher eaves, lower ridges.
 	pub fn hall_and_bays() -> Self {
-		let hall = Aabb3d::from_min_max(
-			Vec3::new(-14.0, 2.0, -3.0),
-			Vec3::new(14.0, 5.8, 3.0),
-		);
+		let hall = Aabb3d::from_min_max(Vec3::new(-14.0, 2.0, -3.0), Vec3::new(14.0, 5.8, 3.0));
 		// Bays sit on +Z, overlapping the hall so each forms a T junction.
 		let bay = |cx: f32| {
 			Aabb3d::from_min_max(Vec3::new(cx - 2.0, 3.2, 1.0), Vec3::new(cx + 2.0, 4.6, 10.0))
 		};
-		Self::new(vec![hall, bay(-8.0), bay(0.0), bay(8.0)]).end_cap(EndCap::Gable {
-			ridge: Overhang::Fixed(0.8),
-			eave: Overhang::Fixed(0.7),
-		})
+		Self::new(vec![hall, bay(-8.0), bay(0.0), bay(8.0)])
+			.end_cap(EndCap::Gable { ridge: Overhang::Fixed(0.8), eave: Overhang::Fixed(0.7) })
 	}
 
 	/// Several pitch masses with no plan overlap (no valleys).
@@ -340,13 +329,7 @@ pub struct RectangularPitchedRoofComplex {
 impl RectangularPitchedRoofComplex {
 	pub fn new(params: RectangularPitchedRoofComplexParams) -> Self {
 		let (roofs, valleys, openings, mapped) = resolve(&params);
-		Self {
-			params,
-			roofs,
-			valleys,
-			openings,
-			mapped,
-		}
+		Self { params, roofs, valleys, openings, mapped }
 	}
 
 	pub fn params(&self) -> &RectangularPitchedRoofComplexParams {
@@ -382,19 +365,9 @@ impl BuildingComponents for RectangularPitchedRoofComplex {
 
 fn resolve(
 	params: &RectangularPitchedRoofComplexParams,
-) -> (
-	Vec<PitchedRoof>,
-	Vec<ValleySegment>,
-	Openings,
-	MappedOpenings,
-) {
+) -> (Vec<PitchedRoof>, Vec<ValleySegment>, Openings, MappedOpenings) {
 	if params.volumes.is_empty() {
-		return (
-			Vec::new(),
-			Vec::new(),
-			Openings::new(),
-			MappedOpenings::new(),
-		);
+		return (Vec::new(), Vec::new(), Openings::new(), MappedOpenings::new());
 	}
 
 	let mut volumes: Vec<VolumeCandidate> = decompose_volumes(&params.volumes)
@@ -410,17 +383,9 @@ fn resolve(
 	}
 	// Hip: meet the lower run ridge on the hip centerline edge (not under the
 	// higher ridge tip). Eaves stay on the end wall.
-	finish_coaxial_ridge_meets(
-		&mut volumes,
-		&junctions.coaxial,
-		params.end_cap,
-		&mut valleys,
-	);
+	finish_coaxial_ridge_meets(&mut volumes, &junctions.coaxial, params.end_cap, &mut valleys);
 
-	let roofs: Vec<PitchedRoof> = volumes
-		.iter()
-		.map(|vol| emit_roof(vol, params))
-		.collect();
+	let roofs: Vec<PitchedRoof> = volumes.iter().map(|vol| emit_roof(vol, params)).collect();
 	let (roofs, openings, mapped) = apply_openings(roofs, &params.openings);
 
 	(roofs, valleys, openings, mapped)

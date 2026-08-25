@@ -39,16 +39,9 @@ impl ClippedQuadPanel {
 		let b0 = b0.into();
 		let b1 = b1.into();
 		let clip: Vec<Vec3> = clip.into_iter().map(Into::into).collect();
-		let complex = build_complex(style, a0, a1, b0, b1, &clip, PanelComplexJointPolicy::default());
-		Self {
-			style,
-			a0,
-			a1,
-			b0,
-			b1,
-			clip,
-			complex,
-		}
+		let complex =
+			build_complex(style, a0, a1, b0, b1, &clip, PanelComplexJointPolicy::default());
+		Self { style, a0, a1, b0, b1, clip, complex }
 	}
 
 	pub fn rough_stone(
@@ -159,16 +152,11 @@ fn build_complex(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec3;
 	use crate::paneling::panel_plane::panel_plane_frame;
+	use bevy_math::Vec3;
 
 	fn ground_quad() -> (Vec3, Vec3, Vec3, Vec3) {
-		(
-			Vec3::ZERO,
-			Vec3::new(3.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(3.0, 0.0, 2.0),
-		)
+		(Vec3::ZERO, Vec3::new(3.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0), Vec3::new(3.0, 0.0, 2.0))
 	}
 
 	fn interior_trap() -> [Vec3; 4] {
@@ -180,7 +168,12 @@ mod tests {
 		]
 	}
 
-	fn point_in_tri_strict(p: bevy_math::Vec2, a: bevy_math::Vec2, b: bevy_math::Vec2, c: bevy_math::Vec2) -> bool {
+	fn point_in_tri_strict(
+		p: bevy_math::Vec2,
+		a: bevy_math::Vec2,
+		b: bevy_math::Vec2,
+		c: bevy_math::Vec2,
+	) -> bool {
 		let cross = |o: bevy_math::Vec2, u: bevy_math::Vec2, v: bevy_math::Vec2| {
 			(u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x)
 		};
@@ -272,21 +265,9 @@ mod tests {
 			false
 		};
 
-		assert!(
-			covered(Vec3::new(0.5, 0.15, 0.0)),
-			"left of door near ground should remain"
-		);
-		assert!(
-			covered(Vec3::new(3.5, 0.15, 0.0)),
-			"right of door near ground should remain"
-		);
-		assert!(
-			!covered(Vec3::new(2.0, 0.5, 0.0)),
-			"door interior should be open"
-		);
-		assert!(
-			covered(Vec3::new(2.0, 2.6, 0.0)),
-			"above door should remain"
-		);
+		assert!(covered(Vec3::new(0.5, 0.15, 0.0)), "left of door near ground should remain");
+		assert!(covered(Vec3::new(3.5, 0.15, 0.0)), "right of door near ground should remain");
+		assert!(!covered(Vec3::new(2.0, 0.5, 0.0)), "door interior should be open");
+		assert!(covered(Vec3::new(2.0, 2.6, 0.0)), "above door should remain");
 	}
 }

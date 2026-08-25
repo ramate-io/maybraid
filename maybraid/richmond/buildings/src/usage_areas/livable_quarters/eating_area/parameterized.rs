@@ -38,9 +38,7 @@ impl EatingAreaParameterized {
 			spaciousness: cfg
 				.sample_range_f32_4d(space_lo, space_hi, c.x, c.y, c.z, 40.0)
 				.clamp(0.75, 1.9),
-			occupancy: cfg
-				.sample_range_f32_4d(0.28, 0.52, c.x, c.y, c.z, 41.0)
-				.clamp(0.1, 0.75),
+			occupancy: cfg.sample_range_f32_4d(0.28, 0.52, c.x, c.y, c.z, 41.0).clamp(0.1, 0.75),
 			kitchen_frac: cfg
 				.sample_range_f32_4d(frac_lo, frac_hi, c.x, c.y, c.z, 42.0)
 				.clamp(0.3, 0.72),

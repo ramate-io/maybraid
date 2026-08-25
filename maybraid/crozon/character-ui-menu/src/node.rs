@@ -185,6 +185,9 @@ pub enum MenuNode<E> {
 	/// Block-labeled multi-select of items, each row pairing a toggle button
 	/// with its color swatches (e.g. clothing layers).
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
+	/// One-line text field. Toggle and typed changes are renderer events;
+	/// the IR only carries the current value.
+	ShortText { label: &'static str, value: String, max_len: usize },
 }
 
 impl<E> MenuNode<E> {
@@ -292,6 +295,15 @@ impl<E> MenuNode<E> {
 				.map(|value| AssetChoice::new(*value, *value == select.value, event(*value)))
 				.collect(),
 		}
+	}
+
+	/// Short typed label; `max_len` is a hard cap on the stored value.
+	pub fn short_text(label: &'static str, value: impl Into<String>, max_len: usize) -> Self {
+		let mut value = value.into();
+		if value.chars().count() > max_len {
+			value = value.chars().take(max_len).collect();
+		}
+		Self::ShortText { label, value, max_len }
 	}
 }
 

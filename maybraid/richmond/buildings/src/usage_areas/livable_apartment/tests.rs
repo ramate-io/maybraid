@@ -27,22 +27,15 @@ fn apt_with_door(extent: Vec3) -> Confines {
 			OpeningLabel::Passage,
 		),
 	);
-	Confines::new(
-		Aabb3d::from_min_max(Vec3::ZERO, extent),
-		0.0,
-		openings,
-	)
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
 }
 
 #[test]
 fn layout_has_entryway_and_rooms() {
 	let confines = apt_with_door(Vec3::new(10.0, 3.0, 8.0));
-	let (apt, _) =
-		LivableApartment::from_confines(0, &confines, NoiseParams::default()).unwrap();
+	let (apt, _) = LivableApartment::from_confines(0, &confines, NoiseParams::default()).unwrap();
 	assert!(
-		apt.rooms
-			.iter()
-			.any(|r| matches!(r, ApartmentRoom::Entryway { .. })),
+		apt.rooms.iter().any(|r| matches!(r, ApartmentRoom::Entryway { .. })),
 		"expected entryway"
 	);
 	assert!(
@@ -65,16 +58,11 @@ fn larger_apt_gets_bedroom() {
 	let (apt, _) = LivableApartment::from_confines(
 		0,
 		&confines,
-		NoiseParams {
-			seed: 3,
-			..Default::default()
-		},
+		NoiseParams { seed: 3, ..Default::default() },
 	)
 	.unwrap();
 	assert!(
-		apt.rooms
-			.iter()
-			.any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
+		apt.rooms.iter().any(|r| matches!(r, ApartmentRoom::Bedroom(_))),
 		"expected bedroom in larger apt"
 	);
 }
@@ -85,10 +73,7 @@ fn internal_walls_only_on_high_structural_band() {
 	let (apt, _) = LivableApartment::from_confines(
 		0,
 		&confines,
-		NoiseParams {
-			seed: 3,
-			..Default::default()
-		},
+		NoiseParams { seed: 3, ..Default::default() },
 	)
 	.unwrap();
 	assert!(
@@ -101,21 +86,15 @@ fn internal_walls_only_on_high_structural_band() {
 	);
 	let high = apt.panel_nodes_for_level(LodSceneLevel::High);
 	assert!(
-		high.labeled
-			.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+		high.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 		"High should tag internal walls"
 	);
 	let medium = apt.panel_nodes_for_level(LodSceneLevel::Medium);
 	assert!(
-		!medium
-			.labeled
-			.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
+		!medium.labeled.contains_key(&Layer::new(INTERNAL_WALLS_LAYER)),
 		"Medium should drop internal walls"
 	);
-	assert!(
-		medium.len() < high.len(),
-		"Medium should emit fewer panels than High"
-	);
+	assert!(medium.len() < high.len(), "Medium should emit fewer panels than High");
 }
 
 #[test]
@@ -130,10 +109,7 @@ fn l_shape_reaches_entry_from_far() {
 				o.insert(
 					OpeningId::new("door"),
 					Opening::new(
-						Aabb3d::from_min_max(
-							Vec3::new(4.0, 0.0, -0.15),
-							Vec3::new(5.0, 2.2, 0.15),
-						),
+						Aabb3d::from_min_max(Vec3::new(4.0, 0.0, -0.15), Vec3::new(5.0, 2.2, 0.15)),
 						OpeningLabel::Passage,
 					),
 				);
@@ -150,14 +126,9 @@ fn l_shape_reaches_entry_from_far() {
 		),
 	);
 	let cells = MultiConfines::new([bar, stub]);
-	let (apt, _) =
-		LivableApartment::from_multi(0, &cells, NoiseParams::default()).unwrap();
+	let (apt, _) = LivableApartment::from_multi(0, &cells, NoiseParams::default()).unwrap();
 	assert!(apt.max_rects.len() >= 2, "L should yield ≥2 max-rects");
-	assert!(
-		apt.rooms
-			.iter()
-			.any(|r| matches!(r, ApartmentRoom::Entryway { .. }))
-	);
+	assert!(apt.rooms.iter().any(|r| matches!(r, ApartmentRoom::Entryway { .. })));
 	let far = apt.rooms.iter().filter_map(room_xz).any(|r| r.min.y > 5.5);
 	assert!(far, "expected packed content in far L leg");
 }
@@ -174,10 +145,7 @@ fn shallow_door_cell_entry_stays_connected() {
 				o.insert(
 					OpeningId::new("door"),
 					Opening::new(
-						Aabb3d::from_min_max(
-							Vec3::new(0.9, 0.0, -0.15),
-							Vec3::new(2.1, 2.2, 0.15),
-						),
+						Aabb3d::from_min_max(Vec3::new(0.9, 0.0, -0.15), Vec3::new(2.1, 2.2, 0.15)),
 						OpeningLabel::Passage,
 					),
 				);
@@ -238,10 +206,7 @@ fn thin_entry_corridor_claimed_not_dropped() {
 				o.insert(
 					OpeningId::new("door"),
 					Opening::new(
-						Aabb3d::from_min_max(
-							Vec3::new(0.4, 0.0, -0.15),
-							Vec3::new(1.4, 2.2, 0.15),
-						),
+						Aabb3d::from_min_max(Vec3::new(0.4, 0.0, -0.15), Vec3::new(1.4, 2.2, 0.15)),
 						OpeningLabel::Passage,
 					),
 				);
@@ -261,9 +226,7 @@ fn thin_entry_corridor_claimed_not_dropped() {
 		LivableApartment::from_multi(0, &MultiConfines::new([stem, body]), NoiseParams::default())
 			.unwrap();
 	assert!(
-		apt.rooms
-			.iter()
-			.any(|r| matches!(r, ApartmentRoom::Entryway { .. })),
+		apt.rooms.iter().any(|r| matches!(r, ApartmentRoom::Entryway { .. })),
 		"expected entry on stem"
 	);
 	assert!(

@@ -108,11 +108,7 @@ impl PlanOpeningFace {
 		if a1 - a0 < MIN_SPAN {
 			return None;
 		}
-		Some(Self {
-			along0: a0,
-			along1: a1,
-			..self
-		})
+		Some(Self { along0: a0, along1: a1, ..self })
 	}
 
 	/// Shared border length with `region` (≥0) when the region sits on the inward side.
@@ -187,35 +183,21 @@ impl PlanOpeningFace {
 			.into_iter()
 			.filter(|(a, b)| b - a + EPS >= min_len)
 			.max_by(|a, b| {
-				(a.1 - a.0)
-					.partial_cmp(&(b.1 - b.0))
-					.unwrap_or(std::cmp::Ordering::Equal)
+				(a.1 - a.0).partial_cmp(&(b.1 - b.0)).unwrap_or(std::cmp::Ordering::Equal)
 			})
 	}
 
 	fn extrude(self, s0: f32, s1: f32, depth: f32) -> Aabb2d {
 		if self.thru_is_x {
 			if self.inward_positive {
-				Aabb2d {
-					min: Vec2::new(self.thru, s0),
-					max: Vec2::new(self.thru + depth, s1),
-				}
+				Aabb2d { min: Vec2::new(self.thru, s0), max: Vec2::new(self.thru + depth, s1) }
 			} else {
-				Aabb2d {
-					min: Vec2::new(self.thru - depth, s0),
-					max: Vec2::new(self.thru, s1),
-				}
+				Aabb2d { min: Vec2::new(self.thru - depth, s0), max: Vec2::new(self.thru, s1) }
 			}
 		} else if self.inward_positive {
-			Aabb2d {
-				min: Vec2::new(s0, self.thru),
-				max: Vec2::new(s1, self.thru + depth),
-			}
+			Aabb2d { min: Vec2::new(s0, self.thru), max: Vec2::new(s1, self.thru + depth) }
 		} else {
-			Aabb2d {
-				min: Vec2::new(s0, self.thru - depth),
-				max: Vec2::new(s1, self.thru),
-			}
+			Aabb2d { min: Vec2::new(s0, self.thru - depth), max: Vec2::new(s1, self.thru) }
 		}
 	}
 
@@ -226,10 +208,7 @@ impl PlanOpeningFace {
 		let depth = depth.max(MIN_SPAN);
 		let (s0, s1) = place_segment(face.along0, face.along1, contact_len, along_t)?;
 		let seed = face.extrude(s0, s1, depth);
-		let clamped = Aabb2d {
-			min: seed.min.max(host.min),
-			max: seed.max.min(host.max),
-		};
+		let clamped = Aabb2d { min: seed.min.max(host.min), max: seed.max.min(host.max) };
 		if clamped.max.x - clamped.min.x < MIN_SPAN || clamped.max.y - clamped.min.y < MIN_SPAN {
 			return None;
 		}
@@ -255,10 +234,7 @@ impl PlanOpeningFace {
 		let depth = depth.max(MIN_SPAN);
 		let (s0, s1) = place_segment(seg0, seg1, contact_len, along_t)?;
 		let seed = face.extrude(s0, s1, depth);
-		let clamped = Aabb2d {
-			min: seed.min.max(host.min),
-			max: seed.max.min(host.max),
-		};
+		let clamped = Aabb2d { min: seed.min.max(host.min), max: seed.max.min(host.max) };
 		if clamped.max.x - clamped.min.x < MIN_SPAN || clamped.max.y - clamped.min.y < MIN_SPAN {
 			return None;
 		}
@@ -280,26 +256,14 @@ impl PlanOpeningFace {
 	pub fn outward_block(self, host: Aabb2d) -> Aabb2d {
 		if self.thru_is_x {
 			if self.inward_positive {
-				Aabb2d {
-					min: host.min,
-					max: Vec2::new(self.thru, host.max.y),
-				}
+				Aabb2d { min: host.min, max: Vec2::new(self.thru, host.max.y) }
 			} else {
-				Aabb2d {
-					min: Vec2::new(self.thru, host.min.y),
-					max: host.max,
-				}
+				Aabb2d { min: Vec2::new(self.thru, host.min.y), max: host.max }
 			}
 		} else if self.inward_positive {
-			Aabb2d {
-				min: host.min,
-				max: Vec2::new(host.max.x, self.thru),
-			}
+			Aabb2d { min: host.min, max: Vec2::new(host.max.x, self.thru) }
 		} else {
-			Aabb2d {
-				min: Vec2::new(host.min.x, self.thru),
-				max: host.max,
-			}
+			Aabb2d { min: Vec2::new(host.min.x, self.thru), max: host.max }
 		}
 	}
 }
@@ -342,7 +306,12 @@ pub trait Aabb2dPack: Sized {
 	fn is_clear_of(self, excludes: &[Self]) -> bool;
 
 	/// Reserved: axis-aligned bipartition by area fraction.
-	fn bipartition_by_area(self, cut_x: bool, first_from_min: bool, first_frac: f32) -> (Self, Self);
+	fn bipartition_by_area(
+		self,
+		cut_x: bool,
+		first_from_min: bool,
+		first_frac: f32,
+	) -> (Self, Self);
 
 	/// Reserved: alternate full grow of two seeds into free space.
 	fn grow_pair(
@@ -408,66 +377,41 @@ impl Aabb2dPack for Aabb2d {
 		!excludes.iter().any(|e| intersects_aabb2(self, *e))
 	}
 
-	fn bipartition_by_area(self, cut_x: bool, first_from_min: bool, first_frac: f32) -> (Self, Self) {
+	fn bipartition_by_area(
+		self,
+		cut_x: bool,
+		first_from_min: bool,
+		first_frac: f32,
+	) -> (Self, Self) {
 		let frac = first_frac.clamp(0.05, 0.95);
 		if cut_x {
 			let span = self.max.x - self.min.x;
-			let cut = if first_from_min {
-				self.min.x + span * frac
-			} else {
-				self.max.x - span * frac
-			};
+			let cut =
+				if first_from_min { self.min.x + span * frac } else { self.max.x - span * frac };
 			if first_from_min {
 				(
-					Aabb2d {
-						min: self.min,
-						max: Vec2::new(cut, self.max.y),
-					},
-					Aabb2d {
-						min: Vec2::new(cut, self.min.y),
-						max: self.max,
-					},
+					Aabb2d { min: self.min, max: Vec2::new(cut, self.max.y) },
+					Aabb2d { min: Vec2::new(cut, self.min.y), max: self.max },
 				)
 			} else {
 				(
-					Aabb2d {
-						min: Vec2::new(cut, self.min.y),
-						max: self.max,
-					},
-					Aabb2d {
-						min: self.min,
-						max: Vec2::new(cut, self.max.y),
-					},
+					Aabb2d { min: Vec2::new(cut, self.min.y), max: self.max },
+					Aabb2d { min: self.min, max: Vec2::new(cut, self.max.y) },
 				)
 			}
 		} else {
 			let span = self.max.y - self.min.y;
-			let cut = if first_from_min {
-				self.min.y + span * frac
-			} else {
-				self.max.y - span * frac
-			};
+			let cut =
+				if first_from_min { self.min.y + span * frac } else { self.max.y - span * frac };
 			if first_from_min {
 				(
-					Aabb2d {
-						min: self.min,
-						max: Vec2::new(self.max.x, cut),
-					},
-					Aabb2d {
-						min: Vec2::new(self.min.x, cut),
-						max: self.max,
-					},
+					Aabb2d { min: self.min, max: Vec2::new(self.max.x, cut) },
+					Aabb2d { min: Vec2::new(self.min.x, cut), max: self.max },
 				)
 			} else {
 				(
-					Aabb2d {
-						min: Vec2::new(self.min.x, cut),
-						max: self.max,
-					},
-					Aabb2d {
-						min: self.min,
-						max: Vec2::new(self.max.x, cut),
-					},
+					Aabb2d { min: Vec2::new(self.min.x, cut), max: self.max },
+					Aabb2d { min: self.min, max: Vec2::new(self.max.x, cut) },
 				)
 			}
 		}
@@ -557,10 +501,7 @@ fn place_segment(a0: f32, a1: f32, len: f32, t: f32) -> Option<(f32, f32)> {
 
 fn lerp_aabb2(a: Aabb2d, b: Aabb2d, t: f32) -> Aabb2d {
 	let t = t.clamp(0.0, 1.0);
-	Aabb2d {
-		min: a.min + (b.min - a.min) * t,
-		max: a.max + (b.max - a.max) * t,
-	}
+	Aabb2d { min: a.min + (b.min - a.min) * t, max: a.max + (b.max - a.max) * t }
 }
 
 #[cfg(test)]
@@ -569,14 +510,8 @@ mod tests {
 
 	#[test]
 	fn south_passage_face_opens_north_into_host() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 8.0),
-		};
-		let passage = Aabb2d {
-			min: Vec2::new(1.0, -0.2),
-			max: Vec2::new(4.0, 0.2),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 8.0) };
+		let passage = Aabb2d { min: Vec2::new(1.0, -0.2), max: Vec2::new(4.0, 0.2) };
 		let face = PlanOpeningFace::from_passage(host, passage).unwrap();
 		assert!(!face.thru_is_x);
 		assert!((face.thru - 0.2).abs() < 1e-3);
@@ -586,14 +521,8 @@ mod tests {
 
 	#[test]
 	fn seed_shares_one_meter_border() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 8.0),
-		};
-		let passage = Aabb2d {
-			min: Vec2::new(1.0, -0.2),
-			max: Vec2::new(4.0, 0.2),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 8.0) };
+		let passage = Aabb2d { min: Vec2::new(1.0, -0.2), max: Vec2::new(4.0, 0.2) };
 		let face = PlanOpeningFace::from_passage(host, passage).unwrap();
 		let seed = face.seed(host, 1.0, 1.0, 0.5).unwrap();
 		assert!(face.contacts(seed, 1.0));
@@ -602,14 +531,8 @@ mod tests {
 
 	#[test]
 	fn face_band_depth_into_host() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 8.0),
-		};
-		let passage = Aabb2d {
-			min: Vec2::new(1.0, -0.2),
-			max: Vec2::new(5.0, 0.2),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 8.0) };
+		let passage = Aabb2d { min: Vec2::new(1.0, -0.2), max: Vec2::new(5.0, 0.2) };
 		let face = PlanOpeningFace::from_passage(host, passage).unwrap();
 		let band = face.band(host, 2.0, 0.8, 0.0).unwrap();
 		assert!((band.max.y - band.min.y - 0.8).abs() < 1e-2);
@@ -618,14 +541,8 @@ mod tests {
 
 	#[test]
 	fn grow_toward_area_stops_near_target() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 6.0),
-		};
-		let seed = Aabb2d {
-			min: Vec2::new(4.0, 0.0),
-			max: Vec2::new(6.0, 1.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 6.0) };
+		let seed = Aabb2d { min: Vec2::new(4.0, 0.0), max: Vec2::new(6.0, 1.0) };
 		let grown = seed.grow_toward_area(host, &[], 12.0);
 		let area = grown.pack_area();
 		assert!(area >= 11.0 && area <= 14.0, "area {area}");
@@ -633,10 +550,7 @@ mod tests {
 
 	#[test]
 	fn bipartition_splits_half() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(10.0, 6.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(10.0, 6.0) };
 		let (a, b) = host.bipartition_by_area(false, true, 0.5);
 		assert!((a.pack_area() - 30.0).abs() < 1e-2);
 		assert!((b.pack_area() - 30.0).abs() < 1e-2);

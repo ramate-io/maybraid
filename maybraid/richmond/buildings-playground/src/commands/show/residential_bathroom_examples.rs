@@ -15,9 +15,6 @@ pub struct ResidentialBathroomExamples {
 
 impl ResidentialBathroomExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::ResidentialBathroomExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::ResidentialBathroomExamples, self.transform.transform())
 	}
 }

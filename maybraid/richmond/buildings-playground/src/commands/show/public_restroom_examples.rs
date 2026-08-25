@@ -15,9 +15,6 @@ pub struct PublicRestroomExamples {
 
 impl PublicRestroomExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::PublicRestroomExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::PublicRestroomExamples, self.transform.transform())
 	}
 }

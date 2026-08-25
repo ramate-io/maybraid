@@ -36,10 +36,7 @@ fn living_and_sitting_gallery_cells_fit() {
 	for (extent, seed, sp, occ) in living {
 		let (room, _) = LivingRoom::fit_with_fill(
 			&south_door(extent),
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			LivingRoomParameterized::with_fill(sp, occ),
 		)
 		.unwrap_or_else(|e| panic!("living {extent:?} seed={seed}: {e}"));
@@ -53,10 +50,7 @@ fn living_and_sitting_gallery_cells_fit() {
 	for (extent, seed, sp, occ) in sitting {
 		let (room, _) = SittingRoom::fit_with_fill(
 			&south_door(extent),
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			SittingRoomParameterized::with_fill(sp, occ),
 		)
 		.unwrap_or_else(|e| panic!("sitting {extent:?} seed={seed}: {e}"));
@@ -73,18 +67,14 @@ fn kitchen_layouts_and_thin_dining_fit() {
 	] {
 		let (room, _) = Kitchen::fit_with_fill(
 			&south_door(Vec3::new(6.0, 3.0, 4.5)),
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			KitchenParameterized::with_fill(1.2, 0.4).with_layout(layout),
 		)
 		.unwrap_or_else(|e| panic!("kitchen {layout:?}: {e}"));
 		assert!(!room.counter_runs.is_empty());
 		if layout == KitchenCounterLayout::LShape {
 			assert!(
-				room.counter_runs.len() >= 2
-					|| room.counter_layout == KitchenCounterLayout::Galley,
+				room.counter_runs.len() >= 2 || room.counter_layout == KitchenCounterLayout::Galley,
 				"L should place two runs or soft-fall to galley"
 			);
 		}
@@ -96,10 +86,7 @@ fn kitchen_layouts_and_thin_dining_fit() {
 	] {
 		let (room, _) = DiningRoom::fit_with_fill(
 			&south_door(extent),
-			NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed, ..NoiseParams::default() },
 			DiningRoomParameterized::with_fill(1.25, 0.4),
 		)
 		.unwrap_or_else(|e| panic!("dining {extent:?}: {e}"));
@@ -110,17 +97,11 @@ fn kitchen_layouts_and_thin_dining_fit() {
 	let plan = DiningRoomPlan::from_parameterized(
 		DiningRoomParameterized::with_fill(1.3, 0.45),
 		&confines,
-		NoiseParams {
-			seed: 3,
-			..NoiseParams::default()
-		},
+		NoiseParams { seed: 3, ..NoiseParams::default() },
 	)
 	.expect("roomy dining");
 	let table = plan.packed.tables.first().expect("table");
 	let e = table.max - table.min;
 	let long = e.x.max(e.z);
-	assert!(
-		long + 1e-3 >= 3.2,
-		"expected host-scaled table long axis >= 3.2, got {long}"
-	);
+	assert!(long + 1e-3 >= 3.2, "expected host-scaled table long axis >= 3.2, got {long}");
 }

@@ -23,10 +23,7 @@ fn single_box_long_axis_and_no_valleys() {
 #[test]
 fn single_gable_extends_free_ends() {
 	let complex = RectangularPitchedRoofComplexParams::single(10.0, 6.0, 2.0, 4.0)
-		.end_cap(EndCap::Gable {
-			ridge: Overhang::Fixed(0.5),
-			eave: Overhang::Fixed(0.4),
-		})
+		.end_cap(EndCap::Gable { ridge: Overhang::Fixed(0.5), eave: Overhang::Fixed(0.4) })
 		.build();
 	assert_eq!(complex.roofs().len(), 1);
 	let half = &complex.roofs()[0].params().halves[0];
@@ -78,14 +75,8 @@ fn stepped_presets_vary_ridge_and_eave_heights() {
 			[a.y, b.y]
 		})
 		.collect();
-	assert!(
-		eave_ys.iter().any(|y| (y - 2.0).abs() < 1e-3),
-		"missing bar eave 2.0 in {eave_ys:?}"
-	);
-	assert!(
-		eave_ys.iter().any(|y| (y - 3.2).abs() < 1e-3),
-		"missing stem eave 3.2 in {eave_ys:?}"
-	);
+	assert!(eave_ys.iter().any(|y| (y - 2.0).abs() < 1e-3), "missing bar eave 2.0 in {eave_ys:?}");
+	assert!(eave_ys.iter().any(|y| (y - 3.2).abs() < 1e-3), "missing stem eave 3.2 in {eave_ys:?}");
 	assert!(!eave_step.valleys().is_empty());
 
 	let t = RectangularPitchedRoofComplexParams::t_shape_stepped().build();
@@ -116,11 +107,7 @@ fn hall_and_bays_has_three_t_junctions() {
 	let complex = RectangularPitchedRoofComplexParams::hall_and_bays().build();
 	assert_eq!(complex.roofs().len(), 4);
 	// Each bay forms a T → two concave corners; three bays → six valleys.
-	assert!(
-		complex.valleys().len() >= 6,
-		"expected ≥6 valleys, got {}",
-		complex.valleys().len()
-	);
+	assert!(complex.valleys().len() >= 6, "expected ≥6 valleys, got {}", complex.valleys().len());
 }
 
 #[test]
@@ -130,10 +117,7 @@ fn t_bar_keeps_full_eaves_stems_strip_to_valley() {
 	let hall = &complex.roofs()[0];
 	for half in &hall.params().halves {
 		let span_x = (half.eave_line.1.x - half.eave_line.0.x).abs();
-		assert!(
-			span_x > 27.5,
-			"hall eave should stay full, got {span_x}"
-		);
+		assert!(span_x > 27.5, "hall eave should stay full, got {span_x}");
 	}
 	// Bays (stems): facing eaves strip back toward the hall valley.
 	for bay in &complex.roofs()[1..] {
@@ -153,10 +137,7 @@ fn t_bar_keeps_full_eaves_stems_strip_to_valley() {
 fn l_shape_marks_junction_and_builds_valley() {
 	let complex = RectangularPitchedRoofComplexParams::l_shape().build();
 	assert_eq!(complex.roofs().len(), 2);
-	assert!(
-		!complex.valleys().is_empty(),
-		"expected at least one valley at the L corner"
-	);
+	assert!(!complex.valleys().is_empty(), "expected at least one valley at the L corner");
 	let v = complex.valleys()[0];
 	assert!(v.ridge_point.y > v.eave_point.y);
 	// Inner corner of default L is near (+2, +2) in XZ before overhang.
@@ -214,10 +195,7 @@ fn demo_presets_valley_expectations() {
 
 	let mixed = RectangularPitchedRoofComplexParams::mixed().build();
 	assert_eq!(mixed.roofs().len(), 5);
-	assert!(
-		!mixed.valleys().is_empty(),
-		"mixed cluster should still form valleys"
-	);
+	assert!(!mixed.valleys().is_empty(), "mixed cluster should still form valleys");
 
 	let ring = RectangularPitchedRoofComplexParams::ring().build();
 	assert_eq!(ring.roofs().len(), 4);
@@ -249,16 +227,8 @@ fn demo_presets_valley_expectations() {
 	);
 
 	let cross = RectangularPitchedRoofComplexParams::pathological_cross().build();
-	assert_eq!(
-		cross.roofs().len(),
-		4,
-		"full + cross should decompose into four arm roofs"
-	);
-	assert_eq!(
-		cross.valleys().len(),
-		4,
-		"four L valleys at the ridge crossing"
-	);
+	assert_eq!(cross.roofs().len(), 4, "full + cross should decompose into four arm roofs");
+	assert_eq!(cross.valleys().len(), 4, "four L valleys at the ridge crossing");
 }
 
 #[test]
@@ -305,14 +275,11 @@ fn pitch_opening_assigns_to_nearest_roof_and_clips() {
 		.build();
 	assert!(complex.mapped_opening(&OpeningId::new("sky")).is_some());
 	assert_eq!(complex.openings().len(), 1);
-	let clipped = complex
-		.roofs()
-		.iter()
-		.any(|r| {
-			r.pitches()
-				.iter()
-				.any(|p| matches!(p.pieces()[0], ClippedStripPiece::Clipped(_)))
-		});
+	let clipped = complex.roofs().iter().any(|r| {
+		r.pitches()
+			.iter()
+			.any(|p| matches!(p.pieces()[0], ClippedStripPiece::Clipped(_)))
+	});
 	assert!(clipped, "expected a clipped pitch on the nearest roof");
 }
 

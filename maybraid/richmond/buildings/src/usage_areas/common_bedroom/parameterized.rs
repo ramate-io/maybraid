@@ -47,19 +47,14 @@ impl CommonBedroomParameterized {
 		let usable = aabb2_area(aabb3_to_plan(&confines.bounds, PlanAxes::XZ)).max(1.0);
 
 		// Bias toward roomier footprints than the old 1.0-centered default.
-		let spaciousness = cfg
-			.sample_range_f32_4d(1.05, 1.55, c.x, c.y, c.z, 10.0)
-			.clamp(0.75, 2.0);
-		let occupancy = cfg
-			.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, 11.0)
-			.clamp(0.05, 1.0);
+		let spaciousness =
+			cfg.sample_range_f32_4d(1.05, 1.55, c.x, c.y, c.z, 10.0).clamp(0.75, 2.0);
+		let occupancy = cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, 11.0).clamp(0.05, 1.0);
 		let bed_against_wall = cfg.sample_unit_4d(c.x, c.y, c.z, 17.0) >= 0.4;
 
 		// Ensuite: may claim a large share of the host (up to ~half) when space allows.
 		let ensuite_min_area = 2.6 * 1.8;
-		let ensuite_lo = (usable * 0.18)
-			.max(ensuite_min_area)
-			.min(usable.max(ensuite_min_area));
+		let ensuite_lo = (usable * 0.18).max(ensuite_min_area).min(usable.max(ensuite_min_area));
 		let ensuite_hi = (usable * 0.50).max(ensuite_lo + 0.5);
 		let ensuite_area_target =
 			cfg.sample_range_f32_4d(ensuite_lo, ensuite_hi, c.x, c.y, c.z, 18.0);
@@ -76,9 +71,7 @@ impl CommonBedroomParameterized {
 
 		// Walk-in: larger than a shallow closet; grows modestly with host area.
 		let walk_in_min_area = 2.4 * 1.5;
-		let walk_lo = (usable * 0.06)
-			.max(walk_in_min_area)
-			.min(usable.max(walk_in_min_area));
+		let walk_lo = (usable * 0.06).max(walk_in_min_area).min(usable.max(walk_in_min_area));
 		let walk_hi = (usable * 0.14).max(walk_lo + 0.5);
 		let walk_in_area_target = cfg.sample_range_f32_4d(walk_lo, walk_hi, c.x, c.y, c.z, 20.0);
 
@@ -164,9 +157,6 @@ impl CommonBedroomPlan {
 			door_height: params.door_height,
 		};
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

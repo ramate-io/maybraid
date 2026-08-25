@@ -50,12 +50,7 @@ impl RoundedRectFloorParams {
 	pub(super) fn resolve_walls(
 		&self,
 		geom: &RoundedRectGeom,
-	) -> (
-		[ClippedRectangularStrip; 4],
-		[Option<ClippedArcSweep>; 4],
-		Openings,
-		MappedOpenings,
-	) {
+	) -> ([ClippedRectangularStrip; 4], [Option<ClippedArcSweep>; 4], Openings, MappedOpenings) {
 		let thickness = self.joint_thickness.max(1e-4);
 		let mut best_straight: [Option<(f32, OpeningId, Opening)>; 4] = [None, None, None, None];
 		let mut best_corner: [Option<(f32, OpeningId, Opening)>; 4] = [None, None, None, None];
@@ -148,9 +143,7 @@ impl RoundedRectFloorParams {
 			let Some((_, id, opening)) = best_corner[idx].take() else {
 				continue;
 			};
-			let Some((t0, t1, mapped_o)) =
-				corner_clip_t(geom, corner, &opening.bounds)
-			else {
+			let Some((t0, t1, mapped_o)) = corner_clip_t(geom, corner, &opening.bounds) else {
 				continue;
 			};
 			corner_clips[idx] = Some((t0, t1));
@@ -268,10 +261,7 @@ fn corner_clip_t(
 	let p1 = Vec3::new(c.x + ang1.cos() * r, hy0, c.z + ang1.sin() * r);
 	let p2 = Vec3::new(c.x + ang0.cos() * r, hy1, c.z + ang0.sin() * r);
 	let p3 = Vec3::new(c.x + ang1.cos() * r, hy1, c.z + ang1.sin() * r);
-	let mapped = MappedOpening::new(
-		MappedOpeningQuad::new(p1, p0, p3, p2),
-		corner.outward(),
-	);
+	let mapped = MappedOpening::new(MappedOpeningQuad::new(p1, p0, p3, p2), corner.outward());
 	Some((t_lo, t_hi, mapped))
 }
 

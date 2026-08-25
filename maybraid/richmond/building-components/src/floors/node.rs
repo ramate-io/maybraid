@@ -64,11 +64,7 @@ impl LodScene for FloorNode {
 		LodSceneCulls::None
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.placed_kits_for_style(self.style, self.placement)

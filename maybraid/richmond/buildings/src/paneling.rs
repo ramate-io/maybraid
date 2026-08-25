@@ -50,9 +50,7 @@ pub use rect_fit::{
 	roll_to_align_height, zero_roll_height_axis, FittedRect, OrientedRect, RectInset,
 };
 pub use rectangle::{ClippedRectangle, Rectangle};
-pub use rectangular_n_tube::{
-	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation,
-};
+pub use rectangular_n_tube::{RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation};
 pub use rectangular_strip::{RectangularStrip, RectangularStripNode};
 pub use ruled_pitch::RuledPitch;
 pub use ruled_strip::RuledStrip;

@@ -165,10 +165,7 @@ mod tests {
 		assert!(ROOF_HIGH_FACTOR < LINEAR_HIGH_FACTOR);
 		assert!(ROOF_MEDIUM_FACTOR < LINEAR_HIGH_FACTOR);
 		// Wall High cutoff is already past roof Medium → Low for roofs.
-		assert_eq!(
-			RoofLodBand::from_distance_factor(LINEAR_HIGH_FACTOR),
-			RoofLodBand::Low
-		);
+		assert_eq!(RoofLodBand::from_distance_factor(LINEAR_HIGH_FACTOR), RoofLodBand::Low);
 		assert_eq!(RoofLodBand::from_distance_factor(ROOF_LOW_FACTOR + 1.0), RoofLodBand::UltraLow);
 		Ok(())
 	}

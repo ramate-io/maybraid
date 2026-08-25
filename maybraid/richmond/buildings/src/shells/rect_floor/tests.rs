@@ -30,13 +30,8 @@ fn south_passage_clips_and_maps_offset() {
 	let center = Vec3::ZERO;
 	let footprint = Vec2::new(8.0, 6.0);
 	// Offset door toward +X on south face.
-	let opening = RectFloor::side_passage_opening(
-		RectFloorSide::South,
-		center,
-		footprint,
-		1.2,
-		2.1,
-	);
+	let opening =
+		RectFloor::side_passage_opening(RectFloorSide::South, center, footprint, 1.2, 2.1);
 	// Shift the authored AABB toward +X (helper is centered; rebuild offset).
 	let mut openings = Openings::new();
 	let mut o = opening;
@@ -45,16 +40,12 @@ fn south_passage_clips_and_maps_offset() {
 	o.bounds = bevy_math::bounding::Aabb3d::from_min_max(min, max);
 	openings.insert("south", o);
 
-	let r = RectFloorParams::default()
-		.openings(openings)
-		.build();
+	let r = RectFloorParams::default().openings(openings).build();
 	assert!(matches!(
 		r.walls().faces()[RectFloorSide::South.face_index()].pieces()[0],
 		ClippedRectangularStripPiece::Clipped(_)
 	));
-	let mapped = r
-		.mapped_opening(&OpeningId::new("south"))
-		.expect("mapped south");
+	let mapped = r.mapped_opening(&OpeningId::new("south")).expect("mapped south");
 	assert!(mapped.orientation.y < -0.9);
 	let (bl, br, ..) = mapped.endpoint_corners();
 	let mid_x = 0.5 * (bl.x + br.x);

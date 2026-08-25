@@ -94,14 +94,13 @@ impl BladeTuftShape {
 				let index = i as u32;
 				let length = (self.blade_length
 					* CapDirections::length_scale(index, self.seed, 0.78, 1.0))
-					.max(1e-4);
+				.max(1e-4);
 				let base_offset = {
 					let spread = self.base_spread;
 					if spread <= 0.0 {
 						Vec3::ZERO
 					} else {
-						let outward =
-							Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
+						let outward = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
 						let radius = CapDirections::length_scale(
 							index,
 							self.seed.wrapping_add(17),
@@ -150,14 +149,8 @@ impl BladeTuftShape {
 			let mut points = Vec::with_capacity(rings + 1);
 			for ring in 0..=rings {
 				let t = ring as f32 / rings as f32;
-				let sway = strand_sway_at(
-					&noise,
-					seed,
-					t,
-					sway_frequency,
-					self.noise_amplitude,
-					max_sway,
-				);
+				let sway =
+					strand_sway_at(&noise, seed, t, sway_frequency, self.noise_amplitude, max_sway);
 				let local = Vec3::new(sway.right, t * length, sway.forward);
 				points.push(base + rotation * local);
 			}
@@ -171,12 +164,7 @@ impl BladeTuftShape {
 				if seg_len < 1e-6 {
 					continue;
 				}
-				run.push(BladeFrondSegment {
-					start,
-					direction: ray,
-					length: seg_len,
-					width,
-				});
+				run.push(BladeFrondSegment { start, direction: ray, length: seg_len, width });
 			}
 			if !run.is_empty() {
 				runs.push(run);

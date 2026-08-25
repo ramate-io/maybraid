@@ -66,11 +66,7 @@ impl EligibleBitesPassage {
 			if along_len + 1e-3 < BITES_COUNTER_ALONG_MIN {
 				continue;
 			}
-			out.push(Self {
-				bounds: opening.bounds,
-				face,
-				along_len,
-			});
+			out.push(Self { bounds: opening.bounds, face, along_len });
 		}
 		out
 	}
@@ -103,9 +99,7 @@ pub struct PackedBitesCounters {
 impl PackedBitesCounters {
 	pub fn from_specs(host_bounds: &Aabb3d, specs: &[BitesPassageSpec]) -> Result<Self, FitError> {
 		if specs.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "bites counter passage",
-			});
+			return Err(FitError::TooSmall { reason: "bites counter passage" });
 		}
 		let mut counters = Vec::new();
 		let mut faces = Vec::with_capacity(specs.len());
@@ -116,15 +110,9 @@ impl PackedBitesCounters {
 			}
 		}
 		if counters.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "bites counter passage",
-			});
+			return Err(FitError::TooSmall { reason: "bites counter passage" });
 		}
-		Ok(Self {
-			counters,
-			faces,
-			specs: specs.to_vec(),
-		})
+		Ok(Self { counters, faces, specs: specs.to_vec() })
 	}
 }
 
@@ -144,11 +132,7 @@ impl BitesKitchen {
 			.iter()
 			.map(|c| inflate_aabb2(aabb3_to_plan(c, PlanAxes::XZ), BITES_KITCHEN_COUNTER_CLEARANCE))
 			.collect();
-		cuts.extend(
-			extra_excludes
-				.iter()
-				.map(|e| aabb3_to_plan(e, PlanAxes::XZ)),
-		);
+		cuts.extend(extra_excludes.iter().map(|e| aabb3_to_plan(e, PlanAxes::XZ)));
 		let kitchen2 = max_empty_rect2(host, &cuts)?;
 		let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
 		Some(plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ))
@@ -185,10 +169,8 @@ impl BitesSitdownRegions {
 		faces: &[PlanOpeningFace],
 	) -> Option<(Aabb2d, PlanOpeningFace)> {
 		let host = aabb3_to_plan(bounds, PlanAxes::XZ);
-		let counter_plans: Vec<_> = counters
-			.iter()
-			.map(|c| aabb3_to_plan(c, PlanAxes::XZ))
-			.collect();
+		let counter_plans: Vec<_> =
+			counters.iter().map(|c| aabb3_to_plan(c, PlanAxes::XZ)).collect();
 		let contact = self.seating_contact.max(BITES_SEATING_FACE_CONTACT);
 		let depth = self.seating_seed_depth.max(self.min_plan);
 
@@ -200,13 +182,9 @@ impl BitesSitdownRegions {
 				.unwrap_or(std::cmp::Ordering::Equal)
 		});
 		for &i in &order {
-			if let Some(seed) = faces[i].seed_from_free(
-				host,
-				&counter_plans,
-				contact,
-				depth,
-				self.seating_along_t,
-			) {
+			if let Some(seed) =
+				faces[i].seed_from_free(host, &counter_plans, contact, depth, self.seating_along_t)
+			{
 				return Some((seed, faces[i]));
 			}
 			// Fall back across the free segment if the noisy t misses.
@@ -232,23 +210,17 @@ impl BitesSitdownRegions {
 		face: PlanOpeningFace,
 	) -> Option<Aabb3d> {
 		let host = aabb3_to_plan(bounds, PlanAxes::XZ);
-		let counter_plans: Vec<_> = counters
-			.iter()
-			.map(|c| aabb3_to_plan(c, PlanAxes::XZ))
-			.collect();
+		let counter_plans: Vec<_> =
+			counters.iter().map(|c| aabb3_to_plan(c, PlanAxes::XZ)).collect();
 		let contact = self.seating_contact.max(BITES_SEATING_FACE_CONTACT);
 		let mut hard = counter_plans;
 		hard.push(face.outward_block(host));
 
-		let counter_area: f32 = counters
-			.iter()
-			.map(|c| aabb2_area(aabb3_to_plan(c, PlanAxes::XZ)))
-			.sum();
+		let counter_area: f32 =
+			counters.iter().map(|c| aabb2_area(aabb3_to_plan(c, PlanAxes::XZ))).sum();
 		let usable = (aabb2_area(host) - counter_area).max(0.0);
-		let kitchen_reserve = self
-			.kitchen_area_reserve
-			.max(self.min_plan * self.min_plan)
-			.min(usable * 0.35);
+		let kitchen_reserve =
+			self.kitchen_area_reserve.max(self.min_plan * self.min_plan).min(usable * 0.35);
 		let target = self
 			.seating_area_target
 			.max(self.min_plan * self.min_plan)

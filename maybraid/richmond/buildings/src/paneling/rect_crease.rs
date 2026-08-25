@@ -52,34 +52,26 @@ pub fn joint_along_fitted_bay_crease(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec3;
 	use crate::paneling::rect_fit::{fit_rectangle, orient_rectangle};
+	use bevy_math::Vec3;
 
 	#[test]
 	fn coplanar_bays_skip_default_policy() {
 		let a = orient_rectangle(Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0).unwrap();
-		let b = orient_rectangle(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0)
-			.unwrap();
+		let b =
+			orient_rectangle(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0).unwrap();
 		assert!(joint_along_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default()).is_none());
 	}
 
 	#[test]
 	fn folded_bays_emit_vertical_joint() {
 		let a = orient_rectangle(Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0).unwrap();
-		let b = orient_rectangle(
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 0.0),
-			2.0,
-			0.0,
-		)
-		.unwrap();
+		let b =
+			orient_rectangle(Vec3::new(0.0, 0.0, 2.0), Vec3::new(2.0, 0.0, 0.0), 2.0, 0.0).unwrap();
 		let joint = joint_along_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default())
 			.expect("folded crease");
 		let along = joint.placement.rotation() * Vec3::Y;
-		assert!(
-			along.y.abs() > 0.9,
-			"joint should stand vertically, got along={along:?}"
-		);
+		assert!(along.y.abs() > 0.9, "joint should stand vertically, got along={along:?}");
 		assert!((joint.placement.translation - Vec3::new(0.0, 0.0, 2.0)).length() < 1e-3);
 		assert!(joint_along_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::never()).is_none());
 	}
@@ -100,9 +92,8 @@ mod tests {
 			Vec3::new(2.0, 0.0, 4.0),
 		)
 		.unwrap();
-		assert!(
-			joint_along_fitted_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default()).is_none()
-		);
+		assert!(joint_along_fitted_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default())
+			.is_none());
 	}
 
 	#[test]
@@ -121,9 +112,8 @@ mod tests {
 			Vec3::new(2.0, 1.5, 4.0),
 		)
 		.unwrap();
-		assert!(
-			joint_along_fitted_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default()).is_some()
-		);
+		assert!(joint_along_fitted_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default())
+			.is_some());
 		assert!(
 			joint_along_fitted_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::never()).is_none()
 		);

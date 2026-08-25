@@ -1,0 +1,27 @@
+[package]
+name = "menu-playground"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy = { workspace = true }
+camera-controls = { workspace = true }
+character-ui-menu = { workspace = true }
+clap = { workspace = true }
+crozon-character-playground = { workspace = true }
+crozon-character-ui-menus = { workspace = true }
+crozon-characters = { workspace = true }
+game-commands = { workspace = true }
+lod = { workspace = true }
+maybraid-character-ui-menu-renderer = { workspace = true }
+menu-components = { workspace = true }
+menu-screens = { workspace = true }
+
+[lints]
+workspace = true

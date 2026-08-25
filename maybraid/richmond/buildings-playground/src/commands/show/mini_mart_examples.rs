@@ -15,9 +15,6 @@ pub struct MiniMartExamples {
 
 impl MiniMartExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::MiniMartExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::MiniMartExamples, self.transform.transform())
 	}
 }

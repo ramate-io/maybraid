@@ -355,9 +355,15 @@ fn clothing_toggle_and_color() -> anyhow::Result<()> {
 fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 	let menu = CharacterMenu::default();
 	let nodes = menu.menu_nodes();
-	assert_eq!(nodes.len(), 1);
-	let MenuNode::SectionSelect { label, groups, children } = &nodes[0] else {
-		anyhow::bail!("expected a species SectionSelect at the root");
+	assert_eq!(nodes.len(), 2);
+	let MenuNode::ShortText { label, value, max_len } = &nodes[0] else {
+		anyhow::bail!("expected a Name ShortText at the root");
+	};
+	assert_eq!(*label, "Name");
+	assert!(value.is_empty());
+	assert_eq!(*max_len, crate::CHARACTER_NAME_MAX_LEN);
+	let MenuNode::SectionSelect { label, groups, children } = &nodes[1] else {
+		anyhow::bail!("expected a species SectionSelect after the name field");
 	};
 	assert_eq!(*label, "Species");
 	assert_eq!(groups.len(), 4);

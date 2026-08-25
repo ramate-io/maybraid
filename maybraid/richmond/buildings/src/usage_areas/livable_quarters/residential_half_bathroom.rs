@@ -3,9 +3,7 @@
 mod layout;
 mod parameterized;
 
-pub use parameterized::{
-	ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SCOPE,
-};
+pub use parameterized::{ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SCOPE};
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;

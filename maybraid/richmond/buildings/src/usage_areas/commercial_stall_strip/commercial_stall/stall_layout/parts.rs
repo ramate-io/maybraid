@@ -61,9 +61,7 @@ impl PartsRegions {
 		let host = aabb3_to_plan(host3, PlanAxes::XZ);
 		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "parts passage",
-			});
+			return Err(FitError::TooSmall { reason: "parts passage" });
 		}
 
 		let mut clearances = PassageClearance::bands_std(host, &passage_faces);
@@ -73,9 +71,7 @@ impl PartsRegions {
 			seed_depth: self.office_seed_depth,
 			along_t: self.office_along_t,
 			area_target: self.office_area_target,
-			area_reserve: self
-				.parts_area_reserve
-				.max(PARTS_REGION_MIN * PARTS_REGION_MIN),
+			area_reserve: self.parts_area_reserve.max(PARTS_REGION_MIN * PARTS_REGION_MIN),
 			reserve_cap_frac: 0.7,
 			grow_into: false,
 			max_axis_frac: None,
@@ -92,32 +88,18 @@ impl PartsRegions {
 			door_id: OpeningId::scoped(SCOPE, "office_door", "0"),
 		}
 		.pack(host3, host, &clearances)
-		.ok_or(FitError::TooSmall {
-			reason: "parts office",
-		})?;
-		crate::usage_areas::clearance::commit_door_clear(
-			&mut clearances,
-			enclosed.door_clear,
-			0.0,
-		);
+		.ok_or(FitError::TooSmall { reason: "parts office" })?;
+		crate::usage_areas::clearance::commit_door_clear(&mut clearances, enclosed.door_clear, 0.0);
 
 		let parts = self
 			.pack_parts(host, &clearances, enclosed.room)
-			.ok_or(FitError::TooSmall {
-				reason: "parts region",
-			})?;
+			.ok_or(FitError::TooSmall { reason: "parts region" })?;
 
 		Ok(PartsPacked {
 			office: plan_to_aabb3(host3, enclosed.room, PlanAxes::XZ),
-			parts: parts
-				.into_iter()
-				.map(|p| plan_to_aabb3(host3, p, PlanAxes::XZ))
-				.collect(),
+			parts: parts.into_iter().map(|p| plan_to_aabb3(host3, p, PlanAxes::XZ)).collect(),
 			office_walls: enclosed.walls,
-			office_door: PartsOfficeDoor {
-				id: enclosed.door_id,
-				opening: enclosed.door,
-			},
+			office_door: PartsOfficeDoor { id: enclosed.door_id, opening: enclosed.door },
 		})
 	}
 

@@ -7,7 +7,7 @@ pub mod focus;
 pub mod section_open;
 pub mod shared;
 
-pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState};
+pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState, CHARACTER_NAME_MAX_LEN};
 pub use characters::{
 	braidman::BraidmanMenu, brenal::BrenalMenu, brodler::BrodlerMenu, brokker::BrokkerMenu,
 	caole::CaoleMenu, chupri::ChupriMenu, claber::ClaberMenu, croconot::CroconotMenu, dui::DuiMenu,

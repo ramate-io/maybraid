@@ -79,13 +79,7 @@ impl Default for RoundedRectFloorParams {
 
 impl RoundedRectFloorParams {
 	pub fn new(center_xz: Vec3, footprint: Vec2, storey_height: f32, corner_radius: f32) -> Self {
-		Self {
-			center_xz,
-			footprint,
-			storey_height,
-			corner_radius,
-			..Self::default()
-		}
+		Self { center_xz, footprint, storey_height, corner_radius, ..Self::default() }
 	}
 
 	pub fn floor(mut self, floor: RoundedRectFloorSlab) -> Self {
@@ -230,9 +224,7 @@ impl RoundedRectFloor {
 	}
 
 	pub fn has_floor(&self) -> bool {
-		self.floor_core.is_some()
-			|| !self.floor_edges.is_empty()
-			|| !self.floor_quarters.is_empty()
+		self.floor_core.is_some() || !self.floor_edges.is_empty() || !self.floor_quarters.is_empty()
 	}
 
 	pub fn has_ceiling(&self) -> bool {

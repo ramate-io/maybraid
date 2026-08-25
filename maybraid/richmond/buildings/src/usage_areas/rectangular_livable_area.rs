@@ -11,8 +11,8 @@ mod parameterized;
 mod slot_policy;
 
 pub use parameterized::{
-	RectLivableStrategy, RectangularLivableAreaParameterized, RectangularLivableAreaPlan, SCOPE,
-	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL,
+	RectLivableStrategy, RectangularLivableAreaParameterized, RectangularLivableAreaPlan,
+	DEFAULT_CLOSED_MAX_AREA, DEFAULT_MIN_HALL, SCOPE,
 };
 use slot_policy::{min_area_for, SlotPolicy};
 
@@ -41,8 +41,8 @@ use crate::usage_areas::livable_quarters::{
 	DiningRoom, EatingArea, Kitchen, LivingRoom, ResidentialBathroom, ResidentialHalfBathroom,
 	SittingRoom, Study,
 };
-use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
 use crate::usage_areas::plan_access::PlanAccessParams;
+use crate::usage_areas::plan_cells::{shared_edge_span, subtract_aabb2};
 use crate::usage_areas::plan_geom::{
 	aabb2_near_eq, confines_from_xz, connecting_passage, host_xz, noise_for_cell, DOOR_WIDTH,
 	MIN_ROOM,
@@ -69,10 +69,7 @@ pub enum RectQuarterKind {
 
 impl RectQuarterKind {
 	pub fn is_closed(self) -> bool {
-		matches!(
-			self,
-			Self::Bedroom | Self::Bathroom | Self::HalfBath | Self::Study
-		)
+		matches!(self, Self::Bedroom | Self::Bathroom | Self::HalfBath | Self::Study)
 	}
 
 	pub fn is_open(self) -> bool {
@@ -209,17 +206,13 @@ impl RectangularLivableArea {
 		// still host open/guillotine layouts; spine strategies fail on their own
 		// when they cannot carve `min_hall`.
 		if fp.x < DOOR_WIDTH || fp.y < DOOR_WIDTH {
-			return Err(FitError::TooSmall {
-				reason: "rla_footprint",
-			});
+			return Err(FitError::TooSmall { reason: "rla_footprint" });
 		}
 		let host = host_xz(&confines.bounds);
 		let hs = (host.max - host.min).max(Vec2::splat(EPS));
 		let host_aspect = hs.x.max(hs.y) / hs.x.min(hs.y);
 		let strategies = strategy_order(params.strategy, program, host_aspect);
-		let mut last = FitError::TooSmall {
-			reason: "rla_exhausted",
-		};
+		let mut last = FitError::TooSmall { reason: "rla_exhausted" };
 		for strategy in strategies {
 			match try_strategy(confines, noise, params, program, strategy, circulation) {
 				Ok(ok) => return Ok(ok),
@@ -372,9 +365,7 @@ fn try_strategy(
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let (mut area, residual) = match strategy {
 		RectLivableStrategy::CaseAttempt => {
-			return Err(FitError::TooSmall {
-				reason: "rla_case_attempt_leaf",
-			});
+			return Err(FitError::TooSmall { reason: "rla_case_attempt_leaf" });
 		}
 		RectLivableStrategy::AllOpen => {
 			fit_all_open(confines, noise, params, program, circulation)?
@@ -388,9 +379,7 @@ fn try_strategy(
 		}
 	};
 	if !normalize_ok(&area, params.min_hall) {
-		return Err(FitError::TooSmall {
-			reason: "rla_normalize",
-		});
+		return Err(FitError::TooSmall { reason: "rla_normalize" });
 	}
 	area.plan.chosen = strategy;
 	Ok((area, residual))
@@ -404,11 +393,7 @@ fn fit_all_open(
 	circulation: &[Aabb2d],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	let open_kinds: Vec<_> = program.iter().copied().filter(|k| k.is_open()).collect();
-	let kinds = if open_kinds.is_empty() {
-		vec![RectQuarterKind::Living]
-	} else {
-		open_kinds
-	};
+	let kinds = if open_kinds.is_empty() { vec![RectQuarterKind::Living] } else { open_kinds };
 	let host = host_xz(&confines.bounds);
 	let y0 = Vec3::from(confines.bounds.min).y;
 	let y1 = Vec3::from(confines.bounds.max).y;
@@ -468,12 +453,7 @@ fn fit_all_open(
 	}
 	if rooms.is_empty() {
 		rooms.push(RectAreaRoom::OpenBand {
-			label: label_filling_aabb(
-				LabelStyle::Cyan,
-				"OpenHall",
-				&confines.bounds,
-				roll,
-			),
+			label: label_filling_aabb(LabelStyle::Cyan, "OpenHall", &confines.bounds, roll),
 			confines: confines.clone(),
 		});
 		open_confines.push(confines.clone());
@@ -492,10 +472,7 @@ fn fit_all_open(
 			closed_confines: Vec::new(),
 			open_confines,
 		},
-		FillableRegions {
-			within: residual_within,
-			atop: Vec::new(),
-		},
+		FillableRegions { within: residual_within, atop: Vec::new() },
 	))
 }
 
@@ -506,32 +483,22 @@ fn fit_single_closed(
 	program: &[RectQuarterKind],
 ) -> Result<(RectangularLivableArea, FillableRegions), FitError> {
 	if passage_count(confines) != 1 {
-		return Err(FitError::TooSmall {
-			reason: "rla_single_closed_ports",
-		});
+		return Err(FitError::TooSmall { reason: "rla_single_closed_ports" });
 	}
 	let area_m2 = {
 		let fp = confines.footprint();
 		fp.x * fp.y
 	};
 	if area_m2 > params.closed_max_area + EPS {
-		return Err(FitError::TooSmall {
-			reason: "rla_single_closed_area",
-		});
+		return Err(FitError::TooSmall { reason: "rla_single_closed_area" });
 	}
 	let closed_kinds: Vec<_> = program.iter().copied().filter(|k| k.is_closed()).collect();
 	let kinds = if closed_kinds.is_empty() {
-		vec![
-			RectQuarterKind::Bedroom,
-			RectQuarterKind::Bathroom,
-			RectQuarterKind::Study,
-		]
+		vec![RectQuarterKind::Bedroom, RectQuarterKind::Bathroom, RectQuarterKind::Study]
 	} else {
 		closed_kinds
 	};
-	let mut last = FitError::TooSmall {
-		reason: "rla_single_closed",
-	};
+	let mut last = FitError::TooSmall { reason: "rla_single_closed" };
 	for &kind in &kinds {
 		match try_fit_kind(kind, confines, noise) {
 			Ok((room, nested)) => {
@@ -539,9 +506,7 @@ fn fit_single_closed(
 				// Closed room needs a zero-area "open" witness at the passage face
 				// for normalize — use a thin open band on the door edge.
 				let Some(open_band) = passage_lip_band(confines, params.min_hall) else {
-					last = FitError::TooSmall {
-						reason: "rla_single_closed_lip",
-					};
+					last = FitError::TooSmall { reason: "rla_single_closed_lip" };
 					continue;
 				};
 				let y0 = Vec3::from(confines.bounds.min).y;
@@ -556,8 +521,7 @@ fn fit_single_closed(
 					),
 					confines: open_c.clone(),
 				};
-				let partitions =
-					enclose_closed_rooms(&[confines.clone()], &[open_band], 0);
+				let partitions = enclose_closed_rooms(&[confines.clone()], &[open_band], 0);
 				let area = RectangularLivableArea {
 					confines: confines.clone(),
 					rooms: vec![room, open_room],
@@ -596,13 +560,10 @@ fn fit_spine_hall(
 	let roll = confines.roll;
 	let min_hall = params.min_hall;
 
-	let spine = build_spine_connecting_passages(confines, min_hall).ok_or(FitError::TooSmall {
-		reason: "rla_spine",
-	})?;
+	let spine = build_spine_connecting_passages(confines, min_hall)
+		.ok_or(FitError::TooSmall { reason: "rla_spine" })?;
 	if spine.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "rla_spine_empty",
-		});
+		return Err(FitError::TooSmall { reason: "rla_spine_empty" });
 	}
 
 	let mut rooms = Vec::new();
@@ -615,12 +576,7 @@ fn fit_spine_hall(
 	for (i, band) in spine.iter().enumerate() {
 		let c = confines_from_xz(*band, y0, y1, roll, &Openings::new());
 		rooms.push(RectAreaRoom::OpenBand {
-			label: label_filling_aabb(
-				LabelStyle::Cyan,
-				&format!("Hall{i}"),
-				&c.bounds,
-				roll,
-			),
+			label: label_filling_aabb(LabelStyle::Cyan, &format!("Hall{i}"), &c.bounds, roll),
 			confines: c.clone(),
 		});
 		open_confines.push(c);
@@ -687,10 +643,7 @@ fn fit_spine_hall(
 			closed_confines,
 			open_confines,
 		},
-		FillableRegions {
-			within: residual_within,
-			atop: Vec::new(),
-		},
+		FillableRegions { within: residual_within, atop: Vec::new() },
 	))
 }
 
@@ -704,9 +657,7 @@ fn fit_guillotine(
 	let host = host_xz(&confines.bounds);
 	let size = host.max - host.min;
 	if size.x < params.min_hall * 2.5 && size.y < params.min_hall * 2.5 {
-		return Err(FitError::TooSmall {
-			reason: "rla_guillotine_small",
-		});
+		return Err(FitError::TooSmall { reason: "rla_guillotine_small" });
 	}
 	let y0 = Vec3::from(confines.bounds.min).y;
 	let y1 = Vec3::from(confines.bounds.max).y;
@@ -719,25 +670,17 @@ fn fit_guillotine(
 		host.bipartition_by_area(false, true, frac)
 	};
 	if !rect_usable(a, 6.0) || !rect_usable(b, 6.0) {
-		return Err(FitError::TooSmall {
-			reason: "rla_guillotine_parts",
-		});
+		return Err(FitError::TooSmall { reason: "rla_guillotine_parts" });
 	}
 
 	let Some((along_x, lo, hi, mid)) = shared_edge_span(a, b) else {
-		return Err(FitError::TooSmall {
-			reason: "rla_guillotine_edge",
-		});
+		return Err(FitError::TooSmall { reason: "rla_guillotine_edge" });
 	};
 	if hi - lo + EPS < params.min_hall {
-		return Err(FitError::TooSmall {
-			reason: "rla_guillotine_access",
-		});
+		return Err(FitError::TooSmall { reason: "rla_guillotine_access" });
 	}
 	let passage = connecting_passage(SCOPE, "connect", along_x, lo, hi, mid, y0, y1, "0_0_1")
-		.ok_or(FitError::TooSmall {
-			reason: "rla_guillotine_door",
-		})?;
+		.ok_or(FitError::TooSmall { reason: "rla_guillotine_door" })?;
 
 	let (open_a, open_b) = split_host_openings(confines, a, b);
 	let mut openings_a = open_a;
@@ -800,9 +743,7 @@ fn fit_guillotine(
 }
 
 fn min_door_contact(min_hall: f32) -> f32 {
-	PlanAccessParams::residential()
-		.with_walk_clear(min_hall)
-		.door_contact()
+	PlanAccessParams::residential().with_walk_clear(min_hall).door_contact()
 }
 
 /// Normalize: passages on open ≥ door contact; open connected; closed doors onto open.
@@ -1021,10 +962,8 @@ fn passage_port_points(confines: &Confines, host: &Aabb2d) -> Vec<Vec2> {
 		let dmin = Vec3::from(o.bounds.min);
 		let dmax = Vec3::from(o.bounds.max);
 		let c = Vec2::new(0.5 * (dmin.x + dmax.x), 0.5 * (dmin.z + dmax.z));
-		let clamped = Vec2::new(
-			c.x.clamp(host.min.x, host.max.x),
-			c.y.clamp(host.min.y, host.max.y),
-		);
+		let clamped =
+			Vec2::new(c.x.clamp(host.min.x, host.max.x), c.y.clamp(host.min.y, host.max.y));
 		out.push(clamped);
 	}
 	out
@@ -1066,17 +1005,11 @@ fn band_from_port(host: Aabb2d, port: Vec2, w: f32) -> Aabb2d {
 		0 | 1 => {
 			// Vertical face → horizontal band from that edge through center.
 			let y0 = (port.y - half).clamp(host.min.y, host.max.y - w);
-			Aabb2d {
-				min: Vec2::new(host.min.x, y0),
-				max: Vec2::new(host.max.x, y0 + w),
-			}
+			Aabb2d { min: Vec2::new(host.min.x, y0), max: Vec2::new(host.max.x, y0 + w) }
 		}
 		_ => {
 			let x0 = (port.x - half).clamp(host.min.x, host.max.x - w);
-			Aabb2d {
-				min: Vec2::new(x0, host.min.y),
-				max: Vec2::new(x0 + w, host.max.y),
-			}
+			Aabb2d { min: Vec2::new(x0, host.min.y), max: Vec2::new(x0 + w, host.max.y) }
 		}
 	}
 }
@@ -1184,18 +1117,16 @@ fn pack_closed_abutting(
 					}
 				}
 			}
-			Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
-				match try_slot(host) {
-					Ok((room, nested, confines)) => {
-						rooms.push(room);
-						closed_confines.push(confines.clone());
-						filled_closed.push(confines);
-						residual_within.extend(nested.within);
-					}
-					Err(FitError::TooSmall { .. }) => free.push(host),
-					Err(err) => return Err(err),
+			Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => match try_slot(host) {
+				Ok((room, nested, confines)) => {
+					rooms.push(room);
+					closed_confines.push(confines.clone());
+					filled_closed.push(confines);
+					residual_within.extend(nested.within);
 				}
-			}
+				Err(FitError::TooSmall { .. }) => free.push(host),
+				Err(err) => return Err(err),
+			},
 			Err(FitError::TooSmall { .. }) => free.push(host),
 			Err(err) => return Err(err),
 		}
@@ -1238,11 +1169,8 @@ fn pack_open_into(
 	}
 	// After the program's open kinds (incl. at most one Eating) are placed,
 	// leftover pockets become living/sitting — not more kitchens.
-	let fillers = seeded_shuffle_kinds(
-		&[RectQuarterKind::Living, RectQuarterKind::Sitting],
-		noise,
-		19.0,
-	);
+	let fillers =
+		seeded_shuffle_kinds(&[RectQuarterKind::Living, RectQuarterKind::Sitting], noise, 19.0);
 	let mut guard = 0;
 	while guard < 12 {
 		guard += 1;
@@ -1330,17 +1258,15 @@ fn try_pack_one_open(
 			residual_within.extend(nested.within);
 			return_open_remnants(free, rooms, residual_within, rem, y0, y1, roll);
 		}
-		Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => {
-			match try_slot(host, &[]) {
-				Ok((room, nested, confines)) => {
-					rooms.push(room);
-					open_confines.push(confines);
-					residual_within.extend(nested.within);
-				}
-				Err(FitError::TooSmall { .. }) => free.push(host),
-				Err(err) => return Err(err),
+		Err(FitError::TooSmall { .. }) if !aabb2_near_eq(slot, host) => match try_slot(host, &[]) {
+			Ok((room, nested, confines)) => {
+				rooms.push(room);
+				open_confines.push(confines);
+				residual_within.extend(nested.within);
 			}
-		}
+			Err(FitError::TooSmall { .. }) => free.push(host),
+			Err(err) => return Err(err),
+		},
 		Err(FitError::TooSmall { .. }) => free.push(host),
 		Err(err) => return Err(err),
 	}
@@ -1443,9 +1369,7 @@ fn passage_onto_anchors(
 	y1: f32,
 	id: u32,
 ) -> Option<(OpeningId, Opening)> {
-	passages_onto_anchors(slot, anchors, y0, y1, id)
-		.into_iter()
-		.next()
+	passages_onto_anchors(slot, anchors, y0, y1, id).into_iter().next()
 }
 
 /// One door-width passage per distinct shared wall onto circulation anchors.
@@ -1467,9 +1391,8 @@ fn passages_onto_anchors(
 		if hi - lo + EPS < DOOR_WIDTH * 0.7 {
 			continue;
 		}
-		if let Some((_, wlo, whi, _)) = walls
-			.iter_mut()
-			.find(|(ax, _, _, m)| *ax == along_x && (*m - mid).abs() < 0.05)
+		if let Some((_, wlo, whi, _)) =
+			walls.iter_mut().find(|(ax, _, _, m)| *ax == along_x && (*m - mid).abs() < 0.05)
 		{
 			*wlo = (*wlo).min(lo);
 			*whi = (*whi).max(hi);
@@ -1497,11 +1420,7 @@ fn passages_onto_anchors(
 }
 
 /// Clone `host` openings and add door-width passages onto abutting `circulation`.
-fn confines_with_circulation_doors(
-	host: &Confines,
-	circulation: &[Aabb2d],
-	id: u32,
-) -> Confines {
+fn confines_with_circulation_doors(host: &Confines, circulation: &[Aabb2d], id: u32) -> Confines {
 	let xz = host_xz(&host.bounds);
 	let y0 = Vec3::from(host.bounds.min).y;
 	let y1 = Vec3::from(host.bounds.max).y;
@@ -1537,10 +1456,7 @@ fn openings_for_open_slot(
 	for (oid, opening) in passages_onto_anchors(slot, anchors, y0, y1, id) {
 		openings.insert(oid, opening);
 	}
-	if !openings
-		.iter()
-		.any(|(_, o)| matches!(o.label, OpeningLabel::Passage))
-	{
+	if !openings.iter().any(|(_, o)| matches!(o.label, OpeningLabel::Passage)) {
 		let edge = slot_edge_passage(slot, y0, y1, id);
 		for (oid, o) in edge.iter() {
 			openings.insert(oid.clone(), o.clone());
@@ -1586,10 +1502,7 @@ fn ensure_doors_on_host_passage_walls(
 	}
 }
 
-fn slot_span_on_passage_wall(
-	slot: Aabb2d,
-	face: PlanOpeningFace,
-) -> Option<(bool, f32, f32, f32)> {
+fn slot_span_on_passage_wall(slot: Aabb2d, face: PlanOpeningFace) -> Option<(bool, f32, f32, f32)> {
 	const T: f32 = 0.12;
 	if face.thru_is_x {
 		let on_min = (slot.min.x - face.thru).abs() <= T;
@@ -1597,33 +1510,18 @@ fn slot_span_on_passage_wall(
 		if !on_min && !on_max {
 			return None;
 		}
-		Some((
-			false,
-			slot.min.y,
-			slot.max.y,
-			if on_min { slot.min.x } else { slot.max.x },
-		))
+		Some((false, slot.min.y, slot.max.y, if on_min { slot.min.x } else { slot.max.x }))
 	} else {
 		let on_min = (slot.min.y - face.thru).abs() <= T;
 		let on_max = (slot.max.y - face.thru).abs() <= T;
 		if !on_min && !on_max {
 			return None;
 		}
-		Some((
-			true,
-			slot.min.x,
-			slot.max.x,
-			if on_min { slot.min.y } else { slot.max.y },
-		))
+		Some((true, slot.min.x, slot.max.x, if on_min { slot.min.y } else { slot.max.y }))
 	}
 }
 
-fn openings_wall_has_passage(
-	openings: &Openings,
-	slot: Aabb2d,
-	along_x: bool,
-	mid: f32,
-) -> bool {
+fn openings_wall_has_passage(openings: &Openings, slot: Aabb2d, along_x: bool, mid: f32) -> bool {
 	for (_, o) in openings.iter() {
 		if !matches!(o.label, OpeningLabel::Passage) {
 			continue;
@@ -1722,10 +1620,8 @@ fn take_slot(host: Aabb2d, kind: RectQuarterKind) -> (Aabb2d, Vec<Aabb2d>) {
 	}
 	let frac = policy.carve_frac(host_a);
 	let min_d = policy.min_dim;
-	let candidates = [
-		host.bipartition_by_area(true, true, frac),
-		host.bipartition_by_area(false, true, frac),
-	];
+	let candidates =
+		[host.bipartition_by_area(true, true, frac), host.bipartition_by_area(false, true, frac)];
 	let mut best: Option<(Aabb2d, Aabb2d, f32)> = None;
 	for (slot, rest) in candidates {
 		let ss = slot.max - slot.min;
@@ -1759,22 +1655,16 @@ fn try_fit_kind(
 	noise: NoiseParams,
 ) -> Result<(RectAreaRoom, FillableRegions), FitError> {
 	let fallbacks: &[RectQuarterKind] = match kind {
-		RectQuarterKind::Bedroom => &[
-			RectQuarterKind::Bedroom,
-			RectQuarterKind::Study,
-			RectQuarterKind::Sitting,
-		],
-		RectQuarterKind::Living => &[
-			RectQuarterKind::Living,
-			RectQuarterKind::Sitting,
-			RectQuarterKind::Eating,
-		],
+		RectQuarterKind::Bedroom => {
+			&[RectQuarterKind::Bedroom, RectQuarterKind::Study, RectQuarterKind::Sitting]
+		}
+		RectQuarterKind::Living => {
+			&[RectQuarterKind::Living, RectQuarterKind::Sitting, RectQuarterKind::Eating]
+		}
 		RectQuarterKind::Eating => &[RectQuarterKind::Eating, RectQuarterKind::Kitchen],
-		RectQuarterKind::Kitchen => &[
-			RectQuarterKind::Eating,
-			RectQuarterKind::Kitchen,
-			RectQuarterKind::Dining,
-		],
+		RectQuarterKind::Kitchen => {
+			&[RectQuarterKind::Eating, RectQuarterKind::Kitchen, RectQuarterKind::Dining]
+		}
 		RectQuarterKind::Dining => &[
 			RectQuarterKind::Eating,
 			RectQuarterKind::Dining,
@@ -1783,20 +1673,14 @@ fn try_fit_kind(
 		],
 		RectQuarterKind::Bathroom => &[RectQuarterKind::Bathroom, RectQuarterKind::HalfBath],
 		RectQuarterKind::HalfBath => &[RectQuarterKind::HalfBath, RectQuarterKind::Bathroom],
-		RectQuarterKind::Sitting => &[
-			RectQuarterKind::Sitting,
-			RectQuarterKind::Living,
-			RectQuarterKind::Study,
-		],
-		RectQuarterKind::Study => &[
-			RectQuarterKind::Study,
-			RectQuarterKind::Bedroom,
-			RectQuarterKind::Sitting,
-		],
+		RectQuarterKind::Sitting => {
+			&[RectQuarterKind::Sitting, RectQuarterKind::Living, RectQuarterKind::Study]
+		}
+		RectQuarterKind::Study => {
+			&[RectQuarterKind::Study, RectQuarterKind::Bedroom, RectQuarterKind::Sitting]
+		}
 	};
-	let mut last = FitError::TooSmall {
-		reason: "rla_quarter",
-	};
+	let mut last = FitError::TooSmall { reason: "rla_quarter" };
 	for &k in fallbacks {
 		match fit_kind_exact(k, confines, noise) {
 			Ok(ok) => return Ok(ok),
@@ -1815,14 +1699,18 @@ fn fit_kind_exact(
 	match kind {
 		RectQuarterKind::Bedroom => CommonBedroom::fit_to_confines(confines, noise)
 			.map(|(r, n)| (RectAreaRoom::Bedroom(r), n)),
-		RectQuarterKind::Living => LivingRoom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (RectAreaRoom::Living(r), n)),
-		RectQuarterKind::Eating => EatingArea::fit_to_confines(confines, noise)
-			.map(|(r, n)| (RectAreaRoom::Eating(r), n)),
-		RectQuarterKind::Kitchen => Kitchen::fit_to_confines(confines, noise)
-			.map(|(r, n)| (RectAreaRoom::Kitchen(r), n)),
-		RectQuarterKind::Dining => DiningRoom::fit_to_confines(confines, noise)
-			.map(|(r, n)| (RectAreaRoom::Dining(r), n)),
+		RectQuarterKind::Living => {
+			LivingRoom::fit_to_confines(confines, noise).map(|(r, n)| (RectAreaRoom::Living(r), n))
+		}
+		RectQuarterKind::Eating => {
+			EatingArea::fit_to_confines(confines, noise).map(|(r, n)| (RectAreaRoom::Eating(r), n))
+		}
+		RectQuarterKind::Kitchen => {
+			Kitchen::fit_to_confines(confines, noise).map(|(r, n)| (RectAreaRoom::Kitchen(r), n))
+		}
+		RectQuarterKind::Dining => {
+			DiningRoom::fit_to_confines(confines, noise).map(|(r, n)| (RectAreaRoom::Dining(r), n))
+		}
 		RectQuarterKind::Bathroom => ResidentialBathroom::fit_to_confines(confines, noise)
 			.map(|(r, n)| (RectAreaRoom::Bathroom(r), n)),
 		RectQuarterKind::HalfBath => ResidentialHalfBathroom::fit_to_confines(confines, noise)
@@ -1835,7 +1723,11 @@ fn fit_kind_exact(
 	}
 }
 
-fn push_leftover(rooms: &mut Vec<RectAreaRoom>, residual: &mut Vec<FillRegion>, confines: Confines) {
+fn push_leftover(
+	rooms: &mut Vec<RectAreaRoom>,
+	residual: &mut Vec<FillRegion>,
+	confines: Confines,
+) {
 	let area = {
 		let fp = confines.footprint();
 		fp.x * fp.y
@@ -1967,8 +1859,7 @@ fn enclose_closed_rooms(
 			) {
 				continue;
 			}
-			let door = if !door_placed && best_door == Some(fi) && best_score >= DOOR_WIDTH * 0.7
-			{
+			let door = if !door_placed && best_door == Some(fi) && best_score >= DOOR_WIDTH * 0.7 {
 				door_placed = true;
 				connecting_passage(
 					SCOPE,
@@ -1984,17 +1875,7 @@ fn enclose_closed_rooms(
 			} else {
 				None
 			};
-			push_private_wall(
-				&mut partitions,
-				along_x,
-				lo,
-				hi,
-				mid,
-				y0,
-				y1,
-				thickness,
-				door,
-			);
+			push_private_wall(&mut partitions, along_x, lo, hi, mid, y0, y1, thickness, door);
 		}
 	}
 	partitions
@@ -2039,17 +1920,9 @@ fn partition_strip(
 		return None;
 	}
 	let (start, end, outward) = if along_x {
-		(
-			Vec3::new(lo, y0, mid),
-			Vec3::new(hi, y0, mid),
-			Vec2::new(0.0, 1.0),
-		)
+		(Vec3::new(lo, y0, mid), Vec3::new(hi, y0, mid), Vec2::new(0.0, 1.0))
 	} else {
-		(
-			Vec3::new(mid, y0, lo),
-			Vec3::new(mid, y0, hi),
-			Vec2::new(1.0, 0.0),
-		)
+		(Vec3::new(mid, y0, lo), Vec3::new(mid, y0, hi), Vec2::new(1.0, 0.0))
 	};
 	let edge = WallEdge::new(start, end, height, outward);
 	Some(wall_strip_with_openings(edge, openings, thickness))
@@ -2100,22 +1973,12 @@ fn wall_strip_with_openings(
 	let mut cursor = 0.0_f32;
 	for (s_lo, s_hi, sill, header) in cuts {
 		if s_lo > cursor + EPS {
-			nodes.push(RectangularStripNode::new(
-				edge.start + tang * s_lo,
-				h,
-				thickness,
-				0.0,
-			));
+			nodes.push(RectangularStripNode::new(edge.start + tang * s_lo, h, thickness, 0.0));
 			insets.push(None);
 			cursor = s_lo;
 		}
 		let s_hi = s_hi.max(cursor + EPS);
-		nodes.push(RectangularStripNode::new(
-			edge.start + tang * s_hi,
-			h,
-			thickness,
-			0.0,
-		));
+		nodes.push(RectangularStripNode::new(edge.start + tang * s_hi, h, thickness, 0.0));
 		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
 		insets.push(Some(RectInset::new(sill, header, jamb, jamb)));
 		cursor = s_hi;
@@ -2193,10 +2056,7 @@ mod tests {
 	use super::*;
 
 	fn rect_with_south_door(sx: f32, sz: f32) -> Confines {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(sx, sz),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(sx, sz) };
 		let openings = passages_on_faces(host, 0.0, 3.0, &[(CardinalFace::South, 0.5)]);
 		confines_from_xz(host, 0.0, 3.0, 0.0, &openings)
 	}
@@ -2236,9 +2096,7 @@ mod tests {
 		)
 		.unwrap();
 		assert!(
-			area.rooms
-				.iter()
-				.any(|r| matches!(r, RectAreaRoom::Bedroom(_))),
+			area.rooms.iter().any(|r| matches!(r, RectAreaRoom::Bedroom(_))),
 			"expected closed bedroom"
 		);
 		assert!(normalize_ok(&area, 1.0));
@@ -2246,18 +2104,12 @@ mod tests {
 
 	#[test]
 	fn multi_passage_open_connects() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(8.0, 6.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(8.0, 6.0) };
 		let openings = passages_on_faces(
 			host,
 			0.0,
 			3.0,
-			&[
-				(CardinalFace::South, 0.5),
-				(CardinalFace::North, 0.5),
-			],
+			&[(CardinalFace::South, 0.5), (CardinalFace::North, 0.5)],
 		);
 		let confines = confines_from_xz(host, 0.0, 3.0, 0.0, &openings);
 		let params = RectangularLivableAreaParameterized {
@@ -2277,10 +2129,7 @@ mod tests {
 
 	#[test]
 	fn large_spine_packs_open_quarters() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(12.0, 14.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(12.0, 14.0) };
 		let openings = passages_on_faces(host, 0.0, 3.2, &[(CardinalFace::South, 0.5)]);
 		let confines = confines_from_xz(host, 0.0, 3.2, 0.0, &openings);
 		let params = RectangularLivableAreaParameterized {
@@ -2289,10 +2138,7 @@ mod tests {
 		};
 		let (area, _) = RectangularLivableArea::fit_with_params(
 			&confines,
-			NoiseParams {
-				seed: 7,
-				..Default::default()
-			},
+			NoiseParams { seed: 7, ..Default::default() },
 			params,
 			&[
 				RectQuarterKind::Eating,
@@ -2303,10 +2149,9 @@ mod tests {
 		)
 		.unwrap();
 		assert!(
-			area.rooms.iter().any(|r| matches!(
-				r,
-				RectAreaRoom::Eating(_) | RectAreaRoom::Kitchen(_)
-			)),
+			area.rooms
+				.iter()
+				.any(|r| matches!(r, RectAreaRoom::Eating(_) | RectAreaRoom::Kitchen(_))),
 			"expected eating area / kitchen in large spine layout"
 		);
 		assert!(
@@ -2356,10 +2201,7 @@ mod tests {
 			})
 			.sum();
 		// Most of the footprint should be claimed by labeled rooms / open bands.
-		assert!(
-			labeled > 12.0 * 14.0 * 0.55,
-			"expected most of host labeled, got {labeled}"
-		);
+		assert!(labeled > 12.0 * 14.0 * 0.55, "expected most of host labeled, got {labeled}");
 	}
 
 	#[test]
@@ -2368,60 +2210,25 @@ mod tests {
 		use procedural_common::intersects_aabb2;
 
 		// Bedroom west, open kitchen east — door on the shared edge at x=3.
-		let closed_xz = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(3.0, 4.0),
-		};
-		let open_xz = Aabb2d {
-			min: Vec2::new(3.0, 0.0),
-			max: Vec2::new(8.0, 5.0),
-		};
-		let (oid, door) = connecting_passage(
-			SCOPE,
-			"connect",
-			false,
-			1.0,
-			2.0,
-			3.0,
-			0.0,
-			3.0,
-			"bed",
-		)
-		.expect("door");
+		let closed_xz = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(3.0, 4.0) };
+		let open_xz = Aabb2d { min: Vec2::new(3.0, 0.0), max: Vec2::new(8.0, 5.0) };
+		let (oid, door) =
+			connecting_passage(SCOPE, "connect", false, 1.0, 2.0, 3.0, 0.0, 3.0, "bed")
+				.expect("door");
 		let mut closed_openings = Openings::new();
 		closed_openings.insert(oid.clone(), door);
 		let closed = confines_from_xz(closed_xz, 0.0, 3.0, 0.0, &closed_openings);
 		let host = confines_from_xz(open_xz, 0.0, 3.0, 0.0, &Openings::new());
-		let openings = openings_for_open_slot(
-			open_xz,
-			&[closed_xz],
-			&host,
-			&[closed],
-			0.0,
-			3.0,
-			0,
-		);
-		assert!(
-			openings.get(&oid).is_some(),
-			"open slot must inherit closed sibling door"
-		);
+		let openings = openings_for_open_slot(open_xz, &[closed_xz], &host, &[closed], 0.0, 3.0, 0);
+		assert!(openings.get(&oid).is_some(), "open slot must inherit closed sibling door");
 		let open_conf = confines_from_xz(open_xz, 0.0, 3.0, 0.0, &openings);
-		let pack = init_host_with(
-			&open_conf,
-			InitHostOpts {
-				passage_wall_lip: true,
-			},
-		)
-		.expect("pack host");
+		let pack =
+			init_host_with(&open_conf, InitHostOpts { passage_wall_lip: true }).expect("pack host");
 		// Flush counter on the shared wall at the door along-span.
-		let flush = Aabb2d {
-			min: Vec2::new(3.0, 1.0),
-			max: Vec2::new(3.55, 2.0),
-		};
+		let flush = Aabb2d { min: Vec2::new(3.0, 1.0), max: Vec2::new(3.55, 2.0) };
 		assert!(
 			pack.clearances.iter().any(|c| intersects_aabb2(flush, *c)),
 			"mirrored sibling door must keep out wall-flush furniture"
 		);
 	}
 }
-

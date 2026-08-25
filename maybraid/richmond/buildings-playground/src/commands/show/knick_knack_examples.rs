@@ -15,9 +15,6 @@ pub struct KnickKnackExamples {
 
 impl KnickKnackExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::KnickKnackExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::KnickKnackExamples, self.transform.transform())
 	}
 }

@@ -191,8 +191,12 @@ impl LabelOption for ConceptSpecies {
 	}
 }
 
+/// Hard cap for the character display name.
+pub const CHARACTER_NAME_MAX_LEN: usize = 16;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CharacterMenu {
+	pub name: String,
 	pub species: SingleSelect<ConceptSpecies>,
 	pub braidman: BraidmanMenu,
 	pub brenal: BrenalMenu,
@@ -227,6 +231,7 @@ pub struct CharacterMenu {
 impl CharacterMenu {
 	pub fn from_braidman(config: &BraidmanConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Braidman),
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brenal: BrenalMenu::default(),
@@ -261,6 +266,7 @@ impl CharacterMenu {
 
 	pub fn from_brenal(config: &BrenalConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Brenal),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::from(config).with_animation(animation),
@@ -295,6 +301,7 @@ impl CharacterMenu {
 
 	pub fn from_caole(config: &CaoleConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Caole),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -329,6 +336,7 @@ impl CharacterMenu {
 
 	pub fn from_epiphant(config: &EpiphantConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Epiphant),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -363,6 +371,7 @@ impl CharacterMenu {
 
 	pub fn from_hars(config: &HarsConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Hars),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -397,6 +406,7 @@ impl CharacterMenu {
 
 	pub fn from_ylter(config: &YilterConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Yilter),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -431,6 +441,7 @@ impl CharacterMenu {
 
 	pub fn from_sonyak(config: &SonyakConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Sonyak),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -465,6 +476,7 @@ impl CharacterMenu {
 
 	pub fn from_croconot(config: &CroconotConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Croconot),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -499,6 +511,7 @@ impl CharacterMenu {
 
 	pub fn from_claber(config: &ClaberConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Claber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -533,6 +546,7 @@ impl CharacterMenu {
 
 	pub fn from_brodler(config: &BrodlerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Brodler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -567,6 +581,7 @@ impl CharacterMenu {
 
 	pub fn from_mygr(config: &MygrConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Mygr),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -601,6 +616,7 @@ impl CharacterMenu {
 
 	pub fn from_dui(config: &DuiConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Dui),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -635,6 +651,7 @@ impl CharacterMenu {
 
 	pub fn from_lidder(config: &LidderConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Lidder),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -669,6 +686,7 @@ impl CharacterMenu {
 
 	pub fn from_chupri(config: &ChupriConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Chupri),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -703,6 +721,7 @@ impl CharacterMenu {
 
 	pub fn from_brokker(config: &BrokkerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Brokker),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -737,6 +756,7 @@ impl CharacterMenu {
 
 	pub fn from_tipple(config: &TippleConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Tipple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -771,6 +791,7 @@ impl CharacterMenu {
 
 	pub fn from_topple(config: &ToppleConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Topple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -805,6 +826,7 @@ impl CharacterMenu {
 
 	pub fn from_kispar(config: &KisparConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Kispar),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -839,6 +861,7 @@ impl CharacterMenu {
 
 	pub fn from_tapp(config: &TappConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Tapp),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -873,6 +896,7 @@ impl CharacterMenu {
 
 	pub fn from_kaller(config: &KallerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Kaller),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -907,6 +931,7 @@ impl CharacterMenu {
 
 	pub fn from_kappler(config: &KapplerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Kappler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -941,6 +966,7 @@ impl CharacterMenu {
 
 	pub fn from_wumbus(config: &WumbusConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Wumbus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -975,6 +1001,7 @@ impl CharacterMenu {
 
 	pub fn from_lero(config: &LeroConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Lero),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1009,6 +1036,7 @@ impl CharacterMenu {
 
 	pub fn from_spibmom(config: &SpibmomConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Spibmom),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1043,6 +1071,7 @@ impl CharacterMenu {
 
 	pub fn from_grener(config: &GrenerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Grener),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1077,6 +1106,7 @@ impl CharacterMenu {
 
 	pub fn from_thumplus(config: &ThumplusConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Thumplus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1111,6 +1141,7 @@ impl CharacterMenu {
 
 	pub fn from_mistler(config: &MistlerConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Mistler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1145,6 +1176,7 @@ impl CharacterMenu {
 
 	pub fn from_tuberwaber(config: &TuberwaberConfig, animation: ConceptAnimation) -> Self {
 		Self {
+			name: String::new(),
 			species: SingleSelect::new(ConceptSpecies::Tuberwaber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -3104,58 +3136,65 @@ impl CharacterMenu {
 
 impl MenuComponent<MenuEvent> for CharacterMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
-		MenuNode::section_select_grouped(
-			"Species",
-			self.species.value,
-			MenuEvent::SetSpecies,
-			&[
-				(
-					"Humanoids",
-					&[
-						ConceptSpecies::Braidman,
-						ConceptSpecies::Brodler,
-						ConceptSpecies::Mygr,
-						ConceptSpecies::Dui,
-						ConceptSpecies::Wumbus,
-						ConceptSpecies::Lero,
-						ConceptSpecies::Spibmom,
-						ConceptSpecies::Tuberwaber,
-					],
-				),
-				(
-					"Quadrupeds",
-					&[
-						ConceptSpecies::Brenal,
-						ConceptSpecies::Caole,
-						ConceptSpecies::Epiphant,
-						ConceptSpecies::Hars,
-						ConceptSpecies::Yilter,
-						ConceptSpecies::Sonyak,
-						ConceptSpecies::Claber,
-						ConceptSpecies::Croconot,
-					],
-				),
-				(
-					"Birds",
-					&[
-						ConceptSpecies::Lidder,
-						ConceptSpecies::Chupri,
-						ConceptSpecies::Brokker,
-						ConceptSpecies::Tipple,
-						ConceptSpecies::Topple,
-						ConceptSpecies::Kispar,
-						ConceptSpecies::Tapp,
-						ConceptSpecies::Kaller,
-						ConceptSpecies::Kappler,
-					],
-				),
-				(
-					"Aquatic",
-					&[ConceptSpecies::Grener, ConceptSpecies::Thumplus, ConceptSpecies::Mistler],
-				),
-			],
-			self.species_node(),
-		)
+		MenuNode::fragment([
+			MenuNode::short_text("Name", self.name.clone(), CHARACTER_NAME_MAX_LEN),
+			MenuNode::section_select_grouped(
+				"Species",
+				self.species.value,
+				MenuEvent::SetSpecies,
+				&[
+					(
+						"Humanoids",
+						&[
+							ConceptSpecies::Braidman,
+							ConceptSpecies::Brodler,
+							ConceptSpecies::Mygr,
+							ConceptSpecies::Dui,
+							ConceptSpecies::Wumbus,
+							ConceptSpecies::Lero,
+							ConceptSpecies::Spibmom,
+							ConceptSpecies::Tuberwaber,
+						],
+					),
+					(
+						"Quadrupeds",
+						&[
+							ConceptSpecies::Brenal,
+							ConceptSpecies::Caole,
+							ConceptSpecies::Epiphant,
+							ConceptSpecies::Hars,
+							ConceptSpecies::Yilter,
+							ConceptSpecies::Sonyak,
+							ConceptSpecies::Claber,
+							ConceptSpecies::Croconot,
+						],
+					),
+					(
+						"Birds",
+						&[
+							ConceptSpecies::Lidder,
+							ConceptSpecies::Chupri,
+							ConceptSpecies::Brokker,
+							ConceptSpecies::Tipple,
+							ConceptSpecies::Topple,
+							ConceptSpecies::Kispar,
+							ConceptSpecies::Tapp,
+							ConceptSpecies::Kaller,
+							ConceptSpecies::Kappler,
+						],
+					),
+					(
+						"Aquatic",
+						&[
+							ConceptSpecies::Grener,
+							ConceptSpecies::Thumplus,
+							ConceptSpecies::Mistler,
+						],
+					),
+				],
+				self.species_node(),
+			),
+		])
 	}
 }
 

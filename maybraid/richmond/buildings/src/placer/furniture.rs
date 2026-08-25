@@ -41,8 +41,16 @@ pub fn try_free_extent(
 		return None;
 	}
 	if knobs.prefer_wall {
-		if let Some(a) = try_extent_on_walls(host3, host, clearances, cfg, salt, extent, knobs.wall_eps, knobs.attempts)
-		{
+		if let Some(a) = try_extent_on_walls(
+			host3,
+			host,
+			clearances,
+			cfg,
+			salt,
+			extent,
+			knobs.wall_eps,
+			knobs.attempts,
+		) {
 			return Some(a);
 		}
 	}
@@ -136,18 +144,19 @@ fn try_extent_on_walls(
 	for k in 0..4u32 {
 		let wall = (start + k) % 4;
 		for &swap in &[false, true] {
-			let e = if swap {
-				Vec3::new(extent.z, extent.y, extent.x)
-			} else {
-				extent
-			};
+			let e = if swap { Vec3::new(extent.z, extent.y, extent.x) } else { extent };
 			if e.x > size.x + 1e-3 || e.z > size.z + 1e-3 {
 				continue;
 			}
 			let max_u = (size.x - e.x).max(0.0);
 			let max_v = (size.z - e.z).max(0.0);
 			for attempt in 0..attempts {
-				let t = cfg.sample_unit_4d(salt as f32, attempt as f32, wall as f32 + (swap as u32 as f32) * 0.5, 23.0);
+				let t = cfg.sample_unit_4d(
+					salt as f32,
+					attempt as f32,
+					wall as f32 + (swap as u32 as f32) * 0.5,
+					23.0,
+				);
 				let min = match wall {
 					0 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.min.z),
 					1 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.max.z - e.z),
@@ -170,8 +179,5 @@ fn try_extent_on_walls(
 
 /// Build a plan AABB from origin + size (XZ as Aabb2d x/y).
 pub fn plan_rect(ox: f32, oz: f32, sx: f32, sz: f32) -> Aabb2d {
-	Aabb2d {
-		min: Vec2::new(ox, oz),
-		max: Vec2::new(ox + sx, oz + sz),
-	}
+	Aabb2d { min: Vec2::new(ox, oz), max: Vec2::new(ox + sx, oz + sz) }
 }

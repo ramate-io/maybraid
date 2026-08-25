@@ -114,7 +114,6 @@ impl SlotPolicy {
 				carve_frac_lo: 0.28,
 				carve_frac_hi: 0.65,
 			},
-
 		}
 	}
 

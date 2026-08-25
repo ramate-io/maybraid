@@ -46,37 +46,17 @@ pub struct Rectangle {
 impl Rectangle {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		let (origin, edge, height, thickness, roll) = match self.preset {
-			Some(RectanglePreset::Floor) => (
-				Vec3::ZERO,
-				Vec3::new(0.0, 0.0, 2.0),
-				3.0,
-				0.75,
-				-FRAC_PI_2,
-			),
-			Some(RectanglePreset::Wall) => (
-				Vec3::ZERO,
-				Vec3::new(4.0, 0.0, 0.0),
-				3.0,
-				0.75,
-				0.0,
-			),
-			Some(RectanglePreset::Ceiling) => (
-				Vec3::new(0.0, 2.0, 0.0),
-				Vec3::new(3.0, 0.0, 0.0),
-				2.0,
-				0.75,
-				PI,
-			),
+			Some(RectanglePreset::Floor) => {
+				(Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), 3.0, 0.75, -FRAC_PI_2)
+			}
+			Some(RectanglePreset::Wall) => (Vec3::ZERO, Vec3::new(4.0, 0.0, 0.0), 3.0, 0.75, 0.0),
+			Some(RectanglePreset::Ceiling) => {
+				(Vec3::new(0.0, 2.0, 0.0), Vec3::new(3.0, 0.0, 0.0), 2.0, 0.75, PI)
+			}
 			None => (self.origin, self.edge, self.height, self.thickness, self.roll),
 		};
 		(
-			PreviewSubject::Rectangle {
-				origin,
-				edge,
-				height,
-				thickness,
-				roll,
-			},
+			PreviewSubject::Rectangle { origin, edge, height, thickness, roll },
 			self.transform.transform(),
 		)
 	}

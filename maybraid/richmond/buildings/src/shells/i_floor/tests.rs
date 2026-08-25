@@ -50,25 +50,18 @@ fn passage_on_first_edge_clips() {
 	let edges = IFloorParams::default().build().edges().to_vec();
 	let edge = edges[0];
 	let r = IFloorParams::default()
-		.openings(Openings::new().with(
-			"door",
-			IFloor::edge_passage_opening(edge, 1.0, 2.1),
-		))
+		.openings(Openings::new().with("door", IFloor::edge_passage_opening(edge, 1.0, 2.1)))
 		.build();
 	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
 	assert!(r.walls().iter().any(|w| {
-		w.pieces()
-			.iter()
-			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
+		w.pieces().iter().any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
 			|| w.pieces().len() > 1
 	}));
 }
 
 #[test]
 fn solid_floor_has_multiple_pieces() {
-	let r = IFloorParams::default()
-		.floor(IFloorSlab::Solid)
-		.build();
+	let r = IFloorParams::default().floor(IFloorSlab::Solid).build();
 	assert!(r.has_floor());
 	let panels = r.panel_nodes_for_level(LodSceneLevel::High);
 	assert!(panels.len() > r.wall_count());
@@ -88,13 +81,8 @@ fn shaft_can_remove_a_slab_piece() {
 			OpeningLabel::Shaft,
 		),
 	);
-	let with = IFloorParams::default()
-		.floor(IFloorSlab::Solid)
-		.openings(openings)
-		.build();
-	let without = IFloorParams::default()
-		.floor(IFloorSlab::Solid)
-		.build();
+	let with = IFloorParams::default().floor(IFloorSlab::Solid).openings(openings).build();
+	let without = IFloorParams::default().floor(IFloorSlab::Solid).build();
 	assert!(with.has_floor());
 	assert!(
 		with.panel_nodes_for_level(LodSceneLevel::High).len()

@@ -16,8 +16,8 @@ use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::{SpiralStair, StairNode};
 use richmond_building_components::{
-	append_component_scenes, confined_scene, BuildingComponents,
-	Layers, ParentConfines, PartitionNode,
+	append_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
+	PartitionNode,
 };
 
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
@@ -222,11 +222,7 @@ impl LodScene for WizardsTowerFloor {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
 		self.emit_internal_features(&mut children, lod_ref);
