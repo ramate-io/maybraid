@@ -3,8 +3,8 @@
 //! High / Medium emit one [`FrondCollection`] per frond with a multi-segment rachis run;
 //! fine-phase collection merge does Medium decimation. Collections stay per-frond so
 //! UltraLow merge cannot chord the whole crown; the LOD probe is the parent crown
-//! (same unit as structural LOD). Low / UltraLow drop the fronds and keep two rotated
-//! layered-ball proxies fit to the High crown AABB.
+//! (same unit as structural LOD). Low / UltraLow emit a shared five-chord star
+//! ([`PalmCrownParams::unit_low_star`]) — not layered / cheap balls.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
 //! [`spawn`] for date / Waialea / bush trees still on RenderItem.
@@ -16,11 +16,13 @@ pub use spawn::spawn_stacked_frond_crowns;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
-	StructuralLod, VegetationComponents,
+	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
+	VegetationComponents,
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
+
+use crate::palm_tree::{low_star_collection_nodes, LOW_STAR_FROND_COUNT};
 
 /// Per-ring seed salt (shared with [`spawn::FROND_RING_SEED_SALT`]).
 pub use spawn::FROND_RING_SEED_SALT;
@@ -29,7 +31,7 @@ pub use spawn::FROND_RING_SEED_SALT;
 const PALM_CROWN_STRUCTURAL_HIGH_FACTOR: f32 = 36.0;
 /// Medium outer edge (fine-phase merge; same frond IR as High).
 const PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR: f32 = 54.0;
-/// Low outer edge (layered-ball proxy).
+/// Low outer edge (shared five-chord star).
 const PALM_CROWN_STRUCTURAL_LOW_FACTOR: f32 = 100.0;
 
 /// Authoring / CLI parameters for a palm crown (standalone or stacked rings).
@@ -74,13 +76,13 @@ impl Default for PalmCrownParams {
 }
 
 /// Mid-band date-palm frond length as a fraction of stalk height `H` (RFC `0.6`–`0.8`).
-const DATE_PALM_FROND_LENGTH_FRACTION: f32 = 0.7;
+pub(crate) const DATE_PALM_FROND_LENGTH_FRACTION: f32 = 0.7;
 /// Date-palm rachis width as a fraction of `H`.
-const DATE_PALM_FROND_WIDTH_FRACTION: f32 = 0.07;
+pub(crate) const DATE_PALM_FROND_WIDTH_FRACTION: f32 = 0.07;
 /// Mid-band palm-bush / Waialea frond length as a fraction of `H` (RFC `0.25`–`0.40`).
-const DETAIL_FROND_LENGTH_FRACTION: f32 = 0.325;
+pub(crate) const DETAIL_FROND_LENGTH_FRACTION: f32 = 0.325;
 /// Palm-bush / Waialea rachis width as a fraction of `H`.
-const DETAIL_FROND_WIDTH_FRACTION: f32 = 0.05;
+pub(crate) const DETAIL_FROND_WIDTH_FRACTION: f32 = 0.05;
 
 impl PalmCrownParams {
 	pub fn new(ring_count: u32, ring_spacing: f32, shape: FrondCrownShape) -> Self {
@@ -165,6 +167,21 @@ impl PalmCrownParams {
 		self.shape.emission_lift_radians = 0.28;
 	}
 
+	fn apply_low_star_archetype(&mut self) {
+		self.ring_count = 1;
+		self.ring_spacing = 0.0;
+		self.shape.frond_count = LOW_STAR_FROND_COUNT;
+		self.shape.spine_segments = 1;
+		self.shape.leaflet_count = 2;
+		self.shape.droop = 0.55;
+		self.shape.arch_lift = 0.28;
+		self.shape.twist = 0.0;
+		self.shape.downward_tilt_radians = 0.55;
+		self.shape.outward_spread_radians = 0.0;
+		self.shape.emission_lift_radians = 0.32;
+		self.shape.seed = 0;
+	}
+
 	fn normalize_to_unit(&mut self) -> f32 {
 		let size = self.characteristic_size();
 		let inv = 1.0 / size;
@@ -209,6 +226,14 @@ impl PalmCrownParams {
 		let size = self.normalize_to_unit();
 		self.shape.seed = num as i32;
 		(self, size)
+	}
+
+	/// Shared Low crown: one ring, five chords, seed 0. Not keyed by `num`.
+	pub fn unit_low_star() -> Self {
+		let mut params = Self::default();
+		params.apply_low_star_archetype();
+		params.normalize_to_unit();
+		params
 	}
 
 	/// Tree-local ring anchors stacked along +Y from the origin.
@@ -324,33 +349,15 @@ impl PalmCrown {
 		(min, max)
 	}
 
-	/// Two layered balls with rotated pose offsets for a denser Low silhouette.
-	fn layered_proxy_balls(&self) -> Vec<FoliageNode> {
-		let (min, max) = self.crown_aabb();
-		let center = (min + max) * 0.5;
-		let half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
-		// Slightly under-full AABB so the pair densifies without blowing the silhouette.
-		let scale = half_extents * 0.9;
-		let offset = Vec3::new(half_extents.x * 0.12, half_extents.y * 0.04, 0.0);
-		let yaw_b = std::f32::consts::FRAC_PI_2;
-		let center_a = center + offset;
-		let center_b = center + Quat::from_rotation_y(yaw_b) * offset;
-		vec![
-			FoliageNode::layered_ball(
-				Placement::new(center_a, 0.0)
-					.with_pitch(0.18)
-					.with_roll(-0.22)
-					.with_scale(scale),
-			)
-			.with_material(chico_leaf_material_ref()),
-			FoliageNode::layered_ball(
-				Placement::new(center_b, yaw_b)
-					.with_pitch(-0.28)
-					.with_roll(0.4)
-					.with_scale(scale),
-			)
-			.with_material(chico_leaf_material_ref()),
-		]
+	fn low_star_nodes(&self) -> Vec<FoliageNode> {
+		let anchor = self.anchors.first().copied().unwrap_or(Vec3::ZERO);
+		low_star_collection_nodes(
+			anchor,
+			self.shape.length,
+			self.shape.width,
+			self.crown_center(),
+			self.structural_radius(),
+		)
 	}
 
 	fn crown_center(&self) -> Vec3 {
@@ -379,7 +386,7 @@ impl VegetationComponents for PalmCrown {
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => Layers::from_free(self.layered_proxy_balls()),
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_star_nodes()),
 		}
 	}
 
@@ -444,7 +451,7 @@ mod tests {
 	}
 
 	#[test]
-	fn medium_keeps_high_rachis_low_is_two_layered_balls() -> Result<()> {
+	fn medium_keeps_high_rachis_low_is_shared_star() -> Result<()> {
 		let built = crown(5).build();
 		let high = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
 		let medium = built.foliage_nodes_for_level(LodSceneLevel::Medium).flatten();
@@ -460,13 +467,30 @@ mod tests {
 		assert_eq!(medium_segs, high_segs);
 
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 2);
-		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
-		assert_ne!(low[0].placement.yaw, low[1].placement.yaw);
+		assert_eq!(low.len(), LOW_STAR_FROND_COUNT as usize);
+		assert!(low.iter().all(|n| n.geometry.is_frond_collection()));
+		for node in &low {
+			let collection = node.geometry.as_frond_collection().expect("star");
+			assert_eq!(collection.runs.len(), 1);
+			assert_eq!(collection.runs[0].segments.len(), 1);
+		}
 
 		let ultra = built.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten();
-		assert_eq!(ultra.len(), 2);
-		assert!(ultra.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_eq!(ultra.len(), LOW_STAR_FROND_COUNT as usize);
+		assert!(ultra.iter().all(|n| n.geometry.is_frond_collection()));
+		Ok(())
+	}
+
+	#[test]
+	fn unit_low_star_is_shared_unit_footprint() -> Result<()> {
+		let a = PalmCrownParams::unit_low_star();
+		let b = PalmCrownParams::unit_low_star();
+		assert_eq!(a, b);
+		assert_eq!(a.shape.seed, 0);
+		assert_eq!(a.ring_count, 1);
+		assert_eq!(a.shape.frond_count, LOW_STAR_FROND_COUNT);
+		assert_eq!(a.shape.spine_segments, 1);
+		assert!((a.characteristic_size() - 1.0).abs() < 1e-3);
 		Ok(())
 	}
 

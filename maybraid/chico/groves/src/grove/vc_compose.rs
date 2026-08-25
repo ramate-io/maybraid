@@ -394,6 +394,16 @@ pub fn grove_detail_level(level: LodSceneLevel) -> Option<LodSceneLevel> {
 	}
 }
 
+/// Like [`grove_detail_level`], but Low also nests plants (palm-only groves).
+///
+/// Plant Low is the shared five-chord star; UltraLow still uses cheap-ball bins.
+pub fn grove_detail_level_keep_low(level: LodSceneLevel) -> Option<LodSceneLevel> {
+	match level {
+		LodSceneLevel::High | LodSceneLevel::Medium | LodSceneLevel::Low => Some(level),
+		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => None,
+	}
+}
+
 /// Nest one posed plant as [`chico_vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
 pub fn nest_placed_plant_host<T>(
 	plant: T,
@@ -527,6 +537,77 @@ pub fn woody_grove_scene_chunks(
 			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
 		}
 	}
+}
+
+/// High/Medium/Low → nested plant hosts; UltraLow → canopy-ball vegetation chunks.
+///
+/// Palm-only groves use this so tile Low instances the plant Low star instead of a
+/// crown cheap-ball.
+pub fn woody_grove_scene_chunks_keep_low_plants(
+	level: LodSceneLevel,
+	lod_ref: &LodRef,
+	plant_chunks: Vec<SceneChunk>,
+	vegetation: &impl VegetationComponents,
+) -> SceneChunk {
+	match grove_detail_level_keep_low(level) {
+		Some(_) => {
+			if plant_chunks.is_empty() {
+				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
+			} else {
+				SceneChunk::chunks(plant_chunks)
+			}
+		}
+		None => {
+			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
+		}
+	}
+}
+
+/// Plant foliage posed in grove space with palette materials (same stamp as nest).
+pub fn placed_foliage_nodes<T>(
+	plant: &T,
+	level: LodSceneLevel,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+) -> Vec<FoliageNode>
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	PlacedVegetation::new(
+		plant.clone(),
+		placement,
+		stick_material.clone(),
+		ball_material.clone(),
+		frond_material.clone(),
+	)
+	.foliage_nodes_for_level(level)
+	.flatten()
+}
+
+/// Frond collections from plant Low (shared star); cheap-ball trunks stay with the caller.
+pub fn placed_palm_low_fronds<T>(
+	plant: &T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+) -> Vec<FoliageNode>
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	placed_foliage_nodes(
+		plant,
+		LodSceneLevel::Low,
+		placement,
+		stick_material,
+		ball_material,
+		frond_material,
+	)
+	.into_iter()
+	.filter(|node| node.geometry.is_frond_collection())
+	.collect()
 }
 
 #[cfg(test)]

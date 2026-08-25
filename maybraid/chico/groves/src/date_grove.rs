@@ -116,13 +116,12 @@ mod vc {
 	use super::{definition, DateGroveCell, DateGroveItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_crown, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		canopy_ball_material_from_palette, canopy_proxy_crown, foliage_ultra_low_merged_balls,
+		frond_material_from_palette, grove_detail_level_keep_low, grove_lod_culls, grove_lod_level,
+		grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
+		placement_noise, stick_material_from_palette, woody_grove_scene_chunks_keep_low_plants,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const DATE_GROVE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -366,10 +365,7 @@ mod vc {
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			match level {
-				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => {
-					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
-				}
+				LodSceneLevel::High | LodSceneLevel::Medium | LodSceneLevel::Low => Layers::new(),
 				LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
 				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
@@ -408,7 +404,7 @@ mod vc {
 		}
 
 		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-			match grove_detail_level(level) {
+			match grove_detail_level_keep_low(level) {
 				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
 				None => {
 					let mut children: Vec<Box<dyn Scene>> = Vec::new();
@@ -424,7 +420,12 @@ mod vc {
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+			woody_grove_scene_chunks_keep_low_plants(
+				level,
+				lod_ref,
+				self.nest_plant_chunks(lod_ref),
+				self,
+			)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {
@@ -480,15 +481,19 @@ mod vc {
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
-			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
-			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low date-grove should emit one flattened canopy collection");
+			assert_eq!(grove.foliage_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(!grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten().is_empty());
+			let low = grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low);
+			let lod::SceneChunk::SubChunks(parts) = low else {
+				anyhow::bail!("Low date-grove should nest plant chunks");
 			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			assert_eq!(parts.len(), 1, "expected one lazy plant producer");
+			let lod::SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } = &parts[0]
+			else {
+				anyhow::bail!("Low date-grove plants should be SceneChunk::Lazy");
+			};
+			assert_eq!(*remaining_primitives, grove.plants.len());
+			assert_eq!(*remaining_weight as usize, grove.plants.len());
 			Ok(())
 		}
 

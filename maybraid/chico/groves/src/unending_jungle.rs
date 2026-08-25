@@ -351,13 +351,13 @@ mod vc {
 	use super::{definition, UnendingJungleCell, UnendingJungleItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_waialea,
-		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
-		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
-		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_trunk,
+		canopy_proxy_waialea, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
+		frond_material_from_palette, grove_detail_level, grove_lod_culls, grove_lod_level,
+		grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
+		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
+		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const UNENDING_JUNGLE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -644,6 +644,62 @@ mod vc {
 				})
 				.collect()
 		}
+
+		fn foliage_low_nodes(&self) -> Vec<FoliageNode> {
+			let mut nodes = Vec::new();
+			let mut sites = Vec::new();
+			for plant in self.plants.iter() {
+				let material = &plant.ball_material;
+				match &plant.kind {
+					UnendingJungleKind::Honu(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Sope(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Storybook(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::JungleStorybook(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Torch(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Rory(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Waialea(t) => {
+						nodes.extend(placed_palm_low_fronds(
+							t.as_ref(),
+							plant.placement,
+							&plant.stick_material,
+							material,
+							&plant.frond_material,
+						));
+						if let Some(trunk) =
+							canopy_proxy_trunk(t, plant.placement, &plant.stick_material)
+						{
+							sites.push(trunk);
+						}
+					}
+				}
+			}
+			nodes.extend(foliage_low_canopy_balls(sites));
+			nodes
+		}
 	}
 
 	fn grow_plant(
@@ -776,9 +832,7 @@ mod vc {
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			match level {
 				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => {
-					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
-				}
+				LodSceneLevel::Low => layers_from_nodes(self.foliage_low_nodes()),
 				LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
 				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
@@ -913,16 +967,22 @@ mod vc {
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
-			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.canopy_sites().len());
-			assert!(low_foliage >= grove.plants.len());
-			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low unending-jungle should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+			let palms = grove
+				.plants
+				.iter()
+				.filter(|p| matches!(p.kind, UnendingJungleKind::Waialea(_)))
+				.count();
+			let fronds = low_foliage.iter().filter(|n| n.geometry.is_frond_collection()).count();
+			assert_eq!(fronds, palms * 5);
+			assert!(!grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten().is_empty());
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low unending-jungle should emit flattened kits"),
+			}
 			Ok(())
 		}
 

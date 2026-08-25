@@ -48,7 +48,7 @@ fn merge_foliage(nodes: Vec<FoliageNode>) -> Vec<FoliageNode> {
 
 [`StickNode::merge_standard`](../vegetation-components/src/sticks/node.rs) and [`FoliageNode::merge_cheap_balls`](../vegetation-components/src/foliage/node.rs) become one [`MultiSceneMerge`](../../scene-ref) per collection. Merge already packs kit-local positions into vertex **COLOR** so [`ChicoLeafMaterial`](../shaders) breakup still works after the bake.
 
-Leave layered / frond / procedural fallbacks as separate nodes. Low canopy proxies do not need this merge.
+Leave layered / frond / procedural fallbacks as separate nodes. Palm Low is a shared five-chord star (`PalmCrownParams::unit_low_star` / `low_star_collection_nodes`) — one singleton collection per blade so UltraLow merge cannot chord the fan. Do not key that star on the High variant seed.
 
 ### 3. LOD bands stay local
 

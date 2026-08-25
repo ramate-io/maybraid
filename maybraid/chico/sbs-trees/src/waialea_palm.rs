@@ -2,7 +2,7 @@
 //!
 //! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
 //! implements [`VegetationComponents`]: trunk sticks + per-frond collections at High/Medium;
-//! cheap-ball trunk column + dual layered-ball crown at Low/UltraLow (no mid-tree canopy
+//! cheap-ball trunk column + shared five-chord Low star at Low/UltraLow (no mid-tree canopy
 //! to hide a missing stalk).
 //!
 //! [`WaialeaPalm::unit_from_num`] / [`WaialeaPalmParams::into_unit_from_num`] normalize
@@ -25,10 +25,12 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_crown::{
+	DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION, FROND_RING_SEED_SALT,
+};
 use crate::palm_tree::{
-	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
-	trunk_proxy_node, trunk_stick_nodes, world_space_frond_shape,
+	crown_lod_probe, frond_collection_nodes, low_star_nodes_for_rings, trunk_proxy_node,
+	trunk_stick_nodes, world_space_frond_shape,
 };
 use crate::storybook_tree::merge_kit_sticks;
 use crown::frond_shape_for_ring;
@@ -150,13 +152,18 @@ impl VegetationComponents for WaialeaPalm {
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(&rings);
+				let height = self.geometry.height();
 				let mut nodes = vec![trunk_proxy_node(
 					&self.chain,
-					self.geometry.height(),
+					height,
 					self.geometry.scale.stalk_base_radius_or_default(),
 				)];
-				nodes.extend(layered_proxy_balls(min, max));
+				nodes.extend(low_star_nodes_for_rings(
+					&rings,
+					DETAIL_FROND_LENGTH_FRACTION * height,
+					DETAIL_FROND_WIDTH_FRACTION * height,
+					Some((self.footprint_radius(), height)),
+				));
 				Layers::from_free(nodes)
 			}
 		}
@@ -189,13 +196,18 @@ mod tests {
 	}
 
 	#[test]
-	fn low_keeps_trunk_proxy_and_crown_balls() -> Result<()> {
+	fn low_keeps_trunk_proxy_and_shared_star() -> Result<()> {
 		let built = WaialeaPalmParams::default().build();
 		assert!(built.stick_nodes_for_level(LodSceneLevel::Low).flatten().is_empty());
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 3);
+		assert_eq!(low.len(), 1 + crate::palm_tree::LOW_STAR_FROND_COUNT as usize);
 		assert!(low[0].geometry.is_cheap_ball());
-		assert!(low[1..].iter().all(|n| n.geometry.is_layered_ball()));
+		assert!(low[1..].iter().all(|n| n.geometry.is_frond_collection()));
+		for node in &low[1..] {
+			let collection = node.geometry.as_frond_collection().expect("star");
+			assert_eq!(collection.runs.len(), 1);
+			assert_eq!(collection.runs[0].segments.len(), 1);
+		}
 		Ok(())
 	}
 
