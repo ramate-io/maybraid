@@ -3,9 +3,9 @@
 // cards (planes through a centroid) + vertex sway + wrap light.
 //
 // Holes are glued to each card (kit space) so they ride with
-// wind. Radial density keeps the hub connected; rims take the
-// swiss cheese. Near/mid share a 2-octave hole; far skips
-// discard so overlapping cards keep early-Z.
+// wind. A noisy rim discard runs at every distance so far cards
+// are not rectangles. Interior swiss cheese is near/mid only;
+// far hubs stay solid so overlapping cards keep early-Z.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -47,7 +47,7 @@ struct LeafVertexOutput {
     @location(7) @interpolate(flat) visibility_range_dither: i32,
 #endif
     @location(8) local_pos: vec3<f32>,
-    /// Centroid distance in ball-radii, floored by abs/48 m (coherent per card).
+    /// Centroid distance in ball-radii; remapped so CAP meters == MID.
     @location(9) view_dist: f32,
 }
 
@@ -94,12 +94,12 @@ fn fbm_3d_2(p: vec3<f32>) -> f32 {
     return (a + b) / 0.75;
 }
 
-// Cheese / sway bands in ball-radii (`abs / scale`, floored by abs / cap).
-// Unit-radius kits match the old meter cuts. Huge puffs never stay "near"
-// past LEAF_ABS_CAP meters.
-const LEAF_MID_DIST: f32 = 32.0;
-const LEAF_SWAY_CUT_DIST: f32 = 24.0;
-const LEAF_ABS_CAP: f32 = 48.0;
+// Cheese / sway bands in ball-radii. `view_dist` is
+// `max(abs/scale, abs * MID/CAP)` so a unit kit cheeses to MID meters
+// and nothing stays in discard past CAP meters.
+const LEAF_MID_DIST: f32 = 80.0;
+const LEAF_SWAY_CUT_DIST: f32 = 60.0;
+const LEAF_ABS_CAP: f32 = 140.0;
 /// Blot radius ceiling (`0.52 + 0.38`); outside this, skip hole FBM.
 const LEAF_RIM_CUT: f32 = 0.92;
 
@@ -213,10 +213,13 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     let scale = instance_scale(mesh_world_from_local);
 #endif
     out.local_pos = kit_local;
-    // Placement may be baked into vertices (grove flatten). LOD is angular
-    // with a meter floor so UltraLow proxies do not keep discard at 80 m.
+    // Placement may be baked into vertices (grove flatten). Angular LOD,
+    // remapped so abs == CAP sits on the far side of MID regardless of scale.
     let abs_dist = length(centroid - view.world_position);
-    out.view_dist = max(abs_dist / max(scale, 1e-4), abs_dist / LEAF_ABS_CAP);
+    out.view_dist = max(
+        abs_dist / max(scale, 1e-4),
+        abs_dist * (LEAF_MID_DIST / LEAF_ABS_CAP),
+    );
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
@@ -281,24 +284,23 @@ fn fragment(
     let view_dist = mesh.view_dist;
     let cheese = view_dist < LEAF_MID_DIST;
 
-    // Rim first: blot never reaches past LEAF_RIM_CUT, so skip hole FBM.
-    if (cheese && r > LEAF_RIM_CUT) {
+    // Noisy rim at every distance — Opaque ignores alpha, so far cards
+    // stay rectangular unless we discard. Hub stays solid (early-Z).
+    if (r > LEAF_RIM_CUT) {
+        discard;
+    }
+    let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
+    let rim_w = max(fwidth(r) * 2.0, 0.08);
+    let radial_alpha = smoothstep(0.0, rim_w, blot - r);
+    if (radial_alpha < 0.08) {
         discard;
     }
 
     var hole_alpha = 1.0;
-    var radial_alpha = 1.0;
     var tint_noise = 0.5;
 
     if (cheese) {
-        let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
-        let rim_w = max(fwidth(r) * 2.0, 0.08);
-        radial_alpha = smoothstep(0.0, rim_w, blot - r);
-        if (radial_alpha < 0.08) {
-            discard;
-        }
-        // Coarse 2-octave hole + one high-freq bite so mid cards do not
-        // read as a lattice. Opaque + discard (no A2C). Hub stays solid.
+        // Interior bites. Far skips this so isolated hubs stay cheap.
         let hole = fbm_3d_2(local_pos * 3.25) * 0.62 + value_noise_3d(local_pos * 8.5) * 0.38;
         let hub = 1.0 - smoothstep(0.22, 0.62, r);
         let threshold = mix(0.22, 0.52, 1.0 - hub);
@@ -310,10 +312,8 @@ fn fragment(
         }
     } else {
         let field = value_noise_3d(local_pos * 3.25);
-        let rim_w = max(fwidth(r) * 2.0, 0.08);
-        radial_alpha = smoothstep(0.0, rim_w, 0.70 - r);
         hole_alpha = mix(0.85, 1.0, field);
-        tint_noise = value_noise_3d(local_pos * 1.75);
+        tint_noise = field;
     }
 
     let alpha = hole_alpha * radial_alpha;
@@ -342,7 +342,9 @@ fn fragment(
         wrap = saturate(dot(n, L) * 0.5 + 0.5);
         back = saturate(-dot(n, L));
     }
-    let lifted = albedo * (0.36 + 0.44 * wrap + 0.30 * back);
+    // Wrap + hemi fill — replaces clustered PBR so palettes stay as authored.
+    let hemi = mix(0.10, 0.20, saturate(n.y * 0.5 + 0.5));
+    let lifted = albedo * (0.50 + 0.55 * wrap + 0.35 * back + hemi);
 
     return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
 }

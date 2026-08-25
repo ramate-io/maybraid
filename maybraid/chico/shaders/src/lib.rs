@@ -2,8 +2,8 @@
 //!
 //! - [`ChicoStickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
 //! - [`ChicoLeafMaterial`] — object-space leafy breakup + vertex sway + wrap light.
-//!   Near/mid: 2-octave hole + one high-freq bite after a rim reject.
-//!   LOD is ball-radii. Far: no `discard`. Opaque.
+//!   Noisy rim `discard` at every distance. Interior holes near/mid only.
+//!   LOD is ball-radii. Opaque.
 //! - [`ChicoFrondMaterial`] — palette + tip-weighted sway + double-sided PBR. Opaque;
 //!   no cheese / `discard` (authored frond kit silhouette).
 

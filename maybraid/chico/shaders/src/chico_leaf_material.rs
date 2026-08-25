@@ -1,8 +1,8 @@
 //! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, wrap light.
 //!
-//! Near/mid cheese is a 2-octave hole plus one high-freq bite after a rim reject.
-//! LOD is centroid distance / ball scale (capped in meters). Far skips `discard`.
-//! No clustered PBR. Opaque — not alpha-to-coverage.
+//! A noisy rim `discard` runs at every distance (Opaque ignores alpha).
+//! Interior holes are near/mid only (80 radii, remapped so 140 m is never near).
+//! Wrap + hemi fill, not clustered PBR.
 
 use bevy::{
 	asset::embedded_asset,
