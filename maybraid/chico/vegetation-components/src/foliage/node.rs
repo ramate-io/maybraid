@@ -27,6 +27,7 @@ use crate::lod_host::{
 	posed_foliage_asset_tier, posed_foliage_multi_scene_merge, posed_frond_asset_tier,
 	posed_frond_multi_scene_merge,
 };
+use crate::materials::chico_frond_material_ref;
 use crate::placed::Placement;
 use crate::procedural::VegetationProceduralAssets;
 use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
@@ -39,7 +40,8 @@ pub struct FoliageNode {
 	pub geometry: FoliageGeometry,
 	pub placement: Placement,
 	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
-	/// higher-order types set leaf / palette as needed.
+	/// frond constructors stamp [`crate::chico_frond_material_ref`]; higher-order
+	/// types set leaf / palette as needed.
 	pub material: MaterialRef,
 }
 
@@ -72,11 +74,13 @@ impl FoliageNode {
 	/// Square-ended straight frond segment (`straight_frond_segment_001_*`).
 	pub fn straight_frond_segment(placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, FoliageGeometry::StraightFrondSegment, placement)
+			.with_material(chico_frond_material_ref())
 	}
 
 	/// Point-tip straight frond (`straight_frond_001_*`); prefer [`Self::straight_frond_segment`].
 	pub fn straight_frond(placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, FoliageGeometry::StraightFrond, placement)
+			.with_material(chico_frond_material_ref())
 	}
 
 	/// Frond collection under one LOD parent (merge thinning by collection extent).
@@ -84,6 +88,7 @@ impl FoliageNode {
 	/// Parent [`Placement`] is usually identity when members are already tree-local.
 	pub fn frond_collection(collection: FrondCollection, placement: Placement) -> Self {
 		Self::new(FoliageStyle::Standard, FoliageGeometry::FrondCollection(collection), placement)
+			.with_material(chico_frond_material_ref())
 	}
 
 	/// Cheap-ball collection under one LOD parent (merge thinning by collection extent).
@@ -458,5 +463,29 @@ impl LodScene for FoliageNode {
 		};
 		let half = bevy::math::Vec3::splat(extent);
 		Aabb3d::from_min_max(center - half, center + half)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::materials::{chico_frond_material_ref, CHICO_FROND_MATERIAL};
+	use material_ref::MaterialId;
+
+	#[test]
+	fn frond_constructors_use_chico_frond_material() {
+		let expected = MaterialId::named(CHICO_FROND_MATERIAL);
+		assert_eq!(
+			FoliageNode::straight_frond_segment(Placement::IDENTITY).material.name,
+			expected
+		);
+		assert_eq!(FoliageNode::straight_frond(Placement::IDENTITY).material.name, expected);
+		assert_eq!(
+			FoliageNode::frond_collection(FrondCollection::new([]), Placement::IDENTITY)
+				.material
+				.name,
+			expected
+		);
+		assert_eq!(chico_frond_material_ref().name, expected);
 	}
 }

@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use bevy::prelude::{Color, Vec3};
 use bevy::scene::prelude::Scene;
 use chico_vegetation_components::{
-	chico_leaf_material_ref, chico_stick_material_ref, components_only_host,
-	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
-	Placement, StickNode, StructuralLod, VegetationComponents,
+	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
+	components_only_host, flattened_components_only_host, FoliageGeometry, FoliageNode, Layers,
+	PlacedVegetation, Placement, StickNode, StructuralLod, VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -111,12 +111,12 @@ pub fn canopy_ball_material_from_palette(palette: Option<PaletteMix>, seed: i32)
 		.unwrap_or_else(chico_leaf_material_ref)
 }
 
-/// Frond / standard foliage material: default green with palette.
+/// Frond material: Chico frond recipe with one palette-picked color.
 pub fn frond_material_from_palette(palette: Option<PaletteMix>, seed: i32) -> MaterialRef {
 	palette
 		.and_then(|p| p.pick_color(seed))
-		.map(|c| MaterialRef::default().with_palette([c]))
-		.unwrap_or_default()
+		.map(|c| chico_frond_material_ref().with_palette([c]))
+		.unwrap_or_else(chico_frond_material_ref)
 }
 
 fn is_frond_geometry(geometry: &FoliageGeometry) -> bool {
@@ -231,7 +231,11 @@ pub fn canopy_proxy_site(
 ) -> Option<CanopyProxySite> {
 	let lod = plant.structural_lod()?;
 	let (center, scale) = composed_lod_center(lod.center, plant_placement);
-	Some(CanopyProxySite::from_radius(center, (lod.tree_radius * scale).max(0.25), material.clone()))
+	Some(CanopyProxySite::from_radius(
+		center,
+		(lod.tree_radius * scale).max(0.25),
+		material.clone(),
+	))
 }
 
 /// Long thin proxy for conifers: full height, footprint much smaller than characteristic radius.
@@ -498,10 +502,7 @@ mod tests {
 		assert_eq!(grove_bands_for_typical_height(180.0), (10.0, 55.0, 85.0));
 		assert_eq!(grove_bands_for_typical_height(160.0), (10.0, 50.0, 75.0));
 		assert_eq!(grove_bands_for_typical_height(40.0), (5.0, 15.0, 25.0));
-		assert_eq!(
-			grove_bands_for_typical_height_and_plant_medium(32.0, 36.0),
-			(5.0, 15.0, 25.0)
-		);
+		assert_eq!(grove_bands_for_typical_height_and_plant_medium(32.0, 36.0), (5.0, 15.0, 25.0));
 		assert_eq!(grove_bands_for_typical_height(20.0), (5.0, 10.0, 15.0));
 		assert_ne!(grove_bands_for_typical_height(180.0).1, 20.0);
 	}
@@ -560,5 +561,21 @@ mod tests {
 		assert_eq!(merged.len(), 1);
 		let p = merged[0].placement;
 		assert!(p.scale.y > p.scale.x);
+	}
+
+	#[test]
+	fn frond_palette_uses_chico_frond_recipe() {
+		use crate::grove::{PaletteMix, PaletteSlot};
+		use chico_vegetation_components::CHICO_FROND_MATERIAL;
+		use material_ref::MaterialId;
+
+		let named = frond_material_from_palette(None, 0);
+		assert_eq!(named.name, MaterialId::named(CHICO_FROND_MATERIAL));
+		assert!(named.palette.is_empty());
+
+		const MIX: PaletteMix = PaletteMix::new(&[PaletteSlot::new("palm_green", "palm_green")]);
+		let tinted = frond_material_from_palette(Some(MIX), 3);
+		assert_eq!(tinted.name, MaterialId::named(CHICO_FROND_MATERIAL));
+		assert_eq!(tinted.palette.len(), 1);
 	}
 }

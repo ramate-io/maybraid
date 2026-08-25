@@ -56,7 +56,7 @@ Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::
 
 ### 4. Widening High is a shader problem, then a factor
 
-Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds stay cheap because they do not run that shader.
+Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds use [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (palette + tip-weighted sway, opaque — no cheese / `discard`).
 
 [`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) already short-circuits by camera distance to each card centroid (`LEAF_NEAR_DIST` 16 m / `LEAF_MID_DIST` 32 m / sway cut 24 m): full 4-octave swiss cheese up close, two octaves in the mid band, one noise and **no `discard`** farther out so overlapping cards keep early-Z.
 
@@ -65,7 +65,7 @@ That path is shared. Any construction that emits `CheapBall` / `CheapBallCollect
 1. Confirm High foliage is merged cheap balls on `ChicoLeafMaterial` (not layered / frond / a custom WGSL).
 2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (tall woody constructions share Storybook’s `10 / 30 / 50`). Bushes and hedges stay tighter. Do not copy those numbers blindly — they are `distance / tree_radius`.
 3. Profile `ChicoLeafMaterial` **fragment** time, not triangle count. If it is still hot, thin High `AzimuthHeightBands` (card count) before adding another material.
-4. A plant-specific shader must copy the distance bands itself. Sticks and fronds do not need this.
+4. A plant-specific shader must copy the distance bands itself. Sticks do not need this. Fronds stay on `ChicoFrondMaterial` — do not point them at `ChicoLeafMaterial`.
 
 Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUTING.md)).
 

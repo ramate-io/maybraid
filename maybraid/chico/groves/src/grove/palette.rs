@@ -249,6 +249,17 @@ impl WithPalette for chico_vegetation_shaders::ChicoLeafMaterial {
 	}
 }
 
+#[cfg(feature = "render")]
+impl WithPalette for chico_vegetation_shaders::ChicoFrondMaterial {
+	fn with_palette(mut base: Self, palette: PaletteMix, seed: i32) -> Self {
+		if let Some(color) = palette.pick_color(seed) {
+			let linear = bevy::color::LinearRgba::from(color);
+			base.base_color = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
+		}
+		base
+	}
+}
+
 /// After lower-order [`RenderItem::spawn_render_items`](render_item::RenderItem), patch spawned
 /// entities with a per-placement palette-resolved material asset.
 ///

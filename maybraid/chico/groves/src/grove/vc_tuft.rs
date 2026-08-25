@@ -9,8 +9,8 @@ use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuftShape, SpearTuftShape};
 use chico_sbs_trees::TuftPatch;
 use chico_vegetation_components::{
-	FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
-	VegetationComponents, FROND_KIT_HALF_X,
+	chico_frond_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
+	StructuralLod, VegetationComponents, FROND_KIT_HALF_X,
 };
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
@@ -79,7 +79,7 @@ pub fn variant_noise(base: NoiseParams, variant: u32) -> NoiseParams {
 	NoiseParams { seed: base.seed ^ (variant as i32).wrapping_mul(0x45d9f3b), ..base }
 }
 
-/// Palette → green standard material for one placement.
+/// Palette → Chico frond material for one placement.
 pub fn material_from_palette(
 	mix: PaletteMix,
 	position: Vec3,
@@ -87,8 +87,8 @@ pub fn material_from_palette(
 ) -> MaterialRef {
 	let seed = placement_noise(foliage_noise, position).seed;
 	mix.pick_color(seed)
-		.map(|c| MaterialRef::default().with_palette([c]))
-		.unwrap_or_default()
+		.map(|c| chico_frond_material_ref().with_palette([c]))
+		.unwrap_or_else(chico_frond_material_ref)
 }
 
 /// Stamp authored blade noise amplitudes onto a shape then wrap as a single-clump patch.
