@@ -36,7 +36,7 @@ impl SpiralFlight {
 		Self { polyline, stairs }
 	}
 
-	/// Fit a circular run inside the shaft; first tread faces the lower walk-on.
+	/// Fit a circular run inside the shaft; outer rail on the lower walk-on.
 	pub fn fit(polyline: FlightPolyline, fit: SpiralFlightFit) -> Self {
 		let stairs = fit_spiral_node(&polyline, fit);
 		Self { polyline, stairs }
@@ -65,7 +65,7 @@ fn fit_spiral_node(polyline: &FlightPolyline, fit: SpiralFlightFit) -> StairNode
 	let tread_width = (opening_min * 0.4).clamp(0.35, 1.1);
 	let tread_depth = (tread_width * 0.55).clamp(0.25, 0.45);
 
-	let (center, radius) = spiral_center_radius(polyline, fit, opening_min);
+	let (center, radius) = spiral_center_radius(polyline, fit, opening_min, tread_width);
 	let turns = spiral_turns(rise, radius, tread_depth, fit, center);
 	let yaw = spiral_start_yaw(fit.lower_walk_on, center, fit.lower_out);
 
@@ -85,14 +85,18 @@ fn spiral_center_radius(
 	polyline: &FlightPolyline,
 	fit: SpiralFlightFit,
 	opening_min: f32,
+	tread_width: f32,
 ) -> (Vec3, f32) {
 	let a = xz(fit.lower_center);
 	let b = xz(fit.upper_center);
 	let mid = polyline.stations.get(1).map(|s| xz(s.center)).unwrap_or_else(|| (a + b) * 0.5);
 	let center = Vec3::new(mid.x, fit.lower_center.y, mid.y);
-	// First-tread centerline on the walk-on; clamp so the run stays inside the hole.
+	// `radius` is the tread centerline. Inset by half tread width so the outer
+	// rail sits on the walk-on / hole edge; the run-in covers the remaining gap.
+	let half_tread = 0.5 * tread_width;
 	let to_walk = (xz(fit.lower_walk_on) - mid).length();
-	let radius = to_walk.max(0.35).min(opening_min.max(0.35));
+	let inscribed = (opening_min - half_tread).max(0.35);
+	let radius = (to_walk - half_tread).max(0.35).min(inscribed);
 	(center, radius)
 }
 
@@ -179,16 +183,18 @@ mod tests {
 				upper_half_depth: 1.2,
 			},
 		);
-		assert!(matches!(
-			&flight.stairs().geometry,
-			Stair::Spiral(g) if g.height > 2.9 && (g.radius - 1.2).abs() < 1e-3
-		));
+		let Stair::Spiral(g) = &flight.stairs().geometry else {
+			panic!("expected spiral");
+		};
+		assert!(g.height > 2.9);
+		assert!((g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3, "outer rail should sit on the hole, radius={}", g.radius);
 		let c = flight.stairs().placement.translation;
 		assert!(c.x.abs() < 0.15 && c.z.abs() < 0.15, "center={c:?}");
 		let first = first_tread_xz(&flight);
+		let outer = first + (first - bevy_math::Vec2::new(c.x, c.z)).normalize() * (0.5 * g.tread_width);
 		assert!(
-			(first - bevy_math::Vec2::new(0.0, -1.2)).length() < 0.05,
-			"first tread should sit on the walk-on, got {first:?}"
+			(outer - bevy_math::Vec2::new(0.0, -1.2)).length() < 0.05,
+			"outer rail should sit on the walk-on, centerline={first:?} outer={outer:?}"
 		);
 		assert!(!flight.stair_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}

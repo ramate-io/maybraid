@@ -294,7 +294,7 @@ mod tests {
 		let stairs = well.stair_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(stairs.len(), 1);
 		assert!(
-			matches!(&stairs[0].geometry, Stair::Spiral(g) if g.height > 2.9 && (g.radius - 1.2).abs() < 1e-3)
+			matches!(&stairs[0].geometry, Stair::Spiral(g) if g.height > 2.9 && (g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3)
 		);
 		let center = stairs[0].placement.translation;
 		assert!(
