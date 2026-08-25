@@ -28,9 +28,13 @@ pub fn frond_shape_for_ring(
 	let u = proto.ring_vertical_bias(ring);
 	let downward_tilt = 0.44 + (1.0 - u) * 0.20;
 	let emission_lift = 0.28 + (1.0 - u) * 0.10;
+	// Leftover meters authored for [`DEFAULT_STALK_HEIGHT`]. Divide by
+	// `frond_world_scale` like length — grove variants (Palm Shade ~0.47) must
+	// keep the same droop/length as `/show` after `world_space_frond_shape`.
+	// Lower rings weep; upper stay milder so they can still rise.
 	let h_scale = h / DEFAULT_STALK_HEIGHT.max(1e-6);
-	let droop = (0.5 + (1.0 - u) * 0.16) * h_scale;
-	let arch_lift = 0.30 * h_scale;
+	let droop = (1.7 + (1.0 - u) * 0.85) * h_scale / scale;
+	let arch_lift = 0.30 * h_scale / scale;
 	// length shortens with ring index
 	let length_fraction =
 		FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
@@ -94,5 +98,36 @@ mod tests {
 		let u = frond_shape_for_ring(&unit, 0, 0);
 		assert!((t.droop / t.length - u.droop / u.length).abs() < 1e-4);
 		assert!((t.arch_lift / t.length - u.arch_lift / u.length).abs() < 1e-4);
+	}
+
+	#[test]
+	fn lower_rings_droop_more_than_upper() {
+		let geometry = DatePalmSbs::default();
+		let low = frond_shape_for_ring(&geometry, 0, 0);
+		let high = frond_shape_for_ring(&geometry, geometry.crown.ring_count - 1, 0);
+		assert!(low.droop > high.droop);
+		assert!(
+			low.droop / low.length > 0.24,
+			"lower date fronds should weep, got {}",
+			low.droop / low.length
+		);
+	}
+
+	#[test]
+	fn world_space_droop_ratio_ignores_frond_world_scale() {
+		use crate::palm_tree::world_space_frond_shape;
+
+		let show = DatePalmSbs::default();
+		let mut grove = DatePalmSbs::default();
+		grove.scale.stalk_height = 1.0;
+		grove.frond_world_scale = 0.35 + 0.35 * 0.5;
+		let s = world_space_frond_shape(frond_shape_for_ring(&show, 0, 0), show.frond_world_scale);
+		let g = world_space_frond_shape(frond_shape_for_ring(&grove, 0, 0), grove.frond_world_scale);
+		assert!((s.droop / s.length - g.droop / g.length).abs() < 1e-4);
+		assert!(
+			g.droop / g.length > 0.35,
+			"unit grove mesh should weep, got {}",
+			g.droop / g.length
+		);
 	}
 }
