@@ -99,11 +99,7 @@ pub(crate) fn low_star_collection_nodes(
 	let mut nodes = Vec::with_capacity(LOW_STAR_FROND_COUNT as usize);
 	for i in 0..LOW_STAR_FROND_COUNT {
 		let azimuth = i as f32 * std::f32::consts::TAU / n;
-		let dir = Vec3::new(
-			pitch.cos() * azimuth.cos(),
-			pitch.sin(),
-			pitch.cos() * azimuth.sin(),
-		);
+		let dir = Vec3::new(pitch.cos() * azimuth.cos(), pitch.sin(), pitch.cos() * azimuth.sin());
 		let Some(placement) = Placement::frond_segment(anchor, dir, length, width) else {
 			continue;
 		};
@@ -126,30 +122,6 @@ pub(crate) fn low_star_nodes_for_rings(
 	let (center, radius) = crown_lod_probe(rings, footprint_and_height);
 	let anchor = rings.first().map(|(a, _)| *a).unwrap_or(center);
 	low_star_collection_nodes(anchor, length, width, center, radius)
-}
-
-/// Authored Low-star shape (docs / [`crate::PalmCrownParams::unit_low_star`]).
-///
-/// Emit through [`low_star_collection_nodes`], not [`FrondCrownShape::frond_runs_at`]: a
-/// 1-segment droop spine plus `from_rotation_arc` rolls some blades flat.
-pub(crate) fn low_star_shape(length: f32, width: f32) -> FrondCrownShape {
-	let length = (length * LOW_STAR_LENGTH_FACTOR).max(1e-4);
-	let width = (width * LOW_STAR_WIDTH_FACTOR).max(1e-6);
-	FrondCrownShape {
-		frond_count: LOW_STAR_FROND_COUNT,
-		length,
-		width,
-		droop: (length * 0.85).max(1e-4),
-		arch_lift: length * 0.2,
-		twist: 0.0,
-		leaflet_count: 2,
-		spine_segments: 1,
-		downward_tilt_radians: LOW_STAR_DROOP_PITCH.abs(),
-		outward_spread_radians: 0.0,
-		emission_lift_radians: 0.0,
-		seed: 0,
-		..FrondCrownShape::default()
-	}
 }
 
 /// Parent-crown LOD probe: AABB center, radius at least the crown half-extent.
@@ -266,16 +238,39 @@ mod tests {
 			assert!((collection.center - Vec3::Y).length() < 1e-4);
 			assert!((collection.radius - 0.5).abs() < 1e-4);
 			let dir = collection.runs[0].segments[0].placement.rotation() * Vec3::Y;
-			assert!(
-				dir.y < -0.5,
-				"low-star chord should hang, not stick out: {dir:?}"
-			);
+			assert!(dir.y < -0.5, "low-star chord should hang, not stick out: {dir:?}");
 		}
-		let a = low_star_shape(0.4, 0.05);
-		let b = low_star_shape(0.4, 0.05);
-		assert_eq!(a, b);
-		assert_eq!(a.seed, 0);
-		assert_eq!(a.spine_segments, 1);
+		Ok(())
+	}
+
+	#[test]
+	fn high_waialea_rachis_tips_hang() -> Result<()> {
+		use crate::waialea_palm::WaialeaPalmParams;
+		use chico_vegetation_components::VegetationComponents;
+		use lod::gen::LodSceneLevel;
+
+		let built = WaialeaPalmParams::default().build();
+		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!nodes.is_empty());
+		for node in nodes {
+			let collection = node.geometry.as_frond_collection().expect("collection");
+			for run in &collection.runs {
+				let first = run.segments.first().expect("segment");
+				let last = run.segments.last().expect("segment");
+				let start = first.placement.translation;
+				let first_dir = first.placement.rotation() * Vec3::Y;
+				let chain_len: f32 = run.segments.iter().map(|s| s.placement.scale.y.abs()).sum();
+				let tip = last.placement.translation
+					+ last.placement.rotation() * Vec3::new(0.0, last.placement.scale.y.abs(), 0.0);
+				let straight_tip_y = start.y + first_dir.y * chain_len;
+				assert!(
+					tip.y < straight_tip_y - 0.02,
+					"High rachis stayed straight: tip.y={} straight.y={}",
+					tip.y,
+					straight_tip_y
+				);
+			}
+		}
 		Ok(())
 	}
 }

@@ -42,20 +42,23 @@ pub fn length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
 }
 
 /// Align frond-local +X to the crown emission direction.
+///
+/// [`Quat::from_rotation_arc`] leaves twist free: for some azimuths, local −Y (spine
+/// droop) rolls into the XZ plane and the blade reads as a straight stick. Build a
+/// world-up frame so droop stays in the vertical plane of the emission heading.
+/// Parallel-to-Y emission (no unique vertical plane) falls back to the arc.
 pub fn align_frond_direction(direction: Vec3) -> Quat {
-	let axis = Vec3::X;
-	let d = direction.normalize_or_zero();
-	if d.length_squared() < 1e-12 {
+	let forward = direction.normalize_or_zero();
+	if forward.length_squared() < 1e-12 {
 		return Quat::IDENTITY;
 	}
-	let dot = axis.dot(d);
-	if dot > 1.0 - 1e-5 {
-		return Quat::IDENTITY;
+	let right = forward.cross(Vec3::Y);
+	if right.length_squared() < 1e-8 {
+		return Quat::from_rotation_arc(Vec3::X, forward);
 	}
-	if dot < -1.0 + 1e-5 {
-		return Quat::from_axis_angle(Vec3::Y, std::f32::consts::PI);
-	}
-	Quat::from_rotation_arc(axis, d)
+	let right = right.normalize();
+	let up = right.cross(forward).normalize_or_zero();
+	Quat::from_mat3(&Mat3::from_cols(forward, up, right))
 }
 
 #[cfg(test)]
@@ -91,6 +94,23 @@ mod tests {
 		let min_l = lengths.iter().copied().fold(f32::INFINITY, f32::min);
 		let max_l = lengths.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 		assert!(max_l - min_l > 1e-3, "lengths collapsed: {lengths:?}");
+	}
+
+	#[test]
+	fn droop_axis_stays_in_the_vertical_plane_for_every_azimuth() {
+		let pitch: f32 = 0.12;
+		for i in 0..16 {
+			let az = i as f32 * std::f32::consts::TAU / 16.0;
+			let dir = Vec3::new(pitch.cos() * az.cos(), pitch.sin(), pitch.cos() * az.sin())
+				.normalize_or_zero();
+			let q = align_frond_direction(dir);
+			assert!((q * Vec3::X - dir).length() < 1e-4, "az {i}: +X missed emission");
+			let droop = q * Vec3::NEG_Y;
+			assert!(
+				droop.y < -0.7,
+				"az {i}: droop rolled sideways/out: {droop:?}"
+			);
+		}
 	}
 
 	/// Stacked palm rings salt seeds 18 apart; adjacent rings must not render identically.

@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::anchors::date_palm::DEFAULT_STALK_HEIGHT;
 use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use procedural_common::NoiseParams;
 use render_item::CascadeChunk;
@@ -27,7 +28,9 @@ pub fn frond_shape_for_ring(
 	let u = proto.ring_vertical_bias(ring);
 	let downward_tilt = 0.44 + (1.0 - u) * 0.20;
 	let emission_lift = 0.28 + (1.0 - u) * 0.10;
-	let droop = 0.5 + (1.0 - u) * 0.16;
+	let h_scale = h / DEFAULT_STALK_HEIGHT.max(1e-6);
+	let droop = (0.5 + (1.0 - u) * 0.16) * h_scale;
+	let arch_lift = 0.30 * h_scale;
 	// length shortens with ring index
 	let length_fraction =
 		FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
@@ -37,7 +40,7 @@ pub fn frond_shape_for_ring(
 		length: (length_fraction * h) / scale,
 		width: (FROND_WIDTH_FRACTION_OF_HEIGHT * h) / scale,
 		droop,
-		arch_lift: 0.30,
+		arch_lift,
 		twist: 0.66,
 		leaflet_count: 16,
 		spine_segments: 11,
@@ -76,4 +79,20 @@ where
 		cascade_chunk,
 		parent,
 	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn droop_and_arch_scale_with_height() {
+		let tall = DatePalmSbs::default();
+		let mut unit = tall.clone();
+		unit.scale.stalk_height = 1.0;
+		let t = frond_shape_for_ring(&tall, 0, 0);
+		let u = frond_shape_for_ring(&unit, 0, 0);
+		assert!((t.droop / t.length - u.droop / u.length).abs() < 1e-4);
+		assert!((t.arch_lift / t.length - u.arch_lift / u.length).abs() < 1e-4);
+	}
 }

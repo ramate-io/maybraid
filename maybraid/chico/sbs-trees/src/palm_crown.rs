@@ -187,6 +187,8 @@ impl PalmCrownParams {
 		let inv = 1.0 / size;
 		self.shape.length *= inv;
 		self.shape.width *= inv;
+		self.shape.droop *= inv;
+		self.shape.arch_lift *= inv;
 		self.shape.shoot_half_radius *= inv;
 		self.shape.rachis_half_thickness *= inv;
 		self.ring_spacing *= inv;
@@ -531,6 +533,11 @@ mod tests {
 		let runs_a = a.ring_shape(0).frond_runs_at(Vec3::ZERO);
 		let runs_b = PalmCrownParams::unit_full_from_num(8).ring_shape(0).frond_runs_at(Vec3::ZERO);
 		assert_ne!(runs_a[0][0].direction, runs_b[0][0].direction);
+		assert!(
+			a.shape.droop < 0.55,
+			"unit droop should shrink with characteristic size, got {}",
+			a.shape.droop
+		);
 		Ok(())
 	}
 
