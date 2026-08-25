@@ -1,8 +1,9 @@
 //! **Waialea Palm** — arched trunk + light upward frond crown ([#255](https://github.com/ramate-io/maybraid/issues/255), [RFC §3.1.7.8](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/08-waialea-palm/README.md)).
 //!
 //! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
-//! implements [`VegetationComponents`]: trunk sticks; per-frond collections at High/Medium;
-//! dual layered-ball crown proxy at Low/UltraLow.
+//! implements [`VegetationComponents`]: trunk sticks + per-frond collections at High/Medium;
+//! cheap-ball trunk column + dual layered-ball crown at Low/UltraLow (no mid-tree canopy
+//! to hide a missing stalk).
 //!
 //! [`WaialeaPalm::unit_from_num`] / [`WaialeaPalmParams::into_unit_from_num`] normalize
 //! the trunk to unit height and key trunk noise by a variant index. Emission folds
@@ -27,7 +28,7 @@ use lod::gen::LodSceneLevel;
 use crate::palm_crown::FROND_RING_SEED_SALT;
 use crate::palm_tree::{
 	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
-	trunk_stick_nodes, world_space_frond_shape,
+	trunk_proxy_node, trunk_stick_nodes, world_space_frond_shape,
 };
 use crate::storybook_tree::merge_kit_sticks;
 use crown::frond_shape_for_ring;
@@ -119,12 +120,20 @@ impl WaialeaPalm {
 }
 
 impl VegetationComponents for WaialeaPalm {
-	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-		let nodes: Vec<_> = trunk_stick_nodes(&self.chain)
-			.into_iter()
-			.map(|n| n.with_material(chico_stick_material_ref()))
-			.collect();
-		Layers::from_free(merge_kit_sticks(nodes))
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				let nodes: Vec<_> = trunk_stick_nodes(&self.chain)
+					.into_iter()
+					.map(|n| n.with_material(chico_stick_material_ref()))
+					.collect();
+				Layers::from_free(merge_kit_sticks(nodes))
+			}
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => Layers::new(),
+		}
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -142,7 +151,13 @@ impl VegetationComponents for WaialeaPalm {
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
 				let (min, max) = crown_aabb_from_rings(&rings);
-				Layers::from_free(layered_proxy_balls(min, max))
+				let mut nodes = vec![trunk_proxy_node(
+					&self.chain,
+					self.geometry.height(),
+					self.geometry.scale.stalk_base_radius_or_default(),
+				)];
+				nodes.extend(layered_proxy_balls(min, max));
+				Layers::from_free(nodes)
 			}
 		}
 	}
@@ -174,11 +189,13 @@ mod tests {
 	}
 
 	#[test]
-	fn low_is_two_layered_balls() -> Result<()> {
+	fn low_keeps_trunk_proxy_and_crown_balls() -> Result<()> {
 		let built = WaialeaPalmParams::default().build();
+		assert!(built.stick_nodes_for_level(LodSceneLevel::Low).flatten().is_empty());
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 2);
-		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_eq!(low.len(), 3);
+		assert!(low[0].geometry.is_cheap_ball());
+		assert!(low[1..].iter().all(|n| n.geometry.is_layered_ball()));
 		Ok(())
 	}
 

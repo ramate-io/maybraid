@@ -351,11 +351,10 @@ mod vc {
 	use super::{definition, UnendingJungleCell, UnendingJungleItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
-		foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_waialea,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -614,30 +613,33 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
+				.flat_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						UnendingJungleKind::Honu(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Sope(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Storybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::JungleStorybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Torch(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Rory(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						UnendingJungleKind::Waialea(t) => {
-							canopy_proxy_crown(t, plant.placement, material)
-						}
+						UnendingJungleKind::Waialea(t) => canopy_proxy_waialea(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							material,
+						),
 					}
 				})
 				.collect()
@@ -665,13 +667,11 @@ mod vc {
 
 		match placed.variant.item() {
 			UnendingJungleItem::Honu(banyan) => {
-				let world_size = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(
-					banyan,
-					build_noise,
-				)
-				.geometry
-				.scale
-				.tree_height;
+				let world_size =
+					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.tree_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
@@ -682,13 +682,11 @@ mod vc {
 				}
 			}
 			UnendingJungleItem::Sope(banyan) => {
-				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
-					banyan,
-					build_noise,
-				)
-				.geometry
-				.scale
-				.stalk_height;
+				let world_size =
+					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.stalk_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
@@ -916,7 +914,8 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert!(low_foliage >= grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
 			let lod::SceneChunk::Primitive { weight, .. } =
 				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)

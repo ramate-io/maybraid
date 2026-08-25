@@ -179,10 +179,10 @@ mod vc {
 	use super::{definition, PalmShadeCell, PalmShadeItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_crown, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_waialea,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -190,8 +190,8 @@ mod vc {
 
 	/// Typical Waialea ~32 m; plant Medium is 36. `grove_bands_for_typical_height_and_plant_medium(32, 36)`.
 	pub const PALM_SHADE_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-	pub const PALM_SHADE_STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-	pub const PALM_SHADE_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
+	pub const PALM_SHADE_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+	pub const PALM_SHADE_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -397,13 +397,17 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
-					let material = &plant.ball_material;
-					match &plant.kind {
-						PalmShadeKind::Waialea(t) => {
-							canopy_proxy_crown(t, plant.placement, material)
-						}
-						PalmShadeKind::Date(t) => canopy_proxy_crown(t, plant.placement, material),
+				.flat_map(|plant| match &plant.kind {
+					PalmShadeKind::Waialea(t) => canopy_proxy_waialea(
+						t,
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+					),
+					PalmShadeKind::Date(t) => {
+						canopy_proxy_crown(t, plant.placement, &plant.ball_material)
+							.into_iter()
+							.collect()
 					}
 				})
 				.collect()
@@ -597,7 +601,8 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert!(low_foliage >= grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
 			let lod::SceneChunk::Primitive { weight, .. } =
 				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)

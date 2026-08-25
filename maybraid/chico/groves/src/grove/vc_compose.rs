@@ -24,6 +24,8 @@ pub const DEFAULT_PLANT_MEDIUM_FACTOR: f32 = 30.0;
 
 /// Column proxy XZ half-extent as a fraction of characteristic half-height.
 const COLUMN_XZ_OF_HALF_HEIGHT: f32 = 0.28;
+/// Waialea / tall-palm trunk column: thinner than a conifer, still readable at Low.
+const PALM_TRUNK_XZ_OF_HALF_HEIGHT: f32 = 0.10;
 /// Crown ball radius as a fraction of characteristic half-height.
 const CROWN_RADIUS_OF_HALF: f32 = 0.42;
 /// Lift from a mid-tree sphere center toward the canopy, in half-heights.
@@ -274,6 +276,48 @@ pub fn canopy_proxy_crown(
 		(half * CROWN_RADIUS_OF_HALF * scale).max(0.2),
 		material.clone(),
 	))
+}
+
+/// Thin trunk column from the plant base to the crown probe (Y-up).
+///
+/// Waialea Low has no mid-tree canopy; a crown ball alone floats. Pair with
+/// [`canopy_proxy_crown`] via [`canopy_proxy_waialea`].
+pub fn canopy_proxy_trunk(
+	plant: &impl VegetationComponents,
+	plant_placement: Placement,
+	material: &MaterialRef,
+) -> Option<CanopyProxySite> {
+	let lod = plant.structural_lod()?;
+	let ground = plant_placement.translation;
+	let (crown, _) = composed_lod_center(lod.center, plant_placement);
+	let half_h = (crown.y - ground.y).abs() * 0.5;
+	if half_h < 0.2 {
+		return None;
+	}
+	let mid = (ground + crown) * 0.5;
+	let xz = (half_h * PALM_TRUNK_XZ_OF_HALF_HEIGHT).max(0.12);
+	Some(CanopyProxySite {
+		center: mid,
+		half_extents: Vec3::new(xz, half_h, xz),
+		material: material.clone(),
+	})
+}
+
+/// Waialea Low / UltraLow: trunk column (stick material) + crown ball (canopy material).
+pub fn canopy_proxy_waialea(
+	plant: &impl VegetationComponents,
+	plant_placement: Placement,
+	trunk_material: &MaterialRef,
+	crown_material: &MaterialRef,
+) -> Vec<CanopyProxySite> {
+	let mut sites = Vec::with_capacity(2);
+	if let Some(trunk) = canopy_proxy_trunk(plant, plant_placement, trunk_material) {
+		sites.push(trunk);
+	}
+	if let Some(crown) = canopy_proxy_crown(plant, plant_placement, crown_material) {
+		sites.push(crown);
+	}
+	sites
 }
 
 /// Like [`canopy_proxy_site`], with an extra local child pose (e.g. crown at trunk tip).
@@ -540,6 +584,26 @@ mod tests {
 		.expect("already-crown");
 		assert!((already.center.y - 34.0).abs() < 1e-3);
 		assert!(already.radius() < 12.0);
+	}
+
+	#[test]
+	fn waialea_low_proxy_keeps_trunk_and_crown() {
+		let crown = StructuralLod::new(Vec3::Y * 10.0, 6.0);
+		let plant = LodPlant(crown);
+		let placement = Placement::new(Vec3::new(2.0, 0.0, -1.0), 0.0).with_scale(Vec3::splat(2.0));
+		let sites = canopy_proxy_waialea(
+			&plant,
+			placement,
+			&chico_stick_material_ref(),
+			&chico_leaf_material_ref(),
+		);
+		assert_eq!(sites.len(), 2);
+		let trunk = &sites[0];
+		let ball = &sites[1];
+		assert!(trunk.half_extents.y > trunk.half_extents.x * 2.0);
+		assert!((trunk.center.x - 2.0).abs() < 1.0);
+		assert!(trunk.center.y < ball.center.y);
+		assert!((ball.half_extents.x - ball.half_extents.z).abs() < 1e-3);
 	}
 
 	#[test]
