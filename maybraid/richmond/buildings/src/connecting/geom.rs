@@ -14,7 +14,8 @@ pub(crate) fn opening_to_tube_node(end: MappedOpening) -> Option<TubeCrossSectio
 
 	let bottom_middle = (bl + br) * 0.5;
 	let top_middle = (tl + tr) * 0.5;
-	// Vertical span for mid-station lerp; pitched offset is carried by `top_middle`.
+	// Vertical span for the hall run. Opening pitch stays on this station's
+	// `top_middle`; the kink reconstructs a plumb lift (see [`lerp_tube_nodes`]).
 	let height = (top_middle.y - bottom_middle.y).abs().max(EPS);
 
 	let bottom_left_width = signed_width(bl, bottom_middle, right);
@@ -49,29 +50,19 @@ pub(crate) fn lerp_tube_nodes(
 	w_b: f32,
 	bottom_middle: Vec3,
 ) -> TubeCrossSectionNode {
-	let mut mid = TubeCrossSectionNode::new(
+	let height = w_a * a.height + w_b * b.height;
+	// Ends keep authored lintels (trazaloid face pitch, etc.). World-lerping those
+	// points pulled the kink off plumb because `bottom_middle` is the plan-ray hit,
+	// not a lerp of the sills. Lift straight up so the run stays vertical.
+	TubeCrossSectionNode::new(
 		bottom_middle,
 		w_a * a.bottom_left_width + w_b * b.bottom_left_width,
 		w_a * a.bottom_right_width + w_b * b.bottom_right_width,
-		w_a * a.height + w_b * b.height,
+		height,
 		w_a * a.top_left_width + w_b * b.top_left_width,
 		w_a * a.top_right_width + w_b * b.top_right_width,
-	);
-	match (a.top_middle, b.top_middle) {
-		(Some(ta), Some(tb)) => {
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(Some(ta), None) => {
-			let tb = b.bottom_middle + Vec3::Y * b.height;
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(None, Some(tb)) => {
-			let ta = a.bottom_middle + Vec3::Y * a.height;
-			mid = mid.with_top_middle(ta * w_a + tb * w_b);
-		}
-		(None, None) => {}
-	}
-	mid
+	)
+	.with_top_middle(bottom_middle + Vec3::Y * height)
 }
 
 pub(crate) fn normalize_xz(v: Vec2) -> Option<Vec2> {

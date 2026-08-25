@@ -95,7 +95,8 @@ impl ConnectingShells {
 		});
 
 		// Hall tops on the trazaloid end follow the footprint→waist pitch (door clip
-		// points lie on that face; Tube stations keep authored `top_middle`).
+		// points lie on that face). The kink stays plumb; only the end station
+		// keeps that authored `top_middle`.
 		let end_tower = tower
 			.mapped_opening(0, &connect_id)
 			.expect("arc tower ground door")
@@ -184,6 +185,14 @@ mod tests {
 		assert!(
 			(top.x - traz_station.bottom_middle.x).abs() > 1e-3,
 			"tube station should keep non-vertical top lift"
+		);
+		let mid = stations[1];
+		let mid_top = mid.top_middle.ok_or_else(|| anyhow::anyhow!("plumb mid top_middle"))?;
+		assert!(
+			(mid_top.x - mid.bottom_middle.x).abs() < 1e-3
+				&& (mid_top.z - mid.bottom_middle.z).abs() < 1e-3,
+			"kink should stay plumb, got top={mid_top:?} bottom={:?}",
+			mid.bottom_middle
 		);
 		Ok(())
 	}

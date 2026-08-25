@@ -249,4 +249,46 @@ mod tests {
 		assert!((hall.stations()[0].height - 2.3).abs() < 1e-3);
 		Ok(())
 	}
+
+	#[test]
+	fn unequal_plumb_openings_keep_plumb_kink() -> anyhow::Result<()> {
+		// Same geometry as `height_is_length_weighted`: world-lerping lintels used
+		// to put the mid top at a plan offset even though both faces are vertical.
+		let a = opening_facing(Vec3::new(0.0, 0.0, -1.0), 1.0, 1.0, Vec2::Y)?;
+		let b = opening_facing(Vec3::new(4.0, 4.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+		let hall = ConnectingHall::rough_stone(a, b);
+		let mid = hall.stations()[1];
+		let top = mid.top_middle.ok_or_else(|| anyhow::anyhow!("mid top_middle"))?;
+		assert!((top.x - mid.bottom_middle.x).abs() < 1e-3);
+		assert!((top.z - mid.bottom_middle.z).abs() < 1e-3);
+		assert!((top.y - mid.bottom_middle.y - mid.height).abs() < 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn pitched_end_does_not_lean_the_kink() -> anyhow::Result<()> {
+		let a = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y)?;
+		let (bl, br, tl, tr) = opening_facing(Vec3::new(3.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?
+			.endpoint_corners();
+		// Inset the lintel along +X so the B face pitches like a trazaloid.
+		let b = MappedOpening::from_corners(
+			bl,
+			br,
+			tl + Vec3::X * 0.4,
+			tr + Vec3::X * 0.4,
+			-Vec2::X,
+		);
+		let hall = ConnectingHall::rough_stone(a, b);
+		let end_b = hall.stations()[2];
+		let end_top = end_b.top_middle.ok_or_else(|| anyhow::anyhow!("end top"))?;
+		assert!(
+			(end_top.x - end_b.bottom_middle.x).abs() > 0.3,
+			"end should keep host-face pitch, got {end_top:?}"
+		);
+		let mid = hall.stations()[1];
+		let mid_top = mid.top_middle.ok_or_else(|| anyhow::anyhow!("mid top"))?;
+		assert!((mid_top.x - mid.bottom_middle.x).abs() < 1e-3);
+		assert!((mid_top.z - mid.bottom_middle.z).abs() < 1e-3);
+		Ok(())
+	}
 }
