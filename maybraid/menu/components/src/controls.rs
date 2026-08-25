@@ -10,6 +10,7 @@ pub mod hud_menu;
 pub mod row;
 pub mod scroll;
 pub mod section;
+pub mod short_text;
 pub mod stepper;
 pub mod swatch;
 pub mod text;
@@ -29,6 +30,13 @@ pub use scroll::{
 pub use section::{
 	spawn_section_header, sync_overlay_header_cursors, ActiveOverlayKey, OverlayHeader,
 	OverlayHeaderKey,
+};
+pub use short_text::{
+	capture_short_text_input, emit_short_text_cancel_on_click, emit_short_text_submit_on_click,
+	emit_short_text_toggle_on_click, emit_short_text_toggle_on_enter, restore_short_text_editing,
+	spawn_short_text_button, sync_short_text_cursors, sync_short_text_display, sync_short_text_ime,
+	sync_short_text_modal, ActiveShortText, ShortTextChange, ShortTextField, ShortTextKey,
+	ShortTextModal, ShortTextToggle, ShortTextValue,
 };
 pub use stepper::spawn_stepper;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};

@@ -11,7 +11,7 @@ use maybraid_character_ui_menu_renderer::{
 };
 use menu_components::{
 	spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate,
-	MenuFocus, PANEL_ROW_GAP,
+	MenuFocus, ShortTextChange, PANEL_ROW_GAP,
 };
 use menu_screens::MenuScreen;
 
@@ -71,6 +71,7 @@ impl Plugin for CharacterScreenPlugin {
 			.add_observer(on_overlay_close)
 			.add_observer(on_menu_activate)
 			.add_observer(on_menu_focus)
+			.add_observer(on_short_text_change)
 			.add_systems(
 				Update,
 				(apply_show_character, sync_character_ui, sync_overlay_select)
@@ -373,4 +374,18 @@ fn on_menu_focus(
 	if let Some(camera) = menu_state.0.camera_focus_for_event(focus.event().choice) {
 		menu_events.write(CharacterMenuEvent::CameraFocus(camera));
 	}
+}
+
+fn on_short_text_change(
+	change: On<ShortTextChange>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	screens: Query<Entity, With<CharacterScreen>>,
+) {
+	if screens.is_empty() {
+		return;
+	}
+	if change.event().key != "Name" {
+		return;
+	}
+	menu_state.bypass_change_detection().0.name = change.event().value.clone();
 }

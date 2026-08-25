@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
-use game_commands::command::TextEntryFocus;
+use game_commands::command::{TextEntryBlocked, TextEntryFocus};
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::single_select::{republish_menu_activate, MenuFocus, TextMenuInputLock};
@@ -104,10 +104,24 @@ impl Plugin for HomeScreenPlugin {
 }
 
 fn sync_text_menu_input_lock(
-	focus: Option<Res<TextEntryFocus>>,
+	mut focus: Option<ResMut<TextEntryFocus>>,
+	mut blocked: Option<ResMut<TextEntryBlocked>>,
+	modal: Res<menu_components::ShortTextModal>,
+	fields: Query<&menu_components::ShortTextField>,
 	mut lock: ResMut<TextMenuInputLock>,
 ) {
-	lock.0 = focus.is_some_and(|focus| focus.0);
+	let short = modal.is_open() || fields.iter().any(|field| field.editing);
+	if let Some(blocked) = blocked.as_mut() {
+		blocked.0 = short;
+	}
+	if short {
+		if let Some(focus) = focus.as_mut() {
+			focus.0 = false;
+		}
+		lock.0 = true;
+		return;
+	}
+	lock.0 = focus.as_ref().is_some_and(|focus| focus.0);
 }
 
 fn apply_show_home(

@@ -55,6 +55,7 @@ pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
+		MenuNode::ShortText { .. } => false,
 		_ => false,
 	}
 }
@@ -95,7 +96,12 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 		{
 			Some(node)
 		}
-		_ => None,
+		MenuNode::ShortText { .. }
+		| MenuNode::LabeledCycle { .. }
+		| MenuNode::LabeledSlider { .. }
+		| MenuNode::LabeledSwatch { .. }
+		| MenuNode::BlockAsset { .. }
+		| MenuNode::ItemMultiSelect { .. } => None,
 	}
 }
 

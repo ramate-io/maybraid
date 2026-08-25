@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use menu_components::{MenuComponentsPlugin, TextMenuSystems};
+use menu_components::{restore_short_text_editing, MenuComponentsPlugin, TextMenuSystems};
 use std::marker::PhantomData;
 
 use crate::event::CharacterMenuEvent;
@@ -52,6 +52,7 @@ where
 			Update,
 			(emit_hud_focus::<E>, emit_hud_activate_on_enter::<E>, emit_overlay_close_on_escape)
 				.in_set(CharacterHudSystems::Input),
-		);
+		)
+		.add_systems(Update, restore_short_text_editing.after(CharacterHudSystems::Sync));
 	}
 }

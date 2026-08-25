@@ -7,8 +7,9 @@ use character_ui_menu::{
 };
 use menu_components::{
 	spawn_asset_tile, spawn_group_label, spawn_hud_text, spawn_labeled_row, spawn_section_header,
-	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
+	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_LABEL_FONT_SIZE,
+	PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 use crate::justify::MenuJustify;
@@ -182,11 +183,37 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					self.header(parent, context, label, Some(overlay_summary_value(node)));
 				}
 			}
+			MenuNode::ShortText { label, value, max_len } => {
+				self.short_text(parent, context, label, value, *max_len);
+			}
 		}
 	}
 }
 
 impl MaybraidMenuSink {
+	fn short_text<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &'static str,
+		value: &str,
+		max_len: usize,
+	) {
+		spawn_short_text_button(
+			parent,
+			context.fonts,
+			label,
+			value,
+			false,
+			self.justify.content(),
+			(
+				ShortTextKey(label),
+				ShortTextField { value: value.to_string(), max_len, editing: false },
+				context.stamp_hud_item(),
+			),
+		);
+	}
+
 	fn header<C>(
 		&self,
 		parent: &mut ChildSpawnerCommands,
