@@ -201,7 +201,8 @@ mod vc {
 	use super::{definition, TemperateLowerMassivesCell, TemperateLowerMassivesItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
+		foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
@@ -429,18 +430,21 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
+				.flat_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						TemperateLowerMassivesKind::Oak(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						TemperateLowerMassivesKind::Storybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						TemperateLowerMassivesKind::Rory(t) => {
-							canopy_proxy_site(t, plant.placement, material)
-						}
+						TemperateLowerMassivesKind::Rory(t) => canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							material,
+						),
 					}
 				})
 				.collect()
@@ -650,16 +654,16 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert!(low_foliage >= grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!(
-					"Low temperate lower massives should emit one flattened canopy collection"
-				);
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low temperate lower massives should emit flattened canopy kits"),
+			}
 			Ok(())
 		}
 

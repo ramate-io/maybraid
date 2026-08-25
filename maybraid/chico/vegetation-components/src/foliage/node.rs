@@ -1,5 +1,7 @@
 //! Foliage IR node: style + geometry + placement.
 
+use std::collections::HashMap;
+
 use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Mesh3d, MeshMaterial3d, StandardMaterial, Vec3, Visibility};
@@ -9,7 +11,7 @@ use lod::gen::{
 };
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
-use material_ref::{MaterialRef, MaterialRefRoot};
+use material_ref::{MaterialId, MaterialRef, MaterialRefRoot};
 
 use crate::assets::AssetPath;
 use crate::foliage::ball_collection::{
@@ -121,23 +123,28 @@ impl FoliageNode {
 		Some(Self::cheap_ball_collection(collection, Placement::IDENTITY).with_material(material))
 	}
 
-	/// Fold every cheap ball into one collection; leave fronds and other geometries as-is.
+	/// Fold cheap balls into one collection **per material recipe**; leave fronds
+	/// and other geometries as-is.
 	///
-	/// Grove Low / UltraLow canopy proxies use this so a tile is one posed kit, not
-	/// one [`lod::LodScene`] host per plant.
+	/// Grove Low / UltraLow canopy proxies use this so a tile is a few posed kits,
+	/// not one [`lod::LodScene`] host per plant. Trunk (stick) and crown (leaf)
+	/// must not share a kit — [`Self::merge_cheap_balls`] keeps the first
+	/// material, which painted umbrellas bark-colored.
 	pub fn merge_canopy_proxies(nodes: impl IntoIterator<Item = Self>) -> Vec<Self> {
-		let mut cheap = Vec::new();
+		let mut groups: HashMap<MaterialId, Vec<Self>> = HashMap::new();
 		let mut rest = Vec::new();
 		for node in nodes {
 			match &node.geometry {
 				FoliageGeometry::CheapBall | FoliageGeometry::CheapBallCollection(_) => {
-					cheap.push(node)
+					groups.entry(node.material.name.clone()).or_default().push(node);
 				}
 				_ => rest.push(node),
 			}
 		}
-		if let Some(merged) = Self::merge_cheap_balls(cheap) {
-			rest.insert(0, merged);
+		for cheap in groups.into_values() {
+			if let Some(merged) = Self::merge_cheap_balls(cheap) {
+				rest.insert(0, merged);
+			}
 		}
 		rest
 	}

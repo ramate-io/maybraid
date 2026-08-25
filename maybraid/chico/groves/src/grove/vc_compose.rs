@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
 use bevy::scene::prelude::Scene;
+use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
 	components_only_host, flattened_components_only_host, FoliageGeometry, FoliageNode, Layers,
@@ -320,6 +321,65 @@ pub fn canopy_proxy_waialea(
 	sites
 }
 
+/// Trained umbrella (Rory): trunk column + one cheap ball at the stalk tip.
+///
+/// [`canopy_proxy_site`] puts a sphere at mid-height with `tree_radius` =
+/// max(footprint, half-height). That mid-tree blob is the grove Low / UltraLow
+/// card. Keep the trunk (stick material, world stalk radius) and one uniform
+/// canopy ball (leaf material) at `crown_y_frac` of height. Do not flatten the
+/// crown — a non-uniform cheap ball reads as a rectangle.
+pub fn canopy_proxy_trained(
+	plant_placement: Placement,
+	trunk_material: &MaterialRef,
+	crown_material: &MaterialRef,
+	world_height: f32,
+	stalk_radius_world: f32,
+	crown_radius: f32,
+	crown_y_frac: f32,
+) -> Vec<CanopyProxySite> {
+	let h = world_height.max(1e-4);
+	let ground = plant_placement.translation;
+	let crown_center = ground + Vec3::Y * (h * crown_y_frac.clamp(0.35, 0.98));
+	let trunk_half_h = (crown_center.y - ground.y).abs() * 0.5;
+	let xz = stalk_radius_world.max(0.12);
+	let mut sites = Vec::with_capacity(2);
+	if trunk_half_h >= 0.2 {
+		sites.push(CanopyProxySite {
+			center: (ground + crown_center) * 0.5,
+			half_extents: Vec3::new(xz, trunk_half_h, xz),
+			material: trunk_material.clone(),
+		});
+	}
+	sites.push(CanopyProxySite::from_radius(
+		crown_center,
+		crown_radius.max(0.25),
+		crown_material.clone(),
+	));
+	sites
+}
+
+/// [`canopy_proxy_trained`] from a unit-height [`RorysHeadTrained`] plus placement scale.
+pub fn canopy_proxy_rory(
+	plant: &RorysHeadTrained,
+	plant_placement: Placement,
+	trunk_material: &MaterialRef,
+	crown_material: &MaterialRef,
+) -> Vec<CanopyProxySite> {
+	let s = plant_placement.scale.abs().max_element();
+	let h = (plant.geometry.height() * s).max(1e-4);
+	let stalk = plant.geometry.scale.stalk_base_radius_or_default() * s;
+	let crown = (plant.geometry.projection.max_fraction() * h).max(0.25);
+	canopy_proxy_trained(
+		plant_placement,
+		trunk_material,
+		crown_material,
+		h,
+		stalk,
+		crown,
+		plant.geometry.scale.stalk_height_fraction,
+	)
+}
+
 /// Like [`canopy_proxy_site`], with an extra local child pose (e.g. crown at trunk tip).
 pub fn canopy_proxy_site_nested(
 	plant: &impl VegetationComponents,
@@ -343,11 +403,23 @@ pub fn foliage_low_canopy_balls(
 }
 
 /// Grove UltraLow: merge nearby canopy sites into larger balls; one color per bin.
+///
+/// Uniform crowns and trunk/column sites merge separately so a trained umbrella
+/// does not collapse into one bark-colored rectangle.
 pub fn foliage_ultra_low_merged_balls(
 	sites: &[CanopyProxySite],
 	bin_meters: f32,
 ) -> Vec<FoliageNode> {
 	let bin = bin_meters.max(1.0);
+	let mut nodes = merge_proxy_bins(sites.iter().filter(|site| site.is_uniform()), bin);
+	nodes.extend(merge_proxy_bins(sites.iter().filter(|site| !site.is_uniform()), bin));
+	nodes
+}
+
+fn merge_proxy_bins<'a>(
+	sites: impl Iterator<Item = &'a CanopyProxySite>,
+	bin: f32,
+) -> Vec<FoliageNode> {
 	let mut bins: HashMap<(i32, i32), (Vec3, Vec3, MaterialRef, u32)> = HashMap::new();
 	for site in sites {
 		let ix = (site.center.x / bin).floor() as i32;
@@ -358,7 +430,6 @@ pub fn foliage_ultra_low_merged_balls(
 		entry.0 += site.center;
 		entry.1 = entry.1.max(site.half_extents);
 		entry.3 = entry.3.saturating_add(1);
-		// Keep first material in the bin (stable pick).
 	}
 
 	bins.into_iter()
@@ -665,6 +736,43 @@ mod tests {
 		.expect("already-crown");
 		assert!((already.center.y - 34.0).abs() < 1e-3);
 		assert!(already.radius() < 12.0);
+	}
+
+	#[test]
+	fn trained_low_proxy_keeps_trunk_and_crown_ball() {
+		let placement = Placement::new(Vec3::new(4.0, 0.0, -2.0), 0.0).with_scale(Vec3::splat(2.0));
+		let sites = canopy_proxy_trained(
+			placement,
+			&chico_stick_material_ref(),
+			&chico_leaf_material_ref(),
+			20.0,
+			1.6,
+			6.0,
+			0.90,
+		);
+		assert_eq!(sites.len(), 2);
+		let trunk = &sites[0];
+		let crown = &sites[1];
+		assert!(trunk.half_extents.y > trunk.half_extents.x * 2.0);
+		assert!((trunk.half_extents.x - 1.6).abs() < 1e-3);
+		assert!(trunk.center.y < crown.center.y);
+		assert!((crown.center.y - 18.0).abs() < 1e-3);
+		assert!(crown.is_uniform());
+		assert!((crown.half_extents.x - 6.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn ultra_low_keeps_trained_trunk_separate_from_crown() {
+		let sites = [
+			CanopyProxySite {
+				center: Vec3::Y * 8.0,
+				half_extents: Vec3::new(0.4, 8.0, 0.4),
+				material: chico_stick_material_ref(),
+			},
+			CanopyProxySite::from_radius(Vec3::Y * 16.0, 4.0, chico_leaf_material_ref()),
+		];
+		let merged = foliage_ultra_low_merged_balls(&sites, 8.0);
+		assert_eq!(merged.len(), 2);
 	}
 
 	#[test]

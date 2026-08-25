@@ -742,12 +742,13 @@ mod vc {
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low bush-scrub should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low bush-scrub should emit flattened canopy kits"),
+			}
 			Ok(())
 		}
 

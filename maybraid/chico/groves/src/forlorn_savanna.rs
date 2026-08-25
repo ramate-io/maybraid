@@ -58,6 +58,8 @@ pub enum ForlornSavannaItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForlornSavannaRory {
 	pub height: UnitRange,
+	/// Stalk base radius as a **fraction of sampled height**. Large savanna
+	/// umbrellas stay thick; leftover metres would stay spindly on a 30 m tree.
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
 	pub canopy_density: UnitRange,
@@ -86,7 +88,7 @@ pub struct ForlornSavannaStorybook {
 
 const SAVANNA_RORY: ForlornSavannaRory = ForlornSavannaRory {
 	height: UnitRange::new(5.0, 30.0),
-	stalk_radius: UnitRange::new(0.12, 0.45),
+	stalk_radius: UnitRange::new(0.15, 0.20),
 	canopy_spread: UnitRange::new(3.0, 12.0),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
@@ -203,15 +205,16 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, ForlornSavannaCell, ForlornSavannaItem};
-	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
-	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use crate::grove::{
+		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
+	};
 
 	/// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
 	pub const FORLORN_SAVANNA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -433,17 +436,17 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
+				.flat_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						ForlornSavannaKind::Rory(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
 						}
 						ForlornSavannaKind::Bush(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						ForlornSavannaKind::Storybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 					}
 				})
@@ -656,14 +659,16 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert!(low_foliage >= grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low forlorn-savanna should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low forlorn-savanna should emit flattened canopy kits"),
+			}
 			Ok(())
 		}
 
@@ -739,6 +744,7 @@ mod tests {
 			anyhow::bail!("expected rory item");
 		};
 		assert_eq!(rory.height, UnitRange::new(5.0, 30.0));
+		assert_eq!(rory.stalk_radius, UnitRange::new(0.15, 0.20));
 		assert_eq!(rory.canopy_spread, UnitRange::new(3.0, 12.0));
 		assert_eq!(rory.canopy_density, SPARSE_CANOPY_DENSITY);
 

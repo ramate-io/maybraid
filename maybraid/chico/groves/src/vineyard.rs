@@ -120,8 +120,9 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, VineyardCell, VineyardItem};
+	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_rory, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
@@ -129,7 +130,6 @@ mod vc {
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 
 	pub const VINEYARD_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
 	pub const VINEYARD_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
@@ -323,8 +323,13 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
-					canopy_proxy_site(&plant.tree, plant.placement, &plant.ball_material)
+				.flat_map(|plant| {
+					canopy_proxy_rory(
+						&plant.tree,
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+					)
 				})
 				.collect()
 		}
@@ -488,14 +493,16 @@ mod vc {
 
 			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert_eq!(low_foliage, grove.plants.len() * 2);
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low vineyard should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low vineyard should emit flattened canopy kits"),
+			}
 			Ok(())
 		}
 

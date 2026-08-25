@@ -25,8 +25,9 @@ use procedural_common::NoiseParams;
 
 pub const DEFAULT_TREE_HEIGHT: f32 = 18.0;
 pub const DEFAULT_STALK_HEIGHT_FRACTION: f32 = 0.90;
-/// Playground default; RFC lists `0.025 * H`.
-pub const DEFAULT_STALK_BASE_RADIUS_FRACTION: f32 = 0.07;
+/// Default stalk radius as a fraction of tree height. RFC lists `0.025 * H`;
+/// the playground default is thicker so the column reads at orchard / savanna scale.
+pub const DEFAULT_STALK_BASE_RADIUS_FRACTION: f32 = 0.105;
 pub const DEFAULT_STALK_SECTION_COUNT: u32 = 3;
 
 // --- Canopy ring (RFC § anchor ring) ---
@@ -61,7 +62,7 @@ pub const DEFAULT_BRANCH_RADIUS_CHILD_SCALE_HI: f32 = 0.94;
 
 // --- Foliage (RFC § ball selection) ---
 
-pub const DEFAULT_LEAF_RADIUS_FRACTION: f32 = 0.07;
+pub const DEFAULT_LEAF_RADIUS_FRACTION: f32 = 0.126;
 pub const DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION: f32 = 0.65;
 
 // --- Anchor / limb numerics ---

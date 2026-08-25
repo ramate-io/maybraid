@@ -655,4 +655,20 @@ mod tests {
 		};
 		assert_eq!(weight, FLATTENED_KIT_CHUNK_WEIGHT);
 	}
+
+	#[test]
+	fn merge_canopy_proxies_keeps_stick_and_leaf_recipes() {
+		use crate::materials::{chico_leaf_material_ref, chico_stick_material_ref};
+		let nodes = vec![
+			FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::ZERO, 0.4))
+				.with_material(chico_stick_material_ref()),
+			FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::Y, 0.8))
+				.with_material(chico_leaf_material_ref()),
+		];
+		let merged = FoliageNode::merge_canopy_proxies(nodes);
+		assert_eq!(merged.len(), 2);
+		let names: Vec<_> = merged.iter().map(|n| n.material.name.clone()).collect();
+		assert!(names.contains(&material_ref::MaterialId::named(CHICO_STICK_MATERIAL)));
+		assert!(names.contains(&material_ref::MaterialId::named(CHICO_LEAF_MATERIAL)));
+	}
 }
