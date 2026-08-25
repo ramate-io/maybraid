@@ -6,7 +6,7 @@
 //! copies activate onto [`Message<E>`] for listeners outside the screen.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::FontSourceTemplate;
 
 use crate::theme::{

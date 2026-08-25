@@ -1,13 +1,12 @@
-//! Short-text button plus a physical-key modal.
+//! Short-text button plus a modal line and in-game keypad.
 //!
-//! Toggle opens the modal. Submit (Enter or the submit control) emits
-//! [`ShortTextChange`] and closes. Escape / backdrop cancel closes without
-//! writing. System OSKs (IME) type into the same visible line; the modal
-//! stays up.
+//! Toggle opens the modal. Devices without a system OSK get an A–Z / 0–9
+//! keypad. iOS and Android hide that keypad and enable IME so the system
+//! keyboard types into the same visible line. Submit emits [`ShortTextChange`].
 
 use bevy::ecs::event::EntityEvent;
-use bevy::input::keyboard::KeyboardInput;
 use bevy::input::ButtonState;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
@@ -15,15 +14,16 @@ use bevy::window::{Ime, PrimaryWindow};
 use crate::icons::AnimatedIcon;
 use crate::single_select::{TextCursorSlot, TextMenuInputLock};
 use crate::theme::{
-	HEADER_FONT_SIZE, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	HEADER_FONT_SIZE, PANEL_CHIP_GAP, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
+use super::HudFonts;
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
 use super::hud_menu::{HudMenu, HudMenuItem};
 use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
-use super::HudFonts;
 
 /// IR / host key for a short-text field.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,6 +64,7 @@ pub struct ShortTextSession {
 	pub value: String,
 	pub original: String,
 	pub max_len: usize,
+	pub shift: bool,
 }
 
 /// Root of the fullscreen text modal.
@@ -78,6 +79,27 @@ pub struct ShortTextSubmit;
 
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct ShortTextCancel;
+
+/// In-game keypad root; absent on devices that already have a system OSK.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct ShortTextPad;
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortTextPadKey {
+	Letter(char),
+	Digit(char),
+	Space,
+	Backspace,
+	Shift,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct ShortTextPadLetter(char);
+
+/// True on platforms where winit can show a system soft keyboard.
+pub fn system_osk_available() -> bool {
+	cfg!(target_os = "ios") || cfg!(target_os = "android")
+}
 
 /// Start or stop editing. The button does not interpret the text.
 #[derive(EntityEvent, Debug, Clone)]
@@ -155,11 +177,7 @@ fn spawn_short_text_line(
 }
 
 fn row_value_display(value: &str) -> String {
-	if value.is_empty() {
-		String::from("  —")
-	} else {
-		format!("  {value}")
-	}
+	if value.is_empty() { String::from("  —") } else { format!("  {value}") }
 }
 
 fn modal_value_display(value: &str) -> String {
@@ -182,6 +200,7 @@ pub fn open_short_text_modal(
 		value: field.value.clone(),
 		original: field.value.clone(),
 		max_len: field.max_len,
+		shift: false,
 	});
 	commands.trigger(ShortTextToggle { entity, key, editing: true });
 }
@@ -298,6 +317,35 @@ pub fn emit_short_text_submit_on_click(
 	submit_short_text_modal(&mut active, &mut modal, &mut fields, &mut commands);
 }
 
+pub fn emit_short_text_pad_on_click(
+	click: On<Pointer<Click>>,
+	keys: Query<&ShortTextPadKey>,
+	mut modal: ResMut<ShortTextModal>,
+) {
+	let Ok(key) = keys.get(click.entity) else {
+		return;
+	};
+	let Some(session) = modal.session.as_mut() else {
+		return;
+	};
+	match *key {
+		ShortTextPadKey::Shift => session.shift = !session.shift,
+		ShortTextPadKey::Backspace => {
+			session.value.pop();
+		}
+		ShortTextPadKey::Space => {
+			push_short_text_char(&mut session.value, session.max_len, ' ');
+		}
+		ShortTextPadKey::Digit(ch) => {
+			push_short_text_char(&mut session.value, session.max_len, ch);
+		}
+		ShortTextPadKey::Letter(ch) => {
+			let ch = if session.shift { ch.to_ascii_uppercase() } else { ch.to_ascii_lowercase() };
+			push_short_text_char(&mut session.value, session.max_len, ch);
+		}
+	}
+}
+
 pub fn emit_short_text_cancel_on_click(
 	click: On<Pointer<Click>>,
 	cancels: Query<(), With<ShortTextCancel>>,
@@ -398,7 +446,21 @@ pub fn sync_short_text_modal(
 	}
 }
 
+pub(crate) fn sync_short_text_pad_shift(
+	modal: Res<ShortTextModal>,
+	mut letters: Query<(&ShortTextPadLetter, &mut Text)>,
+) {
+	let shift = modal.session.as_ref().is_some_and(|session| session.shift);
+	for (letter, mut text) in &mut letters {
+		let display = pad_letter_label(letter.0, shift);
+		if text.0 != display {
+			text.0 = display;
+		}
+	}
+}
+
 fn spawn_short_text_modal(commands: &mut Commands, fonts: &HudFonts, session: &ShortTextSession) {
+	let show_pad = !system_osk_available();
 	commands
 		.spawn((
 			ShortTextModalRoot,
@@ -410,7 +472,7 @@ fn spawn_short_text_modal(commands: &mut Commands, fonts: &HudFonts, session: &S
 				height: Val::Percent(100.0),
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
-				padding: UiRect::bottom(Val::Percent(22.0)),
+				padding: UiRect::bottom(Val::Percent(if show_pad { 8.0 } else { 22.0 })),
 				..default()
 			},
 			GlobalZIndex(100),
@@ -432,8 +494,8 @@ fn spawn_short_text_modal(commands: &mut Commands, fonts: &HudFonts, session: &S
 			));
 			root.spawn((
 				Node {
-					width: Val::Px(640.0),
-					max_width: Val::Percent(88.0),
+					width: Val::Px(720.0),
+					max_width: Val::Percent(92.0),
 					flex_direction: FlexDirection::Column,
 					align_items: AlignItems::FlexStart,
 					row_gap: Val::Px(PANEL_ROW_GAP),
@@ -459,15 +521,162 @@ fn spawn_short_text_modal(commands: &mut Commands, fonts: &HudFonts, session: &S
 					Pickable::IGNORE,
 				));
 				spawn_text_button(card, fonts, "submit", ShortTextSubmit);
-				spawn_hud_text(
-					card,
-					fonts.body(PANEL_ITEM_FONT_SIZE),
-					"A–Z  0–9  space  enter",
-					TEXT_YELLOW_FAINT,
-					Justify::Left,
-				);
+				if show_pad {
+					spawn_short_text_pad(card, fonts, session.shift);
+				} else {
+					spawn_hud_text(
+						card,
+						fonts.body(PANEL_ITEM_FONT_SIZE),
+						"type to enter",
+						TEXT_YELLOW_FAINT,
+						Justify::Left,
+					);
+				}
 			});
 		});
+}
+
+const PAD_LETTERS: [&str; 3] = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
+const PAD_DIGITS: &str = "1234567890";
+const PAD_KEY_SIZE: f32 = 40.0;
+const PAD_WIDE_KEY: f32 = 88.0;
+
+fn spawn_short_text_pad(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, shift: bool) {
+	parent
+		.spawn((
+			ShortTextPad,
+			Node {
+				width: Val::Percent(100.0),
+				flex_direction: FlexDirection::Column,
+				align_items: AlignItems::FlexStart,
+				row_gap: Val::Px(PANEL_CHIP_GAP),
+				margin: UiRect::top(Val::Px(PANEL_ROW_GAP)),
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|pad| {
+			for row in PAD_LETTERS {
+				spawn_pad_letter_row(pad, fonts, row, shift);
+			}
+			spawn_pad_digit_row(pad, fonts);
+			spawn_pad_action_row(pad, fonts);
+		});
+}
+
+fn spawn_pad_letter_row(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	letters: &str,
+	shift: bool,
+) {
+	parent
+		.spawn((
+			Node {
+				flex_direction: FlexDirection::Row,
+				column_gap: Val::Px(PANEL_CHIP_GAP),
+				flex_wrap: FlexWrap::Wrap,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|row| {
+			for ch in letters.chars() {
+				spawn_pad_key(
+					row,
+					fonts,
+					&pad_letter_label(ch, shift),
+					PAD_KEY_SIZE,
+					ShortTextPadKey::Letter(ch),
+					Some(ch),
+				);
+			}
+		});
+}
+
+fn spawn_pad_digit_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
+	parent
+		.spawn((
+			Node {
+				flex_direction: FlexDirection::Row,
+				column_gap: Val::Px(PANEL_CHIP_GAP),
+				flex_wrap: FlexWrap::Wrap,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|row| {
+			for ch in PAD_DIGITS.chars() {
+				spawn_pad_key(
+					row,
+					fonts,
+					&ch.to_string(),
+					PAD_KEY_SIZE,
+					ShortTextPadKey::Digit(ch),
+					None,
+				);
+			}
+		});
+}
+
+fn spawn_pad_action_row(parent: &mut ChildSpawnerCommands, fonts: &HudFonts) {
+	parent
+		.spawn((
+			Node {
+				flex_direction: FlexDirection::Row,
+				column_gap: Val::Px(PANEL_CHIP_GAP),
+				flex_wrap: FlexWrap::Wrap,
+				align_items: AlignItems::Center,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|row| {
+			spawn_pad_key(row, fonts, "shift", PAD_WIDE_KEY, ShortTextPadKey::Shift, None);
+			spawn_pad_key(row, fonts, "space", PAD_WIDE_KEY * 2.0, ShortTextPadKey::Space, None);
+			spawn_pad_key(row, fonts, "back", PAD_WIDE_KEY, ShortTextPadKey::Backspace, None);
+		});
+}
+
+fn spawn_pad_key(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	label: &str,
+	min_width: f32,
+	extra: impl Bundle,
+	letter: Option<char>,
+) {
+	parent
+		.spawn((
+			Button,
+			extra,
+			Node {
+				min_width: Val::Px(min_width),
+				min_height: Val::Px(PAD_KEY_SIZE),
+				padding: UiRect::axes(Val::Px(6.0), Val::Px(4.0)),
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				..default()
+			},
+			BackgroundColor(Color::NONE),
+		))
+		.with_children(|button| {
+			let mut text = button.spawn((
+				Text::new(label),
+				fonts.item(PANEL_VALUE_FONT_SIZE),
+				TextColor(TEXT_YELLOW),
+				TextLayout::new(Justify::Center, LineBreak::NoWrap),
+				LineHeight::RelativeToFont(1.0),
+				Pickable::IGNORE,
+			));
+			if let Some(ch) = letter {
+				text.insert(ShortTextPadLetter(ch));
+			}
+		});
+}
+
+fn pad_letter_label(letter: char, shift: bool) -> String {
+	if shift { letter.to_ascii_uppercase() } else { letter.to_ascii_lowercase() }.to_string()
 }
 
 pub fn sync_short_text_display(
@@ -564,7 +773,7 @@ pub fn sync_short_text_ime(
 	modal: Res<ShortTextModal>,
 	mut windows: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-	let editing = modal.is_open();
+	let editing = modal.is_open() && system_osk_available();
 	let Ok(mut window) = windows.single_mut() else {
 		return;
 	};
@@ -575,7 +784,13 @@ pub fn sync_short_text_ime(
 
 #[cfg(test)]
 mod tests {
-	use super::{is_short_text_char, push_short_text_char};
+	use super::{is_short_text_char, pad_letter_label, push_short_text_char};
+
+	#[test]
+	fn pad_letters_follow_shift() {
+		assert_eq!(pad_letter_label('A', false), "a");
+		assert_eq!(pad_letter_label('A', true), "A");
+	}
 
 	#[test]
 	fn allows_letters_digits_space_and_caps_max_len() {

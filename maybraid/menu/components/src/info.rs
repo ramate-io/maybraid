@@ -3,5 +3,5 @@
 pub mod description;
 pub mod hint;
 
-pub use description::{set_description_for_menu, TextMenuDescription};
-pub use hint::{set_hint_for_menu, TextMenuHint, TextMenuHintLabel};
+pub use description::{TextMenuDescription, set_description_for_menu};
+pub use hint::{TextMenuHint, TextMenuHintLabel, set_hint_for_menu};

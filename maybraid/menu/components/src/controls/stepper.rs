@@ -5,9 +5,9 @@ use bevy::text::Justify;
 
 use crate::theme::{PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
+use super::HudFonts;
 use super::button::spawn_text_button;
 use super::text::spawn_hud_text;
-use super::HudFonts;
 
 /// Compact horizontal stepper. `minus` / `plus` are stamped onto the arrows.
 pub fn spawn_stepper(
