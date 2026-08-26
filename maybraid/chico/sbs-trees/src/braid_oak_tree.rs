@@ -216,10 +216,7 @@ mod tests {
 			.iter()
 			.map(|n| (n.position.x * n.position.x + n.position.z * n.position.z).sqrt())
 			.fold(0.0_f32, f32::max);
-		assert!(
-			max_xz < 1.5,
-			"unit oak footprint should stay near the braid dome, got {max_xz}"
-		);
+		assert!(max_xz < 1.5, "unit oak footprint should stay near the braid dome, got {max_xz}");
 		Ok(())
 	}
 

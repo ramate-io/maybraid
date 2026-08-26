@@ -334,9 +334,9 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, RorysHeadTrained,
-		RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
-		WaialeaPalmParams,
+		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
+		RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams,
+		WaialeaPalm, WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -752,7 +752,7 @@ mod vc {
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
+					kind: UnendingJungleKind::Honu(HonuBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -767,7 +767,7 @@ mod vc {
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
+					kind: UnendingJungleKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -792,9 +792,9 @@ mod vc {
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::JungleStorybook(Arc::new(
-						JungleStorybookTree::unit_from_num(variant),
-					)),
+					kind: UnendingJungleKind::JungleStorybook(
+						JungleStorybookTree::grow_num(variant).0,
+					),
 					stick_material,
 					ball_material,
 					frond_material,

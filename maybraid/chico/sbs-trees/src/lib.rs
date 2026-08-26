@@ -17,6 +17,7 @@ pub mod palm_bush;
 pub mod palm_crown;
 mod palm_tree;
 pub mod penmarch_torch;
+pub mod quantized;
 pub mod rorys_head_trained;
 pub mod simplemans_hedge;
 pub mod skipped_mesh_material;
@@ -43,6 +44,7 @@ pub use northern_conifer::{NorthernConifer, NorthernConiferParams};
 pub use palm_bush::{PalmBush, PalmBushParams};
 pub use palm_crown::{PalmCrown, PalmCrownParams};
 pub use penmarch_torch::{PenmarchTorch, PenmarchTorchParams};
+pub use quantized::QuantizedPlant;
 pub use rorys_head_trained::{RorysHeadTrained, RorysHeadTrainedParams};
 pub use simplemans_hedge::{SimplemansHedge, SimplemansHedgeParams};
 pub use skipped_mesh_material::{

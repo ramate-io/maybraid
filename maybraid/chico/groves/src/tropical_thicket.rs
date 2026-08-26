@@ -273,7 +273,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HighBushShoots, HighBushShootsParams, HonuBanyan, PalmBush, PalmBushParams,
+		HighBushShoots, HighBushShootsParams, HonuBanyan, PalmBush, PalmBushParams, QuantizedPlant,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -646,7 +646,7 @@ mod vc {
 				TropicalThicketPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalThicketKind::Banyan(Arc::new(HonuBanyan::unit_from_num(variant))),
+					kind: TropicalThicketKind::Banyan(HonuBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

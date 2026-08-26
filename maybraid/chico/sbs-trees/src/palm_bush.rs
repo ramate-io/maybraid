@@ -28,7 +28,8 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 use crate::palm_crown::{
-	PalmCrownParams, DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION, FROND_RING_SEED_SALT,
+	PalmCrownParams, DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION,
+	FROND_RING_SEED_SALT,
 };
 use crate::palm_tree::{
 	crown_lod_probe, frond_collection_nodes, low_star_nodes_for_rings, world_space_frond_shape,

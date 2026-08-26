@@ -13,12 +13,12 @@ If the tree or tuft still emits one node per stick/ball and has no `into_unit_fr
 1. Add `tree_variants: u32` (woody) or `patch_variants: u32` (tuft) on params, default `100`.
 2. At grow, map placement → archetype with [`patch_variant_index`](src/grove/vc_tuft.rs) (stable hash of world XZ).
 3. Key construction noise with [`variant_noise`](src/grove/vc_tuft.rs) so the same index rebuilds identically.
-4. Call `params.into_unit_from_num(variant)` (or `unit_from_num`). Keep **palette / leaf / frond color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Fronds resolve through [`frond_material_from_palette`](src/grove/vc_compose.rs) → [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (sway, no leaf cheese). Preset silhouettes instance the default unit and put sampled cell height on `Placement` only — do not remix grove SBS projection, descenders, or leaf balls onto the mesh. That is [`BraidOakTree::unit_from_num`](../sbs-trees/src/braid_oak_tree.rs), [`HonuBanyan::unit_from_num`](../sbs-trees/src/honu_banyan.rs), [`SopesBanyan::unit_from_num`](../sbs-trees/src/sopes_banyan.rs), and [`JungleStorybookTree::unit_from_num`](../sbs-trees/src/jungle_storybook_tree.rs). Ordinary Storybook (and similar) still remix height + span onto params, then `into_unit_from_num`.
+4. Call [`QuantizedPlant::grow_num`](../sbs-trees/src/quantized.rs) (or `params.into_unit_from_num` only when building a wrapper’s `build_unit`). Keep **palette / leaf / frond color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Fronds resolve through [`frond_material_from_palette`](src/grove/vc_compose.rs) → [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (sway, no leaf cheese). Preset silhouettes instance the default unit (`HonuBanyan::grow_num`, `BraidOakTree::grow_num`, …) and put sampled cell height on `Placement` only — do not remix grove SBS projection, descenders, or leaf balls onto those meshes. Ordinary Storybook (and similar) that remix height + span implement `QuantizedPlant` on a **wrapper type** (`type Unit = StorybookTree`) so they do not share `StorybookTree`’s `(num)` slot, then nest `Arc<StorybookTree>` / `Arc<DatePalm>` so playground hosts stay on the base type ([Orchard](src/orchard.rs), [Date Grove](src/date_grove.rs)).
 5. Put world size on [`Placement`](../vegetation-components/src/placed.rs):
 
    `Placement::new(position, 0.0).with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)))`
 
-6. Store `Arc<YourTree>` when `T` is large (Orchard: `Arc<StorybookTree>`). Begin/drain must not clone the grown chain per chunk.
+6. Store the `Arc` from `grow_num`. Begin/drain must not clone the grown chain per chunk. Do not cache materials, `Placement`, or world-space proxy sites.
 
 Orchard `grow_plant` is the woody template. Tuft groves use [`unit_plant_from_params`](src/grove/vc_tuft.rs).
 
@@ -60,7 +60,7 @@ Keep `ComponentsOnly<PlacedVegetation<YourTree>>` only if another grove still ne
 
 ## Tests
 
-- Same cell positions + `tree_variants = 4` (or similar) produce repeated archetypes (`tree_variants_quantize_archetypes` / `patch_variants_quantize_archetypes`).
+- Same cell positions + `tree_variants = 4` (or similar) produce repeated archetypes (`tree_variants_quantize_archetypes` / `patch_variants_quantize_archetypes`). Repeated variants share one unit `Arc` (`grow_num_reuses_arc_for_same_type_and_num`).
 - High/Medium nest one flattened host per plant, not one host per kit node.
 - Low / UltraLow `scene_chunks` emit flattened kits (ordinary woody: one cheap-ball collection; Rory Low: one merged trunk kit plus crown balls; palm-only Low: nested plant hosts with the shared star; mixed Low: star fronds plus merged balls). Not one `FoliageNode` host per plant.
 - Uniform Low crowns stay Y-up (`low_uniform_crown_stays_y_up`).

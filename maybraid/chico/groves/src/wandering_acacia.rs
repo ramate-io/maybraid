@@ -261,7 +261,7 @@ mod vc {
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
 		HighBushShoots, HighBushShootsParams, KamakuraTorch, KamakuraTorchParams, PenmarchTorch,
-		PenmarchTorchParams, SopesBanyan, VaseTree, VaseTreeParams,
+		PenmarchTorchParams, QuantizedPlant, SopesBanyan, VaseTree, VaseTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -587,7 +587,7 @@ mod vc {
 				WanderingAcaciaPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
+					kind: WanderingAcaciaKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

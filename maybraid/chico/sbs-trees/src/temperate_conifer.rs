@@ -35,9 +35,9 @@ use lod::gen::LodSceneLevel;
 use procedural_common::{parse_unit_range, UnitRange};
 
 use crate::conifer_canopy_apex::{sample_apex_canopy_spawn, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
-use crate::storybook_tree::merge_kit_sticks;
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
 use crate::palm_tree::world_space_frond_shape;
+use crate::storybook_tree::merge_kit_sticks;
 use foliage::{branch_direction, frond_shape_for_joint};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).

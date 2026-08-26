@@ -166,7 +166,10 @@ fn crook_trunk_and_branch_candidates(
 	(trunk, branch_candidates)
 }
 
-fn banded_branches(candidates: &[BranchCandidate], bands: AzimuthHeightBands) -> Vec<&BranchCandidate> {
+fn banded_branches(
+	candidates: &[BranchCandidate],
+	bands: AzimuthHeightBands,
+) -> Vec<&BranchCandidate> {
 	sample_max_horizontal_radius_by_azimuth_height(candidates, |c| c.sample_at, bands)
 		.into_iter()
 		.map(|s| s.item)

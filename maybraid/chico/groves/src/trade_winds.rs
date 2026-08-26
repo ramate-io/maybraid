@@ -233,7 +233,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HonuBanyan, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm, WaialeaPalmParams,
+		HonuBanyan, QuantizedPlant, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
+		WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -595,7 +596,7 @@ mod vc {
 					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
 					placement,
-					kind: TradeWindsKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
+					kind: TradeWindsKind::Honu(HonuBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -611,7 +612,7 @@ mod vc {
 					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
 					placement,
-					kind: TradeWindsKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
+					kind: TradeWindsKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

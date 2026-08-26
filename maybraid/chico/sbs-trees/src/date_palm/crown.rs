@@ -122,7 +122,8 @@ mod tests {
 		grove.scale.stalk_height = 1.0;
 		grove.frond_world_scale = 0.35 + 0.35 * 0.5;
 		let s = world_space_frond_shape(frond_shape_for_ring(&show, 0, 0), show.frond_world_scale);
-		let g = world_space_frond_shape(frond_shape_for_ring(&grove, 0, 0), grove.frond_world_scale);
+		let g =
+			world_space_frond_shape(frond_shape_for_ring(&grove, 0, 0), grove.frond_world_scale);
 		assert!((s.droop / s.length - g.droop / g.length).abs() < 1e-4);
 		assert!(
 			g.droop / g.length > 0.35,

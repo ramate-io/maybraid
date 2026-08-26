@@ -193,7 +193,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{BraidOakTree, StorybookTree, StorybookTreeParams};
+	use chico_sbs_trees::{BraidOakTree, QuantizedPlant, StorybookTree, StorybookTreeParams};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -466,7 +466,7 @@ mod vc {
 				RollingOaksPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: RollingOaksKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
+					kind: RollingOaksKind::Oak(BraidOakTree::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

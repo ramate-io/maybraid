@@ -262,7 +262,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{BraidOakTree, DatePalm, DatePalmParams, SopesBanyan};
+	use chico_sbs_trees::{BraidOakTree, DatePalm, DatePalmParams, QuantizedPlant, SopesBanyan};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -573,7 +573,7 @@ mod vc {
 				ShamanhomePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ShamanhomeKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
+					kind: ShamanhomeKind::Oak(BraidOakTree::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -602,7 +602,7 @@ mod vc {
 				ShamanhomePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ShamanhomeKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
+					kind: ShamanhomeKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

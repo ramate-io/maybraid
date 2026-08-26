@@ -102,7 +102,7 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use std::sync::Arc;
 
-	use chico_sbs_trees::{DatePalm, DatePalmParams};
+	use chico_sbs_trees::{DatePalm, DatePalmParams, QuantizedPlant};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -113,7 +113,7 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, DateGroveCell, DateGroveItem};
+	use super::{definition, DateGroveCell, DateGroveItem, FRUITING_DATE_PALM};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, foliage_ultra_low_merged_balls,
@@ -247,6 +247,21 @@ mod vc {
 		}
 	}
 
+	/// Cache identity for fruiting Date Grove remixes of [`DatePalm`].
+	struct DateGrovePalm;
+
+	impl QuantizedPlant for DateGrovePalm {
+		type Unit = DatePalm;
+
+		fn build_unit(num: u32) -> (DatePalm, f32) {
+			let noise = variant_noise(GroveFrontend::default().noise, num);
+			let mut params = DatePalmParams::default();
+			params.geometry = FRUITING_DATE_PALM.build_with_noise(noise);
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
+		}
+	}
+
 	#[derive(Clone)]
 	pub struct DateGrovePlant {
 		pub placement: Placement,
@@ -330,7 +345,6 @@ mod vc {
 		tree_variants: u32,
 	) -> DateGrovePlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -343,16 +357,13 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		let DateGroveItem::DatePalm(palm) = placed.variant.item();
-		let geometry = palm.build_with_noise(build_noise);
-		let mut params = DatePalmParams::default();
-		params.geometry = geometry;
-		let (unit_params, world_size) = params.into_unit_from_num(variant);
+		let DateGroveItem::DatePalm(_) = placed.variant.item();
+		let (tree, world_size) = DateGrovePalm::grow_num(variant);
 
 		DateGrovePlant {
 			placement: Placement::new(placed.position, 0.0)
 				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-			tree: Arc::new(unit_params.build()),
+			tree,
 			stick_material,
 			ball_material,
 			frond_material,
@@ -501,6 +512,7 @@ mod vc {
 		#[test]
 		fn tree_variants_quantize_archetypes() -> Result<()> {
 			use std::collections::HashSet;
+			use std::sync::Arc;
 
 			let mut params = DateGroveParams::default()
 				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(80.0, 1.0, 80.0)));
@@ -517,6 +529,11 @@ mod vc {
 			let seeds: HashSet<i32> =
 				grove.plants.iter().map(|p| p.tree.geometry.trunk_noise.seed).collect();
 			assert!(seeds.len() <= 4, "expected ≤4 unique unit seeds, got {}", seeds.len());
+			let ptrs: HashSet<_> = grove.plants.iter().map(|p| Arc::as_ptr(&p.tree)).collect();
+			assert!(
+				grove.plants.len() > ptrs.len(),
+				"expected repeated variants to share one unit Arc"
+			);
 			Ok(())
 		}
 	}
