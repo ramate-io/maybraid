@@ -6,10 +6,10 @@
 
 use bevy::scene::prelude::Scene;
 use chico_vegetation_components::{
-	PlacedVegetation, Placement, VegetationComponents, components_only_host,
+	components_only_host, PlacedVegetation, Placement, VegetationComponents,
 };
-use lod::SceneChunk;
 use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 use material_ref::MaterialRef;
 
 /// Nest one posed plant as [`chico_vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.

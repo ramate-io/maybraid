@@ -42,44 +42,20 @@ pub struct WoodyGroveLod {
 
 impl WoodyGroveLod {
 	pub const fn ordinary(high: f32, medium: f32, low: f32) -> Self {
-		Self {
-			high,
-			medium,
-			low,
-			policy: WoodyCanopyPolicy::Ordinary,
-			rory_trunks: false,
-		}
+		Self { high, medium, low, policy: WoodyCanopyPolicy::Ordinary, rory_trunks: false }
 	}
 
 	pub const fn keep_low_plants(high: f32, medium: f32, low: f32) -> Self {
-		Self {
-			high,
-			medium,
-			low,
-			policy: WoodyCanopyPolicy::KeepLowPlants,
-			rory_trunks: false,
-		}
+		Self { high, medium, low, policy: WoodyCanopyPolicy::KeepLowPlants, rory_trunks: false }
 	}
 
 	pub const fn skip_ultralow_bins(high: f32, medium: f32, low: f32) -> Self {
-		Self {
-			high,
-			medium,
-			low,
-			policy: WoodyCanopyPolicy::SkipUltraLowBins,
-			rory_trunks: false,
-		}
+		Self { high, medium, low, policy: WoodyCanopyPolicy::SkipUltraLowBins, rory_trunks: false }
 	}
 
 	/// Ordinary foliage plus trained Low / UltraLow trunk sticks.
 	pub const fn rory_trunk(high: f32, medium: f32, low: f32) -> Self {
-		Self {
-			high,
-			medium,
-			low,
-			policy: WoodyCanopyPolicy::Ordinary,
-			rory_trunks: true,
-		}
+		Self { high, medium, low, policy: WoodyCanopyPolicy::Ordinary, rory_trunks: true }
 	}
 
 	pub const fn with_rory_trunks(self) -> Self {

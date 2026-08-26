@@ -7,8 +7,8 @@ use bevy::scene::prelude::Scene;
 use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
-	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers,
-	PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
+	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
+	Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;

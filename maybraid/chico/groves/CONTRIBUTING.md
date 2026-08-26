@@ -6,6 +6,8 @@ Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_varia
 
 Woody `LodScene` / `VegetationComponents` go through [`WoodyGroveLod`](src/grove/woody_lod.rs). Keep HIGH / MEDIUM / LOW and the policy constructor on the grove (`ordinary` / `keep_low_plants` / `skip_ultralow_bins` / `rory_trunk`). The shared impl is mechanical only.
 
+File shape: `foo.rs` is the open grove — `definition()`, Cell / Item, palettes, `distribution()`, band constants, and `WOODY_LOD`. Declare file submodules at the top (`pub mod variants;`, `mod vc;`). Clap / build / grow live in [`foo/vc.rs`](src/orchard/vc.rs); render checks in [`foo/vc/tests.rs`](src/orchard/vc/tests.rs); RFC selection tests in [`foo/tests.rs`](src/orchard/tests.rs). Never `mod.rs`. Crate root re-exports **`Foo` + `FooParams` only** (plus [`OasisDatePalm`](src/strange_oasis.rs) for the playground host). Cell / item types stay on the grove module (`chico_groves::orchard::OrchardCell`).
+
 ## Plant type first
 
 If the tree or tuft still emits one node per stick/ball and has no `into_unit_from_num`, do that in `chico-sbs-trees` before changing the grove. Quantizing a unique-mesh construction only caps grow noise; it does not cap GPU uploads.
@@ -62,8 +64,8 @@ Isolated `/show` trees use that same family (identity [`Placement`](../vegetatio
 
 ## Tests
 
-- Same cell positions + `tree_variants = 4` (or similar) produce repeated archetypes (`tree_variants_quantize_archetypes` / `patch_variants_quantize_archetypes`). Repeated variants share one unit `Arc` (`grow_num_reuses_arc_for_same_type_and_num`).
-- High/Medium nest one flattened host per plant, not one host per kit node.
+- Same cell positions + `tree_variants = 4` (or similar) produce repeated archetypes (`tree_variants_quantize_archetypes` / `patch_variants_quantize_archetypes`). Call [`assert_quantized_archetypes`](src/grove/woody_checks.rs) / [`assert_shared_unit_arcs`](src/grove/woody_checks.rs) instead of copying the HashSet walk. Repeated variants share one unit `Arc` (`grow_num_reuses_arc_for_same_type_and_num` in `chico-sbs-trees`).
+- High/Medium nest one flattened host per plant, not one host per kit node — [`assert_high_medium_nests_plants`](src/grove/woody_checks.rs).
 - Low / UltraLow `scene_chunks` emit flattened kits (ordinary woody: one cheap-ball collection; Rory Low: one merged trunk kit plus crown balls; palm-only Low: nested plant hosts with the shared star; mixed Low: star fronds plus merged balls). Not one `FoliageNode` host per plant.
 - Uniform Low crowns stay Y-up (`low_uniform_crown_stays_y_up`).
 
