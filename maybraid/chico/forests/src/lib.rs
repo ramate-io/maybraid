@@ -9,6 +9,7 @@
 mod assemble;
 mod chico;
 mod extent;
+mod forest;
 mod hopscotch;
 mod kind;
 mod layer;
@@ -17,6 +18,7 @@ pub mod layerings;
 pub use assemble::{assemble, grow_tile, AssembledForest, ForestGroveTile};
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
+pub use forest::ChicoForest;
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use kind::{ForestGroveKind, ForestLayering, LayeringKind, SelectedLayers, WeightedGrove};
 pub use layer::{select_layers, throw_layer};

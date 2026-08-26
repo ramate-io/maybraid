@@ -74,6 +74,17 @@ pub struct AssembledForest {
 	pub upper_canopy: Vec<ForestGroveTile>,
 }
 
+impl AssembledForest {
+	/// Flattened tiles in layer order: tufts, understory, lower canopy, upper canopy.
+	pub fn tiles(&self) -> impl Iterator<Item = &ForestGroveTile> {
+		self.tufts
+			.iter()
+			.chain(self.understory.iter())
+			.chain(self.lower_canopy.iter())
+			.chain(self.upper_canopy.iter())
+	}
+}
+
 /// Grow `kind` on one grove tile. Uses default grove params (no construction-seed bias).
 pub fn grow_tile(
 	kind: ForestGroveKind,

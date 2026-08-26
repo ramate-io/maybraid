@@ -1,5 +1,6 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
+use crate::forest_stream::{DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS};
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use crate::vast::{parse_vast_grove_name, spawn_vast_grove};
 use bevy::prelude::*;
@@ -30,6 +31,7 @@ use chico_vegetation_components::{
 };
 use clap::{Args, Subcommand};
 use lod::gen::LodScene;
+use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 use crate::render::SbsRenderItem;
 
@@ -104,6 +106,8 @@ pub enum Show {
 	Vast(ShowVast),
 	/// Centered radius-10 tile of default Orchard groves (21×21) for scale testing.
 	VastOrchards,
+	/// Unified Chico forest: Hopscotch 1600 m cells and spawn grove LodScene hosts.
+	Forest(ShowForest),
 	/// Riparian General grove via VegetationComponents / LodScene.
 	RiparianGeneral(ShowRiparianGeneral),
 	/// Forlorn Savanna grove via VegetationComponents / LodScene.
@@ -573,6 +577,23 @@ pub struct ShowVast {
 	/// Grove construction kebab-case name (`orchard`, `goettingen-follow`, `rolling-oaks`, …).
 	#[arg(long, value_parser = parse_vast_grove_name)]
 	pub grove_name: String,
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowForest {
+	/// Hopscotch / layer-throw noise (`seed,frequency,amplitude,octaves[,type]`).
+	#[arg(
+		long,
+		default_value = DEFAULT_FOREST_NOISE,
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
+	)]
+	pub noise: NoiseParams,
+
+	/// Chebyshev ring of 1600 m cells around the camera (`0` = current cell only).
+	#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
+	pub stream_radius: u32,
 }
 
 #[derive(Clone, Args)]
@@ -1221,6 +1242,9 @@ impl Show {
 			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
 			Self::Vast(args) => ShowSubject::Vast { grove_name: args.grove_name },
 			Self::VastOrchards => ShowSubject::Vast { grove_name: "orchard".into() },
+			Self::Forest(args) => {
+				ShowSubject::Forest { noise: args.noise, stream_radius: args.stream_radius }
+			}
 			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
 			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
 			Self::GoettingenFollow(args) => ShowSubject::GoettingenFollow(args.configured()),
@@ -1299,6 +1323,7 @@ pub enum ShowSubject {
 	RollingOaks(RollingOaksParams),
 	Orchard(OrchardParams),
 	Vast { grove_name: String },
+	Forest { noise: NoiseParams, stream_radius: u32 },
 	RiparianGeneral(RiparianGeneralParams),
 	ForlornSavanna(ForlornSavannaParams),
 	GoettingenFollow(GoettingenFollowParams),
@@ -1501,6 +1526,9 @@ pub fn sync_show(
 			g.terrain
 		)),
 		Some(ShowSubject::Vast { grove_name }) => Some(format!("vast:{grove_name}")),
+		Some(ShowSubject::Forest { noise, stream_radius }) => {
+			Some(format!("forest:{noise:?}|r={stream_radius}"))
+		}
 		Some(ShowSubject::RiparianGeneral(g)) => Some(format!(
 			"riparian-general:extent={:?}|cell={:?}|terrain={:?}",
 			g.extent,
@@ -1740,6 +1768,7 @@ pub fn sync_show(
 				Err(msg) => bevy::log::error!("show vast: {msg}"),
 			}
 		}
+		ShowSubject::Forest { .. } => {}
 		ShowSubject::RiparianGeneral(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::ForlornSavanna(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::GoettingenFollow(params) => spawn_show_grove(&mut commands, &params.build()),
@@ -1832,6 +1861,29 @@ mod tests {
 			anyhow::bail!("expected show vast command");
 		};
 		assert_eq!(args.grove_name, "goettingen-follow");
+		Ok(())
+	}
+
+	#[test]
+	fn show_forest_parses_defaults_and_overrides() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show forest")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::Forest(args)) = cmd else {
+			anyhow::bail!("expected show forest command");
+		};
+		assert_eq!(args.stream_radius, DEFAULT_FOREST_STREAM_RADIUS);
+		assert_eq!(args.noise.seed, 1337);
+		assert!((args.noise.frequency - 0.0005).abs() < 1e-8);
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"show forest --stream-radius 0 --noise 3,0.005,1,1",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::Forest(args)) = cmd else {
+			anyhow::bail!("expected show forest command");
+		};
+		assert_eq!(args.stream_radius, 0);
+		assert_eq!(args.noise.seed, 3);
+		assert!((args.noise.frequency - 0.005).abs() < 1e-8);
 		Ok(())
 	}
 

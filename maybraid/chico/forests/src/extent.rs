@@ -70,6 +70,35 @@ impl ForestExtent {
 	pub fn default_grove_tiles(self) -> Vec<GroveExtent> {
 		self.grove_tiles(DEFAULT_FOREST_GROVE_TILE_XZ)
 	}
+
+	/// Origin-centered cell whose `(0, 0)` index is [`Self::default_cell`].
+	pub fn from_cell_index(ix: i32, iz: i32) -> Self {
+		let s = DEFAULT_FOREST_EXTENT_XZ;
+		let h = s * 0.5;
+		Self::new(
+			Vec3::new(ix as f32 * s - h, 0.0, iz as f32 * s - h),
+			Vec3::new(ix as f32 * s + h, 1.0, iz as f32 * s + h),
+		)
+	}
+
+	/// Cell index containing `position` on the origin-centered 1600 m grid.
+	///
+	/// The +X / +Z faces are exclusive so a point on a shared edge belongs to the
+	/// higher-index neighbor.
+	pub fn cell_index_containing(position: Vec3) -> (i32, i32) {
+		let s = DEFAULT_FOREST_EXTENT_XZ;
+		let h = s * 0.5;
+		let ix = ((position.x + h) / s).floor() as i32;
+		let iz = ((position.z + h) / s).floor() as i32;
+		(ix, iz)
+	}
+
+	/// Inclusive Chebyshev ring of cell indices around `center`.
+	pub fn cell_ring(center: (i32, i32), radius: u32) -> impl Iterator<Item = (i32, i32)> {
+		let r = radius as i32;
+		let (cx, cz) = center;
+		(-r..=r).flat_map(move |dx| (-r..=r).map(move |dz| (cx + dx, cz + dz)))
+	}
 }
 
 #[cfg(test)]
@@ -82,6 +111,26 @@ mod tests {
 		let tiles = ForestExtent::default_cell().default_grove_tiles();
 		assert_eq!(tiles.len(), 16 * 16);
 		assert!((tiles[0].max().x - tiles[0].min().x - DEFAULT_FOREST_GROVE_TILE_XZ).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn origin_cell_index_matches_default_cell() -> Result<()> {
+		assert_eq!(ForestExtent::from_cell_index(0, 0), ForestExtent::default_cell());
+		assert_eq!(ForestExtent::cell_index_containing(Vec3::ZERO), (0, 0));
+		assert_eq!(ForestExtent::cell_index_containing(Vec3::new(799.9, 0.0, 0.0)), (0, 0));
+		assert_eq!(ForestExtent::cell_index_containing(Vec3::new(800.0, 0.0, 0.0)), (1, 0));
+		assert_eq!(ForestExtent::cell_index_containing(Vec3::new(-800.0, 0.0, 0.0)), (0, 0));
+		assert_eq!(ForestExtent::cell_index_containing(Vec3::new(-800.1, 0.0, 0.0)), (-1, 0));
+		Ok(())
+	}
+
+	#[test]
+	fn cell_ring_radius_one_is_three_by_three() -> Result<()> {
+		let cells: Vec<_> = ForestExtent::cell_ring((0, 0), 1).collect();
+		assert_eq!(cells.len(), 9);
+		assert!(cells.contains(&(0, 0)));
+		assert!(cells.contains(&(1, -1)));
 		Ok(())
 	}
 }

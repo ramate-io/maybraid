@@ -23,6 +23,7 @@ chico-tree-components = { workspace = true, features = ["clap"] }
 chico-sbs-geometry = { workspace = true, features = ["clap"] }
 chico-ball-components = { workspace = true, features = ["clap"] }
 chico-groves = { workspace = true, features = ["render"] }
+chico-forests = { workspace = true }
 chico-sdf = { workspace = true }
 chico-stick-components = { workspace = true }
 chico-vegetation-components = { workspace = true }

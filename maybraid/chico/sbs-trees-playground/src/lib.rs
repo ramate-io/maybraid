@@ -5,6 +5,7 @@ pub mod checkerboard_material;
 mod chico_material_lib;
 pub mod commands;
 pub mod diagnostics;
+mod forest_stream;
 mod ground;
 mod monster_grass_plain;
 mod render;
@@ -35,6 +36,7 @@ use chico_vegetation_shaders::{
 };
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
+use forest_stream::stream_forest;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
@@ -103,6 +105,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
+					stream_forest.after(sync_show),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

@@ -2275,6 +2275,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "chico-ball-components",
+ "chico-forests",
  "chico-groves",
  "chico-sbs-geometry",
  "chico-sbs-trees",
