@@ -54,7 +54,9 @@ pub use grove::{
 };
 
 #[cfg(feature = "render")]
-pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+pub use grove::{
+	patch_spawned_leaf_material, resolve_palette_color, GrovePreviewParams, WithPalette,
+};
 
 #[cfg(feature = "render")]
 pub use alpine::{Alpine, AlpineParams};

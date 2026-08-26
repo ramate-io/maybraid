@@ -21,6 +21,8 @@ mod terrain;
 mod tuft_patch;
 
 #[cfg(feature = "render")]
+mod preview;
+#[cfg(feature = "render")]
 mod quantized;
 #[cfg(feature = "render")]
 pub mod vc_compose;
@@ -42,6 +44,8 @@ pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+#[cfg(feature = "render")]
+pub use preview::GrovePreviewParams;
 #[cfg(feature = "render")]
 pub(crate) use quantized::{
 	remixed_blade_tuft_plant, remixed_bush_plant, remixed_sbs_plant, remixed_spear_tuft_plant,

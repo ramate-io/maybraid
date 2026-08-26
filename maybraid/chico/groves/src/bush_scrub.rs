@@ -253,9 +253,9 @@ mod vc {
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_blade_tuft_plant,
-		remixed_bush_plant, remixed_tuft_plant, stick_material_from_palette, woody_grove_scene_chunks,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_bush_plant, remixed_tuft_plant, stick_material_from_palette,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GrovePreviewParams, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const BUSH_SCRUB_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -265,26 +265,8 @@ mod vc {
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
 	pub struct BushScrubParams {
-		#[command(flatten, next_help_heading = "Grove")]
-		pub grove: GroveFrontend,
-
-		#[arg(
-			long,
-			default_value = "0,1.0,1.0,1",
-			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-			help_heading = "The noise applied to the chains of sticks in the bushes",
-		)]
-		pub bush_chain_noise: NoiseParams,
-
-		#[arg(
-			long,
-			default_value = "0,1.0,0.05,1",
-			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-			help_heading = "Stick Surface Noise",
-		)]
-		pub stick_surface_noise: NoiseParams,
+		#[command(flatten)]
+		pub preview: GrovePreviewParams<BushScrubCell>,
 
 		#[arg(
 			long,
@@ -295,80 +277,24 @@ mod vc {
 		)]
 		pub leaf_surface_noise: NoiseParams,
 
-		#[arg(skip)]
-		pub extent: GroveExtent,
-
-		#[command(flatten, next_help_heading = "Terrain")]
-		pub terrain: FlatTerrainSample,
-
 		#[arg(long, default_value_t = 100)]
 		pub patch_variants: u32,
-
-		/// Number of unit-height bush archetypes (`unit_from_num(0..n)`). Caps unique
-		/// merged-mesh handles for High/Medium bushes.
-		#[arg(long, default_value_t = 100)]
-		pub tree_variants: u32,
-
-		#[arg(skip)]
-		resolved_placements: Option<Vec<GroveCellVariant<BushScrubCell>>>,
 	}
 
 	impl Default for BushScrubParams {
 		fn default() -> Self {
 			Self {
-				grove: GroveFrontend::default(),
-				bush_chain_noise: NoiseParams::from_scalar(0.0, 1.0, 1.0, 1),
-				stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+				preview: GrovePreviewParams::default().with_terrain(FlatTerrainSample::default()),
 				leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-				extent: GroveExtent::new(
-					Vec3::ZERO,
-					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
-				),
-				terrain: FlatTerrainSample::default(),
 				patch_variants: 100,
-				tree_variants: 100,
-				resolved_placements: None,
 			}
 		}
 	}
 
+	crate::impl_grove_preview_params!(BushScrubParams, BushScrubCell);
+
 	impl BushScrubParams {
-		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
-			self.extent = extent;
-			self
-		}
-
-		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
-			self.terrain = terrain;
-			self
-		}
-
-		pub fn cell_extent_xz(&self) -> Vec2 {
-			self.grove.definition(definition()).cell_extent_xz
-		}
-
-		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-			self.extent.subdivide_xz(self.cell_extent_xz())
-		}
-
-		pub fn placements(&self) -> Vec<GroveCellVariant<BushScrubCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.placements_on(&self.terrain)
-		}
-
-		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
-		pub fn placements_on(
-			&self,
-			world: &impl crate::GroveWorldSample,
-		) -> Vec<GroveCellVariant<BushScrubCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.grove.assemble(definition()).populate(&self.extent, world)
-		}
-
+		// preview accessors via impl_grove_preview_params!
 		pub fn build(&self) -> BushScrub {
 			self.build_on(&self.terrain)
 		}
@@ -378,7 +304,6 @@ mod vc {
 			BushScrub::from_placements(
 				&self.placements_on(world),
 				self.grove.noise,
-				self.bush_chain_noise,
 				self.leaf_surface_noise,
 				self.patch_variants,
 				self.tree_variants,
@@ -425,7 +350,6 @@ mod vc {
 		pub fn from_placements(
 			placements: &[GroveCellVariant<BushScrubCell>],
 			grove_noise: NoiseParams,
-			bush_chain_noise: NoiseParams,
 			leaf_surface_noise: NoiseParams,
 			patch_variants: u32,
 			tree_variants: u32,
@@ -439,7 +363,6 @@ mod vc {
 					grow_plant(
 						placed,
 						grove_noise,
-						bush_chain_noise,
 						leaf_surface_noise,
 						patch_variants,
 						tree_variants,
@@ -532,7 +455,6 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<BushScrubCell>,
 		grove_noise: NoiseParams,
-		_bush_chain_noise: NoiseParams,
 		leaf_surface_noise: NoiseParams,
 		patch_variants: u32,
 		tree_variants: u32,

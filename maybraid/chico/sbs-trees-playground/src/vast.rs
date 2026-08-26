@@ -83,17 +83,15 @@ pub fn parse_vast_grove_name(name: &str) -> Result<String, String> {
 	if VAST_GROVE_NAMES.contains(&key.as_str()) {
 		Ok(key)
 	} else {
-		Err(format!(
-			"unknown grove {name:?}; expected one of: {}",
-			VAST_GROVE_NAMES.join(", ")
-		))
+		Err(format!("unknown grove {name:?}; expected one of: {}", VAST_GROVE_NAMES.join(", ")))
 	}
 }
 
 fn tile_extents() -> impl Iterator<Item = GroveExtent> {
 	(-VAST_GROVE_RADIUS..=VAST_GROVE_RADIUS).flat_map(|ix| {
 		(-VAST_GROVE_RADIUS..=VAST_GROVE_RADIUS).map(move |iz| {
-			let min = Vec3::new(ix as f32 * VAST_GROVE_EXTENT_XZ, 0.0, iz as f32 * VAST_GROVE_EXTENT_XZ);
+			let min =
+				Vec3::new(ix as f32 * VAST_GROVE_EXTENT_XZ, 0.0, iz as f32 * VAST_GROVE_EXTENT_XZ);
 			GroveExtent::new(min, min + Vec3::new(VAST_GROVE_EXTENT_XZ, 1.0, VAST_GROVE_EXTENT_XZ))
 		})
 	})
@@ -144,16 +142,18 @@ pub fn spawn_vast_grove(
 ) -> Result<Vec<Entity>, String> {
 	let name = parse_vast_grove_name(grove_name)?;
 	Ok(match name.as_str() {
-		"alpine" => spawn_tiled_lod(commands, transform, |e| AlpineParams::default().with_extent(e).build()),
+		"alpine" => {
+			spawn_tiled_lod(commands, transform, |e| AlpineParams::default().with_extent(e).build())
+		}
 		"arid-conifer-sapling" => spawn_tiled_lod(commands, transform, |e| {
 			AridConiferSaplingParams::default().with_extent(e).build()
 		}),
 		"braid-grass" => spawn_tiled_components(commands, transform, |e| {
 			BraidGrassParams::default().with_extent(e).build()
 		}),
-		"bush-scrub" => {
-			spawn_tiled_lod(commands, transform, |e| BushScrubParams::default().with_extent(e).build())
-		}
+		"bush-scrub" => spawn_tiled_lod(commands, transform, |e| {
+			BushScrubParams::default().with_extent(e).build()
+		}),
 		"christmas-taiga" => spawn_tiled_lod(commands, transform, |e| {
 			ChristmasTaigaParams::default().with_extent(e).build()
 		}),
@@ -166,21 +166,21 @@ pub fn spawn_vast_grove(
 		"conifer-sapling" => spawn_tiled_lod(commands, transform, |e| {
 			ConiferSaplingParams::default().with_extent(e).build()
 		}),
-		"date-grove" => {
-			spawn_tiled_lod(commands, transform, |e| DateGroveParams::default().with_extent(e).build())
-		}
-		"dryland" => {
-			spawn_tiled_lod(commands, transform, |e| DrylandParams::default().with_extent(e).build())
-		}
+		"date-grove" => spawn_tiled_lod(commands, transform, |e| {
+			DateGroveParams::default().with_extent(e).build()
+		}),
+		"dryland" => spawn_tiled_lod(commands, transform, |e| {
+			DrylandParams::default().with_extent(e).build()
+		}),
 		"forlorn-savanna" => spawn_tiled_lod(commands, transform, |e| {
 			ForlornSavannaParams::default().with_extent(e).build()
 		}),
 		"goettingen-follow" => spawn_tiled_lod(commands, transform, |e| {
 			GoettingenFollowParams::default().with_extent(e).build()
 		}),
-		"high-bush" => {
-			spawn_tiled_lod(commands, transform, |e| HighBushParams::default().with_extent(e).build())
-		}
+		"high-bush" => spawn_tiled_lod(commands, transform, |e| {
+			HighBushParams::default().with_extent(e).build()
+		}),
 		"jerrys-chaparral" => spawn_tiled_lod(commands, transform, |e| {
 			JerrysChaparralParams::default().with_extent(e).build()
 		}),
@@ -190,24 +190,24 @@ pub fn spawn_vast_grove(
 		"jungle-massives" => spawn_tiled_lod(commands, transform, |e| {
 			JungleMassivesParams::default().with_extent(e).build()
 		}),
-		"leeward" => {
-			spawn_tiled_lod(commands, transform, |e| LeewardParams::default().with_extent(e).build())
-		}
+		"leeward" => spawn_tiled_lod(commands, transform, |e| {
+			LeewardParams::default().with_extent(e).build()
+		}),
 		"levantine-scrub" => spawn_tiled_lod(commands, transform, |e| {
 			LevantineScrubParams::default().with_extent(e).build()
 		}),
-		"low-bush" => {
-			spawn_tiled_lod(commands, transform, |e| LowBushParams::default().with_extent(e).build())
-		}
+		"low-bush" => spawn_tiled_lod(commands, transform, |e| {
+			LowBushParams::default().with_extent(e).build()
+		}),
 		"monster-grass" => spawn_tiled_components(commands, transform, |e| {
 			MonsterGrassParams::default().with_extent(e).build()
 		}),
-		"orchard" => {
-			spawn_tiled_lod(commands, transform, |e| OrchardParams::default().with_extent(e).build())
-		}
-		"palm-shade" => {
-			spawn_tiled_lod(commands, transform, |e| PalmShadeParams::default().with_extent(e).build())
-		}
+		"orchard" => spawn_tiled_lod(commands, transform, |e| {
+			OrchardParams::default().with_extent(e).build()
+		}),
+		"palm-shade" => spawn_tiled_lod(commands, transform, |e| {
+			PalmShadeParams::default().with_extent(e).build()
+		}),
 		"riparian-general" => spawn_tiled_lod(commands, transform, |e| {
 			RiparianGeneralParams::default().with_extent(e).build()
 		}),
@@ -220,9 +220,9 @@ pub fn spawn_vast_grove(
 		"rolling-oaks" => spawn_tiled_lod(commands, transform, |e| {
 			RollingOaksParams::default().with_extent(e).build()
 		}),
-		"shamanhome" => {
-			spawn_tiled_lod(commands, transform, |e| ShamanhomeParams::default().with_extent(e).build())
-		}
+		"shamanhome" => spawn_tiled_lod(commands, transform, |e| {
+			ShamanhomeParams::default().with_extent(e).build()
+		}),
 		"spotty-bushes" => spawn_tiled_lod(commands, transform, |e| {
 			SpottyBushesParams::default().with_extent(e).build()
 		}),
@@ -241,9 +241,9 @@ pub fn spawn_vast_grove(
 		"temperate-massives" => spawn_tiled_lod(commands, transform, |e| {
 			TemperateMassivesParams::default().with_extent(e).build()
 		}),
-		"trade-winds" => {
-			spawn_tiled_lod(commands, transform, |e| TradeWindsParams::default().with_extent(e).build())
-		}
+		"trade-winds" => spawn_tiled_lod(commands, transform, |e| {
+			TradeWindsParams::default().with_extent(e).build()
+		}),
 		"tropical-thicket" => spawn_tiled_lod(commands, transform, |e| {
 			TropicalThicketParams::default().with_extent(e).build()
 		}),
@@ -256,9 +256,9 @@ pub fn spawn_vast_grove(
 		"unending-jungle" => spawn_tiled_lod(commands, transform, |e| {
 			UnendingJungleParams::default().with_extent(e).build()
 		}),
-		"vineyard" => {
-			spawn_tiled_lod(commands, transform, |e| VineyardParams::default().with_extent(e).build())
-		}
+		"vineyard" => spawn_tiled_lod(commands, transform, |e| {
+			VineyardParams::default().with_extent(e).build()
+		}),
 		"wandering-acacia" => spawn_tiled_lod(commands, transform, |e| {
 			WanderingAcaciaParams::default().with_extent(e).build()
 		}),

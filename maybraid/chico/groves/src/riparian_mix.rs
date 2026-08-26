@@ -259,7 +259,7 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{BuildWithNoise, NoiseParams};
 
 	use super::{
 		definition, RiparianMixCell, RiparianMixItem, BANK_FRIEND_CONIFER,
@@ -272,8 +272,8 @@ mod vc {
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		remixed_sbs_plant, stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GrovePreviewParams,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const RIPARIAN_MIX_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -283,106 +283,23 @@ mod vc {
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
 	pub struct RiparianMixParams {
-		#[command(flatten, next_help_heading = "Grove")]
-		pub grove: GroveFrontend,
-
-		#[arg(
-			long,
-			default_value = "0,1.0,1.0,1",
-			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-			help_heading = "The noise applied to the chains of sticks in trees",
-		)]
-		pub tree_chain_noise: NoiseParams,
-
-		#[arg(
-			long,
-			default_value = "0,1.0,0.05,1",
-			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-			help_heading = "Stick Surface Noise",
-		)]
-		pub stick_surface_noise: NoiseParams,
-
-		#[arg(
-			long,
-			default_value = "0,1.0,0.06,1",
-			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
-			help_heading = "Leaf Surface Noise",
-		)]
-		pub leaf_surface_noise: NoiseParams,
-
-		#[arg(skip)]
-		pub extent: GroveExtent,
-
-		#[command(flatten, next_help_heading = "Terrain")]
-		pub terrain: FlatTerrainSample,
-
-		/// Number of unit-height plant archetypes (`unit_from_num(0..n)`). Caps unique
-		/// merged-mesh handles for High/Medium.
-		#[arg(long, default_value_t = 100)]
-		pub tree_variants: u32,
-
-		#[arg(skip)]
-		resolved_placements: Option<Vec<GroveCellVariant<RiparianMixCell>>>,
+		#[command(flatten)]
+		pub preview: GrovePreviewParams<RiparianMixCell>,
 	}
 
 	impl Default for RiparianMixParams {
 		fn default() -> Self {
 			Self {
-				grove: GroveFrontend::default(),
-				tree_chain_noise: NoiseParams::from_scalar(0.0, 1.0, 1.0, 1),
-				stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
-				leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-				extent: GroveExtent::new(
-					Vec3::ZERO,
-					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
-				),
-				terrain: FlatTerrainSample { elevation: 0.35, steepness: 0.15 },
-				tree_variants: 100,
-				resolved_placements: None,
+				preview: GrovePreviewParams::default()
+					.with_terrain(FlatTerrainSample { elevation: 0.35, steepness: 0.15 }),
 			}
 		}
 	}
 
+	crate::impl_grove_preview_params!(RiparianMixParams, RiparianMixCell);
+
 	impl RiparianMixParams {
-		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
-			self.extent = extent;
-			self
-		}
-
-		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
-			self.terrain = terrain;
-			self
-		}
-
-		pub fn cell_extent_xz(&self) -> Vec2 {
-			self.grove.definition(definition()).cell_extent_xz
-		}
-
-		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-			self.extent.subdivide_xz(self.cell_extent_xz())
-		}
-
-		pub fn placements(&self) -> Vec<GroveCellVariant<RiparianMixCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.placements_on(&self.terrain)
-		}
-
-		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
-		pub fn placements_on(
-			&self,
-			world: &impl crate::GroveWorldSample,
-		) -> Vec<GroveCellVariant<RiparianMixCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.grove.assemble(definition()).populate(&self.extent, world)
-		}
-
+		// preview accessors via impl_grove_preview_params!
 		pub fn build(&self) -> RiparianMix {
 			self.build_on(&self.terrain)
 		}
@@ -392,7 +309,6 @@ mod vc {
 			RiparianMix::from_placements(
 				&self.placements_on(world),
 				self.grove.noise,
-				self.stick_surface_noise,
 				&self.extent,
 				self.tree_variants,
 			)
@@ -472,13 +388,12 @@ mod vc {
 		pub fn from_placements(
 			placements: &[GroveCellVariant<RiparianMixCell>],
 			grove_noise: NoiseParams,
-			stick_surface_noise: NoiseParams,
 			extent: &GroveExtent,
 			tree_variants: u32,
 		) -> Self {
 			let plants: Arc<[RiparianMixPlant]> = placements
 				.iter()
-				.map(|placed| grow_plant(placed, grove_noise, stick_surface_noise, tree_variants))
+				.map(|placed| grow_plant(placed, grove_noise, tree_variants))
 				.collect::<Vec<_>>()
 				.into();
 			let (structural_center, footprint_radius) = grove_structural_footprint(extent);
@@ -570,7 +485,6 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<RiparianMixCell>,
 		grove_noise: NoiseParams,
-		_stick_surface_noise: NoiseParams,
 		tree_variants: u32,
 	) -> RiparianMixPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);

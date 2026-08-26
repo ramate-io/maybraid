@@ -36,6 +36,7 @@ Sometimes, particularly during early development of a model, the game object may
 Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura torch, Rory’s Head-trained) onto [`chico-vegetation-components`](./chico/vegetation-components/) + [`chico-sbs-trees`](./chico/sbs-trees/).
 
 - **Naming:** `FooParams` = authoring / CLI; `Foo` = built instance from `params.build()` (grow the chain once). Prefer this over `*Instance` / `*Std` for new vegetation.
+- **Grove preview params:** flatten [`GrovePreviewParams`](./chico/groves/src/grove/preview.rs) (`GroveFrontend`, extent, terrain, `tree_variants`, resolved placements). Grove-specific fields are only flags `build` still reads (`merge_collections`, tuft/bush palette-seed noise). Call surface: `Params::default().with_extent(e).build_on(&world)`.
 - **Presentation:** trees implement `VegetationComponents` and present via `ComponentsOnly` / `spawn_vegetation_components` — same shape as Richmond’s `BuildingComponents`, not ad hoc RenderItem generics.
 - **Stick geometry:** `StickGeometry::{Segment,Trunk}` picks the kit triad under `vegetation/sticks/standard/` (`001_*` vs `trunk_001_*`) and the nested mesh-LOD extent policy. Trunk is geometry, not a second style.
 - **Nested stick mesh LOD:** band on **radius/girth** for segments (`distance / radius`); trunks stay length-biased (max-axis extent). Useful default factors: High ≤ 10, Medium ≤ 25, Low ≤ 100; **UltraLow = empty scene** (do not collapse onto Low).

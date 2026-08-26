@@ -262,15 +262,15 @@ mod vc {
 			grow_placed_tuft_params, horizontal_grid_proxy_placements, surface_normal_at,
 			surface_samples_from_plants, upright_proxy_run,
 		},
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GrovePreviewParams,
 	};
 
 	/// Authoring / CLI parameters for Monster Grass.
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
 	pub struct MonsterGrassParams {
-		#[command(flatten, next_help_heading = "Grove")]
-		pub grove: GroveFrontend,
+		#[command(flatten)]
+		pub preview: GrovePreviewParams<MonsterGrassCell>,
 
 		#[arg(
 			long,
@@ -281,12 +281,6 @@ mod vc {
 		)]
 		pub foliage_noise: NoiseParams,
 
-		#[arg(skip)]
-		pub extent: GroveExtent,
-
-		#[command(flatten, next_help_heading = "Terrain")]
-		pub terrain: FlatTerrainSample,
-
 		/// Cap foliage LOD collections after growing placements (`0` = no fold, one per placement).
 		#[arg(long, default_value_t = 0)]
 		pub merge_collections: usize,
@@ -295,87 +289,38 @@ mod vc {
 		/// merged-mesh handles for High/Medium.
 		#[arg(long, default_value_t = 100)]
 		pub patch_variants: u32,
-
-		#[arg(skip)]
-		resolved_placements: Option<Vec<GroveCellVariant<MonsterGrassCell>>>,
 	}
 
 	impl Default for MonsterGrassParams {
 		fn default() -> Self {
 			Self {
-				grove: GroveFrontend::default(),
+				preview: GrovePreviewParams::default().with_terrain(FlatTerrainSample::default()),
 				foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.20, 1),
-				extent: GroveExtent::new(
-					Vec3::ZERO,
-					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
-				),
-				terrain: FlatTerrainSample::default(),
 				merge_collections: 0,
 				patch_variants: 100,
-				resolved_placements: None,
 			}
 		}
 	}
 
+	crate::impl_grove_preview_params!(MonsterGrassParams, MonsterGrassCell);
+
 	impl MonsterGrassParams {
-		/// Render precomputed placements instead of selecting live from the grove frontend.
+		// preview accessors via impl_grove_preview_params!
 		pub fn with_resolved_placements(
 			resolved_placements: Vec<GroveCellVariant<MonsterGrassCell>>,
 			terrain: FlatTerrainSample,
 			foliage_noise: NoiseParams,
 		) -> Self {
 			Self {
-				grove: GroveFrontend::default(),
+				preview: GrovePreviewParams::default()
+					.with_terrain(terrain)
+					.with_resolved_placements(resolved_placements),
 				foliage_noise,
-				extent: GroveExtent::new(
-					Vec3::ZERO,
-					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
-				),
-				terrain,
 				merge_collections: 0,
 				patch_variants: 100,
-				resolved_placements: Some(resolved_placements),
 			}
 		}
 
-		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
-			self.extent = extent;
-			self
-		}
-
-		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
-			self.terrain = terrain;
-			self
-		}
-
-		/// Effective vegetation cell footprint (frontend override or authored).
-		pub fn cell_extent_xz(&self) -> Vec2 {
-			self.grove.definition(definition()).cell_extent_xz
-		}
-
-		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-			self.extent.subdivide_xz(self.cell_extent_xz())
-		}
-
-		pub fn placements(&self) -> Vec<GroveCellVariant<MonsterGrassCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.placements_on(&self.terrain)
-		}
-
-		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
-		pub fn placements_on(
-			&self,
-			world: &impl crate::GroveWorldSample,
-		) -> Vec<GroveCellVariant<MonsterGrassCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.grove.assemble(definition()).populate(&self.extent, world)
-		}
-
-		/// Grow placements into the VegetationComponents grove.
 		pub fn build(&self) -> MonsterGrass {
 			self.build_on(&self.terrain)
 		}

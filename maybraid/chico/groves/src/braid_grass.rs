@@ -268,7 +268,7 @@ mod vc {
 	};
 	use crate::grove::{
 		remixed_blade_tuft_plant, remixed_spear_tuft_plant, remixed_tuft_plant, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		GrovePreviewParams,
 	};
 
 	pub const BRAID_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -292,8 +292,8 @@ mod vc {
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
 	pub struct BraidGrassParams {
-		#[command(flatten, next_help_heading = "Grove")]
-		pub grove: GroveFrontend,
+		#[command(flatten)]
+		pub preview: GrovePreviewParams<BraidGrassCell>,
 
 		#[arg(
 			long,
@@ -304,76 +304,28 @@ mod vc {
 		)]
 		pub foliage_noise: NoiseParams,
 
-		#[arg(skip)]
-		pub extent: GroveExtent,
-
-		#[command(flatten, next_help_heading = "Terrain")]
-		pub terrain: FlatTerrainSample,
-
 		#[arg(long, default_value_t = 0)]
 		pub merge_collections: usize,
 
 		#[arg(long, default_value_t = 100)]
 		pub patch_variants: u32,
-
-		#[arg(skip)]
-		resolved_placements: Option<Vec<GroveCellVariant<BraidGrassCell>>>,
 	}
 
 	impl Default for BraidGrassParams {
 		fn default() -> Self {
 			Self {
-				grove: GroveFrontend::default(),
+				preview: GrovePreviewParams::default().with_terrain(FlatTerrainSample::default()),
 				foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-				extent: GroveExtent::new(
-					Vec3::ZERO,
-					Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
-				),
-				terrain: FlatTerrainSample::default(),
 				merge_collections: 0,
 				patch_variants: 100,
-				resolved_placements: None,
 			}
 		}
 	}
 
+	crate::impl_grove_preview_params!(BraidGrassParams, BraidGrassCell);
+
 	impl BraidGrassParams {
-		pub fn with_extent(mut self, extent: GroveExtent) -> Self {
-			self.extent = extent;
-			self
-		}
-
-		pub fn with_terrain(mut self, terrain: FlatTerrainSample) -> Self {
-			self.terrain = terrain;
-			self
-		}
-
-		pub fn cell_extent_xz(&self) -> Vec2 {
-			self.grove.definition(definition()).cell_extent_xz
-		}
-
-		pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-			self.extent.subdivide_xz(self.cell_extent_xz())
-		}
-
-		pub fn placements(&self) -> Vec<GroveCellVariant<BraidGrassCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.placements_on(&self.terrain)
-		}
-
-		/// Select placements against `world` ([`crate::GroveWorldSample::height_at`]).
-		pub fn placements_on(
-			&self,
-			world: &impl crate::GroveWorldSample,
-		) -> Vec<GroveCellVariant<BraidGrassCell>> {
-			if let Some(ref resolved) = self.resolved_placements {
-				return resolved.clone();
-			}
-			self.grove.assemble(definition()).populate(&self.extent, world)
-		}
-
+		// preview accessors via impl_grove_preview_params!
 		pub fn build(&self) -> BraidGrass {
 			self.build_on(&self.terrain)
 		}
