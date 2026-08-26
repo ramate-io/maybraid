@@ -134,7 +134,7 @@ const ULTRA_GRID: u32 = 2;
 const LOW_CELL_STRIDE: f32 = 2.0 * std::f32::consts::SQRT_2;
 
 /// Built Monster Grass grove: composed [`TuftPatch`] plants for VegetationComponents.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Component)]
 pub struct MonsterGrass {
 	pub plants: Vec<MonsterGrassPlant>,
 	pub structural_center: Vec3,
@@ -356,3 +356,5 @@ impl VegetationComponents for MonsterGrass {
 		)
 	}
 }
+
+crate::impl_tuft_grove_lod!(MonsterGrass);

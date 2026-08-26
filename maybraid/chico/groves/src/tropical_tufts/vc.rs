@@ -186,3 +186,5 @@ impl VegetationComponents for TropicalTufts {
 		Some(self.body.structural_lod())
 	}
 }
+
+crate::impl_tuft_grove_lod!(TropicalTufts);

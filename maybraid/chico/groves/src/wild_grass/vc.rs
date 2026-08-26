@@ -140,3 +140,5 @@ impl VegetationComponents for WildGrass {
 		Some(self.body.structural_lod())
 	}
 }
+
+crate::impl_tuft_grove_lod!(WildGrass);

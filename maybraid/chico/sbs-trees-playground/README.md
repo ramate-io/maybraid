@@ -28,6 +28,8 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 /show rorys-head-trained --tree-height 12 --projection 0.60..0.60
 /show high-bush-shoots --height 12
 /show high-bush-shoots --height 12 --shoot-count 8
+/show jungle-growth
+/show jungle-growth --inner-ball-scale 0.9 --seed 42
 /show sopes-banyan
 /show honu-banyan
 /help

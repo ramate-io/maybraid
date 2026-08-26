@@ -18,14 +18,15 @@ use chico_groves::{
 };
 use chico_sbs_trees::{
 	BraidOakTreeParams, DatePalmParams, FriendsConiferParams, HighBushShootsParams,
-	HonuBanyanParams, JungleStorybookTreeParams, KamakuraTorchParams, LiamsConiferParams,
-	NorthernConiferParams, PalmBushParams, PalmCrownParams, PenmarchTorchParams,
-	RorysHeadTrainedParams, SimplemansHedgeParams, SopesBanyanParams, StorybookTreeParams,
-	TemperateConiferParams, TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
+	HonuBanyanParams, JungleGrowthParams, JungleStorybookTreeParams, KamakuraTorchParams,
+	LiamsConiferParams, NorthernConiferParams, PalmBushParams, PalmCrownParams,
+	PenmarchTorchParams, RorysHeadTrainedParams, SimplemansHedgeParams, SopesBanyanParams,
+	StorybookTreeParams, TemperateConiferParams, TuftPatchParams, VaseTreeParams,
+	WaialeaPalmParams,
 };
 use chico_vegetation_components::{
-	spawn_flattened_placed_vegetation, spawn_lod_scene_host, spawn_vegetation_components,
-	vegetation_bounds, VegetationComponents,
+	spawn_flattened_placed_vegetation, spawn_lod_scene_host, vegetation_bounds,
+	VegetationComponents,
 };
 use clap::{Args, Subcommand};
 use lod::gen::LodScene;
@@ -163,6 +164,8 @@ pub enum Show {
 	FriendsConifer(ShowFriendsConifer),
 	/// High Bush Shoots via VegetationComponents / LodScene.
 	HighBushShoots(ShowHighBushShoots),
+	/// Jungle Growth via VegetationComponents / LodScene.
+	JungleGrowth(ShowJungleGrowth),
 }
 
 #[derive(Clone, Args)]
@@ -1174,6 +1177,13 @@ pub struct ShowHighBushShoots {
 	pub bush: HighBushShootsParams,
 }
 
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ShowJungleGrowth {
+	#[command(flatten)]
+	pub growth: JungleGrowthParams,
+}
+
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
 		let subject = match self {
@@ -1243,6 +1253,7 @@ impl Show {
 			Self::DateGrove(args) => ShowSubject::DateGrove(args.configured()),
 			Self::FriendsConifer(args) => ShowSubject::FriendsConifer(args.tree),
 			Self::HighBushShoots(args) => ShowSubject::HighBushShoots(args.bush),
+			Self::JungleGrowth(args) => ShowSubject::JungleGrowth(args.growth),
 		};
 		commands.insert_resource(ShowConfig { subject: Some(subject) });
 	}
@@ -1318,6 +1329,7 @@ pub enum ShowSubject {
 	DateGrove(DateGroveParams),
 	FriendsConifer(FriendsConiferParams),
 	HighBushShoots(HighBushShootsParams),
+	JungleGrowth(JungleGrowthParams),
 }
 
 #[derive(Component)]
@@ -1329,17 +1341,6 @@ where
 {
 	let bounds = vegetation_bounds(tree);
 	let entities = spawn_flattened_placed_vegetation(commands, tree, Transform::IDENTITY, bounds);
-	for entity in entities {
-		commands.entity(entity).insert(ShowRoot);
-	}
-}
-
-fn spawn_show_components<T>(commands: &mut Commands, vegetation: &T)
-where
-	T: VegetationComponents + Clone + Send + Sync + 'static,
-{
-	let bounds = vegetation_bounds(vegetation);
-	let entities = spawn_vegetation_components(commands, vegetation, Transform::IDENTITY, bounds);
 	for entity in entities {
 		commands.entity(entity).insert(ShowRoot);
 	}
@@ -1673,6 +1674,7 @@ pub fn sync_show(
 			t.geometry, t.splay_radius_fraction_of_height
 		)),
 		Some(ShowSubject::HighBushShoots(b)) => Some(format!("high-bush-shoots:{:?}", b.shape)),
+		Some(ShowSubject::JungleGrowth(g)) => Some(format!("jungle-growth:{:?}", g.shape)),
 	};
 	if key == *last && show_roots.iter().next().is_some() {
 		return;
@@ -1708,17 +1710,17 @@ pub fn sync_show(
 		ShowSubject::DatePalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::WaialeaPalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmBush(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::MonsterGrass(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::MonsterGrass(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::MonsterGrassPlains => {
 			for entity in spawn_monster_grass_plain(&mut commands, Transform::IDENTITY) {
 				commands.entity(entity).insert(ShowRoot);
 			}
 		}
-		ShowSubject::BraidGrass(params) => spawn_show_components(&mut commands, &params.build()),
-		ShowSubject::TropicalTufts(params) => spawn_show_components(&mut commands, &params.build()),
-		ShowSubject::CommonTufts(params) => spawn_show_components(&mut commands, &params.build()),
-		ShowSubject::TallGrass(params) => spawn_show_components(&mut commands, &params.build()),
-		ShowSubject::WildGrass(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::BraidGrass(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TropicalTufts(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::CommonTufts(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::TallGrass(params) => spawn_show_grove(&mut commands, &params.build()),
+		ShowSubject::WildGrass(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::BushScrub(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::TropicalUndergrowth(params) => {
 			spawn_show_grove(&mut commands, &params.build())
@@ -1772,6 +1774,7 @@ pub fn sync_show(
 		ShowSubject::DateGrove(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::FriendsConifer(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::HighBushShoots(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::JungleGrowth(params) => spawn_show_tree(&mut commands, &params.build()),
 	}
 }
 
@@ -1888,6 +1891,7 @@ mod tests {
 			"show date-grove --grove-extent-xz 160",
 			"show friends-conifer",
 			"show high-bush-shoots",
+			"show jungle-growth",
 		] {
 			let cmd = crate::commands::PlaygroundCommand::parse_line(line)
 				.map_err(|e| anyhow::anyhow!("{line}: {e}"))?;
@@ -2017,6 +2021,9 @@ mod tests {
 				}
 				crate::commands::PlaygroundCommand::Show(Show::HighBushShoots(args)) => {
 					let _ = args.bush.build();
+				}
+				crate::commands::PlaygroundCommand::Show(Show::JungleGrowth(args)) => {
+					let _ = args.growth.build();
 				}
 				_ => anyhow::bail!("unexpected command for {line}"),
 			}

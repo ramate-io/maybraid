@@ -28,6 +28,8 @@ mod preview;
 #[cfg(feature = "render")]
 mod quantized;
 #[cfg(feature = "render")]
+mod tuft_lod;
+#[cfg(feature = "render")]
 pub mod vc_compose;
 #[cfg(feature = "render")]
 pub mod vc_tuft;

@@ -2,7 +2,7 @@
 //!
 //! Plain data returned from [`crate::VegetationComponents::structural_lod`] — not an
 //! ECS component. Host presentation uses [`crate::FlattenedComponentsOnly`] (plants)
-//! or [`crate::ComponentsOnly`] (tuft groves without [`lod::LodScene`] yet).
+//! or a grove type that implements [`lod::gen::LodScene`].
 
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;

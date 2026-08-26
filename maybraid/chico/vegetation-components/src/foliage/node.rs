@@ -19,8 +19,8 @@ use crate::foliage::ball_collection::{
 	CHEAP_BALL_COLLECTION_MEDIUM_METERS,
 };
 use crate::foliage::collection::{
-	FrondCollection, FrondKit, FROND_COLLECTION_HIGH_METERS,
-	FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
+	FrondCollection, FrondKit, FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_METERS,
+	FROND_COLLECTION_MEDIUM_METERS,
 };
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::probe::FoliageLodProbe;
@@ -74,7 +74,8 @@ impl FoliageNode {
 
 	/// Point-tip straight frond (`straight_frond_001_*`); prefer [`Self::straight_frond_segment`].
 	pub fn straight_frond(placement: Placement) -> Self {
-		Self::new(FoliageGeometry::StraightFrond, placement).with_material(chico_frond_material_ref())
+		Self::new(FoliageGeometry::StraightFrond, placement)
+			.with_material(chico_frond_material_ref())
 	}
 
 	/// Frond collection under one LOD parent (merge thinning by collection extent).
@@ -178,7 +179,9 @@ impl FoliageNode {
 
 	fn standard_ball_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
 		match &self.geometry {
-			FoliageGeometry::LayeredBall => Some(FoliageGeometry::layered_ball_glb_for_level(level)),
+			FoliageGeometry::LayeredBall => {
+				Some(FoliageGeometry::layered_ball_glb_for_level(level))
+			}
 			FoliageGeometry::CheapBall => Some(FoliageGeometry::cheap_ball_glb_for_level(level)),
 			_ => None,
 		}
@@ -292,7 +295,9 @@ impl FoliageNode {
 					self.material.clone(),
 				))
 			}
-			FoliageGeometry::FrondCollection(collection) => self.collection_content(collection, level),
+			FoliageGeometry::FrondCollection(collection) => {
+				self.collection_content(collection, level)
+			}
 			FoliageGeometry::CheapBallCollection(collection) => {
 				self.cheap_ball_collection_content(collection, level)
 			}

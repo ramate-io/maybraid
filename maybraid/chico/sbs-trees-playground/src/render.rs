@@ -15,8 +15,6 @@ use chico_groves::{
 	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
 	WanderingAcaciaParams, WildGrassParams,
 };
-use chico_sbs_trees::SkippedLeafMeshMaterial;
-use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConiferParams;
@@ -34,12 +32,14 @@ use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
 use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_sbs_trees::waialea_palm::WaialeaPalmParams;
+use chico_sbs_trees::SkippedLeafMeshMaterial;
+use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
 	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
 };
 use chico_vegetation_components::{
-	VegetationComponents, spawn_flattened_placed_vegetation, spawn_lod_scene_host,
-	spawn_vegetation_components, vegetation_bounds,
+	spawn_flattened_placed_vegetation, spawn_lod_scene_host, vegetation_bounds,
+	VegetationComponents,
 };
 use chico_vegetation_shaders::ChicoStickMaterial;
 use chunk::cascade::CascadeChunk;
@@ -961,18 +961,27 @@ impl RenderSubject {
 			}
 			Self::BraidGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::TropicalTufts(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::CommonTufts(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::BushScrub(item) => {
 				let grove = item.build();
@@ -1016,18 +1025,27 @@ impl RenderSubject {
 			}
 			Self::TallGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::WildGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::MonsterGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::RiverineGreen(item) => {
 				let grove = item.build();

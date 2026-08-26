@@ -7,7 +7,9 @@ use material_ref::MaterialRef;
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
 use crate::layer::Layers;
-use crate::materials::{chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref};
+use crate::materials::{
+	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
+};
 use crate::placed::Placement;
 use crate::sticks::node::StickNode;
 use crate::structural_lod::StructuralLod;

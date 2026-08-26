@@ -1,9 +1,9 @@
 //! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
 //!
 //! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for tuft
-//! groves that still nest them. Isolated plants and woody grove children share one
+//! groves that nest them. Isolated plants and woody grove children share one
 //! family: [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
-//! Woody groves register as themselves. Cull uses a rotating [`OpenLattice`] annulus.
+//! Groves register as themselves. Cull uses a rotating [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -18,13 +18,13 @@ use chico_groves::{
 	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 use chico_sbs_trees::{
-	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree,
-	KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch,
-	RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch,
-	VaseTree, WaialeaPalm,
+	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleGrowth,
+	JungleStorybookTree, KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown,
+	PenmarchTorch, RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer,
+	TuftPatch, VaseTree, WaialeaPalm,
 };
 use chico_vegetation_components::{
-	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
+	FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
 };
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
@@ -111,17 +111,17 @@ impl Plugin for VegetationLodRefreshPlugin {
 			LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, VegetationCull>::default(),
 		));
 
-		// Fine-phase domain hosts nested under tuft-grove ComponentsOnly roots.
+		// Fine-phase domain hosts nested under grove LodScene roots.
 		avian_host!(app, FoliageNode);
 		avian_host!(app, StickNode);
 
-		// Tuft groves without LodScene yet.
-		avian_host!(app, ComponentsOnly<MonsterGrass>);
-		avian_host!(app, ComponentsOnly<BraidGrass>);
-		avian_host!(app, ComponentsOnly<TropicalTufts>);
-		avian_host!(app, ComponentsOnly<CommonTufts>);
-		avian_host!(app, ComponentsOnly<TallGrass>);
-		avian_host!(app, ComponentsOnly<WildGrass>);
+		// Tuft grove roots (LodScene).
+		avian_host!(app, MonsterGrass);
+		avian_host!(app, BraidGrass);
+		avian_host!(app, TropicalTufts);
+		avian_host!(app, CommonTufts);
+		avian_host!(app, TallGrass);
+		avian_host!(app, WildGrass);
 
 		// Woody grove roots (LodScene).
 		avian_host!(app, BushScrub);
@@ -169,6 +169,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, FlattenedPlant<PenmarchTorch>);
 		avian_host!(app, FlattenedPlant<KamakuraTorch>);
 		avian_host!(app, FlattenedPlant<HighBushShoots>);
+		avian_host!(app, FlattenedPlant<JungleGrowth>);
 		avian_host!(app, FlattenedPlant<SimplemansHedge>);
 		avian_host!(app, FlattenedPlant<PalmBush>);
 		avian_host!(app, FlattenedPlant<HonuBanyan>);

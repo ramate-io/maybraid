@@ -14,9 +14,7 @@ use chico_groves::{
 	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
 	DEFAULT_GROVE_EXTENT_XZ,
 };
-use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
-};
+use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use lod::gen::LodScene;
 
 /// Grove-tile radius from center (`[-radius, radius]` on each axis).
@@ -115,25 +113,6 @@ where
 	entities
 }
 
-fn spawn_tiled_components<T, F>(
-	commands: &mut Commands,
-	transform: Transform,
-	mut build: F,
-) -> Vec<Entity>
-where
-	T: VegetationComponents + Clone + Send + Sync + 'static,
-	F: FnMut(GroveExtent) -> T,
-{
-	let axis = 2 * VAST_GROVE_RADIUS + 1;
-	let mut entities = Vec::with_capacity((axis * axis) as usize);
-	for extent in tile_extents() {
-		let grove = build(extent);
-		let bounds = vegetation_bounds(&grove);
-		entities.extend(spawn_vegetation_components(commands, &grove, transform, bounds));
-	}
-	entities
-}
-
 /// Spawn a centered `(2 × [`VAST_GROVE_RADIUS`] + 1)²` tile of default groves named `grove_name`.
 pub fn spawn_vast_grove(
 	commands: &mut Commands,
@@ -148,7 +127,7 @@ pub fn spawn_vast_grove(
 		"arid-conifer-sapling" => spawn_tiled_lod(commands, transform, |e| {
 			AridConiferSaplingParams::default().with_extent(e).build()
 		}),
-		"braid-grass" => spawn_tiled_components(commands, transform, |e| {
+		"braid-grass" => spawn_tiled_lod(commands, transform, |e| {
 			BraidGrassParams::default().with_extent(e).build()
 		}),
 		"bush-scrub" => spawn_tiled_lod(commands, transform, |e| {
@@ -157,7 +136,7 @@ pub fn spawn_vast_grove(
 		"christmas-taiga" => spawn_tiled_lod(commands, transform, |e| {
 			ChristmasTaigaParams::default().with_extent(e).build()
 		}),
-		"common-tufts" => spawn_tiled_components(commands, transform, |e| {
+		"common-tufts" => spawn_tiled_lod(commands, transform, |e| {
 			CommonTuftsParams::default().with_extent(e).build()
 		}),
 		"conifer-massives" => spawn_tiled_lod(commands, transform, |e| {
@@ -199,7 +178,7 @@ pub fn spawn_vast_grove(
 		"low-bush" => spawn_tiled_lod(commands, transform, |e| {
 			LowBushParams::default().with_extent(e).build()
 		}),
-		"monster-grass" => spawn_tiled_components(commands, transform, |e| {
+		"monster-grass" => spawn_tiled_lod(commands, transform, |e| {
 			MonsterGrassParams::default().with_extent(e).build()
 		}),
 		"orchard" => spawn_tiled_lod(commands, transform, |e| {
@@ -232,7 +211,7 @@ pub fn spawn_vast_grove(
 		"strange-oasis" => spawn_tiled_lod(commands, transform, |e| {
 			StrangeOasisParams::default().with_extent(e).build()
 		}),
-		"tall-grass" => spawn_tiled_components(commands, transform, |e| {
+		"tall-grass" => spawn_tiled_lod(commands, transform, |e| {
 			TallGrassParams::default().with_extent(e).build()
 		}),
 		"temperate-lower-massives" => spawn_tiled_lod(commands, transform, |e| {
@@ -247,7 +226,7 @@ pub fn spawn_vast_grove(
 		"tropical-thicket" => spawn_tiled_lod(commands, transform, |e| {
 			TropicalThicketParams::default().with_extent(e).build()
 		}),
-		"tropical-tufts" => spawn_tiled_components(commands, transform, |e| {
+		"tropical-tufts" => spawn_tiled_lod(commands, transform, |e| {
 			TropicalTuftsParams::default().with_extent(e).build()
 		}),
 		"tropical-undergrowth" => spawn_tiled_lod(commands, transform, |e| {
@@ -262,7 +241,7 @@ pub fn spawn_vast_grove(
 		"wandering-acacia" => spawn_tiled_lod(commands, transform, |e| {
 			WanderingAcaciaParams::default().with_extent(e).build()
 		}),
-		"wild-grass" => spawn_tiled_components(commands, transform, |e| {
+		"wild-grass" => spawn_tiled_lod(commands, transform, |e| {
 			WildGrassParams::default().with_extent(e).build()
 		}),
 		other => return Err(format!("unhandled grove {other:?}")),
