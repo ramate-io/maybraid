@@ -9,7 +9,10 @@ use richmond_building_components::panels::PanelStyle;
 use crate::connecting::geom::{normalize_xz, EPS};
 use crate::openings::MappedOpening;
 use crate::paneling::quad_panel::QuadPanel;
-use crate::stair_flights::{FlightPolyline, FlightStation, SpiralFlight, SpiralFlightFit};
+use crate::stair_flights::{
+	FlightPolyline, FlightStation, SpiralFlight, SpiralFlightFit, StairwellFlight,
+	StairwellFlightKind,
+};
 
 use super::RUN_IN_M;
 
@@ -147,6 +150,23 @@ impl StairwellOpening {
 	pub fn spiral_flight_to(self, upper: Self) -> SpiralFlight {
 		let polyline = self.flight_polyline_to(upper);
 		SpiralFlight::fit(polyline, self.spiral_fit(upper))
+	}
+
+	/// Fitted flight of `kind` along [`Self::flight_polyline_to`].
+	pub fn flight_to(
+		self,
+		upper: Self,
+		kind: StairwellFlightKind,
+		style: PanelStyle,
+		slab_thickness: f32,
+	) -> StairwellFlight {
+		StairwellFlight::fit(
+			kind,
+			self.flight_polyline_to(upper),
+			self.spiral_fit(upper),
+			style,
+			slab_thickness,
+		)
 	}
 }
 

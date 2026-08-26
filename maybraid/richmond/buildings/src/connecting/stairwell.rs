@@ -11,7 +11,7 @@
 //! the nearby rim). Turn the landing off when a follow-on stairwell will own
 //! that floor. The shaft is filled with composed [`StairNode`]s. It does not
 //! author walls or emit shaft opening labels. A [`FlightPolyline`] along face
-//! centers absorbs plan offset; v1 always fits a [`SpiralFlight`].
+//! centers absorbs plan offset. Choose a family with [`Self::with_flight`].
 
 mod landing;
 mod opening;
@@ -29,7 +29,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::quad_panel::QuadPanel;
-use crate::stair_flights::{FlightPolyline, SpiralFlight};
+use crate::stair_flights::{FlightPolyline, StairwellFlight, StairwellFlightKind};
 
 /// Aesthetic run-in depth / upper-landing length along the rim (meters).
 pub const RUN_IN_M: f32 = 0.75;
@@ -40,7 +40,7 @@ pub const SLAB_THICKNESS_M: f32 = 0.05;
 /// Shortest authored slab along the rim (meters).
 const MIN_SLAB_M: f32 = 0.12;
 
-/// Two horizontal shaft faces → run-in / optional upper landing + spiral flight.
+/// Two horizontal shaft faces → run-in / optional upper landing + stair flight.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectingStairwell {
 	style: PanelStyle,
@@ -51,7 +51,8 @@ pub struct ConnectingStairwell {
 	want_landing: bool,
 	slab_thickness: f32,
 	upper_landing: Option<QuadPanel>,
-	flight: SpiralFlight,
+	kind: StairwellFlightKind,
+	flight: StairwellFlight,
 }
 
 impl ConnectingStairwell {
@@ -63,9 +64,10 @@ impl ConnectingStairwell {
 	) -> Self {
 		let lower = lower.into();
 		let upper = upper.into();
-		let flight = lower.spiral_flight_to(upper);
-		let polyline = flight.polyline().clone();
 		let slab_thickness = SLAB_THICKNESS_M;
+		let kind = StairwellFlightKind::Spiral;
+		let flight = lower.flight_to(upper, kind, style, slab_thickness);
+		let polyline = flight.polyline().clone();
 		let run_in = lower.run_in_slab(style, slab_thickness);
 		let upper_landing = flight.landing_slab(upper, style, slab_thickness);
 		Self {
@@ -77,6 +79,7 @@ impl ConnectingStairwell {
 			want_landing: true,
 			slab_thickness,
 			upper_landing,
+			kind,
 			flight,
 		}
 	}
@@ -101,7 +104,14 @@ impl ConnectingStairwell {
 	/// Kit thickness of both owned slabs (meters). Default [`SLAB_THICKNESS_M`].
 	pub fn with_slab_thickness(mut self, thickness: f32) -> Self {
 		self.slab_thickness = thickness.max(1e-4);
-		self.rebuild_slabs();
+		self.rebuild_flight();
+		self
+	}
+
+	/// Replace the shaft fill. Default is [`StairwellFlightKind::Spiral`].
+	pub fn with_flight(mut self, kind: StairwellFlightKind) -> Self {
+		self.kind = kind;
+		self.rebuild_flight();
 		self
 	}
 
@@ -110,19 +120,18 @@ impl ConnectingStairwell {
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
-		self.run_in = self
-			.lower
-			.run_in_slab(self.style, self.slab_thickness)
-			.with_joint_policy(joint_policy);
-		self.upper_landing = self
-			.want_landing
-			.then(|| {
-				self.flight
-					.landing_slab(self.upper, self.style, self.slab_thickness)
-					.map(|slab| slab.with_joint_policy(joint_policy))
-			})
-			.flatten();
+		self.rebuild_slabs();
+		self.run_in = self.run_in.clone().with_joint_policy(joint_policy);
+		self.upper_landing =
+			self.upper_landing.take().map(|slab| slab.with_joint_policy(joint_policy));
 		self
+	}
+
+	fn rebuild_flight(&mut self) {
+		self.flight =
+			self.lower.flight_to(self.upper, self.kind, self.style, self.slab_thickness);
+		self.polyline = self.flight.polyline().clone();
+		self.rebuild_slabs();
 	}
 
 	fn rebuild_slabs(&mut self) {
@@ -153,8 +162,12 @@ impl ConnectingStairwell {
 		self.upper_landing.as_ref()
 	}
 
-	pub fn flight(&self) -> &SpiralFlight {
+	pub fn flight(&self) -> &StairwellFlight {
 		&self.flight
+	}
+
+	pub fn flight_kind(&self) -> StairwellFlightKind {
+		self.kind
 	}
 }
 
@@ -164,6 +177,7 @@ impl BuildingComponents for ConnectingStairwell {
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.panel_nodes_for_level(level));
 		}
+		out.extend(self.flight.panel_nodes_for_level(level));
 		out
 	}
 
@@ -172,6 +186,7 @@ impl BuildingComponents for ConnectingStairwell {
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.joint_nodes_for_level(level));
 		}
+		out.extend(self.flight.joint_nodes_for_level(level));
 		out
 	}
 
@@ -190,6 +205,7 @@ mod tests {
 	use crate::connecting::geom::normalize_xz;
 	use crate::openings::MappedOpening;
 	use bevy_math::{Vec2, Vec3};
+	use crate::stair_flights::StairwellFlightKind;
 	use richmond_building_components::stairs::Stair;
 
 	/// Horizontal shaft face: `center` in the hole, walk-on on the −orientation side.
@@ -327,15 +343,49 @@ mod tests {
 		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		let stairs = well.stair_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(stairs.len(), 1);
-		assert!(
-			matches!(&stairs[0].geometry, Stair::Spiral(g) if g.height > 2.9 && (g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3)
-		);
-		let center = stairs[0].placement.translation;
-		assert!(
-			center.x.abs() < 0.2 && center.z.abs() < 0.2,
-			"spiral should sit in the shaft, got {center:?}"
-		);
+		assert!(!stairs.is_empty());
+		assert!(stairs.iter().all(|s| matches!(s.geometry, Stair::Straight(_))));
+		for s in &stairs {
+			let p = s.placement.translation;
+			assert!(
+				p.x.abs() < 1.4 && p.z.abs() < 1.4,
+				"spiral treads should sit in the shaft, got {p:?}"
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn rectangular_spiral_pads_corners_and_reaches_walk_on() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let well = ConnectingStairwell::rough_stone(lower, upper)
+			.with_flight(StairwellFlightKind::RectangularSpiral);
+		let n = well.panel_nodes_for_level(LodSceneLevel::High).flatten().len();
+		assert!(n > 2, "corner pads should add panels beyond run-in + upper landing, got {n}");
+		let landing = well.upper_landing().expect("upper landing");
+		let walk = well.upper().walk_on_mid();
+		let reach = landing
+			.corners()
+			.into_iter()
+			.map(|p| (Vec2::new(p.x, p.z) - Vec2::new(walk.x, walk.z)).length())
+			.fold(f32::MAX, f32::min);
+		assert!(reach < 0.25, "upper landing should reach the walk-on, nearest={reach}");
+		Ok(())
+	}
+
+	#[test]
+	fn with_flight_switches_family() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let rect = ConnectingStairwell::rough_stone(lower, upper)
+			.with_flight(StairwellFlightKind::RectangularSpiral);
+		assert_eq!(rect.flight_kind(), StairwellFlightKind::RectangularSpiral);
+		assert!(rect.stair_nodes_for_level(LodSceneLevel::High).flatten().len() >= 2);
+		let runs = ConnectingStairwell::rough_stone(lower, upper)
+			.with_flight(StairwellFlightKind::RunAndLanding);
+		assert_eq!(runs.flight_kind(), StairwellFlightKind::RunAndLanding);
+		assert!(!runs.stair_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 		Ok(())
 	}
 

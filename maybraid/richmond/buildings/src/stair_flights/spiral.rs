@@ -1,12 +1,13 @@
-//! Circular / spiral run along a [`super::FlightPolyline`].
+//! Circular flight: many one-tread [`StraightStair`] nodes around a centerline.
 
 use std::f32::consts::TAU;
 
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use richmond_building_components::stairs::{SpiralStair, Stair, StairNode};
-use richmond_building_components::{BuildingComponents, Layers, Placement};
+use richmond_building_components::stairs::{StairNode, StraightStair};
+use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::stair_flights::geom::{normalize_xz, place_straight_run, travel_xz, xz};
 use crate::stair_flights::FlightPolyline;
 
 /// Inputs for fitting a spiral inside a vertical shaft (two horizontal faces).
@@ -24,21 +25,21 @@ pub struct SpiralFlightFit {
 	pub upper_half_depth: f32,
 }
 
-/// Spiral flight composed from existing [`StairNode`] IR.
+/// Circular flight composed from one-tread [`StraightStair`] nodes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpiralFlight {
 	polyline: FlightPolyline,
-	stairs: StairNode,
+	stairs: Vec<StairNode>,
 }
 
 impl SpiralFlight {
-	pub fn new(polyline: FlightPolyline, stairs: StairNode) -> Self {
+	pub fn new(polyline: FlightPolyline, stairs: Vec<StairNode>) -> Self {
 		Self { polyline, stairs }
 	}
 
 	/// Fit a circular run inside the shaft; outer rail on the lower walk-on.
 	pub fn fit(polyline: FlightPolyline, fit: SpiralFlightFit) -> Self {
-		let stairs = fit_spiral_node(&polyline, fit);
+		let stairs = fit_circular_nodes(&polyline, fit);
 		Self { polyline, stairs }
 	}
 
@@ -46,97 +47,94 @@ impl SpiralFlight {
 		&self.polyline
 	}
 
-	pub fn stairs(&self) -> &StairNode {
+	pub fn stairs(&self) -> &[StairNode] {
 		&self.stairs
 	}
 
 	/// Centerline of the last tessellated tread in XZ.
 	pub fn last_tread_xz(&self) -> Vec2 {
-		self.tread_xz_at(self.last_turn_frac())
+		self.stairs.last().map(|n| xz(n.placement.translation)).unwrap_or(Vec2::ZERO)
 	}
 
 	/// Unit XZ in the last tread's travel direction (ascent / kit \(+X\)).
 	pub fn last_tread_travel_xz(&self) -> Vec2 {
-		let theta = self.last_turn_frac() * TAU;
-		let (s, c) = theta.sin_cos();
-		// Local \(+θ\): derivative of \((\cosθ,\ -sinθ)\).
-		self.world_xz(-s, -c)
+		self.stairs.last().map(|n| travel_xz(n.placement.yaw)).unwrap_or(Vec2::X)
 	}
 
 	/// Last tread leading-edge corners \((\mathrm{outer},\ \mathrm{inner})\) in XZ.
-	///
-	/// Kit \(+X\) is travel (depth). Outward is the in-plane CCW perpendicular of travel.
 	pub fn last_tread_leading_xz(&self) -> (Vec2, Vec2) {
-		let Some(g) = self.spiral() else {
-			let p = self.last_tread_xz();
-			return (p, p);
-		};
-		let last = self.last_tread_xz();
-		let travel = self.last_tread_travel_xz();
-		let radial = Vec2::new(-travel.y, travel.x);
-		let lead = last + travel * (0.5 * g.tread_depth);
-		(lead + radial * (0.5 * g.tread_width), lead - radial * (0.5 * g.tread_width))
-	}
-
-	fn spiral(&self) -> Option<&SpiralStair> {
-		match &self.stairs.geometry {
-			Stair::Spiral(g) => Some(g),
-			_ => None,
-		}
-	}
-
-	fn last_turn_frac(&self) -> f32 {
-		let Some(g) = self.spiral() else {
-			return 0.0;
-		};
-		let n = g.tread_count().max(1) as f32;
-		(n - 1.0) / n * g.turns
-	}
-
-	fn tread_xz_at(&self, turns: f32) -> Vec2 {
-		let Some(g) = self.spiral() else {
-			return xz(self.stairs.placement.translation);
-		};
-		let theta = turns * TAU;
-		let (s, c) = theta.sin_cos();
-		let p = self.world_xz(c * g.radius, -s * g.radius);
-		xz(self.stairs.placement.translation) + p
-	}
-
-	fn world_xz(&self, lx: f32, lz: f32) -> Vec2 {
-		let (ys, yc) = self.stairs.placement.yaw.sin_cos();
-		Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz)
+		crate::stair_flights::TreadEnd::from_last_straight(&self.stairs)
+			.map(|e| (e.leading_outer, e.leading_inner))
+			.unwrap_or_else(|| {
+				let p = self.last_tread_xz();
+				(p, p)
+			})
 	}
 }
 
 impl BuildingComponents for SpiralFlight {
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
-		Layers::from_free(vec![self.stairs.clone()])
+		Layers::from_free(self.stairs.clone())
 	}
 }
 
-fn fit_spiral_node(polyline: &FlightPolyline, fit: SpiralFlightFit) -> StairNode {
-	let rise = polyline.rise().max(SpiralStair::DEFAULT_TREAD_HEIGHT);
+/// Place one-tread straight nodes on a circle. `start_yaw` sends local \(+X\)
+/// toward the first tread (radial); kit travel is `start_yaw + θ + π/2`.
+pub fn circular_straight_nodes(
+	center: Vec3,
+	start_yaw: f32,
+	radius: f32,
+	width: f32,
+	depth: f32,
+	local_tops: &[f32],
+	turns: f32,
+) -> Vec<StairNode> {
+	if local_tops.is_empty() {
+		return Vec::new();
+	}
+	let n = local_tops.len() as f32;
+	let yaw_step = turns.max(1e-4) * TAU / n;
+	let (ys, yc) = start_yaw.sin_cos();
+	let rotate = |lx: f32, lz: f32| Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz);
+
+	let mut prev_top = 0.0_f32;
+	local_tops
+		.iter()
+		.copied()
+		.enumerate()
+		.filter_map(|(i, top)| {
+			let rise = (top - prev_top).max(1e-4);
+			prev_top = top;
+			let theta = i as f32 * yaw_step;
+			let (s, c) = theta.sin_cos();
+			let p = rotate(c * radius, -s * radius);
+			let travel_yaw = start_yaw + theta + std::f32::consts::FRAC_PI_2;
+			place_straight_run(
+				p + xz(center),
+				center.y + top - rise,
+				travel_xz(travel_yaw),
+				width,
+				depth,
+				vec![rise],
+			)
+		})
+		.collect()
+}
+
+fn fit_circular_nodes(polyline: &FlightPolyline, fit: SpiralFlightFit) -> Vec<StairNode> {
+	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
 	let opening_min = half_w.min(half_d);
-	let tread_width = (opening_min * 0.4).clamp(0.35, 1.1);
-	let tread_depth = (tread_width * 0.55).clamp(0.25, 0.45);
+	let (tread_width, tread_depth) = crate::stair_flights::geom::tread_dims(opening_min);
 
 	let (center, radius) = spiral_center_radius(polyline, fit, opening_min, tread_width);
 	let turns = spiral_turns(rise, radius, tread_depth, fit, center);
 	let yaw = spiral_start_yaw(fit.lower_walk_on, center, fit.lower_out);
+	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
+	let local_tops = crate::stair_flights::geom::uniform_tops(rise, n);
 
-	let geometry = Stair::Spiral(SpiralStair {
-		height: rise,
-		radius,
-		tread_width,
-		tread_depth,
-		tread_height: SpiralStair::DEFAULT_TREAD_HEIGHT,
-		turns,
-		tread_tops: Vec::new(),
-	});
-	StairNode::rough_stone(geometry, Placement::new(center, yaw))
+	circular_straight_nodes(center, yaw, radius, tread_width, tread_depth, &local_tops, turns)
 }
 
 fn spiral_center_radius(
@@ -149,8 +147,6 @@ fn spiral_center_radius(
 	let b = xz(fit.upper_center);
 	let mid = polyline.stations.get(1).map(|s| xz(s.center)).unwrap_or_else(|| (a + b) * 0.5);
 	let center = Vec3::new(mid.x, fit.lower_center.y, mid.y);
-	// `radius` is the tread centerline. Inset by half tread width so the outer
-	// rail sits on the walk-on / hole edge; the run-in covers the remaining gap.
 	let half_tread = 0.5 * tread_width;
 	let to_walk = (xz(fit.lower_walk_on) - mid).length();
 	let inscribed = (opening_min - half_tread).max(0.35);
@@ -165,7 +161,7 @@ fn spiral_turns(
 	fit: SpiralFlightFit,
 	center: Vec3,
 ) -> f32 {
-	let n = (rise / SpiralStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0);
+	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0);
 	let from_depth = n * tread_depth / (TAU * radius.max(1e-4));
 	let from_arrive = arrive_turns(fit, center);
 	from_depth.max(from_arrive).clamp(0.35, 3.0)
@@ -187,7 +183,7 @@ fn arrive_turns(fit: SpiralFlightFit, center: Vec3) -> f32 {
 	(delta / TAU).clamp(0.2, 1.5)
 }
 
-/// First spiral tread is at local \(+X\); yaw sends that toward the lower walk-on.
+/// First tread is at local \(+X\); yaw sends that toward the lower walk-on.
 fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: Vec2) -> f32 {
 	let mut toward = xz(walk_on) - xz(center);
 	if toward.length() < 1e-3 {
@@ -199,21 +195,7 @@ fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: Vec2) -> f32 {
 	} else {
 		toward = toward.normalize();
 	}
-	// Placement yaw: local +X → `(cos yaw, 0, -sin yaw)` = toward walk-on.
 	(-toward.y).atan2(toward.x)
-}
-
-fn xz(p: Vec3) -> Vec2 {
-	Vec2::new(p.x, p.z)
-}
-
-fn normalize_xz(v: Vec2) -> Option<Vec2> {
-	let len = v.length();
-	if len < 1e-5 {
-		None
-	} else {
-		Some(v / len)
-	}
 }
 
 #[cfg(test)]
@@ -222,7 +204,7 @@ mod tests {
 	use crate::stair_flights::{FlightPolyline, FlightStation};
 
 	#[test]
-	fn fit_emits_spiral_inscribed_in_shaft() {
+	fn fit_emits_straight_treads_inscribed_in_shaft() {
 		let polyline = FlightPolyline::new([
 			FlightStation { center: Vec3::new(0.0, 0.0, 0.0), height: 3.0 },
 			FlightStation { center: Vec3::new(0.0, 3.0, 0.0), height: 3.0 },
@@ -234,41 +216,21 @@ mod tests {
 				upper_center: Vec3::new(0.0, 3.0, 0.0),
 				lower_walk_on: Vec3::new(0.0, 0.0, -1.2),
 				upper_walk_on: Vec3::new(0.0, 3.0, -1.2),
-				lower_out: bevy_math::Vec2::Y,
+				lower_out: Vec2::Y,
 				lower_half_width: 1.2,
 				lower_half_depth: 1.2,
 				upper_half_width: 1.2,
 				upper_half_depth: 1.2,
 			},
 		);
-		let Stair::Spiral(g) = &flight.stairs().geometry else {
-			panic!("expected spiral");
-		};
-		assert!(g.height > 2.9);
+		assert!(!flight.stairs().is_empty());
+		let first = flight.stairs()[0].placement.translation;
+		let last = flight.last_tread_xz();
 		assert!(
-			(g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3,
-			"outer rail should sit on the hole, radius={}",
-			g.radius
+			(Vec2::new(first.x, first.z) - Vec2::new(0.0, -1.2)).length() < 0.6,
+			"first tread should sit near the walk-on, got {first:?}"
 		);
-		let c = flight.stairs().placement.translation;
-		assert!(c.x.abs() < 0.15 && c.z.abs() < 0.15, "center={c:?}");
-		let first = first_tread_xz(&flight);
-		let outer =
-			first + (first - bevy_math::Vec2::new(c.x, c.z)).normalize() * (0.5 * g.tread_width);
-		assert!(
-			(outer - bevy_math::Vec2::new(0.0, -1.2)).length() < 0.05,
-			"outer rail should sit on the walk-on, centerline={first:?} outer={outer:?}"
-		);
+		assert!(last.length() > 0.3, "last tread should sit on the ring, got {last:?}");
 		assert!(!flight.stair_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
-	}
-
-	fn first_tread_xz(flight: &SpiralFlight) -> bevy_math::Vec2 {
-		let Stair::Spiral(g) = &flight.stairs().geometry else {
-			panic!("expected spiral");
-		};
-		let p = flight.stairs().placement;
-		// Local first tread at +X * radius; yaw maps +X → (cos, 0, -sin).
-		let (s, c) = p.yaw.sin_cos();
-		bevy_math::Vec2::new(p.translation.x + c * g.radius, p.translation.z + -s * g.radius)
 	}
 }

@@ -1,6 +1,8 @@
-//! Stair scene components (spiral and straight runs).
+//! Stair scene components.
 //!
-//! IR: [`StairStyle`] + [`StairGeometry`] + [`Placement`] → [`StairNode`] (`LodScene`).
+//! IR: [`StairStyle`] + [`StairGeometry`] (a linear [`StraightStair`]) + [`Placement`]
+//! → [`StairNode`] (`LodScene`). Circular / rectangular flights are composed by
+//! higher-order types as many straight nodes.
 
 pub mod geometry;
 pub mod node;

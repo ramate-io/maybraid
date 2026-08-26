@@ -32,7 +32,7 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 | [`openings`](src/openings.rs) | Opening plans / shell records / mapped contact geometry |
 | [`connecting`](src/connecting.rs) | Opening-to-opening connectors ([`ConnectingHall`](src/connecting/hall.rs), [`ConnectingStairwell`](src/connecting/stairwell.rs)) |
-| [`stair_flights`](src/stair_flights.rs) | Flight fillers over a well polyline (`spiral`, `rectangular_spiral`, `run_and_landing`) |
+| [`stair_flights`](src/stair_flights.rs) | Flight fillers over a well polyline (`spiral`, `rectangular_spiral`, `run_and_landing`); all compose [`StraightStair`](../building-components/src/stairs/geometry.rs) nodes |
 | [`shells`](src/shells.rs) | Envelope shells (`ArcFloor`, `Trazaloid`, …) |
 | [`storeys`](src/storeys.rs) | Storey typologies (Les Halles commercial / livable full storey, I-Apartment) |
 | [`placer`](src/placer.rs) | Predicate-based rectangular layout trier (`KindSpec` catalogs) |

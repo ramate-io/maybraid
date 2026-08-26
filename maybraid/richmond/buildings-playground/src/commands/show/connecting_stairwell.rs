@@ -1,11 +1,39 @@
-//! `/show connecting-stairwell` — run-in floor + spiral flight between two openings.
+//! `/show connecting-stairwell` — run-in floor + stair flight between two openings.
 
 use bevy::prelude::*;
 use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
-use richmond_buildings::SLAB_THICKNESS_M;
+use richmond_buildings::{StairwellFlightKind, SLAB_THICKNESS_M};
+
+/// Flight family. Independent of [`ConnectingStairwellCase`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum ConnectingStairwellFlight {
+	#[default]
+	Spiral,
+	RectangularSpiral,
+	RunAndLanding,
+}
+
+impl ConnectingStairwellFlight {
+	pub fn slug(self) -> &'static str {
+		match self {
+			Self::Spiral => "spiral",
+			Self::RectangularSpiral => "rectangular-spiral",
+			Self::RunAndLanding => "run-and-landing",
+		}
+	}
+
+	pub fn kind(self) -> StairwellFlightKind {
+		match self {
+			Self::Spiral => StairwellFlightKind::Spiral,
+			Self::RectangularSpiral => StairwellFlightKind::RectangularSpiral,
+			Self::RunAndLanding => StairwellFlightKind::RunAndLanding,
+		}
+	}
+}
 
 /// Named shaft pairs that stress spiral fit (inscription, center, arrive).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -79,6 +107,9 @@ pub struct ConnectingStairwell {
 	/// Kit thickness of the run-in and upper-landing slabs (meters).
 	#[arg(long, default_value_t = SLAB_THICKNESS_M)]
 	pub slab_thickness: f32,
+	/// Shaft fill. Independent of `--case`.
+	#[arg(long, value_enum, default_value_t = ConnectingStairwellFlight::Spiral)]
+	pub flight: ConnectingStairwellFlight,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
@@ -88,6 +119,7 @@ impl ConnectingStairwell {
 		(
 			PreviewSubject::ConnectingStairwell {
 				case: self.case,
+				flight: self.flight,
 				upper_landing: !self.no_upper_landing,
 				slab_thickness: self.slab_thickness,
 			},

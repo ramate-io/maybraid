@@ -3,7 +3,7 @@
 //! [`hall`] joins two same-storey wall quads with a one-kink [`crate::Tube`].
 //! [`stairwell`] joins two horizontal shaft faces (a vertical well): owned
 //! thin floor slabs (run-in / optional upper landing) and a fitted stair
-//! flight (no well walls).
+//! flight (`with_flight`; no well walls).
 
 mod geom;
 pub mod hall;

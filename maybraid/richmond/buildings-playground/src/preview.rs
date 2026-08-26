@@ -1,6 +1,8 @@
 //! Preview subject sync. Viewer tracking lives in [`lod::LodRefreshCorePlugin`].
 
-use crate::commands::show::connecting_stairwell::ConnectingStairwellCase;
+use crate::commands::show::connecting_stairwell::{
+	ConnectingStairwellCase, ConnectingStairwellFlight,
+};
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use bevy::prelude::*;
@@ -127,6 +129,7 @@ pub enum PreviewSubject {
 	ConnectingHall,
 	ConnectingStairwell {
 		case: ConnectingStairwellCase,
+		flight: ConnectingStairwellFlight,
 		upper_landing: bool,
 		slab_thickness: f32,
 	},
@@ -575,10 +578,11 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
-			PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } => {
+			PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } => {
 				format!(
-					"preview: connecting-stairwell --case {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} ({})",
+					"preview: connecting-stairwell --case {} --flight {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} ({})",
 					case.slug(),
+					flight.slug(),
 					case.look_for()
 				)
 			}
@@ -3661,9 +3665,10 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
-		PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } => {
+		PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } => {
 			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
 			let well = ConnectingStairwell::rough_stone(lower, upper)
+				.with_flight(flight.kind())
 				.with_slab_thickness(*slab_thickness)
 				.with_upper_landing(*upper_landing);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
@@ -5506,7 +5511,7 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 /// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
 /// orientation arrows, and the flight polyline.
 pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	let PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } =
+	let PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } =
 		config.subject
 	else {
 		return;
@@ -5516,6 +5521,7 @@ pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewC
 
 	let (lower, upper) = connecting_stairwell_demo_endpoints(case);
 	let well = ConnectingStairwell::rough_stone(lower, upper)
+		.with_flight(flight.kind())
 		.with_slab_thickness(slab_thickness)
 		.with_upper_landing(upper_landing);
 

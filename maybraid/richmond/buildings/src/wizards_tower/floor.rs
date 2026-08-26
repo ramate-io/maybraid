@@ -14,7 +14,7 @@ use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
-use richmond_building_components::stairs::{SpiralStair, StairNode};
+use richmond_building_components::stairs::{StairNode, StraightStair};
 use richmond_building_components::{
 	append_component_scenes, confined_scene, BuildingComponents, Layers, ParentConfines,
 	PartitionNode,
@@ -65,7 +65,7 @@ impl WizardsTowerFloor {
 		let tread_width = spire_half * 0.45;
 		let stair_radius = (spire_half - 0.5 * tread_width).max(1e-4);
 		let tread_depth = tread_width * 0.55;
-		let target_tread_height = SpiralStair::DEFAULT_TREAD_HEIGHT;
+		let target_tread_height = StraightStair::DEFAULT_TREAD_HEIGHT;
 
 		// Hang over the floor ring, clear of the spire stairs (~chest / lantern height).
 		let lantern = Vec3::new(
@@ -129,13 +129,11 @@ impl WizardsTowerFloor {
 		lod_ref: &LodRef,
 		spire_confines: ParentConfines,
 	) {
-		children.push(Box::new(
-			self.arc_spire
-				.stairs
-				.clone()
-				.with_confines(spire_confines)
-				.scene_with_lod(lod_ref),
-		));
+		for stair in &self.arc_spire.stairs {
+			children.push(Box::new(
+				stair.clone().with_confines(spire_confines).scene_with_lod(lod_ref),
+			));
+		}
 	}
 
 	fn storey_confine_center(&self) -> Vec3 {
@@ -209,11 +207,10 @@ impl BuildingComponents for WizardsTowerFloor {
 		if !Self::is_detail_level(level) {
 			return Layers::new();
 		}
-		Layers::from_free(vec![self
-			.arc_spire
-			.stairs
-			.clone()
-			.with_confines(self.storey_spire_capsule())])
+		let confines = self.storey_spire_capsule();
+		Layers::from_free(
+			self.arc_spire.stairs.iter().map(|s| s.clone().with_confines(confines)).collect(),
+		)
 	}
 }
 

@@ -11,11 +11,10 @@ use crate::assets::stairs::rough_stonework::TREAD;
 use crate::lod_band::placement_bounds;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::placed::Placement;
-use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
+use crate::scene_children::{pose, posed_glb, scene_children};
 use crate::stairs::geometry::StairGeometry;
 use crate::stairs::style::StairStyle;
 use crate::stairs::tessellate::StairKit;
-use crate::stairs::{RoughStoneSpiralStair, RoughStoneStraightStair, WoodStraightStair};
 
 /// Authoring IR for a stair feature.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
@@ -55,36 +54,15 @@ impl LodScene for StairNode {
 		LodSceneCulls::None
 	}
 
-	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.placed_kits(self.placement)
 			.into_iter()
 			.map(|piece| {
 				let transform = pose(piece.placement);
-				match self.style {
-					StairStyle::RoughStonework => match piece.geom {
-						StairKit::Tread => Box::new(posed_glb(TREAD, transform)) as Box<dyn Scene>,
-						StairKit::Spiral => Box::new(with_pose(
-							transform,
-							RoughStoneSpiralStair.scene_with_level(lod_ref, level),
-						)) as Box<dyn Scene>,
-						StairKit::Straight => Box::new(with_pose(
-							transform,
-							RoughStoneStraightStair.scene_with_level(lod_ref, level),
-						)) as Box<dyn Scene>,
-					},
-					StairStyle::Wood => {
-						let child: Box<dyn Scene> = match piece.geom {
-							StairKit::Tread | StairKit::Spiral => {
-								Box::new(RoughStoneSpiralStair.scene_with_level(lod_ref, level))
-							}
-							StairKit::Straight => {
-								Box::new(WoodStraightStair.scene_with_level(lod_ref, level))
-							}
-						};
-						Box::new(with_pose(transform, child)) as Box<dyn Scene>
-					}
+				match piece.geom {
+					StairKit::Tread => Box::new(posed_glb(TREAD, transform)) as Box<dyn Scene>,
 				}
 			})
 			.collect();

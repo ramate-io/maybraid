@@ -148,7 +148,12 @@ impl BuildingComponents for WizardsTowerColumn {
 		Layers::from_free(
 			self.floors
 				.iter()
-				.map(|f| f.arc_spire.stairs.clone().with_confines(spire_confines))
+				.flat_map(|f| {
+					f.arc_spire
+						.stairs
+						.iter()
+						.map(|s| s.clone().with_confines(spire_confines))
+				})
 				.collect(),
 		)
 	}

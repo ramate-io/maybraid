@@ -10,8 +10,10 @@
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
-use richmond_building_components::stairs::{Stair, StairNode};
-use richmond_building_components::{BuildingComponents, Layers, Placement};
+use richmond_building_components::stairs::StairNode;
+use richmond_building_components::{BuildingComponents, Layers};
+
+use crate::stair_flights::circular_straight_nodes;
 
 /// Inclusive scale range vs the target tread height used when fitting \(Y\) gaps.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -65,8 +67,8 @@ pub struct ArcSpire {
 	pub fitted_tops: Vec<f32>,
 	/// Missed (skipped) bindings from the input list.
 	pub missed_bindings: Vec<f32>,
-	/// Spiral stair node (local tops relative to `center_xz.y`).
-	pub stairs: StairNode,
+	/// One-tread straight nodes around the centerline (local tops relative to `center_xz.y`).
+	pub stairs: Vec<StairNode>,
 }
 
 impl ArcSpire {
@@ -85,9 +87,14 @@ impl ArcSpire {
 		let local_tops: Vec<f32> =
 			fitted_tops.iter().map(|y| y - base_y).filter(|y| *y > 1e-5).collect();
 
-		let stairs = StairNode::rough_stone(
-			Stair::spiral_fitted(radius, tread_width, tread_depth, local_tops, turns),
-			Placement::new(params.center_xz, 0.0),
+		let stairs = circular_straight_nodes(
+			params.center_xz,
+			0.0,
+			radius,
+			tread_width,
+			tread_depth,
+			&local_tops,
+			turns,
 		);
 
 		Self {
@@ -107,7 +114,7 @@ impl ArcSpire {
 
 impl BuildingComponents for ArcSpire {
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
-		Layers::from_free(vec![self.stairs.clone()])
+		Layers::from_free(self.stairs.clone())
 	}
 }
 
@@ -210,14 +217,14 @@ pub fn uniform_storey_bindings(base_y: f32, height: f32, target_tread_height: f3
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::stairs::SpiralStair;
+	use richmond_building_components::stairs::{Stair, StraightStair};
 
 	#[test]
 	fn uniform_bindings_fit_exactly() -> anyhow::Result<()> {
-		let bindings = uniform_storey_bindings(0.0, 3.0, SpiralStair::DEFAULT_TREAD_HEIGHT);
+		let bindings = uniform_storey_bindings(0.0, 3.0, StraightStair::DEFAULT_TREAD_HEIGHT);
 		let (fitted, missed) = best_fit_y_bindings(
 			&bindings,
-			SpiralStair::DEFAULT_TREAD_HEIGHT,
+			StraightStair::DEFAULT_TREAD_HEIGHT,
 			FitTolerance::default(),
 		);
 		assert!(missed.is_empty());
@@ -254,13 +261,14 @@ mod tests {
 			radius: 1.2,
 			tread_width: 0.5,
 			tread_depth: 0.3,
-			target_tread_height: SpiralStair::DEFAULT_TREAD_HEIGHT,
-			y_bindings: uniform_storey_bindings(2.0, 3.0, SpiralStair::DEFAULT_TREAD_HEIGHT),
+			target_tread_height: StraightStair::DEFAULT_TREAD_HEIGHT,
+			y_bindings: uniform_storey_bindings(2.0, 3.0, StraightStair::DEFAULT_TREAD_HEIGHT),
 			fit_tolerance: FitTolerance::default(),
 			turns: 1.0,
 		});
 		assert!(!spire.fitted_tops.is_empty());
-		assert!(matches!(spire.stairs.geometry, Stair::Spiral(_)));
+		assert!(!spire.stairs.is_empty());
+		assert!(spire.stairs.iter().all(|s| matches!(s.geometry, Stair::Straight(_))));
 		Ok(())
 	}
 }
