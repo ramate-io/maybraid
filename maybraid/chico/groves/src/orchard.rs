@@ -2,7 +2,6 @@
 //! ([RFC-183 §3.4.7.7], [#353](https://github.com/ramate-io/maybraid/issues/353)).
 //!
 //! Compact fruiting and pale-bloom storybook forms on low-slope terrain with tight cell offset.
-//! Forest-layer attachment remains a follow-up.
 //!
 //! Under `render`, High/Medium nest one flattened Storybook tree host per plant
 //! (posed kit content, no per-stick / per-ball LOD hosts). Plants unitize through

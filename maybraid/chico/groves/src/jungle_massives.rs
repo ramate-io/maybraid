@@ -1,8 +1,7 @@
 //! Jungle Massives — giant upper-canopy grove above jungle lower massives
 //! ([RFC-183 §3.4.7.1], [#331](https://github.com/ramate-io/maybraid/issues/331)).
 //!
-//! Common 70–220 m jungle storybook and banyan skyline forms. Forest-layer attachment remains a
-//! follow-up.
+//! Common 70–220 m jungle storybook and banyan skyline forms.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.2], [#343](https://github.com/ramate-io/maybraid/issues/343)).
 //!
 //! Towering Northern, Friend's, Liam's, and Temperate Conifer skyline forms above conifer lower
-//! massives. Forest-layer attachment remains a follow-up.
+//! massives.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

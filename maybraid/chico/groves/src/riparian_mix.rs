@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.11], [#333](https://github.com/ramate-io/maybraid/issues/333)).
 //!
 //! Braid oak and storybook bank/overbank forms with Friend's and Temperate Conifer on sheltered
-//! margins. Forest-layer attachment remains a follow-up.
+//! margins.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

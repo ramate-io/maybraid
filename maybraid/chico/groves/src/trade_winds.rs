@@ -1,8 +1,7 @@
 //! Trade Winds — low-density tropical upper-canopy grove
 //! ([RFC-183 §3.4.7.15], [#337](https://github.com/ramate-io/maybraid/issues/337)).
 //!
-//! Common Storybook forms with less common Sope and Honu banyans and rare Waialea palms. Forest-layer
-//! attachment remains a follow-up.
+//! Common Storybook forms with less common Sope and Honu banyans and rare Waialea palms.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

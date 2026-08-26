@@ -4,8 +4,7 @@
 //!
 //! Dense blade-tuft clumps at 50–100 cm for wet meadows, river edges, and tropical grasslands.
 //! Patch varietals scatter each clump's blades as loose mounds and carry most of the placed
-//! weight so single-anchor clumps read as the rarer silhouette. Forest-layer attachment remains
-//! a follow-up.
+//! weight so single-anchor clumps read as the rarer silhouette.
 
 use std::ops::RangeInclusive;
 

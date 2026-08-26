@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.6.9], [#330](https://github.com/ramate-io/maybraid/issues/330)).
 //!
 //! Common 10–20 m braid oak and storybook forms with rare Rory's Head-trained accents.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

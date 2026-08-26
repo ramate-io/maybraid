@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.6.3], [#324](https://github.com/ramate-io/maybraid/issues/324)).
 //!
 //! Braid Oak dominates with uncommon ritual Date Palm and Sope Banyan accents.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

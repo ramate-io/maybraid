@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.6.2], [#323](https://github.com/ramate-io/maybraid/issues/323)).
 //!
 //! Compact date palms with rare Penmarch torch and Storybook accents in wet desert pockets.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

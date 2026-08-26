@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.16], [#338](https://github.com/ramate-io/maybraid/issues/338)).
 //!
 //! Sparse acacia-like High Bush, dry Sope's Banyan, and rare vase and torch accents across open
-//! country. Forest-layer attachment remains a follow-up.
+//! country.
 
 use std::ops::RangeInclusive;
 

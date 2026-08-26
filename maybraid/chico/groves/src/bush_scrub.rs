@@ -4,7 +4,7 @@
 //!
 //! Low irregular scrub mixing 25–50 cm tufts with scaled-down Common High Bush forms. Patch
 //! varietals scatter each tuft's blades as loose mounds and carry most of the tuft weight; small
-//! bushes stay single-anchor. Forest-layer attachment remains a follow-up.
+//! bushes stay single-anchor.
 
 use std::ops::RangeInclusive;
 

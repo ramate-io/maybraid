@@ -4,7 +4,7 @@
 //!
 //! Common High Bush forms at 1.0–2.5 m: substantial shrub masses that shape sightlines and
 //! local movement. Each placement is a [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs)
-//! bush with dual stick and canopy palettes; forest-layer attachment remains a follow-up.
+//! bush with dual stick and canopy palettes.
 
 use std::ops::RangeInclusive;
 

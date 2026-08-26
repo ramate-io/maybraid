@@ -1,8 +1,7 @@
 //! Conifer Sapling — well-known moderate-density young conifer lower-canopy grove
 //! ([RFC-183 §3.4.6.5], [#326](https://github.com/ramate-io/maybraid/issues/326)).
 //!
-//! Mixed Friend's and Northern Conifer saplings beneath taller evergreen canopy. Forest-layer
-//! attachment remains a follow-up.
+//! Mixed Friend's and Northern Conifer saplings beneath taller evergreen canopy.
 
 use bevy_math::{Vec2, Vec3};
 use procedural_common::UnitRange;

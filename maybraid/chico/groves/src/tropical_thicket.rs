@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.5.6], [#317](https://github.com/ramate-io/maybraid/issues/317)).
 //!
 //! Mixes larger palm bushes, moderate Common High Bush forms, and rare mini Honu Banyan accents.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use std::ops::RangeInclusive;
 

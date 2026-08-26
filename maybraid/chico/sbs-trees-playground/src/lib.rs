@@ -84,9 +84,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
 		register_vegetation_view(app);
-		if !app.is_plugin_added::<diagnostics::PlaygroundTimingPlugin>() {
-			app.add_plugins(diagnostics::PlaygroundTimingPlugin);
-		}
 		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),

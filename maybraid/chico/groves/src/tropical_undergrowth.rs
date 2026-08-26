@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.5.5], [#315](https://github.com/ramate-io/maybraid/issues/315)).
 //!
 //! Mixes bright/deep tufts (mostly as patches), small palm bushes, and rare mini SBS-tree forms.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use std::ops::RangeInclusive;
 

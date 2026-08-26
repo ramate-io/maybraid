@@ -2,8 +2,7 @@
 //! ([RFC-183 §3.4.5.8], [#320](https://github.com/ramate-io/maybraid/issues/320)).
 //!
 //! Mixes Rory's Head-trained forms, small Vase Trees, Common High Bush scrub mass, Penmarch Torch
-//! accents, occasional small Braid Oak forms, and Simpleman's Hedge bands. Forest-layer attachment
-//! remains a follow-up.
+//! accents, occasional small Braid Oak forms, and Simpleman's Hedge bands.
 
 use std::ops::RangeInclusive;
 

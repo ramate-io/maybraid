@@ -1,8 +1,7 @@
 //! Goettingen Follow — well-known low-density temperate lower-canopy follow grove
 //! ([RFC-183 §3.4.6.4], [#325](https://github.com/ramate-io/maybraid/issues/325)).
 //!
-//! Sparse braid oaks and storybook forms beneath taller canopy. Forest-layer attachment remains
-//! a follow-up.
+//! Sparse braid oaks and storybook forms beneath taller canopy.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

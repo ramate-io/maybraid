@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.9], [#357](https://github.com/ramate-io/maybraid/issues/357)).
 //!
 //! Single moderate-crown date palm form with tight cell offset on warm flat terrain.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

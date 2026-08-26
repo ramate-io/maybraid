@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use chico_sbs_trees_playground::{
-	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, SbsTreesPlaygroundPlugin,
+	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, PlaygroundTimingPlugin,
+	SbsTreesPlaygroundPlugin,
 };
 
 fn assets_root() -> PathBuf {
@@ -23,21 +24,25 @@ fn main() {
 	println!("Diagnostics: {} (CHICO_SBS_DIAG=fps|off).", diag.summary());
 
 	let assets_path = assets_root();
-	App::new()
-		.add_plugins(
-			DefaultPlugins
-				.set(WindowPlugin {
-					primary_window: Some(Window {
-						title: "Chico SBS Trees Playground".into(),
-						resolution: (1280, 720).into(),
-						..default()
-					}),
+	let mut app = App::new();
+	app.add_plugins(
+		DefaultPlugins
+			.set(WindowPlugin {
+				primary_window: Some(Window {
+					title: "Chico SBS Trees Playground".into(),
+					resolution: (1280, 720).into(),
 					..default()
-				})
-				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
-		)
-		.insert_resource(ClearColor(Color::srgb(0.82, 0.88, 0.92)))
-		.insert_resource(PendingStartupCommand(startup))
-		.add_plugins(SbsTreesPlaygroundPlugin)
-		.run();
+				}),
+				..default()
+			})
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
+	)
+	.insert_resource(ClearColor(Color::srgb(0.82, 0.88, 0.92)))
+	.insert_resource(PendingStartupCommand(startup))
+	.add_plugins(SbsTreesPlaygroundPlugin);
+
+	if diag.fps {
+		app.add_plugins(PlaygroundTimingPlugin);
+	}
+	app.run();
 }

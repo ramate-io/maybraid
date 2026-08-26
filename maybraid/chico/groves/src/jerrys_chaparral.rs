@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.5.7], [#318](https://github.com/ramate-io/maybraid/issues/318)).
 //!
 //! Mixes Rory's Head-trained forms, Common High Bush chaparral mass, and rare small Friend's
-//! Conifer accents. Forest-layer attachment remains a follow-up.
+//! Conifer accents.
 
 use std::ops::RangeInclusive;
 

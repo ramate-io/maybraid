@@ -1,8 +1,7 @@
 //! Rolling Oaks — low-density open oak-country upper-canopy grove
 //! ([RFC-183 §3.4.7.5], [#349](https://github.com/ramate-io/maybraid/issues/349)).
 //!
-//! Common dry Braid Oak forms with rare Storybook accents across rolling open woodland. Forest-layer
-//! attachment remains a follow-up.
+//! Common dry Braid Oak forms with rare Storybook accents across rolling open woodland.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

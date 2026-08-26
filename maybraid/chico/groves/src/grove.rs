@@ -216,19 +216,6 @@ impl<V: Clone> Grove<V> {
 		self.distribution.select_at(position, sample.scale, *cell, self.noise, world)
 	}
 
-	/// Sample, place, validate, and choose a bucket for one vegetation cell.
-	///
-	/// This is the implementation that will hook into the generative API.
-	pub fn sample_cell(
-		&self,
-		cell: &Cell,
-		extent: &GroveExtent,
-		world: &impl GroveWorldSample,
-	) -> (Option<GroveCellVariant<V>>, Cell) {
-		let outcome = self.select_cell(cell, extent, world).into_placed();
-		(outcome, *cell)
-	}
-
 	pub fn cell_extent_xz(&self) -> Vec2 {
 		self.cell_extent_xz
 	}
@@ -247,20 +234,6 @@ impl<V: Clone> Grove<V> {
 
 	pub fn distribution(&self) -> &PreparedGroveDistribution<V> {
 		&self.distribution
-	}
-}
-
-/// Grove items can be constructed from cell, grove, information about extents, and terrain.
-///
-/// This is a useful plugin to hierarchical generation APIs, ala https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
-pub trait GroveItem: Clone {
-	fn from_cell_and_grove(
-		cell: &Cell,
-		grove: &Grove<Self>,
-		grove_extent: &GroveExtent,
-		world: &impl GroveWorldSample,
-	) -> Option<GroveCellVariant<Self>> {
-		grove.sample_cell(cell, grove_extent, world).0
 	}
 }
 

@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.10], [#332](https://github.com/ramate-io/maybraid/issues/332)).
 //!
 //! Tower Waialea columns, dense lower Waialea crowns, and clustered Date Palms for oasis shade.
-//! Forest-layer attachment remains a follow-up.
+//!
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

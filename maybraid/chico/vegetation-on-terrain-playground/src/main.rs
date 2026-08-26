@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, VegetationOnTerrainPlugin,
+	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, PlaygroundTimingPlugin,
+	VegetationOnTerrainPlugin,
 };
 
 fn assets_root() -> PathBuf {
@@ -19,20 +20,24 @@ fn main() {
 	println!("Diagnostics: {} (CHICO_VEG_TERRAIN_DIAG=fps|off).", diag.summary());
 
 	let assets_path = assets_root();
-	App::new()
-		.add_plugins(
-			DefaultPlugins
-				.set(WindowPlugin {
-					primary_window: Some(Window {
-						title: "Chico Vegetation on Terrain".into(),
-						resolution: (1280, 720).into(),
-						..default()
-					}),
+	let mut app = App::new();
+	app.add_plugins(
+		DefaultPlugins
+			.set(WindowPlugin {
+				primary_window: Some(Window {
+					title: "Chico Vegetation on Terrain".into(),
+					resolution: (1280, 720).into(),
 					..default()
-				})
-				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
-		)
-		.insert_resource(PendingStartupCommand(startup))
-		.add_plugins(VegetationOnTerrainPlugin)
-		.run();
+				}),
+				..default()
+			})
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
+	)
+	.insert_resource(PendingStartupCommand(startup))
+	.add_plugins(VegetationOnTerrainPlugin);
+
+	if diag.fps {
+		app.add_plugins(PlaygroundTimingPlugin);
+	}
+	app.run();
 }

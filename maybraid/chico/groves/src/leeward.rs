@@ -1,8 +1,7 @@
 //! Leeward — moderate-density sheltered upper-canopy grove
 //! ([RFC-183 §3.4.7.17], [#339](https://github.com/ramate-io/maybraid/issues/339)).
 //!
-//! Temperate Conifer and Storybook Tree forms on mild lee slopes. Forest-layer attachment remains a
-//! follow-up.
+//! Temperate Conifer and Storybook Tree forms on mild lee slopes.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

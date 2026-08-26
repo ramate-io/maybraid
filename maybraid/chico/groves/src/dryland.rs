@@ -1,8 +1,7 @@
 //! Dryland — very-low-density arid upper-canopy grove with Liam's Conifer and Vase Tree
 //! ([RFC-183 §3.4.7.13], [#335](https://github.com/ramate-io/maybraid/issues/335)).
 //!
-//! Sparse dry highland canopy with evenly common Liam's Conifer and Vase Tree forms. Forest-layer
-//! attachment remains a follow-up.
+//! Sparse dry highland canopy with evenly common Liam's Conifer and Vase Tree forms.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

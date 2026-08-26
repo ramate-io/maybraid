@@ -1,8 +1,7 @@
 //! Storyteller's — colorful whimsical Storybook and Braid Oak upper-canopy grove
 //! ([RFC-183 §3.4.7.14], [#336](https://github.com/ramate-io/maybraid/issues/336)).
 //!
-//! Moderate-density color-pop canopy with common storybook, braid-oak, and torch forms. Forest-layer
-//! attachment remains a follow-up.
+//! Moderate-density color-pop canopy with common storybook, braid-oak, and torch forms.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

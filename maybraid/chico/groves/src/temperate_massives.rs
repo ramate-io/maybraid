@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.7.3], [#345](https://github.com/ramate-io/maybraid/issues/345)).
 //!
 //! Enormous Braid Oak, Storybook Tree, and rare Rory's Head-trained skyline forms above temperate
-//! lower massives. Forest-layer attachment remains a follow-up.
+//! lower massives.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

@@ -3,7 +3,7 @@
 //!
 //! Wind-shaped Rory's Head-trained forms, acacia-impression High Bush, and rare dry Storybook
 //! accents across open savanna. Low / UltraLow keep one canopy proxy per plant — the grove
-//! is too sparse for UltraLow 8 m bins. Forest-layer attachment remains a follow-up.
+//! is too sparse for UltraLow 8 m bins.
 
 use std::ops::RangeInclusive;
 

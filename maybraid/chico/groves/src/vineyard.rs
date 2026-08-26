@@ -1,8 +1,7 @@
 //! Vineyard — high-density cultivated Rory-trained vine upper-canopy grove
 //! ([RFC-183 §3.4.7.8], [#355](https://github.com/ramate-io/maybraid/issues/355)).
 //!
-//! Low trained-vine rows with very tight cell offset and grape-like palettes. Forest-layer
-//! attachment remains a follow-up.
+//! Low trained-vine rows with very tight cell offset and grape-like palettes.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

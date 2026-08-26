@@ -28,8 +28,8 @@ In-game: `/` console, `Y` or `F1` drawer. Fly camera: WASD, Space/Shift, mouse l
 
 Defaults: `monster-grass`, `terrain-radius 2` (4×4 cells), `grove-extent 100`, `tile-radius 1` (3×3 tiles).
 
-Throttled FPS logging is on by default (`[veg.timing]` once per second). Disable with
-`CHICO_VEG_TERRAIN_DIAG=off`.
+Throttled FPS logging is off by default. Enable with `CHICO_VEG_TERRAIN_DIAG=fps`
+(`[veg.timing]` once per second).
 
 ## Verify
 

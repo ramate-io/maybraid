@@ -1,8 +1,7 @@
 //! Riparian General — moderate-density mixed river-corridor upper-canopy grove
 //! ([RFC-183 §3.4.7.4], [#347](https://github.com/ramate-io/maybraid/issues/347)).
 //!
-//! Common Braid Oak and Storybook Tree forms with rare willow-like High Bush accents. Forest-layer
-//! attachment remains a follow-up.
+//! Common Braid Oak and Storybook Tree forms with rare willow-like High Bush accents.
 
 use std::ops::RangeInclusive;
 

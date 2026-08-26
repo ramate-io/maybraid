@@ -1,8 +1,7 @@
 //! Jungle Lower Massives — massive lower-canopy grove beneath very tall upper canopy
 //! ([RFC-183 §3.4.6.7], [#328](https://github.com/ramate-io/maybraid/issues/328)).
 //!
-//! Common 10–20 m jungle storybook and banyan forms with rare braid-oak accents. Forest-layer
-//! attachment remains a follow-up.
+//! Common 10–20 m jungle storybook and banyan forms with rare braid-oak accents.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

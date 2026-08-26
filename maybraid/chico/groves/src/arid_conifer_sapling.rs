@@ -1,8 +1,7 @@
 //! Arid Conifer Sapling — well-known low-density dry young conifer lower-canopy grove
 //! ([RFC-183 §3.4.6.6], [#327](https://github.com/ramate-io/maybraid/issues/327)).
 //!
-//! Sparse Friend's, Northern, and rare Liam's Conifer saplings on dry exposed terrain. Forest-layer
-//! attachment remains a follow-up.
+//! Sparse Friend's, Northern, and rare Liam's Conifer saplings on dry exposed terrain.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

@@ -1,8 +1,7 @@
 //! Christmas Taiga — moderate-density cold Northern Conifer upper-canopy grove
 //! ([RFC-183 §3.4.7.18], [#341](https://github.com/ramate-io/maybraid/issues/341)).
 //!
-//! Dense cold-forest Northern Conifer forms with a colder high-band variant. Forest-layer attachment
-//! remains a follow-up.
+//! Dense cold-forest Northern Conifer forms with a colder high-band variant.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

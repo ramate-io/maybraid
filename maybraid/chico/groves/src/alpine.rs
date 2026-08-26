@@ -1,8 +1,7 @@
 //! Alpine — cold upland conifer upper-canopy grove
 //! ([RFC-183 §3.4.7.12], [#334](https://github.com/ramate-io/maybraid/issues/334)).
 //!
-//! Tall Friend's Conifer with less common Liam's Conifer on high, steep terrain. Forest-layer
-//! attachment remains a follow-up.
+//! Tall Friend's Conifer with less common Liam's Conifer on high, steep terrain.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

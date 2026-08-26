@@ -2,7 +2,7 @@
 //! ([RFC-183 §3.4.6.1], [#322](https://github.com/ramate-io/maybraid/issues/322)).
 //!
 //! Mixes mini banyans, Storybook and Jungle Storybook forms, and rare torch, Rory, and palm accents
-//! beneath taller forest layers. Forest-layer attachment remains a follow-up.
+//! beneath taller forest layers.
 
 use bevy_math::Vec2;
 use procedural_common::UnitRange;

@@ -1,13 +1,13 @@
 //! Frame timing diagnostics for the vegetation-on-terrain playground.
 //!
 //! Toggle with env `CHICO_VEG_TERRAIN_DIAG` (comma-separated):
-//! - `fps` — throttled `[veg.timing]` FPS / frame_ms (default when unset)
-//! - `off` — disable
+//! - `fps` — throttled `[veg.timing]` FPS / frame_ms
+//! - `off` — disable (default when unset)
 //!
 //! Examples:
 //! ```text
-//! CHICO_VEG_TERRAIN_DIAG=fps   # default
-//! CHICO_VEG_TERRAIN_DIAG=off
+//! CHICO_VEG_TERRAIN_DIAG=fps
+//! CHICO_VEG_TERRAIN_DIAG=off   # default
 //! ```
 
 use std::time::Duration;
@@ -35,7 +35,7 @@ impl PlaygroundDiag {
 		let raw = std::env::var(ENV_DIAG).unwrap_or_default();
 		let raw = raw.trim();
 		if raw.is_empty() {
-			return Self { fps: true };
+			return Self { fps: false };
 		}
 		let mut fps = false;
 		let mut off = false;
@@ -54,9 +54,6 @@ impl PlaygroundDiag {
 		}
 		if off {
 			return Self { fps: false };
-		}
-		if !fps {
-			fps = true;
 		}
 		Self { fps }
 	}
@@ -116,8 +113,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn default_env_enables_fps() {
-		// from_env with empty uses fps; we only assert the constructor path.
+	fn summary_names_fps_flag() {
 		assert!(PlaygroundDiag { fps: true }.summary().contains("fps"));
 		assert!(PlaygroundDiag { fps: false }.summary().contains("off"));
 	}
