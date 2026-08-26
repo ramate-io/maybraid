@@ -240,7 +240,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{HighBushShoots, HighBushShootsParams};
+	use chico_sbs_trees::{HighBushShoots, QuantizedPlant};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -249,15 +249,18 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, LowBushCell, LowBushItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, LowBushCell, DRY_LOW_BUSH, FLOWERING_LOW_BUSH, GREEN_LOW_BUSH, LEAFY_LOW_BUSH,
+		RED_STEM_LOW_BUSH,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_bush_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -386,6 +389,12 @@ mod vc {
 		}
 	}
 
+	remixed_bush_plant!(LowBushGreen, GREEN_LOW_BUSH);
+	remixed_bush_plant!(LowBushDry, DRY_LOW_BUSH);
+	remixed_bush_plant!(LowBushLeafy, LEAFY_LOW_BUSH);
+	remixed_bush_plant!(LowBushFlowering, FLOWERING_LOW_BUSH);
+	remixed_bush_plant!(LowBushRedStem, RED_STEM_LOW_BUSH);
+
 	#[derive(Clone)]
 	pub struct LowBushPlant {
 		pub placement: Placement,
@@ -467,12 +476,10 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<LowBushCell>,
 		grove_noise: NoiseParams,
-		bush_chain_noise: NoiseParams,
+		_bush_chain_noise: NoiseParams,
 		tree_variants: u32,
 	) -> LowBushPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(bush_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -485,21 +492,17 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		let LowBushItem::Bush(bush) = placed.variant.item();
-		let mut shape = bush.build_with_noise(build_noise);
-		shape.chain_noise = chain_noise;
-		let (unit_params, world_size) =
-			HighBushShootsParams::new(shape).into_unit_from_num(variant);
+		let (bush, world_size) = match placed.variant {
+			LowBushCell::GreenLowBush => LowBushGreen::grow_num(variant),
+			LowBushCell::DryLowBush => LowBushDry::grow_num(variant),
+			LowBushCell::LeafyLowBush => LowBushLeafy::grow_num(variant),
+			LowBushCell::FloweringLowBush => LowBushFlowering::grow_num(variant),
+			LowBushCell::RedStemLowBush => LowBushRedStem::grow_num(variant),
+		};
 		let placement = Placement::new(placed.position, 0.0)
 			.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 
-		LowBushPlant {
-			placement,
-			bush: Arc::new(unit_params.build()),
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		LowBushPlant { placement, bush, stick_material, ball_material, frond_material }
 	}
 
 	impl VegetationComponents for LowBush {

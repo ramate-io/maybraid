@@ -302,7 +302,7 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
 		FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams, NorthernConifer,
-		NorthernConiferParams,
+		NorthernConiferParams, QuantizedPlant,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -312,15 +312,19 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, AridConiferSaplingCell, AridConiferSaplingItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, AridConiferSaplingCell, BARE_DRY_FRIEND_SAPLING, BARE_DRY_NORTHERN_SAPLING,
+		DRY_FRIEND_SAPLING, DRY_LIAMS_SAPLING, DRY_NORTHERN_SAPLING, WISPY_DRY_FRIEND_SAPLING,
+		WISPY_DRY_NORTHERN_SAPLING,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, GroveCellVariant,
 		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -447,6 +451,39 @@ mod vc {
 		}
 	}
 
+	remixed_sbs_plant!(DryFriendSapling, FriendsConifer, FriendsConiferParams, DRY_FRIEND_SAPLING);
+	remixed_sbs_plant!(
+		DryNorthernSapling,
+		NorthernConifer,
+		NorthernConiferParams,
+		DRY_NORTHERN_SAPLING
+	);
+	remixed_sbs_plant!(
+		WispyDryFriendSapling,
+		FriendsConifer,
+		FriendsConiferParams,
+		WISPY_DRY_FRIEND_SAPLING
+	);
+	remixed_sbs_plant!(
+		WispyDryNorthernSapling,
+		NorthernConifer,
+		NorthernConiferParams,
+		WISPY_DRY_NORTHERN_SAPLING
+	);
+	remixed_sbs_plant!(
+		BareDryFriendSapling,
+		FriendsConifer,
+		FriendsConiferParams,
+		BARE_DRY_FRIEND_SAPLING
+	);
+	remixed_sbs_plant!(
+		BareDryNorthernSapling,
+		NorthernConifer,
+		NorthernConiferParams,
+		BARE_DRY_NORTHERN_SAPLING
+	);
+	remixed_sbs_plant!(DryLiamsConiferSapling, LiamsConifer, LiamsConiferParams, DRY_LIAMS_SAPLING);
+
 	#[derive(Clone)]
 	enum AridConiferSaplingKind {
 		Friends(Arc<FriendsConifer>),
@@ -566,7 +603,6 @@ mod vc {
 		tree_variants: u32,
 	) -> AridConiferSaplingPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -579,49 +615,44 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			AridConiferSaplingItem::FriendsConifer(conifer) => {
-				let geometry = conifer.build_with_noise(build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				AridConiferSaplingPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: AridConiferSaplingKind::Friends(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			AridConiferSaplingCell::DryFriendSapling => {
+				let (tree, world_size) = DryFriendSapling::grow_num(variant);
+				(AridConiferSaplingKind::Friends(tree), world_size)
 			}
-			AridConiferSaplingItem::NorthernConifer(conifer) => {
-				let geometry = conifer.build_with_noise(build_noise);
-				let mut params = NorthernConiferParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				AridConiferSaplingPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: AridConiferSaplingKind::Northern(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			AridConiferSaplingCell::DryNorthernSapling => {
+				let (tree, world_size) = DryNorthernSapling::grow_num(variant);
+				(AridConiferSaplingKind::Northern(tree), world_size)
 			}
-			AridConiferSaplingItem::LiamsConifer(conifer) => {
-				let geometry = conifer.build_with_noise(build_noise);
-				let mut params = LiamsConiferParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				AridConiferSaplingPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: AridConiferSaplingKind::Liams(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			AridConiferSaplingCell::WispyDryFriendSapling => {
+				let (tree, world_size) = WispyDryFriendSapling::grow_num(variant);
+				(AridConiferSaplingKind::Friends(tree), world_size)
 			}
+			AridConiferSaplingCell::WispyDryNorthernSapling => {
+				let (tree, world_size) = WispyDryNorthernSapling::grow_num(variant);
+				(AridConiferSaplingKind::Northern(tree), world_size)
+			}
+			AridConiferSaplingCell::BareDryFriendSapling => {
+				let (tree, world_size) = BareDryFriendSapling::grow_num(variant);
+				(AridConiferSaplingKind::Friends(tree), world_size)
+			}
+			AridConiferSaplingCell::BareDryNorthernSapling => {
+				let (tree, world_size) = BareDryNorthernSapling::grow_num(variant);
+				(AridConiferSaplingKind::Northern(tree), world_size)
+			}
+			AridConiferSaplingCell::DryLiamsConiferSapling => {
+				let (tree, world_size) = DryLiamsConiferSapling::grow_num(variant);
+				(AridConiferSaplingKind::Liams(tree), world_size)
+			}
+		};
+
+		AridConiferSaplingPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

@@ -72,9 +72,10 @@ Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUT
 ### 5. Tests
 
 - `unit_from_num(n)` is unit-sized and deterministic.
+- `grow_num(n)` returns the same `Arc` for the same type and `n` (`grow_num_reuses_arc_for_same_type_and_num`).
 - `into_unit_from_num` returns the pre-normalize world size.
 - High emit is one stick collection and one cheap-ball collection (Storybook: `high_emits_merged_stick_and_cheap_ball_collections`).
 
 ## Grove construction
 
-Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Preset silhouettes (Braid Oak, Honu, Sope, Jungle Storybook) instance `unit_from_num` and put sampled height on placement: groves must not remix SBS projection / descenders / growth onto those meshes and then `into_unit_from_num`. Jungle Storybook `into_unit_from_num` must divide `jungle_growth_radius_scale` by height so fronds stay proportional after placement scale.
+Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / [`QuantizedPlant::grow_num`](src/quantized.rs) / `nest_flattened_plant_chunk`. The cache is `(construction type, num)` for the process — not a hash of params. `grow_num` returns `Arc<Self::Unit>` so groves still nest the base tree the playground already hosts. Preset silhouettes (Braid Oak, Honu, Sope, Jungle Storybook) use `type Unit = Self` and put sampled height on placement: groves must not remix SBS projection / descenders / growth onto those meshes. A grove that remixed the same model differently implements `QuantizedPlant` on a wrapper (`type Unit = StorybookTree` / `DatePalm`). Jungle Storybook `into_unit_from_num` must divide `jungle_growth_radius_scale` by height so fronds stay proportional after placement scale.

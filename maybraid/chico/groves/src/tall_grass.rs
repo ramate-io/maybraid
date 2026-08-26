@@ -205,27 +205,44 @@ impl TallGrassCell {
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
+	use chico_sbs_trees::QuantizedPlant;
 	use chico_vegetation_components::{
 		FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, TallGrassCell, TallGrassItem};
+	use super::{
+		definition, TallGrassCell, HAWAIIAN_RED, HAWAIIAN_RED_PATCH, PALE_REED, PALE_REED_PATCH,
+		RIVER_GREEN, RIVER_GREEN_PATCH, TROPICAL_BLADE, TROPICAL_BLADE_PATCH,
+	};
 	use crate::grove::vc_tuft::{
-		grow_placed_tuft_params, single_blade_patch_params, stamp_foliage_noise,
-		tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights,
-		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		grow_placed_tuft_params, tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant,
+		TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
 		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		remixed_blade_tuft_plant, remixed_tuft_plant, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const TALL_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
 	pub const TALL_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
 	pub const TALL_GRASS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(RiverGreen, RIVER_GREEN, default_foliage());
+	remixed_blade_tuft_plant!(PaleReed, PALE_REED, default_foliage());
+	remixed_blade_tuft_plant!(TropicalBlade, TROPICAL_BLADE, default_foliage());
+	remixed_blade_tuft_plant!(HawaiianRed, HAWAIIAN_RED, default_foliage());
+	remixed_tuft_plant!(RiverGreenPatch, RIVER_GREEN_PATCH, default_foliage());
+	remixed_tuft_plant!(PaleReedPatch, PALE_REED_PATCH, default_foliage());
+	remixed_tuft_plant!(TropicalBladePatch, TROPICAL_BLADE_PATCH, default_foliage());
+	remixed_tuft_plant!(HawaiianRedPatch, HAWAIIAN_RED_PATCH, default_foliage());
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -324,17 +341,19 @@ mod vc {
 				foliage_noise,
 				self.merge_collections,
 				self.patch_variants,
-				|cell, noise| {
+				|cell, variant| {
 					let mix = cell.palette_mix();
-					let params = match cell.item() {
-						TallGrassItem::Clump(clump) => {
-							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise)
-						}
-						TallGrassItem::Patch(patch) => {
-							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise)
-						}
+					let (patch, world_size) = match cell {
+						TallGrassCell::RiverGreen => RiverGreen::grow_num(variant),
+						TallGrassCell::PaleReed => PaleReed::grow_num(variant),
+						TallGrassCell::TropicalBlade => TropicalBlade::grow_num(variant),
+						TallGrassCell::HawaiianRed => HawaiianRed::grow_num(variant),
+						TallGrassCell::RiverGreenPatch => RiverGreenPatch::grow_num(variant),
+						TallGrassCell::PaleReedPatch => PaleReedPatch::grow_num(variant),
+						TallGrassCell::TropicalBladePatch => TropicalBladePatch::grow_num(variant),
+						TallGrassCell::HawaiianRedPatch => HawaiianRedPatch::grow_num(variant),
 					};
-					(params, mix)
+					(patch, world_size, mix)
 				},
 			);
 			TallGrass {

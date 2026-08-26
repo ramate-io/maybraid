@@ -246,7 +246,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, HonuBanyan, JungleStorybookTree, SopesBanyan, WaialeaPalm, WaialeaPalmParams,
+		BraidOakTree, HonuBanyan, JungleStorybookTree, QuantizedPlant, SopesBanyan, WaialeaPalm,
+		WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -258,13 +259,15 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, JungleLowerMassivesCell, JungleLowerMassivesItem};
+	use super::{
+		definition, JungleLowerMassivesCell, JungleLowerMassivesItem, LOWER_MASSIVE_WAIALEA_PALM,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -392,6 +395,13 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(
+		LowerMassiveWaialeaPalm,
+		WaialeaPalm,
+		WaialeaPalmParams,
+		LOWER_MASSIVE_WAIALEA_PALM
+	);
 
 	#[derive(Clone)]
 	enum JungleLowerMassivesKind {
@@ -561,9 +571,7 @@ mod vc {
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::Honu(Arc::new(HonuBanyan::unit_from_num(
-						variant,
-					))),
+					kind: JungleLowerMassivesKind::Honu(HonuBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -578,9 +586,7 @@ mod vc {
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::Sope(Arc::new(SopesBanyan::unit_from_num(
-						variant,
-					))),
+					kind: JungleLowerMassivesKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -591,23 +597,20 @@ mod vc {
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::JungleStorybook(Arc::new(
-						JungleStorybookTree::unit_from_num(variant),
-					)),
+					kind: JungleLowerMassivesKind::JungleStorybook(
+						JungleStorybookTree::grow_num(variant).0,
+					),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			JungleLowerMassivesItem::WaialeaPalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = WaialeaPalmParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			JungleLowerMassivesItem::WaialeaPalm(_) => {
+				let (tree, world_size) = LowerMassiveWaialeaPalm::grow_num(variant);
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::Waialea(Arc::new(unit_params.build())),
+					kind: JungleLowerMassivesKind::Waialea(tree),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -618,9 +621,7 @@ mod vc {
 				JungleLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleLowerMassivesKind::Oak(Arc::new(BraidOakTree::unit_from_num(
-						variant,
-					))),
+					kind: JungleLowerMassivesKind::Oak(BraidOakTree::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,

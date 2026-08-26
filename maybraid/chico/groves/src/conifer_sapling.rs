@@ -276,6 +276,7 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
 		FriendsConifer, FriendsConiferParams, NorthernConifer, NorthernConiferParams,
+		QuantizedPlant,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -287,15 +288,20 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, ConiferSaplingCell, ConiferSaplingItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, ConiferSaplingCell, ConiferSaplingFriendsConifer,
+		ConiferSaplingNorthernConifer, BRIGHT_FRIEND_SAPLING, COLD_NORTHERN_SAPLING,
+		FRIEND_SAPLING, MOSSY_FRIEND_SAPLING, NORTHERN_SAPLING, WINDSWEPT_NORTHERN_SAPLING,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks, CanopyProxySite,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const CONIFER_SAPLING_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -420,6 +426,84 @@ mod vc {
 		}
 	}
 
+	fn friends_sapling_unit(
+		authored: &ConiferSaplingFriendsConifer,
+		num: u32,
+	) -> (FriendsConifer, f32) {
+		let samples = BuildWithNoise::<FriendConiferSamples>::build_with_noise(
+			authored,
+			unit_build_noise(num),
+		);
+		let mut params = FriendsConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	fn northern_sapling_unit(
+		authored: &ConiferSaplingNorthernConifer,
+		num: u32,
+	) -> (NorthernConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = NorthernConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.splay_spawn_fraction = samples.splay_spawn_fraction;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct FriendSapling;
+	impl QuantizedPlant for FriendSapling {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			friends_sapling_unit(&FRIEND_SAPLING, num)
+		}
+	}
+
+	struct MossyFriendSapling;
+	impl QuantizedPlant for MossyFriendSapling {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			friends_sapling_unit(&MOSSY_FRIEND_SAPLING, num)
+		}
+	}
+
+	struct BrightFriendSapling;
+	impl QuantizedPlant for BrightFriendSapling {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			friends_sapling_unit(&BRIGHT_FRIEND_SAPLING, num)
+		}
+	}
+
+	struct NorthernSapling;
+	impl QuantizedPlant for NorthernSapling {
+		type Unit = NorthernConifer;
+		fn build_unit(num: u32) -> (NorthernConifer, f32) {
+			northern_sapling_unit(&NORTHERN_SAPLING, num)
+		}
+	}
+
+	struct ColdNorthernSapling;
+	impl QuantizedPlant for ColdNorthernSapling {
+		type Unit = NorthernConifer;
+		fn build_unit(num: u32) -> (NorthernConifer, f32) {
+			northern_sapling_unit(&COLD_NORTHERN_SAPLING, num)
+		}
+	}
+
+	struct WindsweptNorthernSapling;
+	impl QuantizedPlant for WindsweptNorthernSapling {
+		type Unit = NorthernConifer;
+		fn build_unit(num: u32) -> (NorthernConifer, f32) {
+			northern_sapling_unit(&WINDSWEPT_NORTHERN_SAPLING, num)
+		}
+	}
+
 	#[derive(Clone)]
 	enum ConiferSaplingKind {
 		Friends(Arc<FriendsConifer>),
@@ -527,7 +611,6 @@ mod vc {
 		tree_variants: u32,
 	) -> ConiferSaplingPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -540,41 +623,40 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			ConiferSaplingItem::FriendsConifer(conifer) => {
-				let samples =
-					BuildWithNoise::<FriendConiferSamples>::build_with_noise(conifer, build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferSaplingPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferSaplingKind::Friends(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			ConiferSaplingCell::FriendSapling => {
+				let (tree, world_size) = FriendSapling::grow_num(variant);
+				(ConiferSaplingKind::Friends(tree), world_size)
 			}
-			ConiferSaplingItem::NorthernConifer(conifer) => {
-				let samples = conifer.build_with_noise(build_noise);
-				let mut params = NorthernConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.splay_spawn_fraction = samples.splay_spawn_fraction;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferSaplingPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferSaplingKind::Northern(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ConiferSaplingCell::MossyFriendSapling => {
+				let (tree, world_size) = MossyFriendSapling::grow_num(variant);
+				(ConiferSaplingKind::Friends(tree), world_size)
 			}
+			ConiferSaplingCell::BrightFriendSapling => {
+				let (tree, world_size) = BrightFriendSapling::grow_num(variant);
+				(ConiferSaplingKind::Friends(tree), world_size)
+			}
+			ConiferSaplingCell::NorthernSapling => {
+				let (tree, world_size) = NorthernSapling::grow_num(variant);
+				(ConiferSaplingKind::Northern(tree), world_size)
+			}
+			ConiferSaplingCell::ColdNorthernSapling => {
+				let (tree, world_size) = ColdNorthernSapling::grow_num(variant);
+				(ConiferSaplingKind::Northern(tree), world_size)
+			}
+			ConiferSaplingCell::WindsweptNorthernSapling => {
+				let (tree, world_size) = WindsweptNorthernSapling::grow_num(variant);
+				(ConiferSaplingKind::Northern(tree), world_size)
+			}
+		};
+
+		ConiferSaplingPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

@@ -28,11 +28,11 @@ use lod::gen::LodSceneLevel;
 use crate::conifer_canopy_apex::{
 	DEFAULT_APEX_CANOPY_SPAWN_FRACTION, FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 };
-use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 use crate::northern_conifer::canopy::{
 	foliage_nodes_banded, foliage_nodes_low, foliage_nodes_medium, HIGH_FOLIAGE_BANDS,
 };
 use crate::northern_conifer::stick::{stick_nodes_high, stick_nodes_low, stick_nodes_medium};
+use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 pub use canopy::{
 	FRIENDS_SPLAY_CORE_RADIUS, FRIENDS_SPLAY_LEAF_DISC_RADIUS,
 	FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,

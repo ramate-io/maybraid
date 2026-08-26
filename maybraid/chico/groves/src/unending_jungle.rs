@@ -334,9 +334,9 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, RorysHeadTrained,
-		RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
-		WaialeaPalmParams,
+		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
+		RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams,
+		WaialeaPalm, WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -348,7 +348,11 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, UnendingJungleCell, UnendingJungleItem};
+	use super::{
+		definition, UnendingJungleCell, LOWER_STORYBOOK, PENUMARCH_ACCENT, RED_JUNGLE_TORCH,
+		RORY_ACCENT, SMALL_HONU_BANYAN, SMALL_JUNGLE_STORYBOOK, SMALL_SOPE_BANYAN,
+		WAIALEA_PALM_ACCENT,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
@@ -356,9 +360,9 @@ mod vc {
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_sbs_plant, stick_material_from_palette, trained_proxy_stick_nodes_for_level,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const UNENDING_JUNGLE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -482,6 +486,12 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(LowerStorybook, StorybookTree, StorybookTreeParams, LOWER_STORYBOOK);
+	remixed_sbs_plant!(PenmarchAccent, PenmarchTorch, PenmarchTorchParams, PENUMARCH_ACCENT);
+	remixed_sbs_plant!(RedJungleTorch, PenmarchTorch, PenmarchTorchParams, RED_JUNGLE_TORCH);
+	remixed_sbs_plant!(RoryAccent, RorysHeadTrained, RorysHeadTrainedParams, RORY_ACCENT);
+	remixed_sbs_plant!(WaialeaPalmAccent, WaialeaPalm, WaialeaPalmParams, WAIALEA_PALM_ACCENT);
 
 	#[derive(Clone)]
 	enum UnendingJungleKind {
@@ -729,7 +739,6 @@ mod vc {
 		tree_variants: u32,
 	) -> UnendingJunglePlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -742,106 +751,67 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			UnendingJungleItem::Honu(banyan) => {
+		let (kind, world_size) = match placed.variant {
+			UnendingJungleCell::SmallHonuBanyan => {
+				let build_noise = variant_noise(grove_noise, variant);
+				let world_size = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(
+					&SMALL_HONU_BANYAN,
+					build_noise,
+				)
+				.geometry
+				.scale
+				.tree_height;
+				(UnendingJungleKind::Honu(HonuBanyan::grow_num(variant).0), world_size)
+			}
+			UnendingJungleCell::SmallSopeBanyan => {
+				let build_noise = variant_noise(grove_noise, variant);
+				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
+					&SMALL_SOPE_BANYAN,
+					build_noise,
+				)
+				.geometry
+				.scale
+				.stalk_height;
+				(UnendingJungleKind::Sope(SopesBanyan::grow_num(variant).0), world_size)
+			}
+			UnendingJungleCell::LowerStorybook => {
+				let (tree, world_size) = LowerStorybook::grow_num(variant);
+				(UnendingJungleKind::Storybook(tree), world_size)
+			}
+			UnendingJungleCell::SmallJungleStorybook => {
+				let build_noise = variant_noise(grove_noise, variant);
 				let world_size =
-					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise)
-						.geometry
-						.scale
-						.tree_height;
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+					SMALL_JUNGLE_STORYBOOK.build_with_noise(build_noise).geometry.height();
+				(
+					UnendingJungleKind::JungleStorybook(JungleStorybookTree::grow_num(variant).0),
+					world_size,
+				)
 			}
-			UnendingJungleItem::Sope(banyan) => {
-				let world_size =
-					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise)
-						.geometry
-						.scale
-						.stalk_height;
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			UnendingJungleCell::PenmarchAccent => {
+				let (tree, world_size) = PenmarchAccent::grow_num(variant);
+				(UnendingJungleKind::Torch(tree), world_size)
 			}
-			UnendingJungleItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Storybook(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			UnendingJungleCell::RedJungleTorch => {
+				let (tree, world_size) = RedJungleTorch::grow_num(variant);
+				(UnendingJungleKind::Torch(tree), world_size)
 			}
-			UnendingJungleItem::JungleStorybook(jungle) => {
-				let world_size = jungle.build_with_noise(build_noise).geometry.height();
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::JungleStorybook(Arc::new(
-						JungleStorybookTree::unit_from_num(variant),
-					)),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			UnendingJungleCell::RoryAccent => {
+				let (tree, world_size) = RoryAccent::grow_num(variant);
+				(UnendingJungleKind::Rory(tree), world_size)
 			}
-			UnendingJungleItem::Torch(torch) => {
-				let geometry = torch.build_with_noise(build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Torch(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			UnendingJungleCell::WaialeaPalmAccent => {
+				let (tree, world_size) = WaialeaPalmAccent::grow_num(variant);
+				(UnendingJungleKind::Waialea(tree), world_size)
 			}
-			UnendingJungleItem::RoryHead(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Rory(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
-			}
-			UnendingJungleItem::WaialeaPalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = WaialeaPalmParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				UnendingJunglePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Waialea(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
-			}
+		};
+
+		UnendingJunglePlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

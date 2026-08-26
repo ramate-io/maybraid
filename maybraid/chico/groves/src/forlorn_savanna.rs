@@ -192,8 +192,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HighBushShoots, HighBushShootsParams, RorysHeadTrained, RorysHeadTrainedParams,
-		StorybookTree, StorybookTreeParams,
+		HighBushShoots, QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
+		StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -203,15 +203,18 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, ForlornSavannaCell, ForlornSavannaItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, ForlornSavannaCell, ForlornSavannaItem, ACACIA_HIGH_BUSH,
+		RARE_SAVANNA_STORYBOOK, SAVANNA_RORY,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-		foliage_low_canopy_balls, frond_material_from_palette,
-		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
-		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		foliage_low_canopy_balls, frond_material_from_palette, grove_detail_level, grove_lod_culls,
+		grove_lod_level, grove_lod_status, grove_structural_footprint, layers_from_nodes,
+		nest_flattened_plant_chunk, placement_noise, remixed_bush_plant, remixed_sbs_plant,
 		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
 		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
 		DEFAULT_GROVE_EXTENT_XZ,
@@ -340,6 +343,15 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(SavannaRory, RorysHeadTrained, RorysHeadTrainedParams, SAVANNA_RORY);
+	remixed_bush_plant!(AcaciaHighBush, ACACIA_HIGH_BUSH);
+	remixed_sbs_plant!(
+		RareSavannaStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		RARE_SAVANNA_STORYBOOK
+	);
 
 	#[derive(Clone)]
 	enum ForlornSavannaKind {
@@ -484,12 +496,10 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<ForlornSavannaCell>,
 		grove_noise: NoiseParams,
-		tree_chain_noise: NoiseParams,
+		_tree_chain_noise: NoiseParams,
 		tree_variants: u32,
 	) -> ForlornSavannaPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(tree_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -502,49 +512,28 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			ForlornSavannaItem::Rory(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ForlornSavannaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ForlornSavannaKind::Rory(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant.item() {
+			ForlornSavannaItem::Rory(_) => {
+				let (tree, world_size) = SavannaRory::grow_num(variant);
+				(ForlornSavannaKind::Rory(tree), world_size)
 			}
-			ForlornSavannaItem::HighBush(bush) => {
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
-				ForlornSavannaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ForlornSavannaKind::Bush(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ForlornSavannaItem::HighBush(_) => {
+				let (tree, world_size) = AcaciaHighBush::grow_num(variant);
+				(ForlornSavannaKind::Bush(tree), world_size)
 			}
-			ForlornSavannaItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ForlornSavannaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ForlornSavannaKind::Storybook(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ForlornSavannaItem::Storybook(_) => {
+				let (tree, world_size) = RareSavannaStorybook::grow_num(variant);
+				(ForlornSavannaKind::Storybook(tree), world_size)
 			}
+		};
+
+		ForlornSavannaPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

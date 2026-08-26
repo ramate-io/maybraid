@@ -260,8 +260,8 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
-		HighBushShoots, HighBushShootsParams, KamakuraTorch, KamakuraTorchParams, PenmarchTorch,
-		PenmarchTorchParams, SopesBanyan, VaseTree, VaseTreeParams,
+		HighBushShoots, KamakuraTorch, KamakuraTorchParams, PenmarchTorch, PenmarchTorchParams,
+		QuantizedPlant, SopesBanyan, VaseTree, VaseTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -273,16 +273,20 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, WanderingAcaciaCell, WanderingAcaciaItem};
+	use super::{
+		definition, WanderingAcaciaCell, WanderingAcaciaTorch, DRY_WANDERING_SOPE,
+		WANDERING_HIGH_BUSH, WANDERING_KAMAKURA_TORCH, WANDERING_PENMARCH_TORCH,
+		WANDERING_VASE_TREE,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_bush_plant,
+		remixed_sbs_plant, stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const WANDERING_ACACIA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -405,6 +409,42 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	remixed_bush_plant!(WanderingHighBush, WANDERING_HIGH_BUSH);
+	remixed_sbs_plant!(WanderingVaseTree, VaseTree, VaseTreeParams, WANDERING_VASE_TREE);
+
+	fn wandering_penmarch_unit(authored: &WanderingAcaciaTorch, num: u32) -> (PenmarchTorch, f32) {
+		let mut params = PenmarchTorchParams::default();
+		params.geometry =
+			BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(authored, unit_build_noise(num));
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	fn wandering_kamakura_unit(authored: &WanderingAcaciaTorch, num: u32) -> (KamakuraTorch, f32) {
+		let mut params = KamakuraTorchParams::default();
+		params.geometry =
+			BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(authored, unit_build_noise(num));
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct WanderingPenmarchTorch;
+	struct WanderingKamakuraTorch;
+
+	impl QuantizedPlant for WanderingPenmarchTorch {
+		type Unit = PenmarchTorch;
+		fn build_unit(num: u32) -> (PenmarchTorch, f32) {
+			wandering_penmarch_unit(&WANDERING_PENMARCH_TORCH, num)
+		}
+	}
+
+	impl QuantizedPlant for WanderingKamakuraTorch {
+		type Unit = KamakuraTorch;
+		fn build_unit(num: u32) -> (KamakuraTorch, f32) {
+			wandering_kamakura_unit(&WANDERING_KAMAKURA_TORCH, num)
 		}
 	}
 
@@ -549,12 +589,10 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<WanderingAcaciaCell>,
 		grove_noise: NoiseParams,
-		bush_chain_noise: NoiseParams,
+		_bush_chain_noise: NoiseParams,
 		tree_variants: u32,
 	) -> WanderingAcaciaPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(bush_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -567,76 +605,38 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			WanderingAcaciaItem::HighBush(bush) => {
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
-				WanderingAcaciaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Bush(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			WanderingAcaciaCell::WanderingHighBush => {
+				let (tree, world_size) = WanderingHighBush::grow_num(variant);
+				(WanderingAcaciaKind::Bush(tree), world_size)
 			}
-			WanderingAcaciaItem::Sope(banyan) => {
-				let world_size = banyan.build_with_noise(build_noise).geometry.scale.stalk_height;
-				WanderingAcaciaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			WanderingAcaciaCell::DryWanderingSopesBanyan => {
+				let build_noise = variant_noise(grove_noise, variant);
+				let world_size =
+					DRY_WANDERING_SOPE.build_with_noise(build_noise).geometry.scale.stalk_height;
+				(WanderingAcaciaKind::Sope(SopesBanyan::grow_num(variant).0), world_size)
 			}
-			WanderingAcaciaItem::VaseTree(vase) => {
-				let geometry = vase.build_with_noise(build_noise);
-				let mut params = VaseTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				WanderingAcaciaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Vase(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			WanderingAcaciaCell::WanderingVaseTree => {
+				let (tree, world_size) = WanderingVaseTree::grow_num(variant);
+				(WanderingAcaciaKind::Vase(tree), world_size)
 			}
-			WanderingAcaciaItem::PenmarchTorch(torch) => {
-				let geometry =
-					BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				WanderingAcaciaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Penmarch(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			WanderingAcaciaCell::WanderingPenmarchTorch => {
+				let (tree, world_size) = WanderingPenmarchTorch::grow_num(variant);
+				(WanderingAcaciaKind::Penmarch(tree), world_size)
 			}
-			WanderingAcaciaItem::KamakuraTorch(torch) => {
-				let geometry =
-					BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = KamakuraTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				WanderingAcaciaPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: WanderingAcaciaKind::Kamakura(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			WanderingAcaciaCell::WanderingKamakuraTorch => {
+				let (tree, world_size) = WanderingKamakuraTorch::grow_num(variant);
+				(WanderingAcaciaKind::Kamakura(tree), world_size)
 			}
+		};
+
+		WanderingAcaciaPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

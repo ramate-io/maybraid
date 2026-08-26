@@ -356,8 +356,8 @@ mod vc {
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
 		KamakuraTorch, KamakuraTorchParams, PalmBush, PalmBushParams, PenmarchTorch,
-		PenmarchTorchParams, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
-		StorybookTreeParams, TuftPatch, VaseTree, VaseTreeParams,
+		PenmarchTorchParams, QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams,
+		StorybookTree, StorybookTreeParams, TuftPatch, VaseTree, VaseTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -369,18 +369,23 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TropicalUndergrowthCell, TropicalUndergrowthItem};
+	use super::{
+		definition, TropicalUndergrowthCell, TropicalUndergrowthTorch, BRIGHT_TUFT,
+		BRIGHT_TUFT_PATCH, DEEP_TUFT, DEEP_TUFT_PATCH, MINI_KAMAKURA_TORCH, MINI_PENMARCH_TORCH,
+		MINI_RORY_HEAD, MINI_STORYBOOK, MINI_TORCH_TREE, MINI_VASE_TREE, SMALL_PALM_BUSH,
+	};
 	use crate::grove::vc_tuft::{
-		material_from_palette, patch_variant_index, single_blade_patch_params, stamp_foliage_noise,
-		unit_plant_from_params, variant_noise, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
-		TUFT_GROVE_STRUCTURAL_LOW_FACTOR, TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
+		material_from_palette, patch_variant_index, unit_plant_from_grown,
+		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		remixed_blade_tuft_plant, remixed_sbs_plant, remixed_tuft_plant, stick_material_from_palette,
+		trained_proxy_stick_nodes_for_level, unit_build_noise, woody_grove_scene_chunks,
 		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
 		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -511,6 +516,66 @@ mod vc {
 				self.tree_variants,
 				&self.extent,
 			)
+		}
+	}
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(BrightTuft, BRIGHT_TUFT, default_foliage());
+	remixed_blade_tuft_plant!(DeepTuft, DEEP_TUFT, default_foliage());
+	remixed_tuft_plant!(BrightTuftPatch, BRIGHT_TUFT_PATCH, default_foliage());
+	remixed_tuft_plant!(DeepTuftPatch, DEEP_TUFT_PATCH, default_foliage());
+	remixed_sbs_plant!(SmallPalmBush, PalmBush, PalmBushParams, SMALL_PALM_BUSH);
+	remixed_sbs_plant!(MiniRoryHead, RorysHeadTrained, RorysHeadTrainedParams, MINI_RORY_HEAD);
+	remixed_sbs_plant!(MiniVaseTree, VaseTree, VaseTreeParams, MINI_VASE_TREE);
+	remixed_sbs_plant!(MiniSparseStorybook, StorybookTree, StorybookTreeParams, MINI_STORYBOOK);
+
+	fn undergrowth_penmarch_unit(
+		authored: &TropicalUndergrowthTorch,
+		num: u32,
+	) -> (PenmarchTorch, f32) {
+		let mut params = PenmarchTorchParams::default();
+		params.geometry =
+			BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(authored, unit_build_noise(num));
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	fn undergrowth_kamakura_unit(
+		authored: &TropicalUndergrowthTorch,
+		num: u32,
+	) -> (KamakuraTorch, f32) {
+		let mut params = KamakuraTorchParams::default();
+		params.geometry =
+			BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(authored, unit_build_noise(num));
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct MiniPenmarchTorch;
+	struct MiniKamakuraTorch;
+	struct MiniTorchTree;
+
+	impl QuantizedPlant for MiniPenmarchTorch {
+		type Unit = PenmarchTorch;
+		fn build_unit(num: u32) -> (PenmarchTorch, f32) {
+			undergrowth_penmarch_unit(&MINI_PENMARCH_TORCH, num)
+		}
+	}
+
+	impl QuantizedPlant for MiniKamakuraTorch {
+		type Unit = KamakuraTorch;
+		fn build_unit(num: u32) -> (KamakuraTorch, f32) {
+			undergrowth_kamakura_unit(&MINI_KAMAKURA_TORCH, num)
+		}
+	}
+
+	impl QuantizedPlant for MiniTorchTree {
+		type Unit = PenmarchTorch;
+		fn build_unit(num: u32) -> (PenmarchTorch, f32) {
+			undergrowth_penmarch_unit(&MINI_TORCH_TREE, num)
 		}
 	}
 
@@ -760,180 +825,89 @@ mod vc {
 		patch_variants: u32,
 		tree_variants: u32,
 	) -> TropicalUndergrowthPlant {
-		match placed.variant.item() {
-			TropicalUndergrowthItem::Tuft(tuft) => {
+		match placed.variant {
+			TropicalUndergrowthCell::BrightTuft
+			| TropicalUndergrowthCell::DeepTuft
+			| TropicalUndergrowthCell::BrightTuftPatch
+			| TropicalUndergrowthCell::DeepTuftPatch => {
 				let variant = patch_variant_index(placed.position, patch_variants);
-				let noise = variant_noise(leaf_surface_noise, variant);
-				let params =
-					single_blade_patch_params(tuft.build_with_noise(noise), leaf_surface_noise);
+				let (patch, world_size) = match placed.variant {
+					TropicalUndergrowthCell::BrightTuft => BrightTuft::grow_num(variant),
+					TropicalUndergrowthCell::DeepTuft => DeepTuft::grow_num(variant),
+					TropicalUndergrowthCell::BrightTuftPatch => BrightTuftPatch::grow_num(variant),
+					TropicalUndergrowthCell::DeepTuftPatch => DeepTuftPatch::grow_num(variant),
+					_ => unreachable!("tuft cells only"),
+				};
 				let material = material_from_palette(
 					placed.variant.palette_mix(),
 					placed.position,
 					leaf_surface_noise,
 				);
-				let (placement, patch, material) = unit_plant_from_params(
-					params,
-					variant,
+				let (placement, patch, material) = unit_plant_from_grown(
+					patch,
+					world_size,
 					placed.position,
 					placed.scale,
 					material,
 				);
 				TropicalUndergrowthPlant {
 					placement,
-					kind: TropicalUndergrowthKind::Tuft(Arc::new(patch)),
+					kind: TropicalUndergrowthKind::Tuft(patch),
 					stick_material: MaterialRef::default(),
 					ball_material: material.clone(),
 					frond_material: material,
 				}
 			}
-			TropicalUndergrowthItem::Patch(patch) => {
-				let variant = patch_variant_index(placed.position, patch_variants);
-				let noise = variant_noise(leaf_surface_noise, variant);
-				let params = stamp_foliage_noise(patch.build_tuft_patch(noise), leaf_surface_noise);
-				let material = material_from_palette(
-					placed.variant.palette_mix(),
-					placed.position,
-					leaf_surface_noise,
-				);
-				let (placement, patch, material) = unit_plant_from_params(
-					params,
-					variant,
-					placed.position,
-					placed.scale,
-					material,
-				);
-				TropicalUndergrowthPlant {
-					placement,
-					kind: TropicalUndergrowthKind::Tuft(Arc::new(patch)),
-					stick_material: MaterialRef::default(),
-					ball_material: material.clone(),
-					frond_material: material,
-				}
-			}
-			TropicalUndergrowthItem::PalmBush(palm) => {
+			TropicalUndergrowthCell::SmallPalmBush
+			| TropicalUndergrowthCell::MiniRoryHeadTrained
+			| TropicalUndergrowthCell::MiniVaseTree
+			| TropicalUndergrowthCell::MiniSparseStorybook
+			| TropicalUndergrowthCell::MiniPenmarchTorch
+			| TropicalUndergrowthCell::MiniKamakuraTorch
+			| TropicalUndergrowthCell::MiniTorchTree => {
 				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
 				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = PalmBushParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
 				let (stick, ball, frond) = woody_materials(placed, palette_noise);
+				let (kind, world_size) = match placed.variant {
+					TropicalUndergrowthCell::SmallPalmBush => {
+						let (tree, world_size) = SmallPalmBush::grow_num(variant);
+						(TropicalUndergrowthKind::Palm(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniRoryHeadTrained => {
+						let (tree, world_size) = MiniRoryHead::grow_num(variant);
+						(TropicalUndergrowthKind::Rory(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniVaseTree => {
+						let (tree, world_size) = MiniVaseTree::grow_num(variant);
+						(TropicalUndergrowthKind::Vase(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniSparseStorybook => {
+						let (tree, world_size) = MiniSparseStorybook::grow_num(variant);
+						(TropicalUndergrowthKind::Storybook(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniPenmarchTorch => {
+						let (tree, world_size) = MiniPenmarchTorch::grow_num(variant);
+						(TropicalUndergrowthKind::Penmarch(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniKamakuraTorch => {
+						let (tree, world_size) = MiniKamakuraTorch::grow_num(variant);
+						(TropicalUndergrowthKind::Kamakura(tree), world_size)
+					}
+					TropicalUndergrowthCell::MiniTorchTree => {
+						let (tree, world_size) = MiniTorchTree::grow_num(variant);
+						(TropicalUndergrowthKind::Penmarch(tree), world_size)
+					}
+					TropicalUndergrowthCell::BrightTuft
+					| TropicalUndergrowthCell::DeepTuft
+					| TropicalUndergrowthCell::BrightTuftPatch
+					| TropicalUndergrowthCell::DeepTuftPatch => {
+						unreachable!("tuft cells are handled above")
+					}
+				};
 				TropicalUndergrowthPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Palm(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::RoryHead(rory) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Rory(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::VaseTree(vase) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry = vase.build_with_noise(build_noise);
-				let mut params = VaseTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Vase(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::Storybook(story) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Storybook(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::PenmarchTorch(torch) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry =
-					BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Penmarch(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::KamakuraTorch(torch) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry =
-					BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = KamakuraTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Kamakura(Arc::new(unit_params.build())),
-					stick_material: stick,
-					ball_material: ball,
-					frond_material: frond,
-				}
-			}
-			TropicalUndergrowthItem::TorchTree(torch) => {
-				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let palette_noise = placement_noise(grove_noise, placed.position);
-				let geometry =
-					BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				let (stick, ball, frond) = woody_materials(placed, palette_noise);
-				TropicalUndergrowthPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalUndergrowthKind::Penmarch(Arc::new(unit_params.build())),
+					kind,
 					stick_material: stick,
 					ball_material: ball,
 					frond_material: frond,

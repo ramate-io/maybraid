@@ -323,7 +323,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, HighBushShoots, HighBushShootsParams, PenmarchTorch, PenmarchTorchParams,
+		BraidOakTree, HighBushShoots, PenmarchTorch, PenmarchTorchParams, QuantizedPlant,
 		RorysHeadTrained, RorysHeadTrainedParams, SimplemansHedge, SimplemansHedgeParams, VaseTree,
 		VaseTreeParams,
 	};
@@ -337,17 +337,20 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, LevantineScrubCell, LevantineScrubItem};
+	use super::{
+		definition, LevantineScrubCell, LevantineScrubHedge, DRY_HIGH_BUSH, DRY_RORY_HEAD,
+		RED_OLIVE_TORCH, SCRUB_HEDGE, SMALL_BRAID_OAK, SMALL_PENMARCH_TORCH, SMALL_VASE_TREE,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
-		CanopyProxySite,
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_bush_plant, remixed_sbs_plant, stick_material_from_palette,
+		trained_proxy_stick_nodes_for_level, unit_build_noise, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Structural High band (× footprint).
@@ -497,6 +500,38 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	remixed_sbs_plant!(DryRoryHead, RorysHeadTrained, RorysHeadTrainedParams, DRY_RORY_HEAD);
+	remixed_sbs_plant!(SmallVaseTree, VaseTree, VaseTreeParams, SMALL_VASE_TREE);
+	remixed_bush_plant!(DryHighBush, DRY_HIGH_BUSH);
+	remixed_sbs_plant!(
+		SmallPenmarchTorch,
+		PenmarchTorch,
+		PenmarchTorchParams,
+		SMALL_PENMARCH_TORCH
+	);
+	remixed_sbs_plant!(RedOliveTorch, PenmarchTorch, PenmarchTorchParams, RED_OLIVE_TORCH);
+
+	fn scrub_hedge_unit(authored: &LevantineScrubHedge, num: u32) -> (SimplemansHedge, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let (unit, world_size) = SimplemansHedgeParams::new(
+			samples.height,
+			samples.footprint_xz,
+			samples.density,
+			samples.seed,
+		)
+		.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct ScrubHedge;
+
+	impl QuantizedPlant for ScrubHedge {
+		type Unit = SimplemansHedge;
+		fn build_unit(num: u32) -> (SimplemansHedge, f32) {
+			scrub_hedge_unit(&SCRUB_HEDGE, num)
 		}
 	}
 
@@ -683,13 +718,11 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<LevantineScrubCell>,
 		grove_noise: NoiseParams,
-		tree_chain_noise: NoiseParams,
+		_tree_chain_noise: NoiseParams,
 		_stick_surface_noise: NoiseParams,
 		tree_variants: u32,
 	) -> LevantineScrubPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(tree_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -700,92 +733,45 @@ mod vc {
 		let ball_material = canopy_ball_material_from_palette(canopy_palette, canopy_seed);
 		let frond_material = frond_material_from_palette(canopy_palette, canopy_seed);
 
-		match placed.variant.item() {
-			LevantineScrubItem::RoryHead(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Rory(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			LevantineScrubCell::DryRoryHeadTrained => {
+				let (tree, world_size) = DryRoryHead::grow_num(variant);
+				(LevantineScrubKind::Rory(tree), world_size)
 			}
-			LevantineScrubItem::VaseTree(vase) => {
-				let geometry = vase.build_with_noise(build_noise);
-				let mut params = VaseTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Vase(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LevantineScrubCell::SmallVaseTree => {
+				let (tree, world_size) = SmallVaseTree::grow_num(variant);
+				(LevantineScrubKind::Vase(tree), world_size)
 			}
-			LevantineScrubItem::Bush(bush) => {
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Bush(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LevantineScrubCell::DryHighBush => {
+				let (tree, world_size) = DryHighBush::grow_num(variant);
+				(LevantineScrubKind::Bush(tree), world_size)
 			}
-			LevantineScrubItem::PenmarchTorch(torch) => {
-				let geometry = torch.build_with_noise(build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Torch(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LevantineScrubCell::SmallPenmarchTorch => {
+				let (tree, world_size) = SmallPenmarchTorch::grow_num(variant);
+				(LevantineScrubKind::Torch(tree), world_size)
 			}
-			LevantineScrubItem::BraidOak(oak) => {
-				let world_size = oak.build_with_noise(build_noise).height();
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LevantineScrubCell::RedOliveTorch => {
+				let (tree, world_size) = RedOliveTorch::grow_num(variant);
+				(LevantineScrubKind::Torch(tree), world_size)
 			}
-			LevantineScrubItem::Hedge(hedge) => {
-				let samples = hedge.build_with_noise(build_noise);
-				let (unit_params, world_size) = SimplemansHedgeParams::new(
-					samples.height,
-					samples.footprint_xz,
-					samples.density,
-					samples.seed,
-				)
-				.into_unit_from_num(variant);
-				LevantineScrubPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LevantineScrubKind::Hedge(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LevantineScrubCell::SmallBraidOak => {
+				let build_noise = variant_noise(grove_noise, variant);
+				let world_size = SMALL_BRAID_OAK.build_with_noise(build_noise).height();
+				(LevantineScrubKind::Oak(BraidOakTree::grow_num(variant).0), world_size)
 			}
+			LevantineScrubCell::ScrubHedge => {
+				let (tree, world_size) = ScrubHedge::grow_num(variant);
+				(LevantineScrubKind::Hedge(tree), world_size)
+			}
+		};
+
+		LevantineScrubPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

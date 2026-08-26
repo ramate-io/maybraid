@@ -205,7 +205,7 @@ mod vc {
 	use chico_sbs_geometry::DatePalmSbs;
 	use chico_sbs_trees::{
 		DatePalm, DatePalmParams, PalmCrown, PalmCrownParams, PenmarchTorch, PenmarchTorchParams,
-		StorybookTree, StorybookTreeParams,
+		QuantizedPlant, StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -217,16 +217,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, StrangeOasisCell, StrangeOasisItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, StrangeOasisCell, COMPACT_DATE_PALM, OASIS_STORYBOOK, RED_TORCH_ACCENT,
+		TORCH_ACCENT,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite,
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		placed_palm_low_fronds, placement_noise, remixed_sbs_plant, stick_material_from_palette,
+		unit_build_noise, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
@@ -391,6 +394,30 @@ mod vc {
 		}
 	}
 
+	struct CompactDatePalm;
+
+	impl QuantizedPlant for CompactDatePalm {
+		type Unit = OasisDatePalm;
+
+		fn build_unit(num: u32) -> (OasisDatePalm, f32) {
+			let geometry = COMPACT_DATE_PALM.build_with_noise(unit_build_noise(num));
+			let mut trunk_params = DatePalmParams::default();
+			trunk_params.geometry = geometry;
+			let (unit_trunk, trunk_world) = trunk_params.into_unit_from_num(num);
+			let trunk = unit_trunk.build();
+			let tip = DatePalmSbs::trunk_tip_from_chain(&trunk.chain);
+			let (unit_crown, crown_size) = PalmCrownParams::unit_full_for_height_from_num(1.0, num);
+			let crown = unit_crown.build();
+			let crown_local =
+				Placement::new(tip, 0.0).with_scale(Vec3::splat(crown_size.max(1e-4)));
+			(OasisDatePalm { trunk, crown, crown_local }, trunk_world)
+		}
+	}
+
+	remixed_sbs_plant!(TorchAccent, PenmarchTorch, PenmarchTorchParams, TORCH_ACCENT);
+	remixed_sbs_plant!(RedTorchAccent, PenmarchTorch, PenmarchTorchParams, RED_TORCH_ACCENT);
+	remixed_sbs_plant!(OasisStorybook, StorybookTree, StorybookTreeParams, OASIS_STORYBOOK);
+
 	#[derive(Clone)]
 	enum StrangeOasisKind {
 		/// Columnar trunk + unit PalmCrown at tip
@@ -543,7 +570,6 @@ mod vc {
 		tree_variants: u32,
 	) -> StrangeOasisPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -556,60 +582,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			StrangeOasisItem::DatePalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut trunk_params = DatePalmParams::default();
-				trunk_params.geometry = geometry;
-				let (unit_trunk, trunk_world) = trunk_params.into_unit_from_num(variant);
-				let trunk = unit_trunk.build();
-				let tip = DatePalmSbs::trunk_tip_from_chain(&trunk.chain);
-				let (unit_crown, crown_size) =
-					PalmCrownParams::unit_full_for_height_from_num(1.0, variant);
-				let crown = unit_crown.build();
-				let crown_local =
-					Placement::new(tip, 0.0).with_scale(Vec3::splat(crown_size.max(1e-4)));
-				StrangeOasisPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * trunk_world).max(1e-4))),
-					kind: StrangeOasisKind::DatePalm(Arc::new(OasisDatePalm {
-						trunk,
-						crown,
-						crown_local,
-					})),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			StrangeOasisCell::CompactDatePalm => {
+				let (tree, world_size) = CompactDatePalm::grow_num(variant);
+				(StrangeOasisKind::DatePalm(tree), world_size)
 			}
-			StrangeOasisItem::Torch(torch) => {
-				let geometry = torch.build_with_noise(build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				StrangeOasisPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StrangeOasisKind::Torch(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			StrangeOasisCell::TorchAccent => {
+				let (tree, world_size) = TorchAccent::grow_num(variant);
+				(StrangeOasisKind::Torch(tree), world_size)
 			}
-			StrangeOasisItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				StrangeOasisPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StrangeOasisKind::Storybook(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			StrangeOasisCell::RedTorchAccent => {
+				let (tree, world_size) = RedTorchAccent::grow_num(variant);
+				(StrangeOasisKind::Torch(tree), world_size)
 			}
+			StrangeOasisCell::OasisStorybook => {
+				let (tree, world_size) = OasisStorybook::grow_num(variant);
+				(StrangeOasisKind::Storybook(tree), world_size)
+			}
+		};
+
+		StrangeOasisPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

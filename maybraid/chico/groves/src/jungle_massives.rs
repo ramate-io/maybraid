@@ -176,7 +176,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{HonuBanyan, JungleStorybookTree, SopesBanyan};
+	use chico_sbs_trees::{HonuBanyan, JungleStorybookTree, QuantizedPlant, SopesBanyan};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -464,7 +464,7 @@ mod vc {
 				JungleMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleMassivesKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
+					kind: JungleMassivesKind::Honu(HonuBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -479,7 +479,7 @@ mod vc {
 				JungleMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleMassivesKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
+					kind: JungleMassivesKind::Sope(SopesBanyan::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -490,9 +490,9 @@ mod vc {
 				JungleMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JungleMassivesKind::JungleStorybook(Arc::new(
-						JungleStorybookTree::unit_from_num(variant),
-					)),
+					kind: JungleMassivesKind::JungleStorybook(
+						JungleStorybookTree::grow_num(variant).0,
+					),
 					stick_material,
 					ball_material,
 					frond_material,

@@ -249,27 +249,45 @@ impl BraidGrassCell {
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
+	use chico_sbs_trees::QuantizedPlant;
 	use chico_vegetation_components::{
 		FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, BraidGrassCell, BraidGrassItem};
+	use super::{
+		definition, BraidGrassCell, DEEP_GREEN_BLADE, DEEP_GREEN_PATCH, FOUNTAIN_SPEAR,
+		GREEN_SPEAR, JUNGLE_BLADE, JUNGLE_PATCH, PALE_REED_BLADE, PALE_REED_PATCH, RED_EDGE_BLADE,
+	};
 	use crate::grove::vc_tuft::{
-		grow_placed_tuft_params, single_blade_patch_params, spear_as_blade_patch_params,
-		stamp_foliage_noise, tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant,
+		grow_placed_tuft_params, tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant,
 		TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
 		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		remixed_blade_tuft_plant, remixed_spear_tuft_plant, remixed_tuft_plant, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const BRAID_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
 	pub const BRAID_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
 	pub const BRAID_GRASS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(DeepGreenBlade, DEEP_GREEN_BLADE, default_foliage());
+	remixed_blade_tuft_plant!(PaleReedBlade, PALE_REED_BLADE, default_foliage());
+	remixed_blade_tuft_plant!(JungleBlade, JUNGLE_BLADE, default_foliage());
+	remixed_blade_tuft_plant!(RedEdgeBlade, RED_EDGE_BLADE, default_foliage());
+	remixed_spear_tuft_plant!(GreenSpear, GREEN_SPEAR, default_foliage());
+	remixed_spear_tuft_plant!(FountainSpear, FOUNTAIN_SPEAR, default_foliage());
+	remixed_tuft_plant!(DeepGreenPatch, DEEP_GREEN_PATCH, default_foliage());
+	remixed_tuft_plant!(PaleReedPatch, PALE_REED_PATCH, default_foliage());
+	remixed_tuft_plant!(JunglePatch, JUNGLE_PATCH, default_foliage());
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -368,21 +386,20 @@ mod vc {
 				foliage_noise,
 				self.merge_collections,
 				self.patch_variants,
-				|cell, noise| {
+				|cell, variant| {
 					let mix = cell.palette_mix();
-					let params = match cell.item() {
-						BraidGrassItem::Blade(clump) => {
-							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise)
-						}
-						BraidGrassItem::Spear(clump) => spear_as_blade_patch_params(
-							clump.build_with_noise(noise),
-							foliage_noise,
-						),
-						BraidGrassItem::Patch(patch) => {
-							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise)
-						}
+					let (patch, world_size) = match cell {
+						BraidGrassCell::DeepGreenBlade => DeepGreenBlade::grow_num(variant),
+						BraidGrassCell::PaleReedBlade => PaleReedBlade::grow_num(variant),
+						BraidGrassCell::JungleBlade => JungleBlade::grow_num(variant),
+						BraidGrassCell::RedEdgeBlade => RedEdgeBlade::grow_num(variant),
+						BraidGrassCell::GreenSpear => GreenSpear::grow_num(variant),
+						BraidGrassCell::FountainSpear => FountainSpear::grow_num(variant),
+						BraidGrassCell::DeepGreenPatch => DeepGreenPatch::grow_num(variant),
+						BraidGrassCell::PaleReedPatch => PaleReedPatch::grow_num(variant),
+						BraidGrassCell::JunglePatch => JunglePatch::grow_num(variant),
 					};
-					(params, mix)
+					(patch, world_size, mix)
 				},
 			);
 			BraidGrass {

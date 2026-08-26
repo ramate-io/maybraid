@@ -240,7 +240,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{BraidOakTree, StorybookTree, StorybookTreeParams};
+	use chico_sbs_trees::{BraidOakTree, QuantizedPlant, StorybookTree, StorybookTreeParams};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -251,13 +251,13 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, GoettingenFollowCell, GoettingenFollowItem};
+	use super::{definition, GoettingenFollowCell, GoettingenFollowItem, FOLLOW_STORYBOOK};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -385,6 +385,8 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(FollowStorybook, StorybookTree, StorybookTreeParams, FOLLOW_STORYBOOK);
 
 	#[derive(Clone)]
 	enum GoettingenFollowKind {
@@ -514,21 +516,18 @@ mod vc {
 				GoettingenFollowPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: GoettingenFollowKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
+					kind: GoettingenFollowKind::Oak(BraidOakTree::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			GoettingenFollowItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			GoettingenFollowItem::Storybook(_) => {
+				let (tree, world_size) = FollowStorybook::grow_num(variant);
 				GoettingenFollowPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: GoettingenFollowKind::Storybook(Arc::new(unit_params.build())),
+					kind: GoettingenFollowKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,

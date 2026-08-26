@@ -174,27 +174,42 @@ impl CommonTuftsCell {
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
+	use chico_sbs_trees::QuantizedPlant;
 	use chico_vegetation_components::{
 		FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, CommonTuftsCell, CommonTuftsItem};
+	use super::{
+		definition, CommonTuftsCell, DRY_SCRUB, DRY_SCRUB_PATCH, SHORT_GREEN, SHORT_GREEN_PATCH,
+		TALL_WILD, TALL_WILD_PATCH,
+	};
 	use crate::grove::vc_tuft::{
-		grow_placed_tuft_params, single_blade_patch_params, stamp_foliage_noise,
-		tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights,
-		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		grow_placed_tuft_params, tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant,
+		TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
 		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		remixed_blade_tuft_plant, remixed_tuft_plant, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const COMMON_TUFTS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
 	pub const COMMON_TUFTS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
 	pub const COMMON_TUFTS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(ShortGreen, SHORT_GREEN, default_foliage());
+	remixed_blade_tuft_plant!(DryScrub, DRY_SCRUB, default_foliage());
+	remixed_blade_tuft_plant!(TallWild, TALL_WILD, default_foliage());
+	remixed_tuft_plant!(ShortGreenPatch, SHORT_GREEN_PATCH, default_foliage());
+	remixed_tuft_plant!(DryScrubPatch, DRY_SCRUB_PATCH, default_foliage());
+	remixed_tuft_plant!(TallWildPatch, TALL_WILD_PATCH, default_foliage());
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -293,17 +308,17 @@ mod vc {
 				foliage_noise,
 				self.merge_collections,
 				self.patch_variants,
-				|cell, noise| {
+				|cell, variant| {
 					let mix = cell.palette_mix();
-					let params = match cell.item() {
-						CommonTuftsItem::Clump(clump) => {
-							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise)
-						}
-						CommonTuftsItem::Patch(patch) => {
-							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise)
-						}
+					let (patch, world_size) = match cell {
+						CommonTuftsCell::ShortGreen => ShortGreen::grow_num(variant),
+						CommonTuftsCell::DryScrub => DryScrub::grow_num(variant),
+						CommonTuftsCell::TallWild => TallWild::grow_num(variant),
+						CommonTuftsCell::ShortGreenPatch => ShortGreenPatch::grow_num(variant),
+						CommonTuftsCell::DryScrubPatch => DryScrubPatch::grow_num(variant),
+						CommonTuftsCell::TallWildPatch => TallWildPatch::grow_num(variant),
 					};
-					(params, mix)
+					(patch, world_size, mix)
 				},
 			);
 			CommonTufts {

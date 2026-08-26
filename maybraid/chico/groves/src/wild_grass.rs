@@ -273,27 +273,49 @@ impl WildGrassCell {
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
+	use chico_sbs_trees::QuantizedPlant;
 	use chico_vegetation_components::{
 		FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, WildGrassCell, WildGrassItem};
+	use super::{
+		definition, WildGrassCell, BLOOMING_GRASS, BLOOMING_GRASS_PATCH, BLUE_TROPICAL,
+		BLUE_TROPICAL_PATCH, GOLDEN_GRASS, GOLDEN_GRASS_PATCH, MEADOW_GREEN, MEADOW_GREEN_PATCH,
+		PALE_FIELD, PALE_FIELD_PATCH, RED_PRAIRIE, RED_PRAIRIE_PATCH,
+	};
 	use crate::grove::vc_tuft::{
-		grow_placed_tuft_params, single_blade_patch_params, stamp_foliage_noise,
-		tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights,
-		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		grow_placed_tuft_params, tuft_grove_stick_nodes, TuftGroveBody, TuftGrovePlant,
+		TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
 		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
-		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		remixed_blade_tuft_plant, remixed_tuft_plant, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const WILD_GRASS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
 	pub const WILD_GRASS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
 	pub const WILD_GRASS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.12, 1)
+	}
+
+	remixed_blade_tuft_plant!(MeadowGreen, MEADOW_GREEN, default_foliage());
+	remixed_blade_tuft_plant!(GoldenGrass, GOLDEN_GRASS, default_foliage());
+	remixed_blade_tuft_plant!(RedPrairie, RED_PRAIRIE, default_foliage());
+	remixed_blade_tuft_plant!(BlueTropical, BLUE_TROPICAL, default_foliage());
+	remixed_blade_tuft_plant!(PaleField, PALE_FIELD, default_foliage());
+	remixed_blade_tuft_plant!(BloomingGrass, BLOOMING_GRASS, default_foliage());
+	remixed_tuft_plant!(MeadowGreenPatch, MEADOW_GREEN_PATCH, default_foliage());
+	remixed_tuft_plant!(GoldenGrassPatch, GOLDEN_GRASS_PATCH, default_foliage());
+	remixed_tuft_plant!(RedPrairiePatch, RED_PRAIRIE_PATCH, default_foliage());
+	remixed_tuft_plant!(BlueTropicalPatch, BLUE_TROPICAL_PATCH, default_foliage());
+	remixed_tuft_plant!(PaleFieldPatch, PALE_FIELD_PATCH, default_foliage());
+	remixed_tuft_plant!(BloomingGrassPatch, BLOOMING_GRASS_PATCH, default_foliage());
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -392,17 +414,23 @@ mod vc {
 				foliage_noise,
 				self.merge_collections,
 				self.patch_variants,
-				|cell, noise| {
+				|cell, variant| {
 					let mix = cell.palette_mix();
-					let params = match cell.item() {
-						WildGrassItem::Clump(clump) => {
-							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise)
-						}
-						WildGrassItem::Patch(patch) => {
-							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise)
-						}
+					let (patch, world_size) = match cell {
+						WildGrassCell::MeadowGreen => MeadowGreen::grow_num(variant),
+						WildGrassCell::GoldenGrass => GoldenGrass::grow_num(variant),
+						WildGrassCell::RedPrairie => RedPrairie::grow_num(variant),
+						WildGrassCell::BlueTropical => BlueTropical::grow_num(variant),
+						WildGrassCell::PaleField => PaleField::grow_num(variant),
+						WildGrassCell::BloomingGrass => BloomingGrass::grow_num(variant),
+						WildGrassCell::MeadowGreenPatch => MeadowGreenPatch::grow_num(variant),
+						WildGrassCell::GoldenGrassPatch => GoldenGrassPatch::grow_num(variant),
+						WildGrassCell::RedPrairiePatch => RedPrairiePatch::grow_num(variant),
+						WildGrassCell::BlueTropicalPatch => BlueTropicalPatch::grow_num(variant),
+						WildGrassCell::PaleFieldPatch => PaleFieldPatch::grow_num(variant),
+						WildGrassCell::BloomingGrassPatch => BloomingGrassPatch::grow_num(variant),
 					};
-					(params, mix)
+					(patch, world_size, mix)
 				},
 			);
 			WildGrass {

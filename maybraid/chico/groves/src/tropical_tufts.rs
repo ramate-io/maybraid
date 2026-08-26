@@ -223,7 +223,7 @@ impl TropicalTuftsCell {
 #[cfg(feature = "render")]
 mod vc {
 	use bevy::prelude::*;
-	use chico_sbs_trees::{PalmBush, PalmBushParams};
+	use chico_sbs_trees::{PalmBush, PalmBushParams, QuantizedPlant};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -232,21 +232,36 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TropicalTuftsCell, TropicalTuftsItem};
+	use super::{
+		definition, TropicalTuftsCell, TropicalTuftsItem, BRIGHT_TUFT, BRIGHT_TUFT_PATCH,
+		DEEP_TUFT, DEEP_TUFT_PATCH, YELLOW_GREEN_TUFT, YELLOW_GREEN_TUFT_PATCH,
+	};
 	use crate::grove::vc_tuft::{
-		grow_tuft_plants, material_from_palette, patch_variant_index, single_blade_patch_params,
-		stamp_foliage_noise, tuft_grove_stick_nodes, unit_plant_from_params, variant_noise,
-		TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
-		TUFT_GROVE_STRUCTURAL_LOW_FACTOR, TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
+		grow_tuft_plants, material_from_palette, patch_variant_index, tuft_grove_stick_nodes,
+		unit_plant_from_grown, TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights,
+		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
-		flatten_foliage_nodes, frond_material_from_palette, placement_noise, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		flatten_foliage_nodes, frond_material_from_palette, placement_noise,
+		remixed_blade_tuft_plant, remixed_tuft_plant, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	pub const TROPICAL_TUFTS_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
 	pub const TROPICAL_TUFTS_STRUCTURAL_MEDIUM_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR;
 	pub const TROPICAL_TUFTS_STRUCTURAL_LOW_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_LOW_FACTOR;
+
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(BrightTuft, BRIGHT_TUFT, default_foliage());
+	remixed_blade_tuft_plant!(DeepTuft, DEEP_TUFT, default_foliage());
+	remixed_blade_tuft_plant!(YellowGreenTuft, YELLOW_GREEN_TUFT, default_foliage());
+	remixed_tuft_plant!(BrightTuftPatch, BRIGHT_TUFT_PATCH, default_foliage());
+	remixed_tuft_plant!(DeepTuftPatch, DEEP_TUFT_PATCH, default_foliage());
+	remixed_tuft_plant!(YellowGreenTuftPatch, YELLOW_GREEN_TUFT_PATCH, default_foliage());
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -345,36 +360,11 @@ mod vc {
 			let mut palms = Vec::new();
 			for placed in self.placements_on(world) {
 				let mix = placed.variant.palette_mix();
-				match placed.variant.item() {
-					TropicalTuftsItem::Tuft(clump) => {
-						let variant = patch_variant_index(placed.position, variants);
-						let noise = variant_noise(foliage_noise, variant);
-						let params =
-							single_blade_patch_params(clump.build_with_noise(noise), foliage_noise);
-						let material = material_from_palette(mix, placed.position, foliage_noise);
-						tuft_grown.push(unit_plant_from_params(
-							params,
-							variant,
-							placed.position,
-							placed.scale,
-							material,
-						));
-					}
-					TropicalTuftsItem::Patch(patch) => {
-						let variant = patch_variant_index(placed.position, variants);
-						let noise = variant_noise(foliage_noise, variant);
-						let params =
-							stamp_foliage_noise(patch.build_tuft_patch(noise), foliage_noise);
-						let material = material_from_palette(mix, placed.position, foliage_noise);
-						tuft_grown.push(unit_plant_from_params(
-							params,
-							variant,
-							placed.position,
-							placed.scale,
-							material,
-						));
-					}
-					TropicalTuftsItem::PalmBush(palm) => {
+				match placed.variant {
+					TropicalTuftsCell::SmallPalmBush | TropicalTuftsCell::JuvenilePalmBush => {
+						let TropicalTuftsItem::PalmBush(palm) = placed.variant.item() else {
+							unreachable!("palm cells only");
+						};
 						let noise = placement_noise(foliage_noise, placed.position);
 						let geometry = palm.build_with_noise(noise);
 						let mut params = PalmBushParams::default();
@@ -388,6 +378,31 @@ mod vc {
 							material,
 							frond_material,
 						});
+					}
+					cell => {
+						let variant = patch_variant_index(placed.position, variants);
+						let (patch, world_size) = match cell {
+							TropicalTuftsCell::BrightTuft => BrightTuft::grow_num(variant),
+							TropicalTuftsCell::DeepTuft => DeepTuft::grow_num(variant),
+							TropicalTuftsCell::YellowGreenTuft => YellowGreenTuft::grow_num(variant),
+							TropicalTuftsCell::BrightTuftPatch => BrightTuftPatch::grow_num(variant),
+							TropicalTuftsCell::DeepTuftPatch => DeepTuftPatch::grow_num(variant),
+							TropicalTuftsCell::YellowGreenTuftPatch => {
+								YellowGreenTuftPatch::grow_num(variant)
+							}
+							TropicalTuftsCell::SmallPalmBush
+							| TropicalTuftsCell::JuvenilePalmBush => {
+								unreachable!("palm cells handled above")
+							}
+						};
+						let material = material_from_palette(mix, placed.position, foliage_noise);
+						tuft_grown.push(unit_plant_from_grown(
+							patch,
+							world_size,
+							placed.position,
+							placed.scale,
+							material,
+						));
 					}
 				}
 			}

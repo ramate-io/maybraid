@@ -142,7 +142,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{StorybookTree, StorybookTreeParams};
+	use chico_sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -153,7 +153,9 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, OrchardCell, OrchardItem};
+	use super::{
+		definition, OrchardCell, OrchardStorybook, FRUITING_STORYBOOK, PALE_BLOOM_STORYBOOK,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
@@ -287,6 +289,36 @@ mod vc {
 		}
 	}
 
+	fn orchard_storybook_unit(authored: &OrchardStorybook, num: u32) -> (StorybookTree, f32) {
+		let noise = variant_noise(GroveFrontend::default().noise, num);
+		let mut params = StorybookTreeParams::default();
+		params.geometry = authored.build_with_noise(noise);
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	/// Cache identity for fruiting orchard remixes of [`StorybookTree`].
+	struct OrchardFruiting;
+
+	/// Cache identity for pale-bloom orchard remixes of [`StorybookTree`].
+	struct OrchardPaleBloom;
+
+	impl QuantizedPlant for OrchardFruiting {
+		type Unit = StorybookTree;
+
+		fn build_unit(num: u32) -> (StorybookTree, f32) {
+			orchard_storybook_unit(&FRUITING_STORYBOOK, num)
+		}
+	}
+
+	impl QuantizedPlant for OrchardPaleBloom {
+		type Unit = StorybookTree;
+
+		fn build_unit(num: u32) -> (StorybookTree, f32) {
+			orchard_storybook_unit(&PALE_BLOOM_STORYBOOK, num)
+		}
+	}
+
 	#[derive(Clone)]
 	pub struct OrchardPlant {
 		pub placement: Placement,
@@ -371,7 +403,6 @@ mod vc {
 		tree_variants: u32,
 	) -> OrchardPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -384,21 +415,14 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		let OrchardItem::Storybook(story) = placed.variant.item();
-		let geometry = story.build_with_noise(build_noise);
-		let mut params = StorybookTreeParams::default();
-		params.geometry = geometry;
-		let (unit_params, world_size) = params.into_unit_from_num(variant);
+		let (tree, world_size) = match placed.variant {
+			OrchardCell::FruitingStorybook => OrchardFruiting::grow_num(variant),
+			OrchardCell::PaleBloomStorybook => OrchardPaleBloom::grow_num(variant),
+		};
 		let placement = Placement::new(placed.position, 0.0)
 			.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 
-		OrchardPlant {
-			placement,
-			tree: Arc::new(unit_params.build()),
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		OrchardPlant { placement, tree, stick_material, ball_material, frond_material }
 	}
 
 	impl VegetationComponents for Orchard {
@@ -694,6 +718,7 @@ mod tests {
 		#[test]
 		fn tree_variants_quantize_archetypes() -> Result<()> {
 			use std::collections::HashSet;
+			use std::sync::Arc;
 
 			let mut params = OrchardParams::default()
 				.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(120.0, 1.0, 120.0)));
@@ -710,6 +735,11 @@ mod tests {
 			let seeds: HashSet<i32> =
 				grove.plants.iter().map(|p| p.tree.geometry.canopy_noise.seed).collect();
 			assert!(seeds.len() <= 4, "expected ≤4 unique unit seeds, got {}", seeds.len());
+			let ptrs: HashSet<_> = grove.plants.iter().map(|p| Arc::as_ptr(&p.tree)).collect();
+			assert!(
+				grove.plants.len() > ptrs.len(),
+				"expected repeated variants to share one unit Arc"
+			);
 			Ok(())
 		}
 	}

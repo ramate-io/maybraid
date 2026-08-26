@@ -108,7 +108,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{RorysHeadTrained, RorysHeadTrainedParams};
+	use chico_sbs_trees::{QuantizedPlant, RorysHeadTrained, RorysHeadTrainedParams};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -117,15 +117,15 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, VineyardCell, VineyardItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{definition, VineyardCell, VineyardItem, TRAINED_VINE_RORY};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
 		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
 		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
@@ -253,6 +253,8 @@ mod vc {
 		}
 	}
 
+	remixed_sbs_plant!(VineyardRory, RorysHeadTrained, RorysHeadTrainedParams, TRAINED_VINE_RORY);
+
 	#[derive(Clone)]
 	pub struct VineyardPlant {
 		pub placement: Placement,
@@ -357,7 +359,6 @@ mod vc {
 		tree_variants: u32,
 	) -> VineyardPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -370,21 +371,12 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		let VineyardItem::Rory(vine) = placed.variant.item();
-		let geometry = vine.build_with_noise(build_noise);
-		let mut params = RorysHeadTrainedParams::default();
-		params.geometry = geometry;
-		let (unit_params, world_size) = params.into_unit_from_num(variant);
+		let VineyardItem::Rory(_) = placed.variant.item();
+		let (tree, world_size) = VineyardRory::grow_num(variant);
 		let placement = Placement::new(placed.position, 0.0)
 			.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 
-		VineyardPlant {
-			placement,
-			tree: Arc::new(unit_params.build()),
-			stick_material,
-			ball_material,
-			frond_material,
-		}
+		VineyardPlant { placement, tree, stick_material, ball_material, frond_material }
 	}
 
 	impl VegetationComponents for Vineyard {

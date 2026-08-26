@@ -414,7 +414,7 @@ mod vc {
 	use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 	use chico_sbs_trees::{
 		BraidOakTree, KamakuraTorch, KamakuraTorchParams, PenmarchTorch, PenmarchTorchParams,
-		StorybookTree, StorybookTreeParams,
+		QuantizedPlant, StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -426,15 +426,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, StorytellersCell, StorytellersItem};
+	use super::{
+		definition, StorytellersCell, StorytellersItem, BLUE_FLAME_KAMAKURA, BLUE_MOON_STORYBOOK,
+		BRIGHT_CANOPY_STORYBOOK, COLORFUL_STORYBOOK, FESTIVAL_TORCH_TREE, GOLDEN_LANTERN_PENMARCH,
+		PINK_LANTERN_STORYBOOK, PURPLE_CROWN_STORYBOOK,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
+		stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks, CanopyProxySite,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
@@ -558,6 +562,69 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	remixed_sbs_plant!(ColorfulStorybook, StorybookTree, StorybookTreeParams, COLORFUL_STORYBOOK);
+	remixed_sbs_plant!(
+		BrightCanopyStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		BRIGHT_CANOPY_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		PinkLanternStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		PINK_LANTERN_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		PurpleCrownStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		PURPLE_CROWN_STORYBOOK
+	);
+	remixed_sbs_plant!(BlueMoonStorybook, StorybookTree, StorybookTreeParams, BLUE_MOON_STORYBOOK);
+
+	struct GoldenLanternPenmarch;
+	impl QuantizedPlant for GoldenLanternPenmarch {
+		type Unit = PenmarchTorch;
+		fn build_unit(num: u32) -> (PenmarchTorch, f32) {
+			let mut params = PenmarchTorchParams::default();
+			params.geometry = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(
+				&GOLDEN_LANTERN_PENMARCH,
+				unit_build_noise(num),
+			);
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
+		}
+	}
+
+	struct FestivalTorchTree;
+	impl QuantizedPlant for FestivalTorchTree {
+		type Unit = PenmarchTorch;
+		fn build_unit(num: u32) -> (PenmarchTorch, f32) {
+			let mut params = PenmarchTorchParams::default();
+			params.geometry = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(
+				&FESTIVAL_TORCH_TREE,
+				unit_build_noise(num),
+			);
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
+		}
+	}
+
+	struct BlueFlameKamakura;
+	impl QuantizedPlant for BlueFlameKamakura {
+		type Unit = KamakuraTorch;
+		fn build_unit(num: u32) -> (KamakuraTorch, f32) {
+			let mut params = KamakuraTorchParams::default();
+			params.geometry = BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(
+				&BLUE_FLAME_KAMAKURA,
+				unit_build_noise(num),
+			);
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
 		}
 	}
 
@@ -711,51 +778,59 @@ mod vc {
 				StorytellersPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StorytellersKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
+					kind: StorytellersKind::Oak(BraidOakTree::grow_num(variant).0),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			StorytellersItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			StorytellersItem::Storybook(_) => {
+				let (tree, world_size) = match placed.variant {
+					StorytellersCell::ColorfulStorybook => ColorfulStorybook::grow_num(variant),
+					StorytellersCell::BrightCanopyStorybook => {
+						BrightCanopyStorybook::grow_num(variant)
+					}
+					StorytellersCell::PinkLanternStorybook => {
+						PinkLanternStorybook::grow_num(variant)
+					}
+					StorytellersCell::PurpleCrownStorybook => {
+						PurpleCrownStorybook::grow_num(variant)
+					}
+					StorytellersCell::BlueMoonStorybook => BlueMoonStorybook::grow_num(variant),
+					_ => unreachable!("storybook item is only storybook cells"),
+				};
 				StorytellersPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StorytellersKind::Storybook(Arc::new(unit_params.build())),
+					kind: StorytellersKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			StorytellersItem::PenmarchTorch(torch) | StorytellersItem::TorchTree(torch) => {
-				let geometry =
-					BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = PenmarchTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			StorytellersItem::PenmarchTorch(_) | StorytellersItem::TorchTree(_) => {
+				let (tree, world_size) = match placed.variant {
+					StorytellersCell::GoldenLanternPenmarch => {
+						GoldenLanternPenmarch::grow_num(variant)
+					}
+					StorytellersCell::FestivalTorchTree => FestivalTorchTree::grow_num(variant),
+					_ => unreachable!("penmarch item is only penmarch torch cells"),
+				};
 				StorytellersPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StorytellersKind::Penmarch(Arc::new(unit_params.build())),
+					kind: StorytellersKind::Penmarch(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			StorytellersItem::KamakuraTorch(torch) => {
-				let geometry =
-					BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
-				let mut params = KamakuraTorchParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			StorytellersItem::KamakuraTorch(_) => {
+				let (tree, world_size) = BlueFlameKamakura::grow_num(variant);
 				StorytellersPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: StorytellersKind::Kamakura(Arc::new(unit_params.build())),
+					kind: StorytellersKind::Kamakura(tree),
 					stick_material,
 					ball_material,
 					frond_material,
