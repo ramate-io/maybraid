@@ -34,6 +34,8 @@ impl StairGeometry {
 ///
 /// `length` is the total going. `width` / `depth` are one tread's across / going.
 /// Empty [`Self::tread_tops`] ⇒ uniform rise from [`Self::height`] / [`Self::tread_height`].
+/// Placement is the **walkable** center of the first tread (\(X \in [-1, 1]\)).
+/// Kits may bleed to \(X = -2\); [`Self::flush_start`] packs that into the first going.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StraightStair {
 	/// Total rise (meters). Ignored when [`Self::tread_tops`] is non-empty except as
@@ -49,6 +51,11 @@ pub struct StraightStair {
 	pub tread_height: f32,
 	/// Local tread-top \(Y\) values (ascending). Empty → uniform rise.
 	pub tread_tops: Vec<f32>,
+	/// Pack the first kit's rearward bleed (\(X \to -2\)) into the going.
+	///
+	/// Walkable contact stays \(X \in [-1, 1]\). Leave `false` on one-tread
+	/// circular nodes so adjacent kits still nest on the bleed.
+	pub flush_start: bool,
 }
 
 impl StraightStair {
@@ -68,6 +75,7 @@ impl StraightStair {
 			depth,
 			tread_height: Self::DEFAULT_TREAD_HEIGHT,
 			tread_tops: Vec::new(),
+			flush_start: false,
 		}
 	}
 
@@ -75,6 +83,12 @@ impl StraightStair {
 	pub fn single(width: f32, depth: f32, rise: f32) -> Self {
 		let depth = depth.max(1e-4);
 		Self::run(rise.max(1e-4), depth, width, depth)
+	}
+
+	/// First kit does not hang the \(X = -2\) bleed behind the walkable trailing.
+	pub fn with_flush_start(mut self, flush: bool) -> Self {
+		self.flush_start = flush;
+		self
 	}
 
 	pub fn tread_count(&self) -> u32 {

@@ -268,16 +268,11 @@ mod tests {
 	#[test]
 	fn pitched_end_does_not_lean_the_kink() -> anyhow::Result<()> {
 		let a = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y)?;
-		let (bl, br, tl, tr) = opening_facing(Vec3::new(3.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?
-			.endpoint_corners();
+		let (bl, br, tl, tr) =
+			opening_facing(Vec3::new(3.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?.endpoint_corners();
 		// Inset the lintel along +X so the B face pitches like a trazaloid.
-		let b = MappedOpening::from_corners(
-			bl,
-			br,
-			tl + Vec3::X * 0.4,
-			tr + Vec3::X * 0.4,
-			-Vec2::X,
-		);
+		let b =
+			MappedOpening::from_corners(bl, br, tl + Vec3::X * 0.4, tr + Vec3::X * 0.4, -Vec2::X);
 		let hall = ConnectingHall::rough_stone(a, b);
 		let end_b = hall.stations()[2];
 		let end_top = end_b.top_middle.ok_or_else(|| anyhow::anyhow!("end top"))?;

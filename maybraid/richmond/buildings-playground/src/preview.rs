@@ -133,7 +133,7 @@ pub enum PreviewSubject {
 		upper_landing: bool,
 		slab_thickness: f32,
 		tread_fill: f32,
-		going_ratio: f32,
+		lapping_ratio: f32,
 	},
 	ArcFloor {
 		radius: f32,
@@ -586,10 +586,10 @@ impl PreviewConfig {
 				upper_landing,
 				slab_thickness,
 				tread_fill,
-				going_ratio,
+				lapping_ratio,
 			} => {
 				format!(
-					"preview: connecting-stairwell --case {} --flight {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} tread_fill={tread_fill:.3} going_ratio={going_ratio:.3} ({})",
+					"preview: connecting-stairwell --case {} --flight {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} tread_fill={tread_fill:.3} lapping_ratio={lapping_ratio:.3} ({})",
 					case.slug(),
 					flight.slug(),
 					case.look_for()
@@ -3680,14 +3680,14 @@ pub fn present_preview_lod(
 			upper_landing,
 			slab_thickness,
 			tread_fill,
-			going_ratio,
+			lapping_ratio,
 		} => {
 			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
 			let well = ConnectingStairwell::rough_stone(lower, upper)
 				.with_flight(flight.kind())
 				.with_slab_thickness(*slab_thickness)
 				.with_tread_fill(*tread_fill)
-				.with_going_ratio(*going_ratio)
+				.with_lapping_ratio(*lapping_ratio)
 				.with_upper_landing(*upper_landing);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
 		}
@@ -5570,7 +5570,7 @@ pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewC
 		upper_landing,
 		slab_thickness,
 		tread_fill,
-		going_ratio,
+		lapping_ratio,
 	} = config.subject
 	else {
 		return;
@@ -5583,7 +5583,7 @@ pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewC
 		.with_flight(flight.kind())
 		.with_slab_thickness(slab_thickness)
 		.with_tread_fill(tread_fill)
-		.with_going_ratio(going_ratio)
+		.with_lapping_ratio(lapping_ratio)
 		.with_upper_landing(upper_landing);
 
 	let cyan = Color::srgb(0.2, 0.9, 0.95);

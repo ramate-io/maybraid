@@ -6,7 +6,7 @@ use clap::{Args, ValueEnum};
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
 use richmond_buildings::{
-	StairwellFlightKind, GOING_RATIO_DEFAULT, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
+	StairwellFlightKind, LAPPING_RATIO_DEFAULT, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
 };
 
 /// Flight family. Independent of [`ConnectingStairwellCase`].
@@ -148,9 +148,9 @@ pub struct ConnectingStairwell {
 	/// Tread span as a fraction of the tighter opening half-extent.
 	#[arg(long, default_value_t = TREAD_FILL_DEFAULT)]
 	pub tread_fill: f32,
-	/// Preferred going / width. High values add rectangular-spiral circuits (stay 0.5–0.7 on a ~3 m well).
-	#[arg(long, default_value_t = GOING_RATIO_DEFAULT)]
-	pub going_ratio: f32,
+	/// Lapping ratio (preferred going / width). High values add rectangular-spiral circuits (stay 0.5–0.7 on a ~3 m well).
+	#[arg(long, default_value_t = LAPPING_RATIO_DEFAULT)]
+	pub lapping_ratio: f32,
 	/// Shaft fill. Independent of `--case`.
 	#[arg(long, value_enum, default_value_t = ConnectingStairwellFlight::Spiral)]
 	pub flight: ConnectingStairwellFlight,
@@ -167,7 +167,7 @@ impl ConnectingStairwell {
 				upper_landing: !self.no_upper_landing,
 				slab_thickness: self.slab_thickness,
 				tread_fill: self.tread_fill,
-				going_ratio: self.going_ratio,
+				lapping_ratio: self.lapping_ratio,
 			},
 			self.transform.transform(),
 		)

@@ -163,7 +163,7 @@ To fill irregular spaces, we commonly use rectangular or triangular tiling techn
 
 ## Stairs
 
-Stairs treads are typically authored as X = Y = Z [-1.0, 1.0] unit cubes s.t. the left face of the stairs is in the -Z direction. Often, the author will bleed the geometry will out to X = -2.0, to give support for the stair placed on top. 
+Stairs treads are typically authored as X = Y = Z [-1.0, 1.0] unit cubes s.t. the left face of the stairs is in the -Z direction. Often, the author will bleed the geometry out to X = -2.0, to give support for the stair placed on top. Tessellation maps walkable \(X \in [-1, 1]\) onto one going. A run that leaves a landing (`StraightStair::flush_start`) packs that \(X \to -2\) bleed into the first going so the mesh does not hang behind the walkable trailing. One-tread circular nodes leave the bleed so adjacent kits still nest. 
 
 When authoring circular stairs, we typically use a fraction of the radius for the tread width and angle each of the treads along the arc.
 

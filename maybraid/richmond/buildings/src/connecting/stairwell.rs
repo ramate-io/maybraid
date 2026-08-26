@@ -16,8 +16,8 @@
 //! Choose a family with [`Self::with_flight`]. Run-and-landing is an I / L /
 //! U from the walk-on sides (side-by-side 180°, never stacked on one
 //! centerline). Tread span is a fill fraction of the tighter opening
-//! half-extent ([`Self::with_tread_fill`]); preferred going / width is
-//! [`Self::with_going_ratio`].
+//! half-extent ([`Self::with_tread_fill`]); lapping ratio is
+//! [`Self::with_lapping_ratio`].
 
 mod landing;
 mod opening;
@@ -35,7 +35,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::quad_panel::QuadPanel;
-use crate::stair_flights::geom::{clamp_going_ratio, clamp_tread_fill};
+use crate::stair_flights::geom::{clamp_lapping_ratio, clamp_tread_fill};
 use crate::stair_flights::{FlightPolyline, StairwellFlight, StairwellFlightKind};
 
 /// Aesthetic run-in depth / upper-landing length along the rim (meters).
@@ -47,8 +47,8 @@ pub const SLAB_THICKNESS_M: f32 = 0.05;
 /// Default tread span as a fraction of the tighter opening half-extent.
 pub const TREAD_FILL_DEFAULT: f32 = crate::stair_flights::geom::TREAD_FILL_DEFAULT;
 
-/// Default preferred going / width. Stay near this for one circuit on a ~3 m well.
-pub const GOING_RATIO_DEFAULT: f32 = crate::stair_flights::geom::GOING_RATIO_DEFAULT;
+/// Default lapping ratio. Stay near this for one circuit on a ~3 m well.
+pub const LAPPING_RATIO_DEFAULT: f32 = crate::stair_flights::geom::LAPPING_RATIO_DEFAULT;
 
 /// Shortest authored slab along the rim (meters).
 const MIN_SLAB_M: f32 = 0.12;
@@ -64,7 +64,7 @@ pub struct ConnectingStairwell {
 	want_landing: bool,
 	slab_thickness: f32,
 	tread_fill: f32,
-	going_ratio: f32,
+	lapping_ratio: f32,
 	upper_landing: Option<QuadPanel>,
 	kind: StairwellFlightKind,
 	flight: StairwellFlight,
@@ -81,9 +81,9 @@ impl ConnectingStairwell {
 		let upper = upper.into();
 		let slab_thickness = SLAB_THICKNESS_M;
 		let tread_fill = TREAD_FILL_DEFAULT;
-		let going_ratio = GOING_RATIO_DEFAULT;
+		let lapping_ratio = LAPPING_RATIO_DEFAULT;
 		let kind = StairwellFlightKind::Spiral;
-		let flight = lower.flight_to(upper, kind, style, slab_thickness, tread_fill, going_ratio);
+		let flight = lower.flight_to(upper, kind, style, slab_thickness, tread_fill, lapping_ratio);
 		let polyline = flight.polyline().clone();
 		let run_in = lower.run_in_slab(style, slab_thickness);
 		let upper_landing = flight.landing_slab(upper, style, slab_thickness);
@@ -96,7 +96,7 @@ impl ConnectingStairwell {
 			want_landing: true,
 			slab_thickness,
 			tread_fill,
-			going_ratio,
+			lapping_ratio,
 			upper_landing,
 			kind,
 			flight,
@@ -144,7 +144,7 @@ impl ConnectingStairwell {
 		self
 	}
 
-	/// Preferred going / width. Default [`GOING_RATIO_DEFAULT`] (0.55).
+	/// Lapping ratio (preferred going / width). Default [`LAPPING_RATIO_DEFAULT`] (0.55).
 	///
 	/// This is not “how chunky one tread looks.” It is a preferred going that
 	/// the fitter tries to keep while holding rise near 0.18 m
@@ -154,8 +154,8 @@ impl ConnectingStairwell {
 	/// \(0.2\ldots 2.0\). Depth stays in \(0.15\ldots 3.0\,\mathrm{m}\).
 	/// Rectangular-spiral may add rim circuits; run-and-landing adds
 	/// side-by-side runs. Both may still stretch going to tile a leftover run.
-	pub fn with_going_ratio(mut self, ratio: f32) -> Self {
-		self.going_ratio = clamp_going_ratio(ratio);
+	pub fn with_lapping_ratio(mut self, ratio: f32) -> Self {
+		self.lapping_ratio = clamp_lapping_ratio(ratio);
 		self.rebuild_flight();
 		self
 	}
@@ -168,8 +168,8 @@ impl ConnectingStairwell {
 		self.tread_fill
 	}
 
-	pub fn going_ratio(&self) -> f32 {
-		self.going_ratio
+	pub fn lapping_ratio(&self) -> f32 {
+		self.lapping_ratio
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
@@ -187,7 +187,7 @@ impl ConnectingStairwell {
 			self.style,
 			self.slab_thickness,
 			self.tread_fill,
-			self.going_ratio,
+			self.lapping_ratio,
 		);
 		self.polyline = self.flight.polyline().clone();
 		self.rebuild_slabs();
@@ -475,22 +475,22 @@ mod tests {
 	}
 
 	#[test]
-	fn going_ratio_changes_preferred_going() -> anyhow::Result<()> {
+	fn lapping_ratio_changes_preferred_going() -> anyhow::Result<()> {
 		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let shallow = ConnectingStairwell::rough_stone(lower, upper)
 			.with_tread_fill(0.6)
-			.with_going_ratio(0.4);
+			.with_lapping_ratio(0.4);
 		let deep = ConnectingStairwell::rough_stone(lower, upper)
 			.with_tread_fill(0.6)
-			.with_going_ratio(0.7);
-		assert!((shallow.going_ratio() - 0.4).abs() < 1e-4);
-		assert!((deep.going_ratio() - 0.7).abs() < 1e-4);
+			.with_lapping_ratio(0.7);
+		assert!((shallow.lapping_ratio() - 0.4).abs() < 1e-4);
+		assert!((deep.lapping_ratio() - 0.7).abs() < 1e-4);
 		let d0 = first_tread_depth(&shallow);
 		let d1 = first_tread_depth(&deep);
-		assert!(d1 > d0 + 0.08, "going_ratio 0.7 should go deeper than 0.4, {d0} vs {d1}");
-		let clamped = ConnectingStairwell::rough_stone(lower, upper).with_going_ratio(10.0);
-		assert!((clamped.going_ratio() - 2.0).abs() < 1e-4);
+		assert!(d1 > d0 + 0.08, "lapping_ratio 0.7 should go deeper than 0.4, {d0} vs {d1}");
+		let clamped = ConnectingStairwell::rough_stone(lower, upper).with_lapping_ratio(10.0);
+		assert!((clamped.lapping_ratio() - 2.0).abs() < 1e-4);
 		Ok(())
 	}
 

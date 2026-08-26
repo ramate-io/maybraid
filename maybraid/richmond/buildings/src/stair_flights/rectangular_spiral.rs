@@ -33,7 +33,7 @@ fn fit_rect_nodes(
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.going_ratio);
+	let (width, depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.lapping_ratio);
 
 	let center = xz(fit.lower_center);
 	let out = normalize_xz(fit.lower_out).unwrap_or(Vec2::Y);
@@ -60,7 +60,7 @@ fn fit_rect_nodes(
 	}
 
 	// Extra full laps so n_from_rise treads of preferred going fit. On a ~3 m
-	// well, going_ratio ≳ 1 usually means another circuit (headroom shrinks).
+	// well, lapping_ratio ≳ 1 usually means another circuit (headroom shrinks).
 	let n_from_rise = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0);
 	let from_depth = n_from_rise * depth / lap_len;
 	let from_arrive = arrive_laps(fit, &loop_pts, start);
@@ -299,7 +299,7 @@ mod tests {
 				upper_half_width: half,
 				upper_half_depth: half,
 				tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
-				going_ratio: crate::stair_flights::geom::GOING_RATIO_DEFAULT,
+				lapping_ratio: crate::stair_flights::geom::LAPPING_RATIO_DEFAULT,
 			},
 			PanelStyle::RoughStonework,
 			0.05,

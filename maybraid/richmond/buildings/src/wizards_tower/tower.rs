@@ -149,10 +149,7 @@ impl BuildingComponents for WizardsTowerColumn {
 			self.floors
 				.iter()
 				.flat_map(|f| {
-					f.arc_spire
-						.stairs
-						.iter()
-						.map(|s| s.clone().with_confines(spire_confines))
+					f.arc_spire.stairs.iter().map(|s| s.clone().with_confines(spire_confines))
 				})
 				.collect(),
 		)

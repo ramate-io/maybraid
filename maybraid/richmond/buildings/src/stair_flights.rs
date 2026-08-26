@@ -47,9 +47,9 @@ pub struct WellFit {
 	pub upper_half_depth: f32,
 	/// Tread span as a fraction of the tighter opening half-extent.
 	pub tread_fill: f32,
-	/// Preferred going / width — not “how chunky one tread looks.”
+	/// Lapping ratio (preferred going / width) — not “how chunky one tread looks.”
 	/// High values add rectangular-spiral circuits or side-by-side runs.
-	pub going_ratio: f32,
+	pub lapping_ratio: f32,
 }
 
 /// Which family [`crate::ConnectingStairwell::with_flight`] should fit.

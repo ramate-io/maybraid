@@ -20,8 +20,9 @@ pub struct TreadEnd {
 impl TreadEnd {
 	/// Last tread of a linear [`Stair::Straight`] node.
 	///
-	/// Outer is the CCW perpendicular of travel (same convention as the circular
-	/// flight). Swap with [`Self::prefer_outer_near`] when a rim is known.
+	/// Leading is the **walkable** kit \(X = +1\) (placement center \(+\) half
+	/// going), not the rearward \(X = -2\) bleed. Outer is the CCW perpendicular
+	/// of travel. Swap with [`Self::prefer_outer_near`] when a rim is known.
 	pub fn from_straight(node: &StairNode) -> Self {
 		let (width, going, n) = match &node.geometry {
 			Stair::Straight(g) => (g.width, g.going_per_tread(), g.tread_count().max(1)),

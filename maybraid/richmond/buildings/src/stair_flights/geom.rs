@@ -54,10 +54,10 @@ pub(crate) const TREAD_FILL_MIN: f32 = 0.2;
 pub(crate) const TREAD_FILL_MAX: f32 = 0.95;
 const TREAD_WIDTH_MIN_M: f32 = 0.35;
 
-/// Default preferred going / width. Stay near this for one circuit on a ~3 m well.
-pub(crate) const GOING_RATIO_DEFAULT: f32 = 0.55;
-pub(crate) const GOING_RATIO_MIN: f32 = 0.2;
-pub(crate) const GOING_RATIO_MAX: f32 = 2.0;
+/// Default lapping ratio. Stay near this for one circuit on a ~3 m well.
+pub(crate) const LAPPING_RATIO_DEFAULT: f32 = 0.55;
+pub(crate) const LAPPING_RATIO_MIN: f32 = 0.2;
+pub(crate) const LAPPING_RATIO_MAX: f32 = 2.0;
 const TREAD_DEPTH_MIN_M: f32 = 0.15;
 const TREAD_DEPTH_MAX_M: f32 = 3.0;
 
@@ -70,30 +70,33 @@ pub(crate) fn clamp_tread_fill(fill: f32) -> f32 {
 	}
 }
 
-/// Keep an authored going / width inside \(0.2\ldots 2.0\).
-pub(crate) fn clamp_going_ratio(ratio: f32) -> f32 {
+/// Keep an authored lapping ratio inside \(0.2\ldots 2.0\).
+pub(crate) fn clamp_lapping_ratio(ratio: f32) -> f32 {
 	if !ratio.is_finite() {
-		GOING_RATIO_DEFAULT
+		LAPPING_RATIO_DEFAULT
 	} else {
-		ratio.clamp(GOING_RATIO_MIN, GOING_RATIO_MAX)
+		ratio.clamp(LAPPING_RATIO_MIN, LAPPING_RATIO_MAX)
 	}
 }
 
-/// Tread width / preferred going from opening half-extent, fill, and going / width.
+/// Tread width / preferred going from opening half-extent, fill, and lapping ratio.
 ///
 /// Preferred going is a wish: rectangular-spiral may add circuits so rise stays
 /// near [`StraightStair::DEFAULT_TREAD_HEIGHT`] (0.18 m). Values ≳ 1 on a ~3 m
 /// well usually stack another lap.
-pub(crate) fn tread_dims(opening_min: f32, fill: f32, going_ratio: f32) -> (f32, f32) {
+pub(crate) fn tread_dims(opening_min: f32, fill: f32, lapping_ratio: f32) -> (f32, f32) {
 	let fill = clamp_tread_fill(fill);
-	let going_ratio = clamp_going_ratio(going_ratio);
+	let lapping_ratio = clamp_lapping_ratio(lapping_ratio);
 	let opening_min = opening_min.max(1e-4);
 	let width = (opening_min * fill).clamp(TREAD_WIDTH_MIN_M, opening_min * TREAD_FILL_MAX);
-	let depth = (width * going_ratio).clamp(TREAD_DEPTH_MIN_M, TREAD_DEPTH_MAX_M);
+	let depth = (width * lapping_ratio).clamp(TREAD_DEPTH_MIN_M, TREAD_DEPTH_MAX_M);
 	(width, depth)
 }
 
 /// Linear run: first tread centered on `start_xz` at `base_y`, travel along \(+X\).
+///
+/// `flush_start` packs the first kit's \(X \to -2\) bleed into the going so the
+/// mesh trailing sits on the walkable trailing (landing / walk-on edge).
 pub(crate) fn place_straight_run(
 	start_xz: Vec2,
 	base_y: f32,
@@ -101,6 +104,7 @@ pub(crate) fn place_straight_run(
 	width: f32,
 	depth: f32,
 	local_tops: Vec<f32>,
+	flush_start: bool,
 ) -> Option<StairNode> {
 	let travel = normalize_xz(travel)?;
 	let tops = normalize_tops(local_tops);
@@ -117,6 +121,7 @@ pub(crate) fn place_straight_run(
 		depth,
 		tread_height: StraightStair::DEFAULT_TREAD_HEIGHT,
 		tread_tops: tops,
+		flush_start,
 	});
 	Some(StairNode::rough_stone(
 		geometry,
@@ -221,8 +226,22 @@ pub(crate) fn wanted_rest(tread_width: f32, shortest_side: f32) -> f32 {
 	want.min(cap)
 }
 
-/// Straight runs along `segs`. One [`JointBudget`] per joint; the pad is flush
-/// with the last leading and the next first riser.
+/// First trailing of the next run: inner edge on a U / 180°, outgoing far on an L.
+fn departing_riser(end: TreadEnd, outgoing: Option<Vec2>, budget: JointBudget) -> Vec2 {
+	let incoming = normalize_xz(end.travel).unwrap_or(Vec2::X);
+	if budget.u_turn {
+		return end.leading_mid();
+	}
+	if let Some(out) = outgoing.and_then(normalize_xz) {
+		if is_yaw_joint(incoming, out) {
+			return end.leading_mid() + incoming * budget.along + out * budget.far;
+		}
+	}
+	end.leading_mid()
+}
+
+/// Straight runs along `segs`. One [`JointBudget`] per joint; the next first
+/// riser is the authored pad edge, not a polyline skip.
 pub(crate) fn place_runs_with_corner_landings(
 	segs: &[PathSeg],
 	width: f32,
@@ -241,8 +260,7 @@ pub(crate) fn place_runs_with_corner_landings(
 	let min_tread = pref_depth * 0.4;
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
-	let mut skip = 0.0_f32;
-	let mut pending_inner = 0.0_f32;
+	let mut pending_riser: Option<(Vec2, bool)> = None;
 
 	for (i, seg) in segs.iter().enumerate() {
 		let travel = seg.end - seg.start;
@@ -250,11 +268,20 @@ pub(crate) fn place_runs_with_corner_landings(
 			continue;
 		};
 		let remaining = travel.length();
-		let used = skip.min(remaining);
+		if (seg.y1 - seg.y0).abs() < EPS {
+			continue;
+		}
+		let used = if let Some((edge, skip_short)) = pending_riser {
+			let inset = (edge - seg.start).dot(dir).max(0.0);
+			if (skip_short && remaining <= width * 1.15) || inset + EPS >= remaining {
+				continue;
+			}
+			inset
+		} else {
+			0.0
+		};
 		let leftover = (remaining - used).max(0.0);
 		if leftover < EPS {
-			skip = pending_inner;
-			pending_inner = 0.0;
 			continue;
 		}
 		let at_joint = i + 1 < segs.len();
@@ -268,12 +295,11 @@ pub(crate) fn place_runs_with_corner_landings(
 		let turned = next_dir.is_some_and(|nd| is_yaw_joint(dir, nd)) || bridge;
 		let mut budget = JointBudget::new(leftover, next_len, wanted, min_tread, !at_joint, turned);
 		if bridge {
-			budget.far = next_len;
+			// Pad must cover the return's far rail (centerline + half width).
+			budget.far = next_len + 0.5 * width;
 			budget.u_turn = true;
 		}
 		if budget.run_len < EPS {
-			skip = pending_inner;
-			pending_inner = 0.0;
 			continue;
 		}
 		let y0 = stairs.last().map(run_top_y).unwrap_or(seg.y0.min(seg.y1));
@@ -281,26 +307,17 @@ pub(crate) fn place_runs_with_corner_landings(
 		let n = tread_count(height, budget.run_len, pref_depth).max(1);
 		let going = budget.run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
-		let Some(node) = place_straight_run(first, y0, dir, width, going, uniform_tops(height, n))
+		let Some(node) =
+			place_straight_run(first, y0, dir, width, going, uniform_tops(height, n), true)
 		else {
-			skip = 0.0;
 			continue;
 		};
-		skip = 0.0;
-		pending_inner = 0.0;
+		pending_riser = None;
 		if at_joint {
-			if let Some(pad) = TreadEnd::from_straight(&node).pad(
-				next_dir,
-				budget,
-				width,
-				run_top_y(&node),
-				style,
-				thickness,
-			) {
-				skip = budget.far;
-				if budget.u_turn {
-					pending_inner = budget.along;
-				}
+			let end = TreadEnd::from_straight(&node);
+			if let Some(pad) = end.pad(next_dir, budget, width, run_top_y(&node), style, thickness)
+			{
+				pending_riser = Some((departing_riser(end, next_dir, budget), budget.u_turn));
 				pads.push(pad);
 			}
 		}
@@ -346,8 +363,8 @@ mod tests {
 
 	#[test]
 	fn tread_fill_scales_width_relative_to_the_opening() {
-		let (narrow, _) = tread_dims(1.2, 0.4, GOING_RATIO_DEFAULT);
-		let (wide, _) = tread_dims(1.2, 0.8, GOING_RATIO_DEFAULT);
+		let (narrow, _) = tread_dims(1.2, 0.4, LAPPING_RATIO_DEFAULT);
+		let (wide, _) = tread_dims(1.2, 0.8, LAPPING_RATIO_DEFAULT);
 		assert!((narrow - 0.48).abs() < 1e-4);
 		assert!((wide - 0.96).abs() < 1e-4);
 	}
@@ -356,30 +373,30 @@ mod tests {
 	fn tread_fill_clamps_and_stays_inside_the_opening() {
 		assert!((clamp_tread_fill(3.0) - TREAD_FILL_MAX).abs() < 1e-4);
 		assert!((clamp_tread_fill(0.0) - TREAD_FILL_MIN).abs() < 1e-4);
-		let (w, _) = tread_dims(3.0, 0.4, GOING_RATIO_DEFAULT);
+		let (w, _) = tread_dims(3.0, 0.4, LAPPING_RATIO_DEFAULT);
 		assert!(
 			(w - 1.2).abs() < 1e-4,
 			"large wells follow the fraction, not a 1.1 m cap, got {w}"
 		);
-		let (tiny, _) = tread_dims(0.45, 0.4, GOING_RATIO_DEFAULT);
+		let (tiny, _) = tread_dims(0.45, 0.4, LAPPING_RATIO_DEFAULT);
 		assert!((tiny - TREAD_WIDTH_MIN_M).abs() < 1e-4);
-		let (capped, _) = tread_dims(1.2, 0.95, GOING_RATIO_DEFAULT);
+		let (capped, _) = tread_dims(1.2, 0.95, LAPPING_RATIO_DEFAULT);
 		assert!((capped - 1.2 * TREAD_FILL_MAX).abs() < 1e-4);
 	}
 
 	#[test]
-	fn going_ratio_scales_preferred_going() {
+	fn lapping_ratio_scales_preferred_going() {
 		let (_, shallow) = tread_dims(1.2, 0.6, 0.4);
 		let (_, deep) = tread_dims(1.2, 0.6, 0.7);
 		assert!((shallow - 0.288).abs() < 1e-4, "got {shallow}");
 		assert!((deep - 0.504).abs() < 1e-4, "0.72*0.7 should not hit a comfort cap, got {deep}");
 		let (_, chunky) = tread_dims(1.2, 0.4, 2.0);
-		assert!((chunky - 0.96).abs() < 1e-4, "going_ratio 2.0 on a 0.48 m tread, got {chunky}");
+		assert!((chunky - 0.96).abs() < 1e-4, "lapping_ratio 2.0 on a 0.48 m tread, got {chunky}");
 	}
 
 	#[test]
-	fn going_ratio_clamps() {
-		assert!((clamp_going_ratio(10.0) - GOING_RATIO_MAX).abs() < 1e-4);
-		assert!((clamp_going_ratio(0.0) - GOING_RATIO_MIN).abs() < 1e-4);
+	fn lapping_ratio_clamps() {
+		assert!((clamp_lapping_ratio(10.0) - LAPPING_RATIO_MAX).abs() < 1e-4);
+		assert!((clamp_lapping_ratio(0.0) - LAPPING_RATIO_MIN).abs() < 1e-4);
 	}
 }

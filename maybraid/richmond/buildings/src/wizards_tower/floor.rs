@@ -209,7 +209,11 @@ impl BuildingComponents for WizardsTowerFloor {
 		}
 		let confines = self.storey_spire_capsule();
 		Layers::from_free(
-			self.arc_spire.stairs.iter().map(|s| s.clone().with_confines(confines)).collect(),
+			self.arc_spire
+				.stairs
+				.iter()
+				.map(|s| s.clone().with_confines(confines))
+				.collect(),
 		)
 	}
 }

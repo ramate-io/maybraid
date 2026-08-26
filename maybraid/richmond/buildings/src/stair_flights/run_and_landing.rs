@@ -1,8 +1,8 @@
-//! I / L / U flights: openings own the ends; extra going is a side-by-side bank.
+//! I / L / U flights: openings own the ends; extra lapping is a side-by-side bank.
 //!
 //! Walk-on sides pick the graph. Adjacent → compact L. Same side → U (two
 //! parallel runs, far landing spans both). Opposite or a short rise → I.
-//! Preferred going only packs that graph: if one topology is short, add
+//! Lapping ratio only packs that graph: if one topology is short, add
 //! another **lateral** run (never the same centerline twice). A long L
 //! between offset openings stays the polyline path.
 
@@ -38,7 +38,7 @@ fn fit_runs(
 ) {
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, pref_depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.going_ratio);
+	let (width, pref_depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.lapping_ratio);
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let path = plan_path(polyline, fit, width, pref_depth);
 	let segs = segs_along_path(&path, fit.lower_walk_on.y, rise, width);
@@ -271,7 +271,7 @@ mod tests {
 			Vec3::new(0.0, 3.0, -1.2),
 			Vec2::Y,
 			3.0,
-			crate::stair_flights::geom::GOING_RATIO_DEFAULT,
+			crate::stair_flights::geom::LAPPING_RATIO_DEFAULT,
 		)
 	}
 
@@ -280,7 +280,7 @@ mod tests {
 		upper_walk: Vec3,
 		out: Vec2,
 		rise: f32,
-		going_ratio: f32,
+		lapping_ratio: f32,
 	) -> (FlightPolyline, WellFit) {
 		(
 			FlightPolyline::new([
@@ -298,7 +298,7 @@ mod tests {
 				upper_half_width: 1.2,
 				upper_half_depth: 1.2,
 				tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
-				going_ratio,
+				lapping_ratio,
 			},
 		)
 	}
@@ -333,6 +333,34 @@ mod tests {
 			return_z < 0.85,
 			"return must start at the landing inner edge, not side-on at the far rim, z={return_z}"
 		);
+		let ret = longs[1];
+		let Stair::Straight(g) = &ret.geometry;
+		let travel = travel_xz(ret.placement.yaw);
+		let trail = xz(ret.placement.translation) - travel * (0.5 * g.going_per_tread());
+		let pad = flight.pads().first().expect("U pad");
+		for c in pad.corners() {
+			let p = Vec2::new(c.x, c.z);
+			let ahead = (p - trail).dot(travel);
+			assert!(
+				ahead <= 0.06,
+				"first tread must start at the landing edge, not on it, ahead={ahead} p={p:?}"
+			);
+		}
+		let inbound = travel_xz(longs[0].placement.yaw);
+		let across = Vec2::new(-inbound.y, inbound.x);
+		let mid0 = xz(longs[0].placement.translation);
+		let mid1 = xz(ret.placement.translation);
+		let sign = if (mid1 - mid0).dot(across) >= 0.0 { 1.0 } else { -1.0 };
+		let outer = trail + across * sign * (0.5 * g.width);
+		let reach = pad
+			.corners()
+			.into_iter()
+			.map(|c| (Vec2::new(c.x, c.z) - outer).length())
+			.fold(f32::MAX, f32::min);
+		assert!(
+			reach < 0.2,
+			"landing must run the full second-flight width, outer={outer:?} nearest={reach}"
+		);
 		let last = flight.last_tread_xz();
 		assert!(
 			(last - Vec2::new(0.0, -1.2)).length() < 1.1,
@@ -347,7 +375,7 @@ mod tests {
 			Vec3::new(0.0, 1.1, -1.2),
 			Vec2::Y,
 			1.1,
-			crate::stair_flights::geom::GOING_RATIO_DEFAULT,
+			crate::stair_flights::geom::LAPPING_RATIO_DEFAULT,
 		);
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		assert_eq!(flight.stairs().len(), 1, "1.1 m < one 2.4 m crossing");
@@ -361,7 +389,7 @@ mod tests {
 			Vec3::new(-1.2, 3.0, 0.0),
 			Vec2::Y,
 			3.0,
-			crate::stair_flights::geom::GOING_RATIO_DEFAULT,
+			crate::stair_flights::geom::LAPPING_RATIO_DEFAULT,
 		);
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		assert!(
@@ -374,17 +402,38 @@ mod tests {
 			(last - Vec2::new(-1.2, 0.0)).length() < 0.75,
 			"last tread should meet the west walk-on, got {last:?}"
 		);
+		departing_treads_clear_pads(&flight, "quarter-turn 0.55");
+	}
+
+	fn departing_treads_clear_pads(flight: &ComposedFlight, label: &str) {
+		for (i, pad) in flight.pads().iter().enumerate() {
+			let Some(next) = flight.stairs().get(i + 1) else {
+				continue;
+			};
+			let Stair::Straight(g) = &next.geometry;
+			let travel = travel_xz(next.placement.yaw);
+			let trail = xz(next.placement.translation) - travel * (0.5 * g.going_per_tread());
+			for c in pad.corners() {
+				let p = Vec2::new(c.x, c.z);
+				let ahead = (p - trail).dot(travel);
+				assert!(
+					ahead <= 0.06,
+					"{label}: pad {i} corner {p:?} is {ahead} along the next run; first trailing={trail:?} going={}",
+					g.going_per_tread()
+				);
+			}
+		}
 	}
 
 	#[test]
-	fn extra_going_uses_side_by_side_runs() {
+	fn extra_lapping_uses_side_by_side_runs() {
 		let (polyline, well) =
 			well(Vec3::new(0.0, 0.0, -1.2), Vec3::new(-1.2, 3.0, 0.0), Vec2::Y, 3.0, 1.2);
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		let longs = long_runs(&flight);
 		assert!(
 			longs.len() >= 3,
-			"going_ratio 1.2 should pack extra parallel runs, got {}",
+			"lapping_ratio 1.2 should pack extra parallel runs, got {}",
 			longs.len()
 		);
 		let right = Vec2::new(-1.0, 0.0);
@@ -398,7 +447,7 @@ mod tests {
 		laterals.dedup_by(|a, b| (*a - *b).abs() < 0.15);
 		assert!(
 			laterals.len() >= 2,
-			"going_ratio 1.2 should occupy more than one corridor, slots={}",
+			"lapping_ratio 1.2 should occupy more than one corridor, slots={}",
 			laterals.len()
 		);
 		let last = flight.last_tread_xz();
@@ -406,6 +455,7 @@ mod tests {
 			(last - Vec2::new(-1.2, 0.0)).length() < 0.85,
 			"still arrive on the west walk-on, got {last:?}"
 		);
+		departing_treads_clear_pads(&flight, "quarter-turn 1.2");
 	}
 
 	#[test]
@@ -429,7 +479,7 @@ mod tests {
 	}
 
 	#[test]
-	fn higher_going_ratio_adds_parallel_runs() {
+	fn higher_lapping_ratio_adds_parallel_runs() {
 		let (polyline, default_well) = stacked_fit();
 		let default = fit(polyline.clone(), default_well, PanelStyle::RoughStonework, 0.05);
 		let (polyline, deep_well) =
@@ -437,7 +487,7 @@ mod tests {
 		let deep = fit(polyline, deep_well, PanelStyle::RoughStonework, 0.05);
 		assert!(
 			long_runs(&deep).len() > long_runs(&default).len(),
-			"going_ratio 2.0 should add lateral runs, {} vs {}",
+			"lapping_ratio 2.0 should add lateral runs, {} vs {}",
 			long_runs(&deep).len(),
 			long_runs(&default).len()
 		);
@@ -461,7 +511,7 @@ mod tests {
 			upper_half_width: 1.2,
 			upper_half_depth: 1.2,
 			tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
-			going_ratio: crate::stair_flights::geom::GOING_RATIO_DEFAULT,
+			lapping_ratio: crate::stair_flights::geom::LAPPING_RATIO_DEFAULT,
 		};
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		assert!(flight.stairs().len() >= 2, "offset should split into runs");
