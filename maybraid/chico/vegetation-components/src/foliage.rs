@@ -1,11 +1,10 @@
-//! Foliage domain: style + geometry + placement → [`FoliageNode`].
+//! Foliage domain: geometry + placement → [`FoliageNode`].
 
 pub mod ball_collection;
 pub mod collection;
 pub mod geometry;
 pub mod node;
 pub mod probe;
-pub mod style;
 
 pub use ball_collection::{
 	CheapBallCollection, CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
@@ -22,4 +21,3 @@ pub use probe::{
 	update_foliage_host_levels, FoliageLodProbe, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
 	FOLIAGE_MEDIUM_FACTOR,
 };
-pub use style::FoliageStyle;

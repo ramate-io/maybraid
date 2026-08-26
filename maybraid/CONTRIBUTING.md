@@ -37,7 +37,7 @@ Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura 
 
 - **Naming:** `FooParams` = authoring / CLI; `Foo` = built instance from `params.build()` (grow the chain once). Prefer this over `*Instance` / `*Std` for new vegetation.
 - **Presentation:** trees implement `VegetationComponents` and present via `ComponentsOnly` / `spawn_vegetation_components` — same shape as Richmond’s `BuildingComponents`, not ad hoc RenderItem generics.
-- **Style vs geometry (sticks):** `StickStyle::Standard` is the kit family under `vegetation/sticks/standard/`. `StickGeometry::{Segment,Trunk}` picks `001_*` vs `trunk_001_*` and the nested mesh-LOD extent policy. Trunk is geometry, not a second style.
+- **Stick geometry:** `StickGeometry::{Segment,Trunk}` picks the kit triad under `vegetation/sticks/standard/` (`001_*` vs `trunk_001_*`) and the nested mesh-LOD extent policy. Trunk is geometry, not a second style.
 - **Nested stick mesh LOD:** band on **radius/girth** for segments (`distance / radius`); trunks stay length-biased (max-axis extent). Useful default factors: High ≤ 10, Medium ≤ 25, Low ≤ 100; **UltraLow = empty scene** (do not collapse onto Low).
 - **Structural (tree) LOD:** separate probe from stick/foliage hosts. Tall torches: characteristic radius `max(footprint, half-height)` so height does not dump you to Medium while still filling the view; torch defaults High / Medium / Low ≈ 3 / 15 / 24.
 - **Silhouette sampling:** azimuth × height outer picks beat “every Nth” or global outer shells for vase / torch profiles. For sticks, sample the **outermost endpoint** (not the midpoint) — midpoints sit inward on steep limbs and lose the contest.

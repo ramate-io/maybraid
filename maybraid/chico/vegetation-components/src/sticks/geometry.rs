@@ -6,9 +6,9 @@ use crate::assets::{sticks as stick_assets, AssetPath};
 
 /// Stick footprint / role in the chain.
 ///
-/// For [`super::StickStyle::Standard`], geometry selects the GLB triad under
-/// `vegetation/sticks/standard/` (`001_*` vs `trunk_001_*`) and the mesh-LOD
-/// extent policy (radius vs length-dominated).
+/// Geometry selects the GLB triad under `vegetation/sticks/standard/`
+/// (`001_*` vs `trunk_001_*`) and the mesh-LOD extent policy (radius vs
+/// length-dominated).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum StickGeometry {
 	/// Generic branch / connector segment (`001_*` GLBs; radius-based mesh LOD).
