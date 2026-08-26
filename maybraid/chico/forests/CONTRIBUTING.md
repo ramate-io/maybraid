@@ -9,5 +9,6 @@ Forests assemble **concrete grove types** from `chico-groves`. Do not add a `Tuf
 - Grow with `Params::default().with_extent(tile).build_on(world)`. Do not pass CLI grove noise into `build_unit`.
 - Do not implement the full RFC `ForestGroveBiases` set yet. `select_cell` leaves grove biases at default.
 - [`ChicoForest`](src/forest.rs) is a generation result. Do not implement `LodScene` on it. Playgrounds spawn the concrete grove hosts underneath.
+- Pinned review cells use [`ForestLayering::typical_layers`](src/kind.rs) (highest-weight non-`None` grove per layer). Hopscotch cells still Bucket-Throw.
 
 File shape: no `mod.rs`. Methods live on `ForestExtent`, `ChicoForest`, `LayeringKind`, and the assemble helpers.

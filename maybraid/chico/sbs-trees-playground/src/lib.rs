@@ -36,6 +36,7 @@ use chico_vegetation_shaders::{
 };
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
+use diagnostics::toggle_fps_logging;
 use forest_stream::stream_forest;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
@@ -86,6 +87,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
 		register_vegetation_view(app);
+		if !app.is_plugin_added::<PlaygroundTimingPlugin>() {
+			app.add_plugins(PlaygroundTimingPlugin);
+		}
 		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
@@ -106,6 +110,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(sync_render_material_handles),
 					sync_show.after(capture_command_line_input::<PlaygroundCommand>),
 					stream_forest.after(sync_show),
+					toggle_fps_logging.after(capture_command_line_input::<PlaygroundCommand>),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

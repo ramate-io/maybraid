@@ -10,7 +10,7 @@ mod assemble;
 mod chico;
 mod extent;
 mod forest;
-mod hopscotch;
+pub(crate) mod hopscotch;
 mod kind;
 mod layer;
 pub mod layerings;

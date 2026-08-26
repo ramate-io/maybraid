@@ -335,4 +335,18 @@ mod tests {
 		assert_eq!(select_cell(cell, noise), select_cell(cell, noise));
 		Ok(())
 	}
+
+	#[test]
+	fn origin_cell_default_forest_noise_selects_a_grove() -> Result<()> {
+		let noise = NoiseParams::from_scalar(1337.0, 0.0005, 1.0, 1);
+		let layers = select_cell(ForestExtent::default_cell(), noise);
+		assert!(
+			layers.tufts.is_some()
+				|| layers.understory.is_some()
+				|| layers.lower_canopy.is_some()
+				|| layers.upper_canopy.is_some(),
+			"origin cell was empty: {layers:?}"
+		);
+		Ok(())
+	}
 }

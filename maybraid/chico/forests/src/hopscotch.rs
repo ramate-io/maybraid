@@ -9,6 +9,8 @@ const ANCHOR_LANE: Vec3 = Vec3::new(11.0, 0.0, 0.0);
 const BUDGET_LANE: Vec3 = Vec3::new(0.0, 0.0, 13.0);
 /// Base lane for successive hop-edge throws (`+ step` on X).
 const EDGE_LANE_X: f32 = 17.0;
+/// Keep world origin off OpenSimplex's zero so the first bucket is not forced.
+pub(crate) const SAMPLE_ORIGIN: Vec3 = Vec3::new(10_007.0, 0.0, 10_009.0);
 
 /// One Hopscotch node: anchor weight, outgoing edges, and the layering it selects.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,20 +38,18 @@ pub fn select<T: Copy + PartialEq>(
 	}
 	let n = NoiseConfig::new(noise);
 	let throw = BucketThrow::from_weights(nodes.iter().map(|node| node.weight), 0.0);
-	let sample = n.sample_3d(position + ANCHOR_LANE) * throw.total_weight();
+	let sample = n.sample_3d(position + ANCHOR_LANE + SAMPLE_ORIGIN) * throw.total_weight();
 	let mut index = throw.select(sample)?;
 	let mut current = &nodes[index];
-	let t = n.sample_unit_3d(
-		(position + BUDGET_LANE).x,
-		(position + BUDGET_LANE).y,
-		(position + BUDGET_LANE).z,
-	);
+	let budget_at = position + BUDGET_LANE + SAMPLE_ORIGIN;
+	let t = n.sample_unit_3d(budget_at.x, budget_at.y, budget_at.z);
 	let mut budget = hop_budget.start + (hop_budget.end - hop_budget.start) * t;
 	let mut step = 0u32;
 	while budget >= current.weight && !current.adjacencies.is_empty() {
 		budget -= current.weight;
 		let edges = BucketThrow::from_weights(current.adjacencies.iter().map(|(_, w)| *w), 0.0);
-		let edge_sample = n.sample_3d(position + Vec3::new(EDGE_LANE_X + step as f32, 0.0, 0.0))
+		let edge_sample = n
+			.sample_3d(position + Vec3::new(EDGE_LANE_X + step as f32, 0.0, 0.0) + SAMPLE_ORIGIN)
 			* edges.total_weight();
 		let Some(edge_i) = edges.select(edge_sample) else {
 			break;

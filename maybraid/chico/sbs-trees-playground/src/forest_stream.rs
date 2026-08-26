@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use chico_forests::{ChicoForest, ForestExtent, ForestGroveTile};
+use chico_forests::{ChicoForest, ForestExtent, ForestGroveTile, LayeringKind};
 use chico_groves::{
 	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
 	ConiferMassives, ConiferSapling, DateGrove, Dryland, FlatTerrainSample, ForlornSavanna,
@@ -27,8 +27,18 @@ pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
 /// Hopscotch default so neighboring 1600 m cells stay related.
 pub const DEFAULT_FOREST_NOISE: &str = "1337,0.0005,1,1";
 
+/// Clap parser for a well-known layering kebab name.
+pub fn parse_layering_kind(name: &str) -> Result<LayeringKind, String> {
+	LayeringKind::from_kebab(name).ok_or_else(|| {
+		let names: Vec<_> = LayeringKind::ALL.iter().map(|kind| kind.as_kebab()).collect();
+		format!("unknown layering {name:?}; expected one of: {}", names.join(", "))
+	})
+}
+
 const FOREST_CAMERA_SPEED: f32 = 80.0;
 const DEFAULT_CAMERA_SPEED: f32 = 18.0;
+/// Stay on the current stream cell until the camera is this far into a neighbor.
+const STREAM_COMMIT_MARGIN: f32 = 80.0;
 
 fn spawn_grove_host<T>(commands: &mut Commands, grove: &T) -> Vec<Entity>
 where
@@ -99,12 +109,26 @@ fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> V
 	}
 }
 
-fn spawn_forest_cell(commands: &mut Commands, ix: i32, iz: i32, noise: NoiseParams) -> Vec<Entity> {
+fn spawn_forest_cell(
+	commands: &mut Commands,
+	ix: i32,
+	iz: i32,
+	noise: NoiseParams,
+	layering: Option<LayeringKind>,
+) -> Vec<Entity> {
 	let extent = ForestExtent::from_cell_index(ix, iz);
-	let forest = ChicoForest::assemble_on(extent, noise, &FlatTerrainSample::default());
+	let forest = match layering {
+		Some(kind) => ChicoForest::assemble_layering(extent, kind, &FlatTerrainSample::default()),
+		None => ChicoForest::assemble_on(extent, noise, &FlatTerrainSample::default()),
+	};
+	let layers = forest.assembled.layers;
 	info!(
-		"forest cell ({ix},{iz}) layering={:?} tiles={}",
-		forest.assembled.layers.layering,
+		"forest cell ({ix},{iz}) layering={:?} tufts={:?} understory={:?} lower={:?} upper={:?} tiles={}",
+		layers.layering,
+		layers.tufts,
+		layers.understory,
+		layers.lower_canopy,
+		layers.upper_canopy,
 		forest.tiles().count()
 	);
 	let mut entities = Vec::new();
@@ -127,8 +151,9 @@ pub fn stream_forest(
 	mut live: Local<HashMap<(i32, i32), Vec<Entity>>>,
 	mut last_key: Local<Option<String>>,
 	mut forest_camera: Local<bool>,
+	mut stream_center: Local<Option<(i32, i32)>>,
 ) {
-	let Some(ShowSubject::Forest { noise, stream_radius }) = &config.subject else {
+	let Some(ShowSubject::Forest { noise, stream_radius, layering }) = &config.subject else {
 		if *forest_camera {
 			if let Ok(mut ctrl) = controller.single_mut() {
 				ctrl.speed = DEFAULT_CAMERA_SPEED;
@@ -137,6 +162,7 @@ pub fn stream_forest(
 		}
 		live.clear();
 		last_key.take();
+		stream_center.take();
 		return;
 	};
 
@@ -147,9 +173,11 @@ pub fn stream_forest(
 		*forest_camera = true;
 	}
 
-	let key = format!("forest:{noise:?}|r={stream_radius}");
+	let layering_key = layering.map(LayeringKind::as_kebab).unwrap_or("hopscotch");
+	let key = format!("forest:{layering_key}|{noise:?}|r={stream_radius}");
 	if last_key.as_ref() != Some(&key) {
 		live.clear();
+		stream_center.take();
 		*last_key = Some(key);
 	}
 
@@ -161,7 +189,14 @@ pub fn stream_forest(
 		ground_tf.translation.z = cam.translation.z;
 	}
 
-	let center = ForestExtent::cell_index_containing(cam.translation);
+	let raw = ForestExtent::cell_index_containing(cam.translation);
+	let center = match *stream_center {
+		Some(current) => {
+			ForestExtent::cell_index_committed(cam.translation, current, STREAM_COMMIT_MARGIN)
+		}
+		None => raw,
+	};
+	*stream_center = Some(center);
 	let wanted: Vec<(i32, i32)> = ForestExtent::cell_ring(center, *stream_radius).collect();
 
 	live.retain(|(ix, iz), entities| {
@@ -181,7 +216,7 @@ pub fn stream_forest(
 	let Some(&(ix, iz)) = missing.first() else {
 		return;
 	};
-	let entities = spawn_forest_cell(&mut commands, ix, iz, *noise);
+	let entities = spawn_forest_cell(&mut commands, ix, iz, *noise, *layering);
 	live.insert((ix, iz), entities);
 }
 
@@ -197,6 +232,16 @@ mod tests {
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert_eq!(noise.seed, 1337);
 		assert!((noise.frequency - 0.0005).abs() < 1e-8);
+		Ok(())
+	}
+
+	#[test]
+	fn parse_layering_kind_accepts_kebab() -> Result<()> {
+		assert_eq!(
+			parse_layering_kind("ag-town").map_err(|e| anyhow::anyhow!("{e}"))?,
+			LayeringKind::AgTown
+		);
+		assert!(parse_layering_kind("not-a-forest").is_err());
 		Ok(())
 	}
 }

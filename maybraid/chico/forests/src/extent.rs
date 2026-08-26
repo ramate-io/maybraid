@@ -99,6 +99,29 @@ impl ForestExtent {
 		let (cx, cz) = center;
 		(-r..=r).flat_map(move |dx| (-r..=r).map(move |dz| (cx + dx, cz + dz)))
 	}
+
+	/// Stay on `current` until `position` is `margin` metres inside a neighboring cell.
+	///
+	/// Stops the streamer from thrashing when the camera sits on a shared face.
+	pub fn cell_index_committed(position: Vec3, current: (i32, i32), margin: f32) -> (i32, i32) {
+		let raw = Self::cell_index_containing(position);
+		if raw == current {
+			return current;
+		}
+		let next = Self::from_cell_index(raw.0, raw.1);
+		let m = margin.max(0.0);
+		let min = next.min();
+		let max = next.max();
+		let committed = position.x >= min.x + m
+			&& position.x <= max.x - m
+			&& position.z >= min.z + m
+			&& position.z <= max.z - m;
+		if committed {
+			raw
+		} else {
+			current
+		}
+	}
 }
 
 #[cfg(test)]
@@ -131,6 +154,16 @@ mod tests {
 		assert_eq!(cells.len(), 9);
 		assert!(cells.contains(&(0, 0)));
 		assert!(cells.contains(&(1, -1)));
+		Ok(())
+	}
+
+	#[test]
+	fn cell_index_committed_ignores_shared_face() -> Result<()> {
+		let on_face = Vec3::new(800.0, 0.0, 0.0);
+		assert_eq!(ForestExtent::cell_index_containing(on_face), (1, 0));
+		assert_eq!(ForestExtent::cell_index_committed(on_face, (0, 0), 80.0), (0, 0));
+		let inside_next = Vec3::new(880.0, 0.0, 0.0);
+		assert_eq!(ForestExtent::cell_index_committed(inside_next, (0, 0), 80.0), (1, 0));
 		Ok(())
 	}
 }

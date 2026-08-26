@@ -6,7 +6,7 @@
 use chico_groves::GroveWorldSample;
 use procedural_common::NoiseParams;
 
-use crate::{assemble, select_cell, AssembledForest, ForestExtent, ForestGroveTile};
+use crate::{assemble, select_cell, AssembledForest, ForestExtent, ForestGroveTile, LayeringKind};
 
 /// One assembled forest cell (extent + grown grove tiles).
 #[derive(Clone)]
@@ -23,6 +23,16 @@ impl ChicoForest {
 		world: &impl GroveWorldSample,
 	) -> Self {
 		let layers = select_cell(extent, noise);
+		Self { extent, assembled: assemble(extent, layers, world) }
+	}
+
+	/// Pin a well-known layering and grow its typical (highest-weight) groves.
+	pub fn assemble_layering(
+		extent: ForestExtent,
+		layering: LayeringKind,
+		world: &impl GroveWorldSample,
+	) -> Self {
+		let layers = layering.layering().typical_layers();
 		Self { extent, assembled: assemble(extent, layers, world) }
 	}
 
@@ -55,6 +65,19 @@ mod tests {
 		.filter(Option::is_some)
 		.count();
 		assert_eq!(tile_count, selected);
+		Ok(())
+	}
+
+	#[test]
+	fn assemble_layering_uses_typical_lush_jungle_groves() -> Result<()> {
+		let extent = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let forest = ChicoForest::assemble_layering(
+			extent,
+			LayeringKind::LushJungle,
+			&FlatTerrainSample::default(),
+		);
+		assert_eq!(forest.assembled.layers.layering, LayeringKind::LushJungle);
+		assert!(forest.tiles().next().is_some());
 		Ok(())
 	}
 }

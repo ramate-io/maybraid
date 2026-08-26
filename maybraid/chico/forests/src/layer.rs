@@ -22,7 +22,8 @@ pub fn throw_layer(
 	}
 	let throw = BucketThrow::from_weights(buckets.iter().map(|b| b.weight), 0.0);
 	let n = NoiseConfig::new(noise);
-	let sample = n.sample_3d(position + lane) * throw.total_weight();
+	let sample =
+		n.sample_3d(position + lane + crate::hopscotch::SAMPLE_ORIGIN) * throw.total_weight();
 	let index = throw.select(sample)?;
 	buckets.get(index).and_then(|b| b.kind)
 }

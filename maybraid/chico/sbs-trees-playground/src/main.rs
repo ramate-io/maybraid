@@ -41,7 +41,7 @@ fn main() {
 	.insert_resource(PendingStartupCommand(startup))
 	.add_plugins(SbsTreesPlaygroundPlugin);
 
-	if diag.fps {
+	if !app.is_plugin_added::<PlaygroundTimingPlugin>() {
 		app.add_plugins(PlaygroundTimingPlugin);
 	}
 	app.run();

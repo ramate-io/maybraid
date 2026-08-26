@@ -1,9 +1,12 @@
 //! `/show` — LodScene presentation (VegetationComponents).
 
-use crate::forest_stream::{DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS};
+use crate::forest_stream::{
+	parse_layering_kind, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+};
 use crate::monster_grass_plain::spawn_monster_grass_plain;
 use crate::vast::{parse_vast_grove_name, spawn_vast_grove};
 use bevy::prelude::*;
+use chico_forests::LayeringKind;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
 	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
@@ -582,6 +585,10 @@ pub struct ShowVast {
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ShowForest {
+	/// Pin a well-known layering (`lush-jungle`, `ag-town`, …). Omit to Hopscotch.
+	#[arg(value_parser = parse_layering_kind, value_name = "LAYERING")]
+	pub layering: Option<LayeringKind>,
+
 	/// Hopscotch / layer-throw noise (`seed,frequency,amplitude,octaves[,type]`).
 	#[arg(
 		long,
@@ -1242,9 +1249,11 @@ impl Show {
 			Self::Orchard(args) => ShowSubject::Orchard(args.configured()),
 			Self::Vast(args) => ShowSubject::Vast { grove_name: args.grove_name },
 			Self::VastOrchards => ShowSubject::Vast { grove_name: "orchard".into() },
-			Self::Forest(args) => {
-				ShowSubject::Forest { noise: args.noise, stream_radius: args.stream_radius }
-			}
+			Self::Forest(args) => ShowSubject::Forest {
+				noise: args.noise,
+				stream_radius: args.stream_radius,
+				layering: args.layering,
+			},
 			Self::RiparianGeneral(args) => ShowSubject::RiparianGeneral(args.configured()),
 			Self::ForlornSavanna(args) => ShowSubject::ForlornSavanna(args.configured()),
 			Self::GoettingenFollow(args) => ShowSubject::GoettingenFollow(args.configured()),
@@ -1323,7 +1332,7 @@ pub enum ShowSubject {
 	RollingOaks(RollingOaksParams),
 	Orchard(OrchardParams),
 	Vast { grove_name: String },
-	Forest { noise: NoiseParams, stream_radius: u32 },
+	Forest { noise: NoiseParams, stream_radius: u32, layering: Option<LayeringKind> },
 	RiparianGeneral(RiparianGeneralParams),
 	ForlornSavanna(ForlornSavannaParams),
 	GoettingenFollow(GoettingenFollowParams),
@@ -1526,8 +1535,9 @@ pub fn sync_show(
 			g.terrain
 		)),
 		Some(ShowSubject::Vast { grove_name }) => Some(format!("vast:{grove_name}")),
-		Some(ShowSubject::Forest { noise, stream_radius }) => {
-			Some(format!("forest:{noise:?}|r={stream_radius}"))
+		Some(ShowSubject::Forest { noise, stream_radius, layering }) => {
+			let layering = layering.map(LayeringKind::as_kebab).unwrap_or("hopscotch");
+			Some(format!("forest:{layering}|{noise:?}|r={stream_radius}"))
 		}
 		Some(ShowSubject::RiparianGeneral(g)) => Some(format!(
 			"riparian-general:extent={:?}|cell={:?}|terrain={:?}",
@@ -1874,6 +1884,7 @@ mod tests {
 		assert_eq!(args.stream_radius, DEFAULT_FOREST_STREAM_RADIUS);
 		assert_eq!(args.noise.seed, 1337);
 		assert!((args.noise.frequency - 0.0005).abs() < 1e-8);
+		assert!(args.layering.is_none());
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"show forest --stream-radius 0 --noise 3,0.005,1,1",
 		)
@@ -1884,6 +1895,13 @@ mod tests {
 		assert_eq!(args.stream_radius, 0);
 		assert_eq!(args.noise.seed, 3);
 		assert!((args.noise.frequency - 0.005).abs() < 1e-8);
+		assert!(args.layering.is_none());
+		let cmd = crate::commands::PlaygroundCommand::parse_line("show forest lush-jungle")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Show(Show::Forest(args)) = cmd else {
+			anyhow::bail!("expected show forest lush-jungle command");
+		};
+		assert_eq!(args.layering, Some(chico_forests::LayeringKind::LushJungle));
 		Ok(())
 	}
 
