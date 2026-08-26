@@ -8,10 +8,12 @@
 //!
 //! Owned floors are thin [`QuadPanel`] slabs at [`SLAB_THICKNESS_M`] (run-in at
 //! the lower walk-on; optional upper landing flush with the last tread, along
-//! the nearby rim). Turn the landing off when a follow-on stairwell will own
-//! that floor. The shaft is filled with composed [`StairNode`]s. It does not
-//! author walls or emit shaft opening labels. A [`FlightPolyline`] along face
-//! centers absorbs plan offset. Choose a family with [`Self::with_flight`].
+//! the nearby rim). Kit top sits on that plane — rectangle / triangle panels
+//! are centered on local \(Y = 0\) with \(\pm 0.2\,\mathrm{m}\). Turn the
+//! landing off when a follow-on stairwell will own that floor. The shaft is
+//! filled with composed [`StairNode`]s. It does not author walls or emit shaft
+//! opening labels. A [`FlightPolyline`] along face centers absorbs plan offset.
+//! Choose a family with [`Self::with_flight`].
 
 mod landing;
 mod opening;
@@ -206,6 +208,7 @@ mod tests {
 	use crate::openings::MappedOpening;
 	use bevy_math::{Vec2, Vec3};
 	use crate::stair_flights::StairwellFlightKind;
+	use richmond_building_components::partitions::PANEL_Y_HALF;
 	use richmond_building_components::stairs::Stair;
 
 	/// Horizontal shaft face: `center` in the hole, walk-on on the −orientation side.
@@ -259,6 +262,11 @@ mod tests {
 		let well = ConnectingStairwell::rough_stone(lower, upper);
 		assert!((well.run_in().thickness() - SLAB_THICKNESS_M).abs() < 1e-3);
 		let [a0, a1, b0, b1] = well.run_in().corners();
+		assert!(
+			(a0.y - (-PANEL_Y_HALF)).abs() < 1e-3,
+			"run-in kit center should sit {PANEL_Y_HALF} below the walk-on, got y={}",
+			a0.y
+		);
 		let inward = (b0 + b1) * 0.5 - (a0 + a1) * 0.5;
 		assert!(inward.x > 0.5, "run-in should follow +X into the shaft, got {inward:?}");
 		Ok(())
@@ -272,7 +280,11 @@ mod tests {
 		let landing = well.upper_landing().expect("upper landing on by default");
 		assert!((landing.thickness() - SLAB_THICKNESS_M).abs() < 1e-3);
 		let [a, b, inner_start, ..] = landing.corners();
-		assert!((a.y - 3.0).abs() < 1e-3);
+		assert!(
+			(a.y - (3.0 - PANEL_Y_HALF)).abs() < 1e-3,
+			"landing kit center should sit {PANEL_Y_HALF} below the walk-on, got y={}",
+			a.y
+		);
 		for p in [a, b] {
 			assert!(
 				p.x.abs() <= 1.2 + 1e-3 && p.z.abs() <= 1.2 + 1e-3,

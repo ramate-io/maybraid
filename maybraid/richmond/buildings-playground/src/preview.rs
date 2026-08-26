@@ -4641,6 +4641,38 @@ pub fn connecting_stairwell_demo_endpoints(
 			stairwell_shaft_opening(Vec3::ZERO, 3.0, 3.0, Vec2::Y),
 			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 3.0, 3.0, Vec2::Y),
 		),
+		ConnectingStairwellCase::QuarterTurn => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::X),
+		),
+		ConnectingStairwellCase::LongOffset => (
+			stairwell_shaft_opening(Vec3::new(0.0, 0.0, -6.0), 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(8.0, 3.0, 0.0), 1.2, 1.2, -Vec2::X),
+		),
+		ConnectingStairwellCase::Tiny => (
+			stairwell_shaft_opening(Vec3::ZERO, 0.45, 0.45, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 0.45, 0.45, Vec2::Y),
+		),
+		ConnectingStairwellCase::ShortRise => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(0.0, 1.1, 0.0), 1.2, 1.2, Vec2::Y),
+		),
+		ConnectingStairwellCase::Skew => (
+			stairwell_shaft_opening(Vec3::ZERO, 1.2, 1.2, Vec2::new(1.0, 1.0)),
+			stairwell_shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::new(1.0, 1.0)),
+		),
+		ConnectingStairwellCase::SameYL => (
+			stairwell_shaft_opening(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(4.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X),
+		),
+		ConnectingStairwellCase::OffsetTall => (
+			stairwell_shaft_opening(Vec3::new(0.0, 0.0, -3.0), 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(4.0, 9.0, 0.0), 1.2, 1.2, -Vec2::X),
+		),
+		ConnectingStairwellCase::OppositeOffset => (
+			stairwell_shaft_opening(Vec3::new(0.0, 0.0, -4.0), 1.2, 1.2, Vec2::Y),
+			stairwell_shaft_opening(Vec3::new(5.0, 3.0, 2.0), 1.2, 1.2, -Vec2::Y),
+		),
 	}
 }
 

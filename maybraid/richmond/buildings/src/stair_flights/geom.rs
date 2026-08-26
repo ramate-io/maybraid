@@ -113,10 +113,11 @@ pub(crate) struct PathSeg {
 	pub y1: f32,
 }
 
-/// Straight runs along `segs`. At each interior joint the incoming run stops
-/// short and a **rectangle** landing is extruded along incoming travel (the
-/// leading edge is perpendicular to travel, so this stays planar). The next
-/// run starts at the joint — the landing already fills up to that point.
+/// Straight runs along `segs`. At a yaw jump the incoming run stops short,
+/// a rest fills the corner (full tread width × reserved gap, including the
+/// outer rail), and the next run starts at that pad's far edge. Colinear
+/// joints keep an incoming-only strip — extruding along outgoing there
+/// collapses the quad.
 pub(crate) fn place_runs_with_corner_landings(
 	segs: &[PathSeg],
 	width: f32,
@@ -127,6 +128,7 @@ pub(crate) fn place_runs_with_corner_landings(
 	let pad = landing_size(width);
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
+	let mut skip = 0.0_f32;
 
 	for (i, seg) in segs.iter().enumerate() {
 		let travel = seg.end - seg.start;
@@ -134,34 +136,86 @@ pub(crate) fn place_runs_with_corner_landings(
 			continue;
 		};
 		let remaining = travel.length();
+		let used = skip.min(remaining);
 		let at_joint = i + 1 < segs.len();
-		let reserve = if at_joint { pad.min(remaining * 0.45) } else { 0.0 };
-		let run_len = remaining - reserve;
+		let leftover = (remaining - used).max(0.0);
+		let reserve = if at_joint { pad.min(leftover * 0.45) } else { 0.0 };
+		let run_len = leftover - reserve;
 		if run_len < pref_depth * 0.55 {
+			skip = 0.0;
 			continue;
 		}
 		let height = (seg.y1 - seg.y0).abs().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 		let n = tread_count(height, run_len, pref_depth);
 		let going = run_len / n as f32;
-		let first = seg.start + dir * (0.5 * going);
+		let first = seg.start + dir * (used + 0.5 * going);
 		let Some(node) =
 			place_straight_run(first, seg.y0.min(seg.y1), dir, width, going, uniform_tops(height, n))
 		else {
+			skip = 0.0;
 			continue;
 		};
+		skip = 0.0;
 		if at_joint {
-			if let Some(pad_slab) = TreadEnd::from_straight(&node).landing_along(
-				dir,
-				run_top_y(&node),
-				style,
-				thickness,
-				reserve.max(pad * 0.5),
-				pref_depth * 0.4,
-			) {
+			let y = run_top_y(&node);
+			let next_dir = segs.get(i + 1).and_then(|next| normalize_xz(next.end - next.start));
+			let turned = next_dir.filter(|nd| dir.dot(*nd).abs() <= 0.85);
+			let pad_slab = match turned {
+				Some(nd) => {
+					corner_square_slab(seg.end, dir, nd, reserve, width, y, style, thickness)
+				}
+				None => TreadEnd::from_straight(&node).landing_along(
+					dir,
+					y,
+					style,
+					thickness,
+					reserve.max(pad * 0.5),
+					pref_depth * 0.4,
+				),
+			};
+			if let Some(pad_slab) = pad_slab {
+				skip = if turned.is_some() { reserve.max(0.5 * width) } else { 0.0 };
 				pads.push(pad_slab);
 			}
 		}
 		stairs.push(node);
 	}
 	(stairs, pads)
+}
+
+/// Corner rest in the incoming × outgoing frame, flush with the last leading
+/// and the next first riser, covering the full tread width (outer rail included).
+///
+/// Local \(x\) along `incoming`, \(y\) along `outgoing`, origin at `joint`:
+/// \(x \in [-\texttt{along}, w/2]\), \(y \in [-w/2, \max(\texttt{along}, w/2)]\).
+/// `along` stays the reserved incoming gap so the pad does not swallow the
+/// last tread; outgoing extent is at least a half-width so the inner rail
+/// is covered on a short reserve.
+fn corner_square_slab(
+	joint: Vec2,
+	incoming: Vec2,
+	outgoing: Vec2,
+	along: f32,
+	tread_width: f32,
+	y: f32,
+	style: PanelStyle,
+	thickness: f32,
+) -> Option<QuadPanel> {
+	let incoming = normalize_xz(incoming)?;
+	let outgoing = normalize_xz(outgoing)?;
+	let along = along.max(1e-4);
+	let half = 0.5 * tread_width.max(1e-4);
+	let far = along.max(half);
+	let pt = |u: f32, v: f32| {
+		let p = joint + incoming * u + outgoing * v;
+		Vec3::new(p.x, y, p.y)
+	};
+	Some(QuadPanel::slab(
+		style,
+		pt(-along, -half),
+		pt(half, -half),
+		pt(-along, far),
+		pt(half, far),
+		thickness,
+	))
 }

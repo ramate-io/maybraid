@@ -255,8 +255,9 @@ fn nearest_on_loop(p: Vec2, loop_pts: &[Vec2]) -> Option<Vec2> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::stair_flights::{FlightPolyline, FlightStation};
-	use bevy_math::Vec3;
+	use crate::stair_flights::geom::xz;
+	use crate::stair_flights::{FlightPolyline, FlightStation, TreadEnd};
+	use bevy_math::{Vec2, Vec3};
 
 	#[test]
 	fn stacked_well_emits_runs_and_corner_pads() {
@@ -289,5 +290,86 @@ mod tests {
 		let [a, b, c, ..] = flight.corner_pads()[0].corners();
 		assert!((b - a).length() > 0.3 && (c - a).length() > 0.3, "corner pad should be a rectangle");
 		assert!(!flight.stair_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
+	}
+
+	#[test]
+	fn corner_pads_fill_width_and_do_not_swallow_treads() {
+		for (label, upper_walk, half) in [
+			("quarter-turn", Vec3::new(1.2, 3.0, 0.0), 1.2),
+			("stacked", Vec3::new(0.0, 3.0, -1.2), 1.2),
+			("tiny", Vec3::new(0.0, 3.0, -0.45), 0.45),
+		] {
+			let flight = fit_rect_well(upper_walk, half);
+			assert!(
+				flight.stairs().len() >= 2 && !flight.corner_pads().is_empty(),
+				"{label}: need a corner pad and a following run"
+			);
+			for (i, pad) in flight.corner_pads().iter().enumerate() {
+				let Some(incoming) = flight.stairs().get(i) else {
+					continue;
+				};
+				let Some(next) = flight.stairs().get(i + 1) else {
+					continue;
+				};
+				let [a0, a1, b0, ..] = pad.corners();
+				let first = xz(next.placement.translation);
+				assert!(
+					!point_in_pad_xz(a0, a1, b0, first, 0.08),
+					"{label}: next run starts on the pad, first={first:?}"
+				);
+				let last = TreadEnd::from_straight(incoming);
+				let last_mid = last.leading_mid() - last.travel * 0.01;
+				assert!(
+					!point_in_pad_xz(a0, a1, b0, last_mid, 0.08),
+					"{label}: pad swallows the last incoming tread, mid={last_mid:?}"
+				);
+				for (name, p) in [("outer", last.leading_outer), ("inner", last.leading_inner)] {
+					assert!(
+						point_in_pad_xz(a0, a1, b0, p, -0.06),
+						"{label}: pad misses incoming leading {name} {p:?} pad={:?}",
+						pad.corners()
+					);
+				}
+			}
+		}
+	}
+
+	fn fit_rect_well(upper_walk_on: Vec3, half: f32) -> RectangularSpiralFlight {
+		RectangularSpiralFlight::fit(
+			FlightPolyline::new([
+				FlightStation { center: Vec3::new(0.0, 0.0, 0.0), height: 3.0 },
+				FlightStation { center: Vec3::new(0.0, 3.0, 0.0), height: 3.0 },
+			]),
+			SpiralFlightFit {
+				lower_center: Vec3::new(0.0, 0.0, 0.0),
+				upper_center: Vec3::new(0.0, 3.0, 0.0),
+				lower_walk_on: Vec3::new(0.0, 0.0, -half),
+				upper_walk_on,
+				lower_out: Vec2::Y,
+				lower_half_width: half,
+				lower_half_depth: half,
+				upper_half_width: half,
+				upper_half_depth: half,
+			},
+			PanelStyle::RoughStonework,
+			0.05,
+		)
+	}
+
+	fn point_in_pad_xz(a0: Vec3, a1: Vec3, b0: Vec3, p: Vec2, inset: f32) -> bool {
+		let a0 = Vec2::new(a0.x, a0.z);
+		let u = Vec2::new(a1.x, a1.z) - a0;
+		let v = Vec2::new(b0.x, b0.z) - a0;
+		let w = p - a0;
+		let uu = u.dot(u);
+		let vv = v.dot(v);
+		let uv = u.dot(v);
+		let denom = uu * vv - uv * uv;
+		if denom.abs() < 1e-8 {
+			return false;
+		}
+		let s = (w.dot(u) * vv - w.dot(v) * uv) / denom;
+		let t = (w.dot(v) * uu - w.dot(u) * uv) / denom;
+		s > inset && s < 1.0 - inset && t > inset && t < 1.0 - inset
 	}
 }

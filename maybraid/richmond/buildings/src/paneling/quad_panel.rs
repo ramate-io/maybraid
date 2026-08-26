@@ -9,6 +9,8 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use richmond_building_components::partitions::PANEL_Y_HALF;
+
 use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
 };
@@ -72,9 +74,18 @@ impl QuadPanel {
 		&self.0
 	}
 
-	/// Horizontal (or general) floor quad with uniform kit thickness.
+	/// Floor quad whose **top face** sits on the callers' plane.
+	///
+	/// Rectangle / right-triangle kits are centered on local \(Y = 0\) with
+	/// half-extent [`PANEL_Y_HALF`]. Tessellated triangle presentation keeps
+	/// `scale.y = 1`, so the mesh extends \(\pm 0.2\,\mathrm{m}\) around the
+	/// stored corners. This shifts those corners down the plane normal so the
+	/// kit top stays on `(a0, a1, b0, b1)`.
 	pub fn slab(style: PanelStyle, a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, thickness: f32) -> Self {
-		let t = |p: Vec3| PanelPoint::new(p, thickness);
+		let n = (a1 - a0).cross(b0 - a0).normalize_or_zero();
+		let down = if n.y >= 0.0 { -n } else { n };
+		let shift = down * PANEL_Y_HALF;
+		let t = |p: Vec3| PanelPoint::new(p + shift, thickness);
 		Self::new(style, t(a0), t(a1), t(b0), t(b1))
 	}
 
@@ -121,6 +132,7 @@ mod tests {
 	use bevy_math::{EulerRot, Quat, Vec3};
 	use lod::gen::LodSceneLevel;
 	use richmond_building_components::joints::JOINT_KIT_XZ;
+	use richmond_building_components::partitions::PANEL_Y_HALF;
 	use richmond_building_components::BuildingComponents;
 
 	#[test]
@@ -203,5 +215,23 @@ mod tests {
 		let r = c.insert_point(Vec3::new(2.0, 0.0, 1.0));
 		c.add_triangle(p, q, r);
 		assert_eq!(c.triangles().len(), 3);
+	}
+
+	#[test]
+	fn slab_authors_kit_center_below_the_top_plane() {
+		let slab = QuadPanel::slab(
+			PanelStyle::RoughStonework,
+			Vec3::new(0.0, 3.0, 0.0),
+			Vec3::new(1.0, 3.0, 0.0),
+			Vec3::new(0.0, 3.0, 1.0),
+			Vec3::new(1.0, 3.0, 1.0),
+			0.05,
+		);
+		for p in slab.corners() {
+			assert!(
+				(p.y - (3.0 - PANEL_Y_HALF)).abs() < 1e-4,
+				"slab corners should sit {PANEL_Y_HALF} below the top plane, got {p:?}"
+			);
+		}
 	}
 }

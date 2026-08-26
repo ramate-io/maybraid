@@ -35,7 +35,7 @@ impl ConnectingStairwellFlight {
 	}
 }
 
-/// Named shaft pairs that stress spiral fit (inscription, center, arrive).
+/// Named shaft pairs. Independent of [`ConnectingStairwellFlight`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "kebab-case")]
 pub enum ConnectingStairwellCase {
@@ -60,6 +60,22 @@ pub enum ConnectingStairwellCase {
 	Tall,
 	/// 6×6 well. Outer rail should still sit on the hole.
 	Huge,
+	/// Stacked, upper walk-off +X (90° from the lower +Z).
+	QuarterTurn,
+	/// 8 m east / 6 m north. Long run-and-landing path; one real kink.
+	LongOffset,
+	/// 0.9×0.9 well. Corner pads (~0.65 m) eat most of a side.
+	Tiny,
+	/// 1.1 m stacked rise — a handful of treads, fat relative landings.
+	ShortRise,
+	/// Both openings yawed 45° (northeast walk-off).
+	Skew,
+	/// Floor-level L: south hole to an east hole, no rise.
+	SameYL,
+	/// 9 m rise plus a 4 m east / 3 m north plan offset.
+	OffsetTall,
+	/// L in plan and opposite walk-ons (south → north on the far hole).
+	OppositeOffset,
 }
 
 impl ConnectingStairwellCase {
@@ -75,22 +91,38 @@ impl ConnectingStairwellCase {
 			Self::SameY => "same-y",
 			Self::Tall => "tall",
 			Self::Huge => "huge",
+			Self::QuarterTurn => "quarter-turn",
+			Self::LongOffset => "long-offset",
+			Self::Tiny => "tiny",
+			Self::ShortRise => "short-rise",
+			Self::Skew => "skew",
+			Self::SameYL => "same-y-l",
+			Self::OffsetTall => "offset-tall",
+			Self::OppositeOffset => "opposite-offset",
 		}
 	}
 
 	/// What the preview is meant to expose.
 	pub fn look_for(self) -> &'static str {
 		match self {
-			Self::Stacked => "outer rail on the south walk-on; same-side arrive wraps a full extra turn",
-			Self::NarrowSlot => "outer rail ~12 cm past the 0.8 m slot sides (radius floor)",
-			Self::Shallow => "outer rail past the 1.0 m depth (radius floor)",
-			Self::Offset => "spiral centered between the two holes, not in either",
-			Self::NearOffset => "spiral centered on the upper hole; ~10 cm bleed on +X of lower",
-			Self::Mismatch => "outer rail on the 1.2 m upper hole; floats inside the lower",
-			Self::Opposite => "landing is a short pad off the last tread in its travel direction",
-			Self::SameY => "18 cm spiral on the ground between two floor-level holes",
-			Self::Tall => "tight 9 m helix; still inscribed if stacked",
-			Self::Huge => "wide ring in a 6×6 hole; outer rail on the edge",
+			Self::Stacked => "run-in / last-tread / landing tops flush with Y=0 and Y=3; same-side arrive",
+			Self::NarrowSlot => "0.8 m slot: treads and pads may bleed the short sides",
+			Self::Shallow => "1.0 m depth: treads and pads may bleed the short axis",
+			Self::Offset => "one plan kink; landing pad at the mid station, not a sheared mountain",
+			Self::NearOffset => "no polyline kink (~10 cm); flight stays on the stacked well",
+			Self::Mismatch => "inscribe to the 1.2 m upper hole; floats inside the lower",
+			Self::Opposite => "short upper pad off the last tread; walk-on is the far rim",
+			Self::SameY => "floor-level facing holes; rise floors to one tread",
+			Self::Tall => "9 m stacked rise; landings still flush with each storey",
+			Self::Huge => "6×6 hole; outer rail / rim runs on the edge",
+			Self::QuarterTurn => "arrive on the +X rim; rect-spiral must finish a different side",
+			Self::LongOffset => "long L (8 m east / 6 m north); one rectangular kink pad",
+			Self::Tiny => "0.9×0.9 well; ~0.65 m pads eat a side",
+			Self::ShortRise => "1.1 m rise; fat landings vs a few treads",
+			Self::Skew => "45° openings; pads stay planar on yawed rims",
+			Self::SameYL => "no rise, true L on the ground; one corner pad",
+			Self::OffsetTall => "9 m plus a 4×3 m offset; stacked laps then a long last run",
+			Self::OppositeOffset => "L then opposite arrive — last tread vs far walk-on",
 		}
 	}
 }
