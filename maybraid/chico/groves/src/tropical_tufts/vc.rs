@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bevy::prelude::*;
 use chico_sbs_trees::{PalmBush, PalmBushParams, QuantizedPlant};
 use chico_vegetation_components::{
@@ -5,20 +7,23 @@ use chico_vegetation_components::{
 };
 use clap::Args;
 use lod::gen::LodSceneLevel;
+use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 use material_ref::MaterialRef;
-use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 use super::{
-	definition, TropicalTuftsCell, TropicalTuftsItem, BRIGHT_TUFT, BRIGHT_TUFT_PATCH, DEEP_TUFT,
-	DEEP_TUFT_PATCH, YELLOW_GREEN_TUFT, YELLOW_GREEN_TUFT_PATCH,
+	definition, TropicalTuftsCell, BRIGHT_TUFT, BRIGHT_TUFT_PATCH, DEEP_TUFT, DEEP_TUFT_PATCH,
+	JUVENILE_PALM_BUSH, SMALL_PALM_BUSH, YELLOW_GREEN_TUFT, YELLOW_GREEN_TUFT_PATCH,
 };
 use crate::grove::vc_tuft::{
 	grow_tuft_plants, material_from_palette, patch_variant_index, tuft_grove_stick_nodes,
 	unit_plant_from_grown, TuftGroveBody, TuftGrovePlant, TuftGroveProxyHeights,
 };
 use crate::grove::{
-	flatten_foliage_nodes, frond_material_from_palette, placement_noise, remixed_blade_tuft_plant,
-	remixed_tuft_plant, FlatTerrainSample, GrovePreviewParams,
+	frond_material_from_palette, nest_flattened_plant_chunk, placement_noise,
+	remixed_blade_tuft_plant, remixed_sbs_plant, remixed_tuft_plant, FlatTerrainSample,
+	GrovePreviewParams,
 };
 
 fn default_foliage() -> NoiseParams {
@@ -31,6 +36,8 @@ remixed_blade_tuft_plant!(YellowGreenTuft, YELLOW_GREEN_TUFT, default_foliage())
 remixed_tuft_plant!(BrightTuftPatch, BRIGHT_TUFT_PATCH, default_foliage());
 remixed_tuft_plant!(DeepTuftPatch, DEEP_TUFT_PATCH, default_foliage());
 remixed_tuft_plant!(YellowGreenTuftPatch, YELLOW_GREEN_TUFT_PATCH, default_foliage());
+remixed_sbs_plant!(SmallPalmBush, PalmBush, PalmBushParams, SMALL_PALM_BUSH);
+remixed_sbs_plant!(JuvenilePalmBush, PalmBush, PalmBushParams, JUVENILE_PALM_BUSH);
 
 #[derive(Clone, Debug, Args)]
 #[command(rename_all = "kebab-case")]
@@ -83,19 +90,21 @@ impl TropicalTuftsParams {
 			let mix = placed.variant.palette_mix();
 			match placed.variant {
 				TropicalTuftsCell::SmallPalmBush | TropicalTuftsCell::JuvenilePalmBush => {
-					let TropicalTuftsItem::PalmBush(palm) = placed.variant.item() else {
-						unreachable!("palm cells only");
+					let variant = patch_variant_index(placed.position, variants);
+					let (bush, world_size) = match placed.variant {
+						TropicalTuftsCell::SmallPalmBush => SmallPalmBush::grow_num(variant),
+						TropicalTuftsCell::JuvenilePalmBush => JuvenilePalmBush::grow_num(variant),
+						_ => unreachable!("palm cells only"),
 					};
-					let noise = placement_noise(foliage_noise, placed.position);
-					let geometry = palm.build_with_noise(noise);
-					let mut params = PalmBushParams::default();
-					params.geometry = geometry;
 					let material = material_from_palette(mix, placed.position, foliage_noise);
-					let frond_material = frond_material_from_palette(Some(mix), noise.seed);
+					let frond_material = frond_material_from_palette(
+						Some(mix),
+						placement_noise(foliage_noise, placed.position).seed,
+					);
 					palms.push(TropicalTuftsPalm {
 						placement: Placement::new(placed.position, 0.0)
-							.with_scale(Vec3::splat(placed.scale.max(1e-4))),
-						bush: params.build(),
+							.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+						bush,
 						material,
 						frond_material,
 					});
@@ -133,7 +142,7 @@ impl TropicalTuftsParams {
 				self.cell_extent_xz(),
 				TuftGroveProxyHeights::SHORT,
 			),
-			palms,
+			palms: palms.into(),
 		}
 	}
 }
@@ -141,7 +150,7 @@ impl TropicalTuftsParams {
 #[derive(Clone)]
 struct TropicalTuftsPalm {
 	placement: Placement,
-	bush: PalmBush,
+	bush: Arc<PalmBush>,
 	material: MaterialRef,
 	frond_material: MaterialRef,
 }
@@ -149,12 +158,56 @@ struct TropicalTuftsPalm {
 #[derive(Clone, Component)]
 pub struct TropicalTufts {
 	body: TuftGroveBody,
-	palms: Vec<TropicalTuftsPalm>,
+	palms: Arc<[TropicalTuftsPalm]>,
 }
 
 impl TropicalTufts {
 	pub fn plants(&self) -> &[TuftGrovePlant] {
 		&self.body.plants
+	}
+
+	pub fn palm_count(&self) -> usize {
+		self.palms.len()
+	}
+
+	#[cfg(test)]
+	pub(crate) fn palms_share_unit_arc(&self) -> bool {
+		self.palms.len() >= 2 && Arc::ptr_eq(&self.palms[0].bush, &self.palms[1].bush)
+	}
+
+	/// High/Medium palm hosts — one lazy producer so begin does not rebuild crowns.
+	fn nest_palm_chunks(&self, lod_ref: &LodRef) -> Vec<SceneChunk> {
+		if self.palms.is_empty() {
+			return Vec::new();
+		}
+		let n = self.palms.len();
+		let palms = Arc::clone(&self.palms);
+		let prev = *lod_ref.previous_transform;
+		let curr = *lod_ref.current_transform;
+		let bounds = *lod_ref.bounds;
+		let entity = lod_ref.entity;
+		let mut index = 0usize;
+		vec![SceneChunk::lazy(n as u32, n, move || {
+			if index >= palms.len() {
+				return None;
+			}
+			let palm = &palms[index];
+			index += 1;
+			let plant_lod = LodRef {
+				entity,
+				previous_transform: &prev,
+				current_transform: &curr,
+				bounds: &bounds,
+			};
+			Some(nest_flattened_plant_chunk(
+				Arc::clone(&palm.bush),
+				palm.placement,
+				&MaterialRef::default(),
+				&palm.material,
+				&palm.frond_material,
+				&plant_lod,
+			))
+		})]
 	}
 }
 
@@ -164,22 +217,7 @@ impl VegetationComponents for TropicalTufts {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-		let mut nodes = self.body.foliage_for_level(level).flatten();
-		// Palm companions: High/Medium authored fronds; Low/UltraLow shared five-chord star.
-		let palm_level = match level {
-			LodSceneLevel::Medium => LodSceneLevel::High,
-			other => other,
-		};
-		for palm in &self.palms {
-			nodes.extend(flatten_foliage_nodes(
-				&palm.bush,
-				palm.placement,
-				&palm.material,
-				&palm.frond_material,
-				palm_level,
-			));
-		}
-		Layers::from_free(nodes)
+		self.body.foliage_for_level(level)
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
@@ -187,4 +225,63 @@ impl VegetationComponents for TropicalTufts {
 	}
 }
 
-crate::impl_tuft_grove_lod!(TropicalTufts);
+impl lod::gen::LodScene for TropicalTufts {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> lod::gen::LodSceneLevel {
+		self.structural_lod()
+			.map(|band| crate::grove::grove_lod_level(band, lod_ref))
+			.unwrap_or(LodSceneLevel::High)
+	}
+
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		self.structural_lod()
+			.map(|band| crate::grove::grove_lod_status(band, lod_ref))
+			.unwrap_or(lod::gen::LodSceneStatus::Unchanged)
+	}
+
+	fn scene_lod_culls(
+		&self,
+		lod_ref: &LodRef,
+		_current: LodSceneLevel,
+	) -> lod::gen::LodSceneCulls {
+		self.structural_lod()
+			.map(|band| crate::grove::grove_lod_culls(band, lod_ref))
+			.unwrap_or(lod::gen::LodSceneCulls::None)
+	}
+
+	fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> impl bevy::scene::prelude::Scene + 'static {
+		chico_vegetation_components::flattened_component_scene(self, lod_ref, level)
+	}
+
+	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		let tufts =
+			chico_vegetation_components::flattened_vegetation_scene_chunks(self, lod_ref, level);
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				let palms = self.nest_palm_chunks(lod_ref);
+				if palms.is_empty() {
+					tufts
+				} else {
+					let mut parts = Vec::with_capacity(1 + palms.len());
+					parts.push(tufts);
+					parts.extend(palms);
+					SceneChunk::chunks(parts)
+				}
+			}
+			_ => tufts,
+		}
+	}
+
+	fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {
+		self.structural_lod()
+			.map(|p| p.footprint_aabb())
+			.unwrap_or_else(|| chico_vegetation_components::vegetation_bounds(self))
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl bevy::scene::prelude::Scene + 'static {
+		lod::lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
+	}
+}

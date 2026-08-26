@@ -91,3 +91,62 @@ fn populated_grove_is_deterministic() -> Result<()> {
 	assert_eq!(grove.populate(&extent, &terrain), grove.populate(&extent, &terrain));
 	Ok(())
 }
+
+#[cfg(feature = "render")]
+mod render_tests {
+	use super::*;
+	use crate::grove::GroveCellVariant;
+	use crate::tropical_tufts::TropicalTuftsParams;
+	use bevy::math::bounding::Aabb3d;
+	use bevy::prelude::{Entity, Transform};
+	use chico_vegetation_components::VegetationComponents;
+	use lod::gen::{LodScene, LodSceneLevel};
+	use lod::lod_ref::LodRef;
+	use lod::SceneChunk;
+
+	#[test]
+	fn palms_share_quantized_arcs() -> Result<()> {
+		let mut params = TropicalTuftsParams::default();
+		params.preview = params.preview.with_resolved_placements(vec![
+			GroveCellVariant::new(TropicalTuftsCell::SmallPalmBush, Vec3::new(1.0, 0.0, 1.0), 1.0),
+			GroveCellVariant::new(TropicalTuftsCell::SmallPalmBush, Vec3::new(4.0, 0.0, 1.0), 1.0),
+		]);
+		params.patch_variants = 1;
+		let grove = params.build();
+		assert_eq!(grove.palm_count(), 2);
+		assert!(grove.plants().is_empty());
+		assert!(grove.palms_share_unit_arc(), "same variant should share one PalmBush Arc");
+		Ok(())
+	}
+
+	#[test]
+	fn high_nests_lazy_palms_and_keeps_tuft_foliage_tuft_only() -> Result<()> {
+		let mut params = TropicalTuftsParams::default();
+		params.preview = params.preview.with_resolved_placements(vec![
+			GroveCellVariant::new(TropicalTuftsCell::BrightTuft, Vec3::new(1.0, 0.0, 2.0), 1.0),
+			GroveCellVariant::new(TropicalTuftsCell::SmallPalmBush, Vec3::new(3.0, 0.0, 2.0), 1.0),
+		]);
+		let grove = params.build();
+		assert_eq!(grove.plants().len(), 1);
+		assert_eq!(grove.palm_count(), 1);
+		let tuft_nodes = grove.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(tuft_nodes.len(), 1, "palms must not explode into grove foliage");
+
+		let camera = Transform::from_translation(Vec3::new(1.0, 2.0, 8.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		let SceneChunk::SubChunks(parts) =
+			grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High)
+		else {
+			anyhow::bail!("High should wrap tuft kits plus palm hosts");
+		};
+		assert_eq!(parts.len(), 2);
+		assert!(matches!(parts[1], SceneChunk::Lazy { remaining_primitives: 1, .. }));
+		Ok(())
+	}
+}

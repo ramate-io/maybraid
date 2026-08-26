@@ -3,6 +3,8 @@
 //!
 //! All authored data (cell footprint, placement ranges, bucket weights, constraints, palettes,
 //! and item geometry) lives in this module as constants mirroring the RFC blocks.
+//! Under `render`, tufts emit flattened lazy kits; palm companions are quantized
+//! (`grow_num` → `Arc<PalmBush>`) and nested as flattened plant hosts.
 
 use std::ops::RangeInclusive;
 
