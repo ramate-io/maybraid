@@ -120,7 +120,9 @@ mod render_tests {
 	}
 
 	#[test]
-	fn high_nests_lazy_palms_and_keeps_tuft_foliage_tuft_only() -> Result<()> {
+	fn high_emits_lazy_grove_kits_including_posed_palms() -> Result<()> {
+		use chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT;
+
 		let mut params = TropicalTuftsParams::default();
 		params.preview = params.preview.with_resolved_placements(vec![
 			GroveCellVariant::new(TropicalTuftsCell::BrightTuft, Vec3::new(1.0, 0.0, 2.0), 1.0),
@@ -129,8 +131,8 @@ mod render_tests {
 		let grove = params.build();
 		assert_eq!(grove.plants().len(), 1);
 		assert_eq!(grove.palm_count(), 1);
-		let tuft_nodes = grove.foliage_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(tuft_nodes.len(), 1, "palms must not explode into grove foliage");
+		let nodes = grove.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(nodes.len() > 1, "posed palm kits should join tuft foliage");
 
 		let camera = Transform::from_translation(Vec3::new(1.0, 2.0, 8.0));
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
@@ -140,13 +142,13 @@ mod render_tests {
 			current_transform: &camera,
 			bounds: &bounds,
 		};
-		let SceneChunk::SubChunks(parts) =
+		let SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } =
 			grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High)
 		else {
-			anyhow::bail!("High should wrap tuft kits plus palm hosts");
+			anyhow::bail!("High should be one lazy kit stream, not nested palm hosts");
 		};
-		assert_eq!(parts.len(), 2);
-		assert!(matches!(parts[1], SceneChunk::Lazy { remaining_primitives: 1, .. }));
+		assert_eq!(remaining_primitives, nodes.len());
+		assert_eq!(remaining_weight, nodes.len() as u32 * FLATTENED_KIT_CHUNK_WEIGHT);
 		Ok(())
 	}
 }
