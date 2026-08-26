@@ -5,7 +5,7 @@ use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
-use richmond_buildings::{StairwellFlightKind, SLAB_THICKNESS_M};
+use richmond_buildings::{StairwellFlightKind, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT};
 
 /// Flight family. Independent of [`ConnectingStairwellCase`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -139,6 +139,9 @@ pub struct ConnectingStairwell {
 	/// Kit thickness of the run-in and upper-landing slabs (meters).
 	#[arg(long, default_value_t = SLAB_THICKNESS_M)]
 	pub slab_thickness: f32,
+	/// Tread span as a fraction of the tighter opening half-extent.
+	#[arg(long, default_value_t = TREAD_FILL_DEFAULT)]
+	pub tread_fill: f32,
 	/// Shaft fill. Independent of `--case`.
 	#[arg(long, value_enum, default_value_t = ConnectingStairwellFlight::Spiral)]
 	pub flight: ConnectingStairwellFlight,
@@ -154,6 +157,7 @@ impl ConnectingStairwell {
 				flight: self.flight,
 				upper_landing: !self.no_upper_landing,
 				slab_thickness: self.slab_thickness,
+				tread_fill: self.tread_fill,
 			},
 			self.transform.transform(),
 		)

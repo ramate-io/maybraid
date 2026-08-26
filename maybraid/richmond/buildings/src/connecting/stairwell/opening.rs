@@ -9,7 +9,7 @@ use richmond_building_components::panels::PanelStyle;
 use crate::connecting::geom::{normalize_xz, EPS};
 use crate::openings::MappedOpening;
 use crate::paneling::quad_panel::QuadPanel;
-use crate::stair_flights::geom::level_rect;
+use crate::stair_flights::geom::{clamp_tread_fill, level_rect, TREAD_FILL_DEFAULT};
 use crate::stair_flights::{
 	FlightPolyline, FlightStation, SpiralFlight, StairwellFlight, StairwellFlightKind, WellFit,
 };
@@ -131,6 +131,11 @@ impl StairwellOpening {
 
 	/// Fit inputs for a well from this lower face to `upper`.
 	pub fn well_fit(self, upper: Self) -> WellFit {
+		self.well_fit_filled(upper, TREAD_FILL_DEFAULT)
+	}
+
+	/// Fit inputs with an authored tread-fill fraction.
+	pub fn well_fit_filled(self, upper: Self, tread_fill: f32) -> WellFit {
 		let (lower_hw, lower_hd) = self.plan_half_extents();
 		let (upper_hw, upper_hd) = upper.plan_half_extents();
 		WellFit {
@@ -143,6 +148,7 @@ impl StairwellOpening {
 			lower_half_depth: lower_hd,
 			upper_half_width: upper_hw,
 			upper_half_depth: upper_hd,
+			tread_fill: clamp_tread_fill(tread_fill),
 		}
 	}
 
@@ -163,11 +169,12 @@ impl StairwellOpening {
 		kind: StairwellFlightKind,
 		style: PanelStyle,
 		slab_thickness: f32,
+		tread_fill: f32,
 	) -> StairwellFlight {
 		StairwellFlight::fit(
 			kind,
 			self.flight_polyline_to(upper),
-			self.well_fit(upper),
+			self.well_fit_filled(upper, tread_fill),
 			style,
 			slab_thickness,
 		)

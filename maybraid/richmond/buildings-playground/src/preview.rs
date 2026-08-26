@@ -132,6 +132,7 @@ pub enum PreviewSubject {
 		flight: ConnectingStairwellFlight,
 		upper_landing: bool,
 		slab_thickness: f32,
+		tread_fill: f32,
 	},
 	ArcFloor {
 		radius: f32,
@@ -578,9 +579,15 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
-			PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } => {
+			PreviewSubject::ConnectingStairwell {
+				case,
+				flight,
+				upper_landing,
+				slab_thickness,
+				tread_fill,
+			} => {
 				format!(
-					"preview: connecting-stairwell --case {} --flight {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} ({})",
+					"preview: connecting-stairwell --case {} --flight {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} tread_fill={tread_fill:.3} ({})",
 					case.slug(),
 					flight.slug(),
 					case.look_for()
@@ -3665,11 +3672,18 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
-		PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } => {
+		PreviewSubject::ConnectingStairwell {
+			case,
+			flight,
+			upper_landing,
+			slab_thickness,
+			tread_fill,
+		} => {
 			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
 			let well = ConnectingStairwell::rough_stone(lower, upper)
 				.with_flight(flight.kind())
 				.with_slab_thickness(*slab_thickness)
+				.with_tread_fill(*tread_fill)
 				.with_upper_landing(*upper_landing);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
 		}
@@ -4493,7 +4507,10 @@ fn spawn_triangular_panel_hosts(
 	let kits = [
 		("floor-a", Placement::IDENTITY.with_scale(Vec3::new(s, 1.0, s))),
 		("floor-b", Placement::new(Vec3::new(s, 0.0, -s), PI).with_scale(Vec3::new(s, 1.0, s))),
-		("solo", Placement::new(Vec3::new(s + 1.5, 0.0, 0.0), 0.0).with_scale(Vec3::new(s, 1.0, s))),
+		(
+			"solo",
+			Placement::new(Vec3::new(s + 1.5, 0.0, 0.0), 0.0).with_scale(Vec3::new(s, 1.0, s)),
+		),
 		(
 			"wall",
 			Placement::new(Vec3::new(0.0, 0.0, s + 1.5), 0.0)
@@ -4534,10 +4551,7 @@ pub fn print_triangular_panel_lod(
 		rows = untagged
 			.iter()
 			.map(|(node, level)| {
-				(
-					format!("panel@{:?}", node.placement.translation),
-					format_lod_level(*level),
-				)
+				(format!("panel@{:?}", node.placement.translation), format_lod_level(*level))
 			})
 			.collect();
 	}
@@ -4545,7 +4559,10 @@ pub fn print_triangular_panel_lod(
 	let body = if rows.is_empty() {
 		"(no panel hosts yet)".into()
 	} else {
-		rows.into_iter().map(|(name, level)| format!("  {name}: {level}")).collect::<Vec<_>>().join("\n")
+		rows.into_iter()
+			.map(|(name, level)| format!("  {name}: {level}"))
+			.collect::<Vec<_>>()
+			.join("\n")
 	};
 	let text = format!("triangular-panels style={style:?} scale={scale:.2}\n{body}");
 	if *last != text {
@@ -5543,8 +5560,13 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 /// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
 /// orientation arrows, and the flight polyline.
 pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	let PreviewSubject::ConnectingStairwell { case, flight, upper_landing, slab_thickness } =
-		config.subject
+	let PreviewSubject::ConnectingStairwell {
+		case,
+		flight,
+		upper_landing,
+		slab_thickness,
+		tread_fill,
+	} = config.subject
 	else {
 		return;
 	};
@@ -5555,6 +5577,7 @@ pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewC
 	let well = ConnectingStairwell::rough_stone(lower, upper)
 		.with_flight(flight.kind())
 		.with_slab_thickness(slab_thickness)
+		.with_tread_fill(tread_fill)
 		.with_upper_landing(upper_landing);
 
 	let cyan = Color::srgb(0.2, 0.9, 0.95);
@@ -5698,4 +5721,3 @@ fn spawn_rectangle_debug_balls(
 		));
 	}
 }
-

@@ -48,9 +48,26 @@ pub(crate) fn yaw_of(travel: Vec2) -> f32 {
 	(-travel.y).atan2(travel.x)
 }
 
-/// Tread width / depth from the tighter opening half-extent.
-pub(crate) fn tread_dims(opening_min: f32) -> (f32, f32) {
-	let width = (opening_min * 0.4).clamp(0.35, 1.1);
+/// Default tread span as a fraction of the tighter opening half-extent.
+pub(crate) const TREAD_FILL_DEFAULT: f32 = 0.4;
+pub(crate) const TREAD_FILL_MIN: f32 = 0.2;
+pub(crate) const TREAD_FILL_MAX: f32 = 0.95;
+const TREAD_WIDTH_MIN_M: f32 = 0.35;
+
+/// Keep an authored fill inside the legal band.
+pub(crate) fn clamp_tread_fill(fill: f32) -> f32 {
+	if !fill.is_finite() {
+		TREAD_FILL_DEFAULT
+	} else {
+		fill.clamp(TREAD_FILL_MIN, TREAD_FILL_MAX)
+	}
+}
+
+/// Tread width / depth from the tighter opening half-extent and a fill fraction.
+pub(crate) fn tread_dims(opening_min: f32, fill: f32) -> (f32, f32) {
+	let fill = clamp_tread_fill(fill);
+	let opening_min = opening_min.max(1e-4);
+	let width = (opening_min * fill).clamp(TREAD_WIDTH_MIN_M, opening_min * TREAD_FILL_MAX);
 	let depth = (width * 0.55).clamp(0.25, 0.45);
 	(width, depth)
 }
@@ -292,5 +309,28 @@ mod tests {
 		assert_eq!(b.along, 0.0);
 		assert_eq!(b.far, 0.0);
 		assert!((b.run_len - 1.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn tread_fill_scales_width_relative_to_the_opening() {
+		let (narrow, _) = tread_dims(1.2, 0.4);
+		let (wide, _) = tread_dims(1.2, 0.8);
+		assert!((narrow - 0.48).abs() < 1e-4);
+		assert!((wide - 0.96).abs() < 1e-4);
+	}
+
+	#[test]
+	fn tread_fill_clamps_and_stays_inside_the_opening() {
+		assert!((clamp_tread_fill(3.0) - TREAD_FILL_MAX).abs() < 1e-4);
+		assert!((clamp_tread_fill(0.0) - TREAD_FILL_MIN).abs() < 1e-4);
+		let (w, _) = tread_dims(3.0, 0.4);
+		assert!(
+			(w - 1.2).abs() < 1e-4,
+			"large wells follow the fraction, not a 1.1 m cap, got {w}"
+		);
+		let (tiny, _) = tread_dims(0.45, 0.4);
+		assert!((tiny - TREAD_WIDTH_MIN_M).abs() < 1e-4);
+		let (capped, _) = tread_dims(1.2, 0.95);
+		assert!((capped - 1.2 * TREAD_FILL_MAX).abs() < 1e-4);
 	}
 }

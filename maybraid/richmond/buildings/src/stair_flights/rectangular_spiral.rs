@@ -33,7 +33,7 @@ fn fit_rect_nodes(
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, depth) = tread_dims(half_w.min(half_d));
+	let (width, depth) = tread_dims(half_w.min(half_d), fit.tread_fill);
 
 	let center = xz(fit.lower_center);
 	let out = normalize_xz(fit.lower_out).unwrap_or(Vec2::Y);
@@ -296,6 +296,7 @@ mod tests {
 				lower_half_depth: half,
 				upper_half_width: half,
 				upper_half_depth: half,
+				tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
 			},
 			PanelStyle::RoughStonework,
 			0.05,

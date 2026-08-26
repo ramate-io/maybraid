@@ -13,7 +13,8 @@
 //! landing off when a follow-on stairwell will own that floor. The shaft is
 //! filled with composed [`StairNode`]s. It does not author walls or emit shaft
 //! opening labels. A [`FlightPolyline`] along face centers absorbs plan offset.
-//! Choose a family with [`Self::with_flight`].
+//! Choose a family with [`Self::with_flight`]. Tread span is a fill
+//! fraction of the tighter opening half-extent ([`Self::with_tread_fill`]).
 
 mod landing;
 mod opening;
@@ -31,6 +32,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::quad_panel::QuadPanel;
+use crate::stair_flights::geom::clamp_tread_fill;
 use crate::stair_flights::{FlightPolyline, StairwellFlight, StairwellFlightKind};
 
 /// Aesthetic run-in depth / upper-landing length along the rim (meters).
@@ -38,6 +40,9 @@ pub const RUN_IN_M: f32 = 0.75;
 
 /// Kit thickness for both owned floor slabs (meters).
 pub const SLAB_THICKNESS_M: f32 = 0.05;
+
+/// Default tread span as a fraction of the tighter opening half-extent.
+pub const TREAD_FILL_DEFAULT: f32 = crate::stair_flights::geom::TREAD_FILL_DEFAULT;
 
 /// Shortest authored slab along the rim (meters).
 const MIN_SLAB_M: f32 = 0.12;
@@ -52,6 +57,7 @@ pub struct ConnectingStairwell {
 	run_in: QuadPanel,
 	want_landing: bool,
 	slab_thickness: f32,
+	tread_fill: f32,
 	upper_landing: Option<QuadPanel>,
 	kind: StairwellFlightKind,
 	flight: StairwellFlight,
@@ -67,8 +73,9 @@ impl ConnectingStairwell {
 		let lower = lower.into();
 		let upper = upper.into();
 		let slab_thickness = SLAB_THICKNESS_M;
+		let tread_fill = TREAD_FILL_DEFAULT;
 		let kind = StairwellFlightKind::Spiral;
-		let flight = lower.flight_to(upper, kind, style, slab_thickness);
+		let flight = lower.flight_to(upper, kind, style, slab_thickness, tread_fill);
 		let polyline = flight.polyline().clone();
 		let run_in = lower.run_in_slab(style, slab_thickness);
 		let upper_landing = flight.landing_slab(upper, style, slab_thickness);
@@ -80,6 +87,7 @@ impl ConnectingStairwell {
 			run_in,
 			want_landing: true,
 			slab_thickness,
+			tread_fill,
 			upper_landing,
 			kind,
 			flight,
@@ -117,8 +125,22 @@ impl ConnectingStairwell {
 		self
 	}
 
+	/// Tread span as a fraction of the tighter opening half-extent.
+	///
+	/// Default [`TREAD_FILL_DEFAULT`]. Clamped to \(0.2\ldots 0.95\). Width is
+	/// at least \(0.35\,\mathrm{m}\) and at most \(0.95\) of that half-extent.
+	pub fn with_tread_fill(mut self, fill: f32) -> Self {
+		self.tread_fill = clamp_tread_fill(fill);
+		self.rebuild_flight();
+		self
+	}
+
 	pub fn slab_thickness(&self) -> f32 {
 		self.slab_thickness
+	}
+
+	pub fn tread_fill(&self) -> f32 {
+		self.tread_fill
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
@@ -130,8 +152,13 @@ impl ConnectingStairwell {
 	}
 
 	fn rebuild_flight(&mut self) {
-		self.flight =
-			self.lower.flight_to(self.upper, self.kind, self.style, self.slab_thickness);
+		self.flight = self.lower.flight_to(
+			self.upper,
+			self.kind,
+			self.style,
+			self.slab_thickness,
+			self.tread_fill,
+		);
 		self.polyline = self.flight.polyline().clone();
 		self.rebuild_slabs();
 	}
@@ -206,8 +233,8 @@ mod tests {
 	use super::*;
 	use crate::connecting::geom::normalize_xz;
 	use crate::openings::MappedOpening;
-	use bevy_math::{Vec2, Vec3};
 	use crate::stair_flights::StairwellFlightKind;
+	use bevy_math::{Vec2, Vec3};
 	use richmond_building_components::partitions::PANEL_Y_HALF;
 	use richmond_building_components::stairs::Stair;
 
@@ -399,6 +426,28 @@ mod tests {
 		assert_eq!(runs.flight_kind(), StairwellFlightKind::RunAndLanding);
 		assert!(!runs.stair_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 		Ok(())
+	}
+
+	#[test]
+	fn tread_fill_widens_treads_relative_to_the_opening() -> anyhow::Result<()> {
+		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;
+		let default = ConnectingStairwell::rough_stone(lower, upper);
+		let wide = ConnectingStairwell::rough_stone(lower, upper).with_tread_fill(0.8);
+		assert!((default.tread_fill() - TREAD_FILL_DEFAULT).abs() < 1e-4);
+		assert!((wide.tread_fill() - 0.8).abs() < 1e-4);
+		let w0 = first_tread_width(&default);
+		let w1 = first_tread_width(&wide);
+		assert!(w1 > w0 + 0.3, "fill 0.8 should be clearly wider than default, {w0} vs {w1}");
+		let clamped = ConnectingStairwell::rough_stone(lower, upper).with_tread_fill(3.0);
+		assert!((clamped.tread_fill() - 0.95).abs() < 1e-4);
+		Ok(())
+	}
+
+	fn first_tread_width(well: &ConnectingStairwell) -> f32 {
+		match &well.flight().composed().stairs()[0].geometry {
+			Stair::Straight(g) => g.width,
+		}
 	}
 
 	#[test]

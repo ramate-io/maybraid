@@ -45,6 +45,8 @@ pub struct WellFit {
 	pub lower_half_depth: f32,
 	pub upper_half_width: f32,
 	pub upper_half_depth: f32,
+	/// Tread span as a fraction of the tighter opening half-extent.
+	pub tread_fill: f32,
 }
 
 /// Which family [`crate::ConnectingStairwell::with_flight`] should fit.

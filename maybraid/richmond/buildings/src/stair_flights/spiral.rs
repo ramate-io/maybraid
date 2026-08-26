@@ -64,7 +64,8 @@ fn fit_circular_nodes(polyline: &FlightPolyline, fit: WellFit) -> Vec<StairNode>
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
 	let opening_min = half_w.min(half_d);
-	let (tread_width, tread_depth) = crate::stair_flights::geom::tread_dims(opening_min);
+	let (tread_width, tread_depth) =
+		crate::stair_flights::geom::tread_dims(opening_min, fit.tread_fill);
 
 	let (center, radius) = spiral_center_radius(polyline, fit, opening_min, tread_width);
 	let turns = spiral_turns(rise, radius, tread_depth, fit, center);
@@ -155,6 +156,7 @@ mod tests {
 				lower_half_depth: 1.2,
 				upper_half_width: 1.2,
 				upper_half_depth: 1.2,
+				tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
 			},
 		);
 		assert!(!flight.stairs().is_empty());

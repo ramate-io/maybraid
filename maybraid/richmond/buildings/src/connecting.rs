@@ -10,4 +10,6 @@ pub mod hall;
 pub mod stairwell;
 
 pub use hall::{ConnectingHall, HallOpening};
-pub use stairwell::{ConnectingStairwell, StairwellOpening, TreadEnd, RUN_IN_M, SLAB_THICKNESS_M};
+pub use stairwell::{
+	ConnectingStairwell, StairwellOpening, TreadEnd, RUN_IN_M, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
+};
