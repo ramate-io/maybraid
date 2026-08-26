@@ -172,6 +172,8 @@ pub(crate) struct JointBudget {
 	pub along: f32,
 	pub far: f32,
 	pub run_len: f32,
+	/// 180° rest: pad stops at the inner edge; the return run starts there.
+	pub u_turn: bool,
 }
 
 impl JointBudget {
@@ -185,7 +187,7 @@ impl JointBudget {
 		turned: bool,
 	) -> Self {
 		if last_side {
-			return Self { along: 0.0, far: 0.0, run_len: available.max(0.0) };
+			return Self { along: 0.0, far: 0.0, run_len: available.max(0.0), u_turn: false };
 		}
 		let available = available.max(0.0);
 		let mut along = if available > min_tread + EPS {
@@ -208,7 +210,7 @@ impl JointBudget {
 		} else {
 			0.0
 		};
-		Self { along, far, run_len }
+		Self { along, far, run_len, u_turn: false }
 	}
 }
 
@@ -232,7 +234,7 @@ pub(crate) fn place_runs_with_corner_landings(
 		.iter()
 		.filter_map(|s| {
 			let len = (s.end - s.start).length();
-			(len > EPS).then_some(len)
+			(len > width * 1.15).then_some(len)
 		})
 		.fold(f32::MAX, f32::min);
 	let wanted = wanted_rest(width, if shortest.is_finite() { shortest } else { width });
@@ -240,6 +242,7 @@ pub(crate) fn place_runs_with_corner_landings(
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
 	let mut skip = 0.0_f32;
+	let mut pending_inner = 0.0_f32;
 
 	for (i, seg) in segs.iter().enumerate() {
 		let travel = seg.end - seg.start;
@@ -250,35 +253,41 @@ pub(crate) fn place_runs_with_corner_landings(
 		let used = skip.min(remaining);
 		let leftover = (remaining - used).max(0.0);
 		if leftover < EPS {
-			skip = 0.0;
+			skip = pending_inner;
+			pending_inner = 0.0;
 			continue;
 		}
 		let at_joint = i + 1 < segs.len();
 		let next = segs.get(i + 1);
 		let next_dir = next.and_then(|s| normalize_xz(s.end - s.start));
 		let next_len = next.map(|s| (s.end - s.start).length()).unwrap_or(0.0);
-		let turned = next_dir.is_some_and(|nd| is_yaw_joint(dir, nd));
-		let budget = JointBudget::new(leftover, next_len, wanted, min_tread, !at_joint, turned);
+		let bridge = at_joint
+			&& next_len <= width * 1.15
+			&& leftover > width * 2.0
+			&& next_len + EPS < leftover;
+		let turned = next_dir.is_some_and(|nd| is_yaw_joint(dir, nd)) || bridge;
+		let mut budget = JointBudget::new(leftover, next_len, wanted, min_tread, !at_joint, turned);
+		if bridge {
+			budget.far = next_len;
+			budget.u_turn = true;
+		}
 		if budget.run_len < EPS {
-			skip = 0.0;
+			skip = pending_inner;
+			pending_inner = 0.0;
 			continue;
 		}
+		let y0 = stairs.last().map(run_top_y).unwrap_or(seg.y0.min(seg.y1));
 		let height = (seg.y1 - seg.y0).abs().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 		let n = tread_count(height, budget.run_len, pref_depth).max(1);
 		let going = budget.run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
-		let Some(node) = place_straight_run(
-			first,
-			seg.y0.min(seg.y1),
-			dir,
-			width,
-			going,
-			uniform_tops(height, n),
-		) else {
+		let Some(node) = place_straight_run(first, y0, dir, width, going, uniform_tops(height, n))
+		else {
 			skip = 0.0;
 			continue;
 		};
 		skip = 0.0;
+		pending_inner = 0.0;
 		if at_joint {
 			if let Some(pad) = TreadEnd::from_straight(&node).pad(
 				next_dir,
@@ -289,6 +298,9 @@ pub(crate) fn place_runs_with_corner_landings(
 				thickness,
 			) {
 				skip = budget.far;
+				if budget.u_turn {
+					pending_inner = budget.along;
+				}
 				pads.push(pad);
 			}
 		}

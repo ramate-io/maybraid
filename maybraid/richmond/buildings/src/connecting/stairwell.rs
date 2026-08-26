@@ -13,9 +13,11 @@
 //! landing off when a follow-on stairwell will own that floor. The shaft is
 //! filled with composed [`StairNode`]s. It does not author walls or emit shaft
 //! opening labels. A [`FlightPolyline`] along face centers absorbs plan offset.
-//! Choose a family with [`Self::with_flight`]. Tread span is a fill
-//! fraction of the tighter opening half-extent ([`Self::with_tread_fill`]);
-//! preferred going / width is [`Self::with_going_ratio`].
+//! Choose a family with [`Self::with_flight`]. Run-and-landing is an I / L /
+//! U from the walk-on sides (side-by-side 180°, never stacked on one
+//! centerline). Tread span is a fill fraction of the tighter opening
+//! half-extent ([`Self::with_tread_fill`]); preferred going / width is
+//! [`Self::with_going_ratio`].
 
 mod landing;
 mod opening;
@@ -150,7 +152,8 @@ impl ConnectingStairwell {
 	/// On a ~3 m well, stay in **0.5–0.7** for one circuit. Values ≳ 1 add
 	/// another lap (headroom between stacked runs shrinks). Clamped to
 	/// \(0.2\ldots 2.0\). Depth stays in \(0.15\ldots 3.0\,\mathrm{m}\).
-	/// Run-and-landing / rectangular-spiral may still stretch going to tile a side.
+	/// Rectangular-spiral may add rim circuits; run-and-landing adds
+	/// side-by-side runs. Both may still stretch going to tile a leftover run.
 	pub fn with_going_ratio(mut self, ratio: f32) -> Self {
 		self.going_ratio = clamp_going_ratio(ratio);
 		self.rebuild_flight();

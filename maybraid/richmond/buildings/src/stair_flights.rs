@@ -48,7 +48,7 @@ pub struct WellFit {
 	/// Tread span as a fraction of the tighter opening half-extent.
 	pub tread_fill: f32,
 	/// Preferred going / width — not “how chunky one tread looks.”
-	/// High values add rectangular-spiral circuits so rise stays ~0.18 m.
+	/// High values add rectangular-spiral circuits or side-by-side runs.
 	pub going_ratio: f32,
 }
 

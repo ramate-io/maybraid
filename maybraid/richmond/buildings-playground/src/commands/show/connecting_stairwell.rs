@@ -108,7 +108,7 @@ impl ConnectingStairwellCase {
 	pub fn look_for(self) -> &'static str {
 		match self {
 			Self::Stacked => {
-				"run-in / last-tread / landing tops flush with Y=0 and Y=3; same-side arrive"
+				"run-in / last-tread / landing tops flush with Y=0 and Y=3; run-and-landing side-by-side U"
 			}
 			Self::NarrowSlot => "0.8 m slot: treads and pads may bleed the short sides",
 			Self::Shallow => "1.0 m depth: treads and pads may bleed the short axis",
@@ -119,10 +119,12 @@ impl ConnectingStairwellCase {
 			Self::SameY => "floor-level facing holes; rise floors to one tread",
 			Self::Tall => "9 m stacked rise; landings still flush with each storey",
 			Self::Huge => "6×6 hole; outer rail / rim runs on the edge",
-			Self::QuarterTurn => "arrive on the +X rim; rect-spiral must finish a different side",
+			Self::QuarterTurn => {
+				"arrive on the +X rim; run-and-landing L (or side-by-side bank) then the west walk-on"
+			}
 			Self::LongOffset => "long L (8 m east / 6 m north); one rectangular kink pad",
 			Self::Tiny => "0.9×0.9 well; ~0.65 m pads eat a side",
-			Self::ShortRise => "1.1 m rise; fat landings vs a few treads",
+			Self::ShortRise => "1.1 m rise; one crossing (not enough to switchback)",
 			Self::Skew => "45° openings; pads stay planar on yawed rims",
 			Self::SameYL => "no rise, true L on the ground; one corner pad",
 			Self::OffsetTall => "9 m plus a 4×3 m offset; stacked laps then a long last run",

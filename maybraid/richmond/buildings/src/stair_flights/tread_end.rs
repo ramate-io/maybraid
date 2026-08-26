@@ -131,12 +131,14 @@ impl TreadEnd {
 			if is_yaw_joint(incoming, out) {
 				let far = budget.far.max(1e-4);
 				let pt = |u: f32, v: f32| joint + incoming * u + out * v;
+				// U rest: stop at the inner edge so the return walk off it, not along the side.
+				let past = if budget.u_turn { 0.0 } else { half };
 				return Some(level_rect(
 					style,
 					pt(-along, -half),
-					pt(half, -half),
+					pt(past, -half),
 					pt(-along, far),
-					pt(half, far),
+					pt(past, far),
 					y,
 					thickness,
 				));
