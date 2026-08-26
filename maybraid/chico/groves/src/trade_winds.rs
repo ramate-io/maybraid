@@ -251,10 +251,11 @@ mod vc {
 		canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_trunk,
 		canopy_proxy_waialea, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
 		frond_material_from_palette, grove_detail_level, grove_lod_culls, grove_lod_level,
-		grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		grove_lod_status, grove_structural_footprint, layers_from_nodes,
+		nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise,
+		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Typical large types ~36 m (honu / waialea). `grove_bands_for_typical_height(36)`.

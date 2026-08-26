@@ -768,7 +768,9 @@ mod vc {
 			let lod::SceneChunk::Primitive { weight, .. } =
 				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
 			else {
-				anyhow::bail!("Low arid-conifer-sapling should emit one flattened canopy collection");
+				anyhow::bail!(
+					"Low arid-conifer-sapling should emit one flattened canopy collection"
+				);
 			};
 			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
 			Ok(())

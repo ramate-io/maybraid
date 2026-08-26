@@ -281,8 +281,8 @@ mod vc {
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
 		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const SHAMANHOME_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -594,13 +594,11 @@ mod vc {
 				}
 			}
 			ShamanhomeItem::SopeBanyan(banyan) => {
-				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
-					banyan,
-					build_noise,
-				)
-				.geometry
-				.scale
-				.stalk_height;
+				let world_size =
+					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.stalk_height;
 				ShamanhomePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),

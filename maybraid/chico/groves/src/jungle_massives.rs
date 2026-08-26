@@ -456,13 +456,11 @@ mod vc {
 
 		match placed.variant.item() {
 			JungleMassivesItem::Honu(banyan) => {
-				let world_size = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(
-					banyan,
-					build_noise,
-				)
-				.geometry
-				.scale
-				.tree_height;
+				let world_size =
+					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.tree_height;
 				JungleMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
@@ -473,13 +471,11 @@ mod vc {
 				}
 			}
 			JungleMassivesItem::Sope(banyan) => {
-				let world_size = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(
-					banyan,
-					build_noise,
-				)
-				.geometry
-				.scale
-				.stalk_height;
+				let world_size =
+					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.stalk_height;
 				JungleMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),

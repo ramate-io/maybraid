@@ -377,13 +377,12 @@ mod vc {
 	};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-		foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TROPICAL_UNDERGROWTH_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -671,12 +670,15 @@ mod vc {
 							.into_iter()
 							.collect()
 					}
-					TropicalUndergrowthKind::Rory(t) => canopy_proxy_rory(
-						t,
-						plant.placement,
-						&plant.stick_material,
-						&plant.ball_material,
-					),
+					TropicalUndergrowthKind::Rory(t) => vec![
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.crown,
+					],
 					TropicalUndergrowthKind::Vase(t) => {
 						canopy_proxy_site(t, plant.placement, &plant.ball_material)
 							.into_iter()
@@ -697,6 +699,24 @@ mod vc {
 							.into_iter()
 							.collect()
 					}
+				})
+				.collect()
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					TropicalUndergrowthKind::Rory(t) => {
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.trunk
+					}
+					_ => None,
 				})
 				.collect()
 		}
@@ -923,8 +943,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for TropicalUndergrowth {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -1066,7 +1086,7 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.canopy_sites().len());
 			assert!(low_foliage >= grove.plants.len());

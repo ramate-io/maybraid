@@ -126,9 +126,9 @@ mod vc {
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const VINEYARD_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -323,13 +323,29 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.flat_map(|plant| {
+				.map(|plant| {
 					canopy_proxy_rory(
 						&plant.tree,
 						plant.placement,
 						&plant.stick_material,
 						&plant.ball_material,
 					)
+					.crown
+				})
+				.collect()
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| {
+					canopy_proxy_rory(
+						&plant.tree,
+						plant.placement,
+						&plant.stick_material,
+						&plant.ball_material,
+					)
+					.trunk
 				})
 				.collect()
 		}
@@ -372,8 +388,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for Vineyard {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -491,10 +507,10 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.canopy_sites().len());
-			assert_eq!(low_foliage, grove.plants.len() * 2);
+			assert_eq!(low_foliage, grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
 			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
 				lod::SceneChunk::Primitive { weight, .. } => {

@@ -118,10 +118,11 @@ mod vc {
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, foliage_ultra_low_merged_balls,
 		frond_material_from_palette, grove_detail_level_keep_low, grove_lod_culls, grove_lod_level,
-		grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-		placement_noise, stick_material_from_palette, woody_grove_scene_chunks_keep_low_plants,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		grove_lod_status, grove_structural_footprint, layers_from_nodes,
+		nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
+		woody_grove_scene_chunks_keep_low_plants, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const DATE_GROVE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;

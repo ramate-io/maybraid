@@ -205,6 +205,7 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, RollingOaksCell, RollingOaksItem};
+	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
@@ -214,7 +215,6 @@ mod vc {
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 
 	/// Typical sentinels ~36 m. `grove_bands_for_typical_height(36)`.
 	pub const ROLLING_OAKS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;

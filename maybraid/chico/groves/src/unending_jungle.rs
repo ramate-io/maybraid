@@ -351,13 +351,14 @@ mod vc {
 	use super::{definition, UnendingJungleCell, UnendingJungleItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site, canopy_proxy_trunk,
-		canopy_proxy_waialea, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
-		frond_material_from_palette, grove_detail_level, grove_lod_culls, grove_lod_level,
-		grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent,
-		GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
+		canopy_proxy_trunk, canopy_proxy_waialea, foliage_low_canopy_balls,
+		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
+		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
+		layers_from_nodes, nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const UNENDING_JUNGLE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -631,12 +632,10 @@ mod vc {
 						UnendingJungleKind::Torch(t) => {
 							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						UnendingJungleKind::Rory(t) => canopy_proxy_rory(
-							t,
-							plant.placement,
-							&plant.stick_material,
-							material,
-						),
+						UnendingJungleKind::Rory(t) => vec![
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						],
 						UnendingJungleKind::Waialea(t) => canopy_proxy_waialea(
 							t,
 							plant.placement,
@@ -680,12 +679,10 @@ mod vc {
 						}
 					}
 					UnendingJungleKind::Rory(t) => {
-						sites.extend(canopy_proxy_rory(
-							t,
-							plant.placement,
-							&plant.stick_material,
-							material,
-						));
+						sites.push(
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						);
 					}
 					UnendingJungleKind::Waialea(t) => {
 						nodes.extend(placed_palm_low_fronds(
@@ -705,6 +702,24 @@ mod vc {
 			}
 			nodes.extend(foliage_low_canopy_balls(sites));
 			nodes
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					UnendingJungleKind::Rory(t) => {
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.trunk
+					}
+					_ => None,
+				})
+				.collect()
 		}
 	}
 
@@ -831,8 +846,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for UnendingJungle {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -972,7 +987,7 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 			let palms = grove
 				.plants

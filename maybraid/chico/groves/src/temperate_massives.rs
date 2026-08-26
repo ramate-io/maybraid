@@ -179,8 +179,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
-		StorybookTreeParams,
+		BraidOakTree, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -196,13 +195,12 @@ mod vc {
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-		foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Typical large types ~170 m (storybook / rory). `grove_bands_for_typical_height(170)`.
@@ -434,13 +432,29 @@ mod vc {
 						TemperateMassivesKind::Storybook(t) => {
 							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						TemperateMassivesKind::Rory(t) => canopy_proxy_rory(
+						TemperateMassivesKind::Rory(t) => vec![
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						],
+					}
+				})
+				.collect()
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					TemperateMassivesKind::Rory(t) => {
+						canopy_proxy_rory(
 							t,
 							plant.placement,
 							&plant.stick_material,
-							material,
-						),
+							&plant.ball_material,
+						)
+						.trunk
 					}
+					_ => None,
 				})
 				.collect()
 		}
@@ -472,7 +486,9 @@ mod vc {
 				TemperateMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TemperateMassivesKind::Oak(Arc::new(BraidOakTree::unit_from_num(variant))),
+					kind: TemperateMassivesKind::Oak(Arc::new(BraidOakTree::unit_from_num(
+						variant,
+					))),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -510,8 +526,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for TemperateMassives {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -645,7 +661,7 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.canopy_sites().len());
 			assert!(low_foliage >= grove.plants.len());

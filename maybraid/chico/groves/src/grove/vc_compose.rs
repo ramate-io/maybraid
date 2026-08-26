@@ -8,7 +8,7 @@ use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
 	components_only_host, flattened_components_only_host, FoliageGeometry, FoliageNode, Layers,
-	PlacedVegetation, Placement, StickNode, StructuralLod, VegetationComponents,
+	PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -321,13 +321,18 @@ pub fn canopy_proxy_waialea(
 	sites
 }
 
-/// Trained umbrella (Rory): trunk column + one cheap ball at the stalk tip.
+/// Trained umbrella (Rory) Low / UltraLow: one real trunk plus one crown cheap ball.
 ///
-/// [`canopy_proxy_site`] puts a sphere at mid-height with `tree_radius` =
-/// max(footprint, half-height). That mid-tree blob is the grove Low / UltraLow
-/// card. Keep the trunk (stick material, world stalk radius) and one uniform
-/// canopy ball (leaf material) at `crown_y_frac` of height. Do not flatten the
-/// crown — a non-uniform cheap ball reads as a rectangle.
+/// [`canopy_proxy_site`] puts a sphere at mid-height. A stretched cheap ball for
+/// the stalk reads as a rectangle. Emit [`StickGeometry::Trunk`] only — no branch
+/// segments — and one uniform leaf-material ball at `crown_y_frac` of height.
+#[derive(Clone, Debug)]
+pub struct TrainedCanopyProxy {
+	pub trunk: Option<StickNode>,
+	pub crown: CanopyProxySite,
+}
+
+/// One [`StickGeometry::Trunk`] from `ground` to the crown, plus a uniform crown ball.
 pub fn canopy_proxy_trained(
 	plant_placement: Placement,
 	trunk_material: &MaterialRef,
@@ -336,26 +341,25 @@ pub fn canopy_proxy_trained(
 	stalk_radius_world: f32,
 	crown_radius: f32,
 	crown_y_frac: f32,
-) -> Vec<CanopyProxySite> {
+) -> TrainedCanopyProxy {
 	let h = world_height.max(1e-4);
 	let ground = plant_placement.translation;
 	let crown_center = ground + Vec3::Y * (h * crown_y_frac.clamp(0.35, 0.98));
-	let trunk_half_h = (crown_center.y - ground.y).abs() * 0.5;
-	let xz = stalk_radius_world.max(0.12);
-	let mut sites = Vec::with_capacity(2);
-	if trunk_half_h >= 0.2 {
-		sites.push(CanopyProxySite {
-			center: (ground + crown_center) * 0.5,
-			half_extents: Vec3::new(xz, trunk_half_h, xz),
-			material: trunk_material.clone(),
-		});
-	}
-	sites.push(CanopyProxySite::from_radius(
+	let trunk = StickNode::from_segment_geometry(
+		ground,
 		crown_center,
-		crown_radius.max(0.25),
-		crown_material.clone(),
-	));
-	sites
+		stalk_radius_world.max(0.12),
+		StickGeometry::Trunk,
+	)
+	.map(|node| node.with_material(trunk_material.clone()));
+	TrainedCanopyProxy {
+		trunk,
+		crown: CanopyProxySite::from_radius(
+			crown_center,
+			crown_radius.max(0.25),
+			crown_material.clone(),
+		),
+	}
 }
 
 /// [`canopy_proxy_trained`] from a unit-height [`RorysHeadTrained`] plus placement scale.
@@ -364,7 +368,7 @@ pub fn canopy_proxy_rory(
 	plant_placement: Placement,
 	trunk_material: &MaterialRef,
 	crown_material: &MaterialRef,
-) -> Vec<CanopyProxySite> {
+) -> TrainedCanopyProxy {
 	let s = plant_placement.scale.abs().max_element();
 	let h = (plant.geometry.height() * s).max(1e-4);
 	let stalk = plant.geometry.scale.stalk_base_radius_or_default() * s;
@@ -378,6 +382,25 @@ pub fn canopy_proxy_rory(
 		crown,
 		plant.geometry.scale.stalk_height_fraction,
 	)
+}
+
+/// Low / UltraLow proxy trunks as one standard stick collection.
+///
+/// High / Medium stay empty — woody groves nest plants there. Trunks only; no
+/// branch segments.
+pub fn trained_proxy_stick_nodes_for_level(
+	level: LodSceneLevel,
+	trunks: impl IntoIterator<Item = StickNode>,
+) -> Layers<StickNode> {
+	match level {
+		LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
+		LodSceneLevel::Low
+		| LodSceneLevel::UltraLow
+		| LodSceneLevel::Distance(_)
+		| LodSceneLevel::Resolution(_) => {
+			layers_from_nodes(StickNode::merge_standard(trunks).into_iter().collect())
+		}
+	}
 }
 
 /// Like [`canopy_proxy_site`], with an extra local child pose (e.g. crown at trunk tip).
@@ -404,7 +427,7 @@ pub fn foliage_low_canopy_balls(
 
 /// Grove UltraLow: merge nearby canopy sites into larger balls; one color per bin.
 ///
-/// Uniform crowns and trunk/column sites merge separately so a trained umbrella
+/// Uniform crowns and trunk/column sites merge separately so a Waialea column
 /// does not collapse into one bark-colored rectangle.
 pub fn foliage_ultra_low_merged_balls(
 	sites: &[CanopyProxySite],
@@ -741,7 +764,7 @@ mod tests {
 	#[test]
 	fn trained_low_proxy_keeps_trunk_and_crown_ball() {
 		let placement = Placement::new(Vec3::new(4.0, 0.0, -2.0), 0.0).with_scale(Vec3::splat(2.0));
-		let sites = canopy_proxy_trained(
+		let proxy = canopy_proxy_trained(
 			placement,
 			&chico_stick_material_ref(),
 			&chico_leaf_material_ref(),
@@ -750,15 +773,13 @@ mod tests {
 			6.0,
 			0.90,
 		);
-		assert_eq!(sites.len(), 2);
-		let trunk = &sites[0];
-		let crown = &sites[1];
-		assert!(trunk.half_extents.y > trunk.half_extents.x * 2.0);
-		assert!((trunk.half_extents.x - 1.6).abs() < 1e-3);
-		assert!(trunk.center.y < crown.center.y);
-		assert!((crown.center.y - 18.0).abs() < 1e-3);
-		assert!(crown.is_uniform());
-		assert!((crown.half_extents.x - 6.0).abs() < 1e-3);
+		let trunk = proxy.trunk.expect("trunk");
+		assert_eq!(trunk.geometry, StickGeometry::Trunk);
+		assert!(trunk.collection.is_none());
+		assert!((proxy.crown.center.y - 18.0).abs() < 1e-3);
+		assert!(proxy.crown.is_uniform());
+		assert!((proxy.crown.half_extents.x - 6.0).abs() < 1e-3);
+		assert!(trunk.placement.translation.y < proxy.crown.center.y);
 	}
 
 	#[test]

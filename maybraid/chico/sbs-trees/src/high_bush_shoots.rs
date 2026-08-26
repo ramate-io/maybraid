@@ -28,9 +28,9 @@ use lod::gen::LodSceneLevel;
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 
 /// High when `distance / footprint_radius ≤` this.
-const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
-const HIGH_BUSH_STRUCTURAL_LOW_FACTOR: f32 = 50.0;
+const HIGH_BUSH_STRUCTURAL_HIGH_FACTOR: f32 = 30.0;
+const HIGH_BUSH_STRUCTURAL_MEDIUM_FACTOR: f32 = 45.0;
+const HIGH_BUSH_STRUCTURAL_LOW_FACTOR: f32 = 60.0;
 
 /// Authoring / CLI parameters for High Bush Shoots (VegetationComponents path).
 #[derive(Component, Clone, Args, Debug, PartialEq)]

@@ -211,9 +211,9 @@ mod vc {
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
@@ -440,7 +440,15 @@ mod vc {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						ForlornSavannaKind::Rory(t) => {
-							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+							vec![
+								canopy_proxy_rory(
+									t,
+									plant.placement,
+									&plant.stick_material,
+									material,
+								)
+								.crown,
+							]
 						}
 						ForlornSavannaKind::Bush(t) => {
 							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
@@ -449,6 +457,24 @@ mod vc {
 							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 					}
+				})
+				.collect()
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					ForlornSavannaKind::Rory(t) => {
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.trunk
+					}
+					_ => None,
 				})
 				.collect()
 		}
@@ -522,8 +548,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for ForlornSavanna {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -657,7 +683,7 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.canopy_sites().len());
 			assert!(low_foliage >= grove.plants.len());

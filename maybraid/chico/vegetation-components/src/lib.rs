@@ -318,12 +318,21 @@ pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
 /// Cheap balls fold through [`FoliageNode::merge_canopy_proxies`] so a grove tile
 /// is one (or a few) [`FLATTENED_KIT_CHUNK_WEIGHT`] kits, not one host per plant.
 /// Sticks, if any, are flattened the same way and not hosted.
+///
+/// Stick UltraLow is an empty kit. Proxy trunks still need the Low trunk GLB, so
+/// sticks present at Low when the grove band is UltraLow.
 pub fn flattened_canopy_proxy_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
-	let sticks = vegetation.stick_nodes_for_level(level).flatten();
+	let stick_level = match level {
+		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+			LodSceneLevel::Low
+		}
+		other => other,
+	};
+	let sticks = vegetation.stick_nodes_for_level(stick_level).flatten();
 	let foliage =
 		FoliageNode::merge_canopy_proxies(vegetation.foliage_nodes_for_level(level).flatten());
 	let n = sticks.len() + foliage.len();
@@ -334,7 +343,7 @@ pub fn flattened_canopy_proxy_chunks(
 	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
 	let mut chunks = Vec::with_capacity(n);
 	for node in sticks {
-		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
+		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, stick_level)));
 	}
 	for node in foliage {
 		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
