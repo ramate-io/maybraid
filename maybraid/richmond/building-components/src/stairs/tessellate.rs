@@ -41,8 +41,6 @@ fn straight_kits(g: &StraightStair) -> Vec<Placed<StairKit>> {
 	}
 	let going = g.going_per_tread();
 	let half = 2.0 * TREAD_HALF_EXTENT;
-	let kit_min_x = -(TREAD_HALF_EXTENT + TREAD_BLEED_X);
-	let mesh_span = TREAD_HALF_EXTENT - kit_min_x;
 	let mut prev_top = 0.0_f32;
 
 	tops.into_iter()
@@ -50,21 +48,24 @@ fn straight_kits(g: &StraightStair) -> Vec<Placed<StairKit>> {
 		.map(|(i, top)| {
 			let rise = (top - prev_top).max(1e-4);
 			prev_top = top;
-			let center_x = i as f32 * going;
-			let y = top - 0.5 * rise;
-			// Walkable cube maps going onto [-1, 1]. Flush first kit packs the
-			// X=-2 bleed into that same going so it does not hang behind the
-			// walkable trailing (landing / walk-on edge).
-			let (x, scale_x) = if g.flush_start && i == 0 {
-				let scale_x = going / mesh_span;
-				(center_x - 0.5 * going - kit_min_x * scale_x, scale_x)
-			} else {
-				(center_x, going / half)
-			};
+			let (x, scale_x) = kit_x(g.flush_start && i == 0, i, going);
 			let scale = Vec3::new(scale_x, rise / half, g.width / half);
-			Placed::new(StairKit::Tread, Vec3::new(x, y, 0.0), 0.0).with_scale(scale)
+			Placed::new(StairKit::Tread, Vec3::new(x, top - 0.5 * rise, 0.0), 0.0).with_scale(scale)
 		})
 		.collect()
+}
+
+/// Walkable cube maps going onto \([-1, 1]\). Flush packs \(X \to -2\) into that going.
+fn kit_x(flush_first: bool, i: usize, going: f32) -> (f32, f32) {
+	let center_x = i as f32 * going;
+	let half = 2.0 * TREAD_HALF_EXTENT;
+	if flush_first {
+		let kit_min_x = -(TREAD_HALF_EXTENT + TREAD_BLEED_X);
+		let scale_x = going / (TREAD_HALF_EXTENT - kit_min_x);
+		(center_x - 0.5 * going - kit_min_x * scale_x, scale_x)
+	} else {
+		(center_x, going / half)
+	}
 }
 
 #[cfg(test)]
@@ -72,10 +73,14 @@ mod tests {
 	use super::*;
 	use crate::stairs::geometry::{StairGeometry, StraightStair};
 
+	fn kit_world_x(placement_x: f32, scale_x: f32, kit_x: f32) -> f32 {
+		placement_x + kit_x * scale_x
+	}
+
 	fn two_tread(flush: bool) -> Vec<Placed<StairKit>> {
-		let mut g = StraightStair::run(0.36, 0.5, 0.5, 0.25);
-		g.tread_tops = vec![0.18, 0.36];
-		g.flush_start = flush;
+		let g = StraightStair::run(0.36, 0.5, 0.5, 0.25)
+			.with_tread_tops(vec![0.18, 0.36])
+			.with_flush_start(flush);
 		StairGeometry::Straight(g).kit_pieces()
 	}
 
@@ -90,15 +95,17 @@ mod tests {
 		let nest = &nested[0].placement;
 		assert!(nest.translation.x.abs() < 1e-4);
 		assert!((nest.scale.x - going / 2.0).abs() < 1e-4);
-		let nest_bleed = nest.translation.x - 2.0 * nest.scale.x;
+		let nest_bleed =
+			kit_world_x(nest.translation.x, nest.scale.x, -(TREAD_HALF_EXTENT + TREAD_BLEED_X));
 		assert!(
 			(nest_bleed + going).abs() < 1e-4,
 			"nested bleed hangs a half going behind, got {nest_bleed}"
 		);
 
 		let first = &flush[0].placement;
-		let mesh_trail = first.translation.x - 2.0 * first.scale.x;
-		let mesh_lead = first.translation.x + first.scale.x;
+		let mesh_trail =
+			kit_world_x(first.translation.x, first.scale.x, -(TREAD_HALF_EXTENT + TREAD_BLEED_X));
+		let mesh_lead = kit_world_x(first.translation.x, first.scale.x, TREAD_HALF_EXTENT);
 		assert!(
 			(mesh_trail + 0.5 * going).abs() < 1e-4,
 			"flush mesh trailing should be the walkable trailing, got {mesh_trail}"

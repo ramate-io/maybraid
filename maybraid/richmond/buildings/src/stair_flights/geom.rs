@@ -114,15 +114,11 @@ pub(crate) fn place_straight_run(
 	let n = tops.len() as f32;
 	let depth = depth.max(1e-4);
 	let height = tops.last().copied().unwrap_or(StraightStair::DEFAULT_TREAD_HEIGHT);
-	let geometry = Stair::Straight(StraightStair {
-		height,
-		length: n * depth,
-		width: width.max(1e-4),
-		depth,
-		tread_height: StraightStair::DEFAULT_TREAD_HEIGHT,
-		tread_tops: tops,
-		flush_start,
-	});
+	let geometry = Stair::Straight(
+		StraightStair::run(height, n * depth, width, depth)
+			.with_tread_tops(tops)
+			.with_flush_start(flush_start),
+	);
 	Some(StairNode::rough_stone(
 		geometry,
 		Placement::new(Vec3::new(start_xz.x, base_y, start_xz.y), yaw_of(travel)),
@@ -162,6 +158,15 @@ pub(crate) fn level_rect(
 	QuadPanel::slab(style, at_y(a0, y), at_y(a1, y), at_y(b0, y), at_y(b1, y), thickness)
 }
 
+/// Plan length ≤ this × tread width is a landing lateral, not a run.
+pub(crate) const LATERAL_OVER_WIDTH: f32 = 1.15;
+/// Leftover must exceed this × width before a short next seg is a U bridge.
+const U_BRIDGE_OVER_WIDTH: f32 = 2.0;
+/// When a side cannot keep `min_tread`, rest is this fraction of the side.
+const REST_FALLBACK: f32 = 0.35;
+const REST_SIDE_FRACTION: f32 = 0.4;
+const REST_MIN_M: f32 = 0.65;
+
 /// Plan segment with walk-on \(Y\) at each end.
 #[derive(Clone, Copy)]
 pub(crate) struct PathSeg {
@@ -169,6 +174,25 @@ pub(crate) struct PathSeg {
 	pub end: Vec2,
 	pub y0: f32,
 	pub y1: f32,
+}
+
+impl PathSeg {
+	pub(crate) fn travel(self) -> Vec2 {
+		self.end - self.start
+	}
+
+	pub(crate) fn length(self) -> f32 {
+		self.travel().length()
+	}
+
+	pub(crate) fn rise(self) -> f32 {
+		(self.y1 - self.y0).abs()
+	}
+}
+
+/// Short laterals are landing bridges; rise stays on real runs.
+pub(crate) fn is_lateral(len: f32, tread_width: f32) -> bool {
+	len <= tread_width * LATERAL_OVER_WIDTH
 }
 
 /// One joint: incoming rest, outgoing skip, and the run between them.
@@ -194,50 +218,85 @@ impl JointBudget {
 		if last_side {
 			return Self { along: 0.0, far: 0.0, run_len: available.max(0.0), u_turn: false };
 		}
-		let available = available.max(0.0);
-		let mut along = if available > min_tread + EPS {
-			wanted.min(available - min_tread)
-		} else {
-			available * 0.35
-		};
-		along = along.max(0.0);
-		let mut run_len = (available - along).max(0.0);
-		if run_len < EPS {
-			along = 0.0;
-			run_len = available;
-		}
-		let far = if turned {
-			if next_len > min_tread + EPS {
-				wanted.min(next_len - min_tread).max(0.0)
-			} else {
-				(next_len * 0.35).max(0.0)
-			}
-		} else {
-			0.0
-		};
+		let (along, run_len) = reserve_rest(available, wanted, min_tread);
+		let far = if turned { rest_on_side(next_len, wanted, min_tread) } else { 0.0 };
 		Self { along, far, run_len, u_turn: false }
+	}
+}
+
+fn reserve_rest(available: f32, wanted: f32, min_tread: f32) -> (f32, f32) {
+	let available = available.max(0.0);
+	let mut along = rest_on_side(available, wanted, min_tread);
+	let mut run_len = (available - along).max(0.0);
+	if run_len < EPS {
+		along = 0.0;
+		run_len = available;
+	}
+	(along, run_len)
+}
+
+fn rest_on_side(side: f32, wanted: f32, min_tread: f32) -> f32 {
+	if side > min_tread + EPS {
+		wanted.min(side - min_tread).max(0.0)
+	} else {
+		(side * REST_FALLBACK).max(0.0)
 	}
 }
 
 /// Rest target: at least ~tread width, at most 40% of the shortest side.
 pub(crate) fn wanted_rest(tread_width: f32, shortest_side: f32) -> f32 {
-	let want = tread_width.max(0.65);
-	let cap = (shortest_side * 0.4).max(tread_width * 0.75);
+	let want = tread_width.max(REST_MIN_M);
+	let cap = (shortest_side * REST_SIDE_FRACTION).max(tread_width * 0.75);
 	want.min(cap)
 }
 
-/// First trailing of the next run: inner edge on a U / 180°, outgoing far on an L.
-fn departing_riser(end: TreadEnd, outgoing: Option<Vec2>, budget: JointBudget) -> Vec2 {
-	let incoming = normalize_xz(end.travel).unwrap_or(Vec2::X);
-	if budget.u_turn {
-		return end.leading_mid();
+/// Next run starts here: inner edge on a U / 180°, outgoing far on an L.
+#[derive(Clone, Copy)]
+struct PendingRiser {
+	edge: Vec2,
+	/// Consume a short U-bridge seg without placing it.
+	skip_short: bool,
+}
+
+impl PendingRiser {
+	fn from_joint(end: TreadEnd, outgoing: Option<Vec2>, budget: JointBudget) -> Self {
+		let incoming = normalize_xz(end.travel).unwrap_or(Vec2::X);
+		let edge = if budget.u_turn {
+			end.leading_mid()
+		} else if let Some(out) = outgoing.and_then(normalize_xz) {
+			if is_yaw_joint(incoming, out) {
+				end.leading_mid() + incoming * budget.along + out * budget.far
+			} else {
+				end.leading_mid()
+			}
+		} else {
+			end.leading_mid()
+		};
+		Self { edge, skip_short: budget.u_turn }
 	}
-	if let Some(out) = outgoing.and_then(normalize_xz) {
-		if is_yaw_joint(incoming, out) {
-			return end.leading_mid() + incoming * budget.along + out * budget.far;
+
+	/// Inset along `dir`, or `None` if this seg is the U bridge / the rest itself.
+	fn inset(self, start: Vec2, dir: Vec2, remaining: f32, width: f32) -> Option<f32> {
+		let inset = (self.edge - start).dot(dir).max(0.0);
+		if (self.skip_short && is_lateral(remaining, width)) || inset + EPS >= remaining {
+			None
+		} else {
+			Some(inset)
 		}
 	}
-	end.leading_mid()
+}
+
+fn shortest_run(segs: &[PathSeg], width: f32) -> f32 {
+	segs.iter()
+		.map(|s| s.length())
+		.filter(|&len| !is_lateral(len, width))
+		.fold(f32::MAX, f32::min)
+}
+
+fn is_u_bridge(next_len: f32, leftover: f32, width: f32) -> bool {
+	is_lateral(next_len, width)
+		&& leftover > width * U_BRIDGE_OVER_WIDTH
+		&& next_len + EPS < leftover
 }
 
 /// Straight runs along `segs`. One [`JointBudget`] per joint; the next first
@@ -249,33 +308,25 @@ pub(crate) fn place_runs_with_corner_landings(
 	style: PanelStyle,
 	thickness: f32,
 ) -> (Vec<StairNode>, Vec<QuadPanel>) {
-	let shortest = segs
-		.iter()
-		.filter_map(|s| {
-			let len = (s.end - s.start).length();
-			(len > width * 1.15).then_some(len)
-		})
-		.fold(f32::MAX, f32::min);
+	let shortest = shortest_run(segs, width);
 	let wanted = wanted_rest(width, if shortest.is_finite() { shortest } else { width });
 	let min_tread = pref_depth * 0.4;
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
-	let mut pending_riser: Option<(Vec2, bool)> = None;
+	let mut pending: Option<PendingRiser> = None;
 
 	for (i, seg) in segs.iter().enumerate() {
-		let travel = seg.end - seg.start;
-		let Some(dir) = normalize_xz(travel) else {
+		let Some(dir) = normalize_xz(seg.travel()) else {
 			continue;
 		};
-		let remaining = travel.length();
-		if (seg.y1 - seg.y0).abs() < EPS {
+		let remaining = seg.length();
+		if seg.rise() < EPS {
 			continue;
 		}
-		let used = if let Some((edge, skip_short)) = pending_riser {
-			let inset = (edge - seg.start).dot(dir).max(0.0);
-			if (skip_short && remaining <= width * 1.15) || inset + EPS >= remaining {
+		let used = if let Some(riser) = pending {
+			let Some(inset) = riser.inset(seg.start, dir, remaining, width) else {
 				continue;
-			}
+			};
 			inset
 		} else {
 			0.0
@@ -286,12 +337,9 @@ pub(crate) fn place_runs_with_corner_landings(
 		}
 		let at_joint = i + 1 < segs.len();
 		let next = segs.get(i + 1);
-		let next_dir = next.and_then(|s| normalize_xz(s.end - s.start));
-		let next_len = next.map(|s| (s.end - s.start).length()).unwrap_or(0.0);
-		let bridge = at_joint
-			&& next_len <= width * 1.15
-			&& leftover > width * 2.0
-			&& next_len + EPS < leftover;
+		let next_dir = next.and_then(|s| normalize_xz(s.travel()));
+		let next_len = next.map(|s| s.length()).unwrap_or(0.0);
+		let bridge = at_joint && is_u_bridge(next_len, leftover, width);
 		let turned = next_dir.is_some_and(|nd| is_yaw_joint(dir, nd)) || bridge;
 		let mut budget = JointBudget::new(leftover, next_len, wanted, min_tread, !at_joint, turned);
 		if bridge {
@@ -303,7 +351,7 @@ pub(crate) fn place_runs_with_corner_landings(
 			continue;
 		}
 		let y0 = stairs.last().map(run_top_y).unwrap_or(seg.y0.min(seg.y1));
-		let height = (seg.y1 - seg.y0).abs().max(StraightStair::DEFAULT_TREAD_HEIGHT);
+		let height = seg.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 		let n = tread_count(height, budget.run_len, pref_depth).max(1);
 		let going = budget.run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
@@ -312,12 +360,12 @@ pub(crate) fn place_runs_with_corner_landings(
 		else {
 			continue;
 		};
-		pending_riser = None;
+		pending = None;
 		if at_joint {
 			let end = TreadEnd::from_straight(&node);
 			if let Some(pad) = end.pad(next_dir, budget, width, run_top_y(&node), style, thickness)
 			{
-				pending_riser = Some((departing_riser(end, next_dir, budget), budget.u_turn));
+				pending = Some(PendingRiser::from_joint(end, next_dir, budget));
 				pads.push(pad);
 			}
 		}

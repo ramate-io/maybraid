@@ -52,6 +52,27 @@ pub struct WellFit {
 	pub lapping_ratio: f32,
 }
 
+impl WellFit {
+	/// Tighter of the two walk-on half-widths.
+	pub fn half_width(self) -> f32 {
+		self.lower_half_width.min(self.upper_half_width).max(1e-4)
+	}
+
+	/// Tighter of the two walk-on-to-far half-depths.
+	pub fn half_depth(self) -> f32 {
+		self.lower_half_depth.min(self.upper_half_depth).max(1e-4)
+	}
+
+	/// Tighter opening half-extent (width or depth).
+	pub fn opening_min(self) -> f32 {
+		self.half_width().min(self.half_depth())
+	}
+
+	pub(crate) fn tread_dims(self) -> (f32, f32) {
+		geom::tread_dims(self.opening_min(), self.tread_fill, self.lapping_ratio)
+	}
+}
+
 /// Which family [`crate::ConnectingStairwell::with_flight`] should fit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StairwellFlightKind {
@@ -113,11 +134,7 @@ impl StairwellFlight {
 	}
 
 	pub fn tread_end(&self) -> TreadEnd {
-		self.composed.tread_end().unwrap_or(TreadEnd {
-			leading_outer: Vec2::ZERO,
-			leading_inner: Vec2::ZERO,
-			travel: Vec2::X,
-		})
+		self.composed.tread_end().unwrap_or_default()
 	}
 }
 

@@ -8,13 +8,24 @@
 
 use bevy_math::Vec2;
 use richmond_building_components::panels::PanelStyle;
-use richmond_building_components::stairs::StraightStair;
+use richmond_building_components::stairs::{StairNode, StraightStair};
 
+use crate::paneling::quad_panel::QuadPanel;
 use crate::stair_flights::composed::ComposedFlight;
 use crate::stair_flights::geom::{
-	normalize_xz, place_runs_with_corner_landings, tread_dims, xz, PathSeg, EPS,
+	is_lateral, normalize_xz, place_runs_with_corner_landings, xz, PathSeg, EPS,
 };
 use crate::stair_flights::{FlightPolyline, WellFit};
+
+/// Plan points closer than this are the same waypoint.
+const DEDUP_M: f32 = 0.12;
+/// Walk-on is on this side of the well if |u| or |u − far| is below this.
+const SIDE_ALIGN_M: f32 = 0.35;
+const IN_WELL_SLACK_M: f32 = 0.3;
+const ADJACENT_RIM_M: f32 = 0.4;
+/// Compact I / L is enough when needed going fits this × the path length.
+const COMPACT_FIT: f32 = 1.05;
+const STATION_M: f32 = 0.15;
 
 /// Fit an I / L / U path, or the polyline L when the arrive is outside the well.
 pub fn fit(
@@ -32,13 +43,8 @@ fn fit_runs(
 	fit: WellFit,
 	style: PanelStyle,
 	thickness: f32,
-) -> (
-	Vec<richmond_building_components::stairs::StairNode>,
-	Vec<crate::paneling::quad_panel::QuadPanel>,
-) {
-	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
-	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, pref_depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.lapping_ratio);
+) -> (Vec<StairNode>, Vec<QuadPanel>) {
+	let (width, pref_depth) = fit.tread_dims();
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let path = plan_path(polyline, fit, width, pref_depth);
 	let segs = segs_along_path(&path, fit.lower_walk_on.y, rise, width);
@@ -63,8 +69,8 @@ impl Frame {
 		let arrive = xz(fit.upper_walk_on);
 		let delta = arrive - start;
 		let right = Vec2::new(-out.y, out.x);
-		let hw = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
-		let hd = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
+		let hw = fit.half_width();
+		let hd = fit.half_depth();
 		Some(Self { start, out, right, hw, hd, u_a: delta.dot(out), v_a: delta.dot(right) })
 	}
 
@@ -77,21 +83,23 @@ impl Frame {
 	}
 
 	fn in_well(self) -> bool {
-		let u_ok = self.u_a >= -0.3 && self.u_a <= self.far() + 0.3;
-		let v_ok = self.v_a.abs() <= self.hw + 0.3;
+		let u_ok = self.u_a >= -IN_WELL_SLACK_M && self.u_a <= self.far() + IN_WELL_SLACK_M;
+		let v_ok = self.v_a.abs() <= self.hw + IN_WELL_SLACK_M;
 		u_ok && v_ok
 	}
 
 	fn same_side(self) -> bool {
-		self.u_a.abs() < 0.35
+		self.u_a.abs() < SIDE_ALIGN_M
 	}
 
 	fn opposite(self) -> bool {
-		(self.u_a - self.far()).abs() < 0.35
+		(self.u_a - self.far()).abs() < SIDE_ALIGN_M
 	}
 
 	fn adjacent(self) -> bool {
-		self.v_a.abs() > self.hw - 0.4 && self.u_a > 0.3 && self.u_a < self.far() - 0.3
+		self.v_a.abs() > self.hw - ADJACENT_RIM_M
+			&& self.u_a > IN_WELL_SLACK_M
+			&& self.u_a < self.far() - IN_WELL_SLACK_M
 	}
 }
 
@@ -111,14 +119,19 @@ fn plan_path(polyline: &FlightPolyline, fit: WellFit, width: f32, pref_depth: f3
 		if frame.same_side() { far } else { (xz(fit.upper_walk_on) - frame.start).length() };
 	let l_len = frame.u_a.abs() + frame.v_a.abs();
 
-	if needed <= i_len * 1.05 && (frame.opposite() || frame.same_side()) {
+	if needed <= i_len * COMPACT_FIT && (frame.opposite() || frame.same_side()) {
 		return path_i(frame);
 	}
-	if frame.adjacent() && needed <= l_len * 1.05 {
+	if frame.adjacent() && needed <= l_len * COMPACT_FIT {
 		return path_l(frame);
 	}
 
 	let run = (far - width).max(width);
+	path_bank(frame, bank_slots(frame, needed, run, width), width)
+}
+
+/// Side-by-side slots so rise fits `run`, even parity on a U, odd on an I.
+fn bank_slots(frame: Frame, needed: f32, run: f32, width: f32) -> u32 {
 	let max_slots = ((2.0 * frame.hw) / width.max(1e-4)).floor().max(1.0) as u32;
 	let mut n = (needed / run).ceil().max(1.0) as u32;
 	if frame.same_side() {
@@ -133,8 +146,7 @@ fn plan_path(polyline: &FlightPolyline, fit: WellFit, width: f32, pref_depth: f3
 	} else if frame.opposite() && n % 2 == 0 {
 		n += 1;
 	}
-	n = n.min(max_slots).max(1);
-	path_bank(frame, n, width)
+	n.min(max_slots).max(1)
 }
 
 fn path_i(frame: Frame) -> Vec<Vec2> {
@@ -169,16 +181,16 @@ fn path_bank(frame: Frame, n: u32, width: f32) -> Vec<Vec2> {
 	}
 	if frame.adjacent() {
 		if let Some(&(u, v)) = local.last() {
-			if (u - frame.u_a).abs() > 0.12 {
+			if (u - frame.u_a).abs() > DEDUP_M {
 				local.push((frame.u_a, v));
 			}
-			if (v - frame.v_a).abs() > 0.12 {
+			if (v - frame.v_a).abs() > DEDUP_M {
 				local.push((frame.u_a, frame.v_a));
 			}
 		}
 	} else if frame.opposite() {
 		if let Some(&(_, v)) = local.last() {
-			if (v - frame.v_a).abs() > 0.12 {
+			if (v - frame.v_a).abs() > DEDUP_M {
 				local.push((far, frame.v_a));
 			}
 		}
@@ -202,16 +214,16 @@ fn plan_one_shot(polyline: &FlightPolyline, fit: WellFit) -> Vec<Vec2> {
 	if polyline.stations.len() > 2 {
 		for s in &polyline.stations[1..polyline.stations.len() - 1] {
 			let p = xz(s.center);
-			if pts.last().is_some_and(|q| (*q - p).length() > 0.15) {
+			if pts.last().is_some_and(|q| (*q - p).length() > STATION_M) {
 				pts.push(p);
 			}
 		}
 	}
 	let arrive = xz(fit.upper_walk_on);
-	if pts.last().is_some_and(|q| (*q - arrive).length() > 0.15) {
+	if pts.last().is_some_and(|q| (*q - arrive).length() > STATION_M) {
 		pts.push(arrive);
 	}
-	if pts.len() < 2 || (pts.len() == 2 && (pts[1] - pts[0]).length() < 0.15) {
+	if pts.len() < 2 || (pts.len() == 2 && (pts[1] - pts[0]).length() < STATION_M) {
 		if let Some(out) = normalize_xz(fit.lower_out) {
 			let span = (2.0 * fit.lower_half_depth.min(fit.upper_half_depth)).max(0.5);
 			let far = start + out * span;
@@ -228,7 +240,7 @@ fn plan_one_shot(polyline: &FlightPolyline, fit: WellFit) -> Vec<Vec2> {
 fn dedup(pts: Vec<Vec2>) -> Vec<Vec2> {
 	let mut out: Vec<Vec2> = Vec::new();
 	for p in pts {
-		if out.last().is_some_and(|q| (*q - p).length() <= 0.12) {
+		if out.last().is_some_and(|q| (*q - p).length() <= DEDUP_M) {
 			if let Some(last) = out.last_mut() {
 				*last = p;
 			}
@@ -242,7 +254,7 @@ fn dedup(pts: Vec<Vec2>) -> Vec<Vec2> {
 fn segs_along_path(path: &[Vec2], base_y: f32, rise: f32, width: f32) -> Vec<PathSeg> {
 	let lens: Vec<f32> = path.windows(2).map(|w| (w[1] - w[0]).length()).collect();
 	let run: Vec<f32> =
-		lens.iter().map(|&len| if len > width * 1.15 { len } else { 0.0 }).collect();
+		lens.iter().map(|&len| if is_lateral(len, width) { 0.0 } else { len }).collect();
 	let total: f32 = run.iter().sum();
 	let mut y = base_y;
 	let mut out = Vec::new();
@@ -303,7 +315,7 @@ mod tests {
 		)
 	}
 
-	fn long_runs(flight: &ComposedFlight) -> Vec<&richmond_building_components::stairs::StairNode> {
+	fn long_runs(flight: &ComposedFlight) -> Vec<&StairNode> {
 		flight
 			.stairs()
 			.iter()
@@ -314,7 +326,7 @@ mod tests {
 			.collect()
 	}
 
-	fn run_offset(a: &richmond_building_components::stairs::StairNode, right: Vec2) -> f32 {
+	fn run_offset(a: &StairNode, right: Vec2) -> f32 {
 		xz(a.placement.translation).dot(right)
 	}
 

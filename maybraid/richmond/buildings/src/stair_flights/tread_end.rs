@@ -17,6 +17,12 @@ pub struct TreadEnd {
 	pub travel: Vec2,
 }
 
+impl Default for TreadEnd {
+	fn default() -> Self {
+		Self { leading_outer: Vec2::ZERO, leading_inner: Vec2::ZERO, travel: Vec2::X }
+	}
+}
+
 impl TreadEnd {
 	/// Last tread of a linear [`Stair::Straight`] node.
 	///

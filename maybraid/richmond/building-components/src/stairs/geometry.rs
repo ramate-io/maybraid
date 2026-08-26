@@ -91,6 +91,12 @@ impl StraightStair {
 		self
 	}
 
+	/// Replace uniform rise with explicit local tread-top \(Y\)s.
+	pub fn with_tread_tops(mut self, tops: Vec<f32>) -> Self {
+		self.tread_tops = tops;
+		self
+	}
+
 	pub fn tread_count(&self) -> u32 {
 		if !self.tread_tops.is_empty() {
 			return self.tread_tops.len() as u32;

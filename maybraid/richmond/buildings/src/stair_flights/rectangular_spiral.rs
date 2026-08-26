@@ -2,12 +2,11 @@
 
 use bevy_math::Vec2;
 use richmond_building_components::panels::PanelStyle;
-use richmond_building_components::stairs::StraightStair;
+use richmond_building_components::stairs::{StairNode, StraightStair};
 
+use crate::paneling::quad_panel::QuadPanel;
 use crate::stair_flights::composed::ComposedFlight;
-use crate::stair_flights::geom::{
-	normalize_xz, place_runs_with_corner_landings, tread_dims, xz, PathSeg, EPS,
-};
+use crate::stair_flights::geom::{normalize_xz, place_runs_with_corner_landings, xz, PathSeg, EPS};
 use crate::stair_flights::{FlightPolyline, WellFit};
 
 /// Fit straight runs around the inscribed opening rim.
@@ -26,14 +25,11 @@ fn fit_rect_nodes(
 	fit: WellFit,
 	style: PanelStyle,
 	thickness: f32,
-) -> (
-	Vec<richmond_building_components::stairs::StairNode>,
-	Vec<crate::paneling::quad_panel::QuadPanel>,
-) {
+) -> (Vec<StairNode>, Vec<QuadPanel>) {
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
-	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
-	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.lapping_ratio);
+	let half_w = fit.half_width();
+	let half_d = fit.half_depth();
+	let (width, depth) = fit.tread_dims();
 
 	let center = xz(fit.lower_center);
 	let out = normalize_xz(fit.lower_out).unwrap_or(Vec2::Y);
