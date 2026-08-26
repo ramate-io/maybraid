@@ -137,11 +137,7 @@ impl<T> Layers<T> {
 	}
 
 	/// Flatten `other` and append under a single provenance label.
-	pub fn extend_under(
-		&mut self,
-		layer: impl Into<Layer>,
-		other: Layers<T>,
-	) -> &mut Self {
+	pub fn extend_under(&mut self, layer: impl Into<Layer>, other: Layers<T>) -> &mut Self {
 		self.extend_labeled(layer, other.flatten())
 	}
 
@@ -161,8 +157,7 @@ impl<T> Layers<T> {
 
 	/// Keep free nodes and drop the named labeled buckets.
 	pub fn except(self, names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
-		let deny: HashSet<String> =
-			names.into_iter().map(|n| n.as_ref().to_string()).collect();
+		let deny: HashSet<String> = names.into_iter().map(|n| n.as_ref().to_string()).collect();
 		Self {
 			free: self.free,
 			labeled: self
@@ -175,8 +170,7 @@ impl<T> Layers<T> {
 
 	/// Keep only the named labeled buckets (drops free and other labels).
 	pub fn only(self, names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
-		let allow: HashSet<String> =
-			names.into_iter().map(|n| n.as_ref().to_string()).collect();
+		let allow: HashSet<String> = names.into_iter().map(|n| n.as_ref().to_string()).collect();
 		Self {
 			free: Vec::new(),
 			labeled: self
@@ -235,24 +229,16 @@ mod tests {
 			.with_labeled("envelope", [3]);
 		let kept = layers.only(["internal_walls"]);
 		assert!(kept.free.is_empty());
-		assert_eq!(
-			kept.labeled.get(&Layer::new("internal_walls")).unwrap(),
-			&vec![2]
-		);
+		assert_eq!(kept.labeled.get(&Layer::new("internal_walls")).unwrap(), &vec![2]);
 		assert!(!kept.labeled.contains_key(&Layer::new("envelope")));
 	}
 
 	#[test]
 	fn extend_under_flattens_into_label() {
 		let mut out = Layers::new();
-		let child = Layers::new()
-			.with_free([1])
-			.with_labeled("closet", [2]);
+		let child = Layers::new().with_free([1]).with_labeled("closet", [2]);
 		out.extend_under("internal_walls", child);
 		assert!(out.free.is_empty());
-		assert_eq!(
-			out.labeled.get(&Layer::new("internal_walls")).unwrap(),
-			&vec![1, 2]
-		);
+		assert_eq!(out.labeled.get(&Layer::new("internal_walls")).unwrap(), &vec![1, 2]);
 	}
 }

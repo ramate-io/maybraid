@@ -28,15 +28,14 @@ pub struct Kitchen {
 impl Kitchen {
 	pub fn from_plan(plan: KitchenPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
-		let counter_layout = plan
-			.packed
-			.layout
-			.unwrap_or(KitchenCounterLayout::Galley);
+		let counter_layout = plan.packed.layout.unwrap_or(KitchenCounterLayout::Galley);
 		let counter_runs = plan
 			.packed
 			.counter_runs
 			.iter()
-			.map(|aabb| furniture_fill(style, "CounterRun", aabb, confines.roll, FurnitureNode::dresser))
+			.map(|aabb| {
+				furniture_fill(style, "CounterRun", aabb, confines.roll, FurnitureNode::dresser)
+			})
 			.collect();
 		let peninsulas = plan
 			.packed
@@ -127,23 +126,13 @@ impl BuildingComponents for Kitchen {
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
 		out.extend(Layers::from_free(
-			self.counter_runs
-				.iter()
-				.map(|f| f.furniture.clone())
-				.collect(),
+			self.counter_runs.iter().map(|f| f.furniture.clone()).collect(),
 		));
 		out.extend(Layers::from_free(
-			self.peninsulas
-				.iter()
-				.map(|f| f.furniture.clone())
-				.collect(),
+			self.peninsulas.iter().map(|f| f.furniture.clone()).collect(),
 		));
-		out.extend(Layers::from_free(
-			self.islands.iter().map(|f| f.furniture.clone()).collect(),
-		));
-		out.extend(Layers::from_free(
-			self.fillers.iter().map(|f| f.furniture.clone()).collect(),
-		));
+		out.extend(Layers::from_free(self.islands.iter().map(|f| f.furniture.clone()).collect()));
+		out.extend(Layers::from_free(self.fillers.iter().map(|f| f.furniture.clone()).collect()));
 		out
 	}
 }

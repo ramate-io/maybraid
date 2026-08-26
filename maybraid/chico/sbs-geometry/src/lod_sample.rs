@@ -6,9 +6,7 @@
 
 use bevy_math::Vec3;
 
-use crate::chain::{
-	horizontal_radius_from_y_axis, BallStickChain, BallStickNode, Hysteresis,
-};
+use crate::chain::{horizontal_radius_from_y_axis, BallStickChain, BallStickNode, Hysteresis};
 
 /// Grid resolution for [`sample_max_horizontal_radius_by_azimuth_height`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -119,14 +117,12 @@ pub fn sample_max_horizontal_radius_by_azimuth_height<'a, T>(
 
 	best.into_iter()
 		.flatten()
-		.map(|(horizontal_radius, item, position, azimuth_bin, height_bin)| {
-			AzimuthHeightSample {
-				item,
-				position,
-				horizontal_radius,
-				azimuth_bin,
-				height_bin,
-			}
+		.map(|(horizontal_radius, item, position, azimuth_bin, height_bin)| AzimuthHeightSample {
+			item,
+			position,
+			horizontal_radius,
+			azimuth_bin,
+			height_bin,
 		})
 		.collect()
 }

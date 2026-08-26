@@ -91,13 +91,7 @@ impl Default for RectRingFloorParams {
 
 impl RectRingFloorParams {
 	pub fn new(center_xz: Vec3, outer: Vec2, inner: Vec2, storey_height: f32) -> Self {
-		Self {
-			center_xz,
-			outer,
-			inner,
-			storey_height,
-			..Self::default()
-		}
+		Self { center_xz, outer, inner, storey_height, ..Self::default() }
 	}
 
 	pub fn floor(mut self, floor: RectRingFloorSlab) -> Self {
@@ -153,18 +147,8 @@ impl RingSlabPiece {
 	/// Axis-aligned XZ footprint of a floor / ceiling residual.
 	fn xz_bounds(&self) -> (f32, f32, f32, f32) {
 		let r = &self.0;
-		let xs = [
-			r.a0.position.x,
-			r.a1.position.x,
-			r.b0.position.x,
-			r.b1.position.x,
-		];
-		let zs = [
-			r.a0.position.z,
-			r.a1.position.z,
-			r.b0.position.z,
-			r.b1.position.z,
-		];
+		let xs = [r.a0.position.x, r.a1.position.x, r.b0.position.x, r.b1.position.x];
+		let zs = [r.a0.position.z, r.a1.position.z, r.b0.position.z, r.b1.position.z];
 		(
 			xs.into_iter().fold(f32::INFINITY, f32::min),
 			xs.into_iter().fold(f32::NEG_INFINITY, f32::max),
@@ -183,13 +167,7 @@ impl RectRingFloor {
 		let (outer, inner) = sanitize_pair(params.outer, params.inner);
 		let storey_height = params.storey_height.max(1e-4);
 		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let params = RectRingFloorParams {
-			center_xz,
-			outer,
-			inner,
-			storey_height,
-			..params
-		};
+		let params = RectRingFloorParams { center_xz, outer, inner, storey_height, ..params };
 
 		let geom = params.resolve_geometry();
 		let (walls, openings, mapped) = params.resolve_walls(&geom.edges);
@@ -197,15 +175,7 @@ impl RectRingFloor {
 		let ceiling_pieces =
 			params.resolve_slab_pieces(params.ceiling, &geom.slab_rects, geom.y0 + storey_height);
 
-		Self {
-			params,
-			walls,
-			edges: geom.edges,
-			floor_pieces,
-			ceiling_pieces,
-			openings,
-			mapped,
-		}
+		Self { params, walls, edges: geom.edges, floor_pieces, ceiling_pieces, openings, mapped }
 	}
 
 	pub fn params(&self) -> &RectRingFloorParams {

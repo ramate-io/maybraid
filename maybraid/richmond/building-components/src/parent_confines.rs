@@ -112,9 +112,7 @@ pub fn apply_parent_confines(
 	}
 	let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
 	if elapsed_ms >= 0.5 {
-		bevy::log::info!(
-			"[lod.confines] apply_parent_confines: hosts={n} in {elapsed_ms:.2}ms"
-		);
+		bevy::log::info!("[lod.confines] apply_parent_confines: hosts={n} in {elapsed_ms:.2}ms");
 	}
 }
 

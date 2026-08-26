@@ -4,9 +4,7 @@ use richmond_building_components::joints::JOINT_KIT_XZ;
 use richmond_building_components::BuildingComponents;
 
 use super::adjacency::canonical_edge;
-use super::{
-	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelPointId,
-};
+use super::{shared_edges, PanelComplex, PanelComplexJointPolicy, PanelPointId};
 
 fn folded_quad() -> PanelComplex {
 	let mut c = PanelComplex::rough_stone();
@@ -27,20 +25,14 @@ fn builder_quad_emits_two_panels_and_one_shared_edge() {
 	let shared = c.shared_edges();
 	assert_eq!(shared.len(), 1);
 	let (u, v) = shared[0].endpoints();
-	assert_eq!(
-		canonical_edge(u, v),
-		canonical_edge(PanelPointId(0), PanelPointId(3))
-	);
+	assert_eq!(canonical_edge(u, v), canonical_edge(PanelPointId(0), PanelPointId(3)));
 }
 
 #[test]
 fn folded_joint_aligns_y_and_uses_endpoint_avg_thickness() {
 	let c = folded_quad();
 	let kink = c.dihedral_kink(c.shared_edges()[0]).expect("kink");
-	assert!(
-		(kink - std::f32::consts::FRAC_PI_2).abs() < 1e-3,
-		"expected ~90° fold, got {kink}"
-	);
+	assert!((kink - std::f32::consts::FRAC_PI_2).abs() < 1e-3, "expected ~90° fold, got {kink}");
 	let joints = c.joint_nodes();
 	assert_eq!(joints.len(), 1);
 	let p = &joints[0].placement;
@@ -93,9 +85,7 @@ fn non_manifold_edge_omitted_from_shared_and_flagged() {
 	let p0 = c.insert_point(Vec3::new(0.0, 1.0, 0.0));
 	let p1 = c.insert_point(Vec3::new(0.0, 0.0, 1.0));
 	let p2 = c.insert_point(Vec3::new(0.0, -1.0, 0.0));
-	c.add_triangle(a, b, p0)
-		.add_triangle(a, b, p1)
-		.add_triangle(a, b, p2);
+	c.add_triangle(a, b, p0).add_triangle(a, b, p1).add_triangle(a, b, p2);
 	let (shared, non_manifold) = shared_edges(c.triangles());
 	assert!(shared.is_empty());
 	assert_eq!(non_manifold.len(), 1);

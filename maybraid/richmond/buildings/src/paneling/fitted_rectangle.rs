@@ -37,22 +37,13 @@ impl FittedRectangle {
 		let b0 = b0.into();
 		let b1 = b1.into();
 		let fitted = fit_rectangle(a0.position, a1.position, b0.position, b1.position)
-			.unwrap_or_else(|| fallback_fitted_rect(a0.position, a1.position, b0.position, b1.position));
+			.unwrap_or_else(|| {
+				fallback_fitted_rect(a0.position, a1.position, b0.position, b1.position)
+			});
 		let thickness = mean_thickness([a0, a1, b0, b1]);
-		let panel = PanelNode::new(
-			style,
-			PanelGeometry::rectangle(),
-			fitted.solid_placement(thickness),
-		);
-		Self {
-			style,
-			a0,
-			a1,
-			b0,
-			b1,
-			fitted,
-			panel,
-		}
+		let panel =
+			PanelNode::new(style, PanelGeometry::rectangle(), fitted.solid_placement(thickness));
+		Self { style, a0, a1, b0, b1, fitted, panel }
 	}
 
 	pub fn rough_stone(
@@ -117,7 +108,9 @@ impl ClippedFittedRectangle {
 		let b0 = b0.into();
 		let b1 = b1.into();
 		let fitted = fit_rectangle(a0.position, a1.position, b0.position, b1.position)
-			.unwrap_or_else(|| fallback_fitted_rect(a0.position, a1.position, b0.position, b1.position));
+			.unwrap_or_else(|| {
+				fallback_fitted_rect(a0.position, a1.position, b0.position, b1.position)
+			});
 		let thickness = mean_thickness([a0, a1, b0, b1]);
 		let panels = inset
 			.frame_pieces(fitted.width, fitted.depth)
@@ -130,16 +123,7 @@ impl ClippedFittedRectangle {
 				)
 			})
 			.collect();
-		Self {
-			style,
-			a0,
-			a1,
-			b0,
-			b1,
-			fitted,
-			inset,
-			panels,
-		}
+		Self { style, a0, a1, b0, b1, fitted, inset, panels }
 	}
 
 	pub fn rough_stone(
@@ -238,9 +222,6 @@ mod tests {
 			RectInset::uniform(0.25),
 		);
 		assert_eq!(r.panels().len(), 4);
-		assert!(r
-			.panels()
-			.iter()
-			.all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
+		assert!(r.panels().iter().all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
 	}
 }

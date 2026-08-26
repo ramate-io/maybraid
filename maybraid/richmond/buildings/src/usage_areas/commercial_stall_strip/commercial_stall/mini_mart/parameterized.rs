@@ -9,13 +9,13 @@ use crate::fit::{Confines, FitError};
 
 use crate::usage_areas::clearance::{PassageClearance, PlanHost};
 
-use super::super::stall_layout::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 use super::super::stall_layout::mini_mart::{
 	MINI_MART_AISLES_MIN, MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX,
 	MINI_MART_DOOR_HEIGHT_MIN, MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN,
 	MINI_MART_OFFICE_LONG_MIN, MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN,
 	MINI_MART_SHELF_DEPTH_MAX, MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
 };
+use super::super::stall_layout::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 
 /// Noise / style knobs for [`super::MiniMart`].
 #[derive(Debug, Clone, PartialEq)]
@@ -38,9 +38,7 @@ impl MiniMartParameterized {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "mini mart passage",
-			});
+			return Err(FitError::TooSmall { reason: "mini mart passage" });
 		}
 
 		let cfg = NoiseConfig::new(noise);
@@ -167,9 +165,6 @@ impl MiniMartPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = params.regions().pack(confines)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

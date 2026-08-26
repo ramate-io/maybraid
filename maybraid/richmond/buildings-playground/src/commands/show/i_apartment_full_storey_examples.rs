@@ -15,9 +15,6 @@ pub struct IApartmentFullStoreyExamples {
 
 impl IApartmentFullStoreyExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::IApartmentFullStoreyExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::IApartmentFullStoreyExamples, self.transform.transform())
 	}
 }

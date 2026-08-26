@@ -22,12 +22,8 @@ impl DiningRoomParameterized {
 		let c = confines.center();
 		Ok(Self {
 			style: LabelStyle::Green,
-			spaciousness: cfg
-				.sample_range_f32_4d(0.95, 1.4, c.x, c.y, c.z, 40.0)
-				.clamp(0.75, 1.75),
-			occupancy: cfg
-				.sample_range_f32_4d(0.22, 0.45, c.x, c.y, c.z, 41.0)
-				.clamp(0.1, 0.7),
+			spaciousness: cfg.sample_range_f32_4d(0.95, 1.4, c.x, c.y, c.z, 40.0).clamp(0.75, 1.75),
+			occupancy: cfg.sample_range_f32_4d(0.22, 0.45, c.x, c.y, c.z, 41.0).clamp(0.1, 0.7),
 		})
 	}
 
@@ -52,14 +48,9 @@ impl DiningRoomPlan {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<Self, FitError> {
-		let regions = DiningRoomRegions {
-			spaciousness: params.spaciousness,
-			occupancy: params.occupancy,
-		};
+		let regions =
+			DiningRoomRegions { spaciousness: params.spaciousness, occupancy: params.occupancy };
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

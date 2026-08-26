@@ -31,9 +31,7 @@ pub use livable_full_storey::LesHallesLivableFullStorey;
 pub use parameterized::{
 	LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor,
 };
-pub use usage_plan::{
-	LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan,
-};
+pub use usage_plan::{LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan};
 
 /// Scope prefix for [`crate::OpeningId::scoped`] openings authored by this typology.
 pub const SCOPE: &str = "les_halles";

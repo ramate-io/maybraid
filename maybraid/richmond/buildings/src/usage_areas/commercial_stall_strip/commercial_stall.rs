@@ -60,9 +60,7 @@ impl CommercialStallParameterized {
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
 		let t = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 11.0);
-		Self {
-			style: LabelStyle::from_unit(t),
-		}
+		Self { style: LabelStyle::from_unit(t) }
 	}
 }
 
@@ -87,21 +85,11 @@ impl CommercialStallPlan {
 			return Err(FitError::TooSmall { reason: "stall" });
 		}
 		let walls = shell_walls(confines);
-		let interior_confines = Confines::new(
-			confines.bounds,
-			confines.roll,
-			forward_openings(&confines.openings),
-		);
+		let interior_confines =
+			Confines::new(confines.bounds, confines.roll, forward_openings(&confines.openings));
 		let (interior, regions) =
 			CommercialStallInterior::fit_to_confines(&interior_confines, noise)?;
-		Ok((
-			Self {
-				parameterized: params,
-				walls,
-				interior,
-			},
-			regions,
-		))
+		Ok((Self { parameterized: params, walls, interior }, regions))
 	}
 }
 
@@ -127,8 +115,7 @@ impl Fit for CommercialStall {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = CommercialStallParameterized::sample(confines, noise);
-		let (plan, regions) =
-			CommercialStallPlan::from_parameterized(params, confines, noise)?;
+		let (plan, regions) = CommercialStallPlan::from_parameterized(params, confines, noise)?;
 		Ok((Self::from_plan(plan), regions))
 	}
 }
@@ -150,12 +137,7 @@ impl BuildingComponents for CommercialStall {
 
 fn shell_walls(confines: &Confines) -> Vec<ClippedRectangularStrip> {
 	let mut walls = Vec::new();
-	for face in [
-		FaceKind::Front,
-		FaceKind::Back,
-		FaceKind::Left,
-		FaceKind::Right,
-	] {
+	for face in [FaceKind::Front, FaceKind::Back, FaceKind::Left, FaceKind::Right] {
 		if face_excluded(&confines.bounds, face, &confines.openings) {
 			continue;
 		}
@@ -172,26 +154,18 @@ fn face_edge(bounds: &Aabb3d, face: FaceKind) -> Option<WallEdge> {
 	let max = Vec3::from(bounds.max);
 	let h = (max.y - min.y).max(EPS);
 	let (start, end, outward) = match face {
-		FaceKind::Front => (
-			Vec3::new(min.x, min.y, min.z),
-			Vec3::new(max.x, min.y, min.z),
-			Vec2::new(0.0, -1.0),
-		),
-		FaceKind::Back => (
-			Vec3::new(min.x, min.y, max.z),
-			Vec3::new(max.x, min.y, max.z),
-			Vec2::new(0.0, 1.0),
-		),
-		FaceKind::Left => (
-			Vec3::new(min.x, min.y, min.z),
-			Vec3::new(min.x, min.y, max.z),
-			Vec2::new(-1.0, 0.0),
-		),
-		FaceKind::Right => (
-			Vec3::new(max.x, min.y, min.z),
-			Vec3::new(max.x, min.y, max.z),
-			Vec2::new(1.0, 0.0),
-		),
+		FaceKind::Front => {
+			(Vec3::new(min.x, min.y, min.z), Vec3::new(max.x, min.y, min.z), Vec2::new(0.0, -1.0))
+		}
+		FaceKind::Back => {
+			(Vec3::new(min.x, min.y, max.z), Vec3::new(max.x, min.y, max.z), Vec2::new(0.0, 1.0))
+		}
+		FaceKind::Left => {
+			(Vec3::new(min.x, min.y, min.z), Vec3::new(min.x, min.y, max.z), Vec2::new(-1.0, 0.0))
+		}
+		FaceKind::Right => {
+			(Vec3::new(max.x, min.y, min.z), Vec3::new(max.x, min.y, max.z), Vec2::new(1.0, 0.0))
+		}
 		FaceKind::Top | FaceKind::Bottom => return None,
 	};
 	if start.distance(end) < EPS {
@@ -231,27 +205,16 @@ fn wall_strip_for_face(edge: WallEdge, openings: &Openings) -> ClippedRectangula
 	assigned.sort_by(|a, b| {
 		b.priority
 			.cmp(&a.priority)
-			.then_with(|| {
-				a.s_lo
-					.partial_cmp(&b.s_lo)
-					.unwrap_or(std::cmp::Ordering::Equal)
-			})
+			.then_with(|| a.s_lo.partial_cmp(&b.s_lo).unwrap_or(std::cmp::Ordering::Equal))
 	});
 	let mut kept = Vec::new();
 	for op in assigned {
-		if kept
-			.iter()
-			.any(|k: &FaceCut| spans_overlap(k.s_lo, k.s_hi, op.s_lo, op.s_hi))
-		{
+		if kept.iter().any(|k: &FaceCut| spans_overlap(k.s_lo, k.s_hi, op.s_lo, op.s_hi)) {
 			continue;
 		}
 		kept.push(op);
 	}
-	kept.sort_by(|a, b| {
-		a.s_lo
-			.partial_cmp(&b.s_lo)
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
+	kept.sort_by(|a, b| a.s_lo.partial_cmp(&b.s_lo).unwrap_or(std::cmp::Ordering::Equal));
 	build_wall_strip(edge, &kept, thickness)
 }
 
@@ -305,22 +268,12 @@ fn build_wall_strip(
 
 	for op in openings {
 		if op.s_lo > cursor + EPS {
-			nodes.push(RectangularStripNode::new(
-				edge.start + tang * op.s_lo,
-				h,
-				t,
-				0.0,
-			));
+			nodes.push(RectangularStripNode::new(edge.start + tang * op.s_lo, h, t, 0.0));
 			insets.push(None);
 			cursor = op.s_lo;
 		}
 		let s_hi = op.s_hi.max(cursor + EPS);
-		nodes.push(RectangularStripNode::new(
-			edge.start + tang * s_hi,
-			h,
-			t,
-			0.0,
-		));
+		nodes.push(RectangularStripNode::new(edge.start + tang * s_hi, h, t, 0.0));
 		// Standing strip: left/right = vertical, bottom/top = along-wall jambs.
 		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
 		insets.push(Some(RectInset::new(op.sill, op.header, jamb, jamb)));
@@ -339,10 +292,7 @@ fn build_wall_strip(
 
 fn face_excluded(bounds: &Aabb3d, face: FaceKind, openings: &Openings) -> bool {
 	for (_id, opening) in openings.iter() {
-		if !matches!(
-			opening.label,
-			OpeningLabel::Exclusion | OpeningLabel::Boundary
-		) {
+		if !matches!(opening.label, OpeningLabel::Exclusion | OpeningLabel::Boundary) {
 			continue;
 		}
 		if opening_covers_face(bounds, face, &opening.bounds) {
@@ -391,10 +341,7 @@ fn opening_covers_face(bounds: &Aabb3d, face: FaceKind, opening: &Aabb3d) -> boo
 fn forward_openings(openings: &Openings) -> Openings {
 	let mut out = Openings::new();
 	for (id, opening) in openings.iter() {
-		if matches!(
-			opening.label,
-			OpeningLabel::Passage | OpeningLabel::Aperture
-		) {
+		if matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
 			out.insert(id.clone(), opening.clone());
 		}
 	}
@@ -404,10 +351,10 @@ fn forward_openings(openings: &Openings) -> Openings {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::bounding::Aabb3d;
-	use bevy_math::Vec3;
 	use crate::openings::{Opening, OpeningId};
 	use crate::paneling::clipped_rectangular_strip::ClippedRectangularStripPiece;
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
 
 	#[test]
 	fn stall_fit_emits_walls_and_interior_labels() {
@@ -442,10 +389,7 @@ mod tests {
 			}
 		}
 		assert_eq!(stall.plan.walls.len(), 4);
-		assert!(!stall
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!stall.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -466,9 +410,10 @@ mod tests {
 		let (stall, _) =
 			CommercialStall::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		let front = &stall.plan.walls[0];
-		let has_clipped = front.pieces().iter().any(|p| {
-			matches!(p, ClippedRectangularStripPiece::Clipped(_))
-		});
+		let has_clipped = front
+			.pieces()
+			.iter()
+			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)));
 		assert!(has_clipped, "front wall should clip the passage");
 		// Solid full-face wall is one panel; a punched door needs jamb/header pieces.
 		assert!(

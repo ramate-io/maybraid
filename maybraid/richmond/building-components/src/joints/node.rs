@@ -55,11 +55,7 @@ impl LodScene for JointNode {
 		warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		let _ = self.style;
 		let _ = self.geometry;
 		JointLod::posed_tier(pose(self.placement), level)

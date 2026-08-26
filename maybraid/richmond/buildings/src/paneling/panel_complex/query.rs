@@ -22,9 +22,10 @@ impl PanelComplex {
 
 	/// Present points as `(id, point)` in id order.
 	pub fn points(&self) -> impl Iterator<Item = (PanelPointId, &PanelPoint)> + '_ {
-		self.points.iter().enumerate().filter_map(|(i, p)| {
-			p.as_ref().map(|pt| (PanelPointId(i as u32), pt))
-		})
+		self.points
+			.iter()
+			.enumerate()
+			.filter_map(|(i, p)| p.as_ref().map(|pt| (PanelPointId(i as u32), pt)))
 	}
 
 	pub fn triangles(&self) -> &[PanelTriangle] {
@@ -68,10 +69,7 @@ impl PanelComplex {
 	}
 
 	pub fn triangle_panels(&self) -> Vec<TessellatedTrianglePanel> {
-		self.triangles
-			.iter()
-			.filter_map(|t| self.triangle_panel(*t))
-			.collect()
+		self.triangles.iter().filter_map(|t| self.triangle_panel(*t)).collect()
 	}
 
 	/// Average thickness of the two endpoints of a shared edge.
@@ -125,12 +123,9 @@ impl PanelComplex {
 				continue;
 			};
 			let radial_hint = n0 + n1;
-			let Some(placement) = JointPost::placed_along_crease(
-				pa.position,
-				pb.position,
-				thickness,
-				radial_hint,
-			) else {
+			let Some(placement) =
+				JointPost::placed_along_crease(pa.position, pb.position, thickness, radial_hint)
+			else {
 				continue;
 			};
 			out.push(JointNode::rough_stone_post(placement));

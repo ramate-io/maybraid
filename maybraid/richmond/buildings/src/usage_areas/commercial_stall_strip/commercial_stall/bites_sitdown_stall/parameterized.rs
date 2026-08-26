@@ -10,8 +10,8 @@ use richmond_building_components::LabelStyle;
 use crate::fit::{Confines, FitError};
 
 use super::super::bites_stall::BitesStallParameterized;
-use super::super::stall_layout::BitesSitdownRegions;
 use super::super::stall_layout::bites::{BITES_REGION_MIN_PLAN, BITES_SEATING_FACE_CONTACT};
+use super::super::stall_layout::BitesSitdownRegions;
 
 /// Noise / style knobs for [`super::BitesSitdownStall`].
 #[derive(Debug, Clone, PartialEq)]
@@ -86,9 +86,7 @@ impl BitesSitdownPlan {
 		};
 		let (seating_aabb, kitchen_aabb) = packer
 			.pack(&confines.bounds, &packed.counters, &packed.faces)
-			.ok_or(FitError::TooSmall {
-				reason: "bites seating/kitchen",
-			})?;
+			.ok_or(FitError::TooSmall { reason: "bites seating/kitchen" })?;
 		Ok(Self {
 			parameterized: params,
 			counter_aabbs: packed.counters,

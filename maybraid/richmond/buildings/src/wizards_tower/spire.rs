@@ -56,4 +56,3 @@ impl BuildingComponents for WizardsTowerSpire {
 		Layers::from_free(self.core_walls.to_vec())
 	}
 }
-

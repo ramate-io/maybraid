@@ -151,6 +151,11 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 					self.item_row(row, parent, context);
 				}
 			}
+			MenuNode::ShortText { label, value, .. } => {
+				inline_label_row(parent, label, |row| {
+					text(row, value, 11.0, VALUE_COLOR);
+				});
+			}
 		}
 	}
 }

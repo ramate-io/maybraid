@@ -6,12 +6,12 @@ use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 
-use super::super::stall_layout::{
-	BitesCounterChoice, BitesKitchen, BitesPassageSpec, EligibleBitesPassage, PackedBitesCounters,
-};
 use super::super::stall_layout::bites::{
 	BITES_COUNTER_ALONG_MIN, BITES_COUNTER_PLACE_RATE, BITES_PASSAGE_REMAIN_MIN,
 	BITES_REGION_MIN_PLAN,
+};
+use super::super::stall_layout::{
+	BitesCounterChoice, BitesKitchen, BitesPassageSpec, EligibleBitesPassage, PackedBitesCounters,
 };
 
 /// Noise / style knobs for [`super::BitesStall`] (sampled above; fit below).
@@ -26,9 +26,7 @@ impl BitesStallParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let eligible = EligibleBitesPassage::collect(confines);
 		if eligible.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "bites counter passage",
-			});
+			return Err(FitError::TooSmall { reason: "bites counter passage" });
 		}
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
@@ -64,8 +62,7 @@ impl BitesStallParameterized {
 		origin: bevy_math::Vec3,
 		salt: f32,
 	) -> BitesCounterChoice {
-		let place_u =
-			cfg.sample_range_f32_4d(0.0, 1.0, origin.x, origin.y, origin.z, salt);
+		let place_u = cfg.sample_range_f32_4d(0.0, 1.0, origin.x, origin.y, origin.z, salt);
 		let place = place_u < BITES_COUNTER_PLACE_RATE;
 		let max_along = (passage.along_len - BITES_PASSAGE_REMAIN_MIN).max(BITES_COUNTER_ALONG_MIN);
 		let along = cfg.sample_range_f32_4d(
@@ -86,12 +83,7 @@ impl BitesStallParameterized {
 		} else {
 			1.0
 		};
-		OptionalFaceBand {
-			place,
-			along,
-			depth,
-			along_t,
-		}
+		OptionalFaceBand { place, along, depth, along_t }
 	}
 
 	pub fn pack_counters(&self, confines: &Confines) -> Result<PackedBitesCounters, FitError> {
@@ -113,19 +105,9 @@ impl BitesStallPlan {
 		confines: &Confines,
 	) -> Result<Self, FitError> {
 		let packed = params.pack_counters(confines)?;
-		let kitchen_aabb = BitesKitchen::pack(
-			&confines.bounds,
-			&packed.counters,
-			&[],
-			BITES_REGION_MIN_PLAN,
-		)
-		.ok_or(FitError::TooSmall {
-			reason: "bites kitchen",
-		})?;
-		Ok(Self {
-			parameterized: params,
-			counter_aabbs: packed.counters,
-			kitchen_aabb,
-		})
+		let kitchen_aabb =
+			BitesKitchen::pack(&confines.bounds, &packed.counters, &[], BITES_REGION_MIN_PLAN)
+				.ok_or(FitError::TooSmall { reason: "bites kitchen" })?;
+		Ok(Self { parameterized: params, counter_aabbs: packed.counters, kitchen_aabb })
 	}
 }

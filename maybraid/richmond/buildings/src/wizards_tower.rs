@@ -31,8 +31,8 @@ use bevy_math::Vec3;
 use lod::gen::{
 	cull_offset_bands, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk,
 };
-use lod::lod_ref::LodRef;
 use lod::lod_host_scene_pending;
+use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 
 use richmond_building_components::floors::FloorNode;

@@ -22,12 +22,8 @@ impl LivingRoomParameterized {
 		let c = confines.center();
 		Ok(Self {
 			style: LabelStyle::Orange,
-			spaciousness: cfg
-				.sample_range_f32_4d(1.0, 1.5, c.x, c.y, c.z, 50.0)
-				.clamp(0.8, 1.85),
-			occupancy: cfg
-				.sample_range_f32_4d(0.25, 0.5, c.x, c.y, c.z, 51.0)
-				.clamp(0.12, 0.75),
+			spaciousness: cfg.sample_range_f32_4d(1.0, 1.5, c.x, c.y, c.z, 50.0).clamp(0.8, 1.85),
+			occupancy: cfg.sample_range_f32_4d(0.25, 0.5, c.x, c.y, c.z, 51.0).clamp(0.12, 0.75),
 		})
 	}
 
@@ -52,14 +48,9 @@ impl LivingRoomPlan {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<Self, FitError> {
-		let regions = LivingRoomRegions {
-			spaciousness: params.spaciousness,
-			occupancy: params.occupancy,
-		};
+		let regions =
+			LivingRoomRegions { spaciousness: params.spaciousness, occupancy: params.occupancy };
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

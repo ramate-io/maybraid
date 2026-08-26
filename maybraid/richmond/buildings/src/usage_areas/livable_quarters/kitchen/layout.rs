@@ -44,16 +44,9 @@ pub struct KitchenRegions {
 
 impl KitchenRegions {
 	pub fn pack(&self, confines: &Confines, noise: NoiseParams) -> Result<KitchenPacked, FitError> {
-		let mut host = init_host_with(
-			confines,
-			InitHostOpts {
-				passage_wall_lip: true,
-			},
-		)?;
+		let mut host = init_host_with(confines, InitHostOpts { passage_wall_lip: true })?;
 		if host.room_area + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "kitchen",
-			});
+			return Err(FitError::TooSmall { reason: "kitchen" });
 		}
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
@@ -64,18 +57,12 @@ impl KitchenRegions {
 		let along_a = sample_along(&cfg, c, self.spaciousness, host.host, 32.0);
 		let along_b = sample_along(&cfg, c, self.spaciousness, host.host, 33.0);
 
-		let mut packed = KitchenPacked {
-			layout: Some(layout),
-			..KitchenPacked::default()
-		};
+		let mut packed = KitchenPacked { layout: Some(layout), ..KitchenPacked::default() };
 
 		match layout {
 			KitchenCounterLayout::Galley => {
-				let primary = place_wall_run(&host, &cfg, along_a, depth, height, 10).ok_or(
-					FitError::TooSmall {
-						reason: "kitchen counter",
-					},
-				)?;
+				let primary = place_wall_run(&host, &cfg, along_a, depth, height, 10)
+					.ok_or(FitError::TooSmall { reason: "kitchen counter" })?;
 				host.commit_footprint(&primary);
 				packed.counter_runs.push(primary);
 			}
@@ -96,11 +83,8 @@ impl KitchenRegions {
 					packed.counter_runs.push(b);
 				} else {
 					// Soft-fall to galley when corner L is blocked (e.g. door clearance).
-					let primary = place_wall_run(&host, &cfg, along_a, depth, height, 11).ok_or(
-						FitError::TooSmall {
-							reason: "kitchen counter",
-						},
-					)?;
+					let primary = place_wall_run(&host, &cfg, along_a, depth, height, 11)
+						.ok_or(FitError::TooSmall { reason: "kitchen counter" })?;
 					host.commit_footprint(&primary);
 					packed.counter_runs.push(primary);
 					layout = KitchenCounterLayout::Galley;
@@ -108,11 +92,8 @@ impl KitchenRegions {
 				}
 			}
 			KitchenCounterLayout::Peninsula => {
-				let primary = place_wall_run(&host, &cfg, along_a, depth, height, 12).ok_or(
-					FitError::TooSmall {
-						reason: "kitchen counter",
-					},
-				)?;
+				let primary = place_wall_run(&host, &cfg, along_a, depth, height, 12)
+					.ok_or(FitError::TooSmall { reason: "kitchen counter" })?;
 				host.commit_footprint(&primary);
 				packed.counter_runs.push(primary);
 				let pen_along = sample_along(&cfg, c, self.spaciousness * 0.85, host.host, 34.0)
@@ -152,11 +133,7 @@ fn place_wall_run(
 		&host.clearances,
 		cfg,
 		salt,
-		WallLongKnobs {
-			extent: Vec3::new(along, height, depth),
-			wall_eps: WALL_EPS,
-			attempts: 20,
-		},
+		WallLongKnobs { extent: Vec3::new(along, height, depth), wall_eps: WALL_EPS, attempts: 20 },
 	)
 }
 
@@ -171,16 +148,13 @@ fn finalize_optional(
 	let height = COUNTER_HEIGHT * regions.spaciousness.min(1.15);
 
 	let island_ok = host.room_area >= 18.0
-		&& matches!(
-			layout,
-			KitchenCounterLayout::Galley | KitchenCounterLayout::LShape
-		)
+		&& matches!(layout, KitchenCounterLayout::Galley | KitchenCounterLayout::LShape)
 		&& cfg.sample_unit_4d(c.x, c.y, c.z, 36.0) > 0.45;
 	if island_ok {
-		let ix = cfg.sample_range_f32_4d(0.9, 1.5, c.x, c.y, c.z, 37.0)
-			* regions.spaciousness.min(1.2);
-		let iz = cfg.sample_range_f32_4d(0.7, 1.1, c.x, c.y, c.z, 38.0)
-			* regions.spaciousness.min(1.2);
+		let ix =
+			cfg.sample_range_f32_4d(0.9, 1.5, c.x, c.y, c.z, 37.0) * regions.spaciousness.min(1.2);
+		let iz =
+			cfg.sample_range_f32_4d(0.7, 1.1, c.x, c.y, c.z, 38.0) * regions.spaciousness.min(1.2);
 		if let Some(island) = try_free_extent(
 			&host.host3,
 			host.host,
@@ -214,11 +188,7 @@ fn finalize_optional(
 			cfg,
 			50,
 			FreeExtentKnobs {
-				extent: Vec3::new(
-					0.4 * regions.spaciousness,
-					0.5,
-					0.4 * regions.spaciousness,
-				),
+				extent: Vec3::new(0.4 * regions.spaciousness, 0.5, 0.4 * regions.spaciousness),
 				prefer_wall: true,
 				wall_eps: WALL_EPS,
 				attempts: 10,
@@ -234,17 +204,13 @@ fn finalize_optional(
 	}
 
 	if packed.counter_runs.is_empty() {
-		return Err(FitError::TooSmall {
-			reason: "kitchen counter",
-		});
+		return Err(FitError::TooSmall { reason: "kitchen counter" });
 	}
 	Ok(packed.clone())
 }
 
 fn sample_along(cfg: &NoiseConfig, c: Vec3, spaciousness: f32, host: Aabb2d, w: f32) -> f32 {
-	let max_span = (host.max.x - host.min.x)
-		.max(host.max.y - host.min.y)
-		.max(1.5);
+	let max_span = (host.max.x - host.min.x).max(host.max.y - host.min.y).max(1.5);
 	cfg.sample_range_f32_4d(
 		1.5 * spaciousness,
 		(3.2 * spaciousness).min(max_span - 0.15),
@@ -259,11 +225,7 @@ fn sample_along(cfg: &NoiseConfig, c: Vec3, spaciousness: f32, host: Aabb2d, w: 
 fn pick_layout(cfg: &NoiseConfig, c: Vec3, room_area: f32) -> KitchenCounterLayout {
 	let t = cfg.sample_unit_4d(c.x, c.y, c.z, 31.0);
 	if room_area < 12.0 {
-		return if t < 0.55 {
-			KitchenCounterLayout::Galley
-		} else {
-			KitchenCounterLayout::LShape
-		};
+		return if t < 0.55 { KitchenCounterLayout::Galley } else { KitchenCounterLayout::LShape };
 	}
 	if t < 0.28 {
 		KitchenCounterLayout::Galley

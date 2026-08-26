@@ -25,10 +25,7 @@ pub struct RuledStrip {
 impl RuledStrip {
 	/// Empty strip (no stations). Style + default joint policy on the complex.
 	pub fn new(style: PanelStyle) -> Self {
-		Self {
-			complex: PanelComplex::new(style),
-			stations: Vec::new(),
-		}
+		Self { complex: PanelComplex::new(style), stations: Vec::new() }
 	}
 
 	pub fn rough_stone() -> Self {
@@ -85,12 +82,8 @@ impl RuledStrip {
 	) -> &mut Self {
 		let rail_a = rail_a.into();
 		let rail_b = rail_b.into();
-		let a_id = self
-			.complex
-			.insert_point_thick(rail_a.position, rail_a.thickness);
-		let b_id = self
-			.complex
-			.insert_point_thick(rail_b.position, rail_b.thickness);
+		let a_id = self.complex.insert_point_thick(rail_a.position, rail_a.thickness);
+		let b_id = self.complex.insert_point_thick(rail_b.position, rail_b.thickness);
 		if let Some(&(prev_a, prev_b)) = self.stations.last() {
 			// Bay: {rail_a[i], rail_a[i+1], rail_b[i], rail_b[i+1]}
 			self.complex.add_quad(prev_a, a_id, prev_b, b_id);
@@ -122,15 +115,11 @@ impl RuledStrip {
 	}
 
 	pub fn rail_a_polyline(&self) -> Vec<PanelPoint> {
-		self.rail_a_ids()
-			.filter_map(|id| self.complex.point(id).copied())
-			.collect()
+		self.rail_a_ids().filter_map(|id| self.complex.point(id).copied()).collect()
 	}
 
 	pub fn rail_b_polyline(&self) -> Vec<PanelPoint> {
-		self.rail_b_ids()
-			.filter_map(|id| self.complex.point(id).copied())
-			.collect()
+		self.rail_b_ids().filter_map(|id| self.complex.point(id).copied()).collect()
 	}
 
 	pub fn as_complex(&self) -> &PanelComplex {
@@ -166,16 +155,10 @@ mod tests {
 	use richmond_building_components::BuildingComponents;
 
 	fn example_lines() -> (Vec<Vec3>, Vec<Vec3>) {
-		let rail_a = vec![
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let rail_b = vec![
-			Vec3::new(1.0, 1.0, 1.0),
-			Vec3::new(1.0, 1.0, 2.0),
-			Vec3::new(1.0, 1.0, 4.0),
-		];
+		let rail_a =
+			vec![Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let rail_b =
+			vec![Vec3::new(1.0, 1.0, 1.0), Vec3::new(1.0, 1.0, 2.0), Vec3::new(1.0, 1.0, 4.0)];
 		(rail_a, rail_b)
 	}
 
@@ -246,11 +229,8 @@ mod tests {
 	#[test]
 	#[cfg(not(debug_assertions))]
 	fn mismatched_from_lines_yields_empty() {
-		let strip = RuledStrip::from_lines(
-			PanelStyle::RoughStonework,
-			[Vec3::ZERO, Vec3::X],
-			[Vec3::Y],
-		);
+		let strip =
+			RuledStrip::from_lines(PanelStyle::RoughStonework, [Vec3::ZERO, Vec3::X], [Vec3::Y]);
 		assert!(strip.stations().is_empty());
 		assert!(strip.as_complex().triangles().is_empty());
 	}
@@ -259,11 +239,8 @@ mod tests {
 	#[cfg(debug_assertions)]
 	#[should_panic(expected = "RuledStrip::from_lines requires equal lengths >= 2")]
 	fn mismatched_from_lines_debug_asserts() {
-		let _ = RuledStrip::from_lines(
-			PanelStyle::RoughStonework,
-			[Vec3::ZERO, Vec3::X],
-			[Vec3::Y],
-		);
+		let _ =
+			RuledStrip::from_lines(PanelStyle::RoughStonework, [Vec3::ZERO, Vec3::X], [Vec3::Y]);
 	}
 
 	#[test]

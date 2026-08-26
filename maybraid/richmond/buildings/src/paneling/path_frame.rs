@@ -18,11 +18,8 @@ pub struct TubeFrame {
 /// Average of inbound/outbound unit tangents at `positions[index]`.
 pub fn average_path_tangent(positions: &[Vec3], index: usize) -> Vec3 {
 	let p = positions[index];
-	let inbound = if index > 0 {
-		Some((p - positions[index - 1]).normalize_or_zero())
-	} else {
-		None
-	};
+	let inbound =
+		if index > 0 { Some((p - positions[index - 1]).normalize_or_zero()) } else { None };
 	let outbound = if index + 1 < positions.len() {
 		Some((positions[index + 1] - p).normalize_or_zero())
 	} else {
@@ -61,11 +58,7 @@ pub fn average_path_tangent(positions: &[Vec3], index: usize) -> Vec3 {
 /// Unbanked basis in the plane ⊥ `tangent`: `up` increases world Y in that plane.
 pub fn zero_roll_basis(tangent: Vec3) -> (Vec3, Vec3) {
 	let t = tangent.normalize_or_zero();
-	let t = if t.length_squared() > 0.0 {
-		t
-	} else {
-		Vec3::Z
-	};
+	let t = if t.length_squared() > 0.0 { t } else { Vec3::Z };
 	let mut up = Vec3::Y - t * t.dot(Vec3::Y);
 	if up.length_squared() < 1e-10 {
 		up = Vec3::X - t * t.dot(Vec3::X);
@@ -85,16 +78,8 @@ pub fn path_frame(positions: &[Vec3], index: usize, roll: f32) -> TubeFrame {
 	let t = average_path_tangent(positions, index);
 	let (right0, up0) = zero_roll_basis(t);
 	if roll.abs() < 1e-8 {
-		return TubeFrame {
-			tangent: t,
-			right: right0,
-			up: up0,
-		};
+		return TubeFrame { tangent: t, right: right0, up: up0 };
 	}
 	let q = Quat::from_axis_angle(t, roll);
-	TubeFrame {
-		tangent: t,
-		right: q * right0,
-		up: q * up0,
-	}
+	TubeFrame { tangent: t, right: q * right0, up: q * up0 }
 }

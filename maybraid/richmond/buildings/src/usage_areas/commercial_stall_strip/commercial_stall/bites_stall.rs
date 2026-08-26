@@ -75,12 +75,12 @@ impl BuildingComponents for BitesStall {
 
 #[cfg(test)]
 mod tests {
+	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
 	use super::*;
+	use crate::openings::{Opening, OpeningId, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, Openings};
 	use procedural_common::OptionalFaceBand;
-	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
 
 	fn two_south_doors() -> Confines {
 		let mut openings = Openings::new();
@@ -98,11 +98,7 @@ mod tests {
 				Vec3::new(7.5, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 6.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 6.0)), 0.0, openings)
 	}
 
 	fn both_counters() -> BitesStallParameterized {
@@ -115,12 +111,7 @@ mod tests {
 				.into_iter()
 				.map(|passage| BitesPassageSpec {
 					passage,
-					counter: OptionalFaceBand {
-						place: true,
-						along: 1.5,
-						depth: 0.8,
-						along_t: 0.0,
-					},
+					counter: OptionalFaceBand { place: true, along: 1.5, depth: 0.8, along_t: 0.0 },
 				})
 				.collect(),
 		}
@@ -233,12 +224,7 @@ mod tests {
 				.into_iter()
 				.map(|passage| BitesPassageSpec {
 					passage,
-					counter: OptionalFaceBand {
-						place: true,
-						along: 5.0,
-						depth: 1.0,
-						along_t: 0.0,
-					},
+					counter: OptionalFaceBand { place: true, along: 5.0, depth: 1.0, along_t: 0.0 },
 				})
 				.collect(),
 		};

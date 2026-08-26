@@ -122,11 +122,7 @@ impl LodScene for PartitionLodProbe {
 		self.status_for_lod_ref(lod_ref)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, _level: LodSceneLevel) -> impl Scene + 'static {
 		bevy::scene::SceneFunction(empty_scene)
 	}
 }

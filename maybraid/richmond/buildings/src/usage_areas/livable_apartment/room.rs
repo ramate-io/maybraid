@@ -43,9 +43,9 @@ pub enum ApartmentRoom {
 impl ApartmentRoom {
 	pub(crate) fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		match self {
-			Self::Entryway { .. }
-			| Self::HouseholdCloset { .. }
-			| Self::OpenHall { .. } => Layers::new(),
+			Self::Entryway { .. } | Self::HouseholdCloset { .. } | Self::OpenHall { .. } => {
+				Layers::new()
+			}
 			Self::Bedroom(r) => r.panel_nodes_for_level(level),
 			Self::Living(r) => r.panel_nodes_for_level(level),
 			Self::Kitchen(r) => r.panel_nodes_for_level(level),
@@ -59,9 +59,9 @@ impl ApartmentRoom {
 
 	pub(crate) fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		match self {
-			Self::Entryway { .. }
-			| Self::HouseholdCloset { .. }
-			| Self::OpenHall { .. } => Layers::new(),
+			Self::Entryway { .. } | Self::HouseholdCloset { .. } | Self::OpenHall { .. } => {
+				Layers::new()
+			}
 			Self::Bedroom(r) => r.joint_nodes_for_level(level),
 			Self::Living(r) => r.joint_nodes_for_level(level),
 			Self::Kitchen(r) => r.joint_nodes_for_level(level),
@@ -95,9 +95,9 @@ impl ApartmentRoom {
 
 	pub(crate) fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		match self {
-			Self::Entryway { .. }
-			| Self::HouseholdCloset { .. }
-			| Self::OpenHall { .. } => Layers::new(),
+			Self::Entryway { .. } | Self::HouseholdCloset { .. } | Self::OpenHall { .. } => {
+				Layers::new()
+			}
 			Self::Bedroom(r) => r.furniture_nodes_for_level(level),
 			Self::Living(r) => r.furniture_nodes_for_level(level),
 			Self::Kitchen(r) => r.furniture_nodes_for_level(level),
@@ -110,10 +110,7 @@ impl ApartmentRoom {
 	}
 
 	pub(crate) fn is_closed(&self) -> bool {
-		matches!(
-			self,
-			Self::Bedroom(_) | Self::Bathroom(_) | Self::HalfBath(_) | Self::Study(_)
-		)
+		matches!(self, Self::Bedroom(_) | Self::Bathroom(_) | Self::HalfBath(_) | Self::Study(_))
 	}
 
 	pub(crate) fn is_open_circ(&self) -> bool {

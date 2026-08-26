@@ -34,12 +34,7 @@ impl KitchenParameterized {
 		let occupancy = cfg
 			.sample_range_f32_4d(0.28, 0.52 + 0.1 * size_t, c.x, c.y, c.z, 31.0)
 			.clamp(0.1, 0.8);
-		Ok(Self {
-			style: LabelStyle::Yellow,
-			spaciousness,
-			occupancy,
-			layout: None,
-		})
+		Ok(Self { style: LabelStyle::Yellow, spaciousness, occupancy, layout: None })
 	}
 
 	pub fn with_fill(spaciousness: f32, occupancy: f32) -> Self {
@@ -75,9 +70,6 @@ impl KitchenPlan {
 			layout: params.layout,
 		};
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

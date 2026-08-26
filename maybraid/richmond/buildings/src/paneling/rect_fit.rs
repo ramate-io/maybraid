@@ -43,13 +43,7 @@ impl FittedRect {
 		let ey = self.normal;
 		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, ey, -self.e1));
 		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
-		Placement {
-			translation: origin,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::new(w, thick_scale, d),
-		}
+		Placement { translation: origin, yaw, pitch, roll, scale: Vec3::new(w, thick_scale, d) }
 	}
 
 	pub fn solid_placement(&self, thick_scale: f32) -> Placement {
@@ -94,11 +88,7 @@ pub fn fit_rectangle(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3) -> Option<FittedRec
 	let project_v = |p: Vec3| (p - a0).dot(e1_raw);
 	let zb0 = project_v(b0);
 	let zb1 = project_v(b1);
-	let sign = if zb0.abs() >= zb1.abs() {
-		zb0.signum()
-	} else {
-		zb1.signum()
-	};
+	let sign = if zb0.abs() >= zb1.abs() { zb0.signum() } else { zb1.signum() };
 	let sign = if sign.abs() < 0.5 { 1.0 } else { sign };
 	let depth = ((zb0.abs() + zb1.abs()) * 0.5).max(1e-4);
 	let e1 = e1_raw * sign;
@@ -154,13 +144,7 @@ impl OrientedRect {
 		let ey = self.normal;
 		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, ey, -self.e1));
 		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
-		Placement {
-			translation: origin,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::new(w, thick_scale, d),
-		}
+		Placement { translation: origin, yaw, pitch, roll, scale: Vec3::new(w, thick_scale, d) }
 	}
 
 	pub fn solid_placement(&self, thick_scale: f32) -> Placement {
@@ -224,28 +208,14 @@ pub fn orient_rectangle(origin: Vec3, edge: Vec3, height: f32, roll: f32) -> Opt
 	let a1 = a0 + e0 * width;
 	let b0 = a0 + edge;
 	let b1 = a1 + edge;
-	Some(OrientedRect {
-		a0,
-		a1,
-		b0,
-		b1,
-		e0,
-		e1,
-		normal,
-		width,
-		depth,
-	})
+	Some(OrientedRect { a0, a1, b0, b1, e0, e1, normal, width, depth })
 }
 
 /// Fallback when orientation fails (keeps call sites infallible).
 pub fn fallback_oriented(origin: Vec3, edge: Vec3, height: f32) -> OrientedRect {
 	let depth = edge.length().max(1e-4);
 	let width = height.max(1e-4);
-	let e1 = if edge.length_squared() > 1e-12 {
-		edge.normalize()
-	} else {
-		Vec3::Z
-	};
+	let e1 = if edge.length_squared() > 1e-12 { edge.normalize() } else { Vec3::Z };
 	let e0 = zero_roll_height_axis(e1).unwrap_or(Vec3::Y);
 	let normal = e0.cross(e1).normalize_or_zero();
 	let a0 = origin;
@@ -277,21 +247,11 @@ pub struct RectInset {
 }
 
 impl RectInset {
-	pub const ZERO: Self = Self {
-		left: 0.0,
-		right: 0.0,
-		bottom: 0.0,
-		top: 0.0,
-	};
+	pub const ZERO: Self = Self { left: 0.0, right: 0.0, bottom: 0.0, top: 0.0 };
 
 	pub fn uniform(m: f32) -> Self {
 		let m = m.max(0.0);
-		Self {
-			left: m,
-			right: m,
-			bottom: m,
-			top: m,
-		}
+		Self { left: m, right: m, bottom: m, top: m }
 	}
 
 	pub fn new(left: f32, right: f32, bottom: f32, top: f32) -> Self {
@@ -430,11 +390,7 @@ mod tests {
 		let height_dir = Vec3::new(2.0, 0.0, 0.0);
 		let roll = roll_to_align_height(edge.normalize(), height_dir).unwrap();
 		let o = orient_rectangle(Vec3::ZERO, edge, 2.0, roll).unwrap();
-		assert!(
-			o.e0.dot(height_dir.normalize()) > 0.99,
-			"e0={:?} should align with +X",
-			o.e0
-		);
+		assert!(o.e0.dot(height_dir.normalize()) > 0.99, "e0={:?} should align with +X", o.e0);
 	}
 
 	#[test]

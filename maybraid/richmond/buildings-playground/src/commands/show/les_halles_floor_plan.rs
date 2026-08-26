@@ -51,8 +51,5 @@ impl LesHallesFloorPlan {
 pub(crate) fn resolve_les_halles_openings(
 	args: &[OpeningArg],
 ) -> Result<Vec<PreviewOpening>, String> {
-	args.iter()
-		.cloned()
-		.map(|a| a.resolve_aabb(None))
-		.collect()
+	args.iter().cloned().map(|a| a.resolve_aabb(None)).collect()
 }

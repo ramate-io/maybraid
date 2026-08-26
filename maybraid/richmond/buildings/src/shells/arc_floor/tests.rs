@@ -43,9 +43,7 @@ fn slab_none_omits_nodes() -> anyhow::Result<()> {
 
 #[test]
 fn solid_slab_without_openings() -> anyhow::Result<()> {
-	let solid = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
-		.floor(ArcFloorSlab::Solid)
-		.build();
+	let solid = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0).floor(ArcFloorSlab::Solid).build();
 	// 4 caps + 1 inscribed fill
 	assert_eq!(solid.floor_nodes().len(), 5);
 	Ok(())
@@ -116,10 +114,7 @@ fn east_door_does_not_drop_quarter_ring() -> anyhow::Result<()> {
 		})
 		.sum();
 	// Full ring is 360°; one door should remove well under a quarter of solid.
-	assert!(
-		solid_deg > 300.0,
-		"unexpected missing wall mass: solid_deg={solid_deg}"
-	);
+	assert!(solid_deg > 300.0, "unexpected missing wall mass: solid_deg={solid_deg}");
 	Ok(())
 }
 
@@ -135,9 +130,7 @@ fn opening_aabb_and_wall_cut_share_the_same_side() -> anyhow::Result<()> {
 		.build();
 	// Non-solid sectors for this door must be low indices (yaw near 0 → +X), not ~12 (−X).
 	let (sectors, _) = floor.params().resolve_wall_sweeps();
-	let hit: Vec<u32> = (0..SECTORS)
-		.filter(|&i| !sectors[i as usize].is_solid())
-		.collect();
+	let hit: Vec<u32> = (0..SECTORS).filter(|&i| !sectors[i as usize].is_solid()).collect();
 	assert!(!hit.is_empty(), "door should cut at least one sector");
 	for i in &hit {
 		assert!(
@@ -159,13 +152,9 @@ fn raised_aperture_keeps_footer_strip() -> anyhow::Result<()> {
 			OpeningLabel::Aperture,
 		),
 	);
-	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
-		.openings(openings)
-		.build();
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0).openings(openings).build();
 	let (sectors, parts) = floor.params().resolve_wall_sweeps();
-	let cut: Vec<_> = (0..SECTORS)
-		.filter(|&i| !sectors[i as usize].is_solid())
-		.collect();
+	let cut: Vec<_> = (0..SECTORS).filter(|&i| !sectors[i as usize].is_solid()).collect();
 	assert!(!cut.is_empty(), "window should cut sectors");
 	// Footer band [0, 1): slice kit with Y-scale = h / SLICE_KIT_HEIGHT (= 5 for h=1).
 	let expect_y_scale = 1.0 / SLICE_KIT_HEIGHT;
@@ -177,10 +166,7 @@ fn raised_aperture_keeps_footer_strip() -> anyhow::Result<()> {
 				&& (p.placement.scale.y - expect_y_scale).abs() < 1e-2
 		})
 		.count();
-	assert!(
-		footers >= 1,
-		"expected scaled slice footer under window, cut={cut:?}"
-	);
+	assert!(footers >= 1, "expected scaled slice footer under window, cut={cut:?}");
 	Ok(())
 }
 

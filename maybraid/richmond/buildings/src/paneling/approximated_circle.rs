@@ -82,13 +82,7 @@ impl ApproximatedCircle {
 		segments: u32,
 		clip: Option<f32>,
 	) -> Self {
-		Self::horizontal(
-			PanelStyle::RoughStonework,
-			center_xz,
-			radius,
-			segments,
-			clip,
-		)
+		Self::horizontal(PanelStyle::RoughStonework, center_xz, radius, segments, clip)
 	}
 
 	pub fn with_frame(
@@ -124,17 +118,7 @@ impl ApproximatedCircle {
 			thickness,
 			PanelComplexJointPolicy::never(),
 		);
-		Self {
-			style,
-			center,
-			radius,
-			segments,
-			clip,
-			start_angle,
-			normal,
-			thickness,
-			complex,
-		}
+		Self { style, center, radius, segments, clip, start_angle, normal, thickness, complex }
 	}
 
 	pub fn with_start_angle(mut self, start_angle: f32) -> Self {
@@ -228,17 +212,13 @@ fn build_complex(
 	let (e0, e1) = orthonormal_basis(normal);
 	let n = segments as usize;
 	let outer = ring_points(center, radius, n, start_angle, e0, e1);
-	let outer_ids: Vec<PanelPointId> = outer
-		.iter()
-		.map(|&p| complex.insert_point_thick(p, thickness))
-		.collect();
+	let outer_ids: Vec<PanelPointId> =
+		outer.iter().map(|&p| complex.insert_point_thick(p, thickness)).collect();
 
 	if let Some(inner_r) = clip {
 		let inner = ring_points(center, inner_r, n, start_angle, e0, e1);
-		let inner_ids: Vec<PanelPointId> = inner
-			.iter()
-			.map(|&p| complex.insert_point_thick(p, thickness))
-			.collect();
+		let inner_ids: Vec<PanelPointId> =
+			inner.iter().map(|&p| complex.insert_point_thick(p, thickness)).collect();
 		for i in 0..n {
 			let i1 = (i + 1) % n;
 			// Two tris per radial quad; winding matches +normal.
@@ -305,7 +285,12 @@ mod tests {
 
 	#[test]
 	fn horizontal_emits_panel_nodes() {
-		let disk = ApproximatedCircle::rough_stone_horizontal(Vec3::new(1.0, 0.0, 2.0), 3.0, 16, Some(1.0));
+		let disk = ApproximatedCircle::rough_stone_horizontal(
+			Vec3::new(1.0, 0.0, 2.0),
+			3.0,
+			16,
+			Some(1.0),
+		);
 		let nodes = disk.panel_nodes_for_level(LodSceneLevel::High).flatten();
 		assert_eq!(nodes.len(), 32);
 	}

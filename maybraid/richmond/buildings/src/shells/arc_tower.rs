@@ -68,16 +68,9 @@ impl ArcTower {
 		let storeys = (0..floor_count)
 			.map(|i| {
 				let y = base_y + i as f32 * storey_height;
-				let floor = if i == 0 {
-					params.base_floor
-				} else {
-					params.intermediate_floors
-				};
-				let ceiling = if i + 1 == floor_count {
-					params.top_ceiling
-				} else {
-					ArcFloorSlab::None
-				};
+				let floor = if i == 0 { params.base_floor } else { params.intermediate_floors };
+				let ceiling =
+					if i + 1 == floor_count { params.top_ceiling } else { ArcFloorSlab::None };
 				let mut storey_openings = Openings::new();
 				for (id, opening) in params.openings.iter() {
 					let dy = y - base_y;
@@ -114,13 +107,7 @@ impl ArcTower {
 			.collect();
 
 		Self {
-			params: ArcTowerParams {
-				center_xz,
-				radius,
-				floor_count,
-				storey_height,
-				..params
-			},
+			params: ArcTowerParams { center_xz, radius, floor_count, storey_height, ..params },
 			storeys,
 		}
 	}
@@ -190,15 +177,9 @@ mod tests {
 			intermediate_floor_hole: 0.0,
 			..ArcTowerParams::default()
 		});
-		let s0 = tower
-			.storey(0)
-			.ok_or_else(|| anyhow::anyhow!("missing storey 0"))?;
-		let s1 = tower
-			.storey(1)
-			.ok_or_else(|| anyhow::anyhow!("missing storey 1"))?;
-		let s2 = tower
-			.storey(2)
-			.ok_or_else(|| anyhow::anyhow!("missing storey 2"))?;
+		let s0 = tower.storey(0).ok_or_else(|| anyhow::anyhow!("missing storey 0"))?;
+		let s1 = tower.storey(1).ok_or_else(|| anyhow::anyhow!("missing storey 1"))?;
+		let s2 = tower.storey(2).ok_or_else(|| anyhow::anyhow!("missing storey 2"))?;
 		assert!(s0.ceiling_nodes().is_empty());
 		assert!(s1.ceiling_nodes().is_empty());
 		assert!(!s2.ceiling_nodes().is_empty());

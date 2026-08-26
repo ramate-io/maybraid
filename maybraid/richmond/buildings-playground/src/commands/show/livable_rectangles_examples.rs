@@ -15,9 +15,6 @@ pub struct LivableRectanglesExamples {
 
 impl LivableRectanglesExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::LivableRectanglesExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::LivableRectanglesExamples, self.transform.transform())
 	}
 }

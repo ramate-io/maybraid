@@ -15,9 +15,6 @@ pub struct IApartmentFloorPlanExamples {
 
 impl IApartmentFloorPlanExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::IApartmentFloorPlanExamples,
-			self.transform.transform(),
-		)
+		(PreviewSubject::IApartmentFloorPlanExamples, self.transform.transform())
 	}
 }

@@ -52,10 +52,8 @@ mod tests {
 
 	#[test]
 	fn lounge_fits_tiny_bay() {
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(0.5, 1.0, 0.5),
-		));
+		let confines =
+			Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(0.5, 1.0, 0.5)));
 		let (lounge, _) = Lounge::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert_eq!(lounge.stall_type.text, "Lounge");
 	}

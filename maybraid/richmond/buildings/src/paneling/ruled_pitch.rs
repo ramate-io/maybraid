@@ -140,26 +140,12 @@ mod tests {
 
 	#[test]
 	fn eave_ridge_map_to_rails() {
-		let eave = [
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let ridge = [
-			Vec3::new(1.0, 1.0, 1.0),
-			Vec3::new(1.0, 1.0, 2.0),
-			Vec3::new(1.0, 1.0, 4.0),
-		];
+		let eave = [Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 4.0)];
+		let ridge = [Vec3::new(1.0, 1.0, 1.0), Vec3::new(1.0, 1.0, 2.0), Vec3::new(1.0, 1.0, 4.0)];
 		let pitch = RuledPitch::from_lines(PanelStyle::ShepherdsThatch, eave, ridge);
 		let strip = pitch.as_strip();
-		assert_eq!(
-			pitch.eave_ids().collect::<Vec<_>>(),
-			strip.rail_a_ids().collect::<Vec<_>>()
-		);
-		assert_eq!(
-			pitch.ridge_ids().collect::<Vec<_>>(),
-			strip.rail_b_ids().collect::<Vec<_>>()
-		);
+		assert_eq!(pitch.eave_ids().collect::<Vec<_>>(), strip.rail_a_ids().collect::<Vec<_>>());
+		assert_eq!(pitch.ridge_ids().collect::<Vec<_>>(), strip.rail_b_ids().collect::<Vec<_>>());
 		for (a, b) in pitch.eave_polyline().iter().zip(strip.rail_a_polyline()) {
 			assert!((a.position - b.position).length() < 1e-5);
 		}

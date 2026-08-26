@@ -114,11 +114,7 @@ pub fn split_toward_min_room(
 			out.push(cell);
 			continue;
 		}
-		let cut_x = if can_cut_x && can_cut_z {
-			size.x >= size.y
-		} else {
-			can_cut_x
-		};
+		let cut_x = if can_cut_x && can_cut_z { size.x >= size.y } else { can_cut_x };
 		let (a, b) = cell.bounds.bipartition_by_area(cut_x, true, 0.5);
 		let sa = a.max - a.min;
 		let sb = b.max - b.min;
@@ -148,13 +144,9 @@ pub fn group_cells_to_apartments(
 	min_room_size: Vec2,
 	target_apartment_area: f32,
 ) -> Vec<Vec<u32>> {
-	let access = PlanAccessParams::residential().with_room_min(min_room_size.x.min(min_room_size.y));
-	pack_apartments_to_targets(
-		cells,
-		halls,
-		&[target_apartment_area.max(EPS)],
-		access,
-	)
+	let access =
+		PlanAccessParams::residential().with_room_min(min_room_size.x.min(min_room_size.y));
+	pack_apartments_to_targets(cells, halls, &[target_apartment_area.max(EPS)], access)
 }
 
 /// Pack hall-connected apartments against a target-area catalog.
@@ -192,8 +184,7 @@ pub fn pack_apartments_to_targets(
 		let mut area = eligible[seed].area();
 		let accept = target * 0.85;
 		while area + EPS < target {
-			let Some(next) =
-				best_grow_candidate(&eligible, &assigned, &group, &frontage, min_conn)
+			let Some(next) = best_grow_candidate(&eligible, &assigned, &group, &frontage, min_conn)
 			else {
 				break;
 			};
@@ -267,11 +258,7 @@ pub fn split_oversized_cells(
 			out.push(cell);
 			continue;
 		}
-		let cut_x = if can_cut_x && can_cut_z {
-			size.x >= size.y
-		} else {
-			can_cut_x
-		};
+		let cut_x = if can_cut_x && can_cut_z { size.x >= size.y } else { can_cut_x };
 		let (a, b) = cell.bounds.bipartition_by_area(cut_x, true, 0.5);
 		let sa = a.max - a.min;
 		let sb = b.max - b.min;
@@ -357,12 +344,7 @@ fn max_pinch_safe_shared(
 	well.then_some(shared)
 }
 
-fn groups_can_merge(
-	cells: &[PlanCell],
-	a: &[usize],
-	b: &[usize],
-	min_conn: f32,
-) -> Option<f32> {
+fn groups_can_merge(cells: &[PlanCell], a: &[usize], b: &[usize], min_conn: f32) -> Option<f32> {
 	let mut shared = 0.0_f32;
 	let mut well = false;
 	for &ai in a {
@@ -428,8 +410,7 @@ fn merge_degenerate_frontage_groups(
 		});
 		let mut did = false;
 		for gi in order {
-			if gi >= groups.len()
-				|| !cell_group_footprint(cells, &groups[gi]).is_degenerate(access)
+			if gi >= groups.len() || !cell_group_footprint(cells, &groups[gi]).is_degenerate(access)
 			{
 				continue;
 			}
@@ -438,8 +419,7 @@ fn merge_degenerate_frontage_groups(
 				if tj == gi {
 					continue;
 				}
-				let Some(shared) =
-					groups_can_merge(cells, &groups[gi], &groups[tj], min_conn)
+				let Some(shared) = groups_can_merge(cells, &groups[gi], &groups[tj], min_conn)
 				else {
 					continue;
 				};
@@ -449,8 +429,7 @@ fn merge_degenerate_frontage_groups(
 				let better = match best {
 					None => true,
 					Some((_, bs, ba)) => {
-						shared > bs + EPS
-							|| ((shared - bs).abs() <= EPS && aspect < ba - 1e-4)
+						shared > bs + EPS || ((shared - bs).abs() <= EPS && aspect < ba - 1e-4)
 					}
 				};
 				if better {
@@ -493,9 +472,7 @@ fn find_absorb_group(
 			Some((_, bs, bsoft, bc, ba)) => {
 				shared > bs + EPS
 					|| ((shared - bs).abs() <= EPS && soft_ok && !bsoft)
-					|| ((shared - bs).abs() <= EPS
-						&& soft_ok == bsoft
-						&& fp.compact > bc + 1e-4)
+					|| ((shared - bs).abs() <= EPS && soft_ok == bsoft && fp.compact > bc + 1e-4)
 					|| ((shared - bs).abs() <= EPS
 						&& soft_ok == bsoft
 						&& (fp.compact - bc).abs() <= 1e-4
@@ -515,11 +492,8 @@ fn find_absorb_group(
 /// union, takes the largest, and subtracts it until scraps are gone. Prefer fewer
 /// larger rects (L / T footprints stay multi-rect).
 pub fn decompose_max_rects(parts: &[Aabb2d]) -> Vec<Aabb2d> {
-	let mut remaining: Vec<Aabb2d> = parts
-		.iter()
-		.copied()
-		.filter(|r| aabb2_area(*r) > EPS * EPS)
-		.collect();
+	let mut remaining: Vec<Aabb2d> =
+		parts.iter().copied().filter(|r| aabb2_area(*r) > EPS * EPS).collect();
 	if remaining.is_empty() {
 		return Vec::new();
 	}
@@ -531,9 +505,7 @@ pub fn decompose_max_rects(parts: &[Aabb2d]) -> Vec<Aabb2d> {
 			.iter()
 			.map(|seed| grow_maximal_in_union(*seed, &remaining))
 			.max_by(|a, b| {
-				aabb2_area(*a)
-					.partial_cmp(&aabb2_area(*b))
-					.unwrap_or(std::cmp::Ordering::Equal)
+				aabb2_area(*a).partial_cmp(&aabb2_area(*b)).unwrap_or(std::cmp::Ordering::Equal)
 			})
 		else {
 			break;
@@ -546,15 +518,10 @@ pub fn decompose_max_rects(parts: &[Aabb2d]) -> Vec<Aabb2d> {
 		for r in remaining {
 			next.extend(subtract_aabb2(r, &[best]));
 		}
-		remaining = next
-			.into_iter()
-			.filter(|r| aabb2_area(*r) > MIN_SCRAP)
-			.collect();
+		remaining = next.into_iter().filter(|r| aabb2_area(*r) > MIN_SCRAP).collect();
 	}
 	out.sort_by(|a, b| {
-		aabb2_area(*b)
-			.partial_cmp(&aabb2_area(*a))
-			.unwrap_or(std::cmp::Ordering::Equal)
+		aabb2_area(*b).partial_cmp(&aabb2_area(*a)).unwrap_or(std::cmp::Ordering::Equal)
 	});
 	out
 }
@@ -588,10 +555,7 @@ fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
 		if x >= r.min.x - EPS {
 			continue;
 		}
-		let trial = Aabb2d {
-			min: Vec2::new(x, r.min.y),
-			max: r.max,
-		};
+		let trial = Aabb2d { min: Vec2::new(x, r.min.y), max: r.max };
 		if rect_in_union(trial, parts) {
 			r = trial;
 		}
@@ -601,10 +565,7 @@ fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
 		if x <= r.max.x + EPS {
 			continue;
 		}
-		let trial = Aabb2d {
-			min: r.min,
-			max: Vec2::new(x, r.max.y),
-		};
+		let trial = Aabb2d { min: r.min, max: Vec2::new(x, r.max.y) };
 		if rect_in_union(trial, parts) {
 			r = trial;
 		}
@@ -614,10 +575,7 @@ fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
 		if y >= r.min.y - EPS {
 			continue;
 		}
-		let trial = Aabb2d {
-			min: Vec2::new(r.min.x, y),
-			max: r.max,
-		};
+		let trial = Aabb2d { min: Vec2::new(r.min.x, y), max: r.max };
 		if rect_in_union(trial, parts) {
 			r = trial;
 		}
@@ -627,10 +585,7 @@ fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
 		if y <= r.max.y + EPS {
 			continue;
 		}
-		let trial = Aabb2d {
-			min: r.min,
-			max: Vec2::new(r.max.x, y),
-		};
+		let trial = Aabb2d { min: r.min, max: Vec2::new(r.max.x, y) };
 		if rect_in_union(trial, parts) {
 			r = trial;
 		}
@@ -644,11 +599,7 @@ fn grow_maximal_in_union(seed: Aabb2d, parts: &[Aabb2d]) -> Aabb2d {
 pub fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	let touch_x = (a.max.x - b.min.x).abs() <= EPS || (b.max.x - a.min.x).abs() <= EPS;
 	if touch_x {
-		let mid = if (a.max.x - b.min.x).abs() <= EPS {
-			a.max.x
-		} else {
-			b.max.x
-		};
+		let mid = if (a.max.x - b.min.x).abs() <= EPS { a.max.x } else { b.max.x };
 		let lo = a.min.y.max(b.min.y);
 		let hi = a.max.y.min(b.max.y);
 		if hi - lo > EPS {
@@ -657,11 +608,7 @@ pub fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	}
 	let touch_y = (a.max.y - b.min.y).abs() <= EPS || (b.max.y - a.min.y).abs() <= EPS;
 	if touch_y {
-		let mid = if (a.max.y - b.min.y).abs() <= EPS {
-			a.max.y
-		} else {
-			b.max.y
-		};
+		let mid = if (a.max.y - b.min.y).abs() <= EPS { a.max.y } else { b.max.y };
 		let lo = a.min.x.max(b.min.x);
 		let hi = a.max.x.min(b.max.x);
 		if hi - lo > EPS {
@@ -683,10 +630,7 @@ pub fn subtract_aabb2(host: Aabb2d, cuts: &[Aabb2d]) -> Vec<Aabb2d> {
 		}
 		regions = next;
 	}
-	regions
-		.into_iter()
-		.filter(|r| aabb2_area(*r) > EPS * EPS)
-		.collect()
+	regions.into_iter().filter(|r| aabb2_area(*r) > EPS * EPS).collect()
 }
 
 fn subtract_one(host: Aabb2d, cut: Aabb2d) -> Vec<Aabb2d> {
@@ -700,31 +644,19 @@ fn subtract_one(host: Aabb2d, cut: Aabb2d) -> Vec<Aabb2d> {
 	let mut out = Vec::new();
 	// Left
 	if x0 - host.min.x > EPS {
-		out.push(Aabb2d {
-			min: host.min,
-			max: Vec2::new(x0, host.max.y),
-		});
+		out.push(Aabb2d { min: host.min, max: Vec2::new(x0, host.max.y) });
 	}
 	// Right
 	if host.max.x - x1 > EPS {
-		out.push(Aabb2d {
-			min: Vec2::new(x1, host.min.y),
-			max: host.max,
-		});
+		out.push(Aabb2d { min: Vec2::new(x1, host.min.y), max: host.max });
 	}
 	// Bottom (between left/right slabs)
 	if y0 - host.min.y > EPS {
-		out.push(Aabb2d {
-			min: Vec2::new(x0, host.min.y),
-			max: Vec2::new(x1, y0),
-		});
+		out.push(Aabb2d { min: Vec2::new(x0, host.min.y), max: Vec2::new(x1, y0) });
 	}
 	// Top
 	if host.max.y - y1 > EPS {
-		out.push(Aabb2d {
-			min: Vec2::new(x0, y1),
-			max: Vec2::new(x1, host.max.y),
-		});
+		out.push(Aabb2d { min: Vec2::new(x0, y1), max: Vec2::new(x1, host.max.y) });
 	}
 	out
 }
@@ -734,13 +666,7 @@ mod tests {
 	use super::*;
 
 	fn cell(id: u32, min: Vec2, max: Vec2) -> PlanCell {
-		PlanCell::new(
-			id,
-			Aabb2d {
-				min,
-				max,
-			},
-		)
+		PlanCell::new(id, Aabb2d { min, max })
 	}
 
 	#[test]
@@ -769,10 +695,7 @@ mod tests {
 			// Isolated: no hall edge, no adjacency to other rooms.
 			cell(2, Vec2::new(20.0, 20.0), Vec2::new(24.0, 24.0)),
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, 4.0),
-			max: Vec2::new(8.0, 6.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, 4.0), max: Vec2::new(8.0, 6.0) };
 		let groups = group_cells_to_apartments(&rooms, &[hall], Vec2::new(2.0, 2.0), 20.0);
 		let flat: Vec<u32> = groups.iter().flatten().copied().collect();
 		assert!(flat.contains(&0));
@@ -797,10 +720,7 @@ mod tests {
 			cell(2, Vec2::new(0.0, 6.0), Vec2::new(3.0, 9.0)),
 			cell(3, Vec2::new(0.0, 9.0), Vec2::new(3.0, 12.0)),
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(3.0, 0.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(3.0, 0.0) };
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
@@ -821,23 +741,10 @@ mod tests {
 			cell(1, Vec2::new(4.0, 0.0), Vec2::new(8.0, 4.0)), // 4 m shared
 			cell(2, Vec2::new(4.0, 3.6), Vec2::new(8.0, 7.6)), // 0.4 m pinch with cell 0
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(8.0, 0.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(8.0, 0.0) };
 		assert!(cells_edge_adjacent(&rooms[0], &rooms[2], EPS));
-		assert!(!cells_well_connected(
-			&rooms[0],
-			&rooms[2],
-			MIN_GROUP_CONNECTIVITY,
-			EPS
-		));
-		assert!(cells_well_connected(
-			&rooms[0],
-			&rooms[1],
-			MIN_GROUP_CONNECTIVITY,
-			EPS
-		));
+		assert!(!cells_well_connected(&rooms[0], &rooms[2], MIN_GROUP_CONNECTIVITY, EPS));
+		assert!(cells_well_connected(&rooms[0], &rooms[1], MIN_GROUP_CONNECTIVITY, EPS));
 
 		let groups = pack_apartments_to_targets(
 			&rooms,
@@ -848,10 +755,7 @@ mod tests {
 		// Cell 0+1 may group; cell 2 must not join via the pinch alone.
 		for g in &groups {
 			if g.contains(&2) {
-				assert!(
-					!g.contains(&0),
-					"pinch must not join cell 2 with cell 0: {groups:?}"
-				);
+				assert!(!g.contains(&0), "pinch must not join cell 2 with cell 0: {groups:?}");
 			}
 		}
 	}
@@ -866,10 +770,7 @@ mod tests {
 			cell(2, Vec2::new(0.0, 6.0), Vec2::new(6.0, 9.0)),
 			cell(3, Vec2::new(6.0, 0.0), Vec2::new(8.0, 9.0)), // thin frontage strip
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(8.0, 0.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(8.0, 0.0) };
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
@@ -893,10 +794,7 @@ mod tests {
 			cell(2, Vec2::new(4.0, 3.0), Vec2::new(8.0, 6.0)), // compact wing
 			cell(3, Vec2::new(0.0, 6.0), Vec2::new(4.0, 9.0)), // snake tip
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(4.0, 0.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(4.0, 0.0) };
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
@@ -904,10 +802,7 @@ mod tests {
 			PlanAccessParams::residential().with_room_min(2.0),
 		);
 		let g0 = groups.iter().find(|g| g.contains(&0)).expect("seed group");
-		assert!(
-			g0.contains(&2),
-			"compact wing should join before/over snake tip: {groups:?}"
-		);
+		assert!(g0.contains(&2), "compact wing should join before/over snake tip: {groups:?}");
 	}
 
 	#[test]
@@ -920,10 +815,7 @@ mod tests {
 			cell(2, Vec2::new(3.0, 3.0), Vec2::new(6.0, 6.0)),
 			cell(3, Vec2::new(3.0, 6.0), Vec2::new(6.0, 9.0)),
 		];
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, -2.0),
-			max: Vec2::new(6.0, 0.0),
-		};
+		let hall = Aabb2d { min: Vec2::new(0.0, -2.0), max: Vec2::new(6.0, 0.0) };
 		let groups = pack_apartments_to_targets(
 			&rooms,
 			&[hall],
@@ -948,14 +840,8 @@ mod tests {
 
 	#[test]
 	fn subtract_carves_corridor() {
-		let host = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(10.0, 10.0),
-		};
-		let hall = Aabb2d {
-			min: Vec2::new(0.0, 4.0),
-			max: Vec2::new(10.0, 6.0),
-		};
+		let host = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(10.0, 10.0) };
+		let hall = Aabb2d { min: Vec2::new(0.0, 4.0), max: Vec2::new(10.0, 6.0) };
 		let rem = subtract_aabb2(host, &[hall]);
 		assert!(rem.len() >= 2);
 		assert!(rem.iter().all(|r| aabb2_area(*r) > 0.0));
@@ -983,10 +869,7 @@ mod tests {
 		let out = decompose_max_rects(&parts);
 		assert!(out.len() >= 2, "L should stay multi-rect, got {out:?}");
 		let out_area: f32 = out.iter().map(|r| aabb2_area(*r)).sum();
-		assert!(
-			(out_area - input_area).abs() < 0.5,
-			"cover area {out_area} vs input {input_area}"
-		);
+		assert!((out_area - input_area).abs() < 0.5, "cover area {out_area} vs input {input_area}");
 	}
 
 	#[test]
@@ -1004,10 +887,8 @@ mod tests {
 
 	#[test]
 	fn decompose_merges_coaxial_pair() {
-		let parts = [
-			rect(Vec2::ZERO, Vec2::new(4.0, 3.0)),
-			rect(Vec2::new(4.0, 0.0), Vec2::new(8.0, 3.0)),
-		];
+		let parts =
+			[rect(Vec2::ZERO, Vec2::new(4.0, 3.0)), rect(Vec2::new(4.0, 0.0), Vec2::new(8.0, 3.0))];
 		let out = decompose_max_rects(&parts);
 		assert_eq!(out.len(), 1, "coaxial pair should merge: {out:?}");
 		assert!((aabb2_area(out[0]) - 24.0).abs() < 0.1);

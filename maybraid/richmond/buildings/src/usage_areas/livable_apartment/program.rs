@@ -114,10 +114,7 @@ mod tests {
 		// reused parent noise for every suite).
 		let center = Vec3::new(4.0, 1.75, 12.0);
 		let area = 72.0;
-		let parent = NoiseParams {
-			seed: 1337,
-			..NoiseParams::default()
-		};
+		let parent = NoiseParams { seed: 1337, ..NoiseParams::default() };
 		let a = program_from_area(area, noise_for_cell(parent, 0), center);
 		let b = program_from_area(area, noise_for_cell(parent, 1), center);
 		let c = program_from_area(area, noise_for_cell(parent, 2), center);
@@ -135,20 +132,10 @@ mod tests {
 		// should land on the larger max-rect.
 		use bevy_math::Vec2;
 		let rects = [
-			Aabb2d {
-				min: Vec2::ZERO,
-				max: Vec2::new(2.0, 3.0),
-			},
-			Aabb2d {
-				min: Vec2::ZERO,
-				max: Vec2::new(8.0, 6.0),
-			},
+			Aabb2d { min: Vec2::ZERO, max: Vec2::new(2.0, 3.0) },
+			Aabb2d { min: Vec2::ZERO, max: Vec2::new(8.0, 6.0) },
 		];
-		let slices = distribute_program(
-			&[RectQuarterKind::Eating],
-			&rects,
-			NoiseParams::default(),
-		);
+		let slices = distribute_program(&[RectQuarterKind::Eating], &rects, NoiseParams::default());
 		assert!(
 			slices[1].contains(&RectQuarterKind::Eating),
 			"Eating alone should prefer the large rect: {slices:?}"
@@ -200,19 +187,17 @@ pub fn distribute_program(
 		let mut best_score = f32::NEG_INFINITY;
 		for &i in &rect_order {
 			let closed_bonus = if kind.is_closed() { areas[i] * 0.02 } else { 0.0 };
-			let living_bonus =
-				if matches!(kind, RectQuarterKind::Living | RectQuarterKind::Sitting) {
-					areas[i] * 0.04
-				} else {
-					0.0
-				};
-			let jitter = cfg.sample_unit_4d(
-				i as f32,
-				areas[i],
-				ki as f32,
-				kind_noise_key(kind),
-			) * 0.025;
-			let score = targets[i] - load[i] / total.max(1.0) + areas[i] * 1e-4 + closed_bonus
+			let living_bonus = if matches!(kind, RectQuarterKind::Living | RectQuarterKind::Sitting)
+			{
+				areas[i] * 0.04
+			} else {
+				0.0
+			};
+			let jitter =
+				cfg.sample_unit_4d(i as f32, areas[i], ki as f32, kind_noise_key(kind)) * 0.025;
+			let score = targets[i] - load[i] / total.max(1.0)
+				+ areas[i] * 1e-4
+				+ closed_bonus
 				+ living_bonus
 				+ jitter;
 			if score > best_score {

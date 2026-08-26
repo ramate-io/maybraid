@@ -67,20 +67,15 @@ impl PublicRestroomRegions {
 		let host = aabb3_to_plan(host3, PlanAxes::XZ);
 		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "restroom passage",
-			});
+			return Err(FitError::TooSmall { reason: "restroom passage" });
 		}
 
 		let mut clearances = PassageClearance::bands_std(host, &passage_faces);
-		let sink_depth = self
-			.sink_depth
-			.clamp(RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_DEPTH_MAX);
+		let sink_depth = self.sink_depth.clamp(RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_DEPTH_MAX);
 		// Door-side strip toward the entry: stalls-door keep-out + sink pocket + customer
 		// passage keep-out can stack on the same wall, so reserve all three.
 		let free_strip_depth = 2.0 * PASSAGE_CLEARANCE + sink_depth;
-		let strip_area =
-			free_strip_depth * (host.max.x - host.min.x).max(host.max.y - host.min.y);
+		let strip_area = free_strip_depth * (host.max.x - host.min.x).max(host.max.y - host.min.y);
 		let area_reserve = self
 			.sink_area_reserve
 			.max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN)
@@ -112,9 +107,7 @@ impl PublicRestroomRegions {
 			host3,
 			host,
 			&clearances,
-			|face| {
-				Self::free_strip_block(host, face, free_strip_depth).map(|strip| vec![strip])
-			},
+			|face| Self::free_strip_block(host, face, free_strip_depth).map(|strip| vec![strip]),
 			|stalls, face| {
 				let Some(zone) = Self::door_side_zone(host, stalls, face) else {
 					return false;
@@ -123,38 +116,18 @@ impl PublicRestroomRegions {
 				zone_short + 1e-3 >= RESTROOM_SINK_MIN
 			},
 		)
-		.ok_or(FitError::TooSmall {
-			reason: "restroom stalls",
-		})?;
-		crate::usage_areas::clearance::commit_door_clear(
-			&mut clearances,
-			enclosed.door_clear,
-			0.0,
-		);
+		.ok_or(FitError::TooSmall { reason: "restroom stalls" })?;
+		crate::usage_areas::clearance::commit_door_clear(&mut clearances, enclosed.door_clear, 0.0);
 
 		let sinks = self
-			.pack_sinks(
-				host,
-				&clearances,
-				enclosed.room,
-				enclosed.seed_face,
-				enclosed.door_clear,
-			)
-			.ok_or(FitError::TooSmall {
-				reason: "restroom sink",
-			})?;
+			.pack_sinks(host, &clearances, enclosed.room, enclosed.seed_face, enclosed.door_clear)
+			.ok_or(FitError::TooSmall { reason: "restroom sink" })?;
 
 		Ok(PublicRestroomPacked {
 			stalls: plan_to_aabb3(host3, enclosed.room, PlanAxes::XZ),
-			sinks: sinks
-				.into_iter()
-				.map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ))
-				.collect(),
+			sinks: sinks.into_iter().map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ)).collect(),
 			stall_walls: enclosed.walls,
-			stalls_door: RestroomStallsDoor {
-				id: enclosed.door_id,
-				opening: enclosed.door,
-			},
+			stalls_door: RestroomStallsDoor { id: enclosed.door_id, opening: enclosed.door },
 		})
 	}
 
@@ -207,16 +180,8 @@ impl PublicRestroomRegions {
 			} else {
 				host.min.y
 			},
-			along0: if seed_face.thru_is_x {
-				host.min.y
-			} else {
-				host.min.x
-			},
-			along1: if seed_face.thru_is_x {
-				host.max.y
-			} else {
-				host.max.x
-			},
+			along0: if seed_face.thru_is_x { host.min.y } else { host.min.x },
+			along1: if seed_face.thru_is_x { host.max.y } else { host.max.x },
 			inward_positive: !seed_face.inward_positive,
 		};
 		opposite.band(host, opposite.along_len(), depth, 0.5)

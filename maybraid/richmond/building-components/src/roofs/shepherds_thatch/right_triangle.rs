@@ -42,8 +42,8 @@ impl ShepherdsThatchRightTriangle {
 		lod_ref: &LodRef,
 		mirror: Option<MirrorAxis>,
 	) -> impl Scene + 'static {
-		let level = PartitionLodProbe::from_aabb(lod_ref.bounds)
-			.level_for(lod_ref.current_transform);
+		let level =
+			PartitionLodProbe::from_aabb(lod_ref.bounds).level_for(lod_ref.current_transform);
 		Self::scene_for_level_mirrored(level, mirror)
 	}
 }

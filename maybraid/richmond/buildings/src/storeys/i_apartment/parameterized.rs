@@ -121,16 +121,9 @@ impl IApartmentParameterized {
 		let short = footprint.x.min(footprint.y);
 		let shaft_hi = (short * 0.12).clamp(MIN_SHAFT_SIDE, MAX_SHAFT_SIDE);
 		let shaft_lo = MIN_SHAFT_SIDE.min(shaft_hi);
-		let shaft_side =
-			cfg.sample_range_f32_4d(shaft_lo, shaft_hi, c.x, c.y, c.z, SALT_SHAFT);
-		let hall_width = cfg.sample_range_f32_4d(
-			MIN_HALL_WIDTH,
-			MAX_HALL_WIDTH,
-			c.x,
-			c.y,
-			c.z,
-			SALT_HALL,
-		);
+		let shaft_side = cfg.sample_range_f32_4d(shaft_lo, shaft_hi, c.x, c.y, c.z, SALT_SHAFT);
+		let hall_width =
+			cfg.sample_range_f32_4d(MIN_HALL_WIDTH, MAX_HALL_WIDTH, c.x, c.y, c.z, SALT_HALL);
 
 		Ok(Self {
 			stem_width,
@@ -176,11 +169,7 @@ impl IApartmentParameterized {
 
 /// For a single bar: one arm ⇒ share is leftover fraction; two arms ⇒ relative weights
 /// already scaled so `left + right == fill` (see [`normalize_bar_shares`]).
-fn pair_length(
-	left: Option<f32>,
-	right: Option<f32>,
-	leftover: f32,
-) -> (Option<f32>, Option<f32>) {
+fn pair_length(left: Option<f32>, right: Option<f32>, leftover: f32) -> (Option<f32>, Option<f32>) {
 	match (left, right) {
 		(Some(l), Some(r)) => {
 			let sum = (l + r).max(1e-4);
@@ -285,10 +274,7 @@ mod tests {
 		for seed in 0..200 {
 			let p = IApartmentParameterized::sample(
 				&confines,
-				NoiseParams {
-					seed,
-					..NoiseParams::default()
-				},
+				NoiseParams { seed, ..NoiseParams::default() },
 			)
 			.unwrap();
 			let arms = [
@@ -316,24 +302,15 @@ mod tests {
 		for seed in 0..80 {
 			let p = IApartmentParameterized::sample(
 				&confines,
-				NoiseParams {
-					seed,
-					..NoiseParams::default()
-				},
+				NoiseParams { seed, ..NoiseParams::default() },
 			)
 			.unwrap();
 			let leftover = (footprint.x - p.stem_width).max(0.0);
 			let (tl, tr, bl, br) = p.flange_lengths(footprint, p.stem_width);
 			let top = tl.unwrap_or(0.0) + tr.unwrap_or(0.0);
 			let bot = bl.unwrap_or(0.0) + br.unwrap_or(0.0);
-			assert!(
-				top <= leftover + 1e-3,
-				"seed={seed} top {top} > leftover {leftover}"
-			);
-			assert!(
-				bot <= leftover + 1e-3,
-				"seed={seed} bot {bot} > leftover {leftover}"
-			);
+			assert!(top <= leftover + 1e-3, "seed={seed} top {top} > leftover {leftover}");
+			assert!(bot <= leftover + 1e-3, "seed={seed} bot {bot} > leftover {leftover}");
 		}
 	}
 }

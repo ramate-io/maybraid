@@ -11,17 +11,15 @@ use crate::paneling::Rectangle;
 /// Full-face wall on `face` when the AABB has positive extent, else [`None`].
 pub fn face_rectangle(aabb: &Aabb3d, face: FaceKind, thickness: f32) -> Option<Rectangle> {
 	let (a0, a1, b0, _b1) = face_quad(aabb, face, 0.0, 1.0)?;
-	Some(Rectangle::rough_stone(
-		a0,
-		a1 - a0,
-		(b0 - a0).length(),
-		thickness,
-		0.0,
-	))
+	Some(Rectangle::rough_stone(a0, a1 - a0, (b0 - a0).length(), thickness, 0.0))
 }
 
 /// Short return wall on the −side of `face` (door leave), matching legacy 0.35×half span.
-pub fn opening_return_rectangle(aabb: &Aabb3d, face: FaceKind, thickness: f32) -> Option<Rectangle> {
+pub fn opening_return_rectangle(
+	aabb: &Aabb3d,
+	face: FaceKind,
+	thickness: f32,
+) -> Option<Rectangle> {
 	// Legacy: centered stub covering 0.35 of half-span → u in [0, 0.35] of full face.
 	face_span_rectangle(aabb, face, 0.0, 0.35, thickness)
 }
@@ -35,13 +33,7 @@ pub fn face_span_rectangle(
 	thickness: f32,
 ) -> Option<Rectangle> {
 	let (a0, a1, b0, _b1) = face_quad(aabb, face, u0, u1)?;
-	Some(Rectangle::rough_stone(
-		a0,
-		a1 - a0,
-		(b0 - a0).length(),
-		thickness,
-		0.0,
-	))
+	Some(Rectangle::rough_stone(a0, a1 - a0, (b0 - a0).length(), thickness, 0.0))
 }
 
 /// Bottom `(a0,a1)` and top `(b0,b1)` corners for face span `[u0,u1]`.

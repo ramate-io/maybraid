@@ -24,14 +24,12 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
-use crate::usage_areas::furniture_util::placement_filling_aabb;
-use crate::fit::{
-	Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::paneling::Rectangle;
+use crate::placer::WalledRoomFill;
+use crate::usage_areas::furniture_util::placement_filling_aabb;
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::livable_quarters::ResidentialBathroom;
-use crate::placer::WalledRoomFill;
 
 use layout::BedroomPartition;
 
@@ -203,9 +201,7 @@ impl CommonBedroom {
 			.iter()
 			.map(|p| {
 				closet_walls.extend(p.walls.iter().cloned());
-				ClosetFill {
-					room: partition_to_walled(p, style, "Closet", confines.roll),
-				}
+				ClosetFill { room: partition_to_walled(p, style, "Closet", confines.roll) }
 			})
 			.collect();
 		let walk_in_closets = plan
@@ -227,9 +223,7 @@ impl CommonBedroom {
 			.iter()
 			.map(|p| {
 				ensuite_walls.extend(p.walls.iter().cloned());
-				EnsuiteFill {
-					room: partition_to_walled(p, style, "Ensuite", confines.roll),
-				}
+				EnsuiteFill { room: partition_to_walled(p, style, "Ensuite", confines.roll) }
 			})
 			.collect();
 
@@ -295,10 +289,8 @@ fn compose_ensuite_bathrooms(
 	let mut out = Vec::new();
 	for (i, ensuite) in ensuites.iter().enumerate() {
 		let region = ensuite.room.to_fill_region(SpaceKind::InternalSpace, roll);
-		let bath_noise = NoiseParams {
-			seed: noise.seed.wrapping_add(i as i32).wrapping_mul(7919),
-			..noise
-		};
+		let bath_noise =
+			NoiseParams { seed: noise.seed.wrapping_add(i as i32).wrapping_mul(7919), ..noise };
 		if let Ok((bath, _)) = ResidentialBathroom::fit_to_confines(&region.confines, bath_noise) {
 			out.push(bath);
 		}
@@ -312,10 +304,8 @@ fn finish_fit(
 	noise: NoiseParams,
 ) -> (CommonBedroom, FillableRegions) {
 	room.ensuite_bathrooms = compose_ensuite_bathrooms(&room.ensuites, confines.roll, noise);
-	let regions = FillableRegions {
-		within: room.partition_regions(confines.roll),
-		atop: Vec::new(),
-	};
+	let regions =
+		FillableRegions { within: room.partition_regions(confines.roll), atop: Vec::new() };
 	(room, regions)
 }
 
@@ -365,11 +355,7 @@ impl BuildingComponents for CommonBedroom {
 		labels.extend(self.closets.iter().map(|c| c.room.label.clone()));
 		labels.extend(self.walk_in_closets.iter().map(|c| c.room.label.clone()));
 		labels.extend(self.ensuites.iter().map(|e| e.room.label.clone()));
-		labels.extend(
-			self.ensuite_bathrooms
-				.iter()
-				.map(|b| b.room_type.clone()),
-		);
+		labels.extend(self.ensuite_bathrooms.iter().map(|b| b.room_type.clone()));
 		Layers::from_free(labels)
 	}
 
@@ -379,10 +365,7 @@ impl BuildingComponents for CommonBedroom {
 			self.beds.iter().map(|b| b.furniture.clone()).collect::<Vec<_>>(),
 		));
 		out.extend(Layers::from_free(
-			self.nightstands
-				.iter()
-				.map(|n| n.furniture.clone())
-				.collect::<Vec<_>>(),
+			self.nightstands.iter().map(|n| n.furniture.clone()).collect::<Vec<_>>(),
 		));
 		out.extend(Layers::from_free(
 			self.small_bedroom_furniture
@@ -391,22 +374,13 @@ impl BuildingComponents for CommonBedroom {
 				.collect::<Vec<_>>(),
 		));
 		out.extend(Layers::from_free(
-			self.wardrobes
-				.iter()
-				.map(|w| w.furniture.clone())
-				.collect::<Vec<_>>(),
+			self.wardrobes.iter().map(|w| w.furniture.clone()).collect::<Vec<_>>(),
 		));
 		out.extend(Layers::from_free(
-			self.dressers
-				.iter()
-				.map(|d| d.furniture.clone())
-				.collect::<Vec<_>>(),
+			self.dressers.iter().map(|d| d.furniture.clone()).collect::<Vec<_>>(),
 		));
 		out.extend(Layers::from_free(
-			self.bedroom_furniture
-				.iter()
-				.map(|b| b.furniture.clone())
-				.collect::<Vec<_>>(),
+			self.bedroom_furniture.iter().map(|b| b.furniture.clone()).collect::<Vec<_>>(),
 		));
 		out
 	}

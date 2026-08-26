@@ -22,6 +22,10 @@ pub struct CommandConsoleOutput(pub String);
 #[derive(Resource, Default)]
 pub struct TextEntryFocus(pub bool);
 
+/// When true, slash must not steal keys (a HUD text modal owns input).
+#[derive(Resource, Default, Clone, Copy, Debug)]
+pub struct TextEntryBlocked(pub bool);
+
 #[derive(Resource, Default)]
 pub struct CommandHistory {
 	pub entries: VecDeque<String>,
@@ -174,8 +178,13 @@ pub fn run_script_file<T: GameCommand>(path: &Path, commands: &mut Commands, con
 pub fn toggle_text_entry_focus(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	drawer_visible: Option<Res<crate::ui::GameCommandDrawerVisible>>,
+	blocked: Option<Res<TextEntryBlocked>>,
 	mut focus: ResMut<TextEntryFocus>,
 ) {
+	if blocked.is_some_and(|blocked| blocked.0) {
+		focus.0 = false;
+		return;
+	}
 	if drawer_visible.is_some_and(|visible| !visible.0) {
 		focus.0 = false;
 		return;
@@ -193,8 +202,9 @@ pub fn capture_command_line_input<T: GameCommand>(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	mut console: ResMut<CommandConsoleOutput>,
 	focus: Res<TextEntryFocus>,
+	blocked: Option<Res<TextEntryBlocked>>,
 ) {
-	if !focus.0 {
+	if blocked.is_some_and(|blocked| blocked.0) || !focus.0 {
 		return;
 	}
 
@@ -298,6 +308,7 @@ impl<T: GameCommand> Plugin for GameCommandPlugin<T> {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<TypedCommandLine>()
 			.init_resource::<TextEntryFocus>()
+			.init_resource::<TextEntryBlocked>()
 			.init_resource::<CommandConsoleOutput>()
 			.init_resource::<CommandHistory>();
 		if !app.world().contains_resource::<PendingStartupCommand<T>>() {

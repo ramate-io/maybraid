@@ -18,9 +18,7 @@ use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, La
 
 use bevy_math::bounding::Aabb3d;
 
-use crate::fit::{
-	Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::openings::{Opening, OpeningId, Openings};
 use crate::paneling::Rectangle;
 
@@ -67,12 +65,7 @@ impl MiniMart {
 			),
 			office_walls: plan.packed.office_walls,
 			office_bounds,
-			office: label_filling_aabb(
-				style,
-				"MiniMartOffice",
-				&office_bounds,
-				confines.roll,
-			),
+			office: label_filling_aabb(style, "MiniMartOffice", &office_bounds, confines.roll),
 			stall_aisles,
 			register: label_filling_aabb(
 				LabelStyle::Magenta,
@@ -90,10 +83,7 @@ impl MiniMart {
 	pub fn office_fill_region(&self, roll: f32) -> FillRegion {
 		let mut openings = Openings::new();
 		openings.insert(self.office_door_id.clone(), self.office_door.clone());
-		FillRegion::new(
-			SpaceKind::InternalSpace,
-			Confines::new(self.office_bounds, roll, openings),
-		)
+		FillRegion::new(SpaceKind::InternalSpace, Confines::new(self.office_bounds, roll, openings))
 	}
 }
 
@@ -133,9 +123,9 @@ impl BuildingComponents for MiniMart {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use procedural_common::{
 		aabb2_area, aabb3_to_plan, intersects_aabb2, Aabb2dPack, PlanAxes, PlanOpeningFace,
 	};
@@ -161,11 +151,7 @@ mod tests {
 				Vec3::new(10.5, 2.2, 0.2),
 			)),
 		);
-		Confines::new(
-			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.0, 12.0)),
-			0.0,
-			openings,
-		)
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.0, 12.0)), 0.0, openings)
 	}
 
 	fn plan_extent(aabb: &Aabb3d) -> (f32, f32) {
@@ -192,17 +178,10 @@ mod tests {
 			stall.office_walls.len()
 		);
 		assert!(!stall.stall_aisles.is_empty());
-		assert_eq!(
-			stall.office_door_id,
-			OpeningId::scoped(SCOPE, "office_door", "0")
-		);
+		assert_eq!(stall.office_door_id, OpeningId::scoped(SCOPE, "office_door", "0"));
 		assert!(matches!(stall.office_door.label, OpeningLabel::Passage));
 		assert_eq!(regions.within.len(), 1);
-		assert!(regions.within[0]
-			.confines
-			.openings
-			.get(&stall.office_door_id)
-			.is_some());
+		assert!(regions.within[0].confines.openings.get(&stall.office_door_id).is_some());
 	}
 
 	#[test]
@@ -210,10 +189,7 @@ mod tests {
 		let confines = roomy_south_doors();
 		let params = MiniMartParameterized::sample(
 			&confines,
-			NoiseParams {
-				seed: 11,
-				..Default::default()
-			},
+			NoiseParams { seed: 11, ..Default::default() },
 		)
 		.unwrap();
 		let plan = MiniMartPlan::from_parameterized(params, &confines).unwrap();
@@ -224,10 +200,7 @@ mod tests {
 		assert!(!plan.packed.aisles.is_empty());
 		let (aw, ad) = plan_extent(&plan.packed.aisles[0]);
 		assert!(aw + 1e-3 >= MINI_MART_AISLES_MIN && ad + 1e-3 >= MINI_MART_AISLES_MIN);
-		assert!(matches!(
-			plan.packed.office_door.opening.label,
-			OpeningLabel::Passage
-		));
+		assert!(matches!(plan.packed.office_door.opening.label, OpeningLabel::Passage));
 
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		for (_id, opening) in confines.openings.iter() {
@@ -278,10 +251,7 @@ mod tests {
 		for seed in [1i32, 2, 3, 5, 8, 13, 21, 34] {
 			let params = MiniMartParameterized::sample(
 				&confines,
-				NoiseParams {
-					seed,
-					..Default::default()
-				},
+				NoiseParams { seed, ..Default::default() },
 			)
 			.unwrap();
 			areas.push(params.office_area_target);
@@ -297,17 +267,11 @@ mod tests {
 		for seed in [1i32, 8, 21, 34, 55, 89] {
 			let params = MiniMartParameterized::sample(
 				&confines,
-				NoiseParams {
-					seed,
-					..Default::default()
-				},
+				NoiseParams { seed, ..Default::default() },
 			)
 			.unwrap();
 			if let Ok(plan) = MiniMartPlan::from_parameterized(params, &confines) {
-				packed_areas.push(aabb2_area(aabb3_to_plan(
-					&plan.packed.office,
-					PlanAxes::XZ,
-				)));
+				packed_areas.push(aabb2_area(aabb3_to_plan(&plan.packed.office, PlanAxes::XZ)));
 			}
 		}
 		assert!(packed_areas.len() >= 3);
@@ -336,14 +300,8 @@ mod tests {
 			openings,
 		);
 		for seed in [11i32, 21, 42] {
-			MiniMart::fit_to_confines(
-				&confines,
-				NoiseParams {
-					seed,
-					..Default::default()
-				},
-			)
-			.unwrap_or_else(|e| panic!("seed {seed} failed: {e}"));
+			MiniMart::fit_to_confines(&confines, NoiseParams { seed, ..Default::default() })
+				.unwrap_or_else(|e| panic!("seed {seed} failed: {e}"));
 		}
 	}
 }

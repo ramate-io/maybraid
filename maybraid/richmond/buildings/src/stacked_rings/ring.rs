@@ -42,4 +42,3 @@ impl BuildingComponents for StackedRing {
 		Layers::from_free(self.outer_walls.to_vec())
 	}
 }
-

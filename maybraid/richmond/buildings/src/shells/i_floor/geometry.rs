@@ -27,11 +27,7 @@ impl PlanAabb {
 
 	pub fn to_plan_rect(self, y: f32) -> PlanRect {
 		PlanRect::new(
-			Vec3::new(
-				0.5 * (self.min_x + self.max_x),
-				y,
-				0.5 * (self.min_z + self.max_z),
-			),
+			Vec3::new(0.5 * (self.min_x + self.max_x), y, 0.5 * (self.min_z + self.max_z)),
 			(self.max_x - self.min_x).max(EPS),
 			(self.max_z - self.min_z).max(EPS),
 		)
@@ -54,10 +50,7 @@ impl PlanAabb {
 	}
 
 	pub fn center_xz(self) -> Vec2 {
-		Vec2::new(
-			0.5 * (self.min_x + self.max_x),
-			0.5 * (self.min_z + self.max_z),
-		)
+		Vec2::new(0.5 * (self.min_x + self.max_x), 0.5 * (self.min_z + self.max_z))
 	}
 }
 
@@ -79,10 +72,7 @@ impl IFloorParams {
 		let d = self.central_rectangle.y.max(EPS);
 		let half_w = w * 0.5;
 		let half_d = d * 0.5;
-		let flange_t = self
-			.flange_thickness
-			.map(|t| t.max(EPS))
-			.unwrap_or(w);
+		let flange_t = self.flange_thickness.map(|t| t.max(EPS)).unwrap_or(w);
 
 		let tl = positive_len(self.top_left_length).unwrap_or(0.0);
 		let tr = positive_len(self.top_right_length).unwrap_or(0.0);
@@ -101,32 +91,17 @@ impl IFloorParams {
 
 		let mut slabs = vec![PlanAabb::new(stem_x0, stem_x1, stem_z0, stem_z1)];
 		if has_top {
-			slabs.push(PlanAabb::new(
-				stem_x0 - tl,
-				stem_x1 + tr,
-				stem_z1,
-				top_z1,
-			));
+			slabs.push(PlanAabb::new(stem_x0 - tl, stem_x1 + tr, stem_z1, top_z1));
 		}
 		if has_bot {
-			slabs.push(PlanAabb::new(
-				stem_x0 - bl,
-				stem_x1 + br,
-				bot_z0,
-				stem_z0,
-			));
+			slabs.push(PlanAabb::new(stem_x0 - bl, stem_x1 + br, bot_z0, stem_z0));
 		}
 
 		let ring = outline_ring(
 			stem_x0, stem_x1, stem_z0, stem_z1, top_z1, bot_z0, tl, tr, bl, br, has_top, has_bot,
 		);
 		let edges = ring_to_edges(&ring, y0, height);
-		IGeom {
-			y0,
-			height,
-			slab_rects: slabs,
-			edges,
-		}
+		IGeom { y0, height, slab_rects: slabs, edges }
 	}
 }
 
@@ -222,11 +197,7 @@ fn ring_to_edges(ring: &[Vec2], y: f32, height: f32) -> Vec<WallEdge> {
 		let along = (end - start).normalize_or_zero();
 		let outward3 = Vec3::Y.cross(along);
 		let outward = Vec2::new(outward3.x, outward3.z);
-		let outward = if outward.length_squared() > 1e-8 {
-			outward.normalize()
-		} else {
-			Vec2::X
-		};
+		let outward = if outward.length_squared() > 1e-8 { outward.normalize() } else { Vec2::X };
 		edges.push(WallEdge::new(start, end, height, outward));
 	}
 	edges

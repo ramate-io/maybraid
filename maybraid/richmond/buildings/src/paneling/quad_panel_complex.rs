@@ -71,15 +71,13 @@ impl FromStr for QuadPanelComplex {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use richmond_building_components::BuildingComponents;
 	use lod::gen::LodSceneLevel;
+	use richmond_building_components::BuildingComponents;
 
 	#[test]
 	fn from_str_into_complex_escape_hatch() {
 		let q: QuadPanelComplex =
-			"1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}"
-				.parse()
-				.expect("parse");
+			"1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}".parse().expect("parse");
 		let mut c = q.into_complex();
 		assert_eq!(c.triangles().len(), 2);
 		// Escape hatch: add another triangle after unwrap.

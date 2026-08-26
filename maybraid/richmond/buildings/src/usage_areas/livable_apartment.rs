@@ -25,9 +25,7 @@ use richmond_building_components::labels::{LabelNode, LabelStyle};
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
-use crate::fit::{
-	Confines, FillRegion, FillableRegions, Fit, FitError, MultiConfines, SpaceKind,
-};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, MultiConfines, SpaceKind};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::shells::RectFloor;
 use crate::usage_areas::plan_geom::host_xz;

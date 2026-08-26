@@ -34,7 +34,8 @@ impl WizardsTowerRoom {
 		let width = size.x.max(1e-4);
 		let depth = size.z.max(1e-4);
 		// Panel-space lower-left; FloorNode remaps to the centered floor kit.
-		let floor_origin = Vec3::new(constraints.aabb.min.x, constraints.aabb.min.y, constraints.aabb.min.z);
+		let floor_origin =
+			Vec3::new(constraints.aabb.min.x, constraints.aabb.min.y, constraints.aabb.min.z);
 
 		Self {
 			partition: PartitionNode::rough_stone(
@@ -63,4 +64,3 @@ impl BuildingComponents for WizardsTowerRoom {
 		Layers::from_free(vec![self.floor.clone()])
 	}
 }
-

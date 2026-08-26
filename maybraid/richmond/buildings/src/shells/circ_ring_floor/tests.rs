@@ -18,9 +18,7 @@ fn default_constructs_two_rings() {
 
 #[test]
 fn annulus_clip_set_on_solid_floor() {
-	let r = CircRingFloorParams::default()
-		.floor(CircRingFloorSlab::Solid)
-		.build();
+	let r = CircRingFloorParams::default().floor(CircRingFloorSlab::Solid).build();
 	assert!(r.has_floor());
 	let floor = r.floor_circle().expect("floor");
 	assert_eq!(floor.clip, Some(r.params().inner_radius));
@@ -29,14 +27,8 @@ fn annulus_clip_set_on_solid_floor() {
 
 #[test]
 fn passage_maps_on_outer() {
-	let (id, opening) = CircRingFloor::plan_opening_at_t(
-		"door",
-		OpeningLabel::Passage,
-		Vec3::ZERO,
-		5.0,
-		3.0,
-		0.0,
-	);
+	let (id, opening) =
+		CircRingFloor::plan_opening_at_t("door", OpeningLabel::Passage, Vec3::ZERO, 5.0, 3.0, 0.0);
 	let r = CircRingFloorParams::default()
 		.openings(Openings::new().with(id.clone(), opening))
 		.build();
@@ -63,9 +55,7 @@ fn cuts_slab_can_omit_annulus() {
 			OpeningLabel::Shaft,
 		),
 	);
-	let solid = CircRingFloorParams::default()
-		.floor(CircRingFloorSlab::Solid)
-		.build();
+	let solid = CircRingFloorParams::default().floor(CircRingFloorSlab::Solid).build();
 	let cut = CircRingFloorParams::default()
 		.floor(CircRingFloorSlab::Solid)
 		.openings(openings)

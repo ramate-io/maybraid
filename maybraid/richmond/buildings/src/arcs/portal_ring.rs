@@ -136,11 +136,7 @@ mod tests {
 			.partitions
 			.iter()
 			.any(|p| matches!(p.geometry, Partition::SliceArc(_))));
-		assert!(wall
-			.sweep
-			.partitions
-			.iter()
-			.any(|p| matches!(p.geometry, Partition::Arc(_))));
+		assert!(wall.sweep.partitions.iter().any(|p| matches!(p.geometry, Partition::Arc(_))));
 	}
 
 	#[test]

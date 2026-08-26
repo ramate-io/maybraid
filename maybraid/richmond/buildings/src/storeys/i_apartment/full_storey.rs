@@ -44,10 +44,8 @@ impl IApartmentFullStorey {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let mut blocks = Vec::new();
 		let mut residual_within = Vec::new();
-		let opts = LivableApartmentsOptions {
-			hall_width: Some(floor_plan.hall_width),
-			targets: None,
-		};
+		let opts =
+			LivableApartmentsOptions { hall_width: Some(floor_plan.hall_width), targets: None };
 
 		// Progressive fill: each primary rect may claim shared edges, then marks
 		// later siblings with Boundary so they skip those faces.
@@ -75,24 +73,16 @@ impl IApartmentFullStorey {
 					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
 				Err(FitError::TooSmall { .. }) => {
-					residual_within.push(FillRegion::new(
-						SpaceKind::ClosetSpace,
-						pending[i].confines.clone(),
-					));
+					residual_within
+						.push(FillRegion::new(SpaceKind::ClosetSpace, pending[i].confines.clone()));
 				}
 				Err(err) => return Err(err),
 			}
 		}
 
 		Ok((
-			Self {
-				floor_plan,
-				blocks,
-			},
-			FillableRegions {
-				within: residual_within,
-				atop: regions.atop,
-			},
+			Self { floor_plan, blocks },
+			FillableRegions { within: residual_within, atop: regions.atop },
 		))
 	}
 }
@@ -157,25 +147,19 @@ impl BuildingComponents for IApartmentFullStorey {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::prelude::Transform;
-	use bevy_math::bounding::Aabb3d;
-	use bevy_math::Vec3;
-	use richmond_building_components::STRUCTURAL_HIGH_OUTSIDE_METERS;
 	use crate::openings::OpeningLabel;
 	use crate::storeys::i_apartment::{IApartmentFloorPlan, IApartmentParameterized};
 	use crate::usage_areas::plan_cells::{hall_frontage_length, PlanCell, MIN_GROUP_CONNECTIVITY};
 	use crate::usage_areas::plan_geom::host_xz;
+	use bevy::prelude::Transform;
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
+	use richmond_building_components::STRUCTURAL_HIGH_OUTSIDE_METERS;
 
 	fn storey_seed(seed: i32) -> IApartmentFullStorey {
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(-22.0, 0.0, -18.0),
-			Vec3::new(22.0, 3.5, 18.0),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(-22.0, 0.0, -18.0), Vec3::new(22.0, 3.5, 18.0));
 		let empty = Confines::from_bounds(bounds);
-		let noise = NoiseParams {
-			seed,
-			..NoiseParams::default()
-		};
+		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let params = IApartmentParameterized::sample(&empty, noise).unwrap();
 		let inbound = IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
 		let confines = Confines::new(bounds, 0.0, inbound);
@@ -185,10 +169,7 @@ mod tests {
 
 	#[test]
 	fn full_storey_allocates_block_per_rect() {
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(-22.0, 0.0, -18.0),
-			Vec3::new(22.0, 3.5, 18.0),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(-22.0, 0.0, -18.0), Vec3::new(22.0, 3.5, 18.0));
 		let confines = Confines::from_bounds(bounds);
 		let noise = NoiseParams::default();
 		let params = IApartmentParameterized::sample(&confines, noise).unwrap();
@@ -196,17 +177,13 @@ mod tests {
 		let n = plan.primary_rects.len();
 		let (storey, _) = IApartmentFullStorey::from_floor_plan(plan, noise).unwrap();
 		assert_eq!(storey.blocks.len(), n);
-		assert!(!storey
-			.panel_nodes_for_level(LodSceneLevel::High)
-			.is_empty());
+		assert!(!storey.panel_nodes_for_level(LodSceneLevel::High).is_empty());
 	}
 
 	#[test]
 	fn structural_probe_high_within_perimeter_cutoff() {
 		let storey = storey_seed(0);
-		let probe = storey
-			.structural_lod()
-			.expect("composed LivableApartments footprints");
+		let probe = storey.structural_lod().expect("composed LivableApartments footprints");
 		assert!(!probe.footprints.is_empty());
 		assert_eq!(probe.high_outside_meters, STRUCTURAL_HIGH_OUTSIDE_METERS);
 
@@ -225,10 +202,7 @@ mod tests {
 
 	#[test]
 	fn full_storey_blocks_contain_apartments_when_connected() {
-		let bounds = Aabb3d::from_min_max(
-			Vec3::new(-22.0, 0.0, -18.0),
-			Vec3::new(22.0, 3.5, 18.0),
-		);
+		let bounds = Aabb3d::from_min_max(Vec3::new(-22.0, 0.0, -18.0), Vec3::new(22.0, 3.5, 18.0));
 		let empty = Confines::from_bounds(bounds);
 		let noise = NoiseParams::default();
 		let params = IApartmentParameterized::sample(&empty, noise).unwrap();
@@ -252,11 +226,7 @@ mod tests {
 				let mut best = 0.0_f32;
 				for part in apt.cells.iter() {
 					let cell = PlanCell::new(0, host_xz(&part.confines.bounds));
-					best = best.max(hall_frontage_length(
-						&cell,
-						&block.halls.hall_bands,
-						1e-3,
-					));
+					best = best.max(hall_frontage_length(&cell, &block.halls.hall_bands, 1e-3));
 				}
 				assert!(
 					best + 1e-3 >= MIN_GROUP_CONNECTIVITY,
@@ -280,10 +250,7 @@ mod tests {
 			.openings
 			.iter()
 			.any(|(_, o)| matches!(o.label, OpeningLabel::Boundary));
-		assert!(
-			has_boundary,
-			"expected Boundary openings on progressive/exterior faces"
-		);
+		assert!(has_boundary, "expected Boundary openings on progressive/exterior faces");
 		// Stem should author some enclosure walls (shared interface + hall).
 		assert!(
 			!storey.blocks[0].walls.is_empty(),
@@ -299,11 +266,8 @@ mod tests {
 		let storey = storey_seed(1337);
 		assert!(storey.blocks.len() >= 2, "expected stem + flange");
 		let flange = &storey.blocks[1];
-		let livable1 = flange
-			.apartments
-			.iter()
-			.find(|a| a.region_id == 0)
-			.expect("Flange Livable 1");
+		let livable1 =
+			flange.apartments.iter().find(|a| a.region_id == 0).expect("Flange Livable 1");
 		for room in &livable1.rooms {
 			if let ApartmentRoom::HouseholdCloset { confines, .. } = room {
 				let area = aabb2_area(host_xz(&confines.bounds));
@@ -354,12 +318,12 @@ mod tests {
 	/// hall inflate (open rooms may overlap spine bands by design).
 	#[test]
 	fn seed_1337_flange_livable_open_furniture_clears_halls() {
-		use bevy_math::bounding::{Aabb2d, BoundingVolume};
-		use bevy_math::Vec2;
 		use crate::usage_areas::livable_apartment::ApartmentRoom;
 		use crate::usage_areas::plan_cells::shared_edge_span;
 		use crate::usage_areas::PASSAGE_WALL_LIP;
-		use procedural_common::{intersects_aabb2, aabb2_area};
+		use bevy_math::bounding::{Aabb2d, BoundingVolume};
+		use bevy_math::Vec2;
+		use procedural_common::{aabb2_area, intersects_aabb2};
 
 		fn fill_xz(t: bevy_math::Vec3, s: bevy_math::Vec3) -> Aabb2d {
 			Aabb2d {
@@ -380,26 +344,14 @@ mod tests {
 			if along_x {
 				let inward_pos = room.center().y >= mid;
 				if inward_pos {
-					Aabb2d {
-						min: Vec2::new(lo, mid),
-						max: Vec2::new(hi, mid + depth),
-					}
+					Aabb2d { min: Vec2::new(lo, mid), max: Vec2::new(hi, mid + depth) }
 				} else {
-					Aabb2d {
-						min: Vec2::new(lo, mid - depth),
-						max: Vec2::new(hi, mid),
-					}
+					Aabb2d { min: Vec2::new(lo, mid - depth), max: Vec2::new(hi, mid) }
 				}
 			} else if room.center().x >= mid {
-				Aabb2d {
-					min: Vec2::new(mid, lo),
-					max: Vec2::new(mid + depth, hi),
-				}
+				Aabb2d { min: Vec2::new(mid, lo), max: Vec2::new(mid + depth, hi) }
 			} else {
-				Aabb2d {
-					min: Vec2::new(mid - depth, lo),
-					max: Vec2::new(mid, hi),
-				}
+				Aabb2d { min: Vec2::new(mid - depth, lo), max: Vec2::new(mid, hi) }
 			}
 		}
 
@@ -460,13 +412,20 @@ mod tests {
 					};
 					// Skip open-over-spine: room substantially overlaps the hall.
 					let overlap = Aabb2d {
-						min: Vec2::new(room_xz.min.x.max(hall.min.x), room_xz.min.y.max(hall.min.y)),
-						max: Vec2::new(room_xz.max.x.min(hall.max.x), room_xz.max.y.min(hall.max.y)),
+						min: Vec2::new(
+							room_xz.min.x.max(hall.min.x),
+							room_xz.min.y.max(hall.min.y),
+						),
+						max: Vec2::new(
+							room_xz.max.x.min(hall.max.x),
+							room_xz.max.y.min(hall.max.y),
+						),
 					};
 					if aabb2_area(overlap) > 0.25 {
 						continue;
 					}
-					let lip = shared_wall_lip(room_xz, along_x, lo, hi, mid, PASSAGE_WALL_LIP - 0.05);
+					let lip =
+						shared_wall_lip(room_xz, along_x, lo, hi, mid, PASSAGE_WALL_LIP - 0.05);
 					for fp in &footprints {
 						assert!(
 							!intersects_aabb2(*fp, lip),

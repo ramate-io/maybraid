@@ -42,13 +42,16 @@ fn resolve_piece(
 	openings: &Openings,
 	thickness: f32,
 ) -> Option<ISlabPiece> {
-	let cutting = openings.iter().filter_map(|(_id, o)| {
-		if o.label.cuts_slab() {
-			Some(o.bounds)
-		} else {
-			None
-		}
-	});
+	let cutting =
+		openings.iter().filter_map(
+			|(_id, o)| {
+				if o.label.cuts_slab() {
+					Some(o.bounds)
+				} else {
+					None
+				}
+			},
+		);
 	match merge_slab_insets(plan, cutting) {
 		None => Some(ISlabPiece::Solid(solid(style, plan, thickness))),
 		Some(None) => None,

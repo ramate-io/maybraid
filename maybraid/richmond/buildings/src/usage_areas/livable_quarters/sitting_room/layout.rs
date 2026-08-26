@@ -103,16 +103,9 @@ impl SittingRoomRegions {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<SittingRoomPacked, FitError> {
-		let mut host = init_host_with(
-			confines,
-			InitHostOpts {
-				passage_wall_lip: true,
-			},
-		)?;
+		let mut host = init_host_with(confines, InitHostOpts { passage_wall_lip: true })?;
 		if host.room_area + 1e-3 < MIN_AREA {
-			return Err(FitError::TooSmall {
-				reason: "sitting room",
-			});
+			return Err(FitError::TooSmall { reason: "sitting room" });
 		}
 		let mut packed = SittingRoomPacked::default();
 		let placed = pack_kinds(
@@ -135,9 +128,7 @@ impl SittingRoomRegions {
 			}
 		}
 		if packed.primary_seating.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "sitting room seating",
-			});
+			return Err(FitError::TooSmall { reason: "sitting room seating" });
 		}
 		Ok(packed)
 	}

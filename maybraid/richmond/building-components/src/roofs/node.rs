@@ -14,8 +14,8 @@ use crate::assets::roofs::shepherds_thatch::{
 };
 use crate::empty_scene;
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
-use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::geometry::LinearLod;
+use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::roofs::geometry::RoofGeometry;
 use crate::roofs::lod::{roof_scene_ref_for_level, RoofLodProbe};
@@ -100,11 +100,7 @@ impl LodScene for RoofNode {
 		warm_mesh_lod_culls(current)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		self.content_for_level(level)
 	}
 

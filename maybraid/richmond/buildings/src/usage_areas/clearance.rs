@@ -111,33 +111,17 @@ const WALL_SNAP: f32 = 0.28;
 pub fn snap_face_to_host_wall(face: PlanOpeningFace, host: Aabb2d) -> PlanOpeningFace {
 	if face.thru_is_x {
 		if (face.thru - host.min.x).abs() <= WALL_SNAP {
-			return PlanOpeningFace {
-				thru: host.min.x,
-				inward_positive: true,
-				..face
-			};
+			return PlanOpeningFace { thru: host.min.x, inward_positive: true, ..face };
 		}
 		if (face.thru - host.max.x).abs() <= WALL_SNAP {
-			return PlanOpeningFace {
-				thru: host.max.x,
-				inward_positive: false,
-				..face
-			};
+			return PlanOpeningFace { thru: host.max.x, inward_positive: false, ..face };
 		}
 	} else {
 		if (face.thru - host.min.y).abs() <= WALL_SNAP {
-			return PlanOpeningFace {
-				thru: host.min.y,
-				inward_positive: true,
-				..face
-			};
+			return PlanOpeningFace { thru: host.min.y, inward_positive: true, ..face };
 		}
 		if (face.thru - host.max.y).abs() <= WALL_SNAP {
-			return PlanOpeningFace {
-				thru: host.max.y,
-				inward_positive: false,
-				..face
-			};
+			return PlanOpeningFace { thru: host.max.y, inward_positive: false, ..face };
 		}
 	}
 	face
@@ -192,17 +176,9 @@ impl PassageClearance {
 		let mut out = Vec::new();
 		for &face in faces {
 			let full = if face.thru_is_x {
-				PlanOpeningFace {
-					along0: host.min.y,
-					along1: host.max.y,
-					..face
-				}
+				PlanOpeningFace { along0: host.min.y, along1: host.max.y, ..face }
 			} else {
-				PlanOpeningFace {
-					along0: host.min.x,
-					along1: host.max.x,
-					..face
-				}
+				PlanOpeningFace { along0: host.min.x, along1: host.max.x, ..face }
 			};
 			let along = full.along_len();
 			if let Some(band) = full.band(host, along, depth, 0.5) {
@@ -281,9 +257,7 @@ pub fn pack_abutting_clearance(
 	let seed = max_empty_abutting_clearance_sized(host, hard, clearance, min_size)?;
 	let seed = clamp_min_size2(seed, min_size)?;
 	let target = area_target.max(min_size.x * min_size.y);
-	let grown = seed
-		.grow_toward_area(host, hard, target)
-		.grow_into(host, hard);
+	let grown = seed.grow_toward_area(host, hard, target).grow_into(host, hard);
 	let grown = clamp_min_size2(grown, min_size)?;
 	if !grown.is_clear_of(hard) {
 		return None;
@@ -305,22 +279,10 @@ mod tests {
 
 	#[test]
 	fn abuts_clearance_accepts_edge_contact_only() {
-		let clear = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(1.0, 2.0),
-		};
-		let beside = Aabb2d {
-			min: Vec2::new(1.0, 0.0),
-			max: Vec2::new(2.0, 1.0),
-		};
-		let overlap = Aabb2d {
-			min: Vec2::new(0.5, 0.0),
-			max: Vec2::new(1.5, 1.0),
-		};
-		let far = Aabb2d {
-			min: Vec2::new(1.2, 0.0),
-			max: Vec2::new(2.0, 1.0),
-		};
+		let clear = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(1.0, 2.0) };
+		let beside = Aabb2d { min: Vec2::new(1.0, 0.0), max: Vec2::new(2.0, 1.0) };
+		let overlap = Aabb2d { min: Vec2::new(0.5, 0.0), max: Vec2::new(1.5, 1.0) };
+		let far = Aabb2d { min: Vec2::new(1.2, 0.0), max: Vec2::new(2.0, 1.0) };
 		assert!(abuts_clearance(beside, clear));
 		assert!(!abuts_clearance(overlap, clear));
 		assert!(!abuts_clearance(far, clear));
@@ -328,10 +290,7 @@ mod tests {
 
 	#[test]
 	fn snap_face_moves_thru_to_host_wall() {
-		let host = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(4.0, 5.0),
-		};
+		let host = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(4.0, 5.0) };
 		let inset = PlanOpeningFace {
 			thru_is_x: true,
 			thru: 0.12,
@@ -346,23 +305,11 @@ mod tests {
 
 	#[test]
 	fn pack_abutting_clearance_grows_beside_keepout() {
-		let host = Aabb2d {
-			min: Vec2::ZERO,
-			max: Vec2::new(6.0, 4.0),
-		};
-		let clearance = Aabb2d {
-			min: Vec2::new(0.0, 0.0),
-			max: Vec2::new(1.0, 4.0),
-		};
+		let host = Aabb2d { min: Vec2::ZERO, max: Vec2::new(6.0, 4.0) };
+		let clearance = Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(1.0, 4.0) };
 		let hard = [clearance];
-		let packed = pack_abutting_clearance(
-			host,
-			&hard,
-			clearance,
-			Vec2::splat(0.5),
-			8.0,
-		)
-		.unwrap();
+		let packed =
+			pack_abutting_clearance(host, &hard, clearance, Vec2::splat(0.5), 8.0).unwrap();
 		assert!(abuts_clearance(packed, clearance));
 		assert!(packed.is_clear_of(&hard));
 		assert!(aabb2_area(packed) + 1e-3 >= 0.5 * 0.5);
@@ -383,24 +330,17 @@ mod tests {
 		openings.insert(
 			OpeningId::scoped("t", "pass", "0"),
 			Opening::new(
-				Aabb3d::from_min_max(
-					Vec3::new(1.5, 0.0, -0.12),
-					Vec3::new(2.5, 2.1, 0.12),
-				),
+				Aabb3d::from_min_max(Vec3::new(1.5, 0.0, -0.12), Vec3::new(2.5, 2.1, 0.12)),
 				OpeningLabel::Passage,
 			),
 		);
 		let confines = Confines::new(host3, 0.0, openings);
 		let host = init_host(&confines).unwrap();
-		let flush = Aabb2d {
-			min: Vec2::new(0.2, 0.0),
-			max: Vec2::new(3.8, 0.7),
-		};
+		let flush = Aabb2d { min: Vec2::new(0.2, 0.0), max: Vec2::new(3.8, 0.7) };
 		assert!(
 			host.clearances.iter().any(|c| intersects_aabb2(flush, *c)),
 			"wall-flush counter must hit snapped passage clearance, bands={:?}",
 			host.clearances
 		);
 	}
-
 }

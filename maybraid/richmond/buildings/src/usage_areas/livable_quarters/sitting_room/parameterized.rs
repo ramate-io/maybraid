@@ -22,12 +22,8 @@ impl SittingRoomParameterized {
 		let c = confines.center();
 		Ok(Self {
 			style: LabelStyle::Orange,
-			spaciousness: cfg
-				.sample_range_f32_4d(0.85, 1.15, c.x, c.y, c.z, 60.0)
-				.clamp(0.7, 1.4),
-			occupancy: cfg
-				.sample_range_f32_4d(0.18, 0.38, c.x, c.y, c.z, 61.0)
-				.clamp(0.08, 0.55),
+			spaciousness: cfg.sample_range_f32_4d(0.85, 1.15, c.x, c.y, c.z, 60.0).clamp(0.7, 1.4),
+			occupancy: cfg.sample_range_f32_4d(0.18, 0.38, c.x, c.y, c.z, 61.0).clamp(0.08, 0.55),
 		})
 	}
 
@@ -52,14 +48,9 @@ impl SittingRoomPlan {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<Self, FitError> {
-		let regions = SittingRoomRegions {
-			spaciousness: params.spaciousness,
-			occupancy: params.occupancy,
-		};
+		let regions =
+			SittingRoomRegions { spaciousness: params.spaciousness, occupancy: params.occupancy };
 		let packed = regions.pack(confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			packed,
-		})
+		Ok(Self { parameterized: params, packed })
 	}
 }

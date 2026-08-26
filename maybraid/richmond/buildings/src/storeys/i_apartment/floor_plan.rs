@@ -68,7 +68,8 @@ impl IApartmentFloorPlan {
 		let center = confines.center();
 		let center_xz = Vec3::new(center.x, y0, center.z);
 
-		let mut ifloor_params = derive_ifloor_params(&params, confines, center_xz, height, ceiling)?;
+		let mut ifloor_params =
+			derive_ifloor_params(&params, confines, center_xz, height, ceiling)?;
 		let primary_rects = ifloor_params.plan_rects();
 		if primary_rects.is_empty() {
 			return Err(FitError::TooSmall { reason: "i_rects" });
@@ -87,22 +88,13 @@ impl IApartmentFloorPlan {
 			);
 		}
 
-		openings.extend(&generated_facade_apertures(
-			&params,
-			&ifloor_params,
-			height,
-		));
+		openings.extend(&generated_facade_apertures(&params, &ifloor_params, height));
 
 		ifloor_params.openings = openings.clone();
 		let shell = IFloor::new(ifloor_params);
 		sync_connectable_openings_from_mapped(&mut openings, &shell);
 		// Interior connectivity: after sync so Passage sync does not drop them.
-		openings.extend(&inter_rect_passages(
-			&primary_rects,
-			params.hall_width,
-			height,
-			y0,
-		));
+		openings.extend(&inter_rect_passages(&primary_rects, params.hall_width, height, y0));
 
 		let plan = Self {
 			parameterized: params.clone(),
@@ -136,9 +128,7 @@ impl IApartmentFloorPlan {
 			return Openings::new();
 		};
 		let y0 = confines.bounds.min.y;
-		let height = (confines.bounds.max.y - confines.bounds.min.y)
-			.max(0.0)
-			.min(3.0);
+		let height = (confines.bounds.max.y - confines.bounds.min.y).max(0.0).min(3.0);
 		let mut openings = Openings::new();
 		for (ri, rect) in ifloor.plan_rects().iter().enumerate() {
 			// Prefer a boundary pocket (SW) so demos exercise non-center slots.
@@ -167,26 +157,14 @@ impl IApartmentFloorPlan {
 		let y1 = y0 + self.storey_height;
 		let host = Aabb3d::from_min_max(
 			Vec3::new(
-				self.primary_rects
-					.iter()
-					.map(|r| r.min_x)
-					.fold(f32::INFINITY, f32::min),
+				self.primary_rects.iter().map(|r| r.min_x).fold(f32::INFINITY, f32::min),
 				y0,
-				self.primary_rects
-					.iter()
-					.map(|r| r.min_z)
-					.fold(f32::INFINITY, f32::min),
+				self.primary_rects.iter().map(|r| r.min_z).fold(f32::INFINITY, f32::min),
 			),
 			Vec3::new(
-				self.primary_rects
-					.iter()
-					.map(|r| r.max_x)
-					.fold(f32::NEG_INFINITY, f32::max),
+				self.primary_rects.iter().map(|r| r.max_x).fold(f32::NEG_INFINITY, f32::max),
 				y1,
-				self.primary_rects
-					.iter()
-					.map(|r| r.max_z)
-					.fold(f32::NEG_INFINITY, f32::max),
+				self.primary_rects.iter().map(|r| r.max_z).fold(f32::NEG_INFINITY, f32::max),
 			),
 		);
 
@@ -200,12 +178,8 @@ impl IApartmentFloorPlan {
 			let mut openings = openings_intersecting_xz(&self.openings, rect2);
 			// Shell owns true exterior; leave shared primary-rect edges free so the
 			// first progressive fill can box them, then hand Boundary to siblings.
-			let siblings: Vec<Aabb2d> = rects2
-				.iter()
-				.enumerate()
-				.filter(|(j, _)| *j != i)
-				.map(|(_, r)| *r)
-				.collect();
+			let siblings: Vec<Aabb2d> =
+				rects2.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, r)| *r).collect();
 			crate::usage_areas::boundary_openings::inject_exterior_boundaries(
 				rect2,
 				&siblings,
@@ -306,10 +280,7 @@ fn map_inbound_shafts(
 			continue;
 		};
 		let rc = aabb_xz_center(&opening.bounds);
-		let Some(rect_i) = primary_rects
-			.iter()
-			.position(|r| rect_contains_xz(r, rc))
-		else {
+		let Some(rect_i) = primary_rects.iter().position(|r| rect_contains_xz(r, rc)) else {
 			openings.openings.remove(&id);
 			continue;
 		};
@@ -373,10 +344,7 @@ fn nine_pockets(rect: &IFloorPlanRect) -> Vec<Aabb2d> {
 	for jz in 0..3 {
 		for ix in 0..3 {
 			out.push(Aabb2d {
-				min: Vec2::new(
-					rect.min_x + ix as f32 * dx,
-					rect.min_z + jz as f32 * dz,
-				),
+				min: Vec2::new(rect.min_x + ix as f32 * dx, rect.min_z + jz as f32 * dz),
 				max: Vec2::new(
 					rect.min_x + (ix + 1) as f32 * dx,
 					rect.min_z + (jz + 1) as f32 * dz,
@@ -427,10 +395,7 @@ fn shaft_aabb_at_pocket(pocket: &Aabb2d, y0: f32, height: f32, shaft_side: f32) 
 	let clear = SHAFT_WALL_CLEARANCE.min(pw * 0.35).min(pd * 0.35);
 	let max_half_x = ((pw * 0.5) - clear).max(0.35);
 	let max_half_z = ((pd * 0.5) - clear).max(0.35);
-	let half = (shaft_side * 0.5)
-		.max(0.6)
-		.min(max_half_x)
-		.min(max_half_z);
+	let half = (shaft_side * 0.5).max(0.6).min(max_half_x).min(max_half_z);
 	Aabb3d::from_min_max(
 		Vec3::new(cx - half, y0, cz - half),
 		Vec3::new(cx + half, y0 + height.max(EPS), cz + half),
@@ -446,8 +411,7 @@ fn derive_ifloor_params(
 ) -> Result<IFloorParams, FitError> {
 	let footprint = aabb_xz_extent(&confines.bounds);
 	let stem_w = params.stem_width.clamp(1.0, footprint.x * 0.9);
-	let flange_bars =
-		(params.has_top_flange() as u8) + (params.has_bottom_flange() as u8);
+	let flange_bars = (params.has_top_flange() as u8) + (params.has_bottom_flange() as u8);
 	let flange_t = if flange_bars == 0 {
 		params.flange_thickness
 	} else {
@@ -563,11 +527,7 @@ fn inter_rect_passages(
 fn shared_edge_span(a: &IFloorPlanRect, b: &IFloorPlanRect) -> Option<(bool, f32, f32, f32)> {
 	// Vertical joint (shared X plane): overlap in Z.
 	if (a.max_x - b.min_x).abs() <= EPS || (b.max_x - a.min_x).abs() <= EPS {
-		let mid = if (a.max_x - b.min_x).abs() <= EPS {
-			a.max_x
-		} else {
-			b.max_x
-		};
+		let mid = if (a.max_x - b.min_x).abs() <= EPS { a.max_x } else { b.max_x };
 		let lo = a.min_z.max(b.min_z);
 		let hi = a.max_z.min(b.max_z);
 		if hi - lo > EPS {
@@ -576,11 +536,7 @@ fn shared_edge_span(a: &IFloorPlanRect, b: &IFloorPlanRect) -> Option<(bool, f32
 	}
 	// Horizontal joint (shared Z plane): overlap in X.
 	if (a.max_z - b.min_z).abs() <= EPS || (b.max_z - a.min_z).abs() <= EPS {
-		let mid = if (a.max_z - b.min_z).abs() <= EPS {
-			a.max_z
-		} else {
-			b.max_z
-		};
+		let mid = if (a.max_z - b.min_z).abs() <= EPS { a.max_z } else { b.max_z };
 		let lo = a.min_x.max(b.min_x);
 		let hi = a.max_x.min(b.max_x);
 		if hi - lo > EPS {
@@ -611,10 +567,7 @@ mod tests {
 		assert!((1..=3).contains(&plan.primary_rects.len()));
 		assert_eq!(regions.within.len(), plan.primary_rects.len());
 		assert!(plan.hall_width >= crate::usage_areas::MIN_HALL_WIDTH - 1e-3);
-		assert!(!plan
-			.label_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!plan.label_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 	}
 
 	#[test]
@@ -624,10 +577,7 @@ mod tests {
 		for seed in 0..80 {
 			let params = IApartmentParameterized::sample(
 				&confines,
-				NoiseParams {
-					seed,
-					..NoiseParams::default()
-				},
+				NoiseParams { seed, ..NoiseParams::default() },
 			)
 			.unwrap();
 			let (plan, _) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
@@ -638,8 +588,7 @@ mod tests {
 				.openings
 				.iter()
 				.filter(|(id, o)| {
-					id.as_str().contains("inter_rect")
-						&& matches!(o.label, OpeningLabel::Passage)
+					id.as_str().contains("inter_rect") && matches!(o.label, OpeningLabel::Passage)
 				})
 				.count();
 			if n > 0 {
@@ -686,10 +635,8 @@ mod tests {
 			let pockets = nine_pockets(&plan.primary_rects[rect_i]);
 			let pocket = &pockets[pocket_i];
 			let c = aabb_xz_center(shaft);
-			let pc = Vec2::new(
-				(pocket.min.x + pocket.max.x) * 0.5,
-				(pocket.min.y + pocket.max.y) * 0.5,
-			);
+			let pc =
+				Vec2::new((pocket.min.x + pocket.max.x) * 0.5, (pocket.min.y + pocket.max.y) * 0.5);
 			assert!(
 				(c.x - pc.x).abs() < 1e-2 && (c.y - pc.y).abs() < 1e-2,
 				"shaft center should sit on pocket centroid"
@@ -722,10 +669,7 @@ mod tests {
 		openings.insert(
 			"far_shaft",
 			Opening::new(
-				Aabb3d::from_min_max(
-					Vec3::new(100.0, 0.0, 100.0),
-					Vec3::new(101.0, 3.0, 101.0),
-				),
+				Aabb3d::from_min_max(Vec3::new(100.0, 0.0, 100.0), Vec3::new(101.0, 3.0, 101.0)),
 				OpeningLabel::Shaft,
 			),
 		);

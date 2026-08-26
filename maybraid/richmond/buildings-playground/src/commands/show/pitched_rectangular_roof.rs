@@ -76,16 +76,8 @@ impl PitchedRectangularRoof {
 		};
 		for half in &mut params.halves {
 			half.draw_in_wall_line = !self.no_walls;
-			half.draw_in_half_hip = if self.no_hips {
-				(false, false)
-			} else {
-				(true, true)
-			};
-			half.draw_in_half_gable_end = if gables {
-				(true, true)
-			} else {
-				(false, false)
-			};
+			half.draw_in_half_hip = if self.no_hips { (false, false) } else { (true, true) };
+			half.draw_in_half_gable_end = if gables { (true, true) } else { (false, false) };
 		}
 
 		if self.skylight {
@@ -105,13 +97,8 @@ impl PitchedRectangularRoof {
 			});
 		}
 		if self.gable_window {
-			let opening = PitchedRoof::gable_end_opening(
-				&params.halves,
-				1,
-				2.8,
-				2.2,
-				OpeningLabel::Aperture,
-			);
+			let opening =
+				PitchedRoof::gable_end_opening(&params.halves, 1, 2.8, 2.2, OpeningLabel::Aperture);
 			openings.push(PreviewOpening {
 				id: "gable_win".into(),
 				label: OpeningLabel::Aperture,

@@ -15,7 +15,9 @@ use crate::paneling::{
 	ClippedRectangularStrip, PanelComplexJointPolicy, RectInset, RectangularStripNode,
 	DEFAULT_PANEL_THICKNESS,
 };
-use crate::portals::{assign_portals, AssignedPortal, MustAssignPortal, PortalFootprint, WallRegion};
+use crate::portals::{
+	assign_portals, AssignedPortal, MustAssignPortal, PortalFootprint, WallRegion,
+};
 
 /// Parameters for [`NoisyRectangularWall::new`].
 #[derive(Debug, Clone, PartialEq)]

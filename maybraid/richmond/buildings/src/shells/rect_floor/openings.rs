@@ -3,9 +3,7 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 
-use crate::openings::{
-	MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,
-};
+use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::RectInset;
 use crate::shells::ortho::{
 	best_side_for_bounds, face_extent_score, ntube_face_opening, OrthoSide, PlanRect,

@@ -58,8 +58,7 @@ pub(crate) trait TowerLodFootprint {
 		let dist = self.capsule_surface_distance(viewer);
 		let high_cut = self.footprint_radius() * HIGH_FOOTPRINT_MULTIPLIER;
 		if dist <= high_cut {
-			let progress =
-				if high_cut > 1e-4 { (dist / high_cut).clamp(0.0, 1.0) } else { 1.0 };
+			let progress = if high_cut > 1e-4 { (dist / high_cut).clamp(0.0, 1.0) } else { 1.0 };
 			(LodSceneLevel::High, progress)
 		} else if dist <= LOW_RES_CUTOFF_METERS {
 			let span = (LOW_RES_CUTOFF_METERS - high_cut).max(1e-4);

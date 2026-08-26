@@ -38,14 +38,7 @@ impl ClippedTessellatedTriangle {
 	) -> Self {
 		let clip: Vec<Vec3> = clip.into_iter().map(Into::into).collect();
 		let complex = build_complex(style, a, b, c, &clip, PanelComplexJointPolicy::default());
-		Self {
-			style,
-			a,
-			b,
-			c,
-			clip,
-			complex,
-		}
+		Self { style, a, b, c, clip, complex }
 	}
 
 	pub fn rough_stone(
@@ -115,10 +108,7 @@ fn build_complex(
 ) -> PanelComplex {
 	let mut complex = PanelComplex::new(style).with_joint_policy(joint_policy);
 	let Some(frame) = panel_plane_frame(a, b, c) else {
-		debug_assert!(
-			false,
-			"ClippedTessellatedTriangle: degenerate outer triangle"
-		);
+		debug_assert!(false, "ClippedTessellatedTriangle: degenerate outer triangle");
 		return complex;
 	};
 
@@ -279,12 +269,7 @@ fn bite_polygons(outer: &[Vec2], hole_ccw: &[Vec2]) -> Option<Vec<Vec<Vec2>>> {
 	let hn = hole_ccw.len();
 	for i in 0..hn {
 		// CW around hole (= CCW around fill when walking the cutout).
-		push_split_edge(
-			&mut edges,
-			hole_ccw[(i + 1) % hn],
-			hole_ccw[i],
-			&verts,
-		);
+		push_split_edge(&mut edges, hole_ccw[(i + 1) % hn], hole_ccw[i], &verts);
 	}
 
 	cancel_reverse_edges(&mut edges);
@@ -493,15 +478,11 @@ fn bridge_outer_hole(outer: &[Vec2], hole: &[Vec2]) -> Option<Vec<Vec2>> {
 	if outer.len() < 3 || hole.is_empty() {
 		return None;
 	}
-	let (hj, &h) = hole
-		.iter()
-		.enumerate()
-		.min_by(|(_, p), (_, q)| {
-			p.x
-				.partial_cmp(&q.x)
-				.unwrap_or(std::cmp::Ordering::Equal)
-				.then(p.y.partial_cmp(&q.y).unwrap_or(std::cmp::Ordering::Equal))
-		})?;
+	let (hj, &h) = hole.iter().enumerate().min_by(|(_, p), (_, q)| {
+		p.x.partial_cmp(&q.x)
+			.unwrap_or(std::cmp::Ordering::Equal)
+			.then(p.y.partial_cmp(&q.y).unwrap_or(std::cmp::Ordering::Equal))
+	})?;
 
 	let oi = (0..outer.len()).find(|&i| bridge_visible(outer[i], h, outer, hole))?;
 
@@ -652,11 +633,7 @@ mod tests {
 	use richmond_building_components::BuildingComponents;
 
 	fn ground_triangle() -> (Vec3, Vec3, Vec3) {
-		(
-			Vec3::ZERO,
-			Vec3::new(3.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 2.0),
-		)
+		(Vec3::ZERO, Vec3::new(3.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 2.0))
 	}
 
 	fn rect_clip() -> [Vec3; 4] {
@@ -675,9 +652,8 @@ mod tests {
 		let g = ClippedTessellatedTriangle::rough_stone(a, b, c, clip);
 		assert!(g.as_complex().triangles().len() >= 3);
 		let frame = panel_plane_frame(a, b, c).unwrap();
-		let centroid = frame.project(
-			clip.iter().copied().fold(Vec3::ZERO, |s, p| s + p) / clip.len() as f32,
-		);
+		let centroid =
+			frame.project(clip.iter().copied().fold(Vec3::ZERO, |s, p| s + p) / clip.len() as f32);
 		for tri in g.as_complex().triangles() {
 			let pa = frame.project(g.as_complex().point(tri.a).unwrap().position);
 			let pb = frame.project(g.as_complex().point(tri.b).unwrap().position);
@@ -765,21 +741,12 @@ mod tests {
 	fn fill_has_shared_edges_and_never_policy_suppresses_joints() {
 		let (a, b, c) = ground_triangle();
 		let g = ClippedTessellatedTriangle::rough_stone(a, b, c, rect_clip());
-		assert!(
-			!g.as_complex().shared_edges().is_empty(),
-			"annulus fill should share edges"
-		);
+		assert!(!g.as_complex().shared_edges().is_empty(), "annulus fill should share edges");
 		let never = ClippedTessellatedTriangle::rough_stone(a, b, c, rect_clip())
 			.with_joint_policy(PanelComplexJointPolicy::never())
 			.into_complex();
 		assert!(never.joint_nodes().is_empty());
-		assert!(
-			never
-				.panel_nodes_for_level(LodSceneLevel::High)
-				.flatten()
-				.len()
-				>= 3
-		);
+		assert!(never.panel_nodes_for_level(LodSceneLevel::High).flatten().len() >= 3);
 	}
 
 	/// Boundary hole that splits outer \ hole into two components (ground notch
@@ -788,17 +755,9 @@ mod tests {
 	fn bite_keeps_both_fill_components() {
 		// Right triangle CCW: (0,0)-(4,0)-(4,3). Door on the ground edge that
 		// also crosses the hypotenuse → two fill loops.
-		let outer = orient_ccw(vec![
-			Vec2::new(0.0, 0.0),
-			Vec2::new(4.0, 0.0),
-			Vec2::new(4.0, 3.0),
-		]);
-		let clip = [
-			Vec2::new(1.5, 0.0),
-			Vec2::new(2.5, 0.0),
-			Vec2::new(2.5, 2.1),
-			Vec2::new(1.5, 2.1),
-		];
+		let outer = orient_ccw(vec![Vec2::new(0.0, 0.0), Vec2::new(4.0, 0.0), Vec2::new(4.0, 3.0)]);
+		let clip =
+			[Vec2::new(1.5, 0.0), Vec2::new(2.5, 0.0), Vec2::new(2.5, 2.1), Vec2::new(1.5, 2.1)];
 		let hole = orient_ccw(dedup_poly(sutherland_hodgman(&clip, &outer)));
 		assert!(hole_touches_boundary(&hole, &outer));
 		let loops = bite_polygons(&outer, &hole).expect("bite");
@@ -806,10 +765,8 @@ mod tests {
 		match clip_and_triangulate(&outer, &clip) {
 			FillTris::Tris(tris) => {
 				assert!(tris.len() >= 2);
-				let covered = |p: Vec2| {
-					tris.iter()
-						.any(|t| point_in_triangle_strict(p, t[0], t[1], t[2]))
-				};
+				let covered =
+					|p: Vec2| tris.iter().any(|t| point_in_triangle_strict(p, t[0], t[1], t[2]));
 				assert!(covered(Vec2::new(0.5, 0.1)), "left remnant");
 				assert!(covered(Vec2::new(3.7, 0.1)), "right remnant");
 				assert!(!covered(Vec2::new(2.0, 0.5)), "door interior");

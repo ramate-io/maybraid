@@ -155,12 +155,7 @@ impl FrondCrownShape {
 				if length < 1e-5 {
 					continue;
 				}
-				run.push(FrondRachisSegment {
-					start,
-					direction: ray / length,
-					length,
-					width,
-				});
+				run.push(FrondRachisSegment { start, direction: ray / length, length, width });
 			}
 			if !run.is_empty() {
 				runs.push(run);
