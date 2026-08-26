@@ -4,7 +4,8 @@
 //! fine-phase collection merge does Medium decimation. Collections stay per-frond so
 //! UltraLow merge cannot chord the whole crown; the LOD probe is the parent crown
 //! (same unit as structural LOD). Low / UltraLow emit a shared five-chord star
-//! ([`PalmCrownParams::unit_low_star`]) — not layered / cheap balls.
+//! ([`PalmCrownParams::unit_low_star`]) — not layered / cheap balls. Probe and
+//! collection nodes bake at build so produce / grove emit do not walk the crown AABB.
 //!
 //! Legacy stacked [`FrondCrown`](chico_ball_components::FrondCrown) mesh spawn remains in
 //! [`spawn`] for date / Waialea / bush trees still on RenderItem.
@@ -260,23 +261,48 @@ impl PalmCrownParams {
 	}
 }
 
-/// Built palm crown: params plus resolved ring anchors.
+/// Built palm crown: params, ring anchors, plus baked unit probe / collection nodes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PalmCrown {
 	pub ring_count: u32,
 	pub ring_spacing: f32,
 	pub shape: FrondCrownShape,
 	pub anchors: Vec<Vec3>,
+	structural_lod: StructuralLod,
+	high_nodes: Vec<FoliageNode>,
+	low_nodes: Vec<FoliageNode>,
 }
 
 impl PalmCrown {
 	pub fn from_params(params: &PalmCrownParams) -> Self {
-		Self {
+		let mut crown = Self {
 			ring_count: params.ring_count,
 			ring_spacing: params.ring_spacing,
 			shape: params.shape.clone(),
 			anchors: params.ring_anchors(),
-		}
+			structural_lod: StructuralLod::default(),
+			high_nodes: Vec::new(),
+			low_nodes: Vec::new(),
+		};
+		let (min, max) = crown.crown_aabb();
+		let center = (min + max) * 0.5;
+		let half = (max - min) * 0.5;
+		let radius = half.x.max(half.y).max(half.z).max(1e-3);
+		crown.structural_lod = StructuralLod::new(center, radius).with_factors(
+			PALM_CROWN_STRUCTURAL_HIGH_FACTOR,
+			PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
+			PALM_CROWN_STRUCTURAL_LOW_FACTOR,
+		);
+		crown.high_nodes = crown.frond_nodes_at(center, radius, false);
+		let anchor = crown.anchors.first().copied().unwrap_or(Vec3::ZERO);
+		crown.low_nodes = low_star_collection_nodes(
+			anchor,
+			crown.shape.length,
+			crown.shape.width,
+			center,
+			radius,
+		);
+		crown
 	}
 
 	fn ring_shape(&self, index: u32) -> FrondCrownShape {
@@ -289,13 +315,16 @@ impl PalmCrown {
 	/// One [`FrondCollection`] per frond (single run).
 	///
 	/// Ring-wide collections make UltraLow merge chord the whole crown; per-frond
-	/// collections keep merge extent ≈ rachis length. LOD probe is the parent crown
-	/// ([`Self::crown_center`] / [`Self::structural_radius`]), not the run AABB.
+	/// collections keep merge extent ≈ rachis length. LOD probe is the parent crown,
+	/// not the run AABB.
 	///
 	/// When `collapse_rachis`, each multi-segment spine becomes a single base→tip chord.
-	fn frond_nodes(&self, collapse_rachis: bool) -> Vec<FoliageNode> {
-		let probe_center = self.crown_center();
-		let probe_radius = self.structural_radius();
+	fn frond_nodes_at(
+		&self,
+		probe_center: Vec3,
+		probe_radius: f32,
+		collapse_rachis: bool,
+	) -> Vec<FoliageNode> {
 		let mut nodes = Vec::new();
 		for (index, anchor) in self.anchors.iter().enumerate() {
 			let shape = self.ring_shape(index as u32);
@@ -350,28 +379,6 @@ impl PalmCrown {
 		}
 		(min, max)
 	}
-
-	fn low_star_nodes(&self) -> Vec<FoliageNode> {
-		let anchor = self.anchors.first().copied().unwrap_or(Vec3::ZERO);
-		low_star_collection_nodes(
-			anchor,
-			self.shape.length,
-			self.shape.width,
-			self.crown_center(),
-			self.structural_radius(),
-		)
-	}
-
-	fn crown_center(&self) -> Vec3 {
-		let (min, max) = self.crown_aabb();
-		(min + max) * 0.5
-	}
-
-	fn structural_radius(&self) -> f32 {
-		let (min, max) = self.crown_aabb();
-		let half = (max - min) * 0.5;
-		half.x.max(half.y).max(half.z).max(1e-3)
-	}
 }
 
 impl VegetationComponents for PalmCrown {
@@ -383,21 +390,17 @@ impl VegetationComponents for PalmCrown {
 		match level {
 			// Medium keeps High topology; FrondCollection fine-phase merge thins runs.
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				Layers::from_free(self.frond_nodes(false))
+				Layers::from_free(self.high_nodes.clone())
 			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_star_nodes()),
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_nodes.clone()),
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		Some(StructuralLod::new(self.crown_center(), self.structural_radius()).with_factors(
-			PALM_CROWN_STRUCTURAL_HIGH_FACTOR,
-			PALM_CROWN_STRUCTURAL_MEDIUM_FACTOR,
-			PALM_CROWN_STRUCTURAL_LOW_FACTOR,
-		))
+		Some(self.structural_lod)
 	}
 }
 
@@ -505,6 +508,18 @@ mod tests {
 		assert_eq!(probe.low_factor, PALM_CROWN_STRUCTURAL_LOW_FACTOR);
 		assert!(probe.high_factor < probe.medium_factor);
 		assert!(probe.medium_factor < probe.low_factor);
+		Ok(())
+	}
+
+	#[test]
+	fn structural_lod_is_baked_unit_probe() -> Result<()> {
+		let built = crown(0).build();
+		let a = built.structural_lod();
+		let b = built.structural_lod();
+		assert_eq!(a, b);
+		let band = a.expect("probe");
+		assert_eq!(band.high_factor, PALM_CROWN_STRUCTURAL_HIGH_FACTOR);
+		assert!(band.tree_radius > 0.0);
 		Ok(())
 	}
 
