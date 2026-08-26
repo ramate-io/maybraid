@@ -3,8 +3,7 @@
 use lod::gen::LodSceneLevel;
 
 use crate::assets::{foliage as foliage_assets, AssetPath};
-use crate::foliage::ball_collection::CheapBallCollection;
-use crate::foliage::collection::FrondCollection;
+use crate::foliage::collection::{CheapBallCollection, FrondCollection, FrondKit};
 
 /// Foliage footprint / construction.
 ///
@@ -142,5 +141,13 @@ impl FoliageGeometry {
 			foliage_assets::standard::STRAIGHT_FROND_SEGMENT_MID,
 			foliage_assets::standard::STRAIGHT_FROND_SEGMENT_LOW,
 		)
+	}
+
+	/// Kit GLB for one [`FrondKit`] member at `level`.
+	pub fn frond_kit_glb_for_level(kit: FrondKit, level: LodSceneLevel) -> AssetPath {
+		match kit {
+			FrondKit::StraightFrond => Self::straight_frond_glb_for_level(level),
+			FrondKit::StraightFrondSegment => Self::straight_frond_segment_glb_for_level(level),
+		}
 	}
 }

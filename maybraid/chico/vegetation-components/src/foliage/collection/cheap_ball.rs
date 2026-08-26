@@ -1,8 +1,8 @@
 //! Cheap-ball collection — many placed cheap-ball kits under one foliage LOD parent.
 //!
-//! Same host / [`crate::scene_ref`]-adjacent merge idea as
-//! [`super::FrondCollection`]: one [`crate::FoliageNode`] schedules a
-//! [`scene_ref::MultiSceneMerge`] instead of one host per ball.
+//! Same host idea as [`super::FrondCollection`]: one [`crate::FoliageNode`] and one
+//! probe. Whether members bake into a [`scene_ref::MultiSceneMerge`] or stay posed
+//! kits is [`crate::CollectionPresent`] on the node.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -10,16 +10,14 @@ use lod::gen::LodSceneLevel;
 use crate::lod_band::characteristic_extent_abs;
 use crate::placed::Placement;
 
-use super::collection::{
-	FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
-};
+use super::{COLLECTION_HIGH_METERS, COLLECTION_LOW_METERS, COLLECTION_MEDIUM_METERS};
 
-/// Warm-root cull bands match frond collections (absolute meters).
-pub const CHEAP_BALL_COLLECTION_HIGH_METERS: f32 = FROND_COLLECTION_HIGH_METERS;
+/// Warm-root cull; aliases [`super::COLLECTION_HIGH_METERS`].
+pub const CHEAP_BALL_COLLECTION_HIGH_METERS: f32 = COLLECTION_HIGH_METERS;
 /// See [`CHEAP_BALL_COLLECTION_HIGH_METERS`].
-pub const CHEAP_BALL_COLLECTION_MEDIUM_METERS: f32 = FROND_COLLECTION_MEDIUM_METERS;
+pub const CHEAP_BALL_COLLECTION_MEDIUM_METERS: f32 = COLLECTION_MEDIUM_METERS;
 /// See [`CHEAP_BALL_COLLECTION_HIGH_METERS`].
-pub const CHEAP_BALL_COLLECTION_LOW_METERS: f32 = FROND_COLLECTION_LOW_METERS;
+pub const CHEAP_BALL_COLLECTION_LOW_METERS: f32 = COLLECTION_LOW_METERS;
 
 /// Many cheap-ball placements, one LOD parent.
 #[derive(Debug, Clone, PartialEq)]

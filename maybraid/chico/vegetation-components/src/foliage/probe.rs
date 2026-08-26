@@ -6,13 +6,10 @@ use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
-use crate::foliage::ball_collection::{
-	CheapBallCollection, CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
-	CHEAP_BALL_COLLECTION_MEDIUM_METERS,
-};
 use crate::foliage::collection::{
-	FrondCollection, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR,
-	FROND_COLLECTION_MEDIUM_FACTOR,
+	CheapBallCollection, FrondCollection, CHEAP_BALL_COLLECTION_HIGH_METERS,
+	CHEAP_BALL_COLLECTION_LOW_METERS, CHEAP_BALL_COLLECTION_MEDIUM_METERS,
+	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_MEDIUM_FACTOR,
 };
 use crate::lod_band::{characteristic_extent_abs, DistanceLodBand};
 use crate::placed::Placement;
