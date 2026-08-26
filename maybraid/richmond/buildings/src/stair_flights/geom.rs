@@ -98,6 +98,13 @@ pub(crate) fn landing_size(tread_width: f32) -> f32 {
 	tread_width.max(0.65)
 }
 
+/// [`landing_size`] capped so a short well side still has room for a run.
+fn landing_size_for(tread_width: f32, shortest_side: f32) -> f32 {
+	let want = landing_size(tread_width);
+	let cap = (shortest_side * 0.4).max(tread_width * 0.75);
+	want.min(cap)
+}
+
 pub(crate) fn run_top_y(node: &StairNode) -> f32 {
 	match &node.geometry {
 		Stair::Straight(g) => node.placement.translation.y + g.height,
@@ -125,7 +132,15 @@ pub(crate) fn place_runs_with_corner_landings(
 	style: PanelStyle,
 	thickness: f32,
 ) -> (Vec<StairNode>, Vec<QuadPanel>) {
-	let pad = landing_size(width);
+	let shortest = segs
+		.iter()
+		.filter_map(|s| {
+			let len = (s.end - s.start).length();
+			(len > EPS).then_some(len)
+		})
+		.fold(f32::MAX, f32::min);
+	let pad = landing_size_for(width, if shortest.is_finite() { shortest } else { width });
+	let min_run = pref_depth * 0.4;
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
 	let mut skip = 0.0_f32;
@@ -139,14 +154,24 @@ pub(crate) fn place_runs_with_corner_landings(
 		let used = skip.min(remaining);
 		let at_joint = i + 1 < segs.len();
 		let leftover = (remaining - used).max(0.0);
-		let reserve = if at_joint { pad.min(leftover * 0.45) } else { 0.0 };
+		if leftover < EPS {
+			skip = 0.0;
+			continue;
+		}
+		let reserve = if !at_joint {
+			0.0
+		} else if leftover > min_run {
+			pad.min(leftover * 0.45).min(leftover - min_run)
+		} else {
+			leftover * 0.35
+		};
 		let run_len = leftover - reserve;
-		if run_len < pref_depth * 0.55 {
+		if run_len < EPS {
 			skip = 0.0;
 			continue;
 		}
 		let height = (seg.y1 - seg.y0).abs().max(StraightStair::DEFAULT_TREAD_HEIGHT);
-		let n = tread_count(height, run_len, pref_depth);
+		let n = tread_count(height, run_len, pref_depth).max(1);
 		let going = run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
 		let Some(node) =
@@ -158,12 +183,23 @@ pub(crate) fn place_runs_with_corner_landings(
 		skip = 0.0;
 		if at_joint {
 			let y = run_top_y(&node);
-			let next_dir = segs.get(i + 1).and_then(|next| normalize_xz(next.end - next.start));
+			let next = segs.get(i + 1);
+			let next_dir = next.and_then(|s| normalize_xz(s.end - s.start));
+			let next_len = next.map(|s| (s.end - s.start).length()).unwrap_or(0.0);
 			let turned = next_dir.filter(|nd| dir.dot(*nd).abs() <= 0.85);
+			let far = pad_far(reserve, width, next_len, min_run);
 			let pad_slab = match turned {
-				Some(nd) => {
-					corner_square_slab(seg.end, dir, nd, reserve, width, y, style, thickness)
-				}
+				Some(nd) => corner_square_slab(
+					seg.end,
+					dir,
+					nd,
+					reserve,
+					far,
+					width,
+					y,
+					style,
+					thickness,
+				),
 				None => TreadEnd::from_straight(&node).landing_along(
 					dir,
 					y,
@@ -174,7 +210,7 @@ pub(crate) fn place_runs_with_corner_landings(
 				),
 			};
 			if let Some(pad_slab) = pad_slab {
-				skip = if turned.is_some() { reserve.max(0.5 * width) } else { 0.0 };
+				skip = if turned.is_some() { far } else { 0.0 };
 				pads.push(pad_slab);
 			}
 		}
@@ -183,19 +219,30 @@ pub(crate) fn place_runs_with_corner_landings(
 	(stairs, pads)
 }
 
+/// Outgoing pad extent, locked to the next-run skip. Caps so a short next
+/// side still has room for a tread.
+fn pad_far(reserve: f32, tread_width: f32, next_len: f32, min_run: f32) -> f32 {
+	let wanted = reserve.max(0.5 * tread_width);
+	if next_len > min_run + EPS {
+		wanted.min(next_len - min_run).max(reserve)
+	} else {
+		wanted.min(next_len.max(reserve))
+	}
+}
+
 /// Corner rest in the incoming × outgoing frame, flush with the last leading
 /// and the next first riser, covering the full tread width (outer rail included).
 ///
 /// Local \(x\) along `incoming`, \(y\) along `outgoing`, origin at `joint`:
-/// \(x \in [-\texttt{along}, w/2]\), \(y \in [-w/2, \max(\texttt{along}, w/2)]\).
-/// `along` stays the reserved incoming gap so the pad does not swallow the
-/// last tread; outgoing extent is at least a half-width so the inner rail
-/// is covered on a short reserve.
+/// \(x \in [-\texttt{along}, w/2]\), \(y \in [-w/2, \texttt{far}]\).
+/// `along` is the reserved incoming gap (flush with the last leading).
+/// `far` is the outgoing skip (flush with the next first riser).
 fn corner_square_slab(
 	joint: Vec2,
 	incoming: Vec2,
 	outgoing: Vec2,
 	along: f32,
+	far: f32,
 	tread_width: f32,
 	y: f32,
 	style: PanelStyle,
@@ -204,8 +251,8 @@ fn corner_square_slab(
 	let incoming = normalize_xz(incoming)?;
 	let outgoing = normalize_xz(outgoing)?;
 	let along = along.max(1e-4);
+	let far = far.max(along);
 	let half = 0.5 * tread_width.max(1e-4);
-	let far = along.max(half);
 	let pt = |u: f32, v: f32| {
 		let p = joint + incoming * u + outgoing * v;
 		Vec3::new(p.x, y, p.y)

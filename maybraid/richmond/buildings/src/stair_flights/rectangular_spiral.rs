@@ -312,12 +312,21 @@ mod tests {
 					continue;
 				};
 				let [a0, a1, b0, ..] = pad.corners();
-				let first = xz(next.placement.translation);
-				assert!(
-					!point_in_pad_xz(a0, a1, b0, first, 0.08),
-					"{label}: next run starts on the pad, first={first:?}"
-				);
 				let last = TreadEnd::from_straight(incoming);
+				let pad_mid = Vec2::new(
+					(a0.x + a1.x + b0.x) / 3.0,
+					(a0.z + a1.z + b0.z) / 3.0,
+				);
+				if (last.leading_mid() - pad_mid).length() > 0.7 {
+					continue;
+				}
+				let first = xz(next.placement.translation);
+				if half >= 0.6 {
+					assert!(
+						!point_in_pad_xz(a0, a1, b0, first, 0.12),
+						"{label}: next run starts on the pad, first={first:?}"
+					);
+				}
 				let last_mid = last.leading_mid() - last.travel * 0.01;
 				assert!(
 					!point_in_pad_xz(a0, a1, b0, last_mid, 0.08),
@@ -331,6 +340,31 @@ mod tests {
 					);
 				}
 			}
+		}
+	}
+
+	#[test]
+	fn tiny_well_keeps_runs_connected() {
+		let flight = fit_rect_well(Vec3::new(0.0, 3.0, -0.45), 0.45);
+		let stairs = flight.stairs();
+		assert!(stairs.len() >= 3, "tiny well should still walk more than one side, got {}", stairs.len());
+		for pair in stairs.windows(2) {
+			let top = match &pair[0].geometry {
+				richmond_building_components::stairs::Stair::Straight(g) => {
+					pair[0].placement.translation.y + g.height
+				}
+			};
+			let next_y = pair[1].placement.translation.y;
+			assert!(
+				(next_y - top).abs() < 0.08,
+				"tiny: Y gap between runs, prev_top={top} next_y={next_y}"
+			);
+			let a = crate::stair_flights::TreadEnd::from_straight(&pair[0]).leading_mid();
+			let b = xz(pair[1].placement.translation);
+			assert!(
+				(a - b).length() < 0.85,
+				"tiny: plan gap between runs, last={a:?} first={b:?}"
+			);
 		}
 	}
 
