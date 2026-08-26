@@ -1028,7 +1028,7 @@ mod tests {
 	#[cfg(feature = "render")]
 	#[test]
 	fn low_and_ultra_low_emit_canopy_ball_proxies() -> Result<()> {
-		use chico_vegetation_components::VegetationComponents;
+		use chico_vegetation_components::{FoliageGeometry, VegetationComponents};
 		use lod::gen::LodSceneLevel;
 
 		let mut params = TropicalThicketParams::default();
@@ -1037,21 +1037,21 @@ mod tests {
 		let grove = params.build();
 		assert!(!grove.plants.is_empty());
 
+		// Mixed Low: palm five-chord stars + one cheap ball per banyan / bush.
 		let low = grove.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), grove.plants.len());
-		assert!(low.iter().all(|n| matches!(
-			n.geometry,
-			chico_vegetation_components::FoliageGeometry::CheapBall
-		)));
+		let fronds = low.iter().filter(|n| n.geometry.is_frond_collection()).count();
+		let balls = low.iter().filter(|n| matches!(n.geometry, FoliageGeometry::CheapBall)).count();
+		assert_eq!(fronds % 5, 0, "each palm Low star is five frond collections");
+		let palms = fronds / 5;
+		assert_eq!(fronds, palms * 5);
+		assert_eq!(balls, grove.plants.len() - palms);
+		assert_eq!(low.len(), fronds + balls);
 		assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).flatten().is_empty());
 
 		let ultra = grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten();
 		assert!(!ultra.is_empty());
 		assert!(ultra.len() <= grove.plants.len());
-		assert!(ultra.iter().all(|n| matches!(
-			n.geometry,
-			chico_vegetation_components::FoliageGeometry::CheapBall
-		)));
+		assert!(ultra.iter().all(|n| matches!(n.geometry, FoliageGeometry::CheapBall)));
 		Ok(())
 	}
 
