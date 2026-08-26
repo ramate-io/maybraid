@@ -228,7 +228,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{HighBushShoots, HighBushShootsParams, TuftPatch};
+	use chico_sbs_trees::{HighBushShoots, QuantizedPlant, TuftPatch};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -239,7 +239,7 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, BushScrubCell, BushScrubItem};
+	use super::{definition, BushScrubCell, BushScrubItem, SAPLING_BUSH, SMALL_BUSH};
 	use crate::grove::vc_tuft::{
 		material_from_palette, patch_variant_index, single_blade_patch_params, stamp_foliage_noise,
 		unit_plant_from_params, variant_noise, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
@@ -249,7 +249,7 @@ mod vc {
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_bush_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -383,6 +383,9 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_bush_plant!(BushScrubSmall, SMALL_BUSH);
+	remixed_bush_plant!(BushScrubSapling, SAPLING_BUSH);
 
 	#[derive(Clone)]
 	enum BushScrubKind {
@@ -518,7 +521,7 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<BushScrubCell>,
 		grove_noise: NoiseParams,
-		bush_chain_noise: NoiseParams,
+		_bush_chain_noise: NoiseParams,
 		leaf_surface_noise: NoiseParams,
 		patch_variants: u32,
 		tree_variants: u32,
@@ -573,21 +576,20 @@ mod vc {
 					frond_material: material,
 				}
 			}
-			BushScrubItem::Bush(bush) => {
+			BushScrubItem::Bush(_) => {
 				let variant = patch_variant_index(placed.position, tree_variants);
-				let build_noise = variant_noise(grove_noise, variant);
-				let chain_noise = variant_noise(bush_chain_noise, variant);
 				let palette_noise = placement_noise(grove_noise, placed.position);
 				let stick_seed = palette_noise.seed;
 				let canopy_seed = palette_noise.seed.wrapping_add(31);
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
+				let (bush, world_size) = match placed.variant {
+					BushScrubCell::SmallBush => BushScrubSmall::grow_num(variant),
+					BushScrubCell::SaplingBush => BushScrubSapling::grow_num(variant),
+					_ => unreachable!("Bush item is only SmallBush or SaplingBush"),
+				};
 				BushScrubPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: BushScrubKind::Bush(Arc::new(unit_params.build())),
+					kind: BushScrubKind::Bush(bush),
 					stick_material: stick_material_from_palette(
 						Some(placed.variant.stick_palette_mix()),
 						stick_seed,

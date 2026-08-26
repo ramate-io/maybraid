@@ -188,7 +188,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		StorybookTree, StorybookTreeParams, TemperateConifer, TemperateConiferParams,
+		QuantizedPlant, StorybookTree, StorybookTreeParams, TemperateConifer, TemperateConiferParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -200,16 +200,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, LeewardCell, LeewardItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, LeewardCell, LeewardTemperateConifer, HIGH_LEEWARD_STORYBOOK,
+		ROUNDED_LEEWARD_STORYBOOK, SHELTERED_TEMPERATE_CONIFER, WINDBREAK_TEMPERATE_CONIFER,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_sbs_plant, stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const LEEWARD_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -334,6 +337,55 @@ mod vc {
 		}
 	}
 
+	fn leeward_temperate_unit(
+		authored: &LeewardTemperateConifer,
+		num: u32,
+	) -> (TemperateConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = TemperateConiferParams::default();
+		params.geometry = samples.geometry;
+		params.frond_world_scale = samples.frond_world_scale;
+		params.fronds_per_joint = samples.fronds_per_joint;
+		params.frond_length_fraction = samples.frond_length_fraction;
+		params.frond_spawn_fraction = samples.frond_spawn_fraction;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct ShelteredTemperate;
+
+	impl QuantizedPlant for ShelteredTemperate {
+		type Unit = TemperateConifer;
+
+		fn build_unit(num: u32) -> (TemperateConifer, f32) {
+			leeward_temperate_unit(&SHELTERED_TEMPERATE_CONIFER, num)
+		}
+	}
+
+	struct WindbreakTemperate;
+
+	impl QuantizedPlant for WindbreakTemperate {
+		type Unit = TemperateConifer;
+
+		fn build_unit(num: u32) -> (TemperateConifer, f32) {
+			leeward_temperate_unit(&WINDBREAK_TEMPERATE_CONIFER, num)
+		}
+	}
+
+	remixed_sbs_plant!(
+		RoundedLeewardStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		ROUNDED_LEEWARD_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		HighLeewardStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		HIGH_LEEWARD_STORYBOOK
+	);
+
 	#[derive(Clone)]
 	enum LeewardKind {
 		Storybook(Arc<StorybookTree>),
@@ -441,7 +493,6 @@ mod vc {
 		tree_variants: u32,
 	) -> LeewardPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -454,40 +505,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			LeewardItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				LeewardPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LeewardKind::Storybook(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			LeewardCell::ShelteredTemperateConifer => {
+				let (tree, world_size) = ShelteredTemperate::grow_num(variant);
+				(LeewardKind::Temperate(tree), world_size)
 			}
-			LeewardItem::TemperateConifer(temperate) => {
-				let samples = temperate.build_with_noise(build_noise);
-				let mut params = TemperateConiferParams::default();
-				params.geometry = samples.geometry;
-				params.frond_world_scale = samples.frond_world_scale;
-				params.fronds_per_joint = samples.fronds_per_joint;
-				params.frond_length_fraction = samples.frond_length_fraction;
-				params.frond_spawn_fraction = samples.frond_spawn_fraction;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				LeewardPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: LeewardKind::Temperate(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			LeewardCell::WindbreakTemperateConifer => {
+				let (tree, world_size) = WindbreakTemperate::grow_num(variant);
+				(LeewardKind::Temperate(tree), world_size)
 			}
+			LeewardCell::RoundedLeewardStorybook => {
+				let (tree, world_size) = RoundedLeewardStorybook::grow_num(variant);
+				(LeewardKind::Storybook(tree), world_size)
+			}
+			LeewardCell::HighLeewardStorybook => {
+				let (tree, world_size) = HighLeewardStorybook::grow_num(variant);
+				(LeewardKind::Storybook(tree), world_size)
+			}
+		};
+
+		LeewardPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

@@ -272,9 +272,7 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{
-		HighBushShoots, HighBushShootsParams, HonuBanyan, PalmBush, PalmBushParams, QuantizedPlant,
-	};
+	use chico_sbs_trees::{HighBushShoots, HonuBanyan, PalmBush, PalmBushParams, QuantizedPlant};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -285,16 +283,21 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TropicalThicketCell, TropicalThicketItem};
+	use super::{
+		definition, TropicalThicketCell, TropicalThicketPalm, BROAD_WET_PALM_BUSH,
+		FLOWERING_HIGH_BUSH, LARGE_PALM_BUSH, MINI_HONU_BANYAN, MODERATE_HIGH_BUSH,
+		RED_STEM_PALM_BUSH,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-		placed_palm_low_fronds, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		placed_palm_low_fronds, placement_noise, remixed_bush_plant, stick_material_from_palette,
+		unit_build_noise, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TROPICAL_THICKET_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -442,6 +445,43 @@ mod vc {
 			)
 		}
 	}
+
+	fn thicket_palm_unit(authored: &TropicalThicketPalm, num: u32) -> (PalmBush, f32) {
+		let mut geometry = authored.build_with_noise(unit_build_noise(num));
+		let detail = PalmBushParams::unit_detail_from_num(num);
+		geometry.crown.ring_count = detail.geometry.crown.ring_count;
+		geometry.crown.fronds_per_ring = detail.geometry.crown.fronds_per_ring;
+		let (unit, world_size) = PalmBushParams::new(geometry).into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct LargePalmBush;
+	struct BroadWetPalmBush;
+	struct RedStemPalmBush;
+
+	impl QuantizedPlant for LargePalmBush {
+		type Unit = PalmBush;
+		fn build_unit(num: u32) -> (PalmBush, f32) {
+			thicket_palm_unit(&LARGE_PALM_BUSH, num)
+		}
+	}
+
+	impl QuantizedPlant for BroadWetPalmBush {
+		type Unit = PalmBush;
+		fn build_unit(num: u32) -> (PalmBush, f32) {
+			thicket_palm_unit(&BROAD_WET_PALM_BUSH, num)
+		}
+	}
+
+	impl QuantizedPlant for RedStemPalmBush {
+		type Unit = PalmBush;
+		fn build_unit(num: u32) -> (PalmBush, f32) {
+			thicket_palm_unit(&RED_STEM_PALM_BUSH, num)
+		}
+	}
+
+	remixed_bush_plant!(ModerateHighBush, MODERATE_HIGH_BUSH);
+	remixed_bush_plant!(FloweringHighBush, FLOWERING_HIGH_BUSH);
 
 	#[derive(Clone)]
 	enum TropicalThicketKind {
@@ -592,12 +632,10 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<TropicalThicketCell>,
 		grove_noise: NoiseParams,
-		bush_chain_noise: NoiseParams,
+		_bush_chain_noise: NoiseParams,
 		tree_variants: u32,
 	) -> TropicalThicketPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(bush_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -610,48 +648,42 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			TropicalThicketItem::Palm(palm) => {
-				let mut geometry = palm.build_with_noise(build_noise);
-				let detail = PalmBushParams::unit_detail_from_num(variant);
-				geometry.crown.ring_count = detail.geometry.crown.ring_count;
-				geometry.crown.fronds_per_ring = detail.geometry.crown.fronds_per_ring;
-				let (unit_params, world_size) =
-					PalmBushParams::new(geometry).into_unit_from_num(variant);
-				TropicalThicketPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalThicketKind::Palm(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			TropicalThicketCell::LargePalmBush => {
+				let (tree, world_size) = LargePalmBush::grow_num(variant);
+				(TropicalThicketKind::Palm(tree), world_size)
 			}
-			TropicalThicketItem::Bush(bush) => {
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
-				TropicalThicketPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalThicketKind::Bush(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			TropicalThicketCell::BroadWetPalmBush => {
+				let (tree, world_size) = BroadWetPalmBush::grow_num(variant);
+				(TropicalThicketKind::Palm(tree), world_size)
 			}
-			TropicalThicketItem::Banyan(banyan) => {
-				let world_size = banyan.build_with_noise(build_noise).geometry.scale.tree_height;
-				TropicalThicketPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TropicalThicketKind::Banyan(HonuBanyan::grow_num(variant).0),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			TropicalThicketCell::RedStemPalmBush => {
+				let (tree, world_size) = RedStemPalmBush::grow_num(variant);
+				(TropicalThicketKind::Palm(tree), world_size)
 			}
+			TropicalThicketCell::ModerateHighBush => {
+				let (tree, world_size) = ModerateHighBush::grow_num(variant);
+				(TropicalThicketKind::Bush(tree), world_size)
+			}
+			TropicalThicketCell::FloweringHighBush => {
+				let (tree, world_size) = FloweringHighBush::grow_num(variant);
+				(TropicalThicketKind::Bush(tree), world_size)
+			}
+			TropicalThicketCell::MiniHonuBanyan => {
+				let build_noise = variant_noise(grove_noise, variant);
+				let world_size =
+					MINI_HONU_BANYAN.build_with_noise(build_noise).geometry.scale.tree_height;
+				(TropicalThicketKind::Banyan(HonuBanyan::grow_num(variant).0), world_size)
+			}
+		};
+
+		TropicalThicketPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

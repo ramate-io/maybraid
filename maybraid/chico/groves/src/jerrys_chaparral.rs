@@ -246,8 +246,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		FriendsConifer, FriendsConiferParams, HighBushShoots, HighBushShootsParams,
-		RorysHeadTrained, RorysHeadTrainedParams,
+		FriendsConifer, FriendsConiferParams, HighBushShoots, QuantizedPlant, RorysHeadTrained,
+		RorysHeadTrainedParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -260,14 +260,18 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::ChaparralFlatTerrain;
-	use super::{definition, JerrysChaparralCell, JerrysChaparralItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, JerrysChaparralCell, JerrysChaparralFriendsConifer, CHAPARRAL_HIGH_BUSH,
+		DRY_RORY_HEAD, MANZANITA_RORY, SMALL_FRIENDS_CONIFER,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		remixed_bush_plant, remixed_sbs_plant, stick_material_from_palette,
+		trained_proxy_stick_nodes_for_level, unit_build_noise, woody_grove_scene_chunks,
 		CanopyProxySite, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -392,6 +396,43 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	remixed_sbs_plant!(
+		DryRoryHead,
+		RorysHeadTrained,
+		RorysHeadTrainedParams,
+		DRY_RORY_HEAD
+	);
+	remixed_sbs_plant!(
+		ManzanitaRory,
+		RorysHeadTrained,
+		RorysHeadTrainedParams,
+		MANZANITA_RORY
+	);
+	remixed_bush_plant!(ChaparralHighBush, CHAPARRAL_HIGH_BUSH);
+
+	fn chaparral_friends_unit(
+		authored: &JerrysChaparralFriendsConifer,
+		num: u32,
+	) -> (FriendsConifer, f32) {
+		let samples =
+			BuildWithNoise::<ConiferSamples>::build_with_noise(authored, unit_build_noise(num));
+		let mut params = FriendsConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct SmallFriendsConifer;
+
+	impl QuantizedPlant for SmallFriendsConifer {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			chaparral_friends_unit(&SMALL_FRIENDS_CONIFER, num)
 		}
 	}
 
@@ -531,12 +572,10 @@ mod vc {
 	fn grow_plant(
 		placed: &GroveCellVariant<JerrysChaparralCell>,
 		grove_noise: NoiseParams,
-		tree_chain_noise: NoiseParams,
+		_tree_chain_noise: NoiseParams,
 		tree_variants: u32,
 	) -> JerrysChaparralPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
-		let chain_noise = variant_noise(tree_chain_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -549,52 +588,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			JerrysChaparralItem::RoryHead(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				JerrysChaparralPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JerrysChaparralKind::Rory(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			JerrysChaparralCell::DryRoryHeadTrained => {
+				let (tree, world_size) = DryRoryHead::grow_num(variant);
+				(JerrysChaparralKind::Rory(tree), world_size)
 			}
-			JerrysChaparralItem::Bush(bush) => {
-				let mut shape = bush.build_with_noise(build_noise);
-				shape.chain_noise = chain_noise;
-				let (unit_params, world_size) =
-					HighBushShootsParams::new(shape).into_unit_from_num(variant);
-				JerrysChaparralPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JerrysChaparralKind::Bush(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			JerrysChaparralCell::ManzanitaRory => {
+				let (tree, world_size) = ManzanitaRory::grow_num(variant);
+				(JerrysChaparralKind::Rory(tree), world_size)
 			}
-			JerrysChaparralItem::FriendsConifer(conifer) => {
-				let samples =
-					BuildWithNoise::<ConiferSamples>::build_with_noise(conifer, build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				JerrysChaparralPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: JerrysChaparralKind::Friends(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			JerrysChaparralCell::ChaparralHighBush => {
+				let (tree, world_size) = ChaparralHighBush::grow_num(variant);
+				(JerrysChaparralKind::Bush(tree), world_size)
 			}
+			JerrysChaparralCell::SmallFriendsConifer => {
+				let (tree, world_size) = SmallFriendsConifer::grow_num(variant);
+				(JerrysChaparralKind::Friends(tree), world_size)
+			}
+		};
+
+		JerrysChaparralPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

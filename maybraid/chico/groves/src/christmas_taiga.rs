@@ -139,7 +139,7 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use std::sync::Arc;
 
-	use chico_sbs_trees::{NorthernConifer, NorthernConiferParams};
+	use chico_sbs_trees::{NorthernConifer, NorthernConiferParams, QuantizedPlant};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -150,14 +150,16 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, ChristmasTaigaCell, ChristmasTaigaItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, ChristmasTaigaCell, ChristmasTaigaNorthernConifer, CHRISTMAS_NORTHERN_CONIFER,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
+		unit_build_noise, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -284,6 +286,30 @@ mod vc {
 		}
 	}
 
+	fn christmas_northern_unit(
+		authored: &ChristmasTaigaNorthernConifer,
+		num: u32,
+	) -> (NorthernConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = NorthernConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.splay_spawn_fraction = samples.splay_spawn_fraction;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct ChristmasNorthern;
+
+	impl QuantizedPlant for ChristmasNorthern {
+		type Unit = NorthernConifer;
+
+		fn build_unit(num: u32) -> (NorthernConifer, f32) {
+			christmas_northern_unit(&CHRISTMAS_NORTHERN_CONIFER, num)
+		}
+	}
+
 	#[derive(Clone)]
 	pub struct ChristmasTaigaPlant {
 		pub placement: Placement,
@@ -367,7 +393,6 @@ mod vc {
 		tree_variants: u32,
 	) -> ChristmasTaigaPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -380,19 +405,12 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		let ChristmasTaigaItem::NorthernConifer(conifer) = placed.variant.item();
-		let samples = conifer.build_with_noise(build_noise);
-		let mut params = NorthernConiferParams::default();
-		params.geometry = samples.geometry;
-		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-		params.splay_spawn_fraction = samples.splay_spawn_fraction;
-		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-		let (unit_params, world_size) = params.into_unit_from_num(variant);
+		let (tree, world_size) = ChristmasNorthern::grow_num(variant);
 
 		ChristmasTaigaPlant {
 			placement: Placement::new(placed.position, 0.0)
 				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-			tree: Arc::new(unit_params.build()),
+			tree,
 			stick_material,
 			ball_material,
 			frond_material,

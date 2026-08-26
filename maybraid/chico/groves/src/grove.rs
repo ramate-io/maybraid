@@ -21,6 +21,8 @@ mod terrain;
 mod tuft_patch;
 
 #[cfg(feature = "render")]
+mod quantized;
+#[cfg(feature = "render")]
 pub mod vc_compose;
 #[cfg(feature = "render")]
 pub mod vc_tuft;
@@ -40,6 +42,10 @@ pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+#[cfg(feature = "render")]
+pub(crate) use quantized::{remixed_bush_plant, remixed_sbs_plant};
+#[cfg(feature = "render")]
+pub use quantized::{unit_build_noise, unit_chain_noise};
 #[cfg(feature = "render")]
 pub use vc_compose::{
 	canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_crown, canopy_proxy_rory,

@@ -246,14 +246,17 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TradeWindsCell, TradeWindsItem};
+	use super::{
+		definition, TradeWindsCell, TradeWindsItem, RARE_TALL_TRADE_STORYBOOK,
+		RARE_TRADE_WAIALEA_PALM, TRADE_STORYBOOK,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_trunk,
 		canopy_proxy_waialea, foliage_low_canopy_balls, foliage_ultra_low_merged_balls,
 		frond_material_from_palette, grove_detail_level, grove_lod_culls, grove_lod_level,
 		grove_lod_status, grove_structural_footprint, layers_from_nodes,
-		nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise,
+		nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -381,6 +384,25 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(
+		TradeStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		TRADE_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		RareTallTradeStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		RARE_TALL_TRADE_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		RareTradeWaialeaPalm,
+		WaialeaPalm,
+		WaialeaPalmParams,
+		RARE_TRADE_WAIALEA_PALM
+	);
 
 	#[derive(Clone)]
 	enum TradeWindsKind {
@@ -571,16 +593,19 @@ mod vc {
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
 		match placed.variant.item() {
-			TradeWindsItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TradeWindsItem::Storybook(_) => {
+				let (tree, world_size) = match placed.variant {
+					TradeWindsCell::TradeStorybook => TradeStorybook::grow_num(variant),
+					TradeWindsCell::RareTallTradeStorybook => {
+						RareTallTradeStorybook::grow_num(variant)
+					}
+					_ => unreachable!("storybook item is only TradeStorybook cells"),
+				};
 				let placement = Placement::new(placed.position, 0.0)
 					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
 					placement,
-					kind: TradeWindsKind::Storybook(Arc::new(unit_params.build())),
+					kind: TradeWindsKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -618,16 +643,13 @@ mod vc {
 					frond_material,
 				}
 			}
-			TradeWindsItem::WaialeaPalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = WaialeaPalmParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TradeWindsItem::WaialeaPalm(_) => {
+				let (tree, world_size) = RareTradeWaialeaPalm::grow_num(variant);
 				let placement = Placement::new(placed.position, 0.0)
 					.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
 				TradeWindsPlant {
 					placement,
-					kind: TradeWindsKind::Waialea(Arc::new(unit_params.build())),
+					kind: TradeWindsKind::Waialea(tree),
 					stick_material,
 					ball_material,
 					frond_material,

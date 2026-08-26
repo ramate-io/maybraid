@@ -218,7 +218,7 @@ mod vc {
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
 		FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams, NorthernConifer,
-		NorthernConiferParams, TemperateConifer, TemperateConiferParams,
+		NorthernConiferParams, QuantizedPlant, TemperateConifer, TemperateConiferParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -230,15 +230,20 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, ConiferMassivesCell, ConiferMassivesItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, ConiferMassivesCell, ConiferMassivesFriendsConifer,
+		ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer, MASSIVE_FRIENDS_CONIFER,
+		MASSIVE_LIAMS_CONIFER, MASSIVE_NORTHERN_CONIFER, MASSIVE_TEMPERATE_CONIFER,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
+		stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks, CanopyProxySite,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Typical large types ~160 m (northern / friends firs). `grove_bands_for_typical_height(160)`.
@@ -361,6 +366,80 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	fn massive_northern_unit(
+		authored: &ConiferMassivesNorthernConifer,
+		num: u32,
+	) -> (NorthernConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = NorthernConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.splay_spawn_fraction = samples.splay_spawn_fraction;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	fn massive_friends_unit(
+		authored: &ConiferMassivesFriendsConifer,
+		num: u32,
+	) -> (FriendsConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = FriendsConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	fn massive_temperate_unit(
+		authored: &ConiferMassivesTemperateConifer,
+		num: u32,
+	) -> (TemperateConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = TemperateConiferParams::default();
+		params.geometry = samples.geometry;
+		params.frond_world_scale = samples.frond_world_scale;
+		params.fronds_per_joint = samples.fronds_per_joint;
+		params.frond_length_fraction = samples.frond_length_fraction;
+		params.frond_spawn_fraction = samples.frond_spawn_fraction;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct MassiveNorthernConifer;
+	impl QuantizedPlant for MassiveNorthernConifer {
+		type Unit = NorthernConifer;
+		fn build_unit(num: u32) -> (NorthernConifer, f32) {
+			massive_northern_unit(&MASSIVE_NORTHERN_CONIFER, num)
+		}
+	}
+
+	struct MassiveFriendsConifer;
+	impl QuantizedPlant for MassiveFriendsConifer {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			massive_friends_unit(&MASSIVE_FRIENDS_CONIFER, num)
+		}
+	}
+
+	remixed_sbs_plant!(
+		MassiveLiamsConifer,
+		LiamsConifer,
+		LiamsConiferParams,
+		MASSIVE_LIAMS_CONIFER
+	);
+
+	struct MassiveTemperateConifer;
+	impl QuantizedPlant for MassiveTemperateConifer {
+		type Unit = TemperateConifer;
+		fn build_unit(num: u32) -> (TemperateConifer, f32) {
+			massive_temperate_unit(&MASSIVE_TEMPERATE_CONIFER, num)
 		}
 	}
 
@@ -495,7 +574,6 @@ mod vc {
 		tree_variants: u32,
 	) -> ConiferMassivesPlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -508,73 +586,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			ConiferMassivesItem::NorthernConifer(conifer) => {
-				let samples = conifer.build_with_noise(build_noise);
-				let mut params = NorthernConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.splay_spawn_fraction = samples.splay_spawn_fraction;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferMassivesPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferMassivesKind::Northern(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			ConiferMassivesCell::MassiveNorthernConifer => {
+				let (tree, world_size) = MassiveNorthernConifer::grow_num(variant);
+				(ConiferMassivesKind::Northern(tree), world_size)
 			}
-			ConiferMassivesItem::FriendsConifer(conifer) => {
-				let samples = conifer.build_with_noise(build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferMassivesPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferMassivesKind::Friends(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ConiferMassivesCell::MassiveFriendsConifer => {
+				let (tree, world_size) = MassiveFriendsConifer::grow_num(variant);
+				(ConiferMassivesKind::Friends(tree), world_size)
 			}
-			ConiferMassivesItem::LiamsConifer(conifer) => {
-				let geometry = conifer.build_with_noise(build_noise);
-				let mut params = LiamsConiferParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferMassivesPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferMassivesKind::Liams(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ConiferMassivesCell::MassiveLiamsConifer => {
+				let (tree, world_size) = MassiveLiamsConifer::grow_num(variant);
+				(ConiferMassivesKind::Liams(tree), world_size)
 			}
-			ConiferMassivesItem::TemperateConifer(temperate) => {
-				let samples = temperate.build_with_noise(build_noise);
-				let mut params = TemperateConiferParams::default();
-				params.geometry = samples.geometry;
-				params.frond_world_scale = samples.frond_world_scale;
-				params.fronds_per_joint = samples.fronds_per_joint;
-				params.frond_length_fraction = samples.frond_length_fraction;
-				params.frond_spawn_fraction = samples.frond_spawn_fraction;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				ConiferMassivesPlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: ConiferMassivesKind::Temperate(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			ConiferMassivesCell::MassiveTemperateConifer => {
+				let (tree, world_size) = MassiveTemperateConifer::grow_num(variant);
+				(ConiferMassivesKind::Temperate(tree), world_size)
 			}
+		};
+
+		ConiferMassivesPlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

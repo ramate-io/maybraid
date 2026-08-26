@@ -165,7 +165,9 @@ mod vc {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{DatePalm, DatePalmParams, WaialeaPalm, WaialeaPalmParams};
+	use chico_sbs_trees::{
+		DatePalm, DatePalmParams, QuantizedPlant, WaialeaPalm, WaialeaPalmParams,
+	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -174,15 +176,18 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, PalmShadeCell, PalmShadeItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, PalmShadeCell, CLUSTER_DATE_PALM, LOWER_WAIALEA_PALM, SHADE_DATE_PALM,
+		TOWER_WAIALEA_PALM,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_waialea,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level_keep_low,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
 		stick_material_from_palette, woody_grove_scene_chunks_keep_low_plants, CanopyProxySite,
 		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
@@ -311,6 +316,11 @@ mod vc {
 		}
 	}
 
+	remixed_sbs_plant!(TowerWaialeaPalm, WaialeaPalm, WaialeaPalmParams, TOWER_WAIALEA_PALM);
+	remixed_sbs_plant!(LowerWaialeaPalm, WaialeaPalm, WaialeaPalmParams, LOWER_WAIALEA_PALM);
+	remixed_sbs_plant!(ShadeDatePalm, DatePalm, DatePalmParams, SHADE_DATE_PALM);
+	remixed_sbs_plant!(ClusterDatePalm, DatePalm, DatePalmParams, CLUSTER_DATE_PALM);
+
 	#[derive(Clone)]
 	enum PalmShadeKind {
 		Waialea(Arc<WaialeaPalm>),
@@ -420,7 +430,6 @@ mod vc {
 		tree_variants: u32,
 	) -> PalmShadePlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -433,35 +442,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			PalmShadeItem::WaialeaPalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = WaialeaPalmParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				PalmShadePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: PalmShadeKind::Waialea(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			PalmShadeCell::TowerWaialeaPalm => {
+				let (tree, world_size) = TowerWaialeaPalm::grow_num(variant);
+				(PalmShadeKind::Waialea(tree), world_size)
 			}
-			PalmShadeItem::DatePalm(palm) => {
-				let geometry = palm.build_with_noise(build_noise);
-				let mut params = DatePalmParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				PalmShadePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: PalmShadeKind::Date(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			PalmShadeCell::LowerWaialeaPalm => {
+				let (tree, world_size) = LowerWaialeaPalm::grow_num(variant);
+				(PalmShadeKind::Waialea(tree), world_size)
 			}
+			PalmShadeCell::ShadeDatePalm => {
+				let (tree, world_size) = ShadeDatePalm::grow_num(variant);
+				(PalmShadeKind::Date(tree), world_size)
+			}
+			PalmShadeCell::ClusterDatePalm => {
+				let (tree, world_size) = ClusterDatePalm::grow_num(variant);
+				(PalmShadeKind::Date(tree), world_size)
+			}
+		};
+
+		PalmShadePlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

@@ -194,11 +194,12 @@ impl AlpineCell {
 mod vc {
 	use std::sync::Arc;
 
-	use super::variants::alpine_friends_conifer::FriendsConiferSamples;
 	use bevy::math::bounding::Aabb3d;
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
-	use chico_sbs_trees::{FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams};
+	use chico_sbs_trees::{
+		FriendsConifer, FriendsConiferParams, LiamsConifer, LiamsConiferParams, QuantizedPlant,
+	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
@@ -209,15 +210,18 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, AlpineCell, AlpineItem};
-	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use super::{
+		definition, AlpineCell, AlpineFriendsConifer, ALPINE_LIAMS, NEEDLE_SPIRE_LIAMS,
+		TALL_ALPINE_FRIENDS, WINDLINE_FRIENDS,
+	};
+	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_sbs_plant,
+		stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks, CanopyProxySite,
+		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
@@ -344,6 +348,44 @@ mod vc {
 		}
 	}
 
+	fn alpine_friends_unit(authored: &AlpineFriendsConifer, num: u32) -> (FriendsConifer, f32) {
+		let samples = authored.build_with_noise(unit_build_noise(num));
+		let mut params = FriendsConiferParams::default();
+		params.geometry = samples.geometry;
+		params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+		params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+		let (unit, world_size) = params.into_unit_from_num(num);
+		(unit.build(), world_size)
+	}
+
+	struct TallAlpineFriends;
+
+	impl QuantizedPlant for TallAlpineFriends {
+		type Unit = FriendsConifer;
+
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			alpine_friends_unit(&TALL_ALPINE_FRIENDS, num)
+		}
+	}
+
+	struct WindlineFriends;
+
+	impl QuantizedPlant for WindlineFriends {
+		type Unit = FriendsConifer;
+
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			alpine_friends_unit(&WINDLINE_FRIENDS, num)
+		}
+	}
+
+	remixed_sbs_plant!(AlpineLiams, LiamsConifer, LiamsConiferParams, ALPINE_LIAMS);
+	remixed_sbs_plant!(
+		NeedleSpireLiams,
+		LiamsConifer,
+		LiamsConiferParams,
+		NEEDLE_SPIRE_LIAMS
+	);
+
 	#[derive(Clone)]
 	enum AlpineKind {
 		Friends(Arc<FriendsConifer>),
@@ -447,7 +489,6 @@ mod vc {
 		tree_variants: u32,
 	) -> AlpinePlant {
 		let variant = patch_variant_index(placed.position, tree_variants);
-		let build_noise = variant_noise(grove_noise, variant);
 		let palette_noise = placement_noise(grove_noise, placed.position);
 		let stick_seed = palette_noise.seed;
 		let canopy_seed = palette_noise.seed.wrapping_add(31);
@@ -460,38 +501,32 @@ mod vc {
 		let frond_material =
 			frond_material_from_palette(Some(placed.variant.canopy_palette_mix()), canopy_seed);
 
-		match placed.variant.item() {
-			AlpineItem::FriendsConifer(conifer) => {
-				let samples =
-					BuildWithNoise::<FriendsConiferSamples>::build_with_noise(conifer, build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				AlpinePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: AlpineKind::Friends(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+		let (kind, world_size) = match placed.variant {
+			AlpineCell::TallAlpineFriendsConifer => {
+				let (tree, world_size) = TallAlpineFriends::grow_num(variant);
+				(AlpineKind::Friends(tree), world_size)
 			}
-			AlpineItem::LiamsConifer(conifer) => {
-				let geometry = conifer.build_with_noise(build_noise);
-				let mut params = LiamsConiferParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
-				AlpinePlant {
-					placement: Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: AlpineKind::Liams(Arc::new(unit_params.build())),
-					stick_material,
-					ball_material,
-					frond_material,
-				}
+			AlpineCell::WindlineFriendsConifer => {
+				let (tree, world_size) = WindlineFriends::grow_num(variant);
+				(AlpineKind::Friends(tree), world_size)
 			}
+			AlpineCell::AlpineLiamsConifer => {
+				let (tree, world_size) = AlpineLiams::grow_num(variant);
+				(AlpineKind::Liams(tree), world_size)
+			}
+			AlpineCell::NeedleSpireLiamsConifer => {
+				let (tree, world_size) = NeedleSpireLiams::grow_num(variant);
+				(AlpineKind::Liams(tree), world_size)
+			}
+		};
+
+		AlpinePlant {
+			placement: Placement::new(placed.position, 0.0)
+				.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
+			kind,
+			stick_material,
+			ball_material,
+			frond_material,
 		}
 	}
 

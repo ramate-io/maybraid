@@ -261,16 +261,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, RiparianMixCell, RiparianMixItem};
+	use super::{
+		definition, RiparianMixCell, RiparianMixItem, BANK_FRIEND_CONIFER, ROUND_RIPARIAN_STORYBOOK,
+		SHELTERED_TEMPERATE_CONIFER, TALL_RIPARIAN_STORYBOOK,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_sbs_plant, stick_material_from_palette, unit_build_noise, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const RIPARIAN_MIX_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -393,6 +396,50 @@ mod vc {
 				&self.extent,
 				self.tree_variants,
 			)
+		}
+	}
+
+	remixed_sbs_plant!(
+		RoundRiparianStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		ROUND_RIPARIAN_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		TallRiparianStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		TALL_RIPARIAN_STORYBOOK
+	);
+
+	struct BankFriendConifer;
+	impl QuantizedPlant for BankFriendConifer {
+		type Unit = FriendsConifer;
+		fn build_unit(num: u32) -> (FriendsConifer, f32) {
+			let samples = BANK_FRIEND_CONIFER.build_with_noise(unit_build_noise(num));
+			let mut params = FriendsConiferParams::default();
+			params.geometry = samples.geometry;
+			params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
+			params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
+		}
+	}
+
+	struct ShelteredTemperateConifer;
+	impl QuantizedPlant for ShelteredTemperateConifer {
+		type Unit = TemperateConifer;
+		fn build_unit(num: u32) -> (TemperateConifer, f32) {
+			let samples = SHELTERED_TEMPERATE_CONIFER.build_with_noise(unit_build_noise(num));
+			let mut params = TemperateConiferParams::default();
+			params.geometry = samples.geometry;
+			params.frond_world_scale = samples.frond_world_scale;
+			params.fronds_per_joint = samples.fronds_per_joint;
+			params.frond_length_fraction = samples.frond_length_fraction;
+			params.frond_spawn_fraction = samples.frond_spawn_fraction;
+			params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
+			let (unit, world_size) = params.into_unit_from_num(num);
+			(unit.build(), world_size)
 		}
 	}
 
@@ -552,50 +599,42 @@ mod vc {
 					frond_material,
 				}
 			}
-			RiparianMixItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			RiparianMixItem::Storybook(_) => {
+				let (tree, world_size) = match placed.variant {
+					RiparianMixCell::RoundRiparianStorybook => {
+						RoundRiparianStorybook::grow_num(variant)
+					}
+					RiparianMixCell::TallRiparianStorybook => {
+						TallRiparianStorybook::grow_num(variant)
+					}
+					_ => unreachable!("storybook item is only riparian storybook cells"),
+				};
 				RiparianMixPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: RiparianMixKind::Storybook(Arc::new(unit_params.build())),
+					kind: RiparianMixKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			RiparianMixItem::FriendsConifer(conifer) => {
-				let samples = conifer.build_with_noise(build_noise);
-				let mut params = FriendsConiferParams::default();
-				params.geometry = samples.geometry;
-				params.splay_radius_fraction_of_height = samples.splay_radius_fraction_of_height;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			RiparianMixItem::FriendsConifer(_) => {
+				let (tree, world_size) = BankFriendConifer::grow_num(variant);
 				RiparianMixPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: RiparianMixKind::Friends(Arc::new(unit_params.build())),
+					kind: RiparianMixKind::Friends(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			RiparianMixItem::TemperateConifer(temperate) => {
-				let samples = temperate.build_with_noise(build_noise);
-				let mut params = TemperateConiferParams::default();
-				params.geometry = samples.geometry;
-				params.frond_world_scale = samples.frond_world_scale;
-				params.fronds_per_joint = samples.fronds_per_joint;
-				params.frond_length_fraction = samples.frond_length_fraction;
-				params.frond_spawn_fraction = samples.frond_spawn_fraction;
-				params.apex_canopy_spawn_fraction = samples.apex_canopy_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			RiparianMixItem::TemperateConifer(_) => {
+				let (tree, world_size) = ShelteredTemperateConifer::grow_num(variant);
 				RiparianMixPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: RiparianMixKind::Temperate(Arc::new(unit_params.build())),
+					kind: RiparianMixKind::Temperate(tree),
 					stick_material,
 					ball_material,
 					frond_material,

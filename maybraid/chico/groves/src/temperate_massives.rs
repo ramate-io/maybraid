@@ -192,16 +192,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TemperateMassivesCell, TemperateMassivesItem};
+	use super::{
+		definition, TemperateMassivesCell, TemperateMassivesItem, MASSIVE_STORYBOOK,
+		RARE_MASSIVE_RORY,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_sbs_plant, stick_material_from_palette, trained_proxy_stick_nodes_for_level,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	/// Typical large types ~170 m (storybook / rory). `grove_bands_for_typical_height(170)`.
@@ -327,6 +330,14 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(MassiveStorybook, StorybookTree, StorybookTreeParams, MASSIVE_STORYBOOK);
+	remixed_sbs_plant!(
+		RareMassiveRory,
+		RorysHeadTrained,
+		RorysHeadTrainedParams,
+		RARE_MASSIVE_RORY
+	);
 
 	#[derive(Clone)]
 	enum TemperateMassivesKind {
@@ -493,29 +504,23 @@ mod vc {
 					frond_material,
 				}
 			}
-			TemperateMassivesItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TemperateMassivesItem::Storybook(_) => {
+				let (tree, world_size) = MassiveStorybook::grow_num(variant);
 				TemperateMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TemperateMassivesKind::Storybook(Arc::new(unit_params.build())),
+					kind: TemperateMassivesKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			TemperateMassivesItem::Rory(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TemperateMassivesItem::Rory(_) => {
+				let (tree, world_size) = RareMassiveRory::grow_num(variant);
 				TemperateMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TemperateMassivesKind::Rory(Arc::new(unit_params.build())),
+					kind: TemperateMassivesKind::Rory(tree),
 					stick_material,
 					ball_material,
 					frond_material,

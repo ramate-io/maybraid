@@ -198,16 +198,19 @@ mod vc {
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
-	use super::{definition, TemperateLowerMassivesCell, TemperateLowerMassivesItem};
+	use super::{
+		definition, TemperateLowerMassivesCell, TemperateLowerMassivesItem,
+		LOWER_MASSIVE_STORYBOOK, RARE_LOWER_MASSIVE_RORY,
+	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
-		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		remixed_sbs_plant, stick_material_from_palette, trained_proxy_stick_nodes_for_level,
+		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
+		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
@@ -332,6 +335,19 @@ mod vc {
 			)
 		}
 	}
+
+	remixed_sbs_plant!(
+		LowerMassiveStorybook,
+		StorybookTree,
+		StorybookTreeParams,
+		LOWER_MASSIVE_STORYBOOK
+	);
+	remixed_sbs_plant!(
+		RareLowerMassiveRory,
+		RorysHeadTrained,
+		RorysHeadTrainedParams,
+		RARE_LOWER_MASSIVE_RORY
+	);
 
 	#[derive(Clone)]
 	enum TemperateLowerMassivesKind {
@@ -498,29 +514,23 @@ mod vc {
 					frond_material,
 				}
 			}
-			TemperateLowerMassivesItem::Storybook(story) => {
-				let geometry = story.build_with_noise(build_noise);
-				let mut params = StorybookTreeParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TemperateLowerMassivesItem::Storybook(_) => {
+				let (tree, world_size) = LowerMassiveStorybook::grow_num(variant);
 				TemperateLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TemperateLowerMassivesKind::Storybook(Arc::new(unit_params.build())),
+					kind: TemperateLowerMassivesKind::Storybook(tree),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
-			TemperateLowerMassivesItem::Rory(rory) => {
-				let geometry = rory.build_with_noise(build_noise);
-				let mut params = RorysHeadTrainedParams::default();
-				params.geometry = geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+			TemperateLowerMassivesItem::Rory(_) => {
+				let (tree, world_size) = RareLowerMassiveRory::grow_num(variant);
 				TemperateLowerMassivesPlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: TemperateLowerMassivesKind::Rory(Arc::new(unit_params.build())),
+					kind: TemperateLowerMassivesKind::Rory(tree),
 					stick_material,
 					ball_material,
 					frond_material,
