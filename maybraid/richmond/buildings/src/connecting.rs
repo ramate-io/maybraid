@@ -11,5 +11,6 @@ pub mod stairwell;
 
 pub use hall::{ConnectingHall, HallOpening};
 pub use stairwell::{
-	ConnectingStairwell, StairwellOpening, TreadEnd, RUN_IN_M, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
+	ConnectingStairwell, StairwellOpening, TreadEnd, GOING_RATIO_DEFAULT, RUN_IN_M,
+	SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
 };

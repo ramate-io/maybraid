@@ -54,6 +54,13 @@ pub(crate) const TREAD_FILL_MIN: f32 = 0.2;
 pub(crate) const TREAD_FILL_MAX: f32 = 0.95;
 const TREAD_WIDTH_MIN_M: f32 = 0.35;
 
+/// Default preferred going / width. Stay near this for one circuit on a ~3 m well.
+pub(crate) const GOING_RATIO_DEFAULT: f32 = 0.55;
+pub(crate) const GOING_RATIO_MIN: f32 = 0.2;
+pub(crate) const GOING_RATIO_MAX: f32 = 2.0;
+const TREAD_DEPTH_MIN_M: f32 = 0.15;
+const TREAD_DEPTH_MAX_M: f32 = 3.0;
+
 /// Keep an authored fill inside the legal band.
 pub(crate) fn clamp_tread_fill(fill: f32) -> f32 {
 	if !fill.is_finite() {
@@ -63,12 +70,26 @@ pub(crate) fn clamp_tread_fill(fill: f32) -> f32 {
 	}
 }
 
-/// Tread width / depth from the tighter opening half-extent and a fill fraction.
-pub(crate) fn tread_dims(opening_min: f32, fill: f32) -> (f32, f32) {
+/// Keep an authored going / width inside \(0.2\ldots 2.0\).
+pub(crate) fn clamp_going_ratio(ratio: f32) -> f32 {
+	if !ratio.is_finite() {
+		GOING_RATIO_DEFAULT
+	} else {
+		ratio.clamp(GOING_RATIO_MIN, GOING_RATIO_MAX)
+	}
+}
+
+/// Tread width / preferred going from opening half-extent, fill, and going / width.
+///
+/// Preferred going is a wish: rectangular-spiral may add circuits so rise stays
+/// near [`StraightStair::DEFAULT_TREAD_HEIGHT`] (0.18 m). Values ≳ 1 on a ~3 m
+/// well usually stack another lap.
+pub(crate) fn tread_dims(opening_min: f32, fill: f32, going_ratio: f32) -> (f32, f32) {
 	let fill = clamp_tread_fill(fill);
+	let going_ratio = clamp_going_ratio(going_ratio);
 	let opening_min = opening_min.max(1e-4);
 	let width = (opening_min * fill).clamp(TREAD_WIDTH_MIN_M, opening_min * TREAD_FILL_MAX);
-	let depth = (width * 0.55).clamp(0.25, 0.45);
+	let depth = (width * going_ratio).clamp(TREAD_DEPTH_MIN_M, TREAD_DEPTH_MAX_M);
 	(width, depth)
 }
 
@@ -313,8 +334,8 @@ mod tests {
 
 	#[test]
 	fn tread_fill_scales_width_relative_to_the_opening() {
-		let (narrow, _) = tread_dims(1.2, 0.4);
-		let (wide, _) = tread_dims(1.2, 0.8);
+		let (narrow, _) = tread_dims(1.2, 0.4, GOING_RATIO_DEFAULT);
+		let (wide, _) = tread_dims(1.2, 0.8, GOING_RATIO_DEFAULT);
 		assert!((narrow - 0.48).abs() < 1e-4);
 		assert!((wide - 0.96).abs() < 1e-4);
 	}
@@ -323,14 +344,30 @@ mod tests {
 	fn tread_fill_clamps_and_stays_inside_the_opening() {
 		assert!((clamp_tread_fill(3.0) - TREAD_FILL_MAX).abs() < 1e-4);
 		assert!((clamp_tread_fill(0.0) - TREAD_FILL_MIN).abs() < 1e-4);
-		let (w, _) = tread_dims(3.0, 0.4);
+		let (w, _) = tread_dims(3.0, 0.4, GOING_RATIO_DEFAULT);
 		assert!(
 			(w - 1.2).abs() < 1e-4,
 			"large wells follow the fraction, not a 1.1 m cap, got {w}"
 		);
-		let (tiny, _) = tread_dims(0.45, 0.4);
+		let (tiny, _) = tread_dims(0.45, 0.4, GOING_RATIO_DEFAULT);
 		assert!((tiny - TREAD_WIDTH_MIN_M).abs() < 1e-4);
-		let (capped, _) = tread_dims(1.2, 0.95);
+		let (capped, _) = tread_dims(1.2, 0.95, GOING_RATIO_DEFAULT);
 		assert!((capped - 1.2 * TREAD_FILL_MAX).abs() < 1e-4);
+	}
+
+	#[test]
+	fn going_ratio_scales_preferred_going() {
+		let (_, shallow) = tread_dims(1.2, 0.6, 0.4);
+		let (_, deep) = tread_dims(1.2, 0.6, 0.7);
+		assert!((shallow - 0.288).abs() < 1e-4, "got {shallow}");
+		assert!((deep - 0.504).abs() < 1e-4, "0.72*0.7 should not hit a comfort cap, got {deep}");
+		let (_, chunky) = tread_dims(1.2, 0.4, 2.0);
+		assert!((chunky - 0.96).abs() < 1e-4, "going_ratio 2.0 on a 0.48 m tread, got {chunky}");
+	}
+
+	#[test]
+	fn going_ratio_clamps() {
+		assert!((clamp_going_ratio(10.0) - GOING_RATIO_MAX).abs() < 1e-4);
+		assert!((clamp_going_ratio(0.0) - GOING_RATIO_MIN).abs() < 1e-4);
 	}
 }

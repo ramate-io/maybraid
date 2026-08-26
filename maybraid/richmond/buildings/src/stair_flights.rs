@@ -47,6 +47,9 @@ pub struct WellFit {
 	pub upper_half_depth: f32,
 	/// Tread span as a fraction of the tighter opening half-extent.
 	pub tread_fill: f32,
+	/// Preferred going / width — not “how chunky one tread looks.”
+	/// High values add rectangular-spiral circuits so rise stays ~0.18 m.
+	pub going_ratio: f32,
 }
 
 /// Which family [`crate::ConnectingStairwell::with_flight`] should fit.

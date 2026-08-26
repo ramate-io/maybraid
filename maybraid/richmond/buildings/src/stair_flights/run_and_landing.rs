@@ -31,7 +31,7 @@ fn fit_runs(
 ) {
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
-	let (width, pref_depth) = tread_dims(half_w.min(half_d), fit.tread_fill);
+	let (width, pref_depth) = tread_dims(half_w.min(half_d), fit.tread_fill, fit.going_ratio);
 	let waypoints = plan_waypoints(polyline, fit);
 	let segs: Vec<PathSeg> = waypoints
 		.windows(2)
@@ -99,6 +99,7 @@ mod tests {
 				upper_half_width: 1.2,
 				upper_half_depth: 1.2,
 				tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
+				going_ratio: crate::stair_flights::geom::GOING_RATIO_DEFAULT,
 			},
 		)
 	}
@@ -129,6 +130,7 @@ mod tests {
 			upper_half_width: 1.2,
 			upper_half_depth: 1.2,
 			tread_fill: crate::stair_flights::geom::TREAD_FILL_DEFAULT,
+			going_ratio: crate::stair_flights::geom::GOING_RATIO_DEFAULT,
 		};
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		assert!(flight.stairs().len() >= 2, "offset should split into runs");

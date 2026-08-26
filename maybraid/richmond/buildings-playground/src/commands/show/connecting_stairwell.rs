@@ -5,7 +5,9 @@ use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
-use richmond_buildings::{StairwellFlightKind, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT};
+use richmond_buildings::{
+	StairwellFlightKind, GOING_RATIO_DEFAULT, SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
+};
 
 /// Flight family. Independent of [`ConnectingStairwellCase`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -105,7 +107,9 @@ impl ConnectingStairwellCase {
 	/// What the preview is meant to expose.
 	pub fn look_for(self) -> &'static str {
 		match self {
-			Self::Stacked => "run-in / last-tread / landing tops flush with Y=0 and Y=3; same-side arrive",
+			Self::Stacked => {
+				"run-in / last-tread / landing tops flush with Y=0 and Y=3; same-side arrive"
+			}
 			Self::NarrowSlot => "0.8 m slot: treads and pads may bleed the short sides",
 			Self::Shallow => "1.0 m depth: treads and pads may bleed the short axis",
 			Self::Offset => "one plan kink; landing pad at the mid station, not a sheared mountain",
@@ -142,6 +146,9 @@ pub struct ConnectingStairwell {
 	/// Tread span as a fraction of the tighter opening half-extent.
 	#[arg(long, default_value_t = TREAD_FILL_DEFAULT)]
 	pub tread_fill: f32,
+	/// Preferred going / width. High values add rectangular-spiral circuits (stay 0.5–0.7 on a ~3 m well).
+	#[arg(long, default_value_t = GOING_RATIO_DEFAULT)]
+	pub going_ratio: f32,
 	/// Shaft fill. Independent of `--case`.
 	#[arg(long, value_enum, default_value_t = ConnectingStairwellFlight::Spiral)]
 	pub flight: ConnectingStairwellFlight,
@@ -158,6 +165,7 @@ impl ConnectingStairwell {
 				upper_landing: !self.no_upper_landing,
 				slab_thickness: self.slab_thickness,
 				tread_fill: self.tread_fill,
+				going_ratio: self.going_ratio,
 			},
 			self.transform.transform(),
 		)
