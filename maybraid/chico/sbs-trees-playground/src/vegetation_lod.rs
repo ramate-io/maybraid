@@ -1,7 +1,7 @@
 //! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
 //!
-//! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for tuft
-//! groves that nest them. Isolated plants and woody grove children share one
+//! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for
+//! any leftover nested kit nodes. Isolated plants and woody grove children share one
 //! family: [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
 //! Groves register as themselves. Cull uses a rotating [`OpenLattice`] annulus.
 

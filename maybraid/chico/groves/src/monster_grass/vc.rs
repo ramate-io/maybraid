@@ -45,7 +45,8 @@ pub struct MonsterGrassParams {
 	)]
 	pub foliage_noise: NoiseParams,
 
-	/// Cap foliage LOD collections after growing placements (`0` = no fold, one per placement).
+	/// Cap foliage LOD collections after growing placements into square XZ bins
+	/// (`ceil(sqrt(n))` on a side; `0` = one collection per placement).
 	#[arg(long, default_value_t = 0)]
 	pub merge_collections: usize,
 
@@ -158,6 +159,7 @@ impl MonsterGrass {
 			foliage_noise,
 			merge_collections,
 			patch_variants,
+			extent,
 			|cell, variant| {
 				let mix = cell.palette_mix();
 				let (patch, world_size) = match cell {

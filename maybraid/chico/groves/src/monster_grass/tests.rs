@@ -209,6 +209,12 @@ mod render_tests {
 	}
 
 	#[test]
+	fn default_does_not_fold() -> Result<()> {
+		assert_eq!(MonsterGrassParams::default().merge_collections, 0);
+		Ok(())
+	}
+
+	#[test]
 	fn build_composes_tuft_patches() -> Result<()> {
 		use crate::grove::GroveCellVariant;
 
@@ -294,13 +300,14 @@ mod render_tests {
 
 	#[test]
 	fn build_merges_down_to_collection_cap() -> Result<()> {
-		use crate::grove::GroveCellVariant;
+		use crate::grove::{GroveCellVariant, GroveExtent};
 
-		let placements: Vec<_> = (0..40)
+		// 4×4 placements on a matching extent; merge 4 → 2×2 square bins.
+		let placements: Vec<_> = (0..16)
 			.map(|i| {
 				GroveCellVariant::new(
 					MonsterGrassCell::GiantWetBlade,
-					Vec3::new((i % 8) as f32 * 3.0, 0.0, (i / 8) as f32 * 3.0),
+					Vec3::new((i % 4) as f32 * 5.0 + 2.5, 0.0, (i / 4) as f32 * 5.0 + 2.5),
 					1.0,
 				)
 			})
@@ -310,9 +317,78 @@ mod render_tests {
 			FlatTerrainSample::default(),
 			NoiseParams::default(),
 		);
-		params.merge_collections = 5;
+		params.extent = GroveExtent::new(Vec3::ZERO, Vec3::new(20.0, 1.0, 20.0));
+		params.merge_collections = 4;
 		let grove = params.build();
-		assert_eq!(grove.plants.len(), 5);
+		assert_eq!(grove.plants.len(), 4);
+		Ok(())
+	}
+
+	#[test]
+	fn fold_bins_are_square_not_strips() -> Result<()> {
+		use crate::grove::{GroveCellVariant, GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
+
+		let placements = vec![
+			GroveCellVariant::new(MonsterGrassCell::GiantWetBlade, Vec3::new(5.0, 0.0, 5.0), 1.0),
+			GroveCellVariant::new(MonsterGrassCell::GiantWetBlade, Vec3::new(5.0, 0.0, 95.0), 1.0),
+			GroveCellVariant::new(MonsterGrassCell::GiantWetBlade, Vec3::new(95.0, 0.0, 5.0), 1.0),
+		];
+		let mut params = MonsterGrassParams::with_resolved_placements(
+			placements,
+			FlatTerrainSample::default(),
+			NoiseParams::default(),
+		);
+		params.extent = GroveExtent::new(
+			Vec3::ZERO,
+			Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
+		);
+		params.merge_collections = 4;
+		let grove = params.build();
+		assert_eq!(grove.plants.len(), 3, "opposite corners must not share an X-strip bin");
+		Ok(())
+	}
+
+	#[test]
+	fn high_collections_present_as_merged_kits() -> Result<()> {
+		use crate::grove::GroveCellVariant;
+		use bevy::math::bounding::Aabb3d;
+		use bevy::prelude::{Entity, Transform};
+		use chico_vegetation_components::{
+			CollectionPresent, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+		};
+		use lod::gen::{LodScene, LodSceneLevel};
+		use lod::lod_ref::LodRef;
+		use lod::SceneChunk;
+
+		let grove = MonsterGrassParams::with_resolved_placements(
+			vec![GroveCellVariant::new(
+				MonsterGrassCell::GiantWetBlade,
+				Vec3::new(1.0, 0.0, 2.0),
+				1.0,
+			)],
+			FlatTerrainSample::default(),
+			NoiseParams::default(),
+		)
+		.build();
+		let nodes = grove.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!nodes.is_empty());
+		assert!(nodes.iter().all(|n| n.collection_present == CollectionPresent::Merge));
+
+		let camera = Transform::from_translation(Vec3::new(1.0, 2.0, 8.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		let SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } =
+			grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High)
+		else {
+			anyhow::bail!("High should emit lazy flattened kits, not nested collection hosts");
+		};
+		assert_eq!(remaining_primitives, nodes.len());
+		assert_eq!(remaining_weight, nodes.len() as u32 * FLATTENED_KIT_CHUNK_WEIGHT);
 		Ok(())
 	}
 

@@ -179,9 +179,13 @@ where
 }
 
 /// Grow cached unit [`TuftPatch`] plants; clone out of the [`Arc`] when `merge_collections > 0`.
+///
+/// Fold bins are a square XZ grid on `extent` (`ceil(sqrt(n))` on a side), not an
+/// X-major strip. Empty cells are dropped.
 pub fn grow_tuft_plants(
 	grown: Vec<(Placement, Arc<TuftPatch>, MaterialRef)>,
 	merge_collections: usize,
+	extent: &GroveExtent,
 ) -> Vec<TuftGrovePlant> {
 	if merge_collections == 0 {
 		return grown
@@ -189,20 +193,25 @@ pub fn grow_tuft_plants(
 			.map(|(placement, patch, material)| TuftGrovePlant { placement, patch, material })
 			.collect();
 	}
-	let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> =
-		grown.into_iter().map(|(p, patch, m)| (p, (*patch).clone(), m)).collect();
-	remaining.sort_by(|a, b| {
-		a.0.translation
-			.x
-			.total_cmp(&b.0.translation.x)
-			.then(a.0.translation.z.total_cmp(&b.0.translation.z))
-	});
-	let target = merge_collections.max(1);
-	let chunk_len = remaining.len().div_ceil(target);
-	let mut plants = Vec::with_capacity(target.min(remaining.len()));
-	while !remaining.is_empty() {
-		let take = chunk_len.min(remaining.len());
-		let chunk: Vec<_> = remaining.drain(..take).collect();
+	let side = ((merge_collections.max(1) as f32).sqrt().ceil() as i32).max(1);
+	let origin = extent.min();
+	let span = (extent.max() - extent.min()).max(Vec3::splat(1e-3));
+	let mut bins: HashMap<(i32, i32), Vec<(Placement, TuftPatch, MaterialRef)>> = HashMap::new();
+	for (placement, patch, material) in grown {
+		let p = placement.translation;
+		let ix = (((p.x - origin.x) / span.x) * side as f32).floor() as i32;
+		let iz = (((p.z - origin.z) / span.z) * side as f32).floor() as i32;
+		bins.entry((ix.clamp(0, side - 1), iz.clamp(0, side - 1))).or_default().push((
+			placement,
+			(*patch).clone(),
+			material,
+		));
+	}
+	let mut keys: Vec<(i32, i32)> = bins.keys().copied().collect();
+	keys.sort_unstable();
+	let mut plants = Vec::with_capacity(keys.len());
+	for key in keys {
+		let chunk = bins.remove(&key).expect("bin key from keys");
 		let material = chunk[0].2.clone();
 		let mut iter = chunk.into_iter();
 		let (placement, mut merged, _) = iter.next().expect("chunk non-empty");
@@ -521,6 +530,7 @@ pub fn grow_placed_tuft_params<C, F>(
 	foliage_noise: NoiseParams,
 	merge_collections: usize,
 	patch_variants: u32,
+	extent: &GroveExtent,
 	mut grow: F,
 ) -> Vec<TuftGrovePlant>
 where
@@ -537,7 +547,7 @@ where
 			unit_plant_from_grown(patch, world_size, placed.position, placed.scale, material)
 		})
 		.collect();
-	grow_tuft_plants(grown, merge_collections)
+	grow_tuft_plants(grown, merge_collections, extent)
 }
 
 #[cfg(test)]

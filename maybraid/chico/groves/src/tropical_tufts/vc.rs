@@ -128,7 +128,7 @@ impl TropicalTuftsParams {
 		}
 		TropicalTufts {
 			body: TuftGroveBody::from_plants(
-				grow_tuft_plants(tuft_grown, self.merge_collections),
+				grow_tuft_plants(tuft_grown, self.merge_collections, &self.extent),
 				&self.extent,
 				self.cell_extent_xz(),
 				TuftGroveProxyHeights::SHORT,

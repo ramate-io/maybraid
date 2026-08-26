@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_groves::{GroveExtent, MonsterGrassParams, DEFAULT_GROVE_EXTENT_XZ};
-use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
+use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds};
 
 /// Grove-tile radius from center (`[-radius, radius]` on each axis).
 pub const PLAIN_GROVE_RADIUS: i32 = 10;
@@ -20,13 +20,9 @@ pub fn spawn_monster_grass_plain(commands: &mut Commands, transform: Transform) 
 		for iz in -PLAIN_GROVE_RADIUS..=PLAIN_GROVE_RADIUS {
 			let min = Vec3::new(ix as f32 * tile, 0.0, iz as f32 * tile);
 			let max = min + Vec3::new(tile, 1.0, tile);
-			let mut params = MonsterGrassParams::default().with_extent(GroveExtent::new(min, max));
-			params.merge_collections = 0;
+			let params = MonsterGrassParams::default().with_extent(GroveExtent::new(min, max));
 			let grove = params.build();
-			let bounds = grove
-				.structural_lod()
-				.map(|p| p.footprint_aabb())
-				.unwrap_or_else(|| vegetation_bounds(&grove));
+			let bounds = vegetation_bounds(&grove);
 			entities.extend(spawn_lod_scene_host(commands, &grove, transform, bounds));
 		}
 	}

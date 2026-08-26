@@ -1,8 +1,8 @@
 //! Shared tuft-grove [`LodScene`]. Authored bands stay on the grove body.
 //!
 //! Tuft High / Medium / Low / UltraLow already live on [`VegetationComponents`].
-//! This impl only makes the grove a structural host (same emission as the old
-//! [`chico_vegetation_components::ComponentsOnly`] wrapper).
+//! Chunks are flattened posed kits ([`flattened_vegetation_scene_chunks`]), not
+//! nested [`FoliageNode`] hosts. Begin only materializes a kit prefix.
 
 /// Mechanical [`LodScene`] for a tuft grove that already implements [`VegetationComponents`].
 #[macro_export]
@@ -36,7 +36,7 @@ macro_rules! impl_tuft_grove_lod {
 				lod_ref: &lod::lod_ref::LodRef,
 				level: lod::gen::LodSceneLevel,
 			) -> impl bevy::scene::prelude::Scene + 'static {
-				chico_vegetation_components::component_only_scene(self, lod_ref, level)
+				chico_vegetation_components::flattened_component_scene(self, lod_ref, level)
 			}
 
 			fn scene_chunks_with_level(
@@ -44,7 +44,7 @@ macro_rules! impl_tuft_grove_lod {
 				lod_ref: &lod::lod_ref::LodRef,
 				level: lod::gen::LodSceneLevel,
 			) -> lod::SceneChunk {
-				chico_vegetation_components::vegetation_scene_chunks(self, lod_ref, level)
+				chico_vegetation_components::flattened_vegetation_scene_chunks(self, lod_ref, level)
 			}
 
 			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {

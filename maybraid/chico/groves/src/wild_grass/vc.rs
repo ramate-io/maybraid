@@ -86,6 +86,7 @@ impl WildGrassParams {
 			foliage_noise,
 			self.merge_collections,
 			self.patch_variants,
+			&self.extent,
 			|cell, variant| {
 				let mix = cell.palette_mix();
 				let (patch, world_size) = match cell {

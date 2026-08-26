@@ -7,10 +7,11 @@
 //! cells use `clump_count = 1`). Under `render`, [`MonsterGrassParams::build`] grows
 //! [`TuftPatch`](chico_sbs_trees::TuftPatch) plants quantized through
 //! [`TuftPatchParams::into_unit_from_num`](chico_sbs_trees::TuftPatchParams::into_unit_from_num)
-//! (`patch_variants`, default `100`) so High/Medium share archetypal MultiSceneMerge meshes.
-//! Optional
-//! [`TuftPatch::merge_placed`](chico_sbs_trees::TuftPatch::merge_placed) fold via
-//! [`MonsterGrassParams::merge_collections`] (`0` = one collection per placement).
+//! (`patch_variants`, default `100`). High/Medium collections merge to one
+//! `MultiSceneMerge` per plant. The grove `LodScene` emits those as lazy flattened
+//! kits (no nested [`FoliageNode`](chico_vegetation_components::FoliageNode) hosts).
+//! Optional square XZ fold via [`MonsterGrassParams::merge_collections`]
+//! (default `0` = one collection per placement).
 //!
 //! Structural LOD (× grove footprint): High (full clumps); Medium = ~¼ of High tufts
 //! (same geometry, thinned); Low ≈ one upright proxy per ~8 cells; UltraLow = 2×2 carpets.
