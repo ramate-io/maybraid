@@ -24,7 +24,7 @@ Orchard `grow_plant` is the woody template. Tuft groves implement `QuantizedPlan
 
 ## Flatten High / Medium
 
-1. Compose plants with [`nest_flattened_plant_chunk`](src/grove/vc_compose.rs), not `nest_placed_plant_chunk`. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and spawn posed kits only.
+1. Compose plants with [`nest_flattened_plant_chunk`](src/grove/vc_compose.rs), not the unused nested-host helpers in [`placed_host.rs`](src/grove/placed_host.rs). Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and spawn posed kits only.
 2. Lazy `SceneChunk` for the plant list (`SceneChunk::lazy(n, n, …)` yielding one flattened chunk per plant). Begin must not box every `scene_with_level` up front. See Orchard `nest_plant_chunks`.
 3. Feed that list through [`woody_grove_scene_chunks`](src/grove/vc_compose.rs) (or the tuft equivalent).
 4. UltraLow still author canopy proxies (`canopy_proxy_site` for broadleaf spheres, `canopy_proxy_column` for conifers, `canopy_proxy_crown` for palms; `ULTRA_LOW_CANOPY_BIN_METERS`) and emit them through [`flattened_canopy_proxy_chunks`](../vegetation-components/src/lib.rs) (one cheap-ball collection kit, no per-plant `FoliageNode` hosts). Ordinary woody groves also use that on **tile Low**. Palms do not: a crown ball does not read as a palm. Palm-only groves ([Palm Shade](src/palm_shade.rs), [Date Grove](src/date_grove.rs)) nest flattened plants through Low via [`woody_grove_scene_chunks_keep_low_plants`](src/grove/vc_compose.rs) so tile Low instances the plant Low five-chord star. Mixed groves emit that star through [`placed_palm_low_fronds`](src/grove/vc_compose.rs) and keep cheap balls for the other types. Proxies must match silhouette: a 160 m fir is a tall thin ellipsoid, not a 80 m sphere. Waialea UltraLow still keeps a thin trunk column — [`canopy_proxy_waialea`](src/grove/vc_compose.rs). Rory's Head-trained is an umbrella, not a mid-tree sphere: [`canopy_proxy_rory`](src/grove/vc_compose.rs) emits one [`StickGeometry::Trunk`](../vegetation-components/src/sticks/geometry.rs) (no branch segments) plus one leaf-material cheap ball at the stalk tip. Stick UltraLow is empty, so [`flattened_canopy_proxy_chunks`](../vegetation-components/src/lib.rs) presents those trunks at Low. `merge_canopy_proxies` must not fold leftover stick-material cheap balls (Waialea columns) into a bark-colored crown kit. Uniform Low / UltraLow crowns stay **Y-up** (`foliage_placement_for_proxy`) — do not `foliage_uniform` tumble them; an edge-on cheap-ball kit plus rim `discard` reads as a bare pole. Sparse groves ([Forlorn Savanna](src/forlorn_savanna.rs)) skip UltraLow 8 m bins and keep one crown per plant — a shared ball does not sit on isolated trunks.
@@ -56,7 +56,7 @@ Register **the flattened wrapper** in [`vegetation_lod.rs`](../sbs-trees-playgro
 avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);
 ```
 
-Keep `ComponentsOnly<PlacedVegetation<YourTree>>` only if another grove still nests fine-phase hosts. Do not add a second produce plugin per region channel.
+Isolated `/show` trees use that same family (identity [`Placement`](../vegetation-components/src/placed.rs)). Do not add a second produce plugin per region channel.
 
 ## Tests
 

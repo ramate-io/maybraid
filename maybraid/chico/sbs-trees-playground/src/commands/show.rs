@@ -24,7 +24,8 @@ use chico_sbs_trees::{
 	TemperateConiferParams, TuftPatchParams, VaseTreeParams, WaialeaPalmParams,
 };
 use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+	spawn_flattened_placed_vegetation, spawn_lod_scene_host, spawn_vegetation_components,
+	vegetation_bounds, VegetationComponents,
 };
 use clap::{Args, Subcommand};
 use lod::gen::LodScene;
@@ -1327,7 +1328,18 @@ where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
 {
 	let bounds = vegetation_bounds(tree);
-	let entities = spawn_vegetation_components(commands, tree, Transform::IDENTITY, bounds);
+	let entities = spawn_flattened_placed_vegetation(commands, tree, Transform::IDENTITY, bounds);
+	for entity in entities {
+		commands.entity(entity).insert(ShowRoot);
+	}
+}
+
+fn spawn_show_components<T>(commands: &mut Commands, vegetation: &T)
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let bounds = vegetation_bounds(vegetation);
+	let entities = spawn_vegetation_components(commands, vegetation, Transform::IDENTITY, bounds);
 	for entity in entities {
 		commands.entity(entity).insert(ShowRoot);
 	}
@@ -1696,17 +1708,17 @@ pub fn sync_show(
 		ShowSubject::DatePalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::WaialeaPalm(params) => spawn_show_tree(&mut commands, &params.build()),
 		ShowSubject::PalmBush(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::MonsterGrass(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::MonsterGrass(params) => spawn_show_components(&mut commands, &params.build()),
 		ShowSubject::MonsterGrassPlains => {
 			for entity in spawn_monster_grass_plain(&mut commands, Transform::IDENTITY) {
 				commands.entity(entity).insert(ShowRoot);
 			}
 		}
-		ShowSubject::BraidGrass(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::TropicalTufts(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::CommonTufts(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::TallGrass(params) => spawn_show_tree(&mut commands, &params.build()),
-		ShowSubject::WildGrass(params) => spawn_show_tree(&mut commands, &params.build()),
+		ShowSubject::BraidGrass(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::TropicalTufts(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::CommonTufts(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::TallGrass(params) => spawn_show_components(&mut commands, &params.build()),
+		ShowSubject::WildGrass(params) => spawn_show_components(&mut commands, &params.build()),
 		ShowSubject::BushScrub(params) => spawn_show_grove(&mut commands, &params.build()),
 		ShowSubject::TropicalUndergrowth(params) => {
 			spawn_show_grove(&mut commands, &params.build())

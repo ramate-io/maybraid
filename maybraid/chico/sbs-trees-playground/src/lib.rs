@@ -27,19 +27,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_material_lib::ChicoMaterialRefPlugin;
-use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
-use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
-use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
-use chico_sbs_trees::honu_banyan::render_item_plugin::ensure_registered as ensure_honu_banyan_render_plugins;
-use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
-use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
-use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as ensure_northern_conifer_render_plugins;
-use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
-use chico_sbs_trees::simplemans_hedge::render_item_plugin::ensure_registered as ensure_simplemans_hedge_render_plugins;
-use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
-use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
-use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
-use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
+use chico_sbs_trees::ensure_chico_tree_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin};
 use chico_vegetation_shaders::{
@@ -69,19 +57,7 @@ pub fn register_vegetation_view(app: &mut App) {
 	if !app.is_plugin_added::<VegetationLodRefreshPlugin>() {
 		app.add_plugins(VegetationLodRefreshPlugin);
 	}
-	ensure_honu_banyan_render_plugins(app);
-	ensure_liams_conifer_render_plugins(app);
-	ensure_friends_conifer_render_plugins(app);
-	ensure_northern_conifer_render_plugins(app);
-	ensure_temperate_conifer_render_plugins(app);
-	ensure_date_palm_render_plugins(app);
-	ensure_palm_bush_render_plugins(app);
-	ensure_waialea_palm_render_plugins(app);
-	ensure_storybook_tree_render_plugins(app);
-	ensure_simplemans_hedge_render_plugins(app);
-	ensure_vase_tree_render_plugins(app);
-	ensure_braid_oak_tree_render_plugins(app);
-	ensure_jungle_storybook_tree_render_plugins(app);
+	ensure_chico_tree_render_plugins(app);
 	if !app.is_plugin_added::<TuftRenderItemPlugin>() {
 		app.add_plugins(TuftRenderItemPlugin::default());
 	}

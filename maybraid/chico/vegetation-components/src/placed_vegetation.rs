@@ -7,6 +7,7 @@ use material_ref::MaterialRef;
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
 use crate::layer::Layers;
+use crate::materials::{chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref};
 use crate::placed::Placement;
 use crate::sticks::node::StickNode;
 use crate::structural_lod::StructuralLod;
@@ -25,7 +26,8 @@ fn is_frond_geometry(geometry: &FoliageGeometry) -> bool {
 ///
 /// Placement is baked into emitted nodes and [`structural_lod`] so banding uses
 /// parent-local positions (camera [`LodRef`](lod::LodRef) is world-space). Nest as
-/// [`crate::ComponentsOnly`]`<PlacedVegetation<T>>` under a grove host.
+/// [`crate::FlattenedComponentsOnly`]`<PlacedVegetation<T>>` under a grove or isolated
+/// `/show` host.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct PlacedVegetation<T: Send + Sync + 'static> {
 	pub vegetation: T,
@@ -44,6 +46,17 @@ impl<T: Send + Sync + 'static> PlacedVegetation<T> {
 		frond_material: MaterialRef,
 	) -> Self {
 		Self { vegetation, placement, stick_material, ball_material, frond_material }
+	}
+
+	/// Identity pose with the standard Chico stick / leaf / frond recipes.
+	pub fn identity(vegetation: T) -> Self {
+		Self::new(
+			vegetation,
+			Placement::IDENTITY,
+			chico_stick_material_ref(),
+			chico_leaf_material_ref(),
+			chico_frond_material_ref(),
+		)
 	}
 }
 

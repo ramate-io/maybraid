@@ -15,6 +15,8 @@ use chico_groves::{
 	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
 	WanderingAcaciaParams, WildGrassParams,
 };
+use chico_sbs_trees::SkippedLeafMeshMaterial;
+use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_sbs_trees::braid_oak_tree::BraidOakTreeParams;
 use chico_sbs_trees::date_palm::DatePalmParams;
 use chico_sbs_trees::friends_conifer::FriendsConiferParams;
@@ -32,13 +34,12 @@ use chico_sbs_trees::temperate_conifer::TemperateConiferParams;
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
 use chico_sbs_trees::vase_tree::VaseTreeParams;
 use chico_sbs_trees::waialea_palm::WaialeaPalmParams;
-use chico_sbs_trees::SkippedLeafMeshMaterial;
-use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
 	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
 };
 use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+	VegetationComponents, spawn_flattened_placed_vegetation, spawn_lod_scene_host,
+	spawn_vegetation_components, vegetation_bounds,
 };
 use chico_vegetation_shaders::ChicoStickMaterial;
 use chunk::cascade::CascadeChunk;
@@ -874,89 +875,89 @@ impl RenderSubject {
 			Self::SopesBanyan(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::HonuBanyan(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::LiamsConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::FriendsConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::NorthernConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::TemperateConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::DatePalm(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::WaialeaPalm(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::PalmBush(item) => {
 				let bush = item.build();
 				let bounds = vegetation_bounds(&bush);
-				spawn_vegetation_components(commands, &bush, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &bush, transform, bounds)
 			}
 			Self::StorybookTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::PenmarchTorch(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::KamakuraTorch(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::RorysHeadTrained(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::VaseTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::BraidOakTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::JungleStorybookTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TuftPatch(item) => {
 				let patch = item.build();
 				let bounds = vegetation_bounds(&patch);
-				spawn_vegetation_components(commands, &patch, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &patch, transform, bounds)
 			}
 			Self::BraidGrass(item) => {
 				let grove = item.build();

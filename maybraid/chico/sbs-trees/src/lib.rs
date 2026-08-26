@@ -57,3 +57,20 @@ pub use temperate_conifer::{TemperateConifer, TemperateConiferParams};
 pub use tuft_patch::{TuftPatch, TuftPatchParams};
 pub use vase_tree::{VaseTree, VaseTreeParams};
 pub use waialea_palm::{WaialeaPalm, WaialeaPalmParams};
+
+/// Register every tree RenderItem plugin the playground `/render` path still uses.
+pub fn ensure_chico_tree_render_plugins(app: &mut bevy::prelude::App) {
+	braid_oak_tree::render_item_plugin::ensure_registered(app);
+	date_palm::render_item_plugin::ensure_registered(app);
+	friends_conifer::render_item_plugin::ensure_registered(app);
+	honu_banyan::render_item_plugin::ensure_registered(app);
+	jungle_storybook_tree::render_item_plugin::ensure_registered(app);
+	liams_conifer::render_item_plugin::ensure_registered(app);
+	northern_conifer::render_item_plugin::ensure_registered(app);
+	palm_bush::render_item_plugin::ensure_registered(app);
+	simplemans_hedge::render_item_plugin::ensure_registered(app);
+	storybook_tree::render_item_plugin::ensure_registered(app);
+	temperate_conifer::render_item_plugin::ensure_registered(app);
+	vase_tree::render_item_plugin::ensure_registered(app);
+	waialea_palm::render_item_plugin::ensure_registered(app);
+}

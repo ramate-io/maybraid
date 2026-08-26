@@ -1,7 +1,8 @@
 //! Tree-level structural LOD banding (distance / tree-radius factors).
 //!
 //! Plain data returned from [`crate::VegetationComponents::structural_lod`] — not an
-//! ECS component. Host presentation uses [`crate::ComponentsOnly`] as the [`lod::LodScene`].
+//! ECS component. Host presentation uses [`crate::FlattenedComponentsOnly`] (plants)
+//! or [`crate::ComponentsOnly`] (tuft groves without [`lod::LodScene`] yet).
 
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;

@@ -66,7 +66,7 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
-	/// When set, drives structural [`LodScene`] banding / bounds for [`ComponentsOnly`].
+	/// When set, drives structural [`LodScene`] banding / bounds for host wrappers.
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		None
 	}
@@ -523,7 +523,25 @@ where
 	vec![entity]
 }
 
-/// Spawn a typed [`LodScene`] host (grove roots that nest [`ComponentsOnly`] plants).
+/// Spawn a [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>` host.
+///
+/// Isolated `/show` / `/render` plants use this family so they share grove plant hosts.
+pub fn spawn_flattened_placed_vegetation<T>(
+	commands: &mut Commands,
+	vegetation: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+) -> Vec<Entity>
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let host = FlattenedComponentsOnly(PlacedVegetation::identity(std::sync::Arc::new(
+		vegetation.clone(),
+	)));
+	spawn_lod_scene_host(commands, &host, transform, bounds)
+}
+
+/// Spawn a typed [`LodScene`] host (grove roots that nest flattened plant hosts).
 pub fn spawn_lod_scene_host<T>(
 	commands: &mut Commands,
 	host: &T,
