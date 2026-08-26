@@ -487,36 +487,11 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		LowerStorybook,
-		StorybookTree,
-		StorybookTreeParams,
-		LOWER_STORYBOOK
-	);
-	remixed_sbs_plant!(
-		PenmarchAccent,
-		PenmarchTorch,
-		PenmarchTorchParams,
-		PENUMARCH_ACCENT
-	);
-	remixed_sbs_plant!(
-		RedJungleTorch,
-		PenmarchTorch,
-		PenmarchTorchParams,
-		RED_JUNGLE_TORCH
-	);
-	remixed_sbs_plant!(
-		RoryAccent,
-		RorysHeadTrained,
-		RorysHeadTrainedParams,
-		RORY_ACCENT
-	);
-	remixed_sbs_plant!(
-		WaialeaPalmAccent,
-		WaialeaPalm,
-		WaialeaPalmParams,
-		WAIALEA_PALM_ACCENT
-	);
+	remixed_sbs_plant!(LowerStorybook, StorybookTree, StorybookTreeParams, LOWER_STORYBOOK);
+	remixed_sbs_plant!(PenmarchAccent, PenmarchTorch, PenmarchTorchParams, PENUMARCH_ACCENT);
+	remixed_sbs_plant!(RedJungleTorch, PenmarchTorch, PenmarchTorchParams, RED_JUNGLE_TORCH);
+	remixed_sbs_plant!(RoryAccent, RorysHeadTrained, RorysHeadTrainedParams, RORY_ACCENT);
+	remixed_sbs_plant!(WaialeaPalmAccent, WaialeaPalm, WaialeaPalmParams, WAIALEA_PALM_ACCENT);
 
 	#[derive(Clone)]
 	enum UnendingJungleKind {
@@ -805,7 +780,8 @@ mod vc {
 			}
 			UnendingJungleCell::SmallJungleStorybook => {
 				let build_noise = variant_noise(grove_noise, variant);
-				let world_size = SMALL_JUNGLE_STORYBOOK.build_with_noise(build_noise).geometry.height();
+				let world_size =
+					SMALL_JUNGLE_STORYBOOK.build_with_noise(build_noise).geometry.height();
 				(
 					UnendingJungleKind::JungleStorybook(JungleStorybookTree::grow_num(variant).0),
 					world_size,

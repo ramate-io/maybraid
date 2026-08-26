@@ -565,12 +565,7 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		ColorfulStorybook,
-		StorybookTree,
-		StorybookTreeParams,
-		COLORFUL_STORYBOOK
-	);
+	remixed_sbs_plant!(ColorfulStorybook, StorybookTree, StorybookTreeParams, COLORFUL_STORYBOOK);
 	remixed_sbs_plant!(
 		BrightCanopyStorybook,
 		StorybookTree,
@@ -589,12 +584,7 @@ mod vc {
 		StorybookTreeParams,
 		PURPLE_CROWN_STORYBOOK
 	);
-	remixed_sbs_plant!(
-		BlueMoonStorybook,
-		StorybookTree,
-		StorybookTreeParams,
-		BLUE_MOON_STORYBOOK
-	);
+	remixed_sbs_plant!(BlueMoonStorybook, StorybookTree, StorybookTreeParams, BLUE_MOON_STORYBOOK);
 
 	struct GoldenLanternPenmarch;
 	impl QuantizedPlant for GoldenLanternPenmarch {
@@ -800,8 +790,12 @@ mod vc {
 					StorytellersCell::BrightCanopyStorybook => {
 						BrightCanopyStorybook::grow_num(variant)
 					}
-					StorytellersCell::PinkLanternStorybook => PinkLanternStorybook::grow_num(variant),
-					StorytellersCell::PurpleCrownStorybook => PurpleCrownStorybook::grow_num(variant),
+					StorytellersCell::PinkLanternStorybook => {
+						PinkLanternStorybook::grow_num(variant)
+					}
+					StorytellersCell::PurpleCrownStorybook => {
+						PurpleCrownStorybook::grow_num(variant)
+					}
 					StorytellersCell::BlueMoonStorybook => BlueMoonStorybook::grow_num(variant),
 					_ => unreachable!("storybook item is only storybook cells"),
 				};

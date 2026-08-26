@@ -20,7 +20,7 @@ If the tree or tuft still emits one node per stick/ball and has no `into_unit_fr
 
 6. Store the `Arc` from `grow_num`. Begin/drain must not clone the grown chain per chunk. Do not cache materials, `Placement`, or world-space proxy sites.
 
-Orchard `grow_plant` is the woody template. Tuft groves use [`unit_plant_from_params`](src/grove/vc_tuft.rs).
+Orchard `grow_plant` is the woody template. Tuft groves implement `QuantizedPlant` on one wrapper per authored clump/patch const ([`remixed_tuft_plant!`](src/grove/quantized.rs) / [`remixed_blade_tuft_plant!`](src/grove/quantized.rs)), store the `Arc` from `grow_num`, and clone out of that `Arc` only when `merge_collections > 0` (default `0` shares the unit). See [`grow_placed_tuft_params`](src/grove/vc_tuft.rs) and [Monster Grass](src/monster_grass.rs).
 
 ## Flatten High / Medium
 

@@ -503,18 +503,8 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		DryRoryHead,
-		RorysHeadTrained,
-		RorysHeadTrainedParams,
-		DRY_RORY_HEAD
-	);
-	remixed_sbs_plant!(
-		SmallVaseTree,
-		VaseTree,
-		VaseTreeParams,
-		SMALL_VASE_TREE
-	);
+	remixed_sbs_plant!(DryRoryHead, RorysHeadTrained, RorysHeadTrainedParams, DRY_RORY_HEAD);
+	remixed_sbs_plant!(SmallVaseTree, VaseTree, VaseTreeParams, SMALL_VASE_TREE);
 	remixed_bush_plant!(DryHighBush, DRY_HIGH_BUSH);
 	remixed_sbs_plant!(
 		SmallPenmarchTorch,
@@ -522,12 +512,7 @@ mod vc {
 		PenmarchTorchParams,
 		SMALL_PENMARCH_TORCH
 	);
-	remixed_sbs_plant!(
-		RedOliveTorch,
-		PenmarchTorch,
-		PenmarchTorchParams,
-		RED_OLIVE_TORCH
-	);
+	remixed_sbs_plant!(RedOliveTorch, PenmarchTorch, PenmarchTorchParams, RED_OLIVE_TORCH);
 
 	fn scrub_hedge_unit(authored: &LevantineScrubHedge, num: u32) -> (SimplemansHedge, f32) {
 		let samples = authored.build_with_noise(unit_build_noise(num));

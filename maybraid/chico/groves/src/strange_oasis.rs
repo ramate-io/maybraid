@@ -406,8 +406,7 @@ mod vc {
 			let (unit_trunk, trunk_world) = trunk_params.into_unit_from_num(num);
 			let trunk = unit_trunk.build();
 			let tip = DatePalmSbs::trunk_tip_from_chain(&trunk.chain);
-			let (unit_crown, crown_size) =
-				PalmCrownParams::unit_full_for_height_from_num(1.0, num);
+			let (unit_crown, crown_size) = PalmCrownParams::unit_full_for_height_from_num(1.0, num);
 			let crown = unit_crown.build();
 			let crown_local =
 				Placement::new(tip, 0.0).with_scale(Vec3::splat(crown_size.max(1e-4)));
@@ -415,24 +414,9 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		TorchAccent,
-		PenmarchTorch,
-		PenmarchTorchParams,
-		TORCH_ACCENT
-	);
-	remixed_sbs_plant!(
-		RedTorchAccent,
-		PenmarchTorch,
-		PenmarchTorchParams,
-		RED_TORCH_ACCENT
-	);
-	remixed_sbs_plant!(
-		OasisStorybook,
-		StorybookTree,
-		StorybookTreeParams,
-		OASIS_STORYBOOK
-	);
+	remixed_sbs_plant!(TorchAccent, PenmarchTorch, PenmarchTorchParams, TORCH_ACCENT);
+	remixed_sbs_plant!(RedTorchAccent, PenmarchTorch, PenmarchTorchParams, RED_TORCH_ACCENT);
+	remixed_sbs_plant!(OasisStorybook, StorybookTree, StorybookTreeParams, OASIS_STORYBOOK);
 
 	#[derive(Clone)]
 	enum StrangeOasisKind {

@@ -413,12 +413,7 @@ mod vc {
 	}
 
 	remixed_bush_plant!(WanderingHighBush, WANDERING_HIGH_BUSH);
-	remixed_sbs_plant!(
-		WanderingVaseTree,
-		VaseTree,
-		VaseTreeParams,
-		WANDERING_VASE_TREE
-	);
+	remixed_sbs_plant!(WanderingVaseTree, VaseTree, VaseTreeParams, WANDERING_VASE_TREE);
 
 	fn wandering_penmarch_unit(authored: &WanderingAcaciaTorch, num: u32) -> (PenmarchTorch, f32) {
 		let mut params = PenmarchTorchParams::default();

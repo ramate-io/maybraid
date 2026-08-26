@@ -262,8 +262,8 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{
-		definition, RiparianMixCell, RiparianMixItem, BANK_FRIEND_CONIFER, ROUND_RIPARIAN_STORYBOOK,
-		SHELTERED_TEMPERATE_CONIFER, TALL_RIPARIAN_STORYBOOK,
+		definition, RiparianMixCell, RiparianMixItem, BANK_FRIEND_CONIFER,
+		ROUND_RIPARIAN_STORYBOOK, SHELTERED_TEMPERATE_CONIFER, TALL_RIPARIAN_STORYBOOK,
 	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{

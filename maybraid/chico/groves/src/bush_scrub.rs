@@ -237,22 +237,25 @@ mod vc {
 	use lod::lod_ref::LodRef;
 	use lod::{lod_host_scene_pending, SceneChunk};
 	use material_ref::MaterialRef;
-	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, BushScrubCell, BushScrubItem, SAPLING_BUSH, SMALL_BUSH};
+	use super::{
+		definition, BushScrubCell, DRY_TUFT, DRY_TUFT_PATCH, GREEN_TUFT, GREEN_TUFT_PATCH,
+		SAPLING_BUSH, SMALL_BUSH,
+	};
 	use crate::grove::vc_tuft::{
-		material_from_palette, patch_variant_index, single_blade_patch_params, stamp_foliage_noise,
-		unit_plant_from_params, variant_noise, TUFT_GROVE_STRUCTURAL_HIGH_FACTOR,
-		TUFT_GROVE_STRUCTURAL_LOW_FACTOR, TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
+		material_from_palette, patch_variant_index, unit_plant_from_grown,
+		TUFT_GROVE_STRUCTURAL_HIGH_FACTOR, TUFT_GROVE_STRUCTURAL_LOW_FACTOR,
+		TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR,
 	};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_bush_plant,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, remixed_blade_tuft_plant,
+		remixed_bush_plant, remixed_tuft_plant, stick_material_from_palette, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const BUSH_SCRUB_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -384,6 +387,14 @@ mod vc {
 		}
 	}
 
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.06, 1)
+	}
+
+	remixed_blade_tuft_plant!(DryTuft, DRY_TUFT, default_foliage());
+	remixed_blade_tuft_plant!(GreenTuft, GREEN_TUFT, default_foliage());
+	remixed_tuft_plant!(DryTuftPatch, DRY_TUFT_PATCH, default_foliage());
+	remixed_tuft_plant!(GreenTuftPatch, GREEN_TUFT_PATCH, default_foliage());
 	remixed_bush_plant!(BushScrubSmall, SMALL_BUSH);
 	remixed_bush_plant!(BushScrubSapling, SAPLING_BUSH);
 
@@ -526,57 +537,40 @@ mod vc {
 		patch_variants: u32,
 		tree_variants: u32,
 	) -> BushScrubPlant {
-		match placed.variant.item() {
-			BushScrubItem::Tuft(tuft) => {
+		match placed.variant {
+			BushScrubCell::DryTuft
+			| BushScrubCell::GreenTuft
+			| BushScrubCell::DryTuftPatch
+			| BushScrubCell::GreenTuftPatch => {
 				let variant = patch_variant_index(placed.position, patch_variants);
-				let noise = variant_noise(leaf_surface_noise, variant);
-				let params =
-					single_blade_patch_params(tuft.build_with_noise(noise), leaf_surface_noise);
+				let (patch, world_size) = match placed.variant {
+					BushScrubCell::DryTuft => DryTuft::grow_num(variant),
+					BushScrubCell::GreenTuft => GreenTuft::grow_num(variant),
+					BushScrubCell::DryTuftPatch => DryTuftPatch::grow_num(variant),
+					BushScrubCell::GreenTuftPatch => GreenTuftPatch::grow_num(variant),
+					_ => unreachable!("tuft cells only"),
+				};
 				let material = material_from_palette(
 					placed.variant.palette_mix(),
 					placed.position,
 					leaf_surface_noise,
 				);
-				let (placement, patch, material) = unit_plant_from_params(
-					params,
-					variant,
+				let (placement, patch, material) = unit_plant_from_grown(
+					patch,
+					world_size,
 					placed.position,
 					placed.scale,
 					material,
 				);
 				BushScrubPlant {
 					placement,
-					kind: BushScrubKind::Tuft(Arc::new(patch)),
+					kind: BushScrubKind::Tuft(patch),
 					stick_material: MaterialRef::default(),
 					ball_material: material.clone(),
 					frond_material: material,
 				}
 			}
-			BushScrubItem::Patch(patch) => {
-				let variant = patch_variant_index(placed.position, patch_variants);
-				let noise = variant_noise(leaf_surface_noise, variant);
-				let params = stamp_foliage_noise(patch.build_tuft_patch(noise), leaf_surface_noise);
-				let material = material_from_palette(
-					placed.variant.palette_mix(),
-					placed.position,
-					leaf_surface_noise,
-				);
-				let (placement, patch, material) = unit_plant_from_params(
-					params,
-					variant,
-					placed.position,
-					placed.scale,
-					material,
-				);
-				BushScrubPlant {
-					placement,
-					kind: BushScrubKind::Tuft(Arc::new(patch)),
-					stick_material: MaterialRef::default(),
-					ball_material: material.clone(),
-					frond_material: material,
-				}
-			}
-			BushScrubItem::Bush(_) => {
+			BushScrubCell::SmallBush | BushScrubCell::SaplingBush => {
 				let variant = patch_variant_index(placed.position, tree_variants);
 				let palette_noise = placement_noise(grove_noise, placed.position);
 				let stick_seed = palette_noise.seed;

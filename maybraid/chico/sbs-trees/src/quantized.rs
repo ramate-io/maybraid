@@ -79,6 +79,7 @@ impl_default_unit! {
 	crate::SopesBanyan, crate::SopesBanyanParams;
 	crate::StorybookTree, crate::StorybookTreeParams;
 	crate::TemperateConifer, crate::TemperateConiferParams;
+	crate::TuftPatch, crate::TuftPatchParams;
 	crate::VaseTree, crate::VaseTreeParams;
 	crate::WaialeaPalm, crate::WaialeaPalmParams;
 }
@@ -86,7 +87,7 @@ impl_default_unit! {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::StorybookTree;
+	use crate::{StorybookTree, TuftPatch};
 
 	#[test]
 	fn grow_num_reuses_arc_for_same_type_and_num() {
@@ -97,5 +98,15 @@ mod tests {
 		assert!((sa - sb).abs() < 1e-5);
 		assert!(!Arc::ptr_eq(&a, &c));
 		assert!((a.geometry.height() - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn tuft_grow_num_reuses_arc_for_same_num() {
+		let (a, sa) = TuftPatch::grow_num(3);
+		let (b, sb) = TuftPatch::grow_num(3);
+		let (c, _) = TuftPatch::grow_num(4);
+		assert!(Arc::ptr_eq(&a, &b));
+		assert!((sa - sb).abs() < 1e-5);
+		assert!(!Arc::ptr_eq(&a, &c));
 	}
 }

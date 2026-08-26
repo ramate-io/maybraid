@@ -188,7 +188,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		QuantizedPlant, StorybookTree, StorybookTreeParams, TemperateConifer, TemperateConiferParams,
+		QuantizedPlant, StorybookTree, StorybookTreeParams, TemperateConifer,
+		TemperateConiferParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,

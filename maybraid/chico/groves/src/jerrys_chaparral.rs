@@ -399,18 +399,8 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		DryRoryHead,
-		RorysHeadTrained,
-		RorysHeadTrainedParams,
-		DRY_RORY_HEAD
-	);
-	remixed_sbs_plant!(
-		ManzanitaRory,
-		RorysHeadTrained,
-		RorysHeadTrainedParams,
-		MANZANITA_RORY
-	);
+	remixed_sbs_plant!(DryRoryHead, RorysHeadTrained, RorysHeadTrainedParams, DRY_RORY_HEAD);
+	remixed_sbs_plant!(ManzanitaRory, RorysHeadTrained, RorysHeadTrainedParams, MANZANITA_RORY);
 	remixed_bush_plant!(ChaparralHighBush, CHAPARRAL_HIGH_BUSH);
 
 	fn chaparral_friends_unit(

@@ -206,8 +206,8 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 	use super::{
-		definition, ForlornSavannaCell, ForlornSavannaItem, ACACIA_HIGH_BUSH, RARE_SAVANNA_STORYBOOK,
-		SAVANNA_RORY,
+		definition, ForlornSavannaCell, ForlornSavannaItem, ACACIA_HIGH_BUSH,
+		RARE_SAVANNA_STORYBOOK, SAVANNA_RORY,
 	};
 	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{

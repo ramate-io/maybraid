@@ -54,5 +54,47 @@ macro_rules! remixed_bush_plant {
 	};
 }
 
+/// One remixed [`GroveTuftPatch`] silhouette.
+macro_rules! remixed_tuft_plant {
+	($name:ident, $authored:expr, $default_foliage:expr) => {
+		struct $name;
+		impl ::chico_sbs_trees::QuantizedPlant for $name {
+			type Unit = ::chico_sbs_trees::TuftPatch;
+			fn build_unit(num: u32) -> (::chico_sbs_trees::TuftPatch, f32) {
+				$crate::grove::remixed_tuft_unit(&$authored, num, $default_foliage)
+			}
+		}
+	};
+}
+
+/// One remixed single-clump blade tuft.
+macro_rules! remixed_blade_tuft_plant {
+	($name:ident, $authored:expr, $default_foliage:expr) => {
+		struct $name;
+		impl ::chico_sbs_trees::QuantizedPlant for $name {
+			type Unit = ::chico_sbs_trees::TuftPatch;
+			fn build_unit(num: u32) -> (::chico_sbs_trees::TuftPatch, f32) {
+				$crate::grove::remixed_blade_tuft_unit(&$authored, num, $default_foliage)
+			}
+		}
+	};
+}
+
+/// One remixed spear clump approximated as a blade tuft.
+macro_rules! remixed_spear_tuft_plant {
+	($name:ident, $authored:expr, $default_foliage:expr) => {
+		struct $name;
+		impl ::chico_sbs_trees::QuantizedPlant for $name {
+			type Unit = ::chico_sbs_trees::TuftPatch;
+			fn build_unit(num: u32) -> (::chico_sbs_trees::TuftPatch, f32) {
+				$crate::grove::remixed_spear_tuft_unit(&$authored, num, $default_foliage)
+			}
+		}
+	};
+}
+
+pub(crate) use remixed_blade_tuft_plant;
 pub(crate) use remixed_bush_plant;
 pub(crate) use remixed_sbs_plant;
+pub(crate) use remixed_spear_tuft_plant;
+pub(crate) use remixed_tuft_plant;

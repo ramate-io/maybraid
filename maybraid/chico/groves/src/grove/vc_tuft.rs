@@ -4,6 +4,7 @@
 //! collections, Low upright proxies, and UltraLow carpets tilted to the plant heightfield.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuftShape, SpearTuftShape};
@@ -14,7 +15,7 @@ use chico_vegetation_components::{
 };
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
+use procedural_common::{BuildWithNoise, NoiseParams};
 
 use super::{placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent, PaletteMix};
 
@@ -48,7 +49,7 @@ impl TuftGroveProxyHeights {
 #[derive(Clone, Debug)]
 pub struct TuftGrovePlant {
 	pub placement: Placement,
-	pub patch: TuftPatch,
+	pub patch: Arc<TuftPatch>,
 	pub material: MaterialRef,
 }
 
@@ -132,9 +133,54 @@ pub fn stamp_foliage_noise(
 	params
 }
 
-/// Grow unit [`TuftPatch`] plants from prebuilt params; fold when `merge_collections > 0`.
+/// Unit [`TuftPatch`] from an authored [`super::GroveTuftPatch`] and default foliage noise.
+pub fn remixed_tuft_unit<C>(
+	authored: &super::GroveTuftPatch<C>,
+	num: u32,
+	default_foliage: NoiseParams,
+) -> (TuftPatch, f32)
+where
+	C: BuildWithNoise<BladeTuftShape>,
+{
+	let noise = variant_noise(default_foliage, num);
+	let params = stamp_foliage_noise(authored.build_tuft_patch(noise), default_foliage);
+	let (unit, world_size) = params.into_unit_from_num(num);
+	(unit.build(), world_size)
+}
+
+/// Unit [`TuftPatch`] from a single authored blade clump.
+pub fn remixed_blade_tuft_unit<C>(
+	authored: &C,
+	num: u32,
+	default_foliage: NoiseParams,
+) -> (TuftPatch, f32)
+where
+	C: BuildWithNoise<BladeTuftShape>,
+{
+	let noise = variant_noise(default_foliage, num);
+	let params = single_blade_patch_params(authored.build_with_noise(noise), default_foliage);
+	let (unit, world_size) = params.into_unit_from_num(num);
+	(unit.build(), world_size)
+}
+
+/// Unit [`TuftPatch`] from an authored spear clump (VC approximates spears as blades).
+pub fn remixed_spear_tuft_unit<C>(
+	authored: &C,
+	num: u32,
+	default_foliage: NoiseParams,
+) -> (TuftPatch, f32)
+where
+	C: BuildWithNoise<SpearTuftShape>,
+{
+	let noise = variant_noise(default_foliage, num);
+	let params = spear_as_blade_patch_params(authored.build_with_noise(noise), default_foliage);
+	let (unit, world_size) = params.into_unit_from_num(num);
+	(unit.build(), world_size)
+}
+
+/// Grow cached unit [`TuftPatch`] plants; clone out of the [`Arc`] when `merge_collections > 0`.
 pub fn grow_tuft_plants(
-	grown: Vec<(Placement, TuftPatch, MaterialRef)>,
+	grown: Vec<(Placement, Arc<TuftPatch>, MaterialRef)>,
 	merge_collections: usize,
 ) -> Vec<TuftGrovePlant> {
 	if merge_collections == 0 {
@@ -143,11 +189,8 @@ pub fn grow_tuft_plants(
 			.map(|(placement, patch, material)| TuftGrovePlant { placement, patch, material })
 			.collect();
 	}
-	let pairs: Vec<(Placement, TuftPatch)> =
-		grown.iter().map(|(p, patch, _)| (*p, patch.clone())).collect();
-	let materials: Vec<MaterialRef> = grown.into_iter().map(|(_, _, m)| m).collect();
 	let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> =
-		pairs.into_iter().zip(materials).map(|((p, patch), m)| (p, patch, m)).collect();
+		grown.into_iter().map(|(p, patch, m)| (p, (*patch).clone(), m)).collect();
 	remaining.sort_by(|a, b| {
 		a.0.translation
 			.x
@@ -168,23 +211,26 @@ pub fn grow_tuft_plants(
 			next.apply_placement(placement);
 			merged.merge(next);
 		}
-		plants.push(TuftGrovePlant { placement: Placement::IDENTITY, patch: merged, material });
+		plants.push(TuftGrovePlant {
+			placement: Placement::IDENTITY,
+			patch: Arc::new(merged),
+			material,
+		});
 	}
 	plants
 }
 
-/// Quantize one placement's params to a unit archetype and world placement scale.
-pub fn unit_plant_from_params(
-	params: chico_sbs_trees::TuftPatchParams,
-	variant: u32,
+/// Pose a cached unit [`TuftPatch`] at a world placement.
+pub fn unit_plant_from_grown(
+	patch: Arc<TuftPatch>,
+	world_size: f32,
 	world_position: Vec3,
 	placed_scale: f32,
 	material: MaterialRef,
-) -> (Placement, TuftPatch, MaterialRef) {
-	let (unit_params, world_size) = params.into_unit_from_num(variant);
+) -> (Placement, Arc<TuftPatch>, MaterialRef) {
 	let placement = Placement::new(world_position, 0.0)
 		.with_scale(Vec3::splat((placed_scale * world_size).max(1e-4)));
-	(placement, unit_params.build(), material)
+	(placement, patch, material)
 }
 
 impl TuftGroveBody {
@@ -248,8 +294,9 @@ impl TuftGroveBody {
 		let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 		let origin = self.extent.min();
 		let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
-		let samples =
-			surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
+		let samples = surface_samples_from_plants(
+			self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
+		);
 
 		for plant in &self.plants {
 			let patch = &plant.patch;
@@ -287,8 +334,9 @@ impl TuftGroveBody {
 
 	pub fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-		let samples =
-			surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
+		let samples = surface_samples_from_plants(
+			self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
+		);
 		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra, &samples)
 			.into_iter()
 			.map(|placement| {
@@ -467,27 +515,26 @@ pub fn tuft_grove_stick_nodes(_level: LodSceneLevel) -> Layers<StickNode> {
 /// Helper used by Params defaults for flat terrain (elevation left to clap / Default).
 pub type TuftTerrain = FlatTerrainSample;
 
-/// Grow helper for a cell that yields [`chico_sbs_trees::TuftPatchParams`] + palette.
+/// Grow helper: `grow(cell, variant)` returns a cached unit plus palette mix.
 pub fn grow_placed_tuft_params<C, F>(
 	placements: &[GroveCellVariant<C>],
 	foliage_noise: NoiseParams,
 	merge_collections: usize,
 	patch_variants: u32,
-	mut params_for: F,
+	mut grow: F,
 ) -> Vec<TuftGrovePlant>
 where
 	C: Copy,
-	F: FnMut(C, NoiseParams) -> (chico_sbs_trees::TuftPatchParams, PaletteMix),
+	F: FnMut(C, u32) -> (Arc<TuftPatch>, f32, PaletteMix),
 {
 	let variants = patch_variants.max(1);
-	let grown: Vec<(Placement, TuftPatch, MaterialRef)> = placements
+	let grown: Vec<(Placement, Arc<TuftPatch>, MaterialRef)> = placements
 		.iter()
 		.map(|placed| {
 			let variant = patch_variant_index(placed.position, variants);
-			let noise = variant_noise(foliage_noise, variant);
-			let (params, mix) = params_for(placed.variant, noise);
+			let (patch, world_size, mix) = grow(placed.variant, variant);
 			let material = material_from_palette(mix, placed.position, foliage_noise);
-			unit_plant_from_params(params, variant, placed.position, placed.scale, material)
+			unit_plant_from_grown(patch, world_size, placed.position, placed.scale, material)
 		})
 		.collect();
 	grow_tuft_plants(grown, merge_collections)

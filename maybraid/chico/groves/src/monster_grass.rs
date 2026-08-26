@@ -238,23 +238,29 @@ impl MonsterGrassCell {
 
 #[cfg(feature = "render")]
 mod vc {
+	use std::sync::Arc;
+
 	use bevy::prelude::*;
-	use chico_sbs_trees::TuftPatch;
+	use chico_sbs_trees::{QuantizedPlant, TuftPatch};
 	use chico_vegetation_components::{
-		chico_frond_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement,
-		StickNode, StructuralLod, VegetationComponents,
+		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
+		VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
 	use material_ref::MaterialRef;
 	use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-	use super::{definition, MonsterGrassCell};
+	use super::{
+		definition, MonsterGrassCell, BROAD_JUNGLE_BLADE, BROAD_JUNGLE_BLADE_PATCH,
+		GIANT_WET_BLADE, GIANT_WET_BLADE_PATCH, PALE_GIANT_REED, PALE_GIANT_REED_PATCH,
+		RED_RIBBED_BLADE, RED_RIBBED_BLADE_PATCH,
+	};
 	use crate::grove::{
-		placement_noise,
+		remixed_tuft_plant,
 		vc_tuft::{
-			horizontal_grid_proxy_placements, surface_normal_at, surface_samples_from_plants,
-			upright_proxy_run,
+			grow_placed_tuft_params, horizontal_grid_proxy_placements, surface_normal_at,
+			surface_samples_from_plants, upright_proxy_run,
 		},
 		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 	};
@@ -386,41 +392,26 @@ mod vc {
 		}
 	}
 
-	/// Stable archetype index in `0..variants` from world XZ.
-	fn patch_variant_index(position: Vec3, variants: u32) -> u32 {
-		let variants = variants.max(1);
-		let h = position
-			.x
-			.to_bits()
-			.wrapping_mul(0x9e3779b9)
-			.wrapping_add(position.z.to_bits().wrapping_mul(0x85ebca77));
-		h % variants
+	fn default_foliage() -> NoiseParams {
+		NoiseParams::from_scalar(0.0, 1.0, 0.20, 1)
 	}
 
-	/// Noise keyed by variant id (not world position) so the same archetype rebuilds identically.
-	fn variant_noise(base: NoiseParams, variant: u32) -> NoiseParams {
-		NoiseParams { seed: base.seed ^ (variant as i32).wrapping_mul(0x45d9f3b), ..base }
-	}
+	remixed_tuft_plant!(GiantWetBlade, GIANT_WET_BLADE, default_foliage());
+	remixed_tuft_plant!(BroadJungleBlade, BROAD_JUNGLE_BLADE, default_foliage());
+	remixed_tuft_plant!(PaleGiantReed, PALE_GIANT_REED, default_foliage());
+	remixed_tuft_plant!(RedRibbedBlade, RED_RIBBED_BLADE, default_foliage());
+	remixed_tuft_plant!(GiantWetBladePatch, GIANT_WET_BLADE_PATCH, default_foliage());
+	remixed_tuft_plant!(BroadJungleBladePatch, BROAD_JUNGLE_BLADE_PATCH, default_foliage());
+	remixed_tuft_plant!(PaleGiantReedPatch, PALE_GIANT_REED_PATCH, default_foliage());
+	remixed_tuft_plant!(RedRibbedBladePatch, RED_RIBBED_BLADE_PATCH, default_foliage());
 
 	/// One grove-local [`TuftPatch`] collection (placement already baked when merged).
 	#[derive(Clone, Debug)]
 	pub struct MonsterGrassPlant {
 		pub placement: Placement,
-		pub patch: TuftPatch,
+		pub patch: Arc<TuftPatch>,
 		/// Chico frond material with one palette-picked color.
 		pub material: MaterialRef,
-	}
-
-	fn material_for_cell(
-		cell: MonsterGrassCell,
-		position: Vec3,
-		foliage_noise: NoiseParams,
-	) -> MaterialRef {
-		let seed = placement_noise(foliage_noise, position).seed;
-		cell.palette_mix()
-			.pick_color(seed)
-			.map(|c| chico_frond_material_ref().with_palette([c]))
-			.unwrap_or_else(chico_frond_material_ref)
 	}
 
 	/// Structural High band (× footprint): full authored clumps.
@@ -460,69 +451,41 @@ mod vc {
 			merge_collections: usize,
 			patch_variants: u32,
 		) -> Self {
-			let variants = patch_variants.max(1);
-			let grown: Vec<(Placement, TuftPatch, MaterialRef)> = placements
-				.iter()
-				.map(|placed| {
-					let variant = patch_variant_index(placed.position, variants);
-					let noise = variant_noise(foliage_noise, variant);
-					let mut params = placed.variant.patch().build_tuft_patch(noise);
-					params.shape.noise_amplitude = foliage_noise.amplitude;
-					params.shape.noise_frequency = foliage_noise.frequency;
-					let (unit_params, world_size) = params.into_unit_from_num(variant);
-					let placement = Placement::new(placed.position, 0.0)
-						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)));
-					let material =
-						material_for_cell(placed.variant, placed.position, foliage_noise);
-					(placement, unit_params.build(), material)
-				})
-				.collect();
-			// Unmerged: keep plant placement (unit runs). Fold: bake placements into runs.
-			let plants = if merge_collections == 0 {
-				grown
-					.into_iter()
-					.map(|(placement, patch, material)| MonsterGrassPlant {
-						placement,
-						patch,
-						material,
-					})
-					.collect()
-			} else {
-				// Fold like [`TuftPatch::merge_placed`], keeping the first plant's material
-				// per output collection.
-				let pairs: Vec<(Placement, TuftPatch)> =
-					grown.iter().map(|(p, patch, _)| (*p, patch.clone())).collect();
-				let materials: Vec<MaterialRef> = grown.into_iter().map(|(_, _, m)| m).collect();
-				let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> =
-					pairs.into_iter().zip(materials).map(|((p, patch), m)| (p, patch, m)).collect();
-				remaining.sort_by(|a, b| {
-					a.0.translation
-						.x
-						.total_cmp(&b.0.translation.x)
-						.then(a.0.translation.z.total_cmp(&b.0.translation.z))
-				});
-				let target = merge_collections.max(1);
-				let chunk_len = remaining.len().div_ceil(target);
-				let mut plants = Vec::with_capacity(target.min(remaining.len()));
-				while !remaining.is_empty() {
-					let take = chunk_len.min(remaining.len());
-					let chunk: Vec<_> = remaining.drain(..take).collect();
-					let material = chunk[0].2.clone();
-					let mut iter = chunk.into_iter();
-					let (placement, mut merged, _) = iter.next().expect("chunk non-empty");
-					merged.apply_placement(placement);
-					for (placement, mut next, _) in iter {
-						next.apply_placement(placement);
-						merged.merge(next);
-					}
-					plants.push(MonsterGrassPlant {
-						placement: Placement::IDENTITY,
-						patch: merged,
-						material,
-					});
-				}
-				plants
-			};
+			let plants: Vec<MonsterGrassPlant> = grow_placed_tuft_params(
+				placements,
+				foliage_noise,
+				merge_collections,
+				patch_variants,
+				|cell, variant| {
+					let mix = cell.palette_mix();
+					let (patch, world_size) = match cell {
+						MonsterGrassCell::GiantWetBlade => GiantWetBlade::grow_num(variant),
+						MonsterGrassCell::BroadJungleBlade => BroadJungleBlade::grow_num(variant),
+						MonsterGrassCell::PaleGiantReed => PaleGiantReed::grow_num(variant),
+						MonsterGrassCell::RedRibbedBlade => RedRibbedBlade::grow_num(variant),
+						MonsterGrassCell::GiantWetBladePatch => {
+							GiantWetBladePatch::grow_num(variant)
+						}
+						MonsterGrassCell::BroadJungleBladePatch => {
+							BroadJungleBladePatch::grow_num(variant)
+						}
+						MonsterGrassCell::PaleGiantReedPatch => {
+							PaleGiantReedPatch::grow_num(variant)
+						}
+						MonsterGrassCell::RedRibbedBladePatch => {
+							RedRibbedBladePatch::grow_num(variant)
+						}
+					};
+					(patch, world_size, mix)
+				},
+			)
+			.into_iter()
+			.map(|plant| MonsterGrassPlant {
+				placement: plant.placement,
+				patch: plant.patch,
+				material: plant.material,
+			})
+			.collect();
 			let span = extent.max() - extent.min();
 			let half = span * 0.5;
 			let footprint_radius = half.x.max(half.z).max(1.0);
@@ -585,8 +548,9 @@ mod vc {
 			let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
 			let origin = self.extent.min();
 			let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
-			let samples =
-				surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
+			let samples = surface_samples_from_plants(
+				self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
+			);
 
 			for plant in &self.plants {
 				let patch = &plant.patch;
@@ -631,8 +595,9 @@ mod vc {
 		/// large “width” onto world up and turns carpets into walls.
 		fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
 			let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-			let samples =
-				surface_samples_from_plants(self.plants.iter().map(|p| (&p.placement, &p.patch)));
+			let samples = surface_samples_from_plants(
+				self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
+			);
 			horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, PROXY_HEIGHT_ULTRA, &samples)
 				.into_iter()
 				.map(|placement| {
@@ -971,6 +936,16 @@ mod tests {
 			let grove = params.build();
 			let seeds: HashSet<i32> = grove.plants.iter().map(|p| p.patch.shape.seed).collect();
 			assert!(seeds.len() <= 4, "expected ≤4 unique unit seeds, got {}", seeds.len());
+			let same_seed: Vec<_> = grove
+				.plants
+				.iter()
+				.filter(|p| p.patch.shape.seed == grove.plants[0].patch.shape.seed)
+				.collect();
+			assert!(same_seed.len() >= 2);
+			assert!(
+				std::sync::Arc::ptr_eq(&same_seed[0].patch, &same_seed[1].patch),
+				"same variant should share one cached TuftPatch Arc"
+			);
 			Ok(())
 		}
 

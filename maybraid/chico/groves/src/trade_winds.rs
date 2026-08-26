@@ -385,12 +385,7 @@ mod vc {
 		}
 	}
 
-	remixed_sbs_plant!(
-		TradeStorybook,
-		StorybookTree,
-		StorybookTreeParams,
-		TRADE_STORYBOOK
-	);
+	remixed_sbs_plant!(TradeStorybook, StorybookTree, StorybookTreeParams, TRADE_STORYBOOK);
 	remixed_sbs_plant!(
 		RareTallTradeStorybook,
 		StorybookTree,

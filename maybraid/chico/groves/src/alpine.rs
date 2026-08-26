@@ -379,12 +379,7 @@ mod vc {
 	}
 
 	remixed_sbs_plant!(AlpineLiams, LiamsConifer, LiamsConiferParams, ALPINE_LIAMS);
-	remixed_sbs_plant!(
-		NeedleSpireLiams,
-		LiamsConifer,
-		LiamsConiferParams,
-		NEEDLE_SPIRE_LIAMS
-	);
+	remixed_sbs_plant!(NeedleSpireLiams, LiamsConifer, LiamsConiferParams, NEEDLE_SPIRE_LIAMS);
 
 	#[derive(Clone)]
 	enum AlpineKind {
