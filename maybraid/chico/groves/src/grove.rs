@@ -31,6 +31,8 @@ mod placed_host;
 pub mod vc_compose;
 #[cfg(feature = "render")]
 pub mod vc_tuft;
+#[cfg(feature = "render")]
+mod woody_lod;
 
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,
@@ -71,6 +73,8 @@ pub use vc_compose::{
 	woody_grove_scene_chunks_keep_low_plants, CanopyProxySite, TrainedCanopyProxy,
 	DEFAULT_PLANT_MEDIUM_FACTOR, ULTRA_LOW_CANOPY_BIN_METERS,
 };
+#[cfg(feature = "render")]
+pub use woody_lod::{WoodyCanopyPolicy, WoodyGroveLod};
 #[cfg(feature = "render")]
 pub use vc_tuft::{remixed_blade_tuft_unit, remixed_spear_tuft_unit, remixed_tuft_unit};
 

@@ -4,6 +4,8 @@ Woody High/Medium plants should be **posed kit instances** of a quantized, merge
 
 Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_variants` default **100**. Grove **tile** bands stay independent of the plant’s own structural factors (Orchard High / Medium / Low is `2 / 5 / 12`; Storytellers is `5 / 20 / 30`; plants use `10 / 30 / 50`). Do **not** copy Storytellers or Goettingen onto every woody grove — size Medium from the trees that grove actually plants ([`grove_bands_for_typical_height`](src/grove/vc_compose.rs)). Plant High can be wide: [`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) cheapens far cheap-ball cheese — see [sbs-trees CONTRIBUTING §4](../sbs-trees/CONTRIBUTING.md#4-widening-high-is-a-shader-problem-then-a-factor). Large-tree groves extend the **tile Medium** band — see [Tile bands for large trees](#tile-bands-for-large-trees).
 
+Woody `LodScene` / `VegetationComponents` go through [`WoodyGroveLod`](src/grove/woody_lod.rs). Keep HIGH / MEDIUM / LOW and the policy constructor on the grove (`ordinary` / `keep_low_plants` / `skip_ultralow_bins` / `rory_trunk`). The shared impl is mechanical only.
+
 ## Plant type first
 
 If the tree or tuft still emits one node per stick/ball and has no `into_unit_from_num`, do that in `chico-sbs-trees` before changing the grove. Quantizing a unique-mesh construction only caps grow noise; it does not cap GPU uploads.

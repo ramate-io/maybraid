@@ -199,9 +199,8 @@ impl StrangeOasisCell {
 mod vc {
 	use std::sync::Arc;
 
-	use bevy::math::bounding::Aabb3d;
+	
 	use bevy::prelude::*;
-	use bevy::scene::prelude::Scene;
 	use chico_sbs_geometry::DatePalmSbs;
 	use chico_sbs_trees::{
 		DatePalm, DatePalmParams, PalmCrown, PalmCrownParams, PenmarchTorch, PenmarchTorchParams,
@@ -211,9 +210,13 @@ mod vc {
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
-	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
+	use lod::gen::LodSceneLevel;
+	#[cfg(test)]
+	use bevy::math::bounding::Aabb3d;
+	#[cfg(test)]
+	use lod::gen::LodScene;
 	use lod::lod_ref::LodRef;
-	use lod::{lod_host_scene_pending, SceneChunk};
+	use lod::SceneChunk;
 	use material_ref::MaterialRef;
 	use procedural_common::{BuildWithNoise, NoiseParams};
 
@@ -224,17 +227,23 @@ mod vc {
 	use crate::grove::vc_tuft::patch_variant_index;
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_crown, canopy_proxy_site,
-		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
-		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
-		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
+		foliage_low_canopy_balls, frond_material_from_palette,
+		grove_structural_footprint, nest_flattened_plant_chunk,
 		placed_palm_low_fronds, placement_noise, remixed_sbs_plant, stick_material_from_palette,
-		unit_build_noise, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GrovePreviewParams, ULTRA_LOW_CANOPY_BIN_METERS,
+		unit_build_noise, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GrovePreviewParams,
+		WoodyGroveLod,
 	};
 
 	pub const STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
 	pub const STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
 	pub const STRANGE_OASIS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+
+	const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::ordinary(
+		STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR,
+		STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR,
+		STRANGE_OASIS_STRUCTURAL_LOW_FACTOR,
+	);
 
 	/// Authoring / CLI parameters for Strange Oasis.
 	#[derive(Clone, Debug, Args)]
@@ -539,82 +548,7 @@ mod vc {
 		}
 	}
 
-	impl VegetationComponents for StrangeOasis {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
-		}
-
-		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-			match level {
-				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => layers_from_nodes(self.foliage_low_nodes()),
-				LodSceneLevel::UltraLow
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
-					&self.canopy_sites(),
-					ULTRA_LOW_CANOPY_BIN_METERS,
-				)),
-			}
-		}
-
-		fn structural_lod(&self) -> Option<StructuralLod> {
-			Some(StructuralLod::new(self.structural_center, self.footprint_radius).with_factors(
-				STRANGE_OASIS_STRUCTURAL_HIGH_FACTOR,
-				STRANGE_OASIS_STRUCTURAL_MEDIUM_FACTOR,
-				STRANGE_OASIS_STRUCTURAL_LOW_FACTOR,
-			))
-		}
-	}
-
-	impl LodScene for StrangeOasis {
-		fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-			self.structural_lod()
-				.map(|band| grove_lod_level(band, lod_ref))
-				.unwrap_or(LodSceneLevel::High)
-		}
-
-		fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-			self.structural_lod()
-				.map(|band| grove_lod_status(band, lod_ref))
-				.unwrap_or(LodSceneStatus::Unchanged)
-		}
-
-		fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-			self.structural_lod()
-				.map(|band| grove_lod_culls(band, lod_ref))
-				.unwrap_or(LodSceneCulls::None)
-		}
-
-		fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-			match grove_detail_level(level) {
-				Some(_) => chico_vegetation_components::scene_children(Vec::new()),
-				None => {
-					let mut children: Vec<Box<dyn Scene>> = Vec::new();
-					chico_vegetation_components::append_component_scenes(
-						self,
-						lod_ref,
-						level,
-						&mut children,
-					);
-					chico_vegetation_components::scene_children(children)
-				}
-			}
-		}
-
-		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
-		}
-
-		fn scene_bounds(&self) -> Aabb3d {
-			self.structural_lod()
-				.map(|p| p.footprint_aabb())
-				.unwrap_or_else(|| chico_vegetation_components::vegetation_bounds(self))
-		}
-
-		fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-			lod_host_scene_pending(self.scene_lod_level(lod_ref), self.scene_bounds())
-		}
-	}
+	crate::impl_woody_grove_lod!(StrangeOasis, WOODY_LOD, low_nodes);
 
 	#[cfg(test)]
 	mod tests {
