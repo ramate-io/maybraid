@@ -218,8 +218,8 @@ mod vc {
 
 	/// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
 	pub const FORLORN_SAVANNA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-	pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
-	pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 15.0;
+	pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+	pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -612,7 +612,7 @@ mod vc {
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
+			woody_grove_scene_chunks(level, lod_ref, || self.nest_plant_chunks(lod_ref), self)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {

@@ -1,5 +1,6 @@
 //! Helpers for flattening nested tree/bush [`VegetationComponents`] into grove hosts.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
@@ -98,6 +99,41 @@ pub fn grove_bands_for_typical_height_and_plant_medium(
 	(high, medium, low)
 }
 
+thread_local! {
+	static GROVE_SCENE_LEVEL: Cell<Option<LodSceneLevel>> = const { Cell::new(None) };
+}
+
+fn with_grove_scene_level<R>(level: LodSceneLevel, f: impl FnOnce() -> R) -> R {
+	GROVE_SCENE_LEVEL.with(|slot| {
+		let prev = slot.replace(Some(level));
+		let out = f();
+		slot.set(prev);
+		out
+	})
+}
+
+/// Temporary band debug: Medium trunks pink, Low / UltraLow trunks yellow.
+fn grove_band_debug_stick_material(level: LodSceneLevel) -> Option<MaterialRef> {
+	match level {
+		LodSceneLevel::Medium => {
+			Some(chico_stick_material_ref().with_palette([Color::srgb(1.0, 0.28, 0.72)]))
+		}
+		LodSceneLevel::Low
+		| LodSceneLevel::UltraLow
+		| LodSceneLevel::Distance(_)
+		| LodSceneLevel::Resolution(_) => {
+			Some(chico_stick_material_ref().with_palette([Color::srgb(1.0, 0.88, 0.12)]))
+		}
+		LodSceneLevel::High => None,
+	}
+}
+
+fn debug_or_stick_material(original: &MaterialRef) -> MaterialRef {
+	GROVE_SCENE_LEVEL
+		.with(|slot| slot.get().and_then(grove_band_debug_stick_material))
+		.unwrap_or_else(|| original.clone())
+}
+
 /// Stick material: Chico stick recipe with one palette-picked color.
 pub fn stick_material_from_palette(palette: Option<PaletteMix>, seed: i32) -> MaterialRef {
 	palette
@@ -144,7 +180,7 @@ pub fn flatten_stick_nodes(
 		.into_iter()
 		.map(|mut node| {
 			node.placement = plant_placement.compose_child(node.placement);
-			node.with_material(stick_material.clone())
+			node.with_material(debug_or_stick_material(stick_material))
 		})
 		.collect()
 }
@@ -217,11 +253,9 @@ fn is_mid_tree_sphere(lod: &StructuralLod) -> bool {
 }
 
 fn foliage_placement_for_proxy(site: &CanopyProxySite) -> Placement {
-	if site.is_uniform() {
-		Placement::foliage_uniform(site.center, site.radius())
-	} else {
-		Placement::new(site.center, 0.0).with_scale(site.half_extents.max(Vec3::splat(0.25)))
-	}
+	// Y-up, no tumble. `foliage_uniform` hashes euler from world position; an
+	// edge-on cheap-ball kit plus rim `discard` reads as a bare pole.
+	Placement::new(site.center, 0.0).with_scale(site.half_extents.max(Vec3::splat(0.25)))
 }
 
 /// World canopy proxy from a plant's [`VegetationComponents::structural_lod`].
@@ -398,6 +432,13 @@ pub fn trained_proxy_stick_nodes_for_level(
 		| LodSceneLevel::UltraLow
 		| LodSceneLevel::Distance(_)
 		| LodSceneLevel::Resolution(_) => {
+			let trunks: Vec<StickNode> = trunks
+				.into_iter()
+				.map(|node| match grove_band_debug_stick_material(level) {
+					Some(material) => node.with_material(material),
+					None => node,
+				})
+				.collect();
 			layers_from_nodes(StickNode::merge_standard(trunks).into_iter().collect())
 		}
 	}
@@ -413,7 +454,7 @@ pub fn canopy_proxy_site_nested(
 	canopy_proxy_site(plant, plant_placement.compose_child(local), material)
 }
 
-/// Grove Low: one cheap ball per plant. Uniform sites tumble; columns stay Y-up.
+/// Grove Low: one cheap ball per plant. Uniform crowns and columns stay Y-up.
 pub fn foliage_low_canopy_balls(
 	sites: impl IntoIterator<Item = CanopyProxySite>,
 ) -> Vec<FoliageNode> {
@@ -514,7 +555,7 @@ where
 		PlacedVegetation::new(
 			plant,
 			placement,
-			stick_material.clone(),
+			debug_or_stick_material(stick_material),
 			ball_material.clone(),
 			frond_material.clone(),
 		),
@@ -565,7 +606,7 @@ where
 		PlacedVegetation::new(
 			plant,
 			placement,
-			stick_material.clone(),
+			debug_or_stick_material(stick_material),
 			ball_material.clone(),
 			frond_material.clone(),
 		),
@@ -616,11 +657,12 @@ pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
 pub fn woody_grove_scene_chunks(
 	level: LodSceneLevel,
 	lod_ref: &LodRef,
-	plant_chunks: Vec<SceneChunk>,
+	plant_chunks: impl FnOnce() -> Vec<SceneChunk>,
 	vegetation: &impl VegetationComponents,
 ) -> SceneChunk {
-	match grove_detail_level(level) {
+	with_grove_scene_level(level, || match grove_detail_level(level) {
 		Some(_) => {
+			let plant_chunks = plant_chunks();
 			if plant_chunks.is_empty() {
 				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
 			} else {
@@ -630,7 +672,7 @@ pub fn woody_grove_scene_chunks(
 		None => {
 			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
 		}
-	}
+	})
 }
 
 /// High/Medium/Low → nested plant hosts; UltraLow → canopy-ball vegetation chunks.
@@ -640,11 +682,12 @@ pub fn woody_grove_scene_chunks(
 pub fn woody_grove_scene_chunks_keep_low_plants(
 	level: LodSceneLevel,
 	lod_ref: &LodRef,
-	plant_chunks: Vec<SceneChunk>,
+	plant_chunks: impl FnOnce() -> Vec<SceneChunk>,
 	vegetation: &impl VegetationComponents,
 ) -> SceneChunk {
-	match grove_detail_level_keep_low(level) {
+	with_grove_scene_level(level, || match grove_detail_level_keep_low(level) {
 		Some(_) => {
+			let plant_chunks = plant_chunks();
 			if plant_chunks.is_empty() {
 				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
 			} else {
@@ -654,7 +697,7 @@ pub fn woody_grove_scene_chunks_keep_low_plants(
 		None => {
 			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
 		}
-	}
+	})
 }
 
 /// Plant foliage posed in grove space with palette materials (same stamp as nest).
@@ -780,6 +823,20 @@ mod tests {
 		assert!(proxy.crown.is_uniform());
 		assert!((proxy.crown.half_extents.x - 6.0).abs() < 1e-3);
 		assert!(trunk.placement.translation.y < proxy.crown.center.y);
+	}
+
+	#[test]
+	fn low_uniform_crown_stays_y_up() {
+		let site =
+			CanopyProxySite::from_radius(Vec3::new(3.0, 8.0, -1.0), 4.0, chico_leaf_material_ref());
+		let nodes = foliage_low_canopy_balls([site]);
+		assert_eq!(nodes.len(), 1);
+		let p = nodes[0].placement;
+		assert_eq!(p.yaw, 0.0);
+		assert_eq!(p.pitch, 0.0);
+		assert_eq!(p.roll, 0.0);
+		assert!((p.scale.x - 4.0).abs() < 1e-4);
+		assert!((p.scale.x - p.scale.y).abs() < 1e-4);
 	}
 
 	#[test]

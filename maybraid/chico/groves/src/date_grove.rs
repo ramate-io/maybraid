@@ -424,7 +424,7 @@ mod vc {
 			woody_grove_scene_chunks_keep_low_plants(
 				level,
 				lod_ref,
-				self.nest_plant_chunks(lod_ref),
+				|| self.nest_plant_chunks(lod_ref),
 				self,
 			)
 		}

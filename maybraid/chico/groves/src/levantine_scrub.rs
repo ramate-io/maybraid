@@ -328,8 +328,7 @@ mod vc {
 		VaseTreeParams,
 	};
 	use chico_vegetation_components::{
-		flattened_canopy_proxy_chunks, FoliageNode, Layers, Placement, StickNode, StructuralLod,
-		VegetationComponents,
+		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
@@ -345,7 +344,8 @@ mod vc {
 		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, trained_proxy_stick_nodes_for_level, CanopyProxySite,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite,
 		FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
@@ -854,19 +854,7 @@ mod vc {
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			match grove_detail_level(level) {
-				Some(_) => {
-					let chunks = self.nest_plant_chunks(lod_ref);
-					if chunks.is_empty() {
-						SceneChunk::primitive(chico_vegetation_components::scene_children(
-							Vec::new(),
-						))
-					} else {
-						SceneChunk::chunks(chunks)
-					}
-				}
-				None => flattened_canopy_proxy_chunks(self, lod_ref, level),
-			}
+			woody_grove_scene_chunks(level, lod_ref, || self.nest_plant_chunks(lod_ref), self)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {
