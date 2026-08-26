@@ -14,10 +14,10 @@
 //! filled with composed [`StairNode`]s. It does not author walls or emit shaft
 //! opening labels. A [`FlightPolyline`] along face centers absorbs plan offset.
 //! Choose a family with [`Self::with_flight`]. Run-and-landing is an I / L /
-//! U from the walk-on sides (side-by-side 180°, never stacked on one
-//! centerline). Tread span is a fill fraction of the tighter opening
-//! half-extent ([`Self::with_tread_fill`]); lapping ratio is
-//! [`Self::with_lapping_ratio`].
+//! U from the walk-on sides (two-corridor switchback; extra lapping stacks
+//! on that silhouette, then a landing to the walk-on). Tread span is a fill
+//! fraction of the tighter opening half-extent ([`Self::with_tread_fill`]);
+//! lapping ratio is [`Self::with_lapping_ratio`].
 
 mod landing;
 mod opening;

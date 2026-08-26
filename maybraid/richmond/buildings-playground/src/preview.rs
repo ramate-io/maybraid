@@ -1,7 +1,8 @@
 //! Preview subject sync. Viewer tracking lives in [`lod::LodRefreshCorePlugin`].
 
 use crate::commands::show::connecting_stairwell::{
-	ConnectingStairwellCase, ConnectingStairwellFlight,
+	pathological_stairwell_gallery, ConnectingStairwellCase, ConnectingStairwellFlight,
+	PathologicalStairwellSpec,
 };
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
@@ -54,6 +55,7 @@ use richmond_buildings::{
 	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
 	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, DEFAULT_PANEL_THICKNESS,
+	SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -135,6 +137,7 @@ pub enum PreviewSubject {
 		tread_fill: f32,
 		lapping_ratio: f32,
 	},
+	PathologicalConnectingStairwellGallery,
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -594,6 +597,9 @@ impl PreviewConfig {
 					flight.slug(),
 					case.look_for()
 				)
+			}
+			PreviewSubject::PathologicalConnectingStairwellGallery => {
+				"preview: pathological-connecting-stairwell-gallery".into()
 			}
 			PreviewSubject::ArcFloor {
 				radius,
@@ -1150,6 +1156,16 @@ pub struct CachedPreview {
 	living_room_examples: Vec<GalleryExampleCell<LivingRoom>>,
 	sitting_room_examples: Vec<GalleryExampleCell<SittingRoom>>,
 	study_examples: Vec<GalleryExampleCell<Study>>,
+	stairwell_gallery: Vec<StairwellGalleryCell>,
+}
+
+/// One cell in [`PreviewSubject::PathologicalConnectingStairwellGallery`].
+#[derive(Clone)]
+struct StairwellGalleryCell {
+	offset: Vec3,
+	well: ConnectingStairwell,
+	label: LabelNode,
+	spec: PathologicalStairwellSpec,
 }
 
 /// One cell in [`PreviewSubject::BedroomExamples`].
@@ -1313,6 +1329,7 @@ impl CachedPreview {
 		self.living_room_examples.clear();
 		self.sitting_room_examples.clear();
 		self.study_examples.clear();
+		self.stairwell_gallery.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1340,6 +1357,9 @@ impl CachedPreview {
 					Ok((room, _)) => self.bedroom = Some(room),
 					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
 				}
+			}
+			PreviewSubject::PathologicalConnectingStairwellGallery => {
+				self.stairwell_gallery = build_stairwell_gallery();
 			}
 			PreviewSubject::BedroomExamples => {
 				let (cells, passages) = build_bedroom_examples();
@@ -1615,6 +1635,17 @@ impl CachedPreview {
 
 	fn label_nodes(&self) -> Vec<LabelNode> {
 		use lod::gen::LodSceneLevel;
+		if !self.stairwell_gallery.is_empty() {
+			return self
+				.stairwell_gallery
+				.iter()
+				.map(|cell| {
+					let mut label = cell.label.clone();
+					label.placement.translation += cell.offset;
+					label
+				})
+				.collect();
+		}
 		if let Some(stall) = self.commercial_stall.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
@@ -3691,6 +3722,17 @@ pub fn present_preview_lod(
 				.with_upper_landing(*upper_landing);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
 		}
+		PreviewSubject::PathologicalConnectingStairwellGallery => {
+			for cell in &cache.stairwell_gallery {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_building_preview(&mut commands, tf, &cell.well, &lod_ref);
+				spawn_preview(
+					&mut commands,
+					tf,
+					cell.label.scene_with_level(&lod_ref, lod::gen::LodSceneLevel::High),
+				);
+			}
+		}
 		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
@@ -4615,6 +4657,43 @@ fn stairwell_shaft_opening(center: Vec3, half_w: f32, half_d: f32, orient: Vec2)
 		far + right * half_w,
 		orient,
 	)
+}
+
+const STAIRWELL_GALLERY_COLS: usize = 4;
+const STAIRWELL_GALLERY_GAP: f32 = 4.0;
+
+fn build_stairwell_gallery() -> Vec<StairwellGalleryCell> {
+	let specs = pathological_stairwell_gallery();
+	let spans: Vec<Vec2> = specs.iter().map(|s| s.plan_span()).collect();
+	specs
+		.iter()
+		.enumerate()
+		.map(|(i, spec)| {
+			let offset = gallery_grid_offset(
+				|idx| Vec3::new(spans[idx].x, 0.0, spans[idx].y + 3.0),
+				specs.len(),
+				i,
+				STAIRWELL_GALLERY_COLS,
+				STAIRWELL_GALLERY_GAP,
+			);
+			let (lower, upper) = connecting_stairwell_demo_endpoints(spec.case);
+			let well = ConnectingStairwell::rough_stone(lower, upper)
+				.with_flight(spec.flight.kind())
+				.with_slab_thickness(SLAB_THICKNESS_M)
+				.with_tread_fill(TREAD_FILL_DEFAULT)
+				.with_lapping_ratio(spec.lapping_ratio)
+				.with_upper_landing(spec.upper_landing);
+			let span = spec.plan_span();
+			let label = LabelNode::rectangle(
+				spec.label_style(),
+				spec.label_text(),
+				Vec3::new(0.0, 1.35, -0.5 * span.y - 1.2),
+				Vec3::new(2.8, 0.42, 1.55),
+				0.0,
+			);
+			StairwellGalleryCell { offset, well, label, spec: *spec }
+		})
+		.collect()
 }
 
 /// Pathological shaft pairs for `/show connecting-stairwell --case`.
@@ -5563,37 +5642,56 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 
 /// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
 /// orientation arrows, and the flight polyline.
-pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	let PreviewSubject::ConnectingStairwell {
-		case,
-		flight,
-		upper_landing,
-		slab_thickness,
-		tread_fill,
-		lapping_ratio,
-	} = config.subject
-	else {
-		return;
-	};
-	let tf = config.transform;
+pub fn draw_connecting_stairwell_gizmos(
+	mut gizmos: Gizmos,
+	config: Res<PreviewConfig>,
+	cache: Res<CachedPreview>,
+) {
+	match &config.subject {
+		PreviewSubject::ConnectingStairwell {
+			case,
+			flight,
+			upper_landing,
+			slab_thickness,
+			tread_fill,
+			lapping_ratio,
+		} => {
+			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
+			let well = ConnectingStairwell::rough_stone(lower, upper)
+				.with_flight(flight.kind())
+				.with_slab_thickness(*slab_thickness)
+				.with_tread_fill(*tread_fill)
+				.with_lapping_ratio(*lapping_ratio)
+				.with_upper_landing(*upper_landing);
+			draw_one_stairwell_gizmos(&mut gizmos, config.transform, lower, upper, &well);
+		}
+		PreviewSubject::PathologicalConnectingStairwellGallery => {
+			for cell in &cache.stairwell_gallery {
+				let tf = config.transform * Transform::from_translation(cell.offset);
+				let (lower, upper) = connecting_stairwell_demo_endpoints(cell.spec.case);
+				draw_one_stairwell_gizmos(&mut gizmos, tf, lower, upper, &cell.well);
+			}
+		}
+		_ => {}
+	}
+}
+
+fn draw_one_stairwell_gizmos(
+	gizmos: &mut Gizmos,
+	tf: Transform,
+	lower: MappedOpening,
+	upper: MappedOpening,
+	well: &ConnectingStairwell,
+) {
 	let map = |p: Vec3| tf.transform_point(p);
-
-	let (lower, upper) = connecting_stairwell_demo_endpoints(case);
-	let well = ConnectingStairwell::rough_stone(lower, upper)
-		.with_flight(flight.kind())
-		.with_slab_thickness(slab_thickness)
-		.with_tread_fill(tread_fill)
-		.with_lapping_ratio(lapping_ratio)
-		.with_upper_landing(upper_landing);
-
 	let cyan = Color::srgb(0.2, 0.9, 0.95);
 	let magenta = Color::srgb(0.95, 0.25, 0.85);
 	let lime = Color::srgb(0.35, 0.95, 0.35);
 	let yellow = Color::srgb(1.0, 0.9, 0.2);
 	let white = Color::srgb(0.95, 0.95, 0.95);
 
-	draw_opening_gizmos(&mut gizmos, map, lower, cyan);
-	draw_opening_gizmos(&mut gizmos, map, upper, magenta);
+	draw_opening_gizmos(gizmos, map, lower, cyan);
+	draw_opening_gizmos(gizmos, map, upper, magenta);
 
 	let (bl, br, ..) = lower.endpoint_corners();
 	gizmos.line(map(bl), map(br), lime);

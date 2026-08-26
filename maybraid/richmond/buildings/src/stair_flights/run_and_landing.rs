@@ -1,10 +1,12 @@
-//! I / L / U flights: openings own the ends; extra lapping is a side-by-side bank.
+//! I / L / U flights: openings own the ends; extra lapping is a stacked switchback.
 //!
 //! Walk-on sides pick the graph. Adjacent → compact L. Same side → U (two
 //! parallel runs, far landing spans both). Opposite or a short rise → I.
-//! Lapping ratio only packs that graph: if one topology is short, add
-//! another **lateral** run (never the same centerline twice). A long L
-//! between offset openings stays the polyline path.
+//! Extra lapping reuses those two corridors — same plan silhouette, stacked
+//! in \(Y\) — instead of packing new laterals or reversing on the last
+//! column. After the last zig-zag, an L arrives with a landing to the
+//! walk-on, not another run of stairs. A long L between offset openings
+//! stays the polyline path.
 
 use bevy_math::Vec2;
 use richmond_building_components::panels::PanelStyle;
@@ -13,9 +15,10 @@ use richmond_building_components::stairs::{StairNode, StraightStair};
 use crate::paneling::quad_panel::QuadPanel;
 use crate::stair_flights::composed::ComposedFlight;
 use crate::stair_flights::geom::{
-	is_lateral, normalize_xz, place_runs_with_corner_landings, xz, PathSeg, EPS,
+	clamp_lapping_ratio, is_lateral, normalize_xz, place_runs_with_corner_landings, run_top_y, xz,
+	JointBudget, PathSeg, EPS,
 };
-use crate::stair_flights::{FlightPolyline, WellFit};
+use crate::stair_flights::{FlightPolyline, TreadEnd, WellFit};
 
 /// Plan points closer than this are the same waypoint.
 const DEDUP_M: f32 = 0.12;
@@ -26,6 +29,10 @@ const ADJACENT_RIM_M: f32 = 0.4;
 /// Compact I / L is enough when needed going fits this × the path length.
 const COMPACT_FIT: f32 = 1.05;
 const STATION_M: f32 = 0.15;
+/// Walk-on this close to the last leading is already on the rim.
+const LATERAL_ARRIVE: f32 = 0.75;
+/// Gap between the two switchback corridors.
+const CORRIDOR_GAP_M: f32 = 0.12;
 
 /// Fit an I / L / U path, or the polyline L when the arrive is outside the well.
 pub fn fit(
@@ -44,11 +51,62 @@ fn fit_runs(
 	style: PanelStyle,
 	thickness: f32,
 ) -> (Vec<StairNode>, Vec<QuadPanel>) {
-	let (width, pref_depth) = fit.tread_dims();
+	let (_, fill_depth) = fit.tread_dims();
+	let (width, pref_depth) = switchback_dims(fit);
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
-	let path = plan_path(polyline, fit, width, pref_depth);
+	let path = plan_path(polyline, fit, width, fill_depth);
 	let segs = segs_along_path(&path, fit.lower_walk_on.y, rise, width);
-	place_runs_with_corner_landings(&segs, width, pref_depth, style, thickness)
+	let (stairs, mut pads) =
+		place_runs_with_corner_landings(&segs, width, pref_depth, style, thickness, fill_depth);
+	if let Some(pad) = arrive_landing(&stairs, xz(fit.upper_walk_on), width, style, thickness) {
+		pads.push(pad);
+	}
+	(stairs, pads)
+}
+
+/// Two flights fill the well (minus a gap), not the spiral fill fraction.
+fn switchback_dims(fit: WellFit) -> (f32, f32) {
+	let (fill_w, _) = fit.tread_dims();
+	let well = 2.0 * fit.half_width();
+	let each = ((well - CORRIDOR_GAP_M) * 0.5).clamp(fill_w, well * 0.48);
+	let depth = (each * clamp_lapping_ratio(fit.lapping_ratio)).clamp(0.15, 3.0);
+	(each, depth)
+}
+
+/// Last zig-zag stops at the walk-on depth; this rectangle reaches the rim.
+fn arrive_landing(
+	stairs: &[StairNode],
+	walk_on: Vec2,
+	width: f32,
+	style: PanelStyle,
+	thickness: f32,
+) -> Option<QuadPanel> {
+	let end = TreadEnd::from_last_straight(stairs)?;
+	let mid = end.leading_mid();
+	let to = walk_on - mid;
+	if to.length() <= width * LATERAL_ARRIVE {
+		return None;
+	}
+	let incoming = normalize_xz(end.travel)?;
+	let across = Vec2::new(-incoming.y, incoming.x);
+	let side = to.dot(across);
+	if side.abs() <= width * LATERAL_ARRIVE {
+		return None;
+	}
+	let outgoing = across * side.signum();
+	let along = to.dot(incoming).max(0.0);
+	if along > width * 0.75 {
+		return None;
+	}
+	let y = stairs.last().map(run_top_y)?;
+	end.pad(
+		Some(outgoing),
+		JointBudget { along: 0.0, far: side.abs() + 0.5 * width, run_len: 0.0, u_turn: false },
+		width,
+		y,
+		style,
+		thickness,
+	)
 }
 
 #[derive(Clone, Copy)]
@@ -127,26 +185,7 @@ fn plan_path(polyline: &FlightPolyline, fit: WellFit, width: f32, pref_depth: f3
 	}
 
 	let run = (far - width).max(width);
-	path_bank(frame, bank_slots(frame, needed, run, width), width)
-}
-
-/// Side-by-side slots so rise fits `run`, even parity on a U, odd on an I.
-fn bank_slots(frame: Frame, needed: f32, run: f32, width: f32) -> u32 {
-	let max_slots = ((2.0 * frame.hw) / width.max(1e-4)).floor().max(1.0) as u32;
-	let mut n = (needed / run).ceil().max(1.0) as u32;
-	if frame.same_side() {
-		n = n.max(2);
-		if n % 2 == 1 {
-			if n > 2 && (n - 1) as f32 * run >= needed * 0.85 {
-				n -= 1;
-			} else {
-				n += 1;
-			}
-		}
-	} else if frame.opposite() && n % 2 == 0 {
-		n += 1;
-	}
-	n.min(max_slots).max(1)
+	path_switchback(frame, needed, run, width)
 }
 
 fn path_i(frame: Frame) -> Vec<Vec2> {
@@ -165,47 +204,47 @@ fn path_l(frame: Frame) -> Vec<Vec2> {
 	])
 }
 
-fn path_bank(frame: Frame, n: u32, width: f32) -> Vec<Vec2> {
+/// Two corridors, \(N\) out-and-backs stacked in \(Y\). Last L run stops at
+/// \(u_a\); the walk-on is a landing, not a reverse on the last column.
+fn path_switchback(frame: Frame, needed: f32, run: f32, width: f32) -> Vec<Vec2> {
 	let far = frame.far();
-	let prefer = if frame.adjacent() { frame.v_a } else { 0.0 };
-	let slots = slot_vs(n, width, frame.hw, prefer);
+	let (v0, v1) = corridor_pair(frame, width);
+	let per_lap = (2.0 * run).max(1e-4);
+	let last_leg = if frame.adjacent() {
+		frame.u_a.clamp(width, far)
+	} else if frame.opposite() {
+		far
+	} else {
+		0.0
+	};
+	let rest = (needed - last_leg).max(0.0);
+	let laps = (rest / per_lap).ceil() as u32;
+
 	let mut local: Vec<(f32, f32)> = Vec::new();
-	for (k, &v) in slots.iter().enumerate() {
-		if k % 2 == 0 {
-			local.push((0.0, v));
-			local.push((far, v));
-		} else {
-			local.push((far, v));
-			local.push((0.0, v));
-		}
+	for _ in 0..laps {
+		local.push((0.0, v0));
+		local.push((far, v0));
+		local.push((far, v1));
+		local.push((0.0, v1));
 	}
 	if frame.adjacent() {
-		if let Some(&(u, v)) = local.last() {
-			if (u - frame.u_a).abs() > DEDUP_M {
-				local.push((frame.u_a, v));
-			}
-			if (v - frame.v_a).abs() > DEDUP_M {
-				local.push((frame.u_a, frame.v_a));
-			}
-		}
+		local.push((0.0, v0));
+		local.push((frame.u_a, v0));
 	} else if frame.opposite() {
-		if let Some(&(_, v)) = local.last() {
-			if (v - frame.v_a).abs() > DEDUP_M {
-				local.push((far, frame.v_a));
-			}
-		}
+		local.push((0.0, v0));
+		local.push((far, v0));
 	}
 	dedup(local.into_iter().map(|(u, v)| frame.world(u, v)).collect())
 }
 
-fn slot_vs(n: u32, width: f32, hw: f32, prefer_last: f32) -> Vec<f32> {
-	let n = n.max(1);
-	let span = (n - 1) as f32 * width;
-	let vmax = (hw - 0.5 * width).max(0.0);
-	let vmin = -vmax;
-	let v_last = prefer_last.clamp(vmin, vmax);
-	let v0 = (v_last - span).clamp(vmin, vmax.min((vmax - span).max(vmin)));
-	(0..n).map(|k| v0 + k as f32 * width).collect()
+/// Opposite halves of the well: outbound away from the arrive, return toward it.
+fn corridor_pair(frame: Frame, width: f32) -> (f32, f32) {
+	let vmax = (frame.hw - 0.5 * width).max(0.0);
+	let toward = if frame.v_a.abs() > SIDE_ALIGN_M { frame.v_a.signum() } else { 1.0 };
+	let half = ((width + CORRIDOR_GAP_M) * 0.5).min(vmax);
+	let v0 = (-toward * half).clamp(-vmax, vmax);
+	let v1 = (toward * half).clamp(-vmax, vmax);
+	(v0, v1)
 }
 
 fn plan_one_shot(polyline: &FlightPolyline, fit: WellFit) -> Vec<Vec2> {
@@ -321,7 +360,7 @@ mod tests {
 			.iter()
 			.filter(|s| {
 				let Stair::Straight(g) = &s.geometry;
-				g.length > 0.8
+				g.length > 0.45
 			})
 			.collect()
 	}
@@ -338,14 +377,26 @@ mod tests {
 		assert!(longs.len() >= 2, "aligned 180° should be a U, got {}", longs.len());
 		assert!(!flight.pads().is_empty(), "far-rim rest must seat both treads");
 		let right = Vec2::new(-1.0, 0.0);
-		let dv = (run_offset(longs[0], right) - run_offset(longs[1], right)).abs();
+		let out = Vec2::Y;
+		let outs: Vec<_> = longs
+			.iter()
+			.filter(|s| travel_xz(s.placement.yaw).dot(out) > 0.5)
+			.copied()
+			.collect();
+		let backs: Vec<_> = longs
+			.iter()
+			.filter(|s| travel_xz(s.placement.yaw).dot(out) < -0.5)
+			.copied()
+			.collect();
+		assert!(!outs.is_empty() && !backs.is_empty(), "U needs an outbound and a return");
+		let dv = (run_offset(outs[0], right) - run_offset(backs[0], right)).abs();
 		assert!(dv > 0.3, "return must sit beside the outbound, offset={dv}");
-		let return_z = longs[1].placement.translation.z;
+		let return_z = backs[0].placement.translation.z;
 		assert!(
 			return_z < 0.85,
 			"return must start at the landing inner edge, not side-on at the far rim, z={return_z}"
 		);
-		let ret = longs[1];
+		let ret = backs[0];
 		let Stair::Straight(g) = &ret.geometry;
 		let travel = travel_xz(ret.placement.yaw);
 		let trail = xz(ret.placement.translation) - travel * (0.5 * g.going_per_tread());
@@ -358,9 +409,9 @@ mod tests {
 				"first tread must start at the landing edge, not on it, ahead={ahead} p={p:?}"
 			);
 		}
-		let inbound = travel_xz(longs[0].placement.yaw);
+		let inbound = travel_xz(outs[0].placement.yaw);
 		let across = Vec2::new(-inbound.y, inbound.x);
-		let mid0 = xz(longs[0].placement.translation);
+		let mid0 = xz(outs[0].placement.translation);
 		let mid1 = xz(ret.placement.translation);
 		let sign = if (mid1 - mid0).dot(across) >= 0.0 { 1.0 } else { -1.0 };
 		let outer = trail + across * sign * (0.5 * g.width);
@@ -409,12 +460,59 @@ mod tests {
 			"quarter-turn should turn, got {}",
 			flight.stairs().len()
 		);
-		let last = flight.last_tread_xz();
-		assert!(
-			(last - Vec2::new(-1.2, 0.0)).length() < 0.75,
-			"last tread should meet the west walk-on, got {last:?}"
-		);
+		assert_arrives_west(&flight, "quarter-turn 0.55");
+		assert_no_reverse_on_same_corridor(&flight, "quarter-turn 0.55");
+		assert_runs_are_walkable(&flight, "quarter-turn 0.55");
 		departing_treads_clear_pads(&flight, "quarter-turn 0.55");
+	}
+
+	fn assert_runs_are_walkable(flight: &ComposedFlight, label: &str) {
+		for (i, s) in flight.stairs().iter().enumerate() {
+			let Stair::Straight(g) = &s.geometry;
+			assert!(
+				g.width > 0.9,
+				"{label}: run {i} width {} should fill half the 2.4 m well",
+				g.width
+			);
+			assert!(
+				g.going_per_tread() > 0.22,
+				"{label}: run {i} going {} is a card deck",
+				g.going_per_tread()
+			);
+		}
+	}
+
+	fn assert_arrives_west(flight: &ComposedFlight, label: &str) {
+		let walk = Vec2::new(-1.2, 0.0);
+		let last = flight.last_tread_xz();
+		let last_d = (last - walk).length();
+		if last_d < 0.85 {
+			return;
+		}
+		let reach = flight
+			.pads()
+			.iter()
+			.flat_map(|p| p.corners())
+			.map(|c| (Vec2::new(c.x, c.z) - walk).length())
+			.fold(f32::MAX, f32::min);
+		assert!(
+			reach < 0.25,
+			"{label}: last tread {last:?} is {last_d:.2} from west; arrive pad nearest={reach}"
+		);
+	}
+
+	fn assert_no_reverse_on_same_corridor(flight: &ComposedFlight, label: &str) {
+		let right = Vec2::new(-1.0, 0.0);
+		let longs = long_runs(flight);
+		for pair in longs.windows(2) {
+			let dv = (run_offset(pair[0], right) - run_offset(pair[1], right)).abs();
+			if dv > 0.15 {
+				continue;
+			}
+			let t0 = travel_xz(pair[0].placement.yaw);
+			let t1 = travel_xz(pair[1].placement.yaw);
+			assert!(t0.dot(t1) > 0.5, "{label}: consecutive runs reverse on the same corridor");
+		}
 	}
 
 	fn departing_treads_clear_pads(flight: &ComposedFlight, label: &str) {
@@ -425,27 +523,31 @@ mod tests {
 			let Stair::Straight(g) = &next.geometry;
 			let travel = travel_xz(next.placement.yaw);
 			let trail = xz(next.placement.translation) - travel * (0.5 * g.going_per_tread());
-			for c in pad.corners() {
-				let p = Vec2::new(c.x, c.z);
-				let ahead = (p - trail).dot(travel);
-				assert!(
-					ahead <= 0.06,
-					"{label}: pad {i} corner {p:?} is {ahead} along the next run; first trailing={trail:?} going={}",
-					g.going_per_tread()
-				);
+			let max_ahead = pad
+				.corners()
+				.into_iter()
+				.map(|c| (Vec2::new(c.x, c.z) - trail).dot(travel))
+				.fold(f32::NEG_INFINITY, f32::max);
+			if max_ahead > g.going_per_tread() {
+				continue;
 			}
+			assert!(
+				max_ahead <= 0.06,
+				"{label}: pad {i} is {max_ahead} along the next run; first trailing={trail:?} going={}",
+				g.going_per_tread()
+			);
 		}
 	}
 
 	#[test]
-	fn extra_lapping_uses_side_by_side_runs() {
+	fn extra_lapping_reuses_two_corridors() {
 		let (polyline, well) =
 			well(Vec3::new(0.0, 0.0, -1.2), Vec3::new(-1.2, 3.0, 0.0), Vec2::Y, 3.0, 1.2);
 		let flight = fit(polyline, well, PanelStyle::RoughStonework, 0.05);
 		let longs = long_runs(&flight);
 		assert!(
 			longs.len() >= 3,
-			"lapping_ratio 1.2 should pack extra parallel runs, got {}",
+			"lapping_ratio 1.2 should stack extra switchbacks, got {}",
 			longs.len()
 		);
 		let right = Vec2::new(-1.0, 0.0);
@@ -457,16 +559,15 @@ mod tests {
 			.collect();
 		laterals.sort_by(|a, b| a.partial_cmp(b).unwrap());
 		laterals.dedup_by(|a, b| (*a - *b).abs() < 0.15);
-		assert!(
-			laterals.len() >= 2,
-			"lapping_ratio 1.2 should occupy more than one corridor, slots={}",
+		assert_eq!(
+			laterals.len(),
+			2,
+			"extra lapping reuses two corridors, slots={}",
 			laterals.len()
 		);
-		let last = flight.last_tread_xz();
-		assert!(
-			(last - Vec2::new(-1.2, 0.0)).length() < 0.85,
-			"still arrive on the west walk-on, got {last:?}"
-		);
+		assert_arrives_west(&flight, "quarter-turn 1.2");
+		assert_no_reverse_on_same_corridor(&flight, "quarter-turn 1.2");
+		assert_runs_are_walkable(&flight, "quarter-turn 1.2");
 		departing_treads_clear_pads(&flight, "quarter-turn 1.2");
 	}
 
@@ -499,7 +600,7 @@ mod tests {
 		let deep = fit(polyline, deep_well, PanelStyle::RoughStonework, 0.05);
 		assert!(
 			long_runs(&deep).len() > long_runs(&default).len(),
-			"lapping_ratio 2.0 should add lateral runs, {} vs {}",
+			"lapping_ratio 2.0 should add stacked switchbacks, {} vs {}",
 			long_runs(&deep).len(),
 			long_runs(&default).len()
 		);

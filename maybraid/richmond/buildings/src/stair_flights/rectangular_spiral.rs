@@ -73,7 +73,7 @@ fn fit_rect_nodes(
 	}
 
 	let segs = segs_along_path(&path, fit.lower_center.y, rise);
-	place_runs_with_corner_landings(&segs, width, depth, style, thickness)
+	place_runs_with_corner_landings(&segs, width, depth, style, thickness, 0.0)
 }
 
 fn segs_along_path(path: &[Vec2], base_y: f32, rise: f32) -> Vec<PathSeg> {

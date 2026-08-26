@@ -48,7 +48,7 @@ pub struct WellFit {
 	/// Tread span as a fraction of the tighter opening half-extent.
 	pub tread_fill: f32,
 	/// Lapping ratio (preferred going / width) — not “how chunky one tread looks.”
-	/// High values add rectangular-spiral circuits or side-by-side runs.
+	/// High values add rectangular-spiral circuits or stacked switchback laps.
 	pub lapping_ratio: f32,
 }
 

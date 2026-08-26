@@ -307,6 +307,7 @@ pub(crate) fn place_runs_with_corner_landings(
 	pref_depth: f32,
 	style: PanelStyle,
 	thickness: f32,
+	min_going: f32,
 ) -> (Vec<StairNode>, Vec<QuadPanel>) {
 	let shortest = shortest_run(segs, width);
 	let wanted = wanted_rest(width, if shortest.is_finite() { shortest } else { width });
@@ -353,6 +354,12 @@ pub(crate) fn place_runs_with_corner_landings(
 		let y0 = stairs.last().map(run_top_y).unwrap_or(seg.y0.min(seg.y1));
 		let height = seg.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 		let n = tread_count(height, budget.run_len, pref_depth).max(1);
+		let n = if min_going > EPS {
+			let max_n = (budget.run_len / min_going).floor().max(1.0) as u32;
+			n.min(max_n)
+		} else {
+			n
+		};
 		let going = budget.run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
 		let Some(node) =

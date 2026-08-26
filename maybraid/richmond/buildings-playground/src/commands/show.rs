@@ -54,6 +54,7 @@ pub mod opening;
 pub mod panel_complex;
 pub mod parts_examples;
 pub mod parts_stall;
+pub mod pathological_connecting_stairwell_gallery;
 pub mod pitch;
 pub mod pitched_rectangular_roof;
 pub mod polyline;
@@ -77,9 +78,9 @@ pub mod stacked_rings;
 pub mod study_examples;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
-pub mod triangular_panels;
 pub mod transform;
 pub mod trazaloid;
+pub mod triangular_panels;
 pub mod tube;
 pub mod wizards_tower;
 
@@ -122,6 +123,10 @@ pub enum Show {
 	ConnectingHall(connecting_hall::ConnectingHall),
 	/// Run-in floor + spiral flight between a lower and upper opening.
 	ConnectingStairwell(connecting_stairwell::ConnectingStairwell),
+	/// Labeled gallery of pathological connecting-stairwell cases.
+	PathologicalConnectingStairwellGallery(
+		pathological_connecting_stairwell_gallery::PathologicalConnectingStairwellGallery,
+	),
 	/// One circular storey shell with optional `--opening` plan entries.
 	ArcFloor(arc_floor::ArcFloor),
 	/// Stacked circular storey shell (explicit openings; no noise).
@@ -275,6 +280,7 @@ impl Show {
 			Self::Tube(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingHall(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingStairwell(cmd) => Ok(cmd.into_preview()),
+			Self::PathologicalConnectingStairwellGallery(cmd) => Ok(cmd.into_preview()),
 			Self::ArcFloor(cmd) => cmd.into_preview(),
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),

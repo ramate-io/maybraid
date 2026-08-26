@@ -120,7 +120,7 @@ impl ConnectingStairwellCase {
 			Self::Tall => "9 m stacked rise; landings still flush with each storey",
 			Self::Huge => "6×6 hole; outer rail / rim runs on the edge",
 			Self::QuarterTurn => {
-				"arrive on the +X rim; run-and-landing L (or side-by-side bank) then the west walk-on"
+				"arrive on the +X rim; run-and-landing zig-zag then a landing to the west walk-on"
 			}
 			Self::LongOffset => "long L (8 m east / 6 m north); one rectangular kink pad",
 			Self::Tiny => "0.9×0.9 well; ~0.65 m pads eat a side",
@@ -172,4 +172,186 @@ impl ConnectingStairwell {
 			self.transform.transform(),
 		)
 	}
+}
+
+/// One cell in `/show pathological-connecting-stairwell-gallery`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PathologicalStairwellSpec {
+	pub case: ConnectingStairwellCase,
+	pub flight: ConnectingStairwellFlight,
+	pub lapping_ratio: f32,
+	pub upper_landing: bool,
+	pub note: &'static str,
+}
+
+impl PathologicalStairwellSpec {
+	pub fn label_text(self) -> String {
+		let landing = if self.upper_landing { "upper landing" } else { "no upper landing" };
+		format!(
+			"{} / {}\nlapping {:.2}\n{landing}\n{}",
+			self.case.slug(),
+			self.flight.slug(),
+			self.lapping_ratio,
+			self.note
+		)
+	}
+
+	pub fn label_style(self) -> richmond_building_components::LabelStyle {
+		use richmond_building_components::LabelStyle;
+		match self.flight {
+			ConnectingStairwellFlight::RunAndLanding => LabelStyle::Cyan,
+			ConnectingStairwellFlight::RectangularSpiral => LabelStyle::Yellow,
+			ConnectingStairwellFlight::Spiral => LabelStyle::Green,
+		}
+	}
+
+	/// Plan footprint used to space gallery cells (meters).
+	pub fn plan_span(self) -> Vec2 {
+		self.case.plan_span()
+	}
+}
+
+impl ConnectingStairwellCase {
+	pub fn plan_span(self) -> Vec2 {
+		match self {
+			Self::Stacked | Self::QuarterTurn | Self::Opposite | Self::ShortRise | Self::Skew => {
+				Vec2::new(7.0, 7.0)
+			}
+			Self::NarrowSlot => Vec2::new(5.0, 7.0),
+			Self::Shallow => Vec2::new(8.0, 5.0),
+			Self::Mismatch => Vec2::new(7.0, 7.0),
+			Self::NearOffset => Vec2::new(7.0, 7.0),
+			Self::Offset => Vec2::new(10.0, 10.0),
+			Self::SameY => Vec2::new(10.0, 7.0),
+			Self::Tall => Vec2::new(7.0, 7.0),
+			Self::Huge => Vec2::new(12.0, 12.0),
+			Self::LongOffset => Vec2::new(16.0, 12.0),
+			Self::Tiny => Vec2::new(5.0, 5.0),
+			Self::SameYL => Vec2::new(10.0, 8.0),
+			Self::OffsetTall => Vec2::new(12.0, 10.0),
+			Self::OppositeOffset => Vec2::new(12.0, 12.0),
+		}
+	}
+}
+
+/// Review set for the run-and-landing zig-zag / arrive-landing work.
+pub fn pathological_stairwell_gallery() -> [PathologicalStairwellSpec; 16] {
+	use ConnectingStairwellCase as Case;
+	use ConnectingStairwellFlight as Flight;
+	let ral = Flight::RunAndLanding;
+	let def = LAPPING_RATIO_DEFAULT;
+	[
+		PathologicalStairwellSpec {
+			case: Case::QuarterTurn,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "L: zig-zag then land west — no reverse on last column",
+		},
+		PathologicalStairwellSpec {
+			case: Case::QuarterTurn,
+			flight: ral,
+			lapping_ratio: 1.2,
+			upper_landing: true,
+			note: "extra laps on two corridors; landing to west walk-on",
+		},
+		PathologicalStairwellSpec {
+			case: Case::QuarterTurn,
+			flight: ral,
+			lapping_ratio: 1.2,
+			upper_landing: false,
+			note: "same as 1.2; well pads only",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Stacked,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "side-by-side U; return at inner edge",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Stacked,
+			flight: ral,
+			lapping_ratio: 2.0,
+			upper_landing: true,
+			note: "stacked U laps, not new laterals",
+		},
+		PathologicalStairwellSpec {
+			case: Case::ShortRise,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "one crossing; no pad",
+		},
+		PathologicalStairwellSpec {
+			case: Case::SameYL,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "ground L; first riser on outgoing edge",
+		},
+		PathologicalStairwellSpec {
+			case: Case::LongOffset,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "polyline L; one level kink pad",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Tiny,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "0.9 m well; pads eat a side",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Opposite,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "I or odd bank; last vs far walk-on",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Skew,
+			flight: ral,
+			lapping_ratio: 1.2,
+			upper_landing: true,
+			note: "45° openings; pads stay planar",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Mismatch,
+			flight: ral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "inscribe to smaller hole",
+		},
+		PathologicalStairwellSpec {
+			case: Case::OffsetTall,
+			flight: ral,
+			lapping_ratio: 1.2,
+			upper_landing: true,
+			note: "9 m + offset; Y still stitches",
+		},
+		PathologicalStairwellSpec {
+			case: Case::Tiny,
+			flight: Flight::RectangularSpiral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "rim circuits; pad per interior joint",
+		},
+		PathologicalStairwellSpec {
+			case: Case::QuarterTurn,
+			flight: Flight::RectangularSpiral,
+			lapping_ratio: 1.2,
+			upper_landing: true,
+			note: "extra rim lap; headroom shrinks",
+		},
+		PathologicalStairwellSpec {
+			case: Case::QuarterTurn,
+			flight: Flight::Spiral,
+			lapping_ratio: def,
+			upper_landing: true,
+			note: "control: one-tread nodes still nest",
+		},
+	]
 }
