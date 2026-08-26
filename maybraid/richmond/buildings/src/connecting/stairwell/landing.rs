@@ -4,9 +4,10 @@ use richmond_building_components::panels::PanelStyle;
 
 use crate::connecting::geom::EPS;
 use crate::paneling::quad_panel::QuadPanel;
+use crate::stair_flights::geom::level_rect;
 use crate::stair_flights::{StairwellFlight, TreadEnd};
 
-use super::opening::{at_y, StairwellOpening};
+use super::opening::StairwellOpening;
 use super::{MIN_SLAB_M, RUN_IN_M};
 
 impl TreadEnd {
@@ -42,16 +43,8 @@ impl TreadEnd {
 		let b0_xz = a0_xz + lead;
 		let b1_xz = b0_xz + along * length;
 		let y = opening.walk_on_mid().y;
-		Some(QuadPanel::slab(
-			style,
-			at_y(a0_xz, y),
-			at_y(a1_xz, y),
-			at_y(b0_xz, y),
-			at_y(b1_xz, y),
-			thickness,
-		))
+		Some(level_rect(style, a0_xz, a1_xz, b0_xz, b1_xz, y, thickness))
 	}
-
 }
 
 impl StairwellFlight {

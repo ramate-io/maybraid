@@ -102,8 +102,8 @@ pub use shells::{
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use stair_flights::{
-	FlightPolyline, FlightStation, RectangularSpiralFlight, RunAndLandingFlight, SpiralFlight,
-	SpiralFlightFit, StairwellFlight, StairwellFlightKind,
+	ComposedFlight, FlightPolyline, FlightStation, RectangularSpiralFlight, RunAndLandingFlight,
+	SpiralFlight, SpiralFlightFit, StairwellFlight, StairwellFlightKind, WellFit,
 };
 pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,

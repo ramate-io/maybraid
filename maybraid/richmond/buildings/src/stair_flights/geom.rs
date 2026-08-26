@@ -1,12 +1,12 @@
-//! Shared plan helpers for placing [`StraightStair`] runs.
+//! Shared plan helpers for placing [`StraightStair`] runs and level rests.
 
 use bevy_math::{Vec2, Vec3};
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 use richmond_building_components::Placement;
 
-use crate::paneling::quad_panel::QuadPanel;
 use super::tread_end::TreadEnd;
+use crate::paneling::quad_panel::QuadPanel;
 
 fn normalize_tops(mut tops: Vec<f32>) -> Vec<f32> {
 	tops.retain(|y| y.is_finite());
@@ -17,8 +17,15 @@ fn normalize_tops(mut tops: Vec<f32>) -> Vec<f32> {
 
 pub(crate) const EPS: f32 = 1e-5;
 
+/// |incoming · outgoing| above this is treated as colinear (same pad axis).
+const COLINEAR_DOT: f32 = 0.85;
+
 pub(crate) fn xz(p: Vec3) -> Vec2 {
 	Vec2::new(p.x, p.z)
+}
+
+pub(crate) fn at_y(p: Vec2, y: f32) -> Vec3 {
+	Vec3::new(p.x, y, p.y)
 }
 
 pub(crate) fn normalize_xz(v: Vec2) -> Option<Vec2> {
@@ -48,7 +55,7 @@ pub(crate) fn tread_dims(opening_min: f32) -> (f32, f32) {
 	(width, depth)
 }
 
-/// Linear run: first tread centered on `start_xz` at `base_y`, travel along `+X`.
+/// Linear run: first tread centered on `start_xz` at `base_y`, travel along \(+X\).
 pub(crate) fn place_straight_run(
 	start_xz: Vec2,
 	base_y: f32,
@@ -93,22 +100,23 @@ pub(crate) fn tread_count(height: f32, length: f32, depth: f32) -> u32 {
 	from_rise.max(from_going) as u32
 }
 
-/// Square rest at a turn: at least the tread width, not a sliver.
-pub(crate) fn landing_size(tread_width: f32) -> f32 {
-	tread_width.max(0.65)
-}
-
-/// [`landing_size`] capped so a short well side still has room for a run.
-fn landing_size_for(tread_width: f32, shortest_side: f32) -> f32 {
-	let want = landing_size(tread_width);
-	let cap = (shortest_side * 0.4).max(tread_width * 0.75);
-	want.min(cap)
-}
-
 pub(crate) fn run_top_y(node: &StairNode) -> f32 {
 	match &node.geometry {
 		Stair::Straight(g) => node.placement.translation.y + g.height,
 	}
+}
+
+/// Level XZ rectangle; kit top sits on `y` ([`QuadPanel::slab`]).
+pub(crate) fn level_rect(
+	style: PanelStyle,
+	a0: Vec2,
+	a1: Vec2,
+	b0: Vec2,
+	b1: Vec2,
+	y: f32,
+	thickness: f32,
+) -> QuadPanel {
+	QuadPanel::slab(style, at_y(a0, y), at_y(a1, y), at_y(b0, y), at_y(b1, y), thickness)
 }
 
 /// Plan segment with walk-on \(Y\) at each end.
@@ -120,11 +128,61 @@ pub(crate) struct PathSeg {
 	pub y1: f32,
 }
 
-/// Straight runs along `segs`. At a yaw jump the incoming run stops short,
-/// a rest fills the corner (full tread width × reserved gap, including the
-/// outer rail), and the next run starts at that pad's far edge. Colinear
-/// joints keep an incoming-only strip — extruding along outgoing there
-/// collapses the quad.
+/// One joint: incoming rest, outgoing skip, and the run between them.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct JointBudget {
+	pub along: f32,
+	pub far: f32,
+	pub run_len: f32,
+}
+
+impl JointBudget {
+	/// `wanted` rest, never eating `min_tread` off this side or the next.
+	pub fn new(
+		available: f32,
+		next_len: f32,
+		wanted: f32,
+		min_tread: f32,
+		last_side: bool,
+		turned: bool,
+	) -> Self {
+		if last_side {
+			return Self { along: 0.0, far: 0.0, run_len: available.max(0.0) };
+		}
+		let available = available.max(0.0);
+		let mut along = if available > min_tread + EPS {
+			wanted.min(available - min_tread)
+		} else {
+			available * 0.35
+		};
+		along = along.max(0.0);
+		let mut run_len = (available - along).max(0.0);
+		if run_len < EPS {
+			along = 0.0;
+			run_len = available;
+		}
+		let far = if turned {
+			if next_len > min_tread + EPS {
+				wanted.min(next_len - min_tread).max(0.0)
+			} else {
+				(next_len * 0.35).max(0.0)
+			}
+		} else {
+			0.0
+		};
+		Self { along, far, run_len }
+	}
+}
+
+/// Rest target: at least ~tread width, at most 40% of the shortest side.
+pub(crate) fn wanted_rest(tread_width: f32, shortest_side: f32) -> f32 {
+	let want = tread_width.max(0.65);
+	let cap = (shortest_side * 0.4).max(tread_width * 0.75);
+	want.min(cap)
+}
+
+/// Straight runs along `segs`. One [`JointBudget`] per joint; the pad is flush
+/// with the last leading and the next first riser.
 pub(crate) fn place_runs_with_corner_landings(
 	segs: &[PathSeg],
 	width: f32,
@@ -139,8 +197,8 @@ pub(crate) fn place_runs_with_corner_landings(
 			(len > EPS).then_some(len)
 		})
 		.fold(f32::MAX, f32::min);
-	let pad = landing_size_for(width, if shortest.is_finite() { shortest } else { width });
-	let min_run = pref_depth * 0.4;
+	let wanted = wanted_rest(width, if shortest.is_finite() { shortest } else { width });
+	let min_tread = pref_depth * 0.4;
 	let mut stairs = Vec::new();
 	let mut pads = Vec::new();
 	let mut skip = 0.0_f32;
@@ -152,66 +210,48 @@ pub(crate) fn place_runs_with_corner_landings(
 		};
 		let remaining = travel.length();
 		let used = skip.min(remaining);
-		let at_joint = i + 1 < segs.len();
 		let leftover = (remaining - used).max(0.0);
 		if leftover < EPS {
 			skip = 0.0;
 			continue;
 		}
-		let reserve = if !at_joint {
-			0.0
-		} else if leftover > min_run {
-			pad.min(leftover * 0.45).min(leftover - min_run)
-		} else {
-			leftover * 0.35
-		};
-		let run_len = leftover - reserve;
-		if run_len < EPS {
+		let at_joint = i + 1 < segs.len();
+		let next = segs.get(i + 1);
+		let next_dir = next.and_then(|s| normalize_xz(s.end - s.start));
+		let next_len = next.map(|s| (s.end - s.start).length()).unwrap_or(0.0);
+		let turned = next_dir.is_some_and(|nd| is_yaw_joint(dir, nd));
+		let budget = JointBudget::new(leftover, next_len, wanted, min_tread, !at_joint, turned);
+		if budget.run_len < EPS {
 			skip = 0.0;
 			continue;
 		}
 		let height = (seg.y1 - seg.y0).abs().max(StraightStair::DEFAULT_TREAD_HEIGHT);
-		let n = tread_count(height, run_len, pref_depth).max(1);
-		let going = run_len / n as f32;
+		let n = tread_count(height, budget.run_len, pref_depth).max(1);
+		let going = budget.run_len / n as f32;
 		let first = seg.start + dir * (used + 0.5 * going);
-		let Some(node) =
-			place_straight_run(first, seg.y0.min(seg.y1), dir, width, going, uniform_tops(height, n))
-		else {
+		let Some(node) = place_straight_run(
+			first,
+			seg.y0.min(seg.y1),
+			dir,
+			width,
+			going,
+			uniform_tops(height, n),
+		) else {
 			skip = 0.0;
 			continue;
 		};
 		skip = 0.0;
 		if at_joint {
-			let y = run_top_y(&node);
-			let next = segs.get(i + 1);
-			let next_dir = next.and_then(|s| normalize_xz(s.end - s.start));
-			let next_len = next.map(|s| (s.end - s.start).length()).unwrap_or(0.0);
-			let turned = next_dir.filter(|nd| dir.dot(*nd).abs() <= 0.85);
-			let far = pad_far(reserve, width, next_len, min_run);
-			let pad_slab = match turned {
-				Some(nd) => corner_square_slab(
-					seg.end,
-					dir,
-					nd,
-					reserve,
-					far,
-					width,
-					y,
-					style,
-					thickness,
-				),
-				None => TreadEnd::from_straight(&node).landing_along(
-					dir,
-					y,
-					style,
-					thickness,
-					reserve.max(pad * 0.5),
-					pref_depth * 0.4,
-				),
-			};
-			if let Some(pad_slab) = pad_slab {
-				skip = if turned.is_some() { far } else { 0.0 };
-				pads.push(pad_slab);
+			if let Some(pad) = TreadEnd::from_straight(&node).pad(
+				next_dir,
+				budget,
+				width,
+				run_top_y(&node),
+				style,
+				thickness,
+			) {
+				skip = budget.far;
+				pads.push(pad);
 			}
 		}
 		stairs.push(node);
@@ -219,50 +259,38 @@ pub(crate) fn place_runs_with_corner_landings(
 	(stairs, pads)
 }
 
-/// Outgoing pad extent, locked to the next-run skip. Caps so a short next
-/// side still has room for a tread.
-fn pad_far(reserve: f32, tread_width: f32, next_len: f32, min_run: f32) -> f32 {
-	let wanted = reserve.max(0.5 * tread_width);
-	if next_len > min_run + EPS {
-		wanted.min(next_len - min_run).max(reserve)
-	} else {
-		wanted.min(next_len.max(reserve))
-	}
+/// Incoming × outgoing (or incoming × across) rest from a last leading.
+pub(crate) fn is_yaw_joint(incoming: Vec2, outgoing: Vec2) -> bool {
+	incoming.dot(outgoing).abs() <= COLINEAR_DOT
 }
 
-/// Corner rest in the incoming × outgoing frame, flush with the last leading
-/// and the next first riser, covering the full tread width (outer rail included).
-///
-/// Local \(x\) along `incoming`, \(y\) along `outgoing`, origin at `joint`:
-/// \(x \in [-\texttt{along}, w/2]\), \(y \in [-w/2, \texttt{far}]\).
-/// `along` is the reserved incoming gap (flush with the last leading).
-/// `far` is the outgoing skip (flush with the next first riser).
-fn corner_square_slab(
-	joint: Vec2,
-	incoming: Vec2,
-	outgoing: Vec2,
-	along: f32,
-	far: f32,
-	tread_width: f32,
-	y: f32,
-	style: PanelStyle,
-	thickness: f32,
-) -> Option<QuadPanel> {
-	let incoming = normalize_xz(incoming)?;
-	let outgoing = normalize_xz(outgoing)?;
-	let along = along.max(1e-4);
-	let far = far.max(along);
-	let half = 0.5 * tread_width.max(1e-4);
-	let pt = |u: f32, v: f32| {
-		let p = joint + incoming * u + outgoing * v;
-		Vec3::new(p.x, y, p.y)
-	};
-	Some(QuadPanel::slab(
-		style,
-		pt(-along, -half),
-		pt(half, -half),
-		pt(-along, far),
-		pt(half, far),
-		thickness,
-	))
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn budget_leaves_min_tread_on_both_sides() {
+		let b = JointBudget::new(1.0, 1.0, 0.65, 0.1, false, true);
+		assert!((b.along - 0.65).abs() < 1e-4);
+		assert!((b.run_len - 0.35).abs() < 1e-4);
+		assert!((b.far - 0.65).abs() < 1e-4);
+		assert!((b.along + b.run_len - 1.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn budget_shrinks_rest_on_a_short_side() {
+		let b = JointBudget::new(0.28, 0.28, 0.65, 0.1, false, true);
+		assert!(b.run_len + 1e-4 >= 0.1, "run={:?}", b);
+		assert!(b.far <= 0.18 + 1e-4, "far must leave min_tread on the next side, {b:?}");
+		assert!(b.along + b.run_len <= 0.28 + 1e-4, "{b:?}");
+		assert!(b.run_len >= EPS, "never drop the side, {b:?}");
+	}
+
+	#[test]
+	fn last_side_has_no_rest() {
+		let b = JointBudget::new(1.0, 0.0, 0.65, 0.1, true, false);
+		assert_eq!(b.along, 0.0);
+		assert_eq!(b.far, 0.0);
+		assert!((b.run_len - 1.0).abs() < 1e-4);
+	}
 }

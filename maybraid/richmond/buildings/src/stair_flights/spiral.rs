@@ -3,79 +3,17 @@
 use std::f32::consts::TAU;
 
 use bevy_math::{Vec2, Vec3};
-use lod::gen::LodSceneLevel;
-use richmond_building_components::stairs::{StairNode, StraightStair};
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::stairs::StraightStair;
 
+use crate::stair_flights::composed::ComposedFlight;
 use crate::stair_flights::geom::{normalize_xz, place_straight_run, travel_xz, xz};
-use crate::stair_flights::FlightPolyline;
+use crate::stair_flights::{FlightPolyline, WellFit};
+use richmond_building_components::stairs::StairNode;
 
-/// Inputs for fitting a spiral inside a vertical shaft (two horizontal faces).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SpiralFlightFit {
-	pub lower_center: Vec3,
-	pub upper_center: Vec3,
-	pub lower_walk_on: Vec3,
-	pub upper_walk_on: Vec3,
-	/// XZ walk-off from the lower walk-on into the well.
-	pub lower_out: Vec2,
-	pub lower_half_width: f32,
-	pub lower_half_depth: f32,
-	pub upper_half_width: f32,
-	pub upper_half_depth: f32,
-}
-
-/// Circular flight composed from one-tread [`StraightStair`] nodes.
-#[derive(Debug, Clone, PartialEq)]
-pub struct SpiralFlight {
-	polyline: FlightPolyline,
-	stairs: Vec<StairNode>,
-}
-
-impl SpiralFlight {
-	pub fn new(polyline: FlightPolyline, stairs: Vec<StairNode>) -> Self {
-		Self { polyline, stairs }
-	}
-
-	/// Fit a circular run inside the shaft; outer rail on the lower walk-on.
-	pub fn fit(polyline: FlightPolyline, fit: SpiralFlightFit) -> Self {
-		let stairs = fit_circular_nodes(&polyline, fit);
-		Self { polyline, stairs }
-	}
-
-	pub fn polyline(&self) -> &FlightPolyline {
-		&self.polyline
-	}
-
-	pub fn stairs(&self) -> &[StairNode] {
-		&self.stairs
-	}
-
-	/// Centerline of the last tessellated tread in XZ.
-	pub fn last_tread_xz(&self) -> Vec2 {
-		self.stairs.last().map(|n| xz(n.placement.translation)).unwrap_or(Vec2::ZERO)
-	}
-
-	/// Unit XZ in the last tread's travel direction (ascent / kit \(+X\)).
-	pub fn last_tread_travel_xz(&self) -> Vec2 {
-		self.stairs.last().map(|n| travel_xz(n.placement.yaw)).unwrap_or(Vec2::X)
-	}
-
-	/// Last tread leading-edge corners \((\mathrm{outer},\ \mathrm{inner})\) in XZ.
-	pub fn last_tread_leading_xz(&self) -> (Vec2, Vec2) {
-		crate::stair_flights::TreadEnd::from_last_straight(&self.stairs)
-			.map(|e| (e.leading_outer, e.leading_inner))
-			.unwrap_or_else(|| {
-				let p = self.last_tread_xz();
-				(p, p)
-			})
-	}
-}
-
-impl BuildingComponents for SpiralFlight {
-	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
-		Layers::from_free(self.stairs.clone())
-	}
+/// Fit a circular run inside the shaft; outer rail on the lower walk-on.
+pub fn fit(polyline: FlightPolyline, fit: WellFit) -> ComposedFlight {
+	let stairs = fit_circular_nodes(&polyline, fit);
+	ComposedFlight::new(polyline, stairs, Vec::new())
 }
 
 /// Place one-tread straight nodes on a circle. `start_yaw` sends local \(+X\)
@@ -121,7 +59,7 @@ pub fn circular_straight_nodes(
 		.collect()
 }
 
-fn fit_circular_nodes(polyline: &FlightPolyline, fit: SpiralFlightFit) -> Vec<StairNode> {
+fn fit_circular_nodes(polyline: &FlightPolyline, fit: WellFit) -> Vec<StairNode> {
 	let rise = polyline.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let half_w = fit.lower_half_width.min(fit.upper_half_width).max(1e-4);
 	let half_d = fit.lower_half_depth.min(fit.upper_half_depth).max(1e-4);
@@ -139,7 +77,7 @@ fn fit_circular_nodes(polyline: &FlightPolyline, fit: SpiralFlightFit) -> Vec<St
 
 fn spiral_center_radius(
 	polyline: &FlightPolyline,
-	fit: SpiralFlightFit,
+	fit: WellFit,
 	opening_min: f32,
 	tread_width: f32,
 ) -> (Vec3, f32) {
@@ -154,20 +92,14 @@ fn spiral_center_radius(
 	(center, radius)
 }
 
-fn spiral_turns(
-	rise: f32,
-	radius: f32,
-	tread_depth: f32,
-	fit: SpiralFlightFit,
-	center: Vec3,
-) -> f32 {
+fn spiral_turns(rise: f32, radius: f32, tread_depth: f32, fit: WellFit, center: Vec3) -> f32 {
 	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0);
 	let from_depth = n * tread_depth / (TAU * radius.max(1e-4));
 	let from_arrive = arrive_turns(fit, center);
 	from_depth.max(from_arrive).clamp(0.35, 3.0)
 }
 
-fn arrive_turns(fit: SpiralFlightFit, center: Vec3) -> f32 {
+fn arrive_turns(fit: WellFit, center: Vec3) -> f32 {
 	let c = xz(center);
 	let from = xz(fit.lower_walk_on) - c;
 	let to = xz(fit.upper_walk_on) - c;
@@ -201,7 +133,9 @@ fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: Vec2) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::stair_flights::{FlightPolyline, FlightStation};
+	use crate::stair_flights::{FlightPolyline, FlightStation, WellFit};
+	use lod::gen::LodSceneLevel;
+	use richmond_building_components::BuildingComponents;
 
 	#[test]
 	fn fit_emits_straight_treads_inscribed_in_shaft() {
@@ -209,9 +143,9 @@ mod tests {
 			FlightStation { center: Vec3::new(0.0, 0.0, 0.0), height: 3.0 },
 			FlightStation { center: Vec3::new(0.0, 3.0, 0.0), height: 3.0 },
 		]);
-		let flight = SpiralFlight::fit(
+		let flight = fit(
 			polyline,
-			SpiralFlightFit {
+			WellFit {
 				lower_center: Vec3::new(0.0, 0.0, 0.0),
 				upper_center: Vec3::new(0.0, 3.0, 0.0),
 				lower_walk_on: Vec3::new(0.0, 0.0, -1.2),

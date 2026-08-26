@@ -1,11 +1,13 @@
 //! Last-tread contact for a landing (flight-agnostic).
 
-use bevy_math::{Vec2, Vec3};
+use bevy_math::Vec2;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::stairs::{Stair, StairNode};
 
 use crate::paneling::quad_panel::QuadPanel;
-use crate::stair_flights::geom::{travel_xz, xz, EPS};
+use crate::stair_flights::geom::{
+	is_yaw_joint, level_rect, normalize_xz, travel_xz, xz, JointBudget, EPS,
+};
 
 /// Leading edge and travel of the last tread — enough to author a landing.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -70,7 +72,11 @@ impl TreadEnd {
 				return None;
 			}
 			let dir = along / n;
-			if dir.dot(self.travel) >= 0.0 { dir } else { -dir }
+			if dir.dot(self.travel) >= 0.0 {
+				dir
+			} else {
+				-dir
+			}
 		};
 		self.landing_along(along, y, style, thickness, length, min_length)
 	}
@@ -99,20 +105,43 @@ impl TreadEnd {
 		}
 		let a0 = self.leading_outer;
 		let b0 = a0 + lead;
-		let a1 = a0 + along * length;
-		let b1 = b0 + along * length;
-		Some(QuadPanel::slab(
-			style,
-			Vec3::new(a0.x, y, a0.y),
-			Vec3::new(a1.x, y, a1.y),
-			Vec3::new(b0.x, y, b0.y),
-			Vec3::new(b1.x, y, b1.y),
-			thickness,
-		))
+		Some(level_rect(style, a0, a0 + along * length, b0, b0 + along * length, y, thickness))
 	}
 
 	/// Midpoint of the leading edge in XZ.
 	pub fn leading_mid(self) -> Vec2 {
 		(self.leading_outer + self.leading_inner) * 0.5
+	}
+
+	/// Rest pad flush with this leading: incoming × outgoing at a yaw, else incoming strip.
+	pub(crate) fn pad(
+		self,
+		outgoing: Option<Vec2>,
+		budget: JointBudget,
+		tread_width: f32,
+		y: f32,
+		style: PanelStyle,
+		thickness: f32,
+	) -> Option<QuadPanel> {
+		let incoming = normalize_xz(self.travel)?;
+		let along = budget.along.max(1e-4);
+		let joint = self.leading_mid() + incoming * along;
+		let half = 0.5 * tread_width.max(1e-4);
+		if let Some(out) = outgoing.and_then(normalize_xz) {
+			if is_yaw_joint(incoming, out) {
+				let far = budget.far.max(1e-4);
+				let pt = |u: f32, v: f32| joint + incoming * u + out * v;
+				return Some(level_rect(
+					style,
+					pt(-along, -half),
+					pt(half, -half),
+					pt(-along, far),
+					pt(half, far),
+					y,
+					thickness,
+				));
+			}
+		}
+		self.landing_along(incoming, y, style, thickness, along, 1e-4)
 	}
 }

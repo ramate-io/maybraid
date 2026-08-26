@@ -5,16 +5,24 @@
 //! landing panels; they do not add [`richmond_building_components::stairs::StairGeometry`]
 //! variants. A circular spiral is many one-tread straight nodes around a center.
 
+pub(crate) mod composed;
 pub(crate) mod geom;
 pub mod rectangular_spiral;
 pub mod run_and_landing;
 pub mod spiral;
 pub mod tread_end;
 
-pub use rectangular_spiral::RectangularSpiralFlight;
-pub use run_and_landing::RunAndLandingFlight;
-pub use spiral::{circular_straight_nodes, SpiralFlight, SpiralFlightFit};
+pub use composed::ComposedFlight;
+pub use rectangular_spiral::fit as fit_rectangular_spiral;
+pub use run_and_landing::fit as fit_run_and_landing;
+pub use spiral::{circular_straight_nodes, fit as fit_spiral};
 pub use tread_end::TreadEnd;
+
+/// Family structs collapsed onto [`ComposedFlight`].
+pub type SpiralFlight = ComposedFlight;
+pub type RectangularSpiralFlight = ComposedFlight;
+pub type RunAndLandingFlight = ComposedFlight;
+pub type SpiralFlightFit = WellFit;
 
 use bevy_math::Vec2;
 use bevy_math::Vec3;
@@ -23,6 +31,21 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{BuildingComponents, Layers};
+
+/// Inputs for fitting a flight inside a vertical shaft (two horizontal faces).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WellFit {
+	pub lower_center: Vec3,
+	pub upper_center: Vec3,
+	pub lower_walk_on: Vec3,
+	pub upper_walk_on: Vec3,
+	/// XZ walk-off from the lower walk-on into the well.
+	pub lower_out: Vec2,
+	pub lower_half_width: f32,
+	pub lower_half_depth: f32,
+	pub upper_half_width: f32,
+	pub upper_half_depth: f32,
+}
 
 /// Which family [`crate::ConnectingStairwell::with_flight`] should fit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -35,108 +58,75 @@ pub enum StairwellFlightKind {
 
 /// Fitted flight inside a connecting stairwell.
 #[derive(Debug, Clone, PartialEq)]
-pub enum StairwellFlight {
-	Spiral(SpiralFlight),
-	RectangularSpiral(RectangularSpiralFlight),
-	RunAndLanding(RunAndLandingFlight),
+pub struct StairwellFlight {
+	kind: StairwellFlightKind,
+	composed: ComposedFlight,
 }
 
 impl StairwellFlight {
 	pub fn fit(
 		kind: StairwellFlightKind,
 		polyline: FlightPolyline,
-		fit: SpiralFlightFit,
+		fit: WellFit,
 		style: PanelStyle,
 		slab_thickness: f32,
 	) -> Self {
-		match kind {
-			StairwellFlightKind::Spiral => Self::Spiral(SpiralFlight::fit(polyline, fit)),
+		let composed = match kind {
+			StairwellFlightKind::Spiral => spiral::fit(polyline, fit),
 			StairwellFlightKind::RectangularSpiral => {
-				Self::RectangularSpiral(RectangularSpiralFlight::fit(
-					polyline,
-					fit,
-					style,
-					slab_thickness,
-				))
+				rectangular_spiral::fit(polyline, fit, style, slab_thickness)
 			}
 			StairwellFlightKind::RunAndLanding => {
-				Self::RunAndLanding(RunAndLandingFlight::fit(polyline, fit, style, slab_thickness))
+				run_and_landing::fit(polyline, fit, style, slab_thickness)
 			}
-		}
+		};
+		Self { kind, composed }
 	}
 
 	pub fn kind(&self) -> StairwellFlightKind {
-		match self {
-			Self::Spiral(_) => StairwellFlightKind::Spiral,
-			Self::RectangularSpiral(_) => StairwellFlightKind::RectangularSpiral,
-			Self::RunAndLanding(_) => StairwellFlightKind::RunAndLanding,
-		}
+		self.kind
+	}
+
+	pub fn composed(&self) -> &ComposedFlight {
+		&self.composed
 	}
 
 	pub fn polyline(&self) -> &FlightPolyline {
-		match self {
-			Self::Spiral(f) => f.polyline(),
-			Self::RectangularSpiral(f) => f.polyline(),
-			Self::RunAndLanding(f) => f.polyline(),
-		}
+		self.composed.polyline()
 	}
 
 	pub fn last_tread_xz(&self) -> Vec2 {
-		match self {
-			Self::Spiral(f) => f.last_tread_xz(),
-			Self::RectangularSpiral(f) => f.last_tread_xz(),
-			Self::RunAndLanding(f) => f.last_tread_xz(),
-		}
+		self.composed.last_tread_xz()
 	}
 
 	pub fn last_tread_travel_xz(&self) -> Vec2 {
-		match self {
-			Self::Spiral(f) => f.last_tread_travel_xz(),
-			Self::RectangularSpiral(f) => f.last_tread_travel_xz(),
-			Self::RunAndLanding(f) => f.last_tread_travel_xz(),
-		}
+		self.composed.last_tread_travel_xz()
 	}
 
 	pub fn last_tread_leading_xz(&self) -> (Vec2, Vec2) {
-		match self {
-			Self::Spiral(f) => f.last_tread_leading_xz(),
-			Self::RectangularSpiral(f) => f.last_tread_leading_xz(),
-			Self::RunAndLanding(f) => f.last_tread_leading_xz(),
-		}
+		self.composed.last_tread_leading_xz()
 	}
 
 	pub fn tread_end(&self) -> TreadEnd {
-		TreadEnd {
-			leading_outer: self.last_tread_leading_xz().0,
-			leading_inner: self.last_tread_leading_xz().1,
-			travel: self.last_tread_travel_xz(),
-		}
+		self.composed.tread_end().unwrap_or(TreadEnd {
+			leading_outer: Vec2::ZERO,
+			leading_inner: Vec2::ZERO,
+			travel: Vec2::X,
+		})
 	}
 }
 
 impl BuildingComponents for StairwellFlight {
 	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
-		match self {
-			Self::Spiral(f) => f.stair_nodes_for_level(level),
-			Self::RectangularSpiral(f) => f.stair_nodes_for_level(level),
-			Self::RunAndLanding(f) => f.stair_nodes_for_level(level),
-		}
+		self.composed.stair_nodes_for_level(level)
 	}
 
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		match self {
-			Self::RectangularSpiral(f) => f.panel_nodes_for_level(level),
-			Self::RunAndLanding(f) => f.panel_nodes_for_level(level),
-			_ => Layers::new(),
-		}
+		self.composed.panel_nodes_for_level(level)
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
-		match self {
-			Self::RectangularSpiral(f) => f.joint_nodes_for_level(level),
-			Self::RunAndLanding(f) => f.joint_nodes_for_level(level),
-			_ => Layers::new(),
-		}
+		self.composed.joint_nodes_for_level(level)
 	}
 }
 
@@ -167,4 +157,3 @@ impl FlightPolyline {
 		}
 	}
 }
-

@@ -9,9 +9,9 @@ use richmond_building_components::panels::PanelStyle;
 use crate::connecting::geom::{normalize_xz, EPS};
 use crate::openings::MappedOpening;
 use crate::paneling::quad_panel::QuadPanel;
+use crate::stair_flights::geom::level_rect;
 use crate::stair_flights::{
-	FlightPolyline, FlightStation, SpiralFlight, SpiralFlightFit, StairwellFlight,
-	StairwellFlightKind,
+	FlightPolyline, FlightStation, SpiralFlight, StairwellFlight, StairwellFlightKind, WellFit,
 };
 
 use super::RUN_IN_M;
@@ -105,11 +105,11 @@ impl StairwellOpening {
 		let out = normalize_xz(self.orientation).unwrap_or(Vec2::X);
 		let walk = self.walk_on_mid();
 		let half = (0.5 * self.walk_on_width()).max(EPS);
-		let right = Vec3::new(-out.y, 0.0, out.x);
-		let inward = Vec3::new(out.x, 0.0, out.y) * RUN_IN_M;
-		let a0 = walk - right * half;
-		let a1 = walk + right * half;
-		QuadPanel::slab(style, a0, a1, a0 + inward, a1 + inward, thickness)
+		let right = Vec2::new(-out.y, out.x);
+		let mid = plan_xz(walk);
+		let a0 = mid - right * half;
+		let a1 = mid + right * half;
+		level_rect(style, a0, a1, a0 + out * RUN_IN_M, a1 + out * RUN_IN_M, walk.y, thickness)
 	}
 
 	/// Flight polyline from this face center to `upper` (midpoint only when plan-offset).
@@ -129,11 +129,11 @@ impl StairwellOpening {
 		FlightPolyline { stations }
 	}
 
-	/// Spiral fit inputs for a well from this lower face to `upper`.
-	pub fn spiral_fit(self, upper: Self) -> SpiralFlightFit {
+	/// Fit inputs for a well from this lower face to `upper`.
+	pub fn well_fit(self, upper: Self) -> WellFit {
 		let (lower_hw, lower_hd) = self.plan_half_extents();
 		let (upper_hw, upper_hd) = upper.plan_half_extents();
-		SpiralFlightFit {
+		WellFit {
 			lower_center: self.face_center(),
 			upper_center: upper.face_center(),
 			lower_walk_on: self.walk_on_mid(),
@@ -146,10 +146,14 @@ impl StairwellOpening {
 		}
 	}
 
+	/// Fit inputs for a well from this lower face to `upper`.
+	pub fn spiral_fit(self, upper: Self) -> WellFit {
+		self.well_fit(upper)
+	}
+
 	/// Fitted spiral along [`Self::flight_polyline_to`].
 	pub fn spiral_flight_to(self, upper: Self) -> SpiralFlight {
-		let polyline = self.flight_polyline_to(upper);
-		SpiralFlight::fit(polyline, self.spiral_fit(upper))
+		crate::stair_flights::spiral::fit(self.flight_polyline_to(upper), self.well_fit(upper))
 	}
 
 	/// Fitted flight of `kind` along [`Self::flight_polyline_to`].
@@ -163,7 +167,7 @@ impl StairwellOpening {
 		StairwellFlight::fit(
 			kind,
 			self.flight_polyline_to(upper),
-			self.spiral_fit(upper),
+			self.well_fit(upper),
 			style,
 			slab_thickness,
 		)
@@ -186,8 +190,4 @@ impl Deref for StairwellOpening {
 
 pub(crate) fn plan_xz(p: Vec3) -> Vec2 {
 	Vec2::new(p.x, p.z)
-}
-
-pub(crate) fn at_y(p: Vec2, y: f32) -> Vec3 {
-	Vec3::new(p.x, y, p.y)
 }
