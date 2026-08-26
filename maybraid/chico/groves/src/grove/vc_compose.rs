@@ -1,6 +1,5 @@
 //! Helpers for flattening nested tree/bush [`VegetationComponents`] into grove hosts.
 
-use std::cell::Cell;
 use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
@@ -99,41 +98,6 @@ pub fn grove_bands_for_typical_height_and_plant_medium(
 	(high, medium, low)
 }
 
-thread_local! {
-	static GROVE_SCENE_LEVEL: Cell<Option<LodSceneLevel>> = const { Cell::new(None) };
-}
-
-fn with_grove_scene_level<R>(level: LodSceneLevel, f: impl FnOnce() -> R) -> R {
-	GROVE_SCENE_LEVEL.with(|slot| {
-		let prev = slot.replace(Some(level));
-		let out = f();
-		slot.set(prev);
-		out
-	})
-}
-
-/// Temporary band debug: Medium trunks pink, Low / UltraLow trunks yellow.
-fn grove_band_debug_stick_material(level: LodSceneLevel) -> Option<MaterialRef> {
-	match level {
-		LodSceneLevel::Medium => {
-			Some(chico_stick_material_ref().with_palette([Color::srgb(1.0, 0.28, 0.72)]))
-		}
-		LodSceneLevel::Low
-		| LodSceneLevel::UltraLow
-		| LodSceneLevel::Distance(_)
-		| LodSceneLevel::Resolution(_) => {
-			Some(chico_stick_material_ref().with_palette([Color::srgb(1.0, 0.88, 0.12)]))
-		}
-		LodSceneLevel::High => None,
-	}
-}
-
-fn debug_or_stick_material(original: &MaterialRef) -> MaterialRef {
-	GROVE_SCENE_LEVEL
-		.with(|slot| slot.get().and_then(grove_band_debug_stick_material))
-		.unwrap_or_else(|| original.clone())
-}
-
 /// Stick material: Chico stick recipe with one palette-picked color.
 pub fn stick_material_from_palette(palette: Option<PaletteMix>, seed: i32) -> MaterialRef {
 	palette
@@ -180,7 +144,7 @@ pub fn flatten_stick_nodes(
 		.into_iter()
 		.map(|mut node| {
 			node.placement = plant_placement.compose_child(node.placement);
-			node.with_material(debug_or_stick_material(stick_material))
+			node.with_material(stick_material.clone())
 		})
 		.collect()
 }
@@ -432,13 +396,6 @@ pub fn trained_proxy_stick_nodes_for_level(
 		| LodSceneLevel::UltraLow
 		| LodSceneLevel::Distance(_)
 		| LodSceneLevel::Resolution(_) => {
-			let trunks: Vec<StickNode> = trunks
-				.into_iter()
-				.map(|node| match grove_band_debug_stick_material(level) {
-					Some(material) => node.with_material(material),
-					None => node,
-				})
-				.collect();
 			layers_from_nodes(StickNode::merge_standard(trunks).into_iter().collect())
 		}
 	}
@@ -555,7 +512,7 @@ where
 		PlacedVegetation::new(
 			plant,
 			placement,
-			debug_or_stick_material(stick_material),
+			stick_material.clone(),
 			ball_material.clone(),
 			frond_material.clone(),
 		),
@@ -606,7 +563,7 @@ where
 		PlacedVegetation::new(
 			plant,
 			placement,
-			debug_or_stick_material(stick_material),
+			stick_material.clone(),
 			ball_material.clone(),
 			frond_material.clone(),
 		),
@@ -657,12 +614,11 @@ pub fn grove_lod_culls(band: StructuralLod, lod_ref: &LodRef) -> LodSceneCulls {
 pub fn woody_grove_scene_chunks(
 	level: LodSceneLevel,
 	lod_ref: &LodRef,
-	plant_chunks: impl FnOnce() -> Vec<SceneChunk>,
+	plant_chunks: Vec<SceneChunk>,
 	vegetation: &impl VegetationComponents,
 ) -> SceneChunk {
-	with_grove_scene_level(level, || match grove_detail_level(level) {
+	match grove_detail_level(level) {
 		Some(_) => {
-			let plant_chunks = plant_chunks();
 			if plant_chunks.is_empty() {
 				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
 			} else {
@@ -672,7 +628,7 @@ pub fn woody_grove_scene_chunks(
 		None => {
 			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
 		}
-	})
+	}
 }
 
 /// High/Medium/Low → nested plant hosts; UltraLow → canopy-ball vegetation chunks.
@@ -682,12 +638,11 @@ pub fn woody_grove_scene_chunks(
 pub fn woody_grove_scene_chunks_keep_low_plants(
 	level: LodSceneLevel,
 	lod_ref: &LodRef,
-	plant_chunks: impl FnOnce() -> Vec<SceneChunk>,
+	plant_chunks: Vec<SceneChunk>,
 	vegetation: &impl VegetationComponents,
 ) -> SceneChunk {
-	with_grove_scene_level(level, || match grove_detail_level_keep_low(level) {
+	match grove_detail_level_keep_low(level) {
 		Some(_) => {
-			let plant_chunks = plant_chunks();
 			if plant_chunks.is_empty() {
 				SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
 			} else {
@@ -697,7 +652,7 @@ pub fn woody_grove_scene_chunks_keep_low_plants(
 		None => {
 			chico_vegetation_components::flattened_canopy_proxy_chunks(vegetation, lod_ref, level)
 		}
-	})
+	}
 }
 
 /// Plant foliage posed in grove space with palette materials (same stamp as nest).

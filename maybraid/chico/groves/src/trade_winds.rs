@@ -698,7 +698,7 @@ mod vc {
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, || self.nest_plant_chunks(lod_ref), self)
+			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {

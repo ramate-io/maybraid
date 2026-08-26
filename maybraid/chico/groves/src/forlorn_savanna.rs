@@ -2,7 +2,8 @@
 //! ([RFC-183 §3.4.7.6], [#351](https://github.com/ramate-io/maybraid/issues/351)).
 //!
 //! Wind-shaped Rory's Head-trained forms, acacia-impression High Bush, and rare dry Storybook
-//! accents across open savanna. Forest-layer attachment remains a follow-up.
+//! accents across open savanna. Low / UltraLow keep one canopy proxy per plant — the grove
+//! is too sparse for UltraLow 8 m bins. Forest-layer attachment remains a follow-up.
 
 use std::ops::RangeInclusive;
 
@@ -208,12 +209,12 @@ mod vc {
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
 		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
-		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		foliage_low_canopy_balls, frond_material_from_palette,
 		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
 		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
 		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
-		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		DEFAULT_GROVE_EXTENT_XZ,
 	};
 
 	/// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
@@ -555,15 +556,12 @@ mod vc {
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			match level {
 				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => {
+				LodSceneLevel::Low
+				| LodSceneLevel::UltraLow
+				| LodSceneLevel::Distance(_)
+				| LodSceneLevel::Resolution(_) => {
 					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
 				}
-				LodSceneLevel::UltraLow
-				| LodSceneLevel::Distance(_)
-				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
-					&self.canopy_sites(),
-					ULTRA_LOW_CANOPY_BIN_METERS,
-				)),
 			}
 		}
 
@@ -612,7 +610,7 @@ mod vc {
 		}
 
 		fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-			woody_grove_scene_chunks(level, lod_ref, || self.nest_plant_chunks(lod_ref), self)
+			woody_grove_scene_chunks(level, lod_ref, self.nest_plant_chunks(lod_ref), self)
 		}
 
 		fn scene_bounds(&self) -> Aabb3d {
@@ -684,10 +682,20 @@ mod vc {
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
 			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
+			let rory_n = grove
+				.plants
+				.iter()
+				.filter(|plant| matches!(plant.kind, ForlornSavannaKind::Rory(_)))
+				.count();
+			assert_eq!(grove.proxy_trunks().len(), rory_n, "each Rory trunk has a proxy stick");
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.canopy_sites().len());
 			assert!(low_foliage >= grove.plants.len());
-			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
+			assert_eq!(
+				grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len(),
+				low_foliage,
+				"sparse savanna keeps one crown per plant through UltraLow"
+			);
 			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
 				lod::SceneChunk::Primitive { weight, .. } => {
 					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
