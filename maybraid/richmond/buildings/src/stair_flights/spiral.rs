@@ -2,7 +2,7 @@
 
 use std::f32::consts::TAU;
 
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::stairs::{SpiralStair, Stair, StairNode};
 use richmond_building_components::{BuildingComponents, Layers, Placement};
@@ -17,7 +17,7 @@ pub struct SpiralFlightFit {
 	pub lower_walk_on: Vec3,
 	pub upper_walk_on: Vec3,
 	/// XZ walk-off from the lower walk-on into the well.
-	pub lower_out: bevy_math::Vec2,
+	pub lower_out: Vec2,
 	pub lower_half_width: f32,
 	pub lower_half_depth: f32,
 	pub upper_half_width: f32,
@@ -51,12 +51,12 @@ impl SpiralFlight {
 	}
 
 	/// Centerline of the last tessellated tread in XZ.
-	pub fn last_tread_xz(&self) -> bevy_math::Vec2 {
+	pub fn last_tread_xz(&self) -> Vec2 {
 		self.tread_xz_at(self.last_turn_frac())
 	}
 
 	/// Unit XZ in the last tread's travel direction (ascent / kit \(+X\)).
-	pub fn last_tread_travel_xz(&self) -> bevy_math::Vec2 {
+	pub fn last_tread_travel_xz(&self) -> Vec2 {
 		let theta = self.last_turn_frac() * TAU;
 		let (s, c) = theta.sin_cos();
 		// Local \(+θ\): derivative of \((\cosθ,\ -sinθ)\).
@@ -65,58 +65,47 @@ impl SpiralFlight {
 
 	/// Last tread leading-edge corners \((\mathrm{outer},\ \mathrm{inner})\) in XZ.
 	///
-	/// Kit \(+X\) is travel (depth); \(+Z\) is the width axis. Outward is the
-	/// in-plane CCW perpendicular of travel.
-	pub fn last_tread_leading_xz(&self) -> (bevy_math::Vec2, bevy_math::Vec2) {
-		let Stair::Spiral(g) = &self.stairs.geometry else {
+	/// Kit \(+X\) is travel (depth). Outward is the in-plane CCW perpendicular of travel.
+	pub fn last_tread_leading_xz(&self) -> (Vec2, Vec2) {
+		let Some(g) = self.spiral() else {
 			let p = self.last_tread_xz();
 			return (p, p);
 		};
 		let last = self.last_tread_xz();
 		let travel = self.last_tread_travel_xz();
-		let radial = bevy_math::Vec2::new(-travel.y, travel.x);
+		let radial = Vec2::new(-travel.y, travel.x);
 		let lead = last + travel * (0.5 * g.tread_depth);
 		(lead + radial * (0.5 * g.tread_width), lead - radial * (0.5 * g.tread_width))
 	}
 
-	/// Plan center and local top \(Y\) of each tessellated tread.
-	pub fn tread_stations(&self) -> Vec<(bevy_math::Vec2, f32)> {
-		let Stair::Spiral(g) = &self.stairs.geometry else {
-			return Vec::new();
-		};
-		let n = g.tread_count().max(1);
-		let tops = g.effective_tread_tops();
-		(0..n)
-			.map(|i| {
-				let frac = i as f32 / n as f32 * g.turns;
-				let top = tops.get(i as usize).copied().unwrap_or(g.height);
-				(self.tread_xz_at(frac), top)
-			})
-			.collect()
+	fn spiral(&self) -> Option<&SpiralStair> {
+		match &self.stairs.geometry {
+			Stair::Spiral(g) => Some(g),
+			_ => None,
+		}
 	}
 
-	pub(crate) fn last_turn_frac(&self) -> f32 {
-		let Stair::Spiral(g) = &self.stairs.geometry else {
+	fn last_turn_frac(&self) -> f32 {
+		let Some(g) = self.spiral() else {
 			return 0.0;
 		};
 		let n = g.tread_count().max(1) as f32;
 		(n - 1.0) / n * g.turns
 	}
 
-	pub(crate) fn tread_xz_at(&self, turns: f32) -> bevy_math::Vec2 {
-		let Stair::Spiral(g) = &self.stairs.geometry else {
+	fn tread_xz_at(&self, turns: f32) -> Vec2 {
+		let Some(g) = self.spiral() else {
 			return xz(self.stairs.placement.translation);
 		};
 		let theta = turns * TAU;
 		let (s, c) = theta.sin_cos();
 		let p = self.world_xz(c * g.radius, -s * g.radius);
-		bevy_math::Vec2::new(self.stairs.placement.translation.x, self.stairs.placement.translation.z)
-			+ p
+		xz(self.stairs.placement.translation) + p
 	}
 
-	fn world_xz(&self, lx: f32, lz: f32) -> bevy_math::Vec2 {
+	fn world_xz(&self, lx: f32, lz: f32) -> Vec2 {
 		let (ys, yc) = self.stairs.placement.yaw.sin_cos();
-		bevy_math::Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz)
+		Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz)
 	}
 }
 
@@ -199,13 +188,13 @@ fn arrive_turns(fit: SpiralFlightFit, center: Vec3) -> f32 {
 }
 
 /// First spiral tread is at local \(+X\); yaw sends that toward the lower walk-on.
-fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: bevy_math::Vec2) -> f32 {
+fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: Vec2) -> f32 {
 	let mut toward = xz(walk_on) - xz(center);
 	if toward.length() < 1e-3 {
 		if let Some(out) = normalize_xz(lower_out) {
 			toward = -out;
 		} else {
-			toward = bevy_math::Vec2::X;
+			toward = Vec2::X;
 		}
 	} else {
 		toward = toward.normalize();
@@ -214,11 +203,11 @@ fn spiral_start_yaw(walk_on: Vec3, center: Vec3, lower_out: bevy_math::Vec2) -> 
 	(-toward.y).atan2(toward.x)
 }
 
-fn xz(p: Vec3) -> bevy_math::Vec2 {
-	bevy_math::Vec2::new(p.x, p.z)
+fn xz(p: Vec3) -> Vec2 {
+	Vec2::new(p.x, p.z)
 }
 
-fn normalize_xz(v: bevy_math::Vec2) -> Option<bevy_math::Vec2> {
+fn normalize_xz(v: Vec2) -> Option<Vec2> {
 	let len = v.length();
 	if len < 1e-5 {
 		None
@@ -256,11 +245,16 @@ mod tests {
 			panic!("expected spiral");
 		};
 		assert!(g.height > 2.9);
-		assert!((g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3, "outer rail should sit on the hole, radius={}", g.radius);
+		assert!(
+			(g.radius + 0.5 * g.tread_width - 1.2).abs() < 1e-3,
+			"outer rail should sit on the hole, radius={}",
+			g.radius
+		);
 		let c = flight.stairs().placement.translation;
 		assert!(c.x.abs() < 0.15 && c.z.abs() < 0.15, "center={c:?}");
 		let first = first_tread_xz(&flight);
-		let outer = first + (first - bevy_math::Vec2::new(c.x, c.z)).normalize() * (0.5 * g.tread_width);
+		let outer =
+			first + (first - bevy_math::Vec2::new(c.x, c.z)).normalize() * (0.5 * g.tread_width);
 		assert!(
 			(outer - bevy_math::Vec2::new(0.0, -1.2)).length() < 0.05,
 			"outer rail should sit on the walk-on, centerline={first:?} outer={outer:?}"

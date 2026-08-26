@@ -128,7 +128,7 @@ pub enum PreviewSubject {
 	ConnectingStairwell {
 		case: ConnectingStairwellCase,
 		upper_landing: bool,
-		landing_thickness: f32,
+		slab_thickness: f32,
 	},
 	ArcFloor {
 		radius: f32,
@@ -575,9 +575,9 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
-			PreviewSubject::ConnectingStairwell { case, upper_landing, landing_thickness } => {
+			PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } => {
 				format!(
-					"preview: connecting-stairwell --case {} upper_landing={upper_landing} landing_thickness={landing_thickness:.3} ({})",
+					"preview: connecting-stairwell --case {} upper_landing={upper_landing} slab_thickness={slab_thickness:.3} ({})",
 					case.slug(),
 					case.look_for()
 				)
@@ -3661,10 +3661,10 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
-		PreviewSubject::ConnectingStairwell { case, upper_landing, landing_thickness } => {
+		PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } => {
 			let (lower, upper) = connecting_stairwell_demo_endpoints(*case);
 			let well = ConnectingStairwell::rough_stone(lower, upper)
-				.with_landing_thickness(*landing_thickness)
+				.with_slab_thickness(*slab_thickness)
 				.with_upper_landing(*upper_landing);
 			spawn_building_preview(&mut commands, transform, &well, &lod_ref);
 		}
@@ -5506,7 +5506,7 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 /// Debug overlay for [`PreviewSubject::ConnectingStairwell`]: walk-on edges,
 /// orientation arrows, and the flight polyline.
 pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	let PreviewSubject::ConnectingStairwell { case, upper_landing, landing_thickness } =
+	let PreviewSubject::ConnectingStairwell { case, upper_landing, slab_thickness } =
 		config.subject
 	else {
 		return;
@@ -5516,7 +5516,7 @@ pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewC
 
 	let (lower, upper) = connecting_stairwell_demo_endpoints(case);
 	let well = ConnectingStairwell::rough_stone(lower, upper)
-		.with_landing_thickness(landing_thickness)
+		.with_slab_thickness(slab_thickness)
 		.with_upper_landing(upper_landing);
 
 	let cyan = Color::srgb(0.2, 0.9, 0.95);

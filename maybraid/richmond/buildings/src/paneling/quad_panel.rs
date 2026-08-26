@@ -3,9 +3,15 @@
 //! Corners \((a_0, a_1, b_0, b_1)\) triangulate with diagonal \(a_0\)–\(b_1\).
 //! Use [`Self::into_complex`] to continue editing (e.g. add more triangles).
 
-use richmond_building_components::panels::PanelStyle;
+use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
+use richmond_building_components::joints::JointNode;
+use richmond_building_components::panels::{PanelNode, PanelStyle};
+use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::panel_complex::{
+	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
+};
 
 /// Re-export for call sites that imported thickness from this module.
 pub use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
@@ -64,6 +70,36 @@ impl QuadPanel {
 
 	pub fn as_complex(&self) -> &PanelComplex {
 		&self.0
+	}
+
+	/// Horizontal (or general) floor quad with uniform kit thickness.
+	pub fn slab(style: PanelStyle, a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3, thickness: f32) -> Self {
+		let t = |p: Vec3| PanelPoint::new(p, thickness);
+		Self::new(style, t(a0), t(a1), t(b0), t(b1))
+	}
+
+	/// Authored corners \((a_0, a_1, b_0, b_1)\).
+	pub fn corners(&self) -> [Vec3; 4] {
+		[0, 1, 2, 3]
+			.map(|i| self.0.point(PanelPointId(i)).map(|p| p.position).unwrap_or(Vec3::ZERO))
+	}
+
+	/// Kit thickness at \(a_0\) (uniform for [`Self::slab`]).
+	pub fn thickness(&self) -> f32 {
+		self.0
+			.point(PanelPointId(0))
+			.map(|p| p.thickness)
+			.unwrap_or(DEFAULT_PANEL_THICKNESS)
+	}
+}
+
+impl BuildingComponents for QuadPanel {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		self.0.panel_nodes_for_level(level)
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		self.0.joint_nodes_for_level(level)
 	}
 }
 

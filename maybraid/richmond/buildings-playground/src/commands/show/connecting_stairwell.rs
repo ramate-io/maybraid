@@ -5,7 +5,7 @@ use clap::{Args, ValueEnum};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
-use richmond_buildings::LANDING_THICKNESS_M;
+use richmond_buildings::SLAB_THICKNESS_M;
 
 /// Named shaft pairs that stress spiral fit (inscription, center, arrive).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -76,9 +76,9 @@ pub struct ConnectingStairwell {
 	/// Skip the upper landing (a follow-on stairwell would own it).
 	#[arg(long, default_value_t = false)]
 	pub no_upper_landing: bool,
-	/// Upper-landing slab thickness (meters).
-	#[arg(long, default_value_t = LANDING_THICKNESS_M)]
-	pub landing_thickness: f32,
+	/// Kit thickness of the run-in and upper-landing slabs (meters).
+	#[arg(long, default_value_t = SLAB_THICKNESS_M)]
+	pub slab_thickness: f32,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
@@ -89,7 +89,7 @@ impl ConnectingStairwell {
 			PreviewSubject::ConnectingStairwell {
 				case: self.case,
 				upper_landing: !self.no_upper_landing,
-				landing_thickness: self.landing_thickness,
+				slab_thickness: self.slab_thickness,
 			},
 			self.transform.transform(),
 		)
