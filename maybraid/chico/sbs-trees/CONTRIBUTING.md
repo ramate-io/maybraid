@@ -23,7 +23,7 @@ Add `unit_from_num` / `into_unit_from_num` on params and the built type (see `St
 3. Key layout / canopy / tuft **seed by `num`**, not by world position.
 4. Return `(unit_params, world_size)`. World size goes on plant [`Placement`](../vegetation-components/src/placed.rs) scale in the grove.
 
-Same `num` must rebuild the same chain. Different `num` must differ. Test both.
+Same `num` must rebuild the same chain. Different `num` must differ. Test both. The grown chain AABB must also be unit-sized — hop lengths, stick radii, and palm droop / arch authored in meters for a default height (Sope flair `1..4` on a 20 m stalk; Waialea droop `0.72` on a 12 m stalk) have to be fractions of that height, not leftover world meters. Date droop / arch also divide by `frond_world_scale` the same way length does, so a Palm Shade unit mesh keeps `/show` hang when grove noise picks a smaller scale.
 
 Do **not** bake world height into the mesh. Grove placement scale (`placed.scale * world_size`) is the instance size.
 
@@ -48,7 +48,7 @@ fn merge_foliage(nodes: Vec<FoliageNode>) -> Vec<FoliageNode> {
 
 [`StickNode::merge_standard`](../vegetation-components/src/sticks/node.rs) and [`FoliageNode::merge_cheap_balls`](../vegetation-components/src/foliage/node.rs) become one [`MultiSceneMerge`](../../scene-ref) per collection. Merge already packs kit-local positions into vertex **COLOR** so [`ChicoLeafMaterial`](../shaders) breakup still works after the bake.
 
-Leave layered / frond / procedural fallbacks as separate nodes. Low canopy proxies do not need this merge.
+Leave layered / frond / procedural fallbacks as separate nodes. Palm Low is a shared five-chord star (`PalmCrownParams::unit_low_star` / `low_star_collection_nodes`) — one singleton collection per blade so UltraLow merge cannot chord the fan. Do not key that star on the High variant seed.
 
 ### 3. LOD bands stay local
 
@@ -56,16 +56,16 @@ Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::
 
 ### 4. Widening High is a shader problem, then a factor
 
-Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds stay cheap because they do not run that shader.
+Raising `STRUCTURAL_HIGH_FACTOR` keeps the High mesh (merged cheap-ball cards + `ChicoLeafMaterial`) on trees that used to be Medium. Triangle count is usually fine; **draw cost is fragment cheese + `discard` overdraw**, not verts. Fronds use [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (palette + tip-weighted sway, opaque — no cheese / `discard`).
 
-[`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) already short-circuits by camera distance to each card centroid (`LEAF_NEAR_DIST` 16 m / `LEAF_MID_DIST` 32 m / sway cut 24 m): full 4-octave swiss cheese up close, two octaves in the mid band, one noise and **no `discard`** farther out so overlapping cards keep early-Z.
+[`ChicoLeafMaterial`](../shaders/src/chico_leaf_material.wgsl) always `discard`s a noisy rim (Opaque ignores alpha — that was the rectangular far card on a plain). Interior swiss cheese is **in ball-radii** (`LEAF_MID_DIST` 80 / sway cut 60; remapped so 140 m is never “near”). Farther: solid hub, no hole `discard`, so overlapping cards keep early-Z. Lighting is hard Lambert + sky, times fake canopy occlusion (inward faces and puff hubs) — no clustered PBR or leaf shadow maps. Opaque — alpha-to-coverage looked like a window screen.
 
 That path is shared. Any construction that emits `CheapBall` / `CheapBallCollection` with `chico_leaf_material_ref()` gets it. To push another tree’s High the same way:
 
 1. Confirm High foliage is merged cheap balls on `ChicoLeafMaterial` (not layered / frond / a custom WGSL).
-2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (Storybook is `10 / 30 / 50`). Do not copy Storybook’s numbers blindly — they are `distance / tree_radius`.
+2. Raise that module’s `STRUCTURAL_HIGH_FACTOR` (tall woody constructions share Storybook’s `10 / 30 / 50`). Bushes and hedges stay tighter. Do not copy those numbers blindly — they are `distance / tree_radius`.
 3. Profile `ChicoLeafMaterial` **fragment** time, not triangle count. If it is still hot, thin High `AzimuthHeightBands` (card count) before adding another material.
-4. A plant-specific shader must copy the distance bands itself. Sticks and fronds do not need this.
+4. A plant-specific shader must copy the distance bands itself. Sticks do not need this. Fronds stay on `ChicoFrondMaterial` — do not point them at `ChicoLeafMaterial`.
 
 Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUTING.md)).
 
@@ -77,4 +77,4 @@ Grove **tile** bands stay independent ([groves CONTRIBUTING](../groves/CONTRIBUT
 
 ## Grove construction
 
-Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Braid Oak is the default unit oak scaled by placement: groves must not grow a remixed `BraidOakTreeSbs` and then `into_unit_from_num`.
+Quantization is wasted if the grove still grows a unique `T` per cell. See [groves CONTRIBUTING](../groves/CONTRIBUTING.md): `tree_variants` / `patch_variant_index` / `into_unit_from_num` / `nest_flattened_plant_chunk`. Preset silhouettes (Braid Oak, Honu, Sope, Jungle Storybook) instance `unit_from_num` and put sampled height on placement: groves must not remix SBS projection / descenders / growth onto those meshes and then `into_unit_from_num`. Jungle Storybook `into_unit_from_num` must divide `jungle_growth_radius_scale` by height so fronds stay proportional after placement scale.

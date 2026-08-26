@@ -1,11 +1,10 @@
 //---------------------------------------------------------
-// Chico canopy leaf: object-space leafy breakup on cheap-ball
-// cards (planes through a centroid) + vertex sway + split light.
+// Chico frond: authored-mesh silhouette + vertex sway + PBR.
 //
-// Holes are glued to each card (kit space) so they ride with
-// wind. A noisy rim discard runs at every distance so far cards
-// are not rectangles. Interior swiss cheese is near/mid only;
-// far hubs stay solid so overlapping cards keep early-Z.
+// Palette lives on the material uniform. Vertex COLOR is kit-local
+// after MultiSceneMerge (xyz = pre-bake kit pos, w = part scale) —
+// same pack as cheap-ball collections. Do not discard or cheese
+// the blade; the GLB outline is the silhouette.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -16,15 +15,16 @@
     forward_io::Vertex,
     view_transformations::position_world_to_clip,
     mesh_view_bindings::{view, globals, lights},
+    pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
+    pbr_bindings,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
-// Interpolators match Bevy's `VertexOutput` locations 0–7, then local pos.
-struct LeafVertexOutput {
+struct FrondVertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
     @location(1) world_normal: vec3<f32>,
@@ -47,15 +47,8 @@ struct LeafVertexOutput {
     @location(7) @interpolate(flat) visibility_range_dither: i32,
 #endif
     @location(8) local_pos: vec3<f32>,
-    /// Centroid distance in ball-radii; remapped so CAP meters == MID.
     @location(9) view_dist: f32,
-    /// Plant instance origin (flat) — canopy outward for fake occlusion.
-    @location(10) @interpolate(flat) plant_origin: vec3<f32>,
 }
-
-// --------------------------------------------------------
-// Hash / noise
-// --------------------------------------------------------
 
 fn hash13(p: vec3<f32>) -> f32 {
     let p3 = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -89,22 +82,6 @@ fn value_noise_3d(p: vec3<f32>) -> f32 {
     return mix(nxy0, nxy1, f.z);
 }
 
-/// Two-octave FBM — near and mid cheese (4 octaves do not read under overlap).
-fn fbm_3d_2(p: vec3<f32>) -> f32 {
-    let a = value_noise_3d(p) * 0.5;
-    let b = value_noise_3d(p * 2.03) * 0.25;
-    return (a + b) / 0.75;
-}
-
-// Cheese / sway bands in ball-radii. `view_dist` is
-// `max(abs/scale, abs * MID/CAP)` so a unit kit cheeses to MID meters
-// and nothing stays in discard past CAP meters.
-const LEAF_MID_DIST: f32 = 80.0;
-const LEAF_SWAY_CUT_DIST: f32 = 60.0;
-const LEAF_ABS_CAP: f32 = 140.0;
-/// Blot radius ceiling (`0.52 + 0.38`); outside this, skip hole FBM.
-const LEAF_RIM_CUT: f32 = 0.92;
-
 fn instance_scale(world_from_local: mat4x4<f32>) -> f32 {
     return max(
         length(world_from_local[0].xyz),
@@ -112,24 +89,28 @@ fn instance_scale(world_from_local: mat4x4<f32>) -> f32 {
     );
 }
 
-fn canopy_sway(
+/// Tip-weighted wind. Kit \(Y \in [0, 1]\) along the rachis (`Placement::frond_segment`).
+const FROND_SWAY_CUT_DIST: f32 = 48.0;
+
+fn frond_sway(
     local_pos: vec3<f32>,
     world_normal: vec3<f32>,
     centroid: vec3<f32>,
     scale: f32,
     view_dist: f32,
 ) -> vec3<f32> {
-    if (view_dist >= LEAF_SWAY_CUT_DIST) {
+    if (view_dist >= FROND_SWAY_CUT_DIST) {
         return vec3<f32>(0.0);
     }
-    let r = min(length(local_pos), 1.0);
+    let tip = saturate(local_pos.y);
+    let tip2 = tip * tip;
     let t = globals.time;
     let phase = dot(centroid, vec3<f32>(0.07, 0.03, 0.11));
     let gust = sin(t * 0.85 + phase) * sin(t * 0.31 + phase * 1.7);
-    let flutter = sin(t * 2.15 + local_pos.x * 3.0 + phase);
+    let flutter = sin(t * 1.65 + local_pos.y * 2.2 + phase);
     let wind_dir = vec3<f32>(0.92, 0.08, 0.38);
-    var offset = wind_dir * (gust * r * 0.08 * scale);
-    offset += world_normal * (flutter * r * 0.028 * scale);
+    var offset = wind_dir * (gust * tip2 * 0.10 * scale);
+    offset += world_normal * (flutter * tip2 * 0.035 * scale);
     return offset;
 }
 
@@ -157,17 +138,12 @@ fn morph_vertex(vertex_in: Vertex, instance_index: u32) -> Vertex {
 }
 #endif
 
-// --------------------------------------------------------
-// Vertex: Bevy mesh transform + rim-weighted wind
-// --------------------------------------------------------
-
 @vertex
-fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
-    var out: LeafVertexOutput;
+fn vertex(vertex_no_morph: Vertex) -> FrondVertexOutput {
+    var out: FrondVertexOutput;
     out.local_pos = vec3<f32>(0.0, 0.0, 0.0);
     out.world_normal = vec3<f32>(0.0, 1.0, 0.0);
     out.view_dist = 0.0;
-    out.plant_origin = vec3<f32>(0.0, 0.0, 0.0);
 
 #ifdef MORPH_TARGETS
     var vertex = morph_vertex(vertex_no_morph, vertex_no_morph.instance_index);
@@ -176,7 +152,6 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
 #endif
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
-    out.plant_origin = mesh_world_from_local[3].xyz;
 
 #ifdef SKINNED
     var world_from_local = skinning::skin_model(
@@ -201,8 +176,6 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
 
 #ifdef VERTEX_POSITIONS
 #ifdef VERTEX_COLORS
-    // Merged kits: COLOR.xyz is pre-bake unit-kit position; COLOR.w is part scale.
-    // POSITION is collection space. Recover per-ball sway (not the tree instance).
     let kit_local = vertex.color.xyz;
     let part_scale = max(vertex.color.w, 1e-4);
     let ball_local = vertex.position - kit_local * part_scale;
@@ -217,19 +190,13 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     let scale = instance_scale(mesh_world_from_local);
 #endif
     out.local_pos = kit_local;
-    // Placement may be baked into vertices (grove flatten). Angular LOD,
-    // remapped so abs == CAP sits on the far side of MID regardless of scale.
-    let abs_dist = length(centroid - view.world_position);
-    out.view_dist = max(
-        abs_dist / max(scale, 1e-4),
-        abs_dist * (LEAF_MID_DIST / LEAF_ABS_CAP),
-    );
+    out.view_dist = length(centroid - view.world_position);
     out.world_position = mesh_functions::mesh_position_local_to_world(
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
     out.world_position += vec4<f32>(
-        canopy_sway(
+        frond_sway(
             kit_local,
             out.world_normal,
             centroid,
@@ -274,89 +241,52 @@ fn vertex(vertex_no_morph: Vertex) -> LeafVertexOutput {
     return out;
 }
 
-// --------------------------------------------------------
-// Fragment
-// --------------------------------------------------------
-
 @fragment
 fn fragment(
     @builtin(front_facing) is_front: bool,
-    mesh: LeafVertexOutput,
+    mesh: FrondVertexOutput,
 ) -> @location(0) vec4<f32> {
+    var pbr_input: PbrInput = pbr_input_new();
+
     let local_pos = mesh.local_pos;
-    let r = saturate(length(local_pos));
-    let view_dist = mesh.view_dist;
-    let cheese = view_dist < LEAF_MID_DIST;
-
-    // Noisy rim at every distance — Opaque ignores alpha, so far cards
-    // stay rectangular unless we discard. Hub stays solid (early-Z).
-    if (r > LEAF_RIM_CUT) {
-        discard;
-    }
-    let blot = 0.52 + 0.38 * value_noise_3d(local_pos * 2.4);
-    let rim_w = max(fwidth(r) * 2.0, 0.08);
-    let radial_alpha = smoothstep(0.0, rim_w, blot - r);
-    if (radial_alpha < 0.08) {
-        discard;
-    }
-
-    var hole_alpha = 1.0;
-    var tint_noise = 0.5;
-
-    if (cheese) {
-        // Interior bites. Far skips this so isolated hubs stay cheap.
-        let hole = fbm_3d_2(local_pos * 3.25) * 0.62 + value_noise_3d(local_pos * 8.5) * 0.38;
-        let hub = 1.0 - smoothstep(0.22, 0.62, r);
-        let threshold = mix(0.22, 0.52, 1.0 - hub);
-        let fw = max(fwidth(hole) * 1.35, 0.01);
-        hole_alpha = smoothstep(threshold - fw, threshold + fw, hole);
-        tint_noise = value_noise_3d(local_pos * 1.75);
-        if (hole_alpha * radial_alpha < 0.08) {
-            discard;
-        }
-    } else {
-        let field = value_noise_3d(local_pos * 3.25);
-        hole_alpha = mix(0.85, 1.0, field);
-        tint_noise = field;
-    }
-
-    let alpha = hole_alpha * radial_alpha;
-    let base_rgb = vec3<f32>(base_color.x, base_color.y, base_color.z);
-    // Hue wobble only — old 0.82/0.72 ramps read as dirt, not leaf.
+    let tint_noise = value_noise_3d(local_pos * 1.75);
     let warm_cool = mix(
-        vec3<f32>(0.94, 1.02, 0.96),
-        vec3<f32>(1.08, 1.04, 0.94),
+        vec3<f32>(0.82, 0.95, 0.72),
+        vec3<f32>(1.12, 1.04, 0.78),
         tint_noise,
     );
-    let brightness = mix(0.94, 1.08, tint_noise);
-    let wash = mix(0.90, 1.0, saturate(min(alpha, radial_alpha) * 1.25));
-    let albedo = base_rgb * warm_cool * brightness * wash;
+    let base_rgb = vec3<f32>(base_color.x, base_color.y, base_color.z);
+
+    pbr_input.material.base_color = vec4<f32>(base_rgb * warm_cool, 1.0);
+    pbr_input.material.perceptual_roughness = 1.0;
+    pbr_input.material.metallic = 0.0;
+    pbr_input.material.reflectance = vec3<f32>(0.12, 0.12, 0.12);
+    pbr_input.material.flags = pbr_input.material.flags | STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT;
+
+    pbr_input.frag_coord = mesh.position;
+    pbr_input.world_position = mesh.world_position;
+    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
+    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
 
     let prepared_normal = fns::prepare_world_normal(
         mesh.world_normal,
         true,
         is_front,
     );
-    let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.15));
-    var ndl = 0.55;
+    let n = normalize(mix(prepared_normal, vec3<f32>(0.0, 1.0, 0.0), 0.25));
+    pbr_input.world_normal = n;
+    pbr_input.N = n;
+
+    let lit_color = fns::apply_pbr_lighting(pbr_input);
+
+    var wrap = 0.5;
+    var back = 0.0;
     if (lights.n_directional_lights > 0u) {
         let L = lights.directional_lights[0].direction_to_light;
-        ndl = saturate(dot(n, L));
+        wrap = saturate(dot(n, L) * 0.5 + 0.5);
+        back = saturate(-dot(n, L));
     }
-    let sun = ndl * 0.95 + 0.14;
-    let sky = mix(0.38, 0.55, saturate(n.y));
-    let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
-    // Fake canopy shadow: inward faces + puff hubs. Fade out with distance
-    // so far cards stay green instead of reading as black.
-    let outward = mesh.world_position.xyz - mesh.plant_origin;
-    let olen = length(outward);
-    var occ = mix(0.72, 1.0, r);
-    if (olen > 1e-3) {
-        let shade = saturate(dot(n, outward / olen));
-        occ *= mix(0.68, 1.0, shade * shade);
-    }
-    occ = mix(occ, 1.0, saturate((view_dist - 32.0) / 48.0));
-    let lifted = (albedo * sun + albedo * sky * sky_rgb) * occ;
+    let lifted = lit_color.rgb + base_rgb * (0.16 + 0.22 * wrap + 0.28 * back);
 
-    return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
+    return tone_mapping(vec4<f32>(lifted, 1.0), view.color_grading);
 }

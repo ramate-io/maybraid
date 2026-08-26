@@ -185,8 +185,7 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree,
-		StorybookTreeParams,
+		BraidOakTree, RorysHeadTrained, RorysHeadTrainedParams, StorybookTree, StorybookTreeParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -201,17 +200,17 @@ mod vc {
 	use super::{definition, TemperateLowerMassivesCell, TemperateLowerMassivesItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	pub const TEMPERATE_LOWER_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	#[derive(Clone, Debug, Args)]
@@ -429,19 +428,38 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
+				.flat_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						TemperateLowerMassivesKind::Oak(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						TemperateLowerMassivesKind::Storybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						TemperateLowerMassivesKind::Rory(t) => {
-							canopy_proxy_site(t, plant.placement, material)
-						}
+						TemperateLowerMassivesKind::Rory(t) => vec![
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						],
 					}
+				})
+				.collect()
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					TemperateLowerMassivesKind::Rory(t) => {
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.trunk
+					}
+					_ => None,
 				})
 				.collect()
 		}
@@ -513,8 +531,8 @@ mod vc {
 	}
 
 	impl VegetationComponents for TemperateLowerMassives {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -648,18 +666,20 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
+			assert_eq!(low_foliage, grove.canopy_sites().len());
+			assert!(low_foliage >= grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!(
-					"Low temperate lower massives should emit one flattened canopy collection"
-				);
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => {
+					anyhow::bail!("Low temperate lower massives should emit flattened canopy kits")
+				}
+			}
 			Ok(())
 		}
 

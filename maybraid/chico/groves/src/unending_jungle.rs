@@ -334,9 +334,9 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		HonuBanyan, HonuBanyanParams, JungleStorybookTree, JungleStorybookTreeParams,
-		PenmarchTorch, PenmarchTorchParams, RorysHeadTrained, RorysHeadTrainedParams, SopesBanyan,
-		SopesBanyanParams, StorybookTree, StorybookTreeParams, WaialeaPalm, WaialeaPalmParams,
+		HonuBanyan, JungleStorybookTree, PenmarchTorch, PenmarchTorchParams, RorysHeadTrained,
+		RorysHeadTrainedParams, SopesBanyan, StorybookTree, StorybookTreeParams, WaialeaPalm,
+		WaialeaPalmParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -351,13 +351,14 @@ mod vc {
 	use super::{definition, UnendingJungleCell, UnendingJungleItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_rory, canopy_proxy_site,
+		canopy_proxy_trunk, canopy_proxy_waialea, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
-		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
-		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
-		ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placed_palm_low_fronds, placement_noise,
+		stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+		CanopyProxySite, FlatTerrainSample, GroveCellVariant, GroveExtent, GroveFrontend,
+		DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const UNENDING_JUNGLE_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
@@ -613,31 +614,110 @@ mod vc {
 		fn canopy_sites(&self) -> Vec<CanopyProxySite> {
 			self.plants
 				.iter()
-				.filter_map(|plant| {
+				.flat_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						UnendingJungleKind::Honu(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Sope(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Storybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::JungleStorybook(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
 						UnendingJungleKind::Torch(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_site(t, plant.placement, material).into_iter().collect()
 						}
-						UnendingJungleKind::Rory(t) => {
-							canopy_proxy_site(t, plant.placement, material)
-						}
-						UnendingJungleKind::Waialea(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+						UnendingJungleKind::Rory(t) => vec![
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						],
+						UnendingJungleKind::Waialea(t) => canopy_proxy_waialea(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							material,
+						),
+					}
+				})
+				.collect()
+		}
+
+		fn foliage_low_nodes(&self) -> Vec<FoliageNode> {
+			let mut nodes = Vec::new();
+			let mut sites = Vec::new();
+			for plant in self.plants.iter() {
+				let material = &plant.ball_material;
+				match &plant.kind {
+					UnendingJungleKind::Honu(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
 						}
 					}
+					UnendingJungleKind::Sope(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Storybook(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::JungleStorybook(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Torch(t) => {
+						if let Some(site) = canopy_proxy_site(t, plant.placement, material) {
+							sites.push(site);
+						}
+					}
+					UnendingJungleKind::Rory(t) => {
+						sites.push(
+							canopy_proxy_rory(t, plant.placement, &plant.stick_material, material)
+								.crown,
+						);
+					}
+					UnendingJungleKind::Waialea(t) => {
+						nodes.extend(placed_palm_low_fronds(
+							t.as_ref(),
+							plant.placement,
+							&plant.stick_material,
+							material,
+							&plant.frond_material,
+						));
+						if let Some(trunk) =
+							canopy_proxy_trunk(t, plant.placement, &plant.stick_material)
+						{
+							sites.push(trunk);
+						}
+					}
+				}
+			}
+			nodes.extend(foliage_low_canopy_balls(sites));
+			nodes
+		}
+
+		fn proxy_trunks(&self) -> Vec<StickNode> {
+			self.plants
+				.iter()
+				.filter_map(|plant| match &plant.kind {
+					UnendingJungleKind::Rory(t) => {
+						canopy_proxy_rory(
+							t,
+							plant.placement,
+							&plant.stick_material,
+							&plant.ball_material,
+						)
+						.trunk
+					}
+					_ => None,
 				})
 				.collect()
 		}
@@ -664,31 +744,30 @@ mod vc {
 
 		match placed.variant.item() {
 			UnendingJungleItem::Honu(banyan) => {
-				let samples =
-					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
-				let mut params = HonuBanyanParams::default();
-				params.geometry = samples.geometry;
-				params.growth_spawn_fraction = samples.growth_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size =
+					BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.tree_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Honu(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::Honu(Arc::new(HonuBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,
 				}
 			}
 			UnendingJungleItem::Sope(banyan) => {
-				let samples =
-					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
-				let mut params = SopesBanyanParams::default();
-				params.geometry = samples.geometry;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size =
+					BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise)
+						.geometry
+						.scale
+						.stalk_height;
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::Sope(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::Sope(Arc::new(SopesBanyan::unit_from_num(variant))),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -709,15 +788,13 @@ mod vc {
 				}
 			}
 			UnendingJungleItem::JungleStorybook(jungle) => {
-				let samples = jungle.build_with_noise(build_noise);
-				let mut params = JungleStorybookTreeParams::default();
-				params.geometry = samples.geometry;
-				params.growth_spawn_fraction = samples.growth_spawn_fraction;
-				let (unit_params, world_size) = params.into_unit_from_num(variant);
+				let world_size = jungle.build_with_noise(build_noise).geometry.height();
 				UnendingJunglePlant {
 					placement: Placement::new(placed.position, 0.0)
 						.with_scale(Vec3::splat((placed.scale * world_size).max(1e-4))),
-					kind: UnendingJungleKind::JungleStorybook(Arc::new(unit_params.build())),
+					kind: UnendingJungleKind::JungleStorybook(Arc::new(
+						JungleStorybookTree::unit_from_num(variant),
+					)),
 					stick_material,
 					ball_material,
 					frond_material,
@@ -769,16 +846,14 @@ mod vc {
 	}
 
 	impl VegetationComponents for UnendingJungle {
-		fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-			Layers::new()
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+			trained_proxy_stick_nodes_for_level(level, self.proxy_trunks())
 		}
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			match level {
 				LodSceneLevel::High | LodSceneLevel::Medium => Layers::new(),
-				LodSceneLevel::Low => {
-					layers_from_nodes(foliage_low_canopy_balls(self.canopy_sites()))
-				}
+				LodSceneLevel::Low => layers_from_nodes(self.foliage_low_nodes()),
 				LodSceneLevel::UltraLow
 				| LodSceneLevel::Distance(_)
 				| LodSceneLevel::Resolution(_) => layers_from_nodes(foliage_ultra_low_merged_balls(
@@ -912,16 +987,23 @@ mod vc {
 			assert_eq!(*remaining_primitives, grove.plants.len());
 			assert_eq!(*remaining_weight as usize, grove.plants.len());
 
-			assert_eq!(grove.stick_nodes_for_level(LodSceneLevel::Low).len(), 0);
-			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
-			assert_eq!(low_foliage, grove.plants.len());
-			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low unending-jungle should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			assert!(grove.stick_nodes_for_level(LodSceneLevel::Low).len() <= 1);
+			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
+			let palms = grove
+				.plants
+				.iter()
+				.filter(|p| matches!(p.kind, UnendingJungleKind::Waialea(_)))
+				.count();
+			let fronds = low_foliage.iter().filter(|n| n.geometry.is_frond_collection()).count();
+			assert_eq!(fronds, palms * 5);
+			assert!(!grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).flatten().is_empty());
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low unending-jungle should emit flattened kits"),
+			}
 			Ok(())
 		}
 

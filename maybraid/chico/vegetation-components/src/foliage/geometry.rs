@@ -66,6 +66,10 @@ impl FoliageGeometry {
 		matches!(self, Self::LayeredBall)
 	}
 
+	pub fn is_cheap_ball(&self) -> bool {
+		matches!(self, Self::CheapBall)
+	}
+
 	pub fn is_frond_kit(&self) -> bool {
 		matches!(self, Self::StraightFrond | Self::StraightFrondSegment)
 	}

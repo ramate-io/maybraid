@@ -4,13 +4,27 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, Hysteresis};
 use chico_vegetation_components::{
-	chico_leaf_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
+	chico_stick_material_ref, FoliageNode, FrondCollection, FrondRun, Placement, StickGeometry,
 	StickNode, StructuralLod,
 };
 
 /// Target fronds (runs) per [`FrondCollection`]. Batches stay small so UltraLow merge
 /// cannot chord the whole crown; LOD probe is the parent crown, not this batch AABB.
 pub(crate) const FRONDS_PER_COLLECTION: usize = 3;
+
+/// Shared Low / UltraLow palm crown: one ring of even chords, one collection per blade.
+///
+/// Fine-phase `runs_for_level` would collapse a 5-run collection to two (Low) then one
+/// (UltraLow) fat chord — singleton collections keep the star. Seed is fixed so every
+/// unit palm shares the same kit poses; world size / yaw live on [`Placement`].
+pub(crate) const LOW_STAR_FROND_COUNT: u32 = 5;
+/// Fill the High crown disk: five blades need more width than a High rachis.
+const LOW_STAR_WIDTH_FACTOR: f32 = 2.4;
+/// Reach the outer High ring so the star does not sit in an empty halo.
+const LOW_STAR_LENGTH_FACTOR: f32 = 1.2;
+/// Hang each chord (~−40°). Authored direction — do not sample a 1-segment droop spine
+/// through `from_rotation_arc`, which rolls some blades into the XZ plane.
+const LOW_STAR_DROOP_PITCH: f32 = -0.70;
 
 /// Bake mesh-local frond shape into world units (keeps authored rachis segment count).
 pub(crate) fn world_space_frond_shape(
@@ -66,6 +80,50 @@ pub(crate) fn frond_collection_nodes(
 	nodes
 }
 
+/// Shared Low palm crown: five singleton chord collections at `anchor`.
+///
+/// `length` / `width` are world (or unit) metres (High mid-band). The star thickens and
+/// lengthens those so five blades fill the crown. Probe is the parent crown so banding
+/// matches High. Do not put these five runs in one collection.
+pub(crate) fn low_star_collection_nodes(
+	anchor: Vec3,
+	length: f32,
+	width: f32,
+	probe_center: Vec3,
+	probe_radius: f32,
+) -> Vec<FoliageNode> {
+	let length = (length * LOW_STAR_LENGTH_FACTOR).max(1e-4);
+	let width = (width * LOW_STAR_WIDTH_FACTOR).max(1e-6);
+	let pitch = LOW_STAR_DROOP_PITCH;
+	let n = LOW_STAR_FROND_COUNT as f32;
+	let mut nodes = Vec::with_capacity(LOW_STAR_FROND_COUNT as usize);
+	for i in 0..LOW_STAR_FROND_COUNT {
+		let azimuth = i as f32 * std::f32::consts::TAU / n;
+		let dir = Vec3::new(pitch.cos() * azimuth.cos(), pitch.sin(), pitch.cos() * azimuth.sin());
+		let Some(placement) = Placement::frond_segment(anchor, dir, length, width) else {
+			continue;
+		};
+		nodes.push(FoliageNode::frond_collection(
+			FrondCollection::new([FrondRun::from_placements([placement])])
+				.with_probe(probe_center, probe_radius),
+			Placement::IDENTITY,
+		));
+	}
+	nodes
+}
+
+/// Low star at the first ring anchor, probed like High.
+pub(crate) fn low_star_nodes_for_rings(
+	rings: &[(Vec3, FrondCrownShape)],
+	length: f32,
+	width: f32,
+	footprint_and_height: Option<(f32, f32)>,
+) -> Vec<FoliageNode> {
+	let (center, radius) = crown_lod_probe(rings, footprint_and_height);
+	let anchor = rings.first().map(|(a, _)| *a).unwrap_or(center);
+	low_star_collection_nodes(anchor, length, width, center, radius)
+}
+
 /// Parent-crown LOD probe: AABB center, radius at least the crown half-extent.
 ///
 /// When `footprint_and_height` is set, also floors radius with
@@ -110,31 +168,26 @@ pub(crate) fn crown_aabb_from_rings(rings: &[(Vec3, FrondCrownShape)]) -> (Vec3,
 	(min, max)
 }
 
-/// Two layered balls with rotated pose offsets for a denser Low silhouette.
-pub(crate) fn layered_proxy_balls(min: Vec3, max: Vec3) -> Vec<FoliageNode> {
-	let center = (min + max) * 0.5;
-	let half_extents = ((max - min) * 0.5).max(Vec3::splat(1e-4));
-	let scale = half_extents * 0.9;
-	let offset = Vec3::new(half_extents.x * 0.12, half_extents.y * 0.04, 0.0);
-	let yaw_b = std::f32::consts::FRAC_PI_2;
-	let center_a = center + offset;
-	let center_b = center + Quat::from_rotation_y(yaw_b) * offset;
-	vec![
-		FoliageNode::layered_ball(
-			Placement::new(center_a, 0.0)
-				.with_pitch(0.18)
-				.with_roll(-0.22)
-				.with_scale(scale),
-		)
-		.with_material(chico_leaf_material_ref()),
-		FoliageNode::layered_ball(
-			Placement::new(center_b, yaw_b)
-				.with_pitch(-0.28)
-				.with_roll(0.4)
-				.with_scale(scale),
-		)
-		.with_material(chico_leaf_material_ref()),
-	]
+/// One cheap-ball column along the grown trunk (Low / UltraLow silhouette).
+///
+/// Tall palms have no mid-tree canopy, so a crown-only Low reads as a floating tuft.
+/// Kit \(+Y\) follows the base→tip chord so a slight Waialea arch still reads.
+pub(crate) fn trunk_proxy_node<C: Hysteresis>(
+	chain: &BallStickChain<C>,
+	height: f32,
+	base_radius: f32,
+) -> FoliageNode {
+	let start = chain.nodes.first().map(|n| n.position).unwrap_or(Vec3::ZERO);
+	let end = chain.nodes.last().map(|n| n.position).unwrap_or(Vec3::Y * height.max(1e-4));
+	let mid = (start + end) * 0.5;
+	let delta = end - start;
+	let half_len = (delta.length() * 0.5).max(height.max(1e-4) * 0.35);
+	let radius = base_radius.max(height.max(1e-4) * 0.02);
+	let mut placement = Placement::new(mid, 0.0).with_scale(Vec3::new(radius, half_len, radius));
+	if let Some(dir) = delta.try_normalize() {
+		placement = placement.with_rotation(Quat::from_rotation_arc(Vec3::Y, dir));
+	}
+	FoliageNode::cheap_ball(placement).with_material(chico_stick_material_ref())
 }
 
 /// All chain segments as trunk kits (date / Waialea columnar or arched trunks).
@@ -166,5 +219,58 @@ pub(crate) fn assert_high_collections_match_structural_lod(
 		let (center, radius) = collection.center_and_extent();
 		assert!((center - probe.center).length() < 1e-4);
 		assert!((radius - probe.tree_radius).abs() < 1e-4);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn low_star_is_five_singleton_chords() -> Result<()> {
+		let nodes = low_star_collection_nodes(Vec3::Y, 0.4, 0.05, Vec3::Y, 0.5);
+		assert_eq!(nodes.len(), LOW_STAR_FROND_COUNT as usize);
+		for node in &nodes {
+			let collection = node.geometry.as_frond_collection().expect("collection");
+			assert_eq!(collection.runs.len(), 1);
+			assert_eq!(collection.runs[0].segments.len(), 1);
+			assert!((collection.center - Vec3::Y).length() < 1e-4);
+			assert!((collection.radius - 0.5).abs() < 1e-4);
+			let dir = collection.runs[0].segments[0].placement.rotation() * Vec3::Y;
+			assert!(dir.y < -0.5, "low-star chord should hang, not stick out: {dir:?}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn high_waialea_rachis_tips_hang() -> Result<()> {
+		use crate::waialea_palm::WaialeaPalmParams;
+		use chico_vegetation_components::VegetationComponents;
+		use lod::gen::LodSceneLevel;
+
+		let built = WaialeaPalmParams::default().build();
+		let nodes = built.foliage_nodes_for_level(LodSceneLevel::High).flatten();
+		assert!(!nodes.is_empty());
+		for node in nodes {
+			let collection = node.geometry.as_frond_collection().expect("collection");
+			for run in &collection.runs {
+				let first = run.segments.first().expect("segment");
+				let last = run.segments.last().expect("segment");
+				let start = first.placement.translation;
+				let first_dir = first.placement.rotation() * Vec3::Y;
+				let chain_len: f32 = run.segments.iter().map(|s| s.placement.scale.y.abs()).sum();
+				let tip = last.placement.translation
+					+ last.placement.rotation() * Vec3::new(0.0, last.placement.scale.y.abs(), 0.0);
+				let straight_tip_y = start.y + first_dir.y * chain_len;
+				assert!(
+					tip.y < straight_tip_y - 0.02,
+					"High rachis stayed straight: tip.y={} straight.y={}",
+					tip.y,
+					straight_tip_y
+				);
+			}
+		}
+		Ok(())
 	}
 }

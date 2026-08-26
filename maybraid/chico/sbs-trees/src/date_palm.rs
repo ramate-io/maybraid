@@ -2,7 +2,7 @@
 //!
 //! [`DatePalmParams::build`] grows the trunk chain once into [`DatePalm`], which implements
 //! [`VegetationComponents`]: trunk sticks at all bands; per-frond [`FrondCollection`]s at
-//! High/Medium; dual layered-ball crown proxy at Low/UltraLow.
+//! High/Medium; shared five-chord Low star at Low/UltraLow.
 //!
 //! [`DatePalm::unit_from_num`] / [`DatePalmParams::into_unit_from_num`] normalize the
 //! SBS trunk to unit height and key trunk noise by a variant index. Emission folds
@@ -29,17 +29,20 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
+use crate::palm_crown::{
+	PalmCrownParams, DATE_PALM_FROND_LENGTH_FRACTION, DATE_PALM_FROND_WIDTH_FRACTION,
+	FROND_RING_SEED_SALT,
+};
 use crate::palm_tree::{
-	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
-	trunk_stick_nodes, world_space_frond_shape,
+	crown_lod_probe, frond_collection_nodes, low_star_nodes_for_rings, trunk_stick_nodes,
+	world_space_frond_shape,
 };
 use crate::storybook_tree::merge_kit_sticks;
 use crown::frond_shape_for_ring;
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 50.0;
 const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Date Palm.
@@ -157,8 +160,13 @@ impl VegetationComponents for DatePalm {
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(&rings);
-				Layers::from_free(layered_proxy_balls(min, max))
+				let height = self.geometry.height();
+				Layers::from_free(low_star_nodes_for_rings(
+					&rings,
+					DATE_PALM_FROND_LENGTH_FRACTION * height,
+					DATE_PALM_FROND_WIDTH_FRACTION * height,
+					Some((self.footprint_radius(), height)),
+				))
 			}
 		}
 	}
@@ -190,11 +198,16 @@ mod tests {
 	}
 
 	#[test]
-	fn low_is_two_layered_balls() -> Result<()> {
+	fn low_is_shared_star() -> Result<()> {
 		let built = DatePalmParams::default().build();
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 2);
-		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_eq!(low.len(), crate::palm_tree::LOW_STAR_FROND_COUNT as usize);
+		assert!(low.iter().all(|n| n.geometry.is_frond_collection()));
+		for node in &low {
+			let collection = node.geometry.as_frond_collection().expect("star");
+			assert_eq!(collection.runs.len(), 1);
+			assert_eq!(collection.runs[0].segments.len(), 1);
+		}
 		Ok(())
 	}
 

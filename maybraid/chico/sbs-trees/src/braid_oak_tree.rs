@@ -39,9 +39,10 @@ use crate::torch_tree::{stick_nodes_low, HIGH_STICK_BANDS};
 use stick::{stick_nodes_high_crook, stick_nodes_medium_crook_trunk};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+/// High is wide; the leaf shader cheapens cheese / sway with camera distance.
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// Authoring / CLI parameters for Braid Oak Tree.
 #[derive(Component, Clone, Args, Debug)]

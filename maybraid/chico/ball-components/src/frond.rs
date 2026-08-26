@@ -378,6 +378,26 @@ mod tests {
 	}
 
 	#[test]
+	fn rachis_tips_hang_below_a_straight_emission() -> Result<()> {
+		let shape = FrondCrownShape { frond_count: 10, spine_segments: 8, seed: 3, ..Default::default() };
+		for run in shape.frond_runs_at(Vec3::ZERO) {
+			let first = run.first().expect("segment");
+			let last = run.last().expect("segment");
+			let tip = last.start + last.direction * last.length;
+			let chain_len: f32 = run.iter().map(|s| s.length).sum();
+			let straight_tip_y = first.start.y + first.direction.y * chain_len;
+			assert!(
+				tip.y < straight_tip_y - 0.02,
+				"blade stayed straight out: tip.y={} straight.y={} first={:?}",
+				tip.y,
+				straight_tip_y,
+				first.direction
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn crown_mesh_is_non_empty() -> Result<()> {
 		let crown = FrondCrown::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
 		let mesh = crown.build_mesh(1.0);

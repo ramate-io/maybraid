@@ -233,7 +233,7 @@ mod vc {
 	use super::{definition, ConiferMassivesCell, ConiferMassivesItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
@@ -241,9 +241,10 @@ mod vc {
 		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
-	pub const CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
+	/// Typical large types ~160 m (northern / friends firs). `grove_bands_for_typical_height(160)`.
+	pub const CONIFER_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+	pub const CONIFER_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 50.0;
+	pub const CONIFER_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 75.0;
 
 	#[derive(Clone, Debug, Args)]
 	#[command(rename_all = "kebab-case")]
@@ -471,16 +472,16 @@ mod vc {
 					let material = &plant.ball_material;
 					match &plant.kind {
 						ConiferMassivesKind::Northern(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 						ConiferMassivesKind::Friends(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 						ConiferMassivesKind::Liams(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 						ConiferMassivesKind::Temperate(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 					}
 				})

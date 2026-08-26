@@ -1,8 +1,9 @@
 //! **Waialea Palm** — arched trunk + light upward frond crown ([#255](https://github.com/ramate-io/maybraid/issues/255), [RFC §3.1.7.8](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/08-waialea-palm/README.md)).
 //!
 //! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
-//! implements [`VegetationComponents`]: trunk sticks; per-frond collections at High/Medium;
-//! dual layered-ball crown proxy at Low/UltraLow.
+//! implements [`VegetationComponents`]: trunk sticks + per-frond collections at High/Medium;
+//! cheap-ball trunk column + shared five-chord Low star at Low/UltraLow (no mid-tree canopy
+//! to hide a missing stalk).
 //!
 //! [`WaialeaPalm::unit_from_num`] / [`WaialeaPalmParams::into_unit_from_num`] normalize
 //! the trunk to unit height and key trunk noise by a variant index. Emission folds
@@ -24,9 +25,11 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::FROND_RING_SEED_SALT;
+use crate::palm_crown::{
+	DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION, FROND_RING_SEED_SALT,
+};
 use crate::palm_tree::{
-	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
+	crown_lod_probe, frond_collection_nodes, low_star_nodes_for_rings, trunk_proxy_node,
 	trunk_stick_nodes, world_space_frond_shape,
 };
 use crate::storybook_tree::merge_kit_sticks;
@@ -34,7 +37,7 @@ use crown::frond_shape_for_ring;
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
 const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 36.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 50.0;
 const STRUCTURAL_LOW_FACTOR: f32 = 72.0;
 
 /// Authoring / CLI parameters for Waialea Palm.
@@ -119,12 +122,20 @@ impl WaialeaPalm {
 }
 
 impl VegetationComponents for WaialeaPalm {
-	fn stick_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StickNode> {
-		let nodes: Vec<_> = trunk_stick_nodes(&self.chain)
-			.into_iter()
-			.map(|n| n.with_material(chico_stick_material_ref()))
-			.collect();
-		Layers::from_free(merge_kit_sticks(nodes))
+	fn stick_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StickNode> {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				let nodes: Vec<_> = trunk_stick_nodes(&self.chain)
+					.into_iter()
+					.map(|n| n.with_material(chico_stick_material_ref()))
+					.collect();
+				Layers::from_free(merge_kit_sticks(nodes))
+			}
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => Layers::new(),
+		}
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -141,8 +152,19 @@ impl VegetationComponents for WaialeaPalm {
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(&rings);
-				Layers::from_free(layered_proxy_balls(min, max))
+				let height = self.geometry.height();
+				let mut nodes = vec![trunk_proxy_node(
+					&self.chain,
+					height,
+					self.geometry.scale.stalk_base_radius_or_default(),
+				)];
+				nodes.extend(low_star_nodes_for_rings(
+					&rings,
+					DETAIL_FROND_LENGTH_FRACTION * height,
+					DETAIL_FROND_WIDTH_FRACTION * height,
+					Some((self.footprint_radius(), height)),
+				));
+				Layers::from_free(nodes)
 			}
 		}
 	}
@@ -174,11 +196,18 @@ mod tests {
 	}
 
 	#[test]
-	fn low_is_two_layered_balls() -> Result<()> {
+	fn low_keeps_trunk_proxy_and_shared_star() -> Result<()> {
 		let built = WaialeaPalmParams::default().build();
+		assert!(built.stick_nodes_for_level(LodSceneLevel::Low).flatten().is_empty());
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 2);
-		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_eq!(low.len(), 1 + crate::palm_tree::LOW_STAR_FROND_COUNT as usize);
+		assert!(low[0].geometry.is_cheap_ball());
+		assert!(low[1..].iter().all(|n| n.geometry.is_frond_collection()));
+		for node in &low[1..] {
+			let collection = node.geometry.as_frond_collection().expect("star");
+			assert_eq!(collection.runs.len(), 1);
+			assert_eq!(collection.runs[0].segments.len(), 1);
+		}
 		Ok(())
 	}
 

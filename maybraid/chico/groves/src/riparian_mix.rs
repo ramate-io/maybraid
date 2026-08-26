@@ -248,8 +248,8 @@ mod vc {
 	use bevy::prelude::*;
 	use bevy::scene::prelude::Scene;
 	use chico_sbs_trees::{
-		BraidOakTree, FriendsConifer, FriendsConiferParams, StorybookTree,
-		StorybookTreeParams, TemperateConifer, TemperateConiferParams,
+		BraidOakTree, FriendsConifer, FriendsConiferParams, StorybookTree, StorybookTreeParams,
+		TemperateConifer, TemperateConiferParams,
 	};
 	use chico_vegetation_components::{
 		FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
@@ -264,17 +264,17 @@ mod vc {
 	use super::{definition, RiparianMixCell, RiparianMixItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_site,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
 		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
 		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const RIPARIAN_MIX_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const RIPARIAN_MIX_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const RIPARIAN_MIX_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const RIPARIAN_MIX_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	pub const RIPARIAN_MIX_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	#[derive(Clone, Debug, Args)]
@@ -509,10 +509,10 @@ mod vc {
 							canopy_proxy_site(t, plant.placement, material)
 						}
 						RiparianMixKind::Friends(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 						RiparianMixKind::Temperate(t) => {
-							canopy_proxy_site(t, plant.placement, material)
+							canopy_proxy_column(t, plant.placement, material)
 						}
 					}
 				})

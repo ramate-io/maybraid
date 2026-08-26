@@ -18,7 +18,7 @@ const HIGH_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(27, 8);
 const LOW_FOLIAGE_BANDS: AzimuthHeightBands = AzimuthHeightBands::new(6, 2);
 
 /// Default [`crate::HonuBanyanParams::jungle_growth_radius_scale`] for full (~24 m) Honu.
-pub const DEFAULT_HONU_GROWTH_RADIUS_SCALE: f32 = 4.0;
+pub const DEFAULT_HONU_GROWTH_RADIUS_SCALE: f32 = 10.0;
 /// Reference stalk height that pairs with [`DEFAULT_HONU_GROWTH_RADIUS_SCALE`].
 pub const HONU_GROWTH_REFERENCE_HEIGHT: f32 = 24.0;
 /// Floor so tiny trees still get a readable growth cluster.

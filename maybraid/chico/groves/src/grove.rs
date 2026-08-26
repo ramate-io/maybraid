@@ -42,14 +42,18 @@ pub use tuft_patch::GroveTuftPatch;
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 #[cfg(feature = "render")]
 pub use vc_compose::{
-	canopy_ball_material_from_palette, canopy_proxy_site, canopy_proxy_site_nested,
-	flatten_foliage_nodes, flatten_foliage_nodes_nested, flatten_stick_nodes,
+	canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_crown, canopy_proxy_rory,
+	canopy_proxy_site, canopy_proxy_site_nested, canopy_proxy_trained, canopy_proxy_trunk,
+	canopy_proxy_waialea, flatten_foliage_nodes, flatten_foliage_nodes_nested, flatten_stick_nodes,
 	foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
-	grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
-	grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
+	grove_bands_for_typical_height, grove_bands_for_typical_height_and_plant_medium,
+	grove_detail_level, grove_detail_level_keep_low, grove_lod_culls, grove_lod_level,
+	grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
 	nest_flattened_plant_host, nest_placed_plant_chunk, nest_placed_plant_host,
-	stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite,
-	ULTRA_LOW_CANOPY_BIN_METERS,
+	placed_foliage_nodes, placed_palm_low_fronds, stick_material_from_palette,
+	trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+	woody_grove_scene_chunks_keep_low_plants, CanopyProxySite, TrainedCanopyProxy,
+	DEFAULT_PLANT_MEDIUM_FACTOR, ULTRA_LOW_CANOPY_BIN_METERS,
 };
 
 use bevy_math::{Vec2, Vec3};

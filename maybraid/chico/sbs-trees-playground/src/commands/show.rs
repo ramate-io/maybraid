@@ -62,7 +62,7 @@ pub enum Show {
 	SimplemansHedge(ShowSimplemansHedge),
 	/// Tuft Patch via VegetationComponents / LodScene (straight frond segments).
 	TuftPatch(ShowTuftPatch),
-	/// Palm Crown via VegetationComponents / LodScene (fronds; layered ball at Low).
+	/// Palm Crown via VegetationComponents / LodScene (fronds; five-chord star at Low).
 	PalmCrown(ShowPalmCrown),
 	/// Date Palm via VegetationComponents / LodScene.
 	DatePalm(ShowDatePalm),

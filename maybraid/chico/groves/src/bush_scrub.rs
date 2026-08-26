@@ -249,9 +249,10 @@ mod vc {
 		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
+		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
 	pub const BUSH_SCRUB_STRUCTURAL_HIGH_FACTOR: f32 = TUFT_GROVE_STRUCTURAL_HIGH_FACTOR;
@@ -507,11 +508,11 @@ mod vc {
 		let scale = placement.scale.abs().max_element().max(1e-4);
 		let height = (patch.shape.blade_length * scale).max(0.15);
 		let footprint = (patch.patch_extent_xz * 0.5 * scale).max(height * 0.35);
-		CanopyProxySite {
-			center: placement.translation + Vec3::Y * (height * 0.4),
-			radius: footprint.max(0.25),
-			material: material.clone(),
-		}
+		CanopyProxySite::from_radius(
+			placement.translation + Vec3::Y * (height * 0.4),
+			footprint.max(0.25),
+			material.clone(),
+		)
 	}
 
 	fn grow_plant(
@@ -742,12 +743,13 @@ mod vc {
 			let low_foliage = grove.foliage_nodes_for_level(LodSceneLevel::Low).len();
 			assert_eq!(low_foliage, grove.plants.len());
 			assert!(grove.foliage_nodes_for_level(LodSceneLevel::UltraLow).len() <= low_foliage);
-			let lod::SceneChunk::Primitive { weight, .. } =
-				grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low)
-			else {
-				anyhow::bail!("Low bush-scrub should emit one flattened canopy collection");
-			};
-			assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+			match grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::Low) {
+				lod::SceneChunk::Primitive { weight, .. } => {
+					assert_eq!(weight, chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT);
+				}
+				lod::SceneChunk::SubChunks(parts) => assert!(!parts.is_empty()),
+				_ => anyhow::bail!("Low bush-scrub should emit flattened canopy kits"),
+			}
 			Ok(())
 		}
 

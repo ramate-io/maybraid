@@ -15,7 +15,7 @@
 //! Structural LOD (× grove footprint): High (full clumps); Medium = ~¼ of High tufts
 //! (same geometry, thinned); Low ≈ one upright proxy per ~8 cells; UltraLow = 2×2 carpets.
 //! Per-plant leaf color: [`MonsterGrassCell::palette_mix`] + [`PaletteMix::pick_color`] with a
-//! placement seed → [`MaterialRef::default()`].with_palette([color]).
+//! placement seed → [`chico_vegetation_components::chico_frond_material_ref`].with_palette([color]).
 
 use std::ops::RangeInclusive;
 
@@ -241,8 +241,8 @@ mod vc {
 	use bevy::prelude::*;
 	use chico_sbs_trees::TuftPatch;
 	use chico_vegetation_components::{
-		FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode, StructuralLod,
-		VegetationComponents,
+		chico_frond_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement,
+		StickNode, StructuralLod, VegetationComponents,
 	};
 	use clap::Args;
 	use lod::gen::LodSceneLevel;
@@ -407,7 +407,7 @@ mod vc {
 	pub struct MonsterGrassPlant {
 		pub placement: Placement,
 		pub patch: TuftPatch,
-		/// Green standard material with one palette-picked color.
+		/// Chico frond material with one palette-picked color.
 		pub material: MaterialRef,
 	}
 
@@ -419,8 +419,8 @@ mod vc {
 		let seed = placement_noise(foliage_noise, position).seed;
 		cell.palette_mix()
 			.pick_color(seed)
-			.map(|c| MaterialRef::default().with_palette([c]))
-			.unwrap_or_default()
+			.map(|c| chico_frond_material_ref().with_palette([c]))
+			.unwrap_or_else(chico_frond_material_ref)
 	}
 
 	/// Structural High band (× footprint): full authored clumps.

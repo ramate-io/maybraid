@@ -27,9 +27,9 @@ use crate::torch_tree::{stick_nodes_banded, stick_nodes_high, stick_nodes_low};
 use canopy::{foliage_nodes_for_level, DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE};
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 15.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 24.0;
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 /// Authoring / CLI parameters for Jungle Storybook Tree.
 #[derive(Component, Clone, Args, Debug)]
@@ -88,7 +88,7 @@ impl JungleStorybookTreeParams {
 			Self {
 				geometry,
 				growth_spawn_fraction: self.growth_spawn_fraction,
-				jungle_growth_radius_scale: self.jungle_growth_radius_scale,
+				jungle_growth_radius_scale: (self.jungle_growth_radius_scale * inv).max(1e-6),
 			},
 			size,
 		)
@@ -218,6 +218,10 @@ mod tests {
 		assert!((size - 8.0).abs() < 1e-5);
 		assert!((unit.geometry.height() - 1.0).abs() < 1e-5);
 		assert!((unit.geometry.scale.stalk_base_radius.unwrap() - 0.05).abs() < 1e-5);
+		assert!(
+			(unit.jungle_growth_radius_scale - DEFAULT_JUNGLE_GROWTH_RADIUS_SCALE / 8.0).abs()
+				< 1e-5
+		);
 		assert_eq!(unit.geometry.canopy_noise.seed, 7);
 		Ok(())
 	}

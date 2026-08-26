@@ -30,7 +30,8 @@ pub use lod_host::{
 	posed_foliage_multi_scene_merge, posed_frond_multi_scene_merge, posed_material_asset_tier,
 };
 pub use materials::{
-	chico_leaf_material_ref, chico_stick_material_ref, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
+	CHICO_FROND_MATERIAL, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
 };
 pub use placed::Placement;
 pub use placed_vegetation::PlacedVegetation;
@@ -194,8 +195,8 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for ComponentsOnl
 /// [`FoliageNode`] / [`StickNode`] LOD hosts).
 ///
 /// One Avian volume per plant. Unmerged kits keep instance [`Transform`]s;
-/// merged cheap-ball collections pack kit-local into vertex color so leaf
-/// breakup still works after [`scene_ref::MultiSceneMerge`].
+/// merged collections pack kit-local into vertex color so leaf breakup and
+/// frond sway still work after [`scene_ref::MultiSceneMerge`].
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct FlattenedComponentsOnly<T: Send + Sync + 'static>(pub T);
 
@@ -317,12 +318,21 @@ pub const FLATTENED_KIT_CHUNK_WEIGHT: u32 = 4;
 /// Cheap balls fold through [`FoliageNode::merge_canopy_proxies`] so a grove tile
 /// is one (or a few) [`FLATTENED_KIT_CHUNK_WEIGHT`] kits, not one host per plant.
 /// Sticks, if any, are flattened the same way and not hosted.
+///
+/// Stick UltraLow is an empty kit. Proxy trunks still need the Low trunk GLB, so
+/// sticks present at Low when the grove band is UltraLow.
 pub fn flattened_canopy_proxy_chunks(
 	vegetation: &impl VegetationComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 ) -> SceneChunk {
-	let sticks = vegetation.stick_nodes_for_level(level).flatten();
+	let stick_level = match level {
+		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+			LodSceneLevel::Low
+		}
+		other => other,
+	};
+	let sticks = vegetation.stick_nodes_for_level(stick_level).flatten();
 	let foliage =
 		FoliageNode::merge_canopy_proxies(vegetation.foliage_nodes_for_level(level).flatten());
 	let n = sticks.len() + foliage.len();
@@ -333,7 +343,7 @@ pub fn flattened_canopy_proxy_chunks(
 	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
 	let mut chunks = Vec::with_capacity(n);
 	for node in sticks {
-		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
+		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, stick_level)));
 	}
 	for node in foliage {
 		chunks.push(SceneChunk::weighted(kit_w, node.scene_with_level(lod_ref, level)));
@@ -653,5 +663,21 @@ mod tests {
 			panic!("expected one merged cheap-ball kit");
 		};
 		assert_eq!(weight, FLATTENED_KIT_CHUNK_WEIGHT);
+	}
+
+	#[test]
+	fn merge_canopy_proxies_keeps_stick_and_leaf_recipes() {
+		use crate::materials::{chico_leaf_material_ref, chico_stick_material_ref};
+		let nodes = vec![
+			FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::ZERO, 0.4))
+				.with_material(chico_stick_material_ref()),
+			FoliageNode::cheap_ball(Placement::foliage_uniform(Vec3::Y, 0.8))
+				.with_material(chico_leaf_material_ref()),
+		];
+		let merged = FoliageNode::merge_canopy_proxies(nodes);
+		assert_eq!(merged.len(), 2);
+		let names: Vec<_> = merged.iter().map(|n| n.material.name.clone()).collect();
+		assert!(names.contains(&material_ref::MaterialId::named(CHICO_STICK_MATERIAL)));
+		assert!(names.contains(&material_ref::MaterialId::named(CHICO_LEAF_MATERIAL)));
 	}
 }

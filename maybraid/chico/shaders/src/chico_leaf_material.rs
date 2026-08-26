@@ -1,7 +1,8 @@
-//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, double-sided PBR.
+//! Canopy leaf [`Material`] — object-space leafy breakup, vertex sway, split light.
 //!
-//! Fragment work (FBM cheese + `discard`) short-circuits by camera distance to
-//! the card centroid so a wider High structural band stays cheaper on far trees.
+//! A noisy rim `discard` runs at every distance (Opaque ignores alpha).
+//! Interior holes are near/mid only (80 radii, remapped so 140 m is never near).
+//! Lambert + sky, plus fake canopy occlusion (inward faces / puff hubs).
 
 use bevy::{
 	asset::embedded_asset,
@@ -58,7 +59,7 @@ impl Material for ChicoLeafMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
-		// `fwidth` coverage; falls back to discard when MSAA is off.
+		// Opaque + `discard` holes. Alpha-to-coverage read as a window screen.
 		AlphaMode::Opaque
 	}
 

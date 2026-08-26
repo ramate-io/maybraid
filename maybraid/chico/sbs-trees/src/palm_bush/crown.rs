@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::anchors::palm_bush::DEFAULT_HEIGHT;
 use chico_sbs_geometry::PalmBushSbs;
 use render_item::CascadeChunk;
 
@@ -28,14 +29,16 @@ pub fn frond_shape_for_ring(
 		FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
 	let downward_tilt = 0.38 + (1.0 - u) * 0.18;
 	let emission_lift = 0.18 + u * 0.22;
-	let droop = 0.52 + (1.0 - u) * 0.16;
+	let h_scale = h / DEFAULT_HEIGHT.max(1e-6);
+	let droop = (0.52 + (1.0 - u) * 0.16) * h_scale;
+	let arch_lift = (0.22 + u * 0.12) * h_scale;
 
 	FrondCrownShape {
 		frond_count: proto.fronds_per_ring,
 		length: (length_fraction * h) / scale,
 		width: (FROND_WIDTH_FRACTION_OF_HEIGHT * h) / scale,
 		droop,
-		arch_lift: 0.22 + u * 0.12,
+		arch_lift,
 		twist: 0.16,
 		leaflet_count: 14,
 		spine_segments: 10,
@@ -85,5 +88,16 @@ mod tests {
 		let high = frond_shape_for_ring(&geometry, geometry.crown.ring_count - 1, 0);
 		assert!(low.droop > high.droop);
 		assert!(low.downward_tilt_radians > high.downward_tilt_radians);
+	}
+
+	#[test]
+	fn droop_and_arch_scale_with_height() {
+		let tall = PalmBushSbs::default();
+		let mut unit = tall.clone();
+		unit.scale.height = 1.0;
+		let t = frond_shape_for_ring(&tall, 0, 0);
+		let u = frond_shape_for_ring(&unit, 0, 0);
+		assert!((t.droop / t.length - u.droop / u.length).abs() < 1e-4);
+		assert!((t.arch_lift / t.length - u.arch_lift / u.length).abs() < 1e-4);
 	}
 }

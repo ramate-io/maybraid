@@ -26,9 +26,9 @@ use clap::Args;
 use lod::gen::LodSceneLevel;
 
 /// Structural band edges as `distance / tree_radius` (High / Medium / Low).
-const STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
-const STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
-const STRUCTURAL_LOW_FACTOR: f32 = 32.0;
+const STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
+const STRUCTURAL_MEDIUM_FACTOR: f32 = 30.0;
+const STRUCTURAL_LOW_FACTOR: f32 = 50.0;
 
 use crate::storybook_tree::{merge_cheap_ball_foliage, merge_kit_sticks};
 use canopy::foliage_nodes_for_level;

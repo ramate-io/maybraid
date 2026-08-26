@@ -153,7 +153,7 @@ mod vc {
 	use super::{definition, ChristmasTaigaCell, ChristmasTaigaItem};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
 	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
+		canopy_ball_material_from_palette, canopy_proxy_column, foliage_low_canopy_balls,
 		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
 		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
 		layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
@@ -162,8 +162,8 @@ mod vc {
 		ULTRA_LOW_CANOPY_BIN_METERS,
 	};
 
-	pub const CHRISTMAS_TAIGA_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const CHRISTMAS_TAIGA_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const CHRISTMAS_TAIGA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const CHRISTMAS_TAIGA_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	pub const CHRISTMAS_TAIGA_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	#[derive(Clone, Debug, Args)]
@@ -355,7 +355,7 @@ mod vc {
 			self.plants
 				.iter()
 				.filter_map(|plant| {
-					canopy_proxy_site(&plant.tree, plant.placement, &plant.ball_material)
+					canopy_proxy_column(&plant.tree, plant.placement, &plant.ball_material)
 				})
 				.collect()
 		}

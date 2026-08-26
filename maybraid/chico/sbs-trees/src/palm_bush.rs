@@ -1,8 +1,8 @@
 //! **Palm Bush** — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231), [RFC §3.1.7.10](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/10-palm-bush/README.md)).
 //!
 //! [`PalmBushParams::build`] resolves ring anchors into [`PalmBush`], which implements
-//! [`VegetationComponents`]: per-frond collections at High/Medium; dual layered-ball proxy
-//! at Low/UltraLow (no sticks).
+//! [`VegetationComponents`]: per-frond collections at High/Medium; shared five-chord Low
+//! star at Low/UltraLow (no sticks).
 //!
 //! [`PalmBush::unit_from_num`] / [`PalmBushParams::into_unit_from_num`] normalize to
 //! unit height and key foliage noise by a variant index. No sticks; frond collections
@@ -27,10 +27,11 @@ use chico_vegetation_components::{
 use clap::Args;
 use lod::gen::LodSceneLevel;
 
-use crate::palm_crown::{PalmCrownParams, FROND_RING_SEED_SALT};
+use crate::palm_crown::{
+	PalmCrownParams, DETAIL_FROND_LENGTH_FRACTION, DETAIL_FROND_WIDTH_FRACTION, FROND_RING_SEED_SALT,
+};
 use crate::palm_tree::{
-	crown_aabb_from_rings, crown_lod_probe, frond_collection_nodes, layered_proxy_balls,
-	world_space_frond_shape,
+	crown_lod_probe, frond_collection_nodes, low_star_nodes_for_rings, world_space_frond_shape,
 };
 use crown::frond_shape_for_ring;
 
@@ -144,8 +145,13 @@ impl VegetationComponents for PalmBush {
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
 			| LodSceneLevel::Resolution(_) => {
-				let (min, max) = crown_aabb_from_rings(&rings);
-				Layers::from_free(layered_proxy_balls(min, max))
+				let height = self.geometry.height();
+				Layers::from_free(low_star_nodes_for_rings(
+					&rings,
+					DETAIL_FROND_LENGTH_FRACTION * height,
+					DETAIL_FROND_WIDTH_FRACTION * height,
+					None,
+				))
 			}
 		}
 	}
@@ -183,11 +189,11 @@ mod tests {
 	}
 
 	#[test]
-	fn low_is_two_layered_balls() -> Result<()> {
+	fn low_is_shared_star() -> Result<()> {
 		let built = PalmBushParams::default().build();
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
-		assert_eq!(low.len(), 2);
-		assert!(low.iter().all(|n| n.geometry.is_layered_ball()));
+		assert_eq!(low.len(), crate::palm_tree::LOW_STAR_FROND_COUNT as usize);
+		assert!(low.iter().all(|n| n.geometry.is_frond_collection()));
 		Ok(())
 	}
 

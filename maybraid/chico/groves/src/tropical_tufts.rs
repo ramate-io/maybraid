@@ -430,7 +430,7 @@ mod vc {
 
 		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
 			let mut nodes = self.body.foliage_for_level(level).flatten();
-			// Palm companions: High/Medium fronds; Low/UltraLow layered balls from PalmBush.
+			// Palm companions: High/Medium authored fronds; Low/UltraLow shared five-chord star.
 			let palm_level = match level {
 				LodSceneLevel::Medium => LodSceneLevel::High,
 				other => other,

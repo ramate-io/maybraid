@@ -153,18 +153,19 @@ mod vc {
 	use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 
 	use super::{definition, DrylandCell, DrylandItem};
-	use crate::grove::{
-		canopy_ball_material_from_palette, canopy_proxy_site, foliage_low_canopy_balls,
-		foliage_ultra_low_merged_balls, frond_material_from_palette, grove_detail_level,
-		grove_lod_culls, grove_lod_level, grove_lod_status, grove_structural_footprint,
-		layers_from_nodes, nest_flattened_plant_chunk, placement_noise, stick_material_from_palette,
-		woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample, GroveCellVariant,
-		GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ, ULTRA_LOW_CANOPY_BIN_METERS,
-	};
 	use crate::grove::vc_tuft::{patch_variant_index, variant_noise};
+	use crate::grove::{
+		canopy_ball_material_from_palette, canopy_proxy_column, canopy_proxy_site,
+		foliage_low_canopy_balls, foliage_ultra_low_merged_balls, frond_material_from_palette,
+		grove_detail_level, grove_lod_culls, grove_lod_level, grove_lod_status,
+		grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk, placement_noise,
+		stick_material_from_palette, woody_grove_scene_chunks, CanopyProxySite, FlatTerrainSample,
+		GroveCellVariant, GroveExtent, GroveFrontend, DEFAULT_GROVE_EXTENT_XZ,
+		ULTRA_LOW_CANOPY_BIN_METERS,
+	};
 
-	pub const DRYLAND_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
-	pub const DRYLAND_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+	pub const DRYLAND_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+	pub const DRYLAND_STRUCTURAL_MEDIUM_FACTOR: f32 = 10.0;
 	pub const DRYLAND_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 	#[derive(Clone, Debug, Args)]
@@ -374,7 +375,7 @@ mod vc {
 				.filter_map(|plant| {
 					let material = &plant.ball_material;
 					match &plant.kind {
-						DrylandKind::Liams(t) => canopy_proxy_site(t, plant.placement, material),
+						DrylandKind::Liams(t) => canopy_proxy_column(t, plant.placement, material),
 						DrylandKind::Vase(t) => canopy_proxy_site(t, plant.placement, material),
 					}
 				})
