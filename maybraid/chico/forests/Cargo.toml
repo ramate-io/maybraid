@@ -10,10 +10,12 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+bevy = { workspace = true }
 bevy_math = { workspace = true }
 procedural-common = { workspace = true }
 gimme-gen = { workspace = true }
 chico-groves = { workspace = true, features = ["render"] }
+lod = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

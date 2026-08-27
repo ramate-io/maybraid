@@ -11,7 +11,9 @@ mod blend;
 mod chico;
 mod extent;
 mod forest;
+mod generation;
 pub(crate) mod hopscotch;
+mod index;
 mod kind;
 mod layer;
 pub mod layerings;
@@ -26,6 +28,10 @@ pub use blend::{
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
 pub use forest::{neighbor_layers, ChicoForest};
+pub use generation::{
+	ForestGenerateBullseye, ForestLodChan, ForestPresentBullseye, ForestPresentLattice,
+};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
+pub use index::ForestIndex;
 pub use kind::{ForestGroveKind, ForestLayering, LayeringKind, SelectedLayers, WeightedGrove};
 pub use layer::{select_layers, throw_layer};

@@ -20,9 +20,9 @@ use crozon_characters::{
 	AnimClip, AnimRef, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig,
 	CharacterRigRole, CharacterRoot, ComponentsOnly, RigSkeletonKind,
 };
+use game_commands::ui::GameCommandStatusText;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use game_commands::ui::GameCommandStatusText;
 
 use crate::commands::RequestModeCharacter;
 use crate::player::{Jumping, MoveWish, Player, PlayerCapsule};

@@ -10,11 +10,10 @@ use crate::terrain::Terrain;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
-use bevy::scene::Scene;
 use durham_terrain::shaders::DurhamTerrainShader;
 use lod::gen::{
-	GenerationScheme, Id, OriginalId, RegionPresenter, SpatialIndex, StorageStatus, TrackedId,
-	Version,
+	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
+	TrackedId, Version,
 };
 use lod::lod_ref::LodRef;
 use render_item::sdf::cpu_shot::WallFaces;
@@ -254,15 +253,23 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		self.state.presented.get(&id).map(|e| e.version)
 	}
 
-	fn handle(&mut self, id: Id, version: Version, scene: impl Scene, _lod_ref: &LodRef) {
+	fn handle(&mut self, id: Id, version: Version, value: &Terrain, lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self.commands.spawn_scene(scene).insert(PresentedTerrainScene(id)).id();
+		let entity = self
+			.commands
+			.spawn_scene(value.scene_with_lod(lod_ref))
+			.insert(PresentedTerrainScene(id))
+			.id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}
 
-	fn remove_stale(&mut self, _region: Aabb3d, wanted: &HashSet<Id>) {
+	fn presented_ids(&self) -> Vec<Id> {
+		self.state.presented.keys().copied().collect()
+	}
+
+	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 		let stale: Vec<(Id, Entity)> = self
 			.state
 			.presented

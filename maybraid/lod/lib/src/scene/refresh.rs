@@ -31,7 +31,7 @@ use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::lod_ref::track_lod_nodes;
+use crate::lod_ref::{LodNodePlugin, LodNodeSystems};
 use crate::scene::host::{settle_lod_level_root_visibility, sync_lod_level_roots};
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
@@ -100,7 +100,7 @@ pub(crate) fn configure_refresh_sets(app: &mut App) {
 	app.configure_sets(
 		Update,
 		(
-			LodRefreshSystems::Track,
+			LodRefreshSystems::Track.after(LodNodeSystems::Track),
 			LodRefreshSystems::ProduceRegions,
 			LodRefreshSystems::ProduceLevels,
 			LodRefreshSystems::UpdateLevels,
@@ -130,13 +130,15 @@ pub struct LodRefreshCorePlugin;
 impl Plugin for LodRefreshCorePlugin {
 	fn build(&self, app: &mut App) {
 		configure_refresh_sets(app);
+		if !app.is_plugin_added::<LodNodePlugin>() {
+			app.add_plugins(LodNodePlugin);
+		}
 		app.init_resource::<LodProduceCache>()
 			.add_message::<LodSceneRefreshAabb>()
 			.add_message::<LodSceneRefreshLevel>()
 			.add_systems(
 				Update,
 				(
-					track_lod_nodes.in_set(LodRefreshSystems::Track),
 					refresh_lod_host_levels.in_set(LodRefreshSystems::UpdateLevels),
 					settle_lod_level_root_visibility
 						.before(sync_lod_level_roots)

@@ -10,7 +10,7 @@ Forests assemble **concrete grove types** from `chico-groves`. Do not add a `Tuf
 - Planting cells are **world-aligned** ([`GroveExtent::cells_overlapping`](../groves/src/grove/extent.rs)). Adjacent tiles of the same grove share one lattice; a tile owns a cell when the cell center is in its half-open XZ footprint.
 - Every presenting 100 m tile softmax-blends a cardinal run of **produced grove** slots ([`blend.rs`](src/blend.rs), radius 8). Each slot's kind is whoever produced that grove. Same-kind slots share one logit (best influence) so a uniform block does not drown the seam. Interior tiles whose slots are all one planted kind skip softmax and grow that recipe once. Empty layers still present neighbor islands. Stream cache is still adjacent forest selections (`R+1` halo, grow `R`). See [`assemble`](src/assemble.rs) + [`NeighborLayers`](src/assemble.rs).
 - Do not implement the full RFC `ForestGroveBiases` set yet. `select_cell` leaves grove biases at default.
-- [`ChicoForest`](src/forest.rs) is a generation result. Do not implement `LodScene` on it. Playgrounds spawn the concrete grove hosts underneath.
+- [`ChicoForest`](src/forest.rs) is a generation result. Do not implement `LodScene` on it. A [`ForestIndex`](src/index.rs) stores assembled cells. Presentation (playground) spawns grove hosts; the scene stack LOD-refreshes those hosts. Generate, present, and scene plugins stay independently loaded.
 - Pinned review cells use [`ForestLayering::typical_layers`](src/kind.rs) (highest-weight non-`None` grove per layer). Hopscotch cells still Bucket-Throw.
 
 File shape: no `mod.rs`. Methods live on `ForestExtent`, `ChicoForest`, `LayeringKind`, and the assemble helpers.

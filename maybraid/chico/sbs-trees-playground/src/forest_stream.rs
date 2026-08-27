@@ -1,22 +1,23 @@
-//! Rough `/show forest` streaming: keep a ring of 1600 m cells as grove hosts.
+//! `/show forest` glue: enable the independent generate / present / cull plugins.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_forests::{
-	match_forest_grove_tile, select_cell, ForestExtent, ForestGroveTile, LayeringKind,
-	NeighborLayers, SelectedLayers,
+	match_forest_grove_tile, ChicoForest, ForestExtent, ForestGenerateBullseye, ForestGroveTile,
+	ForestIndex, ForestLodChan, ForestPresentBullseye, ForestPresentLattice, LayeringKind,
 };
-use chico_groves::FlatTerrainSample;
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
-use lod::gen::LodScene;
-use procedural_common::NoiseParams;
+use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene, Version};
+use lod::lod_ref::LodRef;
+use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
 
 use crate::camera::CameraController;
 use crate::commands::show::{ShowConfig, ShowRoot, ShowSubject};
 use crate::ground::GroundPlane;
 
-/// Default Chebyshev ring around the camera cell (`3 × 3` when radius is 1).
+/// Default Chebyshev present ring (`3 × 3` when radius is 1).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
 
 /// Hopscotch default so neighboring 1600 m cells stay related.
@@ -32,8 +33,35 @@ pub fn parse_layering_kind(name: &str) -> Result<LayeringKind, String> {
 
 const FOREST_CAMERA_SPEED: f32 = 80.0;
 const DEFAULT_CAMERA_SPEED: f32 = 18.0;
-/// Stay on the current stream cell until the camera is this far into a neighbor.
-const STREAM_COMMIT_MARGIN: f32 = 80.0;
+
+#[derive(Resource, Default)]
+pub struct ForestPresenterState {
+	presented: HashMap<Id, PresentedForest>,
+}
+
+struct PresentedForest {
+	version: Version,
+	entities: Vec<Entity>,
+	hidden: bool,
+}
+
+impl ForestPresenterState {
+	fn clear(&mut self, commands: &mut Commands) {
+		for presented in self.presented.values() {
+			for entity in &presented.entities {
+				commands.entity(*entity).despawn();
+			}
+		}
+		self.presented.clear();
+	}
+}
+
+/// Spawns grove [`LodScene`] hosts for a generated forest cell.
+#[derive(SystemParam)]
+pub struct ForestRegionPresenter<'w, 's> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, ForestPresenterState>,
+}
 
 fn spawn_grove_host<T>(commands: &mut Commands, grove: &T) -> Vec<Entity>
 where
@@ -54,73 +82,86 @@ fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> V
 	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g))
 }
 
-fn layers_for(
-	ix: i32,
-	iz: i32,
-	noise: NoiseParams,
-	layering: Option<LayeringKind>,
-) -> SelectedLayers {
-	match layering {
-		Some(kind) => kind.layering().typical_layers(),
-		None => select_cell(ForestExtent::from_cell_index(ix, iz), noise),
+impl RegionPresenter<ChicoForest, ForestIndex> for ForestRegionPresenter<'_, '_> {
+	fn presented_version(&self, id: Id) -> Option<Version> {
+		self.state.presented.get(&id).map(|entry| entry.version)
+	}
+
+	fn handle(&mut self, id: Id, version: Version, forest: &ChicoForest, _lod_ref: &LodRef) {
+		if let Some(previous) = self.state.presented.remove(&id) {
+			for entity in previous.entities {
+				self.commands.entity(entity).despawn();
+			}
+		}
+		let mut entities = Vec::new();
+		for tile in forest.tiles() {
+			entities.extend(spawn_forest_grove_tile(&mut self.commands, tile));
+		}
+		info!(
+			"presented forest cell layering={:?} tiles={}",
+			forest.assembled.layers.layering,
+			entities.len()
+		);
+		self.state
+			.presented
+			.insert(id, PresentedForest { version, entities, hidden: false });
+	}
+
+	fn hide(&mut self, id: Id) {
+		if let Some(entry) = self.state.presented.get_mut(&id) {
+			entry.hidden = true;
+			for entity in &entry.entities {
+				self.commands.entity(*entity).insert(Visibility::Hidden);
+			}
+		}
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		self.state.presented.get(&id).is_some_and(|entry| entry.hidden)
+	}
+
+	fn presented_ids(&self) -> Vec<Id> {
+		self.state.presented.keys().copied().collect()
+	}
+
+	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		let stale: Vec<Id> =
+			self.state.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
+		for id in stale {
+			if let Some(entry) = self.state.presented.remove(&id) {
+				for entity in entry.entities {
+					self.commands.entity(entity).despawn();
+				}
+			}
+		}
 	}
 }
 
-fn neighbor_layers_from(
-	cache: &HashMap<(i32, i32), SelectedLayers>,
-	ix: i32,
-	iz: i32,
-) -> NeighborLayers {
-	NeighborLayers {
-		north: cache.get(&(ix, iz + 1)).copied(),
-		east: cache.get(&(ix + 1, iz)).copied(),
-		south: cache.get(&(ix, iz - 1)).copied(),
-		west: cache.get(&(ix - 1, iz)).copied(),
-	}
+#[derive(SystemParam)]
+pub(crate) struct ForestStreamLod<'w> {
+	index: ResMut<'w, ForestIndex>,
+	generate: ResMut<'w, ForestGenerateBullseye>,
+	present: ResMut<'w, ForestPresentBullseye>,
+	lattice: ResMut<'w, ForestPresentLattice>,
+	generate_queue: ResMut<'w, LodGenerateQueue<ChicoForest>>,
+	present_queue: ResMut<'w, LodPresentQueue<ChicoForest>>,
+	presenter: ResMut<'w, ForestPresenterState>,
+	generate_regions: MessageWriter<'w, LodGenerateRegion<ForestLodChan>>,
+	present_regions: MessageWriter<'w, LodPresentRegion<ForestLodChan>>,
+	generate_keep: ResMut<'w, LodGenerateKeepRegion<ForestLodChan>>,
+	keep: ResMut<'w, LodPresentKeepRegion<ForestLodChan>>,
 }
 
-fn spawn_forest_cell(
-	commands: &mut Commands,
-	ix: i32,
-	iz: i32,
-	layers: SelectedLayers,
-	neighbors: NeighborLayers,
-) -> Vec<Entity> {
-	let extent = ForestExtent::from_cell_index(ix, iz);
-	let assembled =
-		chico_forests::assemble(extent, layers, neighbors, &FlatTerrainSample::default());
-	let layers = assembled.layers;
-	info!(
-		"forest cell ({ix},{iz}) layering={:?} tufts={:?} understory={:?} lower={:?} upper={:?} tiles={}",
-		layers.layering,
-		layers.tufts,
-		layers.understory,
-		layers.lower_canopy,
-		layers.upper_canopy,
-		assembled.tiles().count()
-	);
-	let mut entities = Vec::new();
-	for tile in assembled.tiles() {
-		entities.extend(spawn_forest_grove_tile(commands, tile));
-	}
-	entities
-}
-
-/// Keep a Chebyshev ring of assembled forest cells around the camera.
-///
-/// Grows at most one missing cell per frame. `sync_show` clears [`ShowRoot`]s when
-/// the subject key changes; this system only tracks live cell indices.
+/// Keep camera / ground / subject key in sync and bootstrap forest regions.
 pub fn stream_forest(
 	mut commands: Commands,
 	config: Res<ShowConfig>,
 	camera: Query<&Transform, With<Camera3d>>,
 	mut controller: Query<&mut CameraController, With<Camera3d>>,
 	mut ground: Query<&mut Transform, (With<GroundPlane>, Without<Camera3d>)>,
-	mut live: Local<HashMap<(i32, i32), Vec<Entity>>>,
-	mut selected: Local<HashMap<(i32, i32), SelectedLayers>>,
+	mut lod: ForestStreamLod,
 	mut last_key: Local<Option<String>>,
 	mut forest_camera: Local<bool>,
-	mut stream_center: Local<Option<(i32, i32)>>,
 ) {
 	let Some(ShowSubject::Forest { noise, stream_radius, layering }) = &config.subject else {
 		if *forest_camera {
@@ -129,10 +170,16 @@ pub fn stream_forest(
 			}
 			*forest_camera = false;
 		}
-		live.clear();
-		selected.clear();
+		lod.generate.enabled = false;
+		lod.present.enabled = false;
+		lod.lattice.enabled = false;
+		lod.generate_keep.region = None;
+		lod.keep.region = None;
+		lod.index.clear();
+		lod.generate_queue.pending.clear();
+		lod.present_queue.pending.clear();
+		lod.presenter.clear(&mut commands);
 		last_key.take();
-		stream_center.take();
 		return;
 	};
 
@@ -145,12 +192,22 @@ pub fn stream_forest(
 
 	let layering_key = layering.map(LayeringKind::as_kebab).unwrap_or("hopscotch");
 	let key = format!("forest:{layering_key}|{noise:?}|r={stream_radius}");
-	if last_key.as_ref() != Some(&key) {
-		live.clear();
-		selected.clear();
-		stream_center.take();
+	let key_changed = last_key.as_ref() != Some(&key);
+	if key_changed {
+		lod.index.clear();
+		lod.generate_queue.pending.clear();
+		lod.present_queue.pending.clear();
+		lod.presenter.clear(&mut commands);
 		*last_key = Some(key);
 	}
+
+	lod.index.noise = *noise;
+	lod.index.layering = *layering;
+	lod.generate.radius = stream_radius.saturating_add(1);
+	lod.generate.enabled = true;
+	lod.present.radius = *stream_radius;
+	lod.present.enabled = true;
+	*lod.lattice = ForestPresentLattice::from_stream_radius(*stream_radius);
 
 	let Ok(cam) = camera.single() else {
 		return;
@@ -160,49 +217,15 @@ pub fn stream_forest(
 		ground_tf.translation.z = cam.translation.z;
 	}
 
-	let raw = ForestExtent::cell_index_containing(cam.translation);
-	let center = match *stream_center {
-		Some(current) => {
-			ForestExtent::cell_index_committed(cam.translation, current, STREAM_COMMIT_MARGIN)
-		}
-		None => raw,
-	};
-	*stream_center = Some(center);
-	let wanted: Vec<(i32, i32)> = ForestExtent::cell_ring(center, *stream_radius).collect();
-	// Select halo (R+1) without growing it so neighbor grove slots have recipes.
-	let halo: Vec<(i32, i32)> =
-		ForestExtent::cell_ring(center, stream_radius.saturating_add(1)).collect();
-	for &(sx, sz) in &halo {
-		selected
-			.entry((sx, sz))
-			.or_insert_with(|| layers_for(sx, sz, *noise, *layering));
+	let center = ForestExtent::cell_index_containing(cam.translation);
+	let generate_aabb = ForestExtent::ring_aabb(center, lod.generate.radius);
+	let present_aabb = ForestExtent::ring_aabb(center, lod.present.radius);
+	lod.generate_keep.region = Some(generate_aabb);
+	lod.keep.region = Some(present_aabb);
+	if key_changed {
+		lod.generate_regions.write(LodGenerateRegion::new(generate_aabb));
+		lod.present_regions.write(LodPresentRegion::new(present_aabb));
 	}
-	selected.retain(|cell, _| halo.contains(cell));
-
-	live.retain(|(ix, iz), entities| {
-		if wanted.contains(&(*ix, *iz)) {
-			true
-		} else {
-			for entity in entities.drain(..) {
-				commands.entity(entity).despawn();
-			}
-			false
-		}
-	});
-
-	let mut missing: Vec<(i32, i32)> =
-		wanted.into_iter().filter(|cell| !live.contains_key(cell)).collect();
-	missing.sort_by_key(|(ix, iz)| (ix - center.0).unsigned_abs() + (iz - center.1).unsigned_abs());
-	let Some(&(ix, iz)) = missing.first() else {
-		return;
-	};
-	let layers = selected
-		.get(&(ix, iz))
-		.copied()
-		.unwrap_or_else(|| layers_for(ix, iz, *noise, *layering));
-	let neighbors = neighbor_layers_from(&selected, ix, iz);
-	let entities = spawn_forest_cell(&mut commands, ix, iz, layers, neighbors);
-	live.insert((ix, iz), entities);
 }
 
 #[cfg(test)]
@@ -231,32 +254,12 @@ mod tests {
 	}
 
 	#[test]
-	fn halo_is_display_ring_plus_one() -> Result<()> {
+	fn generate_ring_is_present_plus_one() -> Result<()> {
 		let r = DEFAULT_FOREST_STREAM_RADIUS;
-		let display: Vec<_> = ForestExtent::cell_ring((0, 0), r).collect();
-		let halo: Vec<_> = ForestExtent::cell_ring((0, 0), r.saturating_add(1)).collect();
-		assert_eq!(display.len(), 9);
-		assert_eq!(halo.len(), 25);
-		assert!(display.iter().all(|cell| halo.contains(cell)));
-		Ok(())
-	}
-
-	#[test]
-	fn neighbor_layers_from_reads_cardinal_cache() -> Result<()> {
-		let east = SelectedLayers {
-			layering: LayeringKind::MiRobles,
-			tufts: None,
-			understory: None,
-			lower_canopy: None,
-			upper_canopy: Some(chico_forests::ForestGroveKind::RollingOaks),
-		};
-		let mut cache = HashMap::new();
-		cache.insert((1, 0), east);
-		let neighbors = neighbor_layers_from(&cache, 0, 0);
-		assert_eq!(neighbors.east, Some(east));
-		assert!(neighbors.north.is_none());
-		assert!(neighbors.south.is_none());
-		assert!(neighbors.west.is_none());
+		let present = ForestExtent::cell_ring((0, 0), r).count();
+		let generate = ForestExtent::cell_ring((0, 0), r.saturating_add(1)).count();
+		assert_eq!(present, 9);
+		assert_eq!(generate, 25);
 		Ok(())
 	}
 }

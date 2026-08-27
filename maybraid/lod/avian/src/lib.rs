@@ -1,22 +1,23 @@
-//! Avian-backed region index for LOD refresh ([`LodSceneRegionIndex`](lod::LodSceneRegionIndex)).
+//! Avian-backed region indexes for LOD generate / present / scene refresh.
 //!
-//! Hosts must carry an Avian [`Collider`] on the **host** entity (no `RigidBody`
-//! required — query-only) and a `T: Component + LodScene` on a
-//! [`LodSceneHost`](lod::LodSceneHost). Prefer
-//! [`PatchSceneBounds`](lod::PatchSceneBounds) with
-//! [`AvianLodSceneBoundsMarshaller`] to stamp volumes from
-//! [`LodScene::scene_bounds`](lod::LodScene::scene_bounds).
+//! Query volumes are stamped by layer-specific marshallers
+//! ([`AvianLodGenerateBoundsMarshaller`], [`AvianLodPresentBoundsMarshaller`],
+//! [`AvianLodSceneBoundsMarshaller`]) so each spatial query can mask to one
+//! [`PhysicsInteractionLayer`]. Hosts must still carry an Avian [`Collider`]
+//! on the **host** entity (no `RigidBody` required — query-only).
 //!
-//! Host volumes use [`PhysicsInteractionLayer::Host`] with empty filters so they
-//! do not enter narrowphase against terrain / buildings ([`layers`]).
+//! Scene hosts use [`PhysicsInteractionLayer::Host`]. Generated and presented
+//! volumes use [`PhysicsInteractionLayer::Generate`] and
+//! [`PhysicsInteractionLayer::Present`]. All three are query-only and do not
+//! enter narrowphase against terrain / buildings ([`layers`]).
 
 mod layers;
 
-pub use layers::{AvianLodHostVolume, PhysicsInteractionLayer};
+pub use layers::{AvianLodHostVolume, AvianLodQueryVolume, PhysicsInteractionLayer};
 
 use std::marker::PhantomData;
 
-use avian3d::prelude::{ColliderAabb, SpatialQuery};
+use avian3d::prelude::{Collider, SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
@@ -27,33 +28,77 @@ use lod::{
 	PatchSceneBounds,
 };
 
-/// [`LodSceneBoundsMarshaller`](lod::LodSceneBoundsMarshaller) that inserts a
-/// query-only Avian [`avian3d::prelude::Collider`] + Host [`CollisionLayers`](avian3d::prelude::CollisionLayers).
+/// [`LodSceneBoundsMarshaller`] for generated-id volumes ([`PhysicsInteractionLayer::Generate`]).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AvianLodGenerateBoundsMarshaller;
+
+/// [`LodSceneBoundsMarshaller`] for presented-id volumes ([`PhysicsInteractionLayer::Present`]).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AvianLodPresentBoundsMarshaller;
+
+/// [`LodSceneBoundsMarshaller`] for scene-host volumes ([`PhysicsInteractionLayer::Host`]).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AvianLodSceneBoundsMarshaller;
 
+fn region_hits(
+	spatial: &SpatialQuery,
+	region: Aabb3d,
+	layer: PhysicsInteractionLayer,
+) -> Vec<Entity> {
+	let min = Vec3::from(region.min);
+	let max = Vec3::from(region.max);
+	let center = (min + max) * 0.5;
+	let size = (max - min).max(Vec3::splat(1e-3));
+	spatial.shape_intersections(
+		&Collider::cuboid(size.x, size.y, size.z),
+		center,
+		Quat::IDENTITY,
+		&SpatialQueryFilter::from_mask(layer),
+	)
+}
+
+/// Untyped Avian lookup of generated-id volumes.
+#[derive(SystemParam)]
+pub struct AvianLodGenerateIndex<'w, 's> {
+	spatial: SpatialQuery<'w, 's>,
+}
+
+impl AvianLodGenerateIndex<'_, '_> {
+	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
+		region_hits(&self.spatial, region, PhysicsInteractionLayer::Generate)
+	}
+}
+
+/// Untyped Avian lookup of presented-id volumes.
+#[derive(SystemParam)]
+pub struct AvianLodPresentIndex<'w, 's> {
+	spatial: SpatialQuery<'w, 's>,
+}
+
+impl AvianLodPresentIndex<'_, '_> {
+	pub fn entities_in_region(&self, region: Aabb3d) -> Vec<Entity> {
+		region_hits(&self.spatial, region, PhysicsInteractionLayer::Present)
+	}
+}
+
 /// Untyped Avian host lookup for the shared produce cache.
 ///
-/// Only colliders on the host entity itself count (physics children do not enroll
-/// the host in LOD refresh).
+/// Hits are already restricted to [`PhysicsInteractionLayer::Host`], so this
+/// does not scan generate / present / terrain / mover colliders.
 #[derive(SystemParam)]
 pub struct AvianLodSceneHostIndex<'w, 's> {
 	spatial: SpatialQuery<'w, 's>,
-	hosts: Query<'w, 's, Entity, With<LodSceneHost>>,
 }
 
 impl LodSceneHostIndex for AvianLodSceneHostIndex<'_, '_> {
 	fn hosts_in_region<'a>(&'a mut self, region: Aabb3d) -> impl Iterator<Item = Entity> + 'a {
-		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
-		let hits = self.spatial.aabb_intersections_with_aabb(collider);
-		hits.into_iter().filter(|entity| self.hosts.contains(*entity))
+		region_hits(&self.spatial, region, PhysicsInteractionLayer::Host).into_iter()
 	}
 }
 
 /// [`SystemParam`] Avian implementation of [`LodSceneRegionIndex`] for host type `T`.
 ///
-/// Only colliders on the host entity itself count (physics children do not enroll
-/// the host in LOD refresh). Used by region-scoped cull.
+/// Layer-masked to [`PhysicsInteractionLayer::Host`], then resolved as `T`.
 #[derive(SystemParam)]
 pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + LodScene + 'static> {
 	spatial: SpatialQuery<'w, 's>,
@@ -67,9 +112,8 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 		&'a mut self,
 		region: Aabb3d,
 	) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
-		let collider = ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max));
-		let hits = self.spatial.aabb_intersections_with_aabb(collider);
-		hits.into_iter()
+		region_hits(&self.spatial, region, PhysicsInteractionLayer::Host)
+			.into_iter()
 			.filter_map(|entity| self.hosts.get(entity).ok().map(|scene| (entity, scene)))
 	}
 }

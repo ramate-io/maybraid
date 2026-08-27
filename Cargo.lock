@@ -2208,9 +2208,11 @@ name = "chico-forests"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "chico-groves",
  "gimme-gen",
+ "lod",
  "procedural-common",
 ]
 

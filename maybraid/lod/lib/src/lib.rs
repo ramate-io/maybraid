@@ -19,11 +19,22 @@ pub use scene::level as lod_level;
 pub use scene::refresh;
 pub use scene::region_index;
 
+pub use gen::{
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
+	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
+	LodGenerateSystems,
+};
 pub use lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
-	LodNode, LodNodeBounds, LodNodePose, LodNodeSnapshot, LodRef, LodRequest,
+	LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems, LodRef,
+	LodRequest,
 };
-pub use presentation::RegionPresenter;
+pub use presentation::{
+	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
+	produce_lod_present_regions, LodPresentBudget, LodPresentCullCursor, LodPresentCullPlugin,
+	LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems, RegionPresenter,
+};
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
 	apply_lod_cull_requests, begin_chunk_lod_fulfill,

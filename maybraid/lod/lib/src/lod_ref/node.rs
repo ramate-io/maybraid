@@ -104,3 +104,20 @@ pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
 pub fn lod_refs_from_snapshots<'a>(snapshots: &'a [LodNodeSnapshot]) -> Vec<LodRef<'a>> {
 	snapshots.iter().map(LodNodeSnapshot::as_lod_ref).collect()
 }
+
+/// Shared driver tracking. Generate, present, and scene plugins add this once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum LodNodeSystems {
+	/// Advance [`LodNodePose`] from [`Transform`].
+	Track,
+}
+
+/// Pose tracking only — not the scene refresh stack.
+pub struct LodNodePlugin;
+
+impl Plugin for LodNodePlugin {
+	fn build(&self, app: &mut App) {
+		app.configure_sets(Update, LodNodeSystems::Track)
+			.add_systems(Update, track_lod_nodes.in_set(LodNodeSystems::Track));
+	}
+}

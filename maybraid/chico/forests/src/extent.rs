@@ -3,8 +3,10 @@
 //! RFC starts at 1600 m forest cells with 200 m grove tiles. Production grove tiles
 //! are [`chico_groves::DEFAULT_GROVE_EXTENT_XZ`] (100 m).
 
+use bevy::math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use chico_groves::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
+use lod::gen::Id;
 
 /// Default square forest cell span in metres on X and Z.
 pub const DEFAULT_FOREST_EXTENT_XZ: f32 = 1600.0;
@@ -40,6 +42,40 @@ impl ForestExtent {
 
 	pub fn center(self) -> Vec3 {
 		(self.min + self.max) * 0.5
+	}
+
+	pub fn aabb(self) -> Aabb3d {
+		Aabb3d::from_min_max(self.min, self.max)
+	}
+
+	pub fn id(self) -> Id {
+		Id::from_cell(self.aabb())
+	}
+
+	pub fn from_id(id: Id) -> Option<Self> {
+		let bounds = id.origin_cell_bounds()?;
+		Some(Self::new(bounds.min.into(), bounds.max.into()))
+	}
+
+	/// Forest cells whose footprints overlap `region` on XZ.
+	pub fn cells_overlapping(region: Aabb3d) -> Vec<Self> {
+		let min_idx = Self::cell_index_containing(Vec3::new(region.min.x, 0.0, region.min.z));
+		let max_x = (region.max.x - 1e-3).max(region.min.x);
+		let max_z = (region.max.z - 1e-3).max(region.min.z);
+		let max_idx = Self::cell_index_containing(Vec3::new(max_x, 0.0, max_z));
+		let (x0, x1) = (min_idx.0.min(max_idx.0), min_idx.0.max(max_idx.0));
+		let (z0, z1) = (min_idx.1.min(max_idx.1), min_idx.1.max(max_idx.1));
+		(x0..=x1)
+			.flat_map(|ix| (z0..=z1).map(move |iz| Self::from_cell_index(ix, iz)))
+			.collect()
+	}
+
+	/// AABB covering a Chebyshev ring of forest cells.
+	pub fn ring_aabb(center: (i32, i32), radius: u32) -> Aabb3d {
+		let r = radius as i32;
+		let min_e = Self::from_cell_index(center.0 - r, center.1 - r);
+		let max_e = Self::from_cell_index(center.0 + r, center.1 + r);
+		Aabb3d::from_min_max(min_e.min(), max_e.max())
 	}
 
 	/// Half-open XZ (`[min, max)`) for a grove-slot center.
@@ -171,6 +207,15 @@ mod tests {
 		assert_eq!(cells.len(), 9);
 		assert!(cells.contains(&(0, 0)));
 		assert!(cells.contains(&(1, -1)));
+		Ok(())
+	}
+
+	#[test]
+	fn ring_aabb_covers_chebyshev_radius() -> Result<()> {
+		let aabb = ForestExtent::ring_aabb((0, 0), 1);
+		assert!((aabb.min.x + 2400.0).abs() < 1e-3);
+		assert!((aabb.max.x - 2400.0).abs() < 1e-3);
+		assert_eq!(ForestExtent::cells_overlapping(aabb).len(), 9);
 		Ok(())
 	}
 

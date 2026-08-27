@@ -3,6 +3,7 @@ use crate::gen::{
 	SpatialIndex, StorageStatus, TrackedId, Version,
 };
 use crate::lod_ref::LodRef;
+use bevy::ecs::resource::Resource;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene, SceneFunction};
 use bevy::{math::Vec3, prelude::Entity};
@@ -148,7 +149,7 @@ pub struct StoredEntry<T> {
 	pub version: Version,
 }
 
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct WorldIndex {
 	next_version: u64,
 	pub terrain: HashMap<Id, StoredEntry<Terrain>>,
@@ -341,26 +342,28 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub enum PresenterOp {
 	Handle(Id, Version),
+	Hide(Id),
 	/// Ids actually removed by a `remove_stale` call.
 	RemoveStale(HashSet<Id>),
 }
 
 /// Records presentation per layer. Each layer keeps its own id → version map,
 /// mirroring how `remove_stale`'s wanted set is scoped to one layer's ids.
-#[derive(Default)]
+#[derive(Resource, Default)]
 pub struct RecordingPresenter {
 	pub terrain: HashMap<Id, Version>,
 	pub vegetation: HashMap<Id, Version>,
 	pub trees: HashMap<Id, Version>,
 	pub leaves: HashMap<Id, Version>,
 	pub moss: HashMap<Id, Version>,
+	pub hidden: HashSet<Id>,
 	pub ops: Vec<PresenterOp>,
 	/// Ids flagged for repair even when storage version is unchanged.
 	pub repair_ids: HashSet<Id>,
 }
 
 macro_rules! presenter_methods {
-	($field:ident) => {
+	($ty:ty, $field:ident) => {
 		fn presented_version(&self, id: Id) -> Option<Version> {
 			self.$field.get(&id).copied()
 		}
@@ -369,18 +372,31 @@ macro_rules! presenter_methods {
 			self.repair_ids.contains(&id)
 		}
 
-		fn handle(&mut self, id: Id, version: Version, _scene: impl Scene, _lod_ref: &LodRef) {
+		fn handle(&mut self, id: Id, version: Version, _value: &$ty, _lod_ref: &LodRef) {
 			self.$field.insert(id, version);
+			self.hidden.remove(&id);
 			self.ops.push(PresenterOp::Handle(id, version));
 		}
 
-		fn remove_stale(&mut self, _region: Aabb3d, wanted: &HashSet<Id>) {
-			// Test presenter treats its whole layer map as in-region; a real
-			// implementation scopes removal to ids presented within `region`.
+		fn hide(&mut self, id: Id) {
+			self.hidden.insert(id);
+			self.ops.push(PresenterOp::Hide(id));
+		}
+
+		fn is_hidden(&self, id: Id) -> bool {
+			self.hidden.contains(&id)
+		}
+
+		fn presented_ids(&self) -> Vec<Id> {
+			self.$field.keys().copied().collect()
+		}
+
+		fn remove_stale(&mut self, wanted: &HashSet<Id>) {
 			let removed: HashSet<Id> =
 				self.$field.keys().copied().filter(|id| !wanted.contains(id)).collect();
 			for id in &removed {
 				self.$field.remove(id);
+				self.hidden.remove(id);
 			}
 			self.ops.push(PresenterOp::RemoveStale(removed));
 		}
@@ -390,7 +406,7 @@ macro_rules! presenter_methods {
 macro_rules! impl_presenter {
 	($ty:ty, $field:ident) => {
 		impl RegionPresenter<$ty, WorldIndex> for RecordingPresenter {
-			presenter_methods!($field);
+			presenter_methods!($ty, $field);
 		}
 	};
 }
@@ -403,7 +419,7 @@ impl_presenter!(Moss, moss);
 /// Vegetation is the index type for this hierarchy: `present_with_descendants`
 /// composes every layer; `present_all` uses the default and forwards here.
 impl RegionPresenter<Vegetation, WorldIndex> for RecordingPresenter {
-	presenter_methods!(vegetation);
+	presenter_methods!(Vegetation, vegetation);
 
 	fn present_with_descendants(
 		&mut self,
