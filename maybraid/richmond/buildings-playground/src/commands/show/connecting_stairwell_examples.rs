@@ -12,7 +12,7 @@ use crate::preview::PreviewSubject;
 pub struct ConnectingStairwellExamples {
 	#[command(flatten)]
 	pub transform: ShowTransform,
-	/// Circular helix or wall-hugging rectangular flights.
+	/// Circular helix, wall-hugging rectangular, or half-well I + landing.
 	#[arg(long, value_enum, default_value_t = StairwellFit::Circular)]
 	pub kind: StairwellFit,
 }

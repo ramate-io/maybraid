@@ -1,5 +1,5 @@
-//! Exclusive [`WellAabb`] stairwell: run-in + circular or rectangular flight +
-//! exit landing.
+//! Exclusive [`WellAabb`] stairwell: run-in + circular, rectangular, or
+//! run-and-landing flight + exit landing.
 //!
 //! Two horizontal shaft faces allocate one orthogonal box. Offset / skew / size
 //! mismatch is another well (or a hall), not a polyline. Walk-off is a landing.
@@ -8,6 +8,7 @@
 
 mod opening;
 mod rect;
+mod run_and_landing;
 mod spiral;
 mod tread;
 mod well;
@@ -35,12 +36,16 @@ pub const SLAB_THICKNESS_M: f32 = 0.05;
 /// Default tread span as a fraction of the well's tighter half-extent.
 pub const TREAD_FILL_DEFAULT: f32 = well::TREAD_FILL_DEFAULT;
 
-/// Circular helix or wall-hugging rectangular flights.
+/// Circular helix, wall-hugging rectangular flights, or half-well I + landing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum StairwellKind {
 	#[default]
 	Circular,
 	Rectangular,
+	/// Half-well I flights; L/U are walkable-depth strips to the walk-off.
+	/// Extra laps turn around on an interior landing and run the other half.
+	/// A leftover U tries one routing switchback first.
+	RunAndLanding,
 }
 
 /// Exclusive box → run-in + flight + optional walk-off landing.
@@ -76,7 +81,7 @@ impl ConnectingStairwell {
 	/// Fit [`StairwellKind`] into an already-allocated exclusive box.
 	pub fn from_well_kind(style: PanelStyle, well: WellAabb, kind: StairwellKind) -> Self {
 		let slab_thickness = SLAB_THICKNESS_M;
-		let (stairs, landing, mids) = fit_kind(&well, style, slab_thickness, kind);
+		let (stairs, landing, mids) = fit_kind(&well, style, slab_thickness, kind, true);
 		Self {
 			style,
 			kind,
@@ -121,7 +126,7 @@ impl ConnectingStairwell {
 		self
 	}
 
-	/// Circular helix or rectangular wall-hug. Default [`StairwellKind::Circular`].
+	/// Circular, rectangular, or run-and-landing. Default [`StairwellKind::Circular`].
 	pub fn with_kind(mut self, kind: StairwellKind) -> Self {
 		self.kind = kind;
 		self.rebuild();
@@ -142,10 +147,10 @@ impl ConnectingStairwell {
 
 	fn rebuild(&mut self) {
 		let (stairs, landing, mids) =
-			fit_kind(&self.well, self.style, self.slab_thickness, self.kind);
+			fit_kind(&self.well, self.style, self.slab_thickness, self.kind, self.want_landing);
 		self.stairs = stairs;
 		self.run_in = self.well.run_in_slab(self.style, self.slab_thickness);
-		self.upper_landing = self.want_landing.then_some(landing).flatten();
+		self.upper_landing = landing;
 		self.mid_landings = mids;
 	}
 
@@ -223,13 +228,18 @@ fn fit_kind(
 	style: PanelStyle,
 	thickness: f32,
 	kind: StairwellKind,
+	want_landing: bool,
 ) -> (Vec<StairNode>, Option<QuadPanel>, Vec<QuadPanel>) {
 	match kind {
 		StairwellKind::Circular => {
 			let (stairs, landing) = spiral::fit(well, style, thickness);
-			(stairs, landing, Vec::new())
+			(stairs, want_landing.then_some(landing).flatten(), Vec::new())
 		}
-		StairwellKind::Rectangular => rect::fit(well, style, thickness),
+		StairwellKind::Rectangular => {
+			let (stairs, landing, mids) = rect::fit(well, style, thickness);
+			(stairs, want_landing.then_some(landing).flatten(), mids)
+		}
+		StairwellKind::RunAndLanding => run_and_landing::fit(well, style, thickness, want_landing),
 	}
 }
 
@@ -636,5 +646,207 @@ mod tests {
 			Stair::Straight(g) => g.width,
 			Stair::Spiral(_) => panic!("spiral well should emit Straight treads"),
 		}
+	}
+
+	fn run_well(min: Vec3, max: Vec3, on: WellSide, off: WellSide) -> ConnectingStairwell {
+		ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(min, max, on, off, TREAD_FILL_DEFAULT),
+			StairwellKind::RunAndLanding,
+		)
+	}
+
+	fn pad_aabb(panel: &QuadPanel) -> (Vec2, Vec2) {
+		let [c0, c1, c2, c3] = panel.corners();
+		(
+			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z)),
+			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z)),
+		)
+	}
+
+	fn covers(pad: &QuadPanel, p: Vec2) -> bool {
+		let (mn, mx) = pad_aabb(pad);
+		p.x >= mn.x - 0.04 && p.x <= mx.x + 0.04 && p.y >= mn.y - 0.04 && p.y <= mx.y + 0.04
+	}
+
+	#[test]
+	fn run_and_landing_fills_half_the_well() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::PosZ,
+		);
+		assert_eq!(well.kind(), StairwellKind::RunAndLanding);
+		assert_eq!(well.stairs().len(), 1);
+		let w = first_tread_width(&well);
+		assert!((w - 1.2).abs() < 0.04, "I should fill the east half, width={w}");
+		let p = well.stairs()[0].placement.translation;
+		assert!(p.x > 0.2, "first I hugs the CCW (east) half, x={}", p.x);
+		assert!(well.well().contains_xz(p.x, p.z));
+	}
+
+	#[test]
+	fn run_and_landing_opposite_is_just_the_door() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::PosZ,
+		);
+		assert!(well.mid_landings().is_empty());
+		assert!(well.upper_landing().is_some());
+		let last = well.last_tread_end().expect("last tread");
+		let door = well.well().side_mid(WellSide::PosZ, well.well().top_y());
+		let last_to_door = (last.leading_mid() - Vec2::new(door.x, door.z)).length();
+		assert!(last_to_door > 0.08, "last leading must not sit on the door");
+		assert!(
+			covers(well.upper_landing().unwrap(), last.leading_mid()),
+			"door strip should cover last leading"
+		);
+	}
+
+	#[test]
+	fn run_and_landing_same_side_laps_back_once() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::NegZ,
+		);
+		assert_eq!(well.stairs().len(), 2, "U to walk-off should switchback once first");
+		let a = well.stairs()[0].placement.translation;
+		let b = well.stairs()[1].placement.translation;
+		assert!(a.x > 0.1 && b.x < -0.1, "return I occupies the other half");
+		assert_eq!(well.mid_landings().len(), 1, "interior turnaround only");
+		let (mn, mx) = pad_aabb(&well.mid_landings()[0]);
+		let depth = mx.y - mn.y;
+		assert!(
+			(0.85..1.05).contains(&depth),
+			"interior landing should be the walkable min, got {depth}"
+		);
+		let turn = TreadEnd::from_straight(&well.stairs()[0]);
+		assert!(covers(&well.mid_landings()[0], turn.leading_mid()));
+		assert!(well.upper_landing().is_some());
+		let last = well.last_tread_end().expect("last tread");
+		assert!(covers(well.upper_landing().unwrap(), last.leading_mid()));
+	}
+
+	#[test]
+	fn run_and_landing_adjacent_is_a_walkable_l() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::NegX,
+		);
+		assert_eq!(well.stairs().len(), 1);
+		let last = well.last_tread_end().expect("last tread");
+		assert!(well.mid_landings().iter().any(|p| covers(p, last.leading_mid())));
+		let (mn, mx) = pad_aabb(&well.mid_landings()[0]);
+		assert!(
+			(0.85..1.05).contains(&(mx.y - mn.y)),
+			"L end-leg should be walkable depth, got {:?}",
+			pad_aabb(&well.mid_landings()[0])
+		);
+		let landing = well.upper_landing().expect("walk-off L leg");
+		let (dn, dx) = pad_aabb(landing);
+		assert!(
+			(0.85..1.05).contains(&(dx.x - dn.x)),
+			"L door-leg should be walkable depth, got {dn:?}..{dx:?}"
+		);
+	}
+
+	#[test]
+	fn run_and_landing_hug_adjacent_keeps_the_i_open() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::PosX,
+		);
+		assert_eq!(well.stairs().len(), 1);
+		let landing = well.upper_landing().expect("walk-off");
+		let (mn, mx) = pad_aabb(landing);
+		let along = mx.y - mn.y;
+		assert!(
+			along < well.well().half_z() + 0.08,
+			"hug-wall door must not lid the I, along={along}"
+		);
+		let (a, b) = pad_aabb(&well.mid_landings()[0]);
+		assert!((0.85..1.05).contains(&(b.y - a.y)), "hug L end-leg should be walkable depth");
+	}
+
+	#[test]
+	fn run_and_landing_tiny_same_side_still_laps_back() {
+		let well = run_well(
+			Vec3::new(-0.6, 0.0, -0.6),
+			Vec3::new(0.6, 1.5, 0.6),
+			WellSide::NegZ,
+			WellSide::NegZ,
+		);
+		assert_eq!(well.stairs().len(), 2);
+		assert_eq!(well.mid_landings().len(), 1);
+	}
+
+	#[test]
+	fn run_and_landing_one_tread_uses_walkable_u_strips() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 0.18, 1.2),
+			WellSide::NegZ,
+			WellSide::NegZ,
+		);
+		assert_eq!(well.stairs().len(), 1);
+		assert_eq!(well.mid_landings().len(), 2, "U extras: far + unused side");
+		for pad in well.mid_landings() {
+			let (mn, mx) = pad_aabb(pad);
+			let d = (mx.x - mn.x).min(mx.y - mn.y);
+			assert!(
+				(0.85..1.05).contains(&d),
+				"U legs should be walkable strips, got {mn:?}..{mx:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn run_and_landing_tall_laps_run_the_other_half() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 6.0, 1.2),
+			WellSide::NegZ,
+			WellSide::NegZ,
+		);
+		assert!(well.stairs().len() >= 2, "6 m should add a return I, got {}", well.stairs().len());
+		let a = well.stairs()[0].placement.translation;
+		let b = well.stairs()[1].placement.translation;
+		assert!(a.x > 0.1, "first I on the CCW half, x={}", a.x);
+		assert!(b.x < -0.1, "return I on the other half, x={}", b.x);
+		assert!(well.mid_landings().len() >= 1, "turnaround needs an interior landing");
+		for s in well.stairs() {
+			let p = s.placement.translation;
+			assert!(well.well().contains_xz(p.x, p.z), "I should stay in the well, {p:?}");
+			let Stair::Straight(g) = &s.geometry else {
+				panic!("run-and-landing should emit Straight flights");
+			};
+			assert!(g.length > 0.4, "two walkable pads must leave a real I, length={}", g.length);
+		}
+	}
+
+	#[test]
+	fn run_and_landing_omits_walk_off_path_when_asked() {
+		let well = run_well(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::NegZ,
+		)
+		.with_upper_landing(false);
+		assert!(well.upper_landing().is_none());
+		assert_eq!(
+			well.mid_landings().len(),
+			1,
+			"routing switchback keeps the interior turnaround; walk-off path drops"
+		);
 	}
 }
