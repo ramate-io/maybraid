@@ -2,7 +2,7 @@
 //!
 //! Every flight is an **I**: hug the wall, fill one half so the other half can
 //! tile. Extra laps for going add an interior landing and run back the other
-//! half when [`super::spiral::MIN_GOING`] and [`super::spiral::MIN_HEADROOM`]
+//! half when [`super::laws::MIN_GOING`] and [`super::laws::MIN_HEADROOM`]
 //! allow. If the last I would still need a U to the walk-off, try **one**
 //! routing switchback first. Interior and L/U pads share a walkable minimum
 //! ([`MIN_WALK_LANDING`]), capped so two pads still leave a real I. A door
@@ -15,12 +15,12 @@ use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 
 use crate::paneling::quad_panel::QuadPanel;
 
-use super::spiral::{MIN_GOING, MIN_HEADROOM};
-use super::well::WellAabb;
-use super::WellSide;
+use super::laws::{
+	add_laps_for_going, resolved_rise, tread_count, MIN_GOING, MIN_LANDING, MIN_RUN,
+};
+use super::well::{yaw_xz, WellAabb};
+use super::{Fit, WellSide};
 
-const MIN_RUN: f32 = 0.08;
-const MIN_LANDING: f32 = 0.12;
 /// Smallest walkable interior / L / U landing (meters). Not “as deep as wide.”
 const MIN_WALK_LANDING: f32 = 0.9;
 
@@ -52,15 +52,10 @@ struct Flight {
 }
 
 /// Half-well I flights + interior turnarounds + walk-off strip path.
-pub(crate) fn fit(
-	well: &WellAabb,
-	style: PanelStyle,
-	thickness: f32,
-	want_landing: bool,
-) -> (Vec<StairNode>, Option<QuadPanel>, Vec<QuadPanel>) {
-	let rise = well.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
+pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32, want_landing: bool) -> Fit {
+	let rise = resolved_rise(well.rise());
 	let width = i_width(well);
-	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
+	let n = tread_count(rise);
 	let door = door_pad_m(well);
 	let turn = turn_pad_m(well);
 	let along = i_along(well);
@@ -82,7 +77,7 @@ pub(crate) fn fit(
 		y += flight.k as f32 * rise_step;
 		let last = i + 1 == flights.len();
 		if !last {
-			mids.push(wall_strip(well, flight.end_side, y, flight.end_pad, style, thickness));
+			mids.push(well.face_strip(flight.end_side, y, flight.end_pad, style, thickness));
 		}
 	}
 	let landing = if want_landing {
@@ -96,22 +91,15 @@ pub(crate) fn fit(
 	} else {
 		None
 	};
-	(stairs, landing, mids)
+	Fit { stairs, door: landing, mids }
 }
 
 fn i_width(well: &WellAabb) -> f32 {
-	match well.walk_on {
-		WellSide::NegX | WellSide::PosX => well.half_z(),
-		WellSide::NegZ | WellSide::PosZ => well.half_x(),
-	}
-	.max(1e-4)
+	well.face_half(well.walk_on).max(1e-4)
 }
 
 fn i_along(well: &WellAabb) -> f32 {
-	match well.walk_on {
-		WellSide::NegX | WellSide::PosX => 2.0 * well.half_x(),
-		WellSide::NegZ | WellSide::PosZ => 2.0 * well.half_z(),
-	}
+	2.0 * well.face_half(well.walk_on.ccw_next())
 }
 
 fn door_pad_m(well: &WellAabb) -> f32 {
@@ -129,16 +117,7 @@ fn turn_pad_m(well: &WellAabb) -> f32 {
 }
 
 fn lap_count(n: u32, run: f32, rise: f32) -> u32 {
-	let mut laps = 1u32;
-	let going_of = |laps: u32| (laps as f32 * run) / n.max(1) as f32;
-	while going_of(laps) + 1e-4 < MIN_GOING {
-		let next = laps + 1;
-		if rise / next as f32 + 1e-4 < MIN_HEADROOM {
-			break;
-		}
-		laps = next;
-	}
-	laps
+	add_laps_for_going(1, rise, |laps| (laps as f32 * run) / n.max(1) as f32)
 }
 
 /// One extra I when the last flight would finish opposite the walk-off (a U).
@@ -234,7 +213,7 @@ fn flight_node(
 	geom.tread_height = rise_step.max(1e-4);
 	StairNode::rough_stone(
 		Stair::Straight(geom),
-		Placement::new(Vec3::new(start.x, y, start.y), yaw_of(flight.travel)),
+		Placement::new(Vec3::new(start.x, y, start.y), yaw_xz(flight.travel)),
 	)
 }
 
@@ -254,11 +233,6 @@ fn half_center(well: &WellAabb, half: Half) -> Vec2 {
 	let hug = half.hug(well.walk_on).into_xz();
 	let ext = if hug.x.abs() > hug.y.abs() { well.half_x() } else { well.half_z() };
 	c + hug * (0.5 * ext)
-}
-
-fn yaw_of(travel: Vec2) -> f32 {
-	let t = unit(travel);
-	(-t.y).atan2(t.x)
 }
 
 fn unit(v: Vec2) -> Vec2 {
@@ -286,11 +260,11 @@ fn walk_off_pads(
 		.iter()
 		.copied()
 		.filter(|s| *s != well.walk_off)
-		.map(|side| wall_strip(well, side, well.top_y(), turn, style, thickness))
+		.map(|side| well.face_strip(side, well.top_y(), turn, style, thickness))
 		.collect();
 	if well.walk_off == hug {
 		(
-			wall_half_strip(
+			half_face_strip(
 				well,
 				well.walk_off,
 				last.end_side,
@@ -302,7 +276,7 @@ fn walk_off_pads(
 			extras,
 		)
 	} else {
-		(wall_strip(well, well.walk_off, well.top_y(), turn, style, thickness), extras)
+		(well.face_strip(well.walk_off, well.top_y(), turn, style, thickness), extras)
 	}
 }
 
@@ -315,25 +289,13 @@ fn door_slab(
 ) -> QuadPanel {
 	let hug = last.half.hug(well.walk_on);
 	if well.walk_off == hug {
-		wall_half_strip(well, well.walk_off, last.end_side, well.top_y(), pad, style, thickness)
+		half_face_strip(well, well.walk_off, last.end_side, well.top_y(), pad, style, thickness)
 	} else {
 		well.walk_off_landing_strip(style, thickness, pad)
 	}
 }
 
-fn wall_strip(
-	well: &WellAabb,
-	side: WellSide,
-	y: f32,
-	depth: f32,
-	style: PanelStyle,
-	thickness: f32,
-) -> QuadPanel {
-	let (lo, hi) = face_along(well, side);
-	strip_slab(well, side, y, depth, lo, hi, style, thickness)
-}
-
-fn wall_half_strip(
+fn half_face_strip(
 	well: &WellAabb,
 	side: WellSide,
 	toward: WellSide,
@@ -343,18 +305,11 @@ fn wall_half_strip(
 	thickness: f32,
 ) -> QuadPanel {
 	let (lo, hi) = half_along(well, side, toward);
-	strip_slab(well, side, y, depth, lo, hi, style, thickness)
-}
-
-fn face_along(well: &WellAabb, side: WellSide) -> (f32, f32) {
-	match side {
-		WellSide::NegZ | WellSide::PosZ => (well.min().x, well.max().x),
-		WellSide::NegX | WellSide::PosX => (well.min().z, well.max().z),
-	}
+	well.strip_slab(side, y, depth, lo, hi, style, thickness)
 }
 
 fn half_along(well: &WellAabb, side: WellSide, toward: WellSide) -> (f32, f32) {
-	let (lo, hi) = face_along(well, side);
+	let (lo, hi) = well.face_along(side);
 	let mid = 0.5 * (lo + hi);
 	let toward_xz = toward.into_xz();
 	let sign = match side {
@@ -366,50 +321,6 @@ fn half_along(well: &WellAabb, side: WellSide, toward: WellSide) -> (f32, f32) {
 	} else {
 		(lo, mid)
 	}
-}
-
-fn strip_slab(
-	well: &WellAabb,
-	side: WellSide,
-	y: f32,
-	depth: f32,
-	along0: f32,
-	along1: f32,
-	style: PanelStyle,
-	thickness: f32,
-) -> QuadPanel {
-	let d = depth.max(MIN_LANDING);
-	let lo = along0.min(along1);
-	let hi = along0.max(along1);
-	let min = well.min();
-	let max = well.max();
-	let (a0, a1, b0, b1) = match side {
-		WellSide::NegZ => (
-			Vec3::new(lo, y, min.z),
-			Vec3::new(hi, y, min.z),
-			Vec3::new(lo, y, min.z + d),
-			Vec3::new(hi, y, min.z + d),
-		),
-		WellSide::PosZ => (
-			Vec3::new(lo, y, max.z),
-			Vec3::new(hi, y, max.z),
-			Vec3::new(lo, y, max.z - d),
-			Vec3::new(hi, y, max.z - d),
-		),
-		WellSide::NegX => (
-			Vec3::new(min.x, y, lo),
-			Vec3::new(min.x, y, hi),
-			Vec3::new(min.x + d, y, lo),
-			Vec3::new(min.x + d, y, hi),
-		),
-		WellSide::PosX => (
-			Vec3::new(max.x, y, lo),
-			Vec3::new(max.x, y, hi),
-			Vec3::new(max.x - d, y, lo),
-			Vec3::new(max.x - d, y, hi),
-		),
-	};
-	QuadPanel::slab(style, a0, a1, b0, b1, thickness)
 }
 
 #[cfg(test)]

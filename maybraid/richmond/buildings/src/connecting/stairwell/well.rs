@@ -7,6 +7,7 @@ use richmond_building_components::panels::PanelStyle;
 
 use crate::paneling::quad_panel::QuadPanel;
 
+use super::laws::MIN_LANDING;
 use super::opening::StairwellOpening;
 use super::RUN_IN_M;
 
@@ -69,8 +70,7 @@ impl WellSide {
 
 	/// Placement yaw for [`Self::travel_xz`] (`(+cos, −sin)` in XZ).
 	pub fn travel_yaw(self) -> f32 {
-		let t = self.travel_xz();
-		(-t.y).atan2(t.x)
+		yaw_xz(self.travel_xz())
 	}
 
 	pub fn nearest(bounds: Aabb3d, p: Vec3) -> Self {
@@ -160,6 +160,22 @@ impl WellAabb {
 		self.half_x().min(self.half_z())
 	}
 
+	/// Half the face length (X for ±Z walls, Z for ±X walls).
+	pub fn face_half(self, side: WellSide) -> f32 {
+		match side {
+			WellSide::NegX | WellSide::PosX => self.half_z(),
+			WellSide::NegZ | WellSide::PosZ => self.half_x(),
+		}
+	}
+
+	/// Inclusive along-axis range of `side` (X for ±Z, Z for ±X).
+	pub fn face_along(self, side: WellSide) -> (f32, f32) {
+		match side {
+			WellSide::NegZ | WellSide::PosZ => (self.min().x, self.max().x),
+			WellSide::NegX | WellSide::PosX => (self.min().z, self.max().z),
+		}
+	}
+
 	pub fn bottom_y(self) -> f32 {
 		self.min().y
 	}
@@ -218,12 +234,7 @@ impl WellAabb {
 
 	/// Run-in: full walk-on width, [`RUN_IN_M`] into the box.
 	pub fn run_in_slab(self, style: PanelStyle, thickness: f32) -> QuadPanel {
-		let along = match self.walk_on {
-			WellSide::NegX | WellSide::PosX => self.half_z(),
-			WellSide::NegZ | WellSide::PosZ => self.half_x(),
-		};
-		let [a0, a1, b0, b1] = self.side_strip(self.walk_on, self.bottom_y(), RUN_IN_M, along);
-		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
+		self.face_strip(self.walk_on, self.bottom_y(), RUN_IN_M, style, thickness)
 	}
 
 	/// Walk-off landing: full exclusive-box span on the door, fixed inward depth.
@@ -237,25 +248,75 @@ impl WellAabb {
 		thickness: f32,
 		depth: f32,
 	) -> QuadPanel {
-		let along = match self.walk_off {
-			WellSide::NegX | WellSide::PosX => self.half_z(),
-			WellSide::NegZ | WellSide::PosZ => self.half_x(),
-		};
 		let cap = self.half_min() * 0.55;
-		let d = depth.max(MIN_LANDING_ALONG).min(cap).max(MIN_LANDING_ALONG);
-		let [a0, a1, b0, b1] = self.side_strip(self.walk_off, self.top_y(), d, along);
-		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
+		let d = depth.max(MIN_LANDING).min(cap).max(MIN_LANDING);
+		self.face_strip(self.walk_off, self.top_y(), d, style, thickness)
 	}
 
-	/// Interior midpoint of a walk-off strip of `landing_depth`.
-	pub fn back_point_xz(self, landing_depth: f32) -> Vec2 {
-		let outer = self.side_mid(self.walk_off, self.top_y());
-		let inward = -self.walk_off.into_xz();
-		Vec2::new(outer.x, outer.z) + inward * landing_depth.max(EPS)
+	/// Full-face strip on `side`, `depth` into the well.
+	pub fn face_strip(
+		self,
+		side: WellSide,
+		y: f32,
+		depth: f32,
+		style: PanelStyle,
+		thickness: f32,
+	) -> QuadPanel {
+		let (lo, hi) = self.face_along(side);
+		self.strip_slab(side, y, depth, lo, hi, style, thickness)
+	}
+
+	/// Axis-aligned strip on `side` with an explicit along-axis range.
+	pub fn strip_slab(
+		self,
+		side: WellSide,
+		y: f32,
+		depth: f32,
+		along0: f32,
+		along1: f32,
+		style: PanelStyle,
+		thickness: f32,
+	) -> QuadPanel {
+		let d = depth.max(MIN_LANDING);
+		let lo = along0.min(along1);
+		let hi = along0.max(along1);
+		let min = self.min();
+		let max = self.max();
+		let (a0, a1, b0, b1) = match side {
+			WellSide::NegZ => (
+				Vec3::new(lo, y, min.z),
+				Vec3::new(hi, y, min.z),
+				Vec3::new(lo, y, min.z + d),
+				Vec3::new(hi, y, min.z + d),
+			),
+			WellSide::PosZ => (
+				Vec3::new(lo, y, max.z),
+				Vec3::new(hi, y, max.z),
+				Vec3::new(lo, y, max.z - d),
+				Vec3::new(hi, y, max.z - d),
+			),
+			WellSide::NegX => (
+				Vec3::new(min.x, y, lo),
+				Vec3::new(min.x, y, hi),
+				Vec3::new(min.x + d, y, lo),
+				Vec3::new(min.x + d, y, hi),
+			),
+			WellSide::PosX => (
+				Vec3::new(max.x, y, lo),
+				Vec3::new(max.x, y, hi),
+				Vec3::new(max.x - d, y, lo),
+				Vec3::new(max.x - d, y, hi),
+			),
+		};
+		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
 	}
 }
 
-const MIN_LANDING_ALONG: f32 = 0.12;
+/// Placement yaw for an XZ direction (`(+cos, −sin)`).
+pub(crate) fn yaw_xz(dir: Vec2) -> f32 {
+	let d = if dir.length_squared() < 1e-8 { Vec2::X } else { dir.normalize() };
+	(-d.y).atan2(d.x)
+}
 
 pub fn clamp_tread_fill(fill: f32) -> f32 {
 	if !fill.is_finite() {
