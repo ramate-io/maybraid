@@ -9,7 +9,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use crate::gen::{
-	expire_pending_outside_keep, GeneratingSpatialIndex, GenerationScheme, Id, StorageStatus,
+	expand_keep_xz, expire_pending_outside_keep, id_xz_distance2, GeneratingSpatialIndex,
+	GenerationScheme, Id, StorageStatus, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -57,15 +58,26 @@ impl<T> Default for LodGenerateQueue<T> {
 
 /// Last generate-ring AABB for this channel. Drain polls this every frame so a
 /// one-shot region is not required after the first ids land in the index.
+///
+/// [`Self::slack_xz`] is the live margin around [`Self::region`] (queue expire).
 #[derive(Resource, Debug)]
 pub struct LodGenerateKeepRegion<M: Send + Sync + 'static> {
 	pub region: Option<Aabb3d>,
+	/// XZ expand of [`Self::region`] for pending-id expiry. World-overridable.
+	pub slack_xz: f32,
 	pub _marker: PhantomData<M>,
 }
 
 impl<M: Send + Sync + 'static> Default for LodGenerateKeepRegion<M> {
 	fn default() -> Self {
-		Self { region: None, _marker: PhantomData }
+		Self { region: None, slack_xz: QUEUE_KEEP_SLACK_XZ, _marker: PhantomData }
+	}
+}
+
+impl<M: Send + Sync + 'static> LodGenerateKeepRegion<M> {
+	/// Keep AABB expanded by [`Self::slack_xz`] on XZ. `None` before the first produce.
+	pub fn live_region(&self) -> Option<Aabb3d> {
+		self.region.map(|region| expand_keep_xz(region, self.slack_xz))
 	}
 }
 
@@ -153,7 +165,7 @@ pub fn drain_lod_generate<T, S, M, F>(
 		}
 	}
 
-	expire_pending_outside_keep(&mut queue.pending, keep.region);
+	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
 
 	if queue.pending.is_empty() {
 		return;
@@ -167,8 +179,8 @@ pub fn drain_lod_generate<T, S, M, F>(
 
 	let origin = lod_ref.current_transform.translation;
 	queue.pending.make_contiguous().sort_by(|a, b| {
-		id_distance(*a, origin)
-			.partial_cmp(&id_distance(*b, origin))
+		id_xz_distance2(*a, origin)
+			.partial_cmp(&id_xz_distance2(*b, origin))
 			.unwrap_or(std::cmp::Ordering::Equal)
 	});
 
@@ -179,16 +191,6 @@ pub fn drain_lod_generate<T, S, M, F>(
 		};
 		index.get_or_generate(id, lod_ref);
 	}
-}
-
-fn id_distance(id: Id, origin: Vec3) -> f32 {
-	let Some(bounds) = id.origin_cell_bounds() else {
-		return f32::MAX;
-	};
-	let center = (bounds.min + bounds.max) * 0.5;
-	let dx = center.x - origin.x;
-	let dz = center.z - origin.z;
-	dx * dx + dz * dz
 }
 
 fn push_keep_region(scan: &mut Vec<Aabb3d>, keep: Option<Aabb3d>) {

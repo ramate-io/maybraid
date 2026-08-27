@@ -7,7 +7,10 @@ use bevy::prelude::Vec3;
 
 use super::Id;
 
-/// XZ slack so a 100 m tile-cross does not drop cells still on the ring edge.
+/// Default XZ slack on [`crate::LodGenerateKeepRegion`] / [`crate::LodPresentKeepRegion`].
+///
+/// Override per channel in the world. A 100 m tile-cross should not drop cells
+/// still on the ring edge.
 pub const QUEUE_KEEP_SLACK_XZ: f32 = 100.0;
 
 /// Expand `keep` on XZ only (Y is not the live axis for grove/forest rings).
@@ -30,14 +33,25 @@ pub fn id_lives_in_keep(id: Id, keep: Aabb3d, slack: f32) -> bool {
 	}
 }
 
-/// Drop pending origin ids whose cell sits outside keep + [`QUEUE_KEEP_SLACK_XZ`].
+/// Viewer-to-origin-cell XZ distance squared (generate / present drain sort).
+pub fn id_xz_distance2(id: Id, origin: Vec3) -> f32 {
+	let Some(bounds) = id.origin_cell_bounds() else {
+		return f32::MAX;
+	};
+	let center = (bounds.min + bounds.max) * 0.5;
+	let dx = center.x - origin.x;
+	let dz = center.z - origin.z;
+	dx * dx + dz * dz
+}
+
+/// Drop pending origin ids whose cell sits outside keep + `slack`.
 ///
 /// No keep AABB → no expiry (nothing is known to be live).
-pub fn expire_pending_outside_keep(pending: &mut VecDeque<Id>, keep: Option<Aabb3d>) {
+pub fn expire_pending_outside_keep(pending: &mut VecDeque<Id>, keep: Option<Aabb3d>, slack: f32) {
 	let Some(keep) = keep else {
 		return;
 	};
-	pending.retain(|id| id_lives_in_keep(*id, keep, QUEUE_KEEP_SLACK_XZ));
+	pending.retain(|id| id_lives_in_keep(*id, keep, slack));
 }
 
 #[cfg(test)]
@@ -55,15 +69,24 @@ mod tests {
 	#[test]
 	fn no_keep_does_not_expire() {
 		let mut pending = VecDeque::from([Id::from_cell(cell(0.0)), Id::from_cell(cell(200.0))]);
-		expire_pending_outside_keep(&mut pending, None);
+		expire_pending_outside_keep(&mut pending, None, QUEUE_KEEP_SLACK_XZ);
 		assert_eq!(pending.len(), 2);
 	}
 
 	#[test]
 	fn expire_drops_only_outside_slack() {
 		let mut pending = VecDeque::from([Id::from_cell(cell(0.0)), Id::from_cell(cell(250.0))]);
-		expire_pending_outside_keep(&mut pending, Some(cell(100.0)));
+		expire_pending_outside_keep(&mut pending, Some(cell(100.0)), QUEUE_KEEP_SLACK_XZ);
 		assert_eq!(pending, VecDeque::from([Id::from_cell(cell(0.0))]));
+	}
+
+	#[test]
+	fn expire_honors_custom_slack() {
+		let mut pending = VecDeque::from([Id::from_cell(cell(250.0))]);
+		expire_pending_outside_keep(&mut pending, Some(cell(100.0)), 200.0);
+		assert_eq!(pending, VecDeque::from([Id::from_cell(cell(250.0))]));
+		expire_pending_outside_keep(&mut pending, Some(cell(100.0)), 0.0);
+		assert!(pending.is_empty());
 	}
 
 	#[test]

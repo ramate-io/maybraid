@@ -166,3 +166,42 @@ fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 	);
 	Ok(())
 }
+
+#[test]
+fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(WorldIndex::default())
+		.insert_resource(LodGenerateBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodGenerateKeepRegion::<GenChan>::default();
+			keep.region = Some(cell(100.0));
+			keep.slack_xz = 0.0;
+			keep
+		})
+		.insert_resource({
+			let mut queue = LodGenerateQueue::<Vegetation>::default();
+			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue
+		})
+		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
+		.world_mut()
+		.spawn((
+			LodNode,
+			LodNodePose { current: Transform::from_xyz(100.4, 0.0, 0.0), ..default() },
+			Transform::from_xyz(100.4, 0.0, 0.0),
+		));
+	app.update();
+
+	assert!(!app
+		.world()
+		.resource::<LodGenerateQueue<Vegetation>>()
+		.pending
+		.contains(&Id::from_cell(cell(0.0))));
+	assert!(SpatialIndex::<Vegetation>::get(
+		app.world().resource::<WorldIndex>(),
+		Id::from_cell(cell(0.0)),
+	)
+	.is_none());
+	Ok(())
+}

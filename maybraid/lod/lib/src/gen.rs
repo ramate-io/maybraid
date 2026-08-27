@@ -9,7 +9,8 @@
 //!   [`GeneratingSpatialIndex`] recurses the whole tree with no scene
 //!   side effects.
 //! - [`keep`]: impulse-queue liveness. Pending generate/present ids drop when
-//!   their origin cell leaves the keep AABB plus slack.
+//!   their origin cell leaves the keep AABB plus per-channel slack
+//!   ([`LodGenerateKeepRegion::slack_xz`] / [`crate::LodPresentKeepRegion::slack_xz`]).
 //!
 //! Presentation is [`crate::presentation`] (including its Bevy present
 //! plugins). Scene / refresh runtime is [`crate::scene`]. Generate plugins
@@ -36,7 +37,8 @@ pub use crate::scene::{
 pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
 pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
 pub use keep::{
-	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, QUEUE_KEEP_SLACK_XZ,
+	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
+	QUEUE_KEEP_SLACK_XZ,
 };
 pub use runtime::{
 	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
