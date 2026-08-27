@@ -30,6 +30,19 @@ macro_rules! impl_kind_recipe {
 				}
 			}
 
+			/// Grow the full tile with default params (no construction-seed bias).
+			pub fn grow_tile(
+				self,
+				extent: GroveExtent,
+				world: &impl GroveWorldSample,
+			) -> ForestGroveTile {
+				match self {
+					$(Self::$Kind => ForestGroveTile::$Kind(
+						$Params::default().with_extent(extent).build_on(world),
+					),)+
+				}
+			}
+
 			/// `select_cell` on `cells`, then grow those placements on `extent`.
 			pub fn grow_on_cells(
 				self,
@@ -53,6 +66,16 @@ macro_rules! impl_kind_recipe {
 					})+
 				}
 			}
+		}
+
+		/// Match a [`ForestGroveTile`] and bind the concrete grove as `$g`.
+		#[macro_export]
+		macro_rules! match_forest_grove_tile {
+			($tile:expr, $g:ident => $body:expr) => {
+				match $tile {
+					$($crate::ForestGroveTile::$Kind($g) => $body,)+
+				}
+			};
 		}
 	};
 }

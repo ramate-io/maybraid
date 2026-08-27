@@ -4,18 +4,10 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use chico_forests::{
-	select_cell, ChicoForest, ForestExtent, ForestGroveTile, LayeringKind, NeighborLayers,
-	SelectedLayers,
+	match_forest_grove_tile, select_cell, ForestExtent, ForestGroveTile, LayeringKind,
+	NeighborLayers, SelectedLayers,
 };
-use chico_groves::{
-	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
-	ConiferMassives, ConiferSapling, DateGrove, Dryland, FlatTerrainSample, ForlornSavanna,
-	GoettingenFollow, HighBush, JerrysChaparral, JungleLowerMassives, JungleMassives, Leeward,
-	LevantineScrub, LowBush, MonsterGrass, Orchard, PalmShade, RiparianGeneral, RiparianMix,
-	RiverineGreen, RollingOaks, Shamanhome, SpottyBushes, Storytellers, StrangeOasis, TallGrass,
-	TemperateLowerMassives, TemperateMassives, TradeWinds, TropicalThicket, TropicalTufts,
-	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
-};
+use chico_groves::FlatTerrainSample;
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use lod::gen::LodScene;
 use procedural_common::NoiseParams;
@@ -59,57 +51,7 @@ where
 }
 
 fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> Vec<Entity> {
-	match tile {
-		ForestGroveTile::Alpine(g) => spawn_grove_host::<Alpine>(commands, g),
-		ForestGroveTile::AridConiferSapling(g) => {
-			spawn_grove_host::<AridConiferSapling>(commands, g)
-		}
-		ForestGroveTile::BraidGrass(g) => spawn_grove_host::<BraidGrass>(commands, g),
-		ForestGroveTile::BushScrub(g) => spawn_grove_host::<BushScrub>(commands, g),
-		ForestGroveTile::ChristmasTaiga(g) => spawn_grove_host::<ChristmasTaiga>(commands, g),
-		ForestGroveTile::CommonTufts(g) => spawn_grove_host::<CommonTufts>(commands, g),
-		ForestGroveTile::ConiferMassives(g) => spawn_grove_host::<ConiferMassives>(commands, g),
-		ForestGroveTile::ConiferSapling(g) => spawn_grove_host::<ConiferSapling>(commands, g),
-		ForestGroveTile::DateGrove(g) => spawn_grove_host::<DateGrove>(commands, g),
-		ForestGroveTile::Dryland(g) => spawn_grove_host::<Dryland>(commands, g),
-		ForestGroveTile::ForlornSavanna(g) => spawn_grove_host::<ForlornSavanna>(commands, g),
-		ForestGroveTile::GoettingenFollow(g) => spawn_grove_host::<GoettingenFollow>(commands, g),
-		ForestGroveTile::HighBush(g) => spawn_grove_host::<HighBush>(commands, g),
-		ForestGroveTile::JerrysChaparral(g) => spawn_grove_host::<JerrysChaparral>(commands, g),
-		ForestGroveTile::JungleLowerMassives(g) => {
-			spawn_grove_host::<JungleLowerMassives>(commands, g)
-		}
-		ForestGroveTile::JungleMassives(g) => spawn_grove_host::<JungleMassives>(commands, g),
-		ForestGroveTile::Leeward(g) => spawn_grove_host::<Leeward>(commands, g),
-		ForestGroveTile::LevantineScrub(g) => spawn_grove_host::<LevantineScrub>(commands, g),
-		ForestGroveTile::LowBush(g) => spawn_grove_host::<LowBush>(commands, g),
-		ForestGroveTile::MonsterGrass(g) => spawn_grove_host::<MonsterGrass>(commands, g),
-		ForestGroveTile::Orchard(g) => spawn_grove_host::<Orchard>(commands, g),
-		ForestGroveTile::PalmShade(g) => spawn_grove_host::<PalmShade>(commands, g),
-		ForestGroveTile::RiparianGeneral(g) => spawn_grove_host::<RiparianGeneral>(commands, g),
-		ForestGroveTile::RiparianMix(g) => spawn_grove_host::<RiparianMix>(commands, g),
-		ForestGroveTile::RiverineGreen(g) => spawn_grove_host::<RiverineGreen>(commands, g),
-		ForestGroveTile::RollingOaks(g) => spawn_grove_host::<RollingOaks>(commands, g),
-		ForestGroveTile::Shamanhome(g) => spawn_grove_host::<Shamanhome>(commands, g),
-		ForestGroveTile::SpottyBushes(g) => spawn_grove_host::<SpottyBushes>(commands, g),
-		ForestGroveTile::Storytellers(g) => spawn_grove_host::<Storytellers>(commands, g),
-		ForestGroveTile::StrangeOasis(g) => spawn_grove_host::<StrangeOasis>(commands, g),
-		ForestGroveTile::TallGrass(g) => spawn_grove_host::<TallGrass>(commands, g),
-		ForestGroveTile::TemperateLowerMassives(g) => {
-			spawn_grove_host::<TemperateLowerMassives>(commands, g)
-		}
-		ForestGroveTile::TemperateMassives(g) => spawn_grove_host::<TemperateMassives>(commands, g),
-		ForestGroveTile::TradeWinds(g) => spawn_grove_host::<TradeWinds>(commands, g),
-		ForestGroveTile::TropicalThicket(g) => spawn_grove_host::<TropicalThicket>(commands, g),
-		ForestGroveTile::TropicalTufts(g) => spawn_grove_host::<TropicalTufts>(commands, g),
-		ForestGroveTile::TropicalUndergrowth(g) => {
-			spawn_grove_host::<TropicalUndergrowth>(commands, g)
-		}
-		ForestGroveTile::UnendingJungle(g) => spawn_grove_host::<UnendingJungle>(commands, g),
-		ForestGroveTile::Vineyard(g) => spawn_grove_host::<Vineyard>(commands, g),
-		ForestGroveTile::WanderingAcacia(g) => spawn_grove_host::<WanderingAcacia>(commands, g),
-		ForestGroveTile::WildGrass(g) => spawn_grove_host::<WildGrass>(commands, g),
-	}
+	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g))
 }
 
 fn layers_for(
@@ -147,8 +89,7 @@ fn spawn_forest_cell(
 	let extent = ForestExtent::from_cell_index(ix, iz);
 	let assembled =
 		chico_forests::assemble(extent, layers, neighbors, &FlatTerrainSample::default());
-	let forest = ChicoForest { extent, assembled };
-	let layers = forest.assembled.layers;
+	let layers = assembled.layers;
 	info!(
 		"forest cell ({ix},{iz}) layering={:?} tufts={:?} understory={:?} lower={:?} upper={:?} tiles={}",
 		layers.layering,
@@ -156,10 +97,10 @@ fn spawn_forest_cell(
 		layers.understory,
 		layers.lower_canopy,
 		layers.upper_canopy,
-		forest.tiles().count()
+		assembled.tiles().count()
 	);
 	let mut entities = Vec::new();
-	for tile in forest.tiles() {
+	for tile in assembled.tiles() {
 		entities.extend(spawn_forest_grove_tile(commands, tile));
 	}
 	entities

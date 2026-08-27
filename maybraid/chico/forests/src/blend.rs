@@ -13,7 +13,7 @@ use crate::{ForestGroveKind, DEFAULT_FOREST_GROVE_TILE_XZ};
 
 /// North, east, south, west.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Cardinal {
+pub(crate) enum Cardinal {
 	North,
 	East,
 	South,
@@ -22,15 +22,6 @@ pub enum Cardinal {
 
 impl Cardinal {
 	pub const ALL: [Self; 4] = [Self::North, Self::East, Self::South, Self::West];
-
-	pub fn index(self) -> usize {
-		match self {
-			Self::North => 0,
-			Self::East => 1,
-			Self::South => 2,
-			Self::West => 3,
-		}
-	}
 
 	fn offset_xz(self) -> Vec3 {
 		let s = DEFAULT_FOREST_GROVE_TILE_XZ;
@@ -57,7 +48,7 @@ pub const GROVE_BLEND_NOISE: f32 = 1.5;
 
 /// One produced grove (center + kind). `kind` is `None` for an empty layer.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BlendSlot {
+pub(crate) struct BlendSlot {
 	pub center: Vec3,
 	pub kind: Option<ForestGroveKind>,
 }
@@ -66,20 +57,25 @@ impl BlendSlot {
 	pub fn planted_kinds(slots: &[Self]) -> impl Iterator<Item = ForestGroveKind> + '_ {
 		slots.iter().filter_map(|slot| slot.kind)
 	}
-}
 
-/// Adjacent 100 m grove footprint in `face` (`steps` tiles away).
-pub fn neighbor_tile(tile: GroveExtent, face: Cardinal) -> GroveExtent {
-	neighbor_tile_steps(tile, face, 1)
+	pub fn has_planted(slots: &[Self]) -> bool {
+		slots.iter().any(|slot| slot.kind.is_some())
+	}
+
+	/// `Some(k)` when every slot is `Some(k)` — no empty votes, one kind.
+	pub fn uniform_planted_kind(slots: &[Self]) -> Option<ForestGroveKind> {
+		let first = slots.first()?.kind?;
+		slots.iter().all(|slot| slot.kind == Some(first)).then_some(first)
+	}
 }
 
 /// Grove footprint `steps` cardinal tiles from `tile`.
-pub fn neighbor_tile_steps(tile: GroveExtent, face: Cardinal, steps: u32) -> GroveExtent {
+pub(crate) fn neighbor_tile_steps(tile: GroveExtent, face: Cardinal, steps: u32) -> GroveExtent {
 	let d = face.offset_xz() * steps as f32;
 	GroveExtent::new(tile.min() + d, tile.max() + d)
 }
 
-pub fn tile_center_xz(tile: GroveExtent) -> Vec3 {
+pub(crate) fn tile_center_xz(tile: GroveExtent) -> Vec3 {
 	(tile.min() + tile.max()) * 0.5
 }
 
@@ -89,66 +85,77 @@ fn dist_xz(a: Vec3, b: Vec3) -> f32 {
 	(dx * dx + dz * dz).sqrt()
 }
 
-fn logit_scale() -> f32 {
-	(GROVE_BLEND_INFLUENCE * GROVE_BLEND_TEMPERATURE.max(1e-3)).max(1e-3)
-}
+/// Temperature is 1, so the scale is just the influence distance.
+const LOGIT_SCALE: f32 = GROVE_BLEND_INFLUENCE * GROVE_BLEND_TEMPERATURE;
 
 fn slot_salt(center: Vec3) -> u32 {
 	center.x.to_bits().wrapping_add(center.z.to_bits().rotate_left(11))
 }
 
 fn source_logit(position: Vec3, source_center: Vec3) -> f32 {
-	let distance = -dist_xz(position, source_center) / logit_scale();
+	let distance = -dist_xz(position, source_center) / LOGIT_SCALE;
 	let wrinkle =
 		(hash_unit_salt(position, slot_salt(source_center)) * 2.0 - 1.0) * GROVE_BLEND_NOISE;
 	distance + wrinkle
 }
 
+/// Distinct kinds in a cardinal run (self + 4 faces). Plenty for a seam.
+const MAX_KIND_GROUPS: usize = 8;
+
 /// Softmax winner over **kinds**: each kind keeps its best slot logit.
 ///
 /// `None` skips the plant (empty-layer mass). Missing slots are simply absent
 /// from `slots`.
-pub fn pick_kind(position: Vec3, slots: &[BlendSlot], hash_unit: f32) -> Option<ForestGroveKind> {
+pub(crate) fn pick_kind(
+	position: Vec3,
+	slots: &[BlendSlot],
+	hash_unit: f32,
+) -> Option<ForestGroveKind> {
 	if slots.is_empty() {
 		return None;
 	}
 	let hash = hash_unit.clamp(0.0, 1.0);
-	let mut groups: Vec<(Option<ForestGroveKind>, f32)> = Vec::with_capacity(4);
+	let mut kinds = [None; MAX_KIND_GROUPS];
+	let mut best = [0.0_f32; MAX_KIND_GROUPS];
+	let mut n = 0usize;
 	for slot in slots {
 		let logit = source_logit(position, slot.center);
-		if let Some((_, best)) = groups.iter_mut().find(|(kind, _)| *kind == slot.kind) {
-			if logit > *best {
-				*best = logit;
+		if let Some(i) = kinds[..n].iter().position(|kind| *kind == slot.kind) {
+			if logit > best[i] {
+				best[i] = logit;
 			}
-		} else {
-			groups.push((slot.kind, logit));
+		} else if n < MAX_KIND_GROUPS {
+			kinds[n] = slot.kind;
+			best[n] = logit;
+			n += 1;
 		}
 	}
-	let Some(max) = groups.iter().map(|(_, l)| *l).reduce(f32::max) else {
+	if n == 0 {
 		return None;
-	};
+	}
+	let max = best[..n].iter().copied().fold(f32::NEG_INFINITY, f32::max);
+	let mut mass = [0.0_f32; MAX_KIND_GROUPS];
 	let mut total = 0.0;
-	let mut mass = vec![0.0_f32; groups.len()];
-	for (i, (_, logit)) in groups.iter().enumerate() {
-		let w = (logit - max).exp();
+	for i in 0..n {
+		let w = (best[i] - max).exp();
 		mass[i] = w;
 		total += w;
 	}
 	let total = total.max(1e-8);
 	let mut acc = 0.0;
-	let mut choice = groups.len() - 1;
-	for (i, w) in mass.iter().enumerate() {
-		acc += *w / total;
+	let mut choice = n - 1;
+	for i in 0..n {
+		acc += mass[i] / total;
 		if hash < acc {
 			choice = i;
 			break;
 		}
 	}
-	groups[choice].0
+	kinds[choice]
 }
 
 /// Stable `0..1` from a world XZ (cell center).
-pub fn hash_unit_xz(position: Vec3) -> f32 {
+pub(crate) fn hash_unit_xz(position: Vec3) -> f32 {
 	hash_unit_salt(position, 0)
 }
 
@@ -174,6 +181,10 @@ mod tests {
 
 	fn self_orchard() -> BlendSlot {
 		BlendSlot { center: tile_center_xz(tile()), kind: Some(ForestGroveKind::Orchard) }
+	}
+
+	fn neighbor_tile(tile: GroveExtent, face: Cardinal) -> GroveExtent {
+		neighbor_tile_steps(tile, face, 1)
 	}
 
 	fn east_oaks() -> Vec<BlendSlot> {

@@ -4,18 +4,7 @@
 //! noise stays on the grove default — forests do not bias `build_unit` seeds.
 
 use bevy_math::Vec3;
-use chico_groves::{
-	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
-	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
-	DateGroveParams, DrylandParams, ForlornSavannaParams, GoettingenFollowParams, GroveExtent,
-	GroveWorldSample, HighBushParams, JerrysChaparralParams, JungleLowerMassivesParams,
-	JungleMassivesParams, LeewardParams, LevantineScrubParams, LowBushParams, MonsterGrassParams,
-	OrchardParams, PalmShadeParams, RiparianGeneralParams, RiparianMixParams, RiverineGreenParams,
-	RollingOaksParams, ShamanhomeParams, SpottyBushesParams, StorytellersParams,
-	StrangeOasisParams, TallGrassParams, TemperateLowerMassivesParams, TemperateMassivesParams,
-	TradeWindsParams, TropicalThicketParams, TropicalTuftsParams, TropicalUndergrowthParams,
-	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
-};
+use chico_groves::{GroveExtent, GroveWorldSample};
 
 use crate::blend::{
 	hash_unit_xz, neighbor_tile_steps, pick_kind, tile_center_xz, BlendSlot, Cardinal,
@@ -96,131 +85,7 @@ pub fn grow_tile(
 	extent: GroveExtent,
 	world: &impl GroveWorldSample,
 ) -> ForestGroveTile {
-	match kind {
-		ForestGroveKind::Alpine => {
-			ForestGroveTile::Alpine(AlpineParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::AridConiferSapling => ForestGroveTile::AridConiferSapling(
-			AridConiferSaplingParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::BraidGrass => ForestGroveTile::BraidGrass(
-			BraidGrassParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::BushScrub => ForestGroveTile::BushScrub(
-			BushScrubParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::ChristmasTaiga => ForestGroveTile::ChristmasTaiga(
-			ChristmasTaigaParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::CommonTufts => ForestGroveTile::CommonTufts(
-			CommonTuftsParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::ConiferMassives => ForestGroveTile::ConiferMassives(
-			ConiferMassivesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::ConiferSapling => ForestGroveTile::ConiferSapling(
-			ConiferSaplingParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::DateGrove => ForestGroveTile::DateGrove(
-			DateGroveParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Dryland => {
-			ForestGroveTile::Dryland(DrylandParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::ForlornSavanna => ForestGroveTile::ForlornSavanna(
-			ForlornSavannaParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::GoettingenFollow => ForestGroveTile::GoettingenFollow(
-			GoettingenFollowParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::HighBush => {
-			ForestGroveTile::HighBush(HighBushParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::JerrysChaparral => ForestGroveTile::JerrysChaparral(
-			JerrysChaparralParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::JungleLowerMassives => ForestGroveTile::JungleLowerMassives(
-			JungleLowerMassivesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::JungleMassives => ForestGroveTile::JungleMassives(
-			JungleMassivesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Leeward => {
-			ForestGroveTile::Leeward(LeewardParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::LevantineScrub => ForestGroveTile::LevantineScrub(
-			LevantineScrubParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::LowBush => {
-			ForestGroveTile::LowBush(LowBushParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::MonsterGrass => ForestGroveTile::MonsterGrass(
-			MonsterGrassParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Orchard => {
-			ForestGroveTile::Orchard(OrchardParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::PalmShade => ForestGroveTile::PalmShade(
-			PalmShadeParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::RiparianGeneral => ForestGroveTile::RiparianGeneral(
-			RiparianGeneralParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::RiparianMix => ForestGroveTile::RiparianMix(
-			RiparianMixParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::RiverineGreen => ForestGroveTile::RiverineGreen(
-			RiverineGreenParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::RollingOaks => ForestGroveTile::RollingOaks(
-			RollingOaksParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Shamanhome => ForestGroveTile::Shamanhome(
-			ShamanhomeParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::SpottyBushes => ForestGroveTile::SpottyBushes(
-			SpottyBushesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Storytellers => ForestGroveTile::Storytellers(
-			StorytellersParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::StrangeOasis => ForestGroveTile::StrangeOasis(
-			StrangeOasisParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TallGrass => ForestGroveTile::TallGrass(
-			TallGrassParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TemperateLowerMassives => ForestGroveTile::TemperateLowerMassives(
-			TemperateLowerMassivesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TemperateMassives => ForestGroveTile::TemperateMassives(
-			TemperateMassivesParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TradeWinds => ForestGroveTile::TradeWinds(
-			TradeWindsParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TropicalThicket => ForestGroveTile::TropicalThicket(
-			TropicalThicketParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TropicalTufts => ForestGroveTile::TropicalTufts(
-			TropicalTuftsParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::TropicalUndergrowth => ForestGroveTile::TropicalUndergrowth(
-			TropicalUndergrowthParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::UnendingJungle => ForestGroveTile::UnendingJungle(
-			UnendingJungleParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::Vineyard => {
-			ForestGroveTile::Vineyard(VineyardParams::default().with_extent(extent).build_on(world))
-		}
-		ForestGroveKind::WanderingAcacia => ForestGroveTile::WanderingAcacia(
-			WanderingAcaciaParams::default().with_extent(extent).build_on(world),
-		),
-		ForestGroveKind::WildGrass => ForestGroveTile::WildGrass(
-			WildGrassParams::default().with_extent(extent).build_on(world),
-		),
-	}
+	kind.grow_tile(extent, world)
 }
 
 fn grow_layer(
@@ -231,6 +96,9 @@ fn grow_layer(
 	layer: LayerSlot,
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
+	if kind.is_none() && !neighbors.any_kind(layer) {
+		return Vec::new();
+	}
 	tiles
 		.iter()
 		.flat_map(|extent| grow_presenting_tile(kind, *extent, forest, neighbors, layer, world))
@@ -254,13 +122,11 @@ impl NeighborLayers {
 		Self { north: None, east: None, south: None, west: None }
 	}
 
-	pub fn get(self, face: Cardinal) -> Option<SelectedLayers> {
-		match face {
-			Cardinal::North => self.north,
-			Cardinal::East => self.east,
-			Cardinal::South => self.south,
-			Cardinal::West => self.west,
-		}
+	fn any_kind(self, layer: LayerSlot) -> bool {
+		[self.north, self.east, self.south, self.west]
+			.into_iter()
+			.flatten()
+			.any(|layers| layer.kind(layers).is_some())
 	}
 }
 
@@ -294,41 +160,27 @@ fn produced_kind_at(
 	if forest.owns_center_xz(center) {
 		return Some(self_kind);
 	}
-	let self_idx = ForestExtent::cell_index_containing(forest.center());
-	let slot_idx = ForestExtent::cell_index_containing(center);
-	let layers = if slot_idx != self_idx {
-		cardinal_forest_layers(self_idx, slot_idx, neighbors)
-	} else {
-		cardinal_layers_outside_extent(center, forest, neighbors)
-	};
-	layers.map(|selected| layer.kind(selected))
+	producer_layers(center, forest, neighbors).map(|selected| layer.kind(selected))
 }
 
-fn cardinal_forest_layers(
-	self_idx: (i32, i32),
-	slot_idx: (i32, i32),
-	neighbors: &NeighborLayers,
-) -> Option<SelectedLayers> {
-	let (sx, sz) = self_idx;
-	let (ix, iz) = slot_idx;
-	if ix == sx + 1 && iz == sz {
-		neighbors.east
-	} else if ix == sx - 1 && iz == sz {
-		neighbors.west
-	} else if ix == sx && iz == sz + 1 {
-		neighbors.north
-	} else if ix == sx && iz == sz - 1 {
-		neighbors.south
-	} else {
-		None
-	}
-}
-
-fn cardinal_layers_outside_extent(
+/// Adjacent-cell cache, or AABB overflow for 100 m test extents.
+fn producer_layers(
 	center: Vec3,
 	forest: ForestExtent,
 	neighbors: &NeighborLayers,
 ) -> Option<SelectedLayers> {
+	let self_idx = ForestExtent::cell_index_containing(forest.center());
+	let slot_idx = ForestExtent::cell_index_containing(center);
+	if slot_idx != self_idx {
+		let (dx, dz) = (slot_idx.0 - self_idx.0, slot_idx.1 - self_idx.1);
+		return match (dx, dz) {
+			(1, 0) => neighbors.east,
+			(-1, 0) => neighbors.west,
+			(0, 1) => neighbors.north,
+			(0, -1) => neighbors.south,
+			_ => None,
+		};
+	}
 	let east = center.x - forest.max().x;
 	let west = forest.min().x - center.x;
 	let north = center.z - forest.max().z;
@@ -376,7 +228,14 @@ fn grow_presenting_tile(
 	layer: LayerSlot,
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
-	grow_blended(kind, extent, &blend_sources(extent, forest, kind, neighbors, layer), world)
+	let slots = blend_sources(extent, forest, kind, neighbors, layer);
+	if !BlendSlot::has_planted(&slots) {
+		return Vec::new();
+	}
+	if let Some(only) = BlendSlot::uniform_planted_kind(&slots) {
+		return vec![grow_tile(only, extent, world)];
+	}
+	grow_blended(kind, extent, &slots, world)
 }
 
 fn grow_blended(
