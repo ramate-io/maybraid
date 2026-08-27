@@ -1,7 +1,9 @@
 //! Shared VegetationComponents host for blade / tuft-patch groves (Monster Grass pattern).
 //!
-//! Grow placements into unit [`TuftPatch`] plants (optional merge fold). High/Medium
-//! scene chunks lazy-pose those stored plants; Low is upright proxies, UltraLow carpets.
+//! Grow placements into unit [`TuftPatch`] plants (optional merge fold). The plant
+//! list and Low / UltraLow proxies are [`Arc`] slices (Orchard pattern): begin is
+//! a pointer bump. High/Medium lazy-pose stored plants; Low / UltraLow drain the
+//! baked proxy kits.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,7 +61,11 @@ pub struct TuftGrovePlant {
 /// Built tuft/grass grove shared by VegetationComponents hosts.
 #[derive(Clone, Debug)]
 pub struct TuftGroveBody {
-	pub plants: Vec<TuftGrovePlant>,
+	pub plants: Arc<[TuftGrovePlant]>,
+	/// Upright bin proxies, baked at grow (not at begin).
+	pub low_nodes: Arc<[FoliageNode]>,
+	/// Carpet / grid proxies, baked at grow (not at begin).
+	pub ultra_nodes: Arc<[FoliageNode]>,
 	pub structural_center: Vec3,
 	pub footprint_radius: f32,
 	pub extent: GroveExtent,
@@ -255,14 +261,33 @@ impl TuftGroveBody {
 		let span = extent.max() - extent.min();
 		let half = span * 0.5;
 		let footprint_radius = half.x.max(half.z).max(1.0);
+		let structural_center = extent.min() + Vec3::new(half.x, half.y.max(1.0), half.z);
+		let plants: Arc<[TuftGrovePlant]> = plants.into();
+		let low_nodes = foliage_cell_proxies(
+			&plants,
+			extent,
+			cell_extent_xz,
+			structural_center,
+			footprint_radius,
+			LOW_CELL_STRIDE,
+			proxy.low,
+		)
+		.into();
+		let ultra_nodes = foliage_ultra_low_nodes(&plants, extent, proxy.ultra).into();
 		Self {
 			plants,
-			structural_center: extent.min() + Vec3::new(half.x, half.y.max(1.0), half.z),
+			low_nodes,
+			ultra_nodes,
+			structural_center,
 			footprint_radius,
 			extent: *extent,
 			cell_extent_xz,
 			proxy,
 		}
+	}
+
+	pub fn plants(&self) -> &[TuftGrovePlant] {
+		&self.plants
 	}
 
 	fn foliage_nodes_for_plant(
@@ -298,63 +323,11 @@ impl TuftGroveBody {
 	}
 
 	pub fn foliage_low(&self) -> Vec<FoliageNode> {
-		self.foliage_cell_proxies(LOW_CELL_STRIDE, self.proxy.low)
-	}
-
-	fn foliage_cell_proxies(&self, cell_stride: f32, height: f32) -> Vec<FoliageNode> {
-		let bin_x = (self.cell_extent_xz.x * cell_stride).max(1e-3);
-		let bin_z = (self.cell_extent_xz.y * cell_stride).max(1e-3);
-		let origin = self.extent.min();
-		let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
-		let samples = surface_samples_from_plants(
-			self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
-		);
-
-		for plant in &self.plants {
-			let patch = &plant.patch;
-			let width = clump_proxy_width(patch);
-			for anchor in &patch.anchors {
-				let world = plant.placement.compose_child(Placement::new(*anchor, 0.0)).translation;
-				let ix = ((world.x - origin.x) / bin_x).floor() as i32;
-				let iz = ((world.z - origin.z) / bin_z).floor() as i32;
-				let entry = bins.entry((ix, iz)).or_insert((Vec3::ZERO, 0.0, 0));
-				entry.0 += world;
-				entry.1 += width;
-				entry.2 = entry.2.saturating_add(1);
-			}
-		}
-
-		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-		let mut runs = Vec::with_capacity(bins.len());
-		let normal_eps = bin_x.max(bin_z) * 0.5;
-		for ((ix, iz), (sum_pos, sum_width, count)) in bins {
-			let n = (count as f32).max(1.0);
-			let mean = sum_pos / n;
-			let width = (sum_width / n).max(bin_x.max(bin_z) * 0.5) * n.sqrt();
-			let cx = origin.x + (ix as f32 + 0.5) * bin_x;
-			let cz = origin.z + (iz as f32 + 0.5) * bin_z;
-			// Prefer bin center on XZ; keep plant mean Y so proxies sit on terrain.
-			let base_xz = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
-			let base = Vec3::new(base_xz.x, mean.y, base_xz.z);
-			let up = surface_normal_at(&samples, base.x, base.z, normal_eps);
-			if let Some(run) = upright_proxy_run(base, up, width, height) {
-				runs.push(run);
-			}
-		}
-		collection_nodes(runs, self.structural_center, self.footprint_radius, material)
+		self.low_nodes.to_vec()
 	}
 
 	pub fn foliage_ultra_low(&self) -> Vec<FoliageNode> {
-		let material = self.plants.first().map(|p| p.material.clone()).unwrap_or_default();
-		let samples = surface_samples_from_plants(
-			self.plants.iter().map(|p| (&p.placement, p.patch.as_ref())),
-		);
-		horizontal_grid_proxy_placements(&self.extent, ULTRA_GRID, self.proxy.ultra, &samples)
-			.into_iter()
-			.map(|placement| {
-				FoliageNode::straight_frond_segment(placement).with_material(material.clone())
-			})
-			.collect()
+		self.ultra_nodes.to_vec()
 	}
 
 	pub fn foliage_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
@@ -379,20 +352,28 @@ impl TuftGroveBody {
 			.with_preserve_ultra_low(true)
 	}
 
-	/// Lazy posed kits from [`Self::plants`]. Begin does not rebuild collections.
+	/// Lazy posed kits from [`Self::plants`]. Begin is [`Arc::clone`] of the list.
 	pub fn high_medium_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		let stride = match level {
 			LodSceneLevel::Medium => MEDIUM_TUFT_STRIDE,
 			_ => 1,
 		};
-		lazy_posed_tuft_chunks(self.plants.clone(), stride, lod_ref, level)
+		lazy_posed_tuft_chunks(Arc::clone(&self.plants), stride, lod_ref, level)
+	}
+
+	/// Lazy kits from baked Low / UltraLow proxies. Begin does not rescan plants.
+	pub fn low_ultra_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		let nodes = match level {
+			LodSceneLevel::Low => Arc::clone(&self.low_nodes),
+			_ => Arc::clone(&self.ultra_nodes),
+		};
+		lazy_foliage_node_chunks(nodes, lod_ref, level)
 	}
 }
 
 /// One posed High/Medium kit per plant (Medium keeps High geometry, every `stride`th plant).
 ///
-/// Begin clones the plant list (`Arc<TuftPatch>` + pose + material). Drain builds one
-/// [`FoliageNode`] from that patch.
+/// Begin is [`Arc::clone`] of the plant list. Drain poses one stored patch at a time.
 pub fn lazy_posed_tuft_chunks(
 	plants: impl Into<Arc<[TuftGrovePlant]>>,
 	stride: usize,
@@ -435,6 +416,101 @@ pub fn lazy_posed_tuft_chunks(
 
 fn posed_tuft_node(plant: &TuftGrovePlant, level: LodSceneLevel) -> Option<FoliageNode> {
 	TuftGroveBody::foliage_nodes_for_plant(plant, level).next()
+}
+
+/// One kit per baked foliage node. Begin is [`Arc::clone`] of the list.
+pub fn lazy_foliage_node_chunks(
+	nodes: impl Into<Arc<[FoliageNode]>>,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> SceneChunk {
+	let nodes: Arc<[FoliageNode]> = nodes.into();
+	let n = nodes.len();
+	if n == 0 {
+		return SceneChunk::primitive(scene_children(Vec::new()));
+	}
+	let prev = *lod_ref.previous_transform;
+	let curr = *lod_ref.current_transform;
+	let bounds = *lod_ref.bounds;
+	let entity = lod_ref.entity;
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	let mut index = 0usize;
+	SceneChunk::lazy(n as u32 * kit_w, n, move || {
+		let kit_lod =
+			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
+		if index < nodes.len() {
+			let node = &nodes[index];
+			index += 1;
+			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, level)));
+		}
+		None
+	})
+}
+
+fn foliage_cell_proxies(
+	plants: &[TuftGrovePlant],
+	extent: &GroveExtent,
+	cell_extent_xz: Vec2,
+	structural_center: Vec3,
+	footprint_radius: f32,
+	cell_stride: f32,
+	height: f32,
+) -> Vec<FoliageNode> {
+	let bin_x = (cell_extent_xz.x * cell_stride).max(1e-3);
+	let bin_z = (cell_extent_xz.y * cell_stride).max(1e-3);
+	let origin = extent.min();
+	let mut bins: HashMap<(i32, i32), (Vec3, f32, u32)> = HashMap::new();
+	let samples =
+		surface_samples_from_plants(plants.iter().map(|p| (&p.placement, p.patch.as_ref())));
+
+	for plant in plants {
+		let patch = &plant.patch;
+		let width = clump_proxy_width(patch);
+		for anchor in &patch.anchors {
+			let world = plant.placement.compose_child(Placement::new(*anchor, 0.0)).translation;
+			let ix = ((world.x - origin.x) / bin_x).floor() as i32;
+			let iz = ((world.z - origin.z) / bin_z).floor() as i32;
+			let entry = bins.entry((ix, iz)).or_insert((Vec3::ZERO, 0.0, 0));
+			entry.0 += world;
+			entry.1 += width;
+			entry.2 = entry.2.saturating_add(1);
+		}
+	}
+
+	let material = plants.first().map(|p| p.material.clone()).unwrap_or_default();
+	let mut runs = Vec::with_capacity(bins.len());
+	let normal_eps = bin_x.max(bin_z) * 0.5;
+	for ((ix, iz), (sum_pos, sum_width, count)) in bins {
+		let n = (count as f32).max(1.0);
+		let mean = sum_pos / n;
+		let width = (sum_width / n).max(bin_x.max(bin_z) * 0.5) * n.sqrt();
+		let cx = origin.x + (ix as f32 + 0.5) * bin_x;
+		let cz = origin.z + (iz as f32 + 0.5) * bin_z;
+		// Prefer bin center on XZ; keep plant mean Y so proxies sit on terrain.
+		let base_xz = Vec3::new(cx, 0.0, cz).lerp(Vec3::new(mean.x, 0.0, mean.z), 0.35);
+		let base = Vec3::new(base_xz.x, mean.y, base_xz.z);
+		let up = surface_normal_at(&samples, base.x, base.z, normal_eps);
+		if let Some(run) = upright_proxy_run(base, up, width, height) {
+			runs.push(run);
+		}
+	}
+	collection_nodes(runs, structural_center, footprint_radius, material)
+}
+
+fn foliage_ultra_low_nodes(
+	plants: &[TuftGrovePlant],
+	extent: &GroveExtent,
+	height: f32,
+) -> Vec<FoliageNode> {
+	let material = plants.first().map(|p| p.material.clone()).unwrap_or_default();
+	let samples =
+		surface_samples_from_plants(plants.iter().map(|p| (&p.placement, p.patch.as_ref())));
+	horizontal_grid_proxy_placements(extent, ULTRA_GRID, height, &samples)
+		.into_iter()
+		.map(|placement| {
+			FoliageNode::straight_frond_segment(placement).with_material(material.clone())
+		})
+		.collect()
 }
 
 fn clump_proxy_width(patch: &TuftPatch) -> f32 {
@@ -627,6 +703,52 @@ mod tests {
 		assert!(n.x < -0.3, "expected uphill tilt, got {n:?}");
 		assert!(n.y > 0.8, "expected mostly upright, got {n:?}");
 		assert!(n.z.abs() < 0.05, "expected no Z lean, got {n:?}");
+	}
+
+	#[test]
+	fn from_plants_bakes_proxy_lists() {
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(20.0, 1.0, 20.0));
+		let body = TuftGroveBody::from_plants(
+			Vec::new(),
+			&extent,
+			Vec2::splat(2.5),
+			TuftGroveProxyHeights::SHORT,
+		);
+		assert!(body.plants.is_empty());
+		assert!(body.low_nodes.is_empty(), "empty grove has no Low bins");
+		assert_eq!(body.ultra_nodes.len(), 4, "UltraLow is a 2×2 carpet grid");
+		assert_eq!(body.foliage_low(), body.low_nodes.to_vec());
+		assert_eq!(body.foliage_ultra_low(), body.ultra_nodes.to_vec());
+	}
+
+	#[test]
+	fn high_medium_chunks_clone_the_plant_arc() {
+		use bevy::math::bounding::Aabb3d;
+		use bevy::prelude::Entity;
+
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(20.0, 1.0, 20.0));
+		let body = TuftGroveBody::from_plants(
+			Vec::new(),
+			&extent,
+			Vec2::splat(2.5),
+			TuftGroveProxyHeights::SHORT,
+		);
+		let camera = Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		// Empty High is a primitive, not a lazy scan. Low still Arc-clones baked nodes.
+		let low = body.low_ultra_chunks(&lod_ref, LodSceneLevel::Low);
+		assert!(matches!(low, SceneChunk::Primitive { .. }));
+		let ultra = body.low_ultra_chunks(&lod_ref, LodSceneLevel::UltraLow);
+		assert!(matches!(
+			ultra,
+			SceneChunk::Lazy { remaining_primitives: 4, .. }
+		));
 	}
 
 	#[test]

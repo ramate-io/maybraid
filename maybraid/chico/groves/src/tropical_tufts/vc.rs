@@ -162,7 +162,7 @@ pub struct TropicalTufts {
 
 impl TropicalTufts {
 	pub fn plants(&self) -> &[TuftGrovePlant] {
-		&self.body.plants
+		self.body.plants()
 	}
 
 	pub fn palm_count(&self) -> usize {
@@ -188,7 +188,11 @@ impl TropicalTufts {
 				SceneChunk::chunks([tufts, self.lazy_palm_chunks(lod_ref, palm_level)])
 			}
 			_ => {
-				chico_vegetation_components::flattened_vegetation_scene_chunks(self, lod_ref, level)
+				let tufts = self.body.low_ultra_chunks(lod_ref, level);
+				if self.palms.is_empty() {
+					return tufts;
+				}
+				SceneChunk::chunks([tufts, self.lazy_palm_chunks(lod_ref, level)])
 			}
 		}
 	}
