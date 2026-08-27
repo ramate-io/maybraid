@@ -220,10 +220,8 @@ pub(crate) fn apply_stampede(
 			let elevation = store
 				.composed_height_at(&layout, x, z)
 				.unwrap_or_else(|| base.0.height_at(x, z));
-			let body = spawn_character_controller(
-				&mut commands,
-				controller_spawn_point(x, z, elevation),
-			);
+			let body =
+				spawn_character_controller(&mut commands, controller_spawn_point(x, z, elevation));
 			commands.entity(body).insert((
 				Name::new(format!("stampede-{}", species.label())),
 				StampedeMember { offset },
@@ -236,10 +234,7 @@ pub(crate) fn apply_stampede(
 			}
 		}
 		commands.spawn(RequestModeCharacter);
-		status.0 = format!(
-			"stampede {} species — WASD / jump on every capsule",
-			count
-		);
+		status.0 = format!("stampede {} species — WASD / jump on every capsule", count);
 		commands.entity(entity).despawn();
 	}
 }

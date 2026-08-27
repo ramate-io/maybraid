@@ -18,15 +18,12 @@ use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use character::{apply_set_character, drive_player_locomotion};
-use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree,
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use debug_bounds::{
-	setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay,
-};
+use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
@@ -38,6 +35,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
+use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
@@ -404,8 +402,18 @@ fn present_cells(
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let terrain_wanted = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	terrain_presenter.remove_stale(&terrain_wanted);
 	let water_view = WaterStoreView::new(&store, &layout);
 	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
+	let water_wanted = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	water_presenter.remove_stale(&water_wanted);
 
 	pending.0 = false;
 }

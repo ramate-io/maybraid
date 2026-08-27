@@ -9,7 +9,7 @@ use lod_cascade::Aabb3d;
 
 pub use node::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, LodNode,
-	LodNodeBounds, LodNodePose, LodNodeSnapshot,
+	LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems,
 };
 
 /// A component type to mark fine LOD.

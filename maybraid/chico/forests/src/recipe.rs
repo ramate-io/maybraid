@@ -20,6 +20,33 @@ use gimme_gen::Cell;
 
 use crate::{ForestGroveKind, ForestGroveTile};
 
+/// Blend result for one presenting tile: kind plus the cells that won.
+///
+/// `cells` is `None` when the tile is uniform (grow the whole footprint).
+#[derive(Clone)]
+pub struct ForestGroveRecipe {
+	pub kind: ForestGroveKind,
+	pub extent: GroveExtent,
+	pub cells: Option<Vec<Cell>>,
+}
+
+impl ForestGroveRecipe {
+	pub fn uniform(kind: ForestGroveKind, extent: GroveExtent) -> Self {
+		Self { kind, extent, cells: None }
+	}
+
+	pub fn on_cells(kind: ForestGroveKind, extent: GroveExtent, cells: Vec<Cell>) -> Self {
+		Self { kind, extent, cells: Some(cells) }
+	}
+
+	pub fn grow(&self, world: &impl GroveWorldSample) -> ForestGroveTile {
+		match &self.cells {
+			None => self.kind.grow_tile(self.extent, world),
+			Some(cells) => self.kind.grow_on_cells(self.extent, cells, world),
+		}
+	}
+}
+
 macro_rules! impl_kind_recipe {
 	($($Kind:ident => $mod:ident, $Params:ident),+ $(,)?) => {
 		impl ForestGroveKind {
@@ -27,6 +54,19 @@ macro_rules! impl_kind_recipe {
 			pub fn cell_extent_xz(self) -> Vec2 {
 				match self {
 					$(Self::$Kind => chico_groves::$mod::definition().cell_extent_xz,)+
+				}
+			}
+
+			/// Grow the full tile with default params (no construction-seed bias).
+			pub fn grow_tile(
+				self,
+				extent: GroveExtent,
+				world: &impl GroveWorldSample,
+			) -> ForestGroveTile {
+				match self {
+					$(Self::$Kind => ForestGroveTile::$Kind(
+						$Params::default().with_extent(extent).build_on(world),
+					),)+
 				}
 			}
 
@@ -53,6 +93,16 @@ macro_rules! impl_kind_recipe {
 					})+
 				}
 			}
+		}
+
+		/// Match a [`ForestGroveTile`] and bind the concrete grove as `$g`.
+		#[macro_export]
+		macro_rules! match_forest_grove_tile {
+			($tile:expr, $g:ident => $body:expr) => {
+				match $tile {
+					$($crate::ForestGroveTile::$Kind($g) => $body,)+
+				}
+			};
 		}
 	};
 }

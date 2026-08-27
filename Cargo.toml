@@ -271,6 +271,12 @@ panic = "unwind"
 [profile.release.build-override]
 opt-level = 3
 
+[profile.perf]
+inherits = "release"
+codegen-units = 1
+lto = "thin"
+
+
 [profile.wasm-dev]
 inherits = "dev"
 opt-level = 1

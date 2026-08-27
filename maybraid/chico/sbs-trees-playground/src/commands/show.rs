@@ -598,7 +598,7 @@ pub struct ShowForest {
 	)]
 	pub noise: NoiseParams,
 
-	/// Chebyshev ring of 1600 m cells around the camera (`0` = current cell only).
+	/// Present-ring multiplier (`1` = 1 km present / 2 km generate; `0` = one 100 m tile).
 	#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
 	pub stream_radius: u32,
 }

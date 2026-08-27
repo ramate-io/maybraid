@@ -1,14 +1,15 @@
 //! Shared tuft-grove [`LodScene`]. Authored bands stay on the grove body.
 //!
 //! High / Medium kits come from stored plants (`lazy_posed_tuft_chunks`): begin
-//! does not rebuild every collection. Drain poses one patch at a time. Low /
-//! UltraLow still go through `flattened_vegetation_scene_chunks` (small lists).
+//! is [`std::sync::Arc::clone`] of the plant list. Low / UltraLow drain proxies
+//! baked at grow (`TuftGroveBody::low_ultra_chunks`). Drain poses one kit at a time.
 
 /// Mechanical [`LodScene`] for a tuft grove that already implements [`VegetationComponents`].
 ///
-/// High / Medium use [`TuftGroveBody::high_medium_chunks`] on `self.body`. Groves
-/// that emit extra kits (Tropical Tufts palms) or store plants off-body
-/// (Monster Grass) implement `tuft_scene_chunks` and take [`impl_tuft_grove_lod_emit!`].
+/// High / Medium use [`TuftGroveBody::high_medium_chunks`] on `self.body`. Low /
+/// UltraLow use [`TuftGroveBody::low_ultra_chunks`]. Groves that emit extra kits
+/// (Tropical Tufts palms) or store plants off-body (Monster Grass) implement
+/// `tuft_scene_chunks` and take [`impl_tuft_grove_lod_emit!`].
 #[macro_export]
 macro_rules! impl_tuft_grove_lod {
 	($Grove:ty) => {
@@ -22,9 +23,7 @@ macro_rules! impl_tuft_grove_lod {
 					lod::gen::LodSceneLevel::High | lod::gen::LodSceneLevel::Medium => {
 						self.body.high_medium_chunks(lod_ref, level)
 					}
-					_ => chico_vegetation_components::flattened_vegetation_scene_chunks(
-						self, lod_ref, level,
-					),
+					_ => self.body.low_ultra_chunks(lod_ref, level),
 				}
 			}
 		}

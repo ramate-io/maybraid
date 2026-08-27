@@ -124,7 +124,7 @@ pub struct WildGrass {
 
 impl WildGrass {
 	pub fn plants(&self) -> &[TuftGrovePlant] {
-		&self.body.plants
+		self.body.plants()
 	}
 }
 

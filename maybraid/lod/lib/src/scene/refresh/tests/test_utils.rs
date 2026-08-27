@@ -5,7 +5,9 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::scene::prelude::Scene;
 
+use crate::cull_offset_bands_from_factor;
 use crate::lod_ref::LodRef;
+use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
@@ -15,7 +17,7 @@ use super::super::{
 	Bullseye, LodCullRegionCursor, LodHostBounds, LodRefreshCorePlugin, LodRefreshSystems,
 	LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRefreshEntitiesPlugin,
 	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin, LodSceneRefreshRegion,
-	LodSceneRefreshRegionPlugin, LodViewer, OpenLattice, Spotlight,
+	LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
 };
 
 /// Channel marker for spotlight region / level tests.
@@ -44,6 +46,11 @@ impl LodScene for Probe {
 		} else {
 			LodSceneLevel::Low
 		}
+	}
+
+	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
+		let d = lod_ref.current_transform.translation.length();
+		cull_offset_bands_from_factor(d, 25.0, 80.0, 200.0)
 	}
 
 	fn scene_with_level(&self, _: &LodRef, _: LodSceneLevel) -> impl Scene + 'static {}
@@ -215,6 +222,45 @@ pub fn app_open_lattice() -> App {
 			capture_cull_regions::<CullChan>.after(LodRefreshSystems::ProduceRegions),
 		);
 	app
+}
+
+/// Region-cull enqueue with scan index (no Avian). Inject [`LodSceneCullAabb`].
+pub fn app_cull_enqueue() -> App {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins).add_plugins(LodSceneRegionCullPlugin::<
+		ScanHostIndex,
+		CullChan,
+		Probe,
+		With<LodViewer>,
+	>::default());
+	app
+}
+
+/// Host at `at` with the given desired level and one root per `roots` level.
+pub fn spawn_host_with_roots(
+	world: &mut World,
+	at: Vec3,
+	desired: LodSceneLevel,
+	roots: &[LodSceneLevel],
+) -> (Entity, Vec<Entity>) {
+	let host = spawn_host(world, at, desired);
+	let bag = world
+		.spawn((LodLevelRoots, Transform::default(), Visibility::Inherited, ChildOf(host)))
+		.id();
+	let mut root_entities = Vec::new();
+	for &level in roots {
+		root_entities.push(
+			world
+				.spawn((
+					LodLevelRoot(level),
+					Transform::default(),
+					Visibility::Inherited,
+					ChildOf(bag),
+				))
+				.id(),
+		);
+	}
+	(host, root_entities)
 }
 
 pub fn spawn_nested_pair(world: &mut World) -> (Entity, Entity, Entity) {

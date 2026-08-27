@@ -141,11 +141,11 @@ impl OrchardCell {
 use crate::grove::WoodyGroveLod;
 
 #[cfg(feature = "render")]
-pub const ORCHARD_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
+pub const ORCHARD_STRUCTURAL_HIGH_FACTOR: f32 = 6.0;
 #[cfg(feature = "render")]
-pub const ORCHARD_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+pub const ORCHARD_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
 #[cfg(feature = "render")]
-pub const ORCHARD_STRUCTURAL_LOW_FACTOR: f32 = 12.0;
+pub const ORCHARD_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 #[cfg(feature = "render")]
 const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::ordinary(

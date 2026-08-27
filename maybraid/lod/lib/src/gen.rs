@@ -9,12 +9,15 @@
 //!   [`GeneratingSpatialIndex`] recurses the whole tree with no scene
 //!   side effects.
 //!
-//! Presentation is [`crate::presentation`]; scene / refresh runtime is
-//! [`crate::scene`]. Compatibility re-exports of scene/presentation types are
-//! kept here for existing `lod::gen::…` call sites.
+//! Presentation is [`crate::presentation`] (including its Bevy present
+//! plugins). Scene / refresh runtime is [`crate::scene`]. Generate plugins
+//! live in [`runtime`] and do not load the scene stack. Compatibility
+//! re-exports of scene/presentation *types* are kept here for existing
+//! `lod::gen::…` call sites.
 
 mod generation;
 mod id;
+mod runtime;
 mod spatial_index;
 
 #[cfg(test)]
@@ -29,4 +32,9 @@ pub use crate::scene::{
 };
 pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
 pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
+pub use runtime::{
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
+	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
+	LodGenerateSystems,
+};
 pub use spatial_index::{SpatialIndex, Version};

@@ -19,7 +19,7 @@ fn present_handles_new_ids_and_skips_unchanged_ones() -> Result<()> {
 
 	let veg_id = Id::from_cell(cell(5.0));
 	assert!(presenter.vegetation.contains_key(&veg_id));
-	assert!(matches!(presenter.ops.last(), Some(PresenterOp::RemoveStale(_))));
+	assert!(presenter.ops.iter().all(|op| !matches!(op, PresenterOp::RemoveStale(_))));
 	let handled = presenter.ops.iter().filter(|op| matches!(op, PresenterOp::Handle(..))).count();
 	assert!(handled >= 1);
 
@@ -116,9 +116,9 @@ fn present_always_heals_after_handling() -> Result<()> {
 
 	let mut presenter = RecordingPresenter::default();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
-	assert!(matches!(presenter.ops.last(), Some(PresenterOp::RemoveStale(_))));
+	assert!(presenter.ops.iter().all(|op| !matches!(op, PresenterOp::RemoveStale(_))));
 
-	// Unchanged storage: no new handles, but healing still runs.
+	// Unchanged storage: no new handles, and refresh does not cull.
 	let ops_before = presenter.ops.len();
 	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, region, &lod.lod_ref());
 	assert_eq!(
@@ -128,7 +128,9 @@ fn present_always_heals_after_handling() -> Result<()> {
 			.count(),
 		0
 	);
-	assert!(matches!(presenter.ops.last(), Some(PresenterOp::RemoveStale(_))));
+	assert!(presenter.ops[ops_before..]
+		.iter()
+		.all(|op| !matches!(op, PresenterOp::RemoveStale(_))));
 
 	Ok(())
 }

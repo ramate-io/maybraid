@@ -366,6 +366,17 @@ fn admit_candidates<T: Component + LodScene>(
 	)>,
 ) {
 	for candidate in candidates {
+		{
+			let scenes = host_sets.p1();
+			let Ok(scene) = scenes.get(candidate.host) else {
+				continue;
+			};
+			if scene.scene_lod_culls(lod_ref, candidate.level).should_cull(candidate.level) {
+				commands.entity(candidate.host).remove::<LodLevelSpawnRequest>();
+				continue;
+			}
+		}
+
 		if !admit_begin(begin_clock, class) {
 			break;
 		}

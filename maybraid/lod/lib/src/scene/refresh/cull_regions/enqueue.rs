@@ -1,76 +1,82 @@
-//! Region-scoped cull enqueue via [`crate::LodSceneRegionIndex`].
+//! Region-scoped cull enqueue from the shared [`LodCullProduceCache`].
 
 use std::marker::PhantomData;
 
 use bevy::ecs::query::QueryFilter;
-use bevy::ecs::system::{StaticSystemParam, SystemParam};
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePose,
-};
+use crate::lod_ref::lod_refs_from_snapshots;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{lod_level_roots_entity, LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
-use crate::scene::region_index::LodSceneRegionIndex;
+use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
 
 use super::super::ensure_refresh_core;
 use super::super::sync::{
 	enqueue_lod_cull, LodChunkBudgetPlugin, LodChunkCullSystems, LodCullInFlight, LodCullRequest,
-	LodLevelRootPending,
 };
 use super::super::viewer::LodViewer;
-use super::markers::{LodCullMarkerPlugin, LodHostHasCullableRoots, LodNestedRefreshAllowed};
+use super::cache::{LodCullProduceCache, LodSceneCullProduceFillPlugin};
+use super::markers::{LodCullMarkerPlugin, LodNestedRefreshAllowed};
 use super::produce::LodSceneCullRegion;
 
-/// Enqueue culls for hosts overlapping each [`LodSceneCullRegion<M>`].
+/// Enqueue culls for hosts overlapping this frame's cull AABBs.
 ///
-/// Uses a single viewer [`LodRef`] (no per-host dominant level vote). Requires
-/// [`LodNestedRefreshAllowed`] + [`LodHostHasCullableRoots`].
-pub fn produce_lod_cull_for_region<I, M, T, F>(
+/// Reuses [`LodCullProduceCache`] (one untyped spatial query). Lowers a stale
+/// desired [`LodSceneLevel`] when distance wants a farther band, then GC's
+/// non-desired roots per [`LodScene::scene_lod_culls`]. Requires
+/// [`LodNestedRefreshAllowed`]. Skips types with no hosts.
+pub fn produce_lod_cull_for_region<T>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
-	mut regions: MessageReader<LodSceneCullRegion<M>>,
-	index: StaticSystemParam<I>,
-	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
-	hosts: Query<
-		(&T, &LodSceneLevel, &Children),
-		(With<LodSceneHost>, With<LodNestedRefreshAllowed>, With<LodHostHasCullableRoots>),
-	>,
+	cache: Res<LodCullProduceCache>,
+	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
+	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
+	host_children_q: Query<&Children, With<LodSceneHost>>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
-	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
 ) where
-	I: SystemParam + 'static,
-	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
-	M: Send + Sync + 'static,
 	T: Component + LodScene + 'static,
-	F: QueryFilter + 'static,
 {
-	if regions.is_empty() {
+	if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
+		return;
+	}
+	if hosts.is_empty() {
 		return;
 	}
 
-	let snapshots = collect_node_snapshots(&nodes);
-	let refs = lod_refs_from_snapshots(&snapshots);
+	let refs = lod_refs_from_snapshots(&cache.snapshots);
 	let Some(viewer_ref) = refs.first() else {
 		return;
 	};
 
-	let mut index = index.into_inner();
-	for region_msg in regions.read() {
-		for (entity, _scene) in index.hosts_in_region(region_msg.region) {
-			let Ok((scene, current, host_children)) = hosts.get(entity) else {
+	for (_region, hits) in &cache.region_hits {
+		for &entity in hits {
+			let Ok(scene) = hosts.get(entity) else {
 				continue;
 			};
 
-			let culls = scene.scene_lod_culls(viewer_ref, *current);
+			let Ok(mut current) = host_levels.get_mut(entity) else {
+				continue;
+			};
+			let distance_level = scene.scene_lod_level(viewer_ref);
+			if distance_level < *current {
+				*current = distance_level;
+			}
+			let current_level = *current;
+			drop(current);
+
+			let culls = scene.scene_lod_culls(viewer_ref, current_level);
 			if matches!(culls, LodSceneCulls::None) {
 				continue;
 			}
 
+			let Ok(host_children) = host_children_q.get(entity) else {
+				continue;
+			};
 			let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads)
 			else {
 				continue;
@@ -79,18 +85,11 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 				continue;
 			};
 
-			if root_children
-				.iter()
-				.any(|child| pending.contains(child) && !wants_cull.contains(child))
-			{
-				continue;
-			}
-
 			for child in root_children.iter() {
 				let Ok(root) = root_keys.get(child) else {
 					continue;
 				};
-				if root.0 == *current {
+				if root.0 == current_level {
 					continue;
 				}
 				if wants_cull.contains(child) {
@@ -104,7 +103,10 @@ pub fn produce_lod_cull_for_region<I, M, T, F>(
 	}
 }
 
-/// Region channel `M` + index `I` → cull enqueue for hosts `T` (no full-world scan).
+/// Untyped fill (`I`) + per-`T` enqueue from [`LodCullProduceCache`].
+///
+/// Channel `M` stays so existing `AvianLodSceneCullPlugin<T, M, F>` adds remain
+/// valid; the spatial query is registered once per (`I`, `F`).
 pub struct LodSceneRegionCullPlugin<I, M, T, F = With<LodViewer>>
 where
 	I: SystemParam + 'static,
@@ -133,7 +135,7 @@ where
 	M: Send + Sync + 'static,
 	T: Component + LodScene + 'static,
 	F: QueryFilter + 'static,
-	for<'w, 's> I::Item<'w, 's>: LodSceneRegionIndex<T>,
+	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);
@@ -143,9 +145,12 @@ where
 		if !app.is_plugin_added::<LodCullMarkerPlugin>() {
 			app.add_plugins(LodCullMarkerPlugin);
 		}
+		if !app.is_plugin_added::<LodSceneCullProduceFillPlugin<I, F>>() {
+			app.add_plugins(LodSceneCullProduceFillPlugin::<I, F>::default());
+		}
 		app.add_message::<LodSceneCullRegion<M>>().add_systems(
 			Update,
-			produce_lod_cull_for_region::<I, M, T, F>.in_set(LodChunkCullSystems::Enqueue),
+			produce_lod_cull_for_region::<T>.in_set(LodChunkCullSystems::Enqueue),
 		);
 	}
 }

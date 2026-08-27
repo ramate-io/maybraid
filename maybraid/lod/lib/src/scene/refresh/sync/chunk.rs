@@ -80,6 +80,8 @@ where
 /// Substeps within [`LodRefreshSystems::Cull`] (order against these, not system types).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodChunkCullSystems {
+	/// Snapshots + untyped host hits ([`crate::fill_lod_cull_produce_cache`]).
+	FillCache,
 	/// Mark unwanted roots / hosts ([`cull_lod_level_roots`] / region cull).
 	Enqueue,
 	/// Apply [`LodCullRequest`] → [`LodCullInFlight`].
@@ -118,6 +120,7 @@ impl Plugin for LodChunkBudgetPlugin {
 			.configure_sets(
 				Update,
 				(
+					LodChunkCullSystems::FillCache,
 					LodChunkCullSystems::Enqueue,
 					LodChunkCullSystems::Apply,
 					LodChunkCullSystems::Drain,
@@ -141,8 +144,6 @@ impl Plugin for LodChunkBudgetPlugin {
 				Update,
 				(
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
-					cancel_unstarted_cull_for_desired_pending_roots
-						.in_set(LodChunkFulfillSystems::Resume),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
 					bump_nested_streamed_progress
 						.in_set(LodChunkFulfillSystems::Complete)
@@ -167,7 +168,14 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_chunk_budget(app);
-		app.add_systems(Update, begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin));
+		app.add_systems(
+			Update,
+			(
+				cancel_unstarted_cull_for_desired_pending_roots::<T>
+					.in_set(LodChunkFulfillSystems::Resume),
+				begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin),
+			),
+		);
 	}
 }
 

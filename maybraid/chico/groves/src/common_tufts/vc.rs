@@ -111,7 +111,7 @@ pub struct CommonTufts {
 
 impl CommonTufts {
 	pub fn plants(&self) -> &[TuftGrovePlant] {
-		&self.body.plants
+		self.body.plants()
 	}
 }
 

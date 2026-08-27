@@ -410,11 +410,11 @@ impl StorytellersCell {
 use crate::grove::WoodyGroveLod;
 
 #[cfg(feature = "render")]
-pub const STORYTELLERS_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+pub const STORYTELLERS_STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
-pub const STORYTELLERS_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+pub const STORYTELLERS_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
 #[cfg(feature = "render")]
-pub const STORYTELLERS_STRUCTURAL_LOW_FACTOR: f32 = 30.0;
+pub const STORYTELLERS_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 #[cfg(feature = "render")]
 const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::ordinary(

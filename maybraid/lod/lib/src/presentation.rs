@@ -6,26 +6,39 @@
 //! opinion about its scene, and no commit phase is needed between generation
 //! and presentation.
 //!
-//! Scene construction / LOD selection lives in [`crate::scene::LodScene`].
+//! `T` is not required to be a [`crate::scene::LodScene`]. A presenter may
+//! spawn scenes, grove hosts, or anything else. LOD level selection lives on
+//! the scene stack after hosts exist.
+//!
+//! [`RegionPresenter::present`] only upserts. Hide / despawn is
+//! [`RegionPresenter::cull`], driven by a separate producer. Bevy produce /
+//! drain plugins live in [`runtime`].
+
+mod runtime;
 
 #[cfg(test)]
 pub mod tests;
 
 use crate::gen::{Id, SpatialIndex, Version};
 use crate::lod_ref::LodRef;
-use crate::scene::LodSceneLevel;
-use bevy::{math::bounding::Aabb3d, scene::Scene};
+use bevy::math::bounding::Aabb3d;
 use std::collections::HashSet;
 
 pub use crate::scene::{LodScene, LodSceneStatus};
+pub use runtime::{
+	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
+	produce_lod_present_regions, LodPresentBudget, LodPresentCullCursor, LodPresentCullPlugin,
+	LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+};
 
 /// Presents one layer (`T`) of a spatial index over a region.
 ///
-/// [`RegionPresenter::present`] is the per-layer entry point: wanted ids are
-/// spawned or patched first, then stale ids are removed. Healing is part of
-/// presentation, not a separate caller concern.
+/// [`RegionPresenter::present`] is the per-layer refresh entry point: wanted
+/// ids are spawned or patched. Healing is part of presentation, not a
+/// separate caller concern. Removal is [`RegionPresenter::cull`].
 ///
-/// Two extension points sit above it:
+/// Two extension points sit above refresh:
 ///
 /// - [`RegionPresenter::present_with_descendants`] — compose the logical
 ///   descendant layers of a generation chain. Override this on types that
@@ -43,42 +56,38 @@ pub use crate::scene::{LodScene, LodSceneStatus};
 /// selection are policy, expressed through these overrides.
 pub trait RegionPresenter<T, S>
 where
-	T: LodScene,
 	S: SpatialIndex<T>,
 {
 	/// The version this presenter last presented for the id, if any.
 	fn presented_version(&self, id: Id) -> Option<Version>;
 
-	/// Spawns or patches the scene for the id. Implementations must record
-	/// `version` so [`RegionPresenter::presented_version`] reflects it.
-	fn handle(&mut self, id: Id, version: Version, scene: impl Scene, lod_ref: &LodRef);
+	/// Spawns or patches the id from the stored value. Implementations must
+	/// record `version` so [`RegionPresenter::presented_version`] reflects it.
+	fn handle(&mut self, id: Id, version: Version, value: &T, lod_ref: &LodRef);
 
-	/// LOD-only update: set the presented host's [`LodSceneLevel`] without rebuilding.
-	///
-	/// Default falls back to [`RegionPresenter::handle`] with `scene_with_lod` for
-	/// presenters that do not track host entities yet.
-	fn set_lod_level(&mut self, id: Id, level: LodSceneLevel, spatial_index: &S, lod_ref: &LodRef) {
-		let _ = level;
-		if let Some(version) = spatial_index.version(id) {
-			if let Some(instance) = spatial_index.get(id) {
-				self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
-			}
-		}
+	/// Hide a presented id that has left the present ring. Default is a no-op;
+	/// the next [`RegionPresenter::cull`] of a still-hidden id despawns it.
+	fn hide(&mut self, _id: Id) {}
+
+	/// Whether [`RegionPresenter::hide`] has been applied and not yet removed.
+	fn is_hidden(&self, _id: Id) -> bool {
+		false
 	}
 
-	/// Removes presented ids within the region that are not in `wanted`.
-	///
-	/// Contract: strictly removal. [`RegionPresenter::present`] invokes this
-	/// after the handle pass, so every wanted id has already been presented.
-	fn remove_stale(&mut self, region: Aabb3d, wanted: &HashSet<Id>);
+	/// Presented ids this layer currently tracks (for cull).
+	fn presented_ids(&self) -> Vec<Id>;
 
-	/// Presents and heals this layer.
+	/// Despawn presented ids that are not in `wanted`.
+	///
+	/// Contract: strictly removal. Refresh does not call this.
+	fn remove_stale(&mut self, wanted: &HashSet<Id>);
+
+	/// Presents and heals this layer (no removal).
 	///
 	/// Contract:
 	///
-	/// - wanted ids are spawned or patched first (version / repair)
-	/// - LOD-only changes call [`RegionPresenter::set_lod_level`] (not a full rebuild)
-	/// - stale ids are removed after
+	/// - wanted ids are spawned or patched (version / repair)
+	/// - ids already presented at the current version are left alone
 	fn present(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		let wanted: HashSet<Id> = spatial_index
 			.tracked_ids_for(region)
@@ -99,16 +108,37 @@ where
 			};
 
 			if needs_present || self.needs_repair(region, id, version) {
-				self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
-				continue;
-			}
-
-			if let LodSceneStatus::Changed(level) = instance.scene_lod_status(lod_ref) {
-				self.set_lod_level(id, level, spatial_index, lod_ref);
+				self.handle(id, version, instance, lod_ref);
 			}
 		}
+	}
 
-		self.remove_stale(region, &wanted);
+	/// Hide, then despawn, presented ids that overlap `region` and are not in
+	/// `keep` (typically the last present-ring set).
+	fn cull(&mut self, spatial_index: &S, region: Aabb3d, keep: &HashSet<Id>) {
+		let stale: Vec<Id> = self
+			.presented_ids()
+			.into_iter()
+			.filter(|id| !keep.contains(id))
+			.filter(|id| {
+				spatial_index
+					.get_bounds(*id)
+					.is_some_and(|bounds| intersects_xz(bounds, region))
+			})
+			.collect();
+		let mut to_remove = HashSet::new();
+		for id in stale {
+			if self.is_hidden(id) {
+				to_remove.insert(id);
+			} else {
+				self.hide(id);
+			}
+		}
+		if !to_remove.is_empty() {
+			let wanted: HashSet<Id> =
+				self.presented_ids().into_iter().filter(|id| !to_remove.contains(&id)).collect();
+			self.remove_stale(&wanted);
+		}
 	}
 
 	/// Optional runtime-world check.
@@ -137,4 +167,8 @@ where
 	fn present_all(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		self.present_with_descendants(spatial_index, region, lod_ref);
 	}
+}
+
+fn intersects_xz(a: Aabb3d, b: Aabb3d) -> bool {
+	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }
