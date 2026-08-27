@@ -192,11 +192,11 @@ use crate::grove::WoodyGroveLod;
 
 #[cfg(feature = "render")]
 /// Typical large types ~25 m. `grove_bands_for_typical_height(25)`.
-pub const FORLORN_SAVANNA_STRUCTURAL_HIGH_FACTOR: f32 = 5.0;
+pub const FORLORN_SAVANNA_STRUCTURAL_HIGH_FACTOR: f32 = 8.0;
 #[cfg(feature = "render")]
-pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 20.0;
+pub const FORLORN_SAVANNA_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
 #[cfg(feature = "render")]
-pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 25.0;
+pub const FORLORN_SAVANNA_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 #[cfg(feature = "render")]
 const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::skip_ultralow_bins(

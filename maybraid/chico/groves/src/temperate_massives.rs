@@ -181,9 +181,9 @@ use crate::grove::WoodyGroveLod;
 /// Typical large types ~170 m (storybook / rory). `grove_bands_for_typical_height(170)`.
 pub const TEMPERATE_MASSIVES_STRUCTURAL_HIGH_FACTOR: f32 = 10.0;
 #[cfg(feature = "render")]
-pub const TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 55.0;
+pub const TEMPERATE_MASSIVES_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
 #[cfg(feature = "render")]
-pub const TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 85.0;
+pub const TEMPERATE_MASSIVES_STRUCTURAL_LOW_FACTOR: f32 = 24.0;
 
 #[cfg(feature = "render")]
 const WOODY_LOD: WoodyGroveLod = WoodyGroveLod::rory_trunk(

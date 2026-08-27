@@ -322,10 +322,10 @@ use crate::grove::WoodyGroveLod;
 
 #[cfg(feature = "render")]
 /// Structural High band (× footprint).
-pub const LEVANTINE_SCRUB_STRUCTURAL_HIGH_FACTOR: f32 = 2.0;
+pub const LEVANTINE_SCRUB_STRUCTURAL_HIGH_FACTOR: f32 = 6.0;
 #[cfg(feature = "render")]
 /// Structural Medium band (× footprint).
-pub const LEVANTINE_SCRUB_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
+pub const LEVANTINE_SCRUB_STRUCTURAL_MEDIUM_FACTOR: f32 = 14.0;
 #[cfg(feature = "render")]
 /// Structural Low band (× footprint).
 pub const LEVANTINE_SCRUB_STRUCTURAL_LOW_FACTOR: f32 = 20.0;

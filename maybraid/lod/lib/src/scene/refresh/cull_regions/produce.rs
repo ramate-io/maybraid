@@ -11,6 +11,7 @@ use crate::lod_ref::{
 };
 
 use super::super::{ensure_refresh_core, LodRefreshSystems};
+use super::cache::LodSceneCullAabb;
 use super::cursor::LodCullRegionCursor;
 
 /// Impulse: cull-evaluate hosts overlapping `region` (channel `M`).
@@ -54,6 +55,7 @@ pub fn produce_lod_cull_regions<P, F, M>(
 	mut cursor: ResMut<LodCullRegionCursor>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut writer: MessageWriter<LodSceneCullRegion<M>>,
+	mut bus: MessageWriter<LodSceneCullAabb>,
 ) where
 	P: Resource + LodCullRegions,
 	F: QueryFilter + 'static,
@@ -75,6 +77,7 @@ pub fn produce_lod_cull_regions<P, F, M>(
 
 	for region in regions {
 		writer.write(LodSceneCullRegion::<M>::new(region));
+		bus.write(LodSceneCullAabb { region });
 	}
 }
 
@@ -110,6 +113,7 @@ where
 		app.init_resource::<P>()
 			.init_resource::<LodCullRegionCursor>()
 			.add_message::<LodSceneCullRegion<M>>()
+			.add_message::<LodSceneCullAabb>()
 			.add_systems(
 				Update,
 				produce_lod_cull_regions::<P, F, M>.in_set(LodRefreshSystems::ProduceRegions),

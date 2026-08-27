@@ -4,15 +4,21 @@ mod test_utils;
 
 use bevy::prelude::*;
 
+use bevy::math::bounding::Aabb3d;
+
 use crate::lod_ref::LodNodePose;
+use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
-use crate::scene::refresh::LodCullRegionCursor;
-use crate::scene::refresh::LodSceneRefreshLevel;
+use crate::scene::refresh::{
+	LodCullRegionCursor, LodLevelRootPending, LodSceneCullAabb, LodSceneRefreshChunkPlugin,
+	LodSceneRefreshLevel,
+};
 
 use test_utils::{
-	app_bullseye_regions, app_core, app_dual_channel_levels, app_entities_only, app_open_lattice,
-	app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose, spawn_host,
-	spawn_nested_pair, spawn_viewer, BullChan, CullChan, NewCullRegions, NewRegions, SpotChan,
+	app_bullseye_regions, app_core, app_cull_enqueue, app_dual_channel_levels, app_entities_only,
+	app_open_lattice, app_spotlight_levels, app_spotlight_regions, host_level, move_viewer, pose,
+	spawn_host, spawn_host_with_roots, spawn_nested_pair, spawn_viewer, BullChan, CullChan,
+	NewCullRegions, NewRegions, Probe, SpotChan,
 };
 
 #[test]
@@ -212,5 +218,101 @@ fn nested_host_under_hidden_root_is_not_refreshed() -> anyhow::Result<()> {
 	app.update();
 	assert_eq!(host_level(&app, allowed), LodSceneLevel::High);
 	assert_eq!(host_level(&app, blocked), LodSceneLevel::UltraLow);
+	Ok(())
+}
+
+fn world_cull_aabb() -> LodSceneCullAabb {
+	LodSceneCullAabb { region: Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0)) }
+}
+
+#[test]
+fn cull_produce_lowers_stale_desired_and_enqueues_high() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(100.0, 0.0, 0.0));
+	let (host, roots) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::High, LodSceneLevel::Medium],
+	);
+	app.update();
+	assert_eq!(host_level(&app, host), LodSceneLevel::High);
+
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::Low);
+	assert!(
+		app.world().get_entity(roots[0]).is_err(),
+		"High root must be culled once desired drops"
+	);
+	assert!(app.world().get_entity(roots[1]).is_ok(), "early Low keeps Medium warm");
+	Ok(())
+}
+
+#[test]
+fn cull_produce_enqueues_non_desired_even_if_sibling_is_pending() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(300.0, 0.0, 0.0));
+	let (host, roots) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::High, LodSceneLevel::Medium],
+	);
+	app.world_mut().entity_mut(roots[0]).insert(LodLevelRootPending);
+	app.update();
+
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::Low);
+	assert!(app.world().get_entity(roots[0]).is_err(), "pending High must still be culled");
+	assert!(
+		app.world().get_entity(roots[1]).is_err(),
+		"Medium sibling must be culled even if High is pending"
+	);
+	Ok(())
+}
+
+#[test]
+fn begin_skips_cull_worthy_desired() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	app.add_plugins(LodSceneRefreshChunkPlugin::<Probe>::default());
+	spawn_viewer(app.world_mut(), Vec3::new(300.0, 0.0, 0.0));
+	let (host, _) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::Medium],
+	);
+	app.world_mut()
+		.entity_mut(host)
+		.insert(LodLevelSpawnRequest { level: LodSceneLevel::High });
+	app.update();
+
+	assert!(app.world().entity(host).get::<LodLevelSpawnRequest>().is_none());
+	let bag_children: Vec<Entity> = app
+		.world()
+		.entity(host)
+		.get::<Children>()
+		.into_iter()
+		.flat_map(|c| c.iter())
+		.collect();
+	let mut pending_high = 0u32;
+	for bag in bag_children {
+		let Some(children) = app.world().entity(bag).get::<Children>() else {
+			continue;
+		};
+		for child in children.iter() {
+			let entity = app.world().entity(child);
+			if entity.get::<crate::LodLevelRoot>().is_some_and(|r| r.0 == LodSceneLevel::High)
+				&& entity.get::<LodLevelRootPending>().is_some()
+			{
+				pending_high += 1;
+			}
+		}
+	}
+	assert_eq!(pending_high, 0, "begin must not start a High root distance would cull");
 	Ok(())
 }

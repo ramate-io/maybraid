@@ -215,11 +215,8 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_avian_host_bounds::<T>(app);
-		app.add_plugins(lod::LodSceneRegionCullPlugin::<
-			AvianLodSceneRegionIndex<'_, '_, T>,
-			M,
-			T,
-			F,
-		>::default());
+		app.add_plugins(
+			lod::LodSceneRegionCullPlugin::<AvianLodSceneHostIndex<'_, '_>, M, T, F>::default(),
+		);
 	}
 }

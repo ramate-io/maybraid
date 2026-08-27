@@ -61,8 +61,11 @@ pub trait LodScene {
 	/// current band.
 	///
 	/// Host GC never despawns the host's current/desired level even if listed.
-	/// After a despawn, Sync + Fulfill spawn the desired level again via
-	/// [`Self::scene_with_level`] — there is no separate rebuild path.
+	/// Region cull produce may **lower** a stale desired when
+	/// [`Self::scene_lod_level`] is farther than the stored value (camera left
+	/// the refresh bullseye). After a despawn, Sync + Fulfill spawn the desired
+	/// level again via [`Self::scene_with_level`] — there is no separate rebuild
+	/// path. Begin will not start a root that this policy would cull.
 	fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
 		let _ = (lod_ref, current);
 		LodSceneCulls::None

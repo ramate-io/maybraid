@@ -15,7 +15,7 @@ use lod::lod_ref::LodRef;
 use lod::{cull_offset_bands_from_factor, SceneChunk};
 use material_ref::MaterialRef;
 
-use super::{GroveExtent, PaletteMix, DEFAULT_GROVE_EXTENT_XZ};
+use super::{GroveExtent, PaletteMix};
 
 /// World-metre bin size for UltraLow merged canopy balls.
 pub const ULTRA_LOW_CANOPY_BIN_METERS: f32 = 8.0;
@@ -59,43 +59,31 @@ impl CanopyProxySite {
 	}
 }
 
-/// Round a tile factor up to a readable 5 m step (floor 5).
-fn round_up_band(value: f32) -> f32 {
-	if value <= 5.0 {
-		5.0
-	} else if value <= 10.0 {
-		10.0
-	} else {
-		(value / 5.0).ceil() * 5.0
-	}
-}
+/// Tile High / Medium / Low on the 100 m grove half-extent (radius 50 m).
+///
+/// Factors are doubled from metre targets so `factor × 50 m` matches:
+/// short 300 / 700 / 1000, mid-height 400 / 700 / 1000, tall 500 / 700 / 1200.
+pub const GROVE_TILE_BANDS_SHORT: (f32, f32, f32) = (6.0, 14.0, 20.0);
+pub const GROVE_TILE_BANDS_MID: (f32, f32, f32) = (8.0, 14.0, 20.0);
+pub const GROVE_TILE_BANDS_TALL: (f32, f32, f32) = (10.0, 14.0, 24.0);
 
 /// Tile High / Medium / Low for a default 100 m grove ([`DEFAULT_GROVE_EXTENT_XZ`]).
-///
-/// Medium is the plant→proxy edge. Floor from the large-tree rule of thumb:
-/// `medium ≳ plant_medium × (typical_height / 2) / tile_radius + 1`.
-/// High stays a short kit band; Low is `1.5 ×` Medium so UltraLow does not slam in.
 pub fn grove_bands_for_typical_height(typical_height_m: f32) -> (f32, f32, f32) {
 	grove_bands_for_typical_height_and_plant_medium(typical_height_m, DEFAULT_PLANT_MEDIUM_FACTOR)
 }
 
-/// Like [`grove_bands_for_typical_height`], with an explicit plant Medium (palms use 36).
+/// Height class only. `plant_medium_factor` is unused (kept for call-site compat).
 pub fn grove_bands_for_typical_height_and_plant_medium(
 	typical_height_m: f32,
-	plant_medium_factor: f32,
+	_plant_medium_factor: f32,
 ) -> (f32, f32, f32) {
-	let tile_radius = DEFAULT_GROVE_EXTENT_XZ * 0.5;
-	let raw = plant_medium_factor * (typical_height_m.max(1.0) * 0.5) / tile_radius + 1.0;
-	let medium = round_up_band(raw.max(5.0));
-	let high = if medium >= 50.0 {
-		10.0
-	} else if medium >= 8.0 {
-		5.0
+	if typical_height_m >= 80.0 {
+		GROVE_TILE_BANDS_TALL
+	} else if typical_height_m >= 24.0 {
+		GROVE_TILE_BANDS_MID
 	} else {
-		2.0
-	};
-	let low = round_up_band(medium * 1.5);
-	(high, medium, low)
+		GROVE_TILE_BANDS_SHORT
+	}
 }
 
 /// Stick material: Chico stick recipe with one palette-picked color.
@@ -667,12 +655,15 @@ mod tests {
 
 	#[test]
 	fn grove_bands_scale_with_typical_height() {
-		assert_eq!(grove_bands_for_typical_height(180.0), (10.0, 55.0, 85.0));
-		assert_eq!(grove_bands_for_typical_height(160.0), (10.0, 50.0, 75.0));
-		assert_eq!(grove_bands_for_typical_height(40.0), (5.0, 15.0, 25.0));
-		assert_eq!(grove_bands_for_typical_height_and_plant_medium(32.0, 36.0), (5.0, 15.0, 25.0));
-		assert_eq!(grove_bands_for_typical_height(20.0), (5.0, 10.0, 15.0));
-		assert_ne!(grove_bands_for_typical_height(180.0).1, 20.0);
+		assert_eq!(grove_bands_for_typical_height(180.0), GROVE_TILE_BANDS_TALL);
+		assert_eq!(grove_bands_for_typical_height(160.0), GROVE_TILE_BANDS_TALL);
+		assert_eq!(grove_bands_for_typical_height(40.0), GROVE_TILE_BANDS_MID);
+		assert_eq!(
+			grove_bands_for_typical_height_and_plant_medium(32.0, 36.0),
+			GROVE_TILE_BANDS_MID
+		);
+		assert_eq!(grove_bands_for_typical_height(20.0), GROVE_TILE_BANDS_SHORT);
+		assert_eq!(grove_bands_for_typical_height(180.0).1, 14.0);
 	}
 
 	#[test]

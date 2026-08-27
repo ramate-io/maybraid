@@ -99,14 +99,6 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 		for tile in grove.grow(&world) {
 			entities.extend(spawn_forest_grove_tile(&mut self.commands, &tile));
 		}
-		if !entities.is_empty() {
-			info!(
-				"presented grove layer={:?} recipes={} hosts={}",
-				grove.layer,
-				grove.recipes.len(),
-				entities.len()
-			);
-		}
 		self.state
 			.presented
 			.insert(id, PresentedGrove { version, entities, hidden: false });

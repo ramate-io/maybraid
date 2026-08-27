@@ -70,9 +70,8 @@ pub fn enqueue_lod_cull(
 /// Mark inactive [`LodLevelRoot`]s for budgeted cull per [`LodScene::scene_lod_culls`].
 ///
 /// Never targets the host's current [`LodSceneLevel`]. Hidden roots not listed
-/// stay warm for cheap band flips. Skips the host while any **active** (not
-/// already culling) level root is still [`LodLevelRootPending`] so warm-hold
-/// roots are not GC'd mid-swap.
+/// stay warm for cheap band flips. A pending fulfill on one root does not
+/// block GC of other non-desired roots on the same host.
 pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut commands: Commands,
 	mut cull_writer: MessageWriter<LodCullRequest>,
@@ -80,7 +79,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	hosts: Query<(Entity, &T, &LodSceneLevel), (With<LodSceneHost>, FHost)>,
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
-	pending: Query<(), With<LodLevelRootPending>>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
@@ -127,14 +125,6 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 		let Ok(root_children) = children_q.get(roots_entity) else {
 			continue;
 		};
-
-		// Active warm-swap pending (not already tearing down).
-		if root_children
-			.iter()
-			.any(|child| pending.contains(child) && !wants_cull.contains(child))
-		{
-			continue;
-		}
 
 		for child in root_children.iter() {
 			let Ok(root) = root_keys.get(child) else {
