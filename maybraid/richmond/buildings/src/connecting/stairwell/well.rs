@@ -190,17 +190,17 @@ impl WellAabb {
 		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
 	}
 
-	/// Walk-off landing: axis-aligned rectangle on the door that covers `points`.
+	/// Walk-off landing: full exclusive-box span on the door, inward to `points`.
 	///
-	/// Outer edge sits on the walk-off. The pad grows along the wall and inward
-	/// until every point is inside, and at least `min_along` wide on the wall.
-	/// Never shears off a tread leading.
+	/// Outer edge sits on the walk-off. Along the wall the pad takes the well's
+	/// full face (same as run-in). Inward it grows until every point is inside
+	/// and at least `min_inward` deep. Never shears off a tread leading.
 	pub fn walk_off_landing_covering(
 		self,
 		style: PanelStyle,
 		thickness: f32,
 		points: &[Vec2],
-		min_along: f32,
+		min_inward: f32,
 	) -> Option<QuadPanel> {
 		if points.is_empty() {
 			return None;
@@ -208,7 +208,7 @@ impl WellAabb {
 		let min = self.min();
 		let max = self.max();
 		let y = self.top_y();
-		let min_span = min_along.max(MIN_LANDING_ALONG);
+		let min_depth = min_inward.max(MIN_LANDING_ALONG);
 		let xs = points.iter().map(|p| p.x);
 		let zs = points.iter().map(|p| p.y);
 		let x_lo = xs.clone().fold(f32::INFINITY, f32::min);
@@ -217,59 +217,55 @@ impl WellAabb {
 		let z_hi = zs.fold(f32::NEG_INFINITY, f32::max);
 		let [a0, a1, b0, b1] = match self.walk_off {
 			WellSide::NegZ => {
-				let (x0, x1) = span_on_axis(x_lo, x_hi, min.x, max.x, min_span);
 				let z_outer = min.z;
-				let z_inner = z_hi.max(z_outer + min_span).min(max.z);
+				let z_inner = z_hi.max(z_outer + min_depth).min(max.z);
 				if z_inner - z_outer < EPS {
 					return None;
 				}
 				[
-					Vec3::new(x0, y, z_outer),
-					Vec3::new(x1, y, z_outer),
-					Vec3::new(x0, y, z_inner),
-					Vec3::new(x1, y, z_inner),
+					Vec3::new(min.x, y, z_outer),
+					Vec3::new(max.x, y, z_outer),
+					Vec3::new(min.x, y, z_inner),
+					Vec3::new(max.x, y, z_inner),
 				]
 			}
 			WellSide::PosZ => {
-				let (x0, x1) = span_on_axis(x_lo, x_hi, min.x, max.x, min_span);
 				let z_outer = max.z;
-				let z_inner = z_lo.min(z_outer - min_span).max(min.z);
+				let z_inner = z_lo.min(z_outer - min_depth).max(min.z);
 				if z_outer - z_inner < EPS {
 					return None;
 				}
 				[
-					Vec3::new(x0, y, z_outer),
-					Vec3::new(x1, y, z_outer),
-					Vec3::new(x0, y, z_inner),
-					Vec3::new(x1, y, z_inner),
+					Vec3::new(min.x, y, z_outer),
+					Vec3::new(max.x, y, z_outer),
+					Vec3::new(min.x, y, z_inner),
+					Vec3::new(max.x, y, z_inner),
 				]
 			}
 			WellSide::NegX => {
-				let (z0, z1) = span_on_axis(z_lo, z_hi, min.z, max.z, min_span);
 				let x_outer = min.x;
-				let x_inner = x_hi.max(x_outer + min_span).min(max.x);
+				let x_inner = x_hi.max(x_outer + min_depth).min(max.x);
 				if x_inner - x_outer < EPS {
 					return None;
 				}
 				[
-					Vec3::new(x_outer, y, z0),
-					Vec3::new(x_outer, y, z1),
-					Vec3::new(x_inner, y, z0),
-					Vec3::new(x_inner, y, z1),
+					Vec3::new(x_outer, y, min.z),
+					Vec3::new(x_outer, y, max.z),
+					Vec3::new(x_inner, y, min.z),
+					Vec3::new(x_inner, y, max.z),
 				]
 			}
 			WellSide::PosX => {
-				let (z0, z1) = span_on_axis(z_lo, z_hi, min.z, max.z, min_span);
 				let x_outer = max.x;
-				let x_inner = x_lo.min(x_outer - min_span).max(min.x);
+				let x_inner = x_lo.min(x_outer - min_depth).max(min.x);
 				if x_outer - x_inner < EPS {
 					return None;
 				}
 				[
-					Vec3::new(x_outer, y, z0),
-					Vec3::new(x_outer, y, z1),
-					Vec3::new(x_inner, y, z0),
-					Vec3::new(x_inner, y, z1),
+					Vec3::new(x_outer, y, min.z),
+					Vec3::new(x_outer, y, max.z),
+					Vec3::new(x_inner, y, min.z),
+					Vec3::new(x_inner, y, max.z),
 				]
 			}
 		};
@@ -285,17 +281,6 @@ impl WellAabb {
 }
 
 const MIN_LANDING_ALONG: f32 = 0.12;
-
-fn span_on_axis(a: f32, b: f32, lo: f32, hi: f32, min_span: f32) -> (f32, f32) {
-	let mut x0 = a.min(b).max(lo);
-	let mut x1 = a.max(b).min(hi);
-	if x1 - x0 < min_span {
-		let mid = 0.5 * (x0 + x1);
-		x0 = (mid - 0.5 * min_span).max(lo);
-		x1 = (mid + 0.5 * min_span).min(hi);
-	}
-	(x0, x1)
-}
 
 pub fn clamp_tread_fill(fill: f32) -> f32 {
 	if !fill.is_finite() {

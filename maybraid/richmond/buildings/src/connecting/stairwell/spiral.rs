@@ -2,8 +2,8 @@
 //!
 //! Inscribe a circle so the outer rail stays in the box. First tread at the
 //! walk-on azimuth. After the last tread exists, grow an axis-aligned walk-off
-//! landing until it covers that leading. Extra turns only when going would fall
-//! under [`MIN_GOING`].
+//! landing across the full door face until it covers that leading. Extra turns
+//! only when going would fall under [`MIN_GOING`].
 
 use std::f32::consts::TAU;
 
@@ -40,28 +40,9 @@ pub(crate) fn fit(
 		circular_nodes(center, well.bottom_y(), start_yaw, radius, width, going, rise, n, turns);
 	let landing = TreadEnd::from_last_straight(&stairs).and_then(|end| {
 		let stand = end.width.max(end.going);
-		well.walk_off_landing_covering(style, thickness, &landing_cover_points(well, end), stand)
+		well.walk_off_landing_covering(style, thickness, &end.plan_quad(), stand)
 	});
 	(stairs, landing)
-}
-
-/// Last-tread plan plus a standable square on the walk-off (AABB union).
-fn landing_cover_points(well: &WellAabb, end: TreadEnd) -> Vec<Vec2> {
-	let mut pts = end.plan_quad().to_vec();
-	let stand = end.width.max(end.going);
-	let mid = well.side_mid(well.walk_off, well.top_y());
-	let door = well.walk_off.into_xz();
-	let along = Vec2::new(-door.y, door.x);
-	let inward = -door;
-	let o = Vec2::new(mid.x, mid.z);
-	let half = 0.5 * stand;
-	pts.extend([
-		o - along * half,
-		o + along * half,
-		o - along * half + inward * stand,
-		o + along * half + inward * stand,
-	]);
-	pts
 }
 
 fn spiral_turns(well: &WellAabb, radius: f32, n: u32) -> f32 {

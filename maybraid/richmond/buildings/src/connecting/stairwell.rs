@@ -277,11 +277,17 @@ mod tests {
 				"landing must cover last leading {label} {p:?}, pad {pad_min:?}..{pad_max:?}"
 			);
 		}
-		let along = (pad_max.x - pad_min.x).max(pad_max.y - pad_min.y);
+		let along = match aabb.walk_off {
+			WellSide::NegZ | WellSide::PosZ => pad_max.x - pad_min.x,
+			WellSide::NegX | WellSide::PosX => pad_max.y - pad_min.y,
+		};
+		let well_along = match aabb.walk_off {
+			WellSide::NegZ | WellSide::PosZ => aabb.max().x - aabb.min().x,
+			WellSide::NegX | WellSide::PosX => aabb.max().z - aabb.min().z,
+		};
 		assert!(
-			along + 1e-3 >= last.width,
-			"landing along-wall {along} should be at least a tread width {}",
-			last.width
+			(along - well_along).abs() < 0.04,
+			"landing along-wall {along} should span the well face {well_along}"
 		);
 		Ok(())
 	}
