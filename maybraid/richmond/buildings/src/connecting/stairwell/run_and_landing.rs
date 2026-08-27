@@ -4,8 +4,9 @@
 //! tile. Extra laps for going add an interior landing and run back the other
 //! half when [`super::spiral::MIN_GOING`] and [`super::spiral::MIN_HEADROOM`]
 //! allow. If the last I would still need a U to the walk-off, try **one**
-//! routing switchback first. Interior turnarounds are flight-width deep so a
-//! 180° step is walkable. L/U leftover is the unused half (not a ribbon).
+//! routing switchback first. Interior and L/U pads share a walkable minimum
+//! ([`MIN_WALK_LANDING`]), capped so two pads still leave a real I. A door
+//! strip stays thin only when the last I already ends on the walk-off.
 
 use bevy_math::{Vec2, Vec3};
 use richmond_building_components::panels::PanelStyle;
@@ -20,6 +21,8 @@ use super::WellSide;
 
 const MIN_RUN: f32 = 0.08;
 const MIN_LANDING: f32 = 0.12;
+/// Smallest walkable interior / L / U landing (meters). Not “as deep as wide.”
+const MIN_WALK_LANDING: f32 = 0.9;
 
 /// Which half of the walk-on split the I occupies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,13 +33,6 @@ enum Half {
 }
 
 impl Half {
-	fn other(self) -> Self {
-		match self {
-			Self::Ccw => Self::Cw,
-			Self::Cw => Self::Ccw,
-		}
-	}
-
 	fn hug(self, walk_on: WellSide) -> WellSide {
 		match self {
 			Self::Ccw => walk_on.ccw_next(),
@@ -91,7 +87,7 @@ pub(crate) fn fit(
 	}
 	let landing = if want_landing {
 		if let Some(last) = flights.iter().rev().find(|f| f.k > 0) {
-			let (door, extras) = walk_off_pads(well, last, door, style, thickness);
+			let (door, extras) = walk_off_pads(well, last, door, turn, style, thickness);
 			mids.extend(extras);
 			Some(door)
 		} else {
@@ -122,11 +118,14 @@ fn door_pad_m(well: &WellAabb) -> f32 {
 	MIN_GOING.min(i_along(well) * 0.2).max(MIN_LANDING)
 }
 
-/// Turnaround depth: as deep as the I is wide, so a 180° step is walkable.
+/// Walkable turn / L / U depth. Shrinks when two pads would eat the I.
 fn turn_pad_m(well: &WellAabb) -> f32 {
+	let along = i_along(well);
 	let door = door_pad_m(well);
-	let cap = (i_along(well) - door - MIN_RUN).max(door);
-	i_width(well).max(door).min(cap)
+	let two_turn = ((along - MIN_RUN) * 0.5).max(door);
+	let door_turn = (along - door - MIN_RUN).max(door);
+	let cap = two_turn.min(door_turn);
+	MIN_WALK_LANDING.max(door).min(cap)
 }
 
 fn lap_count(n: u32, run: f32, rise: f32) -> u32 {
@@ -163,6 +162,8 @@ fn flights(well: &WellAabb, counts: &[u32], door: f32, turn: f32) -> Vec<Flight>
 	let inward = -well.walk_on.into_xz();
 	let far = well.walk_on.opposite();
 	let n = counts.len();
+	let last_end = if n % 2 == 1 { far } else { well.walk_on };
+	let last_lu = last_end != well.walk_off;
 	counts
 		.iter()
 		.enumerate()
@@ -175,7 +176,15 @@ fn flights(well: &WellAabb, counts: &[u32], door: f32, turn: f32) -> Vec<Flight>
 				end_side: if outbound { far } else { well.walk_on },
 				k,
 				start_pad: if i == 0 { door } else { turn },
-				end_pad: if i + 1 == n { door } else { turn },
+				end_pad: if i + 1 == n {
+					if last_lu {
+						turn
+					} else {
+						door
+					}
+				} else {
+					turn
+				},
 			}
 		})
 		.collect()
@@ -263,21 +272,37 @@ fn unit(v: Vec2) -> Vec2 {
 fn walk_off_pads(
 	well: &WellAabb,
 	last: &Flight,
-	pad: f32,
+	door: f32,
+	turn: f32,
 	style: PanelStyle,
 	thickness: f32,
 ) -> (QuadPanel, Vec<QuadPanel>) {
 	if last.end_side == well.walk_off {
-		return (door_slab(well, last, pad, style, thickness), Vec::new());
+		return (door_slab(well, last, door, style, thickness), Vec::new());
 	}
-	let mut extras = vec![wall_strip(well, last.end_side, well.top_y(), pad, style, thickness)];
-	let unused = last.half.other();
-	let fat = half_slab(well, unused, well.top_y(), style, thickness);
-	if well.walk_off != last.half.hug(well.walk_on) {
-		(fat, extras)
+	let hug = last.half.hug(well.walk_on);
+	let path = connect_sides(last.end_side, well.walk_off, hug);
+	let extras = path
+		.iter()
+		.copied()
+		.filter(|s| *s != well.walk_off)
+		.map(|side| wall_strip(well, side, well.top_y(), turn, style, thickness))
+		.collect();
+	if well.walk_off == hug {
+		(
+			wall_half_strip(
+				well,
+				well.walk_off,
+				last.end_side,
+				well.top_y(),
+				turn,
+				style,
+				thickness,
+			),
+			extras,
+		)
 	} else {
-		extras.push(fat);
-		(door_slab(well, last, pad, style, thickness), extras)
+		(wall_strip(well, well.walk_off, well.top_y(), turn, style, thickness), extras)
 	}
 }
 
@@ -293,30 +318,6 @@ fn door_slab(
 		wall_half_strip(well, well.walk_off, last.end_side, well.top_y(), pad, style, thickness)
 	} else {
 		well.walk_off_landing_strip(style, thickness, pad)
-	}
-}
-
-fn half_slab(well: &WellAabb, half: Half, y: f32, style: PanelStyle, thickness: f32) -> QuadPanel {
-	let (a, b) = half_bounds_xz(well, half);
-	QuadPanel::slab(
-		style,
-		Vec3::new(a.x, y, a.y),
-		Vec3::new(b.x, y, a.y),
-		Vec3::new(a.x, y, b.y),
-		Vec3::new(b.x, y, b.y),
-		thickness,
-	)
-}
-
-fn half_bounds_xz(well: &WellAabb, half: Half) -> (Vec2, Vec2) {
-	let min = well.min();
-	let max = well.max();
-	let c = well.center_xz();
-	match half.hug(well.walk_on) {
-		WellSide::PosX => (Vec2::new(c.x, min.z), Vec2::new(max.x, max.z)),
-		WellSide::NegX => (Vec2::new(min.x, min.z), Vec2::new(c.x, max.z)),
-		WellSide::PosZ => (Vec2::new(min.x, c.y), Vec2::new(max.x, max.z)),
-		WellSide::NegZ => (Vec2::new(min.x, min.z), Vec2::new(max.x, c.y)),
 	}
 }
 
@@ -450,5 +451,29 @@ mod tests {
 		assert_eq!(route_lap(1, 17, WellSide::NegZ, WellSide::NegZ), 2);
 		assert_eq!(route_lap(1, 17, WellSide::NegZ, WellSide::PosZ), 1);
 		assert_eq!(route_lap(1, 1, WellSide::NegZ, WellSide::NegZ), 1);
+	}
+
+	#[test]
+	fn turn_pad_is_walkable_min_not_i_width() {
+		let wide = WellAabb::from_plan(
+			Vec3::new(-1.2, 0.0, -1.2),
+			Vec3::new(1.2, 3.0, 1.2),
+			WellSide::NegZ,
+			WellSide::NegZ,
+			0.4,
+		);
+		assert!((turn_pad_m(&wide) - MIN_WALK_LANDING).abs() < 0.02);
+		let two = 2.0 * turn_pad_m(&wide);
+		assert!(i_along(&wide) - two + 1e-3 >= MIN_RUN);
+
+		let tiny = WellAabb::from_plan(
+			Vec3::new(-0.6, 0.0, -0.6),
+			Vec3::new(0.6, 1.5, 0.6),
+			WellSide::NegZ,
+			WellSide::NegZ,
+			0.4,
+		);
+		assert!(turn_pad_m(&tiny) < MIN_WALK_LANDING);
+		assert!(i_along(&tiny) - 2.0 * turn_pad_m(&tiny) + 1e-3 >= MIN_RUN);
 	}
 }

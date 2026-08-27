@@ -42,7 +42,7 @@ pub enum StairwellKind {
 	#[default]
 	Circular,
 	Rectangular,
-	/// Half-well I flights; L/U are unused-half landings to the walk-off.
+	/// Half-well I flights; L/U are walkable-depth strips to the walk-off.
 	/// Extra laps turn around on an interior landing and run the other half.
 	/// A leftover U tries one routing switchback first.
 	RunAndLanding,
@@ -721,7 +721,10 @@ mod tests {
 		assert_eq!(well.mid_landings().len(), 1, "interior turnaround only");
 		let (mn, mx) = pad_aabb(&well.mid_landings()[0]);
 		let depth = mx.y - mn.y;
-		assert!(depth > 1.0, "interior landing should be flight-width deep, got {depth}");
+		assert!(
+			(0.85..1.05).contains(&depth),
+			"interior landing should be the walkable min, got {depth}"
+		);
 		let turn = TreadEnd::from_straight(&well.stairs()[0]);
 		assert!(covers(&well.mid_landings()[0], turn.leading_mid()));
 		assert!(well.upper_landing().is_some());
@@ -730,7 +733,7 @@ mod tests {
 	}
 
 	#[test]
-	fn run_and_landing_adjacent_fills_the_unused_half() {
+	fn run_and_landing_adjacent_is_a_walkable_l() {
 		let well = run_well(
 			Vec3::new(-1.2, 0.0, -1.2),
 			Vec3::new(1.2, 3.0, 1.2),
@@ -740,13 +743,18 @@ mod tests {
 		assert_eq!(well.stairs().len(), 1);
 		let last = well.last_tread_end().expect("last tread");
 		assert!(well.mid_landings().iter().any(|p| covers(p, last.leading_mid())));
-		let landing = well.upper_landing().expect("unused-half L");
-		let (mn, mx) = pad_aabb(landing);
+		let (mn, mx) = pad_aabb(&well.mid_landings()[0]);
 		assert!(
-			(mx.x - mn.x) > 1.0 && (mx.y - mn.y) > 2.0,
-			"L landing should fill the unused half, got {mn:?}..{mx:?}"
+			(0.85..1.05).contains(&(mx.y - mn.y)),
+			"L end-leg should be walkable depth, got {:?}",
+			pad_aabb(&well.mid_landings()[0])
 		);
-		assert!(mx.x < 0.08, "unused half is west of the split");
+		let landing = well.upper_landing().expect("walk-off L leg");
+		let (dn, dx) = pad_aabb(landing);
+		assert!(
+			(0.85..1.05).contains(&(dx.x - dn.x)),
+			"L door-leg should be walkable depth, got {dn:?}..{dx:?}"
+		);
 	}
 
 	#[test]
@@ -765,13 +773,8 @@ mod tests {
 			along < well.well().half_z() + 0.08,
 			"hug-wall door must not lid the I, along={along}"
 		);
-		assert!(
-			well.mid_landings().iter().any(|p| {
-				let (a, b) = pad_aabb(p);
-				(b.x - a.x) > 1.0 && (b.y - a.y) > 2.0
-			}),
-			"L should still offer the unused half as a usable pad"
-		);
+		let (a, b) = pad_aabb(&well.mid_landings()[0]);
+		assert!((0.85..1.05).contains(&(b.y - a.y)), "hug L end-leg should be walkable depth");
 	}
 
 	#[test]
@@ -787,7 +790,7 @@ mod tests {
 	}
 
 	#[test]
-	fn run_and_landing_one_tread_uses_a_fat_u() {
+	fn run_and_landing_one_tread_uses_walkable_u_strips() {
 		let well = run_well(
 			Vec3::new(-1.2, 0.0, -1.2),
 			Vec3::new(1.2, 0.18, 1.2),
@@ -795,12 +798,15 @@ mod tests {
 			WellSide::NegZ,
 		);
 		assert_eq!(well.stairs().len(), 1);
-		let landing = well.upper_landing().expect("unused-half U");
-		let (mn, mx) = pad_aabb(landing);
-		assert!(
-			(mx.x - mn.x) > 1.0 && (mx.y - mn.y) > 2.0,
-			"U fallback should fill the unused half, got {mn:?}..{mx:?}"
-		);
+		assert_eq!(well.mid_landings().len(), 2, "U extras: far + unused side");
+		for pad in well.mid_landings() {
+			let (mn, mx) = pad_aabb(pad);
+			let d = (mx.x - mn.x).min(mx.y - mn.y);
+			assert!(
+				(0.85..1.05).contains(&d),
+				"U legs should be walkable strips, got {mn:?}..{mx:?}"
+			);
+		}
 	}
 
 	#[test]
@@ -820,6 +826,10 @@ mod tests {
 		for s in well.stairs() {
 			let p = s.placement.translation;
 			assert!(well.well().contains_xz(p.x, p.z), "I should stay in the well, {p:?}");
+			let Stair::Straight(g) = &s.geometry else {
+				panic!("run-and-landing should emit Straight flights");
+			};
+			assert!(g.length > 0.4, "two walkable pads must leave a real I, length={}", g.length);
 		}
 	}
 
