@@ -1,9 +1,10 @@
-//! Softmax blend of neighbor **grove** slots.
+//! Softmax blend of **grove** slots.
 //!
-//! Every presenting 100 m tile walks planting cells and draws a recipe from
-//! itself plus the cardinal neighbor grove slots. Distance sets the likelihood;
-//! a high-frequency logit wrinkle plus the CDF hash make the realized front
-//! jagged (holes, islands). Forest cells only choose each slot's recipe.
+//! Every presenting 100 m tile draws a recipe from itself and a cardinal run of
+//! neighbor grove tiles. Each slot's kind is whoever **produced** that grove.
+//! Same-kind slots share one logit (best influence) so a block of identical
+//! groves does not drown the seam. Distance is the likelihood; a logit wrinkle
+//! plus the CDF hash make the realized front jagged.
 
 use bevy_math::Vec3;
 use chico_groves::GroveExtent;
@@ -40,60 +41,45 @@ impl Cardinal {
 			Self::West => Vec3::new(-s, 0.0, 0.0),
 		}
 	}
-
-	fn logit_salt(self) -> u32 {
-		self.index() as u32 + 1
-	}
 }
 
-/// Distance scale (m). Long enough that \(P\) stays messy across a full 100 m tile.
-pub const GROVE_BLEND_INFLUENCE: f32 = 220.0;
+/// How many 100 m grove steps to read along each cardinal.
+pub const GROVE_BLEND_RADIUS: u32 = 8;
+
+/// Distance scale (m). Sized so a grove several tiles away still has mass.
+pub const GROVE_BLEND_INFLUENCE: f32 = 500.0;
 
 /// Softmax temperature. \(1\) leaves the distance logits unsharpened.
 pub const GROVE_BLEND_TEMPERATURE: f32 = 1.0;
 
 /// Amplitude of per-source spatial wrinkle added to each logit (`[-amp, amp]`).
-pub const GROVE_BLEND_NOISE: f32 = 1.35;
+pub const GROVE_BLEND_NOISE: f32 = 1.5;
 
-/// Recipe on each cardinal neighbor **grove** slot.
-///
-/// `None` = slot not in cache (omit from softmax). `Some(None)` = empty layer
-/// (vote to skip the plant). `Some(Some(kind))` = that grove recipe.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GroveNeighbors {
-	pub north: Option<Option<ForestGroveKind>>,
-	pub east: Option<Option<ForestGroveKind>>,
-	pub south: Option<Option<ForestGroveKind>>,
-	pub west: Option<Option<ForestGroveKind>>,
+/// One produced grove (center + kind). `kind` is `None` for an empty layer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BlendSlot {
+	pub center: Vec3,
+	pub kind: Option<ForestGroveKind>,
 }
 
-impl GroveNeighbors {
-	pub fn none() -> Self {
-		Self { north: None, east: None, south: None, west: None }
-	}
-
-	pub fn get(self, face: Cardinal) -> Option<Option<ForestGroveKind>> {
-		match face {
-			Cardinal::North => self.north,
-			Cardinal::East => self.east,
-			Cardinal::South => self.south,
-			Cardinal::West => self.west,
-		}
-	}
-
-	/// Distinct planted kinds on present neighbor slots.
-	pub fn planted_kinds(self) -> impl Iterator<Item = ForestGroveKind> {
-		Cardinal::ALL.into_iter().filter_map(move |face| self.get(face).and_then(|k| k))
+impl BlendSlot {
+	pub fn planted_kinds(slots: &[Self]) -> impl Iterator<Item = ForestGroveKind> + '_ {
+		slots.iter().filter_map(|slot| slot.kind)
 	}
 }
 
-/// Adjacent 100 m grove footprint in `face`.
+/// Adjacent 100 m grove footprint in `face` (`steps` tiles away).
 pub fn neighbor_tile(tile: GroveExtent, face: Cardinal) -> GroveExtent {
-	let d = face.offset_xz();
+	neighbor_tile_steps(tile, face, 1)
+}
+
+/// Grove footprint `steps` cardinal tiles from `tile`.
+pub fn neighbor_tile_steps(tile: GroveExtent, face: Cardinal, steps: u32) -> GroveExtent {
+	let d = face.offset_xz() * steps as f32;
 	GroveExtent::new(tile.min() + d, tile.max() + d)
 }
 
-fn center_xz(tile: GroveExtent) -> Vec3 {
+pub fn tile_center_xz(tile: GroveExtent) -> Vec3 {
 	(tile.min() + tile.max()) * 0.5
 }
 
@@ -107,65 +93,58 @@ fn logit_scale() -> f32 {
 	(GROVE_BLEND_INFLUENCE * GROVE_BLEND_TEMPERATURE.max(1e-3)).max(1e-3)
 }
 
-fn source_logit(position: Vec3, source_center: Vec3, salt: u32) -> f32 {
+fn slot_salt(center: Vec3) -> u32 {
+	center.x.to_bits().wrapping_add(center.z.to_bits().rotate_left(11))
+}
+
+fn source_logit(position: Vec3, source_center: Vec3) -> f32 {
 	let distance = -dist_xz(position, source_center) / logit_scale();
-	let wrinkle = (hash_unit_salt(position, salt) * 2.0 - 1.0) * GROVE_BLEND_NOISE;
+	let wrinkle =
+		(hash_unit_salt(position, slot_salt(source_center)) * 2.0 - 1.0) * GROVE_BLEND_NOISE;
 	distance + wrinkle
 }
 
-/// Softmax winner: `None` skips the plant (empty self or neighbor mass).
+/// Softmax winner over **kinds**: each kind keeps its best slot logit.
 ///
-/// `self_kind` may be `None` (this tile's layer is empty). Missing neighbor
-/// slots are omitted. A spatial wrinkle on each logit plus `hash_unit` as the
-/// CDF draw make the front jagged.
-pub fn pick_kind(
-	position: Vec3,
-	tile: GroveExtent,
-	self_kind: Option<ForestGroveKind>,
-	neighbors: GroveNeighbors,
-	hash_unit: f32,
-) -> Option<ForestGroveKind> {
-	let hash = hash_unit.clamp(0.0, 1.0);
-	let mut kinds = [None; 5];
-	let mut logits = [0.0_f32; 5];
-	let mut n = 0usize;
-
-	kinds[n] = self_kind;
-	logits[n] = source_logit(position, center_xz(tile), 0);
-	n += 1;
-	for face in Cardinal::ALL {
-		let Some(kind) = neighbors.get(face) else {
-			continue;
-		};
-		kinds[n] = kind;
-		logits[n] = source_logit(position, center_xz(neighbor_tile(tile, face)), face.logit_salt());
-		n += 1;
+/// `None` skips the plant (empty-layer mass). Missing slots are simply absent
+/// from `slots`.
+pub fn pick_kind(position: Vec3, slots: &[BlendSlot], hash_unit: f32) -> Option<ForestGroveKind> {
+	if slots.is_empty() {
+		return None;
 	}
-
-	let mut max = logits[0];
-	for logit in logits.iter().take(n).skip(1) {
-		if *logit > max {
-			max = *logit;
+	let hash = hash_unit.clamp(0.0, 1.0);
+	let mut groups: Vec<(Option<ForestGroveKind>, f32)> = Vec::with_capacity(4);
+	for slot in slots {
+		let logit = source_logit(position, slot.center);
+		if let Some((_, best)) = groups.iter_mut().find(|(kind, _)| *kind == slot.kind) {
+			if logit > *best {
+				*best = logit;
+			}
+		} else {
+			groups.push((slot.kind, logit));
 		}
 	}
-	let mut mass = [0.0_f32; 5];
+	let Some(max) = groups.iter().map(|(_, l)| *l).reduce(f32::max) else {
+		return None;
+	};
 	let mut total = 0.0;
-	for i in 0..n {
-		let w = (logits[i] - max).exp();
+	let mut mass = vec![0.0_f32; groups.len()];
+	for (i, (_, logit)) in groups.iter().enumerate() {
+		let w = (logit - max).exp();
 		mass[i] = w;
 		total += w;
 	}
 	let total = total.max(1e-8);
 	let mut acc = 0.0;
-	let mut choice = n - 1;
-	for i in 0..n {
-		acc += mass[i] / total;
+	let mut choice = groups.len() - 1;
+	for (i, w) in mass.iter().enumerate() {
+		acc += *w / total;
 		if hash < acc {
 			choice = i;
 			break;
 		}
 	}
-	kinds[choice]
+	groups[choice].0
 }
 
 /// Stable `0..1` from a world XZ (cell center).
@@ -193,36 +172,56 @@ mod tests {
 		GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0))
 	}
 
-	fn east_oaks() -> GroveNeighbors {
-		GroveNeighbors { east: Some(Some(ForestGroveKind::RollingOaks)), ..GroveNeighbors::none() }
+	fn self_orchard() -> BlendSlot {
+		BlendSlot { center: tile_center_xz(tile()), kind: Some(ForestGroveKind::Orchard) }
 	}
 
-	fn draws(
-		p: Vec3,
-		self_kind: Option<ForestGroveKind>,
-		neighbors: GroveNeighbors,
-	) -> Vec<Option<ForestGroveKind>> {
-		(0..24)
-			.map(|i| pick_kind(p, tile(), self_kind, neighbors, i as f32 / 24.0))
-			.collect()
+	fn east_oaks() -> Vec<BlendSlot> {
+		vec![
+			self_orchard(),
+			BlendSlot {
+				center: tile_center_xz(neighbor_tile(tile(), Cardinal::East)),
+				kind: Some(ForestGroveKind::RollingOaks),
+			},
+		]
+	}
+
+	fn draws(p: Vec3, slots: &[BlendSlot]) -> Vec<Option<ForestGroveKind>> {
+		(0..24).map(|i| pick_kind(p, slots, i as f32 / 24.0)).collect()
 	}
 
 	#[test]
 	fn missing_neighbors_always_self() -> Result<()> {
 		let p = Vec3::new(99.0, 0.0, 50.0);
+		let slots = [self_orchard()];
 		for hash in [0.0, 0.5, 0.99] {
-			assert_eq!(
-				pick_kind(p, tile(), Some(ForestGroveKind::Orchard), GroveNeighbors::none(), hash),
-				Some(ForestGroveKind::Orchard)
-			);
+			assert_eq!(pick_kind(p, &slots, hash), Some(ForestGroveKind::Orchard));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn same_kind_neighbors_do_not_drown_the_seam() -> Result<()> {
+		let p = Vec3::new(99.0, 0.0, 50.0);
+		let mut slots = east_oaks();
+		for face in [Cardinal::North, Cardinal::South, Cardinal::West] {
+			slots.push(BlendSlot {
+				center: tile_center_xz(neighbor_tile(tile(), face)),
+				kind: Some(ForestGroveKind::Orchard),
+			});
+		}
+		let picks = draws(p, &slots);
+		assert!(
+			picks.iter().any(|k| *k == Some(ForestGroveKind::RollingOaks)),
+			"max-per-kind should let oaks win often, got {picks:?}"
+		);
 		Ok(())
 	}
 
 	#[test]
 	fn neighbor_and_self_both_win_near_the_seam() -> Result<()> {
 		let p = Vec3::new(99.0, 0.0, 50.0);
-		let picks = draws(p, Some(ForestGroveKind::Orchard), east_oaks());
+		let picks = draws(p, &east_oaks());
 		assert!(picks.iter().any(|k| *k == Some(ForestGroveKind::Orchard)), "{picks:?}");
 		assert!(picks.iter().any(|k| *k == Some(ForestGroveKind::RollingOaks)), "{picks:?}");
 		Ok(())
@@ -231,7 +230,14 @@ mod tests {
 	#[test]
 	fn empty_self_can_grow_neighbor_islands() -> Result<()> {
 		let p = Vec3::new(99.0, 0.0, 50.0);
-		let picks = draws(p, None, east_oaks());
+		let slots = [
+			BlendSlot { center: tile_center_xz(tile()), kind: None },
+			BlendSlot {
+				center: tile_center_xz(neighbor_tile(tile(), Cardinal::East)),
+				kind: Some(ForestGroveKind::RollingOaks),
+			},
+		];
+		let picks = draws(p, &slots);
 		assert!(
 			picks.iter().any(|k| *k == Some(ForestGroveKind::RollingOaks)),
 			"expected neighbor islands, got {picks:?}"
@@ -242,9 +248,12 @@ mod tests {
 
 	#[test]
 	fn empty_neighbor_can_skip() -> Result<()> {
-		let neighbors = GroveNeighbors { east: Some(None), ..GroveNeighbors::none() };
+		let slots = [
+			self_orchard(),
+			BlendSlot { center: tile_center_xz(neighbor_tile(tile(), Cardinal::East)), kind: None },
+		];
 		let p = Vec3::new(99.0, 0.0, 50.0);
-		let picks = draws(p, Some(ForestGroveKind::Orchard), neighbors);
+		let picks = draws(p, &slots);
 		assert!(picks.iter().any(Option::is_none), "{picks:?}");
 		assert!(picks.iter().any(|k| *k == Some(ForestGroveKind::Orchard)), "{picks:?}");
 		Ok(())
@@ -255,6 +264,8 @@ mod tests {
 		let east = neighbor_tile(tile(), Cardinal::East);
 		assert!((east.min().x - 100.0).abs() < 1e-4);
 		assert!((east.max().x - 200.0).abs() < 1e-4);
+		let far = neighbor_tile_steps(tile(), Cardinal::East, 3);
+		assert!((far.min().x - 300.0).abs() < 1e-4);
 		Ok(())
 	}
 }

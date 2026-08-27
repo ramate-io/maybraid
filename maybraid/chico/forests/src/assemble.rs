@@ -3,6 +3,7 @@
 //! Each tile calls `Params::default().with_extent(tile).build_on(world)`. Construction
 //! noise stays on the grove default — forests do not bias `build_unit` seeds.
 
+use bevy_math::Vec3;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
 	ChristmasTaigaParams, CommonTuftsParams, ConiferMassivesParams, ConiferSaplingParams,
@@ -16,7 +17,10 @@ use chico_groves::{
 	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
 };
 
-use crate::blend::{hash_unit_xz, neighbor_tile, pick_kind, Cardinal, GroveNeighbors};
+use crate::blend::{
+	hash_unit_xz, neighbor_tile_steps, pick_kind, tile_center_xz, BlendSlot, Cardinal,
+	GROVE_BLEND_RADIUS,
+};
 use crate::{ForestExtent, ForestGroveKind, SelectedLayers};
 
 /// One grown grove tile (concrete grove type).
@@ -233,10 +237,10 @@ fn grow_layer(
 		.collect()
 }
 
-/// Cardinal forest-cell selections for grove slots that sit outside this extent.
+/// Adjacent forest-cell selections: the producer for grove slots those cells own.
 ///
-/// Not grown. Every presenting tile reads these when a neighbor 100 m slot
-/// leaves this forest; interior neighbor slots use this cell's own layers.
+/// Not grown. A presenting tile reads these when a neighbor grove was produced
+/// outside this extent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NeighborLayers {
 	pub north: Option<SelectedLayers>,
@@ -279,30 +283,89 @@ impl LayerSlot {
 	}
 }
 
-fn grove_neighbors(
+/// Kind produced at a grove-slot center, or `None` if that producer is not cached.
+fn produced_kind_at(
+	center: Vec3,
+	forest: ForestExtent,
+	self_kind: Option<ForestGroveKind>,
+	neighbors: &NeighborLayers,
+	layer: LayerSlot,
+) -> Option<Option<ForestGroveKind>> {
+	if forest.owns_center_xz(center) {
+		return Some(self_kind);
+	}
+	let self_idx = ForestExtent::cell_index_containing(forest.center());
+	let slot_idx = ForestExtent::cell_index_containing(center);
+	let layers = if slot_idx != self_idx {
+		cardinal_forest_layers(self_idx, slot_idx, neighbors)
+	} else {
+		cardinal_layers_outside_extent(center, forest, neighbors)
+	};
+	layers.map(|selected| layer.kind(selected))
+}
+
+fn cardinal_forest_layers(
+	self_idx: (i32, i32),
+	slot_idx: (i32, i32),
+	neighbors: &NeighborLayers,
+) -> Option<SelectedLayers> {
+	let (sx, sz) = self_idx;
+	let (ix, iz) = slot_idx;
+	if ix == sx + 1 && iz == sz {
+		neighbors.east
+	} else if ix == sx - 1 && iz == sz {
+		neighbors.west
+	} else if ix == sx && iz == sz + 1 {
+		neighbors.north
+	} else if ix == sx && iz == sz - 1 {
+		neighbors.south
+	} else {
+		None
+	}
+}
+
+fn cardinal_layers_outside_extent(
+	center: Vec3,
+	forest: ForestExtent,
+	neighbors: &NeighborLayers,
+) -> Option<SelectedLayers> {
+	let east = center.x - forest.max().x;
+	let west = forest.min().x - center.x;
+	let north = center.z - forest.max().z;
+	let south = forest.min().z - center.z;
+	let over = east.max(west).max(north).max(south);
+	if over < 0.0 {
+		return None;
+	}
+	if over == east {
+		neighbors.east
+	} else if over == west {
+		neighbors.west
+	} else if over == north {
+		neighbors.north
+	} else {
+		neighbors.south
+	}
+}
+
+fn blend_sources(
 	tile: GroveExtent,
 	forest: ForestExtent,
 	self_kind: Option<ForestGroveKind>,
 	neighbors: &NeighborLayers,
 	layer: LayerSlot,
-) -> GroveNeighbors {
-	let slot = |face: Cardinal| {
-		let center = {
-			let n = neighbor_tile(tile, face);
-			(n.min() + n.max()) * 0.5
-		};
-		if forest.owns_center_xz(center) {
-			Some(self_kind)
-		} else {
-			neighbors.get(face).map(|layers| layer.kind(layers))
+) -> Vec<BlendSlot> {
+	let mut slots = Vec::with_capacity(1 + 4 * GROVE_BLEND_RADIUS as usize);
+	slots.push(BlendSlot { center: tile_center_xz(tile), kind: self_kind });
+	for face in Cardinal::ALL {
+		for step in 1..=GROVE_BLEND_RADIUS {
+			let center = tile_center_xz(neighbor_tile_steps(tile, face, step));
+			if let Some(kind) = produced_kind_at(center, forest, self_kind, neighbors, layer) {
+				slots.push(BlendSlot { center, kind });
+			}
 		}
-	};
-	GroveNeighbors {
-		north: slot(Cardinal::North),
-		east: slot(Cardinal::East),
-		south: slot(Cardinal::South),
-		west: slot(Cardinal::West),
 	}
+	slots
 }
 
 fn grow_presenting_tile(
@@ -313,13 +376,13 @@ fn grow_presenting_tile(
 	layer: LayerSlot,
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
-	grow_blended(kind, extent, grove_neighbors(extent, forest, kind, neighbors, layer), world)
+	grow_blended(kind, extent, &blend_sources(extent, forest, kind, neighbors, layer), world)
 }
 
 fn grow_blended(
 	self_kind: Option<ForestGroveKind>,
 	extent: GroveExtent,
-	neighbors: GroveNeighbors,
+	slots: &[BlendSlot],
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
 	use std::collections::HashMap;
@@ -330,15 +393,13 @@ fn grow_blended(
 	if let Some(self_kind) = self_kind {
 		for cell in extent.cells_overlapping(self_kind.cell_extent_xz()) {
 			let center = cell_center(&cell);
-			if let Some(kind) =
-				pick_kind(center, extent, Some(self_kind), neighbors, hash_unit_xz(center))
-			{
+			if let Some(kind) = pick_kind(center, slots, hash_unit_xz(center)) {
 				buckets.entry(kind).or_default().push(cell);
 			}
 		}
 	} else {
 		let mut lattices = Vec::<ForestGroveKind>::new();
-		for lattice in neighbors.planted_kinds() {
+		for lattice in BlendSlot::planted_kinds(slots) {
 			if !lattices.contains(&lattice) {
 				lattices.push(lattice);
 			}
@@ -346,8 +407,7 @@ fn grow_blended(
 		for lattice in lattices {
 			for cell in extent.cells_overlapping(lattice.cell_extent_xz()) {
 				let center = cell_center(&cell);
-				if pick_kind(center, extent, None, neighbors, hash_unit_xz(center)) == Some(lattice)
-				{
+				if pick_kind(center, slots, hash_unit_xz(center)) == Some(lattice) {
 					buckets.entry(lattice).or_default().push(cell);
 				}
 			}
@@ -362,9 +422,9 @@ fn grow_blended(
 
 /// Assemble selected layers onto the forest cell's 100 m grove grid.
 ///
-/// Every presenting tile softmax-blends its cardinal neighbor grove recipes
+/// Every presenting tile softmax-blends a cardinal run of produced grove slots
 /// (empty layers still grow neighbor islands). `neighbors` supply selections
-/// for slots that sit outside this extent.
+/// for grove slots produced by adjacent forest cells.
 pub fn assemble(
 	extent: ForestExtent,
 	layers: SelectedLayers,
@@ -502,15 +562,56 @@ mod tests {
 			}),
 			..NeighborLayers::none()
 		};
-		let slots = grove_neighbors(
+		let slots = blend_sources(
 			interior,
 			forest,
 			Some(ForestGroveKind::Orchard),
 			&neighbors,
 			LayerSlot::UpperCanopy,
 		);
-		assert_eq!(slots.east, Some(Some(ForestGroveKind::Orchard)));
-		assert_eq!(slots.west, Some(Some(ForestGroveKind::Orchard)));
+		let east = tile_center_xz(neighbor_tile_steps(interior, Cardinal::East, 1));
+		let east_kind = slots.iter().find(|slot| {
+			(slot.center.x - east.x).abs() < 1.0 && (slot.center.z - east.z).abs() < 1.0
+		});
+		let east_kind =
+			east_kind.ok_or_else(|| anyhow::anyhow!("expected an east grove slot"))?.kind;
+		assert_eq!(east_kind, Some(ForestGroveKind::Orchard));
+		Ok(())
+	}
+
+	#[test]
+	fn inward_tile_still_reads_far_grove_kind() -> Result<()> {
+		let forest = ForestExtent::default_cell();
+		let tiles = forest.default_grove_tiles();
+		let inward = tiles
+			.iter()
+			.copied()
+			.find(|tile| {
+				let c = tile_center_xz(*tile);
+				(c.x - 350.0).abs() < 60.0 && c.z.abs() <= 50.0
+			})
+			.ok_or_else(|| anyhow::anyhow!("expected a grove tile ~350 m east of origin"))?;
+		let neighbors = NeighborLayers {
+			east: Some(SelectedLayers {
+				layering: LayeringKind::MiRobles,
+				tufts: None,
+				understory: None,
+				lower_canopy: None,
+				upper_canopy: Some(ForestGroveKind::RollingOaks),
+			}),
+			..NeighborLayers::none()
+		};
+		let slots = blend_sources(
+			inward,
+			forest,
+			Some(ForestGroveKind::Orchard),
+			&neighbors,
+			LayerSlot::UpperCanopy,
+		);
+		assert!(
+			slots.iter().any(|slot| slot.kind == Some(ForestGroveKind::RollingOaks)),
+			"radius should reach the east-produced oak groves from well inside the block"
+		);
 		Ok(())
 	}
 
