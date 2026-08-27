@@ -26,6 +26,7 @@ lod-avian = { workspace = true }
 scene-ref = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-buildings = { workspace = true }
+richmond-developments = { workspace = true }
 procedural-common = { workspace = true }
 
 [lints]

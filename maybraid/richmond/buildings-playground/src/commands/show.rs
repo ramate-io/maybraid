@@ -49,6 +49,7 @@ pub mod livable_rectangles_examples;
 pub mod living_room_examples;
 pub mod mini_mart;
 pub mod mini_mart_examples;
+pub mod mixed_use_les_halles_development;
 pub mod mixed_use_les_halles_monotower;
 pub mod noisy_rectangular_wall;
 pub mod opening;
@@ -240,6 +241,8 @@ pub enum Show {
 	),
 	/// Mixed-use Les Halles monotower (commercial storeys below, livable above).
 	MixedUseLesHallesMonotower(mixed_use_les_halles_monotower::MixedUseLesHallesMonotower),
+	/// Flattened Les Halles development (per-floor hosts, shaft stairs, pitched roof).
+	MixedUseLesHallesDevelopment(mixed_use_les_halles_development::MixedUseLesHallesDevelopment),
 	/// I-Apartment floor plan (IFloor + primary rect residuals).
 	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
 	/// Gallery of I-Apartment floor plans via Fit (varied extents/seeds).
@@ -333,6 +336,7 @@ impl Show {
 			Self::LesHallesLivableFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
 			Self::MixedUseLesHallesMonotower(cmd) => cmd.into_preview(),
+			Self::MixedUseLesHallesDevelopment(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),

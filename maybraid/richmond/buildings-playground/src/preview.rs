@@ -51,6 +51,7 @@ use richmond_buildings::{
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
 	DEFAULT_PANEL_THICKNESS,
 };
+use richmond_developments::MixedUseLesHallesDevelopment;
 #[derive(Component)]
 pub struct PreviewRoot;
 
@@ -443,6 +444,14 @@ pub enum PreviewSubject {
 	LesHallesLivableFullStoreyExamples,
 	/// Commercial-below / livable-above Les Halles monotower stack.
 	MixedUseLesHallesMonotower {
+		/// Confines size (XZ centered at origin; Y from 0). Tall ⇒ several storeys.
+		extent: Vec3,
+		seed: i32,
+		/// Inbound openings (`--opening`). Empty ⇒ monotower samples shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
+	/// Flattened Les Halles development (storey / stairwell / roof hosts).
+	MixedUseLesHallesDevelopment {
 		/// Confines size (XZ centered at origin; Y from 0). Tall ⇒ several storeys.
 		extent: Vec3,
 		seed: i32,
@@ -1020,6 +1029,19 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::MixedUseLesHallesDevelopment {
+				extent,
+				seed,
+				ref openings,
+			} => {
+				format!(
+					"preview: mixed-use-les-halles-development (extent={:.1},{:.1},{:.1} seed={seed} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
 				seed,
@@ -1098,6 +1120,7 @@ pub struct CachedPreview {
 	les_halles_livable_full_storey: Option<LesHallesLivableFullStorey>,
 	les_halles_livable_full_storey_examples: Vec<LesHallesLivableFullStoreyExampleCell>,
 	mixed_use_les_halles_monotower: Option<MixedUseLesHallesMonotower>,
+	mixed_use_les_halles_development: Option<MixedUseLesHallesDevelopment>,
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
@@ -1262,6 +1285,7 @@ impl CachedPreview {
 		self.les_halles_livable_full_storey = None;
 		self.les_halles_livable_full_storey_examples.clear();
 		self.mixed_use_les_halles_monotower = None;
+		self.mixed_use_les_halles_development = None;
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
@@ -1539,6 +1563,14 @@ impl CachedPreview {
 					Ok(tower) => self.mixed_use_les_halles_monotower = Some(tower),
 					Err(err) => {
 						bevy::log::error!("mixed-use-les-halles-monotower fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::MixedUseLesHallesDevelopment { extent, seed, openings } => {
+				match fit_mixed_use_les_halles_development(*extent, *seed, openings) {
+					Ok(dev) => self.mixed_use_les_halles_development = Some(dev),
+					Err(err) => {
+						bevy::log::error!("mixed-use-les-halles-development fit failed: {err}");
 					}
 				}
 			}
@@ -2477,6 +2509,19 @@ fn fit_mixed_use_les_halles_monotower(
 	let confines = Confines::new(bounds, 0.0, inbound);
 	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).map(|(tower, _)| tower)
+}
+
+fn fit_mixed_use_les_halles_development(
+	extent: Vec3,
+	seed: i32,
+	openings: &[PreviewOpening],
+) -> Result<MixedUseLesHallesDevelopment, richmond_buildings::FitError> {
+	let bounds = les_halles_confines_bounds(extent);
+	let inbound =
+		if openings.is_empty() { Openings::new() } else { openings_from_preview(openings) };
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
+	MixedUseLesHallesDevelopment::fit_to_confines(&confines, noise).map(|(dev, _)| dev)
 }
 
 fn fit_les_halles_floor_plan(
@@ -4382,6 +4427,17 @@ pub fn present_preview_lod(
 				spawn_building_preview(&mut commands, transform, tower, &lod_ref);
 			}
 		}
+		PreviewSubject::MixedUseLesHallesDevelopment { .. } => {
+			if let Some(dev) = cache.mixed_use_les_halles_development.as_ref() {
+				for floor in &dev.tower.floors {
+					spawn_building_preview(&mut commands, transform, floor, &lod_ref);
+				}
+				for stairwell in &dev.stairwells {
+					spawn_building_preview(&mut commands, transform, stairwell, &lod_ref);
+				}
+				spawn_building_preview(&mut commands, transform, &dev.roof, &lod_ref);
+			}
+		}
 		PreviewSubject::LesHallesLivableFullStoreyExamples => {
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
@@ -4789,7 +4845,8 @@ pub fn draw_opening_plan_gizmos(
 		PreviewSubject::LesHallesFloorPlan { openings, .. }
 		| PreviewSubject::LesHallesFullStorey { openings, .. }
 		| PreviewSubject::LesHallesLivableFullStorey { openings, .. }
-		| PreviewSubject::MixedUseLesHallesMonotower { openings, .. } => {
+		| PreviewSubject::MixedUseLesHallesMonotower { openings, .. }
+		| PreviewSubject::MixedUseLesHallesDevelopment { openings, .. } => {
 			let plan = cache
 				.les_halles_floor_plan
 				.as_ref()
@@ -4800,6 +4857,13 @@ pub fn draw_opening_plan_gizmos(
 						.mixed_use_les_halles_monotower
 						.as_ref()
 						.and_then(|t| t.floors.first())
+						.map(|f| f.floor_plan())
+				})
+				.or_else(|| {
+					cache
+						.mixed_use_les_halles_development
+						.as_ref()
+						.and_then(|d| d.tower.floors.first())
 						.map(|f| f.floor_plan())
 				});
 			let red = Color::srgb(0.95, 0.2, 0.2);
