@@ -1,12 +1,13 @@
-//! Exclusive [`WellAabb`] stairwell: run-in + circular spiral + exit landing.
+//! Exclusive [`WellAabb`] stairwell: run-in + circular or rectangular flight +
+//! exit landing.
 //!
-//! Two horizontal shaft faces allocate one orthogonal box. The spiral fits that
-//! box; offset / skew / size mismatch is another well (or a hall), not a
-//! polyline. Walk-off is a landing. The last tread arrives at that landing's
-//! interior edge (the back-point). Extra turns exist only to keep going above a
-//! fixed floor — there is no lapping-ratio knob.
+//! Two horizontal shaft faces allocate one orthogonal box. Offset / skew / size
+//! mismatch is another well (or a hall), not a polyline. Walk-off is a landing.
+//! The last tread arrives at that landing's interior edge (the back-point).
+//! Extra laps exist only to keep going above a floor when headroom still holds.
 
 mod opening;
+mod rect;
 mod spiral;
 mod tread;
 mod well;
@@ -34,15 +35,25 @@ pub const SLAB_THICKNESS_M: f32 = 0.05;
 /// Default tread span as a fraction of the well's tighter half-extent.
 pub const TREAD_FILL_DEFAULT: f32 = well::TREAD_FILL_DEFAULT;
 
-/// Exclusive box → run-in + spiral flight + optional walk-off landing.
+/// Circular helix or wall-hugging rectangular flights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum StairwellKind {
+	#[default]
+	Circular,
+	Rectangular,
+}
+
+/// Exclusive box → run-in + flight + optional walk-off landing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectingStairwell {
 	style: PanelStyle,
 	well: WellAabb,
+	kind: StairwellKind,
 	run_in: QuadPanel,
 	want_landing: bool,
 	slab_thickness: f32,
 	upper_landing: Option<QuadPanel>,
+	mid_landings: Vec<QuadPanel>,
 	stairs: Vec<StairNode>,
 }
 
@@ -59,14 +70,21 @@ impl ConnectingStairwell {
 
 	/// Fit a circular spiral into an already-allocated exclusive box.
 	pub fn from_well(style: PanelStyle, well: WellAabb) -> Self {
+		Self::from_well_kind(style, well, StairwellKind::Circular)
+	}
+
+	/// Fit [`StairwellKind`] into an already-allocated exclusive box.
+	pub fn from_well_kind(style: PanelStyle, well: WellAabb, kind: StairwellKind) -> Self {
 		let slab_thickness = SLAB_THICKNESS_M;
-		let (stairs, landing) = spiral::fit(&well, style, slab_thickness);
+		let (stairs, landing, mids) = fit_kind(&well, style, slab_thickness, kind);
 		Self {
 			style,
+			kind,
 			run_in: well.run_in_slab(style, slab_thickness),
 			want_landing: true,
 			slab_thickness,
 			upper_landing: landing,
+			mid_landings: mids,
 			stairs,
 			well,
 		}
@@ -103,22 +121,40 @@ impl ConnectingStairwell {
 		self
 	}
 
+	/// Circular helix or rectangular wall-hug. Default [`StairwellKind::Circular`].
+	pub fn with_kind(mut self, kind: StairwellKind) -> Self {
+		self.kind = kind;
+		self.rebuild();
+		self
+	}
+
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
 		self.run_in = self.run_in.clone().with_joint_policy(joint_policy);
 		self.upper_landing =
 			self.upper_landing.take().map(|slab| slab.with_joint_policy(joint_policy));
+		self.mid_landings = self
+			.mid_landings
+			.drain(..)
+			.map(|slab| slab.with_joint_policy(joint_policy))
+			.collect();
 		self
 	}
 
 	fn rebuild(&mut self) {
-		let (stairs, landing) = spiral::fit(&self.well, self.style, self.slab_thickness);
+		let (stairs, landing, mids) =
+			fit_kind(&self.well, self.style, self.slab_thickness, self.kind);
 		self.stairs = stairs;
 		self.run_in = self.well.run_in_slab(self.style, self.slab_thickness);
 		self.upper_landing = self.want_landing.then_some(landing).flatten();
+		self.mid_landings = mids;
 	}
 
 	pub fn well(&self) -> WellAabb {
 		self.well
+	}
+
+	pub fn kind(&self) -> StairwellKind {
+		self.kind
 	}
 
 	pub fn slab_thickness(&self) -> f32 {
@@ -137,6 +173,10 @@ impl ConnectingStairwell {
 		self.upper_landing.as_ref()
 	}
 
+	pub fn mid_landings(&self) -> &[QuadPanel] {
+		&self.mid_landings
+	}
+
 	pub fn stairs(&self) -> &[StairNode] {
 		&self.stairs
 	}
@@ -149,6 +189,9 @@ impl ConnectingStairwell {
 impl BuildingComponents for ConnectingStairwell {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = self.run_in.panel_nodes_for_level(level);
+		for pad in &self.mid_landings {
+			out.extend(pad.panel_nodes_for_level(level));
+		}
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.panel_nodes_for_level(level));
 		}
@@ -157,6 +200,9 @@ impl BuildingComponents for ConnectingStairwell {
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = self.run_in.joint_nodes_for_level(level);
+		for pad in &self.mid_landings {
+			out.extend(pad.joint_nodes_for_level(level));
+		}
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.joint_nodes_for_level(level));
 		}
@@ -169,6 +215,21 @@ impl BuildingComponents for ConnectingStairwell {
 
 	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
 		Layers::from_free(self.stairs.clone())
+	}
+}
+
+fn fit_kind(
+	well: &WellAabb,
+	style: PanelStyle,
+	thickness: f32,
+	kind: StairwellKind,
+) -> (Vec<StairNode>, Option<QuadPanel>, Vec<QuadPanel>) {
+	match kind {
+		StairwellKind::Circular => {
+			let (stairs, landing) = spiral::fit(well, style, thickness);
+			(stairs, landing, Vec::new())
+		}
+		StairwellKind::Rectangular => rect::fit(well, style, thickness),
 	}
 }
 
@@ -438,6 +499,136 @@ mod tests {
 		assert!(b.upper_landing().is_some());
 		assert!(!a.stairs().is_empty());
 		assert!(!b.stairs().is_empty());
+	}
+
+	#[test]
+	fn rectangular_same_side_hugs_four_walls() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		assert_eq!(well.kind(), StairwellKind::Rectangular);
+		assert_eq!(well.stairs().len(), 4);
+		assert_eq!(well.mid_landings().len(), 3);
+		assert!(well.upper_landing().is_some());
+		let aabb = well.well();
+		for s in well.stairs() {
+			let p = s.placement.translation;
+			assert!(
+				aabb.contains_xz(p.x, p.z),
+				"rectangular flight should stay in the well, {p:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn rectangular_opposite_is_two_flights() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::PosZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		assert_eq!(well.stairs().len(), 2);
+		assert_eq!(well.mid_landings().len(), 1);
+	}
+
+	#[test]
+	fn rectangular_quarter_landing_is_a_strip() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegX,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		let aabb = well.well();
+		let landing = well.upper_landing().expect("walk-off");
+		let [c0, c1, c2, c3] = landing.corners();
+		let pad_min =
+			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
+		let pad_max =
+			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		let center = aabb.center_xz();
+		assert!(
+			center.x < pad_min.x - 0.04 || center.x > pad_max.x + 0.04,
+			"rectangular quarter-turn must not lid the well"
+		);
+		assert!(!well.stairs().is_empty());
+	}
+
+	#[test]
+	fn rectangular_last_leading_meets_the_end_pad() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		let aabb = well.well();
+		for (i, node) in well.stairs().iter().enumerate() {
+			let end = TreadEnd::from_straight(node);
+			let side = [WellSide::NegZ, WellSide::PosX, WellSide::PosZ, WellSide::NegX]
+				.into_iter()
+				.max_by(|a, b| {
+					end.travel
+						.dot(a.travel_xz())
+						.partial_cmp(&end.travel.dot(b.travel_xz()))
+						.unwrap_or(std::cmp::Ordering::Equal)
+				})
+				.expect("side");
+			let want = rect::flight_end_leading(&aabb, side);
+			let got = end.leading_mid();
+			assert!(
+				(got - want).length() < 0.05,
+				"flight {i} last leading {got:?} should meet end pad {want:?} on {side:?}"
+			);
+		}
+	}
+
+	#[test]
+	fn rectangular_skinny_collapses_the_hole() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-0.35, 0.0, -1.4),
+				Vec3::new(0.35, 3.0, 1.4),
+				WellSide::NegZ,
+				WellSide::NegZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		assert!(!well.stairs().is_empty());
+		let aabb = well.well();
+		for s in well.stairs() {
+			let p = s.placement.translation;
+			assert!(
+				aabb.contains_xz(p.x, p.z),
+				"skinny rectangular should still hug the box, {p:?}"
+			);
+		}
 	}
 
 	fn first_tread_width(well: &ConnectingStairwell) -> f32 {

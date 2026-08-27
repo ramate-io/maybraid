@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use clap::{Args, ValueEnum};
 
-use richmond_buildings::{ConnectingStairwell as Stairwell, WellAabb, WellSide};
+use richmond_buildings::{ConnectingStairwell as Stairwell, StairwellKind, WellAabb, WellSide};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
@@ -26,6 +26,23 @@ pub enum StairwellCase {
 	StackedPair,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum StairwellFit {
+	#[default]
+	Circular,
+	Rectangular,
+}
+
+impl From<StairwellFit> for StairwellKind {
+	fn from(fit: StairwellFit) -> Self {
+		match fit {
+			StairwellFit::Circular => StairwellKind::Circular,
+			StairwellFit::Rectangular => StairwellKind::Rectangular,
+		}
+	}
+}
+
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct ConnectingStairwell {
@@ -37,12 +54,19 @@ pub struct ConnectingStairwell {
 	/// Tread span as a fraction of the tighter half-extent.
 	#[arg(long, default_value_t = 0.4)]
 	pub tread_fill: f32,
+	/// Circular helix or wall-hugging rectangular flights.
+	#[arg(long, value_enum, default_value_t = StairwellFit::Circular)]
+	pub kind: StairwellFit,
 }
 
 impl ConnectingStairwell {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		(
-			PreviewSubject::ConnectingStairwell { case: self.case, tread_fill: self.tread_fill },
+			PreviewSubject::ConnectingStairwell {
+				case: self.case,
+				tread_fill: self.tread_fill,
+				kind: self.kind,
+			},
 			self.transform.transform(),
 		)
 	}
@@ -101,13 +125,18 @@ pub fn preview_wells(case: StairwellCase, tread_fill: f32) -> Vec<WellAabb> {
 	}
 }
 
-pub fn preview_stairwells(case: StairwellCase, tread_fill: f32) -> Vec<Stairwell> {
+pub fn preview_stairwells(
+	case: StairwellCase,
+	tread_fill: f32,
+	kind: StairwellFit,
+) -> Vec<Stairwell> {
 	use richmond_building_components::panels::PanelStyle;
+	let kind = StairwellKind::from(kind);
 	preview_wells(case, tread_fill)
 		.into_iter()
 		.enumerate()
 		.map(|(i, w)| {
-			let well = Stairwell::from_well(PanelStyle::RoughStonework, w);
+			let well = Stairwell::from_well_kind(PanelStyle::RoughStonework, w, kind);
 			if case == StairwellCase::StackedPair && i == 0 {
 				well.with_upper_landing(false)
 			} else {
@@ -126,8 +155,8 @@ pub struct StairwellGalleryCell {
 const GALLERY_COLS: usize = 4;
 const GALLERY_GAP: f32 = 5.0;
 
-/// Door-pair, aspect, fill, and stack cases that stress the circular fitter.
-pub fn pathological_gallery() -> Vec<StairwellGalleryCell> {
+/// Door-pair, aspect, fill, and stack cases that stress a fitter.
+pub fn pathological_gallery(kind: StairwellFit) -> Vec<StairwellGalleryCell> {
 	use richmond_building_components::panels::PanelStyle;
 
 	let well = |min: Vec3, max: Vec3, on: WellSide, off: WellSide, fill: f32| {
@@ -179,7 +208,11 @@ pub fn pathological_gallery() -> Vec<StairwellGalleryCell> {
 				.copied()
 				.enumerate()
 				.map(|(k, w)| {
-					let s = Stairwell::from_well(PanelStyle::RoughStonework, w);
+					let s = Stairwell::from_well_kind(
+						PanelStyle::RoughStonework,
+						w,
+						StairwellKind::from(kind),
+					);
 					if *omit_first && k == 0 {
 						s.with_upper_landing(false)
 					} else {

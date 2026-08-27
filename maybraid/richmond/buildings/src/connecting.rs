@@ -3,6 +3,6 @@
 pub mod stairwell;
 
 pub use stairwell::{
-	ConnectingStairwell, StairwellOpening, TreadEnd, WellAabb, WellSide, RUN_IN_M,
+	ConnectingStairwell, StairwellKind, StairwellOpening, TreadEnd, WellAabb, WellSide, RUN_IN_M,
 	SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
 };

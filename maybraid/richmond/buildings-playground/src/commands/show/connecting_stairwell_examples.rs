@@ -1,8 +1,9 @@
-//! `/show connecting-stairwell-examples` — pathological circular-spiral wells.
+//! `/show connecting-stairwell-examples` — pathological exclusive-well stairwells.
 
 use bevy::prelude::*;
 use clap::Args;
 
+use super::connecting_stairwell::StairwellFit;
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
@@ -11,10 +12,16 @@ use crate::preview::PreviewSubject;
 pub struct ConnectingStairwellExamples {
 	#[command(flatten)]
 	pub transform: ShowTransform,
+	/// Circular helix or wall-hugging rectangular flights.
+	#[arg(long, value_enum, default_value_t = StairwellFit::Circular)]
+	pub kind: StairwellFit,
 }
 
 impl ConnectingStairwellExamples {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(PreviewSubject::ConnectingStairwellExamples, self.transform.transform())
+		(
+			PreviewSubject::ConnectingStairwellExamples { kind: self.kind },
+			self.transform.transform(),
+		)
 	}
 }

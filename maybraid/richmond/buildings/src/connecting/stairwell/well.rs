@@ -37,6 +37,32 @@ impl WellSide {
 		}
 	}
 
+	/// Next wall walking CCW around the well (center on the left).
+	pub fn ccw_next(self) -> Self {
+		match self {
+			Self::NegZ => Self::PosX,
+			Self::PosX => Self::PosZ,
+			Self::PosZ => Self::NegX,
+			Self::NegX => Self::NegZ,
+		}
+	}
+
+	/// Travel along this wall, CCW (wall on the right).
+	pub fn travel_xz(self) -> Vec2 {
+		match self {
+			Self::NegZ => Vec2::X,
+			Self::PosX => Vec2::Y,
+			Self::PosZ => -Vec2::X,
+			Self::NegX => -Vec2::Y,
+		}
+	}
+
+	/// Placement yaw for [`Self::travel_xz`] (`(+cos, −sin)` in XZ).
+	pub fn travel_yaw(self) -> f32 {
+		let t = self.travel_xz();
+		(-t.y).atan2(t.x)
+	}
+
 	pub fn nearest(bounds: Aabb3d, p: Vec3) -> Self {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
