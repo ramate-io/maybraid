@@ -42,10 +42,10 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells,
-	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening,
-	MappedOpeningQuad, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof,
-	PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor,
-	RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
+	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad,
+	MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams,
+	RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor, RectRingFloorParams,
+	RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
 	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
 	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
 	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
@@ -122,6 +122,8 @@ pub enum PreviewSubject {
 		case: crate::commands::show::connecting_stairwell::StairwellCase,
 		tread_fill: f32,
 	},
+	/// Pathological circular-spiral wells in a grid.
+	ConnectingStairwellExamples,
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -566,6 +568,9 @@ impl PreviewConfig {
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
 			PreviewSubject::ConnectingStairwell { case, tread_fill } => {
 				format!("preview: connecting-stairwell ({case:?} fill={tread_fill:.2})")
+			}
+			PreviewSubject::ConnectingStairwellExamples => {
+				"preview: connecting-stairwell-examples (gallery)".into()
 			}
 			PreviewSubject::ArcFloor {
 				radius,
@@ -3646,6 +3651,14 @@ pub fn present_preview_lod(
 		PreviewSubject::ConnectingStairwell { case, tread_fill } => {
 			spawn_connecting_stairwell(&mut commands, transform, *case, *tread_fill, &lod_ref);
 		}
+		PreviewSubject::ConnectingStairwellExamples => {
+			for cell in crate::commands::show::connecting_stairwell::pathological_gallery() {
+				let tf = transform * Transform::from_translation(cell.offset);
+				for well in cell.stairwells {
+					spawn_building_preview(&mut commands, tf, &well, &lod_ref);
+				}
+			}
+		}
 		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
@@ -5295,42 +5308,63 @@ fn draw_mapped_opening_overlays<M: MapsOpenings>(
 /// Exclusive well box (cyan), walk-on (lime), walk-off (orange), landing (yellow),
 /// last leading (magenta).
 pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
-	let (case, tread_fill) = match &config.subject {
-		PreviewSubject::ConnectingStairwell { case, tread_fill } => (*case, *tread_fill),
+	let cells = match &config.subject {
+		PreviewSubject::ConnectingStairwell { case, tread_fill } => {
+			vec![(
+				Vec3::ZERO,
+				crate::commands::show::connecting_stairwell::preview_stairwells(*case, *tread_fill),
+			)]
+		}
+		PreviewSubject::ConnectingStairwellExamples => {
+			crate::commands::show::connecting_stairwell::pathological_gallery()
+				.into_iter()
+				.map(|c| (c.offset, c.stairwells))
+				.collect()
+		}
 		_ => return,
 	};
-	let tf = config.transform;
+	let root = config.transform;
+	for (offset, wells) in cells {
+		let tf = root * Transform::from_translation(offset);
+		for well in wells {
+			draw_stairwell_well_gizmos(&mut gizmos, tf, &well);
+		}
+	}
+}
+
+fn draw_stairwell_well_gizmos(
+	gizmos: &mut Gizmos,
+	tf: Transform,
+	well: &richmond_buildings::ConnectingStairwell,
+) {
 	let cyan = Color::srgb(0.2, 0.9, 0.95);
 	let lime = Color::srgb(0.35, 0.95, 0.35);
 	let orange = Color::srgb(1.0, 0.55, 0.15);
 	let yellow = Color::srgb(1.0, 0.9, 0.2);
 	let magenta = Color::srgb(0.95, 0.25, 0.85);
-
-	for well in crate::commands::show::connecting_stairwell::preview_stairwells(case, tread_fill) {
-		let aabb = well.well();
-		gizmos.aabb_3d(aabb.bounds, tf, cyan);
-		draw_well_side_gizmo(&mut gizmos, tf, aabb, aabb.walk_on, aabb.bottom_y(), lime);
-		draw_well_side_gizmo(&mut gizmos, tf, aabb, aabb.walk_off, aabb.top_y(), orange);
-		if let Some(landing) = well.upper_landing() {
-			let [a0, a1, b0, b1] = landing.corners();
-			for (p, q) in [(a0, a1), (a1, b1), (b1, b0), (b0, a0)] {
-				gizmos.line(tf.transform_point(p), tf.transform_point(q), yellow);
-			}
+	let aabb = well.well();
+	gizmos.aabb_3d(aabb.bounds, tf, cyan);
+	draw_well_side_gizmo(gizmos, tf, aabb, aabb.walk_on, aabb.bottom_y(), lime);
+	draw_well_side_gizmo(gizmos, tf, aabb, aabb.walk_off, aabb.top_y(), orange);
+	if let Some(landing) = well.upper_landing() {
+		let [a0, a1, b0, b1] = landing.corners();
+		for (p, q) in [(a0, a1), (a1, b1), (b1, b0), (b0, a0)] {
+			gizmos.line(tf.transform_point(p), tf.transform_point(q), yellow);
 		}
-		if let Some(end) = well.last_tread_end() {
-			let y = well
-				.stairs()
-				.last()
-				.map(|s| s.placement.translation.y)
-				.unwrap_or_else(|| aabb.top_y());
-			let [p0, p1, p2, p3] = end.plan_quad();
-			for (a, b) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
-				gizmos.line(
-					tf.transform_point(Vec3::new(a.x, y, a.y)),
-					tf.transform_point(Vec3::new(b.x, y, b.y)),
-					magenta,
-				);
-			}
+	}
+	if let Some(end) = well.last_tread_end() {
+		let y = well
+			.stairs()
+			.last()
+			.map(|s| s.placement.translation.y)
+			.unwrap_or_else(|| aabb.top_y());
+		let [p0, p1, p2, p3] = end.plan_quad();
+		for (a, b) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+			gizmos.line(
+				tf.transform_point(Vec3::new(a.x, y, a.y)),
+				tf.transform_point(Vec3::new(b.x, y, b.y)),
+				magenta,
+			);
 		}
 	}
 }

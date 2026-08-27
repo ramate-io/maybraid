@@ -1,9 +1,9 @@
 //! Circular flight inside an exclusive [`WellAabb`].
 //!
 //! Inscribe a circle so the outer rail stays in the box. First tread at the
-//! walk-on azimuth. After the last tread exists, grow an axis-aligned walk-off
-//! landing across the full door face until it covers that leading. Extra turns
-//! only when going would fall under [`MIN_GOING`].
+//! walk-on azimuth, last at the walk-off. The walk-off landing is a door strip
+//! authored first; the last leading arrives on that strip. Extra turns only
+//! when going would fall under [`MIN_GOING`].
 
 use std::f32::consts::TAU;
 
@@ -14,7 +14,6 @@ use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 
 use crate::paneling::quad_panel::QuadPanel;
 
-use super::tread::TreadEnd;
 use super::well::WellAabb;
 
 /// Smallest walkable going (meters). Extra turns exist only to stay at or above this.
@@ -22,7 +21,7 @@ pub(crate) const MIN_GOING: f32 = 0.25;
 const MIN_RADIUS: f32 = 0.2;
 const MIN_LANDING: f32 = 0.12;
 
-/// Circular nodes + the walk-off landing (AABB strip, not a sheared pad).
+/// Circular nodes + the walk-off landing (door strip, not a sheared pad).
 pub(crate) fn fit(
 	well: &WellAabb,
 	style: PanelStyle,
@@ -33,28 +32,30 @@ pub(crate) fn fit(
 	let radius = (well.half_min() - MIN_LANDING - 0.5 * width).max(MIN_RADIUS);
 	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
 	let turns = spiral_turns(well, radius, n);
-	let going = (turns * TAU * radius) / n as f32;
+	let intervals = n.saturating_sub(1).max(1);
+	let going = (turns * TAU * radius) / intervals as f32;
 	let center = well.center_xz();
 	let start_yaw = yaw_toward(well.walk_on.into_xz());
 	let stairs =
 		circular_nodes(center, well.bottom_y(), start_yaw, radius, width, going, rise, n, turns);
-	let landing = TreadEnd::from_last_straight(&stairs).and_then(|end| {
-		let stand = end.width.max(end.going);
-		well.walk_off_landing_covering(style, thickness, &end.plan_quad(), stand)
-	});
+	// Door to last inner rail: reserved rim + tread span. Capped in the strip.
+	let depth = width + MIN_LANDING;
+	let landing = Some(well.walk_off_landing_strip(style, thickness, depth));
 	(stairs, landing)
 }
 
 fn spiral_turns(well: &WellAabb, radius: f32, n: u32) -> f32 {
-	let start = angle_of(well.walk_on.into_xz());
-	let back = angle_of(well.walk_off.into_xz());
-	let mut sweep = wrap_ccw(back - start);
+	// Same yaw convention as [`circular_nodes`] so walk-off is the last azimuth.
+	let start = yaw_toward(well.walk_on.into_xz());
+	let end = yaw_toward(well.walk_off.into_xz());
+	let mut sweep = wrap_ccw(end - start);
 	if sweep < 0.2 * TAU {
 		sweep += TAU;
 	}
 	let mut turns = sweep / TAU;
 	let r = radius.max(1e-4);
-	while (turns * TAU * r) / n as f32 + 1e-4 < MIN_GOING {
+	let intervals = n.saturating_sub(1).max(1) as f32;
+	while (turns * TAU * r) / intervals + 1e-4 < MIN_GOING {
 		turns += 1.0;
 	}
 	turns
@@ -74,14 +75,15 @@ fn circular_nodes(
 	if n == 0 {
 		return Vec::new();
 	}
-	let yaw_step = turns.max(1e-4) * TAU / n as f32;
+	let sweep = turns.max(1e-4) * TAU;
 	let rise_step = rise / n as f32;
 	let (ys, yc) = start_yaw.sin_cos();
 	let rotate = |lx: f32, lz: f32| Vec2::new(yc * lx + ys * lz, -ys * lx + yc * lz);
 
 	(0..n)
 		.map(|i| {
-			let theta = i as f32 * yaw_step;
+			let t = if n == 1 { 1.0 } else { i as f32 / (n - 1) as f32 };
+			let theta = t * sweep;
 			let (s, c) = theta.sin_cos();
 			let p = center + rotate(c * radius, -s * radius);
 			let travel_yaw = start_yaw + theta + std::f32::consts::FRAC_PI_2;
@@ -100,14 +102,6 @@ fn circular_nodes(
 fn yaw_toward(dir: Vec2) -> f32 {
 	let d = if dir.length_squared() < 1e-8 { Vec2::X } else { dir.normalize() };
 	(-d.y).atan2(d.x)
-}
-
-fn angle_of(dir: Vec2) -> f32 {
-	if dir.length_squared() < 1e-8 {
-		0.0
-	} else {
-		dir.y.atan2(dir.x)
-	}
 }
 
 fn wrap_ccw(delta: f32) -> f32 {

@@ -190,86 +190,25 @@ impl WellAabb {
 		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
 	}
 
-	/// Walk-off landing: full exclusive-box span on the door, inward to `points`.
+	/// Walk-off landing: full exclusive-box span on the door, fixed inward depth.
 	///
-	/// Outer edge sits on the walk-off. Along the wall the pad takes the well's
-	/// full face (same as run-in). Inward it grows until every point is inside
-	/// and at least `min_inward` deep. Never shears off a tread leading.
-	pub fn walk_off_landing_covering(
+	/// A strip, not a hull to the last tread — that lid ate headroom on a
+	/// quarter-turn. Depth is capped at half the tighter half-extent so the
+	/// spiral hole stays open.
+	pub fn walk_off_landing_strip(
 		self,
 		style: PanelStyle,
 		thickness: f32,
-		points: &[Vec2],
-		min_inward: f32,
-	) -> Option<QuadPanel> {
-		if points.is_empty() {
-			return None;
-		}
-		let min = self.min();
-		let max = self.max();
-		let y = self.top_y();
-		let min_depth = min_inward.max(MIN_LANDING_ALONG);
-		let xs = points.iter().map(|p| p.x);
-		let zs = points.iter().map(|p| p.y);
-		let x_lo = xs.clone().fold(f32::INFINITY, f32::min);
-		let x_hi = xs.fold(f32::NEG_INFINITY, f32::max);
-		let z_lo = zs.clone().fold(f32::INFINITY, f32::min);
-		let z_hi = zs.fold(f32::NEG_INFINITY, f32::max);
-		let [a0, a1, b0, b1] = match self.walk_off {
-			WellSide::NegZ => {
-				let z_outer = min.z;
-				let z_inner = z_hi.max(z_outer + min_depth).min(max.z);
-				if z_inner - z_outer < EPS {
-					return None;
-				}
-				[
-					Vec3::new(min.x, y, z_outer),
-					Vec3::new(max.x, y, z_outer),
-					Vec3::new(min.x, y, z_inner),
-					Vec3::new(max.x, y, z_inner),
-				]
-			}
-			WellSide::PosZ => {
-				let z_outer = max.z;
-				let z_inner = z_lo.min(z_outer - min_depth).max(min.z);
-				if z_outer - z_inner < EPS {
-					return None;
-				}
-				[
-					Vec3::new(min.x, y, z_outer),
-					Vec3::new(max.x, y, z_outer),
-					Vec3::new(min.x, y, z_inner),
-					Vec3::new(max.x, y, z_inner),
-				]
-			}
-			WellSide::NegX => {
-				let x_outer = min.x;
-				let x_inner = x_hi.max(x_outer + min_depth).min(max.x);
-				if x_inner - x_outer < EPS {
-					return None;
-				}
-				[
-					Vec3::new(x_outer, y, min.z),
-					Vec3::new(x_outer, y, max.z),
-					Vec3::new(x_inner, y, min.z),
-					Vec3::new(x_inner, y, max.z),
-				]
-			}
-			WellSide::PosX => {
-				let x_outer = max.x;
-				let x_inner = x_lo.min(x_outer - min_depth).max(min.x);
-				if x_outer - x_inner < EPS {
-					return None;
-				}
-				[
-					Vec3::new(x_outer, y, min.z),
-					Vec3::new(x_outer, y, max.z),
-					Vec3::new(x_inner, y, min.z),
-					Vec3::new(x_inner, y, max.z),
-				]
-			}
+		depth: f32,
+	) -> QuadPanel {
+		let along = match self.walk_off {
+			WellSide::NegX | WellSide::PosX => self.half_z(),
+			WellSide::NegZ | WellSide::PosZ => self.half_x(),
 		};
-		Some(QuadPanel::slab(style, a0, a1, b0, b1, thickness))
+		let cap = self.half_min() * 0.55;
+		let d = depth.max(MIN_LANDING_ALONG).min(cap).max(MIN_LANDING_ALONG);
+		let [a0, a1, b0, b1] = self.side_strip(self.walk_off, self.top_y(), d, along);
+		QuadPanel::slab(style, a0, a1, b0, b1, thickness)
 	}
 
 	/// Interior midpoint of a walk-off strip of `landing_depth`.

@@ -293,6 +293,44 @@ mod tests {
 	}
 
 	#[test]
+	fn quarter_turn_landing_is_a_strip_not_a_lid() {
+		let well = ConnectingStairwell::from_well(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegX,
+				TREAD_FILL_DEFAULT,
+			),
+		);
+		let aabb = well.well();
+		let landing = well.upper_landing().expect("walk-off landing");
+		let [c0, c1, c2, c3] = landing.corners();
+		let pad_min =
+			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
+		let pad_max =
+			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		let inward = pad_max.x - pad_min.x;
+		assert!(
+			inward < aabb.half_x() + 0.04,
+			"quarter-turn landing must not lid the well, inward={inward}"
+		);
+		let center = aabb.center_xz();
+		assert!(
+			center.x < pad_min.x - 0.04 || center.x > pad_max.x + 0.04,
+			"well center {center:?} should stay off the landing {pad_min:?}..{pad_max:?}"
+		);
+		let last = well.last_tread_end().expect("last tread");
+		let door = aabb.side_mid(aabb.walk_off, aabb.top_y());
+		let last_to_door = (last.leading_mid() - Vec2::new(door.x, door.z)).length();
+		assert!(
+			last_to_door < aabb.half_min(),
+			"last tread should arrive at the walk-off strip, dist={last_to_door}"
+		);
+	}
+
+	#[test]
 	fn omitting_upper_landing_leaves_only_run_in() -> anyhow::Result<()> {
 		let lower = shaft_opening(Vec3::new(0.0, 0.0, 0.0), 1.2, 1.2, Vec2::Y)?;
 		let upper = shaft_opening(Vec3::new(0.0, 3.0, 0.0), 1.2, 1.2, Vec2::Y)?;

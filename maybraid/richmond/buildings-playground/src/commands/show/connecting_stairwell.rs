@@ -116,3 +116,99 @@ pub fn preview_stairwells(case: StairwellCase, tread_fill: f32) -> Vec<Stairwell
 		})
 		.collect()
 }
+
+/// One cell in [`crate::preview::PreviewSubject::ConnectingStairwellExamples`].
+pub struct StairwellGalleryCell {
+	pub offset: Vec3,
+	pub stairwells: Vec<Stairwell>,
+}
+
+const GALLERY_COLS: usize = 4;
+const GALLERY_GAP: f32 = 5.0;
+
+/// Door-pair, aspect, fill, and stack cases that stress the circular fitter.
+pub fn pathological_gallery() -> Vec<StairwellGalleryCell> {
+	use richmond_building_components::panels::PanelStyle;
+
+	let well = |min: Vec3, max: Vec3, on: WellSide, off: WellSide, fill: f32| {
+		WellAabb::from_plan(min, max, on, off, fill)
+	};
+	let sq = |hy: f32, hz: f32, y1: f32, on: WellSide, off: WellSide, fill: f32| {
+		well(Vec3::new(-hy, 0.0, -hz), Vec3::new(hy, y1, hz), on, off, fill)
+	};
+	const F: f32 = 0.4;
+	let specs: [(Vec<WellAabb>, bool); 12] = [
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::NegZ, F)], false),
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::PosZ, F)], false),
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::NegX, F)], false),
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::PosX, F)], false),
+		(vec![sq(0.6, 0.6, 1.5, WellSide::NegZ, WellSide::NegZ, F)], false),
+		(vec![sq(0.35, 1.4, 3.0, WellSide::NegZ, WellSide::NegZ, F)], false),
+		(vec![sq(2.0, 2.0, 0.4, WellSide::NegZ, WellSide::NegZ, F)], false),
+		(vec![sq(1.2, 1.2, 12.0, WellSide::NegZ, WellSide::NegZ, F)], false),
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::NegZ, 0.2)], false),
+		(vec![sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::NegZ, 0.95)], false),
+		(
+			vec![
+				sq(1.2, 1.2, 3.0, WellSide::NegZ, WellSide::NegZ, F),
+				well(
+					Vec3::new(-1.2, 3.0, -1.2),
+					Vec3::new(1.2, 6.0, 1.2),
+					WellSide::NegZ,
+					WellSide::NegZ,
+					F,
+				),
+			],
+			true,
+		),
+		(vec![sq(1.2, 1.2, 0.18, WellSide::NegZ, WellSide::NegZ, F)], false),
+	];
+
+	let extent = |wells: &[WellAabb]| {
+		wells.iter().fold(Vec2::ZERO, |acc, w| {
+			let s = w.max() - w.min();
+			Vec2::new(acc.x.max(s.x), acc.y.max(s.z))
+		})
+	};
+	(0..specs.len())
+		.map(|i| {
+			let offset = gallery_offset(|j| extent(&specs[j].0), specs.len(), i);
+			let (wells, omit_first) = &specs[i];
+			let stairwells = wells
+				.iter()
+				.copied()
+				.enumerate()
+				.map(|(k, w)| {
+					let s = Stairwell::from_well(PanelStyle::RoughStonework, w);
+					if *omit_first && k == 0 {
+						s.with_upper_landing(false)
+					} else {
+						s
+					}
+				})
+				.collect();
+			StairwellGalleryCell { offset, stairwells }
+		})
+		.collect()
+}
+
+fn gallery_offset(extent_at: impl Fn(usize) -> Vec2, len: usize, index: usize) -> Vec3 {
+	let col = index % GALLERY_COLS;
+	let row = index / GALLERY_COLS;
+	let mut x = 0.0;
+	for c in 0..col {
+		x += extent_at(row * GALLERY_COLS + c).x + GALLERY_GAP;
+	}
+	let mut z = 0.0;
+	for r in 0..row {
+		let mut row_depth = 0.0_f32;
+		for c in 0..GALLERY_COLS {
+			let idx = r * GALLERY_COLS + c;
+			if idx < len {
+				row_depth = row_depth.max(extent_at(idx).y);
+			}
+		}
+		z += row_depth + GALLERY_GAP;
+	}
+	Vec3::new(x, 0.0, z)
+}
