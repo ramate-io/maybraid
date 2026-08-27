@@ -6,7 +6,10 @@
 use chico_groves::GroveWorldSample;
 use procedural_common::NoiseParams;
 
-use crate::{assemble, select_cell, AssembledForest, ForestExtent, ForestGroveTile, LayeringKind};
+use crate::{
+	assemble, select_cell, AssembledForest, ForestExtent, ForestGroveTile, LayeringKind,
+	NeighborLayers,
+};
 
 /// One assembled forest cell (extent + grown grove tiles).
 #[derive(Clone)]
@@ -23,7 +26,8 @@ impl ChicoForest {
 		world: &impl GroveWorldSample,
 	) -> Self {
 		let layers = select_cell(extent, noise);
-		Self { extent, assembled: assemble(extent, layers, world) }
+		let neighbors = neighbor_layers(extent, noise);
+		Self { extent, assembled: assemble(extent, layers, neighbors, world) }
 	}
 
 	/// Pin a well-known layering and grow its typical (highest-weight) groves.
@@ -33,11 +37,23 @@ impl ChicoForest {
 		world: &impl GroveWorldSample,
 	) -> Self {
 		let layers = layering.layering().typical_layers();
-		Self { extent, assembled: assemble(extent, layers, world) }
+		// Pinned review cells share one layering; no kind change on faces.
+		Self { extent, assembled: assemble(extent, layers, NeighborLayers::none(), world) }
 	}
 
 	pub fn tiles(&self) -> impl Iterator<Item = &ForestGroveTile> {
 		self.assembled.tiles()
+	}
+}
+
+/// Hopscotch the four cardinal neighbors (selection only).
+pub fn neighbor_layers(extent: ForestExtent, noise: NoiseParams) -> NeighborLayers {
+	let (ix, iz) = ForestExtent::cell_index_containing(extent.center());
+	NeighborLayers {
+		north: Some(select_cell(ForestExtent::from_cell_index(ix, iz + 1), noise)),
+		east: Some(select_cell(ForestExtent::from_cell_index(ix + 1, iz), noise)),
+		south: Some(select_cell(ForestExtent::from_cell_index(ix, iz - 1), noise)),
+		west: Some(select_cell(ForestExtent::from_cell_index(ix - 1, iz), noise)),
 	}
 }
 
@@ -64,7 +80,10 @@ mod tests {
 		.into_iter()
 		.filter(Option::is_some)
 		.count();
-		assert_eq!(tile_count, selected);
+		assert!(
+			tile_count >= selected,
+			"each selected layer grows at least one host (blend can add more): tiles={tile_count} layers={selected}"
+		);
 		Ok(())
 	}
 
