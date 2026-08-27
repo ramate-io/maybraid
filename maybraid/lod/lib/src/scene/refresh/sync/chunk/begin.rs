@@ -1,11 +1,13 @@
 //! Per-`T` job begin with shared Presence / Desired admission.
 //!
 //! A **capped** host scan builds candidate lists; admission walks those lists in
-//! class order. The scan is limited to a multiple of remaining begin slots
-//! ([`LodChunkFulfillBudget::begin_scan_per_frame`]) and skipped when the shared
-//! clock is empty. Active begin quota is rolled into Desired (begins only start
-//! desired-level jobs). Each admitted job charges shared begin weight for
-//! **prefilled** primitives only
+//! class order after sorting each list by viewer XZ distance (near first). The
+//! scan is still round-robin and limited to a multiple of remaining begin slots
+//! ([`LodChunkFulfillBudget::begin_scan_per_frame`]) so a saturated type does not
+//! starve later `T`s. Distance only ranks **classified** candidates. The scan is
+//! skipped when the shared clock is empty. Active begin quota is rolled into
+//! Desired (begins only start desired-level jobs). Each admitted job charges
+//! shared begin weight for **prefilled** primitives only
 //! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
 use bevy::prelude::*;
@@ -17,6 +19,7 @@ use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
+use crate::scene::refresh::LodHostBounds;
 use crate::scene::LodScene;
 
 use super::super::super::viewer::LodViewer;
@@ -35,6 +38,8 @@ struct BeginCandidate {
 	level: LodSceneLevel,
 	cold: bool,
 	parent_desired: LodSceneLevel,
+	/// Viewer-to-host XZ distance squared (bounds center, then translation).
+	dist_xz: f32,
 }
 
 fn roll_active_into_desired(clock: &mut LodChunkBeginClock) {
@@ -70,6 +75,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	children_q: Query<&Children>,
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	visibilities: Query<&Visibility>,
+	host_pose: Query<(&Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
 	mut scan_cursor: Local<u32>,
 ) {
 	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
@@ -79,6 +85,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 		.map(|b| b.0)
 		.unwrap_or_else(|| point_bounds(pose.current.translation));
 	let lod_ref = pose.as_lod_ref(viewer_entity, &driver_bounds);
+	let viewer_xz = pose.current.translation;
 
 	roll_active_into_desired(&mut begin_clock);
 
@@ -117,7 +124,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 			&visibilities,
 		) {
 			push_begin_candidate(
-				candidate,
+				with_host_xz_distance(candidate, viewer_xz, host, &host_pose),
 				&mut presence_near,
 				&mut presence_far,
 				&mut desired_near,
@@ -153,7 +160,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 				&visibilities,
 			) {
 				push_begin_candidate(
-					candidate,
+					with_host_xz_distance(candidate, viewer_xz, host, &host_pose),
 					&mut presence_near,
 					&mut presence_far,
 					&mut desired_near,
@@ -174,6 +181,11 @@ pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
 	}
 
 	*scan_cursor = next_cursor;
+
+	sort_begin_near_first(&mut presence_near);
+	sort_begin_near_first(&mut presence_far);
+	sort_begin_near_first(&mut desired_near);
+	sort_begin_near_first(&mut desired_far);
 
 	let presence_first = matches!(begin_clock.first_class, FulfillClass::Presence);
 	if presence_first {
@@ -271,6 +283,37 @@ fn push_begin_candidate(
 	}
 }
 
+/// World-space XZ distance² from the viewer to the host footprint center.
+///
+/// Forest grove hosts sit at [`Transform::IDENTITY`] with a world-space
+/// [`LodHostBounds`]; translation alone would collapse them all to the origin.
+fn host_xz_distance2(origin: Vec3, transform: &Transform, bounds: Option<&LodHostBounds>) -> f32 {
+	let center = match bounds {
+		Some(b) => transform.transform_point((Vec3::from(b.0.min) + Vec3::from(b.0.max)) * 0.5),
+		None => transform.translation,
+	};
+	let dx = center.x - origin.x;
+	let dz = center.z - origin.z;
+	dx * dx + dz * dz
+}
+
+fn with_host_xz_distance(
+	mut candidate: BeginCandidate,
+	origin: Vec3,
+	host: Entity,
+	host_pose: &Query<(&Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
+) -> BeginCandidate {
+	candidate.dist_xz = host_pose
+		.get(host)
+		.map(|(transform, bounds)| host_xz_distance2(origin, transform, bounds))
+		.unwrap_or(f32::MAX);
+	candidate
+}
+
+fn sort_begin_near_first(list: &mut [BeginCandidate]) {
+	list.sort_by(|a, b| a.dist_xz.total_cmp(&b.dist_xz));
+}
+
 fn classify_begin_candidate(
 	host: Entity,
 	request: &LodLevelSpawnRequest,
@@ -350,7 +393,14 @@ fn classify_begin_candidate(
 	}
 
 	let parent_desired = parent_host_desired_or_high(host, child_of, host_levels);
-	Some(BeginCandidate { host, roots_entity, level: request.level, cold, parent_desired })
+	Some(BeginCandidate {
+		host,
+		roots_entity,
+		level: request.level,
+		cold,
+		parent_desired,
+		dist_xz: f32::MAX,
+	})
 }
 
 fn admit_candidates<T: Component + LodScene>(
@@ -424,5 +474,29 @@ fn admit_candidates<T: Component + LodScene>(
 		commands.entity(root_entity).insert(fulfillment);
 		commands.entity(candidate.roots_entity).add_child(root_entity);
 		commands.entity(candidate.host).remove::<LodLevelSpawnRequest>();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy::math::bounding::Aabb3d;
+
+	#[test]
+	fn identity_transform_uses_bounds_center() {
+		let transform = Transform::IDENTITY;
+		let bounds = LodHostBounds(Aabb3d::from_min_max(
+			Vec3::new(100.0, -1.0, -1.0),
+			Vec3::new(120.0, 1.0, 1.0),
+		));
+		let dist = host_xz_distance2(Vec3::ZERO, &transform, Some(&bounds));
+		assert!((dist - 110.0 * 110.0).abs() < 0.01);
+	}
+
+	#[test]
+	fn missing_bounds_uses_translation() {
+		let transform = Transform::from_xyz(30.0, 8.0, 40.0);
+		let dist = host_xz_distance2(Vec3::ZERO, &transform, None);
+		assert!((dist - (30.0 * 30.0 + 40.0 * 40.0)).abs() < 0.01);
 	}
 }

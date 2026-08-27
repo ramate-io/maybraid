@@ -5,13 +5,14 @@ mod test_utils;
 use bevy::prelude::*;
 
 use bevy::math::bounding::Aabb3d;
+use bevy::scene::ScenePlugin;
 
 use crate::lod_ref::LodNodePose;
 use crate::scene::host::LodLevelSpawnRequest;
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::{
-	LodCullRegionCursor, LodLevelRootPending, LodSceneCullAabb, LodSceneRefreshChunkPlugin,
-	LodSceneRefreshLevel,
+	LodChunkFulfillBudget, LodCullRegionCursor, LodHostBounds, LodLevelRootPending,
+	LodSceneCullAabb, LodSceneRefreshChunkPlugin, LodSceneRefreshLevel,
 };
 
 use test_utils::{
@@ -364,5 +365,53 @@ fn begin_retargets_stale_high_to_camera_band() -> anyhow::Result<()> {
 		}
 	}
 	assert_eq!(pending_high, 0);
+	Ok(())
+}
+
+/// Identity-transform hosts (forest groves) must rank by footprint center, not
+/// ECS spawn order. Budget 1 begin: the nearer Medium request starts first.
+#[test]
+fn begin_admits_nearer_identity_host_first() -> anyhow::Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins((AssetPlugin::default(), ScenePlugin))
+		.add_plugins(LodSceneRefreshChunkPlugin::<Probe>::default())
+		.insert_resource(LodChunkFulfillBudget { begins_per_frame: 1, ..Default::default() });
+	let viewer = spawn_viewer(app.world_mut(), Vec3::new(40.0, 0.0, 0.0));
+	app.world_mut().entity_mut(viewer).insert(LodNodePose {
+		previous: Transform::from_translation(Vec3::new(40.0, 0.0, 0.0)),
+		current: Transform::from_translation(Vec3::new(40.0, 0.0, 0.0)),
+	});
+
+	let (far, _) = spawn_host_with_roots(app.world_mut(), Vec3::ZERO, LodSceneLevel::Medium, &[]);
+	app.world_mut().entity_mut(far).insert((
+		Transform::IDENTITY,
+		LodHostBounds(Aabb3d::from_min_max(
+			Vec3::new(399.0, -1.0, -1.0),
+			Vec3::new(401.0, 1.0, 1.0),
+		)),
+		LodLevelSpawnRequest { level: LodSceneLevel::Medium },
+	));
+	let (near, _) = spawn_host_with_roots(app.world_mut(), Vec3::ZERO, LodSceneLevel::Medium, &[]);
+	app.world_mut().entity_mut(near).insert((
+		Transform::IDENTITY,
+		LodHostBounds(Aabb3d::from_min_max(Vec3::new(44.0, -1.0, -1.0), Vec3::new(46.0, 1.0, 1.0))),
+		LodLevelSpawnRequest { level: LodSceneLevel::Medium },
+	));
+
+	app.update();
+
+	assert_eq!(
+		app.world().entity(near).get::<LodLevelSpawnRequest>().map(|r| r.level),
+		None,
+		"nearer host must take the only begin slot"
+	);
+	assert_eq!(
+		app.world().entity(far).get::<LodLevelSpawnRequest>().map(|r| r.level),
+		Some(LodSceneLevel::Medium),
+		"farther host must stay queued at Medium"
+	);
+	assert_eq!(host_level(&app, near), LodSceneLevel::Medium);
+	assert_eq!(host_level(&app, far), LodSceneLevel::Medium);
 	Ok(())
 }

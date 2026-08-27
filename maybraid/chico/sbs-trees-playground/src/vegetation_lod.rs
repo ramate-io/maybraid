@@ -94,14 +94,14 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
-			spawn_weights_per_frame: 2048,
+			spawn_weights_per_frame: 1024,
 			cull_weights_per_frame: 128,
 			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 96,
 			begin_scan_per_frame: 384,
-			begin_weights_per_frame: 2048,
+			begin_weights_per_frame: 1024,
 			begin_prefill_weights_per_job: 32,
-			completes_per_frame: 2048,
+			completes_per_frame: 1024,
 		})
 		.insert_resource(SceneRefAdmitBudget { per_frame: 256, new_merge_meshes_per_frame: 64 })
 		.add_plugins((

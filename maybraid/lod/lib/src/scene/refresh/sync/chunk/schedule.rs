@@ -4,7 +4,10 @@
 //! Drain ranks by `(parent_desired, self_level)` High→… within each class
 //! (missing parent counts as High). Frame parity rotates which class runs first;
 //! leftovers cascade into the remaining classes.
-//! Round-robin cursors avoid stable ECS-order starvation within a tuple band.
+//! Begin admission sorts classified candidates by viewer XZ distance; the scan
+//! cursor still avoids classifying the same prefix every frame when the host
+//! count exceeds [`LodChunkFulfillBudget::begin_scan_per_frame`]. Drain still
+//! round-robins within a tuple band.
 
 use bevy::prelude::*;
 
