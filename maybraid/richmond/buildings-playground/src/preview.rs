@@ -48,8 +48,10 @@ use richmond_buildings::{
 	RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
 	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
 	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
-	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, DEFAULT_PANEL_THICKNESS,
+	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
+	DEFAULT_PANEL_THICKNESS,
 };
+use richmond_developments::MixedUseLesHallesDevelopment;
 #[derive(Component)]
 pub struct PreviewRoot;
 
@@ -117,6 +119,15 @@ pub enum PreviewSubject {
 		no_right: bool,
 	},
 	ConnectingHall,
+	ConnectingStairwell {
+		case: crate::commands::show::connecting_stairwell::StairwellCase,
+		tread_fill: f32,
+		kind: crate::commands::show::connecting_stairwell::StairwellFit,
+	},
+	/// Pathological wells in a grid.
+	ConnectingStairwellExamples {
+		kind: crate::commands::show::connecting_stairwell::StairwellFit,
+	},
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -439,6 +450,14 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ monotower samples shaft slots.
 		openings: Vec<PreviewOpening>,
 	},
+	/// Flattened Les Halles development (storey / stairwell / roof hosts).
+	MixedUseLesHallesDevelopment {
+		/// Confines size (XZ centered at origin; Y from 0). Tall ⇒ several storeys.
+		extent: Vec3,
+		seed: i32,
+		/// Inbound openings (`--opening`). Empty ⇒ monotower samples shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
 	IApartmentFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -559,6 +578,12 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
+			PreviewSubject::ConnectingStairwell { case, tread_fill, kind } => {
+				format!("preview: connecting-stairwell ({case:?} {kind:?} fill={tread_fill:.2})")
+			}
+			PreviewSubject::ConnectingStairwellExamples { kind } => {
+				format!("preview: connecting-stairwell-examples ({kind:?} gallery)")
+			}
 			PreviewSubject::ArcFloor {
 				radius,
 				storey_height,
@@ -1004,6 +1029,19 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::MixedUseLesHallesDevelopment {
+				extent,
+				seed,
+				ref openings,
+			} => {
+				format!(
+					"preview: mixed-use-les-halles-development (extent={:.1},{:.1},{:.1} seed={seed} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 			PreviewSubject::IApartmentFloorPlan {
 				extent,
 				seed,
@@ -1082,6 +1120,7 @@ pub struct CachedPreview {
 	les_halles_livable_full_storey: Option<LesHallesLivableFullStorey>,
 	les_halles_livable_full_storey_examples: Vec<LesHallesLivableFullStoreyExampleCell>,
 	mixed_use_les_halles_monotower: Option<MixedUseLesHallesMonotower>,
+	mixed_use_les_halles_development: Option<MixedUseLesHallesDevelopment>,
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
@@ -1246,6 +1285,7 @@ impl CachedPreview {
 		self.les_halles_livable_full_storey = None;
 		self.les_halles_livable_full_storey_examples.clear();
 		self.mixed_use_les_halles_monotower = None;
+		self.mixed_use_les_halles_development = None;
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
@@ -1523,6 +1563,14 @@ impl CachedPreview {
 					Ok(tower) => self.mixed_use_les_halles_monotower = Some(tower),
 					Err(err) => {
 						bevy::log::error!("mixed-use-les-halles-monotower fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::MixedUseLesHallesDevelopment { extent, seed, openings } => {
+				match fit_mixed_use_les_halles_development(*extent, *seed, openings) {
+					Ok(dev) => self.mixed_use_les_halles_development = Some(dev),
+					Err(err) => {
+						bevy::log::error!("mixed-use-les-halles-development fit failed: {err}");
 					}
 				}
 			}
@@ -2461,6 +2509,19 @@ fn fit_mixed_use_les_halles_monotower(
 	let confines = Confines::new(bounds, 0.0, inbound);
 	let noise = NoiseParams { seed, ..NoiseParams::default() };
 	MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).map(|(tower, _)| tower)
+}
+
+fn fit_mixed_use_les_halles_development(
+	extent: Vec3,
+	seed: i32,
+	openings: &[PreviewOpening],
+) -> Result<MixedUseLesHallesDevelopment, richmond_buildings::FitError> {
+	let bounds = les_halles_confines_bounds(extent);
+	let inbound =
+		if openings.is_empty() { Openings::new() } else { openings_from_preview(openings) };
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let noise = NoiseParams { seed, ..NoiseParams::default() };
+	MixedUseLesHallesDevelopment::fit_to_confines(&confines, noise).map(|(dev, _)| dev)
 }
 
 fn fit_les_halles_floor_plan(
@@ -3635,6 +3696,24 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
+		PreviewSubject::ConnectingStairwell { case, tread_fill, kind } => {
+			spawn_connecting_stairwell(
+				&mut commands,
+				transform,
+				*case,
+				*tread_fill,
+				*kind,
+				&lod_ref,
+			);
+		}
+		PreviewSubject::ConnectingStairwellExamples { kind } => {
+			for cell in crate::commands::show::connecting_stairwell::pathological_gallery(*kind) {
+				let tf = transform * Transform::from_translation(cell.offset);
+				for well in cell.stairwells {
+					spawn_building_preview(&mut commands, tf, &well, &lod_ref);
+				}
+			}
+		}
 		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
@@ -4348,6 +4427,17 @@ pub fn present_preview_lod(
 				spawn_building_preview(&mut commands, transform, tower, &lod_ref);
 			}
 		}
+		PreviewSubject::MixedUseLesHallesDevelopment { .. } => {
+			if let Some(dev) = cache.mixed_use_les_halles_development.as_ref() {
+				for floor in &dev.tower.floors {
+					spawn_building_preview(&mut commands, transform, floor, &lod_ref);
+				}
+				for stairwell in &dev.stairwells {
+					spawn_building_preview(&mut commands, transform, stairwell, &lod_ref);
+				}
+				spawn_building_preview(&mut commands, transform, &dev.roof, &lod_ref);
+			}
+		}
 		PreviewSubject::LesHallesLivableFullStoreyExamples => {
 			for cell in &cache.les_halles_livable_full_storey_examples {
 				let tf = transform * Transform::from_translation(cell.offset);
@@ -4411,6 +4501,21 @@ fn spawn_livable_quarters_gallery<T>(
 	for cell in cells {
 		let tf = transform * Transform::from_translation(cell.offset);
 		spawn_building_preview(commands, tf, &cell.room, lod_ref);
+	}
+}
+
+fn spawn_connecting_stairwell(
+	commands: &mut Commands,
+	transform: Transform,
+	case: crate::commands::show::connecting_stairwell::StairwellCase,
+	tread_fill: f32,
+	kind: crate::commands::show::connecting_stairwell::StairwellFit,
+	lod_ref: &lod::lod_ref::LodRef<'_>,
+) {
+	for well in
+		crate::commands::show::connecting_stairwell::preview_stairwells(case, tread_fill, kind)
+	{
+		spawn_building_preview(commands, transform, &well, lod_ref);
 	}
 }
 
@@ -4740,7 +4845,8 @@ pub fn draw_opening_plan_gizmos(
 		PreviewSubject::LesHallesFloorPlan { openings, .. }
 		| PreviewSubject::LesHallesFullStorey { openings, .. }
 		| PreviewSubject::LesHallesLivableFullStorey { openings, .. }
-		| PreviewSubject::MixedUseLesHallesMonotower { openings, .. } => {
+		| PreviewSubject::MixedUseLesHallesMonotower { openings, .. }
+		| PreviewSubject::MixedUseLesHallesDevelopment { openings, .. } => {
 			let plan = cache
 				.les_halles_floor_plan
 				.as_ref()
@@ -4751,6 +4857,13 @@ pub fn draw_opening_plan_gizmos(
 						.mixed_use_les_halles_monotower
 						.as_ref()
 						.and_then(|t| t.floors.first())
+						.map(|f| f.floor_plan())
+				})
+				.or_else(|| {
+					cache
+						.mixed_use_les_halles_development
+						.as_ref()
+						.and_then(|d| d.tower.floors.first())
 						.map(|f| f.floor_plan())
 				});
 			let red = Color::srgb(0.95, 0.2, 0.2);
@@ -5267,6 +5380,90 @@ fn draw_mapped_opening_overlays<M: MapsOpenings>(
 		let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y).normalize_or_zero();
 		gizmos.arrow(map(mid), map(mid + dir * 1.25), orange).with_tip_length(0.2);
 	}
+}
+
+/// Exclusive well box (cyan), walk-on (lime), walk-off (orange), landing (yellow),
+/// last leading (magenta).
+pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	let cells = match &config.subject {
+		PreviewSubject::ConnectingStairwell { case, tread_fill, kind } => {
+			vec![(
+				Vec3::ZERO,
+				crate::commands::show::connecting_stairwell::preview_stairwells(
+					*case,
+					*tread_fill,
+					*kind,
+				),
+			)]
+		}
+		PreviewSubject::ConnectingStairwellExamples { kind } => {
+			crate::commands::show::connecting_stairwell::pathological_gallery(*kind)
+				.into_iter()
+				.map(|c| (c.offset, c.stairwells))
+				.collect()
+		}
+		_ => return,
+	};
+	let root = config.transform;
+	for (offset, wells) in cells {
+		let tf = root * Transform::from_translation(offset);
+		for well in wells {
+			draw_stairwell_well_gizmos(&mut gizmos, tf, &well);
+		}
+	}
+}
+
+fn draw_stairwell_well_gizmos(
+	gizmos: &mut Gizmos,
+	tf: Transform,
+	well: &richmond_buildings::ConnectingStairwell,
+) {
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let yellow = Color::srgb(1.0, 0.9, 0.2);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let aabb = well.well();
+	gizmos.aabb_3d(aabb.bounds, tf, cyan);
+	draw_well_side_gizmo(gizmos, tf, aabb, aabb.walk_on, aabb.bottom_y(), lime);
+	draw_well_side_gizmo(gizmos, tf, aabb, aabb.walk_off, aabb.top_y(), orange);
+	for landing in well.mid_landings().iter().chain(well.upper_landing()) {
+		let [a0, a1, b0, b1] = landing.corners();
+		for (p, q) in [(a0, a1), (a1, b1), (b1, b0), (b0, a0)] {
+			gizmos.line(tf.transform_point(p), tf.transform_point(q), yellow);
+		}
+	}
+	if let Some(end) = well.last_tread_end() {
+		let y = well
+			.stairs()
+			.last()
+			.map(|s| s.placement.translation.y)
+			.unwrap_or_else(|| aabb.top_y());
+		let [p0, p1, p2, p3] = end.plan_quad();
+		for (a, b) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+			gizmos.line(
+				tf.transform_point(Vec3::new(a.x, y, a.y)),
+				tf.transform_point(Vec3::new(b.x, y, b.y)),
+				magenta,
+			);
+		}
+	}
+}
+
+fn draw_well_side_gizmo(
+	gizmos: &mut Gizmos,
+	tf: Transform,
+	aabb: WellAabb,
+	side: WellSide,
+	y: f32,
+	color: Color,
+) {
+	let along = match side {
+		WellSide::NegX | WellSide::PosX => aabb.half_z(),
+		WellSide::NegZ | WellSide::PosZ => aabb.half_x(),
+	};
+	let [a0, a1, ..] = aabb.side_strip(side, y, 0.05, along);
+	gizmos.line(tf.transform_point(a0), tf.transform_point(a1), color);
 }
 
 /// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation

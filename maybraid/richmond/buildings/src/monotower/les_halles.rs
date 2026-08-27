@@ -2,8 +2,8 @@
 //!
 //! One shared [`LesHallesParameterized`] shell is replayed per storey. Shaft slots
 //! merge inbound [`OpeningLabel::Shaft`] openings with a sampled 1…4 complement.
-//! Stairs are deferred — shafts remain [`SpaceKind::InternalSpace`] residuals.
-//! Roof / ground-floor special cases are owned by the tower consumer.
+//! Stairs and roof are deferred to the tower consumer — shafts remain
+//! [`SpaceKind::InternalSpace`] residuals.
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -41,6 +41,43 @@ impl MixedUseLesHallesStorey {
 
 	pub fn is_commercial(&self) -> bool {
 		matches!(self, Self::Commercial { .. })
+	}
+}
+
+impl BuildingComponents for MixedUseLesHallesStorey {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = self.floor_plan().panel_nodes_for_level(level);
+		match self {
+			Self::Commercial { usage, .. } => {
+				out.extend(usage.panel_nodes_for_level(level));
+			}
+			Self::Livable { usage, .. } => {
+				out.extend(usage.panel_nodes_for_level(level));
+			}
+		}
+		out
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		let mut out = self.floor_plan().joint_nodes_for_level(level);
+		if let Self::Livable { usage, .. } = self {
+			out.extend(usage.joint_nodes_for_level(level));
+		}
+		out
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		match self {
+			Self::Livable { usage, .. } => usage.furniture_nodes_for_level(level),
+			Self::Commercial { .. } => Layers::new(),
+		}
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		match self {
+			Self::Commercial { usage, .. } => usage.label_nodes_for_level(level),
+			Self::Livable { usage, .. } => usage.label_nodes_for_level(level),
+		}
 	}
 }
 
@@ -131,16 +168,7 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = Layers::new();
 		for floor in &self.floors {
-			match floor {
-				MixedUseLesHallesStorey::Commercial { floor_plan, usage } => {
-					out.extend(floor_plan.panel_nodes_for_level(level));
-					out.extend(usage.panel_nodes_for_level(level));
-				}
-				MixedUseLesHallesStorey::Livable { floor_plan, usage } => {
-					out.extend(floor_plan.panel_nodes_for_level(level));
-					out.extend(usage.panel_nodes_for_level(level));
-				}
-			}
+			out.extend(floor.panel_nodes_for_level(level));
 		}
 		out
 	}
@@ -148,10 +176,7 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = Layers::new();
 		for floor in &self.floors {
-			out.extend(floor.floor_plan().joint_nodes_for_level(level));
-			if let MixedUseLesHallesStorey::Livable { usage, .. } = floor {
-				out.extend(usage.joint_nodes_for_level(level));
-			}
+			out.extend(floor.joint_nodes_for_level(level));
 		}
 		out
 	}
@@ -159,9 +184,7 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
 		for floor in &self.floors {
-			if let MixedUseLesHallesStorey::Livable { usage, .. } = floor {
-				out.extend(usage.furniture_nodes_for_level(level));
-			}
+			out.extend(floor.furniture_nodes_for_level(level));
 		}
 		out
 	}
@@ -169,14 +192,7 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut out = Layers::new();
 		for floor in &self.floors {
-			match floor {
-				MixedUseLesHallesStorey::Commercial { usage, .. } => {
-					out.extend(usage.label_nodes_for_level(level));
-				}
-				MixedUseLesHallesStorey::Livable { usage, .. } => {
-					out.extend(usage.label_nodes_for_level(level));
-				}
-			}
+			out.extend(floor.label_nodes_for_level(level));
 		}
 		out
 	}

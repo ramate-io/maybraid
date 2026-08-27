@@ -12,6 +12,7 @@
 
 pub mod arc_spire;
 pub mod arcs;
+pub mod connecting;
 pub mod constraints;
 pub mod demos;
 pub mod fit;
@@ -44,6 +45,10 @@ pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
 pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
+pub use connecting::{
+	ConnectingStairwell, StairwellKind, StairwellOpening, TreadEnd, WellAabb, WellSide, RUN_IN_M,
+	SLAB_THICKNESS_M, TREAD_FILL_DEFAULT,
+};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,

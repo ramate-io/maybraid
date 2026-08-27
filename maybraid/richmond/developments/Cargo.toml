@@ -1,0 +1,22 @@
+[package]
+name = "richmond-developments"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy_math = { workspace = true }
+procedural-common = { workspace = true }
+richmond-building-components = { workspace = true }
+richmond-buildings = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

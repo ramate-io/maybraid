@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::WindowFocused;
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
@@ -31,6 +32,33 @@ pub fn setup_camera(mut commands: Commands) {
 	));
 }
 
+/// macOS screenshot (⌘⇧3 / ⌘⇧4) steals modifier key-ups. Clear them on focus
+/// change so Shift does not stay held and drop the fly camera through the floor.
+pub fn release_modifiers_on_focus_change(
+	mut keyboard: ResMut<ButtonInput<KeyCode>>,
+	mut focus: MessageReader<WindowFocused>,
+) {
+	if focus.read().next().is_none() {
+		return;
+	}
+	for key in [
+		KeyCode::ShiftLeft,
+		KeyCode::ShiftRight,
+		KeyCode::SuperLeft,
+		KeyCode::SuperRight,
+		KeyCode::ControlLeft,
+		KeyCode::ControlRight,
+		KeyCode::AltLeft,
+		KeyCode::AltRight,
+	] {
+		keyboard.release(key);
+	}
+}
+
+fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
+	keyboard.pressed(KeyCode::SuperLeft) || keyboard.pressed(KeyCode::SuperRight)
+}
+
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
@@ -41,6 +69,12 @@ pub fn camera_controller(
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
+
+	// Screenshot selection drags the mouse; Command chords are not look/fly.
+	if command_held(&keyboard_input) {
+		mouse_motion.clear();
+		return;
+	}
 
 	let mut mouse_delta = Vec2::ZERO;
 	for event in mouse_motion.read() {
@@ -78,7 +112,7 @@ pub fn camera_controller(
 	if keyboard_input.pressed(KeyCode::Space) {
 		movement += Vec3::Y;
 	}
-	if keyboard_input.pressed(KeyCode::ShiftLeft) {
+	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
 		movement -= Vec3::Y;
 	}
 

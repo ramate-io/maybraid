@@ -24,6 +24,8 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod connecting_hall;
 pub mod connecting_shells;
+pub mod connecting_stairwell;
+pub mod connecting_stairwell_examples;
 pub mod dining_room_examples;
 pub mod fitted_rectangle;
 pub mod halls_to_shafts;
@@ -47,6 +49,7 @@ pub mod livable_rectangles_examples;
 pub mod living_room_examples;
 pub mod mini_mart;
 pub mod mini_mart_examples;
+pub mod mixed_use_les_halles_development;
 pub mod mixed_use_les_halles_monotower;
 pub mod noisy_rectangular_wall;
 pub mod opening;
@@ -116,6 +119,10 @@ pub enum Show {
 	Tube(tube::Tube),
 	/// One-kink tube between two oriented openings.
 	ConnectingHall(connecting_hall::ConnectingHall),
+	/// Exclusive AABB stairwell (circular, rectangular, or run-and-landing).
+	ConnectingStairwell(connecting_stairwell::ConnectingStairwell),
+	/// Gallery of pathological exclusive-well stairwells.
+	ConnectingStairwellExamples(connecting_stairwell_examples::ConnectingStairwellExamples),
 	/// One circular storey shell with optional `--opening` plan entries.
 	ArcFloor(arc_floor::ArcFloor),
 	/// Stacked circular storey shell (explicit openings; no noise).
@@ -234,6 +241,8 @@ pub enum Show {
 	),
 	/// Mixed-use Les Halles monotower (commercial storeys below, livable above).
 	MixedUseLesHallesMonotower(mixed_use_les_halles_monotower::MixedUseLesHallesMonotower),
+	/// Flattened Les Halles development (per-floor hosts, shaft stairs, pitched roof).
+	MixedUseLesHallesDevelopment(mixed_use_les_halles_development::MixedUseLesHallesDevelopment),
 	/// I-Apartment floor plan (IFloor + primary rect residuals).
 	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
 	/// Gallery of I-Apartment floor plans via Fit (varied extents/seeds).
@@ -267,6 +276,8 @@ impl Show {
 			Self::ClippedRuledStrip(cmd) => Ok(cmd.into_preview()),
 			Self::Tube(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingHall(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingStairwell(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingStairwellExamples(cmd) => Ok(cmd.into_preview()),
 			Self::ArcFloor(cmd) => cmd.into_preview(),
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
@@ -325,6 +336,7 @@ impl Show {
 			Self::LesHallesLivableFullStorey(cmd) => cmd.into_preview(),
 			Self::LesHallesLivableFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
 			Self::MixedUseLesHallesMonotower(cmd) => cmd.into_preview(),
+			Self::MixedUseLesHallesDevelopment(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
