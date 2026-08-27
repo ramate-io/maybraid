@@ -70,6 +70,40 @@ impl ForestExtent {
 			.collect()
 	}
 
+	/// Axis-aligned XZ disk of `radius` metres around `center`.
+	pub fn xz_radius_aabb(center: Vec3, radius: f32) -> Aabb3d {
+		let r = radius.max(0.0);
+		Aabb3d::from_min_max(
+			Vec3::new(center.x - r, 0.0, center.z - r),
+			Vec3::new(center.x + r, 1.0, center.z + r),
+		)
+	}
+
+	/// World-aligned 100 m grove tiles overlapping `region` on XZ.
+	///
+	/// The grid is locked to forest cell faces (origin cell min is
+	/// [`-DEFAULT_FOREST_EXTENT_XZ / 2`](DEFAULT_FOREST_EXTENT_XZ)).
+	pub fn grove_tiles_overlapping(region: Aabb3d) -> Vec<GroveExtent> {
+		let s = DEFAULT_FOREST_GROVE_TILE_XZ;
+		let origin = -DEFAULT_FOREST_EXTENT_XZ * 0.5;
+		let ix0 = ((region.min.x - origin) / s).floor() as i32;
+		let iz0 = ((region.min.z - origin) / s).floor() as i32;
+		let max_x = (region.max.x - 1e-3).max(region.min.x);
+		let max_z = (region.max.z - 1e-3).max(region.min.z);
+		let ix1 = ((max_x - origin) / s).floor() as i32;
+		let iz1 = ((max_z - origin) / s).floor() as i32;
+		let (x0, x1) = (ix0.min(ix1), ix0.max(ix1));
+		let (z0, z1) = (iz0.min(iz1), iz0.max(iz1));
+		(x0..=x1)
+			.flat_map(|ix| {
+				(z0..=z1).map(move |iz| {
+					let min = Vec3::new(origin + ix as f32 * s, 0.0, origin + iz as f32 * s);
+					GroveExtent::new(min, min + Vec3::new(s, 1.0, s))
+				})
+			})
+			.collect()
+	}
+
 	/// AABB covering a Chebyshev ring of forest cells.
 	pub fn ring_aabb(center: (i32, i32), radius: u32) -> Aabb3d {
 		let r = radius as i32;
@@ -187,6 +221,16 @@ mod tests {
 		let tiles = ForestExtent::default_cell().default_grove_tiles();
 		assert_eq!(tiles.len(), 16 * 16);
 		assert!((tiles[0].max().x - tiles[0].min().x - DEFAULT_FOREST_GROVE_TILE_XZ).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn grove_tiles_overlapping_match_default_cell_grid() -> Result<()> {
+		let cell = ForestExtent::default_cell();
+		let world = ForestExtent::grove_tiles_overlapping(cell.aabb());
+		let subdivided = cell.default_grove_tiles();
+		assert_eq!(world.len(), subdivided.len());
+		assert!((world[0].min().x - subdivided[0].min().x).abs() < 1e-3);
 		Ok(())
 	}
 

@@ -28,7 +28,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_forests::{
-	ChicoForest, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
+	ChicoGrove, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
 	ForestPresentLattice,
 };
 use chico_material_lib::ChicoMaterialRefPlugin;
@@ -46,9 +46,9 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{
-	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
-	LodPresentCullRegionPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems,
-	LodSceneHost, LodViewer,
+	LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
+	LodPresentCullPlugin, LodPresentCullRegionPlugin, LodPresentPlugin, LodPresentRegionPlugin,
+	LodPresentSystems, LodSceneHost, LodViewer,
 };
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -91,13 +91,14 @@ pub fn register_vegetation_view(app: &mut App) {
 fn register_forest_lod(app: &mut App) {
 	app.init_resource::<ForestIndex>()
 		.init_resource::<ForestPresenterState>()
+		.insert_resource(LodGenerateBudget { ids_per_frame: 16 })
 		.add_plugins(LodGenerateRegionPlugin::<
 			ForestGenerateBullseye,
 			With<LodViewer>,
 			ForestLodChan,
 		>::default())
 		.add_plugins(LodGeneratePlugin::<
-			ChicoForest,
+			ChicoGrove,
 			ForestIndex,
 			ForestLodChan,
 			With<LodViewer>,
@@ -108,7 +109,7 @@ fn register_forest_lod(app: &mut App) {
 			ForestLodChan,
 		>::default())
 		.add_plugins(LodPresentPlugin::<
-			ChicoForest,
+			ChicoGrove,
 			ForestIndex,
 			ForestRegionPresenter,
 			ForestLodChan,
@@ -120,7 +121,7 @@ fn register_forest_lod(app: &mut App) {
 			ForestLodChan,
 		>::default())
 		.add_plugins(LodPresentCullPlugin::<
-			ChicoForest,
+			ChicoGrove,
 			ForestIndex,
 			ForestRegionPresenter,
 			ForestLodChan,

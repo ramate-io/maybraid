@@ -10,7 +10,7 @@ use crate::blend::{
 	hash_unit_xz, neighbor_tile_steps, pick_kind, tile_center_xz, BlendSlot, Cardinal,
 	GROVE_BLEND_RADIUS,
 };
-use crate::{ForestExtent, ForestGroveKind, SelectedLayers};
+use crate::{ForestExtent, ForestGroveKind, ForestGroveRecipe, ForestLayer, SelectedLayers};
 
 /// One grown grove tile (concrete grove type).
 #[derive(Clone)]
@@ -93,7 +93,7 @@ fn grow_layer(
 	tiles: &[GroveExtent],
 	forest: ForestExtent,
 	neighbors: &NeighborLayers,
-	layer: LayerSlot,
+	layer: ForestLayer,
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
 	if kind.is_none() && !neighbors.any_kind(layer) {
@@ -122,30 +122,11 @@ impl NeighborLayers {
 		Self { north: None, east: None, south: None, west: None }
 	}
 
-	fn any_kind(self, layer: LayerSlot) -> bool {
+	pub fn any_kind(self, layer: ForestLayer) -> bool {
 		[self.north, self.east, self.south, self.west]
 			.into_iter()
 			.flatten()
 			.any(|layers| layer.kind(layers).is_some())
-	}
-}
-
-#[derive(Clone, Copy)]
-enum LayerSlot {
-	Tufts,
-	Understory,
-	LowerCanopy,
-	UpperCanopy,
-}
-
-impl LayerSlot {
-	fn kind(self, layers: SelectedLayers) -> Option<ForestGroveKind> {
-		match self {
-			Self::Tufts => layers.tufts,
-			Self::Understory => layers.understory,
-			Self::LowerCanopy => layers.lower_canopy,
-			Self::UpperCanopy => layers.upper_canopy,
-		}
 	}
 }
 
@@ -155,7 +136,7 @@ fn produced_kind_at(
 	forest: ForestExtent,
 	self_kind: Option<ForestGroveKind>,
 	neighbors: &NeighborLayers,
-	layer: LayerSlot,
+	layer: ForestLayer,
 ) -> Option<Option<ForestGroveKind>> {
 	if forest.owns_center_xz(center) {
 		return Some(self_kind);
@@ -205,7 +186,7 @@ fn blend_sources(
 	forest: ForestExtent,
 	self_kind: Option<ForestGroveKind>,
 	neighbors: &NeighborLayers,
-	layer: LayerSlot,
+	layer: ForestLayer,
 ) -> Vec<BlendSlot> {
 	let mut slots = Vec::with_capacity(1 + 4 * GROVE_BLEND_RADIUS as usize);
 	slots.push(BlendSlot { center: tile_center_xz(tile), kind: self_kind });
@@ -220,30 +201,43 @@ fn blend_sources(
 	slots
 }
 
-fn grow_presenting_tile(
+/// Softmax blend for one presenting tile. Does not grow plants.
+pub fn presenting_recipes(
 	kind: Option<ForestGroveKind>,
 	extent: GroveExtent,
 	forest: ForestExtent,
 	neighbors: &NeighborLayers,
-	layer: LayerSlot,
-	world: &impl GroveWorldSample,
-) -> Vec<ForestGroveTile> {
+	layer: ForestLayer,
+) -> Vec<ForestGroveRecipe> {
 	let slots = blend_sources(extent, forest, kind, neighbors, layer);
 	if !BlendSlot::has_planted(&slots) {
 		return Vec::new();
 	}
 	if let Some(only) = BlendSlot::uniform_planted_kind(&slots) {
-		return vec![grow_tile(only, extent, world)];
+		return vec![ForestGroveRecipe::uniform(only, extent)];
 	}
-	grow_blended(kind, extent, &slots, world)
+	recipe_blended(kind, extent, &slots)
 }
 
-fn grow_blended(
+fn grow_presenting_tile(
+	kind: Option<ForestGroveKind>,
+	extent: GroveExtent,
+	forest: ForestExtent,
+	neighbors: &NeighborLayers,
+	layer: ForestLayer,
+	world: &impl GroveWorldSample,
+) -> Vec<ForestGroveTile> {
+	presenting_recipes(kind, extent, forest, neighbors, layer)
+		.into_iter()
+		.map(|recipe| recipe.grow(world))
+		.collect()
+}
+
+fn recipe_blended(
 	self_kind: Option<ForestGroveKind>,
 	extent: GroveExtent,
 	slots: &[BlendSlot],
-	world: &impl GroveWorldSample,
-) -> Vec<ForestGroveTile> {
+) -> Vec<ForestGroveRecipe> {
 	use std::collections::HashMap;
 
 	use chico_groves::cell_center;
@@ -275,7 +269,7 @@ fn grow_blended(
 	buckets
 		.into_iter()
 		.filter(|(_, cells)| !cells.is_empty())
-		.map(|(kind, cells)| kind.grow_on_cells(extent, &cells, world))
+		.map(|(kind, cells)| ForestGroveRecipe::on_cells(kind, extent, cells))
 		.collect()
 }
 
@@ -293,13 +287,13 @@ pub fn assemble(
 	let tiles = extent.default_grove_tiles();
 	AssembledForest {
 		layers,
-		tufts: grow_layer(layers.tufts, &tiles, extent, &neighbors, LayerSlot::Tufts, world),
+		tufts: grow_layer(layers.tufts, &tiles, extent, &neighbors, ForestLayer::Tufts, world),
 		understory: grow_layer(
 			layers.understory,
 			&tiles,
 			extent,
 			&neighbors,
-			LayerSlot::Understory,
+			ForestLayer::Understory,
 			world,
 		),
 		lower_canopy: grow_layer(
@@ -307,7 +301,7 @@ pub fn assemble(
 			&tiles,
 			extent,
 			&neighbors,
-			LayerSlot::LowerCanopy,
+			ForestLayer::LowerCanopy,
 			world,
 		),
 		upper_canopy: grow_layer(
@@ -315,7 +309,7 @@ pub fn assemble(
 			&tiles,
 			extent,
 			&neighbors,
-			LayerSlot::UpperCanopy,
+			ForestLayer::UpperCanopy,
 			world,
 		),
 	}
@@ -333,7 +327,7 @@ pub fn assemble_isolated(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{select_cell, ForestGroveKind, LayeringKind, SelectedLayers};
+	use crate::{select_cell, ForestGroveKind, ForestLayer, LayeringKind, SelectedLayers};
 	use anyhow::Result;
 	use bevy_math::Vec3;
 	use chico_groves::FlatTerrainSample;
@@ -426,7 +420,7 @@ mod tests {
 			forest,
 			Some(ForestGroveKind::Orchard),
 			&neighbors,
-			LayerSlot::UpperCanopy,
+			ForestLayer::UpperCanopy,
 		);
 		let east = tile_center_xz(neighbor_tile_steps(interior, Cardinal::East, 1));
 		let east_kind = slots.iter().find(|slot| {
@@ -465,7 +459,7 @@ mod tests {
 			forest,
 			Some(ForestGroveKind::Orchard),
 			&neighbors,
-			LayerSlot::UpperCanopy,
+			ForestLayer::UpperCanopy,
 		);
 		assert!(
 			slots.iter().any(|slot| slot.kind == Some(ForestGroveKind::RollingOaks)),

@@ -5,8 +5,9 @@ use std::collections::{HashMap, HashSet};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_forests::{
-	match_forest_grove_tile, ChicoForest, ForestExtent, ForestGenerateBullseye, ForestGroveTile,
-	ForestIndex, ForestLodChan, ForestPresentBullseye, ForestPresentLattice, LayeringKind,
+	forest_world_sample, match_forest_grove_tile, ChicoGrove, ForestExtent, ForestGenerateBullseye,
+	ForestGroveTile, ForestIndex, ForestLodChan, ForestPresentBullseye, ForestPresentLattice,
+	LayeringKind, DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene, Version};
@@ -17,7 +18,7 @@ use crate::camera::CameraController;
 use crate::commands::show::{ShowConfig, ShowRoot, ShowSubject};
 use crate::ground::GroundPlane;
 
-/// Default Chebyshev present ring (`3 × 3` when radius is 1).
+/// Default present ring multiplier (`1` → 1 km present / 2 km generate).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
 
 /// Hopscotch default so neighboring 1600 m cells stay related.
@@ -36,10 +37,10 @@ const DEFAULT_CAMERA_SPEED: f32 = 18.0;
 
 #[derive(Resource, Default)]
 pub struct ForestPresenterState {
-	presented: HashMap<Id, PresentedForest>,
+	presented: HashMap<Id, PresentedGrove>,
 }
 
-struct PresentedForest {
+struct PresentedGrove {
 	version: Version,
 	entities: Vec<Entity>,
 	hidden: bool,
@@ -56,7 +57,7 @@ impl ForestPresenterState {
 	}
 }
 
-/// Spawns grove [`LodScene`] hosts for a generated forest cell.
+/// Spawns grove [`LodScene`] hosts for a generated [`ChicoGrove`].
 #[derive(SystemParam)]
 pub struct ForestRegionPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
@@ -82,29 +83,33 @@ fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> V
 	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g))
 }
 
-impl RegionPresenter<ChicoForest, ForestIndex> for ForestRegionPresenter<'_, '_> {
+impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> {
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented.get(&id).map(|entry| entry.version)
 	}
 
-	fn handle(&mut self, id: Id, version: Version, forest: &ChicoForest, _lod_ref: &LodRef) {
+	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, _lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
 			for entity in previous.entities {
 				self.commands.entity(entity).despawn();
 			}
 		}
+		let world = forest_world_sample();
 		let mut entities = Vec::new();
-		for tile in forest.tiles() {
-			entities.extend(spawn_forest_grove_tile(&mut self.commands, tile));
+		for tile in grove.grow(&world) {
+			entities.extend(spawn_forest_grove_tile(&mut self.commands, &tile));
 		}
-		info!(
-			"presented forest cell layering={:?} tiles={}",
-			forest.assembled.layers.layering,
-			entities.len()
-		);
+		if !entities.is_empty() {
+			info!(
+				"presented grove layer={:?} recipes={} hosts={}",
+				grove.layer,
+				grove.recipes.len(),
+				entities.len()
+			);
+		}
 		self.state
 			.presented
-			.insert(id, PresentedForest { version, entities, hidden: false });
+			.insert(id, PresentedGrove { version, entities, hidden: false });
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -143,8 +148,8 @@ pub(crate) struct ForestStreamLod<'w> {
 	generate: ResMut<'w, ForestGenerateBullseye>,
 	present: ResMut<'w, ForestPresentBullseye>,
 	lattice: ResMut<'w, ForestPresentLattice>,
-	generate_queue: ResMut<'w, LodGenerateQueue<ChicoForest>>,
-	present_queue: ResMut<'w, LodPresentQueue<ChicoForest>>,
+	generate_queue: ResMut<'w, LodGenerateQueue<ChicoGrove>>,
+	present_queue: ResMut<'w, LodPresentQueue<ChicoGrove>>,
 	presenter: ResMut<'w, ForestPresenterState>,
 	generate_regions: MessageWriter<'w, LodGenerateRegion<ForestLodChan>>,
 	present_regions: MessageWriter<'w, LodPresentRegion<ForestLodChan>>,
@@ -203,11 +208,12 @@ pub fn stream_forest(
 
 	lod.index.noise = *noise;
 	lod.index.layering = *layering;
-	lod.generate.radius = stream_radius.saturating_add(1);
+	let (present_m, generate_m) = stream_radii_m(*stream_radius);
+	lod.generate.radius_m = generate_m;
 	lod.generate.enabled = true;
-	lod.present.radius = *stream_radius;
+	lod.present.radius_m = present_m;
 	lod.present.enabled = true;
-	*lod.lattice = ForestPresentLattice::from_stream_radius(*stream_radius);
+	*lod.lattice = ForestPresentLattice::from_radii_m(present_m, generate_m);
 
 	let Ok(cam) = camera.single() else {
 		return;
@@ -217,15 +223,22 @@ pub fn stream_forest(
 		ground_tf.translation.z = cam.translation.z;
 	}
 
-	let center = ForestExtent::cell_index_containing(cam.translation);
-	let generate_aabb = ForestExtent::ring_aabb(center, lod.generate.radius);
-	let present_aabb = ForestExtent::ring_aabb(center, lod.present.radius);
+	let generate_aabb = ForestExtent::xz_radius_aabb(cam.translation, generate_m);
+	let present_aabb = ForestExtent::xz_radius_aabb(cam.translation, present_m);
 	lod.generate_keep.region = Some(generate_aabb);
 	lod.keep.region = Some(present_aabb);
 	if key_changed {
 		lod.generate_regions.write(LodGenerateRegion::new(generate_aabb));
 		lod.present_regions.write(LodPresentRegion::new(present_aabb));
 	}
+}
+
+fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
+	if stream_radius == 0 {
+		return (DEFAULT_FOREST_GROVE_TILE_XZ, DEFAULT_FOREST_GROVE_TILE_XZ * 2.0);
+	}
+	let present = GROVE_PRESENT_RADIUS_M * stream_radius as f32;
+	(present, present + (GROVE_GENERATE_RADIUS_M - GROVE_PRESENT_RADIUS_M))
 }
 
 #[cfg(test)]
@@ -254,12 +267,13 @@ mod tests {
 	}
 
 	#[test]
-	fn generate_ring_is_present_plus_one() -> Result<()> {
-		let r = DEFAULT_FOREST_STREAM_RADIUS;
-		let present = ForestExtent::cell_ring((0, 0), r).count();
-		let generate = ForestExtent::cell_ring((0, 0), r.saturating_add(1)).count();
-		assert_eq!(present, 9);
-		assert_eq!(generate, 25);
+	fn default_stream_radii_are_one_and_two_kilometres() -> Result<()> {
+		let (present, generate) = stream_radii_m(DEFAULT_FOREST_STREAM_RADIUS);
+		assert!((present - GROVE_PRESENT_RADIUS_M).abs() < 1e-3);
+		assert!((generate - GROVE_GENERATE_RADIUS_M).abs() < 1e-3);
+		let (tight_present, tight_generate) = stream_radii_m(0);
+		assert!((tight_present - DEFAULT_FOREST_GROVE_TILE_XZ).abs() < 1e-3);
+		assert!(tight_generate > tight_present);
 		Ok(())
 	}
 }

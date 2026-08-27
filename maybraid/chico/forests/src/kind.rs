@@ -105,6 +105,49 @@ pub struct SelectedLayers {
 	pub upper_canopy: Option<ForestGroveKind>,
 }
 
+/// One forest vegetation layer. A 100 m tile may store one [`crate::ChicoGrove`] per layer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ForestLayer {
+	Tufts,
+	Understory,
+	LowerCanopy,
+	UpperCanopy,
+}
+
+impl ForestLayer {
+	pub const ALL: [Self; 4] =
+		[Self::Tufts, Self::Understory, Self::LowerCanopy, Self::UpperCanopy];
+
+	pub fn kind(self, layers: SelectedLayers) -> Option<ForestGroveKind> {
+		match self {
+			Self::Tufts => layers.tufts,
+			Self::Understory => layers.understory,
+			Self::LowerCanopy => layers.lower_canopy,
+			Self::UpperCanopy => layers.upper_canopy,
+		}
+	}
+
+	/// Origin-cell Y used to distinguish stacked grove ids on the same 100 m tile.
+	pub fn id_y(self) -> f32 {
+		match self {
+			Self::Tufts => 0.0,
+			Self::Understory => 1.0,
+			Self::LowerCanopy => 2.0,
+			Self::UpperCanopy => 3.0,
+		}
+	}
+
+	pub fn from_id_y(y: f32) -> Option<Self> {
+		match y.floor() as i32 {
+			0 => Some(Self::Tufts),
+			1 => Some(Self::Understory),
+			2 => Some(Self::LowerCanopy),
+			3 => Some(Self::UpperCanopy),
+			_ => None,
+		}
+	}
+}
+
 impl LayeringKind {
 	pub const ALL: &[Self] = &[
 		Self::LushJungle,

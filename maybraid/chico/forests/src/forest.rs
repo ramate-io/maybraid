@@ -1,48 +1,28 @@
-//! Chico forest model: Hopscotch a cell, then grow the selected grove tiles.
+//! Chico forest model: Hopscotch a cell to selected grove kinds.
 //!
-//! This is a generation result, not a `LodScene` host. Playgrounds spawn the
-//! concrete groves underneath.
+//! This is a generation result, not a `LodScene` host. Growing plants is
+//! [`crate::ChicoGrove`] / [`crate::assemble`], not this type.
 
-use chico_groves::GroveWorldSample;
 use procedural_common::NoiseParams;
 
-use crate::{
-	assemble, select_cell, AssembledForest, ForestExtent, ForestGroveTile, LayeringKind,
-	NeighborLayers,
-};
+use crate::{select_cell, ForestExtent, LayeringKind, NeighborLayers, SelectedLayers};
 
-/// One assembled forest cell (extent + grown grove tiles).
-#[derive(Clone)]
+/// One selected forest cell (extent + per-layer grove kinds).
+#[derive(Clone, Debug)]
 pub struct ChicoForest {
 	pub extent: ForestExtent,
-	pub assembled: AssembledForest,
+	pub layers: SelectedLayers,
 }
 
 impl ChicoForest {
-	/// Hopscotch + per-layer Bucket Throw, then grow default groves on the cell grid.
-	pub fn assemble_on(
-		extent: ForestExtent,
-		noise: NoiseParams,
-		world: &impl GroveWorldSample,
-	) -> Self {
-		let layers = select_cell(extent, noise);
-		let neighbors = neighbor_layers(extent, noise);
-		Self { extent, assembled: assemble(extent, layers, neighbors, world) }
+	/// Hopscotch + per-layer Bucket Throw. Does not grow tiles.
+	pub fn select_on(extent: ForestExtent, noise: NoiseParams) -> Self {
+		Self { extent, layers: select_cell(extent, noise) }
 	}
 
-	/// Pin a well-known layering and grow its typical (highest-weight) groves.
-	pub fn assemble_layering(
-		extent: ForestExtent,
-		layering: LayeringKind,
-		world: &impl GroveWorldSample,
-	) -> Self {
-		let layers = layering.layering().typical_layers();
-		// Pinned review cells share one layering; neighbor slots agree.
-		Self { extent, assembled: assemble(extent, layers, NeighborLayers::none(), world) }
-	}
-
-	pub fn tiles(&self) -> impl Iterator<Item = &ForestGroveTile> {
-		self.assembled.tiles()
+	/// Pin a well-known layering's typical (highest-weight) groves.
+	pub fn select_layering(extent: ForestExtent, layering: LayeringKind) -> Self {
+		Self { extent, layers: layering.layering().typical_layers() }
 	}
 }
 
@@ -62,41 +42,31 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use bevy_math::Vec3;
-	use chico_groves::FlatTerrainSample;
 
 	#[test]
-	fn assemble_on_one_tile_cell_grows_selected_layers() -> Result<()> {
+	fn select_on_records_extent_and_layers() -> Result<()> {
 		let extent = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
-		let forest =
-			ChicoForest::assemble_on(extent, NoiseParams::default(), &FlatTerrainSample::default());
+		let forest = ChicoForest::select_on(extent, NoiseParams::default());
 		assert_eq!(forest.extent, extent);
-		let tile_count = forest.tiles().count();
 		let selected = [
-			forest.assembled.layers.tufts,
-			forest.assembled.layers.understory,
-			forest.assembled.layers.lower_canopy,
-			forest.assembled.layers.upper_canopy,
+			forest.layers.tufts,
+			forest.layers.understory,
+			forest.layers.lower_canopy,
+			forest.layers.upper_canopy,
 		]
 		.into_iter()
 		.filter(Option::is_some)
 		.count();
-		assert!(
-			tile_count >= selected,
-			"each selected layer grows at least one host (blend can add more): tiles={tile_count} layers={selected}"
-		);
+		assert!(selected <= 4);
 		Ok(())
 	}
 
 	#[test]
-	fn assemble_layering_uses_typical_lush_jungle_groves() -> Result<()> {
+	fn select_layering_uses_typical_lush_jungle_groves() -> Result<()> {
 		let extent = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
-		let forest = ChicoForest::assemble_layering(
-			extent,
-			LayeringKind::LushJungle,
-			&FlatTerrainSample::default(),
-		);
-		assert_eq!(forest.assembled.layers.layering, LayeringKind::LushJungle);
-		assert!(forest.tiles().next().is_some());
+		let forest = ChicoForest::select_layering(extent, LayeringKind::LushJungle);
+		assert_eq!(forest.layers.layering, LayeringKind::LushJungle);
+		assert!(forest.layers.upper_canopy.is_some());
 		Ok(())
 	}
 }
