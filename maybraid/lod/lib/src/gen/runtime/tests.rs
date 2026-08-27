@@ -94,3 +94,75 @@ fn drain_generate_picks_up_keep_region_without_a_new_message() -> Result<()> {
 	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(2.0))).is_some());
 	Ok(())
 }
+
+#[test]
+fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(WorldIndex::default())
+		.insert_resource(LodGenerateBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodGenerateKeepRegion::<GenChan>::default();
+			keep.region = Some(cell(0.0));
+			keep
+		})
+		.insert_resource({
+			let mut queue = LodGenerateQueue::<Vegetation>::default();
+			queue.pending.push_back(Id::from_cell(cell(250.0)));
+			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue
+		})
+		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
+		.world_mut()
+		.spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+	app.update();
+
+	let index = app.world().resource::<WorldIndex>();
+	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(0.0))).is_some());
+	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(250.0))).is_none());
+	let queue = app.world().resource::<LodGenerateQueue<Vegetation>>();
+	assert!(!queue.pending.contains(&Id::from_cell(cell(250.0))));
+	Ok(())
+}
+
+#[test]
+fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(WorldIndex::default())
+		.insert_resource(LodGenerateBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodGenerateKeepRegion::<GenChan>::default();
+			keep.region = Some(cell(100.0));
+			keep
+		})
+		.insert_resource({
+			let mut queue = LodGenerateQueue::<Vegetation>::default();
+			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue
+		})
+		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
+		.world_mut()
+		.spawn((
+			LodNode,
+			LodNodePose { current: Transform::from_xyz(100.4, 0.0, 0.0), ..default() },
+			Transform::from_xyz(100.4, 0.0, 0.0),
+		));
+	app.update();
+
+	let still_pending = app
+		.world()
+		.resource::<LodGenerateQueue<Vegetation>>()
+		.pending
+		.contains(&Id::from_cell(cell(0.0)));
+	let generated = SpatialIndex::<Vegetation>::get(
+		app.world().resource::<WorldIndex>(),
+		Id::from_cell(cell(0.0)),
+	)
+	.is_some();
+	assert!(
+		still_pending || generated,
+		"cell one tile behind keep must stay queued or generate, not expire"
+	);
+	Ok(())
+}

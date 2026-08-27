@@ -8,7 +8,9 @@ use bevy::ecs::query::QueryFilter;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
-use crate::gen::{GeneratingSpatialIndex, GenerationScheme, Id, StorageStatus};
+use crate::gen::{
+	expire_pending_outside_keep, GeneratingSpatialIndex, GenerationScheme, Id, StorageStatus,
+};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -150,6 +152,8 @@ pub fn drain_lod_generate<T, S, M, F>(
 			}
 		}
 	}
+
+	expire_pending_outside_keep(&mut queue.pending, keep.region);
 
 	if queue.pending.is_empty() {
 		return;

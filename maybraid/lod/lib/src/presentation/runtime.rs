@@ -9,7 +9,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use super::RegionPresenter;
-use crate::gen::{Id, SpatialIndex};
+use crate::gen::{expire_pending_outside_keep, Id, SpatialIndex};
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
 	LodNodePose, LodNodeSystems,
@@ -196,6 +196,8 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 			}
 		}
 	}
+
+	expire_pending_outside_keep(&mut queue.pending, keep.region);
 
 	if queue.pending.is_empty() {
 		return;
