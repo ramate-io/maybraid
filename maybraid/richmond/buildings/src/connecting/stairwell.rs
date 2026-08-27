@@ -4,8 +4,10 @@
 //! Two horizontal shaft faces allocate one orthogonal box. Offset / skew / size
 //! mismatch is another well (or a hall), not a polyline. Walk-off is a landing.
 //! The last tread arrives at that landing's interior edge (the back-point).
-//! Extra laps exist only to keep going above a floor when headroom still holds.
+//! Extra laps for going exist only when headroom still holds. Run-and-landing
+//! may add one routing switchback so a leftover U is not required.
 
+mod laws;
 mod opening;
 mod rect;
 mod run_and_landing;
@@ -81,14 +83,14 @@ impl ConnectingStairwell {
 	/// Fit [`StairwellKind`] into an already-allocated exclusive box.
 	pub fn from_well_kind(style: PanelStyle, well: WellAabb, kind: StairwellKind) -> Self {
 		let slab_thickness = SLAB_THICKNESS_M;
-		let (stairs, landing, mids) = fit_kind(&well, style, slab_thickness, kind, true);
+		let Fit { stairs, door, mids } = fit_kind(&well, style, slab_thickness, kind, true);
 		Self {
 			style,
 			kind,
 			run_in: well.run_in_slab(style, slab_thickness),
 			want_landing: true,
 			slab_thickness,
-			upper_landing: landing,
+			upper_landing: door,
 			mid_landings: mids,
 			stairs,
 			well,
@@ -146,11 +148,11 @@ impl ConnectingStairwell {
 	}
 
 	fn rebuild(&mut self) {
-		let (stairs, landing, mids) =
+		let Fit { stairs, door, mids } =
 			fit_kind(&self.well, self.style, self.slab_thickness, self.kind, self.want_landing);
 		self.stairs = stairs;
 		self.run_in = self.well.run_in_slab(self.style, self.slab_thickness);
-		self.upper_landing = landing;
+		self.upper_landing = door;
 		self.mid_landings = mids;
 	}
 
@@ -223,22 +225,28 @@ impl BuildingComponents for ConnectingStairwell {
 	}
 }
 
+pub(crate) struct Fit {
+	pub(crate) stairs: Vec<StairNode>,
+	pub(crate) door: Option<QuadPanel>,
+	pub(crate) mids: Vec<QuadPanel>,
+}
+
+impl Fit {
+	fn with_door(self, want: bool) -> Self {
+		Self { door: want.then_some(self.door).flatten(), ..self }
+	}
+}
+
 fn fit_kind(
 	well: &WellAabb,
 	style: PanelStyle,
 	thickness: f32,
 	kind: StairwellKind,
 	want_landing: bool,
-) -> (Vec<StairNode>, Option<QuadPanel>, Vec<QuadPanel>) {
+) -> Fit {
 	match kind {
-		StairwellKind::Circular => {
-			let (stairs, landing) = spiral::fit(well, style, thickness);
-			(stairs, want_landing.then_some(landing).flatten(), Vec::new())
-		}
-		StairwellKind::Rectangular => {
-			let (stairs, landing, mids) = rect::fit(well, style, thickness);
-			(stairs, want_landing.then_some(landing).flatten(), mids)
-		}
+		StairwellKind::Circular => spiral::fit(well, style, thickness).with_door(want_landing),
+		StairwellKind::Rectangular => rect::fit(well, style, thickness).with_door(want_landing),
 		StairwellKind::RunAndLanding => run_and_landing::fit(well, style, thickness, want_landing),
 	}
 }
@@ -274,6 +282,19 @@ mod tests {
 		let tl = far - right * half_w;
 		let tr = far + right * half_w;
 		Ok(MappedOpening::from_corners(bl, br, tl, tr, orient))
+	}
+
+	fn pad_aabb(panel: &QuadPanel) -> (Vec2, Vec2) {
+		let [c0, c1, c2, c3] = panel.corners();
+		(
+			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z)),
+			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z)),
+		)
+	}
+
+	fn covers(pad: &QuadPanel, p: Vec2) -> bool {
+		let (mn, mx) = pad_aabb(pad);
+		p.x >= mn.x - 0.04 && p.x <= mx.x + 0.04 && p.y >= mn.y - 0.04 && p.y <= mx.y + 0.04
 	}
 
 	#[test]
@@ -334,28 +355,15 @@ mod tests {
 			last_to_door > 0.15,
 			"last tread must not sit on the walk-off, dist={last_to_door}"
 		);
-		let [c0, c1, c2, c3] = landing.corners();
-		let pad_min =
-			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
-		let pad_max =
-			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		let (pad_min, pad_max) = pad_aabb(landing);
 		for (label, p) in [("outer", last.leading_outer), ("inner", last.leading_inner)] {
-			assert!(
-				p.x >= pad_min.x - 0.04
-					&& p.x <= pad_max.x + 0.04
-					&& p.y >= pad_min.y - 0.04
-					&& p.y <= pad_max.y + 0.04,
-				"landing must cover last leading {label} {p:?}, pad {pad_min:?}..{pad_max:?}"
-			);
+			assert!(covers(landing, p), "landing must cover last leading {label} {p:?}");
 		}
 		let along = match aabb.walk_off {
 			WellSide::NegZ | WellSide::PosZ => pad_max.x - pad_min.x,
 			WellSide::NegX | WellSide::PosX => pad_max.y - pad_min.y,
 		};
-		let well_along = match aabb.walk_off {
-			WellSide::NegZ | WellSide::PosZ => aabb.max().x - aabb.min().x,
-			WellSide::NegX | WellSide::PosX => aabb.max().z - aabb.min().z,
-		};
+		let well_along = 2.0 * aabb.face_half(aabb.walk_off);
 		assert!(
 			(along - well_along).abs() < 0.04,
 			"landing along-wall {along} should span the well face {well_along}"
@@ -377,11 +385,7 @@ mod tests {
 		);
 		let aabb = well.well();
 		let landing = well.upper_landing().expect("walk-off landing");
-		let [c0, c1, c2, c3] = landing.corners();
-		let pad_min =
-			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
-		let pad_max =
-			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		let (pad_min, pad_max) = pad_aabb(landing);
 		let inward = pad_max.x - pad_min.x;
 		assert!(
 			inward < aabb.half_x() + 0.04,
@@ -450,7 +454,7 @@ mod tests {
 				panic!("spiral well should emit Straight treads");
 			};
 			assert!(
-				g.going_per_tread() + 1e-3 >= spiral::MIN_GOING,
+				g.going_per_tread() + 1e-3 >= laws::MIN_GOING,
 				"going {} below floor",
 				g.going_per_tread()
 			);
@@ -570,11 +574,7 @@ mod tests {
 		);
 		let aabb = well.well();
 		let landing = well.upper_landing().expect("walk-off");
-		let [c0, c1, c2, c3] = landing.corners();
-		let pad_min =
-			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
-		let pad_max =
-			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		let (pad_min, pad_max) = pad_aabb(landing);
 		let center = aabb.center_xz();
 		assert!(
 			center.x < pad_min.x - 0.04 || center.x > pad_max.x + 0.04,
@@ -654,19 +654,6 @@ mod tests {
 			WellAabb::from_plan(min, max, on, off, TREAD_FILL_DEFAULT),
 			StairwellKind::RunAndLanding,
 		)
-	}
-
-	fn pad_aabb(panel: &QuadPanel) -> (Vec2, Vec2) {
-		let [c0, c1, c2, c3] = panel.corners();
-		(
-			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z)),
-			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z)),
-		)
-	}
-
-	fn covers(pad: &QuadPanel, p: Vec2) -> bool {
-		let (mn, mx) = pad_aabb(pad);
-		p.x >= mn.x - 0.04 && p.x <= mx.x + 0.04 && p.y >= mn.y - 0.04 && p.y <= mx.y + 0.04
 	}
 
 	#[test]

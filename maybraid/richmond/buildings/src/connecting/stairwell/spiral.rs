@@ -3,56 +3,46 @@
 //! Inscribe a circle so the outer rail stays in the box. First tread at the
 //! walk-on azimuth, last at the walk-off. The walk-off landing is a door strip
 //! authored first; the last leading arrives on that strip. Extra turns only
-//! when going would fall under [`MIN_GOING`] and rise-per-turn still has
-//! [`MIN_HEADROOM`].
+//! when going would fall under [`super::laws::MIN_GOING`] and rise-per-turn
+//! still has [`super::laws::MIN_HEADROOM`].
 
 use std::f32::consts::TAU;
 
-use bevy_math::{Vec2, Vec3};
+use bevy_math::Vec2;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::placed::Placement;
 use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 
-use crate::paneling::quad_panel::QuadPanel;
+use super::laws::{headroom_allows, resolved_rise, tread_count, MIN_GOING, MIN_LANDING};
+use super::well::{yaw_xz, WellAabb};
+use super::Fit;
 
-use super::well::WellAabb;
-
-/// Smallest walkable going (meters). Extra turns exist only to stay at or above this
-/// when [`MIN_HEADROOM`] still holds.
-pub(crate) const MIN_GOING: f32 = 0.25;
-/// Smallest rise per revolution (meters). A short well keeps one lap and accepts
-/// going below [`MIN_GOING`] rather than stacking helices.
-pub(crate) const MIN_HEADROOM: f32 = 2.0;
 const MIN_RADIUS: f32 = 0.2;
-const MIN_LANDING: f32 = 0.12;
 
 /// Circular nodes + the walk-off landing (door strip, not a sheared pad).
-pub(crate) fn fit(
-	well: &WellAabb,
-	style: PanelStyle,
-	thickness: f32,
-) -> (Vec<StairNode>, Option<QuadPanel>) {
-	let rise = well.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
+pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32) -> Fit {
+	let rise = resolved_rise(well.rise());
 	let width = well.tread_width();
 	let radius = (well.half_min() - MIN_LANDING - 0.5 * width).max(MIN_RADIUS);
-	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
+	let n = tread_count(rise);
 	let turns = spiral_turns(well, radius, n, rise);
 	let intervals = n.saturating_sub(1).max(1);
 	let going = (turns * TAU * radius) / intervals as f32;
 	let center = well.center_xz();
-	let start_yaw = yaw_toward(well.walk_on.into_xz());
+	let start_yaw = yaw_xz(well.walk_on.into_xz());
 	let stairs =
 		circular_nodes(center, well.bottom_y(), start_yaw, radius, width, going, rise, n, turns);
-	// Door to last inner rail: reserved rim + tread span. Capped in the strip.
 	let depth = width + MIN_LANDING;
-	let landing = Some(well.walk_off_landing_strip(style, thickness, depth));
-	(stairs, landing)
+	Fit {
+		stairs,
+		door: Some(well.walk_off_landing_strip(style, thickness, depth)),
+		mids: Vec::new(),
+	}
 }
 
 fn spiral_turns(well: &WellAabb, radius: f32, n: u32, rise: f32) -> f32 {
-	// Same yaw convention as [`circular_nodes`] so walk-off is the last azimuth.
-	let start = yaw_toward(well.walk_on.into_xz());
-	let end = yaw_toward(well.walk_off.into_xz());
+	let start = yaw_xz(well.walk_on.into_xz());
+	let end = yaw_xz(well.walk_off.into_xz());
 	let mut sweep = wrap_ccw(end - start);
 	if sweep < 0.2 * TAU {
 		sweep += TAU;
@@ -61,11 +51,10 @@ fn spiral_turns(well: &WellAabb, radius: f32, n: u32, rise: f32) -> f32 {
 	let r = radius.max(1e-4);
 	let intervals = n.saturating_sub(1).max(1) as f32;
 	while (turns * TAU * r) / intervals + 1e-4 < MIN_GOING {
-		let next = turns + 1.0;
-		if rise / next + 1e-4 < MIN_HEADROOM {
+		if !headroom_allows(rise, turns + 1.0) {
 			break;
 		}
-		turns = next;
+		turns += 1.0;
 	}
 	turns
 }
@@ -102,15 +91,10 @@ fn circular_nodes(
 					StraightStair::single(width, going.max(1e-4), rise_step)
 						.with_flush_start(false),
 				),
-				Placement::new(Vec3::new(p.x, y, p.y), travel_yaw),
+				Placement::new(bevy_math::Vec3::new(p.x, y, p.y), travel_yaw),
 			)
 		})
 		.collect()
-}
-
-fn yaw_toward(dir: Vec2) -> f32 {
-	let d = if dir.length_squared() < 1e-8 { Vec2::X } else { dir.normalize() };
-	(-d.y).atan2(d.x)
 }
 
 fn wrap_ccw(delta: f32) -> f32 {
