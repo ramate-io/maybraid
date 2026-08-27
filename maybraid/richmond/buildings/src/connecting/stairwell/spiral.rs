@@ -3,7 +3,8 @@
 //! Inscribe a circle so the outer rail stays in the box. First tread at the
 //! walk-on azimuth, last at the walk-off. The walk-off landing is a door strip
 //! authored first; the last leading arrives on that strip. Extra turns only
-//! when going would fall under [`MIN_GOING`].
+//! when going would fall under [`MIN_GOING`] and rise-per-turn still has
+//! [`MIN_HEADROOM`].
 
 use std::f32::consts::TAU;
 
@@ -16,8 +17,12 @@ use crate::paneling::quad_panel::QuadPanel;
 
 use super::well::WellAabb;
 
-/// Smallest walkable going (meters). Extra turns exist only to stay at or above this.
+/// Smallest walkable going (meters). Extra turns exist only to stay at or above this
+/// when [`MIN_HEADROOM`] still holds.
 pub(crate) const MIN_GOING: f32 = 0.25;
+/// Smallest rise per revolution (meters). A short well keeps one lap and accepts
+/// going below [`MIN_GOING`] rather than stacking helices.
+pub(crate) const MIN_HEADROOM: f32 = 2.0;
 const MIN_RADIUS: f32 = 0.2;
 const MIN_LANDING: f32 = 0.12;
 
@@ -31,7 +36,7 @@ pub(crate) fn fit(
 	let width = well.tread_width();
 	let radius = (well.half_min() - MIN_LANDING - 0.5 * width).max(MIN_RADIUS);
 	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
-	let turns = spiral_turns(well, radius, n);
+	let turns = spiral_turns(well, radius, n, rise);
 	let intervals = n.saturating_sub(1).max(1);
 	let going = (turns * TAU * radius) / intervals as f32;
 	let center = well.center_xz();
@@ -44,7 +49,7 @@ pub(crate) fn fit(
 	(stairs, landing)
 }
 
-fn spiral_turns(well: &WellAabb, radius: f32, n: u32) -> f32 {
+fn spiral_turns(well: &WellAabb, radius: f32, n: u32, rise: f32) -> f32 {
 	// Same yaw convention as [`circular_nodes`] so walk-off is the last azimuth.
 	let start = yaw_toward(well.walk_on.into_xz());
 	let end = yaw_toward(well.walk_off.into_xz());
@@ -56,7 +61,11 @@ fn spiral_turns(well: &WellAabb, radius: f32, n: u32) -> f32 {
 	let r = radius.max(1e-4);
 	let intervals = n.saturating_sub(1).max(1) as f32;
 	while (turns * TAU * r) / intervals + 1e-4 < MIN_GOING {
-		turns += 1.0;
+		let next = turns + 1.0;
+		if rise / next + 1e-4 < MIN_HEADROOM {
+			break;
+		}
+		turns = next;
 	}
 	turns
 }

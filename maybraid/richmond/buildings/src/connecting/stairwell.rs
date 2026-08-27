@@ -387,6 +387,33 @@ mod tests {
 	}
 
 	#[test]
+	fn short_well_keeps_one_lap_instead_of_stacking() {
+		let tiny = WellAabb::from_plan(
+			Vec3::new(-0.6, 0.0, -0.6),
+			Vec3::new(0.6, 1.5, 0.6),
+			WellSide::NegZ,
+			WellSide::NegZ,
+			TREAD_FILL_DEFAULT,
+		);
+		let well = ConnectingStairwell::from_well(PanelStyle::RoughStonework, tiny);
+		assert!(!well.stairs().is_empty());
+		let going = match &well.stairs()[0].geometry {
+			Stair::Straight(g) => g.going_per_tread(),
+			Stair::Spiral(_) => panic!("spiral well should emit Straight treads"),
+		};
+		let center = tiny.center_xz();
+		let p = well.stairs()[0].placement.translation;
+		let radius = (Vec2::new(p.x, p.z) - center).length().max(1e-4);
+		let intervals = well.stairs().len().saturating_sub(1).max(1) as f32;
+		let turns = going * intervals / (std::f32::consts::TAU * radius);
+		assert!(turns < 1.5, "1.5 m well must not add a second lap, turns={turns} going={going}");
+		assert!(
+			tiny.rise() / turns.max(1e-4) + 1e-3 >= tiny.rise() - 0.05,
+			"one lap should keep the full rise as headroom, turns={turns}"
+		);
+	}
+
+	#[test]
 	fn stacked_wells_share_the_walk_off_face() {
 		let lower = WellAabb::from_plan(
 			Vec3::new(-1.2, 0.0, -1.2),
