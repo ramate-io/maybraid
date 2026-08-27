@@ -118,9 +118,9 @@ pub enum Show {
 	Tube(tube::Tube),
 	/// One-kink tube between two oriented openings.
 	ConnectingHall(connecting_hall::ConnectingHall),
-	/// Exclusive AABB stairwell with a circular spiral.
+	/// Exclusive AABB stairwell (circular, rectangular, or run-and-landing).
 	ConnectingStairwell(connecting_stairwell::ConnectingStairwell),
-	/// Gallery of pathological circular-spiral wells.
+	/// Gallery of pathological exclusive-well stairwells.
 	ConnectingStairwellExamples(connecting_stairwell_examples::ConnectingStairwellExamples),
 	/// One circular storey shell with optional `--opening` plan entries.
 	ArcFloor(arc_floor::ArcFloor),

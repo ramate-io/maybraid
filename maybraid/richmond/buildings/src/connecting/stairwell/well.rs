@@ -47,6 +47,16 @@ impl WellSide {
 		}
 	}
 
+	/// Next wall walking CW around the well.
+	pub fn cw_next(self) -> Self {
+		self.ccw_next().ccw_next().ccw_next()
+	}
+
+	/// Opposite wall.
+	pub fn opposite(self) -> Self {
+		self.ccw_next().ccw_next()
+	}
+
 	/// Travel along this wall, CCW (wall on the right).
 	pub fn travel_xz(self) -> Vec2 {
 		match self {

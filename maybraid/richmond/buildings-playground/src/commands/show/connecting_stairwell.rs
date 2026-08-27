@@ -1,4 +1,5 @@
-//! `/show connecting-stairwell` — exclusive AABB well with a circular spiral.
+//! `/show connecting-stairwell` — exclusive AABB well with a circular, rectangular,
+//! or run-and-landing flight.
 
 use bevy::prelude::*;
 use clap::{Args, ValueEnum};
@@ -32,6 +33,7 @@ pub enum StairwellFit {
 	#[default]
 	Circular,
 	Rectangular,
+	RunAndLanding,
 }
 
 impl From<StairwellFit> for StairwellKind {
@@ -39,6 +41,7 @@ impl From<StairwellFit> for StairwellKind {
 		match fit {
 			StairwellFit::Circular => StairwellKind::Circular,
 			StairwellFit::Rectangular => StairwellKind::Rectangular,
+			StairwellFit::RunAndLanding => StairwellKind::RunAndLanding,
 		}
 	}
 }
@@ -54,7 +57,7 @@ pub struct ConnectingStairwell {
 	/// Tread span as a fraction of the tighter half-extent.
 	#[arg(long, default_value_t = 0.4)]
 	pub tread_fill: f32,
-	/// Circular helix or wall-hugging rectangular flights.
+	/// Circular helix, wall-hugging rectangular, or half-well I + landing.
 	#[arg(long, value_enum, default_value_t = StairwellFit::Circular)]
 	pub kind: StairwellFit,
 }
