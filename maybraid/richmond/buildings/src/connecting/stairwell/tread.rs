@@ -9,6 +9,8 @@ pub struct TreadEnd {
 	pub leading_outer: Vec2,
 	pub leading_inner: Vec2,
 	pub travel: Vec2,
+	pub going: f32,
+	pub width: f32,
 }
 
 impl TreadEnd {
@@ -31,6 +33,8 @@ impl TreadEnd {
 			leading_outer: lead + radial * half_w,
 			leading_inner: lead - radial * half_w,
 			travel,
+			going,
+			width,
 		}
 	}
 
@@ -40,6 +44,26 @@ impl TreadEnd {
 
 	pub fn leading_mid(self) -> Vec2 {
 		(self.leading_outer + self.leading_inner) * 0.5
+	}
+
+	/// Walkable plan quad: leading then trailing (outer / inner).
+	pub fn plan_quad(self) -> [Vec2; 4] {
+		let back = travel_xz_dir(self.travel) * self.going.max(1e-4);
+		[
+			self.leading_outer,
+			self.leading_inner,
+			self.leading_inner - back,
+			self.leading_outer - back,
+		]
+	}
+}
+
+fn travel_xz_dir(travel: Vec2) -> Vec2 {
+	let n = travel.length();
+	if n < 1e-5 {
+		Vec2::X
+	} else {
+		travel / n
 	}
 }
 

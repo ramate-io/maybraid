@@ -21,8 +21,9 @@ use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::LodRefreshSystems;
 use preview::{
-	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_label_text_gizmos,
-	draw_opening_plan_gizmos, draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
+	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_connecting_stairwell_gizmos,
+	draw_label_text_gizmos, draw_opening_plan_gizmos, draw_roof_complex_gizmos,
+	present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
@@ -48,11 +49,13 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			.add_systems(
 				Update,
 				(
+					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller.before(LodRefreshSystems::Track),
 					present_preview_lod
 						.after(LodRefreshSystems::Track)
 						.after(capture_command_line_input::<PlaygroundCommand>),
 					draw_connecting_hall_gizmos.after(present_preview_lod),
+					draw_connecting_stairwell_gizmos.after(present_preview_lod),
 					draw_connecting_shells_gizmos.after(present_preview_lod),
 					draw_opening_plan_gizmos.after(present_preview_lod),
 					draw_label_text_gizmos.after(present_preview_lod),

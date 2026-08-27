@@ -1,8 +1,8 @@
 //! Circular flight inside an exclusive [`WellAabb`].
 //!
-//! Inscribe a circle so the outer rail stays in the box and leaves a landing
-//! strip on the walk-off. First tread at the walk-on azimuth. Last tread at the
-//! back-point (interior of that strip). Extra turns only when going would fall
+//! Inscribe a circle so the outer rail stays in the box. First tread at the
+//! walk-on azimuth. After the last tread exists, grow an axis-aligned walk-off
+//! landing until it covers that leading. Extra turns only when going would fall
 //! under [`MIN_GOING`].
 
 use std::f32::consts::TAU;
@@ -14,6 +14,7 @@ use richmond_building_components::stairs::{Stair, StairNode, StraightStair};
 
 use crate::paneling::quad_panel::QuadPanel;
 
+use super::tread::TreadEnd;
 use super::well::WellAabb;
 
 /// Smallest walkable going (meters). Extra turns exist only to stay at or above this.
@@ -29,8 +30,7 @@ pub(crate) fn fit(
 ) -> (Vec<StairNode>, Option<QuadPanel>) {
 	let rise = well.rise().max(StraightStair::DEFAULT_TREAD_HEIGHT);
 	let width = well.tread_width();
-	let landing_depth = width.min(well.half_min() * 0.35).max(MIN_LANDING);
-	let radius = (well.half_min() - landing_depth - 0.5 * width).max(MIN_RADIUS);
+	let radius = (well.half_min() - MIN_LANDING - 0.5 * width).max(MIN_RADIUS);
 	let n = (rise / StraightStair::DEFAULT_TREAD_HEIGHT).ceil().max(1.0) as u32;
 	let turns = spiral_turns(well, radius, n);
 	let going = (turns * TAU * radius) / n as f32;
@@ -38,8 +38,30 @@ pub(crate) fn fit(
 	let start_yaw = yaw_toward(well.walk_on.into_xz());
 	let stairs =
 		circular_nodes(center, well.bottom_y(), start_yaw, radius, width, going, rise, n, turns);
-	let landing = Some(well.walk_off_landing(style, thickness, landing_depth, 0.5 * width));
+	let landing = TreadEnd::from_last_straight(&stairs).and_then(|end| {
+		let stand = end.width.max(end.going);
+		well.walk_off_landing_covering(style, thickness, &landing_cover_points(well, end), stand)
+	});
 	(stairs, landing)
+}
+
+/// Last-tread plan plus a standable square on the walk-off (AABB union).
+fn landing_cover_points(well: &WellAabb, end: TreadEnd) -> Vec<Vec2> {
+	let mut pts = end.plan_quad().to_vec();
+	let stand = end.width.max(end.going);
+	let mid = well.side_mid(well.walk_off, well.top_y());
+	let door = well.walk_off.into_xz();
+	let along = Vec2::new(-door.y, door.x);
+	let inward = -door;
+	let o = Vec2::new(mid.x, mid.z);
+	let half = 0.5 * stand;
+	pts.extend([
+		o - along * half,
+		o + along * half,
+		o - along * half + inward * stand,
+		o + along * half + inward * stand,
+	]);
+	pts
 }
 
 fn spiral_turns(well: &WellAabb, radius: f32, n: u32) -> f32 {

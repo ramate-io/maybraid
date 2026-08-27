@@ -42,14 +42,14 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells,
-	ConnectingStairwell, WellAabb, WellSide,
-	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad,
-	MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams,
-	RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor, RectRingFloorParams,
-	RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
+	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening,
+	MappedOpeningQuad, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof,
+	PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor,
+	RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
 	RectangularNTubeStation, RectangularPitchedRoofComplex, RectangularStripNode, RoundedRectFloor,
 	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Trazaloid, TrazaloidParams,
-	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, DEFAULT_PANEL_THICKNESS,
+	TrazaloidSlab, Tube, TubeCrossSectionNode, TubeFaces, WellAabb, WellSide,
+	DEFAULT_PANEL_THICKNESS,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -4432,110 +4432,8 @@ fn spawn_connecting_stairwell(
 	tread_fill: f32,
 	lod_ref: &lod::lod_ref::LodRef<'_>,
 ) {
-	use crate::commands::show::connecting_stairwell::StairwellCase;
-	use richmond_building_components::panels::PanelStyle;
-
-	let well = |min: Vec3, max: Vec3, on: WellSide, off: WellSide| {
-		WellAabb::from_plan(min, max, on, off, tread_fill)
-	};
-	match case {
-		StairwellCase::Stacked => {
-			let w = well(
-				Vec3::new(-1.2, 0.0, -1.2),
-				Vec3::new(1.2, 3.0, 1.2),
-				WellSide::NegZ,
-				WellSide::NegZ,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
-				lod_ref,
-			);
-		}
-		StairwellCase::Opposite => {
-			let w = well(
-				Vec3::new(-1.2, 0.0, -1.2),
-				Vec3::new(1.2, 3.0, 1.2),
-				WellSide::NegZ,
-				WellSide::PosZ,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
-				lod_ref,
-			);
-		}
-		StairwellCase::QuarterTurn => {
-			let w = well(
-				Vec3::new(-1.2, 0.0, -1.2),
-				Vec3::new(1.2, 3.0, 1.2),
-				WellSide::NegZ,
-				WellSide::NegX,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
-				lod_ref,
-			);
-		}
-		StairwellCase::Tiny => {
-			let w = well(
-				Vec3::new(-0.6, 0.0, -0.6),
-				Vec3::new(0.6, 1.5, 0.6),
-				WellSide::NegZ,
-				WellSide::NegZ,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
-				lod_ref,
-			);
-		}
-		StairwellCase::Tall => {
-			let w = well(
-				Vec3::new(-1.2, 0.0, -1.2),
-				Vec3::new(1.2, 6.0, 1.2),
-				WellSide::NegZ,
-				WellSide::NegZ,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
-				lod_ref,
-			);
-		}
-		StairwellCase::StackedPair => {
-			let lower = well(
-				Vec3::new(-1.2, 0.0, -1.2),
-				Vec3::new(1.2, 3.0, 1.2),
-				WellSide::NegZ,
-				WellSide::NegZ,
-			);
-			let upper = well(
-				Vec3::new(-1.2, 3.0, -1.2),
-				Vec3::new(1.2, 6.0, 1.2),
-				WellSide::NegZ,
-				WellSide::NegZ,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, lower)
-					.with_upper_landing(false),
-				lod_ref,
-			);
-			spawn_building_preview(
-				commands,
-				transform,
-				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, upper),
-				lod_ref,
-			);
-		}
+	for well in crate::commands::show::connecting_stairwell::preview_stairwells(case, tread_fill) {
+		spawn_building_preview(commands, transform, &well, lod_ref);
 	}
 }
 
@@ -5392,6 +5290,65 @@ fn draw_mapped_opening_overlays<M: MapsOpenings>(
 		let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y).normalize_or_zero();
 		gizmos.arrow(map(mid), map(mid + dir * 1.25), orange).with_tip_length(0.2);
 	}
+}
+
+/// Exclusive well box (cyan), walk-on (lime), walk-off (orange), landing (yellow),
+/// last leading (magenta).
+pub fn draw_connecting_stairwell_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	let (case, tread_fill) = match &config.subject {
+		PreviewSubject::ConnectingStairwell { case, tread_fill } => (*case, *tread_fill),
+		_ => return,
+	};
+	let tf = config.transform;
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let yellow = Color::srgb(1.0, 0.9, 0.2);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+
+	for well in crate::commands::show::connecting_stairwell::preview_stairwells(case, tread_fill) {
+		let aabb = well.well();
+		gizmos.aabb_3d(aabb.bounds, tf, cyan);
+		draw_well_side_gizmo(&mut gizmos, tf, aabb, aabb.walk_on, aabb.bottom_y(), lime);
+		draw_well_side_gizmo(&mut gizmos, tf, aabb, aabb.walk_off, aabb.top_y(), orange);
+		if let Some(landing) = well.upper_landing() {
+			let [a0, a1, b0, b1] = landing.corners();
+			for (p, q) in [(a0, a1), (a1, b1), (b1, b0), (b0, a0)] {
+				gizmos.line(tf.transform_point(p), tf.transform_point(q), yellow);
+			}
+		}
+		if let Some(end) = well.last_tread_end() {
+			let y = well
+				.stairs()
+				.last()
+				.map(|s| s.placement.translation.y)
+				.unwrap_or_else(|| aabb.top_y());
+			let [p0, p1, p2, p3] = end.plan_quad();
+			for (a, b) in [(p0, p1), (p1, p2), (p2, p3), (p3, p0)] {
+				gizmos.line(
+					tf.transform_point(Vec3::new(a.x, y, a.y)),
+					tf.transform_point(Vec3::new(b.x, y, b.y)),
+					magenta,
+				);
+			}
+		}
+	}
+}
+
+fn draw_well_side_gizmo(
+	gizmos: &mut Gizmos,
+	tf: Transform,
+	aabb: WellAabb,
+	side: WellSide,
+	y: f32,
+	color: Color,
+) {
+	let along = match side {
+		WellSide::NegX | WellSide::PosX => aabb.half_z(),
+		WellSide::NegZ | WellSide::PosZ => aabb.half_x(),
+	};
+	let [a0, a1, ..] = aabb.side_strip(side, y, 0.05, along);
+	gizmos.line(tf.transform_point(a0), tf.transform_point(a1), color);
 }
 
 /// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation

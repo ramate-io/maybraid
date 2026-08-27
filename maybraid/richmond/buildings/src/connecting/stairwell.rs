@@ -263,6 +263,26 @@ mod tests {
 			last_to_door > 0.15,
 			"last tread must not sit on the walk-off, dist={last_to_door}"
 		);
+		let [c0, c1, c2, c3] = landing.corners();
+		let pad_min =
+			Vec2::new(c0.x.min(c1.x).min(c2.x).min(c3.x), c0.z.min(c1.z).min(c2.z).min(c3.z));
+		let pad_max =
+			Vec2::new(c0.x.max(c1.x).max(c2.x).max(c3.x), c0.z.max(c1.z).max(c2.z).max(c3.z));
+		for (label, p) in [("outer", last.leading_outer), ("inner", last.leading_inner)] {
+			assert!(
+				p.x >= pad_min.x - 0.04
+					&& p.x <= pad_max.x + 0.04
+					&& p.y >= pad_min.y - 0.04
+					&& p.y <= pad_max.y + 0.04,
+				"landing must cover last leading {label} {p:?}, pad {pad_min:?}..{pad_max:?}"
+			);
+		}
+		let along = (pad_max.x - pad_min.x).max(pad_max.y - pad_min.y);
+		assert!(
+			along + 1e-3 >= last.width,
+			"landing along-wall {along} should be at least a tread width {}",
+			last.width
+		);
 		Ok(())
 	}
 
