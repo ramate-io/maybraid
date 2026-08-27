@@ -1927,7 +1927,7 @@ mod tests {
 			"show bush-scrub --grove-extent-xz 35 --elevation 0.40",
 			"show tropical-undergrowth --grove-extent-xz 35 --elevation 0.35",
 			"show levantine-scrub --grove-extent-xz 20",
-			"show strange-oasis --grove-extent-xz 20",
+			"show strange-oasis --grove-extent-xz 39",
 			"show tropical-thicket --grove-extent-xz 20",
 			"show rolling-oaks --grove-extent-xz 260 --elevation 0.40",
 			"show orchard --grove-extent-xz 160",

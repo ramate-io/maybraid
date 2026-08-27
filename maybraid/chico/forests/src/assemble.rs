@@ -16,6 +16,7 @@ use chico_groves::{
 	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
 };
 
+use crate::blend::{hash_unit_xz, neighbor_tile, pick_kind, Cardinal, GroveNeighbors};
 use crate::{ForestExtent, ForestGroveKind, SelectedLayers};
 
 /// One grown grove tile (concrete grove type).
@@ -221,28 +222,193 @@ pub fn grow_tile(
 fn grow_layer(
 	kind: Option<ForestGroveKind>,
 	tiles: &[GroveExtent],
+	forest: ForestExtent,
+	neighbors: &NeighborLayers,
+	layer: LayerSlot,
 	world: &impl GroveWorldSample,
 ) -> Vec<ForestGroveTile> {
-	let Some(kind) = kind else {
-		return Vec::new();
+	tiles
+		.iter()
+		.flat_map(|extent| grow_presenting_tile(kind, *extent, forest, neighbors, layer, world))
+		.collect()
+}
+
+/// Cardinal forest-cell selections for grove slots that sit outside this extent.
+///
+/// Not grown. Every presenting tile reads these when a neighbor 100 m slot
+/// leaves this forest; interior neighbor slots use this cell's own layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NeighborLayers {
+	pub north: Option<SelectedLayers>,
+	pub east: Option<SelectedLayers>,
+	pub south: Option<SelectedLayers>,
+	pub west: Option<SelectedLayers>,
+}
+
+impl NeighborLayers {
+	pub fn none() -> Self {
+		Self { north: None, east: None, south: None, west: None }
+	}
+
+	pub fn get(self, face: Cardinal) -> Option<SelectedLayers> {
+		match face {
+			Cardinal::North => self.north,
+			Cardinal::East => self.east,
+			Cardinal::South => self.south,
+			Cardinal::West => self.west,
+		}
+	}
+}
+
+#[derive(Clone, Copy)]
+enum LayerSlot {
+	Tufts,
+	Understory,
+	LowerCanopy,
+	UpperCanopy,
+}
+
+impl LayerSlot {
+	fn kind(self, layers: SelectedLayers) -> Option<ForestGroveKind> {
+		match self {
+			Self::Tufts => layers.tufts,
+			Self::Understory => layers.understory,
+			Self::LowerCanopy => layers.lower_canopy,
+			Self::UpperCanopy => layers.upper_canopy,
+		}
+	}
+}
+
+fn grove_neighbors(
+	tile: GroveExtent,
+	forest: ForestExtent,
+	self_kind: Option<ForestGroveKind>,
+	neighbors: &NeighborLayers,
+	layer: LayerSlot,
+) -> GroveNeighbors {
+	let slot = |face: Cardinal| {
+		let center = {
+			let n = neighbor_tile(tile, face);
+			(n.min() + n.max()) * 0.5
+		};
+		if forest.owns_center_xz(center) {
+			Some(self_kind)
+		} else {
+			neighbors.get(face).map(|layers| layer.kind(layers))
+		}
 	};
-	tiles.iter().map(|extent| grow_tile(kind, *extent, world)).collect()
+	GroveNeighbors {
+		north: slot(Cardinal::North),
+		east: slot(Cardinal::East),
+		south: slot(Cardinal::South),
+		west: slot(Cardinal::West),
+	}
+}
+
+fn grow_presenting_tile(
+	kind: Option<ForestGroveKind>,
+	extent: GroveExtent,
+	forest: ForestExtent,
+	neighbors: &NeighborLayers,
+	layer: LayerSlot,
+	world: &impl GroveWorldSample,
+) -> Vec<ForestGroveTile> {
+	grow_blended(kind, extent, grove_neighbors(extent, forest, kind, neighbors, layer), world)
+}
+
+fn grow_blended(
+	self_kind: Option<ForestGroveKind>,
+	extent: GroveExtent,
+	neighbors: GroveNeighbors,
+	world: &impl GroveWorldSample,
+) -> Vec<ForestGroveTile> {
+	use std::collections::HashMap;
+
+	use chico_groves::cell_center;
+
+	let mut buckets: HashMap<ForestGroveKind, Vec<gimme_gen::Cell>> = HashMap::new();
+	if let Some(self_kind) = self_kind {
+		for cell in extent.cells_overlapping(self_kind.cell_extent_xz()) {
+			let center = cell_center(&cell);
+			if let Some(kind) =
+				pick_kind(center, extent, Some(self_kind), neighbors, hash_unit_xz(center))
+			{
+				buckets.entry(kind).or_default().push(cell);
+			}
+		}
+	} else {
+		let mut lattices = Vec::<ForestGroveKind>::new();
+		for lattice in neighbors.planted_kinds() {
+			if !lattices.contains(&lattice) {
+				lattices.push(lattice);
+			}
+		}
+		for lattice in lattices {
+			for cell in extent.cells_overlapping(lattice.cell_extent_xz()) {
+				let center = cell_center(&cell);
+				if pick_kind(center, extent, None, neighbors, hash_unit_xz(center)) == Some(lattice)
+				{
+					buckets.entry(lattice).or_default().push(cell);
+				}
+			}
+		}
+	}
+	buckets
+		.into_iter()
+		.filter(|(_, cells)| !cells.is_empty())
+		.map(|(kind, cells)| kind.grow_on_cells(extent, &cells, world))
+		.collect()
 }
 
 /// Assemble selected layers onto the forest cell's 100 m grove grid.
+///
+/// Every presenting tile softmax-blends its cardinal neighbor grove recipes
+/// (empty layers still grow neighbor islands). `neighbors` supply selections
+/// for slots that sit outside this extent.
 pub fn assemble(
 	extent: ForestExtent,
 	layers: SelectedLayers,
+	neighbors: NeighborLayers,
 	world: &impl GroveWorldSample,
 ) -> AssembledForest {
 	let tiles = extent.default_grove_tiles();
 	AssembledForest {
 		layers,
-		tufts: grow_layer(layers.tufts, &tiles, world),
-		understory: grow_layer(layers.understory, &tiles, world),
-		lower_canopy: grow_layer(layers.lower_canopy, &tiles, world),
-		upper_canopy: grow_layer(layers.upper_canopy, &tiles, world),
+		tufts: grow_layer(layers.tufts, &tiles, extent, &neighbors, LayerSlot::Tufts, world),
+		understory: grow_layer(
+			layers.understory,
+			&tiles,
+			extent,
+			&neighbors,
+			LayerSlot::Understory,
+			world,
+		),
+		lower_canopy: grow_layer(
+			layers.lower_canopy,
+			&tiles,
+			extent,
+			&neighbors,
+			LayerSlot::LowerCanopy,
+			world,
+		),
+		upper_canopy: grow_layer(
+			layers.upper_canopy,
+			&tiles,
+			extent,
+			&neighbors,
+			LayerSlot::UpperCanopy,
+			world,
+		),
 	}
+}
+
+/// Assemble with no neighbor recipes (same as isolated preview tiles).
+pub fn assemble_isolated(
+	extent: ForestExtent,
+	layers: SelectedLayers,
+	world: &impl GroveWorldSample,
+) -> AssembledForest {
+	assemble(extent, layers, NeighborLayers::none(), world)
 }
 
 #[cfg(test)]
@@ -272,10 +438,110 @@ mod tests {
 			lower_canopy: None,
 			upper_canopy: None,
 		};
-		let grown = assemble(cell, layers, &FlatTerrainSample::default());
+		let grown = assemble(cell, layers, NeighborLayers::none(), &FlatTerrainSample::default());
 		assert!(grown.tufts.is_empty());
 		assert!(grown.upper_canopy.is_empty());
 		let _ = select_cell(cell, NoiseParams::default());
+		Ok(())
+	}
+
+	#[test]
+	fn presenting_tile_blends_neighbor_recipe() -> Result<()> {
+		let forest = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let layers = SelectedLayers {
+			layering: LayeringKind::AgTown,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: Some(ForestGroveKind::Orchard),
+		};
+		let neighbors = NeighborLayers {
+			east: Some(SelectedLayers {
+				layering: LayeringKind::MiRobles,
+				tufts: None,
+				understory: None,
+				lower_canopy: None,
+				upper_canopy: Some(ForestGroveKind::RollingOaks),
+			}),
+			..NeighborLayers::none()
+		};
+		let grown = assemble(forest, layers, neighbors, &FlatTerrainSample::default());
+		let kinds = grown
+			.upper_canopy
+			.iter()
+			.map(|tile| match tile {
+				ForestGroveTile::Orchard(_) => "orchard",
+				ForestGroveTile::RollingOaks(_) => "oaks",
+				_ => "other",
+			})
+			.collect::<Vec<_>>();
+		assert!(kinds.contains(&"orchard"), "{kinds:?}");
+		assert!(kinds.contains(&"oaks"), "expected a blended oak host, got {kinds:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn interior_slot_uses_self_kind_not_far_forest() -> Result<()> {
+		let forest = ForestExtent::default_cell();
+		let tiles = forest.default_grove_tiles();
+		let interior = tiles
+			.iter()
+			.copied()
+			.find(|tile| {
+				let c = (tile.min() + tile.max()) * 0.5;
+				c.x.abs() <= 50.0 && c.z.abs() <= 50.0
+			})
+			.ok_or_else(|| anyhow::anyhow!("expected an origin-centered grove tile"))?;
+		let neighbors = NeighborLayers {
+			east: Some(SelectedLayers {
+				layering: LayeringKind::MiRobles,
+				tufts: None,
+				understory: None,
+				lower_canopy: None,
+				upper_canopy: Some(ForestGroveKind::RollingOaks),
+			}),
+			..NeighborLayers::none()
+		};
+		let slots = grove_neighbors(
+			interior,
+			forest,
+			Some(ForestGroveKind::Orchard),
+			&neighbors,
+			LayerSlot::UpperCanopy,
+		);
+		assert_eq!(slots.east, Some(Some(ForestGroveKind::Orchard)));
+		assert_eq!(slots.west, Some(Some(ForestGroveKind::Orchard)));
+		Ok(())
+	}
+
+	#[test]
+	fn empty_tile_grows_neighbor_islands() -> Result<()> {
+		let forest = ForestExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let layers = SelectedLayers {
+			layering: LayeringKind::SunsBarren,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: None,
+		};
+		let neighbors = NeighborLayers {
+			west: Some(SelectedLayers {
+				layering: LayeringKind::AgTown,
+				tufts: None,
+				understory: None,
+				lower_canopy: None,
+				upper_canopy: Some(ForestGroveKind::Orchard),
+			}),
+			..NeighborLayers::none()
+		};
+		let grown = assemble(forest, layers, neighbors, &FlatTerrainSample::default());
+		assert!(
+			grown
+				.upper_canopy
+				.iter()
+				.any(|tile| matches!(tile, ForestGroveTile::Orchard(_))),
+			"empty layer should still present neighbor islands"
+		);
 		Ok(())
 	}
 }

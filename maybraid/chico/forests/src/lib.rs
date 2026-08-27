@@ -7,6 +7,7 @@
 //! default — forests do not bias construction seeds.
 
 mod assemble;
+mod blend;
 mod chico;
 mod extent;
 mod forest;
@@ -14,11 +15,18 @@ pub(crate) mod hopscotch;
 mod kind;
 mod layer;
 pub mod layerings;
+mod recipe;
 
-pub use assemble::{assemble, grow_tile, AssembledForest, ForestGroveTile};
+pub use assemble::{
+	assemble, assemble_isolated, grow_tile, AssembledForest, ForestGroveTile, NeighborLayers,
+};
+pub use blend::{
+	neighbor_tile, Cardinal, GroveNeighbors, GROVE_BLEND_INFLUENCE, GROVE_BLEND_NOISE,
+	GROVE_BLEND_TEMPERATURE,
+};
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
-pub use forest::ChicoForest;
+pub use forest::{neighbor_layers, ChicoForest};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
 pub use kind::{ForestGroveKind, ForestLayering, LayeringKind, SelectedLayers, WeightedGrove};
 pub use layer::{select_layers, throw_layer};

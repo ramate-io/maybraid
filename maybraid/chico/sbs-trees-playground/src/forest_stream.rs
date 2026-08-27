@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use chico_forests::{ChicoForest, ForestExtent, ForestGroveTile, LayeringKind};
+use chico_forests::{
+	select_cell, ChicoForest, ForestExtent, ForestGroveTile, LayeringKind, NeighborLayers,
+	SelectedLayers,
+};
 use chico_groves::{
 	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
 	ConiferMassives, ConiferSapling, DateGrove, Dryland, FlatTerrainSample, ForlornSavanna,
@@ -109,18 +112,42 @@ fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> V
 	}
 }
 
-fn spawn_forest_cell(
-	commands: &mut Commands,
+fn layers_for(
 	ix: i32,
 	iz: i32,
 	noise: NoiseParams,
 	layering: Option<LayeringKind>,
+) -> SelectedLayers {
+	match layering {
+		Some(kind) => kind.layering().typical_layers(),
+		None => select_cell(ForestExtent::from_cell_index(ix, iz), noise),
+	}
+}
+
+fn neighbor_layers_from(
+	cache: &HashMap<(i32, i32), SelectedLayers>,
+	ix: i32,
+	iz: i32,
+) -> NeighborLayers {
+	NeighborLayers {
+		north: cache.get(&(ix, iz + 1)).copied(),
+		east: cache.get(&(ix + 1, iz)).copied(),
+		south: cache.get(&(ix, iz - 1)).copied(),
+		west: cache.get(&(ix - 1, iz)).copied(),
+	}
+}
+
+fn spawn_forest_cell(
+	commands: &mut Commands,
+	ix: i32,
+	iz: i32,
+	layers: SelectedLayers,
+	neighbors: NeighborLayers,
 ) -> Vec<Entity> {
 	let extent = ForestExtent::from_cell_index(ix, iz);
-	let forest = match layering {
-		Some(kind) => ChicoForest::assemble_layering(extent, kind, &FlatTerrainSample::default()),
-		None => ChicoForest::assemble_on(extent, noise, &FlatTerrainSample::default()),
-	};
+	let assembled =
+		chico_forests::assemble(extent, layers, neighbors, &FlatTerrainSample::default());
+	let forest = ChicoForest { extent, assembled };
 	let layers = forest.assembled.layers;
 	info!(
 		"forest cell ({ix},{iz}) layering={:?} tufts={:?} understory={:?} lower={:?} upper={:?} tiles={}",
@@ -149,6 +176,7 @@ pub fn stream_forest(
 	mut controller: Query<&mut CameraController, With<Camera3d>>,
 	mut ground: Query<&mut Transform, (With<GroundPlane>, Without<Camera3d>)>,
 	mut live: Local<HashMap<(i32, i32), Vec<Entity>>>,
+	mut selected: Local<HashMap<(i32, i32), SelectedLayers>>,
 	mut last_key: Local<Option<String>>,
 	mut forest_camera: Local<bool>,
 	mut stream_center: Local<Option<(i32, i32)>>,
@@ -161,6 +189,7 @@ pub fn stream_forest(
 			*forest_camera = false;
 		}
 		live.clear();
+		selected.clear();
 		last_key.take();
 		stream_center.take();
 		return;
@@ -177,6 +206,7 @@ pub fn stream_forest(
 	let key = format!("forest:{layering_key}|{noise:?}|r={stream_radius}");
 	if last_key.as_ref() != Some(&key) {
 		live.clear();
+		selected.clear();
 		stream_center.take();
 		*last_key = Some(key);
 	}
@@ -198,6 +228,15 @@ pub fn stream_forest(
 	};
 	*stream_center = Some(center);
 	let wanted: Vec<(i32, i32)> = ForestExtent::cell_ring(center, *stream_radius).collect();
+	// Select halo (R+1) without growing it so neighbor grove slots have recipes.
+	let halo: Vec<(i32, i32)> =
+		ForestExtent::cell_ring(center, stream_radius.saturating_add(1)).collect();
+	for &(sx, sz) in &halo {
+		selected
+			.entry((sx, sz))
+			.or_insert_with(|| layers_for(sx, sz, *noise, *layering));
+	}
+	selected.retain(|cell, _| halo.contains(cell));
 
 	live.retain(|(ix, iz), entities| {
 		if wanted.contains(&(*ix, *iz)) {
@@ -216,7 +255,12 @@ pub fn stream_forest(
 	let Some(&(ix, iz)) = missing.first() else {
 		return;
 	};
-	let entities = spawn_forest_cell(&mut commands, ix, iz, *noise, *layering);
+	let layers = selected
+		.get(&(ix, iz))
+		.copied()
+		.unwrap_or_else(|| layers_for(ix, iz, *noise, *layering));
+	let neighbors = neighbor_layers_from(&selected, ix, iz);
+	let entities = spawn_forest_cell(&mut commands, ix, iz, layers, neighbors);
 	live.insert((ix, iz), entities);
 }
 
@@ -242,6 +286,36 @@ mod tests {
 			LayeringKind::AgTown
 		);
 		assert!(parse_layering_kind("not-a-forest").is_err());
+		Ok(())
+	}
+
+	#[test]
+	fn halo_is_display_ring_plus_one() -> Result<()> {
+		let r = DEFAULT_FOREST_STREAM_RADIUS;
+		let display: Vec<_> = ForestExtent::cell_ring((0, 0), r).collect();
+		let halo: Vec<_> = ForestExtent::cell_ring((0, 0), r.saturating_add(1)).collect();
+		assert_eq!(display.len(), 9);
+		assert_eq!(halo.len(), 25);
+		assert!(display.iter().all(|cell| halo.contains(cell)));
+		Ok(())
+	}
+
+	#[test]
+	fn neighbor_layers_from_reads_cardinal_cache() -> Result<()> {
+		let east = SelectedLayers {
+			layering: LayeringKind::MiRobles,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: Some(chico_forests::ForestGroveKind::RollingOaks),
+		};
+		let mut cache = HashMap::new();
+		cache.insert((1, 0), east);
+		let neighbors = neighbor_layers_from(&cache, 0, 0);
+		assert_eq!(neighbors.east, Some(east));
+		assert!(neighbors.north.is_none());
+		assert!(neighbors.south.is_none());
+		assert!(neighbors.west.is_none());
 		Ok(())
 	}
 }

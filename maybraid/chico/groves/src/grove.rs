@@ -5,7 +5,7 @@
 //! that deterministically selects and places vegetation per cell:
 //!
 //! 1. sample per-cell scale and offset from authored ranges ([RFC-183 3.4.1]),
-//! 2. resolve the candidate position against the grove footprint ([RFC-183 3.4.2.3]),
+//! 2. resolve the candidate position against the presenting tile ([RFC-183 3.4.2.3]),
 //! 3. sample terrain elevation at the resolved point ([RFC-183 3.4.2.4]),
 //! 4. bucket-throw plus ordered first-fit over the distribution ([RFC-183 3.4.2.5]).
 //!
@@ -16,6 +16,7 @@ mod distribution;
 mod extent;
 mod frontend;
 mod palette;
+mod recipe;
 mod sampling;
 mod terrain;
 mod tuft_patch;
@@ -45,6 +46,7 @@ pub use distribution::{
 pub use extent::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
 pub use frontend::{parse_vec2_csv, parse_vec3_csv, GroveFrontend};
 pub use palette::{PaletteColor, PaletteMix, PaletteSlot};
+pub use recipe::GroveRecipe;
 pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
@@ -143,7 +145,7 @@ pub enum GroveCellOutcome<V> {
 	Empty {
 		position: Vec3,
 	},
-	/// The candidate fell outside the grove footprint, or every bucket failed placement
+	/// The candidate fell outside the presenting tile, or every bucket failed placement
 	/// constraints. The position records where validation ran so callers can debug terrain
 	/// mismatch without inventing a fallback location.
 	Rejected {
@@ -185,16 +187,15 @@ impl<V: Clone> Grove<V> {
 		}
 	}
 
-	/// Subdivide `extent` into vegetation cells and select a placement for each one.
+	/// World-aligned cells this tile owns, then select a placement for each one.
 	pub fn populate(
 		&self,
 		extent: &GroveExtent,
 		world: &impl GroveWorldSample,
 	) -> Vec<GroveCellVariant<V>> {
-		extent
-			.subdivide_xz(self.cell_extent_xz)
+		self.cells_overlapping(extent)
 			.iter()
-			.filter_map(|cell| self.select_cell(cell, extent, world).into_placed())
+			.filter_map(|cell| GroveRecipe::select_cell(self, cell, extent, world).into_placed())
 			.collect()
 	}
 
@@ -207,7 +208,7 @@ impl<V: Clone> Grove<V> {
 	) -> GroveCellOutcome<V> {
 		let sample = self.placement.sample_cell(&self.biases, self.noise, cell);
 		let candidate = sample.position_in(cell);
-		// Cell offsets may overspill the cell, but never the grove footprint.
+		// Cell offsets may overspill the cell, but stay on the presenting tile.
 		if !extent.contains_xz(candidate) {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
@@ -299,7 +300,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let extent = test_extent();
-		let cells = extent.subdivide_xz(grove.cell_extent_xz());
+		let cells = grove.cells_overlapping(&extent);
 		let outcome = grove.select_cell(&cells[0], &extent, &flat(0.4, 0.1));
 		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		assert!(grove.populate(&extent, &flat(0.4, 0.1)).is_empty());

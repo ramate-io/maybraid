@@ -1137,7 +1137,7 @@ mod tests {
 		assert!(grass.grove.variant_weights.is_none());
 		let placements = grass.placements();
 		assert_eq!(helper.grove_extent_xz, 100.0);
-		assert_eq!(grass.placement_cells().len(), 48 * 48);
+		assert_eq!(grass.placement_cells().len(), 47 * 47);
 		assert!(
 			placements.len() >= 8,
 			"expected a visible braid-grass preview with default flags, got {} placements",
@@ -1603,7 +1603,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(12.0)));
 		let grove = helper.configured_strange_oasis();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 16);
+		assert_eq!(cell_count, 9);
 		assert!((grove.terrain.elevation - 0.25).abs() < 1e-5);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::StrangeOasis(helper).into_render_config();
@@ -1693,7 +1693,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(9.0)));
 		let grove = helper.configured_goettingen_follow();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 25);
+		assert_eq!(cell_count, 16);
 		assert!((grove.terrain.elevation - 0.25).abs() < 1e-5);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::GoettingenFollow(helper).into_render_config();
@@ -1967,7 +1967,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(24.0)));
 		let grove = helper.configured_palm_shade();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 100);
+		assert_eq!(cell_count, 81);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::PalmShade(helper).into_render_config();
 		let RenderSubject::PalmShade(subject) = cfg.subject else {
@@ -2056,7 +2056,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(27.0)));
 		let grove = helper.configured_alpine();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 81);
+		assert_eq!(cell_count, 64);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::Alpine(helper).into_render_config();
 		let RenderSubject::Alpine(subject) = cfg.subject else {
@@ -2237,7 +2237,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(37.0)));
 		let grove = helper.configured_wandering_acacia();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 81);
+		assert_eq!(cell_count, 64);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::WanderingAcacia(helper).into_render_config();
 		let RenderSubject::WanderingAcacia(subject) = cfg.subject else {
@@ -2322,7 +2322,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(16.0)));
 		let grove = helper.configured_christmas_taiga();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 169);
+		assert_eq!(cell_count, 144);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::ChristmasTaiga(helper).into_render_config();
 		let RenderSubject::ChristmasTaiga(subject) = cfg.subject else {
@@ -2412,7 +2412,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(49.0)));
 		let grove = helper.configured_temperate_massives();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 81);
+		assert_eq!(cell_count, 64);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::TemperateMassives(helper).into_render_config();
 		let RenderSubject::TemperateMassives(subject) = cfg.subject else {
@@ -2457,7 +2457,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(16.0)));
 		let grove = helper.configured_riparian_general();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 169);
+		assert_eq!(cell_count, 144);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::RiparianGeneral(helper).into_render_config();
 		let RenderSubject::RiparianGeneral(subject) = cfg.subject else {
@@ -2671,7 +2671,7 @@ mod tests {
 		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(12.0)));
 		let grove = helper.configured_date_grove();
 		let cell_count = grove.placement_cells().len();
-		assert_eq!(cell_count, 196);
+		assert_eq!(cell_count, 169);
 		assert!(!grove.placements().is_empty());
 		let cfg = Render::DateGrove(helper).into_render_config();
 		let RenderSubject::DateGrove(subject) = cfg.subject else {
