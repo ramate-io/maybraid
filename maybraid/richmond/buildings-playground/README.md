@@ -113,6 +113,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-ruled-strip [--min-dihedral R] [--no-joint]` — multi-bay strip with a clip on the middle bay
 - `show tube [--min-dihedral R] [--no-joint] [--no-floor] [--no-ceiling] [--no-left] [--no-right]` — trapezoid cross-section polyline → four clipped ruled strips (bend + pitch + slight roll; left-wall opening); `--no-*` omits faces
 - `show connecting-hall` — one-kink `ConnectingHall` tube between two oriented openings (gizmos: opening quads, orientation arrows, A→mid→B path)
+- `show connecting-stairwell [--case stacked|opposite|quarter-turn|tiny|tall|stacked-pair] [--tread-fill F]` — exclusive AABB well with a circular spiral (walk-off is a landing)
 - `show arc-tower [--radius R] [--floor-count N] [--storey-height H] [--floor-hole M] [--no-base-floor] [--no-ceiling]` — stacked circular `ArcTower` shell (explicit cardinal openings; no noise)
 - `show connecting-shells` — demo joining `ArcTower` to `Trazaloid` via `ConnectingHall`
 - `show trazaloid […] [--floor] [--no-ceiling] [--floor-hole M] [--ceiling-hole M] [--door-thickness M] [--face-post-count N]` — two-band trapezoidal-pyramid shell; floor/ceiling optional with centered square holes

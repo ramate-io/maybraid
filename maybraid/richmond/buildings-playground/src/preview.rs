@@ -42,6 +42,7 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells,
+	ConnectingStairwell, WellAabb, WellSide,
 	FittedRectangle, IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad,
 	MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams,
 	RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor, RectRingFloorParams,
@@ -117,6 +118,10 @@ pub enum PreviewSubject {
 		no_right: bool,
 	},
 	ConnectingHall,
+	ConnectingStairwell {
+		case: crate::commands::show::connecting_stairwell::StairwellCase,
+		tread_fill: f32,
+	},
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
@@ -559,6 +564,9 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
+			PreviewSubject::ConnectingStairwell { case, tread_fill } => {
+				format!("preview: connecting-stairwell ({case:?} fill={tread_fill:.2})")
+			}
 			PreviewSubject::ArcFloor {
 				radius,
 				storey_height,
@@ -3635,6 +3643,9 @@ pub fn present_preview_lod(
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_building_preview(&mut commands, transform, &hall, &lod_ref);
 		}
+		PreviewSubject::ConnectingStairwell { case, tread_fill } => {
+			spawn_connecting_stairwell(&mut commands, transform, *case, *tread_fill, &lod_ref);
+		}
 		PreviewSubject::ArcFloor { radius, storey_height, floor, ceiling, openings } => {
 			let floor_shell = ArcFloor::new(ArcFloorParams {
 				center_xz: Vec3::ZERO,
@@ -4411,6 +4422,120 @@ fn spawn_livable_quarters_gallery<T>(
 	for cell in cells {
 		let tf = transform * Transform::from_translation(cell.offset);
 		spawn_building_preview(commands, tf, &cell.room, lod_ref);
+	}
+}
+
+fn spawn_connecting_stairwell(
+	commands: &mut Commands,
+	transform: Transform,
+	case: crate::commands::show::connecting_stairwell::StairwellCase,
+	tread_fill: f32,
+	lod_ref: &lod::lod_ref::LodRef<'_>,
+) {
+	use crate::commands::show::connecting_stairwell::StairwellCase;
+	use richmond_building_components::panels::PanelStyle;
+
+	let well = |min: Vec3, max: Vec3, on: WellSide, off: WellSide| {
+		WellAabb::from_plan(min, max, on, off, tread_fill)
+	};
+	match case {
+		StairwellCase::Stacked => {
+			let w = well(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
+				lod_ref,
+			);
+		}
+		StairwellCase::Opposite => {
+			let w = well(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::PosZ,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
+				lod_ref,
+			);
+		}
+		StairwellCase::QuarterTurn => {
+			let w = well(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegX,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
+				lod_ref,
+			);
+		}
+		StairwellCase::Tiny => {
+			let w = well(
+				Vec3::new(-0.6, 0.0, -0.6),
+				Vec3::new(0.6, 1.5, 0.6),
+				WellSide::NegZ,
+				WellSide::NegZ,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
+				lod_ref,
+			);
+		}
+		StairwellCase::Tall => {
+			let w = well(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 6.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, w),
+				lod_ref,
+			);
+		}
+		StairwellCase::StackedPair => {
+			let lower = well(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+			);
+			let upper = well(
+				Vec3::new(-1.2, 3.0, -1.2),
+				Vec3::new(1.2, 6.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, lower)
+					.with_upper_landing(false),
+				lod_ref,
+			);
+			spawn_building_preview(
+				commands,
+				transform,
+				&ConnectingStairwell::from_well(PanelStyle::RoughStonework, upper),
+				lod_ref,
+			);
+		}
 	}
 }
 
