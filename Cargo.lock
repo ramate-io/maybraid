@@ -5738,7 +5738,19 @@ dependencies = [
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
+ "richmond-developments",
  "scene-ref",
+]
+
+[[package]]
+name = "richmond-developments"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-buildings",
 ]
 
 [[package]]
