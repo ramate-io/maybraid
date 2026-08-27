@@ -291,7 +291,11 @@ fn begin_skips_cull_worthy_desired() -> anyhow::Result<()> {
 		.insert(LodLevelSpawnRequest { level: LodSceneLevel::High });
 	app.update();
 
-	assert!(app.world().entity(host).get::<LodLevelSpawnRequest>().is_none());
+	assert_ne!(
+		app.world().entity(host).get::<LodLevelSpawnRequest>().map(|r| r.level),
+		Some(LodSceneLevel::High),
+		"stale High must retarget, not stay queued"
+	);
 	let bag_children: Vec<Entity> = app
 		.world()
 		.entity(host)
@@ -314,5 +318,51 @@ fn begin_skips_cull_worthy_desired() -> anyhow::Result<()> {
 		}
 	}
 	assert_eq!(pending_high, 0, "begin must not start a High root distance would cull");
+	Ok(())
+}
+
+#[test]
+fn begin_retargets_stale_high_to_camera_band() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	app.add_plugins(LodSceneRefreshChunkPlugin::<Probe>::default());
+	spawn_viewer(app.world_mut(), Vec3::new(300.0, 0.0, 0.0));
+	let (host, _) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::Medium],
+	);
+	app.world_mut()
+		.entity_mut(host)
+		.insert(LodLevelSpawnRequest { level: LodSceneLevel::High });
+	app.update();
+
+	assert_eq!(host_level(&app, host), LodSceneLevel::Low);
+	assert_eq!(
+		app.world().entity(host).get::<LodLevelSpawnRequest>().map(|r| r.level),
+		Some(LodSceneLevel::Low)
+	);
+	let bag_children: Vec<Entity> = app
+		.world()
+		.entity(host)
+		.get::<Children>()
+		.into_iter()
+		.flat_map(|c| c.iter())
+		.collect();
+	let mut pending_high = 0u32;
+	for bag in bag_children {
+		let Some(children) = app.world().entity(bag).get::<Children>() else {
+			continue;
+		};
+		for child in children.iter() {
+			let entity = app.world().entity(child);
+			if entity.get::<crate::LodLevelRoot>().is_some_and(|r| r.0 == LodSceneLevel::High)
+				&& entity.get::<LodLevelRootPending>().is_some()
+			{
+				pending_high += 1;
+			}
+		}
+	}
+	assert_eq!(pending_high, 0);
 	Ok(())
 }

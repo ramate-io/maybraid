@@ -9,7 +9,9 @@ use chico_forests::{
 	ForestGroveTile, ForestIndex, ForestLodChan, ForestPresentBullseye, ForestPresentLattice,
 	LayeringKind, DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
-use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
+use chico_vegetation_components::{
+	spawn_lod_scene_host_with_lod_ref, vegetation_bounds, VegetationComponents,
+};
 use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
@@ -64,7 +66,7 @@ pub struct ForestRegionPresenter<'w, 's> {
 	state: ResMut<'w, ForestPresenterState>,
 }
 
-fn spawn_grove_host<T>(commands: &mut Commands, grove: &T) -> Vec<Entity>
+fn spawn_grove_host<T>(commands: &mut Commands, grove: &T, lod_ref: &LodRef) -> Vec<Entity>
 where
 	T: LodScene + VegetationComponents + Component + Clone + Send + Sync + 'static,
 {
@@ -72,15 +74,20 @@ where
 		.structural_lod()
 		.map(|p| p.footprint_aabb())
 		.unwrap_or_else(|| vegetation_bounds(grove));
-	let entities = spawn_lod_scene_host(commands, grove, Transform::IDENTITY, bounds);
+	let entities =
+		spawn_lod_scene_host_with_lod_ref(commands, grove, Transform::IDENTITY, bounds, lod_ref);
 	for entity in &entities {
 		commands.entity(*entity).insert(ShowRoot);
 	}
 	entities
 }
 
-fn spawn_forest_grove_tile(commands: &mut Commands, tile: &ForestGroveTile) -> Vec<Entity> {
-	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g))
+fn spawn_forest_grove_tile(
+	commands: &mut Commands,
+	tile: &ForestGroveTile,
+	lod_ref: &LodRef,
+) -> Vec<Entity> {
+	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g, lod_ref))
 }
 
 impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> {
@@ -88,7 +95,7 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 		self.state.presented.get(&id).map(|entry| entry.version)
 	}
 
-	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, _lod_ref: &LodRef) {
+	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
 		if let Some(previous) = self.state.presented.remove(&id) {
 			for entity in previous.entities {
 				self.commands.entity(entity).despawn();
@@ -97,7 +104,7 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 		let world = forest_world_sample();
 		let mut entities = Vec::new();
 		for tile in grove.grow(&world) {
-			entities.extend(spawn_forest_grove_tile(&mut self.commands, &tile));
+			entities.extend(spawn_forest_grove_tile(&mut self.commands, &tile, lod_ref));
 		}
 		self.state
 			.presented

@@ -371,8 +371,13 @@ fn admit_candidates<T: Component + LodScene>(
 			let Ok(scene) = scenes.get(candidate.host) else {
 				continue;
 			};
-			if scene.scene_lod_culls(lod_ref, candidate.level).should_cull(candidate.level) {
-				commands.entity(candidate.host).remove::<LodLevelSpawnRequest>();
+			// Stale desired (identity spawn, produce not yet in range) must follow
+			// the viewer. Do not drop the request: [`LodSceneCulls::should_cull`]
+			// is for other bands, not the camera band.
+			let actual = scene.scene_lod_level(lod_ref);
+			if actual != candidate.level {
+				commands.entity(candidate.host).insert(actual);
+				commands.entity(candidate.host).insert(LodLevelSpawnRequest { level: actual });
 				continue;
 			}
 		}
@@ -394,11 +399,10 @@ fn admit_candidates<T: Component + LodScene>(
 		let begin_weight = materialize_front(&mut queue, prefill);
 		charge_begin_weight(begin_clock, begin_weight.max(1));
 
-		let level = candidate.level;
 		let cold = candidate.cold;
 		let initial_vis = if cold { Visibility::Inherited } else { Visibility::Hidden };
 		let level_root = bsn! {
-			template_value(LodLevelRoot(level))
+			template_value(LodLevelRoot(candidate.level))
 			LodLevelRootPending
 			Transform::default()
 			template_value(initial_vis)
