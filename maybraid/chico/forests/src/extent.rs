@@ -42,6 +42,14 @@ impl ForestExtent {
 		(self.min + self.max) * 0.5
 	}
 
+	/// Half-open XZ (`[min, max)`) for a grove-slot center.
+	pub fn owns_center_xz(self, position: Vec3) -> bool {
+		position.x >= self.min.x
+			&& position.x < self.max.x
+			&& position.z >= self.min.z
+			&& position.z < self.max.z
+	}
+
 	/// Tile this forest cell into grove footprints of `tile_xz` metres.
 	pub fn grove_tiles(self, tile_xz: f32) -> Vec<GroveExtent> {
 		let tile = tile_xz.max(1.0);
@@ -128,6 +136,15 @@ impl ForestExtent {
 mod tests {
 	use super::*;
 	use anyhow::Result;
+
+	#[test]
+	fn owns_center_xz_is_half_open() -> Result<()> {
+		let cell = ForestExtent::default_cell();
+		assert!(cell.owns_center_xz(Vec3::ZERO));
+		assert!(cell.owns_center_xz(Vec3::new(-800.0, 0.0, 0.0)));
+		assert!(!cell.owns_center_xz(Vec3::new(800.0, 0.0, 0.0)));
+		Ok(())
+	}
 
 	#[test]
 	fn default_cell_is_sixteen_by_sixteen_hundred_metre_tiles() -> Result<()> {

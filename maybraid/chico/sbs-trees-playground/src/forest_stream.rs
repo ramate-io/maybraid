@@ -228,7 +228,7 @@ pub fn stream_forest(
 	};
 	*stream_center = Some(center);
 	let wanted: Vec<(i32, i32)> = ForestExtent::cell_ring(center, *stream_radius).collect();
-	// Select halo (R+1) without growing it so edge tiles can blend.
+	// Select halo (R+1) without growing it so neighbor grove slots have recipes.
 	let halo: Vec<(i32, i32)> =
 		ForestExtent::cell_ring(center, stream_radius.saturating_add(1)).collect();
 	for &(sx, sz) in &halo {

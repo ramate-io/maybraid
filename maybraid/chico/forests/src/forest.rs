@@ -37,7 +37,7 @@ impl ChicoForest {
 		world: &impl GroveWorldSample,
 	) -> Self {
 		let layers = layering.layering().typical_layers();
-		// Pinned review cells share one layering; no kind change on faces.
+		// Pinned review cells share one layering; neighbor slots agree.
 		Self { extent, assembled: assemble(extent, layers, NeighborLayers::none(), world) }
 	}
 

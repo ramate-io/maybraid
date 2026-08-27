@@ -21,7 +21,8 @@ pub use assemble::{
 	assemble, assemble_isolated, grow_tile, AssembledForest, ForestGroveTile, NeighborLayers,
 };
 pub use blend::{
-	Cardinal, FaceNeighbors, CANOPY_BLEND_WIDTH, TUFT_BLEND_WIDTH, UNDERSTORY_BLEND_WIDTH,
+	neighbor_tile, Cardinal, GroveNeighbors, GROVE_BLEND_INFLUENCE, GROVE_BLEND_NOISE,
+	GROVE_BLEND_TEMPERATURE,
 };
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};
