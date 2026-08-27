@@ -24,6 +24,8 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod connecting_hall;
 pub mod connecting_shells;
+pub mod connecting_stairwell;
+pub mod connecting_stairwell_examples;
 pub mod dining_room_examples;
 pub mod fitted_rectangle;
 pub mod halls_to_shafts;
@@ -116,6 +118,10 @@ pub enum Show {
 	Tube(tube::Tube),
 	/// One-kink tube between two oriented openings.
 	ConnectingHall(connecting_hall::ConnectingHall),
+	/// Exclusive AABB stairwell with a circular spiral.
+	ConnectingStairwell(connecting_stairwell::ConnectingStairwell),
+	/// Gallery of pathological circular-spiral wells.
+	ConnectingStairwellExamples(connecting_stairwell_examples::ConnectingStairwellExamples),
 	/// One circular storey shell with optional `--opening` plan entries.
 	ArcFloor(arc_floor::ArcFloor),
 	/// Stacked circular storey shell (explicit openings; no noise).
@@ -267,6 +273,8 @@ impl Show {
 			Self::ClippedRuledStrip(cmd) => Ok(cmd.into_preview()),
 			Self::Tube(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingHall(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingStairwell(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingStairwellExamples(cmd) => Ok(cmd.into_preview()),
 			Self::ArcFloor(cmd) => cmd.into_preview(),
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
