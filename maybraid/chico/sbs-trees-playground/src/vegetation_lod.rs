@@ -1,8 +1,9 @@
 //! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
 //!
-//! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) and structural
-//! [`ComponentsOnly`] wrappers that band via [`VegetationComponents::structural_lod`]
-//! share the same region channels. Cull uses a rotating [`OpenLattice`] annulus.
+//! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for
+//! any leftover nested kit nodes. Isolated plants and woody grove children share one
+//! family: [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
+//! Groves register as themselves. Cull uses a rotating [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -17,13 +18,13 @@ use chico_groves::{
 	TropicalUndergrowth, UnendingJungle, Vineyard, WanderingAcacia, WildGrass,
 };
 use chico_sbs_trees::{
-	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleStorybookTree,
-	KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown, PenmarchTorch,
-	RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer, TuftPatch,
-	VaseTree, WaialeaPalm,
+	BraidOakTree, DatePalm, FriendsConifer, HighBushShoots, HonuBanyan, JungleGrowth,
+	JungleStorybookTree, KamakuraTorch, LiamsConifer, NorthernConifer, PalmBush, PalmCrown,
+	PenmarchTorch, RorysHeadTrained, SimplemansHedge, SopesBanyan, StorybookTree, TemperateConifer,
+	TuftPatch, VaseTree, WaialeaPalm,
 };
 use chico_vegetation_components::{
-	ComponentsOnly, FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
+	FlattenedComponentsOnly, FoliageNode, PlacedVegetation, StickNode,
 };
 use lod::{
 	Bullseye, LodChunkFulfillBudget, LodCullRegionCursor, LodRefreshCorePlugin,
@@ -44,6 +45,9 @@ pub struct VegetationSpotlight;
 /// Channel marker for OpenLattice [`lod::LodSceneCullRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VegetationCull;
+
+/// Isolated `/show` plant and grove-nested plant host.
+type FlattenedPlant<T> = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<T>>>;
 
 /// Register Avian refresh + cull for one LOD host type (fine-phase or structural).
 macro_rules! avian_host {
@@ -107,17 +111,19 @@ impl Plugin for VegetationLodRefreshPlugin {
 			LodSceneCullRegionPlugin::<OpenLattice, With<Camera>, VegetationCull>::default(),
 		));
 
-		// Fine-phase domain hosts nested under structural roots.
+		// Fine-phase domain hosts nested under grove LodScene roots.
 		avian_host!(app, FoliageNode);
 		avian_host!(app, StickNode);
 
-		// Structural grove hosts (Monster Grass still flattens via ComponentsOnly).
-		avian_host!(app, ComponentsOnly<MonsterGrass>);
-		avian_host!(app, ComponentsOnly<BraidGrass>);
-		avian_host!(app, ComponentsOnly<TropicalTufts>);
-		avian_host!(app, ComponentsOnly<CommonTufts>);
-		avian_host!(app, ComponentsOnly<TallGrass>);
-		avian_host!(app, ComponentsOnly<WildGrass>);
+		// Tuft grove roots (LodScene).
+		avian_host!(app, MonsterGrass);
+		avian_host!(app, BraidGrass);
+		avian_host!(app, TropicalTufts);
+		avian_host!(app, CommonTufts);
+		avian_host!(app, TallGrass);
+		avian_host!(app, WildGrass);
+
+		// Woody grove roots (LodScene).
 		avian_host!(app, BushScrub);
 		avian_host!(app, TropicalUndergrowth);
 		avian_host!(app, LevantineScrub);
@@ -154,85 +160,29 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, Shamanhome);
 		avian_host!(app, DateGrove);
 
-		// Structural single-tree / component hosts used by `/show`.
-		avian_host!(app, ComponentsOnly<SopesBanyan>);
-		avian_host!(app, ComponentsOnly<PenmarchTorch>);
-		avian_host!(app, ComponentsOnly<KamakuraTorch>);
-		avian_host!(app, ComponentsOnly<RorysHeadTrained>);
-		avian_host!(app, ComponentsOnly<StorybookTree>);
-		avian_host!(app, ComponentsOnly<VaseTree>);
-		avian_host!(app, ComponentsOnly<FriendsConifer>);
-		avian_host!(app, ComponentsOnly<NorthernConifer>);
-		avian_host!(app, ComponentsOnly<LiamsConifer>);
-		avian_host!(app, ComponentsOnly<TemperateConifer>);
-		avian_host!(app, ComponentsOnly<HonuBanyan>);
-		avian_host!(app, ComponentsOnly<JungleStorybookTree>);
-		avian_host!(app, ComponentsOnly<BraidOakTree>);
-		avian_host!(app, ComponentsOnly<SimplemansHedge>);
-		avian_host!(app, ComponentsOnly<TuftPatch>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<TuftPatch>>);
-		avian_host!(app, ComponentsOnly<PalmCrown>);
-		avian_host!(app, ComponentsOnly<DatePalm>);
-		avian_host!(app, ComponentsOnly<WaialeaPalm>);
-		avian_host!(app, ComponentsOnly<PalmBush>);
-		avian_host!(app, ComponentsOnly<HighBushShoots>);
-
-		// Nested grove plant hosts (posed + palette materials).
-		avian_host!(app, ComponentsOnly<PlacedVegetation<PalmBush>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<HonuBanyan>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<HighBushShoots>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<OasisDatePalm>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<DatePalm>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<PenmarchTorch>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<StorybookTree>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<StorybookTree>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<StorybookTree>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<VaseTree>>>);
-		avian_host!(
-			app,
-			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<JungleStorybookTree>>>
-		);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<BraidOakTree>>>);
-		avian_host!(
-			app,
-			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<RorysHeadTrained>>>
-		);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<PenmarchTorch>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<KamakuraTorch>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<HighBushShoots>>>);
-		avian_host!(
-			app,
-			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<SimplemansHedge>>>
-		);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<PalmBush>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<HonuBanyan>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<SopesBanyan>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<DatePalm>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<WaialeaPalm>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<OasisDatePalm>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<TuftPatch>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<FriendsConifer>>>);
-		avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<LiamsConifer>>>);
-		avian_host!(
-			app,
-			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<NorthernConifer>>>
-		);
-		avian_host!(
-			app,
-			FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<TemperateConifer>>>
-		);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<RorysHeadTrained>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<VaseTree>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<BraidOakTree>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<SimplemansHedge>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<LiamsConifer>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<TemperateConifer>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<KamakuraTorch>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<SopesBanyan>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<WaialeaPalm>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<JungleStorybookTree>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<FriendsConifer>>);
-		avian_host!(app, ComponentsOnly<PlacedVegetation<NorthernConifer>>);
+		// Isolated /show plants and grove-nested plants.
+		avian_host!(app, FlattenedPlant<StorybookTree>);
+		avian_host!(app, FlattenedPlant<VaseTree>);
+		avian_host!(app, FlattenedPlant<JungleStorybookTree>);
+		avian_host!(app, FlattenedPlant<BraidOakTree>);
+		avian_host!(app, FlattenedPlant<RorysHeadTrained>);
+		avian_host!(app, FlattenedPlant<PenmarchTorch>);
+		avian_host!(app, FlattenedPlant<KamakuraTorch>);
+		avian_host!(app, FlattenedPlant<HighBushShoots>);
+		avian_host!(app, FlattenedPlant<JungleGrowth>);
+		avian_host!(app, FlattenedPlant<SimplemansHedge>);
+		avian_host!(app, FlattenedPlant<PalmBush>);
+		avian_host!(app, FlattenedPlant<HonuBanyan>);
+		avian_host!(app, FlattenedPlant<SopesBanyan>);
+		avian_host!(app, FlattenedPlant<DatePalm>);
+		avian_host!(app, FlattenedPlant<WaialeaPalm>);
+		avian_host!(app, FlattenedPlant<OasisDatePalm>);
+		avian_host!(app, FlattenedPlant<TuftPatch>);
+		avian_host!(app, FlattenedPlant<FriendsConifer>);
+		avian_host!(app, FlattenedPlant<LiamsConifer>);
+		avian_host!(app, FlattenedPlant<NorthernConifer>);
+		avian_host!(app, FlattenedPlant<TemperateConifer>);
+		avian_host!(app, FlattenedPlant<PalmCrown>);
 
 		if !app.is_plugin_added::<LodLazyRefsPlugin>() {
 			app.add_plugins(LodLazyRefsPlugin);

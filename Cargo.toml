@@ -62,6 +62,7 @@ members = [
   "maybraid/chico/vegetation-components",
   "maybraid/chico/sbs-geometry",
   "maybraid/chico/groves",
+  "maybraid/chico/forests",
   "maybraid/gimme/core",
   "maybraid/gimme/gen",
 
@@ -245,6 +246,7 @@ chico-tree-components = { path = "maybraid/chico/tree-components" }
 chico-vegetation-components = { path = "maybraid/chico/vegetation-components" }
 chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
 chico-groves = { path = "maybraid/chico/groves" }
+chico-forests = { path = "maybraid/chico/forests" }
 chico-vegetation-shaders = { path = "maybraid/chico/shaders" }
 
 gimme-core = { path = "maybraid/gimme/core" }

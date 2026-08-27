@@ -1,6 +1,6 @@
 //! Reusable Chico vegetation scene components.
 //!
-//! Per domain: style + geometry + [`Placement`] → node (`LodScene`).
+//! Per domain: geometry + [`Placement`] → node (`LodScene`).
 
 pub mod assets;
 pub mod foliage;
@@ -17,13 +17,13 @@ pub mod structural_lod;
 
 pub use assets::AssetPath;
 pub use foliage::{
-	update_foliage_host_levels, CheapBallCollection, FoliageGeometry, FoliageLodProbe, FoliageNode,
-	FoliageStyle, FrondCollection, FrondKit, FrondMember, FrondRun,
+	update_foliage_host_levels, CheapBallCollection, CollectionPresent, FoliageGeometry,
+	FoliageLodProbe, FoliageNode, FrondCollection, FrondKit, FrondMember, FrondRun,
 	CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
-	CHEAP_BALL_COLLECTION_MEDIUM_METERS, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR,
-	FOLIAGE_MEDIUM_FACTOR, FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_HIGH_METERS,
-	FROND_COLLECTION_LOW_FACTOR, FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_FACTOR,
-	FROND_COLLECTION_MEDIUM_METERS,
+	CHEAP_BALL_COLLECTION_MEDIUM_METERS, COLLECTION_HIGH_METERS, COLLECTION_LOW_METERS,
+	COLLECTION_MEDIUM_METERS, FOLIAGE_HIGH_FACTOR, FOLIAGE_LOW_FACTOR, FOLIAGE_MEDIUM_FACTOR,
+	FROND_COLLECTION_HIGH_FACTOR, FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_FACTOR,
+	FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_FACTOR, FROND_COLLECTION_MEDIUM_METERS,
 };
 pub use layer::{Layer, Layers};
 pub use lod_host::{
@@ -41,7 +41,7 @@ pub use procedural::{
 pub use scene_children::{pose, posed_mesh, posed_mesh_material_ref, scene_children, with_pose};
 pub use sticks::{
 	update_stick_host_levels, StickCollection, StickGeometry, StickLodProbe, StickMember,
-	StickNode, StickStyle, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
+	StickNode, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
 	STICK_COLLECTION_MEDIUM_METERS, STICK_HIGH_FACTOR, STICK_LOW_FACTOR, STICK_MEDIUM_FACTOR,
 };
 pub use structural_lod::{
@@ -66,7 +66,7 @@ pub trait VegetationComponents {
 		Layers::new()
 	}
 
-	/// When set, drives structural [`LodScene`] banding / bounds for [`ComponentsOnly`].
+	/// When set, drives structural [`LodScene`] banding / bounds for host wrappers.
 	fn structural_lod(&self) -> Option<StructuralLod> {
 		None
 	}
@@ -523,7 +523,25 @@ where
 	vec![entity]
 }
 
-/// Spawn a typed [`LodScene`] host (grove roots that nest [`ComponentsOnly`] plants).
+/// Spawn a [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>` host.
+///
+/// Isolated `/show` / `/render` plants use this family so they share grove plant hosts.
+pub fn spawn_flattened_placed_vegetation<T>(
+	commands: &mut Commands,
+	vegetation: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+) -> Vec<Entity>
+where
+	T: VegetationComponents + Clone + Send + Sync + 'static,
+{
+	let host = FlattenedComponentsOnly(PlacedVegetation::identity(std::sync::Arc::new(
+		vegetation.clone(),
+	)));
+	spawn_lod_scene_host(commands, &host, transform, bounds)
+}
+
+/// Spawn a typed [`LodScene`] host (grove roots that nest flattened plant hosts).
 pub fn spawn_lod_scene_host<T>(
 	commands: &mut Commands,
 	host: &T,

@@ -1,17 +1,17 @@
 # `chico-vegetation-components`
 
-Domain IR for Chico vegetation: **style + geometry + placement → node (`LodScene`)**.
+Domain IR for Chico vegetation: **geometry + placement → node (`LodScene`)**.
 
-Higher-order trees implement [`VegetationComponents`](src/lib.rs) and present via [`ComponentsOnly`](src/lib.rs), mirroring Richmond's [`BuildingComponents`](../../richmond/building-components/).
+Higher-order trees implement [`VegetationComponents`](src/lib.rs) and present via [`FlattenedComponentsOnly`](src/lib.rs)`<`[`PlacedVegetation`](src/placed_vegetation.rs)`<Arc<T>>>`, mirroring Richmond's [`BuildingComponents`](../../richmond/building-components/). Tuft groves without [`LodScene`](../../lod/lib) yet still use [`ComponentsOnly`](src/lib.rs).
 
 ## Domains
 
 | Node | Role |
 |------|------|
 | [`StickNode`](src/sticks.rs) | Trunk / branch segments. Kit: \(Y \in [0, 1]\), \(X = Z \in [-0.2, 0.2]\). |
-| [`FoliageNode`](src/foliage.rs) | Canopy leaves (layered ball, noisy ball, plane splay, …). |
+| [`FoliageNode`](src/foliage.rs) | Canopy leaves (layered ball, cheap ball, frond, collections). |
 
-Stick style `Standard` loads GLB LOD triads from `maybraid/assets/vegetation/sticks/standard/`; geometry `Segment` uses `001_*` and `Trunk` uses `trunk_001_*`. Foliage style `Standard` + geometry `LayeredBall` loads `maybraid/assets/vegetation/foliage/standard/layered_ball_001_{high,mid,low}_res.glb`. SDF / inline builders remain as named style variants.
+Stick [`StickGeometry::{Segment,Trunk}`](src/sticks/geometry.rs) picks the GLB triad under `maybraid/assets/vegetation/sticks/standard/` (`001_*` vs `trunk_001_*`) and the nested mesh-LOD extent policy. Foliage [`FoliageGeometry`](src/foliage/geometry.rs) picks the kit under `maybraid/assets/vegetation/foliage/standard/` (layered ball, cheap ball, frond, or a collection of those).
 
 ## Apps
 

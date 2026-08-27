@@ -1,6 +1,6 @@
 //! Frame timing diagnostics for the SBS trees playground.
 //!
-//! Toggle with env `CHICO_SBS_DIAG` (comma-separated):
+//! Toggle with env `CHICO_SBS_DIAG` (comma-separated), or `/stats fps` in-game:
 //! - `fps` — throttled `[sbs.timing]` FPS / frame_ms (default when unset)
 //! - `off` — disable
 //!
@@ -55,9 +55,6 @@ impl PlaygroundDiag {
 		if off {
 			return Self { fps: false };
 		}
-		if !fps {
-			fps = true;
-		}
 		Self { fps }
 	}
 
@@ -74,14 +71,31 @@ pub struct PlaygroundTimingPlugin;
 
 impl Plugin for PlaygroundTimingPlugin {
 	fn build(&self, app: &mut App) {
-		let diag = PlaygroundDiag::from_env();
-		app.insert_resource(diag);
-		if diag.fps {
-			if !app.is_plugin_added::<FrameTimeDiagnosticsPlugin>() {
-				app.add_plugins(FrameTimeDiagnosticsPlugin::default());
-			}
-			app.add_systems(Update, log_frame_timing);
+		if !app.is_plugin_added::<FrameTimeDiagnosticsPlugin>() {
+			app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		}
+		if !app.world().contains_resource::<PlaygroundDiag>() {
+			app.insert_resource(PlaygroundDiag::from_env());
+		}
+		app.add_systems(Update, log_frame_timing);
+	}
+}
+
+pub fn toggle_fps_logging(
+	mut commands: Commands,
+	mut diag: ResMut<PlaygroundDiag>,
+	mut console: ResMut<game_commands::ui::GameCommandStatusText>,
+	requests: Query<Entity, With<crate::commands::RequestFpsToggle>>,
+) {
+	for entity in &requests {
+		diag.fps = !diag.fps;
+		console.0 = if diag.fps {
+			"[sbs.timing] fps logging on".into()
+		} else {
+			"[sbs.timing] fps logging off".into()
+		};
+		info!("{}", console.0);
+		commands.entity(entity).despawn();
 	}
 }
 
@@ -116,7 +130,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn default_env_enables_fps() {
+	fn summary_names_fps_flag() {
 		assert!(PlaygroundDiag { fps: true }.summary().contains("fps"));
 		assert!(PlaygroundDiag { fps: false }.summary().contains("off"));
 	}

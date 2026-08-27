@@ -1,55 +1,44 @@
-//! Foliage IR node: style + geometry + placement.
+//! Foliage IR node: geometry + placement + collection presentation.
+//!
+//! [`FoliageNode`] is authoring IR and the fine-phase [`lod::gen::LodScene`] host.
+//! Scene emission is [`present`]; banding / culls are [`lod`].
+
+mod lod;
+mod present;
 
 use std::collections::HashMap;
 
-use bevy::light::NotShadowCaster;
-use bevy::math::bounding::Aabb3d;
-use bevy::prelude::{Component, Mesh3d, MeshMaterial3d, StandardMaterial, Vec3, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use lod::gen::{
-	cull_offset_bands_from_factor, LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus,
-};
-use lod::lod_ref::LodRef;
-use lod::SceneChunk;
-use material_ref::{MaterialId, MaterialRef, MaterialRefRoot};
+use bevy::prelude::{Component, Vec3};
+use material_ref::{MaterialId, MaterialRef};
 
-use crate::assets::AssetPath;
-use crate::foliage::ball_collection::{
-	CheapBallCollection, CHEAP_BALL_COLLECTION_HIGH_METERS, CHEAP_BALL_COLLECTION_LOW_METERS,
-	CHEAP_BALL_COLLECTION_MEDIUM_METERS,
-};
-use crate::foliage::collection::{
-	FrondCollection, FrondKit, FrondMember, FROND_COLLECTION_HIGH_METERS,
-	FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
-};
+use crate::foliage::collection::{CheapBallCollection, FrondCollection};
 use crate::foliage::geometry::FoliageGeometry;
+use crate::foliage::present::CollectionPresent;
 use crate::foliage::probe::FoliageLodProbe;
-use crate::foliage::style::FoliageStyle;
-use crate::lod_host::{
-	posed_foliage_asset_tier, posed_foliage_multi_scene_merge, posed_frond_asset_tier,
-	posed_frond_multi_scene_merge,
-};
 use crate::materials::chico_frond_material_ref;
 use crate::placed::Placement;
-use crate::procedural::VegetationProceduralAssets;
-use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
-use scene_ref::{MultiSceneMerge, MultiScenePart};
 
-/// Authoring IR for a foliage cluster — also the fine-phase [`LodScene`] host component.
+/// Authoring IR for a foliage cluster — also the fine-phase [`lod::gen::LodScene`] host.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct FoliageNode {
-	pub style: FoliageStyle,
 	pub geometry: FoliageGeometry,
 	pub placement: Placement,
 	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
 	/// frond constructors stamp [`crate::chico_frond_material_ref`]; higher-order
 	/// types set leaf / palette as needed.
 	pub material: MaterialRef,
+	/// Kit collections only. Single kits ignore this. Default [`CollectionPresent::Merge`].
+	pub collection_present: CollectionPresent,
 }
 
 impl FoliageNode {
-	pub fn new(style: FoliageStyle, geometry: FoliageGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement, material: MaterialRef::default() }
+	pub fn new(geometry: FoliageGeometry, placement: Placement) -> Self {
+		Self {
+			geometry,
+			placement,
+			material: MaterialRef::default(),
+			collection_present: CollectionPresent::Merge,
+		}
 	}
 
 	pub fn with_material(mut self, material: MaterialRef) -> Self {
@@ -57,49 +46,58 @@ impl FoliageNode {
 		self
 	}
 
-	pub fn noisy_ball(placement: Placement) -> Self {
-		Self::new(FoliageStyle::NoisyBall, FoliageGeometry::UnitBall, placement)
+	/// Kit-collection presenter. No-op for single kits.
+	pub fn with_collection_present(mut self, present: CollectionPresent) -> Self {
+		self.collection_present = present;
+		self
+	}
+
+	/// Instance each collection member as a posed kit under this host.
+	pub fn instanced(self) -> Self {
+		self.with_collection_present(CollectionPresent::Instance)
+	}
+
+	/// Bake collection members into one [`scene_ref::MultiSceneMerge`] (default).
+	pub fn merged(self) -> Self {
+		self.with_collection_present(CollectionPresent::Merge)
 	}
 
 	/// Layered ball using `vegetation/foliage/standard/layered_ball_001_*` GLBs.
 	pub fn layered_ball(placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, FoliageGeometry::LayeredBall, placement)
+		Self::new(FoliageGeometry::LayeredBall, placement)
 	}
 
 	/// Cheap ball using `vegetation/foliage/standard/cheap_ball_001_*` GLBs.
 	///
 	/// Prefer for dense packed clusters where silhouette comes from density.
 	pub fn cheap_ball(placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, FoliageGeometry::CheapBall, placement)
+		Self::new(FoliageGeometry::CheapBall, placement)
 	}
 
 	/// Square-ended straight frond segment (`straight_frond_segment_001_*`).
 	pub fn straight_frond_segment(placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, FoliageGeometry::StraightFrondSegment, placement)
+		Self::new(FoliageGeometry::StraightFrondSegment, placement)
 			.with_material(chico_frond_material_ref())
 	}
 
 	/// Point-tip straight frond (`straight_frond_001_*`); prefer [`Self::straight_frond_segment`].
 	pub fn straight_frond(placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, FoliageGeometry::StraightFrond, placement)
+		Self::new(FoliageGeometry::StraightFrond, placement)
 			.with_material(chico_frond_material_ref())
 	}
 
-	/// Frond collection under one LOD parent (merge thinning by collection extent).
+	/// Frond collection under one LOD parent. Default presenter is merge.
 	///
 	/// Parent [`Placement`] is usually identity when members are already tree-local.
+	/// Use [`Self::instanced`] when members must stay separate meshes.
 	pub fn frond_collection(collection: FrondCollection, placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, FoliageGeometry::FrondCollection(collection), placement)
+		Self::new(FoliageGeometry::FrondCollection(collection), placement)
 			.with_material(chico_frond_material_ref())
 	}
 
-	/// Cheap-ball collection under one LOD parent (merge thinning by collection extent).
+	/// Cheap-ball collection under one LOD parent. Default presenter is merge.
 	pub fn cheap_ball_collection(collection: CheapBallCollection, placement: Placement) -> Self {
-		Self::new(
-			FoliageStyle::Standard,
-			FoliageGeometry::CheapBallCollection(collection),
-			placement,
-		)
+		Self::new(FoliageGeometry::CheapBallCollection(collection), placement)
 	}
 
 	/// Fold cheap-ball nodes into one collection (shared material, baked probe).
@@ -159,7 +157,7 @@ impl FoliageNode {
 	}
 
 	pub fn standard(geometry: FoliageGeometry, placement: Placement) -> Self {
-		Self::new(FoliageStyle::Standard, geometry, placement)
+		Self::new(geometry, placement)
 	}
 
 	fn probe(&self) -> FoliageLodProbe {
@@ -187,290 +185,6 @@ impl FoliageNode {
 		let scale = self.placement.scale.abs().max_element().max(1e-4);
 		(world_center, (local_radius * scale).max(1e-4))
 	}
-
-	fn standard_ball_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
-		match &self.geometry {
-			FoliageGeometry::LayeredBall => self.style.layered_ball_glb_for_level(level),
-			FoliageGeometry::CheapBall => self.style.cheap_ball_glb_for_level(level),
-			_ => None,
-		}
-	}
-
-	fn standard_frond_glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
-		match &self.geometry {
-			FoliageGeometry::StraightFrond => self.style.straight_frond_glb_for_level(level),
-			FoliageGeometry::StraightFrondSegment => {
-				self.style.straight_frond_segment_glb_for_level(level)
-			}
-			_ => None,
-		}
-	}
-
-	fn frond_glb_for_kit(&self, kit: FrondKit, level: LodSceneLevel) -> Option<AssetPath> {
-		match kit {
-			FrondKit::StraightFrond => self.style.straight_frond_glb_for_level(level),
-			FrondKit::StraightFrondSegment => {
-				self.style.straight_frond_segment_glb_for_level(level)
-			}
-		}
-	}
-
-	fn procedural_ball_scene(&self) -> impl Scene + 'static {
-		posed_mesh_material_ref(
-			VegetationProceduralAssets::foliage_ball(),
-			VegetationProceduralAssets::foliage_material(),
-			self.material.clone(),
-			pose(self.placement),
-		)
-	}
-
-	/// Stick-cylinder stand-in when a frond GLB is missing (same \(Y \in [0, 1]\) kit axis).
-	fn procedural_frond_scene_at(&self, placement: Placement) -> impl Scene + 'static {
-		let mesh = VegetationProceduralAssets::stick_cylinder();
-		let placeholder = VegetationProceduralAssets::foliage_material();
-		let material = self.material.clone();
-		let transform = pose(placement);
-		bsn! {
-			NotShadowCaster
-			Mesh3d({mesh})
-			MeshMaterial3d::<StandardMaterial>({placeholder})
-			template_value(MaterialRefRoot(material))
-			template_value(transform)
-			Visibility::default()
-		}
-	}
-
-	fn member_leaf_scene(&self, member: FrondMember, level: LodSceneLevel) -> Box<dyn Scene> {
-		let placement = self.placement.compose_child(member.placement);
-		match self.frond_glb_for_kit(member.kit, level) {
-			Some(asset) => Box::new(posed_frond_asset_tier(
-				Some(asset),
-				pose(placement),
-				self.material.clone(),
-			)),
-			None => Box::new(self.procedural_frond_scene_at(placement)),
-		}
-	}
-
-	/// Collection-local [`MultiSceneMerge`] (member poses only — parent transform separate).
-	fn collection_multi_scene_merge(
-		&self,
-		collection: &FrondCollection,
-		level: LodSceneLevel,
-	) -> Option<MultiSceneMerge> {
-		let members = collection.members_for_level(level);
-		if members.is_empty() {
-			return None;
-		}
-		let mut parts = Vec::with_capacity(members.len());
-		for member in members {
-			let asset = self.frond_glb_for_kit(member.kit, level)?;
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(member.placement)));
-		}
-		Some(MultiSceneMerge::new(parts))
-	}
-
-	fn cheap_ball_multi_scene_merge(
-		&self,
-		collection: &CheapBallCollection,
-		level: LodSceneLevel,
-	) -> Option<MultiSceneMerge> {
-		let placements = collection.placements_for_level(level);
-		if placements.is_empty() {
-			return None;
-		}
-		let asset = self.style.cheap_ball_glb_for_level(level)?;
-		let mut parts = Vec::with_capacity(placements.len());
-		for placement in placements {
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(placement)));
-		}
-		Some(MultiSceneMerge::new(parts))
-	}
-
-	fn collection_content(
-		&self,
-		collection: &FrondCollection,
-		level: LodSceneLevel,
-	) -> Box<dyn Scene> {
-		if let Some(merge) = self.collection_multi_scene_merge(collection, level) {
-			return Box::new(posed_frond_multi_scene_merge(
-				merge,
-				pose(self.placement),
-				self.material.clone(),
-			));
-		}
-		// Procedural / missing-GLB fallback: per-member children (world-composed).
-		let children: Vec<Box<dyn Scene>> = collection
-			.members_for_level(level)
-			.into_iter()
-			.map(|member| self.member_leaf_scene(member, level))
-			.collect();
-		Box::new(scene_children(children))
-	}
-
-	fn cheap_ball_collection_content(
-		&self,
-		collection: &CheapBallCollection,
-		level: LodSceneLevel,
-	) -> Box<dyn Scene> {
-		if let Some(merge) = self.cheap_ball_multi_scene_merge(collection, level) {
-			return Box::new(posed_foliage_multi_scene_merge(
-				merge,
-				pose(self.placement),
-				self.material.clone(),
-			));
-		}
-		let children: Vec<Box<dyn Scene>> = collection
-			.placements_for_level(level)
-			.into_iter()
-			.map(|placement| {
-				Box::new(posed_mesh_material_ref(
-					VegetationProceduralAssets::foliage_ball(),
-					VegetationProceduralAssets::foliage_material(),
-					self.material.clone(),
-					pose(self.placement.compose_child(placement)),
-				)) as Box<dyn Scene>
-			})
-			.collect();
-		Box::new((bsn! { NotShadowCaster }, scene_children(children)))
-	}
-
-	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
-		match (&self.style, &self.geometry) {
-			(FoliageStyle::Standard, FoliageGeometry::CheapBall) => {
-				match self.standard_ball_glb_for_level(level) {
-					Some(asset) => Box::new((
-						bsn! { NotShadowCaster },
-						posed_foliage_asset_tier(
-							Some(asset),
-							pose(self.placement),
-							self.material.clone(),
-						),
-					)),
-					None => Box::new((bsn! { NotShadowCaster }, self.procedural_ball_scene())),
-				}
-			}
-			(FoliageStyle::Standard, FoliageGeometry::LayeredBall) => {
-				match self.standard_ball_glb_for_level(level) {
-					Some(asset) => Box::new(posed_foliage_asset_tier(
-						Some(asset),
-						pose(self.placement),
-						self.material.clone(),
-					)),
-					None => Box::new(self.procedural_ball_scene()),
-				}
-			}
-			(
-				FoliageStyle::Standard,
-				FoliageGeometry::StraightFrond | FoliageGeometry::StraightFrondSegment,
-			) => match self.standard_frond_glb_for_level(level) {
-				Some(asset) => Box::new(posed_frond_asset_tier(
-					Some(asset),
-					pose(self.placement),
-					self.material.clone(),
-				)),
-				None => Box::new(self.procedural_frond_scene_at(self.placement)),
-			},
-			(FoliageStyle::Standard, FoliageGeometry::FrondCollection(collection)) => {
-				self.collection_content(collection, level)
-			}
-			(FoliageStyle::Standard, FoliageGeometry::CheapBallCollection(collection)) => {
-				self.cheap_ball_collection_content(collection, level)
-			}
-			_ => Box::new(self.procedural_ball_scene()),
-		}
-	}
-}
-
-impl LodScene for FoliageNode {
-	fn host_contents(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
-		let host = self.clone();
-		let probe = self.probe();
-		bsn! {
-			template_value(host)
-			template_value(probe)
-		}
-	}
-
-	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		self.probe().level_for(lod_ref.current_transform)
-	}
-
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		self.probe().status_for_lod_ref(lod_ref)
-	}
-
-	fn scene_lod_culls(&self, lod_ref: &LodRef, _current: LodSceneLevel) -> LodSceneCulls {
-		// Frond collections: absolute-meter warm-root cull (independent of radius-relative spawn).
-		if self.geometry.is_kit_collection() {
-			let probe = self.probe();
-			let distance = lod_ref.current_transform.translation.distance(probe.center);
-			let (high_m, mid_m, low_m) = match &self.geometry {
-				FoliageGeometry::CheapBallCollection(_) => (
-					CHEAP_BALL_COLLECTION_HIGH_METERS,
-					CHEAP_BALL_COLLECTION_MEDIUM_METERS,
-					CHEAP_BALL_COLLECTION_LOW_METERS,
-				),
-				_ => (
-					FROND_COLLECTION_HIGH_METERS,
-					FROND_COLLECTION_MEDIUM_METERS,
-					FROND_COLLECTION_LOW_METERS,
-				),
-			};
-			// Keep all warm roots while still inside the High cull band (~500 m).
-			// `cull_offset_bands_from_factor` alone still lists Low/UltraLow in High, which
-			// would defeat the `LodSceneCulls::None` short-circuit in cull enqueue.
-			if distance <= high_m {
-				return LodSceneCulls::None;
-			}
-			return cull_offset_bands_from_factor(distance, high_m, mid_m, low_m);
-		}
-
-		let probe = self.probe();
-		let factor = probe.band_metric(lod_ref.current_transform.translation);
-		if factor <= probe.high_factor {
-			return LodSceneCulls::None;
-		}
-		cull_offset_bands_from_factor(
-			factor,
-			probe.high_factor,
-			probe.medium_factor,
-			probe.low_factor,
-		)
-	}
-
-	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
-		self.content_for_level(level)
-	}
-
-	fn scene_chunks_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
-		match &self.geometry {
-			FoliageGeometry::FrondCollection(collection) => {
-				// One chunk: merged mesh (or empty). Avoid per-leaf chunks so fulfill
-				// schedules the archetypal MultiSceneMerge as a unit.
-				SceneChunk::primitive(self.collection_content(collection, level))
-			}
-			FoliageGeometry::CheapBallCollection(collection) => {
-				SceneChunk::primitive(self.cheap_ball_collection_content(collection, level))
-			}
-			_ => SceneChunk::primitive(self.content_for_level(level)),
-		}
-	}
-
-	fn scene_bounds(&self) -> Aabb3d {
-		let (center, extent) = match &self.geometry {
-			FoliageGeometry::FrondCollection(_) | FoliageGeometry::CheapBallCollection(_) => {
-				let probe = self.probe();
-				(probe.center, probe.extent.max(1.0))
-			}
-			_ => (
-				crate::lod_band::placement_center(&self.placement),
-				crate::lod_band::characteristic_extent_abs(&self.placement).max(1.0),
-			),
-		};
-		let half = bevy::math::Vec3::splat(extent);
-		Aabb3d::from_min_max(center - half, center + half)
-	}
 }
 
 #[cfg(test)]
@@ -494,5 +208,13 @@ mod tests {
 			expected
 		);
 		assert_eq!(chico_frond_material_ref().name, expected);
+	}
+
+	#[test]
+	fn collection_defaults_to_merge_and_instanced_opts_out() {
+		let merged = FoliageNode::frond_collection(FrondCollection::new([]), Placement::IDENTITY);
+		assert_eq!(merged.collection_present, CollectionPresent::Merge);
+		assert_eq!(merged.clone().instanced().collection_present, CollectionPresent::Instance);
+		assert_eq!(merged.instanced().merged().collection_present, CollectionPresent::Merge);
 	}
 }

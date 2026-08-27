@@ -38,7 +38,8 @@ use chico_tree_components::{
 	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
 };
 use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
+	spawn_flattened_placed_vegetation, spawn_lod_scene_host, vegetation_bounds,
+	VegetationComponents,
 };
 use chico_vegetation_shaders::ChicoStickMaterial;
 use chunk::cascade::CascadeChunk;
@@ -473,62 +474,54 @@ impl RenderSubject {
 			}
 			Self::BushScrub(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}|leaf={:?}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
+					g.tree_variants,
 					g.leaf_surface_noise
 				)
 			}
 			Self::TropicalUndergrowth(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}|leaf={:?}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
+					g.tree_variants,
 					g.leaf_surface_noise
 				)
 			}
 			Self::TropicalThicket(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::JerrysChaparral(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::LevantineScrub(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::TallGrass(g) => {
@@ -563,360 +556,302 @@ impl RenderSubject {
 			}
 			Self::RiverineGreen(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::LowBush(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::HighBush(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::SpottyBushes(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::UnendingJungle(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::JungleLowerMassives(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::JungleMassives(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::TemperateLowerMassives(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::PalmShade(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::RiparianMix(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Alpine(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Dryland(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Storytellers(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::TradeWinds(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::WanderingAcacia(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.bush_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Leeward(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::ChristmasTaiga(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::ConiferMassives(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::TemperateMassives(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::RiparianGeneral(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::RollingOaks(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::ForlornSavanna(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Orchard(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Vineyard(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::DateGrove(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::StrangeOasis(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::Shamanhome(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::GoettingenFollow(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::ConiferSapling(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::AridConiferSapling(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|variants={}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
-					g.tree_chain_noise,
-					g.stick_surface_noise,
-					g.leaf_surface_noise
+					g.tree_variants
 				)
 			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
@@ -940,104 +875,113 @@ impl RenderSubject {
 			Self::SopesBanyan(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::HonuBanyan(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::LiamsConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::FriendsConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::NorthernConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::TemperateConifer(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::DatePalm(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::WaialeaPalm(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::PalmBush(item) => {
 				let bush = item.build();
 				let bounds = vegetation_bounds(&bush);
-				spawn_vegetation_components(commands, &bush, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &bush, transform, bounds)
 			}
 			Self::StorybookTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::PenmarchTorch(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::KamakuraTorch(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::RorysHeadTrained(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::VaseTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::BraidOakTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::JungleStorybookTree(item) => {
 				let tree = item.build();
 				let bounds = vegetation_bounds(&tree);
-				spawn_vegetation_components(commands, &tree, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &tree, transform, bounds)
 			}
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TuftPatch(item) => {
 				let patch = item.build();
 				let bounds = vegetation_bounds(&patch);
-				spawn_vegetation_components(commands, &patch, transform, bounds)
+				spawn_flattened_placed_vegetation(commands, &patch, transform, bounds)
 			}
 			Self::BraidGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::TropicalTufts(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::CommonTufts(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::BushScrub(item) => {
 				let grove = item.build();
@@ -1081,18 +1025,27 @@ impl RenderSubject {
 			}
 			Self::TallGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::WildGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::MonsterGrass(item) => {
 				let grove = item.build();
-				let bounds = vegetation_bounds(&grove);
-				spawn_vegetation_components(commands, &grove, transform, bounds)
+				let bounds = grove
+					.structural_lod()
+					.map(|p| p.footprint_aabb())
+					.unwrap_or_else(|| vegetation_bounds(&grove));
+				spawn_lod_scene_host(commands, &grove, transform, bounds)
 			}
 			Self::RiverineGreen(item) => {
 				let grove = item.build();

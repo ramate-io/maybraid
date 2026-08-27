@@ -7,8 +7,8 @@ use bevy::scene::prelude::Scene;
 use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
-	components_only_host, flattened_components_only_host, FoliageGeometry, FoliageNode, Layers,
-	PlacedVegetation, Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
+	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
+	Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -494,55 +494,6 @@ pub fn grove_detail_level_keep_low(level: LodSceneLevel) -> Option<LodSceneLevel
 		LodSceneLevel::High | LodSceneLevel::Medium | LodSceneLevel::Low => Some(level),
 		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => None,
 	}
-}
-
-/// Nest one posed plant as [`chico_vegetation_components::ComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.
-pub fn nest_placed_plant_host<T>(
-	plant: T,
-	placement: Placement,
-	stick_material: &MaterialRef,
-	ball_material: &MaterialRef,
-	frond_material: &MaterialRef,
-	lod_ref: &LodRef,
-) -> impl Scene + 'static
-where
-	T: VegetationComponents + Clone + Send + Sync + 'static,
-{
-	components_only_host(
-		PlacedVegetation::new(
-			plant,
-			placement,
-			stick_material.clone(),
-			ball_material.clone(),
-			frond_material.clone(),
-		),
-		lod_ref,
-	)
-}
-
-/// Weighted chunk wrapping [`nest_placed_plant_host`].
-pub fn nest_placed_plant_chunk<T>(
-	plant: T,
-	placement: Placement,
-	stick_material: &MaterialRef,
-	ball_material: &MaterialRef,
-	frond_material: &MaterialRef,
-	lod_ref: &LodRef,
-) -> SceneChunk
-where
-	T: VegetationComponents + Clone + Send + Sync + 'static,
-{
-	SceneChunk::weighted(
-		1,
-		nest_placed_plant_host(
-			plant,
-			placement,
-			stick_material,
-			ball_material,
-			frond_material,
-			lod_ref,
-		),
-	)
 }
 
 /// Nest one posed plant as [`chico_vegetation_components::FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<T>>`.

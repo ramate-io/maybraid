@@ -21,11 +21,22 @@ mod terrain;
 mod tuft_patch;
 
 #[cfg(feature = "render")]
+#[allow(dead_code)]
+mod placed_host;
+#[cfg(feature = "render")]
+mod preview;
+#[cfg(feature = "render")]
 mod quantized;
+#[cfg(feature = "render")]
+mod tuft_lod;
 #[cfg(feature = "render")]
 pub mod vc_compose;
 #[cfg(feature = "render")]
 pub mod vc_tuft;
+#[cfg(all(test, feature = "render"))]
+pub(crate) mod woody_checks;
+#[cfg(feature = "render")]
+mod woody_lod;
 
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,
@@ -43,6 +54,8 @@ pub use tuft_patch::GroveTuftPatch;
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 #[cfg(feature = "render")]
+pub use preview::GrovePreviewParams;
+#[cfg(feature = "render")]
 pub(crate) use quantized::{
 	remixed_blade_tuft_plant, remixed_bush_plant, remixed_sbs_plant, remixed_spear_tuft_plant,
 	remixed_tuft_plant,
@@ -58,14 +71,15 @@ pub use vc_compose::{
 	grove_bands_for_typical_height, grove_bands_for_typical_height_and_plant_medium,
 	grove_detail_level, grove_detail_level_keep_low, grove_lod_culls, grove_lod_level,
 	grove_lod_status, grove_structural_footprint, layers_from_nodes, nest_flattened_plant_chunk,
-	nest_flattened_plant_host, nest_placed_plant_chunk, nest_placed_plant_host,
-	placed_foliage_nodes, placed_palm_low_fronds, stick_material_from_palette,
-	trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
+	nest_flattened_plant_host, placed_foliage_nodes, placed_palm_low_fronds,
+	stick_material_from_palette, trained_proxy_stick_nodes_for_level, woody_grove_scene_chunks,
 	woody_grove_scene_chunks_keep_low_plants, CanopyProxySite, TrainedCanopyProxy,
 	DEFAULT_PLANT_MEDIUM_FACTOR, ULTRA_LOW_CANOPY_BIN_METERS,
 };
 #[cfg(feature = "render")]
 pub use vc_tuft::{remixed_blade_tuft_unit, remixed_spear_tuft_unit, remixed_tuft_unit};
+#[cfg(feature = "render")]
+pub use woody_lod::{WoodyCanopyPolicy, WoodyGroveLod};
 
 use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;
@@ -204,19 +218,6 @@ impl<V: Clone> Grove<V> {
 		self.distribution.select_at(position, sample.scale, *cell, self.noise, world)
 	}
 
-	/// Sample, place, validate, and choose a bucket for one vegetation cell.
-	///
-	/// This is the implementation that will hook into the generative API.
-	pub fn sample_cell(
-		&self,
-		cell: &Cell,
-		extent: &GroveExtent,
-		world: &impl GroveWorldSample,
-	) -> (Option<GroveCellVariant<V>>, Cell) {
-		let outcome = self.select_cell(cell, extent, world).into_placed();
-		(outcome, *cell)
-	}
-
 	pub fn cell_extent_xz(&self) -> Vec2 {
 		self.cell_extent_xz
 	}
@@ -235,20 +236,6 @@ impl<V: Clone> Grove<V> {
 
 	pub fn distribution(&self) -> &PreparedGroveDistribution<V> {
 		&self.distribution
-	}
-}
-
-/// Grove items can be constructed from cell, grove, information about extents, and terrain.
-///
-/// This is a useful plugin to hierarchical generation APIs, ala https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
-pub trait GroveItem: Clone {
-	fn from_cell_and_grove(
-		cell: &Cell,
-		grove: &Grove<Self>,
-		grove_extent: &GroveExtent,
-		world: &impl GroveWorldSample,
-	) -> Option<GroveCellVariant<Self>> {
-		grove.sample_cell(cell, grove_extent, world).0
 	}
 }
 

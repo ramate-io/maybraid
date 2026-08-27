@@ -110,9 +110,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 					}),
 			);
 		register_vegetation_view(app);
-		if !app.is_plugin_added::<diagnostics::PlaygroundTimingPlugin>() {
-			app.add_plugins(diagnostics::PlaygroundTimingPlugin);
-		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))

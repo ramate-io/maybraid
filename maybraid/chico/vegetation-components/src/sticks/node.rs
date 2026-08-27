@@ -1,4 +1,4 @@
-//! Stick IR node: style + geometry + placement.
+//! Stick IR node: geometry + placement.
 
 use bevy::light::NotShadowCaster;
 use bevy::math::bounding::Aabb3d;
@@ -16,20 +16,17 @@ use crate::assets::AssetPath;
 use crate::lod_band::warm_mesh_lod_culls;
 use crate::lod_host::{posed_foliage_multi_scene_merge, posed_material_asset_tier};
 use crate::placed::Placement;
-use crate::procedural::VegetationProceduralAssets;
-use crate::scene_children::{pose, posed_mesh_material_ref, scene_children};
+use crate::scene_children::{pose, scene_children};
 use crate::sticks::collection::{
 	StickCollection, StickMember, STICK_COLLECTION_HIGH_METERS, STICK_COLLECTION_LOW_METERS,
 	STICK_COLLECTION_MEDIUM_METERS,
 };
 use crate::sticks::geometry::StickGeometry;
 use crate::sticks::probe::StickLodProbe;
-use crate::sticks::style::StickStyle;
 
 /// Authoring IR for a stick / trunk segment — also the fine-phase [`LodScene`] host component.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct StickNode {
-	pub style: StickStyle,
 	pub geometry: StickGeometry,
 	pub placement: Placement,
 	/// Deferred material. Defaults to [`MaterialRef::default()`] (green standard);
@@ -40,8 +37,8 @@ pub struct StickNode {
 }
 
 impl StickNode {
-	pub fn new(style: StickStyle, geometry: StickGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement, material: MaterialRef::default(), collection: None }
+	pub fn new(geometry: StickGeometry, placement: Placement) -> Self {
+		Self { geometry, placement, material: MaterialRef::default(), collection: None }
 	}
 
 	pub fn with_material(mut self, material: MaterialRef) -> Self {
@@ -49,13 +46,9 @@ impl StickNode {
 		self
 	}
 
-	pub fn noisy_cylinder(geometry: StickGeometry, placement: Placement) -> Self {
-		Self::new(StickStyle::NoisyCylinder, geometry, placement)
-	}
-
 	/// Branch / connector segment using `vegetation/sticks/standard/001_*` GLBs.
 	pub fn segment(placement: Placement) -> Self {
-		Self::new(StickStyle::Standard, StickGeometry::Segment, placement)
+		Self::new(StickGeometry::Segment, placement)
 	}
 
 	/// Standard stick from a directed segment (base at `start`, along `start → end`).
@@ -85,11 +78,11 @@ impl StickNode {
 
 	/// Trunk geometry using `vegetation/sticks/standard/trunk_001_*` GLBs.
 	pub fn trunk(placement: Placement) -> Self {
-		Self::new(StickStyle::Standard, StickGeometry::Trunk, placement)
+		Self::new(StickGeometry::Trunk, placement)
 	}
 
 	pub fn standard(geometry: StickGeometry, placement: Placement) -> Self {
-		Self::new(StickStyle::Standard, geometry, placement)
+		Self::new(geometry, placement)
 	}
 
 	/// Stick collection under one LOD parent (merge thinning by collection extent).
@@ -97,7 +90,6 @@ impl StickNode {
 	/// Parent [`Placement`] is usually identity when members are already posed.
 	pub fn collection(collection: StickCollection, placement: Placement) -> Self {
 		Self {
-			style: StickStyle::Standard,
 			geometry: StickGeometry::Segment,
 			placement,
 			material: MaterialRef::default(),
@@ -136,23 +128,11 @@ impl StickNode {
 	}
 
 	fn glb_for_level(&self, level: LodSceneLevel) -> Option<AssetPath> {
-		match self.style {
-			StickStyle::NoisyCylinder => None,
-			StickStyle::Standard => self.geometry.standard_glb_for_level(level),
-		}
+		self.geometry.standard_glb_for_level(level)
 	}
 
 	fn member_glb(member: &StickMember, level: LodSceneLevel) -> Option<AssetPath> {
 		member.geometry.standard_glb_for_level(level)
-	}
-
-	fn procedural_scene(&self) -> impl Scene + 'static {
-		posed_mesh_material_ref(
-			VegetationProceduralAssets::stick_cylinder(),
-			VegetationProceduralAssets::stick_material(),
-			self.material.clone(),
-			pose(self.placement),
-		)
 	}
 
 	fn empty_scene() -> impl Scene + 'static {
@@ -193,19 +173,7 @@ impl StickNode {
 				self.material.clone(),
 			));
 		}
-		let children: Vec<Box<dyn Scene>> = collection
-			.members_for_level(level)
-			.into_iter()
-			.map(|member| {
-				Box::new(posed_mesh_material_ref(
-					VegetationProceduralAssets::stick_cylinder(),
-					VegetationProceduralAssets::stick_material(),
-					self.material.clone(),
-					pose(self.placement.compose_child(member.placement)),
-				)) as Box<dyn Scene>
-			})
-			.collect();
-		Box::new((bsn! { NotShadowCaster }, scene_children(children)))
+		Box::new((bsn! { NotShadowCaster }, scene_children(Vec::new())))
 	}
 
 	fn content_for_level(&self, level: LodSceneLevel) -> Box<dyn Scene> {
@@ -223,7 +191,7 @@ impl StickNode {
 						Some(self.material.clone()),
 					),
 				)),
-				None => Box::new((bsn! { NotShadowCaster }, self.procedural_scene())),
+				None => Box::new(Self::empty_scene()),
 			},
 		}
 	}

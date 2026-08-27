@@ -13,9 +13,7 @@ use chico_groves::{
 	TradeWindsParams, TropicalThicketParams, TropicalTuftsParams, TropicalUndergrowthParams,
 	UnendingJungleParams, VineyardParams, WanderingAcaciaParams, WildGrassParams,
 };
-use chico_vegetation_components::{
-	spawn_lod_scene_host, spawn_vegetation_components, vegetation_bounds, VegetationComponents,
-};
+use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
 use lod::gen::LodScene;
 
@@ -68,14 +66,6 @@ pub fn spawn_tiled_groves(
 	count
 }
 
-fn spawn_components<T>(commands: &mut Commands, grove: &T) -> Vec<Entity>
-where
-	T: VegetationComponents + Clone + Send + Sync + 'static,
-{
-	let bounds = vegetation_bounds(grove);
-	spawn_vegetation_components(commands, grove, Transform::IDENTITY, bounds)
-}
-
 fn spawn_host<T>(commands: &mut Commands, grove: &T) -> Vec<Entity>
 where
 	T: LodScene + VegetationComponents + Component + Clone + Send + Sync + 'static,
@@ -94,30 +84,25 @@ fn spawn_kind(
 	world: &impl GroveWorldSample,
 ) -> Vec<Entity> {
 	match kind {
-		GroveKind::MonsterGrass => spawn_components(
-			commands,
-			&MonsterGrassParams::default().with_extent(extent).build_on(world),
-		),
-		GroveKind::BraidGrass => spawn_components(
-			commands,
-			&BraidGrassParams::default().with_extent(extent).build_on(world),
-		),
-		GroveKind::TropicalTufts => spawn_components(
+		GroveKind::MonsterGrass => {
+			spawn_host(commands, &MonsterGrassParams::default().with_extent(extent).build_on(world))
+		}
+		GroveKind::BraidGrass => {
+			spawn_host(commands, &BraidGrassParams::default().with_extent(extent).build_on(world))
+		}
+		GroveKind::TropicalTufts => spawn_host(
 			commands,
 			&TropicalTuftsParams::default().with_extent(extent).build_on(world),
 		),
-		GroveKind::CommonTufts => spawn_components(
-			commands,
-			&CommonTuftsParams::default().with_extent(extent).build_on(world),
-		),
-		GroveKind::TallGrass => spawn_components(
-			commands,
-			&TallGrassParams::default().with_extent(extent).build_on(world),
-		),
-		GroveKind::WildGrass => spawn_components(
-			commands,
-			&WildGrassParams::default().with_extent(extent).build_on(world),
-		),
+		GroveKind::CommonTufts => {
+			spawn_host(commands, &CommonTuftsParams::default().with_extent(extent).build_on(world))
+		}
+		GroveKind::TallGrass => {
+			spawn_host(commands, &TallGrassParams::default().with_extent(extent).build_on(world))
+		}
+		GroveKind::WildGrass => {
+			spawn_host(commands, &WildGrassParams::default().with_extent(extent).build_on(world))
+		}
 		GroveKind::BushScrub => {
 			spawn_host(commands, &BushScrubParams::default().with_extent(extent).build_on(world))
 		}

@@ -7,18 +7,18 @@ use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 
 use crate::foliage::collection::{
-	FROND_COLLECTION_HIGH_METERS, FROND_COLLECTION_LOW_METERS, FROND_COLLECTION_MEDIUM_METERS,
+	COLLECTION_HIGH_METERS, COLLECTION_LOW_METERS, COLLECTION_MEDIUM_METERS,
 };
 use crate::lod_band::{characteristic_extent_abs, placement_center};
 use crate::placed::Placement;
 use crate::sticks::geometry::StickGeometry;
 
 /// Warm-root cull bands match foliage collections (absolute meters).
-pub const STICK_COLLECTION_HIGH_METERS: f32 = FROND_COLLECTION_HIGH_METERS;
+pub const STICK_COLLECTION_HIGH_METERS: f32 = COLLECTION_HIGH_METERS;
 /// See [`STICK_COLLECTION_HIGH_METERS`].
-pub const STICK_COLLECTION_MEDIUM_METERS: f32 = FROND_COLLECTION_MEDIUM_METERS;
+pub const STICK_COLLECTION_MEDIUM_METERS: f32 = COLLECTION_MEDIUM_METERS;
 /// See [`STICK_COLLECTION_HIGH_METERS`].
-pub const STICK_COLLECTION_LOW_METERS: f32 = FROND_COLLECTION_LOW_METERS;
+pub const STICK_COLLECTION_LOW_METERS: f32 = COLLECTION_LOW_METERS;
 
 /// One placed stick kit inside a [`StickCollection`].
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -38,10 +38,15 @@ pub enum PlaygroundCommand {
 pub enum Stats {
 	/// Mesh triangle counts plus foliage / stick / structural LOD probe hosts.
 	Mesh,
+	/// Toggle throttled `[sbs.timing]` FPS / frame_ms logs.
+	Fps,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestMeshStats;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestFpsToggle;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -79,6 +84,10 @@ impl Stats {
 			Stats::Mesh => {
 				commands.spawn(RequestMeshStats);
 				*console = "stats mesh: pending".into();
+			}
+			Stats::Fps => {
+				commands.spawn(RequestFpsToggle);
+				*console = "stats fps: toggling".into();
 			}
 		}
 	}

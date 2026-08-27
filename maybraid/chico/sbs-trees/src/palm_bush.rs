@@ -2,7 +2,8 @@
 //!
 //! [`PalmBushParams::build`] resolves ring anchors into [`PalmBush`], which implements
 //! [`VegetationComponents`]: per-frond collections at High/Medium; shared five-chord Low
-//! star at Low/UltraLow (no sticks).
+//! star at Low/UltraLow (no sticks). Probe and collection nodes are baked at build
+//! so produce / grove emit do not rebuild rings.
 //!
 //! [`PalmBush::unit_from_num`] / [`PalmBushParams::into_unit_from_num`] normalize to
 //! unit height and key foliage noise by a variant index. No sticks; frond collections
@@ -93,40 +94,51 @@ impl PalmBushParams {
 	}
 }
 
-/// Built Palm Bush: geometry (ring anchors are derived on demand).
+/// Built Palm Bush: geometry plus baked unit probe / collection nodes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PalmBush {
 	pub geometry: PalmBushSbs,
+	structural_lod: StructuralLod,
+	high_nodes: Vec<FoliageNode>,
+	low_nodes: Vec<FoliageNode>,
 }
 
 impl PalmBush {
 	pub fn from_params(params: &PalmBushParams) -> Self {
-		Self { geometry: params.geometry.clone() }
-	}
-
-	/// Unit-height bush whose foliage noise is keyed solely by `num`.
-	pub fn unit_from_num(num: u32) -> Self {
-		Self::from_params(&PalmBushParams::unit_from_num(num))
-	}
-
-	fn foliage_seed(&self) -> i32 {
-		self.geometry.foliage_noise.seed
-	}
-
-	fn ring_shapes(&self) -> Vec<(Vec3, FrondCrownShape)> {
-		let seed = self.foliage_seed();
-		let scale = self.geometry.frond_world_scale;
-		(0..self.geometry.crown.ring_count)
+		let geometry = params.geometry.clone();
+		let seed = geometry.foliage_noise.seed;
+		let scale = geometry.frond_world_scale;
+		let rings: Vec<(Vec3, FrondCrownShape)> = (0..geometry.crown.ring_count)
 			.map(|ring| {
-				let anchor = self.geometry.crown_ring_position(ring);
+				let anchor = geometry.crown_ring_position(ring);
 				let local = frond_shape_for_ring(
-					&self.geometry,
+					&geometry,
 					ring,
 					seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT),
 				);
 				(anchor, world_space_frond_shape(local, scale))
 			})
-			.collect()
+			.collect();
+		let (center, radius) = crown_lod_probe(&rings, None);
+		let structural_lod = StructuralLod::new(center, radius).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		);
+		let high_nodes = frond_collection_nodes(&rings, center, radius);
+		let height = geometry.height();
+		let low_nodes = low_star_nodes_for_rings(
+			&rings,
+			DETAIL_FROND_LENGTH_FRACTION * height,
+			DETAIL_FROND_WIDTH_FRACTION * height,
+			None,
+		);
+		Self { geometry, structural_lod, high_nodes, low_nodes }
+	}
+
+	/// Unit-height bush whose foliage noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&PalmBushParams::unit_from_num(num))
 	}
 }
 
@@ -136,35 +148,19 @@ impl VegetationComponents for PalmBush {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-		let rings = self.ring_shapes();
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				let (center, radius) = crown_lod_probe(&rings, None);
-				Layers::from_free(frond_collection_nodes(&rings, center, radius))
+				Layers::from_free(self.high_nodes.clone())
 			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				let height = self.geometry.height();
-				Layers::from_free(low_star_nodes_for_rings(
-					&rings,
-					DETAIL_FROND_LENGTH_FRACTION * height,
-					DETAIL_FROND_WIDTH_FRACTION * height,
-					None,
-				))
-			}
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_nodes.clone()),
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let rings = self.ring_shapes();
-		let (center, radius) = crown_lod_probe(&rings, None);
-		Some(StructuralLod::new(center, radius).with_factors(
-			STRUCTURAL_HIGH_FACTOR,
-			STRUCTURAL_MEDIUM_FACTOR,
-			STRUCTURAL_LOW_FACTOR,
-		))
+		Some(self.structural_lod)
 	}
 }
 
@@ -195,6 +191,18 @@ mod tests {
 		let low = built.foliage_nodes_for_level(LodSceneLevel::Low).flatten();
 		assert_eq!(low.len(), crate::palm_tree::LOW_STAR_FROND_COUNT as usize);
 		assert!(low.iter().all(|n| n.geometry.is_frond_collection()));
+		Ok(())
+	}
+
+	#[test]
+	fn structural_lod_is_baked_unit_probe() -> Result<()> {
+		let built = PalmBushParams::default().build();
+		let a = built.structural_lod();
+		let b = built.structural_lod();
+		assert_eq!(a, b);
+		let band = a.expect("probe");
+		assert!((band.high_factor - STRUCTURAL_HIGH_FACTOR).abs() < 1e-5);
+		assert!(band.tree_radius > 0.0);
 		Ok(())
 	}
 

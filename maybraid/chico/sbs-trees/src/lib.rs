@@ -8,6 +8,7 @@ pub mod friends_conifer;
 pub mod high_bush_shoots;
 pub mod honu_banyan;
 mod jungle_canopy_vc;
+pub mod jungle_growth;
 mod jungle_growth_vc;
 pub mod jungle_storybook_tree;
 pub mod kamakura_torch;
@@ -37,6 +38,7 @@ pub use honu_banyan::{
 	jungle_growth_radius_scale_for_height, HonuBanyan, HonuBanyanParams,
 	DEFAULT_HONU_GROWTH_RADIUS_SCALE, HONU_GROWTH_REFERENCE_HEIGHT,
 };
+pub use jungle_growth::{JungleGrowth, JungleGrowthParams};
 pub use jungle_storybook_tree::{JungleStorybookTree, JungleStorybookTreeParams};
 pub use kamakura_torch::{KamakuraTorch, KamakuraTorchParams};
 pub use liams_conifer::{LiamsConifer, LiamsConiferParams};
@@ -57,3 +59,20 @@ pub use temperate_conifer::{TemperateConifer, TemperateConiferParams};
 pub use tuft_patch::{TuftPatch, TuftPatchParams};
 pub use vase_tree::{VaseTree, VaseTreeParams};
 pub use waialea_palm::{WaialeaPalm, WaialeaPalmParams};
+
+/// Register every tree RenderItem plugin the playground `/render` path still uses.
+pub fn ensure_chico_tree_render_plugins(app: &mut bevy::prelude::App) {
+	braid_oak_tree::render_item_plugin::ensure_registered(app);
+	date_palm::render_item_plugin::ensure_registered(app);
+	friends_conifer::render_item_plugin::ensure_registered(app);
+	honu_banyan::render_item_plugin::ensure_registered(app);
+	jungle_storybook_tree::render_item_plugin::ensure_registered(app);
+	liams_conifer::render_item_plugin::ensure_registered(app);
+	northern_conifer::render_item_plugin::ensure_registered(app);
+	palm_bush::render_item_plugin::ensure_registered(app);
+	simplemans_hedge::render_item_plugin::ensure_registered(app);
+	storybook_tree::render_item_plugin::ensure_registered(app);
+	temperate_conifer::render_item_plugin::ensure_registered(app);
+	vase_tree::render_item_plugin::ensure_registered(app);
+	waialea_palm::render_item_plugin::ensure_registered(app);
+}

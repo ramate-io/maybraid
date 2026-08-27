@@ -1,7 +1,7 @@
 //! Shared VegetationComponents host for blade / tuft-patch groves (Monster Grass pattern).
 //!
-//! Grow placements into unit [`TuftPatch`] plants (optional merge fold); emit High/Medium frond
-//! collections, Low upright proxies, and UltraLow carpets tilted to the plant heightfield.
+//! Grow placements into unit [`TuftPatch`] plants (optional merge fold). High/Medium
+//! scene chunks lazy-pose those stored plants; Low is upright proxies, UltraLow carpets.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,10 +10,13 @@ use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuftShape, SpearTuftShape};
 use chico_sbs_trees::TuftPatch;
 use chico_vegetation_components::{
-	chico_frond_material_ref, FoliageNode, FrondCollection, FrondRun, Layers, Placement, StickNode,
-	StructuralLod, VegetationComponents, FROND_KIT_HALF_X,
+	chico_frond_material_ref, scene_children, FoliageNode, FrondCollection, FrondRun, Layers,
+	Placement, StickNode, StructuralLod, VegetationComponents, FLATTENED_KIT_CHUNK_WEIGHT,
+	FROND_KIT_HALF_X,
 };
-use lod::gen::LodSceneLevel;
+use lod::gen::{LodScene, LodSceneLevel};
+use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{BuildWithNoise, NoiseParams};
 
@@ -25,7 +28,7 @@ pub const TUFT_GROVE_STRUCTURAL_MEDIUM_FACTOR: f32 = 5.0;
 pub const TUFT_GROVE_STRUCTURAL_LOW_FACTOR: f32 = 20.0;
 
 /// Keep every Nth plant for Medium (¼ density).
-const MEDIUM_TUFT_STRIDE: usize = 4;
+pub(crate) const MEDIUM_TUFT_STRIDE: usize = 4;
 /// World-space thickness for UltraLow carpets (local Z → surface normal).
 const ULTRA_CARPET_THICKNESS: f32 = 0.35;
 const ULTRA_GRID: u32 = 2;
@@ -179,9 +182,13 @@ where
 }
 
 /// Grow cached unit [`TuftPatch`] plants; clone out of the [`Arc`] when `merge_collections > 0`.
+///
+/// Fold bins are a square XZ grid on `extent` (`ceil(sqrt(n))` on a side), not an
+/// X-major strip. Empty cells are dropped.
 pub fn grow_tuft_plants(
 	grown: Vec<(Placement, Arc<TuftPatch>, MaterialRef)>,
 	merge_collections: usize,
+	extent: &GroveExtent,
 ) -> Vec<TuftGrovePlant> {
 	if merge_collections == 0 {
 		return grown
@@ -189,20 +196,25 @@ pub fn grow_tuft_plants(
 			.map(|(placement, patch, material)| TuftGrovePlant { placement, patch, material })
 			.collect();
 	}
-	let mut remaining: Vec<(Placement, TuftPatch, MaterialRef)> =
-		grown.into_iter().map(|(p, patch, m)| (p, (*patch).clone(), m)).collect();
-	remaining.sort_by(|a, b| {
-		a.0.translation
-			.x
-			.total_cmp(&b.0.translation.x)
-			.then(a.0.translation.z.total_cmp(&b.0.translation.z))
-	});
-	let target = merge_collections.max(1);
-	let chunk_len = remaining.len().div_ceil(target);
-	let mut plants = Vec::with_capacity(target.min(remaining.len()));
-	while !remaining.is_empty() {
-		let take = chunk_len.min(remaining.len());
-		let chunk: Vec<_> = remaining.drain(..take).collect();
+	let side = ((merge_collections.max(1) as f32).sqrt().ceil() as i32).max(1);
+	let origin = extent.min();
+	let span = (extent.max() - extent.min()).max(Vec3::splat(1e-3));
+	let mut bins: HashMap<(i32, i32), Vec<(Placement, TuftPatch, MaterialRef)>> = HashMap::new();
+	for (placement, patch, material) in grown {
+		let p = placement.translation;
+		let ix = (((p.x - origin.x) / span.x) * side as f32).floor() as i32;
+		let iz = (((p.z - origin.z) / span.z) * side as f32).floor() as i32;
+		bins.entry((ix.clamp(0, side - 1), iz.clamp(0, side - 1))).or_default().push((
+			placement,
+			(*patch).clone(),
+			material,
+		));
+	}
+	let mut keys: Vec<(i32, i32)> = bins.keys().copied().collect();
+	keys.sort_unstable();
+	let mut plants = Vec::with_capacity(keys.len());
+	for key in keys {
+		let chunk = bins.remove(&key).expect("bin key from keys");
 		let material = chunk[0].2.clone();
 		let mut iter = chunk.into_iter();
 		let (placement, mut merged, _) = iter.next().expect("chunk non-empty");
@@ -366,6 +378,63 @@ impl TuftGroveBody {
 			)
 			.with_preserve_ultra_low(true)
 	}
+
+	/// Lazy posed kits from [`Self::plants`]. Begin does not rebuild collections.
+	pub fn high_medium_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		let stride = match level {
+			LodSceneLevel::Medium => MEDIUM_TUFT_STRIDE,
+			_ => 1,
+		};
+		lazy_posed_tuft_chunks(self.plants.clone(), stride, lod_ref, level)
+	}
+}
+
+/// One posed High/Medium kit per plant (Medium keeps High geometry, every `stride`th plant).
+///
+/// Begin clones the plant list (`Arc<TuftPatch>` + pose + material). Drain builds one
+/// [`FoliageNode`] from that patch.
+pub fn lazy_posed_tuft_chunks(
+	plants: impl Into<Arc<[TuftGrovePlant]>>,
+	stride: usize,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> SceneChunk {
+	let plants: Arc<[TuftGrovePlant]> = plants.into();
+	let stride = stride.max(1);
+	let n = plants.iter().enumerate().filter(|(i, _)| i % stride == 0).count();
+	if n == 0 {
+		return SceneChunk::primitive(scene_children(Vec::new()));
+	}
+	let prev = *lod_ref.previous_transform;
+	let curr = *lod_ref.current_transform;
+	let bounds = *lod_ref.bounds;
+	let entity = lod_ref.entity;
+	let emit_level = match level {
+		LodSceneLevel::Medium => LodSceneLevel::High,
+		other => other,
+	};
+	let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+	let mut index = 0usize;
+	SceneChunk::lazy(n as u32 * kit_w, n, move || {
+		let kit_lod =
+			LodRef { entity, previous_transform: &prev, current_transform: &curr, bounds: &bounds };
+		while index < plants.len() {
+			let i = index;
+			index += 1;
+			if i % stride != 0 {
+				continue;
+			}
+			let Some(node) = posed_tuft_node(&plants[i], emit_level) else {
+				continue;
+			};
+			return Some(SceneChunk::weighted(kit_w, node.scene_with_level(&kit_lod, emit_level)));
+		}
+		None
+	})
+}
+
+fn posed_tuft_node(plant: &TuftGrovePlant, level: LodSceneLevel) -> Option<FoliageNode> {
+	TuftGroveBody::foliage_nodes_for_plant(plant, level).next()
 }
 
 fn clump_proxy_width(patch: &TuftPatch) -> f32 {
@@ -521,6 +590,7 @@ pub fn grow_placed_tuft_params<C, F>(
 	foliage_noise: NoiseParams,
 	merge_collections: usize,
 	patch_variants: u32,
+	extent: &GroveExtent,
 	mut grow: F,
 ) -> Vec<TuftGrovePlant>
 where
@@ -537,7 +607,7 @@ where
 			unit_plant_from_grown(patch, world_size, placed.position, placed.scale, material)
 		})
 		.collect();
-	grow_tuft_plants(grown, merge_collections)
+	grow_tuft_plants(grown, merge_collections, extent)
 }
 
 #[cfg(test)]

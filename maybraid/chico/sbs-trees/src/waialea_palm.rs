@@ -3,7 +3,8 @@
 //! [`WaialeaPalmParams::build`] grows the arched trunk once into [`WaialeaPalm`], which
 //! implements [`VegetationComponents`]: trunk sticks + per-frond collections at High/Medium;
 //! cheap-ball trunk column + shared five-chord Low star at Low/UltraLow (no mid-tree canopy
-//! to hide a missing stalk).
+//! to hide a missing stalk). Probe and collection nodes bake at build so produce /
+//! grove emit do not rebuild rings.
 //!
 //! [`WaialeaPalm::unit_from_num`] / [`WaialeaPalmParams::into_unit_from_num`] normalize
 //! the trunk to unit height and key trunk noise by a variant index. Emission folds
@@ -78,46 +79,57 @@ impl WaialeaPalmParams {
 	}
 }
 
-/// Built Waialea Palm: geometry plus a single grown arched trunk chain.
+/// Built Waialea Palm: geometry, arched trunk, plus baked unit probe / collection nodes.
 #[derive(Clone)]
 pub struct WaialeaPalm {
 	pub geometry: WaialeaPalmSbs,
 	pub chain: BallStickChain<WaialeaPalmChain>,
+	structural_lod: StructuralLod,
+	high_nodes: Vec<FoliageNode>,
+	low_nodes: Vec<FoliageNode>,
 }
 
 impl WaialeaPalm {
 	pub fn from_params(params: &WaialeaPalmParams) -> Self {
-		Self { geometry: params.geometry.clone(), chain: params.geometry.build_chain() }
-	}
-
-	/// Unit-height palm whose trunk noise is keyed solely by `num`.
-	pub fn unit_from_num(num: u32) -> Self {
-		Self::from_params(&WaialeaPalmParams::unit_from_num(num))
-	}
-
-	fn foliage_seed(&self) -> i32 {
-		self.geometry.trunk_noise.seed
-	}
-
-	fn ring_shapes(&self) -> Vec<(Vec3, FrondCrownShape)> {
-		let seed = self.foliage_seed();
-		let scale = self.geometry.frond_world_scale;
-		(0..self.geometry.crown.ring_count)
+		let geometry = params.geometry.clone();
+		let chain = geometry.build_chain();
+		let seed = geometry.trunk_noise.seed;
+		let scale = geometry.frond_world_scale;
+		let rings: Vec<(Vec3, FrondCrownShape)> = (0..geometry.crown.ring_count)
 			.map(|ring| {
-				let anchor = self.geometry.crown_ring_position(&self.chain, ring);
+				let anchor = geometry.crown_ring_position(&chain, ring);
 				let local = frond_shape_for_ring(
-					&self.geometry,
+					&geometry,
 					ring,
 					seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT),
 				);
 				(anchor, world_space_frond_shape(local, scale))
 			})
-			.collect()
+			.collect();
+		let height = geometry.height();
+		let footprint = chain
+			.footprint_radius_at_least(geometry.scale.stalk_base_radius_or_default().max(1e-3));
+		let (center, radius) = crown_lod_probe(&rings, Some((footprint, height)));
+		let structural_lod = StructuralLod::new(center, radius).with_factors(
+			STRUCTURAL_HIGH_FACTOR,
+			STRUCTURAL_MEDIUM_FACTOR,
+			STRUCTURAL_LOW_FACTOR,
+		);
+		let high_nodes = frond_collection_nodes(&rings, center, radius);
+		let mut low_nodes =
+			vec![trunk_proxy_node(&chain, height, geometry.scale.stalk_base_radius_or_default())];
+		low_nodes.extend(low_star_nodes_for_rings(
+			&rings,
+			DETAIL_FROND_LENGTH_FRACTION * height,
+			DETAIL_FROND_WIDTH_FRACTION * height,
+			Some((footprint, height)),
+		));
+		Self { geometry, chain, structural_lod, high_nodes, low_nodes }
 	}
 
-	fn footprint_radius(&self) -> f32 {
-		self.chain
-			.footprint_radius_at_least(self.geometry.scale.stalk_base_radius_or_default().max(1e-3))
+	/// Unit-height palm whose trunk noise is keyed solely by `num`.
+	pub fn unit_from_num(num: u32) -> Self {
+		Self::from_params(&WaialeaPalmParams::unit_from_num(num))
 	}
 }
 
@@ -139,45 +151,19 @@ impl VegetationComponents for WaialeaPalm {
 	}
 
 	fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FoliageNode> {
-		let rings = self.ring_shapes();
 		match level {
 			LodSceneLevel::High | LodSceneLevel::Medium => {
-				let (center, radius) = crown_lod_probe(
-					&rings,
-					Some((self.footprint_radius(), self.geometry.height())),
-				);
-				Layers::from_free(frond_collection_nodes(&rings, center, radius))
+				Layers::from_free(self.high_nodes.clone())
 			}
 			LodSceneLevel::Low
 			| LodSceneLevel::UltraLow
 			| LodSceneLevel::Distance(_)
-			| LodSceneLevel::Resolution(_) => {
-				let height = self.geometry.height();
-				let mut nodes = vec![trunk_proxy_node(
-					&self.chain,
-					height,
-					self.geometry.scale.stalk_base_radius_or_default(),
-				)];
-				nodes.extend(low_star_nodes_for_rings(
-					&rings,
-					DETAIL_FROND_LENGTH_FRACTION * height,
-					DETAIL_FROND_WIDTH_FRACTION * height,
-					Some((self.footprint_radius(), height)),
-				));
-				Layers::from_free(nodes)
-			}
+			| LodSceneLevel::Resolution(_) => Layers::from_free(self.low_nodes.clone()),
 		}
 	}
 
 	fn structural_lod(&self) -> Option<StructuralLod> {
-		let rings = self.ring_shapes();
-		let (center, radius) =
-			crown_lod_probe(&rings, Some((self.footprint_radius(), self.geometry.height())));
-		Some(StructuralLod::new(center, radius).with_factors(
-			STRUCTURAL_HIGH_FACTOR,
-			STRUCTURAL_MEDIUM_FACTOR,
-			STRUCTURAL_LOW_FACTOR,
-		))
+		Some(self.structural_lod)
 	}
 }
 
@@ -208,6 +194,18 @@ mod tests {
 			assert_eq!(collection.runs.len(), 1);
 			assert_eq!(collection.runs[0].segments.len(), 1);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn structural_lod_is_baked_unit_probe() -> Result<()> {
+		let built = WaialeaPalmParams::default().build();
+		let a = built.structural_lod();
+		let b = built.structural_lod();
+		assert_eq!(a, b);
+		let band = a.expect("probe");
+		assert!((band.high_factor - STRUCTURAL_HIGH_FACTOR).abs() < 1e-5);
+		assert!(band.tree_radius > 0.0);
 		Ok(())
 	}
 

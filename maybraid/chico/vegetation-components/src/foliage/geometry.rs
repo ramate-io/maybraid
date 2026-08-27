@@ -1,20 +1,21 @@
 //! Foliage continuous forms.
 
-use crate::foliage::ball_collection::CheapBallCollection;
-use crate::foliage::collection::FrondCollection;
+use lod::gen::LodSceneLevel;
+
+use crate::assets::{foliage as foliage_assets, AssetPath};
+use crate::foliage::collection::{CheapBallCollection, FrondCollection, FrondKit};
 
 /// Foliage footprint / construction.
 ///
 /// Tessellated / multi-leaf forms (e.g. [`Self::FrondCollection`]) sit on the same
 /// enum as single kits — one [`crate::FoliageNode`] and one foliage LOD probe, like
 /// polyline partitions under a partition node.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum FoliageGeometry {
-	/// Unit sphere centered at the origin (radius 1 before placement scale).
-	UnitBall,
 	/// Layered-ball kit: unit ball before placement scale (GLB under standard style).
 	LayeredBall,
 	/// Cheap-ball kit: lower-poly unit ball for dense packed clusters.
+	#[default]
 	CheapBall,
 	/// Point tip kit (`straight_frond_001_*`); prefer [`Self::StraightFrondSegment`] for strands.
 	StraightFrond,
@@ -27,17 +28,7 @@ pub enum FoliageGeometry {
 	CheapBallCollection(CheapBallCollection),
 }
 
-impl Default for FoliageGeometry {
-	fn default() -> Self {
-		Self::UnitBall
-	}
-}
-
 impl FoliageGeometry {
-	pub fn unit_ball() -> Self {
-		Self::UnitBall
-	}
-
 	pub fn layered_ball() -> Self {
 		Self::LayeredBall
 	}
@@ -94,5 +85,69 @@ impl FoliageGeometry {
 
 	pub fn is_kit_collection(&self) -> bool {
 		matches!(self, Self::FrondCollection(_) | Self::CheapBallCollection(_))
+	}
+
+	fn standard_triad_for_level(
+		level: LodSceneLevel,
+		high: AssetPath,
+		mid: AssetPath,
+		low: AssetPath,
+	) -> AssetPath {
+		match level {
+			LodSceneLevel::High => high,
+			LodSceneLevel::Medium => mid,
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => low,
+		}
+	}
+
+	/// Layered-ball GLB for `level`.
+	pub fn layered_ball_glb_for_level(level: LodSceneLevel) -> AssetPath {
+		Self::standard_triad_for_level(
+			level,
+			foliage_assets::standard::LAYERED_BALL_HIGH,
+			foliage_assets::standard::LAYERED_BALL_MID,
+			foliage_assets::standard::LAYERED_BALL_LOW,
+		)
+	}
+
+	/// Cheap-ball GLB for `level`.
+	pub fn cheap_ball_glb_for_level(level: LodSceneLevel) -> AssetPath {
+		Self::standard_triad_for_level(
+			level,
+			foliage_assets::standard::CHEAP_BALL_HIGH,
+			foliage_assets::standard::CHEAP_BALL_MID,
+			foliage_assets::standard::CHEAP_BALL_LOW,
+		)
+	}
+
+	/// Point-tip straight frond GLB (`straight_frond_001_*`).
+	pub fn straight_frond_glb_for_level(level: LodSceneLevel) -> AssetPath {
+		Self::standard_triad_for_level(
+			level,
+			foliage_assets::standard::STRAIGHT_FROND_HIGH,
+			foliage_assets::standard::STRAIGHT_FROND_MID,
+			foliage_assets::standard::STRAIGHT_FROND_LOW,
+		)
+	}
+
+	/// Square-ended straight frond segment GLB (`straight_frond_segment_001_*`).
+	pub fn straight_frond_segment_glb_for_level(level: LodSceneLevel) -> AssetPath {
+		Self::standard_triad_for_level(
+			level,
+			foliage_assets::standard::STRAIGHT_FROND_SEGMENT_HIGH,
+			foliage_assets::standard::STRAIGHT_FROND_SEGMENT_MID,
+			foliage_assets::standard::STRAIGHT_FROND_SEGMENT_LOW,
+		)
+	}
+
+	/// Kit GLB for one [`FrondKit`] member at `level`.
+	pub fn frond_kit_glb_for_level(kit: FrondKit, level: LodSceneLevel) -> AssetPath {
+		match kit {
+			FrondKit::StraightFrond => Self::straight_frond_glb_for_level(level),
+			FrondKit::StraightFrondSegment => Self::straight_frond_segment_glb_for_level(level),
+		}
 	}
 }

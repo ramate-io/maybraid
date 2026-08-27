@@ -52,6 +52,8 @@ Leave layered / frond / procedural fallbacks as separate nodes. Palm Low is a sh
 
 ### 3. LOD bands stay local
 
+Palm `structural_lod` and High/Low collection nodes bake at `from_params` ([`DatePalm`](src/date_palm.rs), [`WaialeaPalm`](src/waialea_palm.rs), [`PalmBush`](src/palm_bush.rs), [`PalmCrown`](src/palm_crown.rs)). Produce / nest emit must not rebuild rings or walk the crown AABB.
+
 Pass `AzimuthHeightBands` at the `*_banded` call site. Do not call `torch_tree::stick_nodes_high` (or similar) if that hides another construction’s cell counts. Declare High / Medium / Low band constants on **this** module. If High draws a crook (or otherwise posed) trunk, Medium must emit those same trunk members and only thin branches — do not redraw the axis as ball-stick chords.
 
 ### 4. Widening High is a shader problem, then a factor
