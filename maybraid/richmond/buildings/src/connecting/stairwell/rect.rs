@@ -48,6 +48,20 @@ pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32) -> Fit {
 	Fit { stairs, door: Some(well.walk_off_landing_strip(style, thickness, depth)), mids: corners }
 }
 
+#[cfg(test)]
+pub(super) fn flight_end_leading(well: &WellAabb, side: WellSide) -> Vec2 {
+	let pad = corner_pad_m(well, well.tread_width());
+	let min = well.min();
+	let max = well.max();
+	let half_w = 0.5 * well.tread_width();
+	match side {
+		WellSide::NegZ => Vec2::new(max.x - pad, min.z + half_w),
+		WellSide::PosX => Vec2::new(max.x - half_w, max.z - pad),
+		WellSide::PosZ => Vec2::new(min.x + pad, max.z - half_w),
+		WellSide::NegX => Vec2::new(min.x + half_w, min.z + pad),
+	}
+}
+
 fn corner_pad_m(well: &WellAabb, width: f32) -> f32 {
 	let shortest = (2.0 * well.half_x()).min(2.0 * well.half_z());
 	width.min(shortest * 0.35).max(MIN_LANDING)
