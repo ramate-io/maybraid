@@ -6,7 +6,9 @@ use chico_vegetation_components::{
 	FoliageNode, Layers, Placement, StickNode, StructuralLod, VegetationComponents,
 };
 use clap::Args;
-use lod::gen::LodSceneLevel;
+use lod::gen::{LodScene, LodSceneLevel};
+use lod::lod_ref::LodRef;
+use lod::SceneChunk;
 use material_ref::MaterialRef;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
@@ -171,6 +173,74 @@ impl TropicalTufts {
 	pub(crate) fn palms_share_unit_arc(&self) -> bool {
 		self.palms.len() >= 2 && Arc::ptr_eq(&self.palms[0].bush, &self.palms[1].bush)
 	}
+
+	fn tuft_scene_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		match level {
+			LodSceneLevel::High | LodSceneLevel::Medium => {
+				let tufts = self.body.high_medium_chunks(lod_ref, level);
+				if self.palms.is_empty() {
+					return tufts;
+				}
+				let palm_level = match level {
+					LodSceneLevel::Medium => LodSceneLevel::High,
+					other => other,
+				};
+				SceneChunk::chunks([tufts, self.lazy_palm_chunks(lod_ref, palm_level)])
+			}
+			_ => {
+				chico_vegetation_components::flattened_vegetation_scene_chunks(self, lod_ref, level)
+			}
+		}
+	}
+
+	fn lazy_palm_chunks(&self, lod_ref: &LodRef, palm_level: LodSceneLevel) -> SceneChunk {
+		use chico_vegetation_components::FLATTENED_KIT_CHUNK_WEIGHT;
+
+		let palms = Arc::clone(&self.palms);
+		let n: usize = palms
+			.iter()
+			.map(|palm| palm.bush.foliage_nodes_for_level(palm_level).flatten().len())
+			.sum();
+		if n == 0 {
+			return SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()));
+		}
+		let prev = *lod_ref.previous_transform;
+		let curr = *lod_ref.current_transform;
+		let bounds = *lod_ref.bounds;
+		let entity = lod_ref.entity;
+		let kit_w = FLATTENED_KIT_CHUNK_WEIGHT;
+		let mut palm_index = 0usize;
+		let mut pending: Vec<FoliageNode> = Vec::new();
+		SceneChunk::lazy(n as u32 * kit_w, n, move || {
+			let kit_lod = LodRef {
+				entity,
+				previous_transform: &prev,
+				current_transform: &curr,
+				bounds: &bounds,
+			};
+			loop {
+				if let Some(node) = pending.pop() {
+					return Some(SceneChunk::weighted(
+						kit_w,
+						node.scene_with_level(&kit_lod, palm_level),
+					));
+				}
+				if palm_index >= palms.len() {
+					return None;
+				}
+				let palm = &palms[palm_index];
+				palm_index += 1;
+				pending = flatten_foliage_nodes(
+					palm.bush.as_ref(),
+					palm.placement,
+					&palm.material,
+					&palm.frond_material,
+					palm_level,
+				);
+				pending.reverse();
+			}
+		})
+	}
 }
 
 impl VegetationComponents for TropicalTufts {
@@ -201,4 +271,4 @@ impl VegetationComponents for TropicalTufts {
 	}
 }
 
-crate::impl_tuft_grove_lod!(TropicalTufts);
+crate::impl_tuft_grove_lod_emit!(TropicalTufts);

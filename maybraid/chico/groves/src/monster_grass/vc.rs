@@ -359,4 +359,40 @@ impl VegetationComponents for MonsterGrass {
 	}
 }
 
-crate::impl_tuft_grove_lod!(MonsterGrass);
+impl MonsterGrass {
+	fn tuft_scene_chunks(
+		&self,
+		lod_ref: &lod::lod_ref::LodRef,
+		level: lod::gen::LodSceneLevel,
+	) -> lod::SceneChunk {
+		match level {
+			lod::gen::LodSceneLevel::High | lod::gen::LodSceneLevel::Medium => {
+				let plants: Vec<crate::grove::vc_tuft::TuftGrovePlant> = self
+					.plants
+					.iter()
+					.map(|p| crate::grove::vc_tuft::TuftGrovePlant {
+						placement: p.placement,
+						patch: std::sync::Arc::clone(&p.patch),
+						material: p.material.clone(),
+					})
+					.collect();
+				crate::grove::vc_tuft::lazy_posed_tuft_chunks(
+					plants,
+					match level {
+						lod::gen::LodSceneLevel::Medium => {
+							crate::grove::vc_tuft::MEDIUM_TUFT_STRIDE
+						}
+						_ => 1,
+					},
+					lod_ref,
+					level,
+				)
+			}
+			_ => {
+				chico_vegetation_components::flattened_vegetation_scene_chunks(self, lod_ref, level)
+			}
+		}
+	}
+}
+
+crate::impl_tuft_grove_lod_emit!(MonsterGrass);

@@ -142,13 +142,13 @@ mod render_tests {
 			current_transform: &camera,
 			bounds: &bounds,
 		};
-		let SceneChunk::Lazy { remaining_primitives, remaining_weight, .. } =
-			grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High)
-		else {
-			anyhow::bail!("High should be one lazy kit stream, not nested palm hosts");
-		};
-		assert_eq!(remaining_primitives, nodes.len());
-		assert_eq!(remaining_weight, nodes.len() as u32 * FLATTENED_KIT_CHUNK_WEIGHT);
+		let high = grove.scene_chunks_with_level(&lod_ref, LodSceneLevel::High);
+		assert!(
+			!matches!(high, SceneChunk::SubChunks(ref parts) if parts.iter().any(|p| matches!(p, SceneChunk::SubChunks(_)))),
+			"High should lazy-emit posed kits, not nested palm hosts"
+		);
+		assert_eq!(high.total_primitives(), nodes.len());
+		assert_eq!(high.total_weight(), nodes.len() as u32 * FLATTENED_KIT_CHUNK_WEIGHT);
 		Ok(())
 	}
 }
