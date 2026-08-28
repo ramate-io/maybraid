@@ -11,7 +11,7 @@
 //! the scene stack after hosts exist.
 //!
 //! [`RegionPresenter::present`] only upserts. Hide / despawn is
-//! [`RegionPresenter::cull`], driven by a separate producer. Bevy produce /
+//! [`RegionPresenter::cull`], driven by the present keep set. Bevy produce /
 //! drain plugins live in [`runtime`].
 
 mod runtime;
@@ -117,18 +117,10 @@ where
 	/// Hide, then budget-despawn, presented ids that are not in `keep`
 	/// (typically the last present-ring set).
 	///
-	/// Stale is keep-set membership, not a lattice-tile hit. `region` is
-	/// unused for the decision so a drain can hide every leaving id even
-	/// when no cull tile overlaps the grove. Each stale id with stored
-	/// bounds is hidden immediately. Up to `despawn_budget` ids are
-	/// removed this call (including first visit). Returns remaining budget.
-	fn cull(
-		&mut self,
-		spatial_index: &S,
-		_region: Aabb3d,
-		keep: &HashSet<Id>,
-		mut despawn_budget: u32,
-	) -> u32 {
+	/// Stale is keep-set membership. Each stale id with stored bounds is
+	/// hidden immediately. Up to `despawn_budget` ids are removed this call
+	/// (including first visit). Returns remaining budget.
+	fn cull(&mut self, spatial_index: &S, keep: &HashSet<Id>, mut despawn_budget: u32) -> u32 {
 		let stale: Vec<Id> = self
 			.presented_ids()
 			.into_iter()

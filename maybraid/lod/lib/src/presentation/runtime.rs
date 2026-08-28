@@ -35,8 +35,8 @@ impl<M: Send + Sync + 'static> LodPresentRegion<M> {
 	}
 }
 
-/// Impulse: optional lattice tile for present cull. Drain hides leaving
-/// ids from the keep set even when no tile arrives this frame.
+/// Impulse: optional lattice tile for present cull. Drain does not read
+/// these; hide / despawn is keep-set membership.
 #[derive(Message, Debug, Clone)]
 pub struct LodPresentCullRegion<M: Send + Sync + 'static> {
 	pub region: Aabb3d,
@@ -277,7 +277,7 @@ fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
 		&& (a.max.z - b.max.z).abs() < 1e-3
 }
 
-/// Emit [`LodPresentCullRegion<M>`] via strategy `P` and this layer's cursor.
+/// Emit optional [`LodPresentCullRegion<M>`] tiles via strategy `P`. Drain ignores them.
 pub fn produce_lod_present_cull_regions<P, F, M>(
 	producer: Res<P>,
 	mut cursor: ResMut<LodPresentCullCursor>,
@@ -307,14 +307,12 @@ pub fn produce_lod_present_cull_regions<P, F, M>(
 
 /// Hide, then budget-despawn, presented ids outside the keep ring.
 ///
-/// Runs whenever keep is live, even if the lattice emitted no tile this
-/// frame. Lattice messages are consumed so they do not pile up.
+/// Runs whenever keep is live. Does not wait for lattice tiles.
 pub fn drain_lod_present_cull<T, S, Pr, M>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	budget: Res<LodPresentCullBudget>,
-	mut regions: MessageReader<LodPresentCullRegion<M>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -323,7 +321,6 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	M: Send + Sync + 'static,
 {
 	let Some(keep_region) = keep.live_region() else {
-		regions.clear();
 		return;
 	};
 	let keep_ids: HashSet<Id> = index
@@ -332,8 +329,7 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 		.map(|tracked| tracked.0)
 		.collect();
 	let mut presenter = presenter.into_inner();
-	presenter.cull(&*index, keep_region, &keep_ids, budget.despawns_per_frame);
-	regions.clear();
+	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
 }
 
 /// Produce [`LodPresentRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
@@ -422,7 +418,7 @@ where
 	}
 }
 
-/// Produce [`LodPresentCullRegion<M>`] via strategy `P`.
+/// Optional lattice tiles. [`drain_lod_present_cull`] does not require them.
 pub struct LodPresentCullRegionPlugin<P, F, M>
 where
 	P: Resource + LodCullRegions + Default,

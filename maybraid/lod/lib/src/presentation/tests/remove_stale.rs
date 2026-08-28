@@ -24,14 +24,12 @@ fn cull_hides_within_one_hit_and_despawns_when_budgeted() -> Result<()> {
 	assert!(presenter.vegetation.contains_key(&far));
 
 	let keep = HashSet::from([near]);
-	let remaining =
-		RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, span(0.0, 9.0), &keep, 0);
+	let remaining = RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 0);
 	assert_eq!(remaining, 0);
 	assert!(presenter.vegetation.contains_key(&far));
 	assert!(presenter.hidden.contains(&far));
 
-	let remaining =
-		RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, span(0.0, 9.0), &keep, 1);
+	let remaining = RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 1);
 	assert_eq!(remaining, 0);
 	assert!(presenter.vegetation.contains_key(&near));
 	assert!(!presenter.vegetation.contains_key(&far));
@@ -61,7 +59,7 @@ fn cull_despawns_on_first_hit_when_budget_allows() -> Result<()> {
 	);
 
 	let keep = HashSet::from([near]);
-	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, span(0.0, 9.0), &keep, 1);
+	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 1);
 	assert!(presenter.ops.iter().any(|op| matches!(op, PresenterOp::Hide(id) if *id == far)));
 	assert!(!presenter.vegetation.contains_key(&far));
 	assert!(presenter.vegetation.contains_key(&near));
@@ -88,8 +86,7 @@ fn cull_despawn_budget_is_one_id_per_slot() -> Result<()> {
 	);
 
 	let keep = HashSet::from([near]);
-	let remaining =
-		RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, span(0.0, 9.0), &keep, 1);
+	let remaining = RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, &keep, 1);
 	assert_eq!(remaining, 0);
 	assert!(presenter.ops.iter().any(|op| matches!(op, PresenterOp::Hide(id) if *id == mid)));
 	assert!(presenter.ops.iter().any(|op| matches!(op, PresenterOp::Hide(id) if *id == far)));
@@ -99,34 +96,6 @@ fn cull_despawn_budget_is_one_id_per_slot() -> Result<()> {
 		.collect();
 	assert_eq!(still.len(), 1, "one leaving id stays Hidden until a later slot");
 	assert!(presenter.hidden.contains(&still[0]));
-	Ok(())
-}
-
-#[test]
-fn cull_hides_leaving_id_when_tile_misses_grove() -> Result<()> {
-	let mut index = WorldIndex::default();
-	let lod = TestLod::new(span(0.0, 9.0));
-	let near = Id::from_cell(cell(0.0));
-	let far = Id::from_cell(cell(8.0));
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near, &lod.lod_ref());
-	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far, &lod.lod_ref());
-
-	let mut presenter = RecordingPresenter::default();
-	RegionPresenter::<Vegetation, _>::present(
-		&mut presenter,
-		&index,
-		span(0.0, 9.0),
-		&lod.lod_ref(),
-	);
-
-	let keep = HashSet::from([near]);
-	RegionPresenter::<Vegetation, _>::cull(&mut presenter, &index, span(0.0, 1.0), &keep, 0);
-	assert!(
-		presenter.hidden.contains(&far),
-		"leaving id hides even when the cull AABB misses its grove"
-	);
-	assert!(presenter.vegetation.contains_key(&far));
-	assert!(presenter.vegetation.contains_key(&near));
 	Ok(())
 }
 

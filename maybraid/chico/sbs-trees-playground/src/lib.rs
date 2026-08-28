@@ -29,7 +29,6 @@ use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_forests::{
 	ChicoGrove, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
-	ForestPresentLattice,
 };
 use chico_material_lib::ChicoMaterialRefPlugin;
 use chico_sbs_trees::ensure_chico_tree_render_plugins;
@@ -47,8 +46,8 @@ use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{
 	LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
-	LodPresentCullPlugin, LodPresentCullRegionPlugin, LodPresentPlugin, LodPresentRegionPlugin,
-	LodPresentSystems, LodSceneHost, LodViewer,
+	LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems,
+	LodSceneHost, LodViewer,
 };
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -114,11 +113,6 @@ fn register_forest_lod(app: &mut App) {
 			ForestRegionPresenter,
 			ForestLodChan,
 			With<LodViewer>,
-		>::default())
-		.add_plugins(LodPresentCullRegionPlugin::<
-			ForestPresentLattice,
-			With<LodViewer>,
-			ForestLodChan,
 		>::default())
 		.add_plugins(LodPresentCullPlugin::<
 			ChicoGrove,
