@@ -11,7 +11,6 @@ mod forest;
 mod groves;
 mod pitch;
 pub mod player;
-mod stick_physics;
 mod ui;
 
 pub use camera::CameraController;
@@ -63,7 +62,6 @@ use player::{
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
-use stick_physics::StickPhysicsPlugin;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
@@ -226,9 +224,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		if !app.is_plugin_added::<CharacterHostsPlugin>() {
 			app.add_plugins(CharacterHostsPlugin);
-		}
-		if !app.is_plugin_added::<StickPhysicsPlugin>() {
-			app.add_plugins(StickPhysicsPlugin);
 		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())

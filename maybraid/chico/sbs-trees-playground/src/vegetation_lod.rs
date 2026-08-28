@@ -34,6 +34,8 @@ use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefAdmitBudget;
 
+use crate::stick_physics::{sync_vegetation_stick_colliders, StickPhysicsPlugin};
+
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VegetationBullseye;
@@ -60,6 +62,14 @@ macro_rules! avian_host {
 	}};
 }
 
+/// Flattened plant hosts also get High-band stick capsules (no nested [`StickNode`] hosts).
+macro_rules! flattened_plant_host {
+	($app:expr, $ty:ty) => {{
+		avian_host!($app, FlattenedPlant<$ty>);
+		$app.add_systems(Update, sync_vegetation_stick_colliders::<FlattenedPlant<$ty>>);
+	}};
+}
+
 /// Full modern refresh stack for structural + fine-phase vegetation hosts.
 ///
 /// 1. Camera → [`Bullseye`] / [`Spotlight`] region messages
@@ -78,6 +88,9 @@ impl Plugin for VegetationLodRefreshPlugin {
 		}
 		if !app.is_plugin_added::<LodRefreshCorePlugin>() {
 			app.add_plugins(LodRefreshCorePlugin);
+		}
+		if !app.is_plugin_added::<StickPhysicsPlugin>() {
+			app.add_plugins(StickPhysicsPlugin);
 		}
 
 		app.insert_resource(Bullseye {
@@ -161,28 +174,28 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, DateGrove);
 
 		// Isolated /show plants and grove-nested plants.
-		avian_host!(app, FlattenedPlant<StorybookTree>);
-		avian_host!(app, FlattenedPlant<VaseTree>);
-		avian_host!(app, FlattenedPlant<JungleStorybookTree>);
-		avian_host!(app, FlattenedPlant<BraidOakTree>);
-		avian_host!(app, FlattenedPlant<RorysHeadTrained>);
-		avian_host!(app, FlattenedPlant<PenmarchTorch>);
-		avian_host!(app, FlattenedPlant<KamakuraTorch>);
-		avian_host!(app, FlattenedPlant<HighBushShoots>);
-		avian_host!(app, FlattenedPlant<JungleGrowth>);
-		avian_host!(app, FlattenedPlant<SimplemansHedge>);
-		avian_host!(app, FlattenedPlant<PalmBush>);
-		avian_host!(app, FlattenedPlant<HonuBanyan>);
-		avian_host!(app, FlattenedPlant<SopesBanyan>);
-		avian_host!(app, FlattenedPlant<DatePalm>);
-		avian_host!(app, FlattenedPlant<WaialeaPalm>);
-		avian_host!(app, FlattenedPlant<OasisDatePalm>);
-		avian_host!(app, FlattenedPlant<TuftPatch>);
-		avian_host!(app, FlattenedPlant<FriendsConifer>);
-		avian_host!(app, FlattenedPlant<LiamsConifer>);
-		avian_host!(app, FlattenedPlant<NorthernConifer>);
-		avian_host!(app, FlattenedPlant<TemperateConifer>);
-		avian_host!(app, FlattenedPlant<PalmCrown>);
+		flattened_plant_host!(app, StorybookTree);
+		flattened_plant_host!(app, VaseTree);
+		flattened_plant_host!(app, JungleStorybookTree);
+		flattened_plant_host!(app, BraidOakTree);
+		flattened_plant_host!(app, RorysHeadTrained);
+		flattened_plant_host!(app, PenmarchTorch);
+		flattened_plant_host!(app, KamakuraTorch);
+		flattened_plant_host!(app, HighBushShoots);
+		flattened_plant_host!(app, JungleGrowth);
+		flattened_plant_host!(app, SimplemansHedge);
+		flattened_plant_host!(app, PalmBush);
+		flattened_plant_host!(app, HonuBanyan);
+		flattened_plant_host!(app, SopesBanyan);
+		flattened_plant_host!(app, DatePalm);
+		flattened_plant_host!(app, WaialeaPalm);
+		flattened_plant_host!(app, OasisDatePalm);
+		flattened_plant_host!(app, TuftPatch);
+		flattened_plant_host!(app, FriendsConifer);
+		flattened_plant_host!(app, LiamsConifer);
+		flattened_plant_host!(app, NorthernConifer);
+		flattened_plant_host!(app, TemperateConifer);
+		flattened_plant_host!(app, PalmCrown);
 
 		if !app.is_plugin_added::<LodLazyRefsPlugin>() {
 			app.add_plugins(LodLazyRefsPlugin);
