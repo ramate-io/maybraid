@@ -14,6 +14,7 @@ bevy = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+lod = { workspace = true }
 maybraid-sky = { workspace = true }
 chico-vegetation-on-terrain-playground = { workspace = true }
 

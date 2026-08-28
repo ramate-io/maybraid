@@ -22,6 +22,10 @@ chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }
 chico-sbs-trees-playground = { path = "../sbs-trees-playground" }
 lod = { workspace = true }
+lod-avian = { workspace = true }
+avian3d = { workspace = true }
+crozon-characters = { workspace = true }
+ground-avian = { workspace = true }
 render-item = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }

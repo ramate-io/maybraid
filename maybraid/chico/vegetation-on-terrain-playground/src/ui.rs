@@ -6,10 +6,11 @@ use crate::{GroveKind, PlaygroundConfig};
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Vegetation on terrain — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `grove rolling-oaks`, `forest`, `stats mesh`, `help`".into(),
+		empty_console_text:
+			"Console: `grove rolling-oaks`, `forest`, `mode character`, `stats mesh`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
-			"help — grove <kind> — forest [layering] — terrain-radius — grove-extent — tile-radius — stats mesh".into(),
+			"help — grove <kind> — forest [layering] — mode free|character — set-character — stats mesh".into(),
 	}
 }
 

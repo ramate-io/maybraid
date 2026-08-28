@@ -153,9 +153,25 @@ pub enum PlaygroundCommand {
 	},
 	/// Despawn and rebuild groves on the current terrain.
 	Rebuild,
+	/// Switch between free-look fly camera and third-person character control.
+	#[command(subcommand)]
+	Mode(Mode),
+	/// Replace the capsule with a Crozon character (default preview recipe).
+	SetCharacter {
+		species: crate::character::CharacterSpecies,
+	},
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Mode {
+	/// Free-look fly camera (WASD + mouse, Space/Shift vertical).
+	Free,
+	/// Capsule or Crozon character with third-person camera (WASD move, Space jump).
+	Character,
 }
 
 #[derive(Clone, Subcommand)]
@@ -185,6 +201,12 @@ pub struct RequestRebuild;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestMeshStats;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeFree;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeCharacter;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -224,12 +246,32 @@ impl PlaygroundCommand {
 				commands.spawn(RequestRebuild);
 				*console = "rebuild: pending".into();
 			}
+			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
+			PlaygroundCommand::SetCharacter { species } => {
+				commands.spawn(crate::character::RequestSetCharacter { species });
+				*console = format!("set-character {}: pending", species.label());
+			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}
 
 	pub fn parse_line(line: &str) -> Result<Self, String> {
 		<Self as GameCommand>::parse_line(line)
+	}
+}
+
+impl Mode {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Mode::Free => {
+				commands.spawn(RequestModeFree);
+				*console = "mode free: pending".into();
+			}
+			Mode::Character => {
+				commands.spawn(RequestModeCharacter);
+				*console = "mode character: pending".into();
+			}
+		}
 	}
 }
 
@@ -284,5 +326,13 @@ mod tests {
 	fn parse_stats_mesh() {
 		let cmd = PlaygroundCommand::parse_line("stats mesh").unwrap();
 		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Mesh)));
+	}
+
+	#[test]
+	fn parse_mode_character() {
+		let cmd = PlaygroundCommand::parse_line("mode character").unwrap();
+		assert!(matches!(cmd, PlaygroundCommand::Mode(Mode::Character)));
+		let free = PlaygroundCommand::parse_line("mode free").unwrap();
+		assert!(matches!(free, PlaygroundCommand::Mode(Mode::Free)));
 	}
 }

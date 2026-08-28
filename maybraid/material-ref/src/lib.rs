@@ -20,7 +20,7 @@ mod standard;
 pub use fulfill::{
 	fulfill_material_ref_descendants, fulfill_material_ref_roots,
 	invalidate_changed_material_ref_roots, restamp_material_ref_descendants_of_changed,
-	MaterialRefPlugin,
+	MaterialRefPlugin, MaterialRefSystems,
 };
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
@@ -148,6 +148,32 @@ mod tests {
 			.clone();
 		assert_ne!(first, second);
 		assert!(app.world().get::<MaterialRefApplied>(child).is_some());
+		Ok(())
+	}
+
+	#[derive(bevy::ecs::system::SystemParam)]
+	struct NoopMaterialLib;
+
+	impl MaterialLib for NoopMaterialLib {
+		fn fulfill(
+			&mut self,
+			_entity: Entity,
+			_material_ref: &MaterialRef,
+			_commands: &mut Commands,
+		) {
+		}
+	}
+
+	#[test]
+	fn second_material_ref_plugin_does_not_panic_schedule() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+			.init_asset::<StandardMaterial>()
+			.init_resource::<StandardMaterialRefCache>()
+			.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default())
+			.add_plugins(MaterialRefPlugin::<NoopMaterialLib>::default())
+			.add_plugins(StandardMaterialRefPlugin);
+		app.update();
 		Ok(())
 	}
 }

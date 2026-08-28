@@ -2349,16 +2349,20 @@ dependencies = [
 name = "chico-vegetation-on-terrain-playground"
 version = "0.0.1"
 dependencies = [
+ "avian3d",
  "bevy",
  "chico-forests",
  "chico-groves",
  "chico-sbs-trees-playground",
  "chico-vegetation-components",
  "clap",
+ "crozon-characters",
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",
+ "ground-avian",
  "lod",
+ "lod-avian",
  "log",
  "procedural-common",
  "render-item",
@@ -4362,6 +4366,7 @@ dependencies = [
  "chico-vegetation-on-terrain-playground",
  "clap",
  "game-commands",
+ "lod",
  "log",
  "maybraid-sky",
 ]

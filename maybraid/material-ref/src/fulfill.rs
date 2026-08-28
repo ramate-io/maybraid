@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::{
 	Added, App, Changed, ChildOf, Children, Commands, Entity, IntoScheduleConfigs, Mesh3d, Plugin,
-	Query, Update, With, Without,
+	Query, Resource, SystemSet, Update, With, Without,
 };
 
 use crate::lib_trait::MaterialLib;
@@ -125,6 +125,23 @@ fn propagating_material_ref(
 	}
 }
 
+/// Shared invalidate / fulfill schedule labels. [`invalidate_changed_material_ref_roots`]
+/// is not generic and is installed once, even when several [`MaterialRefPlugin`]`<L>`
+/// instances share the app (Chico + Crozon characters).
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MaterialRefSystems {
+	Invalidate,
+	Fulfill,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct MaterialRefShared;
+
+/// True after the first [`MaterialRefPlugin`] has installed the shared invalidate system.
+pub(crate) fn material_ref_shared_installed(app: &App) -> bool {
+	app.world().contains_resource::<MaterialRefShared>()
+}
+
 /// Installs fulfill for material lib `L` (a [`SystemParam`] whose item implements [`MaterialLib`]).
 ///
 /// Parallel to [`lod::LodSceneRefreshLevelsPlugin`]’s index parameter: pass the concrete
@@ -154,15 +171,25 @@ where
 	for<'w, 's> L::Item<'w, 's>: MaterialLib,
 {
 	fn build(&self, app: &mut App) {
+		if !material_ref_shared_installed(app) {
+			app.init_resource::<MaterialRefShared>().configure_sets(
+				Update,
+				MaterialRefSystems::Fulfill.after(MaterialRefSystems::Invalidate),
+			);
+			app.add_systems(
+				Update,
+				invalidate_changed_material_ref_roots.in_set(MaterialRefSystems::Invalidate),
+			);
+		}
 		app.add_systems(
 			Update,
 			(
-				invalidate_changed_material_ref_roots,
-				fulfill_material_ref_roots::<L>.after(invalidate_changed_material_ref_roots),
+				fulfill_material_ref_roots::<L>,
 				fulfill_material_ref_descendants::<L>.after(fulfill_material_ref_roots::<L>),
 				restamp_material_ref_descendants_of_changed::<L>
 					.after(fulfill_material_ref_roots::<L>),
-			),
+			)
+				.in_set(MaterialRefSystems::Fulfill),
 		);
 	}
 }

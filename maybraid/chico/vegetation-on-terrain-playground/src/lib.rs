@@ -4,31 +4,43 @@
 //! tiled `/grove`).
 
 pub mod camera;
+pub mod character;
 pub mod commands;
 pub mod diagnostics;
 mod forest;
 mod groves;
+mod pitch;
+pub mod player;
+mod stick_physics;
 mod ui;
 
 pub use camera::CameraController;
+pub use character::{CharacterSpecies, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin};
+pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
+pub use player::{Player, PlayerPlugin, PlaygroundMode};
 
+use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
+use camera::{
+	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
+	setup_camera, surface_or_hold,
+};
+use character::{apply_set_character, drive_player_locomotion};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
 use chico_sbs_trees_playground::register_vegetation_view;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
-	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestRebuild,
-	RequestTerrainRadius, RequestTileRadius,
+	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
+	RequestModeFree, RequestRebuild, RequestTerrainRadius, RequestTileRadius,
 };
+use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, OuterCellRing,
@@ -43,9 +55,15 @@ use groves::{spawn_tiled_groves, GroveRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
+use player::{
+	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
+	AwaitingTerrainSurface, PlayerControlSystems,
+};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
+use stick_physics::StickPhysicsPlugin;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
@@ -152,7 +170,7 @@ impl PlaygroundConfig {
 			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
-			forest: Some(ForestStreamSpec::default()),
+			forest: Some(ForestStreamSpec { stream_radius: 2, ..ForestStreamSpec::default() }),
 			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
@@ -203,6 +221,15 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		register_vegetation_view(app);
 		register_forest_lod::<DurhamForestPresenter>(app);
+		if !app.is_plugin_added::<PlayerPlugin>() {
+			app.add_plugins(PlayerPlugin);
+		}
+		if !app.is_plugin_added::<CharacterHostsPlugin>() {
+			app.add_plugins(CharacterHostsPlugin);
+		}
+		if !app.is_plugin_added::<StickPhysicsPlugin>() {
+			app.add_plugins(StickPhysicsPlugin);
+		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
@@ -217,6 +244,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_systems(
 				Update,
 				(
+					release_modifiers_on_focus_change.before(camera_controller),
 					camera_controller,
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					generate_cells.after(apply_commands),
@@ -226,6 +254,20 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.after(apply_commands)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
+					apply_set_character.after(apply_commands),
+					apply_mode_commands.after(apply_set_character),
+					snap_player_to_composed_surface
+						.after(present_cells)
+						.after(apply_mode_commands)
+						.before(PlayerControlSystems),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -233,6 +275,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_systems(
 				Update,
 				(
+					release_modifiers_on_focus_change.before(camera_controller),
 					camera_controller,
 					generate_cells,
 					present_cells.after(generate_cells),
@@ -240,6 +283,20 @@ impl Plugin for VegetationOnTerrainPlugin {
 					stream_durham_forest
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
+					apply_set_character,
+					apply_mode_commands.after(apply_set_character),
+					snap_player_to_composed_surface
+						.after(present_cells)
+						.after(apply_mode_commands)
+						.before(PlayerControlSystems),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
 				),
 			);
 		}
@@ -420,12 +477,55 @@ fn apply_commands(
 	}
 }
 
+fn apply_mode_commands(
+	mut commands: Commands,
+	mut mode: ResMut<PlaygroundMode>,
+	mut status: ResMut<GameCommandStatusText>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	store: Res<TerrainEntryStore>,
+	free: Query<Entity, With<RequestModeFree>>,
+	character: Query<Entity, With<RequestModeCharacter>>,
+	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+) {
+	for entity in &free {
+		*mode = PlaygroundMode::Free;
+		status.0 = "mode free".into();
+		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
+			refocus_camera_on_elevation(
+				&layout,
+				surface_or_hold(&layout, &store, &base.0),
+				&mut cam_t,
+				&mut controller,
+			);
+		}
+		commands.entity(entity).despawn();
+	}
+
+	for entity in &character {
+		*mode = PlaygroundMode::Character;
+		status.0 = "mode character — WASD move, mouse look, Space jump".into();
+		if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
+			let center = layout.region_center_xz();
+			if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {
+				respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+			}
+			commands.entity(player).insert(AwaitingTerrainSurface);
+		}
+		commands.entity(entity).despawn();
+	}
+}
+
 fn generate_cells(
+	mut commands: Commands,
 	mut index: AvianTerrainIndex,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut world_base: ResMut<WorldBaseTerrain>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	mode: Res<PlaygroundMode>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
 	if !dirty.0 {
 		return;
@@ -451,8 +551,22 @@ fn generate_cells(
 		world_base.0 = base.clone();
 	}
 
-	if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-		refocus_camera_on_layout(&layout, &world_base.0, &mut transform, &mut controller);
+	if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
+		let center = layout.region_center_xz();
+		if let Some(elevation) = index.composed_height_at(center.x, center.z) {
+			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+		}
+		commands.entity(player).insert(AwaitingTerrainSurface);
+	}
+
+	if *mode == PlaygroundMode::Free {
+		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
+			let center = layout.region_center_xz();
+			let elevation = index
+				.composed_height_at(center.x, center.z)
+				.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
+			refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
+		}
 	}
 
 	dirty.0 = false;
@@ -518,4 +632,16 @@ fn spawn_groves(
 		config.tile_radius
 	);
 	dirty.0 = false;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn world_defaults_double_the_forest_present_ring() {
+		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
+		assert_eq!(spec.stream_radius, 2);
+		assert_eq!(stream_radii_m(2), (2_000.0, 3_000.0));
+	}
 }
