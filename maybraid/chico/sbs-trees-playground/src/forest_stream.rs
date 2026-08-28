@@ -116,8 +116,7 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 			}
 			self.state.pending_despawn.push_back(previous.entities);
 		}
-		let Some(tiles) = grove.grown_tiles() else {
-			grove.ensure_grown(&forest_world_sample());
+		let Some(tiles) = grove.tiles_ready_to_present(&forest_world_sample()) else {
 			return;
 		};
 		let mut entities = Vec::new();

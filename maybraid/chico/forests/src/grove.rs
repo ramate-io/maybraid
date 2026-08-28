@@ -56,6 +56,19 @@ impl ChicoGrove {
 		self.grown.get_or_init(|| self.grow(world))
 	}
 
+	/// Tiles to spawn this present slot. `None` means this call grew and the
+	/// caller should wait for the next slot.
+	pub fn tiles_ready_to_present(
+		&self,
+		world: &impl GroveWorldSample,
+	) -> Option<&[ForestGroveTile]> {
+		if self.grown.get().is_some() {
+			return self.grown_tiles();
+		}
+		self.ensure_grown(world);
+		None
+	}
+
 	pub fn grow(&self, world: &impl GroveWorldSample) -> Vec<ForestGroveTile> {
 		self.recipes.iter().map(|recipe| recipe.grow(world)).collect()
 	}
@@ -107,6 +120,26 @@ mod tests {
 		assert!(first > 0);
 		assert_eq!(grove.ensure_grown(&forest_world_sample()).len(), first);
 		assert!(!grove.recipes.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn tiles_ready_to_present_grows_then_returns_tiles() -> Result<()> {
+		use crate::index::forest_world_sample;
+		use crate::{ForestGroveKind, ForestGroveRecipe};
+
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let grove = ChicoGrove::selected(
+			extent,
+			ForestLayer::UpperCanopy,
+			vec![ForestGroveRecipe::uniform(ForestGroveKind::Orchard, extent)],
+		);
+		assert!(grove.tiles_ready_to_present(&forest_world_sample()).is_none());
+		assert!(grove.grown_tiles().is_some());
+		let tiles = grove
+			.tiles_ready_to_present(&forest_world_sample())
+			.ok_or_else(|| anyhow::anyhow!("ready"))?;
+		assert!(!tiles.is_empty());
 		Ok(())
 	}
 

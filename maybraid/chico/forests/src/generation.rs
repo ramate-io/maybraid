@@ -311,4 +311,105 @@ mod tests {
 		assert!(lod::gen::SpatialIndex::<ChicoForest>::get(&index, forest_id).is_some());
 		Ok(())
 	}
+
+	#[derive(bevy::prelude::Resource, Default)]
+	struct GrovePresentLog {
+		presented: std::collections::HashMap<lod::gen::Id, lod::gen::Version>,
+	}
+
+	#[derive(bevy::ecs::system::SystemParam)]
+	struct GrovePresentParam<'w> {
+		log: bevy::prelude::ResMut<'w, GrovePresentLog>,
+	}
+
+	impl lod::presentation::RegionPresenter<ChicoGrove, ForestIndex> for GrovePresentParam<'_> {
+		fn presented_version(&self, id: lod::gen::Id) -> Option<lod::gen::Version> {
+			self.log.presented.get(&id).copied()
+		}
+
+		fn handle(
+			&mut self,
+			id: lod::gen::Id,
+			version: lod::gen::Version,
+			grove: &ChicoGrove,
+			_lod_ref: &LodRef,
+		) {
+			let Some(_tiles) = grove.tiles_ready_to_present(&crate::index::forest_world_sample())
+			else {
+				return;
+			};
+			self.log.presented.insert(id, version);
+		}
+
+		fn presented_ids(&self) -> Vec<lod::gen::Id> {
+			self.log.presented.keys().copied().collect()
+		}
+
+		fn remove_stale(&mut self, wanted: &std::collections::HashSet<lod::gen::Id>) {
+			self.log.presented.retain(|id, _| wanted.contains(id));
+		}
+	}
+
+	#[test]
+	fn drain_present_grows_then_spawns_on_the_next_slot() -> Result<()> {
+		use bevy::prelude::*;
+		use lod::gen::{SpatialIndex, Version};
+		use lod::lod_ref::{LodNode, LodNodePose};
+		use lod::presentation::{LodPresentBudget, LodPresentKeepRegion, LodPresentPlugin};
+
+		use crate::index::forest_world_sample;
+		use crate::{ForestGroveKind, ForestGroveRecipe};
+
+		let extent = chico_groves::GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let grove = ChicoGrove::selected(
+			extent,
+			ForestLayer::UpperCanopy,
+			vec![ForestGroveRecipe::uniform(ForestGroveKind::Orchard, extent)],
+		);
+		let id = grove.id();
+		let bounds = grove.aabb();
+		let (identity, lod_bounds) = test_lod_ref(bounds);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &lod_bounds,
+		};
+		let mut index = ForestIndex::default();
+		SpatialIndex::<ChicoGrove>::insert(&mut index, id, grove, bounds, &lod_ref);
+
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.insert_resource(index)
+			.insert_resource(GrovePresentLog::default())
+			.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+			.insert_resource({
+				let mut keep = LodPresentKeepRegion::<ForestLodChan>::default();
+				keep.region = Some(bounds);
+				keep
+			})
+			.add_plugins(LodPresentPlugin::<
+				ChicoGrove,
+				ForestIndex,
+				GrovePresentParam,
+				ForestLodChan,
+			>::default());
+		app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+		app.update();
+
+		{
+			let log = app.world().resource::<GrovePresentLog>();
+			assert!(log.presented.is_empty(), "first slot grows and does not present");
+			let index = app.world().resource::<ForestIndex>();
+			let grove = SpatialIndex::<ChicoGrove>::get(index, id)
+				.ok_or_else(|| anyhow::anyhow!("grove after grow"))?;
+			assert!(grove.grown_tiles().is_some());
+			assert!(grove.tiles_ready_to_present(&forest_world_sample()).is_some());
+		}
+
+		app.update();
+		let log = app.world().resource::<GrovePresentLog>();
+		assert_eq!(log.presented.get(&id).copied(), Some(Version(1)));
+		Ok(())
+	}
 }
