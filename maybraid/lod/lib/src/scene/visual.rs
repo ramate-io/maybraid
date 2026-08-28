@@ -22,10 +22,11 @@ use crate::scene::refresh::{LodHostBounds, LodViewer};
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct VisualLodRoot;
 
-/// Tile host whose drawable trees live on [`VisualLodRoot`], not `SceneChunk`.
+/// Tile host whose drawable UltraLow/Low/Medium kits are packed visuals.
 ///
-/// Semantic refresh must not spawn visual kits on this host. Nested hosts
-/// under [`VisualLodRoot`] are frozen against camera-driven level writes.
+/// Stamp only when packed representations exist. Semantic refresh must not
+/// spawn visual kits on this host. Nested hosts under [`VisualLodRoot`] are
+/// frozen against camera-driven level writes.
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct VisualOwnsAppearance;
 
@@ -254,9 +255,12 @@ where
 fn extract_visual_lod<T: VisualLodScene>(
 	mut commands: Commands,
 	views: Extract<Query<(&'static Camera, &'static GlobalTransform), With<LodViewer>>>,
-	instances: Extract<Query<(RenderEntity, &'static T, &'static LodHostBounds), With<VisualLodRoot>>>,
+	instances: Extract<
+		Query<(RenderEntity, &'static T, &'static LodHostBounds), With<VisualLodRoot>>,
+	>,
 ) {
-	let Some(view) = views.iter().find_map(|(camera, xf)| VisualLodView::from_camera(camera, xf)) else {
+	let Some(view) = views.iter().find_map(|(camera, xf)| VisualLodView::from_camera(camera, xf))
+	else {
 		return;
 	};
 	for (render_entity, scene, bounds) in &instances {
@@ -293,12 +297,7 @@ mod tests {
 	struct NoopRenderer;
 
 	impl VisualLodRenderer<Probe> for NoopRenderer {
-		fn queue(
-			_scene: &Probe,
-			_selection: NamedVisualLevel,
-			_ctx: &mut VisualLodRenderContext,
-		) {
-		}
+		fn queue(_scene: &Probe, _selection: NamedVisualLevel, _ctx: &mut VisualLodRenderContext) {}
 	}
 
 	fn world_box() -> LodHostBounds {

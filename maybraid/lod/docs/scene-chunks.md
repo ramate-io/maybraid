@@ -12,9 +12,11 @@ Visual LOD is persistent data whose representation is selected per view by
 [`VisualLodPolicy`](../lib/src/scene/visual.rs) and submitted by
 [`VisualLodRenderer`](../lib/src/scene/visual.rs)
 ([#667](https://github.com/ramate-io/maybraid/issues/667)).
-Forest tiles stamp [`VisualOwnsAppearance`](../lib/src/scene/visual.rs) and spawn
-authored grove kits under [`VisualLodRoot`](../lib/src/scene/visual.rs); every
-named band draws there, including High.
+Forest tiles stamp a [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling so
+policy can select per view. They must **not** `spawn_scene` authored
+[`SceneChunk`](../lib/src/scene/chunk.rs) bands under that root — High kits stay
+on the exclusive semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs)
+mutes tile fulfill only once packed UltraLow/Low/Medium representations exist.
 
 ## API
 

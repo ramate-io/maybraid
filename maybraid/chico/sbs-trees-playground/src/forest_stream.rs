@@ -280,7 +280,7 @@ where
 	let entities =
 		spawn_lod_scene_host_with_lod_ref(commands, grove, Transform::IDENTITY, bounds, lod_ref);
 	for entity in &entities {
-		attach_forest_grove_visual(commands, *entity, grove, bounds, lod_ref);
+		attach_forest_grove_visual(commands, *entity, bounds);
 	}
 	entities
 }
