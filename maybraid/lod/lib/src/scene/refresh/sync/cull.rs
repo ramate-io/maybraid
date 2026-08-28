@@ -18,7 +18,7 @@ use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::chunk::{
 	LodChunkBudgetClock, LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
@@ -86,7 +86,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	children_q: Query<&Children>,
 	visibilities: Query<&Visibility>,
 ) where
-	T: Component + LodScene,
+	T: Component + SemanticLodScene,
 	FHost: QueryFilter + 'static,
 	FNode: QueryFilter + 'static,
 {

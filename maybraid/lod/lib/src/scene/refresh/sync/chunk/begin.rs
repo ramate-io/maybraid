@@ -20,7 +20,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::refresh::LodHostBounds;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, begin_scan_limit, charge_begin_weight, LevelBand};
@@ -58,7 +58,7 @@ fn roll_desired_into_presence(clock: &mut LodChunkBeginClock) {
 }
 
 /// Start a pending root + queue from [`LodLevelSpawnRequest`].
-pub fn begin_chunk_lod_fulfill<T: Component + LodScene>(
+pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 	mut commands: Commands,
 	viewer: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, With<LodViewer>)>,
 	mut begin_clock: ResMut<LodChunkBeginClock>,
@@ -403,7 +403,7 @@ fn classify_begin_candidate(
 	})
 }
 
-fn admit_candidates<T: Component + LodScene>(
+fn admit_candidates<T: Component + SemanticLodScene>(
 	candidates: &[BeginCandidate],
 	class: FulfillClass,
 	commands: &mut Commands,

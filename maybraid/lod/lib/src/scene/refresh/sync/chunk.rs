@@ -37,7 +37,7 @@ use std::marker::PhantomData;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
@@ -54,8 +54,8 @@ pub use types::{
 	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
-/// Register incremental chunk fulfill systems for one [`LodScene`] host type.
-pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
+/// Register incremental chunk fulfill systems for one [`SemanticLodScene`] host type.
+pub fn add_lod_refresh_chunk_for<T: Component + SemanticLodScene>(app: &mut App) {
 	if !app.is_plugin_added::<LodSceneRefreshChunkPlugin<T>>() {
 		app.add_plugins(LodSceneRefreshChunkPlugin::<T>::default());
 	}
@@ -64,14 +64,14 @@ pub fn add_lod_refresh_chunk_for<T: Component + LodScene>(app: &mut App) {
 /// Chunk fulfill plugin (default sync path for level-root spawn).
 pub struct LodSceneRefreshChunkPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	_marker: PhantomData<fn() -> T>,
 }
 
 impl<T> Default for LodSceneRefreshChunkPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
@@ -165,7 +165,7 @@ fn ensure_chunk_budget(app: &mut App) {
 
 impl<T> Plugin for LodSceneRefreshChunkPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	fn build(&self, app: &mut App) {
 		ensure_chunk_budget(app);
@@ -181,7 +181,7 @@ where
 }
 
 /// Probe-style levels + chunk fulfill + cull (no region message pipeline).
-pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
+pub fn add_lod_refresh_chunk_full_for<T: Component + SemanticLodScene>(app: &mut App) {
 	ensure_chunk_budget(app);
 	app.add_systems(
 		Update,
@@ -200,7 +200,7 @@ pub fn add_lod_refresh_chunk_full_for<T: Component + LodScene>(app: &mut App) {
 /// [`crate::scene::refresh::cull_regions::LodSceneRegionCullPlugin`].
 pub struct LodSceneRefreshSyncPlugin<T, F = With<LodViewer>>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	full_scan_cull: bool,
@@ -209,7 +209,7 @@ where
 
 impl<T, F> Default for LodSceneRefreshSyncPlugin<T, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
@@ -219,7 +219,7 @@ where
 
 impl<T, F> LodSceneRefreshSyncPlugin<T, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	/// Chunk fulfill only — region cull plugins own enqueue.
@@ -230,7 +230,7 @@ where
 
 impl<T, F> Plugin for LodSceneRefreshSyncPlugin<T, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	fn build(&self, app: &mut App) {

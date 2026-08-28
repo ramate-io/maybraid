@@ -1,22 +1,29 @@
-//! Incremental LOD scene composition ([`SceneChunk`]).
+//! Incremental LOD composition ([`LodChunk`]).
 //!
 //! A chunk tree is a **scheduling** representation only: it does not change
-//! scene semantics. Fulfillment drains weighted primitives under a per-frame
-//! weight budget (see [`crate::scene::chunk_fulfill`]), expanding
-//! [`SceneChunk::Lazy`] / [`SceneChunk::SubChunks`] on demand.
+//! scene semantics. The leaf type chooses the consume path:
+//!
+//! - [`SemanticSceneChunk`] / [`SceneChunk`] — `Box<dyn Scene>` for exclusive
+//!   main-world spawn ([`crate::drain_chunk_lod_fulfill`]).
+//! - [`VisualSceneChunk`] — [`VisualLodPrimitive`]; **not** a Bevy `Scene` and
+//!   **not** drained by semantic fulfill ([#667](https://github.com/ramate-io/maybraid/issues/667)).
+//!
+//! Fulfillment expands [`LodChunk::Lazy`] / [`LodChunk::SubChunks`] on demand.
 
 use bevy::scene::prelude::Scene;
 use std::collections::VecDeque;
+
+use super::level::LodSceneLevel;
 
 /// Default weight for [`SceneChunk::primitive`].
 pub const DEFAULT_CHUNK_WEIGHT: u32 = 1;
 
 /// Scheduling tree for incremental LOD fulfillment.
-pub enum SceneChunk {
+pub enum LodChunk<P> {
 	/// Nested scheduling groups (expanded on demand during fulfill).
-	SubChunks(Vec<SceneChunk>),
-	/// One spawn unit with a relative cost heuristic.
-	Primitive { weight: u32, scene: Box<dyn Scene> },
+	SubChunks(Vec<LodChunk<P>>),
+	/// One consume unit with a relative cost heuristic.
+	Primitive { weight: u32, payload: P },
 	/// Deferred child chunks. `next` builds the next chunk when fulfill needs it.
 	///
 	/// `remaining_weight` / `remaining_primitives` are the unsettled totals still
@@ -24,23 +31,34 @@ pub enum SceneChunk {
 	Lazy {
 		remaining_weight: u32,
 		remaining_primitives: usize,
-		next: Box<dyn FnMut() -> Option<SceneChunk> + Send + Sync>,
+		next: Box<dyn FnMut() -> Option<LodChunk<P>> + Send + Sync>,
 	},
 }
 
-impl SceneChunk {
-	/// Single primitive with [`DEFAULT_CHUNK_WEIGHT`].
-	pub fn primitive(scene: impl Scene + 'static) -> Self {
-		Self::weighted(DEFAULT_CHUNK_WEIGHT, scene)
-	}
+/// Main-world spawn tree. Consumed by [`crate::drain_chunk_lod_fulfill`].
+pub type SemanticSceneChunk = LodChunk<Box<dyn Scene>>;
 
-	/// Single primitive with an explicit weight (relative heuristic).
-	pub fn weighted(weight: u32, scene: impl Scene + 'static) -> Self {
-		Self::Primitive { weight: weight.max(1), scene: Box::new(scene) }
+/// Compatibility name for [`SemanticSceneChunk`].
+pub type SceneChunk = SemanticSceneChunk;
+
+/// Per-view render tree. Not consumed by semantic drain.
+pub type VisualSceneChunk = LodChunk<VisualLodPrimitive>;
+
+/// Stub visual leaf. [#667](https://github.com/ramate-io/maybraid/issues/667)
+/// replaces this with packed grove / instance / impostor data.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct VisualLodPrimitive {
+	pub level: LodSceneLevel,
+}
+
+impl<P> LodChunk<P> {
+	/// One primitive with an explicit weight.
+	pub fn with_payload(weight: u32, payload: P) -> Self {
+		Self::Primitive { weight: weight.max(1), payload }
 	}
 
 	/// Group child chunks.
-	pub fn chunks(chunks: impl IntoIterator<Item = SceneChunk>) -> Self {
+	pub fn chunks(chunks: impl IntoIterator<Item = LodChunk<P>>) -> Self {
 		Self::SubChunks(chunks.into_iter().collect())
 	}
 
@@ -48,7 +66,7 @@ impl SceneChunk {
 	pub fn lazy(
 		remaining_weight: u32,
 		remaining_primitives: usize,
-		next: impl FnMut() -> Option<SceneChunk> + Send + Sync + 'static,
+		next: impl FnMut() -> Option<LodChunk<P>> + Send + Sync + 'static,
 	) -> Self {
 		Self::Lazy {
 			remaining_weight: remaining_weight.max(1),
@@ -57,21 +75,21 @@ impl SceneChunk {
 		}
 	}
 
-	/// Flatten into a FIFO of `(weight, scene)` primitives.
+	/// Flatten into a FIFO of `(weight, payload)` primitives.
 	///
 	/// **Eager:** expands [`Self::Lazy`] fully. Prefer [`Self::into_fulfill_queue`]
-	/// + [`pull_primitive`] for budgeted materialization.
-	pub fn into_primitives(self) -> VecDeque<(u32, Box<dyn Scene>)> {
+	/// + [`pull_payload`] for budgeted materialization.
+	pub fn into_primitives(self) -> VecDeque<(u32, P)> {
 		let mut queue = self.into_fulfill_queue();
 		let mut out = VecDeque::new();
-		while let Some(prim) = pull_primitive(&mut queue) {
+		while let Some(prim) = pull_payload(&mut queue) {
 			out.push_back(prim);
 		}
 		out
 	}
 
 	/// Queue form that preserves [`Self::Lazy`] / [`Self::SubChunks`] for fulfill.
-	pub fn into_fulfill_queue(self) -> VecDeque<SceneChunk> {
+	pub fn into_fulfill_queue(self) -> VecDeque<LodChunk<P>> {
 		match self {
 			Self::SubChunks(children) => children.into(),
 			other => VecDeque::from([other]),
@@ -97,28 +115,52 @@ impl SceneChunk {
 	}
 }
 
-/// Pull the next spawnable primitive, expanding [`SceneChunk::SubChunks`] /
-/// [`SceneChunk::Lazy`] at the front as needed.
-pub fn pull_primitive(queue: &mut VecDeque<SceneChunk>) -> Option<(u32, Box<dyn Scene>)> {
+impl LodChunk<Box<dyn Scene>> {
+	/// Single primitive with [`DEFAULT_CHUNK_WEIGHT`].
+	pub fn primitive(scene: impl Scene + 'static) -> Self {
+		Self::weighted(DEFAULT_CHUNK_WEIGHT, scene)
+	}
+
+	/// Single primitive with an explicit weight (relative heuristic).
+	pub fn weighted(weight: u32, scene: impl Scene + 'static) -> Self {
+		Self::with_payload(weight, Box::new(scene))
+	}
+}
+
+impl LodChunk<VisualLodPrimitive> {
+	/// Single visual primitive with [`DEFAULT_CHUNK_WEIGHT`].
+	pub fn primitive(payload: VisualLodPrimitive) -> Self {
+		Self::with_payload(DEFAULT_CHUNK_WEIGHT, payload)
+	}
+
+	/// Single visual primitive with an explicit weight.
+	pub fn weighted(weight: u32, payload: VisualLodPrimitive) -> Self {
+		Self::with_payload(weight, payload)
+	}
+}
+
+/// Pull the next payload, expanding [`LodChunk::SubChunks`] / [`LodChunk::Lazy`]
+/// at the front as needed.
+pub fn pull_payload<P>(queue: &mut VecDeque<LodChunk<P>>) -> Option<(u32, P)> {
 	loop {
 		let chunk = queue.pop_front()?;
 		match chunk {
-			SceneChunk::Primitive { weight, scene } => {
-				return Some((weight.max(1), scene));
+			LodChunk::Primitive { weight, payload } => {
+				return Some((weight.max(1), payload));
 			}
-			SceneChunk::SubChunks(children) => {
+			LodChunk::SubChunks(children) => {
 				for child in children.into_iter().rev() {
 					queue.push_front(child);
 				}
 			}
-			SceneChunk::Lazy { remaining_weight, remaining_primitives, mut next } => match next() {
+			LodChunk::Lazy { remaining_weight, remaining_primitives, mut next } => match next() {
 				Some(child) => {
 					let child_w = child.total_weight().max(1);
 					let child_p = child.total_primitives();
 					let rem_w = remaining_weight.saturating_sub(child_w);
 					let rem_p = remaining_primitives.saturating_sub(child_p);
 					if rem_p > 0 {
-						queue.push_front(SceneChunk::Lazy {
+						queue.push_front(LodChunk::Lazy {
 							remaining_weight: rem_w.max(1),
 							remaining_primitives: rem_p,
 							next,
@@ -132,22 +174,27 @@ pub fn pull_primitive(queue: &mut VecDeque<SceneChunk>) -> Option<(u32, Box<dyn 
 	}
 }
 
-/// Materialize up to `budget` weight of primitives at the front of `queue`.
+/// Pull the next semantic spawn primitive.
+pub fn pull_primitive(queue: &mut VecDeque<SceneChunk>) -> Option<(u32, Box<dyn Scene>)> {
+	pull_payload(queue)
+}
+
+/// Materialize up to `budget` weight of payloads at the front of `queue`.
 ///
-/// Expands lazy/sub-chunk fronts into [`SceneChunk::Primitive`] entries so begin
+/// Expands lazy/sub-chunk fronts into [`LodChunk::Primitive`] entries so begin
 /// can prefill under its weight budget. Returns weight spent.
-pub fn materialize_front(queue: &mut VecDeque<SceneChunk>, budget: u32) -> u32 {
+pub fn materialize_front<P>(queue: &mut VecDeque<LodChunk<P>>, budget: u32) -> u32 {
 	if budget == 0 {
 		return 0;
 	}
 	let mut ready = VecDeque::new();
 	let mut spent = 0u32;
 	while spent < budget {
-		let Some((weight, scene)) = pull_primitive(queue) else {
+		let Some((weight, payload)) = pull_payload(queue) else {
 			break;
 		};
 		spent = spent.saturating_add(weight);
-		ready.push_back(SceneChunk::Primitive { weight, scene });
+		ready.push_back(LodChunk::Primitive { weight, payload });
 	}
 	while let Some(chunk) = ready.pop_back() {
 		queue.push_front(chunk);
@@ -197,5 +244,16 @@ mod tests {
 		assert!(matches!(queue.front(), Some(SceneChunk::Primitive { .. })));
 		let prims: Vec<_> = std::iter::from_fn(|| pull_primitive(&mut queue)).collect();
 		assert_eq!(prims.len(), 3);
+	}
+
+	#[test]
+	fn visual_chunk_is_not_a_scene() {
+		let chunk = VisualSceneChunk::primitive(VisualLodPrimitive { level: LodSceneLevel::Low });
+		assert_eq!(chunk.total_weight(), DEFAULT_CHUNK_WEIGHT);
+		assert_eq!(chunk.total_primitives(), 1);
+		let mut queue = chunk.into_fulfill_queue();
+		let (weight, payload) = pull_payload(&mut queue).expect("visual primitive");
+		assert_eq!(weight, DEFAULT_CHUNK_WEIGHT);
+		assert_eq!(payload.level, LodSceneLevel::Low);
 	}
 }

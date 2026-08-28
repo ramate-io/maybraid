@@ -1,6 +1,16 @@
 # Incremental LOD scene chunks
 
-Amortize spawning a level root across frames under a weight budget.
+Amortize spawning a **semantic** level root across frames under a weight budget.
+
+[`SemanticLodScene`](../lib/src/scene/lod_scene.rs) (`LodScene` is an alias) builds
+[`SceneChunk`](../lib/src/scene/chunk.rs) = `LodChunk<Box<dyn Scene>>`. Drain
+spawns those scenes in the main World.
+
+[`VisualLodScene`](../lib/src/scene/lod_scene.rs) builds
+[`VisualSceneChunk`](../lib/src/scene/chunk.rs) = `LodChunk<VisualLodPrimitive>`.
+That tree is **not** a Bevy `Scene` and is **not** consumed by
+`drain_chunk_lod_fulfill`. [#667](https://github.com/ramate-io/maybraid/issues/667)
+fills the visual leaf; this crate only defines the fork.
 
 ## API
 
@@ -17,6 +27,12 @@ fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Sce
 ```
 
 Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit (full scene build still happens up front unless overridden).
+
+Visual (no consume plugin yet):
+
+```rust
+fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk;
+```
 
 ## Lifecycle
 
@@ -37,7 +53,7 @@ add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe / region w
 // or Avian region stack (see chico sbs-trees-playground `vegetation_lod.rs`)
 ```
 
-Pending hosts use [`LodScene::host`](../lib/src/scene/lod_scene.rs) (core pending
+Pending hosts use [`SemanticLodScene::host`](../lib/src/scene/lod_scene.rs) (core pending
 shell + [`host_contents`](../lib/src/scene/lod_scene.rs)); chunk fulfill streams
 [`scene_chunks_with_level`](../lib/src/scene/lod_scene.rs). Domain types override
 `host_contents` only — do not re-stamp `lod_host_scene_pending`.
@@ -53,6 +69,6 @@ Lazy materialization of subtrees (factories evaluated only when the scheduler re
 
 ## Related
 
-- [`SceneChunk`](../lib/src/scene_chunk.rs)
+- [`LodChunk` / `SceneChunk` / `VisualSceneChunk`](../lib/src/scene/chunk.rs)
 - [`chunk_fulfill`](../lib/src/chunk_fulfill.rs)
 - [Richmond CONTRIBUTING — LodScene](../../richmond/CONTRIBUTING.md#lodscene-on-buildings)

@@ -24,7 +24,7 @@ use crate::lod_ref::LodRef;
 use bevy::math::bounding::Aabb3d;
 use std::collections::HashSet;
 
-pub use crate::scene::{LodScene, LodSceneStatus};
+pub use crate::scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};
 pub use runtime::{
 	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
 	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,

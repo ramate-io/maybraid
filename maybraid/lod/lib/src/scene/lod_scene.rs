@@ -1,4 +1,8 @@
-//! [`LodScene`] — how a host builds and selects LOD presentation.
+//! [`SemanticLodScene`] (main-world spawn) and [`VisualLodScene`] (per-view draw).
+//!
+//! [`LodScene`] is a compatibility alias for [`SemanticLodScene`]. Grove and
+//! building hosts keep `impl LodScene`. Visual work must not return a
+//! [`SceneChunk`] of `Box<dyn Scene>` — that is still the exclusive spawn path.
 
 use bevy::ecs::component::Component;
 use bevy::math::bounding::Aabb3d;
@@ -7,7 +11,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use crate::lod_ref::LodRef;
 
-use super::chunk::SceneChunk;
+use super::chunk::{SceneChunk, VisualLodPrimitive, VisualSceneChunk};
 use super::cull::LodSceneCulls;
 use super::host::lod_host_scene_pending;
 use super::level::LodSceneLevel;
@@ -20,8 +24,13 @@ pub enum LodSceneStatus {
 	Unchanged,
 }
 
-/// Runtime presentation for one LOD host type.
-pub trait LodScene {
+/// Semantic (main-world) presentation for one LOD host type.
+///
+/// Builds Bevy [`Scene`]s and [`SceneChunk`]s that
+/// [`crate::drain_chunk_lod_fulfill`] spawns. Use this for physics, interaction,
+/// High capsules, and anything that must exist as ECS. Graphical UltraLow ↔
+/// Medium belongs on [`VisualLodScene`].
+pub trait SemanticLodScene {
 	/// Desired presentation level for `lod_ref.current_*`. Must be cheap — no scene build.
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		let _ = lod_ref;
@@ -74,11 +83,13 @@ pub trait LodScene {
 	/// Scene for one LOD level root (primary implementation target).
 	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static;
 
-	/// Incremental composition for one LOD level root.
+	/// Incremental composition for one **semantic** LOD level root.
 	///
 	/// Default wraps [`Self::scene_with_level`] as a single
 	/// [`SceneChunk::primitive`]. Override to split expensive levels into
 	/// weighted sub-chunks for [`super::chunk_fulfill`] drain.
+	///
+	/// Do not put packed / per-view forest here. That is [`VisualLodScene`].
 	///
 	/// Note: the default still builds the full scene up front; hitch reduction
 	/// requires an override (or future lazy chunk nodes).
@@ -134,7 +145,10 @@ pub trait LodScene {
 	}
 }
 
-impl<T: LodScene + Send + Sync + 'static> LodScene for std::sync::Arc<T> {
+/// Compatibility name for [`SemanticLodScene`].
+pub use SemanticLodScene as LodScene;
+
+impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync::Arc<T> {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		(**self).scene_lod_level(lod_ref)
 	}
@@ -165,5 +179,53 @@ impl<T: LodScene + Send + Sync + 'static> LodScene for std::sync::Arc<T> {
 
 	fn scene_bounds(&self) -> Aabb3d {
 		(**self).scene_bounds()
+	}
+}
+
+/// Per-view render LOD. Does not build a Bevy [`Scene`].
+///
+/// Camera motion that only changes triangles / impostors / instance density
+/// should implement this — not insert `LodLevelSpawnRequest` or rebuild ECS
+/// roots. [#667](https://github.com/ramate-io/maybraid/issues/667) fills
+/// [`VisualLodPrimitive`]. There is no consume plugin on this branch.
+pub trait VisualLodScene {
+	/// Packed / impostor / instance tree for `level`. Must be cheap to plan;
+	/// do not `spawn_scene`.
+	fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk {
+		let _ = lod_ref;
+		VisualSceneChunk::primitive(VisualLodPrimitive { level })
+	}
+}
+
+impl<T: VisualLodScene + Send + Sync + 'static> VisualLodScene for std::sync::Arc<T> {
+	fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk {
+		(**self).visual_chunks_with_level(lod_ref, level)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::lod_ref::LodRef;
+	use bevy::prelude::{Entity, Transform};
+
+	struct StubVisual;
+
+	impl VisualLodScene for StubVisual {}
+
+	#[test]
+	fn visual_default_is_a_level_stub() {
+		let camera = Transform::default();
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		let chunk = StubVisual.visual_chunks_with_level(&lod_ref, LodSceneLevel::Medium);
+		assert_eq!(chunk.total_primitives(), 1);
+		let prims = chunk.into_primitives();
+		assert_eq!(prims[0].1.level, LodSceneLevel::Medium);
 	}
 }

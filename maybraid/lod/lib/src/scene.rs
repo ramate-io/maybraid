@@ -1,6 +1,7 @@
 //! LOD scene runtime: hosts, levels, refresh, chunks.
 //!
-//! - [`LodScene`] — how a host type selects and builds LOD content
+//! - [`SemanticLodScene`] / [`LodScene`] — how a host type selects and builds
+//!   main-world LOD content; [`VisualLodScene`] is the per-view render fork
 //! - [`refresh`] — region / level messages → host levels → sync
 //! - [`host`] — ECS hosts / level roots / sync
 //! - [`chunk`] / [`chunk_fulfill`] — amortized level-root spawn
@@ -18,7 +19,10 @@ pub mod refresh;
 pub mod region_index;
 
 pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
-pub use chunk::{materialize_front, pull_primitive, SceneChunk, DEFAULT_CHUNK_WEIGHT};
+pub use chunk::{
+	materialize_front, pull_payload, pull_primitive, LodChunk, SceneChunk, SemanticSceneChunk,
+	VisualLodPrimitive, VisualSceneChunk, DEFAULT_CHUNK_WEIGHT,
+};
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
 	begin_chunk_lod_fulfill, cancel_unstarted_cull_for_desired_pending_roots,
@@ -41,7 +45,7 @@ pub use host::{
 	LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
-pub use lod_scene::{LodScene, LodSceneStatus};
+pub use lod_scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};
 pub use refresh::{
 	add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref, fill_lod_cull_produce_cache,
 	fill_lod_produce_cache, produce_lod_cull_for_region, produce_lod_cull_regions,

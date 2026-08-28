@@ -4,7 +4,7 @@ use bevy::app::{App, Plugin};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::{Assets, Commands, Entity, MeshMaterial3d, ResMut, StandardMaterial};
 
-use crate::fulfill::MaterialRefPlugin;
+use crate::fulfill::{material_ref_shared_installed, MaterialRefPlugin};
 use crate::key::{MaterialRefCache, MaterialRefKey};
 use crate::lib_trait::MaterialLib;
 use crate::material_ref::{MaterialId, MaterialRef};
@@ -57,7 +57,13 @@ pub struct StandardMaterialRefPlugin;
 
 impl Plugin for StandardMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<StandardMaterialRefCache>()
-			.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default());
+		app.init_resource::<StandardMaterialRefCache>();
+		// A domain lib (Chico) already owns fulfill and falls through to
+		// [`StandardMaterialLib`]. A second [`MaterialRefPlugin`] would race
+		// the same [`MaterialRefRoot`]s and used to panic the Update schedule.
+		if material_ref_shared_installed(app) {
+			return;
+		}
+		app.add_plugins(MaterialRefPlugin::<StandardMaterialLib<'_>>::default());
 	}
 }

@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::super::super::viewer::LodViewer;
 use super::types::{LodCullInFlight, LodLevelRootPending};
@@ -20,7 +20,7 @@ use super::types::{LodCullInFlight, LodLevelRootPending};
 ///
 /// Does **not** resume a root that [`LodScene::scene_lod_culls`] still wants
 /// gone (stale High after the camera left the bullseye).
-pub fn cancel_unstarted_cull_for_desired_pending_roots<T: Component + LodScene>(
+pub fn cancel_unstarted_cull_for_desired_pending_roots<T: Component + SemanticLodScene>(
 	mut commands: Commands,
 	cull_inflight: Query<(Entity, &LodCullInFlight, &LodLevelRoot), With<LodLevelRootPending>>,
 	child_of: Query<&ChildOf>,

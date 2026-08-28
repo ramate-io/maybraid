@@ -7,7 +7,7 @@ use bevy::ecs::component::Component;
 use bevy::ecs::entity::Entity;
 use bevy::math::bounding::Aabb3d;
 
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 /// Lookup of **any** [`crate::LodSceneHost`] whose host volume hits `region`.
 ///
@@ -25,7 +25,7 @@ pub trait LodSceneHostIndex {
 /// How hosts entered the world (authored, generated, etc.) is out of scope.
 /// Volumes are typically stamped by [`crate::PatchSceneBounds`] from
 /// [`crate::LodScene::scene_bounds`].
-pub trait LodSceneRegionIndex<T: Component + LodScene> {
+pub trait LodSceneRegionIndex<T: Component + SemanticLodScene> {
 	fn hosts_in_region<'a>(
 		&'a mut self,
 		region: Aabb3d,

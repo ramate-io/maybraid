@@ -32,3 +32,7 @@ Implement `MaterialLib` on a `#[derive(SystemParam)]` that borrows every
 `Assets<M>` / cache you need, fork on `MaterialId`, and insert the matching
 `MeshMaterial3d<M>`. Register with `MaterialRefPlugin::<YourLib<'_, '_>>::default()`
 after initializing any cache resources.
+
+The shared invalidate system is installed once. If a domain lib is already
+registered, [`StandardMaterialRefPlugin`] only ensures the standard cache —
+that lib should fall through to `StandardMaterial` (Chico does).

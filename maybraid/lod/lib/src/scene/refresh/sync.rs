@@ -5,7 +5,7 @@ mod cull;
 
 use bevy::prelude::*;
 
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::viewer::LodViewer;
 
@@ -26,7 +26,7 @@ pub use cull::{
 ///
 /// Prefer message-driven [`LodSceneRefreshSyncPlugin`] / Avian region plugins when possible.
 /// For viewer-distance level writes + chunk + cull, use [`add_lod_refresh_chunk_full_for`].
-pub fn add_lod_refresh_cull_for<T: Component + LodScene>(app: &mut App) {
+pub fn add_lod_refresh_cull_for<T: Component + SemanticLodScene>(app: &mut App) {
 	if !app.is_plugin_added::<LodChunkBudgetPlugin>() {
 		app.add_plugins(LodChunkBudgetPlugin);
 	}

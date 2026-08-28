@@ -14,7 +14,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::super::ensure_refresh_core;
 use super::super::sync::{
@@ -45,7 +45,7 @@ pub fn produce_lod_cull_for_region<T>(
 	child_of: Query<&ChildOf>,
 	visibilities: Query<&Visibility>,
 ) where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
 		return;
@@ -120,7 +120,7 @@ pub struct LodSceneRegionCullPlugin<I, M, T, F = With<LodViewer>>
 where
 	I: SystemParam + 'static,
 	M: Send + Sync + 'static,
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	_marker: PhantomData<fn() -> (I, M, T, F)>,
@@ -130,7 +130,7 @@ impl<I, M, T, F> Default for LodSceneRegionCullPlugin<I, M, T, F>
 where
 	I: SystemParam + 'static,
 	M: Send + Sync + 'static,
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 {
 	fn default() -> Self {
@@ -142,7 +142,7 @@ impl<I, M, T, F> Plugin for LodSceneRegionCullPlugin<I, M, T, F>
 where
 	I: SystemParam + 'static,
 	M: Send + Sync + 'static,
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	F: QueryFilter + 'static,
 	for<'w, 's> I::Item<'w, 's>: LodSceneHostIndex,
 {

@@ -1,6 +1,6 @@
 //! Incremental presentation composition ([`PresentationChunk`]).
 //!
-//! Same scheduling shape as [`crate::SceneChunk`], without LOD bands. A type
+//! Same scheduling shape as [`crate::LodChunk`], without LOD bands. A type
 //! expands into lower-order constituents; fulfill drains weighted primitives
 //! under a per-frame budget.
 

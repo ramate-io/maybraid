@@ -50,7 +50,7 @@ pub use scene::{
 	produce_lod_cull_regions, produce_lod_refresh_levels, produce_lod_refresh_regions,
 	refresh_lod_host_levels, reset_lod_chunk_budget, settle_lod_level_root_visibility,
 	sync_cullable_roots_marker, sync_lod_level_roots, sync_nested_refresh_allowed,
-	update_lod_host_levels, Bullseye, LodChunkBudgetClock, LodChunkBudgetPlugin,
+	update_lod_host_levels, Bullseye, LodChunk, LodChunkBudgetClock, LodChunkBudgetPlugin,
 	LodChunkCullSystems, LodChunkFulfillBudget, LodChunkFulfillSystems, LodChunkFulfillment,
 	LodCullInFlight, LodCullMarkerPlugin, LodCullProduceCache, LodCullRegionCursor, LodCullRegions,
 	LodCullRegionsStatus, LodCullRequest, LodHostBounds, LodHostHasCullableRoots, LodLazyPending,
@@ -65,6 +65,7 @@ pub use scene::{
 	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin, LodSceneRefreshPlugin,
 	LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, LodSceneRefreshSyncPlugin,
 	LodSceneRegionCullPlugin, LodSceneRegionIndex, LodSceneStatus, LodViewer, OpenLattice,
-	PatchSceneBounds, QuantizedDistance, SceneChunk, Spotlight, DEFAULT_CHUNK_WEIGHT,
+	PatchSceneBounds, QuantizedDistance, SceneChunk, SemanticLodScene, SemanticSceneChunk,
+	Spotlight, VisualLodPrimitive, VisualLodScene, VisualSceneChunk, DEFAULT_CHUNK_WEIGHT,
 	NAMED_BANDS_NEAR_TO_FAR, OFFSET_BAND_DEPTH,
 };

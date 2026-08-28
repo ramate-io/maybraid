@@ -1,9 +1,12 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout};
+use bevy::window::WindowFocused;
+use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
 use std::f32::consts::PI;
+
+use crate::player::PlaygroundMode;
 
 #[derive(Component)]
 pub struct CameraController {
@@ -18,7 +21,11 @@ pub fn setup_camera(
 	layout: Res<TerrainCellLayout>,
 	world_base: Res<crate::WorldBaseTerrain>,
 ) {
-	let look_at = camera_look_at(&layout, &world_base.0);
+	let center = layout.region_center_xz();
+	let look_at = camera_look_at(
+		&layout,
+		crate::player::holding_elevation(&world_base.0, center.x, center.z),
+	);
 	let camera_pos = look_at + Vec3::new(0.0, 24.0, 48.0);
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
@@ -40,7 +47,22 @@ pub fn refocus_camera_on_layout(
 	transform: &mut Transform,
 	controller: &mut CameraController,
 ) {
-	let look_at = camera_look_at(layout, base);
+	let center = layout.region_center_xz();
+	refocus_camera_on_elevation(
+		layout,
+		crate::player::holding_elevation(base, center.x, center.z),
+		transform,
+		controller,
+	);
+}
+
+pub fn refocus_camera_on_elevation(
+	layout: &TerrainCellLayout,
+	elevation: f32,
+	transform: &mut Transform,
+	controller: &mut CameraController,
+) {
+	let look_at = camera_look_at(layout, elevation);
 	let camera_pos = look_at + Vec3::new(0.0, 24.0, 48.0);
 	*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
@@ -48,9 +70,20 @@ pub fn refocus_camera_on_layout(
 	controller.pitch = pitch;
 }
 
-fn camera_look_at(layout: &TerrainCellLayout, base: &BaseTerrainNoise) -> Vec3 {
+/// Composed height when the cell is stored; otherwise the holding altitude.
+pub fn surface_or_hold(
+	layout: &TerrainCellLayout,
+	store: &TerrainEntryStore,
+	base: &BaseTerrainNoise,
+) -> f32 {
 	let center = layout.region_center_xz();
-	let elevation = base.height_at(center.x, center.z);
+	store
+		.composed_height_at(layout, center.x, center.z)
+		.unwrap_or_else(|| crate::player::holding_elevation(base, center.x, center.z))
+}
+
+fn camera_look_at(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
+	let center = layout.region_center_xz();
 	Vec3::new(center.x, elevation, center.z)
 }
 
@@ -64,16 +97,50 @@ fn yaw_pitch_from_rotation(rotation: Quat) -> (f32, f32) {
 	(yaw, pitch)
 }
 
+/// macOS screenshot (⌘⇧3 / ⌘⇧4) steals modifier key-ups. Clear them on focus
+/// change so Shift does not stay held and drop the fly camera through the floor.
+pub fn release_modifiers_on_focus_change(
+	mut keyboard: ResMut<ButtonInput<KeyCode>>,
+	mut focus: MessageReader<WindowFocused>,
+) {
+	if focus.read().next().is_none() {
+		return;
+	}
+	for key in [
+		KeyCode::ShiftLeft,
+		KeyCode::ShiftRight,
+		KeyCode::SuperLeft,
+		KeyCode::SuperRight,
+		KeyCode::ControlLeft,
+		KeyCode::ControlRight,
+		KeyCode::AltLeft,
+		KeyCode::AltRight,
+	] {
+		keyboard.release(key);
+	}
+}
+
+fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
+	keyboard.pressed(KeyCode::SuperLeft) || keyboard.pressed(KeyCode::SuperRight)
+}
+
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
+	mode: Res<PlaygroundMode>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
+
+	// Screenshot selection drags the mouse; Command chords are not look/fly.
+	if command_held(&keyboard_input) {
+		mouse_motion.clear();
+		return;
+	}
 
 	let mut mouse_delta = Vec2::ZERO;
 	for event in mouse_motion.read() {
@@ -83,6 +150,10 @@ pub fn camera_controller(
 	controller.yaw -= mouse_delta.x * controller.sensitivity;
 	controller.pitch -= mouse_delta.y * controller.sensitivity;
 	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+
+	if *mode == PlaygroundMode::Character {
+		return;
+	}
 
 	let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
 	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);

@@ -22,7 +22,7 @@ use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::LodScene;
+use lod::gen::SemanticLodScene;
 use lod::{
 	LodSceneHost, LodSceneHostIndex, LodSceneRefreshPlugin, LodSceneRegionIndex, LodViewer,
 	PatchSceneBounds,
@@ -100,12 +100,12 @@ impl LodSceneHostIndex for AvianLodSceneHostIndex<'_, '_> {
 ///
 /// Layer-masked to [`PhysicsInteractionLayer::Host`], then resolved as `T`.
 #[derive(SystemParam)]
-pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + LodScene + 'static> {
+pub struct AvianLodSceneRegionIndex<'w, 's, T: Component + SemanticLodScene + 'static> {
 	spatial: SpatialQuery<'w, 's>,
 	hosts: Query<'w, 's, &'static T, With<LodSceneHost>>,
 }
 
-impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
+impl<T: Component + SemanticLodScene + 'static> LodSceneRegionIndex<T>
 	for AvianLodSceneRegionIndex<'_, '_, T>
 {
 	fn hosts_in_region<'a>(
@@ -118,7 +118,7 @@ impl<T: Component + LodScene + 'static> LodSceneRegionIndex<T>
 	}
 }
 
-fn ensure_avian_host_bounds<T: Component + LodScene + 'static>(app: &mut App) {
+fn ensure_avian_host_bounds<T: Component + SemanticLodScene + 'static>(app: &mut App) {
 	if !app.is_plugin_added::<PatchSceneBounds<T, AvianLodSceneBoundsMarshaller>>() {
 		app.add_plugins(PatchSceneBounds::<T, AvianLodSceneBoundsMarshaller>::default());
 	}
@@ -133,7 +133,7 @@ fn ensure_avian_host_bounds<T: Component + LodScene + 'static>(app: &mut App) {
 /// OpenLattice (or other) region-scoped cull enqueue.
 pub struct AvianLodSceneRefreshPlugin<T, M, F = With<LodViewer>>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -143,7 +143,7 @@ where
 
 impl<T, M, F> Default for AvianLodSceneRefreshPlugin<T, M, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -154,7 +154,7 @@ where
 
 impl<T, M, F> AvianLodSceneRefreshPlugin<T, M, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -165,7 +165,7 @@ where
 
 impl<T, M, F> Plugin for AvianLodSceneRefreshPlugin<T, M, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -189,7 +189,7 @@ where
 /// Region-scoped cull enqueue for host `T` on cull channel `M` (Avian index).
 pub struct AvianLodSceneCullPlugin<T, M, F = With<LodViewer>>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -198,7 +198,7 @@ where
 
 impl<T, M, F> Default for AvianLodSceneCullPlugin<T, M, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
@@ -209,7 +209,7 @@ where
 
 impl<T, M, F> Plugin for AvianLodSceneCullPlugin<T, M, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {

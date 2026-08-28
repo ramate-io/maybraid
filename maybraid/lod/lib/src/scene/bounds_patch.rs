@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::scene::host::LodSceneHost;
 use crate::scene::refresh::{LodHostBounds, LodRefreshSystems};
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 /// Converts a local [`Aabb3d`] into a backend-specific volume [`Bundle`].
 ///
@@ -23,7 +23,7 @@ pub trait LodSceneBoundsMarshaller: Send + Sync + 'static {
 /// [`LodSceneBoundsMarshaller::Volume`] on the host.
 pub struct PatchSceneBounds<T, M>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: LodSceneBoundsMarshaller,
 {
 	_marker: PhantomData<fn() -> (T, M)>,
@@ -31,7 +31,7 @@ where
 
 impl<T, M> Default for PatchSceneBounds<T, M>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: LodSceneBoundsMarshaller,
 {
 	fn default() -> Self {
@@ -41,7 +41,7 @@ where
 
 impl<T, M> Plugin for PatchSceneBounds<T, M>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: LodSceneBoundsMarshaller,
 {
 	fn build(&self, app: &mut App) {
@@ -59,7 +59,7 @@ fn patch_scene_bounds<T, M>(
 	mut commands: Commands,
 	hosts: Query<(Entity, &T), (With<LodSceneHost>, Or<(Added<T>, Changed<T>)>)>,
 ) where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: LodSceneBoundsMarshaller,
 {
 	for (entity, scene) in &hosts {

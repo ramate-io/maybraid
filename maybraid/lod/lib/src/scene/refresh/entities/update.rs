@@ -10,10 +10,10 @@ use crate::scene::host::{
 	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 /// Pick the driver ref that votes for the highest [`LodSceneLevel`].
-pub fn dominant_lod_ref<'a, T: LodScene>(
+pub fn dominant_lod_ref<'a, T: SemanticLodScene>(
 	scene: &T,
 	refs: &'a [LodRef<'a>],
 ) -> Option<&'a LodRef<'a>> {
@@ -40,7 +40,7 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		Query<(Entity, &'static mut LodSceneLevel), (With<LodSceneHost>, With<T>, FHost)>,
 	)>,
 ) where
-	T: Component + LodScene,
+	T: Component + SemanticLodScene,
 	FHost: QueryFilter + 'static,
 	FNode: QueryFilter + 'static,
 {

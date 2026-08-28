@@ -1,8 +1,13 @@
 //! In-game clap commands for vegetation-on-terrain.
 
 use bevy::prelude::*;
+use chico_forests::LayeringKind;
+use chico_sbs_trees_playground::forest_stream::{
+	parse_layering_kind, ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 use game_commands::command::{CommandScript, GameCommand};
+use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 pub const PLAYGROUND_CLI_NAME: &str = "chico-vegetation-on-terrain";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -106,16 +111,33 @@ impl GroveKind {
 #[command(
 	name = "chico-vegetation-on-terrain",
 	version,
-	about = "Groves on a small Durham patch (in-game after `/` or process argv)",
+	about = "Groves or streamed forest on Durham (in-game after `/` or process argv)",
 	rename_all = "kebab-case",
 	disable_help_subcommand = true
 )]
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
-	/// One grove type across the tiled footprint.
+	/// One grove type across the tiled footprint (disables `/forest`).
 	Grove {
 		kind: GroveKind,
+	},
+	/// Stream the unified Chico forest on Durham height (disables tiled groves).
+	Forest {
+		/// Pin a well-known layering (`lush-jungle`, `ag-town`, …). Omit to Hopscotch.
+		#[arg(value_parser = parse_layering_kind, value_name = "LAYERING")]
+		layering: Option<LayeringKind>,
+		/// Hopscotch / layer-throw noise (`seed,frequency,amplitude,octaves[,type]`).
+		#[arg(
+			long,
+			default_value = DEFAULT_FOREST_NOISE,
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
+		)]
+		noise: NoiseParams,
+		/// Present-ring multiplier (`1` = 1 km present / 2 km generate).
+		#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
+		stream_radius: u32,
 	},
 	/// Fine-grid Chebyshev half-extent in terrain cells.
 	TerrainRadius {
@@ -131,9 +153,25 @@ pub enum PlaygroundCommand {
 	},
 	/// Despawn and rebuild groves on the current terrain.
 	Rebuild,
+	/// Switch between free-look fly camera and third-person character control.
+	#[command(subcommand)]
+	Mode(Mode),
+	/// Replace the capsule with a Crozon character (default preview recipe).
+	SetCharacter {
+		species: crate::character::CharacterSpecies,
+	},
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
+}
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Mode {
+	/// Free-look fly camera (WASD + mouse, Space/Shift vertical).
+	Free,
+	/// Capsule or Crozon character with third-person camera (WASD move, Space jump).
+	Character,
 }
 
 #[derive(Clone, Subcommand)]
@@ -145,6 +183,9 @@ pub enum Stats {
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestGrove(pub GroveKind);
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestForest(pub ForestStreamSpec);
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestTerrainRadius(pub i32);
@@ -160,6 +201,12 @@ pub struct RequestRebuild;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestMeshStats;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeFree;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeCharacter;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -178,6 +225,10 @@ impl PlaygroundCommand {
 				commands.spawn(RequestGrove(kind));
 				*console = format!("grove {}: pending", kind.label());
 			}
+			PlaygroundCommand::Forest { layering, noise, stream_radius } => {
+				commands.spawn(RequestForest(ForestStreamSpec { noise, stream_radius, layering }));
+				*console = "forest: pending".into();
+			}
 			PlaygroundCommand::TerrainRadius { cells } => {
 				commands.spawn(RequestTerrainRadius(cells.max(1)));
 				*console = format!("terrain-radius {}: pending", cells.max(1));
@@ -195,12 +246,32 @@ impl PlaygroundCommand {
 				commands.spawn(RequestRebuild);
 				*console = "rebuild: pending".into();
 			}
+			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
+			PlaygroundCommand::SetCharacter { species } => {
+				commands.spawn(crate::character::RequestSetCharacter { species });
+				*console = format!("set-character {}: pending", species.label());
+			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}
 
 	pub fn parse_line(line: &str) -> Result<Self, String> {
 		<Self as GameCommand>::parse_line(line)
+	}
+}
+
+impl Mode {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Mode::Free => {
+				commands.spawn(RequestModeFree);
+				*console = "mode free: pending".into();
+			}
+			Mode::Character => {
+				commands.spawn(RequestModeCharacter);
+				*console = "mode character: pending".into();
+			}
+		}
 	}
 }
 
@@ -238,8 +309,30 @@ mod tests {
 	}
 
 	#[test]
+	fn parse_forest_defaults_and_layering() {
+		let forest = PlaygroundCommand::parse_line("forest").unwrap();
+		assert!(matches!(
+			forest,
+			PlaygroundCommand::Forest { layering: None, stream_radius: 1, .. }
+		));
+		let lush = PlaygroundCommand::parse_line("forest lush-jungle").unwrap();
+		assert!(matches!(
+			lush,
+			PlaygroundCommand::Forest { layering: Some(LayeringKind::LushJungle), .. }
+		));
+	}
+
+	#[test]
 	fn parse_stats_mesh() {
 		let cmd = PlaygroundCommand::parse_line("stats mesh").unwrap();
 		assert!(matches!(cmd, PlaygroundCommand::Stats(Stats::Mesh)));
+	}
+
+	#[test]
+	fn parse_mode_character() {
+		let cmd = PlaygroundCommand::parse_line("mode character").unwrap();
+		assert!(matches!(cmd, PlaygroundCommand::Mode(Mode::Character)));
+		let free = PlaygroundCommand::parse_line("mode free").unwrap();
+		assert!(matches!(free, PlaygroundCommand::Mode(Mode::Free)));
 	}
 }

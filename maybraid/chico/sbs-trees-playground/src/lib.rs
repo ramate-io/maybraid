@@ -5,7 +5,7 @@ pub mod checkerboard_material;
 mod chico_material_lib;
 pub mod commands;
 pub mod diagnostics;
-mod forest_stream;
+pub mod forest_stream;
 mod ground;
 mod monster_grass_plain;
 mod render;
@@ -27,9 +27,6 @@ use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
-use chico_forests::{
-	ChicoGrove, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
-};
 use chico_material_lib::ChicoMaterialRefPlugin;
 use chico_sbs_trees::ensure_chico_tree_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
@@ -40,15 +37,11 @@ use chico_vegetation_shaders::{
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
 use diagnostics::toggle_fps_logging;
-use forest_stream::{stream_forest, ForestPresenterState, ForestRegionPresenter};
+use forest_stream::{register_forest_lod, stream_forest, ForestRegionPresenter};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::{
-	LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
-	LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems,
-	LodSceneHost, LodViewer,
-};
+use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{setup_render_materials, sync_render_material_handles};
@@ -87,42 +80,6 @@ pub fn register_vegetation_view(app: &mut App) {
 	}
 }
 
-fn register_forest_lod(app: &mut App) {
-	app.init_resource::<ForestIndex>()
-		.init_resource::<ForestPresenterState>()
-		.insert_resource(LodGenerateBudget { ids_per_frame: 16 })
-		.add_plugins(LodGenerateRegionPlugin::<
-			ForestGenerateBullseye,
-			With<LodViewer>,
-			ForestLodChan,
-		>::default())
-		.add_plugins(LodGeneratePlugin::<
-			ChicoGrove,
-			ForestIndex,
-			ForestLodChan,
-			With<LodViewer>,
-		>::default())
-		.add_plugins(LodPresentRegionPlugin::<
-			ForestPresentBullseye,
-			With<LodViewer>,
-			ForestLodChan,
-		>::default())
-		.add_plugins(LodPresentPlugin::<
-			ChicoGrove,
-			ForestIndex,
-			ForestRegionPresenter,
-			ForestLodChan,
-			With<LodViewer>,
-		>::default())
-		.add_plugins(LodPresentCullPlugin::<
-			ChicoGrove,
-			ForestIndex,
-			ForestRegionPresenter,
-			ForestLodChan,
-		>::default())
-		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-}
-
 pub struct SbsTreesPlaygroundPlugin;
 
 impl Plugin for SbsTreesPlaygroundPlugin {
@@ -130,7 +87,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
 		register_vegetation_view(app);
-		register_forest_lod(app);
+		register_forest_lod::<ForestRegionPresenter>(app);
 		if !app.is_plugin_added::<PlaygroundTimingPlugin>() {
 			app.add_plugins(PlaygroundTimingPlugin);
 		}

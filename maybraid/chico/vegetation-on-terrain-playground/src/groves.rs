@@ -29,6 +29,16 @@ pub struct DurhamGroveSample<'a> {
 	fallback: &'a BaseTerrainNoise,
 }
 
+impl<'a> DurhamGroveSample<'a> {
+	pub fn new(
+		store: &'a TerrainEntryStore,
+		layout: &'a TerrainCellLayout,
+		fallback: &'a BaseTerrainNoise,
+	) -> Self {
+		Self { store, layout, fallback }
+	}
+}
+
 impl GroveWorldSample for DurhamGroveSample<'_> {
 	fn height_at(&self, position: Vec3) -> f32 {
 		self.store
@@ -48,7 +58,7 @@ pub fn spawn_tiled_groves(
 	layout: &TerrainCellLayout,
 	fallback: &BaseTerrainNoise,
 ) -> usize {
-	let world = DurhamGroveSample { store, layout, fallback };
+	let world = DurhamGroveSample::new(store, layout, fallback);
 	let tile = config.grove_extent_xz.max(1.0);
 	let radius = config.tile_radius.max(0);
 	let mut count = 0usize;
