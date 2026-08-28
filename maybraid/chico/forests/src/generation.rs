@@ -92,7 +92,10 @@ impl GenerationScheme<ForestIndex> for ChicoGrove {
 		let kind = layer.kind(forest.layers);
 		let neighbors = spatial_index.neighbor_layers(forest_extent);
 		let recipes = presenting_recipes(kind, extent, forest_extent, &neighbors, layer);
-		Some((Self { extent, layer, recipes }, grove_id(extent, layer).origin_cell_bounds()?))
+		Some((
+			Self::selected(extent, layer, recipes),
+			grove_id(extent, layer).origin_cell_bounds()?,
+		))
 	}
 
 	fn descendants_with_lod(
@@ -303,6 +306,7 @@ mod tests {
 		let grove = lod::gen::SpatialIndex::<ChicoGrove>::get(&index, id)
 			.ok_or_else(|| anyhow::anyhow!("grove"))?;
 		assert!(!grove.recipes.is_empty());
+		assert!(grove.grown_tiles().is_none());
 		let forest_id = ForestExtent::default_cell().id();
 		assert!(lod::gen::SpatialIndex::<ChicoForest>::get(&index, forest_id).is_some());
 		Ok(())

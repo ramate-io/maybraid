@@ -1,5 +1,7 @@
 //! Generated 100 m grove on one forest layer.
 
+use std::sync::OnceLock;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
 use chico_groves::{GroveExtent, GroveWorldSample};
@@ -7,21 +9,51 @@ use lod::gen::Id;
 
 use crate::{ForestGroveRecipe, ForestGroveTile, ForestLayer};
 
-/// One layer on a 100 m tile: blend recipes, not grown plants.
-#[derive(Clone)]
+/// One layer on a 100 m tile: blend recipes, plus grown tiles after present
+/// (or a test) calls [`Self::ensure_grown`]. Generate stores recipes only.
 pub struct ChicoGrove {
 	pub extent: GroveExtent,
 	pub layer: ForestLayer,
 	pub recipes: Vec<ForestGroveRecipe>,
+	grown: OnceLock<Vec<ForestGroveTile>>,
+}
+
+impl Clone for ChicoGrove {
+	fn clone(&self) -> Self {
+		let grown = OnceLock::new();
+		if let Some(tiles) = self.grown.get() {
+			let _ = grown.set(tiles.clone());
+		}
+		Self { extent: self.extent, layer: self.layer, recipes: self.recipes.clone(), grown }
+	}
 }
 
 impl ChicoGrove {
+	pub fn selected(
+		extent: GroveExtent,
+		layer: ForestLayer,
+		recipes: Vec<ForestGroveRecipe>,
+	) -> Self {
+		Self { extent, layer, recipes, grown: OnceLock::new() }
+	}
+
 	pub fn id(&self) -> Id {
 		grove_id(self.extent, self.layer)
 	}
 
 	pub fn aabb(&self) -> Aabb3d {
 		grove_aabb(self.extent, self.layer)
+	}
+
+	/// Grown tiles if [`Self::ensure_grown`] (or [`Self::grow`]) has run.
+	pub fn grown_tiles(&self) -> Option<&[ForestGroveTile]> {
+		self.grown.get().map(Vec::as_slice)
+	}
+
+	/// Grow recipes into storage once. Present handle grows on one tick and
+	/// spawns on the next so a dense tile does not own both costs.
+	pub fn ensure_grown(&self, world: &impl GroveWorldSample) -> &[ForestGroveTile] {
+		self.grown.get_or_init(|| self.grow(world))
 	}
 
 	pub fn grow(&self, world: &impl GroveWorldSample) -> Vec<ForestGroveTile> {
@@ -58,6 +90,25 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use chico_groves::GroveExtent;
+
+	#[test]
+	fn ensure_grown_is_once_and_leaves_recipes() -> Result<()> {
+		use crate::index::forest_world_sample;
+		use crate::{ForestGroveKind, ForestGroveRecipe};
+
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let grove = ChicoGrove::selected(
+			extent,
+			ForestLayer::UpperCanopy,
+			vec![ForestGroveRecipe::uniform(ForestGroveKind::Orchard, extent)],
+		);
+		assert!(grove.grown_tiles().is_none());
+		let first = grove.ensure_grown(&forest_world_sample()).len();
+		assert!(first > 0);
+		assert_eq!(grove.ensure_grown(&forest_world_sample()).len(), first);
+		assert!(!grove.recipes.is_empty());
+		Ok(())
+	}
 
 	#[test]
 	fn grove_id_round_trips_layer() -> Result<()> {
