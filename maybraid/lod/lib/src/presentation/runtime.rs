@@ -35,7 +35,8 @@ impl<M: Send + Sync + 'static> LodPresentRegion<M> {
 	}
 }
 
-/// Impulse: cull-evaluate presented ids overlapping `region`.
+/// Impulse: optional lattice tile for present cull. Drain does not read
+/// these; hide / despawn is keep-set membership.
 #[derive(Message, Debug, Clone)]
 pub struct LodPresentCullRegion<M: Send + Sync + 'static> {
 	pub region: Aabb3d,
@@ -57,6 +58,21 @@ pub struct LodPresentBudget {
 impl Default for LodPresentBudget {
 	fn default() -> Self {
 		Self { ids_per_frame: 1 }
+	}
+}
+
+/// How many leaving present ids may recursive-despawn per frame.
+///
+/// Hide is uncapped (cheap `Visibility::Hidden`). Despawn is one grove id
+/// (all of its host entities) per slot — the parent hitch.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LodPresentCullBudget {
+	pub despawns_per_frame: u32,
+}
+
+impl Default for LodPresentCullBudget {
+	fn default() -> Self {
+		Self { despawns_per_frame: 1 }
 	}
 }
 
@@ -261,7 +277,7 @@ fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
 		&& (a.max.z - b.max.z).abs() < 1e-3
 }
 
-/// Emit [`LodPresentCullRegion<M>`] via strategy `P` and this layer's cursor.
+/// Emit optional [`LodPresentCullRegion<M>`] tiles via strategy `P`. Drain ignores them.
 pub fn produce_lod_present_cull_regions<P, F, M>(
 	producer: Res<P>,
 	mut cursor: ResMut<LodPresentCullCursor>,
@@ -289,12 +305,14 @@ pub fn produce_lod_present_cull_regions<P, F, M>(
 	}
 }
 
-/// Hide, then despawn, presented ids in cull tiles outside the keep ring.
+/// Hide, then budget-despawn, presented ids outside the keep ring.
+///
+/// Runs whenever keep is live. Does not wait for lattice tiles.
 pub fn drain_lod_present_cull<T, S, Pr, M>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
-	mut regions: MessageReader<LodPresentCullRegion<M>>,
+	budget: Res<LodPresentCullBudget>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -302,17 +320,16 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<T, S>,
 	M: Send + Sync + 'static,
 {
-	if regions.is_empty() {
+	let Some(keep_region) = keep.live_region() else {
 		return;
-	}
-	let keep_ids: HashSet<Id> = keep
-		.live_region()
-		.map(|region| index.tracked_ids_for(region).into_iter().map(|tracked| tracked.0).collect())
-		.unwrap_or_default();
+	};
+	let keep_ids: HashSet<Id> = index
+		.tracked_ids_for(keep_region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
 	let mut presenter = presenter.into_inner();
-	for message in regions.read() {
-		presenter.cull(&*index, message.region, &keep_ids);
-	}
+	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
 }
 
 /// Produce [`LodPresentRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
@@ -401,7 +418,7 @@ where
 	}
 }
 
-/// Produce [`LodPresentCullRegion<M>`] via strategy `P`.
+/// Optional lattice tiles. [`drain_lod_present_cull`] does not require them.
 pub struct LodPresentCullRegionPlugin<P, F, M>
 where
 	P: Resource + LodCullRegions + Default,
@@ -473,9 +490,11 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_present_sets(app);
-		app.init_resource::<LodPresentKeepRegion<M>>().add_systems(
-			Update,
-			drain_lod_present_cull::<T, S, Pr, M>.in_set(LodPresentSystems::Cull),
-		);
+		app.init_resource::<LodPresentCullBudget>()
+			.init_resource::<LodPresentKeepRegion<M>>()
+			.add_systems(
+				Update,
+				drain_lod_present_cull::<T, S, Pr, M>.in_set(LodPresentSystems::Cull),
+			);
 	}
 }

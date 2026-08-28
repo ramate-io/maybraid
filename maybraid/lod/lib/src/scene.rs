@@ -35,9 +35,10 @@ pub use cull::{
 };
 pub use host::{
 	host_shows_level_root, lod_host_scene, lod_host_scene_pending, lod_level_roots_entity,
-	lod_root_is_shown, nested_host_parent_allows_refresh, parent_host_desired_or_high,
-	settle_lod_level_root_visibility, sync_lod_level_roots, LodLevelRoot, LodLevelRootOverlap,
-	LodLevelRoots, LodLevelSpawnRequest, LodSceneHost, LodSceneHostPlugin,
+	lod_root_is_shown, lod_scene_host_or_ancestor_hidden, nested_host_parent_allows_refresh,
+	parent_host_desired_or_high, settle_lod_level_root_visibility, sync_lod_level_roots,
+	LodLevelRoot, LodLevelRootOverlap, LodLevelRoots, LodLevelSpawnRequest, LodSceneHost,
+	LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus};

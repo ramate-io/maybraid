@@ -6,8 +6,8 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_forests::{
 	forest_world_sample, match_forest_grove_tile, ChicoGrove, ForestExtent, ForestGenerateBullseye,
-	ForestGroveTile, ForestIndex, ForestLodChan, ForestPresentBullseye, ForestPresentLattice,
-	LayeringKind, DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
+	ForestGroveTile, ForestIndex, ForestLodChan, ForestPresentBullseye, LayeringKind,
+	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
 use chico_vegetation_components::{
 	spawn_lod_scene_host_with_lod_ref, vegetation_bounds, VegetationComponents,
@@ -146,7 +146,6 @@ pub(crate) struct ForestStreamLod<'w> {
 	index: ResMut<'w, ForestIndex>,
 	generate: ResMut<'w, ForestGenerateBullseye>,
 	present: ResMut<'w, ForestPresentBullseye>,
-	lattice: ResMut<'w, ForestPresentLattice>,
 	generate_queue: ResMut<'w, LodGenerateQueue<ChicoGrove>>,
 	present_queue: ResMut<'w, LodPresentQueue<ChicoGrove>>,
 	presenter: ResMut<'w, ForestPresenterState>,
@@ -176,7 +175,6 @@ pub fn stream_forest(
 		}
 		lod.generate.enabled = false;
 		lod.present.enabled = false;
-		lod.lattice.enabled = false;
 		lod.generate_keep.region = None;
 		lod.keep.region = None;
 		lod.index.clear();
@@ -212,7 +210,6 @@ pub fn stream_forest(
 	lod.generate.enabled = true;
 	lod.present.radius_m = present_m;
 	lod.present.enabled = true;
-	*lod.lattice = ForestPresentLattice::from_radii_m(present_m, generate_m);
 
 	let Ok(cam) = camera.single() else {
 		return;

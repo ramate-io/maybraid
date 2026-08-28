@@ -2,11 +2,12 @@ use anyhow::Result;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::gen::tests::test_utils::{cell, RecordingPresenter, Vegetation, WorldIndex};
+use crate::gen::tests::test_utils::{cell, span, RecordingPresenter, Vegetation, WorldIndex};
 use crate::gen::{GeneratingSpatialIndex, Id, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
-	LodPresentBudget, LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue,
+	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentKeepRegion,
+	LodPresentPlugin, LodPresentQueue,
 };
 
 #[derive(SystemParam)]
@@ -31,6 +32,14 @@ impl RegionPresenter<Vegetation, WorldIndex> for RecordingParam<'_> {
 
 	fn presented_ids(&self) -> Vec<Id> {
 		RegionPresenter::<Vegetation, WorldIndex>::presented_ids(&*self.inner)
+	}
+
+	fn hide(&mut self, id: Id) {
+		RegionPresenter::<Vegetation, WorldIndex>::hide(&mut *self.inner, id)
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		RegionPresenter::<Vegetation, WorldIndex>::is_hidden(&*self.inner, id)
 	}
 
 	fn remove_stale(&mut self, wanted: &std::collections::HashSet<Id>) {
@@ -163,5 +172,52 @@ fn drain_present_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 
 	let presenter = app.world().resource::<RecordingPresenter>();
 	assert!(presenter.vegetation.contains_key(&Id::from_cell(edge)));
+	Ok(())
+}
+
+#[test]
+fn drain_present_cull_hides_leaving_id_without_a_lattice_message() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let near = cell(0.0);
+	let far = cell(250.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &near,
+	};
+	let near_id = Id::from_cell(near);
+	let far_id = Id::from_cell(far);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, near_id, &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, far_id, &lod);
+
+	let mut presenter = RecordingPresenter::default();
+	RegionPresenter::<Vegetation, _>::present(&mut presenter, &index, span(0.0, 251.0), &lod);
+	assert!(presenter.vegetation.contains_key(&near_id));
+	assert!(presenter.vegetation.contains_key(&far_id));
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(presenter)
+		.insert_resource(LodPresentCullBudget { despawns_per_frame: 0 })
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(near);
+			keep
+		})
+		.add_plugins(
+			LodPresentCullPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		);
+	app.update();
+
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert!(
+		presenter.hidden.contains(&far_id),
+		"drain hides leaving ids from keep without a lattice message"
+	);
+	assert!(presenter.vegetation.contains_key(&far_id));
+	assert!(presenter.vegetation.contains_key(&near_id));
 	Ok(())
 }
