@@ -16,7 +16,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
@@ -99,7 +99,7 @@ pub fn produce_lod_refresh_levels<T>(
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	visibilities: Query<&Visibility>,
 ) where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
 		return;
@@ -164,14 +164,14 @@ where
 /// Emit levels for host `T` from the shared [`LodProduceCache`].
 pub struct LodSceneRefreshLevelsPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	_marker: PhantomData<fn() -> T>,
 }
 
 impl<T> Default for LodSceneRefreshLevelsPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	fn default() -> Self {
 		Self { _marker: PhantomData }
@@ -180,7 +180,7 @@ where
 
 impl<T> Plugin for LodSceneRefreshLevelsPlugin<T>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 {
 	fn build(&self, app: &mut App) {
 		ensure_refresh_core(app);

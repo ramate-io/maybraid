@@ -35,7 +35,7 @@ use bevy::prelude::*;
 use crate::lod_ref::{LodNodePlugin, LodNodeSystems};
 use crate::scene::host::{settle_lod_level_root_visibility, sync_lod_level_roots};
 use crate::scene::region_index::LodSceneHostIndex;
-use crate::scene::LodScene;
+use crate::scene::SemanticLodScene;
 
 pub use bounds::LodHostBounds;
 pub use cull_regions::{
@@ -162,7 +162,7 @@ impl Plugin for LodRefreshCorePlugin {
 /// lattice-scoped cull enqueue.
 pub struct LodSceneRefreshPlugin<T, M, I, F = With<LodViewer>>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,
@@ -173,7 +173,7 @@ where
 
 impl<T, M, I, F> Default for LodSceneRefreshPlugin<T, M, I, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,
@@ -185,7 +185,7 @@ where
 
 impl<T, M, I, F> LodSceneRefreshPlugin<T, M, I, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,
@@ -197,7 +197,7 @@ where
 
 impl<T, M, I, F> Plugin for LodSceneRefreshPlugin<T, M, I, F>
 where
-	T: Component + LodScene + 'static,
+	T: Component + SemanticLodScene + 'static,
 	M: Send + Sync + 'static,
 	I: SystemParam + 'static,
 	F: QueryFilter + 'static,

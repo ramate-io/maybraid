@@ -75,6 +75,8 @@ via the Fit / parameterized → plan path and the shared
 
 ## `LodScene` on buildings
 
+`LodScene` is a compatibility alias for [`SemanticLodScene`](../lod/lib/src/scene/lod_scene.rs) (main-world spawn). Per-view render LOD is [`VisualLodScene`](../lod/lib/src/scene/lod_scene.rs); do not put packed forest in `scene_chunks_with_level`.
+
 Most buildings should implement [`BuildingComponents`](building-components/src/lib.rs) and present via [`ComponentsOnly`](building-components/src/lib.rs)`<T>` (`scene_lod_status` = `Unchanged`; `scene_with_level` = [`component_only_scene`](building-components/src/lib.rs)).
 
 Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](building-components/src/parent_confines.rs) (e.g. Wizard’s Tower) implement `BuildingComponents` and keep a custom `LodScene`. Prefer [`append_component_scenes`](building-components/src/lib.rs) for the node portion.

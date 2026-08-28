@@ -198,7 +198,7 @@ pub fn lod_host_scene(
 
 /// Host with an empty [`LodLevelRoots`] bag and a spawn request for `level`.
 ///
-/// Chunk fulfill streams [`crate::LodScene::scene_chunks_with_level`] into the
+/// Chunk fulfill streams [`crate::SemanticLodScene::scene_chunks_with_level`] into the
 /// pending root — used when skipping warm multi-root prewarm.
 pub fn lod_host_scene_pending(level: LodSceneLevel, bounds: Aabb3d) -> impl Scene + 'static {
 	let roots: Box<dyn Scene> = Box::new(bsn! {
