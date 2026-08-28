@@ -34,7 +34,7 @@ fn main() {
 			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 	)
 	.insert_resource(PendingStartupCommand(startup))
-	.add_plugins(VegetationOnTerrainPlugin);
+	.add_plugins(VegetationOnTerrainPlugin::default());
 
 	if diag.fps {
 		app.add_plugins(PlaygroundTimingPlugin);

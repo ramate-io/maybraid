@@ -1,14 +1,20 @@
 //! Small Durham fine-grid patch for iterating Chico groves on real ground.
+//!
+//! `/forest` streams the unified Chico forest on Durham height (A/B against
+//! tiled `/grove`).
 
 pub mod camera;
 pub mod commands;
 pub mod diagnostics;
+mod forest;
 mod groves;
 mod ui;
 
 pub use camera::CameraController;
+pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin};
+pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::camera::visibility::VisibilitySystems;
@@ -16,24 +22,27 @@ use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
+use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
 use chico_sbs_trees_playground::register_vegetation_view;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
-	RequestGrove, RequestGroveExtent, RequestMeshStats, RequestRebuild, RequestTerrainRadius,
-	RequestTileRadius,
+	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestRebuild,
+	RequestTerrainRadius, RequestTileRadius,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, OuterCellRing,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, WaterPresentationAssets,
+	TERRAIN_CELL_SIZE,
 };
+use forest::stream_durham_forest;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
-use lod::LodSceneHost;
+use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
@@ -41,8 +50,30 @@ use std::f32::consts::PI;
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
+/// Durham models playground fine half-extent (covers a 2 km generate ring).
+const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
+const WORLD_OUTER_2X_ROWS: i32 = 4;
+const WORLD_OUTER_4X_ROWS: i32 = 2;
+
+/// Fine-only patch vs playable world extents (fine grid + macro rings).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TerrainCoverage {
+	#[default]
+	FinePatch,
+	PlayableWorld,
+}
+
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
+}
+
+fn world_lod_bands() -> Vec<TerrainMeshLodBand> {
+	vec![
+		TerrainMeshLodBand { max_radius_cells: 4, res_2: 5 },
+		TerrainMeshLodBand { max_radius_cells: 6, res_2: 4 },
+		TerrainMeshLodBand { max_radius_cells: 8, res_2: 3 },
+		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
+	]
 }
 
 fn cell_layout(half_extent: i32) -> TerrainCellLayout {
@@ -55,6 +86,36 @@ fn cell_layout(half_extent: i32) -> TerrainCellLayout {
 	layout
 }
 
+fn world_cell_layout() -> TerrainCellLayout {
+	let mut layout = TerrainCellLayout::default();
+	layout.origin = IVec2::new(-WORLD_FINE_HALF_EXTENT_CELLS, -WORLD_FINE_HALF_EXTENT_CELLS);
+	let n = (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32;
+	layout.extents = UVec2::new(n, n);
+	layout.outer_rings = vec![
+		OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_2X_ROWS },
+		OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_4X_ROWS },
+	];
+	layout
+}
+
+fn layout_for(playground: &PlaygroundConfig) -> TerrainCellLayout {
+	match playground.coverage {
+		TerrainCoverage::FinePatch => cell_layout(playground.terrain_radius),
+		TerrainCoverage::PlayableWorld => world_cell_layout(),
+	}
+}
+
+fn lod_bands_for(playground: &PlaygroundConfig) -> Vec<TerrainMeshLodBand> {
+	match playground.coverage {
+		TerrainCoverage::FinePatch => playground_lod_bands(playground.terrain_radius),
+		TerrainCoverage::PlayableWorld => world_lod_bands(),
+	}
+}
+
+fn terrain_cells_for_generate_m(generate_m: f32) -> i32 {
+	(generate_m / TERRAIN_CELL_SIZE).ceil() as i32
+}
+
 /// Base noise used for camera height before (and alongside) generation.
 #[derive(Resource)]
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
@@ -65,6 +126,9 @@ pub struct PlaygroundConfig {
 	pub terrain_radius: i32,
 	pub grove_extent_xz: f32,
 	pub tile_radius: i32,
+	/// `Some` streams the forest and skips tiled groves.
+	pub forest: Option<ForestStreamSpec>,
+	pub coverage: TerrainCoverage,
 }
 
 impl Default for PlaygroundConfig {
@@ -74,6 +138,22 @@ impl Default for PlaygroundConfig {
 			terrain_radius: DEFAULT_TERRAIN_RADIUS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
+			forest: None,
+			coverage: TerrainCoverage::FinePatch,
+		}
+	}
+}
+
+impl PlaygroundConfig {
+	/// Terrain + forest at playable present / generate extents.
+	pub fn world_defaults() -> Self {
+		Self {
+			grove: commands::GroveKind::MonsterGrass,
+			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
+			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
+			tile_radius: DEFAULT_TILE_RADIUS,
+			forest: Some(ForestStreamSpec::default()),
+			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
 }
@@ -87,21 +167,32 @@ struct TerrainPresentPending(bool);
 #[derive(Resource)]
 struct GrovesDirty(bool);
 
-pub struct VegetationOnTerrainPlugin;
+pub struct VegetationOnTerrainPlugin {
+	pub config: PlaygroundConfig,
+	/// When false, the caller owns the command drawer / CLI.
+	pub commands: bool,
+}
+
+impl Default for VegetationOnTerrainPlugin {
+	fn default() -> Self {
+		Self { config: PlaygroundConfig::default(), commands: true }
+	}
+}
 
 impl Plugin for VegetationOnTerrainPlugin {
 	fn build(&self, app: &mut App) {
 		let config = TerrainConfig::new(42);
 		let base = BaseTerrainNoise::from_config(&config);
-		let playground = PlaygroundConfig::default();
+		let playground = self.config.clone();
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<
 				CpuShotBuilder<ComposedTerrain>,
 				DurhamTerrainShader,
-			>::default())
-			.add_plugins(
+			>::default());
+		if self.commands {
+			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
@@ -109,17 +200,21 @@ impl Plugin for VegetationOnTerrainPlugin {
 						..default()
 					}),
 			);
+		}
 		register_vegetation_view(app);
+		register_forest_lod::<DurhamForestPresenter>(app);
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(playground.clone())
-			.insert_resource(cell_layout(playground.terrain_radius))
+			.insert_resource(layout_for(&playground))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
-			.add_systems(
+			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
+		if self.commands {
+			app.add_systems(
 				Update,
 				(
 					camera_controller,
@@ -127,10 +222,27 @@ impl Plugin for VegetationOnTerrainPlugin {
 					generate_cells.after(apply_commands),
 					present_cells.after(generate_cells),
 					spawn_groves.after(present_cells),
+					stream_durham_forest
+						.after(apply_commands)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
-			)
-			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
+			);
+		} else {
+			app.add_systems(
+				Update,
+				(
+					camera_controller,
+					generate_cells,
+					present_cells.after(generate_cells),
+					spawn_groves.after(present_cells),
+					stream_durham_forest
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
+				),
+			);
+		}
 	}
 }
 
@@ -207,15 +319,24 @@ fn setup_presentation_assets(
 	playground: Res<PlaygroundConfig>,
 ) {
 	let material = terrain_materials.add(DurhamTerrainShader::default());
+	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match playground.coverage {
+		TerrainCoverage::FinePatch => (Vec::new(), None, None),
+		TerrainCoverage::PlayableWorld => {
+			let s = TERRAIN_CELL_SIZE;
+			let fine_half = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
+			let mid_half = fine_half + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
+			(vec![fine_half, mid_half], Some(2.0 * s), Some(2))
+		}
+	};
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
-		lod_bands: playground_lod_bands(playground.terrain_radius),
+		lod_bands: lod_bands_for(&playground),
 		outer_add_walls: true,
 		fine_grid_max_radius: Some(playground.terrain_radius),
-		macro_seam_half_extents: Vec::new(),
-		macro_cell_min_size: None,
-		macro_res_2: None,
+		macro_seam_half_extents,
+		macro_cell_min_size,
+		macro_res_2,
 	});
 	// AvianTerrainIndex requires water presentation assets even when we skip water.
 	let water_material = standard_materials.add(StandardMaterial {
@@ -235,6 +356,7 @@ fn apply_commands(
 	mut groves_dirty: ResMut<GrovesDirty>,
 	mut status: ResMut<GameCommandStatusText>,
 	grove: Query<(Entity, &RequestGrove)>,
+	forest: Query<(Entity, &RequestForest)>,
 	terrain_radius: Query<(Entity, &RequestTerrainRadius)>,
 	grove_extent: Query<(Entity, &RequestGroveExtent)>,
 	tile_radius: Query<(Entity, &RequestTileRadius)>,
@@ -242,17 +364,39 @@ fn apply_commands(
 ) {
 	for (entity, request) in &grove {
 		playground.grove = request.0;
+		playground.forest = None;
 		groves_dirty.0 = true;
 		status.0 = format!("grove {}", request.0.label());
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &forest {
+		let spec = request.0;
+		playground.forest = Some(spec);
+		if playground.coverage == TerrainCoverage::FinePatch {
+			let (_, generate_m) = stream_radii_m(spec.stream_radius);
+			let needed = terrain_cells_for_generate_m(generate_m).max(1);
+			if playground.terrain_radius < needed {
+				playground.terrain_radius = needed;
+				*layout = cell_layout(needed);
+				terrain_assets.lod_bands = playground_lod_bands(needed);
+				terrain_assets.fine_grid_max_radius = Some(needed);
+				terrain_dirty.0 = true;
+			}
+		}
+		groves_dirty.0 = true;
+		let layering = spec.layering.map(|k| k.as_kebab()).unwrap_or("hopscotch");
+		status.0 = format!("forest {layering} r={}", spec.stream_radius);
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &terrain_radius {
 		let cells = request.0.max(1);
 		playground.terrain_radius = cells;
-		*layout = cell_layout(cells);
-		terrain_assets.lod_bands = playground_lod_bands(cells);
-		terrain_assets.fine_grid_max_radius = Some(cells);
-		terrain_dirty.0 = true;
+		if playground.coverage == TerrainCoverage::FinePatch {
+			*layout = cell_layout(cells);
+			terrain_assets.lod_bands = playground_lod_bands(cells);
+			terrain_assets.fine_grid_max_radius = Some(cells);
+			terrain_dirty.0 = true;
+		}
 		groves_dirty.0 = true;
 		status.0 = format!("terrain-radius {cells}");
 		commands.entity(entity).despawn();
@@ -357,6 +501,12 @@ fn spawn_groves(
 
 	for entity in &roots {
 		commands.entity(entity).despawn();
+	}
+
+	if config.forest.is_some() {
+		info!("forest stream on; tiled groves cleared");
+		dirty.0 = false;
+		return;
 	}
 
 	let n = spawn_tiled_groves(&mut commands, &config, &store, &layout, &base.0);
