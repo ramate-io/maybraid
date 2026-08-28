@@ -10,6 +10,7 @@ mod ground;
 mod monster_grass_plain;
 mod render;
 mod render_materials;
+pub mod stick_physics;
 mod ui;
 mod vast;
 pub mod vegetation_lod;
