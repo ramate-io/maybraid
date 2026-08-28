@@ -350,7 +350,7 @@ pub fn sync_lod_level_roots(
 	mut commands: Commands,
 	hosts: Query<
 		(Entity, &LodSceneLevel, Option<&Children>),
-		(With<LodSceneHost>, Changed<LodSceneLevel>),
+		(With<LodSceneHost>, Changed<LodSceneLevel>, Without<crate::VisualOwnsAppearance>),
 	>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,

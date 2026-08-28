@@ -31,6 +31,7 @@ chico-vegetation-shaders = { workspace = true }
 avian3d = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+lod-visual-pbr = { workspace = true }
 lod-lazy-refs = { workspace = true }
 material-ref = { workspace = true }
 scene-ref = { workspace = true }

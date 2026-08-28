@@ -10,6 +10,7 @@ use crate::scene::host::{
 	nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
+use crate::scene::visual::{under_visual_lod_root, VisualLodRoot, VisualOwnsAppearance};
 use crate::scene::SemanticLodScene;
 
 /// Pick the driver ref that votes for the highest [`LodSceneLevel`].
@@ -39,6 +40,8 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		),
 		Query<(Entity, &'static mut LodSceneLevel), (With<LodSceneHost>, With<T>, FHost)>,
 	)>,
+	owns_visual: Query<(), With<VisualOwnsAppearance>>,
+	visual_roots: Query<(), With<VisualLodRoot>>,
 ) where
 	T: Component + SemanticLodScene,
 	FHost: QueryFilter + 'static,
@@ -52,6 +55,11 @@ pub fn update_lod_host_levels<T, FHost, FNode>(
 		hosts
 			.iter()
 			.filter(|(entity, _)| {
+				if owns_visual.contains(*entity)
+					|| under_visual_lod_root(*entity, &child_of, &visual_roots)
+				{
+					return false;
+				}
 				nested_host_parent_allows_refresh(
 					*entity,
 					&child_of,

@@ -16,6 +16,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
+use crate::scene::visual::{under_visual_lod_root, VisualLodRoot, VisualOwnsAppearance};
 use crate::scene::SemanticLodScene;
 
 use super::super::viewer::LodViewer;
@@ -98,6 +99,8 @@ pub fn produce_lod_refresh_levels<T>(
 	children_q: Query<&Children>,
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	visibilities: Query<&Visibility>,
+	owns_visual: Query<(), With<VisualOwnsAppearance>>,
+	visual_roots: Query<(), With<VisualLodRoot>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -107,6 +110,11 @@ pub fn produce_lod_refresh_levels<T>(
 	let refs = lod_refs_from_snapshots(&cache.snapshots);
 	for (_region, hits) in &cache.region_hits {
 		for &entity in hits {
+			if owns_visual.contains(entity)
+				|| under_visual_lod_root(entity, &child_of, &visual_roots)
+			{
+				continue;
+			}
 			let Ok(scene) = hosts.get(entity) else {
 				continue;
 			};

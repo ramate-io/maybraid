@@ -1,8 +1,8 @@
-//! [`SemanticLodScene`] (main-world spawn) and [`VisualLodScene`] (per-view draw).
+//! [`SemanticLodScene`] — main-world spawn. Per-view draw is [`super::visual`].
 //!
 //! [`LodScene`] is a compatibility alias for [`SemanticLodScene`]. Grove and
-//! building hosts keep `impl LodScene`. Visual work must not return a
-//! [`SceneChunk`] of `Box<dyn Scene>` — that is still the exclusive spawn path.
+//! building hosts keep `impl LodScene`. Visual LOD is [`crate::VisualLodScene`]
+//! (`Policy` + `Renderer`); it must not return a [`SceneChunk`].
 
 use bevy::ecs::component::Component;
 use bevy::math::bounding::Aabb3d;
@@ -11,7 +11,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 
 use crate::lod_ref::LodRef;
 
-use super::chunk::{SceneChunk, VisualLodPrimitive, VisualSceneChunk};
+use super::chunk::SceneChunk;
 use super::cull::LodSceneCulls;
 use super::host::lod_host_scene_pending;
 use super::level::LodSceneLevel;
@@ -179,53 +179,5 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 
 	fn scene_bounds(&self) -> Aabb3d {
 		(**self).scene_bounds()
-	}
-}
-
-/// Per-view render LOD. Does not build a Bevy [`Scene`].
-///
-/// Camera motion that only changes triangles / impostors / instance density
-/// should implement this — not insert `LodLevelSpawnRequest` or rebuild ECS
-/// roots. [#667](https://github.com/ramate-io/maybraid/issues/667) fills
-/// [`VisualLodPrimitive`]. There is no consume plugin on this branch.
-pub trait VisualLodScene {
-	/// Packed / impostor / instance tree for `level`. Must be cheap to plan;
-	/// do not `spawn_scene`.
-	fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk {
-		let _ = lod_ref;
-		VisualSceneChunk::primitive(VisualLodPrimitive { level })
-	}
-}
-
-impl<T: VisualLodScene + Send + Sync + 'static> VisualLodScene for std::sync::Arc<T> {
-	fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk {
-		(**self).visual_chunks_with_level(lod_ref, level)
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate::lod_ref::LodRef;
-	use bevy::prelude::{Entity, Transform};
-
-	struct StubVisual;
-
-	impl VisualLodScene for StubVisual {}
-
-	#[test]
-	fn visual_default_is_a_level_stub() {
-		let camera = Transform::default();
-		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
-		let lod_ref = LodRef {
-			entity: Entity::PLACEHOLDER,
-			previous_transform: &camera,
-			current_transform: &camera,
-			bounds: &bounds,
-		};
-		let chunk = StubVisual.visual_chunks_with_level(&lod_ref, LodSceneLevel::Medium);
-		assert_eq!(chunk.total_primitives(), 1);
-		let prims = chunk.into_primitives();
-		assert_eq!(prims[0].1.level, LodSceneLevel::Medium);
 	}
 }

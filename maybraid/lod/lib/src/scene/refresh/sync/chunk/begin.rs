@@ -76,6 +76,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	visibilities: Query<&Visibility>,
 	host_pose: Query<(&Transform, Option<&LodHostBounds>), With<LodSceneHost>>,
+	owns_visual: Query<(), With<crate::VisualOwnsAppearance>>,
 	mut scan_cursor: Local<u32>,
 ) {
 	let Ok((viewer_entity, pose, viewer_bounds)) = viewer.single() else {
@@ -108,6 +109,9 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 		let i = index;
 		index += 1;
 		if i < start {
+			continue;
+		}
+		if owns_visual.contains(host) {
 			continue;
 		}
 		if let Some(candidate) = classify_begin_candidate(
@@ -145,6 +149,9 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 			index += 1;
 			if i >= start {
 				break;
+			}
+			if owns_visual.contains(host) {
+				continue;
 			}
 			if let Some(candidate) = classify_begin_candidate(
 				host,
