@@ -18,6 +18,28 @@ pub fn lod_root_is_shown(visibility: Visibility) -> bool {
 	!matches!(visibility, Visibility::Hidden)
 }
 
+/// True when this entity or an ancestor [`LodSceneHost`] is [`Visibility::Hidden`].
+///
+/// Present-layer hide stamps Hidden on leaving grove parents so scene cull
+/// does not nibble High roots on a host about to despawn.
+pub fn lod_scene_host_or_ancestor_hidden(
+	entity: Entity,
+	child_of: &Query<&ChildOf>,
+	hosts: &Query<(), With<LodSceneHost>>,
+	visibilities: &Query<&Visibility>,
+) -> bool {
+	let mut current = Some(entity);
+	while let Some(entity) = current {
+		if hosts.contains(entity)
+			&& visibilities.get(entity).is_ok_and(|vis| matches!(*vis, Visibility::Hidden))
+		{
+			return true;
+		}
+		current = child_of.get(entity).ok().map(|child| child.parent());
+	}
+	false
+}
+
 /// Whether `host` currently shows a [`LodLevelRoot`] at `level` (not Hidden).
 pub fn host_shows_level_root(
 	host: Entity,

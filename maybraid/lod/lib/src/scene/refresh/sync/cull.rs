@@ -14,8 +14,8 @@ use crate::lod_ref::{
 use crate::scene::chunk::DEFAULT_CHUNK_WEIGHT;
 use crate::scene::cull::LodSceneCulls;
 use crate::scene::host::{
-	lod_level_roots_entity, nested_host_parent_allows_refresh, LodLevelRoot, LodLevelRoots,
-	LodSceneHost,
+	lod_level_roots_entity, lod_scene_host_or_ancestor_hidden, nested_host_parent_allows_refresh,
+	LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::LodScene;
@@ -77,6 +77,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, FNode)>,
 	hosts: Query<(Entity, &T, &LodSceneLevel), (With<LodSceneHost>, FHost)>,
+	all_hosts: Query<(), With<LodSceneHost>>,
 	level_roots_bags: Query<(), With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
@@ -96,6 +97,9 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let refs = lod_refs_from_snapshots(&snapshots);
 
 	for (host, scene, current) in &hosts {
+		if lod_scene_host_or_ancestor_hidden(host, &child_of, &all_hosts, &visibilities) {
+			continue;
+		}
 		if !nested_host_parent_allows_refresh(
 			host,
 			&child_of,

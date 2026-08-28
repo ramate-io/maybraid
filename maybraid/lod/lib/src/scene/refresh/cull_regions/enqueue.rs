@@ -8,7 +8,10 @@ use bevy::prelude::*;
 
 use crate::lod_ref::lod_refs_from_snapshots;
 use crate::scene::cull::LodSceneCulls;
-use crate::scene::host::{lod_level_roots_entity, LodLevelRoot, LodLevelRoots, LodSceneHost};
+use crate::scene::host::{
+	lod_level_roots_entity, lod_scene_host_or_ancestor_hidden, LodLevelRoot, LodLevelRoots,
+	LodSceneHost,
+};
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
 use crate::scene::LodScene;
@@ -33,11 +36,14 @@ pub fn produce_lod_cull_for_region<T>(
 	mut cull_writer: MessageWriter<LodCullRequest>,
 	cache: Res<LodCullProduceCache>,
 	hosts: Query<&T, (With<LodSceneHost>, With<LodNestedRefreshAllowed>)>,
+	all_hosts: Query<(), With<LodSceneHost>>,
 	mut host_levels: Query<&mut LodSceneLevel, With<LodSceneHost>>,
 	host_children_q: Query<&Children, With<LodSceneHost>>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	wants_cull: Query<(), With<LodCullInFlight>>,
+	child_of: Query<&ChildOf>,
+	visibilities: Query<&Visibility>,
 ) where
 	T: Component + LodScene + 'static,
 {
@@ -55,6 +61,9 @@ pub fn produce_lod_cull_for_region<T>(
 
 	for (_region, hits) in &cache.region_hits {
 		for &entity in hits {
+			if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
+				continue;
+			}
 			let Ok(scene) = hosts.get(entity) else {
 				continue;
 			};

@@ -27,9 +27,9 @@ use std::collections::HashSet;
 pub use crate::scene::{LodScene, LodSceneStatus};
 pub use runtime::{
 	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentCullCursor, LodPresentCullPlugin,
-	LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion, LodPresentPlugin,
-	LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
+	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
+	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
 };
 
 /// Presents one layer (`T`) of a spatial index over a region.
@@ -65,8 +65,9 @@ where
 	/// record `version` so [`RegionPresenter::presented_version`] reflects it.
 	fn handle(&mut self, id: Id, version: Version, value: &T, lod_ref: &LodRef);
 
-	/// Hide a presented id that has left the present ring. Default is a no-op;
-	/// the next [`RegionPresenter::cull`] of a still-hidden id despawns it.
+	/// Hide a presented id that has left the present ring. Default is a no-op.
+	/// [`RegionPresenter::cull`] despawns when the per-frame budget allows
+	/// (same tick if there is a slot; otherwise hide now, despawn later).
 	fn hide(&mut self, _id: Id) {}
 
 	/// Whether [`RegionPresenter::hide`] has been applied and not yet removed.
@@ -113,25 +114,35 @@ where
 		}
 	}
 
-	/// Hide, then despawn, presented ids that overlap `region` and are not in
-	/// `keep` (typically the last present-ring set).
-	fn cull(&mut self, spatial_index: &S, region: Aabb3d, keep: &HashSet<Id>) {
+	/// Hide, then budget-despawn, presented ids that are not in `keep`
+	/// (typically the last present-ring set).
+	///
+	/// Stale is keep-set membership, not a lattice-tile hit. `region` is
+	/// unused for the decision so a drain can hide every leaving id even
+	/// when no cull tile overlaps the grove. Each stale id with stored
+	/// bounds is hidden immediately. Up to `despawn_budget` ids are
+	/// removed this call (including first visit). Returns remaining budget.
+	fn cull(
+		&mut self,
+		spatial_index: &S,
+		_region: Aabb3d,
+		keep: &HashSet<Id>,
+		mut despawn_budget: u32,
+	) -> u32 {
 		let stale: Vec<Id> = self
 			.presented_ids()
 			.into_iter()
 			.filter(|id| !keep.contains(id))
-			.filter(|id| {
-				spatial_index
-					.get_bounds(*id)
-					.is_some_and(|bounds| intersects_xz(bounds, region))
-			})
+			.filter(|id| spatial_index.get_bounds(*id).is_some())
 			.collect();
 		let mut to_remove = HashSet::new();
 		for id in stale {
-			if self.is_hidden(id) {
-				to_remove.insert(id);
-			} else {
+			if !self.is_hidden(id) {
 				self.hide(id);
+			}
+			if despawn_budget > 0 {
+				to_remove.insert(id);
+				despawn_budget -= 1;
 			}
 		}
 		if !to_remove.is_empty() {
@@ -139,6 +150,7 @@ where
 				self.presented_ids().into_iter().filter(|id| !to_remove.contains(&id)).collect();
 			self.remove_stale(&wanted);
 		}
+		despawn_budget
 	}
 
 	/// Optional runtime-world check.
@@ -167,8 +179,4 @@ where
 	fn present_all(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		self.present_with_descendants(spatial_index, region, lod_ref);
 	}
-}
-
-fn intersects_xz(a: Aabb3d, b: Aabb3d) -> bool {
-	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }

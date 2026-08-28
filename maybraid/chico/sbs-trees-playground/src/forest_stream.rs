@@ -212,7 +212,10 @@ pub fn stream_forest(
 	lod.generate.enabled = true;
 	lod.present.radius_m = present_m;
 	lod.present.enabled = true;
-	*lod.lattice = ForestPresentLattice::from_radii_m(present_m, generate_m);
+	let next_lattice = ForestPresentLattice::from_radii_m(present_m, generate_m);
+	if *lod.lattice != next_lattice {
+		*lod.lattice = next_lattice;
+	}
 
 	let Ok(cam) = camera.single() else {
 		return;

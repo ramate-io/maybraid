@@ -277,6 +277,33 @@ fn cull_produce_enqueues_non_desired_even_if_sibling_is_pending() -> anyhow::Res
 }
 
 #[test]
+fn cull_produce_skips_hidden_leaving_host() -> anyhow::Result<()> {
+	let mut app = app_cull_enqueue();
+	spawn_viewer(app.world_mut(), Vec3::new(100.0, 0.0, 0.0));
+	let (host, roots) = spawn_host_with_roots(
+		app.world_mut(),
+		Vec3::ZERO,
+		LodSceneLevel::High,
+		&[LodSceneLevel::High, LodSceneLevel::Medium],
+	);
+	app.world_mut().entity_mut(host).insert(Visibility::Hidden);
+	app.update();
+
+	app.world_mut().write_message(world_cull_aabb());
+	app.update();
+
+	assert_eq!(
+		host_level(&app, host),
+		LodSceneLevel::High,
+		"present-hidden host must not drop desired"
+	);
+	assert!(app.world().get_entity(roots[0]).is_ok(), "High root must not be scene-GC'd");
+	assert!(app.world().get_entity(roots[1]).is_ok());
+	assert!(app.world().get::<crate::LodCullInFlight>(roots[0]).is_none());
+	Ok(())
+}
+
+#[test]
 fn begin_skips_cull_worthy_desired() -> anyhow::Result<()> {
 	let mut app = app_cull_enqueue();
 	app.add_plugins(LodSceneRefreshChunkPlugin::<Probe>::default());
