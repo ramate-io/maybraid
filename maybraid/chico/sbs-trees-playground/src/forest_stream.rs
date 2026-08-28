@@ -1,6 +1,6 @@
 //! `/show forest` glue: enable the independent generate / present / cull plugins.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -12,7 +12,9 @@ use chico_forests::{
 use chico_vegetation_components::{
 	spawn_lod_scene_host_with_lod_ref, vegetation_bounds, VegetationComponents,
 };
-use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene, Version};
+use lod::gen::{
+	Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene, SpatialIndex, Version,
+};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
 
@@ -40,6 +42,9 @@ const DEFAULT_CAMERA_SPEED: f32 = 18.0;
 #[derive(Resource, Default)]
 pub struct ForestPresenterState {
 	presented: HashMap<Id, PresentedGrove>,
+	/// Replaced hosts waiting for the present-cull despawn budget. FIFO batches
+	/// (one prior grove's entities per slot). `handle` never despawns.
+	pending_despawn: VecDeque<Vec<Entity>>,
 }
 
 struct PresentedGrove {
@@ -56,6 +61,15 @@ impl ForestPresenterState {
 			}
 		}
 		self.presented.clear();
+		for entities in self.pending_despawn.drain(..) {
+			for entity in entities {
+				commands.entity(entity).despawn();
+			}
+		}
+	}
+
+	fn retire(&mut self, id: Id) -> Option<PresentedGrove> {
+		self.presented.remove(&id)
 	}
 }
 
@@ -96,15 +110,18 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 	}
 
 	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
-		if let Some(previous) = self.state.presented.remove(&id) {
-			for entity in previous.entities {
-				self.commands.entity(entity).despawn();
+		if let Some(previous) = self.state.retire(id) {
+			for entity in &previous.entities {
+				self.commands.entity(*entity).insert(Visibility::Hidden);
 			}
+			self.state.pending_despawn.push_back(previous.entities);
 		}
-		let world = forest_world_sample();
+		let Some(tiles) = grove.tiles_ready_to_present(&forest_world_sample()) else {
+			return;
+		};
 		let mut entities = Vec::new();
-		for tile in grove.grow(&world) {
-			entities.extend(spawn_forest_grove_tile(&mut self.commands, &tile, lod_ref));
+		for tile in tiles {
+			entities.extend(spawn_forest_grove_tile(&mut self.commands, tile, lod_ref));
 		}
 		self.state
 			.presented
@@ -138,6 +155,45 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 				}
 			}
 		}
+	}
+
+	fn cull(
+		&mut self,
+		spatial_index: &ForestIndex,
+		keep: &HashSet<Id>,
+		mut despawn_budget: u32,
+	) -> u32 {
+		while despawn_budget > 0 {
+			let Some(entities) = self.state.pending_despawn.pop_front() else {
+				break;
+			};
+			for entity in entities {
+				self.commands.entity(entity).despawn();
+			}
+			despawn_budget -= 1;
+		}
+		let stale: Vec<Id> = self
+			.presented_ids()
+			.into_iter()
+			.filter(|id| !keep.contains(id))
+			.filter(|id| SpatialIndex::<ChicoGrove>::get_bounds(spatial_index, *id).is_some())
+			.collect();
+		let mut to_remove = HashSet::new();
+		for id in stale {
+			if !self.is_hidden(id) {
+				self.hide(id);
+			}
+			if despawn_budget > 0 {
+				to_remove.insert(id);
+				despawn_budget -= 1;
+			}
+		}
+		if !to_remove.is_empty() {
+			let wanted: HashSet<Id> =
+				self.presented_ids().into_iter().filter(|id| !to_remove.contains(&id)).collect();
+			self.remove_stale(&wanted);
+		}
+		despawn_budget
 	}
 }
 
@@ -270,6 +326,26 @@ mod tests {
 		let (tight_present, tight_generate) = stream_radii_m(0);
 		assert!((tight_present - DEFAULT_FOREST_GROVE_TILE_XZ).abs() < 1e-3);
 		assert!(tight_generate > tight_present);
+		Ok(())
+	}
+
+	#[test]
+	fn retire_queues_previous_hosts_without_dropping_them() -> Result<()> {
+		use bevy::math::bounding::Aabb3d;
+		use bevy::math::Vec3;
+
+		let mut state = ForestPresenterState::default();
+		let id = Id::from_cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE));
+		let entity = Entity::from_raw_u32(7).expect("test entity");
+		state.presented.insert(
+			id,
+			PresentedGrove { version: Version(1), entities: vec![entity], hidden: false },
+		);
+		let previous = state.retire(id).ok_or_else(|| anyhow::anyhow!("retired"))?;
+		assert!(state.presented.is_empty());
+		state.pending_despawn.push_back(previous.entities);
+		assert_eq!(state.pending_despawn.len(), 1);
+		assert_eq!(state.pending_despawn[0], vec![entity]);
 		Ok(())
 	}
 }
