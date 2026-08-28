@@ -63,7 +63,9 @@ impl WoodyGroveLod {
 	}
 
 	pub fn structural_lod(self, center: Vec3, radius: f32) -> StructuralLod {
-		StructuralLod::new(center, radius).with_factors(self.high, self.medium, self.low)
+		StructuralLod::new(center, radius)
+			.with_factors(self.high, self.medium, self.low)
+			.with_preserve_ultra_low(true)
 	}
 
 	pub fn nest_plant_level(self, level: LodSceneLevel) -> Option<LodSceneLevel> {
@@ -279,6 +281,7 @@ mod tests {
 		assert_eq!(lod.medium, 5.0);
 		assert_eq!(lod.low, 12.0);
 		assert!(!lod.rory_trunks);
+		assert!(lod.structural_lod(Vec3::ZERO, 1.0).preserve_ultra_low);
 	}
 
 	#[test]

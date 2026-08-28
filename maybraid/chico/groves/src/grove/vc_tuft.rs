@@ -745,10 +745,7 @@ mod tests {
 		let low = body.low_ultra_chunks(&lod_ref, LodSceneLevel::Low);
 		assert!(matches!(low, SceneChunk::Primitive { .. }));
 		let ultra = body.low_ultra_chunks(&lod_ref, LodSceneLevel::UltraLow);
-		assert!(matches!(
-			ultra,
-			SceneChunk::Lazy { remaining_primitives: 4, .. }
-		));
+		assert!(matches!(ultra, SceneChunk::Lazy { remaining_primitives: 4, .. }));
 	}
 
 	#[test]

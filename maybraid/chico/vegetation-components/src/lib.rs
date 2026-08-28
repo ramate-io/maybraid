@@ -542,6 +542,10 @@ where
 }
 
 /// Spawn a typed [`LodScene`] host (grove roots that nest flattened plant hosts).
+///
+/// Isolated `/show` uses a throwaway identity viewer (grove at the origin).
+/// Forest present must use [`spawn_lod_scene_host_with_lod_ref`] so the first
+/// [`lod::LodSceneLevel`] is the camera band, not distance-to-origin.
 pub fn spawn_lod_scene_host<T>(
 	commands: &mut Commands,
 	host: &T,
@@ -558,7 +562,21 @@ where
 		current_transform: &identity,
 		bounds: &bounds,
 	};
-	let level = host.scene_lod_level(&lod_ref);
+	spawn_lod_scene_host_with_lod_ref(commands, host, transform, bounds, &lod_ref)
+}
+
+/// Like [`spawn_lod_scene_host`], stamping desired from `lod_ref` (the viewer).
+pub fn spawn_lod_scene_host_with_lod_ref<T>(
+	commands: &mut Commands,
+	host: &T,
+	transform: Transform,
+	bounds: Aabb3d,
+	lod_ref: &LodRef,
+) -> Vec<Entity>
+where
+	T: LodScene + Component + Clone + Send + Sync + 'static,
+{
+	let level = host.scene_lod_level(lod_ref);
 	let pending = lod_host_scene_pending(level, bounds);
 	let entity = commands
 		.spawn_scene((

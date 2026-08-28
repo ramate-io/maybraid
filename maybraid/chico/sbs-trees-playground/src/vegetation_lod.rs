@@ -82,7 +82,9 @@ impl Plugin for VegetationLodRefreshPlugin {
 
 		app.insert_resource(Bullseye {
 			inner: 50.0,
-			outer: 500.0,
+			// Edge length: ±1000 m so produce covers the 1 km present ring (Medium
+			// at 350–700 m). `500` is ±250 m and already inside High.
+			outer: 2000.0,
 		})
 		.insert_resource(Spotlight { extent: 50.0 })
 		.insert_resource(OpenLattice {
@@ -92,19 +94,16 @@ impl Plugin for VegetationLodRefreshPlugin {
 		})
 		.insert_resource(LodCullRegionCursor::default().with_regions_per_tick(1))
 		.insert_resource(LodChunkFulfillBudget {
-			spawn_weights_per_frame: 512,
+			spawn_weights_per_frame: 1024,
 			cull_weights_per_frame: 128,
 			cull_root_despawns_per_frame: 2,
-			begins_per_frame: 48,
-			begin_scan_per_frame: 192,
-			begin_weights_per_frame: 256,
-			begin_prefill_weights_per_job: 8,
-			completes_per_frame: 512,
+			begins_per_frame: 96,
+			begin_scan_per_frame: 384,
+			begin_weights_per_frame: 1024,
+			begin_prefill_weights_per_job: 32,
+			completes_per_frame: 1024,
 		})
-		.insert_resource(SceneRefAdmitBudget {
-			per_frame: 256,
-			new_merge_meshes_per_frame: 16,
-		})
+		.insert_resource(SceneRefAdmitBudget { per_frame: 256, new_merge_meshes_per_frame: 64 })
 		.add_plugins((
 			LodSceneRefreshRegionPlugin::<Bullseye, With<Camera>, VegetationBullseye>::default(),
 			LodSceneRefreshRegionPlugin::<Spotlight, With<Camera>, VegetationSpotlight>::default(),

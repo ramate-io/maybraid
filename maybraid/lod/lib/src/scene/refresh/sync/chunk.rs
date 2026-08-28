@@ -12,7 +12,8 @@
 //! Drain ranks `(parent_desired, self_level)` High→… within each class.
 //! Begin admits by count ([`LodChunkFulfillBudget::begins_per_frame`]) and shared
 //! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
-//! primitive weights). The per-`T` candidate scan is capped
+//! primitive weights). Classified candidates are sorted by viewer XZ distance
+//! within each class / near-far list. The per-`T` candidate scan is capped
 //! ([`LodChunkFulfillBudget::begin_scan_per_frame`]) and skipped when the clock
 //! is empty. Active begin quota folds into Desired.
 //! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
