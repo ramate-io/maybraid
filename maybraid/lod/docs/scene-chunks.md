@@ -38,7 +38,10 @@ fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vi
 
 1. Sync inserts `LodLevelSpawnRequest` when the desired root is missing.
 2. **Begin** creates a hidden `LodLevelRoot` + `LodLevelRootPending` and flattens the chunk tree into `LodChunkFulfillment`.
-3. **Drain** spawns primitives under [`LodChunkFulfillBudget::weights_per_frame`](../lib/src/scene/chunk_fulfill.rs).
+3. **Drain** is an exclusive `&mut World` system: `World::spawn_scene` under
+   [`LodChunkFulfillBudget::spawn_weights_per_frame`](../lib/src/scene/refresh/sync/chunk/types.rs)
+   **and** [`spawn_time_per_frame`](../lib/src/scene/refresh/sync/chunk/types.rs)
+   (`min(weight, elapsed)`). Stops before the next `pull_primitive` when time is up.
 4. **Complete** removes pending, sets the root `Inherited`, hides sibling roots.
 5. Cull/GC may despawn non-desired ready roots as today; the desired level (including in-progress pending) is never culled.
 

@@ -102,6 +102,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 			begin_weights_per_frame: 1024,
 			begin_prefill_weights_per_job: 32,
 			completes_per_frame: 1024,
+			..Default::default()
 		})
 		.insert_resource(SceneRefAdmitBudget { per_frame: 256, new_merge_meshes_per_frame: 64 })
 		.add_plugins((
