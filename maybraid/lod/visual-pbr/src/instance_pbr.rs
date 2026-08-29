@@ -1,10 +1,13 @@
 //! Instanced submit: spatial grove first, then `(mesh, material)`.
 //!
 //! Each grove owns its batch entities (parented under [`VisualLodRoot`]). A band
-//! or present change only rebuilds that grove. Frustum culling uses the grove
-//! [`LodHostBounds`] AABB (`NoAutoAabb` so `Mesh3d` does not replace it with
-//! kit-local mesh bounds at the origin). Instance matrices are grove-local;
-//! the parent transform places them. Opaque vegetation queues [`Opaque3d`].
+//! or present change only rebuilds that grove.
+//!
+//! Invariant: instance matrices are world (grove host is identity today). The
+//! shader does `clip_from_world * instance * vertex` and must not read
+//! `mesh[0]` via `get_world_from_local(0u)`. The batch [`Aabb`] is the grove
+//! footprint. `NoAutoAabb` stops `Mesh3d` from replacing it. `NoFrustumCulling`
+//! is on while that AABB is proven. Opaque vegetation queues [`Opaque3d`].
 
 use std::mem::size_of;
 
@@ -97,6 +100,7 @@ pub struct VisualHorizonStats {
 	pub packed_instances: u32,
 	pub pending_groves: u32,
 	pub batch_entities: u32,
+	pub batches_visible: u32,
 	pub items: u32,
 	pub items_ultralow: u32,
 	pub items_low: u32,
@@ -106,6 +110,8 @@ pub struct VisualHorizonStats {
 	pub presented: u32,
 	pub present_pending: u32,
 	pub generate_pending: u32,
+	pub sample_instance: [f32; 3],
+	pub sample_aabb: [f32; 3],
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -136,14 +142,14 @@ impl Plugin for InstancePbrPlugin {
 		app.init_resource::<InstancePbrState>()
 			.init_resource::<VisualHorizonStats>()
 			.init_resource::<BandDebugAssets>()
-			.add_systems(Update, sync_instance_pbr_batches);
+			.add_systems(Update, (count_instance_visibility, sync_instance_pbr_batches).chain());
 		let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
 			return;
 		};
 		render_app
 			.add_render_command::<Opaque3d, DrawInstancePbr>()
 			.init_resource::<SpecializedMeshPipelines<InstancePbrPipeline>>()
-			.add_systems(ExtractSchedule, extract_dirty_instance_data)
+			.add_systems(ExtractSchedule, extract_instance_data)
 			.add_systems(RenderStartup, init_instance_pipeline.after(MeshPipelineSystems))
 			.add_systems(
 				Render,
@@ -339,6 +345,8 @@ fn sync_instance_pbr_batches(
 	stats.items_low = 0;
 	stats.items_medium = 0;
 	stats.prototype_cache = prototypes.len();
+	stats.sample_instance = [0.0; 3];
+	stats.sample_aabb = [0.0; 3];
 	for (entity, visual, _, _) in &visuals {
 		stats.visual_roots += 1;
 		stats.packed_instances += visual.representation.instances.len() as u32;
@@ -357,6 +365,14 @@ fn sync_instance_pbr_batches(
 			stats.batch_entities += submit.batches.len() as u32;
 			let n = submit.items.len() as u32;
 			stats.items += n;
+			if stats.sample_instance == [0.0; 3] {
+				if let Some((_, _, instance)) = submit.items.first() {
+					stats.sample_instance = [instance.col3[0], instance.col3[1], instance.col3[2]];
+				}
+				if let Some(&(_, _, aabb)) = seen.get(&entity) {
+					stats.sample_aabb = aabb.center.to_array();
+				}
+			}
 			match band {
 				NamedVisualLevel::UltraLow => stats.items_ultralow += n,
 				NamedVisualLevel::Low => stats.items_low += n,
@@ -370,13 +386,14 @@ fn sync_instance_pbr_batches(
 			*last_log = now;
 			info!(
 				target: "veg.horizon",
-				"roots={} high={} other={} packed={} pending={} batches={} items={} ul={} low={} med={} cache={} desired={} presented={} present_q={} generate_q={} tint={}",
+				"roots={} high={} other={} packed={} pending={} batches={} vis={} items={} ul={} low={} med={} cache={} desired={} presented={} present_q={} generate_q={} inst0=({:.1},{:.1},{:.1}) aabb0=({:.1},{:.1},{:.1}) tint={}",
 				stats.visual_roots,
 				stats.semantic_high,
 				stats.semantic_other,
 				stats.packed_instances,
 				stats.pending_groves,
 				stats.batch_entities,
+				stats.batches_visible,
 				stats.items,
 				stats.items_ultralow,
 				stats.items_low,
@@ -386,10 +403,23 @@ fn sync_instance_pbr_batches(
 				stats.presented,
 				stats.present_pending,
 				stats.generate_pending,
+				stats.sample_instance[0],
+				stats.sample_instance[1],
+				stats.sample_instance[2],
+				stats.sample_aabb[0],
+				stats.sample_aabb[1],
+				stats.sample_aabb[2],
 				if band_debug_enabled() { "gold=med cyan=low mag=ul red=high" } else { "off" },
 			);
 		}
 	}
+}
+
+fn count_instance_visibility(
+	batches: Query<&ViewVisibility, With<InstancePbrBatch>>,
+	mut stats: ResMut<VisualHorizonStats>,
+) {
+	stats.batches_visible = batches.iter().filter(|vis| vis.get()).count() as u32;
 }
 
 fn apply_grove_batches(
@@ -424,7 +454,7 @@ fn apply_grove_batches(
 			if let Ok(mut data) = existing.get_mut(entity) {
 				*data = InstanceMaterialData(instances);
 				if let Ok(mut entity) = commands.get_entity(entity) {
-					entity.insert((aabb, NoAutoAabb));
+					entity.insert((aabb, NoAutoAabb, NoFrustumCulling));
 				}
 				continue;
 			}
@@ -438,6 +468,7 @@ fn apply_grove_batches(
 				Visibility::Visible,
 				aabb,
 				NoAutoAabb,
+				NoFrustumCulling,
 				SyncToRenderWorld,
 			))
 			.id();
@@ -542,11 +573,20 @@ fn sync_band_debug_marker(
 	submit.debug_marker = Some(entity);
 }
 
-fn extract_dirty_instance_data(
+/// Copy instance lists when the render entity exists.
+///
+/// `Changed` plus `RenderEntity` on the same frame misses the spawn race:
+/// the first change happens before the render entity is mapped, and later
+/// frames are not `Changed`, so the render world stays empty (`queue ok=0`).
+fn extract_instance_data(
 	mut commands: Commands,
-	query: Extract<Query<(RenderEntity, &InstanceMaterialData), Changed<InstanceMaterialData>>>,
+	main: Extract<Query<(RenderEntity, &InstanceMaterialData, Ref<InstanceMaterialData>)>>,
+	existing: Query<(), With<InstanceMaterialData>>,
 ) {
-	for (entity, data) in &query {
+	for (entity, data, changed) in &main {
+		if existing.get(entity).is_ok() && !changed.is_changed() {
+			continue;
+		}
 		commands.entity(entity).insert(data.clone());
 	}
 }
@@ -641,6 +681,17 @@ impl SpecializedMeshPipeline for InstancePbrPipeline {
 	}
 }
 
+#[derive(Default)]
+struct QueueSkipCounts {
+	query_n: u32,
+	vis_skip: u32,
+	no_mesh: u32,
+	no_gpu: u32,
+	specialize_fail: u32,
+	ok: u32,
+	ticks: u32,
+}
+
 fn queue_instance_pbr(
 	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
 	custom_pipeline: Res<InstancePbrPipeline>,
@@ -648,14 +699,24 @@ fn queue_instance_pbr(
 	pipeline_cache: Res<PipelineCache>,
 	meshes: Res<RenderAssets<RenderMesh>>,
 	render_mesh_instances: Res<RenderMeshInstances>,
-	material_meshes: Query<(Entity, &MainEntity, &ViewVisibility), With<InstanceMaterialData>>,
+	material_meshes: Query<
+		(Entity, &MainEntity, Option<&ViewVisibility>),
+		With<InstanceMaterialData>,
+	>,
 	mut opaque_render_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	views: Query<&ExtractedView>,
 	view_key_cache: Res<ViewKeyCache>,
 	mut queued: Local<HashMap<RetainedViewEntity, HashSet<MainEntity>>>,
+	mut skips: Local<QueueSkipCounts>,
 ) {
 	let draw_custom = opaque_draw_functions.read().id::<DrawInstancePbr>();
 	let mut live_views = HashSet::<RetainedViewEntity>::default();
+	let ticks = skips.ticks.wrapping_add(1);
+	*skips = QueueSkipCounts {
+		query_n: material_meshes.iter().len() as u32,
+		ticks,
+		..Default::default()
+	};
 	for view in &views {
 		let Some(opaque_phase) = opaque_render_phases.get_mut(&view.retained_view_entity) else {
 			continue;
@@ -666,14 +727,17 @@ fn queue_instance_pbr(
 		live_views.insert(view.retained_view_entity);
 		let mut current = HashSet::<MainEntity>::default();
 		for (entity, main_entity, vis) in &material_meshes {
-			if !vis.get() {
+			if vis.is_some_and(|vis| !vis.get()) {
+				skips.vis_skip += 1;
 				continue;
 			}
 			let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
 			else {
+				skips.no_mesh += 1;
 				continue;
 			};
 			let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id()) else {
+				skips.no_gpu += 1;
 				continue;
 			};
 			let key = view_key
@@ -684,8 +748,10 @@ fn queue_instance_pbr(
 			let Ok(pipeline) =
 				pipelines.specialize(&pipeline_cache, &custom_pipeline, key, &mesh.layout)
 			else {
+				skips.specialize_fail += 1;
 				continue;
 			};
+			skips.ok += 1;
 			opaque_phase.add(
 				Opaque3dBatchSetKey {
 					pipeline,
@@ -711,6 +777,18 @@ fn queue_instance_pbr(
 		queued.insert(view.retained_view_entity, current);
 	}
 	queued.retain(|view, _| live_views.contains(view));
+	if skips.ticks % 120 == 0 {
+		info!(
+			target: "veg.horizon",
+			"queue query={} vis_skip={} no_mesh={} no_gpu={} spec_fail={} ok={}",
+			skips.query_n,
+			skips.vis_skip,
+			skips.no_mesh,
+			skips.no_gpu,
+			skips.specialize_fail,
+			skips.ok
+		);
+	}
 }
 
 type DrawInstancePbr = (

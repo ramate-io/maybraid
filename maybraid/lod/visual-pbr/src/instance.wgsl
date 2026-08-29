@@ -1,9 +1,8 @@
-#import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip}
+#import bevy_pbr::view_transformations::position_world_to_clip
 
 struct Vertex {
 	@location(0) position: vec3<f32>,
 	@location(1) normal: vec3<f32>,
-	@location(2) uv: vec2<f32>,
 	@location(8) i_col0: vec4<f32>,
 	@location(9) i_col1: vec4<f32>,
 	@location(10) i_col2: vec4<f32>,
@@ -22,8 +21,9 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 	let instance = mat4x4<f32>(vertex.i_col0, vertex.i_col1, vertex.i_col2, vertex.i_col3);
 	let world = instance * vec4<f32>(vertex.position, 1.0);
 	var out: VertexOutput;
-	// Dummy batch entity sits at identity; instance matrix is already world.
-	out.clip_position = mesh_position_local_to_clip(get_world_from_local(0u), world);
+	// Instance is already world (grove host is identity). Do not use
+	// `get_world_from_local(0u)`: that indexes `mesh[0]`, some other entity.
+	out.clip_position = position_world_to_clip(world.xyz);
 	out.world_normal = normalize((instance * vec4<f32>(vertex.normal, 0.0)).xyz);
 	out.color = vertex.i_color;
 	return out;
