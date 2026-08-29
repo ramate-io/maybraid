@@ -251,6 +251,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(LeewardPlant, LeewardKind => [Storybook, Temperate]);
 crate::impl_woody_grove_lod!(Leeward, WOODY_LOD);
 
 #[cfg(test)]

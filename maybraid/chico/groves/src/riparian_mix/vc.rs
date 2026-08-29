@@ -302,6 +302,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	RiparianMixPlant,
+	RiparianMixKind => [Oak, Storybook, Friends, Temperate]
+);
 crate::impl_woody_grove_lod!(RiparianMix, WOODY_LOD);
 
 #[cfg(test)]

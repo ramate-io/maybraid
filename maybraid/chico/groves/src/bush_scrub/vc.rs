@@ -276,6 +276,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(BushScrubPlant, BushScrubKind => [Tuft, Bush]);
 crate::impl_woody_grove_lod!(BushScrub, WOODY_LOD);
 
 #[cfg(test)]

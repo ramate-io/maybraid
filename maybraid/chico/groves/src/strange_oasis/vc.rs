@@ -329,6 +329,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	StrangeOasisPlant,
+	StrangeOasisKind => [DatePalm, Torch, Storybook]
+);
 crate::impl_woody_grove_lod!(StrangeOasis, WOODY_LOD, low_nodes);
 
 #[cfg(test)]

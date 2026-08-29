@@ -252,6 +252,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	TemperateMassivesPlant,
+	TemperateMassivesKind => [Oak, Storybook, Rory]
+);
 crate::impl_woody_grove_lod!(TemperateMassives, WOODY_LOD, trunks);
 
 #[cfg(test)]

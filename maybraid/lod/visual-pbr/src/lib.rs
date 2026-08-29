@@ -1,11 +1,8 @@
-//! Packed UltraLow / Low / Medium forest draws for [`lod::VisualLodScene`].
+//! Generic instanced PBR draws for [`lod::VisualLodScene`].
 //!
-//! Band debug (default on, `VEG_BAND_DEBUG=0` to disable): gold Medium
-//! instances and poles, cyan Low, magenta UltraLow, red High-host poles.
-//!
-//! [`ForestGroveVisual`] stores [`VisualInstance`]s. Geometry is cached by
+//! [`InstancePbrVisual`] stores [`VisualInstance`]s. Geometry is cached by
 //! [`scene_ref::SceneRef`]; material by [`MaterialRef`]. Policy selects a band
-//! per view; [`InstancePbrRenderer`] buckets per grove, then `(mesh, material)`,
+//! per view; [`InstancePbrRenderer`] buckets per visual root, then `(mesh, material)`,
 //! and submits instanced draws. Camera motion does not cook posed grove meshes.
 
 mod instance_pbr;
@@ -15,23 +12,23 @@ use std::sync::Arc;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::render::sync_world::SyncToRenderWorld;
-use chico_vegetation_components::{pack_vegetation_visual_aliased, VegetationComponents};
-pub use instance_pbr::{InstancePbrPlugin, InstancePbrRenderer, VisualHorizonStats};
+use chico_vegetation_components::{pack_vegetation_visual_aliased, VegetationVisualPack};
+pub use instance_pbr::{InstancePbrCompileBudget, InstancePbrPlugin, InstancePbrRenderer};
 use lod::lod_ref::LodRef;
 use lod::{
-	HasVisualLodThresholds, LodHostBounds, NamedVisualLevel, ProjectedBoundsPolicy,
-	ProjectedBoundsThresholds, SemanticLodScene, VisualInstanceList, VisualLodRoot, VisualLodScene,
-	VisualOwnsAppearance, VisualSceneLodPlugin,
+	HasVisualLodThresholds, LodHostBounds, ProjectedBoundsPolicy, ProjectedBoundsThresholds,
+	SemanticLodScene, VisualInstanceList, VisualLodRoot, VisualLodScene, VisualOwnsAppearance,
+	VisualSceneLodPlugin,
 };
 
-/// Visual sibling stamped on a presented forest grove tile.
+/// Domain-neutral banded instance scene rendered by [`InstancePbrRenderer`].
 #[derive(Debug, Clone, Component)]
-pub struct ForestGroveVisual {
+pub struct InstancePbrVisual {
 	pub thresholds: ProjectedBoundsThresholds,
 	pub representation: VisualInstanceList,
 }
 
-impl ForestGroveVisual {
+impl InstancePbrVisual {
 	pub fn new() -> Self {
 		Self {
 			thresholds: ProjectedBoundsThresholds::default(),
@@ -44,19 +41,19 @@ impl ForestGroveVisual {
 	}
 }
 
-impl Default for ForestGroveVisual {
+impl Default for InstancePbrVisual {
 	fn default() -> Self {
 		Self::new()
 	}
 }
 
-impl HasVisualLodThresholds for ForestGroveVisual {
+impl HasVisualLodThresholds for InstancePbrVisual {
 	fn visual_lod_thresholds(&self) -> ProjectedBoundsThresholds {
 		self.thresholds
 	}
 }
 
-impl VisualLodScene for ForestGroveVisual {
+impl VisualLodScene for InstancePbrVisual {
 	type Representation = VisualInstanceList;
 	type Policy = ProjectedBoundsPolicy;
 	type Renderer = InstancePbrRenderer;
@@ -66,31 +63,24 @@ impl VisualLodScene for ForestGroveVisual {
 	}
 }
 
-/// Render-world selection recorded by [`InstancePbrRenderer`].
-#[derive(Component, Clone, Copy)]
-pub struct SelectedVisualBand(pub NamedVisualLevel);
+/// Banded instance list + instanced PBR submit.
+pub struct InstancePbrVisualPlugin;
 
-/// Packed instance list + instanced PBR submit.
-pub struct ForestGroveVisualPlugin;
-
-impl Plugin for ForestGroveVisualPlugin {
+impl Plugin for InstancePbrVisualPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<scene_ref::SceneRefPlugin>() {
 			app.add_plugins(scene_ref::SceneRefPlugin);
 		}
-		if !app.is_plugin_added::<VisualSceneLodPlugin<ForestGroveVisual>>() {
-			app.add_plugins(VisualSceneLodPlugin::<ForestGroveVisual>::default());
-		}
-		if !app.is_plugin_added::<InstancePbrPlugin>() {
-			app.add_plugins(InstancePbrPlugin);
+		if !app.is_plugin_added::<VisualSceneLodPlugin<InstancePbrVisual>>() {
+			app.add_plugins(VisualSceneLodPlugin::<InstancePbrVisual>::default());
 		}
 	}
 }
 
-/// Persistent visual sibling: interned UltraLow / Low / Medium instances.
+/// Attach a persistent visual sibling to a presented forest grove tile.
 ///
-/// Stamps [`VisualOwnsAppearance`] so non-High semantic fulfill does not spawn
-/// plant hosts. High still uses the exclusive drain.
+/// Stamps [`VisualOwnsAppearance`] so ordinary appearance is always supplied by
+/// the visual scene; semantic High is reserved for gameplay ECS.
 pub fn attach_forest_grove_visual<T>(
 	commands: &mut Commands,
 	host: Entity,
@@ -98,14 +88,14 @@ pub fn attach_forest_grove_visual<T>(
 	bounds: Aabb3d,
 	_lod_ref: &LodRef,
 ) where
-	T: SemanticLodScene + VegetationComponents + Component,
+	T: SemanticLodScene + VegetationVisualPack + Component,
 {
 	commands.entity(host).insert(VisualOwnsAppearance);
 	let packed = pack_vegetation_visual_aliased(grove);
 	let visual = commands
 		.spawn((
 			VisualLodRoot,
-			ForestGroveVisual::from_instances(VisualInstanceList::new(Arc::<[_]>::from(
+			InstancePbrVisual::from_instances(VisualInstanceList::new(Arc::<[_]>::from(
 				packed.instances,
 			))),
 			LodHostBounds(bounds),
@@ -121,11 +111,11 @@ pub fn attach_forest_grove_visual<T>(
 mod tests {
 	use super::*;
 	use bevy::math::bounding::Aabb3d;
-	use lod::{LodHostBounds, VisualLodPolicy, VisualLodView};
+	use lod::{LodHostBounds, NamedVisualLevel, VisualLodPolicy, VisualLodView};
 
 	#[test]
 	fn policy_selects_packed_far_band() {
-		let visual = ForestGroveVisual::new();
+		let visual = InstancePbrVisual::new();
 		let bounds = LodHostBounds(Aabb3d::from_min_max(Vec3::splat(-50.0), Vec3::splat(50.0)));
 		let far = VisualLodView::test_perspective(
 			Vec3::new(0.0, 1_500.0, 3_000.0),
@@ -133,19 +123,18 @@ mod tests {
 			Vec2::new(1280.0, 720.0),
 			std::f32::consts::FRAC_PI_3,
 		);
-		let sel = ProjectedBoundsPolicy::select(&visual, &far, &bounds).clamp_to_packed();
+		let sel = ProjectedBoundsPolicy::select(&visual, &far, &bounds);
 		assert!(matches!(sel, NamedVisualLevel::UltraLow | NamedVisualLevel::Low));
 		assert!(visual.visual_representations().is_empty());
 	}
 
 	#[test]
-	fn high_policy_clamps_to_medium_pack() {
-		assert_eq!(NamedVisualLevel::High.clamp_to_packed(), NamedVisualLevel::Medium);
-		assert_eq!(NamedVisualLevel::Medium.clamp_to_packed(), NamedVisualLevel::Medium);
+	fn high_is_an_ordinary_visual_band() {
+		assert_eq!(NamedVisualLevel::High.and_coarser().next(), Some(NamedVisualLevel::High));
 	}
 
 	#[test]
 	fn representation_is_instance_list() {
-		let _ = std::any::type_name::<<ForestGroveVisual as VisualLodScene>::Representation>();
+		let _ = std::any::type_name::<<InstancePbrVisual as VisualLodScene>::Representation>();
 	}
 }

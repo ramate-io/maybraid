@@ -1,5 +1,7 @@
 use super::*;
-use crate::grove::{FlatTerrainSample, ForestGroveBiases, Grove, GroveCellOutcome, GroveExtent};
+use crate::grove::{
+	FlatTerrainSample, ForestGroveBiases, Grove, GroveCellOutcome, GroveCellVariant, GroveExtent,
+};
 use anyhow::Result;
 use bevy_math::Vec3;
 use gimme_gen::Cell;
@@ -133,5 +135,37 @@ fn populated_grove_is_deterministic_and_non_empty() -> Result<()> {
 	let b = grove.populate(&extent, &terrain);
 	assert_eq!(a, b);
 	assert!(!a.is_empty());
+	Ok(())
+}
+
+#[test]
+fn packed_high_contains_authored_trunks_and_canopy() -> Result<()> {
+	use chico_vegetation_components::{
+		pack_vegetation_visual_aliased, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
+	};
+	use lod::NamedVisualLevel;
+	use material_ref::MaterialId;
+
+	let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(20.0, 1.0, 20.0));
+	let grove = Orchard::from_placements(
+		&[GroveCellVariant::new(OrchardCell::FruitingStorybook, Vec3::new(7.0, 0.0, 9.0), 1.0)],
+		NoiseParams::default(),
+		&extent,
+		1,
+	);
+	let packed = pack_vegetation_visual_aliased(&grove);
+	let stick = MaterialId::named(CHICO_STICK_MATERIAL);
+	let leaf = MaterialId::named(CHICO_LEAF_MATERIAL);
+
+	assert!(packed.instances.iter().any(|instance| {
+		instance.material.name == stick
+			&& instance.scene_for(NamedVisualLevel::High).is_some()
+			&& instance.scene_for(NamedVisualLevel::Low).is_none()
+	}));
+	assert!(packed.instances.iter().any(|instance| {
+		instance.material.name == leaf
+			&& instance.scene_for(NamedVisualLevel::High).is_some()
+			&& instance.scene_for(NamedVisualLevel::Low).is_none()
+	}));
 	Ok(())
 }

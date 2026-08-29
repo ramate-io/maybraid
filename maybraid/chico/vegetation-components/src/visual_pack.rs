@@ -2,8 +2,7 @@
 //!
 //! One instance per IR placement. Kit collections emit one instance per member.
 //! Empty finer slots on the *same* pose alias the coarsest authored [`SceneRef`]
-//! so UltraLow-only bins still draw when Low or Medium is selected. Woody groves
-//! with an empty Medium plant IR share Low kits on those poses.
+//! so coarser-only instances still draw in any finer selected band.
 
 use std::collections::HashMap;
 
@@ -18,7 +17,89 @@ use crate::scene_children::pose;
 use crate::sticks::node::StickNode;
 use crate::VegetationComponents;
 
-/// Packed UltraLow / Low / Medium placements, folded across bands when the
+/// Domain hook for contributing one or more vegetation sources to one packed
+/// banded instance list.
+///
+/// This is deliberately separate from [`VegetationComponents`]: direct
+/// vegetation can add itself, while composite domains can add nested,
+/// independently placed values without a blanket implementation blocking their
+/// custom behavior.
+pub trait VegetationVisualPack {
+	fn pack_vegetation_visual(&self, packer: &mut VegetationVisualPacker);
+}
+
+/// Accumulates independently authored vegetation sources before per-pose band
+/// aliasing.
+#[derive(Default)]
+pub struct VegetationVisualPacker {
+	by_pose: HashMap<(MaterialRefKey, TransformKey), Banded<Option<SceneRef>>>,
+	materials: HashMap<(MaterialRefKey, TransformKey), MaterialRef>,
+}
+
+impl VegetationVisualPacker {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	/// Add all four authored levels from one vegetation source.
+	pub fn add_vegetation(&mut self, vegetation: &impl VegetationComponents) {
+		for (band, level) in [
+			(NamedVisualLevel::UltraLow, LodSceneLevel::UltraLow),
+			(NamedVisualLevel::Low, LodSceneLevel::Low),
+			(NamedVisualLevel::Medium, LodSceneLevel::Medium),
+			(NamedVisualLevel::High, LodSceneLevel::High),
+		] {
+			self.add_level(vegetation, band, level);
+		}
+	}
+
+	/// Add `source_level` placements to one visual `band`.
+	///
+	/// Keeping source and target explicit preserves authored cases such as a
+	/// reduced-density Medium band built from High geometry.
+	pub fn add_level(
+		&mut self,
+		vegetation: &impl VegetationComponents,
+		band: NamedVisualLevel,
+		source_level: LodSceneLevel,
+	) {
+		for (scene, material, transform) in pack_level_placements(vegetation, source_level) {
+			let key = (MaterialRefKey::from(&material), TransformKey::new(transform));
+			self.materials.entry(key.clone()).or_insert(material);
+			let slot = self.by_pose.entry(key).or_default();
+			*slot.for_level_mut(band) = Some(scene);
+		}
+	}
+
+	/// Finish the list, aliasing empty finer slots on each independent pose.
+	pub fn finish_aliased(mut self) -> PackedVegetationBands {
+		for scenes in self.by_pose.values_mut() {
+			alias_empty_finer_bands(scenes);
+		}
+
+		let instances = self
+			.by_pose
+			.into_iter()
+			.filter_map(|(key, scenes)| {
+				let material = self.materials.remove(&key)?;
+				let (_material_key, transform_key) = key;
+				let pose = transform_key.0;
+				Some(VisualInstance {
+					scenes,
+					material,
+					transform: bevy::math::Affine3A::from_scale_rotation_translation(
+						pose.scale,
+						pose.rotation,
+						pose.translation,
+					),
+				})
+			})
+			.collect();
+		PackedVegetationBands { instances }
+	}
+}
+
+/// Packed UltraLow / Low / Medium / High placements, folded across bands when the
 /// material and pose match.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackedVegetationBands {
@@ -39,6 +120,9 @@ impl PackedVegetationBands {
 			if instance.scene_for(NamedVisualLevel::Medium).is_some() {
 				counts.medium += 1;
 			}
+			if instance.scene_for(NamedVisualLevel::High).is_some() {
+				counts.high += 1;
+			}
 		}
 		counts
 	}
@@ -52,46 +136,13 @@ impl PackedVegetationBands {
 	}
 }
 
-/// Pack UltraLow, then Low, then Medium. Empty finer slots alias per instance.
+/// Pack all visual bands coarse-to-fine. Empty finer slots alias per instance.
 pub fn pack_vegetation_visual_aliased(
-	vegetation: &impl VegetationComponents,
+	vegetation: &impl VegetationVisualPack,
 ) -> PackedVegetationBands {
-	let mut by_pose: HashMap<(MaterialRefKey, TransformKey), Banded<Option<SceneRef>>> =
-		HashMap::new();
-	let mut materials: HashMap<(MaterialRefKey, TransformKey), MaterialRef> = HashMap::new();
-
-	for level in [LodSceneLevel::UltraLow, LodSceneLevel::Low, LodSceneLevel::Medium] {
-		let named = NamedVisualLevel::from_scene_level(level).expect("named pack level");
-		for (scene, material, transform) in pack_level_placements(vegetation, level) {
-			let key = (MaterialRefKey::from(&material), TransformKey::new(transform));
-			materials.entry(key.clone()).or_insert(material);
-			let slot = by_pose.entry(key).or_default();
-			*slot.for_level_mut(named) = Some(scene);
-		}
-	}
-
-	for scenes in by_pose.values_mut() {
-		alias_empty_finer_bands(scenes);
-	}
-
-	let instances = by_pose
-		.into_iter()
-		.filter_map(|(key, scenes)| {
-			let material = materials.remove(&key)?;
-			let (_material_key, transform_key) = key;
-			let pose = transform_key.0;
-			Some(VisualInstance {
-				scenes,
-				material,
-				transform: bevy::math::Affine3A::from_scale_rotation_translation(
-					pose.scale,
-					pose.rotation,
-					pose.translation,
-				),
-			})
-		})
-		.collect();
-	PackedVegetationBands { instances }
+	let mut packer = VegetationVisualPacker::new();
+	vegetation.pack_vegetation_visual(&mut packer);
+	packer.finish_aliased()
 }
 
 fn alias_empty_finer_bands(scenes: &mut Banded<Option<SceneRef>>) {
@@ -100,6 +151,9 @@ fn alias_empty_finer_bands(scenes: &mut Banded<Option<SceneRef>>) {
 	}
 	if scenes.medium.is_none() {
 		scenes.medium.clone_from(&scenes.low);
+	}
+	if scenes.high.is_none() {
+		scenes.high.clone_from(&scenes.medium);
 	}
 }
 
@@ -133,8 +187,14 @@ fn pack_level_placements(
 	level: LodSceneLevel,
 ) -> Vec<(SceneRef, MaterialRef, bevy::prelude::Transform)> {
 	let mut out = Vec::new();
-	for node in vegetation.stick_nodes_for_level(level).flatten() {
-		pack_stick_node(&node, level, &mut out);
+	let stick_level = match level {
+		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => {
+			LodSceneLevel::Low
+		}
+		other => other,
+	};
+	for node in vegetation.stick_nodes_for_level(stick_level).flatten() {
+		pack_stick_node(&node, stick_level, &mut out);
 	}
 	for node in vegetation.foliage_nodes_for_level(level).flatten() {
 		pack_foliage_node(&node, level, &mut out);
@@ -221,14 +281,16 @@ mod tests {
 	}
 
 	#[test]
-	fn pack_skips_ultralow_sticks() {
+	fn pack_ultralow_sticks_uses_visible_low_proxy() {
 		let trunk = StickMember::trunk(Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)));
 		let node = StickNode::collection(
 			StickCollection::new([trunk]).bake_bounds_from_members(),
 			Placement::IDENTITY,
 		);
-		assert!(pack_vegetation_visual(&OneTrunk(node.clone()), LodSceneLevel::UltraLow).is_empty());
+		let ultra = pack_vegetation_visual(&OneTrunk(node.clone()), LodSceneLevel::UltraLow);
 		let low = pack_vegetation_visual(&OneTrunk(node), LodSceneLevel::Low);
+		assert_eq!(ultra.len(), 1);
+		assert!(ultra[0].scene_for(NamedVisualLevel::UltraLow).is_some());
 		assert_eq!(low.len(), 1);
 		assert!(low[0].scene_for(NamedVisualLevel::Low).is_some());
 		assert!(low[0].scene_for(NamedVisualLevel::UltraLow).is_none());
@@ -246,8 +308,14 @@ mod tests {
 		}
 	}
 
+	impl VegetationVisualPack for LowOnly {
+		fn pack_vegetation_visual(&self, packer: &mut VegetationVisualPacker) {
+			packer.add_vegetation(self);
+		}
+	}
+
 	#[test]
-	fn aliased_empty_medium_shares_low() {
+	fn low_proxy_stick_remains_visible_through_finer_bands() {
 		let trunk = StickMember::trunk(Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)));
 		let node = StickNode::collection(
 			StickCollection::new([trunk]).bake_bounds_from_members(),
@@ -256,12 +324,54 @@ mod tests {
 		let bands = pack_vegetation_visual_aliased(&LowOnly(node));
 		assert_eq!(bands.instances.len(), 1);
 		let instance = &bands.instances[0];
-		assert!(instance.scene_for(NamedVisualLevel::UltraLow).is_none());
+		assert_eq!(
+			instance.scene_for(NamedVisualLevel::UltraLow),
+			instance.scene_for(NamedVisualLevel::Low)
+		);
 		assert_eq!(
 			instance.scene_for(NamedVisualLevel::Low),
 			instance.scene_for(NamedVisualLevel::Medium)
 		);
+		assert_eq!(
+			instance.scene_for(NamedVisualLevel::Medium),
+			instance.scene_for(NamedVisualLevel::High)
+		);
 		assert!(instance.scene_for(NamedVisualLevel::Low).is_some());
+	}
+
+	struct TwoSources {
+		left: OneTrunk,
+		right: OneTrunk,
+	}
+
+	impl VegetationVisualPack for TwoSources {
+		fn pack_vegetation_visual(&self, packer: &mut VegetationVisualPacker) {
+			packer.add_level(&self.left, NamedVisualLevel::High, LodSceneLevel::High);
+			packer.add_level(&self.right, NamedVisualLevel::High, LodSceneLevel::High);
+		}
+	}
+
+	#[test]
+	fn multiple_sources_keep_independent_transforms() {
+		let trunk = |x| {
+			OneTrunk(StickNode::collection(
+				StickCollection::new([StickMember::trunk(
+					Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)),
+				)])
+				.bake_bounds_from_members(),
+				Placement::new(Vec3::X * x, 0.0),
+			))
+		};
+		let bands =
+			pack_vegetation_visual_aliased(&TwoSources { left: trunk(-3.0), right: trunk(5.0) });
+		assert_eq!(bands.instances.len(), 2);
+		let mut xs: Vec<_> = bands
+			.instances
+			.iter()
+			.map(|instance| instance.transform.translation.x)
+			.collect();
+		xs.sort_by(f32::total_cmp);
+		assert_eq!(xs, vec![-3.0, 5.0]);
 	}
 
 	struct WoodyGrove {
@@ -287,6 +397,12 @@ mod tests {
 		}
 	}
 
+	impl VegetationVisualPack for WoodyGrove {
+		fn pack_vegetation_visual(&self, packer: &mut VegetationVisualPacker) {
+			packer.add_vegetation(self);
+		}
+	}
+
 	#[test]
 	fn aliased_ultralow_bins_draw_when_low_exists() {
 		let trunk = StickMember::trunk(Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)));
@@ -301,11 +417,11 @@ mod tests {
 		let ultra_only = pack_vegetation_visual(&grove, LodSceneLevel::UltraLow);
 		let bands = pack_vegetation_visual_aliased(&grove);
 		assert_eq!(low_only.len(), 1);
-		assert_eq!(ultra_only.len(), 1);
+		assert_eq!(ultra_only.len(), 2);
 		assert_eq!(bands.instances.len(), 2);
 		assert_eq!(bands.band_slot_counts().low, 2);
 		assert_eq!(bands.resolved_count(NamedVisualLevel::Low), 2);
-		assert_eq!(bands.resolved_count(NamedVisualLevel::UltraLow), 1);
+		assert_eq!(bands.resolved_count(NamedVisualLevel::UltraLow), 2);
 		assert!(bands
 			.instances
 			.iter()

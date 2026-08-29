@@ -202,6 +202,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	GoettingenFollowPlant,
+	GoettingenFollowKind => [Oak, Storybook]
+);
 crate::impl_woody_grove_lod!(GoettingenFollow, WOODY_LOD);
 
 #[cfg(test)]

@@ -97,6 +97,20 @@ pub trait SemanticLodScene {
 		SceneChunk::primitive(self.scene_with_level(lod_ref, level))
 	}
 
+	/// Semantic-only content for a host whose ordinary appearance is owned by a
+	/// [`crate::VisualLodScene`].
+	///
+	/// The default preserves existing behavior. Implementors that mix gameplay
+	/// hosts with drawable geometry should override this to retain only ECS
+	/// state, interaction, physics, and nested semantic host shells.
+	fn semantic_scene_chunks_with_level(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> SceneChunk {
+		self.scene_chunks_with_level(lod_ref, level)
+	}
+
 	/// Scene for the **current** LOD selection only (first present / non-host path).
 	///
 	/// Default builds level content only. Typed ECS hosts that nest under a parent
@@ -171,6 +185,14 @@ impl<T: SemanticLodScene + Send + Sync + 'static> SemanticLodScene for std::sync
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		(**self).scene_chunks_with_level(lod_ref, level)
+	}
+
+	fn semantic_scene_chunks_with_level(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> SceneChunk {
+		(**self).semantic_scene_chunks_with_level(lod_ref, level)
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {

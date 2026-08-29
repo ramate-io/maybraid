@@ -16,11 +16,12 @@ Forest tiles store a [`VisualInstance`](../lib/src/scene/visual.rs) list on a
 [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling. Geometry is cached by
 [`SceneRef`](../../scene-ref) → [`ScenePrototype`](../../scene-ref); material by
 [`MaterialRef`](../../material-ref). Policy picks a band per view; the
-[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets per grove,
+[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets per visual root,
 then `(mesh, material)`, and submits instanced draws. Camera motion does not
-cook posed grove meshes or spawn visual `SceneChunk`s. High kits stay on the
-exclusive semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs)
-mutes non-High fulfill on that tile.
+cook posed grove meshes or spawn visual `SceneChunk`s. High is an ordinary
+visual band. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs) keeps semantic
+High available for gameplay ECS while routing its chunk construction through
+`semantic_scene_chunks_with_level`, so it does not duplicate ordinary appearance.
 
 ## API
 
@@ -34,6 +35,16 @@ Optional override:
 
 ```rust
 fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk;
+```
+
+Visual-owned semantic override:
+
+```rust
+fn semantic_scene_chunks_with_level(
+    &self,
+    lod_ref: &LodRef,
+    level: LodSceneLevel,
+) -> SceneChunk;
 ```
 
 Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit (full scene build still happens up front unless overridden).

@@ -214,6 +214,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(PalmShadePlant, PalmShadeKind => [Waialea, Date]);
 crate::impl_woody_grove_lod!(PalmShade, WOODY_LOD);
 
 #[cfg(test)]

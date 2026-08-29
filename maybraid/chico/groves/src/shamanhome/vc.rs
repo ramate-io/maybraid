@@ -259,6 +259,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(ShamanhomePlant, ShamanhomeKind => [Oak, Date, Sope]);
 crate::impl_woody_grove_lod!(Shamanhome, WOODY_LOD, low_nodes);
 
 #[cfg(test)]

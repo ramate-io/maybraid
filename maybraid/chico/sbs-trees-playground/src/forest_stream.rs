@@ -13,6 +13,7 @@ use chico_forests::{
 use chico_groves::GroveWorldSample;
 use chico_vegetation_components::{
 	spawn_lod_scene_host_with_lod_ref, vegetation_bounds, VegetationComponents,
+	VegetationVisualPack,
 };
 use lod::gen::{
 	Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene,
@@ -24,7 +25,7 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
-use lod_visual_pbr::{attach_forest_grove_visual, ForestGroveVisualPlugin, VisualHorizonStats};
+use lod_visual_pbr::{attach_forest_grove_visual, InstancePbrVisualPlugin};
 use procedural_common::NoiseParams;
 
 use crate::camera::CameraController;
@@ -95,8 +96,8 @@ where
 	Pr: SystemParam + 'static,
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<ChicoGrove, ForestIndex>,
 {
-	if !app.is_plugin_added::<ForestGroveVisualPlugin>() {
-		app.add_plugins(ForestGroveVisualPlugin);
+	if !app.is_plugin_added::<InstancePbrVisualPlugin>() {
+		app.add_plugins(InstancePbrVisualPlugin);
 	}
 	app.init_resource::<ForestIndex>()
 		.init_resource::<ForestPresenterState>()
@@ -130,25 +131,7 @@ where
 			Pr,
 			ForestLodChan,
 		>::default())
-		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
-		.add_systems(Update, sync_forest_horizon_stats);
-}
-
-fn sync_forest_horizon_stats(
-	mut stats: ResMut<VisualHorizonStats>,
-	index: Res<ForestIndex>,
-	keep: Res<LodPresentKeepRegion<ForestLodChan>>,
-	present_queue: Res<LodPresentQueue<ChicoGrove>>,
-	generate_queue: Res<LodGenerateQueue<ChicoGrove>>,
-	presenter: Res<ForestPresenterState>,
-) {
-	stats.desired_in_keep = keep
-		.region
-		.map(|region| SpatialIndex::<ChicoGrove>::tracked_ids_for(&*index, region).len() as u32)
-		.unwrap_or(0);
-	stats.presented = presenter.presented_ids().len() as u32;
-	stats.present_pending = present_queue.pending.len() as u32;
-	stats.generate_pending = generate_queue.pending.len() as u32;
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 }
 
 #[derive(Resource, Default)]
@@ -289,7 +272,14 @@ impl ForestPresenterState {
 
 fn spawn_grove_host<T>(commands: &mut Commands, grove: &T, lod_ref: &LodRef) -> Vec<Entity>
 where
-	T: LodScene + VegetationComponents + Component + Clone + Send + Sync + 'static,
+	T: LodScene
+		+ VegetationComponents
+		+ VegetationVisualPack
+		+ Component
+		+ Clone
+		+ Send
+		+ Sync
+		+ 'static,
 {
 	let bounds = grove
 		.structural_lod()

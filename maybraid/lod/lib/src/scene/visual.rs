@@ -10,9 +10,6 @@ use std::sync::Arc;
 
 use bevy::math::Affine3A;
 use bevy::prelude::*;
-use bevy::render::extract_component::ExtractComponent;
-use bevy::render::sync_world::RenderEntity;
-use bevy::render::{Extract, ExtractSchedule, RenderApp};
 use material_ref::MaterialRef;
 use scene_ref::SceneRef;
 
@@ -33,15 +30,11 @@ pub struct VisualLodRoot;
 #[derive(Debug, Clone, Copy, Default, Component)]
 pub struct VisualOwnsAppearance;
 
-/// One persistent visual band under [`VisualLodRoot`]. Policy shows one band.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Component, ExtractComponent)]
-pub struct VisualLodBand(pub NamedVisualLevel);
-
 /// Named visual band. Policy selection for projected-bounds hosts.
 ///
-/// Ordered coarse → fine so several views can take [`Ord::max`] until the
-/// renderer queues a distinct phase item per view.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Ordered coarse → fine so several views can take [`Ord::max`]. The root is
+/// prepared at the finest active selection and submitted to each matching view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Component)]
 pub enum NamedVisualLevel {
 	UltraLow,
 	Low,
@@ -51,14 +44,6 @@ pub enum NamedVisualLevel {
 
 impl NamedVisualLevel {
 	pub const ALL: [Self; 4] = [Self::UltraLow, Self::Low, Self::Medium, Self::High];
-
-	/// Packed forest draws High as Medium (High kits stay on the semantic drain).
-	pub fn clamp_to_packed(self) -> Self {
-		match self {
-			Self::High => Self::Medium,
-			other => other,
-		}
-	}
 
 	pub fn to_scene_level(self) -> crate::LodSceneLevel {
 		match self {
@@ -79,10 +64,9 @@ impl NamedVisualLevel {
 		}
 	}
 
-	/// Finest packed band first, then coarser. High clamps to Medium.
-	pub fn packed_and_coarser(self) -> impl Iterator<Item = Self> {
-		let start = self.clamp_to_packed();
-		Self::ALL.into_iter().rev().filter(move |&level| level <= start)
+	/// Finest requested band first, then coarser authored fallbacks.
+	pub fn and_coarser(self) -> impl Iterator<Item = Self> {
+		Self::ALL.into_iter().rev().filter(move |&level| level <= self)
 	}
 }
 
@@ -139,7 +123,7 @@ impl VisualInstance {
 
 	/// Finest authored [`SceneRef`] at or coarser than `level`.
 	pub fn scene_at_or_coarser(&self, level: NamedVisualLevel) -> Option<&SceneRef> {
-		level.packed_and_coarser().find_map(|candidate| self.scene_for(candidate))
+		level.and_coarser().find_map(|candidate| self.scene_for(candidate))
 	}
 }
 
@@ -290,34 +274,28 @@ pub trait VisualLodScene: Component + Sized {
 
 /// Which representation this view wants. Pure; no ref resolution.
 pub trait VisualLodPolicy<T: VisualLodScene>: Send + Sync + 'static {
-	type Selection: Copy + Send + Sync + 'static;
+	type Selection: Component + Copy + Ord + Send + Sync + 'static;
 
 	fn select(scene: &T, view: &VisualLodView, bounds: &LodHostBounds) -> Self::Selection;
 }
 
-/// How the selected representation is submitted.
+/// Finest selection requested by the active views for one visual root.
+///
+/// The generic visual plugin owns this component. Renderers consume it and
+/// decide how to prepare and submit their representation.
+#[derive(Debug, Clone, Copy, Component)]
+pub struct VisualLodSelection<S: Component + Copy + Ord>(pub S);
+
+/// How the selected representation is prepared and submitted.
 pub trait VisualLodRenderer<T: VisualLodScene>: Send + Sync + 'static {
-	fn queue(
-		scene: &T,
-		selection: <T::Policy as VisualLodPolicy<T>>::Selection,
-		ctx: &mut VisualLodRenderContext,
-	);
+	/// Register renderer-owned preparation, extraction, and render-phase systems.
+	fn register(app: &mut App);
 }
 
-/// Render-world insert target for [`VisualLodRenderer::queue`].
-pub struct VisualLodRenderContext<'w, 's, 'a> {
-	commands: &'a mut Commands<'w, 's>,
-	render_entity: Entity,
-}
-
-impl<'w, 's, 'a> VisualLodRenderContext<'w, 's, 'a> {
-	pub fn render_entity(&self) -> Entity {
-		self.render_entity
-	}
-
-	pub fn insert(&mut self, bundle: impl Bundle) {
-		self.commands.entity(self.render_entity).insert(bundle);
-	}
+/// Generic visual policy ordering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
+pub enum VisualLodSystems {
+	Select,
 }
 
 /// Stateless projected-AABB policy. First concrete [`VisualLodPolicy`]; 668 reuses it.
@@ -348,32 +326,54 @@ where
 	T: VisualLodScene,
 {
 	fn build(&self, app: &mut App) {
-		let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
-			return;
-		};
-		render_app.add_systems(ExtractSchedule, extract_visual_lod::<T>);
+		app.add_systems(Update, select_visual_lod::<T>.in_set(VisualLodSystems::Select));
+		T::Renderer::register(app);
 	}
 }
 
-fn extract_visual_lod<T: VisualLodScene>(
+/// Finest policy selection requested by the active views.
+pub fn select_visual_lod_for_views<T: VisualLodScene>(
+	scene: &T,
+	bounds: &LodHostBounds,
+	views: impl IntoIterator<Item = VisualLodView>,
+) -> Option<<T::Policy as VisualLodPolicy<T>>::Selection> {
+	views.into_iter().map(|view| T::Policy::select(scene, &view, bounds)).max()
+}
+
+fn select_visual_lod<T: VisualLodScene>(
 	mut commands: Commands,
-	views: Extract<Query<(&'static Camera, &'static GlobalTransform), With<LodViewer>>>,
-	instances: Extract<
-		Query<(RenderEntity, &'static T, &'static LodHostBounds), With<VisualLodRoot>>,
+	views: Query<(Ref<Camera>, Ref<GlobalTransform>), With<LodViewer>>,
+	instances: Query<
+		(
+			Entity,
+			Ref<T>,
+			Ref<LodHostBounds>,
+			Option<&VisualLodSelection<<T::Policy as VisualLodPolicy<T>>::Selection>>,
+		),
+		With<VisualLodRoot>,
 	>,
 ) {
+	let mut view_changed = false;
 	let views: Vec<VisualLodView> = views
 		.iter()
-		.filter_map(|(camera, xf)| VisualLodView::from_camera(camera, xf))
+		.filter_map(|(camera, xf)| {
+			view_changed |= camera.is_changed() || xf.is_changed();
+			VisualLodView::from_camera(&camera, &xf)
+		})
 		.collect();
 	if views.is_empty() {
 		return;
 	}
-	for (render_entity, scene, bounds) in &instances {
-		for view in &views {
-			let selection = T::Policy::select(scene, view, bounds);
-			let mut ctx = VisualLodRenderContext { commands: &mut commands, render_entity };
-			T::Renderer::queue(scene, selection, &mut ctx);
+	for (entity, scene, bounds, previous) in &instances {
+		if previous.is_some() && !view_changed && !scene.is_changed() && !bounds.is_changed() {
+			continue;
+		}
+		let Some(selection) = select_visual_lod_for_views(&*scene, &bounds, views.iter().copied())
+		else {
+			continue;
+		};
+		if previous.is_none_or(|previous| previous.0 != selection) {
+			commands.entity(entity).insert(VisualLodSelection(selection));
 		}
 	}
 }
@@ -405,7 +405,7 @@ mod tests {
 	struct NoopRenderer;
 
 	impl VisualLodRenderer<Probe> for NoopRenderer {
-		fn queue(_scene: &Probe, _selection: NamedVisualLevel, _ctx: &mut VisualLodRenderContext) {}
+		fn register(_app: &mut App) {}
 	}
 
 	fn world_box() -> LodHostBounds {
@@ -453,12 +453,32 @@ mod tests {
 	}
 
 	#[test]
-	fn packed_clamp_and_finest_view() {
-		assert_eq!(NamedVisualLevel::High.clamp_to_packed(), NamedVisualLevel::Medium);
+	fn finest_view_wins() {
 		assert_eq!(
 			NamedVisualLevel::UltraLow.max(NamedVisualLevel::Medium),
 			NamedVisualLevel::Medium
 		);
+	}
+
+	#[test]
+	fn aggregate_policy_uses_finest_active_view() {
+		let probe = Probe { thresholds: ProjectedBoundsThresholds::default() };
+		let bounds = world_box();
+		let near = VisualLodView::test_perspective(
+			Vec3::new(0.0, 20.0, 40.0),
+			Vec3::ZERO,
+			Vec2::new(1280.0, 720.0),
+			std::f32::consts::FRAC_PI_3,
+		);
+		let far = VisualLodView::test_perspective(
+			Vec3::new(0.0, 1_500.0, 3_000.0),
+			Vec3::ZERO,
+			Vec2::new(1280.0, 720.0),
+			std::f32::consts::FRAC_PI_3,
+		);
+		let expected = ProjectedBoundsPolicy::select(&probe, &near, &bounds)
+			.max(ProjectedBoundsPolicy::select(&probe, &far, &bounds));
+		assert_eq!(select_visual_lod_for_views(&probe, &bounds, [far, near]), Some(expected));
 	}
 
 	#[test]

@@ -16,6 +16,63 @@ use super::vc_compose::{
 	ULTRA_LOW_CANOPY_BIN_METERS,
 };
 
+/// One stored grove plant that can contribute its authored placed vegetation to
+/// a composite tile visual.
+pub trait WoodyVisualPlant {
+	fn pack_vegetation_visual(
+		&self,
+		packer: &mut chico_vegetation_components::VegetationVisualPacker,
+		include_low: bool,
+	);
+}
+
+/// Implement [`WoodyVisualPlant`] for the common grove plant layouts.
+#[macro_export]
+macro_rules! impl_woody_visual_plant {
+	($Plant:ty, $field:ident) => {
+		impl $crate::grove::WoodyVisualPlant for $Plant {
+			fn pack_vegetation_visual(
+				&self,
+				packer: &mut chico_vegetation_components::VegetationVisualPacker,
+				include_low: bool,
+			) {
+				$crate::grove::pack_woody_plant(
+					packer,
+					std::sync::Arc::clone(&self.$field),
+					self.placement,
+					&self.stick_material,
+					&self.ball_material,
+					&self.frond_material,
+					include_low,
+				);
+			}
+		}
+	};
+	($Plant:ty, $Kind:ident => [$($Variant:ident),+ $(,)?]) => {
+		impl $crate::grove::WoodyVisualPlant for $Plant {
+			fn pack_vegetation_visual(
+				&self,
+				packer: &mut chico_vegetation_components::VegetationVisualPacker,
+				include_low: bool,
+			) {
+				match &self.kind {
+					$(
+						$Kind::$Variant(plant) => $crate::grove::pack_woody_plant(
+							packer,
+							std::sync::Arc::clone(plant),
+							self.placement,
+							&self.stick_material,
+							&self.ball_material,
+							&self.frond_material,
+							include_low,
+						),
+					)+
+				}
+			}
+		}
+	};
+}
+
 /// Tile canopy policy. High / Medium / Low numbers stay on [`WoodyGroveLod`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WoodyCanopyPolicy {
@@ -193,6 +250,25 @@ macro_rules! impl_woody_grove_lod {
 
 			fn structural_lod(&self) -> Option<chico_vegetation_components::StructuralLod> {
 				Some(($lod).structural_lod(self.structural_center, self.footprint_radius))
+			}
+		}
+
+		impl chico_vegetation_components::VegetationVisualPack for $Grove {
+			fn pack_vegetation_visual(
+				&self,
+				packer: &mut chico_vegetation_components::VegetationVisualPacker,
+			) {
+				packer.add_vegetation(self);
+				let include_low = ($lod)
+					.nest_plant_level(lod::gen::LodSceneLevel::Low)
+					.is_some();
+				for plant in self.plants.iter() {
+					$crate::grove::WoodyVisualPlant::pack_vegetation_visual(
+						plant,
+						packer,
+						include_low,
+					);
+				}
 			}
 		}
 

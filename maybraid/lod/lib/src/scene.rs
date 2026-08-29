@@ -65,8 +65,9 @@ pub use refresh::{
 };
 pub use region_index::{LodSceneHostIndex, LodSceneRegionIndex};
 pub use visual::{
-	projected_screen_error, under_visual_lod_root, Banded, HasVisualLodThresholds,
-	NamedVisualLevel, ProjectedBoundsPolicy, ProjectedBoundsThresholds, VisualInstance,
-	VisualInstanceList, VisualLodBand, VisualLodPolicy, VisualLodRenderContext, VisualLodRenderer,
-	VisualLodRoot, VisualLodScene, VisualLodView, VisualOwnsAppearance, VisualSceneLodPlugin,
+	projected_screen_error, select_visual_lod_for_views, under_visual_lod_root, Banded,
+	HasVisualLodThresholds, NamedVisualLevel, ProjectedBoundsPolicy, ProjectedBoundsThresholds,
+	VisualInstance, VisualInstanceList, VisualLodPolicy, VisualLodRenderer, VisualLodRoot,
+	VisualLodScene, VisualLodSelection, VisualLodSystems, VisualLodView, VisualOwnsAppearance,
+	VisualSceneLodPlugin,
 };

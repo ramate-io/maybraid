@@ -193,6 +193,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	keep: Res<LodPresentKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut last_keep: Local<Option<Aabb3d>>,
+	mut pending_ids: Local<HashSet<Id>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -202,6 +203,8 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	F: QueryFilter + 'static,
 {
 	let mut presenter = presenter.into_inner();
+	pending_ids.clear();
+	pending_ids.extend(queue.pending.iter().copied());
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
 	if keep_region_changed(*last_keep, keep.region) {
 		*last_keep = keep.region;
@@ -228,14 +231,14 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				) {
 				continue;
 			}
-			if !queue.pending.contains(&tracked.0) {
+			if pending_ids.insert(tracked.0) {
 				queue.pending.push_back(tracked.0);
 			}
 		}
 	}
 
 	for message in generated.read() {
-		if !queue.pending.contains(&message.id) {
+		if pending_ids.insert(message.id) {
 			queue.pending.push_back(message.id);
 		}
 	}
@@ -267,6 +270,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		let Some(id) = queue.pending.pop_front() else {
 			break;
 		};
+		pending_ids.remove(&id);
 		let Some(version) = index.version(id) else {
 			continue;
 		};
@@ -286,7 +290,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		// keep rescan.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs && !queue.pending.contains(&id) {
+		if still_needs && pending_ids.insert(id) {
 			queue.pending.push_front(id);
 		}
 	}

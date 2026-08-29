@@ -173,6 +173,7 @@ fn grow_plant(
 	RiverineGreenPlant { placement, bush, stick_material, ball_material, frond_material }
 }
 
+crate::impl_woody_visual_plant!(RiverineGreenPlant, bush);
 crate::impl_woody_grove_lod!(RiverineGreen, WOODY_LOD);
 
 #[cfg(test)]

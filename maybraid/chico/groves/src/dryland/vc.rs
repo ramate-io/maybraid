@@ -195,6 +195,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(DrylandPlant, DrylandKind => [Liams, Vase]);
 crate::impl_woody_grove_lod!(Dryland, WOODY_LOD);
 
 #[cfg(test)]

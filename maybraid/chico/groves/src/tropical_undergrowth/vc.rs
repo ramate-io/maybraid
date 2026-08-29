@@ -466,6 +466,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	TropicalUndergrowthPlant,
+	TropicalUndergrowthKind => [Tuft, Palm, Rory, Vase, Storybook, Penmarch, Kamakura]
+);
 crate::impl_woody_grove_lod!(TropicalUndergrowth, WOODY_LOD, trunks);
 
 #[cfg(test)]

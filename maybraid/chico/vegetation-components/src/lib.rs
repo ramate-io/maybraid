@@ -50,6 +50,7 @@ pub use structural_lod::{
 };
 pub use visual_pack::{
 	pack_vegetation_visual, pack_vegetation_visual_aliased, PackedVegetationBands,
+	VegetationVisualPack, VegetationVisualPacker,
 };
 
 use bevy::ecs::template::template;
@@ -277,6 +278,17 @@ impl<T: VegetationComponents + Send + Sync + 'static> LodScene for FlattenedComp
 
 	fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
 		flattened_vegetation_scene_chunks(&self.0, lod_ref, level)
+	}
+
+	fn semantic_scene_chunks_with_level(
+		&self,
+		_lod_ref: &LodRef,
+		_level: LodSceneLevel,
+	) -> SceneChunk {
+		// The typed host itself is the semantic representation. Stick collider
+		// systems read its VegetationComponents IR directly; drawable kits are
+		// owned by the ancestor VisualLodScene.
+		SceneChunk::primitive(scene_children(Vec::new()))
 	}
 
 	fn scene_bounds(&self) -> Aabb3d {
@@ -685,6 +697,27 @@ mod tests {
 			panic!("expected one nested host chunk per ball");
 		};
 		assert_eq!(nested.len(), 2);
+	}
+
+	#[test]
+	fn visual_owned_flattened_host_keeps_semantic_shell_without_kits() {
+		let camera = Transform::from_translation(Vec3::new(0.0, 2.0, 8.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &camera,
+			current_transform: &camera,
+			bounds: &bounds,
+		};
+		let host = FlattenedComponentsOnly(TwoBalls);
+		assert!(matches!(
+			host.scene_chunks_with_level(&lod_ref, LodSceneLevel::High),
+			SceneChunk::Lazy { .. }
+		));
+		assert!(matches!(
+			host.semantic_scene_chunks_with_level(&lod_ref, LodSceneLevel::High),
+			SceneChunk::Primitive { .. }
+		));
 	}
 
 	#[test]

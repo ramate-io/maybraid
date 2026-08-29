@@ -283,6 +283,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	WanderingAcaciaPlant,
+	WanderingAcaciaKind => [Bush, Sope, Vase, Penmarch, Kamakura]
+);
 crate::impl_woody_grove_lod!(WanderingAcacia, WOODY_LOD);
 
 #[cfg(test)]

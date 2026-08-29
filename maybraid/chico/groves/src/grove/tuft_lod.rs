@@ -35,6 +35,15 @@ macro_rules! impl_tuft_grove_lod {
 #[macro_export]
 macro_rules! impl_tuft_grove_lod_emit {
 	($Grove:ty) => {
+		impl chico_vegetation_components::VegetationVisualPack for $Grove {
+			fn pack_vegetation_visual(
+				&self,
+				packer: &mut chico_vegetation_components::VegetationVisualPacker,
+			) {
+				packer.add_vegetation(self);
+			}
+		}
+
 		impl lod::gen::LodScene for $Grove {
 			fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneLevel {
 				self.structural_lod()
@@ -72,6 +81,14 @@ macro_rules! impl_tuft_grove_lod_emit {
 				level: lod::gen::LodSceneLevel,
 			) -> lod::SceneChunk {
 				self.tuft_scene_chunks(lod_ref, level)
+			}
+
+			fn semantic_scene_chunks_with_level(
+				&self,
+				_lod_ref: &lod::lod_ref::LodRef,
+				_level: lod::gen::LodSceneLevel,
+			) -> lod::SceneChunk {
+				lod::SceneChunk::primitive(chico_vegetation_components::scene_children(Vec::new()))
 			}
 
 			fn scene_bounds(&self) -> bevy::math::bounding::Aabb3d {

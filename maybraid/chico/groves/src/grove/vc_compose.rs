@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 
 use bevy::prelude::{Color, Vec3};
-use bevy::scene::prelude::Scene;
+use bevy::scene::prelude::{bsn, Scene};
 use chico_sbs_trees::RorysHeadTrained;
 use chico_vegetation_components::{
 	chico_frond_material_ref, chico_leaf_material_ref, chico_stick_material_ref,
 	flattened_components_only_host, FoliageGeometry, FoliageNode, Layers, PlacedVegetation,
 	Placement, StickGeometry, StickNode, StructuralLod, VegetationComponents,
+	VegetationVisualPacker,
 };
 use lod::gen::{LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -498,15 +499,20 @@ pub fn nest_flattened_plant_host<T>(
 where
 	T: VegetationComponents + Clone + Send + Sync + 'static,
 {
-	flattened_components_only_host(
-		PlacedVegetation::new(
-			plant,
-			placement,
-			stick_material.clone(),
-			ball_material.clone(),
-			frond_material.clone(),
+	(
+		flattened_components_only_host(
+			PlacedVegetation::new(
+				plant,
+				placement,
+				stick_material.clone(),
+				ball_material.clone(),
+				frond_material.clone(),
+			),
+			lod_ref,
 		),
-		lod_ref,
+		bsn! {
+			lod::VisualOwnsAppearance
+		},
 	)
 }
 
@@ -533,6 +539,33 @@ where
 			lod_ref,
 		),
 	)
+}
+
+/// Add one nested woody plant to the tile's authored visual bands using the
+/// same placement and independent material identities as its flattened host.
+pub fn pack_woody_plant<T>(
+	packer: &mut VegetationVisualPacker,
+	plant: T,
+	placement: Placement,
+	stick_material: &MaterialRef,
+	ball_material: &MaterialRef,
+	frond_material: &MaterialRef,
+	include_low: bool,
+) where
+	T: VegetationComponents + Send + Sync + 'static,
+{
+	let placed = PlacedVegetation::new(
+		plant,
+		placement,
+		stick_material.clone(),
+		ball_material.clone(),
+		frond_material.clone(),
+	);
+	packer.add_level(&placed, lod::NamedVisualLevel::High, LodSceneLevel::High);
+	packer.add_level(&placed, lod::NamedVisualLevel::Medium, LodSceneLevel::Medium);
+	if include_low {
+		packer.add_level(&placed, lod::NamedVisualLevel::Low, LodSceneLevel::Low);
+	}
 }
 
 pub fn grove_lod_level(band: StructuralLod, lod_ref: &LodRef) -> LodSceneLevel {

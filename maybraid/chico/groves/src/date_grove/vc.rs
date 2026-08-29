@@ -179,6 +179,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(DateGrovePlant, tree);
 crate::impl_woody_grove_lod!(DateGrove, WOODY_LOD);
 
 #[cfg(test)]

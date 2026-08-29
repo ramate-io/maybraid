@@ -182,6 +182,7 @@ fn grow_plant(
 	VineyardPlant { placement, tree, stick_material, ball_material, frond_material }
 }
 
+crate::impl_woody_visual_plant!(VineyardPlant, tree);
 crate::impl_woody_grove_lod!(Vineyard, WOODY_LOD, trunks);
 
 #[cfg(test)]

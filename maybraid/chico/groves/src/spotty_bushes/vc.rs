@@ -171,6 +171,7 @@ fn grow_plant(
 	SpottyBushesPlant { placement, bush, stick_material, ball_material, frond_material }
 }
 
+crate::impl_woody_visual_plant!(SpottyBushesPlant, bush);
 crate::impl_woody_grove_lod!(SpottyBushes, WOODY_LOD);
 
 #[cfg(test)]

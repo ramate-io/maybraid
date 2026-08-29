@@ -191,6 +191,7 @@ fn grow_plant(
 	OrchardPlant { placement, tree, stick_material, ball_material, frond_material }
 }
 
+crate::impl_woody_visual_plant!(OrchardPlant, tree);
 crate::impl_woody_grove_lod!(Orchard, WOODY_LOD);
 
 #[cfg(test)]

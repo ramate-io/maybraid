@@ -268,6 +268,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	AridConiferSaplingPlant,
+	AridConiferSaplingKind => [Friends, Northern, Liams]
+);
 crate::impl_woody_grove_lod!(AridConiferSapling, WOODY_LOD);
 
 #[cfg(test)]

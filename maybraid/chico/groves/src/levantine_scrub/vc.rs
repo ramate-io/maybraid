@@ -333,6 +333,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	LevantineScrubPlant,
+	LevantineScrubKind => [Rory, Vase, Bush, Torch, Oak, Hedge]
+);
 crate::impl_woody_grove_lod!(LevantineScrub, WOODY_LOD, trunks);
 
 #[cfg(test)]

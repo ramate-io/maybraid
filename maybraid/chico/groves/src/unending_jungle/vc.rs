@@ -390,6 +390,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	UnendingJunglePlant,
+	UnendingJungleKind => [Honu, Sope, Storybook, JungleStorybook, Torch, Rory, Waialea]
+);
 crate::impl_woody_grove_lod!(UnendingJungle, WOODY_LOD, trunks, low_nodes);
 
 #[cfg(test)]

@@ -207,6 +207,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(RollingOaksPlant, RollingOaksKind => [Oak, Storybook]);
 crate::impl_woody_grove_lod!(RollingOaks, WOODY_LOD);
 
 #[cfg(test)]

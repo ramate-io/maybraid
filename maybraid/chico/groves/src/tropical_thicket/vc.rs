@@ -306,6 +306,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	TropicalThicketPlant,
+	TropicalThicketKind => [Palm, Banyan, Bush]
+);
 crate::impl_woody_grove_lod!(TropicalThicket, WOODY_LOD, low_nodes);
 
 #[cfg(test)]

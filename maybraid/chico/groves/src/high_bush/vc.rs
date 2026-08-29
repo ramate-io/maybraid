@@ -173,6 +173,7 @@ fn grow_plant(
 	HighBushPlant { placement, bush, stick_material, ball_material, frond_material }
 }
 
+crate::impl_woody_visual_plant!(HighBushPlant, bush);
 crate::impl_woody_grove_lod!(HighBush, WOODY_LOD);
 
 #[cfg(test)]

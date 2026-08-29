@@ -1,0 +1,100 @@
+name,src_file,src_line,total_ns,counts
+render thread,/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_render-0.19.0/src/pipelined_rendering.rs,151,29020495406,1
+plugin build{plugin="bevy_audio::AudioPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,78958458,1
+plugin build{plugin="bevy_winit::WinitPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,61438749,1
+plugin build{plugin="bevy_core_pipeline::mip_generation::MipGenerationPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,25349084,1
+schedule{name=Render},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,25245670326,1830
+schedule{name=Update},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,24468606801,1830
+plugin build{plugin="bevy_render::RenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,11848501,1
+system{name="bevy_render::view::window::prepare_windows"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,21026998871,1830
+plugin build{plugin="bevy_core_pipeline::tonemapping::TonemappingPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,9464084,1
+sub app{name=RenderExtractApp},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/sub_app.rs,576,16620880922,1830
+plugin finish{plugin="bevy_render::RenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,278,6333167,1
+queue_submit{count=9},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_core_pipeline-0.19.0/src/schedule.rs,236,11763792,2
+system{name="chico_vegetation_on_terrain_playground::generate_cells"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,10691728669,1830
+system{name="lod::presentation::runtime::drain_lod_present<chico_forests::grove::ChicoGrove, chico_forests::index::ForestIndex, chico_vegetation_on_terrain_playground::forest::DurhamForestPresenter<'_, '_>, chico_forests::generation::ForestLodChan, bevy_ecs::query::filter::With<lod::scene::refresh::viewer::LodViewer>>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,8367560327,1830
+RenderContextState::apply{system=bevy_core_pipeline::core_3d::main_opaque_pass_3d_node::main_opaque_pass_3d},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_render-0.19.0/src/renderer/render_context.rs,110,5053067613,1829
+schedule{name=FixedPostUpdate},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,6575730473,2809
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/pbr_lighting.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,4454500,2
+schedule{name=Core3d},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,3648139561,1829
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_render/color_operations.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,3937167,2
+plugin build{plugin="bevy_text::TextPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1896375,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_render/maths.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,3765376,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_render/bindless.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,3652000,2
+schedule{name=RenderStartup},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,1821001,1
+opaque_main_pass_3d,/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_core_pipeline-0.19.0/src/core_3d/main_opaque_pass_3d_node.rs,85,3203963138,1825
+plugin build{plugin="chico_sbs_trees_playground::vegetation_lod::VegetationLodRefreshPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1698204,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/pbr_fragment.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,3220626,2
+plugin build{plugin="bevy_pbr::material::MaterialsPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1565583,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/pbr_functions.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,2953083,2
+schedule{name=PostUpdate},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,2299513263,1830
+plugin build{plugin="chico_vegetation_on_terrain_playground::VegetationOnTerrainPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1218043,1
+plugin build{plugin="bevy_pbr::PbrPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1085168,1
+plugin build{plugin="bevy_ui::UiPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,1016250,1
+plugin build{plugin="bevy_pbr::prepass::PrepassPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,898917,1
+plugin finish,/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,270,856533,1
+plugin build{plugin="crozon_characters::hosts::CharacterHostsPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,829583,1
+plugin build{plugin="bevy_ui_render::UiRenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,821167,1
+system{name="lod_visual_pbr::instance_pbr::sync_instance_pbr_batches"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,1472194996,1830
+plugin cleanup,/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,290,789032,1
+plugin build{plugin="bevy_diagnostic::frame_count::FrameCountPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,788000,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/shadow_sampling.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1571999,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_anti_alias/smaa/smaa.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1478708,2
+system{name="render_item::mesh::fetch_meshes<render_item::mesh::handle::MeshHandle<render_item::sdf::cpu_shot::CpuShotBuilder<durham_terrain_models::terrain::sdf::ComposedTerrain>>, durham_terrain_shaders::durham_terrain_shader::DurhamTerrainShader>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,1227554463,1830
+plugin build{plugin="bevy_gltf::GltfPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,670084,1
+system{name="bevy_render::view::window::create_surfaces"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,651875,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/volumetric_fog/volumetric_fog.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1255041,2
+system{name="lod_visual_pbr::instance_pbr::queue_instance_pbr"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,1133043429,1830
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/mesh_view_types.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1218041,2
+plugin build{plugin="bevy_app::propagate::HierarchyPropagatePlugin<bevy_ui::ui_node::ComputedUiTargetCamera>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,590958,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/clustered_forward.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1165000,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/light_probe/light_probe.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1159666,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/atmosphere/functions.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1131083,2
+plugin build{plugin="bevy_pbr::render::mesh::MeshRenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,552040,1
+plugin build{plugin="bevy_sprite_render::mesh2d::mesh::Mesh2dRenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,539250,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/light_probe/environment_map.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1060792,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/shadows.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1030583,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/cluster/cluster_raster.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,1027334,2
+queue_submit{count=13},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_core_pipeline-0.19.0/src/schedule.rs,236,901207792,1825
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/ssr/raymarch.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,984917,2
+plugin build{plugin="avian3d::dynamics::rigid_body::mass_properties::MassPropertyPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,463542,1
+queue_submit{count=8},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_core_pipeline-0.19.0/src/schedule.rs,236,903584,2
+plugin build{plugin="bevy_pbr::material::MaterialPlugin<bevy_pbr::pbr_material::StandardMaterial>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,435250,1
+calculate conflicting systems,/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/executor/multi_threaded.rs,183,7796041,18
+plugin build{plugin="bevy_pbr::material::MaterialPlugin<chico_vegetation_shaders::chico_stick_material::ChicoStickMaterial>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,428084,1
+system{name="lod::gen::runtime::generate::drain_lod_generate<chico_forests::grove::ChicoGrove, chico_forests::index::ForestIndex, chico_forests::generation::ForestLodChan, bevy_ecs::query::filter::With<lod::scene::refresh::viewer::LodViewer>>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,740654046,1830
+schedule{name=Startup},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,396748,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/pbr_bindings.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,785125,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/atmosphere/bruneton_functions.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,780208,2
+system{name="bevy_render::init_gpu_resource<bevy_pbr::ssao::SsaoPipelines>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,389125,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/ssr/ssr.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,760958,2
+plugin build{plugin="bevy_gilrs::GilrsPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,378208,1
+plugin build{plugin="bevy_light::LightPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,376708,1
+plugin build{plugin="avian3d::schedule::PhysicsSchedulePlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,360917,1
+schedule{name=RenderGraph},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,658064441,1830
+plugin build{plugin="bevy_app::task_pool_plugin::TaskPoolPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,359458,1
+system{name="bevy_pbr::render::skin::skin_uniforms_from_world"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,354792,1
+schedule{name=ExtractSchedule},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,641453916,1830
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/utils.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,683250,2
+plugin build{plugin="bevy_render::render_phase::BinnedRenderPhasePlugin<bevy_core_pipeline::deferred::AlphaMask3dDeferred, bevy_pbr::render::mesh::MeshPipeline>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,327750,1
+plugin build{plugin="bevy_core_pipeline::core_2d::Core2dPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,316708,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_ui_render/ui.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,631917,2
+plugin build{plugin="bevy_gizmos::GizmoPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,305792,1
+plugin build{plugin="bevy_gizmos_render::GizmoRenderPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,305415,1
+system{name="bevy_render::render_resource::sparse_buffer_vec::update_sparse_buffers"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/system/function_system.rs,52,554099568,1830
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/view_transformations.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,597291,2
+plugin build{plugin="bevy_anti_alias::AntiAliasPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,298625,1
+plugin build{plugin="durham_terrain_models::terrain::plugin::TerrainPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,297416,1
+plugin build{plugin="bevy_animation::AnimationPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,292583,1
+schedule{name=PostStartup},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_ecs-0.19.0/src/schedule/schedule.rs,562,291583,1
+plugin build{plugin="bevy_ui_widgets::button::ButtonPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,287333,1
+plugin build{plugin="bevy_anti_alias::fxaa::FxaaPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,287042,1
+plugin build{plugin="bevy_input::InputPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,283375,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_core_pipeline/tonemapping/tonemapping_shared.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,566208,2
+plugin build{plugin="bevy_asset::AssetPlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,282458,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/decal/clustered.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,564459,2
+plugin build{plugin="render_item::mesh::handle::EnforceCachingPlugin<render_item::sdf::cpu_shot::CpuShotBuilder<durham_terrain_models::terrain::sdf::ComposedTerrain>, durham_terrain_shaders::durham_terrain_shader::DurhamTerrainShader>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,276875,1
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_core_pipeline/mip_generation/experimental/downsample_depth.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,552125,2
+asset loading{loader="bevy_shader::shader::ShaderLoader" asset="embedded://bevy_pbr/render/mesh_view_bindings.wgsl"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_asset-0.19.0/src/server/mod.rs,1667,545666,2
+plugin build{plugin="bevy_pbr::material::MaterialPlugin<durham_terrain_shaders::durham_terrain_shader::DurhamTerrainShader>"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,566,269875,1
+plugin finish{plugin="bevy_render::texture::TexturePlugin"},/Users/l-monninger/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_app-0.19.0/src/app.rs,278,266917,1

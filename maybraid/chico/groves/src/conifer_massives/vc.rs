@@ -304,6 +304,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	ConiferMassivesPlant,
+	ConiferMassivesKind => [Northern, Friends, Liams, Temperate]
+);
 crate::impl_woody_grove_lod!(ConiferMassives, WOODY_LOD);
 
 #[cfg(test)]

@@ -268,6 +268,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	JerrysChaparralPlant,
+	JerrysChaparralKind => [Rory, Bush, Friends]
+);
 crate::impl_woody_grove_lod!(JerrysChaparral, WOODY_LOD, trunks);
 
 #[cfg(test)]

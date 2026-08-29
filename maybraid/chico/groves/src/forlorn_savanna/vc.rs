@@ -248,6 +248,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	ForlornSavannaPlant,
+	ForlornSavannaKind => [Rory, Bush, Storybook]
+);
 crate::impl_woody_grove_lod!(ForlornSavanna, WOODY_LOD, trunks);
 
 #[cfg(test)]

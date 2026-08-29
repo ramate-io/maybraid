@@ -229,6 +229,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	RiparianGeneralPlant,
+	RiparianGeneralKind => [Oak, Storybook, Bush]
+);
 crate::impl_woody_grove_lod!(RiparianGeneral, WOODY_LOD);
 
 #[cfg(test)]

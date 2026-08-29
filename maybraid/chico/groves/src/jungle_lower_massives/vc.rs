@@ -295,6 +295,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	JungleLowerMassivesPlant,
+	JungleLowerMassivesKind => [Honu, Sope, JungleStorybook, Waialea, Oak]
+);
 crate::impl_woody_grove_lod!(JungleLowerMassives, WOODY_LOD);
 
 #[cfg(test)]

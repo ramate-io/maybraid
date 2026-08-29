@@ -189,6 +189,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(ChristmasTaigaPlant, tree);
 crate::impl_woody_grove_lod!(ChristmasTaiga, WOODY_LOD);
 
 #[cfg(test)]

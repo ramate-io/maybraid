@@ -328,6 +328,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	StorytellersPlant,
+	StorytellersKind => [Oak, Storybook, Penmarch, Kamakura]
+);
 crate::impl_woody_grove_lod!(Storytellers, WOODY_LOD);
 
 #[cfg(test)]

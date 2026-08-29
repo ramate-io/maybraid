@@ -38,6 +38,7 @@ struct BeginCandidate {
 	level: LodSceneLevel,
 	cold: bool,
 	parent_desired: LodSceneLevel,
+	visual_owned: bool,
 	/// Viewer-to-host XZ distance squared (bounds center, then translation).
 	dist_xz: f32,
 }
@@ -111,9 +112,8 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 		if i < start {
 			continue;
 		}
-		if owns_visual.contains(host)
-			&& !host_levels.get(host).is_ok_and(|level| *level == LodSceneLevel::High)
-		{
+		let visual_owned = owns_visual.contains(host);
+		if visual_owned && !host_levels.get(host).is_ok_and(|level| *level == LodSceneLevel::High) {
 			continue;
 		}
 		if let Some(candidate) = classify_begin_candidate(
@@ -128,6 +128,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 			&children_q,
 			&level_roots_bags,
 			&visibilities,
+			visual_owned,
 		) {
 			push_begin_candidate(
 				with_host_xz_distance(candidate, viewer_xz, host, &host_pose),
@@ -152,7 +153,8 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 			if i >= start {
 				break;
 			}
-			if owns_visual.contains(host)
+			let visual_owned = owns_visual.contains(host);
+			if visual_owned
 				&& !host_levels.get(host).is_ok_and(|level| *level == LodSceneLevel::High)
 			{
 				continue;
@@ -169,6 +171,7 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 				&children_q,
 				&level_roots_bags,
 				&visibilities,
+				visual_owned,
 			) {
 				push_begin_candidate(
 					with_host_xz_distance(candidate, viewer_xz, host, &host_pose),
@@ -337,6 +340,7 @@ fn classify_begin_candidate(
 	children_q: &Query<&Children>,
 	level_roots_bags: &Query<(), With<LodLevelRoots>>,
 	visibilities: &Query<&Visibility>,
+	visual_owned: bool,
 ) -> Option<BeginCandidate> {
 	let Ok(desired) = host_levels.get(host) else {
 		return None;
@@ -410,6 +414,7 @@ fn classify_begin_candidate(
 		level: request.level,
 		cold,
 		parent_desired,
+		visual_owned,
 		dist_xz: f32::MAX,
 	})
 }
@@ -452,7 +457,11 @@ fn admit_candidates<T: Component + SemanticLodScene>(
 			let Ok(scene) = scenes.get(candidate.host) else {
 				continue;
 			};
-			scene.scene_chunks_with_level(lod_ref, candidate.level)
+			if candidate.visual_owned {
+				scene.semantic_scene_chunks_with_level(lod_ref, candidate.level)
+			} else {
+				scene.scene_chunks_with_level(lod_ref, candidate.level)
+			}
 		};
 		let expected = chunk.total_primitives();
 		let mut queue = chunk.into_fulfill_queue();

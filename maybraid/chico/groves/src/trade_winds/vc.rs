@@ -323,6 +323,10 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(
+	TradeWindsPlant,
+	TradeWindsKind => [Storybook, Honu, Sope, Waialea]
+);
 crate::impl_woody_grove_lod!(TradeWinds, WOODY_LOD, low_nodes);
 
 #[cfg(test)]

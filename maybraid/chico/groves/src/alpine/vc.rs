@@ -238,6 +238,7 @@ fn grow_plant(
 	}
 }
 
+crate::impl_woody_visual_plant!(AlpinePlant, AlpineKind => [Friends, Liams]);
 crate::impl_woody_grove_lod!(Alpine, WOODY_LOD);
 
 #[cfg(test)]
