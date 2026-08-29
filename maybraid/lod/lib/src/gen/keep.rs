@@ -44,6 +44,22 @@ pub fn id_xz_distance2(id: Id, origin: Vec3) -> f32 {
 	dx * dx + dz * dz
 }
 
+/// True when the keep AABB appeared, vanished, or moved.
+pub fn keep_region_changed(previous: Option<Aabb3d>, current: Option<Aabb3d>) -> bool {
+	match (previous, current) {
+		(Some(a), Some(b)) => !keep_regions_match(a, b),
+		(None, None) => false,
+		_ => true,
+	}
+}
+
+fn keep_regions_match(a: Aabb3d, b: Aabb3d) -> bool {
+	(a.min.x - b.min.x).abs() < 1e-3
+		&& (a.max.x - b.max.x).abs() < 1e-3
+		&& (a.min.z - b.min.z).abs() < 1e-3
+		&& (a.max.z - b.max.z).abs() < 1e-3
+}
+
 /// Drop pending origin ids whose cell sits outside keep + `slack`.
 ///
 /// No keep AABB → no expiry (nothing is known to be live).
@@ -93,5 +109,12 @@ mod tests {
 	fn bytes_id_without_origin_stays() {
 		let id = Id::Bytes(crate::gen::Bytes([0; 32]));
 		assert!(id_lives_in_keep(id, cell(0.0), QUEUE_KEEP_SLACK_XZ));
+	}
+
+	#[test]
+	fn keep_region_change_ignores_identical_aabb() {
+		assert!(!keep_region_changed(Some(cell(0.0)), Some(cell(0.0))));
+		assert!(keep_region_changed(None, Some(cell(0.0))));
+		assert!(keep_region_changed(Some(cell(0.0)), Some(cell(100.0))));
 	}
 }

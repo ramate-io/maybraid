@@ -10,8 +10,8 @@ use bevy::prelude::*;
 
 use super::RegionPresenter;
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_xz_distance2, Id, SpatialIndex,
-	QUEUE_KEEP_SLACK_XZ,
+	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
+	keep_region_changed, Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -189,8 +189,11 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	mut queue: ResMut<LodPresentQueue<T>>,
 	budget: Res<LodPresentBudget>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
+	mut generated: MessageReader<LodGenerated<T>>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	mut last_keep: Local<Option<Aabb3d>>,
+	mut pending_ids: Local<HashSet<Id>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -200,12 +203,20 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	F: QueryFilter + 'static,
 {
 	let mut presenter = presenter.into_inner();
+	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
+	pending_ids.clear();
+	pending_ids.extend(queue.pending.iter().copied());
+
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
-	if let Some(keep_region) = keep.region {
-		if !scan.iter().any(|region| regions_match(*region, keep_region)) {
-			scan.push(keep_region);
+	if keep_region_changed(*last_keep, keep.region) {
+		*last_keep = keep.region;
+		if let Some(keep_region) = keep.region {
+			if !scan.iter().any(|region| regions_match(*region, keep_region)) {
+				scan.push(keep_region);
+			}
 		}
 	}
+	let mut reorder_pending = !scan.is_empty();
 	for region in scan {
 		for tracked in index.tracked_ids_for(region) {
 			let Some(version) = index.version(tracked.0) else {
@@ -222,13 +233,25 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				) {
 				continue;
 			}
-			if !queue.pending.contains(&tracked.0) {
+			if pending_ids.insert(tracked.0) {
 				queue.pending.push_back(tracked.0);
+				reorder_pending = true;
 			}
 		}
 	}
 
-	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
+	for message in generated.read() {
+		if keep
+			.region
+			.is_some_and(|region| !id_lives_in_keep(message.id, region, keep.slack_xz))
+		{
+			continue;
+		}
+		if pending_ids.insert(message.id) {
+			queue.pending.push_back(message.id);
+			reorder_pending = true;
+		}
+	}
 
 	if queue.pending.is_empty() {
 		return;
@@ -241,11 +264,13 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	};
 
 	let origin = lod_ref.current_transform.translation;
-	queue.pending.make_contiguous().sort_by(|a, b| {
-		id_xz_distance2(*a, origin)
-			.partial_cmp(&id_xz_distance2(*b, origin))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
+	if reorder_pending {
+		queue.pending.make_contiguous().sort_by(|a, b| {
+			id_xz_distance2(*a, origin)
+				.partial_cmp(&id_xz_distance2(*b, origin))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
+	}
 
 	let n = budget.ids_per_frame.max(1) as usize;
 	let mut handled = 0;
@@ -253,6 +278,7 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		let Some(id) = queue.pending.pop_front() else {
 			break;
 		};
+		pending_ids.remove(&id);
 		let Some(version) = index.version(id) else {
 			continue;
 		};
@@ -267,6 +293,14 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		};
 		presenter.handle(id, version, value, lod_ref);
 		handled += 1;
+		// Grow-then-spawn presenters may consume a slot without stamping
+		// `presented_version`. Re-queue so the next slot can finish without a
+		// keep rescan.
+		let still_needs =
+			presenter.presented_version(id).is_none_or(|presented| presented < version);
+		if still_needs && pending_ids.insert(id) {
+			queue.pending.push_front(id);
+		}
 	}
 }
 
@@ -411,6 +445,7 @@ where
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()
 			.add_message::<LodPresentRegion<M>>()
+			.add_message::<LodGenerated<T>>()
 			.add_systems(
 				Update,
 				drain_lod_present::<T, S, Pr, M, F>.in_set(LodPresentSystems::Drain),
