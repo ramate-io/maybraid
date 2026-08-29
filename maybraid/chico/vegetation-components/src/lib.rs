@@ -48,7 +48,9 @@ pub use sticks::{
 pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
-pub use visual_pack::{pack_vegetation_visual, VisualPackPart};
+pub use visual_pack::{
+	pack_vegetation_visual, pack_vegetation_visual_aliased, PackedVegetationBands, VisualPackPart,
+};
 
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;

@@ -35,7 +35,10 @@ pub struct VisualOwnsAppearance;
 pub struct VisualLodBand(pub NamedVisualLevel);
 
 /// Named visual band. Policy selection for projected-bounds hosts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// Ordered coarse → fine so several views can take [`Ord::max`] until the
+/// renderer queues a distinct phase item per view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NamedVisualLevel {
 	UltraLow,
 	Low,
@@ -45,6 +48,14 @@ pub enum NamedVisualLevel {
 
 impl NamedVisualLevel {
 	pub const ALL: [Self; 4] = [Self::UltraLow, Self::Low, Self::Medium, Self::High];
+
+	/// Packed forest draws High as Medium (High kits stay on the semantic drain).
+	pub fn clamp_to_packed(self) -> Self {
+		match self {
+			Self::High => Self::Medium,
+			other => other,
+		}
+	}
 
 	pub fn to_scene_level(self) -> crate::LodSceneLevel {
 		match self {
@@ -259,14 +270,19 @@ fn extract_visual_lod<T: VisualLodScene>(
 		Query<(RenderEntity, &'static T, &'static LodHostBounds), With<VisualLodRoot>>,
 	>,
 ) {
-	let Some(view) = views.iter().find_map(|(camera, xf)| VisualLodView::from_camera(camera, xf))
-	else {
+	let views: Vec<VisualLodView> = views
+		.iter()
+		.filter_map(|(camera, xf)| VisualLodView::from_camera(camera, xf))
+		.collect();
+	if views.is_empty() {
 		return;
-	};
+	}
 	for (render_entity, scene, bounds) in &instances {
-		let selection = T::Policy::select(scene, &view, bounds);
-		let mut ctx = VisualLodRenderContext { commands: &mut commands, render_entity };
-		T::Renderer::queue(scene, selection, &mut ctx);
+		for view in &views {
+			let selection = T::Policy::select(scene, view, bounds);
+			let mut ctx = VisualLodRenderContext { commands: &mut commands, render_entity };
+			T::Renderer::queue(scene, selection, &mut ctx);
+		}
 	}
 }
 
@@ -342,5 +358,14 @@ mod tests {
 		assert_eq!(NamedVisualLevel::Medium.to_scene_level(), crate::LodSceneLevel::Medium);
 		assert_eq!(NamedVisualLevel::Low.to_scene_level(), crate::LodSceneLevel::Low);
 		assert_eq!(NamedVisualLevel::UltraLow.to_scene_level(), crate::LodSceneLevel::UltraLow);
+	}
+
+	#[test]
+	fn packed_clamp_and_finest_view() {
+		assert_eq!(NamedVisualLevel::High.clamp_to_packed(), NamedVisualLevel::Medium);
+		assert_eq!(
+			NamedVisualLevel::UltraLow.max(NamedVisualLevel::Medium),
+			NamedVisualLevel::Medium
+		);
 	}
 }

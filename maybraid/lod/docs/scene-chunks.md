@@ -12,9 +12,11 @@ Visual LOD is persistent data whose representation is selected per view by
 [`VisualLodPolicy`](../lib/src/scene/visual.rs) and submitted by
 [`VisualLodRenderer`](../lib/src/scene/visual.rs)
 ([#667](https://github.com/ramate-io/maybraid/issues/667)).
-Forest tiles intern UltraLow / Low / Medium as [`MultiSceneMerge`](../../scene-ref)
-keys on a [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling. Policy picks a
-band per view without a `SceneChunk` spawn. High kits stay on the exclusive
+Forest tiles store a [`GroveVisualAsset`](../visual-pbr/src/lib.rs) (mesh +
+material per band) on a [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling.
+[`MultiSceneMerge`](../../scene-ref) is only the cook path that produces
+`Handle<Mesh>`. Policy picks a band per view without a `SceneChunk` spawn; only
+the selected band is cooked and instantiated. High kits stay on the exclusive
 semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs) mutes
 non-High fulfill on that tile.
 

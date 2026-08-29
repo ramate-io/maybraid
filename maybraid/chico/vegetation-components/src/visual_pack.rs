@@ -21,6 +21,31 @@ pub struct VisualPackPart {
 	pub merge: MultiSceneMerge,
 }
 
+/// UltraLow / Low / Medium packs. Empty finer bands alias the next coarser pack
+/// so woody groves (empty Medium plant IR) share one cook key.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PackedVegetationBands {
+	pub ultra_low: Vec<VisualPackPart>,
+	pub low: Vec<VisualPackPart>,
+	pub medium: Vec<VisualPackPart>,
+}
+
+/// Pack UltraLow, then Low, then Medium, aliasing empty bands downward.
+pub fn pack_vegetation_visual_aliased(
+	vegetation: &impl VegetationComponents,
+) -> PackedVegetationBands {
+	let ultra_low = pack_vegetation_visual(vegetation, LodSceneLevel::UltraLow);
+	let mut low = pack_vegetation_visual(vegetation, LodSceneLevel::Low);
+	let mut medium = pack_vegetation_visual(vegetation, LodSceneLevel::Medium);
+	if low.is_empty() {
+		low.clone_from(&ultra_low);
+	}
+	if medium.is_empty() {
+		medium.clone_from(&low);
+	}
+	PackedVegetationBands { ultra_low, low, medium }
+}
+
 /// Pack every stick / foliage node at `level`, folded by [`MaterialRef`].
 pub fn pack_vegetation_visual(
 	vegetation: &impl VegetationComponents,
@@ -143,5 +168,30 @@ mod tests {
 		let low = pack_vegetation_visual(&OneTrunk(node), LodSceneLevel::Low);
 		assert_eq!(low.len(), 1);
 		assert!(!low[0].merge.parts.is_empty());
+	}
+
+	struct LowOnly(StickNode);
+
+	impl VegetationComponents for LowOnly {
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> crate::Layers<StickNode> {
+			if matches!(level, LodSceneLevel::Low) {
+				crate::Layers::from_free(vec![self.0.clone()])
+			} else {
+				crate::Layers::new()
+			}
+		}
+	}
+
+	#[test]
+	fn aliased_empty_medium_shares_low() {
+		let trunk = StickMember::trunk(Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)));
+		let node = StickNode::collection(
+			StickCollection::new([trunk]).bake_bounds_from_members(),
+			Placement::IDENTITY,
+		);
+		let bands = pack_vegetation_visual_aliased(&LowOnly(node));
+		assert!(bands.ultra_low.is_empty());
+		assert_eq!(bands.low, bands.medium);
+		assert!(!bands.low.is_empty());
 	}
 }
