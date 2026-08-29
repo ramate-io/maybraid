@@ -14,6 +14,7 @@ mod forest;
 mod generation;
 mod grove;
 pub(crate) mod hopscotch;
+mod host;
 mod index;
 mod kind;
 mod layer;
@@ -36,9 +37,11 @@ pub use generation::{
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
+pub use host::ChicoGroveHost;
 pub use index::{forest_world_sample, ForestIndex};
 pub use kind::{
-	ForestGroveKind, ForestLayer, ForestLayering, LayeringKind, SelectedLayers, WeightedGrove,
+	ForestGroveKind, ForestLayer, ForestLayering, LayerDropOut, LayeringKind, SelectedLayers,
+	WeightedGrove, TUFT_DROP_MIN_HEIGHT_M,
 };
 pub use layer::{select_layers, throw_layer};
 pub use recipe::ForestGroveRecipe;

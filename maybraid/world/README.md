@@ -1,8 +1,9 @@
 # World
 
-Assembled world model. Terrain + streamed forest at playable extents
-(2 km present / 3 km generate), character mode by default, with a soft
-sky-dome wash from 350 m to 1200 m.
+Assembled world model. Streamed forest at 2 km present / 3 km generate.
+Fine terrain covers that generate ring; short 2×/4× macro rings sit outside
+it. Character mode is the default, with a soft sky-dome wash from 350 m to
+1200 m.
 
 ```bash
 cargo run -p maybraid-world-playground

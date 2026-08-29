@@ -2,6 +2,7 @@
 //!
 //! Selection uses the presenting tile's cells. Grow only the placements that won.
 
+use bevy::math::bounding::Aabb3d;
 use bevy_math::Vec2;
 use chico_groves::{
 	AlpineParams, AridConiferSaplingParams, BraidGrassParams, BushScrubParams,
@@ -17,6 +18,9 @@ use chico_groves::{
 	WanderingAcaciaParams, WildGrassParams,
 };
 use gimme_gen::Cell;
+use lod::gen::LodScene;
+use lod::lod_ref::LodRef;
+use lod::{LodSceneCulls, LodSceneLevel, LodSceneStatus, SceneChunk};
 
 use crate::{ForestGroveKind, ForestGroveTile};
 
@@ -149,6 +153,41 @@ impl_kind_recipe! {
 	Vineyard => vineyard, VineyardParams,
 	WanderingAcacia => wandering_acacia, WanderingAcaciaParams,
 	WildGrass => wild_grass, WildGrassParams,
+}
+
+impl ForestGroveTile {
+	/// Blade / tuft-patch groves (High kits, not nested woody plants).
+	pub fn is_tuft(&self) -> bool {
+		matches!(
+			self,
+			Self::BraidGrass(_)
+				| Self::CommonTufts(_)
+				| Self::MonsterGrass(_)
+				| Self::TallGrass(_)
+				| Self::TropicalTufts(_)
+				| Self::WildGrass(_)
+		)
+	}
+
+	pub fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		match_forest_grove_tile!(self, g => g.scene_lod_level(lod_ref))
+	}
+
+	pub fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		match_forest_grove_tile!(self, g => g.scene_lod_status(lod_ref))
+	}
+
+	pub fn scene_lod_culls(&self, lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		match_forest_grove_tile!(self, g => g.scene_lod_culls(lod_ref, current))
+	}
+
+	pub fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		match_forest_grove_tile!(self, g => g.scene_chunks_with_level(lod_ref, level))
+	}
+
+	pub fn scene_bounds(&self) -> Aabb3d {
+		match_forest_grove_tile!(self, g => g.scene_bounds())
+	}
 }
 
 #[cfg(test)]

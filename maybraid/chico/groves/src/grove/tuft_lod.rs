@@ -35,6 +35,12 @@ macro_rules! impl_tuft_grove_lod {
 #[macro_export]
 macro_rules! impl_tuft_grove_lod_emit {
 	($Grove:ty) => {
+		impl $Grove {
+			/// Shared tuft plant list for forest present dropout.
+			pub fn tuft_body(&self) -> &$crate::grove::vc_tuft::TuftGroveBody {
+				&self.body
+			}
+		}
 		impl lod::gen::LodScene for $Grove {
 			fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneLevel {
 				self.structural_lod()
