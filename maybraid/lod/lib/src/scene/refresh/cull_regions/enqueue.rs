@@ -14,6 +14,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
+use crate::scene::visual::{under_visual_lod_root, VisualLodRoot};
 use crate::scene::SemanticLodScene;
 
 use super::super::ensure_refresh_core;
@@ -44,6 +45,7 @@ pub fn produce_lod_cull_for_region<T>(
 	wants_cull: Query<(), With<LodCullInFlight>>,
 	child_of: Query<&ChildOf>,
 	visibilities: Query<&Visibility>,
+	visual_roots: Query<(), With<VisualLodRoot>>,
 ) where
 	T: Component + SemanticLodScene + 'static,
 {
@@ -61,6 +63,9 @@ pub fn produce_lod_cull_for_region<T>(
 
 	for (_region, hits) in &cache.region_hits {
 		for &entity in hits {
+			if under_visual_lod_root(entity, &child_of, &visual_roots) {
+				continue;
+			}
 			if lod_scene_host_or_ancestor_hidden(entity, &child_of, &all_hosts, &visibilities) {
 				continue;
 			}

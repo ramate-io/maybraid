@@ -18,6 +18,7 @@ use crate::scene::host::{
 	LodLevelRoot, LodLevelRoots, LodSceneHost,
 };
 use crate::scene::level::LodSceneLevel;
+use crate::scene::visual::{under_visual_lod_root, VisualLodRoot};
 use crate::scene::SemanticLodScene;
 
 use super::chunk::{
@@ -85,6 +86,7 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	host_levels: Query<&LodSceneLevel, With<LodSceneHost>>,
 	children_q: Query<&Children>,
 	visibilities: Query<&Visibility>,
+	visual_roots: Query<(), With<VisualLodRoot>>,
 ) where
 	T: Component + SemanticLodScene,
 	FHost: QueryFilter + 'static,
@@ -97,6 +99,9 @@ pub fn cull_lod_level_roots<T, FHost, FNode>(
 	let refs = lod_refs_from_snapshots(&snapshots);
 
 	for (host, scene, current) in &hosts {
+		if under_visual_lod_root(host, &child_of, &visual_roots) {
+			continue;
+		}
 		if lod_scene_host_or_ancestor_hidden(host, &child_of, &all_hosts, &visibilities) {
 			continue;
 		}

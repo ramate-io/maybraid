@@ -352,6 +352,7 @@ pub fn sync_lod_level_roots(
 		(Entity, &LodSceneLevel, Option<&Children>),
 		(With<LodSceneHost>, Changed<LodSceneLevel>),
 	>,
+	owns_visual: Query<(), With<crate::VisualOwnsAppearance>>,
 	level_roots_heads: Query<&Children, With<LodLevelRoots>>,
 	root_keys: Query<&LodLevelRoot>,
 	pending: Query<(), With<crate::LodLevelRootPending>>,
@@ -360,15 +361,21 @@ pub fn sync_lod_level_roots(
 ) {
 	for (host, level, host_children) in &hosts {
 		let desired = *level;
+		let visual_owns = owns_visual.contains(host);
+		let request_semantic = !visual_owns || desired == LodSceneLevel::High;
 
 		// No children yet → nothing to show/hide; ask for the first level root to be spawned.
 		let Some(host_children) = host_children else {
-			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
+			if request_semantic {
+				commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
+			}
 			continue;
 		};
 
 		let Some(roots_entity) = lod_level_roots_entity(host_children, &level_roots_heads) else {
-			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
+			if request_semantic {
+				commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
+			}
 			continue;
 		};
 
@@ -377,6 +384,20 @@ pub fn sync_lod_level_roots(
 		};
 
 		let child_ids: Vec<Entity> = root_children.iter().collect();
+		if visual_owns && desired != LodSceneLevel::High {
+			for &child in &child_ids {
+				if root_keys.get(child).is_err() {
+					continue;
+				}
+				if let Ok(mut visibility) = visibilities.get_mut(child) {
+					*visibility = Visibility::Hidden;
+				}
+			}
+			commands.entity(host).remove::<LodLevelRootOverlap>();
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
+			continue;
+		}
+
 		let mut found_desired = false;
 		for &child in &child_ids {
 			let Ok(root) = root_keys.get(child) else {
@@ -407,8 +428,10 @@ pub fn sync_lod_level_roots(
 		// Missing → request fulfill so a culled band can come back.
 		if found_desired {
 			commands.entity(host).remove::<LodLevelSpawnRequest>();
-		} else {
+		} else if request_semantic {
 			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
+		} else {
+			commands.entity(host).remove::<LodLevelSpawnRequest>();
 		}
 	}
 }

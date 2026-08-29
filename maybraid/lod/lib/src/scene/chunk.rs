@@ -1,19 +1,15 @@
 //! Incremental LOD composition ([`LodChunk`]).
 //!
 //! A chunk tree is a **scheduling** representation only: it does not change
-//! scene semantics. The leaf type chooses the consume path:
+//! scene semantics. [`SemanticSceneChunk`] / [`SceneChunk`] is `Box<dyn Scene>`
+//! for exclusive main-world spawn ([`crate::drain_chunk_lod_fulfill`]).
 //!
-//! - [`SemanticSceneChunk`] / [`SceneChunk`] — `Box<dyn Scene>` for exclusive
-//!   main-world spawn ([`crate::drain_chunk_lod_fulfill`]).
-//! - [`VisualSceneChunk`] — [`VisualLodPrimitive`]; **not** a Bevy `Scene` and
-//!   **not** drained by semantic fulfill ([#667](https://github.com/ramate-io/maybraid/issues/667)).
+//! Per-view appearance is [`crate::VisualLodScene`], not a chunk leaf.
 //!
 //! Fulfillment expands [`LodChunk::Lazy`] / [`LodChunk::SubChunks`] on demand.
 
 use bevy::scene::prelude::Scene;
 use std::collections::VecDeque;
-
-use super::level::LodSceneLevel;
 
 /// Default weight for [`SceneChunk::primitive`].
 pub const DEFAULT_CHUNK_WEIGHT: u32 = 1;
@@ -40,16 +36,6 @@ pub type SemanticSceneChunk = LodChunk<Box<dyn Scene>>;
 
 /// Compatibility name for [`SemanticSceneChunk`].
 pub type SceneChunk = SemanticSceneChunk;
-
-/// Per-view render tree. Not consumed by semantic drain.
-pub type VisualSceneChunk = LodChunk<VisualLodPrimitive>;
-
-/// Stub visual leaf. [#667](https://github.com/ramate-io/maybraid/issues/667)
-/// replaces this with packed grove / instance / impostor data.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct VisualLodPrimitive {
-	pub level: LodSceneLevel,
-}
 
 impl<P> LodChunk<P> {
 	/// One primitive with an explicit weight.
@@ -124,18 +110,6 @@ impl LodChunk<Box<dyn Scene>> {
 	/// Single primitive with an explicit weight (relative heuristic).
 	pub fn weighted(weight: u32, scene: impl Scene + 'static) -> Self {
 		Self::with_payload(weight, Box::new(scene))
-	}
-}
-
-impl LodChunk<VisualLodPrimitive> {
-	/// Single visual primitive with [`DEFAULT_CHUNK_WEIGHT`].
-	pub fn primitive(payload: VisualLodPrimitive) -> Self {
-		Self::with_payload(DEFAULT_CHUNK_WEIGHT, payload)
-	}
-
-	/// Single visual primitive with an explicit weight.
-	pub fn weighted(weight: u32, payload: VisualLodPrimitive) -> Self {
-		Self::with_payload(weight, payload)
 	}
 }
 
@@ -244,16 +218,5 @@ mod tests {
 		assert!(matches!(queue.front(), Some(SceneChunk::Primitive { .. })));
 		let prims: Vec<_> = std::iter::from_fn(|| pull_primitive(&mut queue)).collect();
 		assert_eq!(prims.len(), 3);
-	}
-
-	#[test]
-	fn visual_chunk_is_not_a_scene() {
-		let chunk = VisualSceneChunk::primitive(VisualLodPrimitive { level: LodSceneLevel::Low });
-		assert_eq!(chunk.total_weight(), DEFAULT_CHUNK_WEIGHT);
-		assert_eq!(chunk.total_primitives(), 1);
-		let mut queue = chunk.into_fulfill_queue();
-		let (weight, payload) = pull_payload(&mut queue).expect("visual primitive");
-		assert_eq!(weight, DEFAULT_CHUNK_WEIGHT);
-		assert_eq!(payload.level, LodSceneLevel::Low);
 	}
 }

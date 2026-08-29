@@ -2292,6 +2292,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "lod-lazy-refs",
+ "lod-visual-pbr",
  "log",
  "material-ref",
  "procedural-common",
@@ -4231,6 +4232,8 @@ dependencies = [
  "bevy",
  "lod-cascade",
  "lod-cascade-system",
+ "material-ref",
+ "scene-ref",
  "thiserror 1.0.69",
 ]
 
@@ -4267,6 +4270,19 @@ dependencies = [
  "bevy",
  "lod",
  "material-ref",
+]
+
+[[package]]
+name = "lod-visual-pbr"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bytemuck",
+ "chico-vegetation-components",
+ "lod",
+ "material-ref",
+ "scene-ref",
 ]
 
 [[package]]

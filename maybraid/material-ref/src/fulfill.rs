@@ -31,11 +31,11 @@ pub fn fulfill_material_ref_roots<L>(
 		let has_mesh = meshes.contains(entity);
 		if propagate && !has_mesh {
 			// Meshes arrive later under WorldAsset; only mark the root seen.
-			commands.entity(entity).insert(MaterialRefApplied);
+			stamp_applied(&mut commands, entity);
 			continue;
 		}
 		lib.fulfill(entity, &root.0, &mut commands);
-		commands.entity(entity).insert(MaterialRefApplied);
+		stamp_applied(&mut commands, entity);
 	}
 }
 
@@ -47,12 +47,12 @@ pub fn invalidate_changed_material_ref_roots(
 	applied: Query<(), With<MaterialRefApplied>>,
 ) {
 	for root in &changed {
-		commands.entity(root).remove::<MaterialRefApplied>();
+		commands.entity(root).try_remove::<MaterialRefApplied>();
 		let mut stack: Vec<Entity> =
 			children.get(root).map(|c| c.iter().copied().collect()).unwrap_or_default();
 		while let Some(child) = stack.pop() {
 			if applied.contains(child) {
-				commands.entity(child).remove::<MaterialRefApplied>();
+				commands.entity(child).try_remove::<MaterialRefApplied>();
 			}
 			if let Ok(kids) = children.get(child) {
 				stack.extend(kids.iter().copied());
@@ -78,7 +78,7 @@ pub fn fulfill_material_ref_descendants<L>(
 			continue;
 		};
 		lib.fulfill(entity, &material_ref, &mut commands);
-		commands.entity(entity).insert(MaterialRefApplied);
+		stamp_applied(&mut commands, entity);
 	}
 }
 
@@ -103,13 +103,19 @@ pub fn restamp_material_ref_descendants_of_changed<L>(
 		while let Some(child) = stack.pop() {
 			if meshes.contains(child) {
 				lib.fulfill(child, &material.0, &mut commands);
-				commands.entity(child).insert(MaterialRefApplied);
+				stamp_applied(&mut commands, child);
 			}
 			if let Ok(kids) = children.get(child) {
 				stack.extend(kids.iter().copied());
 			}
 		}
 	}
+}
+
+/// High semantic drain / present cull can despawn a `Mesh3d` after fulfill
+/// queues insert/remove. [`EntityCommands::try_insert`] silences that race.
+fn stamp_applied(commands: &mut Commands, entity: Entity) {
+	commands.entity(entity).try_insert(MaterialRefApplied);
 }
 
 fn propagating_material_ref(

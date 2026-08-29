@@ -1,7 +1,7 @@
 //! LOD scene runtime: hosts, levels, refresh, chunks.
 //!
-//! - [`SemanticLodScene`] / [`LodScene`] — how a host type selects and builds
-//!   main-world LOD content; [`VisualLodScene`] is the per-view render fork
+//! - [`SemanticLodScene`] / [`LodScene`] — main-world spawn; [`VisualLodScene`]
+//!   is per-view Policy + Renderer (not a [`SceneChunk`])
 //! - [`refresh`] — region / level messages → host levels → sync
 //! - [`host`] — ECS hosts / level roots / sync
 //! - [`chunk`] / [`chunk_fulfill`] — amortized level-root spawn
@@ -17,11 +17,12 @@ pub mod level;
 pub mod lod_scene;
 pub mod refresh;
 pub mod region_index;
+pub mod visual;
 
 pub use bounds_patch::{LodSceneBoundsMarshaller, PatchSceneBounds};
 pub use chunk::{
 	materialize_front, pull_payload, pull_primitive, LodChunk, SceneChunk, SemanticSceneChunk,
-	VisualLodPrimitive, VisualSceneChunk, DEFAULT_CHUNK_WEIGHT,
+	DEFAULT_CHUNK_WEIGHT,
 };
 pub use chunk_fulfill::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, apply_lod_cull_requests,
@@ -46,7 +47,7 @@ pub use host::{
 	LodSceneHostPlugin,
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
-pub use lod_scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};
+pub use lod_scene::{LodScene, LodSceneStatus, SemanticLodScene};
 pub use refresh::{
 	add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref, fill_lod_cull_produce_cache,
 	fill_lod_produce_cache, produce_lod_cull_for_region, produce_lod_cull_regions,
@@ -63,3 +64,9 @@ pub use refresh::{
 	LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
 };
 pub use region_index::{LodSceneHostIndex, LodSceneRegionIndex};
+pub use visual::{
+	projected_screen_error, under_visual_lod_root, Banded, HasVisualLodThresholds,
+	NamedVisualLevel, ProjectedBoundsPolicy, ProjectedBoundsThresholds, VisualInstance,
+	VisualInstanceList, VisualLodBand, VisualLodPolicy, VisualLodRenderContext, VisualLodRenderer,
+	VisualLodRoot, VisualLodScene, VisualLodView, VisualOwnsAppearance, VisualSceneLodPlugin,
+};

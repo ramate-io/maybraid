@@ -6,11 +6,21 @@ Amortize spawning a **semantic** level root across frames under a weight budget.
 [`SceneChunk`](../lib/src/scene/chunk.rs) = `LodChunk<Box<dyn Scene>>`. Drain
 spawns those scenes in the main World.
 
-[`VisualLodScene`](../lib/src/scene/lod_scene.rs) builds
-[`VisualSceneChunk`](../lib/src/scene/chunk.rs) = `LodChunk<VisualLodPrimitive>`.
-That tree is **not** a Bevy `Scene` and is **not** consumed by
-`drain_chunk_lod_fulfill`. [#667](https://github.com/ramate-io/maybraid/issues/667)
-fills the visual leaf; this crate only defines the fork.
+[`VisualLodScene`](../lib/src/scene/visual.rs) is **not** a chunk tree.
+[`SceneChunk`](../lib/src/scene/chunk.rs) schedules semantic / world realization.
+Visual LOD is persistent data whose representation is selected per view by
+[`VisualLodPolicy`](../lib/src/scene/visual.rs) and submitted by
+[`VisualLodRenderer`](../lib/src/scene/visual.rs)
+([#667](https://github.com/ramate-io/maybraid/issues/667)).
+Forest tiles store a [`VisualInstance`](../lib/src/scene/visual.rs) list on a
+[`VisualLodRoot`](../lib/src/scene/visual.rs) sibling. Geometry is cached by
+[`SceneRef`](../../scene-ref) → [`ScenePrototype`](../../scene-ref); material by
+[`MaterialRef`](../../material-ref). Policy picks a band per view; the
+[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets per grove,
+then `(mesh, material)`, and submits instanced draws. Camera motion does not
+cook posed grove meshes or spawn visual `SceneChunk`s. High kits stay on the
+exclusive semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs)
+mutes non-High fulfill on that tile.
 
 ## API
 
@@ -27,12 +37,6 @@ fn scene_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Sce
 ```
 
 Default: `SceneChunk::primitive(self.scene_with_level(...))` — one spawn unit (full scene build still happens up front unless overridden).
-
-Visual (no consume plugin yet):
-
-```rust
-fn visual_chunks_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> VisualSceneChunk;
-```
 
 ## Lifecycle
 
@@ -72,6 +76,7 @@ Lazy materialization of subtrees (factories evaluated only when the scheduler re
 
 ## Related
 
-- [`LodChunk` / `SceneChunk` / `VisualSceneChunk`](../lib/src/scene/chunk.rs)
+- [`LodChunk` / `SceneChunk`](../lib/src/scene/chunk.rs)
+- [`VisualLodScene`](../lib/src/scene/visual.rs)
 - [`chunk_fulfill`](../lib/src/chunk_fulfill.rs)
 - [Richmond CONTRIBUTING — LodScene](../../richmond/CONTRIBUTING.md#lodscene-on-buildings)

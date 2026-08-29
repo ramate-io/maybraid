@@ -1,5 +1,5 @@
 [package]
-name = "lod"
+name = "lod-visual-pbr"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -9,16 +9,13 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
-[features]
-default = []
-
 [dependencies]
-lod-cascade = { workspace = true }
-lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
+bytemuck = { version = "1", features = ["derive"] }
+chico-vegetation-components = { workspace = true }
+lod = { workspace = true }
 material-ref = { workspace = true }
 scene-ref = { workspace = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

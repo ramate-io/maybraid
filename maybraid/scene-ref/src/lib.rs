@@ -15,6 +15,7 @@ mod fulfill;
 mod handles;
 mod mirror;
 mod multi_merge;
+mod prototype;
 mod scene_ref;
 mod world_asset;
 
@@ -25,6 +26,7 @@ pub use mirror::{mirror_mesh, mirror_transform};
 pub use multi_merge::{
 	MultiSceneMerge, MultiSceneMergeHandles, MultiSceneMergeRoot, MultiScenePart, TransformKey,
 };
+pub use prototype::{ScenePrototype, ScenePrototypeCache, ScenePrototypePart};
 pub use scene_ref::{MirrorAxis, SceneRef, SceneRefRoot};
 
 use fulfill::{fulfill_multi_scene_merge_roots, fulfill_scene_ref_roots};
@@ -58,6 +60,7 @@ impl Plugin for SceneRefPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<SceneRefHandles>()
 			.init_resource::<MultiSceneMergeHandles>()
+			.init_resource::<ScenePrototypeCache>()
 			.init_resource::<SceneRefAdmitBudget>()
 			.add_systems(Update, (fulfill_scene_ref_roots, fulfill_multi_scene_merge_roots));
 	}

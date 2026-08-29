@@ -24,6 +24,7 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
+use lod_visual_pbr::{attach_forest_grove_visual, ForestGroveVisualPlugin};
 use procedural_common::NoiseParams;
 
 use crate::camera::CameraController;
@@ -94,6 +95,9 @@ where
 	Pr: SystemParam + 'static,
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<ChicoGrove, ForestIndex>,
 {
+	if !app.is_plugin_added::<ForestGroveVisualPlugin>() {
+		app.add_plugins(ForestGroveVisualPlugin);
+	}
 	app.init_resource::<ForestIndex>()
 		.init_resource::<ForestPresenterState>()
 		.insert_resource(LodGenerateBudget { ids_per_frame: 16 })
@@ -273,7 +277,12 @@ where
 		.structural_lod()
 		.map(|p| p.footprint_aabb())
 		.unwrap_or_else(|| vegetation_bounds(grove));
-	spawn_lod_scene_host_with_lod_ref(commands, grove, Transform::IDENTITY, bounds, lod_ref)
+	let entities =
+		spawn_lod_scene_host_with_lod_ref(commands, grove, Transform::IDENTITY, bounds, lod_ref);
+	for entity in &entities {
+		attach_forest_grove_visual(commands, *entity, grove, bounds, lod_ref);
+	}
+	entities
 }
 
 fn spawn_forest_grove_tile(
