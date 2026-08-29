@@ -6,7 +6,7 @@ use bevy::prelude::*;
 
 use crate::scene::host::LodSceneHost;
 use crate::scene::level::LodSceneLevel;
-use crate::scene::visual::{under_visual_lod_root, VisualLodRoot, VisualOwnsAppearance};
+use crate::scene::visual::{under_visual_lod_root, VisualLodRoot};
 
 use super::super::ensure_refresh_core;
 use super::super::levels::LodSceneRefreshLevel;
@@ -18,7 +18,6 @@ use super::super::levels::LodSceneRefreshLevel;
 pub fn refresh_lod_host_levels(
 	mut reader: MessageReader<LodSceneRefreshLevel>,
 	mut hosts: Query<&mut LodSceneLevel, With<LodSceneHost>>,
-	owns_visual: Query<(), With<VisualOwnsAppearance>>,
 	child_of: Query<&ChildOf>,
 	visual_roots: Query<(), With<VisualLodRoot>>,
 ) {
@@ -37,7 +36,7 @@ pub fn refresh_lod_host_levels(
 	}
 
 	for (entity, level) in best {
-		if owns_visual.contains(entity) || under_visual_lod_root(entity, &child_of, &visual_roots) {
+		if under_visual_lod_root(entity, &child_of, &visual_roots) {
 			continue;
 		}
 		let Ok(mut current) = hosts.get_mut(entity) else {

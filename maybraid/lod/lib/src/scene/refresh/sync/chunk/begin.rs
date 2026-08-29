@@ -111,7 +111,9 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 		if i < start {
 			continue;
 		}
-		if owns_visual.contains(host) {
+		if owns_visual.contains(host)
+			&& !host_levels.get(host).is_ok_and(|level| *level == LodSceneLevel::High)
+		{
 			continue;
 		}
 		if let Some(candidate) = classify_begin_candidate(
@@ -150,7 +152,9 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 			if i >= start {
 				break;
 			}
-			if owns_visual.contains(host) {
+			if owns_visual.contains(host)
+				&& !host_levels.get(host).is_ok_and(|level| *level == LodSceneLevel::High)
+			{
 				continue;
 			}
 			if let Some(candidate) = classify_begin_candidate(

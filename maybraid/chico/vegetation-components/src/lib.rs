@@ -14,6 +14,7 @@ pub mod procedural;
 pub mod scene_children;
 pub mod sticks;
 pub mod structural_lod;
+pub mod visual_pack;
 
 pub use assets::AssetPath;
 pub use foliage::{
@@ -47,6 +48,7 @@ pub use sticks::{
 pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
+pub use visual_pack::{pack_vegetation_visual, VisualPackPart};
 
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
