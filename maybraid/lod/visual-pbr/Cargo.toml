@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+bytemuck = { version = "1", features = ["derive"] }
 chico-vegetation-components = { workspace = true }
 lod = { workspace = true }
 material-ref = { workspace = true }

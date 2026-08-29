@@ -12,13 +12,15 @@ Visual LOD is persistent data whose representation is selected per view by
 [`VisualLodPolicy`](../lib/src/scene/visual.rs) and submitted by
 [`VisualLodRenderer`](../lib/src/scene/visual.rs)
 ([#667](https://github.com/ramate-io/maybraid/issues/667)).
-Forest tiles store a [`GroveVisualAsset`](../visual-pbr/src/lib.rs) (mesh +
-material per band) on a [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling.
-[`MultiSceneMerge`](../../scene-ref) is only the cook path that produces
-`Handle<Mesh>`. Policy picks a band per view without a `SceneChunk` spawn; only
-the selected band is cooked and instantiated. High kits stay on the exclusive
-semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs) mutes
-non-High fulfill on that tile.
+Forest tiles store a [`VisualInstance`](../lib/src/scene/visual.rs) list on a
+[`VisualLodRoot`](../lib/src/scene/visual.rs) sibling. Geometry is cached by
+[`SceneRef`](../../scene-ref) → [`ScenePrototype`](../../scene-ref); material by
+[`MaterialRef`](../../material-ref). Policy picks a band per view; the
+[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets
+`(prototype, material)` and submits instanced draws. Camera motion does not
+cook posed grove meshes or spawn visual `SceneChunk`s. High kits stay on the
+exclusive semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs)
+mutes non-High fulfill on that tile.
 
 ## API
 

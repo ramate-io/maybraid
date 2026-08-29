@@ -6,12 +6,15 @@
 //! [`SceneChunk`] work.
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use bevy::math::Affine3A;
 use bevy::prelude::*;
 use bevy::render::extract_component::ExtractComponent;
 use bevy::render::sync_world::RenderEntity;
 use bevy::render::{Extract, ExtractSchedule, RenderApp};
+use material_ref::MaterialRef;
+use scene_ref::SceneRef;
 
 use crate::scene::refresh::{LodHostBounds, LodViewer};
 
@@ -64,6 +67,83 @@ impl NamedVisualLevel {
 			Self::Medium => crate::LodSceneLevel::Medium,
 			Self::High => crate::LodSceneLevel::High,
 		}
+	}
+
+	pub fn from_scene_level(level: crate::LodSceneLevel) -> Option<Self> {
+		match level {
+			crate::LodSceneLevel::UltraLow => Some(Self::UltraLow),
+			crate::LodSceneLevel::Low => Some(Self::Low),
+			crate::LodSceneLevel::Medium => Some(Self::Medium),
+			crate::LodSceneLevel::High => Some(Self::High),
+			crate::LodSceneLevel::Distance(_) | crate::LodSceneLevel::Resolution(_) => None,
+		}
+	}
+}
+
+/// One value per named visual band.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct Banded<T> {
+	pub ultra_low: T,
+	pub low: T,
+	pub medium: T,
+	pub high: T,
+}
+
+impl<T> Banded<T> {
+	pub fn for_level(&self, level: NamedVisualLevel) -> &T {
+		match level {
+			NamedVisualLevel::UltraLow => &self.ultra_low,
+			NamedVisualLevel::Low => &self.low,
+			NamedVisualLevel::Medium => &self.medium,
+			NamedVisualLevel::High => &self.high,
+		}
+	}
+
+	pub fn for_level_mut(&mut self, level: NamedVisualLevel) -> &mut T {
+		match level {
+			NamedVisualLevel::UltraLow => &mut self.ultra_low,
+			NamedVisualLevel::Low => &mut self.low,
+			NamedVisualLevel::Medium => &mut self.medium,
+			NamedVisualLevel::High => &mut self.high,
+		}
+	}
+}
+
+/// One drawable: per-band [`SceneRef`]s, one material, one local pose.
+///
+/// Geometry is cached by [`SceneRef`]; material by [`MaterialRef`]. The renderer
+/// combines them only at submit. Empty bands stay `None` — UltraLow bins and
+/// Low sites are different instance sets, not always the same kit at four LODs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VisualInstance {
+	pub scenes: Banded<Option<SceneRef>>,
+	pub material: MaterialRef,
+	pub transform: Affine3A,
+}
+
+impl VisualInstance {
+	pub fn new(material: MaterialRef, transform: Affine3A) -> Self {
+		Self { scenes: Banded::default(), material, transform }
+	}
+
+	pub fn scene_for(&self, level: NamedVisualLevel) -> Option<&SceneRef> {
+		self.scenes.for_level(level).as_ref()
+	}
+}
+
+/// Shared instance list used as a [`VisualLodScene::Representation`].
+#[derive(Debug, Clone, Default)]
+pub struct VisualInstanceList {
+	pub instances: Arc<[VisualInstance]>,
+}
+
+impl VisualInstanceList {
+	pub fn new(instances: impl Into<Arc<[VisualInstance]>>) -> Self {
+		Self { instances: instances.into() }
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.instances.is_empty()
 	}
 }
 
@@ -366,6 +446,25 @@ mod tests {
 		assert_eq!(
 			NamedVisualLevel::UltraLow.max(NamedVisualLevel::Medium),
 			NamedVisualLevel::Medium
+		);
+	}
+
+	#[test]
+	fn banded_indexes_named_levels() {
+		let mut bands = Banded { ultra_low: 0, low: 1, medium: 2, high: 3 };
+		assert_eq!(*bands.for_level(NamedVisualLevel::Low), 1);
+		*bands.for_level_mut(NamedVisualLevel::High) = 9;
+		assert_eq!(bands.high, 9);
+	}
+
+	#[test]
+	fn visual_instance_scene_for_skips_empty_band() {
+		let mut instance = VisualInstance::new(MaterialRef::default(), Affine3A::IDENTITY);
+		instance.scenes.low = Some(SceneRef::glb("vegetation/test.glb"));
+		assert!(instance.scene_for(NamedVisualLevel::UltraLow).is_none());
+		assert_eq!(
+			instance.scene_for(NamedVisualLevel::Low).map(|s| s.path.as_str()),
+			Some("vegetation/test.glb")
 		);
 	}
 }

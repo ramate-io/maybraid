@@ -4232,6 +4232,8 @@ dependencies = [
  "bevy",
  "lod-cascade",
  "lod-cascade-system",
+ "material-ref",
+ "scene-ref",
  "thiserror 1.0.69",
 ]
 
@@ -4276,6 +4278,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "bytemuck",
  "chico-vegetation-components",
  "lod",
  "material-ref",

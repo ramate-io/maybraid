@@ -16,6 +16,8 @@ default = []
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }
 bevy = { workspace = true }
+material-ref = { workspace = true }
+scene-ref = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

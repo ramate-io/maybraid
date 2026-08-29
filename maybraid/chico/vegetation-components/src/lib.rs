@@ -49,7 +49,7 @@ pub use structural_lod::{
 	StructuralLod, STRUCTURAL_HIGH_FACTOR, STRUCTURAL_LOW_FACTOR, STRUCTURAL_MEDIUM_FACTOR,
 };
 pub use visual_pack::{
-	pack_vegetation_visual, pack_vegetation_visual_aliased, PackedVegetationBands, VisualPackPart,
+	pack_vegetation_visual, pack_vegetation_visual_aliased, PackedVegetationBands,
 };
 
 use bevy::ecs::template::template;

@@ -1,12 +1,16 @@
-//! Flatten stick / foliage IR into [`MultiSceneMerge`] keys for packed visual LOD.
+//! Flatten stick / foliage IR into [`VisualInstance`]s for packed visual LOD.
 //!
-//! One merge per material. Kit-local member poses are composed into the node
-//! placement so a grove can intern UltraLow / Low / Medium without spawning
-//! hosts.
+//! One instance per IR placement. Kit collections emit one instance per member.
+//! Empty finer bands alias coarser [`SceneRef`]s on the *same* pose so woody
+//! groves (empty Medium plant IR) share Low kits. UltraLow bins keep their own
+//! instance set when Low sites exist.
+
+use std::collections::HashMap;
 
 use lod::gen::LodSceneLevel;
-use material_ref::MaterialRef;
-use scene_ref::{MultiSceneMerge, MultiScenePart};
+use lod::{Banded, NamedVisualLevel, VisualInstance};
+use material_ref::{MaterialRef, MaterialRefKey};
+use scene_ref::{SceneRef, TransformKey};
 
 use crate::foliage::geometry::FoliageGeometry;
 use crate::foliage::node::FoliageNode;
@@ -14,96 +18,136 @@ use crate::scene_children::pose;
 use crate::sticks::node::StickNode;
 use crate::VegetationComponents;
 
-/// One internable merge and the deferred material that should tint it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct VisualPackPart {
-	pub material: MaterialRef,
-	pub merge: MultiSceneMerge,
-}
-
-/// UltraLow / Low / Medium packs. Empty finer bands alias the next coarser pack
-/// so woody groves (empty Medium plant IR) share one cook key.
+/// Packed UltraLow / Low / Medium placements, folded across bands when the
+/// material and pose match.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PackedVegetationBands {
-	pub ultra_low: Vec<VisualPackPart>,
-	pub low: Vec<VisualPackPart>,
-	pub medium: Vec<VisualPackPart>,
+	pub instances: Vec<VisualInstance>,
 }
 
-/// Pack UltraLow, then Low, then Medium, aliasing empty bands downward.
+/// Pack UltraLow, then Low, then Medium, aliasing empty finer bands downward.
 pub fn pack_vegetation_visual_aliased(
 	vegetation: &impl VegetationComponents,
 ) -> PackedVegetationBands {
-	let ultra_low = pack_vegetation_visual(vegetation, LodSceneLevel::UltraLow);
-	let mut low = pack_vegetation_visual(vegetation, LodSceneLevel::Low);
-	let mut medium = pack_vegetation_visual(vegetation, LodSceneLevel::Medium);
-	if low.is_empty() {
-		low.clone_from(&ultra_low);
+	let mut by_pose: HashMap<(MaterialRefKey, TransformKey), Banded<Option<SceneRef>>> =
+		HashMap::new();
+	let mut materials: HashMap<(MaterialRefKey, TransformKey), MaterialRef> = HashMap::new();
+	let mut any = Banded { ultra_low: false, low: false, medium: false, high: false };
+
+	for level in [LodSceneLevel::UltraLow, LodSceneLevel::Low, LodSceneLevel::Medium] {
+		let named = NamedVisualLevel::from_scene_level(level).expect("named pack level");
+		for (scene, material, transform) in pack_level_placements(vegetation, level) {
+			let key = (MaterialRefKey::from(&material), TransformKey::new(transform));
+			materials.entry(key.clone()).or_insert(material);
+			let slot = by_pose.entry(key).or_default();
+			*slot.for_level_mut(named) = Some(scene);
+			*any.for_level_mut(named) = true;
+		}
 	}
-	if medium.is_empty() {
-		medium.clone_from(&low);
+
+	if !any.low {
+		for scenes in by_pose.values_mut() {
+			if scenes.low.is_none() {
+				scenes.low.clone_from(&scenes.ultra_low);
+			}
+		}
 	}
-	PackedVegetationBands { ultra_low, low, medium }
+	if !any.medium {
+		for scenes in by_pose.values_mut() {
+			if scenes.medium.is_none() {
+				scenes.medium.clone_from(&scenes.low);
+			}
+		}
+	}
+
+	let instances = by_pose
+		.into_iter()
+		.filter_map(|(key, scenes)| {
+			let material = materials.remove(&key)?;
+			let (_material_key, transform_key) = key;
+			let pose = transform_key.0;
+			Some(VisualInstance {
+				scenes,
+				material,
+				transform: bevy::math::Affine3A::from_scale_rotation_translation(
+					pose.scale,
+					pose.rotation,
+					pose.translation,
+				),
+			})
+		})
+		.collect();
+	PackedVegetationBands { instances }
 }
 
-/// Pack every stick / foliage node at `level`, folded by [`MaterialRef`].
+/// Pack every stick / foliage placement at `level` (no cross-band alias).
 pub fn pack_vegetation_visual(
 	vegetation: &impl VegetationComponents,
 	level: LodSceneLevel,
-) -> Vec<VisualPackPart> {
-	let mut parts = Vec::new();
-	for node in vegetation.stick_nodes_for_level(level).flatten() {
-		if let Some(part) = pack_stick_node(&node, level) {
-			parts.push(part);
-		}
-	}
-	for node in vegetation.foliage_nodes_for_level(level).flatten() {
-		if let Some(part) = pack_foliage_node(&node, level) {
-			parts.push(part);
-		}
-	}
-	fold_by_material(parts)
+) -> Vec<VisualInstance> {
+	let named = NamedVisualLevel::from_scene_level(level);
+	pack_level_placements(vegetation, level)
+		.into_iter()
+		.map(|(scene, material, transform)| {
+			let mut instance = VisualInstance::new(
+				material,
+				bevy::math::Affine3A::from_scale_rotation_translation(
+					transform.scale,
+					transform.rotation,
+					transform.translation,
+				),
+			);
+			if let Some(named) = named {
+				*instance.scenes.for_level_mut(named) = Some(scene);
+			}
+			instance
+		})
+		.collect()
 }
 
-fn fold_by_material(parts: Vec<VisualPackPart>) -> Vec<VisualPackPart> {
-	let mut out: Vec<VisualPackPart> = Vec::new();
-	for part in parts {
-		if let Some(existing) = out.iter_mut().find(|p| p.material == part.material) {
-			existing.merge.parts.extend(part.merge.parts);
-		} else {
-			out.push(part);
-		}
+fn pack_level_placements(
+	vegetation: &impl VegetationComponents,
+	level: LodSceneLevel,
+) -> Vec<(SceneRef, MaterialRef, bevy::prelude::Transform)> {
+	let mut out = Vec::new();
+	for node in vegetation.stick_nodes_for_level(level).flatten() {
+		pack_stick_node(&node, level, &mut out);
 	}
-	out.retain(|part| !part.merge.parts.is_empty());
+	for node in vegetation.foliage_nodes_for_level(level).flatten() {
+		pack_foliage_node(&node, level, &mut out);
+	}
 	out
 }
 
-fn pack_stick_node(node: &StickNode, level: LodSceneLevel) -> Option<VisualPackPart> {
+fn pack_stick_node(
+	node: &StickNode,
+	level: LodSceneLevel,
+	out: &mut Vec<(SceneRef, MaterialRef, bevy::prelude::Transform)>,
+) {
 	if matches!(
 		level,
 		LodSceneLevel::UltraLow | LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_)
 	) {
-		return None;
+		return;
 	}
-	let mut parts = Vec::new();
 	if let Some(collection) = &node.collection {
 		for member in collection.members_for_level(level) {
-			let asset = member.geometry.standard_glb_for_level(level)?;
+			let Some(asset) = member.geometry.standard_glb_for_level(level) else {
+				continue;
+			};
 			let placed = node.placement.compose_child(member.placement);
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(placed)));
+			out.push((asset.scene_ref(), node.material.clone(), pose(placed)));
 		}
-	} else {
-		let asset = node.geometry.standard_glb_for_level(level)?;
-		parts.push(MultiScenePart::new(asset.scene_ref(), pose(node.placement)));
+	} else if let Some(asset) = node.geometry.standard_glb_for_level(level) {
+		out.push((asset.scene_ref(), node.material.clone(), pose(node.placement)));
 	}
-	if parts.is_empty() {
-		return None;
-	}
-	Some(VisualPackPart { material: node.material.clone(), merge: MultiSceneMerge::new(parts) })
 }
 
-fn pack_foliage_node(node: &FoliageNode, level: LodSceneLevel) -> Option<VisualPackPart> {
-	let mut parts = Vec::new();
+fn pack_foliage_node(
+	node: &FoliageNode,
+	level: LodSceneLevel,
+	out: &mut Vec<(SceneRef, MaterialRef, bevy::prelude::Transform)>,
+) {
 	match &node.geometry {
 		FoliageGeometry::CheapBall | FoliageGeometry::LayeredBall => {
 			let asset = if matches!(node.geometry, FoliageGeometry::LayeredBall) {
@@ -111,35 +155,31 @@ fn pack_foliage_node(node: &FoliageNode, level: LodSceneLevel) -> Option<VisualP
 			} else {
 				FoliageGeometry::cheap_ball_glb_for_level(level)
 			};
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(node.placement)));
+			out.push((asset.scene_ref(), node.material.clone(), pose(node.placement)));
 		}
 		FoliageGeometry::StraightFrond => {
 			let asset = FoliageGeometry::straight_frond_glb_for_level(level);
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(node.placement)));
+			out.push((asset.scene_ref(), node.material.clone(), pose(node.placement)));
 		}
 		FoliageGeometry::StraightFrondSegment => {
 			let asset = FoliageGeometry::straight_frond_segment_glb_for_level(level);
-			parts.push(MultiScenePart::new(asset.scene_ref(), pose(node.placement)));
+			out.push((asset.scene_ref(), node.material.clone(), pose(node.placement)));
 		}
 		FoliageGeometry::FrondCollection(collection) => {
 			for member in collection.members_for_level(level) {
 				let asset = FoliageGeometry::frond_kit_glb_for_level(member.kit, level);
 				let placed = node.placement.compose_child(member.placement);
-				parts.push(MultiScenePart::new(asset.scene_ref(), pose(placed)));
+				out.push((asset.scene_ref(), node.material.clone(), pose(placed)));
 			}
 		}
 		FoliageGeometry::CheapBallCollection(collection) => {
 			let asset = FoliageGeometry::cheap_ball_glb_for_level(level);
 			for placement in collection.placements_for_level(level) {
 				let placed = node.placement.compose_child(placement);
-				parts.push(MultiScenePart::new(asset.scene_ref(), pose(placed)));
+				out.push((asset.scene_ref(), node.material.clone(), pose(placed)));
 			}
 		}
 	}
-	if parts.is_empty() {
-		return None;
-	}
-	Some(VisualPackPart { material: node.material.clone(), merge: MultiSceneMerge::new(parts) })
 }
 
 #[cfg(test)]
@@ -167,7 +207,8 @@ mod tests {
 		assert!(pack_vegetation_visual(&OneTrunk(node.clone()), LodSceneLevel::UltraLow).is_empty());
 		let low = pack_vegetation_visual(&OneTrunk(node), LodSceneLevel::Low);
 		assert_eq!(low.len(), 1);
-		assert!(!low[0].merge.parts.is_empty());
+		assert!(low[0].scene_for(NamedVisualLevel::Low).is_some());
+		assert!(low[0].scene_for(NamedVisualLevel::UltraLow).is_none());
 	}
 
 	struct LowOnly(StickNode);
@@ -190,8 +231,13 @@ mod tests {
 			Placement::IDENTITY,
 		);
 		let bands = pack_vegetation_visual_aliased(&LowOnly(node));
-		assert!(bands.ultra_low.is_empty());
-		assert_eq!(bands.low, bands.medium);
-		assert!(!bands.low.is_empty());
+		assert_eq!(bands.instances.len(), 1);
+		let instance = &bands.instances[0];
+		assert!(instance.scene_for(NamedVisualLevel::UltraLow).is_none());
+		assert_eq!(
+			instance.scene_for(NamedVisualLevel::Low),
+			instance.scene_for(NamedVisualLevel::Medium)
+		);
+		assert!(instance.scene_for(NamedVisualLevel::Low).is_some());
 	}
 }

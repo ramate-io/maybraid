@@ -48,12 +48,6 @@ pub use host::{
 };
 pub use level::{LodSceneLevel, QuantizedDistance};
 pub use lod_scene::{LodScene, LodSceneStatus, SemanticLodScene};
-pub use visual::{
-	projected_screen_error, under_visual_lod_root, HasVisualLodThresholds, NamedVisualLevel,
-	ProjectedBoundsPolicy, ProjectedBoundsThresholds, VisualLodBand, VisualLodPolicy,
-	VisualLodRenderContext, VisualLodRenderer, VisualLodRoot, VisualLodScene, VisualLodView,
-	VisualOwnsAppearance, VisualSceneLodPlugin,
-};
 pub use refresh::{
 	add_lod_refresh_cull_for, cull_lod_level_roots, dominant_lod_ref, fill_lod_cull_produce_cache,
 	fill_lod_produce_cache, produce_lod_cull_for_region, produce_lod_cull_regions,
@@ -70,3 +64,9 @@ pub use refresh::{
 	LodSceneRefreshRegionPlugin, LodSceneRegionCullPlugin, LodViewer, OpenLattice, Spotlight,
 };
 pub use region_index::{LodSceneHostIndex, LodSceneRegionIndex};
+pub use visual::{
+	projected_screen_error, under_visual_lod_root, Banded, HasVisualLodThresholds,
+	NamedVisualLevel, ProjectedBoundsPolicy, ProjectedBoundsThresholds, VisualInstance,
+	VisualInstanceList, VisualLodBand, VisualLodPolicy, VisualLodRenderContext, VisualLodRenderer,
+	VisualLodRoot, VisualLodScene, VisualLodView, VisualOwnsAppearance, VisualSceneLodPlugin,
+};
