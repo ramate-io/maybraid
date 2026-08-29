@@ -58,6 +58,13 @@ pub struct TuftGrovePlant {
 	pub material: MaterialRef,
 }
 
+impl TuftGrovePlant {
+	/// World-space blade length. `placement.scale` is `max(patch_extent, blade)`, not height.
+	pub fn world_blade_height_m(&self) -> f32 {
+		self.placement.scale.max_element() * self.patch.shape.blade_length.max(0.0)
+	}
+}
+
 /// Built tuft/grass grove shared by VegetationComponents hosts.
 #[derive(Clone, Debug)]
 pub struct TuftGroveBody {
@@ -354,11 +361,30 @@ impl TuftGroveBody {
 
 	/// Lazy posed kits from [`Self::plants`]. Begin is [`Arc::clone`] of the list.
 	pub fn high_medium_chunks(&self, lod_ref: &LodRef, level: LodSceneLevel) -> SceneChunk {
+		self.high_medium_chunks_dropping_shorter_than(lod_ref, level, 0.0)
+	}
+
+	/// Like [`Self::high_medium_chunks`], omitting plants shorter than `min_height_m`.
+	pub fn high_medium_chunks_dropping_shorter_than(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+		min_height_m: f32,
+	) -> SceneChunk {
 		let stride = match level {
 			LodSceneLevel::Medium => MEDIUM_TUFT_STRIDE,
 			_ => 1,
 		};
-		lazy_posed_tuft_chunks(Arc::clone(&self.plants), stride, lod_ref, level)
+		if min_height_m <= 0.0 {
+			return lazy_posed_tuft_chunks(Arc::clone(&self.plants), stride, lod_ref, level);
+		}
+		let plants: Arc<[TuftGrovePlant]> = self
+			.plants
+			.iter()
+			.filter(|plant| plant.world_blade_height_m() >= min_height_m)
+			.cloned()
+			.collect();
+		lazy_posed_tuft_chunks(plants, stride, lod_ref, level)
 	}
 
 	/// Lazy kits from baked Low / UltraLow proxies. Begin does not rescan plants.

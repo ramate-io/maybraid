@@ -146,6 +146,47 @@ impl ForestLayer {
 			_ => None,
 		}
 	}
+
+	/// Present-layer dropout for the tufts bucket ([#652](https://github.com/ramate-io/maybraid/issues/652)).
+	///
+	/// Blade groves on other layers use [`LayerDropOut::for_stacked`].
+	pub fn drop_out(self) -> LayerDropOut {
+		LayerDropOut::for_stacked(self, false)
+	}
+}
+
+/// World-metre height below which tuft plants are omitted on High.
+pub const TUFT_DROP_MIN_HEIGHT_M: f32 = 0.5;
+
+/// When a forest-layer host stops emitting kits, and a High size floor.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LayerDropOut {
+	/// This band and farther (`<=` in [`lod::LodSceneLevel`] order) emit nothing.
+	pub empty_from: Option<lod::LodSceneLevel>,
+	/// Drop High plants shorter than this (0 = keep all).
+	pub min_height_m: f32,
+}
+
+impl LayerDropOut {
+	pub const fn none() -> Self {
+		Self { empty_from: None, min_height_m: 0.0 }
+	}
+
+	/// Tufts layer, or a tuft-typed tile on any layer (Monster / Braid understory).
+	pub fn for_stacked(layer: ForestLayer, tuft_tile: bool) -> Self {
+		if layer == ForestLayer::Tufts || tuft_tile {
+			Self {
+				empty_from: Some(lod::LodSceneLevel::Medium),
+				min_height_m: TUFT_DROP_MIN_HEIGHT_M,
+			}
+		} else {
+			Self::none()
+		}
+	}
+
+	pub fn omits(self, level: lod::LodSceneLevel) -> bool {
+		self.empty_from.is_some_and(|from| level <= from)
+	}
 }
 
 impl LayeringKind {
@@ -253,6 +294,18 @@ mod tests {
 		let layers = LayeringKind::LushJungle.layering().typical_layers();
 		assert_eq!(layers.upper_canopy, Some(ForestGroveKind::TradeWinds));
 		assert!(layers.tufts.is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn stacked_dropout_covers_understory_tuft_tiles() -> Result<()> {
+		assert!(LayerDropOut::for_stacked(ForestLayer::Understory, true)
+			.omits(lod::LodSceneLevel::Medium));
+		assert!(!LayerDropOut::for_stacked(ForestLayer::Understory, false)
+			.omits(lod::LodSceneLevel::Medium));
+		assert!(
+			!LayerDropOut::for_stacked(ForestLayer::Tufts, false).omits(lod::LodSceneLevel::High)
+		);
 		Ok(())
 	}
 }

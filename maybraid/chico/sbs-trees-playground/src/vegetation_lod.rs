@@ -8,6 +8,7 @@
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
+use chico_forests::ChicoGroveHost;
 use chico_groves::{
 	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
 	ConiferMassives, ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow,
@@ -127,6 +128,9 @@ impl Plugin for VegetationLodRefreshPlugin {
 		// Fine-phase domain hosts nested under grove LodScene roots.
 		avian_host!(app, FoliageNode);
 		avian_host!(app, StickNode);
+
+		// Forest / world present: one host wrapping ForestGroveTile ([#652](https://github.com/ramate-io/maybraid/issues/652)).
+		avian_host!(app, ChicoGroveHost);
 
 		// Tuft grove roots (LodScene).
 		avian_host!(app, MonsterGrass);

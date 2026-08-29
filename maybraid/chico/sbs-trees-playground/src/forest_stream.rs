@@ -6,14 +6,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use chico_forests::{
-	forest_world_sample, match_forest_grove_tile, ChicoGrove, ForestExtent, ForestGenerateBullseye,
-	ForestGroveTile, ForestIndex, ForestLodChan, ForestPresentBullseye, LayeringKind,
+	forest_world_sample, ChicoGrove, ChicoGroveHost, ForestExtent, ForestGenerateBullseye,
+	ForestGroveTile, ForestIndex, ForestLayer, ForestLodChan, ForestPresentBullseye, LayeringKind,
 	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
 use chico_groves::GroveWorldSample;
-use chico_vegetation_components::{
-	spawn_lod_scene_host_with_lod_ref, vegetation_bounds, VegetationComponents,
-};
+use chico_vegetation_components::spawn_lod_scene_host_with_lod_ref;
 use lod::gen::{
 	Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene,
 	SpatialIndex, Version,
@@ -217,7 +215,7 @@ impl ForestPresenterState {
 		};
 		let mut entities = Vec::new();
 		for tile in tiles {
-			entities.extend(spawn_forest_grove_tile(commands, tile, lod_ref));
+			entities.extend(spawn_forest_grove_tile(commands, tile, grove.layer, lod_ref));
 		}
 		self.presented
 			.insert(id, PresentedGrove { version, entities: entities.clone(), hidden: false });
@@ -265,23 +263,27 @@ impl ForestPresenterState {
 	}
 }
 
-fn spawn_grove_host<T>(commands: &mut Commands, grove: &T, lod_ref: &LodRef) -> Vec<Entity>
-where
-	T: LodScene + VegetationComponents + Component + Clone + Send + Sync + 'static,
-{
-	let bounds = grove
-		.structural_lod()
-		.map(|p| p.footprint_aabb())
-		.unwrap_or_else(|| vegetation_bounds(grove));
-	spawn_lod_scene_host_with_lod_ref(commands, grove, Transform::IDENTITY, bounds, lod_ref)
+fn spawn_grove_host(
+	commands: &mut Commands,
+	host: &ChicoGroveHost,
+	lod_ref: &LodRef,
+) -> Vec<Entity> {
+	spawn_lod_scene_host_with_lod_ref(
+		commands,
+		host,
+		Transform::IDENTITY,
+		host.scene_bounds(),
+		lod_ref,
+	)
 }
 
 fn spawn_forest_grove_tile(
 	commands: &mut Commands,
 	tile: &ForestGroveTile,
+	layer: ForestLayer,
 	lod_ref: &LodRef,
 ) -> Vec<Entity> {
-	match_forest_grove_tile!(tile, g => spawn_grove_host(commands, g, lod_ref))
+	spawn_grove_host(commands, &ChicoGroveHost::new(tile.clone(), layer), lod_ref)
 }
 
 /// Flat-ground presenter for the SBS trees playground.

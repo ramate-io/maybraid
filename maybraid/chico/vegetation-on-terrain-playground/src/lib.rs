@@ -66,10 +66,12 @@ use std::f32::consts::PI;
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Durham models playground fine half-extent (covers a 2 km generate ring).
+/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Covers forest generate.
 const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
-const WORLD_OUTER_2X_ROWS: i32 = 4;
-const WORLD_OUTER_4X_ROWS: i32 = 2;
+/// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
+const WORLD_OUTER_2X_ROWS: i32 = 2;
+/// 4× macro ring past the 2× ring.
+const WORLD_OUTER_4X_ROWS: i32 = 1;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -85,9 +87,8 @@ fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 
 fn world_lod_bands() -> Vec<TerrainMeshLodBand> {
 	vec![
-		TerrainMeshLodBand { max_radius_cells: 4, res_2: 5 },
-		TerrainMeshLodBand { max_radius_cells: 6, res_2: 4 },
-		TerrainMeshLodBand { max_radius_cells: 8, res_2: 3 },
+		TerrainMeshLodBand { max_radius_cells: 2, res_2: 5 },
+		TerrainMeshLodBand { max_radius_cells: 5, res_2: 3 },
 		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
 	]
 }
@@ -638,5 +639,14 @@ mod tests {
 		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
 		assert_eq!(spec.stream_radius, 2);
 		assert_eq!(stream_radii_m(2), (2_000.0, 3_000.0));
+	}
+
+	#[test]
+	fn world_macro_rings_stay_inside_five_km() {
+		let s = TERRAIN_CELL_SIZE;
+		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
+		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
+		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
+		assert!(outer < 5_000.0, "playable half-extent {outer}");
 	}
 }

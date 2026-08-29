@@ -169,6 +169,23 @@ impl TropicalTufts {
 		self.palms.len()
 	}
 
+	/// High tuft kits with a height floor, plus authored palms (forest present dropout).
+	pub fn high_chunks_dropping_shorter_than(
+		&self,
+		lod_ref: &LodRef,
+		min_height_m: f32,
+	) -> SceneChunk {
+		let tufts = self.body.high_medium_chunks_dropping_shorter_than(
+			lod_ref,
+			LodSceneLevel::High,
+			min_height_m,
+		);
+		if self.palms.is_empty() {
+			return tufts;
+		}
+		SceneChunk::chunks([tufts, self.lazy_palm_chunks(lod_ref, LodSceneLevel::High)])
+	}
+
 	#[cfg(test)]
 	pub(crate) fn palms_share_unit_arc(&self) -> bool {
 		self.palms.len() >= 2 && Arc::ptr_eq(&self.palms[0].bush, &self.palms[1].bush)
