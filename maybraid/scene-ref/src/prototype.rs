@@ -107,7 +107,8 @@ impl ScenePrototypeCache {
 			return None;
 		}
 		let asset = world_assets.get(&handle)?;
-		let prototype = ScenePrototype::from_world(&asset.world)?;
+		// Loaded worlds with no Mesh3d cache empty so submit stops retrying.
+		let prototype = ScenePrototype::from_world(&asset.world).unwrap_or_default();
 		self.cache.insert(scene_ref.clone(), prototype);
 		self.cache.get(scene_ref)
 	}

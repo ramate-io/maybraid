@@ -22,7 +22,7 @@ pub use scene::region_index;
 pub use gen::{
 	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
 	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
-	LodGenerateSystems,
+	LodGenerateSystems, LodGenerated,
 };
 pub use lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,

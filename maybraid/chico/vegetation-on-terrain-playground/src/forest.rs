@@ -75,6 +75,7 @@ pub fn stream_durham_forest(
 	mut controller: Query<&mut CameraController, With<Camera3d>>,
 	mut lod: ForestStreamLod,
 	mut last_key: Local<Option<String>>,
+	mut last_tile: Local<Option<(i32, i32)>>,
 	mut forest_camera: Local<bool>,
 ) {
 	let spec = config.forest.as_ref();
@@ -86,5 +87,5 @@ pub fn stream_durham_forest(
 	}
 
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, spec, cam, &mut last_key);
+	lod.apply_spec(&mut commands, spec, cam, &mut last_key, &mut last_tile);
 }

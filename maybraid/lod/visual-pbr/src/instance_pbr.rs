@@ -2,18 +2,21 @@
 //!
 //! Each grove owns its batch entities (parented under [`VisualLodRoot`]). A band
 //! or present change only rebuilds that grove. Frustum culling uses the grove
-//! [`LodHostBounds`] AABB. Instance matrices are grove-local; the parent
-//! transform places them. Opaque vegetation queues [`Opaque3d`].
+//! [`LodHostBounds`] AABB (`NoAutoAabb` so `Mesh3d` does not replace it with
+//! kit-local mesh bounds at the origin). Instance matrices are grove-local;
+//! the parent transform places them. Opaque vegetation queues [`Opaque3d`].
 
 use std::mem::size_of;
 
 use bevy::asset::{load_internal_asset, uuid_handle, AssetId};
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::ViewVisibility;
+use bevy::camera::visibility::{
+	add_visibility_class, NoAutoAabb, NoFrustumCulling, ViewVisibility, VisibilityClass,
+};
 use bevy::color::ColorToComponents;
 use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey};
 use bevy::ecs::system::lifetimeless::{Read, SRes};
-use bevy::ecs::system::SystemParamItem;
+use bevy::ecs::system::{SystemParam, SystemParamItem};
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
 	MeshPipeline, MeshPipelineKey, MeshPipelineSystems, RenderMeshInstances, SetMeshBindGroup,
@@ -81,7 +84,29 @@ impl InstanceData {
 struct InstanceMaterialData(Vec<InstanceData>);
 
 #[derive(Component)]
+#[require(VisibilityClass)]
+#[component(on_add = add_visibility_class::<InstancePbrBatch>)]
 struct InstancePbrBatch;
+
+/// Live visual/present counters. Distinguishes admission backlog from dead submit.
+#[derive(Resource, Debug, Clone, Default)]
+pub struct VisualHorizonStats {
+	pub visual_roots: u32,
+	pub semantic_high: u32,
+	pub semantic_other: u32,
+	pub packed_instances: u32,
+	pub pending_groves: u32,
+	pub batch_entities: u32,
+	pub items: u32,
+	pub items_ultralow: u32,
+	pub items_low: u32,
+	pub items_medium: u32,
+	pub prototype_cache: usize,
+	pub desired_in_keep: u32,
+	pub presented: u32,
+	pub present_pending: u32,
+	pub generate_pending: u32,
+}
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct BatchKey {
@@ -95,6 +120,7 @@ struct GroveSubmit {
 	pending: bool,
 	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
 	batches: HashMap<BatchKey, Entity>,
+	debug_marker: Option<Entity>,
 }
 
 #[derive(Resource, Default)]
@@ -108,6 +134,8 @@ impl Plugin for InstancePbrPlugin {
 	fn build(&self, app: &mut App) {
 		load_internal_asset!(app, INSTANCE_SHADER_HANDLE, "instance.wgsl", Shader::from_wgsl);
 		app.init_resource::<InstancePbrState>()
+			.init_resource::<VisualHorizonStats>()
+			.init_resource::<BandDebugAssets>()
 			.add_systems(Update, sync_instance_pbr_batches);
 		let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
 			return;
@@ -152,6 +180,60 @@ fn color_key(color: [f32; 4]) -> [u32; 4] {
 	[color[0].to_bits(), color[1].to_bits(), color[2].to_bits(), color[3].to_bits()]
 }
 
+/// Default on. `VEG_BAND_DEBUG=0` turns off poles and instance tints.
+fn band_debug_enabled() -> bool {
+	match std::env::var("VEG_BAND_DEBUG") {
+		Ok(value) => {
+			!matches!(value.trim().to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no")
+		}
+		Err(_) => true,
+	}
+}
+
+/// Loud packed-band colors. Medium is gold so it cannot be mistaken for High plants.
+fn band_debug_color(band: NamedVisualLevel) -> [f32; 4] {
+	match band {
+		NamedVisualLevel::UltraLow => [1.0, 0.15, 0.95, 1.0],
+		NamedVisualLevel::Low => [0.1, 0.95, 1.0, 1.0],
+		NamedVisualLevel::Medium | NamedVisualLevel::High => [1.0, 0.82, 0.05, 1.0],
+	}
+}
+
+fn host_debug_color(band: NamedVisualLevel, semantic_high: bool) -> [f32; 4] {
+	if semantic_high {
+		[0.9, 0.12, 0.12, 1.0]
+	} else {
+		band_debug_color(band)
+	}
+}
+
+#[derive(Component)]
+struct VisualBandDebugMarker;
+
+#[derive(Resource, Default)]
+struct BandDebugAssets {
+	mesh: Option<Handle<Mesh>>,
+}
+
+#[derive(SystemParam)]
+struct BandDebugCtx<'w> {
+	materials: ResMut<'w, Assets<StandardMaterial>>,
+	assets: ResMut<'w, BandDebugAssets>,
+}
+
+fn debug_color_material(
+	color: [f32; 4],
+	materials: &mut Assets<StandardMaterial>,
+) -> Handle<StandardMaterial> {
+	materials.add(StandardMaterial {
+		base_color: Color::linear_rgba(color[0], color[1], color[2], color[3]),
+		emissive: LinearRgba::new(color[0], color[1], color[2], 1.0) * 4.0,
+		unlit: true,
+		alpha_mode: AlphaMode::Opaque,
+		..default()
+	})
+}
+
 fn sync_instance_pbr_batches(
 	mut commands: Commands,
 	visuals: Query<(Entity, &ForestGroveVisual, &LodHostBounds, &ChildOf), With<VisualLodRoot>>,
@@ -162,9 +244,13 @@ fn sync_instance_pbr_batches(
 	asset_server: Res<AssetServer>,
 	mut world_assets: ResMut<Assets<bevy::world_serialization::WorldAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
+	mut debug: BandDebugCtx,
 	type_registry: Res<AppTypeRegistry>,
 	mut state: ResMut<InstancePbrState>,
 	mut existing: Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
+	mut stats: ResMut<VisualHorizonStats>,
+	time: Option<Res<Time>>,
+	mut last_log: Local<f64>,
 ) {
 	let mut seen = HashMap::<Entity, (NamedVisualLevel, bool, Aabb)>::new();
 	for (entity, visual, bounds, child_of) in &visuals {
@@ -183,6 +269,11 @@ fn sync_instance_pbr_batches(
 		} else {
 			for batch in submit.batches.values() {
 				if let Ok(mut entity) = commands.get_entity(*batch) {
+					entity.despawn();
+				}
+			}
+			if let Some(marker) = submit.debug_marker {
+				if let Ok(mut entity) = commands.get_entity(marker) {
 					entity.despawn();
 				}
 			}
@@ -215,15 +306,89 @@ fn sync_instance_pbr_batches(
 		);
 		if let Some(prev) = state.groves.remove(&entity) {
 			submit.batches = prev.batches;
+			submit.debug_marker = prev.debug_marker;
 		}
 		if !(submit.pending && submit.items.is_empty() && prev_empty) {
 			apply_grove_batches(&mut commands, entity, aabb, &mut submit, &mut existing);
 		}
+		sync_band_debug_marker(
+			&mut commands,
+			entity,
+			band,
+			semantic_high,
+			aabb,
+			&mut submit,
+			&mut meshes,
+			&mut debug,
+		);
 		state.groves.insert(entity, submit);
 	}
 
 	if !preload.is_empty() {
 		prototypes.preload(&preload, &mut scene_handles, &asset_server);
+	}
+
+	stats.visual_roots = 0;
+	stats.semantic_high = 0;
+	stats.semantic_other = 0;
+	stats.packed_instances = 0;
+	stats.pending_groves = 0;
+	stats.batch_entities = 0;
+	stats.items = 0;
+	stats.items_ultralow = 0;
+	stats.items_low = 0;
+	stats.items_medium = 0;
+	stats.prototype_cache = prototypes.len();
+	for (entity, visual, _, _) in &visuals {
+		stats.visual_roots += 1;
+		stats.packed_instances += visual.representation.instances.len() as u32;
+		let Some(&(band, semantic_high, _)) = seen.get(&entity) else {
+			continue;
+		};
+		if semantic_high {
+			stats.semantic_high += 1;
+		} else {
+			stats.semantic_other += 1;
+		}
+		if let Some(submit) = state.groves.get(&entity) {
+			if submit.pending {
+				stats.pending_groves += 1;
+			}
+			stats.batch_entities += submit.batches.len() as u32;
+			let n = submit.items.len() as u32;
+			stats.items += n;
+			match band {
+				NamedVisualLevel::UltraLow => stats.items_ultralow += n,
+				NamedVisualLevel::Low => stats.items_low += n,
+				NamedVisualLevel::Medium | NamedVisualLevel::High => stats.items_medium += n,
+			}
+		}
+	}
+	if let Some(time) = time.as_deref() {
+		let now = time.elapsed_secs_f64();
+		if now - *last_log >= 2.0 {
+			*last_log = now;
+			info!(
+				target: "veg.horizon",
+				"roots={} high={} other={} packed={} pending={} batches={} items={} ul={} low={} med={} cache={} desired={} presented={} present_q={} generate_q={} tint={}",
+				stats.visual_roots,
+				stats.semantic_high,
+				stats.semantic_other,
+				stats.packed_instances,
+				stats.pending_groves,
+				stats.batch_entities,
+				stats.items,
+				stats.items_ultralow,
+				stats.items_low,
+				stats.items_medium,
+				stats.prototype_cache,
+				stats.desired_in_keep,
+				stats.presented,
+				stats.present_pending,
+				stats.generate_pending,
+				if band_debug_enabled() { "gold=med cyan=low mag=ul red=high" } else { "off" },
+			);
+		}
 	}
 }
 
@@ -258,6 +423,9 @@ fn apply_grove_batches(
 		if let Some(&entity) = submit.batches.get(&key) {
 			if let Ok(mut data) = existing.get_mut(entity) {
 				*data = InstanceMaterialData(instances);
+				if let Ok(mut entity) = commands.get_entity(entity) {
+					entity.insert((aabb, NoAutoAabb));
+				}
 				continue;
 			}
 		}
@@ -267,8 +435,9 @@ fn apply_grove_batches(
 				Mesh3d(mesh),
 				InstanceMaterialData(instances),
 				Transform::IDENTITY,
-				Visibility::Inherited,
+				Visibility::Visible,
 				aabb,
+				NoAutoAabb,
 				SyncToRenderWorld,
 			))
 			.id();
@@ -308,7 +477,11 @@ fn compile_grove_submit(
 				preload.push(scene_ref.clone());
 				continue;
 			};
-			let color = material_color(&instance.material);
+			let color = if band_debug_enabled() {
+				band_debug_color(band)
+			} else {
+				material_color(&instance.material)
+			};
 			let key_color = color_key(color);
 			for part in &prototype.parts {
 				let local = instance.transform * part.local_transform;
@@ -320,7 +493,53 @@ fn compile_grove_submit(
 			}
 		}
 	}
-	GroveSubmit { band, semantic_high, pending, items, batches: HashMap::new() }
+	GroveSubmit { band, semantic_high, pending, items, batches: HashMap::new(), debug_marker: None }
+}
+
+fn sync_band_debug_marker(
+	commands: &mut Commands,
+	grove: Entity,
+	band: NamedVisualLevel,
+	semantic_high: bool,
+	aabb: Aabb,
+	submit: &mut GroveSubmit,
+	meshes: &mut Assets<Mesh>,
+	debug: &mut BandDebugCtx,
+) {
+	if !band_debug_enabled() {
+		if let Some(entity) = submit.debug_marker.take() {
+			if let Ok(mut entity) = commands.get_entity(entity) {
+				entity.despawn();
+			}
+		}
+		return;
+	}
+	let mesh = debug
+		.assets
+		.mesh
+		.get_or_insert_with(|| meshes.add(Mesh::from(Cuboid::new(12.0, 56.0, 12.0))))
+		.clone();
+	let material =
+		debug_color_material(host_debug_color(band, semantic_high), &mut debug.materials);
+	let transform = Transform::from_translation(Vec3::from(aabb.center));
+	if let Some(entity) = submit.debug_marker {
+		if let Ok(mut entity) = commands.get_entity(entity) {
+			entity.insert((Mesh3d(mesh), MeshMaterial3d(material), transform));
+			return;
+		}
+	}
+	let entity = commands
+		.spawn((
+			VisualBandDebugMarker,
+			Mesh3d(mesh),
+			MeshMaterial3d(material),
+			transform,
+			Visibility::Visible,
+			NoFrustumCulling,
+		))
+		.id();
+	commands.entity(grove).add_child(entity);
+	submit.debug_marker = Some(entity);
 }
 
 fn extract_dirty_instance_data(

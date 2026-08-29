@@ -24,7 +24,7 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
-use lod_visual_pbr::{attach_forest_grove_visual, ForestGroveVisualPlugin};
+use lod_visual_pbr::{attach_forest_grove_visual, ForestGroveVisualPlugin, VisualHorizonStats};
 use procedural_common::NoiseParams;
 
 use crate::camera::CameraController;
@@ -130,7 +130,25 @@ where
 			Pr,
 			ForestLodChan,
 		>::default())
-		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
+		.add_systems(Update, sync_forest_horizon_stats);
+}
+
+fn sync_forest_horizon_stats(
+	mut stats: ResMut<VisualHorizonStats>,
+	index: Res<ForestIndex>,
+	keep: Res<LodPresentKeepRegion<ForestLodChan>>,
+	present_queue: Res<LodPresentQueue<ChicoGrove>>,
+	generate_queue: Res<LodGenerateQueue<ChicoGrove>>,
+	presenter: Res<ForestPresenterState>,
+) {
+	stats.desired_in_keep = keep
+		.region
+		.map(|region| SpatialIndex::<ChicoGrove>::tracked_ids_for(&*index, region).len() as u32)
+		.unwrap_or(0);
+	stats.presented = presenter.presented_ids().len() as u32;
+	stats.present_pending = present_queue.pending.len() as u32;
+	stats.generate_pending = generate_queue.pending.len() as u32;
 }
 
 #[derive(Resource, Default)]
@@ -368,6 +386,7 @@ impl ForestStreamLod<'_> {
 		spec: Option<&ForestStreamSpec>,
 		camera: Option<Vec3>,
 		last_key: &mut Option<String>,
+		last_tile: &mut Option<(i32, i32)>,
 	) {
 		let Some(spec) = spec else {
 			self.generate.enabled = false;
@@ -379,6 +398,7 @@ impl ForestStreamLod<'_> {
 			self.present_queue.pending.clear();
 			self.presenter.clear(commands);
 			last_key.take();
+			last_tile.take();
 			return;
 		};
 
@@ -390,6 +410,7 @@ impl ForestStreamLod<'_> {
 			self.present_queue.pending.clear();
 			self.presenter.clear(commands);
 			*last_key = Some(key);
+			last_tile.take();
 		}
 
 		self.index.noise = spec.noise;
@@ -403,13 +424,17 @@ impl ForestStreamLod<'_> {
 		let Some(cam) = camera else {
 			return;
 		};
-		let generate_aabb = ForestExtent::xz_radius_aabb(cam, generate_m);
-		let present_aabb = ForestExtent::xz_radius_aabb(cam, present_m);
-		self.generate_keep.region = Some(generate_aabb);
-		self.keep.region = Some(present_aabb);
-		if key_changed {
-			self.generate_regions.write(LodGenerateRegion::new(generate_aabb));
-			self.present_regions.write(LodPresentRegion::new(present_aabb));
+		let tile = ForestExtent::cell_index_containing(cam);
+		if key_changed || last_tile.as_ref() != Some(&tile) {
+			*last_tile = Some(tile);
+			let generate_aabb = ForestExtent::xz_radius_aabb(cam, generate_m);
+			let present_aabb = ForestExtent::xz_radius_aabb(cam, present_m);
+			self.generate_keep.region = Some(generate_aabb);
+			self.keep.region = Some(present_aabb);
+			if key_changed {
+				self.generate_regions.write(LodGenerateRegion::new(generate_aabb));
+				self.present_regions.write(LodPresentRegion::new(present_aabb));
+			}
 		}
 	}
 }
@@ -423,6 +448,7 @@ pub fn stream_forest(
 	mut ground: Query<&mut Transform, (With<GroundPlane>, Without<Camera3d>)>,
 	mut lod: ForestStreamLod,
 	mut last_key: Local<Option<String>>,
+	mut last_tile: Local<Option<(i32, i32)>>,
 	mut forest_camera: Local<bool>,
 ) {
 	let spec = match &config.subject {
@@ -449,7 +475,7 @@ pub fn stream_forest(
 	}
 
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, spec.as_ref(), cam, &mut last_key);
+	lod.apply_spec(&mut commands, spec.as_ref(), cam, &mut last_key, &mut last_tile);
 }
 
 #[cfg(test)]

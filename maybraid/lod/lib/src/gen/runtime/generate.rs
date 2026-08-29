@@ -9,8 +9,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_xz_distance2, GeneratingSpatialIndex,
-	GenerationScheme, Id, StorageStatus, QUEUE_KEEP_SLACK_XZ,
+	expand_keep_xz, expire_pending_outside_keep, id_xz_distance2, keep_region_changed,
+	GeneratingSpatialIndex, GenerationScheme, Id, MaterializeStatus, StorageStatus,
+	QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -28,6 +29,20 @@ pub struct LodGenerateRegion<M: Send + Sync + 'static> {
 impl<M: Send + Sync + 'static> LodGenerateRegion<M> {
 	pub fn new(region: Aabb3d) -> Self {
 		Self { region, _marker: PhantomData }
+	}
+}
+
+/// One origin id just inserted by generate. Present enqueues this id; it does
+/// not re-broadphase keep.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct LodGenerated<T: Send + Sync + 'static> {
+	pub id: Id,
+	pub _marker: PhantomData<T>,
+}
+
+impl<T: Send + Sync + 'static> LodGenerated<T> {
+	pub fn new(id: Id) -> Self {
+		Self { id, _marker: PhantomData }
 	}
 }
 
@@ -146,6 +161,8 @@ pub fn drain_lod_generate<T, S, M, F>(
 	mut regions: MessageReader<LodGenerateRegion<M>>,
 	keep: Res<LodGenerateKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	mut last_keep: Local<Option<Aabb3d>>,
+	mut generated: MessageWriter<LodGenerated<T>>,
 ) where
 	T: GenerationScheme<S> + Send + Sync + 'static,
 	S: Resource<Mutability = Mutable> + GeneratingSpatialIndex<T>,
@@ -153,7 +170,11 @@ pub fn drain_lod_generate<T, S, M, F>(
 	F: QueryFilter + 'static,
 {
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
-	push_keep_region(&mut scan, keep.region);
+	if keep_region_changed(*last_keep, keep.region) {
+		*last_keep = keep.region;
+		push_keep_region(&mut scan, keep.region);
+	}
+	let scanned = !scan.is_empty();
 	for region in scan {
 		for original in T::original_ids_for(&mut *index, region) {
 			if index.storage_status(original.0) != StorageStatus::NotTracked {
@@ -178,18 +199,22 @@ pub fn drain_lod_generate<T, S, M, F>(
 	};
 
 	let origin = lod_ref.current_transform.translation;
-	queue.pending.make_contiguous().sort_by(|a, b| {
-		id_xz_distance2(*a, origin)
-			.partial_cmp(&id_xz_distance2(*b, origin))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
+	if scanned {
+		queue.pending.make_contiguous().sort_by(|a, b| {
+			id_xz_distance2(*a, origin)
+				.partial_cmp(&id_xz_distance2(*b, origin))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
+	}
 
 	let n = budget.ids_per_frame.max(1) as usize;
 	for _ in 0..n {
 		let Some(id) = queue.pending.pop_front() else {
 			break;
 		};
-		index.get_or_generate(id, lod_ref);
+		if index.get_or_generate(id, lod_ref) == Some(MaterializeStatus::Created) {
+			generated.write(LodGenerated::new(id));
+		}
 	}
 }
 
@@ -285,6 +310,7 @@ where
 			.init_resource::<LodGenerateQueue<T>>()
 			.init_resource::<LodGenerateKeepRegion<M>>()
 			.add_message::<LodGenerateRegion<M>>()
+			.add_message::<LodGenerated<T>>()
 			.add_systems(
 				Update,
 				drain_lod_generate::<T, S, M, F>.in_set(LodGenerateSystems::Drain),

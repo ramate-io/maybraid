@@ -133,6 +133,10 @@ impl SpatialIndex<ChicoForest> for ForestIndex {
 		let version = self.next_version();
 		self.forests.insert(id, ForestEntry { value: t, bounds, version });
 	}
+
+	fn storage_epoch(&self) -> u64 {
+		self.next_version
+	}
 }
 
 impl SpatialIndex<ChicoGrove> for ForestIndex {
@@ -172,6 +176,10 @@ impl SpatialIndex<ChicoGrove> for ForestIndex {
 	fn insert(&mut self, id: Id, t: ChicoGrove, bounds: Aabb3d, _lod_ref: &LodRef) {
 		let version = self.next_version();
 		self.groves.insert(id, GroveEntry { value: t, bounds, version });
+	}
+
+	fn storage_epoch(&self) -> u64 {
+		self.next_version
 	}
 }
 

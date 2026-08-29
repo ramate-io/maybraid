@@ -3,7 +3,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::gen::tests::test_utils::{cell, span, RecordingPresenter, Vegetation, WorldIndex};
-use crate::gen::{GeneratingSpatialIndex, Id, RegionPresenter, Version};
+use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
 	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentKeepRegion,
@@ -219,5 +219,93 @@ fn drain_present_cull_hides_leaving_id_without_a_lattice_message() -> Result<()>
 	);
 	assert!(presenter.vegetation.contains_key(&far_id));
 	assert!(presenter.vegetation.contains_key(&near_id));
+	Ok(())
+}
+
+#[test]
+fn drain_present_drains_remaining_queue_without_a_keep_rescan() -> Result<()> {
+	let mut app = App::new();
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let near = cell(0.0);
+	let mid = cell(2.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &near,
+	};
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(mid), &lod);
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(RecordingPresenter::default())
+		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(span(0.0, 4.0));
+			keep
+		})
+		.add_plugins(
+			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		);
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+	app.update();
+	app.update();
+
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert!(presenter.vegetation.contains_key(&Id::from_cell(near)));
+	assert!(presenter.vegetation.contains_key(&Id::from_cell(mid)));
+	Ok(())
+}
+
+#[test]
+fn drain_present_picks_up_new_index_ids_without_a_region_message() -> Result<()> {
+	let mut app = App::new();
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let near = cell(0.0);
+	let later = cell(2.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &near,
+	};
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(near), &lod);
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(RecordingPresenter::default())
+		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(span(0.0, 4.0));
+			keep
+		})
+		.add_plugins(
+			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		);
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+	app.update();
+	assert!(app
+		.world()
+		.resource::<RecordingPresenter>()
+		.vegetation
+		.contains_key(&Id::from_cell(near)));
+
+	{
+		let mut index = app.world_mut().resource_mut::<WorldIndex>();
+		GeneratingSpatialIndex::<Vegetation>::get_or_generate(
+			&mut *index,
+			Id::from_cell(later),
+			&lod,
+		);
+	}
+	app.world_mut()
+		.write_message(LodGenerated::<Vegetation>::new(Id::from_cell(later)));
+	app.update();
+
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert!(presenter.vegetation.contains_key(&Id::from_cell(later)));
 	Ok(())
 }

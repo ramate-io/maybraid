@@ -201,6 +201,10 @@ macro_rules! impl_spatial_index {
 				let version = self.next_version();
 				self.$field.insert(id, StoredEntry { value, bounds, version });
 			}
+
+			fn storage_epoch(&self) -> u64 {
+				self.next_version
+			}
 		}
 	};
 }

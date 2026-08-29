@@ -10,8 +10,8 @@ use bevy::prelude::*;
 
 use super::RegionPresenter;
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_xz_distance2, Id, SpatialIndex,
-	QUEUE_KEEP_SLACK_XZ,
+	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
+	keep_region_changed, Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -189,8 +189,10 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	mut queue: ResMut<LodPresentQueue<T>>,
 	budget: Res<LodPresentBudget>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
+	mut generated: MessageReader<LodGenerated<T>>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
+	mut last_keep: Local<Option<Aabb3d>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -201,11 +203,15 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 {
 	let mut presenter = presenter.into_inner();
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
-	if let Some(keep_region) = keep.region {
-		if !scan.iter().any(|region| regions_match(*region, keep_region)) {
-			scan.push(keep_region);
+	if keep_region_changed(*last_keep, keep.region) {
+		*last_keep = keep.region;
+		if let Some(keep_region) = keep.region {
+			if !scan.iter().any(|region| regions_match(*region, keep_region)) {
+				scan.push(keep_region);
+			}
 		}
 	}
+	let scanned = !scan.is_empty();
 	for region in scan {
 		for tracked in index.tracked_ids_for(region) {
 			let Some(version) = index.version(tracked.0) else {
@@ -228,6 +234,12 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		}
 	}
 
+	for message in generated.read() {
+		if !queue.pending.contains(&message.id) {
+			queue.pending.push_back(message.id);
+		}
+	}
+
 	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
 
 	if queue.pending.is_empty() {
@@ -241,11 +253,13 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	};
 
 	let origin = lod_ref.current_transform.translation;
-	queue.pending.make_contiguous().sort_by(|a, b| {
-		id_xz_distance2(*a, origin)
-			.partial_cmp(&id_xz_distance2(*b, origin))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
+	if scanned {
+		queue.pending.make_contiguous().sort_by(|a, b| {
+			id_xz_distance2(*a, origin)
+				.partial_cmp(&id_xz_distance2(*b, origin))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		});
+	}
 
 	let n = budget.ids_per_frame.max(1) as usize;
 	let mut handled = 0;
@@ -267,6 +281,14 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		};
 		presenter.handle(id, version, value, lod_ref);
 		handled += 1;
+		// Grow-then-spawn presenters consume a slot without stamping
+		// `presented_version`. Re-queue so the next slot can spawn without a
+		// keep rescan.
+		let still_needs =
+			presenter.presented_version(id).is_none_or(|presented| presented < version);
+		if still_needs && !queue.pending.contains(&id) {
+			queue.pending.push_front(id);
+		}
 	}
 }
 
@@ -323,12 +345,12 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	let Some(keep_region) = keep.live_region() else {
 		return;
 	};
-	let keep_ids: HashSet<Id> = index
-		.tracked_ids_for(keep_region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
 	let mut presenter = presenter.into_inner();
+	let keep_ids: HashSet<Id> = presenter
+		.presented_ids()
+		.into_iter()
+		.filter(|id| id_lives_in_keep(*id, keep_region, keep.slack_xz))
+		.collect();
 	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
 }
 
@@ -411,6 +433,7 @@ where
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()
 			.add_message::<LodPresentRegion<M>>()
+			.add_message::<LodGenerated<T>>()
 			.add_systems(
 				Update,
 				drain_lod_present::<T, S, Pr, M, F>.in_set(LodPresentSystems::Drain),

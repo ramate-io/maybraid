@@ -31,4 +31,11 @@ pub trait SpatialIndex<T> {
 
 	/// Inserts the value, stamping a fresh [`Version`]. Must not spawn scenes.
 	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d, lod_ref: &LodRef);
+
+	/// Monotonic stamp that changes when this index inserts. Present/generate
+	/// drains rescan keep only when this moves, the keep AABB moves, or a
+	/// region message arrives.
+	fn storage_epoch(&self) -> u64 {
+		0
+	}
 }

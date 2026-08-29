@@ -1,5 +1,8 @@
 //! Packed UltraLow / Low / Medium forest draws for [`lod::VisualLodScene`].
 //!
+//! Band debug (default on, `VEG_BAND_DEBUG=0` to disable): gold Medium
+//! instances and poles, cyan Low, magenta UltraLow, red High-host poles.
+//!
 //! [`ForestGroveVisual`] stores [`VisualInstance`]s. Geometry is cached by
 //! [`scene_ref::SceneRef`]; material by [`MaterialRef`]. Policy selects a band
 //! per view; [`InstancePbrRenderer`] buckets per grove, then `(mesh, material)`,
@@ -13,7 +16,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::render::sync_world::SyncToRenderWorld;
 use chico_vegetation_components::{pack_vegetation_visual_aliased, VegetationComponents};
-pub use instance_pbr::{InstancePbrPlugin, InstancePbrRenderer};
+pub use instance_pbr::{InstancePbrPlugin, InstancePbrRenderer, VisualHorizonStats};
 use lod::lod_ref::LodRef;
 use lod::{
 	HasVisualLodThresholds, LodHostBounds, NamedVisualLevel, ProjectedBoundsPolicy,
