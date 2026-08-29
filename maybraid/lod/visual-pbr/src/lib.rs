@@ -2,8 +2,8 @@
 //!
 //! [`ForestGroveVisual`] stores [`VisualInstance`]s. Geometry is cached by
 //! [`scene_ref::SceneRef`]; material by [`MaterialRef`]. Policy selects a band
-//! per view; [`InstancePbrRenderer`] buckets `(prototype, material)` and submits
-//! instanced draws. Camera motion does not cook posed grove meshes.
+//! per view; [`InstancePbrRenderer`] buckets per grove, then `(mesh, material)`,
+//! and submits instanced draws. Camera motion does not cook posed grove meshes.
 
 mod instance_pbr;
 

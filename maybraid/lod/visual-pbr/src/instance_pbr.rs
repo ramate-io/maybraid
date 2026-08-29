@@ -1,18 +1,19 @@
-//! Instanced PBR submit: bucket resolved prototypes and queue one draw per
-//! `(mesh, material)`.
+//! Instanced PBR submit: spatial grove first, then `(mesh, material)`.
 //!
-//! Dummy batch entities exist only so Bevy uploads the shared mesh. Grove hosts
-//! stay data-only — no tree [`Mesh3d`] children, no camera-driven cook.
+//! Each grove owns its batch entities (parented under [`VisualLodRoot`]). A band
+//! or present change only rebuilds that grove. Frustum culling uses the grove
+//! [`LodHostBounds`] AABB. Instance matrices are grove-local; the parent
+//! transform places them.
 
 use std::mem::size_of;
 
 use bevy::asset::{load_internal_asset, uuid_handle, AssetId};
-use bevy::camera::visibility::NoFrustumCulling;
+use bevy::camera::primitives::Aabb;
+use bevy::camera::visibility::ViewVisibility;
 use bevy::color::ColorToComponents;
 use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
 use bevy::ecs::system::lifetimeless::{Read, SRes};
 use bevy::ecs::system::SystemParamItem;
-use bevy::math::Affine3A;
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
 	get_mesh_instance_world_from_local, MeshInputUniform, MeshPipeline, MeshPipelineKey,
@@ -30,7 +31,7 @@ use bevy::render::render_phase::{
 	RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
 };
 use bevy::render::render_resource::*;
-use bevy::render::renderer::RenderDevice;
+use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::sync_world::{MainEntity, RenderEntity, SyncToRenderWorld};
 use bevy::render::view::ExtractedView;
 use bevy::render::Extract;
@@ -90,17 +91,12 @@ struct BatchKey {
 	color: [u32; 4],
 }
 
-#[derive(Resource, Default)]
-struct InstancePbrBatchEntities {
-	by_key: HashMap<BatchKey, Entity>,
-}
-
 struct GroveSubmit {
 	band: NamedVisualLevel,
 	semantic_high: bool,
-	xf: Affine3A,
-	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
 	pending: bool,
+	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
+	batches: HashMap<BatchKey, Entity>,
 }
 
 #[derive(Resource, Default)]
@@ -113,8 +109,7 @@ pub struct InstancePbrPlugin;
 impl Plugin for InstancePbrPlugin {
 	fn build(&self, app: &mut App) {
 		load_internal_asset!(app, INSTANCE_SHADER_HANDLE, "instance.wgsl", Shader::from_wgsl);
-		app.init_resource::<InstancePbrBatchEntities>()
-			.init_resource::<InstancePbrState>()
+		app.init_resource::<InstancePbrState>()
 			.add_systems(Update, sync_instance_pbr_batches);
 		let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
 			return;
@@ -161,10 +156,7 @@ fn color_key(color: [f32; 4]) -> [u32; 4] {
 
 fn sync_instance_pbr_batches(
 	mut commands: Commands,
-	visuals: Query<
-		(Entity, &ForestGroveVisual, &LodHostBounds, &GlobalTransform, &ChildOf),
-		With<VisualLodRoot>,
-	>,
+	visuals: Query<(Entity, &ForestGroveVisual, &LodHostBounds, &ChildOf), With<VisualLodRoot>>,
 	views: Query<(&Camera, &GlobalTransform), With<LodViewer>>,
 	host_levels: Query<&LodSceneLevel>,
 	mut scene_handles: ResMut<SceneRefHandles>,
@@ -173,52 +165,48 @@ fn sync_instance_pbr_batches(
 	mut world_assets: ResMut<Assets<bevy::world_serialization::WorldAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	type_registry: Res<AppTypeRegistry>,
-	mut batch_entities: ResMut<InstancePbrBatchEntities>,
 	mut state: ResMut<InstancePbrState>,
 	mut existing: Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
 ) {
-	let mut seen = HashMap::<Entity, (NamedVisualLevel, bool, Affine3A)>::new();
-	for (entity, visual, bounds, grove_xf, child_of) in &visuals {
+	let mut seen = HashMap::<Entity, (NamedVisualLevel, bool, Aabb)>::new();
+	for (entity, visual, bounds, child_of) in &visuals {
 		let semantic_high = host_levels
 			.get(child_of.parent())
 			.is_ok_and(|level| *level == LodSceneLevel::High);
 		seen.insert(
 			entity,
-			(selected_packed_band(visual, bounds, &views), semantic_high, grove_xf.affine()),
+			(selected_packed_band(visual, bounds, &views), semantic_high, Aabb::from(bounds.0)),
 		);
 	}
 
-	let mut removed = false;
-	state.groves.retain(|entity, _| {
+	state.groves.retain(|entity, submit| {
 		if seen.contains_key(entity) {
 			true
 		} else {
-			removed = true;
+			for batch in submit.batches.values() {
+				if let Ok(mut entity) = commands.get_entity(*batch) {
+					entity.despawn();
+				}
+			}
 			false
 		}
 	});
 
 	let mut preload = Vec::new();
-	let mut updated = false;
-	let mut added_items = Vec::new();
-	for (entity, visual, _, _, _) in &visuals {
-		let Some(&(band, semantic_high, xf)) = seen.get(&entity) else {
+	for (entity, visual, _, _) in &visuals {
+		let Some(&(band, semantic_high, aabb)) = seen.get(&entity) else {
 			continue;
 		};
 		if state.groves.get(&entity).is_some_and(|prev| {
-			prev.band == band
-				&& prev.semantic_high == semantic_high
-				&& prev.xf == xf
-				&& !prev.pending
+			prev.band == band && prev.semantic_high == semantic_high && !prev.pending
 		}) {
 			continue;
 		}
-		let existed = state.groves.contains_key(&entity);
-		let submit = compile_grove_submit(
+		let prev_empty = state.groves.get(&entity).is_none_or(|prev| prev.items.is_empty());
+		let mut submit = compile_grove_submit(
 			visual,
 			band,
 			semantic_high,
-			xf,
 			&mut scene_handles,
 			&mut prototypes,
 			&asset_server,
@@ -227,10 +215,11 @@ fn sync_instance_pbr_batches(
 			&type_registry,
 			&mut preload,
 		);
-		if existed || submit.pending {
-			updated = true;
-		} else {
-			added_items.extend(submit.items.iter().cloned());
+		if let Some(prev) = state.groves.remove(&entity) {
+			submit.batches = prev.batches;
+		}
+		if !(submit.pending && submit.items.is_empty() && prev_empty) {
+			apply_grove_batches(&mut commands, entity, aabb, &mut submit, &mut existing);
 		}
 		state.groves.insert(entity, submit);
 	}
@@ -238,104 +227,62 @@ fn sync_instance_pbr_batches(
 	if !preload.is_empty() {
 		prototypes.preload(&preload, &mut scene_handles, &asset_server);
 	}
-	if !removed && !updated && added_items.is_empty() {
-		return;
-	}
-
-	if removed || updated {
-		apply_restitch(&mut commands, &state, &mut batch_entities, &mut existing);
-	} else {
-		apply_extend(&mut commands, added_items, &mut batch_entities, &mut existing);
-	}
 }
 
-fn apply_restitch(
+fn apply_grove_batches(
 	commands: &mut Commands,
-	state: &InstancePbrState,
-	batch_entities: &mut InstancePbrBatchEntities,
+	grove: Entity,
+	aabb: Aabb,
+	submit: &mut GroveSubmit,
 	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
 ) {
 	let mut buckets: HashMap<BatchKey, (Handle<Mesh>, Vec<InstanceData>)> = HashMap::new();
-	for submit in state.groves.values() {
-		for (key, mesh, instance) in &submit.items {
-			buckets
-				.entry(key.clone())
-				.or_insert_with(|| (mesh.clone(), Vec::new()))
-				.1
-				.push(*instance);
-		}
+	for (key, mesh, instance) in &submit.items {
+		buckets
+			.entry(key.clone())
+			.or_insert_with(|| (mesh.clone(), Vec::new()))
+			.1
+			.push(*instance);
 	}
 
-	let stale: Vec<BatchKey> = batch_entities
-		.by_key
-		.keys()
-		.filter(|key| !buckets.contains_key(*key))
-		.cloned()
-		.collect();
-	for key in stale {
-		if let Some(entity) = batch_entities.by_key.remove(&key) {
-			commands.entity(entity).despawn();
+	submit.batches.retain(|key, entity| {
+		if buckets.contains_key(key) {
+			true
+		} else {
+			if let Ok(mut entity) = commands.get_entity(*entity) {
+				entity.despawn();
+			}
+			false
 		}
-	}
+	});
 
 	for (key, (mesh, instances)) in buckets {
-		upsert_batch(commands, batch_entities, existing, key, mesh, instances, true);
-	}
-}
-
-fn apply_extend(
-	commands: &mut Commands,
-	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
-	batch_entities: &mut InstancePbrBatchEntities,
-	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
-) {
-	let mut buckets: HashMap<BatchKey, (Handle<Mesh>, Vec<InstanceData>)> = HashMap::new();
-	for (key, mesh, instance) in items {
-		buckets.entry(key).or_insert_with(|| (mesh, Vec::new())).1.push(instance);
-	}
-	for (key, (mesh, extra)) in buckets {
-		upsert_batch(commands, batch_entities, existing, key, mesh, extra, false);
-	}
-}
-
-fn upsert_batch(
-	commands: &mut Commands,
-	batch_entities: &mut InstancePbrBatchEntities,
-	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
-	key: BatchKey,
-	mesh: Handle<Mesh>,
-	instances: Vec<InstanceData>,
-	replace: bool,
-) {
-	if let Some(&entity) = batch_entities.by_key.get(&key) {
-		if let Ok(mut data) = existing.get_mut(entity) {
-			if replace {
+		if let Some(&entity) = submit.batches.get(&key) {
+			if let Ok(mut data) = existing.get_mut(entity) {
 				*data = InstanceMaterialData(instances);
-			} else {
-				data.extend(instances);
+				continue;
 			}
-			return;
 		}
+		let entity = commands
+			.spawn((
+				InstancePbrBatch,
+				Mesh3d(mesh),
+				InstanceMaterialData(instances),
+				Transform::IDENTITY,
+				Visibility::Inherited,
+				aabb,
+				SyncToRenderWorld,
+			))
+			.id();
+		commands.entity(grove).add_child(entity);
+		submit.batches.insert(key, entity);
 	}
-	let entity = commands
-		.spawn((
-			InstancePbrBatch,
-			Mesh3d(mesh),
-			InstanceMaterialData(instances),
-			Transform::IDENTITY,
-			Visibility::Inherited,
-			NoFrustumCulling,
-			SyncToRenderWorld,
-		))
-		.id();
-	batch_entities.by_key.insert(key, entity);
 }
 
 fn compile_grove_submit(
 	visual: &ForestGroveVisual,
 	band: NamedVisualLevel,
 	semantic_high: bool,
-	xf: Affine3A,
 	scene_handles: &mut SceneRefHandles,
 	prototypes: &mut ScenePrototypeCache,
 	asset_server: &AssetServer,
@@ -366,16 +313,16 @@ fn compile_grove_submit(
 			let color = material_color(&instance.material);
 			let key_color = color_key(color);
 			for part in &prototype.parts {
-				let world = xf * instance.transform * part.local_transform;
+				let local = instance.transform * part.local_transform;
 				items.push((
 					BatchKey { mesh: part.mesh.id(), color: key_color },
 					part.mesh.clone(),
-					InstanceData::new(Mat4::from(world), color),
+					InstanceData::new(Mat4::from(local), color),
 				));
 			}
 		}
 	}
-	GroveSubmit { band, semantic_high, xf, items, pending }
+	GroveSubmit { band, semantic_high, pending, items, batches: HashMap::new() }
 }
 
 fn extract_dirty_instance_data(
@@ -395,16 +342,27 @@ struct InstanceBuffer {
 
 fn prepare_instance_buffers(
 	mut commands: Commands,
-	query: Query<(Entity, &InstanceMaterialData), Changed<InstanceMaterialData>>,
+	query: Query<
+		(Entity, &InstanceMaterialData, Option<&InstanceBuffer>),
+		Changed<InstanceMaterialData>,
+	>,
 	render_device: Res<RenderDevice>,
+	render_queue: Res<RenderQueue>,
 ) {
-	for (entity, instance_data) in &query {
+	for (entity, instance_data, existing) in &query {
 		if instance_data.is_empty() {
 			continue;
 		}
+		let bytes = bytemuck::cast_slice(instance_data.as_slice());
+		if let Some(existing) = existing {
+			if existing.length == instance_data.len() {
+				render_queue.write_buffer(&existing.buffer, 0, bytes);
+				continue;
+			}
+		}
 		let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
 			label: Some("instance pbr data"),
-			contents: bytemuck::cast_slice(instance_data.as_slice()),
+			contents: bytes,
 			usage: BufferUsages::VERTEX | BufferUsages::COPY_DST,
 		});
 		commands
@@ -476,7 +434,7 @@ fn queue_instance_pbr(
 	maybe_batched_instance_buffers: Option<
 		Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>,
 	>,
-	material_meshes: Query<(Entity, &MainEntity), With<InstanceMaterialData>>,
+	material_meshes: Query<(Entity, &MainEntity, &ViewVisibility), With<InstanceMaterialData>>,
 	mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
 	views: Query<&ExtractedView>,
 	view_key_cache: Res<ViewKeyCache>,
@@ -490,7 +448,10 @@ fn queue_instance_pbr(
 		let Some(&view_key) = view_key_cache.get(&view.retained_view_entity) else {
 			continue;
 		};
-		for (entity, main_entity) in &material_meshes {
+		for (entity, main_entity, vis) in &material_meshes {
+			if !vis.get() {
+				continue;
+			}
 			let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
 			else {
 				continue;

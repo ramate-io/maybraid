@@ -16,8 +16,8 @@ Forest tiles store a [`VisualInstance`](../lib/src/scene/visual.rs) list on a
 [`VisualLodRoot`](../lib/src/scene/visual.rs) sibling. Geometry is cached by
 [`SceneRef`](../../scene-ref) → [`ScenePrototype`](../../scene-ref); material by
 [`MaterialRef`](../../material-ref). Policy picks a band per view; the
-[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets
-`(prototype, material)` and submits instanced draws. Camera motion does not
+[`InstancePbrRenderer`](../visual-pbr/src/instance_pbr.rs) buckets per grove,
+then `(mesh, material)`, and submits instanced draws. Camera motion does not
 cook posed grove meshes or spawn visual `SceneChunk`s. High kits stay on the
 exclusive semantic drain. [`VisualOwnsAppearance`](../lib/src/scene/visual.rs)
 mutes non-High fulfill on that tile.
