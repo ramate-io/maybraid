@@ -10,9 +10,9 @@ use bevy::asset::{load_internal_asset, uuid_handle, AssetId};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::color::ColorToComponents;
 use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
-use bevy::ecs::query::QueryItem;
 use bevy::ecs::system::lifetimeless::{Read, SRes};
 use bevy::ecs::system::SystemParamItem;
+use bevy::math::Affine3A;
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
 	get_mesh_instance_world_from_local, MeshInputUniform, MeshPipeline, MeshPipelineKey,
@@ -22,7 +22,6 @@ use bevy::pbr::{
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::render::batching::gpu_preprocessing::BatchedInstanceBuffers;
-use bevy::render::extract_component::{ExtractComponent, ExtractComponentPlugin};
 use bevy::render::mesh::allocator::MeshAllocator;
 use bevy::render::mesh::{RenderMesh, RenderMeshBufferInfo};
 use bevy::render::render_asset::RenderAssets;
@@ -32,10 +31,10 @@ use bevy::render::render_phase::{
 };
 use bevy::render::render_resource::*;
 use bevy::render::renderer::RenderDevice;
-use bevy::render::sync_component::SyncComponent;
-use bevy::render::sync_world::{MainEntity, SyncToRenderWorld};
+use bevy::render::sync_world::{MainEntity, RenderEntity, SyncToRenderWorld};
 use bevy::render::view::ExtractedView;
-use bevy::render::{Render, RenderApp, RenderStartup, RenderSystems};
+use bevy::render::Extract;
+use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
 use bevy::shader::Shader;
 use bytemuck::{Pod, Zeroable};
 use lod::{
@@ -79,22 +78,8 @@ impl InstanceData {
 	}
 }
 
-#[derive(Component, Deref, Clone)]
+#[derive(Component, Deref, DerefMut, Clone)]
 struct InstanceMaterialData(Vec<InstanceData>);
-
-impl SyncComponent for InstanceMaterialData {
-	type Target = Self;
-}
-
-impl ExtractComponent for InstanceMaterialData {
-	type QueryData = &'static InstanceMaterialData;
-	type QueryFilter = ();
-	type Out = Self;
-
-	fn extract_component(item: QueryItem<'_, '_, Self::QueryData>) -> Option<Self> {
-		Some(InstanceMaterialData(item.0.clone()))
-	}
-}
 
 #[derive(Component)]
 struct InstancePbrBatch;
@@ -110,9 +95,17 @@ struct InstancePbrBatchEntities {
 	by_key: HashMap<BatchKey, Entity>,
 }
 
+struct GroveSubmit {
+	band: NamedVisualLevel,
+	semantic_high: bool,
+	xf: Affine3A,
+	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
+	pending: bool,
+}
+
 #[derive(Resource, Default)]
-struct InstancePbrSubmitKey {
-	groves: Vec<(Entity, NamedVisualLevel, bool)>,
+struct InstancePbrState {
+	groves: HashMap<Entity, GroveSubmit>,
 }
 
 pub struct InstancePbrPlugin;
@@ -121,8 +114,7 @@ impl Plugin for InstancePbrPlugin {
 	fn build(&self, app: &mut App) {
 		load_internal_asset!(app, INSTANCE_SHADER_HANDLE, "instance.wgsl", Shader::from_wgsl);
 		app.init_resource::<InstancePbrBatchEntities>()
-			.init_resource::<InstancePbrSubmitKey>()
-			.add_plugins(ExtractComponentPlugin::<InstanceMaterialData>::default())
+			.init_resource::<InstancePbrState>()
 			.add_systems(Update, sync_instance_pbr_batches);
 		let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
 			return;
@@ -130,6 +122,7 @@ impl Plugin for InstancePbrPlugin {
 		render_app
 			.add_render_command::<Transparent3d, DrawInstancePbr>()
 			.init_resource::<SpecializedMeshPipelines<InstancePbrPipeline>>()
+			.add_systems(ExtractSchedule, extract_dirty_instance_data)
 			.add_systems(RenderStartup, init_instance_pipeline.after(MeshPipelineSystems))
 			.add_systems(
 				Render,
@@ -181,95 +174,216 @@ fn sync_instance_pbr_batches(
 	mut meshes: ResMut<Assets<Mesh>>,
 	type_registry: Res<AppTypeRegistry>,
 	mut batch_entities: ResMut<InstancePbrBatchEntities>,
-	mut submit_key: ResMut<InstancePbrSubmitKey>,
+	mut state: ResMut<InstancePbrState>,
 	mut existing: Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
 ) {
-	let mut next_key = Vec::new();
-	let mut buckets: HashMap<BatchKey, (Handle<Mesh>, Vec<InstanceData>)> = HashMap::new();
-	let mut preload: Vec<SceneRef> = Vec::new();
-
+	let mut seen = HashMap::<Entity, (NamedVisualLevel, bool, Affine3A)>::new();
 	for (entity, visual, bounds, grove_xf, child_of) in &visuals {
 		let semantic_high = host_levels
 			.get(child_of.parent())
 			.is_ok_and(|level| *level == LodSceneLevel::High);
-		let band = selected_packed_band(visual, bounds, &views);
-		next_key.push((entity, band, semantic_high));
-		if semantic_high {
+		seen.insert(
+			entity,
+			(selected_packed_band(visual, bounds, &views), semantic_high, grove_xf.affine()),
+		);
+	}
+
+	let mut removed = false;
+	state.groves.retain(|entity, _| {
+		if seen.contains_key(entity) {
+			true
+		} else {
+			removed = true;
+			false
+		}
+	});
+
+	let mut preload = Vec::new();
+	let mut updated = false;
+	let mut added_items = Vec::new();
+	for (entity, visual, _, _, _) in &visuals {
+		let Some(&(band, semantic_high, xf)) = seen.get(&entity) else {
+			continue;
+		};
+		if state.groves.get(&entity).is_some_and(|prev| {
+			prev.band == band
+				&& prev.semantic_high == semantic_high
+				&& prev.xf == xf
+				&& !prev.pending
+		}) {
 			continue;
 		}
-		let grove_world = grove_xf.affine();
-		for instance in visual.representation.instances.iter() {
-			let Some(scene_ref) = instance.scene_for(band).cloned() else {
-				continue;
-			};
-			let Some(prototype) = prototypes.try_resolve(
-				&scene_ref,
-				&mut scene_handles,
-				&asset_server,
-				&mut world_assets,
-				&mut meshes,
-				&type_registry,
-			) else {
-				preload.push(scene_ref);
-				continue;
-			};
-			let color = material_color(&instance.material);
-			let key_color = color_key(color);
-			for part in &prototype.parts {
-				let world = grove_world * instance.transform * part.local_transform;
-				let key = BatchKey { mesh: part.mesh.id(), color: key_color };
-				buckets
-					.entry(key)
-					.or_insert_with(|| (part.mesh.clone(), Vec::new()))
-					.1
-					.push(InstanceData::new(Mat4::from(world), color));
-			}
+		let existed = state.groves.contains_key(&entity);
+		let submit = compile_grove_submit(
+			visual,
+			band,
+			semantic_high,
+			xf,
+			&mut scene_handles,
+			&mut prototypes,
+			&asset_server,
+			&mut world_assets,
+			&mut meshes,
+			&type_registry,
+			&mut preload,
+		);
+		if existed || submit.pending {
+			updated = true;
+		} else {
+			added_items.extend(submit.items.iter().cloned());
 		}
+		state.groves.insert(entity, submit);
 	}
 
 	if !preload.is_empty() {
 		prototypes.preload(&preload, &mut scene_handles, &asset_server);
 	}
-
-	if next_key == submit_key.groves
-		&& buckets.len() == batch_entities.by_key.len()
-		&& buckets.keys().all(|k| batch_entities.by_key.contains_key(k))
-	{
+	if !removed && !updated && added_items.is_empty() {
 		return;
 	}
-	submit_key.groves = next_key;
 
-	let mut stale: Vec<BatchKey> = batch_entities
+	if removed || updated {
+		apply_restitch(&mut commands, &state, &mut batch_entities, &mut existing);
+	} else {
+		apply_extend(&mut commands, added_items, &mut batch_entities, &mut existing);
+	}
+}
+
+fn apply_restitch(
+	commands: &mut Commands,
+	state: &InstancePbrState,
+	batch_entities: &mut InstancePbrBatchEntities,
+	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
+) {
+	let mut buckets: HashMap<BatchKey, (Handle<Mesh>, Vec<InstanceData>)> = HashMap::new();
+	for submit in state.groves.values() {
+		for (key, mesh, instance) in &submit.items {
+			buckets
+				.entry(key.clone())
+				.or_insert_with(|| (mesh.clone(), Vec::new()))
+				.1
+				.push(*instance);
+		}
+	}
+
+	let stale: Vec<BatchKey> = batch_entities
 		.by_key
 		.keys()
 		.filter(|key| !buckets.contains_key(*key))
 		.cloned()
 		.collect();
-	for key in stale.drain(..) {
+	for key in stale {
 		if let Some(entity) = batch_entities.by_key.remove(&key) {
 			commands.entity(entity).despawn();
 		}
 	}
 
 	for (key, (mesh, instances)) in buckets {
-		if let Some(&entity) = batch_entities.by_key.get(&key) {
-			if let Ok(mut data) = existing.get_mut(entity) {
+		upsert_batch(commands, batch_entities, existing, key, mesh, instances, true);
+	}
+}
+
+fn apply_extend(
+	commands: &mut Commands,
+	items: Vec<(BatchKey, Handle<Mesh>, InstanceData)>,
+	batch_entities: &mut InstancePbrBatchEntities,
+	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
+) {
+	let mut buckets: HashMap<BatchKey, (Handle<Mesh>, Vec<InstanceData>)> = HashMap::new();
+	for (key, mesh, instance) in items {
+		buckets.entry(key).or_insert_with(|| (mesh, Vec::new())).1.push(instance);
+	}
+	for (key, (mesh, extra)) in buckets {
+		upsert_batch(commands, batch_entities, existing, key, mesh, extra, false);
+	}
+}
+
+fn upsert_batch(
+	commands: &mut Commands,
+	batch_entities: &mut InstancePbrBatchEntities,
+	existing: &mut Query<&mut InstanceMaterialData, With<InstancePbrBatch>>,
+	key: BatchKey,
+	mesh: Handle<Mesh>,
+	instances: Vec<InstanceData>,
+	replace: bool,
+) {
+	if let Some(&entity) = batch_entities.by_key.get(&key) {
+		if let Ok(mut data) = existing.get_mut(entity) {
+			if replace {
 				*data = InstanceMaterialData(instances);
+			} else {
+				data.extend(instances);
+			}
+			return;
+		}
+	}
+	let entity = commands
+		.spawn((
+			InstancePbrBatch,
+			Mesh3d(mesh),
+			InstanceMaterialData(instances),
+			Transform::IDENTITY,
+			Visibility::Inherited,
+			NoFrustumCulling,
+			SyncToRenderWorld,
+		))
+		.id();
+	batch_entities.by_key.insert(key, entity);
+}
+
+fn compile_grove_submit(
+	visual: &ForestGroveVisual,
+	band: NamedVisualLevel,
+	semantic_high: bool,
+	xf: Affine3A,
+	scene_handles: &mut SceneRefHandles,
+	prototypes: &mut ScenePrototypeCache,
+	asset_server: &AssetServer,
+	world_assets: &mut Assets<bevy::world_serialization::WorldAsset>,
+	meshes: &mut Assets<Mesh>,
+	type_registry: &AppTypeRegistry,
+	preload: &mut Vec<SceneRef>,
+) -> GroveSubmit {
+	let mut items = Vec::new();
+	let mut pending = false;
+	if !semantic_high {
+		for instance in visual.representation.instances.iter() {
+			let Some(scene_ref) = instance.scene_for(band) else {
 				continue;
+			};
+			let Some(prototype) = prototypes.try_resolve(
+				scene_ref,
+				scene_handles,
+				asset_server,
+				world_assets,
+				meshes,
+				type_registry,
+			) else {
+				pending = true;
+				preload.push(scene_ref.clone());
+				continue;
+			};
+			let color = material_color(&instance.material);
+			let key_color = color_key(color);
+			for part in &prototype.parts {
+				let world = xf * instance.transform * part.local_transform;
+				items.push((
+					BatchKey { mesh: part.mesh.id(), color: key_color },
+					part.mesh.clone(),
+					InstanceData::new(Mat4::from(world), color),
+				));
 			}
 		}
-		let entity = commands
-			.spawn((
-				InstancePbrBatch,
-				Mesh3d(mesh),
-				InstanceMaterialData(instances),
-				Transform::IDENTITY,
-				Visibility::Inherited,
-				NoFrustumCulling,
-				SyncToRenderWorld,
-			))
-			.id();
-		batch_entities.by_key.insert(key, entity);
+	}
+	GroveSubmit { band, semantic_high, xf, items, pending }
+}
+
+fn extract_dirty_instance_data(
+	mut commands: Commands,
+	query: Extract<Query<(RenderEntity, &InstanceMaterialData), Changed<InstanceMaterialData>>>,
+) {
+	for (entity, data) in &query {
+		commands.entity(entity).insert(data.clone());
 	}
 }
 
@@ -281,7 +395,7 @@ struct InstanceBuffer {
 
 fn prepare_instance_buffers(
 	mut commands: Commands,
-	query: Query<(Entity, &InstanceMaterialData)>,
+	query: Query<(Entity, &InstanceMaterialData), Changed<InstanceMaterialData>>,
 	render_device: Res<RenderDevice>,
 ) {
 	for (entity, instance_data) in &query {
