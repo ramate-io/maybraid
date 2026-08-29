@@ -1,6 +1,7 @@
 //! Markers, fulfill plans, and per-frame budgets.
 
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use bevy::prelude::*;
 
@@ -90,6 +91,14 @@ impl LodChunkFulfillment {
 pub struct LodChunkFulfillBudget {
 	/// Relative weight units for drain each frame.
 	pub spawn_weights_per_frame: u32,
+	/// Wall-clock budget for exclusive semantic [`super::drain::drain_chunk_lod_fulfill`].
+	///
+	/// Combined with [`Self::spawn_weights_per_frame`] as `min(weight_share, elapsed)`.
+	/// Drain stops **before** the next `pull_primitive` when this is exhausted.
+	pub spawn_time_per_frame: Duration,
+	/// Warn (and record on [`LodChunkDrainDiagnostics`]) if one pull+spawn
+	/// quantum exceeds this. Default 3 ms.
+	pub max_atomic_spawn_cost: Duration,
 	/// Relative weight units for cull drain each frame.
 	///
 	/// Ready roots charge [`LodChunkFulfillment::spawned`] (or child count) against
@@ -127,6 +136,8 @@ impl Default for LodChunkFulfillBudget {
 	fn default() -> Self {
 		Self {
 			spawn_weights_per_frame: 512,
+			spawn_time_per_frame: Duration::from_millis(2),
+			max_atomic_spawn_cost: Duration::from_millis(3),
 			cull_weights_per_frame: 64,
 			cull_root_despawns_per_frame: 2,
 			begins_per_frame: 48,
@@ -135,6 +146,34 @@ impl Default for LodChunkFulfillBudget {
 			begin_prefill_weights_per_job: 8,
 			completes_per_frame: 512,
 		}
+	}
+}
+
+/// One exclusive semantic spawn quantum that exceeded [`LodChunkFulfillBudget::max_atomic_spawn_cost`].
+#[derive(Debug, Clone, Copy)]
+pub struct LodChunkAtomicOverrun {
+	pub host: Entity,
+	pub level: LodSceneLevel,
+	pub elapsed: Duration,
+}
+
+/// Measured exclusive drain (always present; playgrounds / tests read it).
+#[derive(Resource, Debug, Clone, Default)]
+pub struct LodChunkDrainDiagnostics {
+	/// Last exclusive drain wall time (pull + `World::spawn_scene`).
+	pub last_exclusive_elapsed: Duration,
+	/// Recent over-budget primitives (capped).
+	pub atomic_overruns: Vec<LodChunkAtomicOverrun>,
+}
+
+impl LodChunkDrainDiagnostics {
+	const MAX_OVERRUNS: usize = 16;
+
+	pub(super) fn record_overrun(&mut self, overrun: LodChunkAtomicOverrun) {
+		if self.atomic_overruns.len() >= Self::MAX_OVERRUNS {
+			self.atomic_overruns.remove(0);
+		}
+		self.atomic_overruns.push(overrun);
 	}
 }
 

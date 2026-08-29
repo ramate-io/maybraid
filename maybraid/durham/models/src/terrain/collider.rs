@@ -9,9 +9,18 @@
 //! Constructed trimeshes use [`PhysicsInteractionLayer::Fixed`] so they contact
 //! Animated movers only — not other Fixed geometry or LOD Host volumes.
 
-use avian3d::prelude::{Collider, ColliderConstructor};
+use avian3d::prelude::{CoefficientCombine, Collider, ColliderConstructor, Friction};
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
+
+/// Dirt / grass grip. [`CoefficientCombine::Max`] beats the character controller's
+/// `Friction::ZERO` + `Min` (Avian dynamic-character default), otherwise the
+/// capsule ice-skates on the trimesh.
+pub const TERRAIN_FRICTION: Friction = Friction {
+	dynamic_coefficient: 0.75,
+	static_coefficient: 0.95,
+	combine_rule: CoefficientCombine::Max,
+};
 
 /// Marks a terrain presentation root whose mesh descendants should get trimesh colliders.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -31,6 +40,7 @@ pub fn queue_terrain_trimesh_colliders(
 				commands.entity(descendant).insert((
 					ColliderConstructor::TrimeshFromMesh,
 					PhysicsInteractionLayer::fixed_layers(),
+					TERRAIN_FRICTION,
 				));
 			}
 		}

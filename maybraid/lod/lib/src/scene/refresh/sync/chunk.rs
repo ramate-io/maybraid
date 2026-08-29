@@ -49,9 +49,10 @@ pub use drain::drain_chunk_lod_fulfill;
 pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
-	FulfillClass, LodChunkBeginClock, LodChunkBudgetClock, LodChunkDrainCursor,
-	LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight, LodLazyPending,
-	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed,
+	FulfillClass, LodChunkAtomicOverrun, LodChunkBeginClock, LodChunkBudgetClock,
+	LodChunkDrainCursor, LodChunkDrainDiagnostics, LodChunkFulfillBudget, LodChunkFulfillment,
+	LodCullInFlight, LodLazyPending, LodLevelRootPending, LodLevelRootStreamed,
+	LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`SemanticLodScene`] host type.
@@ -101,7 +102,7 @@ pub enum LodChunkFulfillSystems {
 	Resume,
 	/// Per-`T` [`begin_chunk_lod_fulfill`].
 	Begin,
-	/// Shared weighted spawn drain (desired jobs only).
+	/// Shared exclusive semantic spawn drain (`World::spawn_scene` + time budget).
 	Drain,
 	/// Shared warm-swap complete.
 	Complete,
@@ -117,6 +118,7 @@ impl Plugin for LodChunkBudgetPlugin {
 			.init_resource::<LodChunkBudgetClock>()
 			.init_resource::<LodChunkBeginClock>()
 			.init_resource::<LodChunkDrainCursor>()
+			.init_resource::<LodChunkDrainDiagnostics>()
 			.add_message::<LodCullRequest>()
 			.configure_sets(
 				Update,

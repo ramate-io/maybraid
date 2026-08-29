@@ -20,7 +20,7 @@ pub use terrain::{
 	TerrainConfig, TerrainEntryStore, TerrainMeshLodBand, TerrainPlugin, TerrainPresentationAssets,
 	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
 	TerrainTrimeshCollider, ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
-	ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
 };
 pub use water::{
 	register_water_plugin, ComposedWater, Water, WaterPlugin, WaterPresentationAssets,
