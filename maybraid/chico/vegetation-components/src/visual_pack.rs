@@ -1,9 +1,9 @@
 //! Flatten stick / foliage IR into [`VisualInstance`]s for packed visual LOD.
 //!
 //! One instance per IR placement. Kit collections emit one instance per member.
-//! Empty finer bands alias coarser [`SceneRef`]s on the *same* pose so woody
-//! groves (empty Medium plant IR) share Low kits. UltraLow bins keep their own
-//! instance set when Low sites exist.
+//! Empty finer slots on the *same* pose alias the coarsest authored [`SceneRef`]
+//! so UltraLow-only bins still draw when Low or Medium is selected. Woody groves
+//! with an empty Medium plant IR share Low kits on those poses.
 
 use std::collections::HashMap;
 
@@ -25,14 +25,40 @@ pub struct PackedVegetationBands {
 	pub instances: Vec<VisualInstance>,
 }
 
-/// Pack UltraLow, then Low, then Medium, aliasing empty finer bands downward.
+impl PackedVegetationBands {
+	/// Filled slot counts after per-instance alias.
+	pub fn band_slot_counts(&self) -> Banded<usize> {
+		let mut counts = Banded::default();
+		for instance in &self.instances {
+			if instance.scene_for(NamedVisualLevel::UltraLow).is_some() {
+				counts.ultra_low += 1;
+			}
+			if instance.scene_for(NamedVisualLevel::Low).is_some() {
+				counts.low += 1;
+			}
+			if instance.scene_for(NamedVisualLevel::Medium).is_some() {
+				counts.medium += 1;
+			}
+		}
+		counts
+	}
+
+	/// Instances that draw when `band` is selected (finest authored ≤ band).
+	pub fn resolved_count(&self, band: NamedVisualLevel) -> usize {
+		self.instances
+			.iter()
+			.filter(|instance| instance.scene_at_or_coarser(band).is_some())
+			.count()
+	}
+}
+
+/// Pack UltraLow, then Low, then Medium. Empty finer slots alias per instance.
 pub fn pack_vegetation_visual_aliased(
 	vegetation: &impl VegetationComponents,
 ) -> PackedVegetationBands {
 	let mut by_pose: HashMap<(MaterialRefKey, TransformKey), Banded<Option<SceneRef>>> =
 		HashMap::new();
 	let mut materials: HashMap<(MaterialRefKey, TransformKey), MaterialRef> = HashMap::new();
-	let mut any = Banded { ultra_low: false, low: false, medium: false, high: false };
 
 	for level in [LodSceneLevel::UltraLow, LodSceneLevel::Low, LodSceneLevel::Medium] {
 		let named = NamedVisualLevel::from_scene_level(level).expect("named pack level");
@@ -41,23 +67,11 @@ pub fn pack_vegetation_visual_aliased(
 			materials.entry(key.clone()).or_insert(material);
 			let slot = by_pose.entry(key).or_default();
 			*slot.for_level_mut(named) = Some(scene);
-			*any.for_level_mut(named) = true;
 		}
 	}
 
-	if !any.low {
-		for scenes in by_pose.values_mut() {
-			if scenes.low.is_none() {
-				scenes.low.clone_from(&scenes.ultra_low);
-			}
-		}
-	}
-	if !any.medium {
-		for scenes in by_pose.values_mut() {
-			if scenes.medium.is_none() {
-				scenes.medium.clone_from(&scenes.low);
-			}
-		}
+	for scenes in by_pose.values_mut() {
+		alias_empty_finer_bands(scenes);
 	}
 
 	let instances = by_pose
@@ -78,6 +92,15 @@ pub fn pack_vegetation_visual_aliased(
 		})
 		.collect();
 	PackedVegetationBands { instances }
+}
+
+fn alias_empty_finer_bands(scenes: &mut Banded<Option<SceneRef>>) {
+	if scenes.low.is_none() {
+		scenes.low.clone_from(&scenes.ultra_low);
+	}
+	if scenes.medium.is_none() {
+		scenes.medium.clone_from(&scenes.low);
+	}
 }
 
 /// Pack every stick / foliage placement at `level` (no cross-band alias).
@@ -239,5 +262,53 @@ mod tests {
 			instance.scene_for(NamedVisualLevel::Medium)
 		);
 		assert!(instance.scene_for(NamedVisualLevel::Low).is_some());
+	}
+
+	struct WoodyGrove {
+		bin: FoliageNode,
+		trunk: StickNode,
+	}
+
+	impl VegetationComponents for WoodyGrove {
+		fn stick_nodes_for_level(&self, level: LodSceneLevel) -> crate::Layers<StickNode> {
+			if matches!(level, LodSceneLevel::Low) {
+				crate::Layers::from_free(vec![self.trunk.clone()])
+			} else {
+				crate::Layers::new()
+			}
+		}
+
+		fn foliage_nodes_for_level(&self, level: LodSceneLevel) -> crate::Layers<FoliageNode> {
+			if matches!(level, LodSceneLevel::UltraLow) {
+				crate::Layers::from_free(vec![self.bin.clone()])
+			} else {
+				crate::Layers::new()
+			}
+		}
+	}
+
+	#[test]
+	fn aliased_ultralow_bins_draw_when_low_exists() {
+		let trunk = StickMember::trunk(Placement::IDENTITY.with_scale(Vec3::new(0.4, 4.0, 0.4)));
+		let grove = WoodyGrove {
+			bin: FoliageNode::cheap_ball(Placement::new(Vec3::X * 8.0, 0.0)),
+			trunk: StickNode::collection(
+				StickCollection::new([trunk]).bake_bounds_from_members(),
+				Placement::IDENTITY,
+			),
+		};
+		let low_only = pack_vegetation_visual(&grove, LodSceneLevel::Low);
+		let ultra_only = pack_vegetation_visual(&grove, LodSceneLevel::UltraLow);
+		let bands = pack_vegetation_visual_aliased(&grove);
+		assert_eq!(low_only.len(), 1);
+		assert_eq!(ultra_only.len(), 1);
+		assert_eq!(bands.instances.len(), 2);
+		assert_eq!(bands.band_slot_counts().low, 2);
+		assert_eq!(bands.resolved_count(NamedVisualLevel::Low), 2);
+		assert_eq!(bands.resolved_count(NamedVisualLevel::UltraLow), 1);
+		assert!(bands
+			.instances
+			.iter()
+			.all(|instance| { instance.scene_at_or_coarser(NamedVisualLevel::Low).is_some() }));
 	}
 }

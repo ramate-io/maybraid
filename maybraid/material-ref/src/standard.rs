@@ -48,7 +48,7 @@ impl StandardMaterialLib<'_> {
 impl MaterialLib for StandardMaterialLib<'_> {
 	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
 		let handle = self.resolve(material_ref);
-		commands.entity(entity).insert(MeshMaterial3d(handle));
+		commands.entity(entity).try_insert(MeshMaterial3d(handle));
 	}
 }
 

@@ -72,29 +72,29 @@ impl MaterialLib for ChicoMaterialLib<'_> {
 				let handle = self.resolve_leaf(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle))
-					.insert(NotShadowCaster);
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle))
+					.try_insert(NotShadowCaster);
 			}
 			MaterialId::Name(name) if name == CHICO_STICK_MATERIAL => {
 				let handle = self.resolve_stick(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle))
-					.insert(NotShadowCaster);
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle))
+					.try_insert(NotShadowCaster);
 			}
 			MaterialId::Name(name) if name == CHICO_FROND_MATERIAL => {
 				let handle = self.resolve_frond(material_ref);
 				commands
 					.entity(entity)
-					.remove::<MeshMaterial3d<StandardMaterial>>()
-					.insert(MeshMaterial3d(handle))
-					.insert(NotShadowCaster);
+					.try_remove::<MeshMaterial3d<StandardMaterial>>()
+					.try_insert(MeshMaterial3d(handle))
+					.try_insert(NotShadowCaster);
 			}
 			_ => {
 				self.standard.fulfill(entity, material_ref, commands);
-				commands.entity(entity).insert(NotShadowCaster);
+				commands.entity(entity).try_insert(NotShadowCaster);
 			}
 		}
 	}

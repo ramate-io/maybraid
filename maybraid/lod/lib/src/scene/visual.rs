@@ -78,6 +78,12 @@ impl NamedVisualLevel {
 			crate::LodSceneLevel::Distance(_) | crate::LodSceneLevel::Resolution(_) => None,
 		}
 	}
+
+	/// Finest packed band first, then coarser. High clamps to Medium.
+	pub fn packed_and_coarser(self) -> impl Iterator<Item = Self> {
+		let start = self.clamp_to_packed();
+		Self::ALL.into_iter().rev().filter(move |&level| level <= start)
+	}
 }
 
 /// One value per named visual band.
@@ -112,8 +118,9 @@ impl<T> Banded<T> {
 /// One drawable: per-band [`SceneRef`]s, one material, one local pose.
 ///
 /// Geometry is cached by [`SceneRef`]; material by [`MaterialRef`]. The renderer
-/// combines them only at submit. Empty bands stay `None` — UltraLow bins and
-/// Low sites are different instance sets, not always the same kit at four LODs.
+/// combines them only at submit. Empty finer slots alias the coarsest authored
+/// [`SceneRef`] on the same pose so UltraLow-only bins still draw when Low is
+/// selected. Distinct poses stay distinct instances.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VisualInstance {
 	pub scenes: Banded<Option<SceneRef>>,
@@ -128,6 +135,11 @@ impl VisualInstance {
 
 	pub fn scene_for(&self, level: NamedVisualLevel) -> Option<&SceneRef> {
 		self.scenes.for_level(level).as_ref()
+	}
+
+	/// Finest authored [`SceneRef`] at or coarser than `level`.
+	pub fn scene_at_or_coarser(&self, level: NamedVisualLevel) -> Option<&SceneRef> {
+		level.packed_and_coarser().find_map(|candidate| self.scene_for(candidate))
 	}
 }
 
@@ -465,6 +477,21 @@ mod tests {
 		assert_eq!(
 			instance.scene_for(NamedVisualLevel::Low).map(|s| s.path.as_str()),
 			Some("vegetation/test.glb")
+		);
+	}
+
+	#[test]
+	fn scene_at_or_coarser_falls_back_to_ultralow() {
+		let mut instance = VisualInstance::new(MaterialRef::default(), Affine3A::IDENTITY);
+		instance.scenes.ultra_low = Some(SceneRef::glb("vegetation/bin.glb"));
+		assert!(instance.scene_for(NamedVisualLevel::Low).is_none());
+		assert_eq!(
+			instance.scene_at_or_coarser(NamedVisualLevel::Low).map(|s| s.path.as_str()),
+			Some("vegetation/bin.glb")
+		);
+		assert_eq!(
+			instance.scene_at_or_coarser(NamedVisualLevel::High).map(|s| s.path.as_str()),
+			Some("vegetation/bin.glb")
 		);
 	}
 }

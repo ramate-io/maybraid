@@ -1,9 +1,9 @@
-//! Instanced PBR submit: spatial grove first, then `(mesh, material)`.
+//! Instanced submit: spatial grove first, then `(mesh, material)`.
 //!
 //! Each grove owns its batch entities (parented under [`VisualLodRoot`]). A band
 //! or present change only rebuilds that grove. Frustum culling uses the grove
 //! [`LodHostBounds`] AABB. Instance matrices are grove-local; the parent
-//! transform places them.
+//! transform places them. Opaque vegetation queues [`Opaque3d`].
 
 use std::mem::size_of;
 
@@ -11,29 +11,27 @@ use bevy::asset::{load_internal_asset, uuid_handle, AssetId};
 use bevy::camera::primitives::Aabb;
 use bevy::camera::visibility::ViewVisibility;
 use bevy::color::ColorToComponents;
-use bevy::core_pipeline::core_3d::{Transparent3d, TransparentSortingInfo3d};
+use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey};
 use bevy::ecs::system::lifetimeless::{Read, SRes};
 use bevy::ecs::system::SystemParamItem;
 use bevy::mesh::{MeshVertexBufferLayoutRef, VertexBufferLayout};
 use bevy::pbr::{
-	get_mesh_instance_world_from_local, MeshInputUniform, MeshPipeline, MeshPipelineKey,
-	MeshPipelineSystems, MeshUniform, RenderMeshInstances, SetMeshBindGroup, SetMeshViewBindGroup,
-	SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+	MeshPipeline, MeshPipelineKey, MeshPipelineSystems, RenderMeshInstances, SetMeshBindGroup,
+	SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
 };
-use bevy::platform::collections::HashMap;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
-use bevy::render::batching::gpu_preprocessing::BatchedInstanceBuffers;
-use bevy::render::mesh::allocator::MeshAllocator;
+use bevy::render::mesh::allocator::{MeshAllocator, MeshSlabs};
 use bevy::render::mesh::{RenderMesh, RenderMeshBufferInfo};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_phase::{
-	AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
-	RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
+	AddRenderCommand, BinnedRenderPhaseType, DrawFunctions, InputUniformIndex, PhaseItem,
+	RenderCommand, RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewBinnedRenderPhases,
 };
 use bevy::render::render_resource::*;
 use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::sync_world::{MainEntity, RenderEntity, SyncToRenderWorld};
-use bevy::render::view::ExtractedView;
+use bevy::render::view::{ExtractedView, RetainedViewEntity};
 use bevy::render::Extract;
 use bevy::render::{ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems};
 use bevy::shader::Shader;
@@ -115,7 +113,7 @@ impl Plugin for InstancePbrPlugin {
 			return;
 		};
 		render_app
-			.add_render_command::<Transparent3d, DrawInstancePbr>()
+			.add_render_command::<Opaque3d, DrawInstancePbr>()
 			.init_resource::<SpecializedMeshPipelines<InstancePbrPipeline>>()
 			.add_systems(ExtractSchedule, extract_dirty_instance_data)
 			.add_systems(RenderStartup, init_instance_pipeline.after(MeshPipelineSystems))
@@ -295,7 +293,7 @@ fn compile_grove_submit(
 	let mut pending = false;
 	if !semantic_high {
 		for instance in visual.representation.instances.iter() {
-			let Some(scene_ref) = instance.scene_for(band) else {
+			let Some(scene_ref) = instance.scene_at_or_coarser(band) else {
 				continue;
 			};
 			let Some(prototype) = prototypes.try_resolve(
@@ -425,29 +423,29 @@ impl SpecializedMeshPipeline for InstancePbrPipeline {
 }
 
 fn queue_instance_pbr(
-	transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
+	opaque_draw_functions: Res<DrawFunctions<Opaque3d>>,
 	custom_pipeline: Res<InstancePbrPipeline>,
 	mut pipelines: ResMut<SpecializedMeshPipelines<InstancePbrPipeline>>,
 	pipeline_cache: Res<PipelineCache>,
 	meshes: Res<RenderAssets<RenderMesh>>,
 	render_mesh_instances: Res<RenderMeshInstances>,
-	maybe_batched_instance_buffers: Option<
-		Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>,
-	>,
 	material_meshes: Query<(Entity, &MainEntity, &ViewVisibility), With<InstanceMaterialData>>,
-	mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
+	mut opaque_render_phases: ResMut<ViewBinnedRenderPhases<Opaque3d>>,
 	views: Query<&ExtractedView>,
 	view_key_cache: Res<ViewKeyCache>,
+	mut queued: Local<HashMap<RetainedViewEntity, HashSet<MainEntity>>>,
 ) {
-	let draw_custom = transparent_3d_draw_functions.read().id::<DrawInstancePbr>();
+	let draw_custom = opaque_draw_functions.read().id::<DrawInstancePbr>();
+	let mut live_views = HashSet::<RetainedViewEntity>::default();
 	for view in &views {
-		let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
-		else {
+		let Some(opaque_phase) = opaque_render_phases.get_mut(&view.retained_view_entity) else {
 			continue;
 		};
 		let Some(&view_key) = view_key_cache.get(&view.retained_view_entity) else {
 			continue;
 		};
+		live_views.insert(view.retained_view_entity);
+		let mut current = HashSet::<MainEntity>::default();
 		for (entity, main_entity, vis) in &material_meshes {
 			if !vis.get() {
 				continue;
@@ -469,27 +467,31 @@ fn queue_instance_pbr(
 			else {
 				continue;
 			};
-			transparent_phase.add_retained(Transparent3d {
-				sorting_info: TransparentSortingInfo3d::Sorted {
-					mesh_center: get_mesh_instance_world_from_local(
-						*main_entity,
-						mesh_instance.current_uniform_index,
-						&render_mesh_instances,
-						maybe_batched_instance_buffers.as_deref(),
-					)
-					.transform_point3(mesh.aabb_center),
-					depth_bias: 0.0,
+			opaque_phase.add(
+				Opaque3dBatchSetKey {
+					pipeline,
+					draw_function: draw_custom,
+					material_bind_group_index: None,
+					slabs: MeshSlabs::default(),
+					lightmap_slab: None,
 				},
-				entity: (entity, *main_entity),
-				pipeline,
-				draw_function: draw_custom,
-				distance: 0.0,
-				batch_range: 0..1,
-				extra_index: PhaseItemExtraIndex::None,
-				indexed: true,
-			});
+				Opaque3dBinKey { asset_id: mesh_instance.mesh_asset_id().into() },
+				(entity, *main_entity),
+				InputUniformIndex::default(),
+				BinnedRenderPhaseType::NonMesh,
+			);
+			current.insert(*main_entity);
 		}
+		if let Some(previous) = queued.get(&view.retained_view_entity) {
+			for old in previous {
+				if !current.contains(old) {
+					opaque_phase.remove(*old);
+				}
+			}
+		}
+		queued.insert(view.retained_view_entity, current);
 	}
+	queued.retain(|view, _| live_views.contains(view));
 }
 
 type DrawInstancePbr = (
