@@ -12,6 +12,7 @@ use durham_terrain_models::{
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
+use maybraid_input::{PadButton, VirtualPad};
 use std::f32::consts::PI;
 
 use crate::camera::CameraController;
@@ -242,7 +243,7 @@ pub fn respawn_player_on_layout(
 fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
-	keyboard: Res<ButtonInput<KeyCode>>,
+	pad: Res<VirtualPad>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut writer: MessageWriter<MovementAction>,
@@ -254,14 +255,7 @@ fn keyboard_movement_input(
 		return;
 	}
 
-	let up = keyboard.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
-	let down = keyboard.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-	let left = keyboard.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
-	let right = keyboard.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
-
-	let direction =
-		Vec2::new(right as i8 as f32 - left as i8 as f32, up as i8 as f32 - down as i8 as f32)
-			.clamp_length_max(1.0);
+	let direction = pad.move_stick.clamp_length_max(1.0);
 
 	let wish_dir = if direction != Vec2::ZERO {
 		if let Ok(camera) = cameras.single() {
@@ -282,7 +276,7 @@ fn keyboard_movement_input(
 	if direction != Vec2::ZERO {
 		writer.write(MovementAction::Move(direction));
 	}
-	if keyboard.just_pressed(KeyCode::Space) {
+	if pad.just_pressed(PadButton::A) {
 		writer.write(MovementAction::Jump);
 	}
 }

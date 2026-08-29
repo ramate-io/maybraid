@@ -2364,6 +2364,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "log",
+ "maybraid-input",
  "procedural-common",
  "render-item",
 ]
@@ -4349,6 +4350,14 @@ dependencies = [
  "bevy",
  "character-ui-menu",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-input"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
 ]
 
 [[package]]

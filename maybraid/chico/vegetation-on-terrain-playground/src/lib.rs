@@ -48,12 +48,15 @@ use durham_terrain_models::{
 	TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
-use game_commands::command::{capture_command_line_input, GameCommandPlugin};
+use game_commands::command::{
+	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
+};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{
 	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
@@ -220,6 +223,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		register_vegetation_view(app);
 		register_forest_lod::<DurhamForestPresenter>(app);
+		if !app.is_plugin_added::<VirtualPadPlugin>() {
+			app.add_plugins(VirtualPadPlugin::default());
+		}
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
@@ -235,6 +241,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
+			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
@@ -628,6 +635,15 @@ fn spawn_groves(
 		config.tile_radius
 	);
 	dirty.0 = false;
+}
+
+fn sync_pad_gameplay(
+	focus: Option<Res<TextEntryFocus>>,
+	blocked: Option<Res<TextEntryBlocked>>,
+	mut enabled: ResMut<PadGameplayEnabled>,
+) {
+	let text = focus.is_some_and(|focus| focus.0) || blocked.is_some_and(|blocked| blocked.0);
+	enabled.0 = !text;
 }
 
 #[cfg(test)]

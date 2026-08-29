@@ -30,6 +30,7 @@ render-item = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+maybraid-input = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 
 [lints]

@@ -4,6 +4,7 @@ use bevy::window::WindowFocused;
 use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
+use maybraid_input::{PadButton, VirtualPad};
 use std::f32::consts::PI;
 
 use crate::player::PlaygroundMode;
@@ -126,7 +127,7 @@ fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
 
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
-	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
+	pad: Res<VirtualPad>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
 	mode: Res<PlaygroundMode>,
@@ -138,17 +139,11 @@ pub fn camera_controller(
 
 	// Screenshot selection drags the mouse; Command chords are not look/fly.
 	if command_held(&keyboard_input) {
-		mouse_motion.clear();
 		return;
 	}
 
-	let mut mouse_delta = Vec2::ZERO;
-	for event in mouse_motion.read() {
-		mouse_delta += event.delta;
-	}
-
-	controller.yaw -= mouse_delta.x * controller.sensitivity;
-	controller.pitch -= mouse_delta.y * controller.sensitivity;
+	controller.yaw -= pad.look_stick.x * controller.sensitivity;
+	controller.pitch -= pad.look_stick.y * controller.sensitivity;
 	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
 
 	if *mode == PlaygroundMode::Character {
@@ -166,20 +161,10 @@ pub fn camera_controller(
 	let mut movement = Vec3::ZERO;
 	let forward = transform.forward();
 	let right = transform.right();
-
-	if keyboard_input.pressed(KeyCode::KeyW) {
-		movement += *forward;
-	}
-	if keyboard_input.pressed(KeyCode::KeyS) {
-		movement -= *forward;
-	}
-	if keyboard_input.pressed(KeyCode::KeyA) {
-		movement -= *right;
-	}
-	if keyboard_input.pressed(KeyCode::KeyD) {
-		movement += *right;
-	}
-	if keyboard_input.pressed(KeyCode::Space) {
+	let wish = pad.move_stick;
+	movement += *forward * wish.y;
+	movement += *right * wish.x;
+	if pad.pressed(PadButton::A) {
 		movement += Vec3::Y;
 	}
 	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
