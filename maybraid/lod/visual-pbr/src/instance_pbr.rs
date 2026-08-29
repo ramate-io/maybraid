@@ -6,16 +6,16 @@
 //! Invariant: instance matrices are world (grove host is identity today). The
 //! shader does `clip_from_world * instance * vertex` and must not read
 //! `mesh[0]` via `get_world_from_local(0u)`. The batch [`Aabb`] is the grove
-//! footprint. `NoAutoAabb` stops `Mesh3d` from replacing it. `NoFrustumCulling`
-//! is on while that AABB is proven. Opaque vegetation queues [`Opaque3d`].
+//! footprint with a ±1000 m Y slab so instance poses that sit above the
+//! structural pancake stay in frustum. `NoAutoAabb` stops `Mesh3d` from
+//! replacing that box with kit-local bounds at the origin. Opaque vegetation
+//! queues [`Opaque3d`].
 
 use std::mem::size_of;
 
 use bevy::asset::{load_internal_asset, uuid_handle, AssetId};
 use bevy::camera::primitives::Aabb;
-use bevy::camera::visibility::{
-	add_visibility_class, NoAutoAabb, NoFrustumCulling, ViewVisibility, VisibilityClass,
-};
+use bevy::camera::visibility::{add_visibility_class, NoAutoAabb, ViewVisibility, VisibilityClass};
 use bevy::color::ColorToComponents;
 use bevy::core_pipeline::core_3d::{Opaque3d, Opaque3dBatchSetKey, Opaque3dBinKey};
 use bevy::ecs::system::lifetimeless::{Read, SRes};
@@ -161,6 +161,14 @@ impl Plugin for InstancePbrPlugin {
 	}
 }
 
+/// Grove footprint XZ; Y is at least ±1000 m so instance poses above the
+/// structural pancake stay inside the CPU frustum test.
+fn batch_cull_aabb(footprint: Aabb) -> Aabb {
+	let mut aabb = footprint;
+	aabb.half_extents.y = aabb.half_extents.y.max(1000.0);
+	aabb
+}
+
 pub fn selected_packed_band(
 	visual: &ForestGroveVisual,
 	bounds: &LodHostBounds,
@@ -265,7 +273,11 @@ fn sync_instance_pbr_batches(
 			.is_ok_and(|level| *level == LodSceneLevel::High);
 		seen.insert(
 			entity,
-			(selected_packed_band(visual, bounds, &views), semantic_high, Aabb::from(bounds.0)),
+			(
+				selected_packed_band(visual, bounds, &views),
+				semantic_high,
+				batch_cull_aabb(Aabb::from(bounds.0)),
+			),
 		);
 	}
 
@@ -454,7 +466,7 @@ fn apply_grove_batches(
 			if let Ok(mut data) = existing.get_mut(entity) {
 				*data = InstanceMaterialData(instances);
 				if let Ok(mut entity) = commands.get_entity(entity) {
-					entity.insert((aabb, NoAutoAabb, NoFrustumCulling));
+					entity.insert((aabb, NoAutoAabb));
 				}
 				continue;
 			}
@@ -468,7 +480,6 @@ fn apply_grove_batches(
 				Visibility::Visible,
 				aabb,
 				NoAutoAabb,
-				NoFrustumCulling,
 				SyncToRenderWorld,
 			))
 			.id();
@@ -566,7 +577,6 @@ fn sync_band_debug_marker(
 			MeshMaterial3d(material),
 			transform,
 			Visibility::Visible,
-			NoFrustumCulling,
 		))
 		.id();
 	commands.entity(grove).add_child(entity);
