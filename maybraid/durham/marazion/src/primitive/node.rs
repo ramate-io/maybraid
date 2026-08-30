@@ -77,6 +77,15 @@ impl HydroNode {
 		Bounds2 { min: mn - Vec2::splat(pad), max: mx + Vec2::splat(pad) }
 	}
 
+	/// True when conservative correction support overlaps or touches `bounds`.
+	pub fn correction_intersects(&self, bounds: Bounds2) -> bool {
+		let support = self.correction_index_bounds();
+		support.min.x <= bounds.max.x
+			&& bounds.min.x <= support.max.x
+			&& support.min.y <= bounds.max.y
+			&& bounds.min.y <= support.max.y
+	}
+
 	/// True when [`Self::correction_index_bounds`] fits entirely inside `cell`.
 	///
 	/// Authored leaves use this in `hydro_nodes()` so oversized correction

@@ -470,8 +470,11 @@ where
 			lod_ref,
 		)?
 		.clone();
-		let compiled = complex_cell.complex.compile();
-		let marazion_fills = compiled.fills;
+		let marazion_fills = if complex_cell.complex.is_empty() {
+			Vec::new()
+		} else {
+			vec![WaterFill::from_hydro(Arc::clone(&complex_cell.complex))]
+		};
 
 		// Keep stage cells materialized for later policy work; elevation uses
 		// the cellular HydroComplex directly (internal carve → rim → apron).
@@ -492,7 +495,7 @@ where
 		)?;
 
 		if !complex_cell.complex.is_empty() {
-			modulations.push(ComposedElevationOp::Hydro(complex_cell.complex));
+			modulations.push(ComposedElevationOp::Hydro(Arc::clone(&complex_cell.complex)));
 		}
 
 		let sdf = Arc::new(Self::compose_sdf(&pre.base, &modulations));
