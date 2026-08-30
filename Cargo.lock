@@ -2204,6 +2204,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-bumpout"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "material-ref",
+ "procedural-common",
+ "terrain-chunk-ref",
+]
+
+[[package]]
+name = "chico-bumpout-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "chico-bumpout",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "sdf",
+ "terrain-chunk-ref",
+]
+
+[[package]]
 name = "chico-forests"
 version = "0.0.1"
 dependencies = [
@@ -6330,6 +6355,17 @@ dependencies = [
  "sdf",
  "serde",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "terrain-chunk-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chunk",
+ "lod-cascade",
+ "render-item",
 ]
 
 [[package]]

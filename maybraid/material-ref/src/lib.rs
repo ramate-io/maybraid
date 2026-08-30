@@ -25,7 +25,8 @@ pub use fulfill::{
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
 pub use material_ref::{
-	MaterialId, MaterialRef, MaterialRefApplied, MaterialRefRoot, PropagateToDescendants,
+	MaterialId, MaterialParameters, MaterialRef, MaterialRefApplied, MaterialRefRoot,
+	PropagateToDescendants,
 };
 pub use reference::ReferenceMaterial;
 pub use standard::{StandardMaterialLib, StandardMaterialRefCache, StandardMaterialRefPlugin};
@@ -56,6 +57,24 @@ mod tests {
 		let other_name = MaterialRef::named("bark").with_palette([Color::srgb(0.1, 0.5, 0.2)]);
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_color));
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_name));
+		Ok(())
+	}
+
+	#[test]
+	fn material_parameter_key_is_named_order_independent_and_bit_stable() -> anyhow::Result<()> {
+		let a = MaterialRef::named("bump_out")
+			.with_parameter("density", [0.25, 0.75])
+			.with_parameter("height", [2.0, -0.0]);
+		let b = MaterialRef::named("bump_out")
+			.with_parameter("height", [2.0, -0.0])
+			.with_parameter("density", [0.25, 0.75]);
+		let positive_zero = MaterialRef::named("bump_out")
+			.with_parameter("density", [0.25, 0.75])
+			.with_parameter("height", [2.0, 0.0]);
+
+		assert_eq!(MaterialRefKey::from(&a), MaterialRefKey::from(&b));
+		assert_ne!(MaterialRefKey::from(&a), MaterialRefKey::from(&positive_zero));
+		assert_eq!(a.parameter("density"), Some([0.25, 0.75].as_slice()));
 		Ok(())
 	}
 
