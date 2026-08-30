@@ -1,6 +1,7 @@
 # World
 
-Assembled world model. Streamed forest at 2 km present / 3 km generate.
+Assembled world model. Streamed forest at 1 km grove fill / 3 km selection
+generate, with canopy bump-outs in the 1–3 km annulus.
 Fine terrain covers that generate ring; short 2×/4× macro rings sit outside
 it. Character mode is the default, with a soft sky-dome wash from 350 m to
 1200 m.

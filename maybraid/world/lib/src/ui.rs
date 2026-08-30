@@ -21,5 +21,5 @@ pub(crate) fn sync_command_status_text(
 	}
 	*seeded = true;
 	status.0 =
-		"world  character  forest hopscotch  present 2 km  generate 3 km  sky 350–1200 m".into();
+		"world  character  forest hopscotch  grove 1 km  bump-outs 1–3 km  sky 350–1200 m".into();
 }

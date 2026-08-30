@@ -1,4 +1,5 @@
-//! [`GenerationScheme`] for [`ChicoForest`] (dependency) and [`ChicoGrove`] (origins).
+//! [`GenerationScheme`] for [`ChicoForest`] (dependency), [`ChicoGrove`] (origins),
+//! and [`CanopyBumpOut`](crate::CanopyBumpOut) (160 m canopy-proxy origins).
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -7,6 +8,10 @@ use lod::lod_ref::LodRef;
 use lod::scene::{LodCullRegions, LodCullRegionsStatus, OpenLattice};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 
+use crate::bump_out::{
+	blend_selection_neighborhood, bump_out_cell_bounds, bump_out_cells_overlapping,
+	bump_out_in_inner_hole, CanopyBumpOut, BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M,
+};
 use crate::grove::{grove_from_id, grove_id};
 use crate::index::ForestIndex;
 use crate::{
@@ -14,10 +19,11 @@ use crate::{
 	DEFAULT_FOREST_GROVE_TILE_XZ,
 };
 
-/// Generate ring around the camera (metres). Present is closer; see [`GROVE_PRESENT_RADIUS_M`].
-pub const GROVE_GENERATE_RADIUS_M: f32 = 2000.0;
+/// Forest selection generate ring around the camera (metres). Present is closer;
+/// see [`GROVE_PRESENT_RADIUS_M`].
+pub const GROVE_GENERATE_RADIUS_M: f32 = 3000.0;
 
-/// Present ring around the camera (metres).
+/// Grove geometry present ring around the camera (metres).
 pub const GROVE_PRESENT_RADIUS_M: f32 = 1000.0;
 
 impl GenerationScheme<ForestIndex> for ChicoForest {
@@ -106,6 +112,56 @@ impl GenerationScheme<ForestIndex> for ChicoGrove {
 	}
 }
 
+fn ensure_forests_for_bounds(index: &mut ForestIndex, bounds: Aabb3d) {
+	for extent in ForestExtent::cells_overlapping(bounds) {
+		index.ensure_forest_selected(extent);
+	}
+}
+
+impl GenerationScheme<ForestIndex> for CanopyBumpOut {
+	fn original_ids_for(_spatial_index: &mut ForestIndex, region: Aabb3d) -> Vec<OriginalId> {
+		bump_out_cells_overlapping(region)
+			.filter_map(|(ix, iz)| {
+				let bounds = bump_out_cell_bounds(ix, iz);
+				if bump_out_in_inner_hole(bounds, region) {
+					return None;
+				}
+				Some(OriginalId(lod::gen::Id::from_cell(bounds)))
+			})
+			.collect()
+	}
+
+	fn build_with_id(
+		spatial_index: &mut ForestIndex,
+		id: lod::gen::Id,
+		_lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let size = (bounds.max.x - bounds.min.x).max(1e-3);
+		if (size - BUMP_OUT_CELL_XZ).abs() > 1e-2 {
+			return None;
+		}
+		let neighborhood = Aabb3d::from_min_max(
+			Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
+			Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
+		);
+		ensure_forests_for_bounds(spatial_index, neighborhood);
+		let samples = blend_selection_neighborhood(spatial_index, bounds);
+		let cell = Self { bounds, samples };
+		if !cell.has_density() {
+			return None;
+		}
+		Some((cell, bounds))
+	}
+
+	fn descendants_with_lod(
+		_id: lod::gen::Id,
+		_spatial_index: &mut ForestIndex,
+		_lod_ref: &LodRef,
+	) {
+	}
+}
+
 fn ensure_forest_ring(index: &mut ForestIndex, forest: ForestExtent) {
 	index.ensure_forest_selected(forest);
 	let (ix, iz) = ForestExtent::cell_index_containing(forest.center());
@@ -145,7 +201,7 @@ impl LodRefreshRegions for ForestGenerateBullseye {
 	}
 }
 
-/// Present ring — typically 1 km when generate is 2 km.
+/// Present ring — typically 1 km when generate is 3 km.
 #[derive(Resource, Debug, Clone, Copy, PartialEq)]
 pub struct ForestPresentBullseye {
 	pub radius_m: f32,
@@ -228,6 +284,75 @@ impl LodCullRegions for ForestPresentLattice {
 			return LodCullRegionsStatus::Unchanged;
 		}
 		self.lattice.lod_cull_regions(lod_refs, cursor)
+	}
+}
+
+/// Channel marker for canopy bump-out generate / present messages.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BumpOutLodChan;
+
+fn bump_out_cell_index(position: Vec3) -> (i32, i32) {
+	let s = BUMP_OUT_CELL_XZ;
+	((position.x / s).floor() as i32, (position.z / s).floor() as i32)
+}
+
+/// Bump-out generate bullseye: 3 km disk; [`CanopyBumpOut::original_ids_for`] skips the 1 km hole.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct BumpOutGenerateBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for BumpOutGenerateBullseye {
+	fn default() -> Self {
+		Self { radius_m: BUMP_OUT_OUTER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for BumpOutGenerateBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		if !self.enabled {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
+		let current = bump_out_cell_index(lod_ref.current_transform.translation);
+		if current == previous {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
+			lod_ref.current_transform.translation,
+			self.radius_m,
+		))
+	}
+}
+
+/// Bump-out present bullseye: 3 km keep AABB; tracked ids skip the 1 km grove-fill hole.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct BumpOutPresentBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for BumpOutPresentBullseye {
+	fn default() -> Self {
+		Self { radius_m: BUMP_OUT_OUTER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for BumpOutPresentBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		if !self.enabled {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
+		let current = bump_out_cell_index(lod_ref.current_transform.translation);
+		if current == previous {
+			return LodRefreshRegionsStatus::Unchanged;
+		}
+		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
+			lod_ref.current_transform.translation,
+			self.radius_m,
+		))
 	}
 }
 
@@ -410,6 +535,64 @@ mod tests {
 		app.update();
 		let log = app.world().resource::<GrovePresentLog>();
 		assert_eq!(log.presented.get(&id).copied(), Some(Version(1)));
+		Ok(())
+	}
+
+	#[test]
+	fn bump_out_radii_match_grove_selection_generate_and_present() {
+		assert!((crate::BUMP_OUT_INNER_RADIUS_M - GROVE_PRESENT_RADIUS_M).abs() < 1e-3);
+		assert!((BUMP_OUT_OUTER_RADIUS_M - GROVE_GENERATE_RADIUS_M).abs() < 1e-3);
+	}
+
+	#[test]
+	fn bump_out_original_ids_skip_the_inner_kilometre() -> Result<()> {
+		let region = ForestExtent::xz_radius_aabb(Vec3::ZERO, BUMP_OUT_OUTER_RADIUS_M);
+		let ids = CanopyBumpOut::original_ids_for(&mut ForestIndex::default(), region);
+		assert!(!ids.is_empty());
+		for OriginalId(id) in &ids {
+			let bounds = id.origin_cell_bounds().ok_or_else(|| anyhow::anyhow!("cell"))?;
+			assert!(
+				!bump_out_in_inner_hole(bounds, region),
+				"origin {:?} is inside the grove-fill hole",
+				bounds
+			);
+			let size = bounds.max.x - bounds.min.x;
+			assert!((size - BUMP_OUT_CELL_XZ).abs() < 1e-2);
+		}
+		let inner = ForestExtent::xz_radius_aabb(Vec3::ZERO, crate::BUMP_OUT_INNER_RADIUS_M * 0.5);
+		let inner_ids = CanopyBumpOut::original_ids_for(&mut ForestIndex::default(), inner);
+		assert!(inner_ids.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn bump_out_build_is_select_only() -> Result<()> {
+		let mut index = ForestIndex::default();
+		index.layering = Some(crate::LayeringKind::LushJungle);
+		let bounds = bump_out_cell_bounds(8, 0);
+		assert!(
+			crate::bump_out_chebyshev_xz(bounds, Vec3::ZERO) > crate::BUMP_OUT_INNER_RADIUS_M,
+			"fixture cell should sit outside the inner hole"
+		);
+		let id = lod::gen::Id::from_cell(bounds);
+		let (identity, lod_bounds) = test_lod_ref(bounds);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &lod_bounds,
+		};
+		assert!(GeneratingSpatialIndex::<CanopyBumpOut>::get_or_generate(&mut index, id, &lod_ref)
+			.is_some());
+		let cell = lod::gen::SpatialIndex::<CanopyBumpOut>::get(&index, id)
+			.ok_or_else(|| anyhow::anyhow!("bump-out"))?;
+		assert!(cell.has_density());
+		let neighborhood = Aabb3d::from_min_max(
+			Vec3::new(bounds.min.x - BUMP_OUT_CELL_XZ, 0.0, bounds.min.z - BUMP_OUT_CELL_XZ),
+			Vec3::new(bounds.max.x + BUMP_OUT_CELL_XZ, 1.0, bounds.max.z + BUMP_OUT_CELL_XZ),
+		);
+		assert!(!lod::gen::SpatialIndex::<ChicoForest>::tracked_ids_for(&index, neighborhood)
+			.is_empty());
 		Ok(())
 	}
 }

@@ -14,6 +14,7 @@ mod pitch;
 pub mod player;
 mod ui;
 
+pub use bump_out::DurhamCanopyBumpOutPresenter;
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
@@ -27,7 +28,7 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::{present_canopy_bump_outs, WorldTerrainBuilder};
+use bump_out::{register_bump_out_lod, stream_canopy_bump_outs, WorldTerrainBuilder};
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
@@ -70,8 +71,8 @@ use terrain_chunk_ref::TerrainChunkRefPlugin;
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Covers forest generate.
-const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
+/// Fine-grid Chebyshev half-extent (19 × 160 m ≈ 3.0 km). Covers bump-out outer / forest generate.
+const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 19;
 /// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
 const WORLD_OUTER_2X_ROWS: i32 = 2;
 /// 4× macro ring past the 2× ring.
@@ -173,7 +174,7 @@ impl PlaygroundConfig {
 			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
-			forest: Some(ForestStreamSpec { stream_radius: 2, ..ForestStreamSpec::default() }),
+			forest: Some(ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() }),
 			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
@@ -226,6 +227,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		register_vegetation_view(app);
 		register_forest_lod::<DurhamForestPresenter>(app);
+		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
@@ -240,7 +242,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
-			.init_resource::<bump_out::CanopyBumpOutState>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
@@ -252,10 +253,13 @@ impl Plugin for VegetationOnTerrainPlugin {
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					generate_cells.after(apply_commands),
 					present_cells.after(generate_cells),
-					present_canopy_bump_outs.after(present_cells),
 					spawn_groves.after(present_cells),
 					stream_durham_forest
 						.after(apply_commands)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
+					stream_canopy_bump_outs
+						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
 					apply_set_character.after(apply_commands),
@@ -283,9 +287,12 @@ impl Plugin for VegetationOnTerrainPlugin {
 					camera_controller,
 					generate_cells,
 					present_cells.after(generate_cells),
-					present_canopy_bump_outs.after(present_cells),
 					spawn_groves.after(present_cells),
 					stream_durham_forest
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
+					stream_canopy_bump_outs
+						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
 					apply_set_character,
@@ -644,10 +651,10 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn world_defaults_double_the_forest_present_ring() {
+	fn world_defaults_keep_grove_fill_at_one_kilometre() {
 		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
-		assert_eq!(spec.stream_radius, 2);
-		assert_eq!(stream_radii_m(2), (2_000.0, 3_000.0));
+		assert_eq!(spec.stream_radius, 1);
+		assert_eq!(stream_radii_m(1), (1_000.0, 3_000.0));
 	}
 
 	#[test]

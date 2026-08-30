@@ -1,7 +1,8 @@
 //! Assembled world model: Durham terrain, streamed forest, sky dome.
 //!
-//! Character mode is the default. Forest present / generate are 2 km / 3 km;
-//! vegetation LOD bullseye / lattice are widened to match.
+//! Character mode is the default. Forest grove fill is 1 km present / 3 km
+//! selection generate. Canopy bump-outs occupy the 1–3 km annulus. Vegetation
+//! LOD bullseye / lattice cover the grove fill ring.
 
 pub mod commands;
 mod ui;
@@ -19,8 +20,8 @@ use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_sky::SkyDomePlugin;
 
-/// ±2 km so produce covers the 2 km present ring (stream-radius 2).
-const WORLD_BULLSEYE_OUTER_M: f32 = 4_000.0;
+/// ±1 km so produce covers the 1 km grove present ring.
+const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;

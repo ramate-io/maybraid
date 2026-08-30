@@ -2,18 +2,28 @@
 //!
 //! Density, bite size, height, and palette are properties of [`ForestGroveKind`] after
 //! forest selection. They do not require growing a [`crate::ChicoGrove`].
+//!
+//! Generated [`CanopyBumpOut`] origins are 160 m terrain cells. Present is a
+//! 1–3 km annulus so they do not cover the same tiles as grove geometry.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec2, Vec3};
 use chico_groves::GroveExtent;
+use lod::gen::Id;
 
 use crate::{
 	ForestExtent, ForestGroveKind, ForestIndex, ForestLayer, SelectedLayers,
 	DEFAULT_FOREST_GROVE_TILE_XZ,
 };
 
-/// Present ring for canopy bump-outs (metres). Overlaps grove Low (~1.0–1.2 km).
-pub const BUMP_OUT_PRESENT_RADIUS_M: f32 = 1200.0;
+/// Terrain-cell edge used as bump-out origin (metres). Matches Durham fine cells.
+pub const BUMP_OUT_CELL_XZ: f32 = 160.0;
+
+/// Inner hole of the bump-out annulus (metres). Same as grove geometry present.
+pub const BUMP_OUT_INNER_RADIUS_M: f32 = 1000.0;
+
+/// Outer radius of the bump-out annulus (metres). Same as forest selection generate.
+pub const BUMP_OUT_OUTER_RADIUS_M: f32 = 3000.0;
 
 /// Authored canopy / cover fields sampled from a grove selection identifier.
 pub trait BumpOutSelection {
@@ -65,6 +75,59 @@ impl BumpOutSelectionSample {
 			palette: kind.bump_out_palette(),
 		}
 	}
+}
+
+/// Select-only canopy proxy on one 160 m terrain cell. No grow, no mesh.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanopyBumpOut {
+	pub bounds: Aabb3d,
+	pub samples: [BumpOutSelectionSample; 9],
+}
+
+impl CanopyBumpOut {
+	pub fn id(&self) -> Id {
+		Id::from_cell(self.bounds)
+	}
+
+	pub fn has_density(&self) -> bool {
+		self.samples.iter().any(|sample| sample.density > 0.001)
+	}
+
+	pub fn center_palette(&self) -> [Color; 3] {
+		self.samples[4].palette
+	}
+}
+
+/// World-aligned 160 m cell AABB (`y` in `[0, 1]`, origin at 0).
+pub fn bump_out_cell_bounds(ix: i32, iz: i32) -> Aabb3d {
+	let s = BUMP_OUT_CELL_XZ;
+	Aabb3d::from_min_max(
+		Vec3::new(ix as f32 * s, 0.0, iz as f32 * s),
+		Vec3::new((ix + 1) as f32 * s, 1.0, (iz + 1) as f32 * s),
+	)
+}
+
+/// Integer 160 m cells whose footprints overlap `region` on XZ.
+pub fn bump_out_cells_overlapping(region: Aabb3d) -> impl Iterator<Item = (i32, i32)> {
+	let s = BUMP_OUT_CELL_XZ;
+	let min_x = (region.min.x / s).floor() as i32;
+	let max_x = ((region.max.x / s).ceil() as i32 - 1).max(min_x);
+	let min_z = (region.min.z / s).floor() as i32;
+	let max_z = ((region.max.z / s).ceil() as i32 - 1).max(min_z);
+	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Chebyshev XZ distance from `origin` to the cell center.
+pub fn bump_out_chebyshev_xz(bounds: Aabb3d, origin: Vec3) -> f32 {
+	let center = Vec3::from((bounds.min + bounds.max) * 0.5);
+	(center.x - origin.x).abs().max((center.z - origin.z).abs())
+}
+
+/// Whether a 160 m cell sits in the grove-fill hole of a camera-centered region.
+pub fn bump_out_in_inner_hole(bounds: Aabb3d, region: Aabb3d) -> bool {
+	let origin =
+		Vec3::new((region.min.x + region.max.x) * 0.5, 0.0, (region.min.z + region.max.z) * 0.5);
+	bump_out_chebyshev_xz(bounds, origin) < BUMP_OUT_INNER_RADIUS_M
 }
 
 impl SelectedLayers {
