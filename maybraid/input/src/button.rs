@@ -54,9 +54,7 @@ impl PadButton {
 		self as usize
 	}
 
-	/// Position-normalized Bevy button → Xbox-letter pad. Analog triggers are not
-	/// mapped here; they become [`PadButton::TriggerFocus`] / [`PadButton::TriggerFire`]
-	/// after the analog threshold.
+	/// Bevy `GamepadButton` → Xbox-letter pad, including analog triggers.
 	pub fn from_gamepad(button: GamepadButton) -> Option<Self> {
 		Some(match button {
 			GamepadButton::South => Self::A,
@@ -73,7 +71,30 @@ impl PadButton {
 			GamepadButton::DPadRight => Self::DpadRight,
 			GamepadButton::Start => Self::Start,
 			GamepadButton::Select => Self::Select,
+			GamepadButton::LeftTrigger2 => Self::TriggerFocus,
+			GamepadButton::RightTrigger2 => Self::TriggerFire,
 			_ => return None,
+		})
+	}
+
+	pub fn gamepad(self) -> Option<GamepadButton> {
+		Some(match self {
+			Self::A => GamepadButton::South,
+			Self::B => GamepadButton::East,
+			Self::X => GamepadButton::West,
+			Self::Y => GamepadButton::North,
+			Self::BumperFocus => GamepadButton::LeftTrigger,
+			Self::BumperFire => GamepadButton::RightTrigger,
+			Self::StickClickMove => GamepadButton::LeftThumb,
+			Self::StickClickLook => GamepadButton::RightThumb,
+			Self::DpadUp => GamepadButton::DPadUp,
+			Self::DpadDown => GamepadButton::DPadDown,
+			Self::DpadLeft => GamepadButton::DPadLeft,
+			Self::DpadRight => GamepadButton::DPadRight,
+			Self::Start => GamepadButton::Start,
+			Self::Select => GamepadButton::Select,
+			Self::TriggerFocus => GamepadButton::LeftTrigger2,
+			Self::TriggerFire => GamepadButton::RightTrigger2,
 		})
 	}
 }

@@ -14,6 +14,7 @@ members = [
   "maybraid/menu/character-ui-menu-renderer",
   "maybraid/menu/screens",
   "maybraid/menu/playground",
+  "maybraid/controllers/menu",
 
   "maybraid/scene-ref",
   "maybraid/material-ref",
@@ -215,6 +216,7 @@ menu-components = { path = "maybraid/menu/components" }
 maybraid-character-ui-menu-renderer = { path = "maybraid/menu/character-ui-menu-renderer" }
 menu-screens = { path = "maybraid/menu/screens" }
 menu-playground = { path = "maybraid/menu/playground" }
+maybraid-menu-controller = { path = "maybraid/controllers/menu" }
 
 scene-ref = { path = "maybraid/scene-ref" }
 material-ref = { path = "maybraid/material-ref" }

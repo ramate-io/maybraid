@@ -6,7 +6,8 @@
 
 use bevy::prelude::*;
 
-use crate::single_select::TextMenuInputLock;
+use crate::single_select::{KeyboardMenuNav, TextMenuInputLock};
+use maybraid_input::{MenuNav, MenuNavImpulse};
 
 /// Focus index for a HUD list (panel headers or overlay leaves).
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +36,14 @@ impl HudMenu {
 		}
 		let n = self.item_count as i32;
 		self.selected = (self.selected as i32 + delta).rem_euclid(n) as usize;
+	}
+
+	pub fn apply_nav(&mut self, nav: MenuNav) {
+		match nav {
+			MenuNav::Up | MenuNav::Left => self.step(-1),
+			MenuNav::Down | MenuNav::Right => self.step(1),
+			MenuNav::Select | MenuNav::Back => {}
+		}
 	}
 }
 
@@ -67,13 +76,28 @@ pub fn select_hud_item_on_over(
 	menu.selected = item.index.min(menu.item_count - 1);
 }
 
+pub fn apply_hud_menu_nav(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	mut menus: Query<&mut HudMenu>,
+) {
+	if lock.0 {
+		return;
+	}
+	let Ok(mut menu) = menus.get_mut(impulse.entity) else {
+		return;
+	};
+	menu.apply_nav(impulse.event().nav);
+}
+
 pub fn navigate_hud_menus(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	overlay_menus: Query<Entity, With<HudOverlayMenu>>,
 	mut menus: Query<(Entity, &mut HudMenu)>,
 ) {
-	if lock.0 {
+	if !keyboard_nav.is_enabled() || lock.0 {
 		return;
 	}
 	let delta = if keyboard.just_pressed(KeyCode::ArrowDown)

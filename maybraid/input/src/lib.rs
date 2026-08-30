@@ -4,6 +4,7 @@
 pub mod analog;
 pub mod button;
 pub mod config;
+pub mod debug;
 pub mod gate;
 pub mod history;
 pub mod pad;
@@ -17,7 +18,7 @@ pub use gate::PadGameplayEnabled;
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use pad::VirtualPad;
 pub use surface::cursor::PadCursor;
-pub use surface::menu::{MenuNav, MenuNavPad};
+pub use surface::menu::{MenuNav, MenuNavImpulse, MenuNavPad};
 
 use bevy::input::InputSystems;
 use bevy::prelude::*;
@@ -53,6 +54,7 @@ impl Plugin for VirtualPadPlugin {
 			)
 			.configure_sets(PreUpdate, VirtualPadSystems::Derive.after(VirtualPadSystems::Produce));
 		produce::configure_produce(app);
+		debug::configure_debug(app);
 		app.add_systems(
 			PreUpdate,
 			(

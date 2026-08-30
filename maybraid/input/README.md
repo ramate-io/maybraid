@@ -34,3 +34,8 @@ so analog and pad buttons clear; the key overlay remains.
 
 `VirtualPadSystems::Produce` (after Bevy `InputSystems`) then `Derive`, both
 in `PreUpdate`. Consumers run in `Update`.
+
+Set [`VirtualPadConfig::debug_overlay`] to dump raw `Gamepad` sticks/buttons
+and the virtual pad onto the screen (menu playground enables this). Menu
+stick threshold is `0.2` so a light tilt still navigates. Unmapped gilrs
+axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.

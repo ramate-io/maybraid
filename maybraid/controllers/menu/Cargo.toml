@@ -1,5 +1,5 @@
 [package]
-name = "menu-components"
+name = "maybraid-menu-controller"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -12,6 +12,10 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 maybraid-input = { workspace = true }
+menu-components = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

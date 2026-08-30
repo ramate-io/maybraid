@@ -7,6 +7,20 @@ use crate::button::PadButton;
 use crate::config::VirtualPadConfig;
 use crate::pad::VirtualPad;
 
+/// Routed menu impulse. Triggered on the focused menu entity.
+#[derive(EntityEvent, Clone, Copy, Debug, PartialEq, Eq)]
+#[entity_event(propagate, auto_propagate)]
+pub struct MenuNavImpulse {
+	pub entity: Entity,
+	pub nav: MenuNav,
+}
+
+impl MenuNavImpulse {
+	pub fn new(entity: Entity, nav: MenuNav) -> Self {
+		Self { entity, nav }
+	}
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MenuNav {
 	Select,

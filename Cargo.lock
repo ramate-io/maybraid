@@ -4349,6 +4349,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "maybraid-input",
  "menu-components",
 ]
 
@@ -4358,6 +4359,16 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+]
+
+[[package]]
+name = "maybraid-menu-controller"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-input",
+ "menu-components",
 ]
 
 [[package]]
@@ -4408,6 +4419,7 @@ name = "menu-components"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "maybraid-input",
 ]
 
 [[package]]
@@ -4424,6 +4436,8 @@ dependencies = [
  "game-commands",
  "lod",
  "maybraid-character-ui-menu-renderer",
+ "maybraid-input",
+ "maybraid-menu-controller",
  "menu-components",
  "menu-screens",
 ]
