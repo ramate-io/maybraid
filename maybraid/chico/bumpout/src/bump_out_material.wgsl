@@ -6,9 +6,8 @@
 #import bevy_pbr::{
     forward_io::Vertex,
     mesh_functions,
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, lights},
     pbr_functions as fns,
-    pbr_types::{PbrInput, pbr_input_new},
     view_transformations::position_world_to_clip,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
@@ -19,7 +18,10 @@ struct BumpOutUniform {
     style: vec4<f32>,
     detail: vec4<f32>,
     density_rows: array<vec4<f32>, 3>,
-    height_rows: array<vec4<f32>, 3>,
+    bite_size_rows: array<vec4<f32>, 3>,
+    bite_size_deviation_rows: array<vec4<f32>, 3>,
+    average_height_rows: array<vec4<f32>, 3>,
+    height_deviation_rows: array<vec4<f32>, 3>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -48,6 +50,8 @@ struct BumpOutVertexOutput {
     @location(7) @interpolate(flat) visibility_range_dither: i32,
 #endif
     @location(8) density: f32,
+    @location(9) bite_size: f32,
+    @location(10) bite_size_deviation: f32,
 }
 
 fn saturate(x: f32) -> f32 {
@@ -116,13 +120,22 @@ fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
         vec4<f32>(vertex.position, 1.0),
     );
     out.density = saturate(sample_grid(bump.density_rows, profile_uv));
-    let profile_height = sample_grid(bump.height_rows, profile_uv);
+    out.bite_size = max(sample_grid(bump.bite_size_rows, profile_uv), 0.01);
+    out.bite_size_deviation = max(
+        sample_grid(bump.bite_size_deviation_rows, profile_uv),
+        0.0,
+    );
+    let average_height = sample_grid(bump.average_height_rows, profile_uv);
+    let height_deviation = max(
+        sample_grid(bump.height_deviation_rows, profile_uv),
+        0.0,
+    );
     let displacement_noise = fbm_2d_3(
         out.world_position.xz * bump.noise.x,
         bump.noise.z,
     );
-    out.world_position.y += profile_height
-        + (displacement_noise - 0.5) * 2.0 * bump.noise.y * out.density;
+    out.world_position.y += average_height
+        + (displacement_noise - 0.5) * 2.0 * height_deviation;
     out.position = position_world_to_clip(out.world_position.xyz);
 
 #ifdef VERTEX_NORMALS
@@ -166,7 +179,14 @@ fn fragment(
     }
 
     // Foliage-style swiss cheese: broad FBM bites mixed with a smaller breakup field.
-    let cheese_position = world.xz * bump.noise.x * bump.detail.x;
+    let bite_scale_noise = value_noise_2d(
+        world.xz * bump.noise.x * 0.23,
+        bump.noise.z + 73.1,
+    );
+    let bite_size = mesh.bite_size * exp2(
+        (bite_scale_noise - 0.5) * 2.0 * mesh.bite_size_deviation,
+    );
+    let cheese_position = world.xz / max(bite_size, 0.01) * bump.detail.x;
     let broad_bites = fbm_2d_3(cheese_position, bump.noise.z + 91.7);
     let fine_bites = value_noise_2d(cheese_position * 3.7, bump.noise.z + 151.3);
     let bite_field = mix(
@@ -193,7 +213,15 @@ fn fragment(
     let tint_noise = value_noise_2d(world.xz * bump.noise.x * 0.31, bump.noise.z + 37.0);
     let color01 = mix(bump.colors[0].rgb, bump.colors[1].rgb, saturate(tint_noise * 2.0));
     let color12 = mix(bump.colors[1].rgb, bump.colors[2].rgb, saturate(tint_noise * 2.0 - 1.0));
-    let albedo = mix(color01, color12, step(0.5, tint_noise));
+    var albedo = mix(color01, color12, step(0.5, tint_noise));
+    let warm_cool = mix(
+        vec3<f32>(0.94, 1.02, 0.96),
+        vec3<f32>(1.08, 1.04, 0.94),
+        tint_noise,
+    );
+    let brightness = mix(0.94, 1.08, tint_noise);
+    let wash = mix(0.90, 1.0, saturate(bite_alpha * 1.25));
+    albedo *= warm_cool * brightness * wash;
 
     // Static fragment-scale apparent height adds sub-triangle relief without extra vertices.
     let detail_height = (
@@ -210,17 +238,14 @@ fn fragment(
     let prepared = fns::prepare_world_normal(geometric_normal, true, is_front);
     let normal = normalize(mix(prepared, vec3<f32>(0.0, 1.0, 0.0), bump.style.z));
 
-    var pbr_input: PbrInput = pbr_input_new();
-    pbr_input.material.base_color = vec4<f32>(albedo, 1.0);
-    pbr_input.material.metallic = 0.0;
-    pbr_input.material.perceptual_roughness = bump.style.y;
-    pbr_input.frag_coord = mesh.position;
-    pbr_input.world_position = mesh.world_position;
-    pbr_input.world_normal = normal;
-    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.N = normal;
-    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
-
-    let lit = fns::apply_pbr_lighting(pbr_input);
-    return tone_mapping(vec4<f32>(lit.rgb, 1.0), view.color_grading);
+    var ndl = 0.55;
+    if (lights.n_directional_lights > 0u) {
+        let direction_to_light = lights.directional_lights[0].direction_to_light;
+        ndl = saturate(dot(normal, direction_to_light));
+    }
+    let sun = ndl * 0.95 + 0.14;
+    let sky = mix(0.38, 0.55, saturate(normal.y));
+    let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
+    let lifted = albedo * sun + albedo * sky * sky_rgb;
+    return tone_mapping(vec4<f32>(lifted, 1.0), view.color_grading);
 }

@@ -1,8 +1,13 @@
+mod commands;
+mod ui;
+
 use std::f32::consts::PI;
 
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle, ChicoBumpOutPlugin};
+use commands::{NeighborhoodValues, PlaygroundCommand};
+use game_commands::command::{GameCommandPlugin, PendingStartupCommand, TextEntryFocus};
 use lod_cascade::Chunk;
 use material_ref::MaterialRefRoot;
 use procedural_common::NoiseParams;
@@ -13,6 +18,12 @@ use sdf::Sdf;
 use terrain_chunk_ref::{TerrainChunkRef, TerrainChunkRefPlugin};
 
 type PlaygroundTerrainBuilder = CpuShotBuilder<PlaygroundTerrain>;
+
+const TILE_RADIUS: i32 = 2;
+const TILE_SIZE: f32 = 52.0;
+const TERRAIN_MIN_Y: f32 = -18.0;
+const TERRAIN_MAX_Y: f32 = 42.0;
+const TILE_RES_2: u8 = 5;
 
 #[derive(Clone, Debug)]
 struct PlaygroundTerrain;
@@ -40,10 +51,19 @@ impl IdentifiedMesh for PlaygroundTerrain {
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-enum PresenterLayer {
+pub(crate) enum PresenterLayer {
 	Terrain,
 	GroundCover,
 	CanopyProxy,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NeighborhoodSample {
+	density: f32,
+	bite_size: f32,
+	bite_size_deviation: f32,
+	average_height: f32,
+	height_deviation: f32,
 }
 
 impl PresenterLayer {
@@ -54,7 +74,117 @@ impl PresenterLayer {
 			Self::CanopyProxy => "CanopyProxy",
 		}
 	}
+
+	fn sample(self, coordinate: IVec2) -> NeighborhoodSample {
+		let x = coordinate.x as f32;
+		let z = coordinate.y as f32;
+		match self {
+			Self::GroundCover => {
+				let density = (0.62
+					+ 0.20 * (x * 0.93 + z * 0.37).sin()
+					+ 0.15 * (z * 1.11 - x * 0.29).cos())
+				.clamp(0.08, 0.98);
+				NeighborhoodSample {
+					density,
+					bite_size: 4.5 + 3.5 * (0.5 + 0.5 * (x * 0.71 + z * 0.53).sin()),
+					bite_size_deviation: 0.2 + 0.65 * (0.5 + 0.5 * (x * 0.43 - z * 0.97).cos()),
+					average_height: (1.8
+						+ 1.65 * (x * 1.17 - z * 0.63).sin()
+						+ 0.75 * (z * 1.31 + x * 0.41).cos())
+					.clamp(0.1, 4.2),
+					height_deviation: 0.15 + 0.8 * (0.5 + 0.5 * (x * 0.83 + z * 0.59).cos()),
+				}
+			}
+			Self::CanopyProxy => {
+				let density = (0.50
+					+ 0.32 * (x * 0.78 + z * 0.44).sin()
+					+ 0.20 * (z * 0.91 - x * 0.32).cos())
+				.clamp(0.03, 0.98);
+				NeighborhoodSample {
+					density,
+					bite_size: 9.0 + 15.0 * (0.5 + 0.5 * (x * 0.57 - z * 0.81).sin()),
+					bite_size_deviation: 0.25 + 1.0 * (0.5 + 0.5 * (x * 0.37 + z * 0.73).cos()),
+					average_height: (25.0
+						+ 14.0 * (x * 1.17 - z * 0.63).sin()
+						+ 10.0 * (z * 1.03 + x * 0.41).cos())
+					.clamp(5.0, 48.0),
+					height_deviation: 2.0 + 7.0 * (0.5 + 0.5 * (x * 0.69 + z * 0.47).cos()),
+				}
+			}
+			Self::Terrain => NeighborhoodSample {
+				density: 0.0,
+				bite_size: 1.0,
+				bite_size_deviation: 0.0,
+				average_height: 0.0,
+				height_deviation: 0.0,
+			},
+		}
+	}
+
+	fn neighborhood(self, center: IVec2) -> BumpOutNeighborhood {
+		let mut densities = [0.0; 9];
+		let mut bite_sizes = [0.0; 9];
+		let mut bite_size_deviations = [0.0; 9];
+		let mut average_heights = [0.0; 9];
+		let mut height_deviations = [0.0; 9];
+		for row in 0..3 {
+			for column in 0..3 {
+				let coordinate = center + IVec2::new(column as i32 - 1, row as i32 - 1);
+				let index = row * 3 + column;
+				let sample = self.sample(coordinate);
+				densities[index] = sample.density;
+				bite_sizes[index] = sample.bite_size;
+				bite_size_deviations[index] = sample.bite_size_deviation;
+				average_heights[index] = sample.average_height;
+				height_deviations[index] = sample.height_deviation;
+			}
+		}
+		BumpOutNeighborhood::new(
+			densities,
+			bite_sizes,
+			bite_size_deviations,
+			average_heights,
+			height_deviations,
+		)
+	}
+
+	fn bump_out(self, tile: IVec2) -> BumpOut {
+		match self {
+			Self::GroundCover => BumpOut::from_neighborhood(
+				self.neighborhood(tile),
+				[
+					Color::srgb(0.12, 0.28, 0.08),
+					Color::srgb(0.22, 0.48, 0.12),
+					Color::srgb(0.52, 0.66, 0.18),
+				],
+				NoiseParams::from_scalar(101.0, 0.085, 0.0, 2),
+			)
+			.with_style(
+				BumpOutStyle::new(0.055, 0.96, 0.42)
+					.with_cheese(0.72, 1.35)
+					.with_fragment_height(5.0, 0.14),
+			),
+			Self::CanopyProxy => BumpOut::from_neighborhood(
+				self.neighborhood(tile),
+				[
+					Color::srgb(0.035, 0.16, 0.055),
+					Color::srgb(0.08, 0.31, 0.10),
+					Color::srgb(0.23, 0.48, 0.13),
+				],
+				NoiseParams::from_scalar(307.0, 0.045, 0.0, 3),
+			)
+			.with_style(
+				BumpOutStyle::new(0.065, 0.88, 0.18)
+					.with_cheese(0.88, 1.0)
+					.with_fragment_height(4.5, 0.85),
+			),
+			Self::Terrain => unreachable!("terrain does not use a bump-out material"),
+		}
+	}
 }
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct TileCoordinate(IVec2);
 
 #[derive(Component)]
 struct FlyCamera {
@@ -78,6 +208,10 @@ impl NeighborhoodControls {
 	fn sample_index(&self) -> usize {
 		self.row * 3 + self.column
 	}
+
+	fn selected_coordinate(&self) -> IVec2 {
+		IVec2::new(self.column as i32 - 1, self.row as i32 - 1)
+	}
 }
 
 impl Default for NeighborhoodControls {
@@ -86,10 +220,17 @@ impl Default for NeighborhoodControls {
 	}
 }
 
-#[derive(Component)]
-struct NeighborhoodControlsText;
-
 fn main() {
+	let startup = PlaygroundCommand::parse_startup_command().unwrap_or_else(|error| {
+		eprintln!("{error}");
+		std::process::exit(2);
+	});
+	if startup.is_some() {
+		println!("Startup command from argv (same as in-game / text).");
+	} else {
+		println!("Chico bump-out playground — press / for commands.");
+	}
+
 	App::new()
 		.add_plugins(DefaultPlugins.set(WindowPlugin {
 			primary_window: Some(Window {
@@ -100,21 +241,21 @@ fn main() {
 			..default()
 		}))
 		.insert_resource(ClearColor(Color::srgb(0.50, 0.72, 0.86)))
+		.insert_resource(PendingStartupCommand(startup))
 		.init_resource::<SharedHandleReport>()
 		.init_resource::<NeighborhoodControls>()
 		.add_plugins((
 			ChicoBumpOutPlugin,
 			TerrainChunkRefPlugin::<PlaygroundTerrainBuilder>::default(),
+			GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 		))
-		.add_systems(Startup, (setup_scene, setup_instructions))
+		.add_systems(Startup, setup_scene)
 		.add_systems(
 			Update,
 			(
 				fly_camera,
-				toggle_layers,
-				edit_neighborhood,
-				update_neighborhood_hud.after(edit_neighborhood),
 				report_shared_mesh_handle,
+				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
 		)
 		.run();
@@ -132,7 +273,7 @@ fn setup_scene(mut commands: Commands, mut standard_materials: ResMut<Assets<Sta
 	));
 
 	let camera_transform =
-		Transform::from_xyz(118.0, 82.0, 132.0).looking_at(Vec3::new(0.0, 12.0, 0.0), Vec3::Y);
+		Transform::from_xyz(178.0, 142.0, 196.0).looking_at(Vec3::new(0.0, 12.0, 0.0), Vec3::Y);
 	let (yaw, pitch, _) = camera_transform.rotation.to_euler(EulerRot::YXZ);
 	commands.spawn((
 		Camera3d::default(),
@@ -141,81 +282,44 @@ fn setup_scene(mut commands: Commands, mut standard_materials: ResMut<Assets<Sta
 		FlyCamera { yaw, pitch, speed: 55.0, sensitivity: 0.0035 },
 	));
 
-	let chunk =
-		Chunk::from_min_max(Vec3::new(-80.0, -18.0, -80.0), Vec3::new(80.0, 42.0, 80.0), None);
-	let terrain_ref = TerrainChunkRef::new(CpuShotBuilder::new(PlaygroundTerrain), chunk, 6);
-	let source_transform = terrain_ref.transform();
 	let terrain_material = standard_materials.add(StandardMaterial {
 		base_color: Color::srgb(0.33, 0.30, 0.20),
 		perceptual_roughness: 0.98,
 		..default()
 	});
+	for z in -TILE_RADIUS..=TILE_RADIUS {
+		for x in -TILE_RADIUS..=TILE_RADIUS {
+			let tile = IVec2::new(x, z);
+			let horizontal_min =
+				Vec2::new((x as f32 - 0.5) * TILE_SIZE, (z as f32 - 0.5) * TILE_SIZE);
+			let chunk = Chunk::from_min_max(
+				Vec3::new(horizontal_min.x, TERRAIN_MIN_Y, horizontal_min.y),
+				Vec3::new(
+					horizontal_min.x + TILE_SIZE,
+					TERRAIN_MAX_Y,
+					horizontal_min.y + TILE_SIZE,
+				),
+				None,
+			);
+			let terrain_ref =
+				TerrainChunkRef::new(CpuShotBuilder::new(PlaygroundTerrain), chunk, TILE_RES_2);
+			let source_transform = terrain_ref.transform();
 
-	commands.spawn((
-		PresenterLayer::Terrain,
-		terrain_ref.clone(),
-		MeshMaterial3d(terrain_material),
-		source_transform,
-		Visibility::default(),
-	));
+			commands.spawn((
+				PresenterLayer::Terrain,
+				TileCoordinate(tile),
+				terrain_ref.clone(),
+				MeshMaterial3d(terrain_material.clone()),
+				source_transform,
+				Visibility::default(),
+			));
 
-	let ground_profile = BumpOutNeighborhood::new(
-		[0.42, 0.58, 0.72, 0.52, 0.82, 0.92, 0.68, 0.88, 0.97],
-		[0.25, 0.45, 0.70, 0.35, 0.65, 1.00, 0.55, 0.95, 1.35],
-	);
-	let ground = BumpOut::from_neighborhood(
-		ground_profile,
-		[
-			Color::srgb(0.12, 0.28, 0.08),
-			Color::srgb(0.22, 0.48, 0.12),
-			Color::srgb(0.52, 0.66, 0.18),
-		],
-		NoiseParams::from_scalar(101.0, 0.085, 0.55, 2),
-	)
-	.with_style(
-		BumpOutStyle::new(0.055, 0.96, 0.42)
-			.with_cheese(0.72, 1.35)
-			.with_fragment_height(5.0, 0.14),
-	);
-	let ground_entity = ground.spawn(&mut commands, terrain_ref.clone());
-	commands.entity(ground_entity).insert(PresenterLayer::GroundCover);
-
-	let canopy_profile = BumpOutNeighborhood::new(
-		[0.10, 0.28, 0.46, 0.22, 0.68, 0.90, 0.48, 0.84, 0.98],
-		[12.0, 16.0, 21.0, 15.0, 24.0, 30.0, 20.0, 29.0, 35.0],
-	);
-	let canopy = BumpOut::from_neighborhood(
-		canopy_profile,
-		[
-			Color::srgb(0.035, 0.16, 0.055),
-			Color::srgb(0.08, 0.31, 0.10),
-			Color::srgb(0.23, 0.48, 0.13),
-		],
-		NoiseParams::from_scalar(307.0, 0.045, 3.2, 3),
-	)
-	.with_style(
-		BumpOutStyle::new(0.065, 0.88, 0.18)
-			.with_cheese(0.88, 1.0)
-			.with_fragment_height(4.5, 0.85),
-	);
-	let canopy_entity = canopy.spawn(&mut commands, terrain_ref);
-	commands.entity(canopy_entity).insert(PresenterLayer::CanopyProxy);
-}
-
-fn setup_instructions(mut commands: Commands) {
-	commands.spawn((
-		Text::new(
-			"TerrainChunkRef<T> shared by three presenters\n\
-			 RMB + mouse: look   WASD/QE: move   Shift: faster\n\
-			 1: terrain   2: ground cover   3: canopy proxy\n\
-			 Tab: edit layer   Arrows: select neighbor\n\
-			 Z/X: density -/+   N/M: height -/+   V/B: cheese -/+",
-		),
-		TextFont { font_size: FontSize::Px(19.0), ..default() },
-		TextColor(Color::WHITE),
-		Node { position_type: PositionType::Absolute, top: px(16.0), left: px(18.0), ..default() },
-		NeighborhoodControlsText,
-	));
+			for layer in [PresenterLayer::GroundCover, PresenterLayer::CanopyProxy] {
+				let entity = layer.bump_out(tile).spawn(&mut commands, terrain_ref.clone());
+				commands.entity(entity).insert((layer, TileCoordinate(tile)));
+			}
+		}
+	}
 }
 
 fn fly_camera(
@@ -223,6 +327,7 @@ fn fly_camera(
 	mouse_buttons: Res<ButtonInput<MouseButton>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
+	text_entry: Res<TextEntryFocus>,
 	mut cameras: Query<(&mut Transform, &mut FlyCamera), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
@@ -232,6 +337,9 @@ fn fly_camera(
 	let mut mouse_delta = Vec2::ZERO;
 	for motion in mouse_motion.read() {
 		mouse_delta += motion.delta;
+	}
+	if text_entry.0 {
+		return;
 	}
 	if mouse_buttons.pressed(MouseButton::Right) {
 		controller.yaw -= mouse_delta.x * controller.sensitivity;
@@ -269,190 +377,129 @@ fn fly_camera(
 	}
 }
 
-fn toggle_layers(
-	keys: Res<ButtonInput<KeyCode>>,
-	mut layers: Query<(&PresenterLayer, &mut Visibility)>,
-) {
-	let selected = if keys.just_pressed(KeyCode::Digit1) {
-		Some(PresenterLayer::Terrain)
-	} else if keys.just_pressed(KeyCode::Digit2) {
-		Some(PresenterLayer::GroundCover)
-	} else if keys.just_pressed(KeyCode::Digit3) {
-		Some(PresenterLayer::CanopyProxy)
-	} else {
-		None
-	};
-	let Some(selected) = selected else {
-		return;
-	};
-
-	for (layer, mut visibility) in &mut layers {
-		if *layer == selected {
-			*visibility = match *visibility {
-				Visibility::Hidden => Visibility::Visible,
-				_ => Visibility::Hidden,
-			};
-		}
-	}
-}
-
 type EditableBumpOut<'a> = (
 	&'a PresenterLayer,
+	&'a TileCoordinate,
 	&'a TerrainChunkRef<PlaygroundTerrainBuilder>,
 	&'a mut BumpOut,
 	&'a mut MaterialRefRoot,
 	&'a mut Aabb,
 );
 
-fn edit_neighborhood(
-	keys: Res<ButtonInput<KeyCode>>,
-	mut controls: ResMut<NeighborhoodControls>,
-	mut layers: Query<EditableBumpOut>,
+pub(crate) fn apply_neighborhood_edit(
+	world: &mut World,
+	values: &NeighborhoodValues,
+	adjust: bool,
 ) {
-	if keys.just_pressed(KeyCode::Tab) {
-		controls.layer = match controls.layer {
-			PresenterLayer::GroundCover => PresenterLayer::CanopyProxy,
-			_ => PresenterLayer::GroundCover,
-		};
-	}
-	if keys.just_pressed(KeyCode::ArrowLeft) {
-		controls.column = controls.column.saturating_sub(1);
-	}
-	if keys.just_pressed(KeyCode::ArrowRight) {
-		controls.column = (controls.column + 1).min(2);
-	}
-	if keys.just_pressed(KeyCode::ArrowUp) {
-		controls.row = controls.row.saturating_sub(1);
-	}
-	if keys.just_pressed(KeyCode::ArrowDown) {
-		controls.row = (controls.row + 1).min(2);
-	}
-
-	let density_delta = if keys.just_pressed(KeyCode::KeyZ) {
-		-0.05
-	} else if keys.just_pressed(KeyCode::KeyX) {
-		0.05
-	} else {
-		0.0
+	let (layer, selected_coordinate) = {
+		let controls = world.resource::<NeighborhoodControls>();
+		(controls.layer, controls.selected_coordinate())
 	};
-	let height_step = if controls.layer == PresenterLayer::CanopyProxy { 1.0 } else { 0.25 };
-	let height_delta = if keys.just_pressed(KeyCode::KeyN) {
-		-height_step
-	} else if keys.just_pressed(KeyCode::KeyM) {
-		height_step
-	} else {
-		0.0
-	};
-	let cheese_delta = if keys.just_pressed(KeyCode::KeyV) {
-		-0.1
-	} else if keys.just_pressed(KeyCode::KeyB) {
-		0.1
-	} else {
-		0.0
-	};
-	if density_delta == 0.0 && height_delta == 0.0 && cheese_delta == 0.0 {
-		return;
-	}
-
-	let sample = controls.sample_index();
-	for (layer, terrain_ref, mut bump_out, mut material_root, mut aabb) in &mut layers {
-		if *layer != controls.layer {
+	let mut layers = world.query::<EditableBumpOut>();
+	for (candidate, tile, terrain_ref, mut bump_out, mut material_root, mut aabb) in
+		layers.iter_mut(world)
+	{
+		if *candidate != layer {
 			continue;
 		}
+		let relative = selected_coordinate - tile.0;
+		if relative.x.abs() > 1 || relative.y.abs() > 1 {
+			continue;
+		}
+
+		let sample = ((relative.y + 1) * 3 + relative.x + 1) as usize;
 		let mut neighborhood = bump_out.neighborhood();
-		if density_delta != 0.0 {
-			neighborhood.set_density(sample, neighborhood.densities[sample] + density_delta);
+		if let Some(value) = values.density {
+			neighborhood
+				.set_density(sample, edited_value(neighborhood.densities[sample], value, adjust));
 		}
-		if height_delta != 0.0 {
-			neighborhood.set_height(sample, neighborhood.heights[sample] + height_delta);
+		if let Some(value) = values.bite_size {
+			neighborhood.set_bite_size(
+				sample,
+				edited_value(neighborhood.bite_sizes[sample], value, adjust),
+			);
 		}
-		let mut style = bump_out.style();
-		if cheese_delta != 0.0 {
-			style.cheese_amount = (style.cheese_amount + cheese_delta).clamp(0.0, 1.0);
+		if let Some(value) = values.bite_size_deviation {
+			neighborhood.set_bite_size_deviation(
+				sample,
+				edited_value(neighborhood.bite_size_deviations[sample], value, adjust),
+			);
+		}
+		if let Some(value) = values.average_height {
+			neighborhood.set_average_height(
+				sample,
+				edited_value(neighborhood.average_heights[sample], value, adjust),
+			);
+		}
+		if let Some(value) = values.height_deviation {
+			neighborhood.set_height_deviation(
+				sample,
+				edited_value(neighborhood.height_deviations[sample], value, adjust),
+			);
 		}
 
 		bump_out.set_neighborhood(neighborhood);
-		bump_out.set_style(style);
 		material_root.0 = bump_out.material.clone();
 		*aabb = bump_out.aabb(terrain_ref);
 	}
 }
 
-fn update_neighborhood_hud(
-	controls: Res<NeighborhoodControls>,
-	layers: Query<(&PresenterLayer, &BumpOut)>,
-	mut hud: Query<&mut Text, With<NeighborhoodControlsText>>,
+pub(crate) fn change_layer_visibility(
+	world: &mut World,
+	selected: PresenterLayer,
+	visible: Option<bool>,
 ) {
-	let Ok(mut text) = hud.single_mut() else {
-		return;
-	};
-	let Some((_, bump_out)) = layers.iter().find(|(layer, _)| **layer == controls.layer) else {
-		return;
-	};
-	let neighborhood = bump_out.neighborhood();
-	let style = bump_out.style();
-	let selected = controls.sample_index();
-	let cell = |index: usize, value: f32| {
-		if index == selected {
-			format!("[{value:5.2}]")
-		} else {
-			format!(" {value:5.2} ")
+	let mut layers = world.query::<(&PresenterLayer, &mut Visibility)>();
+	for (layer, mut visibility) in layers.iter_mut(world) {
+		if *layer != selected {
+			continue;
 		}
-	};
+		let show = visible.unwrap_or(matches!(*visibility, Visibility::Hidden));
+		*visibility = if show { Visibility::Visible } else { Visibility::Hidden };
+	}
+}
 
-	text.0 = format!(
-		"TerrainChunkRef<T> shared by three presenters\n\
-		 RMB + mouse: look   WASD/QE: move   Shift: faster\n\
-		 1: terrain   2: ground cover   3: canopy proxy\n\
-		 Tab: edit layer   Arrows: select neighbor\n\
-		 Z/X: density -/+   N/M: height -/+   V/B: cheese -/+\n\n\
-		 Editing {} sample ({}, {})   cheese={:.2}\n\
-		 density  {} {} {}\n\
-		          {} {} {}\n\
-		          {} {} {}\n\
-		 height   {} {} {}\n\
-		          {} {} {}\n\
-		          {} {} {}",
-		controls.layer.label(),
-		controls.column,
-		controls.row,
-		style.cheese_amount,
-		cell(0, neighborhood.densities[0]),
-		cell(1, neighborhood.densities[1]),
-		cell(2, neighborhood.densities[2]),
-		cell(3, neighborhood.densities[3]),
-		cell(4, neighborhood.densities[4]),
-		cell(5, neighborhood.densities[5]),
-		cell(6, neighborhood.densities[6]),
-		cell(7, neighborhood.densities[7]),
-		cell(8, neighborhood.densities[8]),
-		cell(0, neighborhood.heights[0]),
-		cell(1, neighborhood.heights[1]),
-		cell(2, neighborhood.heights[2]),
-		cell(3, neighborhood.heights[3]),
-		cell(4, neighborhood.heights[4]),
-		cell(5, neighborhood.heights[5]),
-		cell(6, neighborhood.heights[6]),
-		cell(7, neighborhood.heights[7]),
-		cell(8, neighborhood.heights[8]),
-	);
+fn edited_value(current: f32, requested: f32, adjust: bool) -> f32 {
+	if adjust {
+		current + requested
+	} else {
+		requested
+	}
 }
 
 fn report_shared_mesh_handle(
 	mut report: ResMut<SharedHandleReport>,
-	layers: Query<(&PresenterLayer, &Mesh3d)>,
+	layers: Query<(&TileCoordinate, &PresenterLayer, &Mesh3d)>,
 ) {
 	if report.0 {
 		return;
 	}
 	let mut handles = Vec::new();
-	for (layer, mesh) in &layers {
-		handles.push((*layer, mesh.0.id()));
+	for (tile, layer, mesh) in &layers {
+		handles.push((tile.0, *layer, mesh.0.id()));
 	}
-	if handles.len() != 3 {
+	let diameter = (TILE_RADIUS * 2 + 1) as usize;
+	if handles.len() != diameter * diameter * 3 {
 		return;
 	}
-	let shared = handles.windows(2).all(|pair| pair[0].1 == pair[1].1);
-	info!("Terrain/GroundCover/CanopyProxy resolved one shared mesh handle: {shared}");
+
+	let mut shared = true;
+	for z in -TILE_RADIUS..=TILE_RADIUS {
+		for x in -TILE_RADIUS..=TILE_RADIUS {
+			let coordinate = IVec2::new(x, z);
+			let terrain_handle = handles
+				.iter()
+				.find(|(tile, layer, _)| *tile == coordinate && *layer == PresenterLayer::Terrain)
+				.map(|(_, _, handle)| *handle);
+			for layer in [PresenterLayer::GroundCover, PresenterLayer::CanopyProxy] {
+				let bump_handle = handles
+					.iter()
+					.find(|(tile, candidate, _)| *tile == coordinate && *candidate == layer)
+					.map(|(_, _, handle)| *handle);
+				shared &= terrain_handle.is_some() && terrain_handle == bump_handle;
+			}
+		}
+	}
+	info!("Every tile shares one mesh handle across its three presenters: {shared}");
 	report.0 = true;
 }

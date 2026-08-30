@@ -6,7 +6,10 @@ use material_ref::{MaterialRef, MaterialRefRoot};
 use procedural_common::NoiseParams;
 use terrain_chunk_ref::TerrainChunkRef;
 
-use crate::{BumpOutNeighborhood, BumpOutStyle, DENSITY_PARAMETER, HEIGHT_PARAMETER};
+use crate::{
+	BumpOutNeighborhood, BumpOutStyle, AVERAGE_HEIGHT_PARAMETER, BITE_SIZE_DEVIATION_PARAMETER,
+	BITE_SIZE_PARAMETER, DENSITY_PARAMETER, HEIGHT_DEVIATION_PARAMETER,
+};
 
 /// A visual terrain overlay with conservative vertical displacement bounds.
 #[derive(Component, Debug, Clone)]
@@ -34,10 +37,11 @@ impl BumpOut {
 		palette: impl IntoIterator<Item = Color>,
 		noise: NoiseParams,
 	) -> Self {
-		let amplitude = noise.amplitude.abs();
-		let min_height = neighborhood.min_height() - amplitude;
-		let max_height = neighborhood.max_height() + amplitude;
-		Self::new(neighborhood.material_ref(palette, noise), min_height, max_height)
+		Self::new(
+			neighborhood.material_ref(palette, noise),
+			neighborhood.min_displacement(),
+			neighborhood.max_displacement(),
+		)
 	}
 
 	pub fn with_style(mut self, style: BumpOutStyle) -> Self {
@@ -55,10 +59,18 @@ impl BumpOut {
 
 	pub fn set_neighborhood(&mut self, neighborhood: BumpOutNeighborhood) {
 		self.material.parameters.insert(DENSITY_PARAMETER, neighborhood.densities);
-		self.material.parameters.insert(HEIGHT_PARAMETER, neighborhood.heights);
-		let amplitude = self.material.noise.amplitude.abs();
-		self.min_vertical_displacement = neighborhood.min_height() - amplitude;
-		self.max_vertical_displacement = neighborhood.max_height() + amplitude;
+		self.material.parameters.insert(BITE_SIZE_PARAMETER, neighborhood.bite_sizes);
+		self.material
+			.parameters
+			.insert(BITE_SIZE_DEVIATION_PARAMETER, neighborhood.bite_size_deviations);
+		self.material
+			.parameters
+			.insert(AVERAGE_HEIGHT_PARAMETER, neighborhood.average_heights);
+		self.material
+			.parameters
+			.insert(HEIGHT_DEVIATION_PARAMETER, neighborhood.height_deviations);
+		self.min_vertical_displacement = neighborhood.min_displacement();
+		self.max_vertical_displacement = neighborhood.max_displacement();
 	}
 
 	pub fn set_style(&mut self, style: BumpOutStyle) {

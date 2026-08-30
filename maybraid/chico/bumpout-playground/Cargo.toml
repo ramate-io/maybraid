@@ -16,6 +16,8 @@ path = "src/main.rs"
 [dependencies]
 bevy = { workspace = true }
 chico-bumpout = { workspace = true }
+clap = { workspace = true }
+game-commands = { workspace = true }
 lod-cascade = { workspace = true }
 material-ref = { workspace = true }
 procedural-common = { workspace = true }

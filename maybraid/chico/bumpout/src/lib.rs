@@ -22,7 +22,10 @@ pub use neighborhood::{
 
 pub const CHICO_BUMP_OUT_MATERIAL: &str = "chico_bump_out";
 pub const DENSITY_PARAMETER: &str = "neighborhood_density";
-pub const HEIGHT_PARAMETER: &str = "neighborhood_height";
+pub const BITE_SIZE_PARAMETER: &str = "neighborhood_bite_size";
+pub const BITE_SIZE_DEVIATION_PARAMETER: &str = "neighborhood_bite_size_deviation";
+pub const AVERAGE_HEIGHT_PARAMETER: &str = "neighborhood_average_height";
+pub const HEIGHT_DEVIATION_PARAMETER: &str = "neighborhood_height_deviation";
 pub const STYLE_PARAMETER: &str = "bump_out_style";
 
 /// Registers the bump-out shader and standalone deferred material resolver.

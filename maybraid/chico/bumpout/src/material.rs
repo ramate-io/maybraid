@@ -24,14 +24,17 @@ use crate::{
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BumpOutUniform {
 	pub colors: [Vec4; 3],
-	/// `x` frequency, `y` displacement amplitude, `z` seed.
+	/// `x` broad noise frequency, `y` reserved, `z` seed.
 	pub noise: Vec4,
 	/// `x` coverage softness, `y` roughness, `z` normal soften, `w` cheese amount.
 	pub style: Vec4,
 	/// `x` cheese scale, `y` fragment-height frequency, `z` fragment-height amplitude.
 	pub detail: Vec4,
 	pub density_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
-	pub height_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
+	pub bite_size_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
+	pub bite_size_deviation_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
+	pub average_height_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
+	pub height_deviation_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
 }
 
 impl BumpOutUniform {
@@ -70,7 +73,10 @@ impl BumpOutUniform {
 				0.0,
 			),
 			density_rows: rows(neighborhood.densities),
-			height_rows: rows(neighborhood.heights),
+			bite_size_rows: rows(neighborhood.bite_sizes),
+			bite_size_deviation_rows: rows(neighborhood.bite_size_deviations),
+			average_height_rows: rows(neighborhood.average_heights),
+			height_deviation_rows: rows(neighborhood.height_deviations),
 		}
 	}
 }
@@ -211,7 +217,10 @@ mod tests {
 	fn material_ref_maps_named_neighborhood_rows() {
 		let neighborhood = BumpOutNeighborhood::new(
 			[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+			[10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0],
+			[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
 			[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+			[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3],
 		);
 		let material_ref = neighborhood.material_ref(
 			[Color::srgb(0.1, 0.5, 0.2)],
@@ -224,7 +233,10 @@ mod tests {
 		let uniform = BumpOutUniform::from_material_ref(&material_ref);
 
 		assert_eq!(uniform.density_rows[1], Vec4::new(0.3, 0.4, 0.5, 0.0));
-		assert_eq!(uniform.height_rows[2], Vec4::new(7.0, 8.0, 9.0, 0.0));
+		assert_eq!(uniform.bite_size_rows[0], Vec4::new(10.0, 11.0, 12.0, 0.0));
+		assert_eq!(uniform.bite_size_deviation_rows[2], Vec4::new(0.6, 0.7, 0.8, 0.0));
+		assert_eq!(uniform.average_height_rows[2], Vec4::new(7.0, 8.0, 9.0, 0.0));
+		assert_eq!(uniform.height_deviation_rows[1], Vec4::new(0.8, 0.9, 1.0, 0.0));
 		assert!((uniform.noise.y - 1.5).abs() < 1e-6);
 		assert_eq!(uniform.style, Vec4::new(0.07, 0.8, 0.3, 0.65));
 		assert_eq!(uniform.detail, Vec4::new(1.4, 5.0, 0.75, 0.0));

@@ -2,31 +2,52 @@ use bevy::prelude::Color;
 use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
-use crate::{CHICO_BUMP_OUT_MATERIAL, DENSITY_PARAMETER, HEIGHT_PARAMETER, STYLE_PARAMETER};
+use crate::{
+	AVERAGE_HEIGHT_PARAMETER, BITE_SIZE_DEVIATION_PARAMETER, BITE_SIZE_PARAMETER,
+	CHICO_BUMP_OUT_MATERIAL, DENSITY_PARAMETER, HEIGHT_DEVIATION_PARAMETER, STYLE_PARAMETER,
+};
 
 pub const BUMP_OUT_NEIGHBORHOOD_WIDTH: usize = 3;
 pub const BUMP_OUT_NEIGHBORHOOD_SAMPLES: usize =
 	BUMP_OUT_NEIGHBORHOOD_WIDTH * BUMP_OUT_NEIGHBORHOOD_WIDTH;
 
-/// Row-major 3×3 density and average-height samples centered on the presented chunk.
+/// Row-major 3×3 vegetation-field samples centered on the presented chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BumpOutNeighborhood {
 	pub densities: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
-	pub heights: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+	/// Characteristic world-space diameter of fragment bites.
+	pub bite_sizes: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+	/// Symmetric bite-size variation measured in binary scale octaves.
+	pub bite_size_deviations: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+	pub average_heights: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+	/// Symmetric world-space displacement around `average_heights`.
+	pub height_deviations: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
 }
 
 impl BumpOutNeighborhood {
 	pub const fn new(
 		densities: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
-		heights: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+		bite_sizes: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+		bite_size_deviations: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+		average_heights: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+		height_deviations: [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
 	) -> Self {
-		Self { densities, heights }
+		Self { densities, bite_sizes, bite_size_deviations, average_heights, height_deviations }
 	}
 
-	pub fn uniform(density: f32, height: f32) -> Self {
+	pub fn uniform(
+		density: f32,
+		bite_size: f32,
+		bite_size_deviation: f32,
+		average_height: f32,
+		height_deviation: f32,
+	) -> Self {
 		Self {
 			densities: [density; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
-			heights: [height; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+			bite_sizes: [bite_size; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+			bite_size_deviations: [bite_size_deviation; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+			average_heights: [average_height; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
+			height_deviations: [height_deviation; BUMP_OUT_NEIGHBORHOOD_SAMPLES],
 		}
 	}
 
@@ -40,23 +61,41 @@ impl BumpOutNeighborhood {
 			.with_palette(palette)
 			.with_noise(noise)
 			.with_parameter(DENSITY_PARAMETER, self.densities)
-			.with_parameter(HEIGHT_PARAMETER, self.heights)
+			.with_parameter(BITE_SIZE_PARAMETER, self.bite_sizes)
+			.with_parameter(BITE_SIZE_DEVIATION_PARAMETER, self.bite_size_deviations)
+			.with_parameter(AVERAGE_HEIGHT_PARAMETER, self.average_heights)
+			.with_parameter(HEIGHT_DEVIATION_PARAMETER, self.height_deviations)
 			.with_parameter(STYLE_PARAMETER, BumpOutStyle::default().as_values())
 	}
 
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
 		Self {
 			densities: samples_from_ref(material_ref, DENSITY_PARAMETER, 1.0),
-			heights: samples_from_ref(material_ref, HEIGHT_PARAMETER, 0.0),
+			bite_sizes: samples_from_ref(material_ref, BITE_SIZE_PARAMETER, 12.0),
+			bite_size_deviations: samples_from_ref(
+				material_ref,
+				BITE_SIZE_DEVIATION_PARAMETER,
+				0.0,
+			),
+			average_heights: samples_from_ref(material_ref, AVERAGE_HEIGHT_PARAMETER, 0.0),
+			height_deviations: samples_from_ref(material_ref, HEIGHT_DEVIATION_PARAMETER, 0.0),
 		}
 	}
 
-	pub fn min_height(self) -> f32 {
-		self.heights.into_iter().fold(f32::INFINITY, f32::min)
+	pub fn min_displacement(self) -> f32 {
+		self.average_heights
+			.into_iter()
+			.zip(self.height_deviations)
+			.map(|(height, deviation)| height - deviation.abs())
+			.fold(f32::INFINITY, f32::min)
 	}
 
-	pub fn max_height(self) -> f32 {
-		self.heights.into_iter().fold(f32::NEG_INFINITY, f32::max)
+	pub fn max_displacement(self) -> f32 {
+		self.average_heights
+			.into_iter()
+			.zip(self.height_deviations)
+			.map(|(height, deviation)| height + deviation.abs())
+			.fold(f32::NEG_INFINITY, f32::max)
 	}
 
 	pub fn set_density(&mut self, index: usize, density: f32) {
@@ -65,16 +104,34 @@ impl BumpOutNeighborhood {
 		}
 	}
 
-	pub fn set_height(&mut self, index: usize, height: f32) {
-		if let Some(value) = self.heights.get_mut(index) {
+	pub fn set_bite_size(&mut self, index: usize, bite_size: f32) {
+		if let Some(value) = self.bite_sizes.get_mut(index) {
+			*value = bite_size.max(0.01);
+		}
+	}
+
+	pub fn set_bite_size_deviation(&mut self, index: usize, deviation: f32) {
+		if let Some(value) = self.bite_size_deviations.get_mut(index) {
+			*value = deviation.max(0.0);
+		}
+	}
+
+	pub fn set_average_height(&mut self, index: usize, height: f32) {
+		if let Some(value) = self.average_heights.get_mut(index) {
 			*value = height;
+		}
+	}
+
+	pub fn set_height_deviation(&mut self, index: usize, deviation: f32) {
+		if let Some(value) = self.height_deviations.get_mut(index) {
+			*value = deviation.max(0.0);
 		}
 	}
 }
 
 impl Default for BumpOutNeighborhood {
 	fn default() -> Self {
-		Self::uniform(1.0, 0.0)
+		Self::uniform(1.0, 12.0, 0.0, 0.0, 0.0)
 	}
 }
 

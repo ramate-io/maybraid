@@ -2220,6 +2220,8 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "chico-bumpout",
+ "clap",
+ "game-commands",
  "lod-cascade",
  "material-ref",
  "procedural-common",
