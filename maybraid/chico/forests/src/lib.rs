@@ -8,6 +8,7 @@
 
 mod assemble;
 mod blend;
+mod bump_out;
 mod chico;
 mod extent;
 mod forest;
@@ -27,6 +28,10 @@ pub use assemble::{
 };
 pub use blend::{
 	GROVE_BLEND_INFLUENCE, GROVE_BLEND_NOISE, GROVE_BLEND_RADIUS, GROVE_BLEND_TEMPERATURE,
+};
+pub use bump_out::{
+	blend_selection_neighborhood, blend_selection_on_bounds, selection_sample_at, BumpOutSelection,
+	BumpOutSelectionSample, BUMP_OUT_PRESENT_RADIUS_M,
 };
 pub use chico::{chico_hopscotch, select_cell, select_layering, DEFAULT_HOP_BUDGET};
 pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TILE_XZ};

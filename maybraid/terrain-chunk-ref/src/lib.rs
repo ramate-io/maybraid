@@ -99,6 +99,19 @@ where
 		self
 	}
 
+	/// Share an existing [`HandleMap`]. Fill clones handles; the first miss still builds once.
+	///
+	/// `MeshHandle::new` allocates a private map — inject this Arc so every
+	/// [`TerrainChunkRef`] and any stacked `MeshDispatch` see the same mailbox.
+	pub fn with_handles(mut self, handles: HandleMap<T>) -> Self {
+		self.handles = handles;
+		self
+	}
+
+	pub fn handles(&self) -> HandleMap<T> {
+		self.handles.clone()
+	}
+
 	pub fn cached_handle(&self, terrain_ref: &TerrainChunkRef<T>) -> Option<Handle<Mesh>> {
 		let chunk = terrain_ref.terrain_model.normalize_chunk(&terrain_ref.cascade_chunk());
 		self.handles.get(&chunk, &terrain_ref.terrain_model)
@@ -212,6 +225,7 @@ mod tests {
 	use std::sync::Arc;
 
 	use super::*;
+	use render_item::mesh::cache::handle::map::HandleMap;
 
 	#[derive(Clone)]
 	struct CountingTerrain {
@@ -310,5 +324,24 @@ mod tests {
 		app.update();
 
 		assert_eq!(builds.load(Ordering::Relaxed), 1);
+	}
+
+	#[test]
+	fn injected_handle_map_is_shared_across_cache_clones() {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let cache = TerrainChunkRefCache::<CountingTerrain>::new().with_handles(handles.clone());
+		let a = cache.handles();
+		let model = CountingTerrain { builds: Arc::new(AtomicUsize::new(0)) };
+		let chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::ZERO,
+			size: 2.0,
+			extent: Some(Vec3::splat(2.0)),
+			res_2: 2,
+			omit: None,
+		};
+		let mesh = Handle::default();
+		a.insert(&chunk, &model, mesh.clone());
+		assert!(handles.get(&chunk, &model).is_some());
 	}
 }

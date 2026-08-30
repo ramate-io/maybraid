@@ -12,44 +12,78 @@ use bevy::{
 	shader::ShaderRef,
 };
 use material_ref::{
-	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
-	StandardMaterialLib, StandardMaterialRefCache,
+	MaterialId, MaterialLib, MaterialRasters, MaterialRef, MaterialRefCache, MaterialRefKey,
+	MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache, MATERIAL_PALETTE_SLOTS,
+	MATERIAL_RASTER_CHANNELS, MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 
-use crate::{
-	BumpOutNeighborhood, BumpOutStyle, BUMP_OUT_NEIGHBORHOOD_WIDTH, CHICO_BUMP_OUT_MATERIAL,
-};
+use crate::{BumpOutStyle, CHICO_BUMP_OUT_MATERIAL, RASTER_BITE_SIZE, RASTER_DENSITY};
 
-/// Packed, fixed-layout GPU representation of one bump-out material reference.
+const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
+
+/// Packed, fixed-layout GPU representation of one material reference.
+///
+/// Channel meaning is a shader contract. Bump-out uses rasters 0–4 and scalars 0–6.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BumpOutUniform {
-	pub colors: [Vec4; 3],
-	/// `x` broad noise frequency, `y` reserved, `z` seed.
+	pub colors: [Vec4; MATERIAL_PALETTE_SLOTS],
+	/// `x` broad noise frequency, `y` amplitude, `z` seed.
 	pub noise: Vec4,
-	/// `x` coverage softness, `y` roughness, `z` normal soften, `w` cheese amount.
-	pub style: Vec4,
-	/// `x` cheese scale, `y` fragment-height frequency, `z` fragment-height amplitude.
-	pub detail: Vec4,
-	pub density_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
-	pub bite_size_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
-	pub bite_size_deviation_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
-	pub average_height_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
-	pub height_deviation_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
+	pub scalars: [Vec4; SCALAR_VEC4S],
+	pub rasters: [[Vec4; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS],
 }
 
 impl BumpOutUniform {
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		let neighborhood = BumpOutNeighborhood::from_material_ref(material_ref);
-		let style = BumpOutStyle::from_material_ref(material_ref);
 		let fallback = [
 			Vec4::new(0.16, 0.36, 0.14, 1.0),
 			Vec4::new(0.24, 0.52, 0.20, 1.0),
 			Vec4::new(0.38, 0.64, 0.24, 1.0),
 		];
-		let mut colors = fallback;
-		for (target, color) in colors.iter_mut().zip(&material_ref.palette) {
-			let linear = LinearRgba::from(*color);
-			*target = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
+		let mut colors = [Vec4::ZERO; MATERIAL_PALETTE_SLOTS];
+		if material_ref.palette.is_empty() {
+			for (slot, color) in colors.iter_mut().zip(fallback) {
+				*slot = color;
+			}
+		} else {
+			for (slot, color) in colors.iter_mut().zip(&material_ref.palette) {
+				let linear = LinearRgba::from(*color);
+				*slot = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
+			}
+			let first = colors[0];
+			for color in colors.iter_mut().take(3).skip(material_ref.palette.len()) {
+				*color = first;
+			}
+		}
+
+		let mut scalars = [Vec4::ZERO; SCALAR_VEC4S];
+		let values = material_ref.scalar_values();
+		for (i, slot) in scalars.iter_mut().enumerate() {
+			let base = i * 4;
+			*slot = Vec4::new(
+				values.get(base).copied().unwrap_or(0.0),
+				values.get(base + 1).copied().unwrap_or(0.0),
+				values.get(base + 2).copied().unwrap_or(0.0),
+				values.get(base + 3).copied().unwrap_or(0.0),
+			);
+		}
+		if values.is_empty() {
+			let style = BumpOutStyle::default();
+			let packed = style.as_values();
+			scalars[0] = Vec4::new(packed[0], packed[1], packed[2], packed[3]);
+			scalars[1] = Vec4::new(packed[4], packed[5], packed[6], 0.0);
+		}
+
+		let mut rasters = [[Vec4::ZERO; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS];
+		for channel in 0..MATERIAL_RASTER_CHANNELS {
+			let default = match channel {
+				RASTER_DENSITY => 1.0,
+				RASTER_BITE_SIZE => 12.0,
+				_ => 0.0,
+			};
+			let samples = material_ref.rasters.get_or(channel, default);
+			let rows = MaterialRasters::packed_rows(samples);
+			rasters[channel] = rows.map(|row| Vec4::from_array(row));
 		}
 
 		Self {
@@ -60,23 +94,8 @@ impl BumpOutUniform {
 				material_ref.noise.seed as f32,
 				0.0,
 			),
-			style: Vec4::new(
-				style.coverage_softness.max(0.0),
-				style.roughness.clamp(0.0, 1.0),
-				style.normal_soften.clamp(0.0, 1.0),
-				style.cheese_amount.clamp(0.0, 1.0),
-			),
-			detail: Vec4::new(
-				style.cheese_scale.max(1e-4),
-				style.fragment_height_frequency.max(1e-4),
-				style.fragment_height_amplitude.max(0.0),
-				0.0,
-			),
-			density_rows: rows(neighborhood.densities),
-			bite_size_rows: rows(neighborhood.bite_sizes),
-			bite_size_deviation_rows: rows(neighborhood.bite_size_deviations),
-			average_height_rows: rows(neighborhood.average_heights),
-			height_deviation_rows: rows(neighborhood.height_deviations),
+			scalars,
+			rasters,
 		}
 	}
 }
@@ -199,22 +218,18 @@ impl Plugin for BumpOutMaterialRefPlugin {
 	}
 }
 
-fn rows(values: [f32; 9]) -> [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH] {
-	[
-		Vec4::new(values[0], values[1], values[2], 0.0),
-		Vec4::new(values[3], values[4], values[5], 0.0),
-		Vec4::new(values[6], values[7], values[8], 0.0),
-	]
-}
-
 #[cfg(test)]
 mod tests {
 	use procedural_common::NoiseParams;
 
 	use super::*;
+	use crate::{
+		BumpOutNeighborhood, RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION,
+		RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
+	};
 
 	#[test]
-	fn material_ref_maps_named_neighborhood_rows() {
+	fn material_ref_maps_raster_channels() {
 		let neighborhood = BumpOutNeighborhood::new(
 			[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
 			[10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0],
@@ -232,13 +247,13 @@ mod tests {
 			.apply_to(material_ref);
 		let uniform = BumpOutUniform::from_material_ref(&material_ref);
 
-		assert_eq!(uniform.density_rows[1], Vec4::new(0.3, 0.4, 0.5, 0.0));
-		assert_eq!(uniform.bite_size_rows[0], Vec4::new(10.0, 11.0, 12.0, 0.0));
-		assert_eq!(uniform.bite_size_deviation_rows[2], Vec4::new(0.6, 0.7, 0.8, 0.0));
-		assert_eq!(uniform.average_height_rows[2], Vec4::new(7.0, 8.0, 9.0, 0.0));
-		assert_eq!(uniform.height_deviation_rows[1], Vec4::new(0.8, 0.9, 1.0, 0.0));
+		assert_eq!(uniform.rasters[RASTER_DENSITY][1], Vec4::new(0.3, 0.4, 0.5, 0.0));
+		assert_eq!(uniform.rasters[RASTER_BITE_SIZE][0], Vec4::new(10.0, 11.0, 12.0, 0.0));
+		assert_eq!(uniform.rasters[RASTER_BITE_SIZE_DEVIATION][2], Vec4::new(0.6, 0.7, 0.8, 0.0));
+		assert_eq!(uniform.rasters[RASTER_AVERAGE_HEIGHT][2], Vec4::new(7.0, 8.0, 9.0, 0.0));
+		assert_eq!(uniform.rasters[RASTER_HEIGHT_DEVIATION][1], Vec4::new(0.8, 0.9, 1.0, 0.0));
 		assert!((uniform.noise.y - 1.5).abs() < 1e-6);
-		assert_eq!(uniform.style, Vec4::new(0.07, 0.8, 0.3, 0.65));
-		assert_eq!(uniform.detail, Vec4::new(1.4, 5.0, 0.75, 0.0));
+		assert_eq!(uniform.scalars[0], Vec4::new(0.07, 0.8, 0.3, 0.65));
+		assert_eq!(uniform.scalars[1], Vec4::new(1.4, 5.0, 0.75, 0.0));
 	}
 }

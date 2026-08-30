@@ -3,6 +3,7 @@
 //! `/forest` streams the unified Chico forest on Durham height (A/B against
 //! tiled `/grove`).
 
+mod bump_out;
 pub mod camera;
 pub mod character;
 pub mod commands;
@@ -26,11 +27,13 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
+use bump_out::{present_canopy_bump_outs, WorldTerrainBuilder};
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
+use chico_bumpout::ChicoBumpOutPlugin;
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
 use chico_sbs_trees_playground::register_vegetation_view;
@@ -62,6 +65,7 @@ use player::{
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
+use terrain_chunk_ref::TerrainChunkRefPlugin;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
@@ -204,6 +208,8 @@ impl Plugin for VegetationOnTerrainPlugin {
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
+			.add_plugins(ChicoBumpOutPlugin)
+			.add_plugins(TerrainChunkRefPlugin::<WorldTerrainBuilder>::default())
 			.add_plugins(EnforceCachingPlugin::<
 				CpuShotBuilder<ComposedTerrain>,
 				DurhamTerrainShader,
@@ -234,6 +240,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
+			.init_resource::<bump_out::CanopyBumpOutState>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
@@ -245,6 +252,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					generate_cells.after(apply_commands),
 					present_cells.after(generate_cells),
+					present_canopy_bump_outs.after(present_cells),
 					spawn_groves.after(present_cells),
 					stream_durham_forest
 						.after(apply_commands)
@@ -275,6 +283,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 					camera_controller,
 					generate_cells,
 					present_cells.after(generate_cells),
+					present_canopy_bump_outs.after(present_cells),
 					spawn_groves.after(present_cells),
 					stream_durham_forest
 						.before(LodGenerateSystems::Produce)
