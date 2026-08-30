@@ -58,6 +58,18 @@ impl BumpOutNeighborhood {
 	pub fn max_height(self) -> f32 {
 		self.heights.into_iter().fold(f32::NEG_INFINITY, f32::max)
 	}
+
+	pub fn set_density(&mut self, index: usize, density: f32) {
+		if let Some(value) = self.densities.get_mut(index) {
+			*value = density.clamp(0.0, 1.0);
+		}
+	}
+
+	pub fn set_height(&mut self, index: usize, height: f32) {
+		if let Some(value) = self.heights.get_mut(index) {
+			*value = height;
+		}
+	}
 }
 
 impl Default for BumpOutNeighborhood {
@@ -75,15 +87,51 @@ pub struct BumpOutStyle {
 	pub roughness: f32,
 	/// Blend displaced geometric normals toward up.
 	pub normal_soften: f32,
+	/// Strength of the multi-scale bites relative to the broad density mask.
+	pub cheese_amount: f32,
+	/// Frequency multiplier for the multi-scale bite field.
+	pub cheese_scale: f32,
+	/// Frequency multiplier for static fragment-scale apparent height.
+	pub fragment_height_frequency: f32,
+	/// Apparent fragment-scale height amplitude in world units.
+	pub fragment_height_amplitude: f32,
 }
 
 impl BumpOutStyle {
 	pub const fn new(coverage_softness: f32, roughness: f32, normal_soften: f32) -> Self {
-		Self { coverage_softness, roughness, normal_soften }
+		Self {
+			coverage_softness,
+			roughness,
+			normal_soften,
+			cheese_amount: 0.75,
+			cheese_scale: 1.0,
+			fragment_height_frequency: 3.5,
+			fragment_height_amplitude: 0.18,
+		}
 	}
 
-	pub const fn as_values(self) -> [f32; 3] {
-		[self.coverage_softness, self.roughness, self.normal_soften]
+	pub const fn with_cheese(mut self, amount: f32, scale: f32) -> Self {
+		self.cheese_amount = amount;
+		self.cheese_scale = scale;
+		self
+	}
+
+	pub const fn with_fragment_height(mut self, frequency: f32, amplitude: f32) -> Self {
+		self.fragment_height_frequency = frequency;
+		self.fragment_height_amplitude = amplitude;
+		self
+	}
+
+	pub const fn as_values(self) -> [f32; 7] {
+		[
+			self.coverage_softness,
+			self.roughness,
+			self.normal_soften,
+			self.cheese_amount,
+			self.cheese_scale,
+			self.fragment_height_frequency,
+			self.fragment_height_amplitude,
+		]
 	}
 
 	pub fn apply_to(self, material_ref: MaterialRef) -> MaterialRef {
@@ -99,13 +147,23 @@ impl BumpOutStyle {
 			coverage_softness: values.first().copied().unwrap_or(defaults.coverage_softness),
 			roughness: values.get(1).copied().unwrap_or(defaults.roughness),
 			normal_soften: values.get(2).copied().unwrap_or(defaults.normal_soften),
+			cheese_amount: values.get(3).copied().unwrap_or(defaults.cheese_amount),
+			cheese_scale: values.get(4).copied().unwrap_or(defaults.cheese_scale),
+			fragment_height_frequency: values
+				.get(5)
+				.copied()
+				.unwrap_or(defaults.fragment_height_frequency),
+			fragment_height_amplitude: values
+				.get(6)
+				.copied()
+				.unwrap_or(defaults.fragment_height_amplitude),
 		}
 	}
 }
 
 impl Default for BumpOutStyle {
 	fn default() -> Self {
-		Self { coverage_softness: 0.04, roughness: 0.92, normal_soften: 0.25 }
+		Self::new(0.04, 0.92, 0.25)
 	}
 }
 

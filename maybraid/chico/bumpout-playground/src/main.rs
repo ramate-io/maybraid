@@ -1,8 +1,10 @@
 use std::f32::consts::PI;
 
+use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle, ChicoBumpOutPlugin};
 use lod_cascade::Chunk;
+use material_ref::MaterialRefRoot;
 use procedural_common::NoiseParams;
 use render_item::mesh::{IdentifiedMesh, MeshId};
 use render_item::sdf::cpu_shot::CpuShotBuilder;
@@ -44,6 +46,16 @@ enum PresenterLayer {
 	CanopyProxy,
 }
 
+impl PresenterLayer {
+	fn label(self) -> &'static str {
+		match self {
+			Self::Terrain => "Terrain",
+			Self::GroundCover => "GroundCover",
+			Self::CanopyProxy => "CanopyProxy",
+		}
+	}
+}
+
 #[derive(Component)]
 struct FlyCamera {
 	yaw: f32,
@@ -54,6 +66,28 @@ struct FlyCamera {
 
 #[derive(Resource, Default)]
 struct SharedHandleReport(bool);
+
+#[derive(Resource)]
+struct NeighborhoodControls {
+	layer: PresenterLayer,
+	row: usize,
+	column: usize,
+}
+
+impl NeighborhoodControls {
+	fn sample_index(&self) -> usize {
+		self.row * 3 + self.column
+	}
+}
+
+impl Default for NeighborhoodControls {
+	fn default() -> Self {
+		Self { layer: PresenterLayer::GroundCover, row: 1, column: 1 }
+	}
+}
+
+#[derive(Component)]
+struct NeighborhoodControlsText;
 
 fn main() {
 	App::new()
@@ -67,12 +101,22 @@ fn main() {
 		}))
 		.insert_resource(ClearColor(Color::srgb(0.50, 0.72, 0.86)))
 		.init_resource::<SharedHandleReport>()
+		.init_resource::<NeighborhoodControls>()
 		.add_plugins((
 			ChicoBumpOutPlugin,
 			TerrainChunkRefPlugin::<PlaygroundTerrainBuilder>::default(),
 		))
 		.add_systems(Startup, (setup_scene, setup_instructions))
-		.add_systems(Update, (fly_camera, toggle_layers, report_shared_mesh_handle))
+		.add_systems(
+			Update,
+			(
+				fly_camera,
+				toggle_layers,
+				edit_neighborhood,
+				update_neighborhood_hud.after(edit_neighborhood),
+				report_shared_mesh_handle,
+			),
+		)
 		.run();
 }
 
@@ -128,7 +172,11 @@ fn setup_scene(mut commands: Commands, mut standard_materials: ResMut<Assets<Sta
 		],
 		NoiseParams::from_scalar(101.0, 0.085, 0.55, 2),
 	)
-	.with_style(BumpOutStyle::new(0.055, 0.96, 0.42));
+	.with_style(
+		BumpOutStyle::new(0.055, 0.96, 0.42)
+			.with_cheese(0.72, 1.35)
+			.with_fragment_height(5.0, 0.14),
+	);
 	let ground_entity = ground.spawn(&mut commands, terrain_ref.clone());
 	commands.entity(ground_entity).insert(PresenterLayer::GroundCover);
 
@@ -145,7 +193,11 @@ fn setup_scene(mut commands: Commands, mut standard_materials: ResMut<Assets<Sta
 		],
 		NoiseParams::from_scalar(307.0, 0.045, 3.2, 3),
 	)
-	.with_style(BumpOutStyle::new(0.065, 0.88, 0.18));
+	.with_style(
+		BumpOutStyle::new(0.065, 0.88, 0.18)
+			.with_cheese(0.88, 1.0)
+			.with_fragment_height(4.5, 0.85),
+	);
 	let canopy_entity = canopy.spawn(&mut commands, terrain_ref);
 	commands.entity(canopy_entity).insert(PresenterLayer::CanopyProxy);
 }
@@ -155,11 +207,14 @@ fn setup_instructions(mut commands: Commands) {
 		Text::new(
 			"TerrainChunkRef<T> shared by three presenters\n\
 			 RMB + mouse: look   WASD/QE: move   Shift: faster\n\
-			 1: terrain   2: ground cover   3: canopy proxy",
+			 1: terrain   2: ground cover   3: canopy proxy\n\
+			 Tab: edit layer   Arrows: select neighbor\n\
+			 Z/X: density -/+   N/M: height -/+   V/B: cheese -/+",
 		),
 		TextFont { font_size: FontSize::Px(19.0), ..default() },
 		TextColor(Color::WHITE),
 		Node { position_type: PositionType::Absolute, top: px(16.0), left: px(18.0), ..default() },
+		NeighborhoodControlsText,
 	));
 }
 
@@ -239,6 +294,148 @@ fn toggle_layers(
 			};
 		}
 	}
+}
+
+type EditableBumpOut<'a> = (
+	&'a PresenterLayer,
+	&'a TerrainChunkRef<PlaygroundTerrainBuilder>,
+	&'a mut BumpOut,
+	&'a mut MaterialRefRoot,
+	&'a mut Aabb,
+);
+
+fn edit_neighborhood(
+	keys: Res<ButtonInput<KeyCode>>,
+	mut controls: ResMut<NeighborhoodControls>,
+	mut layers: Query<EditableBumpOut>,
+) {
+	if keys.just_pressed(KeyCode::Tab) {
+		controls.layer = match controls.layer {
+			PresenterLayer::GroundCover => PresenterLayer::CanopyProxy,
+			_ => PresenterLayer::GroundCover,
+		};
+	}
+	if keys.just_pressed(KeyCode::ArrowLeft) {
+		controls.column = controls.column.saturating_sub(1);
+	}
+	if keys.just_pressed(KeyCode::ArrowRight) {
+		controls.column = (controls.column + 1).min(2);
+	}
+	if keys.just_pressed(KeyCode::ArrowUp) {
+		controls.row = controls.row.saturating_sub(1);
+	}
+	if keys.just_pressed(KeyCode::ArrowDown) {
+		controls.row = (controls.row + 1).min(2);
+	}
+
+	let density_delta = if keys.just_pressed(KeyCode::KeyZ) {
+		-0.05
+	} else if keys.just_pressed(KeyCode::KeyX) {
+		0.05
+	} else {
+		0.0
+	};
+	let height_step = if controls.layer == PresenterLayer::CanopyProxy { 1.0 } else { 0.25 };
+	let height_delta = if keys.just_pressed(KeyCode::KeyN) {
+		-height_step
+	} else if keys.just_pressed(KeyCode::KeyM) {
+		height_step
+	} else {
+		0.0
+	};
+	let cheese_delta = if keys.just_pressed(KeyCode::KeyV) {
+		-0.1
+	} else if keys.just_pressed(KeyCode::KeyB) {
+		0.1
+	} else {
+		0.0
+	};
+	if density_delta == 0.0 && height_delta == 0.0 && cheese_delta == 0.0 {
+		return;
+	}
+
+	let sample = controls.sample_index();
+	for (layer, terrain_ref, mut bump_out, mut material_root, mut aabb) in &mut layers {
+		if *layer != controls.layer {
+			continue;
+		}
+		let mut neighborhood = bump_out.neighborhood();
+		if density_delta != 0.0 {
+			neighborhood.set_density(sample, neighborhood.densities[sample] + density_delta);
+		}
+		if height_delta != 0.0 {
+			neighborhood.set_height(sample, neighborhood.heights[sample] + height_delta);
+		}
+		let mut style = bump_out.style();
+		if cheese_delta != 0.0 {
+			style.cheese_amount = (style.cheese_amount + cheese_delta).clamp(0.0, 1.0);
+		}
+
+		bump_out.set_neighborhood(neighborhood);
+		bump_out.set_style(style);
+		material_root.0 = bump_out.material.clone();
+		*aabb = bump_out.aabb(terrain_ref);
+	}
+}
+
+fn update_neighborhood_hud(
+	controls: Res<NeighborhoodControls>,
+	layers: Query<(&PresenterLayer, &BumpOut)>,
+	mut hud: Query<&mut Text, With<NeighborhoodControlsText>>,
+) {
+	let Ok(mut text) = hud.single_mut() else {
+		return;
+	};
+	let Some((_, bump_out)) = layers.iter().find(|(layer, _)| **layer == controls.layer) else {
+		return;
+	};
+	let neighborhood = bump_out.neighborhood();
+	let style = bump_out.style();
+	let selected = controls.sample_index();
+	let cell = |index: usize, value: f32| {
+		if index == selected {
+			format!("[{value:5.2}]")
+		} else {
+			format!(" {value:5.2} ")
+		}
+	};
+
+	text.0 = format!(
+		"TerrainChunkRef<T> shared by three presenters\n\
+		 RMB + mouse: look   WASD/QE: move   Shift: faster\n\
+		 1: terrain   2: ground cover   3: canopy proxy\n\
+		 Tab: edit layer   Arrows: select neighbor\n\
+		 Z/X: density -/+   N/M: height -/+   V/B: cheese -/+\n\n\
+		 Editing {} sample ({}, {})   cheese={:.2}\n\
+		 density  {} {} {}\n\
+		          {} {} {}\n\
+		          {} {} {}\n\
+		 height   {} {} {}\n\
+		          {} {} {}\n\
+		          {} {} {}",
+		controls.layer.label(),
+		controls.column,
+		controls.row,
+		style.cheese_amount,
+		cell(0, neighborhood.densities[0]),
+		cell(1, neighborhood.densities[1]),
+		cell(2, neighborhood.densities[2]),
+		cell(3, neighborhood.densities[3]),
+		cell(4, neighborhood.densities[4]),
+		cell(5, neighborhood.densities[5]),
+		cell(6, neighborhood.densities[6]),
+		cell(7, neighborhood.densities[7]),
+		cell(8, neighborhood.densities[8]),
+		cell(0, neighborhood.heights[0]),
+		cell(1, neighborhood.heights[1]),
+		cell(2, neighborhood.heights[2]),
+		cell(3, neighborhood.heights[3]),
+		cell(4, neighborhood.heights[4]),
+		cell(5, neighborhood.heights[5]),
+		cell(6, neighborhood.heights[6]),
+		cell(7, neighborhood.heights[7]),
+		cell(8, neighborhood.heights[8]),
+	);
 }
 
 fn report_shared_mesh_handle(

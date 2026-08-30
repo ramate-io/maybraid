@@ -17,6 +17,7 @@ struct BumpOutUniform {
     colors: array<vec4<f32>, 3>,
     noise: vec4<f32>,
     style: vec4<f32>,
+    detail: vec4<f32>,
     density_rows: array<vec4<f32>, 3>,
     height_rows: array<vec4<f32>, 3>,
 }
@@ -72,6 +73,13 @@ fn value_noise_2d(p: vec2<f32>, seed: f32) -> f32 {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
+fn fbm_2d_3(p: vec2<f32>, seed: f32) -> f32 {
+    let a = value_noise_2d(p, seed) * 0.5;
+    let b = value_noise_2d(p * 2.03, seed + 19.17) * 0.25;
+    let c = value_noise_2d(p * 4.11, seed + 47.31) * 0.125;
+    return (a + b + c) / 0.875;
+}
+
 fn sample_row(row: vec4<f32>, x: f32) -> f32 {
     if (x < 1.0) {
         return mix(row.x, row.y, x);
@@ -109,7 +117,7 @@ fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
     );
     out.density = saturate(sample_grid(bump.density_rows, profile_uv));
     let profile_height = sample_grid(bump.height_rows, profile_uv);
-    let displacement_noise = value_noise_2d(
+    let displacement_noise = fbm_2d_3(
         out.world_position.xz * bump.noise.x,
         bump.noise.z,
     );
@@ -153,15 +161,32 @@ fn fragment(
     mesh: BumpOutVertexOutput,
 ) -> @location(0) vec4<f32> {
     let world = mesh.world_position.xyz;
-    let coverage_noise = value_noise_2d(world.xz * bump.noise.x * 0.73, bump.noise.z + 91.7);
-    let softness = bump.style.x;
-    let reject_probability = smoothstep(
-        mesh.density - softness,
-        mesh.density + softness,
-        coverage_noise,
+    if (mesh.density <= 0.001) {
+        discard;
+    }
+
+    // Foliage-style swiss cheese: broad FBM bites mixed with a smaller breakup field.
+    let cheese_position = world.xz * bump.noise.x * bump.detail.x;
+    let broad_bites = fbm_2d_3(cheese_position, bump.noise.z + 91.7);
+    let fine_bites = value_noise_2d(cheese_position * 3.7, bump.noise.z + 151.3);
+    let bite_field = mix(
+        broad_bites,
+        broad_bites * 0.62 + fine_bites * 0.38,
+        bump.style.w,
     );
-    let dither = hash21(floor(world.xz * bump.noise.x * 12.0) + vec2<f32>(bump.noise.z));
-    if (dither < reject_probability) {
+    let bite_threshold = mix(0.88, 0.12, mesh.density)
+        + bump.style.w * mix(0.08, 0.04, mesh.density);
+    let softness = bump.style.x;
+    let bite_width = max(
+        fwidth(bite_field) * (1.0 + softness * 8.0),
+        max(softness * 0.2, 0.005),
+    );
+    let bite_alpha = smoothstep(
+        bite_threshold - bite_width,
+        bite_threshold + bite_width,
+        bite_field,
+    );
+    if (bite_alpha < 0.08) {
         discard;
     }
 
@@ -170,7 +195,15 @@ fn fragment(
     let color12 = mix(bump.colors[1].rgb, bump.colors[2].rgb, saturate(tint_noise * 2.0 - 1.0));
     let albedo = mix(color01, color12, step(0.5, tint_noise));
 
-    var geometric_normal = normalize(cross(dpdx(world), dpdy(world)));
+    // Static fragment-scale apparent height adds sub-triangle relief without extra vertices.
+    let detail_height = (
+        fbm_2d_3(
+            world.xz * bump.noise.x * bump.detail.y,
+            bump.noise.z + 211.9,
+        ) - 0.5
+    ) * 2.0 * bump.detail.z * mesh.density;
+    let apparent_position = world + vec3<f32>(0.0, detail_height, 0.0);
+    var geometric_normal = normalize(cross(dpdx(apparent_position), dpdy(apparent_position)));
     if (dot(geometric_normal, mesh.world_normal) < 0.0) {
         geometric_normal = -geometric_normal;
     }

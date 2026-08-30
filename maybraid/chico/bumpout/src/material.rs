@@ -26,8 +26,10 @@ pub struct BumpOutUniform {
 	pub colors: [Vec4; 3],
 	/// `x` frequency, `y` displacement amplitude, `z` seed.
 	pub noise: Vec4,
-	/// `x` coverage softness, `y` roughness, `z` normal soften.
+	/// `x` coverage softness, `y` roughness, `z` normal soften, `w` cheese amount.
 	pub style: Vec4,
+	/// `x` cheese scale, `y` fragment-height frequency, `z` fragment-height amplitude.
+	pub detail: Vec4,
 	pub density_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
 	pub height_rows: [Vec4; BUMP_OUT_NEIGHBORHOOD_WIDTH],
 }
@@ -59,6 +61,12 @@ impl BumpOutUniform {
 				style.coverage_softness.max(0.0),
 				style.roughness.clamp(0.0, 1.0),
 				style.normal_soften.clamp(0.0, 1.0),
+				style.cheese_amount.clamp(0.0, 1.0),
+			),
+			detail: Vec4::new(
+				style.cheese_scale.max(1e-4),
+				style.fragment_height_frequency.max(1e-4),
+				style.fragment_height_amplitude.max(0.0),
 				0.0,
 			),
 			density_rows: rows(neighborhood.densities),
@@ -209,10 +217,16 @@ mod tests {
 			[Color::srgb(0.1, 0.5, 0.2)],
 			NoiseParams::from_scalar(17.0, 0.2, 1.5, 2),
 		);
+		let material_ref = BumpOutStyle::new(0.07, 0.8, 0.3)
+			.with_cheese(0.65, 1.4)
+			.with_fragment_height(5.0, 0.75)
+			.apply_to(material_ref);
 		let uniform = BumpOutUniform::from_material_ref(&material_ref);
 
 		assert_eq!(uniform.density_rows[1], Vec4::new(0.3, 0.4, 0.5, 0.0));
 		assert_eq!(uniform.height_rows[2], Vec4::new(7.0, 8.0, 9.0, 0.0));
 		assert!((uniform.noise.y - 1.5).abs() < 1e-6);
+		assert_eq!(uniform.style, Vec4::new(0.07, 0.8, 0.3, 0.65));
+		assert_eq!(uniform.detail, Vec4::new(1.4, 5.0, 0.75, 0.0));
 	}
 }

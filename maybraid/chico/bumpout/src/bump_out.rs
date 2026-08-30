@@ -6,7 +6,7 @@ use material_ref::{MaterialRef, MaterialRefRoot};
 use procedural_common::NoiseParams;
 use terrain_chunk_ref::TerrainChunkRef;
 
-use crate::{BumpOutNeighborhood, BumpOutStyle};
+use crate::{BumpOutNeighborhood, BumpOutStyle, DENSITY_PARAMETER, HEIGHT_PARAMETER};
 
 /// A visual terrain overlay with conservative vertical displacement bounds.
 #[derive(Component, Debug, Clone)]
@@ -41,8 +41,38 @@ impl BumpOut {
 	}
 
 	pub fn with_style(mut self, style: BumpOutStyle) -> Self {
-		self.material = style.apply_to(self.material);
+		self.set_style(style);
 		self
+	}
+
+	pub fn neighborhood(&self) -> BumpOutNeighborhood {
+		BumpOutNeighborhood::from_material_ref(&self.material)
+	}
+
+	pub fn style(&self) -> BumpOutStyle {
+		BumpOutStyle::from_material_ref(&self.material)
+	}
+
+	pub fn set_neighborhood(&mut self, neighborhood: BumpOutNeighborhood) {
+		self.material.parameters.insert(DENSITY_PARAMETER, neighborhood.densities);
+		self.material.parameters.insert(HEIGHT_PARAMETER, neighborhood.heights);
+		let amplitude = self.material.noise.amplitude.abs();
+		self.min_vertical_displacement = neighborhood.min_height() - amplitude;
+		self.max_vertical_displacement = neighborhood.max_height() + amplitude;
+	}
+
+	pub fn set_style(&mut self, style: BumpOutStyle) {
+		self.material = style.apply_to(self.material.clone());
+	}
+
+	pub fn aabb<T>(&self, terrain_ref: &TerrainChunkRef<T>) -> Aabb {
+		let extent = terrain_ref.chunk.extent();
+		let local_min = Vec3::new(0.0, self.min_vertical_displacement.min(0.0), 0.0);
+		let local_max = extent + Vec3::new(0.0, self.max_vertical_displacement.max(0.0), 0.0);
+		Aabb {
+			center: Vec3A::from((local_min + local_max) * 0.5),
+			half_extents: Vec3A::from((local_max - local_min) * 0.5),
+		}
 	}
 
 	/// Spawn an independently materialized presenter that lazily resolves `terrain_ref`.
@@ -50,13 +80,7 @@ impl BumpOut {
 	where
 		T: Send + Sync + 'static,
 	{
-		let extent = terrain_ref.chunk.extent();
-		let local_min = Vec3::new(0.0, self.min_vertical_displacement.min(0.0), 0.0);
-		let local_max = extent + Vec3::new(0.0, self.max_vertical_displacement.max(0.0), 0.0);
-		let aabb = Aabb {
-			center: Vec3A::from((local_min + local_max) * 0.5),
-			half_extents: Vec3A::from((local_max - local_min) * 0.5),
-		};
+		let aabb = self.aabb(&terrain_ref);
 		let transform = terrain_ref.transform();
 		let material = self.material.clone();
 
