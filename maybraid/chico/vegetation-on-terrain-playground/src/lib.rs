@@ -46,10 +46,10 @@ use commands::{
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, DurhamTerrainModelsPlugin, OuterCellRing, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, WaterPresentationAssets,
-	TERRAIN_CELL_SIZE,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
@@ -211,7 +211,8 @@ impl Plugin for VegetationOnTerrainPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(ChicoBumpOutPlugin)
-			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default());
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
+			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default());
 		let (terrain_handles, terrain_disk) = {
 			let caches = app.world().resource::<EnforcedCaches<TerrainMeshBuilder>>();
 			(caches.handle_map(), caches.disk_cache())
@@ -415,10 +416,11 @@ fn setup_presentation_assets(
 		macro_cell_min_size,
 		macro_res_2,
 	});
-	// AvianTerrainIndex requires water presentation assets even when we skip water.
 	let water_material = standard_materials.add(StandardMaterial {
 		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
 		alpha_mode: AlphaMode::Blend,
+		perceptual_roughness: 0.08,
+		reflectance: 0.6,
 		..default()
 	});
 	commands.insert_resource(WaterPresentationAssets { material: water_material });
@@ -565,7 +567,9 @@ fn generate_cells(
 
 	let terrains =
 		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	info!("generated terrain_cells={}", terrains.len());
+	let waters =
+		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
+	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
 
 	if let Some(base) = index.base_noise() {
 		world_base.0 = base.clone();
@@ -595,6 +599,7 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
+	mut water_presenter: WaterRegionPresenter,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
@@ -604,6 +609,7 @@ fn present_cells(
 	}
 
 	terrain_presenter.clear_presented();
+	water_presenter.clear_presented();
 
 	let region = layout.request_region();
 	let identity = Transform::IDENTITY;
@@ -615,6 +621,8 @@ fn present_cells(
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let water_view = WaterStoreView::new(&store, &layout);
+	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
 	pending.0 = false;
 }
 
