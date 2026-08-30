@@ -44,7 +44,8 @@ use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
+	TERRAIN_CELL_SIZE,
 };
 pub use collider::{TerrainTrimeshCollider, TERRAIN_FRICTION};
 pub use config::TerrainConfig;

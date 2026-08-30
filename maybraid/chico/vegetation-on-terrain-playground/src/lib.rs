@@ -657,6 +657,7 @@ fn spawn_groves(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use durham_terrain_models::origin_cell_ids_for_layout;
 
 	#[test]
 	fn world_defaults_keep_grove_fill_at_one_kilometre() {
@@ -669,6 +670,13 @@ mod tests {
 	fn world_fine_grid_stays_at_sixteen_cells() {
 		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
 		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
+	}
+
+	#[test]
+	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
+		let layout = world_cell_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
 	}
 
 	#[test]
