@@ -11,6 +11,17 @@
     view_transformations::position_world_to_clip,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
+#ifdef DISTANCE_FOG
+#import bevy_pbr::mesh_view_bindings::fog
+#endif
+
+fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
+#ifdef DISTANCE_FOG
+    return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
+#else
+    return color;
+#endif
+}
 
 struct BumpOutUniform {
     colors: array<vec4<f32>, 8>,
@@ -248,5 +259,10 @@ fn fragment(
     let sky = mix(0.38, 0.55, saturate(normal.y));
     let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
     let lifted = albedo * sun + albedo * sky * sky_rgb;
-    return tone_mapping(vec4<f32>(lifted, 1.0), view.color_grading);
+    let fogged = with_distance_fog(
+        vec4<f32>(lifted, 1.0),
+        world,
+        mesh.position.xy,
+    );
+    return tone_mapping(fogged, view.color_grading);
 }
