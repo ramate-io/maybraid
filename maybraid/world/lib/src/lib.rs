@@ -1,8 +1,9 @@
 //! Assembled world model: Durham terrain, streamed forest, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
-//! selection generate. Canopy bump-outs occupy the 1–3 km annulus. Vegetation
-//! LOD bullseye / lattice cover the grove fill ring.
+//! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
+//! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
+//! cover the grove fill ring.
 
 pub mod commands;
 mod ui;

@@ -26,8 +26,8 @@ use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
-	OuterCellRing, Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
 	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
@@ -38,7 +38,6 @@ use lod::lod_ref::LodRef;
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
 
 /// Fine-grid half-extent in base cells (covers rings through base-sized `res_2 = 2`).
@@ -98,10 +97,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<
-				CpuShotBuilder<ComposedTerrain>,
-				DurhamTerrainShader,
-			>::default())
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -123,12 +119,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.init_resource::<PlaygroundDebugOverlay>()
 			.add_systems(
 				Startup,
-				(
-					setup_camera,
-					setup_lighting,
-					setup_presentation_assets,
-					setup_cell_location_hud,
-				),
+				(setup_camera, setup_lighting, setup_presentation_assets, setup_cell_location_hud),
 			)
 			.add_systems(
 				Update,

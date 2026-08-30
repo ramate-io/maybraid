@@ -84,6 +84,9 @@ where
 {
 	handles: HandleMap<T>,
 	disk: Option<DiskMeshCache<T>>,
+	/// When false, a cache miss waits instead of marching. Use this when fill
+	/// already owns [`Cached`] / `MeshDispatch` on the same [`HandleMap`].
+	build_on_miss: bool,
 }
 
 impl<T> TerrainChunkRefCache<T>
@@ -91,7 +94,7 @@ where
 	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
 {
 	pub fn new() -> Self {
-		Self { handles: HandleMap::new(), disk: None }
+		Self { handles: HandleMap::new(), disk: None, build_on_miss: true }
 	}
 
 	pub fn with_disk_cache(mut self, disk: DiskMeshCache<T>) -> Self {
@@ -99,12 +102,24 @@ where
 		self
 	}
 
-	/// Share an existing [`HandleMap`]. Fill clones handles; the first miss still builds once.
+	pub fn with_optional_disk(mut self, disk: Option<DiskMeshCache<T>>) -> Self {
+		self.disk = disk;
+		self
+	}
+
+	/// Share an existing [`HandleMap`]. Fill clones handles; the first miss still builds once
+	/// unless [`Self::without_build_on_miss`] is set.
 	///
 	/// `MeshHandle::new` allocates a private map — inject this Arc so every
 	/// [`TerrainChunkRef`] and any stacked `MeshDispatch` see the same mailbox.
 	pub fn with_handles(mut self, handles: HandleMap<T>) -> Self {
 		self.handles = handles;
+		self
+	}
+
+	/// Overlay-only: copy a handle when fill has published one; never remarch.
+	pub fn without_build_on_miss(mut self) -> Self {
+		self.build_on_miss = false;
 		self
 	}
 
@@ -175,7 +190,7 @@ pub fn fulfill_terrain_chunk_refs<T>(
 				.insert((Mesh3d(handle), TerrainChunkRefResolved(key)));
 			continue;
 		}
-		if remaining == 0 {
+		if !cache.build_on_miss || remaining == 0 {
 			continue;
 		}
 		remaining -= 1;
@@ -343,5 +358,35 @@ mod tests {
 		let mesh = Handle::default();
 		a.insert(&chunk, &model, mesh.clone());
 		assert!(handles.get(&chunk, &model).is_some());
+	}
+
+	#[test]
+	fn cache_only_fulfill_waits_for_an_injected_handle() {
+		let handles = HandleMap::<CountingTerrain>::new();
+		let model = CountingTerrain { builds: Arc::new(AtomicUsize::new(0)) };
+		let chunk = Chunk::cube(Vec3::splat(-1.0), 2.0, None);
+		let terrain_ref = TerrainChunkRef::new(model.clone(), chunk, 2);
+		let cascade = terrain_ref.cascade_chunk();
+
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default())).init_asset::<Mesh>();
+		app.insert_resource(
+			TerrainChunkRefCache::<CountingTerrain>::new()
+				.with_handles(handles.clone())
+				.without_build_on_miss(),
+		)
+		.add_plugins(TerrainChunkRefPlugin::<CountingTerrain>::default());
+
+		let entity = app.world_mut().spawn(terrain_ref.clone()).id();
+		app.update();
+		assert!(app.world().get::<Mesh3d>(entity).is_none());
+		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
+
+		let mesh = Handle::default();
+		handles.insert(&cascade, &model, mesh.clone());
+		app.update();
+		let resolved = app.world().get::<Mesh3d>(entity).expect("copied fill handle");
+		assert_eq!(resolved.0, mesh);
+		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
 	}
 }

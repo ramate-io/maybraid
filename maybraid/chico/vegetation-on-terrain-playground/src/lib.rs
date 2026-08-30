@@ -28,7 +28,7 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::{register_bump_out_lod, stream_canopy_bump_outs, WorldTerrainBuilder};
+use bump_out::{register_bump_out_lod, stream_canopy_bump_outs};
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
@@ -46,8 +46,8 @@ use commands::{
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	AvianTerrainIndex, BaseTerrainNoise, DurhamTerrainModelsPlugin, OuterCellRing, Terrain,
+	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, WaterPresentationAssets,
 	TERRAIN_CELL_SIZE,
 };
@@ -63,16 +63,17 @@ use player::{
 	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
 	AwaitingTerrainSurface, PlayerControlSystems,
 };
-use render_item::mesh::handle::EnforceCachingPlugin;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
+use render_item::mesh::handle::{EnforceCachingPlugin, EnforcedCaches};
 use std::f32::consts::PI;
-use terrain_chunk_ref::TerrainChunkRefPlugin;
+use terrain_chunk_ref::{TerrainChunkRefCache, TerrainChunkRefPlugin};
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Fine-grid Chebyshev half-extent (19 × 160 m ≈ 3.0 km). Covers bump-out outer / forest generate.
-const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 19;
+/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Playable disk from
+/// [#675](https://github.com/ramate-io/maybraid/pull/675); bump-outs attach to these
+/// cells instead of expanding generate.
+const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
 /// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
 const WORLD_OUTER_2X_ROWS: i32 = 2;
 /// 4× macro ring past the 2× ring.
@@ -210,11 +211,18 @@ impl Plugin for VegetationOnTerrainPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(ChicoBumpOutPlugin)
-			.add_plugins(TerrainChunkRefPlugin::<WorldTerrainBuilder>::default())
-			.add_plugins(EnforceCachingPlugin::<
-				CpuShotBuilder<ComposedTerrain>,
-				DurhamTerrainShader,
-			>::default());
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default());
+		let (terrain_handles, terrain_disk) = {
+			let caches = app.world().resource::<EnforcedCaches<TerrainMeshBuilder>>();
+			(caches.handle_map(), caches.disk_cache())
+		};
+		app.insert_resource(
+			TerrainChunkRefCache::<TerrainMeshBuilder>::new()
+				.with_handles(terrain_handles)
+				.with_optional_disk(terrain_disk)
+				.without_build_on_miss(),
+		)
+		.add_plugins(TerrainChunkRefPlugin::<TerrainMeshBuilder>::default());
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -658,11 +666,17 @@ mod tests {
 	}
 
 	#[test]
-	fn world_macro_rings_stay_inside_five_km() {
+	fn world_fine_grid_stays_at_sixteen_cells() {
+		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
+		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
+	}
+
+	#[test]
+	fn world_macro_rings_stay_inside_seven_km() {
 		let s = TERRAIN_CELL_SIZE;
 		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
 		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
 		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
-		assert!(outer < 5_000.0, "playable half-extent {outer}");
+		assert!(outer < 7_000.0, "playable half-extent {outer}");
 	}
 }

@@ -296,7 +296,7 @@ fn bump_out_cell_index(position: Vec3) -> (i32, i32) {
 	((position.x / s).floor() as i32, (position.z / s).floor() as i32)
 }
 
-/// Bump-out generate bullseye: 3 km disk; [`CanopyBumpOut::original_ids_for`] skips the 1 km hole.
+/// Bump-out generate bullseye: 5 km disk; [`CanopyBumpOut::original_ids_for`] skips the 1 km hole.
 #[derive(Resource, Debug, Clone, Copy, PartialEq)]
 pub struct BumpOutGenerateBullseye {
 	pub radius_m: f32,
@@ -326,7 +326,7 @@ impl LodRefreshRegions for BumpOutGenerateBullseye {
 	}
 }
 
-/// Bump-out present bullseye: 3 km keep AABB; tracked ids skip the 1 km grove-fill hole.
+/// Bump-out present bullseye: 5 km keep AABB; tracked ids skip the 1 km grove-fill hole.
 #[derive(Resource, Debug, Clone, Copy, PartialEq)]
 pub struct BumpOutPresentBullseye {
 	pub radius_m: f32,
@@ -539,9 +539,9 @@ mod tests {
 	}
 
 	#[test]
-	fn bump_out_radii_match_grove_selection_generate_and_present() {
+	fn bump_out_radii_keep_the_grove_fill_hole() {
 		assert!((crate::BUMP_OUT_INNER_RADIUS_M - GROVE_PRESENT_RADIUS_M).abs() < 1e-3);
-		assert!((BUMP_OUT_OUTER_RADIUS_M - GROVE_GENERATE_RADIUS_M).abs() < 1e-3);
+		assert!((BUMP_OUT_OUTER_RADIUS_M - 5_000.0).abs() < 1e-3);
 	}
 
 	#[test]

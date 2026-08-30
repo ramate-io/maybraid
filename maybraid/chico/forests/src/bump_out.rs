@@ -4,7 +4,7 @@
 //! forest selection. They do not require growing a [`crate::ChicoGrove`].
 //!
 //! Generated [`CanopyBumpOut`] origins are 160 m terrain cells. Present is a
-//! 1–3 km annulus so they do not cover the same tiles as grove geometry.
+//! 1–5 km annulus so they do not cover the same tiles as grove geometry.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Color, Vec2, Vec3};
@@ -22,8 +22,8 @@ pub const BUMP_OUT_CELL_XZ: f32 = 160.0;
 /// Inner hole of the bump-out annulus (metres). Same as grove geometry present.
 pub const BUMP_OUT_INNER_RADIUS_M: f32 = 1000.0;
 
-/// Outer radius of the bump-out annulus (metres). Same as forest selection generate.
-pub const BUMP_OUT_OUTER_RADIUS_M: f32 = 3000.0;
+/// Outer radius of the bump-out annulus (metres).
+pub const BUMP_OUT_OUTER_RADIUS_M: f32 = 5000.0;
 
 /// Authored canopy / cover fields sampled from a grove selection identifier.
 pub trait BumpOutSelection {
@@ -166,47 +166,47 @@ impl BumpOutSelection for ForestGroveKind {
 impl ForestGroveKind {
 	fn authored(self) -> AuthoredBumpOut {
 		match self {
-			Self::Alpine => canopy(0.62, 36.0, conifer()),
-			Self::AridConiferSapling => woody(0.38, 8.0, dry()),
-			Self::BraidGrass => tuft(0.58, 0.8, meadow()),
-			Self::BushScrub => woody(0.42, 3.0, scrub()),
-			Self::ChristmasTaiga => canopy(0.70, 28.0, conifer()),
-			Self::CommonTufts => tuft(0.48, 0.25, meadow()),
-			Self::ConiferMassives => massive(0.78, 160.0, conifer()),
-			Self::ConiferSapling => woody(0.40, 10.0, conifer()),
-			Self::DateGrove => woody(0.45, 18.0, palm()),
-			Self::Dryland => woody(0.28, 12.0, dry()),
-			Self::ForlornSavanna => woody(0.32, 25.0, savanna()),
-			Self::GoettingenFollow => woody(0.50, 22.0, temperate()),
-			Self::HighBush => woody(0.52, 6.0, scrub()),
-			Self::JerrysChaparral => woody(0.40, 4.0, dry()),
-			Self::JungleLowerMassives => canopy(0.72, 40.0, jungle()),
-			Self::JungleMassives => massive(0.82, 180.0, jungle()),
-			Self::Leeward => woody(0.44, 20.0, palm()),
-			Self::LevantineScrub => woody(0.30, 3.5, dry()),
-			Self::LowBush => woody(0.46, 2.0, scrub()),
-			Self::MonsterGrass => tuft(0.55, 1.2, meadow()),
-			Self::Orchard => woody(0.58, 8.0, orchard()),
-			Self::PalmShade => canopy(0.48, 32.0, palm()),
-			Self::RiparianGeneral => woody(0.55, 16.0, temperate()),
-			Self::RiparianMix => woody(0.52, 18.0, temperate()),
-			Self::RiverineGreen => woody(0.50, 14.0, temperate()),
-			Self::RollingOaks => canopy(0.60, 36.0, temperate()),
-			Self::Shamanhome => woody(0.48, 20.0, jungle()),
-			Self::SpottyBushes => woody(0.34, 3.0, scrub()),
-			Self::Storytellers => woody(0.50, 24.0, temperate()),
-			Self::StrangeOasis => woody(0.36, 14.0, palm()),
-			Self::TallGrass => tuft(0.62, 1.0, meadow()),
-			Self::TemperateLowerMassives => canopy(0.70, 40.0, temperate()),
-			Self::TemperateMassives => massive(0.80, 170.0, temperate()),
-			Self::TradeWinds => canopy(0.64, 36.0, jungle()),
-			Self::TropicalThicket => woody(0.66, 8.0, jungle()),
-			Self::TropicalTufts => tuft(0.50, 0.4, jungle()),
-			Self::TropicalUndergrowth => woody(0.58, 5.0, jungle()),
-			Self::UnendingJungle => canopy(0.76, 30.0, jungle()),
-			Self::Vineyard => woody(0.54, 2.5, orchard()),
-			Self::WanderingAcacia => woody(0.30, 16.0, savanna()),
-			Self::WildGrass => tuft(0.52, 0.6, meadow()),
+			Self::Alpine => canopy(0.22, 36.0, conifer()),
+			Self::AridConiferSapling => woody(0.12, 8.0, dry()),
+			Self::BraidGrass => tuft(0.12, 0.8, meadow()),
+			Self::BushScrub => woody(0.14, 3.0, scrub()),
+			Self::ChristmasTaiga => canopy(0.26, 28.0, conifer()),
+			Self::CommonTufts => tuft(0.10, 0.25, meadow()),
+			Self::ConiferMassives => massive(0.32, 160.0, conifer()),
+			Self::ConiferSapling => woody(0.14, 10.0, conifer()),
+			Self::DateGrove => woody(0.16, 18.0, palm()),
+			Self::Dryland => woody(0.08, 12.0, dry()),
+			Self::ForlornSavanna => woody(0.10, 25.0, savanna()),
+			Self::GoettingenFollow => woody(0.18, 22.0, temperate()),
+			Self::HighBush => woody(0.16, 6.0, scrub()),
+			Self::JerrysChaparral => woody(0.12, 4.0, dry()),
+			Self::JungleLowerMassives => canopy(0.28, 40.0, jungle()),
+			Self::JungleMassives => massive(0.36, 180.0, jungle()),
+			Self::Leeward => woody(0.16, 20.0, palm()),
+			Self::LevantineScrub => woody(0.10, 3.5, dry()),
+			Self::LowBush => woody(0.14, 2.0, scrub()),
+			Self::MonsterGrass => tuft(0.14, 1.2, meadow()),
+			Self::Orchard => woody(0.20, 8.0, orchard()),
+			Self::PalmShade => canopy(0.18, 32.0, palm()),
+			Self::RiparianGeneral => woody(0.18, 16.0, temperate()),
+			Self::RiparianMix => woody(0.18, 18.0, temperate()),
+			Self::RiverineGreen => woody(0.16, 14.0, temperate()),
+			Self::RollingOaks => canopy(0.22, 36.0, temperate()),
+			Self::Shamanhome => woody(0.16, 20.0, jungle()),
+			Self::SpottyBushes => woody(0.10, 3.0, scrub()),
+			Self::Storytellers => woody(0.18, 24.0, temperate()),
+			Self::StrangeOasis => woody(0.12, 14.0, palm()),
+			Self::TallGrass => tuft(0.14, 1.0, meadow()),
+			Self::TemperateLowerMassives => canopy(0.26, 40.0, temperate()),
+			Self::TemperateMassives => massive(0.34, 170.0, temperate()),
+			Self::TradeWinds => canopy(0.24, 36.0, jungle()),
+			Self::TropicalThicket => woody(0.24, 8.0, jungle()),
+			Self::TropicalTufts => tuft(0.12, 0.4, jungle()),
+			Self::TropicalUndergrowth => woody(0.20, 5.0, jungle()),
+			Self::UnendingJungle => canopy(0.30, 30.0, jungle()),
+			Self::Vineyard => woody(0.18, 2.5, orchard()),
+			Self::WanderingAcacia => woody(0.08, 16.0, savanna()),
+			Self::WildGrass => tuft(0.12, 0.6, meadow()),
 		}
 	}
 }
@@ -224,9 +224,9 @@ fn tuft(density: f32, height_m: f32, palette: [Color; 3]) -> AuthoredBumpOut {
 	AuthoredBumpOut {
 		density,
 		bite_size: (height_m * 1.8).max(0.35),
-		bite_size_deviation: 0.25,
+		bite_size_deviation: 0.45,
 		height_m,
-		height_deviation_m: (height_m * 0.35).max(0.04),
+		height_deviation_m: (height_m * 0.65).max(0.08),
 		palette,
 	}
 }
@@ -235,9 +235,9 @@ fn woody(density: f32, height_m: f32, palette: [Color; 3]) -> AuthoredBumpOut {
 	AuthoredBumpOut {
 		density,
 		bite_size: (height_m * 0.32).max(1.2),
-		bite_size_deviation: 0.40,
+		bite_size_deviation: 0.55,
 		height_m,
-		height_deviation_m: (height_m * 0.22).max(0.4),
+		height_deviation_m: (height_m * 0.50).max(0.8),
 		palette,
 	}
 }
@@ -246,9 +246,9 @@ fn canopy(density: f32, height_m: f32, palette: [Color; 3]) -> AuthoredBumpOut {
 	AuthoredBumpOut {
 		density,
 		bite_size: (height_m * 0.38).max(4.0),
-		bite_size_deviation: 0.50,
+		bite_size_deviation: 0.65,
 		height_m,
-		height_deviation_m: height_m * 0.20,
+		height_deviation_m: height_m * 0.48,
 		palette,
 	}
 }
@@ -257,9 +257,9 @@ fn massive(density: f32, height_m: f32, palette: [Color; 3]) -> AuthoredBumpOut 
 	AuthoredBumpOut {
 		density,
 		bite_size: height_m * 0.28,
-		bite_size_deviation: 0.55,
+		bite_size_deviation: 0.70,
 		height_m,
-		height_deviation_m: height_m * 0.18,
+		height_deviation_m: height_m * 0.42,
 		palette,
 	}
 }
@@ -305,25 +305,76 @@ fn orchard() -> [Color; 3] {
 }
 
 /// Highest-layer selection at a world XZ point. Does not grow tiles.
+///
+/// If this forest cell selected `None` on every layer, borrow occupied cardinal
+/// neighbors. Stay empty only when the cell and those neighbors are all empty.
 pub fn selection_sample_at(index: &ForestIndex, xz: Vec2) -> BumpOutSelectionSample {
 	let (ix, iz) = ForestExtent::cell_index_containing(Vec3::new(xz.x, 0.0, xz.y));
-	let layers = index.selected_layers_for(ForestExtent::from_cell_index(ix, iz));
-	match layers.highest_kind() {
-		Some(kind) => BumpOutSelectionSample::from_kind(kind),
-		None => BumpOutSelectionSample::empty(),
-	}
+	let self_layers = index.selected_layers_for(ForestExtent::from_cell_index(ix, iz));
+	sample_with_neighbors(
+		self_layers,
+		[
+			index.selected_layers_for(ForestExtent::from_cell_index(ix, iz + 1)),
+			index.selected_layers_for(ForestExtent::from_cell_index(ix + 1, iz)),
+			index.selected_layers_for(ForestExtent::from_cell_index(ix, iz - 1)),
+			index.selected_layers_for(ForestExtent::from_cell_index(ix - 1, iz)),
+		],
+	)
 }
 
-/// Area-weight overlapping 100 m grove tiles onto `bounds` (typically a 160 m terrain cell).
-pub fn blend_selection_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> BumpOutSelectionSample {
-	let tiles = ForestExtent::grove_tiles_overlapping(bounds);
+fn sample_with_neighbors(
+	self_layers: SelectedLayers,
+	neighbors: [SelectedLayers; 4],
+) -> BumpOutSelectionSample {
+	if let Some(kind) = self_layers.highest_kind() {
+		return BumpOutSelectionSample::from_kind(kind);
+	}
+	let borrowed: Vec<BumpOutSelectionSample> = neighbors
+		.into_iter()
+		.filter_map(|layers| layers.highest_kind().map(BumpOutSelectionSample::from_kind))
+		.collect();
+	average_occupied(&borrowed)
+}
+
+fn average_occupied(samples: &[BumpOutSelectionSample]) -> BumpOutSelectionSample {
+	if samples.is_empty() {
+		return BumpOutSelectionSample::empty();
+	}
+	let n = samples.len() as f32;
 	let mut density = 0.0;
 	let mut bite_size = 0.0;
 	let mut bite_size_deviation = 0.0;
 	let mut height_m = 0.0;
 	let mut height_deviation_m = 0.0;
-	let mut weight_sum = 0.0;
-	let mut best_kind: Option<(ForestGroveKind, f32, [Color; 3])> = None;
+	let mut best = samples[0];
+	for sample in samples {
+		density += sample.density;
+		bite_size += sample.bite_size;
+		bite_size_deviation += sample.bite_size_deviation;
+		height_m += sample.height_m;
+		height_deviation_m += sample.height_deviation_m;
+		if sample.density > best.density {
+			best = *sample;
+		}
+	}
+	BumpOutSelectionSample {
+		kind: best.kind,
+		density: (density / n).clamp(0.0, 1.0),
+		bite_size: (bite_size / n).max(0.01),
+		bite_size_deviation: (bite_size_deviation / n).max(0.0),
+		height_m: height_m / n,
+		height_deviation_m: (height_deviation_m / n).max(0.0),
+		palette: best.palette,
+	}
+}
+
+/// Area-weight overlapping 100 m grove tiles onto `bounds` (typically a 160 m terrain cell).
+///
+/// Empty tiles do not dilute occupied ones. The result is empty only when every
+/// overlapping tile (after neighbor borrow) is empty.
+pub fn blend_selection_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> BumpOutSelectionSample {
+	let tiles = ForestExtent::grove_tiles_overlapping(bounds);
+	let mut occupied = Vec::new();
 
 	for tile in tiles {
 		let area = xz_overlap_area(bounds, grove_aabb(tile));
@@ -334,6 +385,25 @@ pub fn blend_selection_on_bounds(index: &ForestIndex, bounds: Aabb3d) -> BumpOut
 			index,
 			Vec2::new((tile.min().x + tile.max().x) * 0.5, (tile.min().z + tile.max().z) * 0.5),
 		);
+		if sample.kind.is_none() && sample.density <= 0.001 {
+			continue;
+		}
+		occupied.push((area, sample));
+	}
+
+	if occupied.is_empty() {
+		return BumpOutSelectionSample::empty();
+	}
+
+	let mut density = 0.0;
+	let mut bite_size = 0.0;
+	let mut bite_size_deviation = 0.0;
+	let mut height_m = 0.0;
+	let mut height_deviation_m = 0.0;
+	let mut weight_sum = 0.0;
+	let mut best_kind: Option<(ForestGroveKind, f32, [Color; 3])> = None;
+
+	for (area, sample) in occupied {
 		density += sample.density * area;
 		bite_size += sample.bite_size * area;
 		bite_size_deviation += sample.bite_size_deviation * area;
@@ -437,7 +507,85 @@ mod tests {
 	fn orchard_height_is_authored_midpoint() -> Result<()> {
 		assert!((ForestGroveKind::Orchard.bump_out_height_m() - 8.0).abs() < 1e-4);
 		assert!(ForestGroveKind::Orchard.bump_out_density() > 0.0);
+		assert!(ForestGroveKind::Orchard.bump_out_density() < 0.35);
 		assert_eq!(ForestGroveKind::Orchard.bump_out_palette().len(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn class_densities_stay_below_grove_fill() -> Result<()> {
+		assert!(ForestGroveKind::WildGrass.bump_out_density() < 0.20);
+		assert!(ForestGroveKind::RollingOaks.bump_out_density() < 0.35);
+		assert!(ForestGroveKind::JungleMassives.bump_out_density() < 0.45);
+		assert!(ForestGroveKind::WanderingAcacia.bump_out_density() < 0.15);
+		Ok(())
+	}
+
+	#[test]
+	fn height_deviation_is_a_large_fraction_of_height() -> Result<()> {
+		let oak = ForestGroveKind::RollingOaks;
+		assert!(oak.bump_out_height_deviation_m() / oak.bump_out_height_m() > 0.40);
+		let orchard = ForestGroveKind::Orchard;
+		assert!(orchard.bump_out_height_deviation_m() / orchard.bump_out_height_m() > 0.40);
+		Ok(())
+	}
+
+	#[test]
+	fn empty_cell_borrows_occupied_neighbors() -> Result<()> {
+		let empty = SelectedLayers {
+			layering: LayeringKind::SunsBarren,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: None,
+		};
+		let oak = SelectedLayers {
+			layering: LayeringKind::MiRobles,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: Some(ForestGroveKind::RollingOaks),
+		};
+		let sample = sample_with_neighbors(empty, [oak, empty, empty, empty]);
+		assert_eq!(sample.kind, Some(ForestGroveKind::RollingOaks));
+		assert!(sample.density > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn empty_stays_empty_when_neighbors_are_empty() -> Result<()> {
+		let empty = SelectedLayers {
+			layering: LayeringKind::SunsBarren,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: None,
+		};
+		let sample = sample_with_neighbors(empty, [empty, empty, empty, empty]);
+		assert!(sample.kind.is_none());
+		assert!(sample.density <= 0.001);
+		Ok(())
+	}
+
+	#[test]
+	fn occupied_cell_does_not_blend_empty_neighbors() -> Result<()> {
+		let empty = SelectedLayers {
+			layering: LayeringKind::SunsBarren,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: None,
+		};
+		let oak = SelectedLayers {
+			layering: LayeringKind::MiRobles,
+			tufts: None,
+			understory: None,
+			lower_canopy: None,
+			upper_canopy: Some(ForestGroveKind::RollingOaks),
+		};
+		let sample = sample_with_neighbors(oak, [empty, empty, empty, empty]);
+		assert_eq!(sample.kind, Some(ForestGroveKind::RollingOaks));
+		assert!((sample.density - ForestGroveKind::RollingOaks.bump_out_density()).abs() < 1e-4);
 		Ok(())
 	}
 

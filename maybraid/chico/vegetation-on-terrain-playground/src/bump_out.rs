@@ -2,7 +2,8 @@
 //!
 //! Generate stores [`CanopyBumpOut`] on [`ForestIndex`] (selection neighborhood, no grow).
 //! Present looks up the matching Durham 160 m cell and spawns [`BumpOut`] with
-//! [`TerrainChunkRef<WorldTerrainBuilder>`].
+//! the same [`TerrainChunkRef<WorldTerrainBuilder>`] identity Durham fill uses
+//! (`Terrain::mesh_builder`), so overlay copies the cached mesh handle.
 
 use std::collections::{HashMap, HashSet};
 
@@ -15,7 +16,7 @@ use chico_forests::{
 	ForestIndex, BUMP_OUT_OUTER_RADIUS_M,
 };
 use durham_terrain_models::{
-	cascade_chunk_for_cell, ComposedTerrain, Terrain, TerrainCellLayout, TerrainEntryStore,
+	cascade_chunk_for_cell, Terrain, TerrainCellLayout, TerrainEntryStore, TerrainMeshBuilder,
 	TerrainStoreView, TERRAIN_CELL_SIZE,
 };
 use lod::gen::{
@@ -30,13 +31,12 @@ use lod::{
 };
 use lod_cascade::Chunk;
 use procedural_common::NoiseParams;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
 use terrain_chunk_ref::TerrainChunkRef;
 
 use crate::ForestStreamSpec;
 use crate::PlaygroundConfig;
 
-pub(crate) type WorldTerrainBuilder = CpuShotBuilder<ComposedTerrain>;
+pub(crate) type WorldTerrainBuilder = TerrainMeshBuilder;
 
 /// Presenter bookkeeping for spawned bump-out entities.
 #[derive(Resource, Default)]
@@ -317,11 +317,7 @@ fn terrain_chunk_ref(terrain: &Terrain) -> TerrainChunkRef<WorldTerrainBuilder> 
 	let cascade = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 	let extent = cascade.extent.unwrap_or(Vec3::splat(cascade.size));
 	let chunk = Chunk::from_min_max(cascade.origin, cascade.origin + extent, None);
-	TerrainChunkRef::new(
-		CpuShotBuilder::new(terrain.sdf.clone()).with_wall_faces(terrain.wall_faces),
-		chunk,
-		terrain.res_2,
-	)
+	TerrainChunkRef::new(terrain.mesh_builder(), chunk, terrain.res_2)
 }
 
 fn xz_overlap_area(a: Aabb3d, b: Aabb3d) -> f32 {

@@ -110,6 +110,18 @@ pub struct EnforcedCaches<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync 
 	disk_cache: Option<DiskMeshCache<T>>,
 }
 
+impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> EnforcedCaches<T> {
+	/// Shared mailbox used by [`Cached`] fill. Inject this into overlay presenters
+	/// ([`crate::mesh::cache::handle::map::HandleMap`] is an Arc).
+	pub fn handle_map(&self) -> HandleMap<T> {
+		self.handle_map.clone()
+	}
+
+	pub fn disk_cache(&self) -> Option<DiskMeshCache<T>> {
+		self.disk_cache.clone()
+	}
+}
+
 #[derive(Component, Clone)]
 pub struct Cached<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> {
 	builder: T,
