@@ -34,6 +34,12 @@ pub fn setup_camera(
 		Camera3d::default(),
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 8_000.0, ..default() }),
+		DistanceFog {
+			color: Color::srgba(0.55, 0.65, 0.72, 1.0),
+			directional_light_color: Color::srgba(1.0, 0.92, 0.78, 0.35),
+			directional_light_exponent: 24.0,
+			falloff: FogFalloff::Linear { start: 700.0, end: 4500.0 },
+		},
 		CameraController { speed: 40.0, sensitivity: 0.005, yaw, pitch },
 		LodViewer,
 		Msaa::Off,
