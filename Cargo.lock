@@ -2219,6 +2219,7 @@ name = "chico-bumpout-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "camera-controls",
  "chico-bumpout",
  "clap",
  "game-commands",

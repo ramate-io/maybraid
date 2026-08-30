@@ -6,14 +6,16 @@ use crate::{NeighborhoodControls, PresenterLayer, TileCoordinate};
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
-		title: "Chico bump-outs - / cmd - F1 drawer - RMB look - WASD/QE move".into(),
-		empty_console_text: "Try `help`, `neighborhood set`, or `visibility toggle`".into(),
-		root_background: Color::srgba(0.08, 0.16, 0.12, 0.84),
-		controls_hint: "help - Enter - up/down history - PgUp/PgDn - Shift+up/down scroll".into(),
+		title: "Chico bump-outs - / cmd - L look - WASD - Space up - PgUp/PgDn scroll".into(),
+		empty_console_text:
+			"Console: `neighborhood …`, `visibility toggle`, `help` — wheel or PgUp/PgDn".into(),
+		root_background: Color::srgba(0.1, 0.2, 0.24, 0.82),
+		controls_hint: "help — neighborhood … — visibility toggle — Enter — history — PgUp/PgDn"
+			.into(),
 	}
 }
 
-pub fn sync_command_status_text(
+pub(crate) fn sync_command_status_text(
 	controls: Res<NeighborhoodControls>,
 	layers: Query<(&PresenterLayer, &TileCoordinate, &BumpOut)>,
 	mut status: ResMut<GameCommandStatusText>,
@@ -31,11 +33,7 @@ pub fn sync_command_status_text(
 	status.0 = format!(
 		"5×5 tiles | editing {} sample ({}, {})\n\
 		 density {:.3} | bite-size {:.2} | bite-size-deviation {:.2}\n\
-		 average-height {:.2} | height-deviation {:.2}\n\
-		 / neighborhood layer <ground-cover|canopy-proxy>\n\
-		 / neighborhood select --x <-1..1> --z <-1..1>\n\
-		 / neighborhood set --density … --bite-size … --bite-size-deviation …\n\
-		 / neighborhood adjust --average-height … --height-deviation …",
+		 average-height {:.2} | height-deviation {:.2}",
 		controls.layer.label(),
 		coordinate.x,
 		coordinate.y,
