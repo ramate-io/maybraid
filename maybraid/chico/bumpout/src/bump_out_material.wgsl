@@ -11,18 +11,30 @@
     view_transformations::position_world_to_clip,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
+#ifdef DISTANCE_FOG
+#import bevy_pbr::mesh_view_bindings::fog
+#endif
+
+fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
+#ifdef DISTANCE_FOG
+    return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
+#else
+    return color;
+#endif
+}
 
 struct BumpOutUniform {
-    colors: array<vec4<f32>, 3>,
+    colors: array<vec4<f32>, 8>,
     noise: vec4<f32>,
-    style: vec4<f32>,
-    detail: vec4<f32>,
-    density_rows: array<vec4<f32>, 3>,
-    bite_size_rows: array<vec4<f32>, 3>,
-    bite_size_deviation_rows: array<vec4<f32>, 3>,
-    average_height_rows: array<vec4<f32>, 3>,
-    height_deviation_rows: array<vec4<f32>, 3>,
+    scalars: array<vec4<f32>, 8>,
+    rasters: array<array<vec4<f32>, 3>, 8>,
 }
+
+const RASTER_DENSITY: u32 = 0u;
+const RASTER_BITE_SIZE: u32 = 1u;
+const RASTER_BITE_SIZE_DEVIATION: u32 = 2u;
+const RASTER_AVERAGE_HEIGHT: u32 = 3u;
+const RASTER_HEIGHT_DEVIATION: u32 = 4u;
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> bump: BumpOutUniform;
@@ -119,15 +131,15 @@ fn vertex(vertex: Vertex) -> BumpOutVertexOutput {
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
-    out.density = saturate(sample_grid(bump.density_rows, profile_uv));
-    out.bite_size = max(sample_grid(bump.bite_size_rows, profile_uv), 0.01);
+    out.density = saturate(sample_grid(bump.rasters[RASTER_DENSITY], profile_uv));
+    out.bite_size = max(sample_grid(bump.rasters[RASTER_BITE_SIZE], profile_uv), 0.01);
     out.bite_size_deviation = max(
-        sample_grid(bump.bite_size_deviation_rows, profile_uv),
+        sample_grid(bump.rasters[RASTER_BITE_SIZE_DEVIATION], profile_uv),
         0.0,
     );
-    let average_height = sample_grid(bump.average_height_rows, profile_uv);
+    let average_height = sample_grid(bump.rasters[RASTER_AVERAGE_HEIGHT], profile_uv);
     let height_deviation = max(
-        sample_grid(bump.height_deviation_rows, profile_uv),
+        sample_grid(bump.rasters[RASTER_HEIGHT_DEVIATION], profile_uv),
         0.0,
     );
     let displacement_noise = fbm_2d_3(
@@ -186,17 +198,17 @@ fn fragment(
     let bite_size = mesh.bite_size * exp2(
         (bite_scale_noise - 0.5) * 2.0 * mesh.bite_size_deviation,
     );
-    let cheese_position = world.xz / max(bite_size, 0.01) * bump.detail.x;
+    let cheese_position = world.xz / max(bite_size, 0.01) * bump.scalars[1].x;
     let broad_bites = fbm_2d_3(cheese_position, bump.noise.z + 91.7);
     let fine_bites = value_noise_2d(cheese_position * 3.7, bump.noise.z + 151.3);
     let bite_field = mix(
         broad_bites,
         broad_bites * 0.62 + fine_bites * 0.38,
-        bump.style.w,
+        bump.scalars[0].w,
     );
     let bite_threshold = mix(0.88, 0.12, mesh.density)
-        + bump.style.w * mix(0.08, 0.04, mesh.density);
-    let softness = bump.style.x;
+        + bump.scalars[0].w * mix(0.08, 0.04, mesh.density);
+    let softness = bump.scalars[0].x;
     let bite_width = max(
         fwidth(bite_field) * (1.0 + softness * 8.0),
         max(softness * 0.2, 0.005),
@@ -226,17 +238,17 @@ fn fragment(
     // Static fragment-scale apparent height adds sub-triangle relief without extra vertices.
     let detail_height = (
         fbm_2d_3(
-            world.xz * bump.noise.x * bump.detail.y,
+            world.xz * bump.noise.x * bump.scalars[1].y,
             bump.noise.z + 211.9,
         ) - 0.5
-    ) * 2.0 * bump.detail.z * mesh.density;
+    ) * 2.0 * bump.scalars[1].z * mesh.density;
     let apparent_position = world + vec3<f32>(0.0, detail_height, 0.0);
     var geometric_normal = normalize(cross(dpdx(apparent_position), dpdy(apparent_position)));
     if (dot(geometric_normal, mesh.world_normal) < 0.0) {
         geometric_normal = -geometric_normal;
     }
     let prepared = fns::prepare_world_normal(geometric_normal, true, is_front);
-    let normal = normalize(mix(prepared, vec3<f32>(0.0, 1.0, 0.0), bump.style.z));
+    let normal = normalize(mix(prepared, vec3<f32>(0.0, 1.0, 0.0), bump.scalars[0].z));
 
     var ndl = 0.55;
     if (lights.n_directional_lights > 0u) {
@@ -247,5 +259,10 @@ fn fragment(
     let sky = mix(0.38, 0.55, saturate(normal.y));
     let sky_rgb = vec3<f32>(0.78, 0.88, 1.0);
     let lifted = albedo * sun + albedo * sky * sky_rgb;
-    return tone_mapping(vec4<f32>(lifted, 1.0), view.color_grading);
+    let fogged = with_distance_fog(
+        vec4<f32>(lifted, 1.0),
+        world,
+        mesh.position.xy,
+    );
+    return tone_mapping(fogged, view.color_grading);
 }

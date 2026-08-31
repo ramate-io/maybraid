@@ -1,4 +1,5 @@
-//! Spatial index of selected [`ChicoForest`] cells and generated [`ChicoGrove`]s.
+//! Spatial index of selected [`ChicoForest`] cells, generated [`ChicoGrove`]s,
+//! and [`CanopyBumpOut`](crate::CanopyBumpOut) terrain cells.
 
 use std::collections::{HashMap, HashSet};
 
@@ -9,19 +10,24 @@ use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 
+use crate::bump_out::{
+	bump_out_cells_overlapping, bump_out_in_inner_hole, CanopyBumpOut, BUMP_OUT_CELL_XZ,
+};
 use crate::{
 	select_cell, ChicoForest, ChicoGrove, ForestExtent, LayeringKind, NeighborLayers,
 	SelectedLayers,
 };
 
-/// Storage for generated forest cells and grove tiles. Generation and
-/// presentation read this; neither plugin owns the other.
+/// Storage for generated forest cells, grove tiles, and canopy bump-out cells.
+/// Generation and presentation read this; neither plugin owns the other.
 #[derive(Resource, Clone)]
 pub struct ForestIndex {
 	next_version: u64,
 	forests: HashMap<Id, ForestEntry>,
 	groves: HashMap<Id, GroveEntry>,
 	grove_cells: HashMap<(i32, i32), Vec<Id>>,
+	bump_outs: HashMap<Id, BumpOutEntry>,
+	bump_out_cells: HashMap<(i32, i32), Id>,
 	pub noise: NoiseParams,
 	pub layering: Option<LayeringKind>,
 }
@@ -40,6 +46,13 @@ struct GroveEntry {
 	version: Version,
 }
 
+#[derive(Clone)]
+struct BumpOutEntry {
+	value: CanopyBumpOut,
+	bounds: Aabb3d,
+	version: Version,
+}
+
 impl Default for ForestIndex {
 	fn default() -> Self {
 		Self {
@@ -47,6 +60,8 @@ impl Default for ForestIndex {
 			forests: HashMap::new(),
 			groves: HashMap::new(),
 			grove_cells: HashMap::new(),
+			bump_outs: HashMap::new(),
+			bump_out_cells: HashMap::new(),
 			noise: NoiseParams::default(),
 			layering: None,
 		}
@@ -58,6 +73,8 @@ impl ForestIndex {
 		self.forests.clear();
 		self.groves.clear();
 		self.grove_cells.clear();
+		self.bump_outs.clear();
+		self.bump_out_cells.clear();
 		self.next_version = 0;
 	}
 
@@ -119,6 +136,19 @@ impl ForestIndex {
 				self.grove_cells.remove(&cell);
 			}
 		}
+	}
+
+	fn bump_out_grid_cell(bounds: Aabb3d) -> (i32, i32) {
+		let s = BUMP_OUT_CELL_XZ;
+		((bounds.min.x / s).floor() as i32, (bounds.min.z / s).floor() as i32)
+	}
+
+	fn index_bump_out(&mut self, id: Id, bounds: Aabb3d) {
+		self.bump_out_cells.insert(Self::bump_out_grid_cell(bounds), id);
+	}
+
+	fn unindex_bump_out(&mut self, bounds: Aabb3d) {
+		self.bump_out_cells.remove(&Self::bump_out_grid_cell(bounds));
 	}
 }
 
@@ -220,6 +250,60 @@ impl SpatialIndex<ChicoGrove> for ForestIndex {
 		}
 		self.groves.insert(id, GroveEntry { value: t, bounds, version });
 		self.index_grove(id, bounds);
+	}
+}
+
+impl SpatialIndex<CanopyBumpOut> for ForestIndex {
+	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
+		let mut tracked = Vec::new();
+		for (ix, iz) in bump_out_cells_overlapping(region) {
+			let Some(&id) = self.bump_out_cells.get(&(ix, iz)) else {
+				continue;
+			};
+			let Some(entry) = self.bump_outs.get(&id) else {
+				continue;
+			};
+			if bump_out_in_inner_hole(entry.bounds, region) {
+				continue;
+			}
+			if region.min.x < entry.bounds.max.x
+				&& region.max.x > entry.bounds.min.x
+				&& region.min.z < entry.bounds.max.z
+				&& region.max.z > entry.bounds.min.z
+			{
+				tracked.push(TrackedId(id));
+			}
+		}
+		tracked
+	}
+
+	fn storage_status(&self, id: Id) -> StorageStatus {
+		if self.bump_outs.contains_key(&id) {
+			StorageStatus::TrackedWithin
+		} else {
+			StorageStatus::NotTracked
+		}
+	}
+
+	fn get(&self, id: Id) -> Option<&CanopyBumpOut> {
+		self.bump_outs.get(&id).map(|entry| &entry.value)
+	}
+
+	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+		self.bump_outs.get(&id).map(|entry| entry.bounds)
+	}
+
+	fn version(&self, id: Id) -> Option<Version> {
+		self.bump_outs.get(&id).map(|entry| entry.version)
+	}
+
+	fn insert(&mut self, id: Id, t: CanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
+		let version = self.next_version();
+		if let Some(previous_bounds) = self.bump_outs.get(&id).map(|previous| previous.bounds) {
+			self.unindex_bump_out(previous_bounds);
+		}
+		self.bump_outs.insert(id, BumpOutEntry { value: t, bounds, version });
+		self.index_bump_out(id, bounds);
 	}
 }
 

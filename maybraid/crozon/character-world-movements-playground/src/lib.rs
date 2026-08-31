@@ -25,8 +25,8 @@ use commands::{RequestModeCharacter, RequestModeFree};
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
+	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
 };
@@ -37,7 +37,6 @@ use lod::lod_ref::LodRef;
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, Player, PlayerControlSystems, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
 
 /// Fine-grid half-extent in base cells. 4×4 cells → ~640 m at the Durham cell size.
@@ -76,10 +75,7 @@ impl Plugin for CharacterWorldMovementsPlaygroundPlugin {
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<
-				CpuShotBuilder<ComposedTerrain>,
-				DurhamTerrainShader,
-			>::default())
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())

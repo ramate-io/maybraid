@@ -6,10 +6,7 @@ use material_ref::{MaterialRef, MaterialRefRoot};
 use procedural_common::NoiseParams;
 use terrain_chunk_ref::TerrainChunkRef;
 
-use crate::{
-	BumpOutNeighborhood, BumpOutStyle, AVERAGE_HEIGHT_PARAMETER, BITE_SIZE_DEVIATION_PARAMETER,
-	BITE_SIZE_PARAMETER, DENSITY_PARAMETER, HEIGHT_DEVIATION_PARAMETER,
-};
+use crate::{BumpOutNeighborhood, BumpOutStyle};
 
 /// A visual terrain overlay with conservative vertical displacement bounds.
 #[derive(Component, Debug, Clone)]
@@ -58,17 +55,7 @@ impl BumpOut {
 	}
 
 	pub fn set_neighborhood(&mut self, neighborhood: BumpOutNeighborhood) {
-		self.material.parameters.insert(DENSITY_PARAMETER, neighborhood.densities);
-		self.material.parameters.insert(BITE_SIZE_PARAMETER, neighborhood.bite_sizes);
-		self.material
-			.parameters
-			.insert(BITE_SIZE_DEVIATION_PARAMETER, neighborhood.bite_size_deviations);
-		self.material
-			.parameters
-			.insert(AVERAGE_HEIGHT_PARAMETER, neighborhood.average_heights);
-		self.material
-			.parameters
-			.insert(HEIGHT_DEVIATION_PARAMETER, neighborhood.height_deviations);
+		self.material = neighborhood.apply_to(self.material.clone());
 		self.min_vertical_displacement = neighborhood.min_displacement();
 		self.max_vertical_displacement = neighborhood.max_displacement();
 	}

@@ -65,3 +65,29 @@ pub trait Sdf: Send + Sync {
 		Vec3::ONE
 	}
 }
+
+impl<T: Sdf + ?Sized> Sdf for std::sync::Arc<T> {
+	fn distance(&self, p: Vec3) -> f32 {
+		self.as_ref().distance(p)
+	}
+
+	fn sign_uniform_on_y(&self, x: f32, z: f32) -> SignUniformIntervals {
+		self.as_ref().sign_uniform_on_y(x, z)
+	}
+
+	fn bounds(&self) -> Bounds {
+		self.as_ref().bounds()
+	}
+
+	fn translation(&self) -> Vec3 {
+		self.as_ref().translation()
+	}
+
+	fn rotation(&self) -> Quat {
+		self.as_ref().rotation()
+	}
+
+	fn scale(&self) -> Vec3 {
+		self.as_ref().scale()
+	}
+}

@@ -3,6 +3,7 @@
 //! `/forest` streams the unified Chico forest on Durham height (A/B against
 //! tiled `/grove`).
 
+mod bump_out;
 pub mod camera;
 pub mod character;
 pub mod commands;
@@ -13,6 +14,7 @@ mod pitch;
 pub mod player;
 mod ui;
 
+pub use bump_out::DurhamCanopyBumpOutPresenter;
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
@@ -26,11 +28,13 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
+use bump_out::{register_bump_out_lod, stream_canopy_bump_outs};
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
+use chico_bumpout::ChicoBumpOutPlugin;
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
 use chico_sbs_trees_playground::register_vegetation_view;
@@ -42,8 +46,8 @@ use commands::{
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	AvianTerrainIndex, BaseTerrainNoise, DurhamTerrainModelsPlugin, OuterCellRing, Terrain,
+	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, WaterPresentationAssets,
 	TERRAIN_CELL_SIZE,
 };
@@ -59,14 +63,16 @@ use player::{
 	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
 	AwaitingTerrainSurface, PlayerControlSystems,
 };
-use render_item::mesh::handle::EnforceCachingPlugin;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
+use render_item::mesh::handle::{EnforceCachingPlugin, EnforcedCaches};
 use std::f32::consts::PI;
+use terrain_chunk_ref::{TerrainChunkRefCache, TerrainChunkRefPlugin};
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Covers forest generate.
+/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Playable disk from
+/// [#675](https://github.com/ramate-io/maybraid/pull/675); bump-outs attach to these
+/// cells instead of expanding generate.
 const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
 /// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
 const WORLD_OUTER_2X_ROWS: i32 = 2;
@@ -169,7 +175,7 @@ impl PlaygroundConfig {
 			terrain_radius: WORLD_FINE_HALF_EXTENT_CELLS,
 			grove_extent_xz: DEFAULT_GROVE_EXTENT_XZ,
 			tile_radius: DEFAULT_TILE_RADIUS,
-			forest: Some(ForestStreamSpec { stream_radius: 2, ..ForestStreamSpec::default() }),
+			forest: Some(ForestStreamSpec { stream_radius: 1, ..ForestStreamSpec::default() }),
 			coverage: TerrainCoverage::PlayableWorld,
 		}
 	}
@@ -204,10 +210,19 @@ impl Plugin for VegetationOnTerrainPlugin {
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<
-				CpuShotBuilder<ComposedTerrain>,
-				DurhamTerrainShader,
-			>::default());
+			.add_plugins(ChicoBumpOutPlugin)
+			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default());
+		let (terrain_handles, terrain_disk) = {
+			let caches = app.world().resource::<EnforcedCaches<TerrainMeshBuilder>>();
+			(caches.handle_map(), caches.disk_cache())
+		};
+		app.insert_resource(
+			TerrainChunkRefCache::<TerrainMeshBuilder>::new()
+				.with_handles(terrain_handles)
+				.with_optional_disk(terrain_disk)
+				.without_build_on_miss(),
+		)
+		.add_plugins(TerrainChunkRefPlugin::<TerrainMeshBuilder>::default());
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -220,6 +235,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		register_vegetation_view(app);
 		register_forest_lod::<DurhamForestPresenter>(app);
+		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
@@ -250,6 +266,10 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.after(apply_commands)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
+					stream_canopy_bump_outs
+						.after(stream_durham_forest)
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
 					apply_set_character.after(apply_commands),
 					apply_mode_commands.after(apply_set_character),
 					snap_player_to_composed_surface
@@ -277,6 +297,10 @@ impl Plugin for VegetationOnTerrainPlugin {
 					present_cells.after(generate_cells),
 					spawn_groves.after(present_cells),
 					stream_durham_forest
+						.before(LodGenerateSystems::Produce)
+						.before(LodPresentSystems::Produce),
+					stream_canopy_bump_outs
+						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce),
 					apply_set_character,
@@ -633,20 +657,34 @@ fn spawn_groves(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use durham_terrain_models::origin_cell_ids_for_layout;
 
 	#[test]
-	fn world_defaults_double_the_forest_present_ring() {
+	fn world_defaults_keep_grove_fill_at_one_kilometre() {
 		let spec = PlaygroundConfig::world_defaults().forest.expect("forest on");
-		assert_eq!(spec.stream_radius, 2);
-		assert_eq!(stream_radii_m(2), (2_000.0, 3_000.0));
+		assert_eq!(spec.stream_radius, 1);
+		assert_eq!(stream_radii_m(1), (1_000.0, 3_000.0));
 	}
 
 	#[test]
-	fn world_macro_rings_stay_inside_five_km() {
+	fn world_fine_grid_stays_at_sixteen_cells() {
+		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
+		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
+	}
+
+	#[test]
+	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
+		let layout = world_cell_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+	}
+
+	#[test]
+	fn world_macro_rings_stay_inside_seven_km() {
 		let s = TERRAIN_CELL_SIZE;
 		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
 		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
 		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
-		assert!(outer < 5_000.0, "playable half-extent {outer}");
+		assert!(outer < 7_000.0, "playable half-extent {outer}");
 	}
 }

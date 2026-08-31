@@ -25,8 +25,9 @@ pub use fulfill::{
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
 pub use material_ref::{
-	MaterialId, MaterialParameters, MaterialRef, MaterialRefApplied, MaterialRefRoot,
-	PropagateToDescendants,
+	MaterialId, MaterialRasters, MaterialRef, MaterialRefApplied, MaterialRefRoot, MaterialScalars,
+	PropagateToDescendants, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
+	MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 pub use reference::ReferenceMaterial;
 pub use standard::{StandardMaterialLib, StandardMaterialRefCache, StandardMaterialRefPlugin};
@@ -61,20 +62,25 @@ mod tests {
 	}
 
 	#[test]
-	fn material_parameter_key_is_named_order_independent_and_bit_stable() -> anyhow::Result<()> {
+	fn material_raster_key_is_bit_stable_and_channel_indexed() -> anyhow::Result<()> {
+		let samples_a = [0.25, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+		let samples_b = [2.0, -0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 		let a = MaterialRef::named("bump_out")
-			.with_parameter("density", [0.25, 0.75])
-			.with_parameter("height", [2.0, -0.0]);
+			.with_raster(0, samples_a)
+			.with_raster(1, samples_b)
+			.with_scalars([0.04, 0.9]);
 		let b = MaterialRef::named("bump_out")
-			.with_parameter("height", [2.0, -0.0])
-			.with_parameter("density", [0.25, 0.75]);
+			.with_raster(1, samples_b)
+			.with_raster(0, samples_a)
+			.with_scalars([0.04, 0.9]);
 		let positive_zero = MaterialRef::named("bump_out")
-			.with_parameter("density", [0.25, 0.75])
-			.with_parameter("height", [2.0, 0.0]);
+			.with_raster(0, samples_a)
+			.with_raster(1, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+			.with_scalars([0.04, 0.9]);
 
 		assert_eq!(MaterialRefKey::from(&a), MaterialRefKey::from(&b));
 		assert_ne!(MaterialRefKey::from(&a), MaterialRefKey::from(&positive_zero));
-		assert_eq!(a.parameter("density"), Some([0.25, 0.75].as_slice()));
+		assert_eq!(a.raster(0), Some(samples_a));
 		Ok(())
 	}
 

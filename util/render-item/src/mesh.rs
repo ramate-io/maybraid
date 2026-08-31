@@ -25,6 +25,12 @@ pub trait IdentifiedMesh {
 	fn id(&self) -> MeshId;
 }
 
+impl<T: IdentifiedMesh + ?Sized> IdentifiedMesh for std::sync::Arc<T> {
+	fn id(&self) -> MeshId {
+		self.as_ref().id()
+	}
+}
+
 pub trait MeshBuilder: Clone + NormalizeChunk {
 	/// The actual implementation which builds the mesh.
 	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh>;

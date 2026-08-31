@@ -1,15 +1,21 @@
 use bevy::prelude::Color;
-use material_ref::MaterialRef;
-use procedural_common::NoiseParams;
+use material_ref::{MaterialRef, MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH};
 
-use crate::{
-	AVERAGE_HEIGHT_PARAMETER, BITE_SIZE_DEVIATION_PARAMETER, BITE_SIZE_PARAMETER,
-	CHICO_BUMP_OUT_MATERIAL, DENSITY_PARAMETER, HEIGHT_DEVIATION_PARAMETER, STYLE_PARAMETER,
-};
+use crate::CHICO_BUMP_OUT_MATERIAL;
 
-pub const BUMP_OUT_NEIGHBORHOOD_WIDTH: usize = 3;
-pub const BUMP_OUT_NEIGHBORHOOD_SAMPLES: usize =
-	BUMP_OUT_NEIGHBORHOOD_WIDTH * BUMP_OUT_NEIGHBORHOOD_WIDTH;
+pub const BUMP_OUT_NEIGHBORHOOD_WIDTH: usize = MATERIAL_RASTER_WIDTH;
+pub const BUMP_OUT_NEIGHBORHOOD_SAMPLES: usize = MATERIAL_RASTER_SAMPLES;
+
+/// Shader channel: neighborhood density.
+pub const RASTER_DENSITY: usize = 0;
+/// Shader channel: world-space bite diameter.
+pub const RASTER_BITE_SIZE: usize = 1;
+/// Shader channel: bite-size deviation in binary octaves.
+pub const RASTER_BITE_SIZE_DEVIATION: usize = 2;
+/// Shader channel: typical canopy / cover height.
+pub const RASTER_AVERAGE_HEIGHT: usize = 3;
+/// Shader channel: height deviation around the typical height.
+pub const RASTER_HEIGHT_DEVIATION: usize = 4;
 
 /// Row-major 3×3 vegetation-field samples centered on the presented chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,31 +61,36 @@ impl BumpOutNeighborhood {
 	pub fn material_ref(
 		self,
 		palette: impl IntoIterator<Item = Color>,
-		noise: NoiseParams,
+		noise: procedural_common::NoiseParams,
 	) -> MaterialRef {
 		MaterialRef::named(CHICO_BUMP_OUT_MATERIAL)
 			.with_palette(palette)
 			.with_noise(noise)
-			.with_parameter(DENSITY_PARAMETER, self.densities)
-			.with_parameter(BITE_SIZE_PARAMETER, self.bite_sizes)
-			.with_parameter(BITE_SIZE_DEVIATION_PARAMETER, self.bite_size_deviations)
-			.with_parameter(AVERAGE_HEIGHT_PARAMETER, self.average_heights)
-			.with_parameter(HEIGHT_DEVIATION_PARAMETER, self.height_deviations)
-			.with_parameter(STYLE_PARAMETER, BumpOutStyle::default().as_values())
+			.with_raster(RASTER_DENSITY, self.densities)
+			.with_raster(RASTER_BITE_SIZE, self.bite_sizes)
+			.with_raster(RASTER_BITE_SIZE_DEVIATION, self.bite_size_deviations)
+			.with_raster(RASTER_AVERAGE_HEIGHT, self.average_heights)
+			.with_raster(RASTER_HEIGHT_DEVIATION, self.height_deviations)
+			.with_scalars(BumpOutStyle::default().as_values())
 	}
 
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
 		Self {
-			densities: samples_from_ref(material_ref, DENSITY_PARAMETER, 1.0),
-			bite_sizes: samples_from_ref(material_ref, BITE_SIZE_PARAMETER, 12.0),
-			bite_size_deviations: samples_from_ref(
-				material_ref,
-				BITE_SIZE_DEVIATION_PARAMETER,
-				0.0,
-			),
-			average_heights: samples_from_ref(material_ref, AVERAGE_HEIGHT_PARAMETER, 0.0),
-			height_deviations: samples_from_ref(material_ref, HEIGHT_DEVIATION_PARAMETER, 0.0),
+			densities: material_ref.rasters.get_or(RASTER_DENSITY, 1.0),
+			bite_sizes: material_ref.rasters.get_or(RASTER_BITE_SIZE, 12.0),
+			bite_size_deviations: material_ref.rasters.get_or(RASTER_BITE_SIZE_DEVIATION, 0.0),
+			average_heights: material_ref.rasters.get_or(RASTER_AVERAGE_HEIGHT, 0.0),
+			height_deviations: material_ref.rasters.get_or(RASTER_HEIGHT_DEVIATION, 0.0),
 		}
+	}
+
+	pub fn apply_to(self, material_ref: MaterialRef) -> MaterialRef {
+		material_ref
+			.with_raster(RASTER_DENSITY, self.densities)
+			.with_raster(RASTER_BITE_SIZE, self.bite_sizes)
+			.with_raster(RASTER_BITE_SIZE_DEVIATION, self.bite_size_deviations)
+			.with_raster(RASTER_AVERAGE_HEIGHT, self.average_heights)
+			.with_raster(RASTER_HEIGHT_DEVIATION, self.height_deviations)
 	}
 
 	pub fn min_displacement(self) -> f32 {
@@ -135,7 +146,7 @@ impl Default for BumpOutNeighborhood {
 	}
 }
 
-/// Material-level controls not already represented by [`NoiseParams`].
+/// Material-level controls not already represented by [`procedural_common::NoiseParams`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BumpOutStyle {
 	/// Width of the fragment-coverage transition around the density threshold.
@@ -192,13 +203,11 @@ impl BumpOutStyle {
 	}
 
 	pub fn apply_to(self, material_ref: MaterialRef) -> MaterialRef {
-		material_ref.with_parameter(STYLE_PARAMETER, self.as_values())
+		material_ref.with_scalars(self.as_values())
 	}
 
 	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		let Some(values) = material_ref.parameter(STYLE_PARAMETER) else {
-			return Self::default();
-		};
+		let values = material_ref.scalar_values();
 		let defaults = Self::default();
 		Self {
 			coverage_softness: values.first().copied().unwrap_or(defaults.coverage_softness),
@@ -222,18 +231,4 @@ impl Default for BumpOutStyle {
 	fn default() -> Self {
 		Self::new(0.04, 0.92, 0.25)
 	}
-}
-
-fn samples_from_ref(
-	material_ref: &MaterialRef,
-	name: &str,
-	default_value: f32,
-) -> [f32; BUMP_OUT_NEIGHBORHOOD_SAMPLES] {
-	let mut samples = [default_value; BUMP_OUT_NEIGHBORHOOD_SAMPLES];
-	if let Some(values) = material_ref.parameter(name) {
-		for (sample, value) in samples.iter_mut().zip(values.iter().copied()) {
-			*sample = value;
-		}
-	}
-	samples
 }
