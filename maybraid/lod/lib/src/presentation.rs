@@ -27,10 +27,10 @@ use std::collections::HashSet;
 pub use crate::scene::{LodScene, LodSceneStatus, SemanticLodScene, VisualLodScene};
 pub use runtime::{
 	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentBudgetClock, LodPresentCullBudget,
-	LodPresentCullBudgetClock, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
-	LodPresentCullRegionPlugin, LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue,
-	LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
+	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
+	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	LodPresentTimeBudget,
 };
 
 /// Presents one layer (`T`) of a spatial index over a region.

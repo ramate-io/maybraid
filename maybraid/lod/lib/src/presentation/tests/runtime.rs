@@ -9,7 +9,7 @@ use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Vers
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
 	LodPresentBudget, LodPresentCullBudget, LodPresentCullPlugin, LodPresentKeepRegion,
-	LodPresentPlugin, LodPresentQueue,
+	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentTimeBudget,
 };
 
 #[derive(SystemParam)]
@@ -85,7 +85,7 @@ impl RegionPresenter<Terrain, WorldIndex> for RecordingParam<'_> {
 struct PresentChan;
 
 #[test]
-fn shared_budget_rotates_across_present_types() -> Result<()> {
+fn independent_present_drains_each_receive_the_configured_budget() -> Result<()> {
 	let mut index = WorldIndex::default();
 	let identity = Transform::IDENTITY;
 	let terrain_bounds = cell(0.0);
@@ -112,6 +112,10 @@ fn shared_budget_rotates_across_present_types() -> Result<()> {
 		.insert_resource(index)
 		.insert_resource(RecordingPresenter::default())
 		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource(LodPresentTimeBudget {
+			time_per_frame: std::time::Duration::ZERO,
+			..default()
+		})
 		.insert_resource({
 			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
 			keep.region = Some(span(0.0, 4.0));
@@ -122,10 +126,6 @@ fn shared_budget_rotates_across_present_types() -> Result<()> {
 			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
 		));
 	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
-
-	app.update();
-	let presenter = app.world().resource::<RecordingPresenter>();
-	assert_eq!(presenter.terrain.len() + presenter.vegetation.len(), 1);
 
 	app.update();
 	let presenter = app.world().resource::<RecordingPresenter>();
@@ -169,6 +169,59 @@ fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
 	let presenter = app.world().resource::<RecordingPresenter>();
 	assert!(presenter.vegetation.contains_key(&Id::from_cell(cell(2.0))));
 	let _ = app.world().resource::<LodPresentQueue<Vegetation>>();
+	Ok(())
+}
+
+#[test]
+fn moving_keep_region_does_not_create_present_scan_work_without_an_impulse() -> Result<()> {
+	let mut app = App::new();
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let initial = cell(0.0);
+	let moved = cell(2.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &initial,
+	};
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(initial), &lod);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(&mut index, Id::from_cell(moved), &lod);
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(RecordingPresenter::default())
+		.insert_resource(LodPresentBudget { ids_per_frame: 8 })
+		.insert_resource(LodPresentTimeBudget {
+			time_per_frame: std::time::Duration::ZERO,
+			..default()
+		})
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(initial);
+			keep
+		})
+		.add_plugins(
+			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		)
+		.add_message::<LodPresentRegion<PresentChan>>();
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+
+	app.update();
+	app.world_mut().resource_mut::<LodPresentKeepRegion<PresentChan>>().region = Some(moved);
+	app.update();
+	assert!(!app
+		.world()
+		.resource::<RecordingPresenter>()
+		.vegetation
+		.contains_key(&Id::from_cell(moved)));
+
+	app.world_mut().write_message(LodPresentRegion::<PresentChan>::new(moved));
+	app.update();
+	assert!(app
+		.world()
+		.resource::<RecordingPresenter>()
+		.vegetation
+		.contains_key(&Id::from_cell(moved)));
 	Ok(())
 }
 

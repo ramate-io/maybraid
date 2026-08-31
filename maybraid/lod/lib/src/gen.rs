@@ -43,8 +43,8 @@ pub use keep::{
 	id_xz_distance2, keep_region_changed, QUEUE_KEEP_SLACK_XZ,
 };
 pub use runtime::{
-	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateBudgetClock,
-	LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion,
-	LodGenerateRegionPlugin, LodGenerateSystems, LodGenerated,
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
+	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
+	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
 };
 pub use spatial_index::{SpatialIndex, Version};

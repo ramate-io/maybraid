@@ -20,9 +20,9 @@ pub use scene::refresh;
 pub use scene::region_index;
 
 pub use gen::{
-	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateBudgetClock,
-	LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion,
-	LodGenerateRegionPlugin, LodGenerateSystems, LodGenerated,
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
+	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
+	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
 };
 pub use lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
@@ -31,10 +31,10 @@ pub use lod_ref::{
 };
 pub use presentation::{
 	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
-	produce_lod_present_regions, LodPresentBudget, LodPresentBudgetClock, LodPresentCullBudget,
-	LodPresentCullBudgetClock, LodPresentCullCursor, LodPresentCullPlugin, LodPresentCullRegion,
-	LodPresentCullRegionPlugin, LodPresentKeepRegion, LodPresentPlugin, LodPresentQueue,
-	LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems, RegionPresenter,
+	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
+	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
+	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	LodPresentTimeBudget, RegionPresenter,
 };
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
