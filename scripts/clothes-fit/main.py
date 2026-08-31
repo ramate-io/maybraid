@@ -1,4 +1,4 @@
-"""Fit a clothing mesh to a bind-pose body and export garment + armature.
+"""Fit an open (or thin) clothing mesh to a bind-pose body and export.
 
 The clothing .blend must already be open (garment skinned to the unit Humanoid
 armature). This script does not save the clothing file.
@@ -6,9 +6,9 @@ armature). This script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-The wrap target is a temporary body *cage*: Catmull-Clark subsurf, then inflate
-along normals. The garment shrinkwraps onto that cage (nearest surface, keep-above
-offset). The render body is not modified.
+Pipeline: shrinkwrap Outside onto an inflated body (keep-out), push verts a
+little farther along body normals (slack), Cloth-simulate against the render
+body, apply Cloth, keep existing vertex groups.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -30,6 +30,10 @@ HELPER_MESH_PREFIXES = (
     "nurbspath",
 )
 
+PIN_GROUP = "FitPins"
+PIN_NAME_TOKENS = ("shoulder", "neck")
+PIN_NAME_EXCLUDE = ("thickness", "humerus", "forearm")
+
 
 def _argv_after_dashdash() -> list[str]:
     argv = sys.argv
@@ -41,7 +45,7 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Wrap an open clothing blend onto an inflated body cage"
+        description="Keep-out wrap a clothing shell, add ease, cloth-drape, export"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
@@ -49,25 +53,25 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
         "--inflate",
         type=float,
         default=0.04,
-        help="Meters to push cage vertices along normals before wrap (default: 0.04)",
+        help="Meters to inflate the Outside-wrap target body (default: 0.04)",
     )
     parser.add_argument(
-        "--offset",
+        "--ease",
         type=float,
-        default=0.04,
-        help="Keep-above-surface offset from the cage in meters (default: 0.04)",
+        default=0.02,
+        help="Meters to push garment verts along body normals after wrap (default: 0.02)",
     )
     parser.add_argument(
-        "--cage-subsurf",
+        "--collision-gap",
+        type=float,
+        default=0.015,
+        help="Cloth collision thickness against the body, meters (default: 0.015)",
+    )
+    parser.add_argument(
+        "--cloth-frames",
         type=int,
-        default=1,
-        help="Catmull-Clark levels on the wrap cage (default: 1; 0 skips)",
-    )
-    parser.add_argument(
-        "--thickness",
-        type=float,
-        default=0.0,
-        help="Solidify thickness after wrap, meters (default: 0 skips)",
+        default=24,
+        help="Frames to simulate cloth drape (default: 24)",
     )
     parser.add_argument(
         "--garment",
@@ -198,6 +202,27 @@ def _restore_armature_modifiers(disabled) -> None:
         mod.show_render = render
 
 
+def _copy_mesh(obj, name: str):
+    import bpy
+
+    dup = obj.copy()
+    dup.data = obj.data.copy()
+    dup.name = name
+    bpy.context.scene.collection.objects.link(dup)
+    for mod in list(dup.modifiers):
+        dup.modifiers.remove(mod)
+    return dup
+
+
+def _delete(obj) -> None:
+    import bpy
+
+    mesh = obj.data if obj.type == "MESH" else None
+    bpy.data.objects.remove(obj, do_unlink=True)
+    if mesh is not None and mesh.users == 0:
+        bpy.data.meshes.remove(mesh)
+
+
 def _recalc_normals(obj) -> None:
     import bmesh
 
@@ -227,39 +252,63 @@ def _inflate_along_normals(obj, distance: float) -> None:
     mesh.update()
 
 
-def _apply_subsurf(obj, levels: int) -> None:
-    import bpy
+def _body_bvh_in_garment_space(body, garment):
+    import bmesh
+    from mathutils.bvhtree import BVHTree
 
-    if levels <= 0:
+    g_inv = garment.matrix_world.inverted()
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.transform(g_inv @ body.matrix_world)
+    bm.normal_update()
+    return bm, BVHTree.FromBMesh(bm, epsilon=1e-6)
+
+
+def _inflate_along_body_normals(garment, body, distance: float) -> None:
+    import bmesh
+
+    if distance == 0.0:
         return
-    name = "FitCageSubsurf"
-    existing = obj.modifiers.get(name)
-    if existing is not None:
-        obj.modifiers.remove(existing)
-    mod = obj.modifiers.new(name, "SUBSURF")
-    mod.subdivision_type = "CATMULL_CLARK"
-    mod.levels = levels
-    mod.render_levels = levels
-    _apply_modifier(obj, name)
+    body_bm, bvh = _body_bvh_in_garment_space(body, garment)
+    g_bm = bmesh.new()
+    g_bm.from_mesh(garment.data)
+    g_bm.verts.ensure_lookup_table()
+    moved = 0
+    for vert in g_bm.verts:
+        loc, hit_n, _i, _d = bvh.find_nearest(vert.co, 1.5)
+        if loc is None or hit_n is None or hit_n.length_squared < 1e-12:
+            continue
+        vert.co += hit_n.normalized() * distance
+        moved += 1
+    body_bm.free()
+    g_bm.to_mesh(garment.data)
+    g_bm.free()
+    garment.data.update()
+    print(f"ease {distance}m along body normals ({moved} verts)")
 
 
-def _make_cage(body, *, subsurf_levels: int, inflate: float):
+def _coords(obj) -> list[float]:
+    n = len(obj.data.vertices)
+    buf = [0.0] * (n * 3)
+    obj.data.vertices.foreach_get("co", buf)
+    return buf
+
+
+def _moved_vert_count(before: list[float], after: list[float], eps: float = 1e-5) -> int:
+    moved = 0
+    for i in range(0, min(len(before), len(after)), 3):
+        dx = after[i] - before[i]
+        dy = after[i + 1] - before[i + 1]
+        dz = after[i + 2] - before[i + 2]
+        if dx * dx + dy * dy + dz * dz > eps * eps:
+            moved += 1
+    return moved
+
+
+def _shrinkwrap_outside(garment, target) -> None:
     import bpy
 
-    cage = body.copy()
-    cage.data = body.data.copy()
-    cage.name = "FitCage"
-    bpy.context.scene.collection.objects.link(cage)
-    _apply_subsurf(cage, subsurf_levels)
-    _recalc_normals(cage)
-    _inflate_along_normals(cage, inflate)
-    _recalc_normals(cage)
-    return cage
-
-
-def _shrinkwrap(garment, target, offset: float) -> None:
-    import bpy
-
+    before = _coords(garment)
     name = "ClothesFitWrap"
     existing = garment.modifiers.get(name)
     if existing is not None:
@@ -267,29 +316,140 @@ def _shrinkwrap(garment, target, offset: float) -> None:
     wrap = garment.modifiers.new(name, "SHRINKWRAP")
     wrap.target = target
     wrap.wrap_method = "NEAREST_SURFACEPOINT"
-    wrap.wrap_mode = "ABOVE_SURFACE"
-    wrap.offset = offset
-    # Apply against rest-pose verts; armature stays on the stack but disabled.
+    wrap.wrap_mode = "OUTSIDE"
+    wrap.offset = 0.0
     garment.modifiers.move(garment.modifiers.find(name), 0)
     _apply_modifier(garment, name)
+    after = _coords(garment)
+    print(
+        f"shrinkwrap OUTSIDE verts={len(garment.data.vertices)} moved={_moved_vert_count(before, after)}"
+    )
 
 
-def _solidify(obj, thickness: float) -> None:
+def _make_pin_group(obj) -> str:
+    existing = obj.vertex_groups.get(PIN_GROUP)
+    if existing is not None:
+        obj.vertex_groups.remove(existing)
+    pin_groups = []
+    for group in obj.vertex_groups:
+        name = group.name.lower()
+        if any(tok in name for tok in PIN_NAME_EXCLUDE):
+            continue
+        if any(tok in name for tok in PIN_NAME_TOKENS):
+            pin_groups.append(group)
+    indices = set()
+    group_ids = {g.index for g in pin_groups}
+    for vert in obj.data.vertices:
+        for membership in vert.groups:
+            if membership.group in group_ids and membership.weight >= 0.25:
+                indices.add(vert.index)
+                break
+    if not indices:
+        zs = [v.co.z for v in obj.data.vertices]
+        cutoff = min(zs) + 0.82 * (max(zs) - min(zs))
+        indices = {v.index for v in obj.data.vertices if v.co.z >= cutoff}
+    group = obj.vertex_groups.new(name=PIN_GROUP)
+    if indices:
+        group.add(list(indices), 1.0, "REPLACE")
+    print(f"pin group {PIN_GROUP}: {len(indices)} verts from {[g.name for g in pin_groups]}")
+    return PIN_GROUP
+
+
+def _enable_collision(obj, thickness: float) -> None:
     import bpy
 
-    if thickness <= 0.0:
-        return
-    name = "ClothesFitSolidify"
-    existing = obj.modifiers.get(name)
+    existing = obj.modifiers.get("FitCollision")
     if existing is not None:
         obj.modifiers.remove(existing)
-    mod = obj.modifiers.new(name, "SOLIDIFY")
-    mod.thickness = thickness
-    # Original (wrapped) surface stays inner; new verts go outward.
-    mod.offset = 1.0
-    mod.use_even_offset = True
-    obj.modifiers.move(obj.modifiers.find(name), 0)
-    _apply_modifier(obj, name)
+    obj.modifiers.new("FitCollision", "COLLISION")
+    obj.collision.use = True
+    obj.collision.thickness_outer = thickness
+    obj.collision.thickness_inner = thickness
+
+
+def _freeze_evaluated_coords(obj) -> None:
+    import bpy
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    eval_obj = obj.evaluated_get(depsgraph)
+    eval_mesh = eval_obj.to_mesh()
+    n = len(eval_mesh.vertices)
+    if n != len(obj.data.vertices):
+        eval_obj.to_mesh_clear()
+        print(
+            f"main.py: evaluated vert count {n} != {len(obj.data.vertices)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    coords = [0.0] * (n * 3)
+    eval_mesh.vertices.foreach_get("co", coords)
+    obj.data.vertices.foreach_set("co", coords)
+    obj.data.update()
+    eval_obj.to_mesh_clear()
+
+
+def _drape_cloth(garment, collider, *, frames: int, gap: float, pin_group: str) -> None:
+    import bpy
+
+    if frames <= 0:
+        return
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = frames
+    scene.gravity = (0.0, 0.0, -9.81)
+    scene.frame_set(1)
+
+    collider.hide_viewport = False
+    collider.hide_render = False
+    garment.hide_viewport = False
+    garment.hide_render = False
+    _enable_collision(collider, gap)
+
+    existing = garment.modifiers.get("FitCloth")
+    if existing is not None:
+        garment.modifiers.remove(existing)
+    cloth = garment.modifiers.new("FitCloth", "CLOTH")
+    settings = cloth.settings
+    settings.quality = 7
+    settings.mass = 0.2
+    settings.tension_stiffness = 15.0
+    settings.compression_stiffness = 15.0
+    settings.shear_stiffness = 5.0
+    settings.bending_stiffness = 0.5
+    settings.vertex_group_mass = pin_group
+    collide = cloth.collision_settings
+    collide.use_collision = True
+    collide.distance_min = gap
+    collide.collision_quality = 5
+    collide.use_self_collision = False
+    cache = cloth.point_cache
+    cache.frame_start = 1
+    cache.frame_end = frames
+
+    before = _coords(garment)
+    print(f"cloth drape {frames} frames gap={gap} pin={pin_group}")
+    baked = False
+    try:
+        with bpy.context.temp_override(
+            scene=scene, active_object=garment, point_cache=cache
+        ):
+            result = bpy.ops.ptcache.bake(bake=True)
+        baked = "FINISHED" in result
+        print(f"ptcache.bake {result}")
+    except Exception as exc:
+        print(f"ptcache.bake skipped ({exc})")
+    if not baked:
+        for frame in range(1, frames + 1):
+            scene.frame_set(frame)
+            bpy.context.view_layer.update()
+    scene.frame_set(frames)
+    bpy.context.view_layer.update()
+    _freeze_evaluated_coords(garment)
+    garment.modifiers.remove(cloth)
+    after = _coords(garment)
+    print(
+        f"cloth frozen verts={len(garment.data.vertices)} moved={_moved_vert_count(before, after)}"
+    )
 
 
 def _assert_reasonable_bounds(obj, max_extent: float = 5.0) -> None:
@@ -309,7 +469,7 @@ def _export_glb(output_path: str, objects) -> None:
     import bpy
     from addon_utils import check, enable
 
-    default, enabled = check("io_scene_gltf2")
+    _default, enabled = check("io_scene_gltf2")
     if not enabled:
         enable("io_scene_gltf2", default_set=True, persistent=True)
 
@@ -353,12 +513,12 @@ def main() -> None:
     _object_mode()
     targets = _append_body_meshes(body_path)
     body = _join_targets(targets)
-    cage = _make_cage(
-        body,
-        subsurf_levels=args.cage_subsurf,
-        inflate=args.inflate,
-    )
-    garments = _garment_objects(args.garment, exclude=[body, cage])
+    wrap_body = _copy_mesh(body, "FitWrapBody")
+    _recalc_normals(wrap_body)
+    _inflate_along_normals(wrap_body, args.inflate)
+    _recalc_normals(wrap_body)
+
+    garments = _garment_objects(args.garment, exclude=[body, wrap_body])
     armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
     if not armatures:
         print("main.py: no armature in the clothing scene", file=sys.stderr)
@@ -366,14 +526,25 @@ def main() -> None:
 
     for garment in garments:
         disabled = _disable_armature_modifiers(garment)
-        _shrinkwrap(garment, cage, args.offset)
-        _solidify(garment, args.thickness)
+        print(f"fit {garment.name} verts={len(garment.data.vertices)}")
+        _shrinkwrap_outside(garment, wrap_body)
+        _inflate_along_body_normals(garment, body, args.ease)
+        pin = _make_pin_group(garment)
+        _drape_cloth(
+            garment,
+            body,
+            frames=args.cloth_frames,
+            gap=args.collision_gap,
+            pin_group=pin,
+        )
+        pin_vg = garment.vertex_groups.get(pin)
+        if pin_vg is not None:
+            garment.vertex_groups.remove(pin_vg)
         _restore_armature_modifiers(disabled)
         _assert_reasonable_bounds(garment)
 
-    bpy.data.objects.remove(cage, do_unlink=True)
-    bpy.data.objects.remove(body, do_unlink=True)
-
+    _delete(wrap_body)
+    _delete(body)
     _export_glb(output_path, garments + armatures)
 
 

@@ -8,7 +8,7 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Wrap target is a temporary body cage (subsurf + inflate), not the garment.
+# Outside wrap onto an inflated body, a little body-normal ease, Cloth drape.
 
 set -euo pipefail
 
@@ -22,9 +22,9 @@ SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
 INFLATE=0.04
-OFFSET=0.04
-CAGE_SUBSURF=1
-THICKNESS=0
+EASE=0.02
+COLLISION_GAP=0.015
+CLOTH_FRAMES=24
 ALL=0
 CLOTHES_STEMS=()
 BODY_STEMS=()
@@ -38,10 +38,10 @@ Usage:
   --clothes         Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
   --body            Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
   --all             Fit every body-slot garment onto every biped mesh body
-  --inflate         Cage inflate along normals, meters (default: ${INFLATE})
-  --offset          Keep-above offset from the cage, meters (default: ${OFFSET})
-  --cage-subsurf    Catmull-Clark levels on the wrap cage (default: ${CAGE_SUBSURF})
-  --thickness       Solidify thickness after wrap, meters (default: ${THICKNESS}; 0 skips)
+  --inflate         Inflate the Outside-wrap target, meters (default: ${INFLATE})
+  --ease            Extra push along body normals after wrap, meters (default: ${EASE})
+  --collision-gap   Cloth vs body thickness, meters (default: ${COLLISION_GAP})
+  --cloth-frames    Cloth simulation frames (default: ${CLOTH_FRAMES}; 0 skips cloth)
 EOF
 }
 
@@ -63,16 +63,16 @@ while [ "$#" -gt 0 ]; do
             INFLATE="$2"
             shift 2
             ;;
-        --offset)
-            OFFSET="$2"
+        --ease)
+            EASE="$2"
             shift 2
             ;;
-        --cage-subsurf)
-            CAGE_SUBSURF="$2"
+        --collision-gap)
+            COLLISION_GAP="$2"
             shift 2
             ;;
-        --thickness)
-            THICKNESS="$2"
+        --cloth-frames)
+            CLOTH_FRAMES="$2"
             shift 2
             ;;
         -h|--help)
@@ -147,9 +147,9 @@ for clothes in "${CLOTHES_STEMS[@]}"; do
             --body "$body_blend" \
             --output "$out" \
             --inflate "$INFLATE" \
-            --offset "$OFFSET" \
-            --cage-subsurf "$CAGE_SUBSURF" \
-            --thickness "$THICKNESS"; then
+            --ease "$EASE" \
+            --collision-gap "$COLLISION_GAP" \
+            --cloth-frames "$CLOTH_FRAMES"; then
             echo "Failed to fit ${clothes} onto ${body}" >&2
             exit 1
         fi
