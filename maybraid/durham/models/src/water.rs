@@ -29,6 +29,7 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use durham_terrain::shaders::RefractionWater;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
@@ -53,7 +54,7 @@ pub struct Water {
 	pub fills: Vec<WaterFill>,
 	/// Meshable union of fills against [`Self::terrain`] ([`ComposedWater`]).
 	pub sdf: ComposedWater,
-	pub material: Handle<StandardMaterial>,
+	pub material: Handle<RefractionWater>,
 	/// Cascade `res_2` copied from the sibling [`Terrain`] cell (shared lattice).
 	pub res_2: u8,
 }
@@ -80,7 +81,7 @@ impl Water {
 			template_value(transform)
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(sdf.clone())))
-			MeshMaterial3d::<StandardMaterial>({material.clone()})
+			MeshMaterial3d::<RefractionWater>({material.clone()})
 		}
 	}
 }

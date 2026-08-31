@@ -145,6 +145,10 @@ impl TerrainEntryStore {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
 	}
 
+	pub fn terrain(&self, id: Id) -> Option<&Terrain> {
+		self.terrain.get(&id).map(|entry| &entry.value)
+	}
+
 	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.
 	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
 		let size = layout.cell_size.max(1e-3);
@@ -315,7 +319,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		ColliderAabb::from_min_max(Vec3::from(region.min), Vec3::from(region.max))
 	}
 
-	fn spawn_cell_entity(&mut self, id: Id, terrain: &Terrain, bounds: Aabb3d) -> Entity {
+	fn spawn_cell_entity(&mut self, id: Id, bounds: Aabb3d) -> Entity {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let center = (min + max) * 0.5;
@@ -323,7 +327,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 			.spawn((
 				Name::new("TerrainCell"),
 				TerrainCellId(id),
-				terrain.clone(),
 				Transform::from_translation(center),
 				GlobalTransform::default(),
 			))
@@ -517,7 +520,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 			}
 		}
 
-		let entity = self.spawn_cell_entity(id, &t, bounds);
+		let entity = self.spawn_cell_entity(id, bounds);
 		let version = self.store.next_version();
 		self.store.entity_to_id.insert(entity, id);
 		self.store

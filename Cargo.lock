@@ -2209,6 +2209,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "chico-vegetation-shaders",
  "material-ref",
  "procedural-common",
  "terrain-chunk-ref",
@@ -2384,6 +2385,7 @@ dependencies = [
  "chico-groves",
  "chico-sbs-trees-playground",
  "chico-vegetation-components",
+ "chico-vegetation-shaders",
  "clap",
  "crozon-characters",
  "durham-terrain",
@@ -2394,6 +2396,7 @@ dependencies = [
  "lod-avian",
  "lod-cascade",
  "log",
+ "material-ref",
  "procedural-common",
  "render-item",
  "terrain-chunk-ref",
@@ -2404,6 +2407,8 @@ name = "chico-vegetation-shaders"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "chico-vegetation-components",
+ "material-ref",
 ]
 
 [[package]]
@@ -4399,6 +4404,7 @@ dependencies = [
  "game-commands",
  "lod",
  "log",
+ "material-ref",
  "maybraid-sky",
 ]
 

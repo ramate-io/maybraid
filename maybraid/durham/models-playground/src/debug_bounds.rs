@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
 	cascade_chunk_for_cell, JerseyControllerLayouts, MarazionLeafKind,
-	PlateauLowPassControllerLayout, Terrain, TerrainCellLayout,
+	PlateauLowPassControllerLayout, Terrain, TerrainCellId, TerrainCellLayout, TerrainEntryStore,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -70,7 +70,8 @@ pub fn update_cell_location_hud(
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
 	jersey_layouts: Res<JerseyControllerLayouts>,
-	terrains: Query<&Terrain>,
+	terrain_cells: Query<&TerrainCellId>,
+	terrain_store: Res<TerrainEntryStore>,
 	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
 	mut last: ResMut<LastLoggedCellLocation>,
@@ -96,7 +97,10 @@ pub fn update_cell_location_hud(
 	let t_cell = terrain_cell_aabb(tix, tiz, t_size, layout.vertical_half_extent);
 	let c_cell = plateau_layout.cell_bounds(cix, ciz);
 
-	let terrain = terrains.iter().find(|t| cells_match_xz(&t.cell, &t_cell));
+	let terrain = terrain_cells
+		.iter()
+		.filter_map(|cell_id| terrain_store.terrain(cell_id.0))
+		.find(|terrain| cells_match_xz(&terrain.cell, &t_cell));
 	let leaf_under_cam =
 		terrain.and_then(|t| t.jersey_leaves.iter().find(|leaf| point_in_xz(p, leaf)).copied());
 	let marazion_under_cam = terrain

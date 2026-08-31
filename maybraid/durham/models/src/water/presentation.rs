@@ -6,6 +6,7 @@ use crate::water::Water;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
+use durham_terrain::shaders::RefractionWater;
 use lod::gen::{
 	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
 	TrackedId, Version,
@@ -20,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 /// water and terrain always share one cascade lattice.
 #[derive(Resource, Clone)]
 pub struct WaterPresentationAssets {
-	pub material: Handle<StandardMaterial>,
+	pub material: Handle<RefractionWater>,
 }
 
 /// Bootstrap source used only when first materializing [`WaterPresentationAssets`]

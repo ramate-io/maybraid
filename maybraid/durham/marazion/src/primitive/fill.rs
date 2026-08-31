@@ -7,6 +7,7 @@
 use crate::primitive::complex::HydroComplex;
 use bevy_math::{Vec2, Vec3};
 use jersey_terrain_stamps::Region2D;
+use std::sync::Arc;
 
 /// Water surface elevation model decided by the stamp.
 #[derive(Debug, Clone)]
@@ -17,8 +18,8 @@ pub enum WaterSurface {
 		/// Horizontal support for unit-test flats (hydro uses carve \(\phi\)).
 		region: Region2D,
 	},
-	/// Indexed hydrology complex (owns \(W\) blend + water SDF).
-	Hydro { complex: HydroComplex },
+	/// Shared indexed hydrology complex (owns \(W\) blend + water SDF).
+	Hydro { complex: Arc<HydroComplex> },
 }
 
 impl WaterSurface {
@@ -42,12 +43,19 @@ pub struct WaterFill {
 }
 
 impl WaterFill {
+	pub fn from_hydro(complex: Arc<HydroComplex>) -> Self {
+		Self { surface: WaterSurface::Hydro { complex } }
+	}
+
 	/// Representative horizontal samples for wet-volume gating.
 	pub fn wet_volume_probe_points(&self) -> Vec<Vec2> {
 		match &self.surface {
 			WaterSurface::Hydro { complex } => {
-				let mut pts: Vec<Vec2> =
-					complex.hydrology.iter().map(|node| node.sample_point()).collect();
+				let mut pts: Vec<Vec2> = complex
+					.hydrology
+					.iter()
+					.map(|node| complex.bounds.project(node.sample_point()))
+					.collect();
 				if pts.is_empty() {
 					pts.push(complex.bounds.center());
 				}
@@ -97,6 +105,11 @@ impl WaterFill {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::primitive::hydro::{
+		Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
+	};
+	use crate::primitive::node::HydroNode;
+	use crate::primitive::parameters::HydroParams;
 	use jersey_terrain_stamps::CircleRegion;
 
 	#[test]
@@ -119,5 +132,28 @@ mod tests {
 		// Outside region → positive XZ distance.
 		assert!(fill.distance(Vec3::new(80.0, 38.0, 0.0), h) > 0.0);
 		Ok(())
+	}
+
+	#[test]
+	fn hydro_probe_points_are_clamped_to_complex_bounds() {
+		let bounds = procedural_common::Bounds2::from_xz(0.0, 0.0, 160.0, 160.0);
+		let node = HydroNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::Ellipse(Ellipse {
+					center: Vec2::new(200.0, 80.0),
+					radii: Vec2::splat(60.0),
+					rotation: 0.0,
+				}),
+				elevation: HydroElevation::Radial(RadialBowl { surface: 40.0, center_depth: 3.0 }),
+				influence_pad: 12.0,
+			},
+			HydroParams::default(),
+			12.0,
+		);
+		let fill =
+			WaterFill::from_hydro(Arc::new(HydroComplex::new(bounds, 1).with_hydro(vec![node])));
+
+		assert_eq!(fill.wet_volume_probe_points(), vec![Vec2::new(160.0, 80.0)]);
+		assert!(fill.inside_horizontal(160.0, 80.0));
 	}
 }

@@ -1,6 +1,6 @@
 //! Render-scene vegetation [`Material`] handles for CLI [`RenderSubject`] rebuilds.
 //!
-//! LOD vegetation components use [`crate::chico_material_lib::ChicoMaterialRefPlugin`] instead.
+//! LOD vegetation components use [`chico_vegetation_shaders::ChicoMaterialRefPlugin`] instead.
 
 use bevy::prelude::*;
 

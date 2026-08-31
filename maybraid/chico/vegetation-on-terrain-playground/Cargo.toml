@@ -22,6 +22,7 @@ chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }
 chico-bumpout = { workspace = true }
 chico-sbs-trees-playground = { path = "../sbs-trees-playground" }
+chico-vegetation-shaders = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
 lod-cascade = { workspace = true }
@@ -33,6 +34,7 @@ terrain-chunk-ref = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+material-ref = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 
 [lints]

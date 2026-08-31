@@ -1,21 +1,14 @@
 use bevy::prelude::Color;
+use chico_vegetation_shaders::CHICO_BUMP_OUT_MATERIAL;
 use material_ref::{MaterialRef, MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH};
 
-use crate::CHICO_BUMP_OUT_MATERIAL;
+pub use chico_vegetation_shaders::{
+	RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY,
+	RASTER_HEIGHT_DEVIATION,
+};
 
 pub const BUMP_OUT_NEIGHBORHOOD_WIDTH: usize = MATERIAL_RASTER_WIDTH;
 pub const BUMP_OUT_NEIGHBORHOOD_SAMPLES: usize = MATERIAL_RASTER_SAMPLES;
-
-/// Shader channel: neighborhood density.
-pub const RASTER_DENSITY: usize = 0;
-/// Shader channel: world-space bite diameter.
-pub const RASTER_BITE_SIZE: usize = 1;
-/// Shader channel: bite-size deviation in binary octaves.
-pub const RASTER_BITE_SIZE_DEVIATION: usize = 2;
-/// Shader channel: typical canopy / cover height.
-pub const RASTER_AVERAGE_HEIGHT: usize = 3;
-/// Shader channel: height deviation around the typical height.
-pub const RASTER_HEIGHT_DEVIATION: usize = 4;
 
 /// Row-major 3×3 vegetation-field samples centered on the presented chunk.
 #[derive(Debug, Clone, Copy, PartialEq)]

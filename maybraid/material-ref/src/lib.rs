@@ -7,8 +7,9 @@
 //! - [`MaterialRefPlugin`]`<L>` — fulfill system generic over that SystemParam
 //! - [`StandardMaterialLib`] / [`StandardMaterialRefPlugin`] — reference implementor
 //!
-//! Domain crates add their own SystemParam libs (e.g. Chico leaf + stick) that fork on
-//! [`MaterialId`] and insert the matching `MeshMaterial3d<M>`.
+//! Domain crates add their own SystemParam libs (e.g. Chico leaf + stick) that
+//! [`MaterialLib::try_fulfill`] only the recipes they own. App crates compose those
+//! libs in one [`MaterialRefPlugin`] so two fulfills never race the same root.
 
 mod fulfill;
 mod key;
@@ -19,8 +20,8 @@ mod standard;
 
 pub use fulfill::{
 	fulfill_material_ref_descendants, fulfill_material_ref_roots,
-	invalidate_changed_material_ref_roots, restamp_material_ref_descendants_of_changed,
-	MaterialRefPlugin, MaterialRefSystems,
+	invalidate_changed_material_ref_roots, material_ref_plugin_installed,
+	restamp_material_ref_descendants_of_changed, MaterialRefPlugin, MaterialRefSystems,
 };
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
@@ -180,12 +181,13 @@ mod tests {
 	struct NoopMaterialLib;
 
 	impl MaterialLib for NoopMaterialLib {
-		fn fulfill(
+		fn try_fulfill(
 			&mut self,
 			_entity: Entity,
 			_material_ref: &MaterialRef,
 			_commands: &mut Commands,
-		) {
+		) -> bool {
+			false
 		}
 	}
 

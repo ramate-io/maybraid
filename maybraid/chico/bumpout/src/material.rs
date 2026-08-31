@@ -1,181 +1,25 @@
+//! [`MaterialLib`] for bump-out recipes. The Bevy material lives in `chico-vegetation-shaders`.
+
 use bevy::ecs::system::SystemParam;
-use bevy::{
-	asset::embedded_asset,
-	light::NotShadowCaster,
-	mesh::MeshVertexBufferLayoutRef,
-	pbr::{MaterialPipeline, MaterialPipelineKey},
-	prelude::*,
-	reflect::TypePath,
-	render::render_resource::{
-		AsBindGroup, RenderPipelineDescriptor, ShaderType, SpecializedMeshPipelineError,
-	},
-	shader::ShaderRef,
-};
+use bevy::light::NotShadowCaster;
+use bevy::prelude::*;
+use chico_vegetation_shaders::{BumpOutMaterial, CHICO_BUMP_OUT_MATERIAL};
 use material_ref::{
-	MaterialId, MaterialLib, MaterialRasters, MaterialRef, MaterialRefCache, MaterialRefKey,
-	MaterialRefPlugin, StandardMaterialLib, StandardMaterialRefCache, MATERIAL_PALETTE_SLOTS,
-	MATERIAL_RASTER_CHANNELS, MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
+	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
+	StandardMaterialLib, StandardMaterialRefCache,
 };
-
-use crate::{BumpOutStyle, CHICO_BUMP_OUT_MATERIAL, RASTER_BITE_SIZE, RASTER_DENSITY};
-
-const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
-
-/// Packed, fixed-layout GPU representation of one material reference.
-///
-/// Channel meaning is a shader contract. Bump-out uses rasters 0–4 and scalars 0–6.
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct BumpOutUniform {
-	pub colors: [Vec4; MATERIAL_PALETTE_SLOTS],
-	/// `x` broad noise frequency, `y` amplitude, `z` seed.
-	pub noise: Vec4,
-	pub scalars: [Vec4; SCALAR_VEC4S],
-	pub rasters: [[Vec4; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS],
-}
-
-impl BumpOutUniform {
-	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		let fallback = [
-			Vec4::new(0.16, 0.36, 0.14, 1.0),
-			Vec4::new(0.24, 0.52, 0.20, 1.0),
-			Vec4::new(0.38, 0.64, 0.24, 1.0),
-		];
-		let mut colors = [Vec4::ZERO; MATERIAL_PALETTE_SLOTS];
-		if material_ref.palette.is_empty() {
-			for (slot, color) in colors.iter_mut().zip(fallback) {
-				*slot = color;
-			}
-		} else {
-			for (slot, color) in colors.iter_mut().zip(&material_ref.palette) {
-				let linear = LinearRgba::from(*color);
-				*slot = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
-			}
-			let first = colors[0];
-			for color in colors.iter_mut().take(3).skip(material_ref.palette.len()) {
-				*color = first;
-			}
-		}
-
-		let mut scalars = [Vec4::ZERO; SCALAR_VEC4S];
-		let values = material_ref.scalar_values();
-		for (i, slot) in scalars.iter_mut().enumerate() {
-			let base = i * 4;
-			*slot = Vec4::new(
-				values.get(base).copied().unwrap_or(0.0),
-				values.get(base + 1).copied().unwrap_or(0.0),
-				values.get(base + 2).copied().unwrap_or(0.0),
-				values.get(base + 3).copied().unwrap_or(0.0),
-			);
-		}
-		if values.is_empty() {
-			let style = BumpOutStyle::default();
-			let packed = style.as_values();
-			scalars[0] = Vec4::new(packed[0], packed[1], packed[2], packed[3]);
-			scalars[1] = Vec4::new(packed[4], packed[5], packed[6], 0.0);
-		}
-
-		let mut rasters = [[Vec4::ZERO; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS];
-		for channel in 0..MATERIAL_RASTER_CHANNELS {
-			let default = match channel {
-				RASTER_DENSITY => 1.0,
-				RASTER_BITE_SIZE => 12.0,
-				_ => 0.0,
-			};
-			let samples = material_ref.rasters.get_or(channel, default);
-			let rows = MaterialRasters::packed_rows(samples);
-			rasters[channel] = rows.map(|row| Vec4::from_array(row));
-		}
-
-		Self {
-			colors,
-			noise: Vec4::new(
-				material_ref.noise.frequency.max(1e-6),
-				material_ref.noise.amplitude,
-				material_ref.noise.seed as f32,
-				0.0,
-			),
-			scalars,
-			rasters,
-		}
-	}
-}
-
-impl Default for BumpOutUniform {
-	fn default() -> Self {
-		Self::from_material_ref(&MaterialRef::named(CHICO_BUMP_OUT_MATERIAL))
-	}
-}
-
-/// Vertex-displaced, noise-masked material used by ground-cover and canopy bump outs.
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
-pub struct BumpOutMaterial {
-	#[uniform(0)]
-	pub uniform: BumpOutUniform,
-}
-
-impl BumpOutMaterial {
-	pub fn from_material_ref(material_ref: &MaterialRef) -> Self {
-		Self { uniform: BumpOutUniform::from_material_ref(material_ref) }
-	}
-}
-
-impl Material for BumpOutMaterial {
-	fn vertex_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wgsl").into()
-	}
-
-	fn fragment_shader() -> ShaderRef {
-		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "bump_out_material.wgsl").into()
-	}
-
-	fn alpha_mode(&self) -> AlphaMode {
-		AlphaMode::Opaque
-	}
-
-	fn enable_prepass() -> bool {
-		false
-	}
-
-	fn specialize(
-		_pipeline: &MaterialPipeline,
-		descriptor: &mut RenderPipelineDescriptor,
-		_layout: &MeshVertexBufferLayoutRef,
-		_key: MaterialPipelineKey<Self>,
-	) -> Result<(), SpecializedMeshPipelineError> {
-		descriptor.primitive.cull_mode = None;
-		Ok(())
-	}
-}
-
-/// Registers the embedded shader and Bevy material asset.
-pub struct BumpOutMaterialPlugin;
-
-impl Plugin for BumpOutMaterialPlugin {
-	fn build(&self, app: &mut App) {
-		embedded_asset!(app, "bump_out_material.wgsl");
-		app.add_plugins(MaterialPlugin::<BumpOutMaterial>::default())
-			.add_systems(PostUpdate, disable_bump_out_shadow_casters);
-	}
-}
-
-fn disable_bump_out_shadow_casters(
-	mut commands: Commands,
-	query: Query<Entity, (With<MeshMaterial3d<BumpOutMaterial>>, Without<NotShadowCaster>)>,
-) {
-	for entity in &query {
-		commands.entity(entity).insert(NotShadowCaster);
-	}
-}
 
 pub type BumpOutMaterialRefCache = MaterialRefCache<BumpOutMaterial>;
 
-/// Standalone material library used by the bump-out playground.
-///
-/// Production apps with a combined domain library can call [`BumpOutMaterial::from_material_ref`]
-/// from that library instead of installing a competing [`MaterialRefPlugin`].
+/// Inserts bump-out material caches. Idempotent.
+pub fn init_bump_out_material_caches(app: &mut App) {
+	app.init_resource::<StandardMaterialRefCache>()
+		.init_resource::<BumpOutMaterialRefCache>();
+}
+
+/// Claims `"chico_bump_out"` only. Does not fall through to [`StandardMaterial`].
 #[derive(SystemParam)]
 pub struct BumpOutMaterialLib<'w> {
-	pub standard: StandardMaterialLib<'w>,
 	pub materials: ResMut<'w, Assets<BumpOutMaterial>>,
 	pub cache: ResMut<'w, BumpOutMaterialRefCache>,
 }
@@ -193,7 +37,12 @@ impl BumpOutMaterialLib<'_> {
 }
 
 impl MaterialLib for BumpOutMaterialLib<'_> {
-	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
 		match &material_ref.name {
 			MaterialId::Name(name) if name == CHICO_BUMP_OUT_MATERIAL => {
 				let handle = self.resolve(material_ref);
@@ -201,32 +50,62 @@ impl MaterialLib for BumpOutMaterialLib<'_> {
 					.entity(entity)
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert((MeshMaterial3d(handle), NotShadowCaster));
+				true
 			}
-			_ => self.standard.fulfill(entity, material_ref, commands),
+			_ => false,
 		}
 	}
 }
 
+/// Bump-out crate standalone lib: bump-out recipes, then [`StandardMaterialLib`].
+#[derive(SystemParam)]
+pub struct BumpOutStandaloneMaterialLib<'w> {
+	pub bump_out: BumpOutMaterialLib<'w>,
+	pub standard: StandardMaterialLib<'w>,
+}
+
+impl MaterialLib for BumpOutStandaloneMaterialLib<'_> {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
+		self.bump_out.try_fulfill(entity, material_ref, commands)
+			|| self.standard.try_fulfill(entity, material_ref, commands)
+	}
+
+	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
+		let _ = self.try_fulfill(entity, material_ref, commands);
+	}
+}
+
 /// Registers caches and deferred [`MaterialRef`] fulfillment for a standalone bump-out app.
+///
+/// Vegetation / world apps that compose several domain libs should call
+/// [`init_bump_out_material_caches`] and skip this plugin.
 pub struct BumpOutMaterialRefPlugin;
 
 impl Plugin for BumpOutMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<StandardMaterialRefCache>()
-			.init_resource::<BumpOutMaterialRefCache>()
-			.add_plugins(MaterialRefPlugin::<BumpOutMaterialLib<'_>>::default());
+		init_bump_out_material_caches(app);
+		if material_ref::material_ref_plugin_installed(app) {
+			return;
+		}
+		app.add_plugins(MaterialRefPlugin::<BumpOutStandaloneMaterialLib<'_>>::default());
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	use chico_vegetation_shaders::{
+		BumpOutUniform, RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION,
+		RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
+	};
 	use procedural_common::NoiseParams;
 
 	use super::*;
-	use crate::{
-		BumpOutNeighborhood, RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION,
-		RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
-	};
+	use crate::{BumpOutNeighborhood, BumpOutStyle};
 
 	#[test]
 	fn material_ref_maps_raster_channels() {

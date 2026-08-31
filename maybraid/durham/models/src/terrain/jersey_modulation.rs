@@ -3,13 +3,14 @@
 use crate::terrain::sdf::{ElevationModulation, TerrainSdf};
 use jersey_terrain_stamps::JerseyModulation;
 use marazion_watersheds::HydroComplex;
+use std::sync::Arc;
 
 /// One elevation op in the final terrain stack.
 #[derive(Debug, Clone)]
 pub enum ComposedElevationOp {
 	Jersey(JerseyModulation),
-	/// Indexed hydrology complex (internally carve → rim → apron).
-	Hydro(HydroComplex),
+	/// Shared indexed hydrology complex (internally carve → rim → apron).
+	Hydro(Arc<HydroComplex>),
 }
 
 impl ComposedElevationOp {
