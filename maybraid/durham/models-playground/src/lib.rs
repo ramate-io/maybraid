@@ -20,15 +20,16 @@ use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use character::{apply_set_character, drive_player_locomotion};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
-	RequestModeFree,
+	RequestModeFree, RequestSeed,
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use debug_bounds::{setup_cell_location_hud, update_cell_location_hud, PlaygroundDebugOverlay};
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin,
+	JerseyStampConfigs, MarazionWatershedConfigs, OuterCellRing, Terrain, TerrainCellLayout,
+	TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
+	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
@@ -43,10 +44,10 @@ use std::f32::consts::PI;
 /// Fine-grid half-extent in base cells (covers rings through base-sized `res_2 = 2`).
 /// World footprint `[-R·s, R·s)` so it abuts the 2× outer-ring tiles.
 ///
-/// Cumulative fine bands: 4 + 2 + 2 + 8 = 16.
-const PLAYGROUND_FINE_HALF_EXTENT_CELLS: i32 = 16;
+/// Cumulative fine bands: 4 + 2 + 2 + 8 + 8 = 24.
+const PLAYGROUND_FINE_HALF_EXTENT_CELLS: i32 = 24;
 
-/// Nested macro rings beyond the fine footprint (world half-extent → 24s, then 32s).
+/// Nested macro rings beyond the fine footprint (world half-extent → 32s, then 40s).
 const PLAYGROUND_OUTER_2X_ROWS: i32 = 4; // 4 × 2s = 8s
 const PLAYGROUND_OUTER_4X_ROWS: i32 = 2; // 2 × 4s = 8s
 
@@ -55,13 +56,15 @@ const PLAYGROUND_OUTER_4X_ROWS: i32 = 2; // 2 × 4s = 8s
 /// - `r ≤ 6` (+2) → 4
 /// - `r ≤ 8` (+2) → 3
 /// - `r ≤ 16` (+8) → 2
-/// Then 2× cells to world radius 24s, then 4× cells to 32s (both `res_2 = 2`).
+/// - `r ≤ 24` (+8) → 2
+/// Then 2× cells to world radius 32s, then 4× cells to 40s (both `res_2 = 2`).
 fn playground_lod_bands() -> Vec<TerrainMeshLodBand> {
 	vec![
 		TerrainMeshLodBand { max_radius_cells: 4, res_2: 5 },
 		TerrainMeshLodBand { max_radius_cells: 6, res_2: 4 },
 		TerrainMeshLodBand { max_radius_cells: 8, res_2: 3 },
 		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
+		TerrainMeshLodBand { max_radius_cells: 24, res_2: 2 },
 	]
 }
 
@@ -98,7 +101,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
-			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
+			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
@@ -126,7 +129,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 				(
 					camera_controller,
 					apply_cell_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					apply_set_character.after(apply_cell_commands),
+					apply_seed.after(apply_cell_commands),
+					apply_set_character.after(apply_seed),
 					apply_mode_commands.after(apply_set_character),
 					apply_mesh_stats.after(apply_mode_commands),
 					generate_cells.after(apply_mesh_stats),
@@ -160,13 +164,13 @@ fn setup_lighting(mut commands: Commands) {
 pub(crate) fn setup_presentation_assets(
 	mut commands: Commands,
 	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
-	mut standard_materials: ResMut<Assets<StandardMaterial>>,
+	mut water_materials: ResMut<Assets<RefractionWater>>,
 	config: Res<TerrainConfig>,
 ) {
 	let material = terrain_materials.add(DurhamTerrainShader::default());
 	let s = TERRAIN_CELL_SIZE;
 	let fine_half = PLAYGROUND_FINE_HALF_EXTENT_CELLS as f32 * s;
-	let mid_half = fine_half + PLAYGROUND_OUTER_2X_ROWS as f32 * 2.0 * s; // 24s
+	let mid_half = fine_half + PLAYGROUND_OUTER_2X_ROWS as f32 * 2.0 * s; // 32s
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
@@ -177,14 +181,9 @@ pub(crate) fn setup_presentation_assets(
 		macro_cell_min_size: Some(2.0 * s),
 		macro_res_2: Some(2),
 	});
-	let water_material = standard_materials.add(StandardMaterial {
-		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
-		alpha_mode: AlphaMode::Blend,
-		perceptual_roughness: 0.08,
-		reflectance: 0.6,
-		..default()
+	commands.insert_resource(WaterPresentationAssets {
+		material: water_materials.add(RefractionWater::default()),
 	});
-	commands.insert_resource(WaterPresentationAssets { material: water_material });
 }
 
 fn apply_cell_commands(
@@ -226,6 +225,30 @@ fn apply_cell_commands(
 			"cells size={:.1} origin=({}, {}) extents={}×{} (regen)",
 			layout.cell_size, layout.origin.x, layout.origin.y, layout.extents.x, layout.extents.y
 		);
+		commands.entity(entity).despawn();
+	}
+}
+
+fn apply_seed(
+	mut commands: Commands,
+	mut config: ResMut<TerrainConfig>,
+	mut assets: ResMut<TerrainPresentationAssets>,
+	mut jersey: ResMut<JerseyStampConfigs>,
+	mut marazion: ResMut<MarazionWatershedConfigs>,
+	mut world_base: ResMut<WorldBaseTerrain>,
+	mut dirty: ResMut<TerrainPresentationDirty>,
+	mut status: ResMut<GameCommandStatusText>,
+	requests: Query<(Entity, &RequestSeed)>,
+) {
+	for (entity, request) in &requests {
+		config.seed = request.0;
+		assets.config.seed = request.0;
+		*jersey = JerseyStampConfigs::from_world_seed(request.0);
+		*marazion = MarazionWatershedConfigs::default().with_seed(request.0);
+		world_base.0 = BaseTerrainNoise::from_config(&config);
+		dirty.0 = true;
+		status.0 = format!("seed {} (regen)", request.0);
+		info!("seed {} — regenerating terrain and water", request.0);
 		commands.entity(entity).despawn();
 	}
 }
@@ -407,4 +430,23 @@ fn present_cells(
 	water_presenter.remove_stale(&water_wanted);
 
 	pending.0 = false;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use durham_terrain_models::origin_cell_ids_for_layout;
+
+	#[test]
+	fn playground_fine_grid_is_twenty_four_cells() {
+		assert_eq!(PLAYGROUND_FINE_HALF_EXTENT_CELLS, 24);
+		assert!(playground_lod_bands().iter().any(|band| band.max_radius_cells == 24));
+	}
+
+	#[test]
+	fn playground_origin_cells_cover_fine_disk_plus_macro_rings() {
+		let layout = playground_cell_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		assert_eq!(ids.len(), 48 * 48 + 448 + 144);
+	}
 }

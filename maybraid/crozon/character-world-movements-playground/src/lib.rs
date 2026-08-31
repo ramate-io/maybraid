@@ -23,7 +23,7 @@ use character::{
 };
 use commands::{RequestModeCharacter, RequestModeFree};
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
@@ -76,7 +76,7 @@ impl Plugin for CharacterWorldMovementsPlaygroundPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
-			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
+			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
@@ -131,7 +131,7 @@ fn setup_lighting(mut commands: Commands) {
 fn setup_presentation_assets(
 	mut commands: Commands,
 	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
-	mut standard_materials: ResMut<Assets<StandardMaterial>>,
+	mut water_materials: ResMut<Assets<RefractionWater>>,
 	config: Res<TerrainConfig>,
 ) {
 	let material = terrain_materials.add(DurhamTerrainShader::default());
@@ -145,14 +145,9 @@ fn setup_presentation_assets(
 		macro_cell_min_size: None,
 		macro_res_2: None,
 	});
-	let water_material = standard_materials.add(StandardMaterial {
-		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
-		alpha_mode: AlphaMode::Blend,
-		perceptual_roughness: 0.08,
-		reflectance: 0.6,
-		..default()
+	commands.insert_resource(WaterPresentationAssets {
+		material: water_materials.add(RefractionWater::default()),
 	});
-	commands.insert_resource(WaterPresentationAssets { material: water_material });
 }
 
 fn apply_mode_commands(

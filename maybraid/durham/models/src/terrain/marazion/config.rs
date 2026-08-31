@@ -152,6 +152,18 @@ impl Default for MarazionWatershedConfigs {
 	}
 }
 
+impl MarazionWatershedConfigs {
+	/// Retarget occupancy / cut seeds without changing stamp knobs.
+	pub fn with_seed(mut self, seed: u32) -> Self {
+		self.seed = seed;
+		self.low_pass.pre_pocket.seed = seed;
+		self.low_pass.guillotine.seed = seed;
+		self.high_pass.pre_pocket.seed = seed;
+		self.high_pass.guillotine.seed = seed;
+		self
+	}
+}
+
 pub trait BootstrapMarazionWatershedConfigs {
 	fn bootstrap_marazion_watershed_configs(&self) -> MarazionWatershedConfigs;
 }

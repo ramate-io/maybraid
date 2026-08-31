@@ -32,6 +32,11 @@ pub enum PlaygroundCommand {
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
+	/// Set the world generation seed and regenerate terrain + water.
+	Seed {
+		/// World seed (jersey families offset from this; Marazion uses it directly).
+		value: u32,
+	},
 }
 
 #[derive(Clone, Subcommand)]
@@ -87,6 +92,9 @@ pub struct RequestModeCharacter;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestMeshStats;
 
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestSeed(pub u32);
+
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
 		<Self as GameCommand>::long_help_string()
@@ -107,6 +115,10 @@ impl PlaygroundCommand {
 				*console = format!("set-character {}: pending", species.label());
 			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
+			PlaygroundCommand::Seed { value } => {
+				commands.spawn(RequestSeed(value));
+				*console = format!("seed {value}: regenerating");
+			}
 		}
 	}
 
@@ -177,5 +189,16 @@ impl GameCommand for PlaygroundCommand {
 
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		Self::react(self, commands, console);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn parse_seed() {
+		let cmd = PlaygroundCommand::parse_line("seed 7").expect("parse");
+		assert!(matches!(cmd, PlaygroundCommand::Seed { value: 7 }));
 	}
 }

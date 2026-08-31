@@ -44,7 +44,7 @@ use commands::{
 	RequestModeFree, RequestRebuild, RequestTerrainRadius, RequestTileRadius,
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
 	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
@@ -212,7 +212,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(ChicoBumpOutPlugin)
 			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
-			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default());
+			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default());
 		let (terrain_handles, terrain_disk) = {
 			let caches = app.world().resource::<EnforcedCaches<TerrainMeshBuilder>>();
 			(caches.handle_map(), caches.disk_cache())
@@ -392,7 +392,7 @@ fn setup_lighting(mut commands: Commands) {
 fn setup_presentation_assets(
 	mut commands: Commands,
 	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
-	mut standard_materials: ResMut<Assets<StandardMaterial>>,
+	mut water_materials: ResMut<Assets<RefractionWater>>,
 	config: Res<TerrainConfig>,
 	playground: Res<PlaygroundConfig>,
 ) {
@@ -416,14 +416,9 @@ fn setup_presentation_assets(
 		macro_cell_min_size,
 		macro_res_2,
 	});
-	let water_material = standard_materials.add(StandardMaterial {
-		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
-		alpha_mode: AlphaMode::Blend,
-		perceptual_roughness: 0.08,
-		reflectance: 0.6,
-		..default()
+	commands.insert_resource(WaterPresentationAssets {
+		material: water_materials.add(RefractionWater::default()),
 	});
-	commands.insert_resource(WaterPresentationAssets { material: water_material });
 }
 
 fn apply_commands(
