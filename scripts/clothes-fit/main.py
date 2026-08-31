@@ -6,9 +6,10 @@ armature). This script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-Pipeline: shrinkwrap Outside onto an inflated body (keep-out), push verts a
-little farther along body normals (slack), Cloth-simulate against the render
-body, apply Cloth, keep existing vertex groups.
+Pipeline: shrinkwrap Outside onto an inflated body (pre-cloth keep-out), push
+verts a little farther along body normals (slack), Cloth-simulate against the
+render body, light-smooth the unpinned verts, then Outside keep-out onto the
+render body plus a small clearance. Topology and existing vertex groups stay.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -72,6 +73,24 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
         type=int,
         default=24,
         help="Frames to simulate cloth drape (default: 24)",
+    )
+    parser.add_argument(
+        "--smooth",
+        type=int,
+        default=3,
+        help="Laplacian-smooth iterations after cloth (default: 3; 0 skips)",
+    )
+    parser.add_argument(
+        "--smooth-factor",
+        type=float,
+        default=0.35,
+        help="Smooth strength per iteration (default: 0.35)",
+    )
+    parser.add_argument(
+        "--keep-out",
+        type=float,
+        default=0.02,
+        help="Post-cloth Outside clearance from the render body, meters (default: 0.02; negative skips)",
     )
     parser.add_argument(
         "--garment",
@@ -305,9 +324,7 @@ def _moved_vert_count(before: list[float], after: list[float], eps: float = 1e-5
     return moved
 
 
-def _shrinkwrap_outside(garment, target) -> None:
-    import bpy
-
+def _shrinkwrap_outside(garment, target, *, label: str = "OUTSIDE") -> None:
     before = _coords(garment)
     name = "ClothesFitWrap"
     existing = garment.modifiers.get(name)
@@ -322,7 +339,53 @@ def _shrinkwrap_outside(garment, target) -> None:
     _apply_modifier(garment, name)
     after = _coords(garment)
     print(
-        f"shrinkwrap OUTSIDE verts={len(garment.data.vertices)} moved={_moved_vert_count(before, after)}"
+        f"shrinkwrap {label} verts={len(garment.data.vertices)} "
+        f"moved={_moved_vert_count(before, after)}"
+    )
+
+
+def _group_indices(obj, name: str, min_weight: float = 0.25) -> set[int]:
+    group = obj.vertex_groups.get(name)
+    if group is None:
+        return set()
+    gid = group.index
+    return {
+        vert.index
+        for vert in obj.data.vertices
+        if any(
+            membership.group == gid and membership.weight >= min_weight
+            for membership in vert.groups
+        )
+    }
+
+
+def _smooth_garment(obj, *, iterations: int, factor: float, pin_group: str) -> None:
+    import bmesh
+
+    if iterations <= 0 or factor <= 0.0:
+        return
+    pinned = _group_indices(obj, pin_group)
+    before = _coords(obj)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    verts = [vert for vert in bm.verts if vert.index not in pinned]
+    for _ in range(iterations):
+        bmesh.ops.smooth_vert(
+            bm,
+            verts=verts,
+            factor=factor,
+            use_axis_x=True,
+            use_axis_y=True,
+            use_axis_z=True,
+        )
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+    after = _coords(obj)
+    print(
+        f"smooth {iterations}x factor={factor} "
+        f"moved={_moved_vert_count(before, after)} skipped_pins={len(pinned)}"
     )
 
 
@@ -518,7 +581,15 @@ def main() -> None:
     _inflate_along_normals(wrap_body, args.inflate)
     _recalc_normals(wrap_body)
 
-    garments = _garment_objects(args.garment, exclude=[body, wrap_body])
+    keep_body = None
+    if args.keep_out >= 0.0:
+        keep_body = _copy_mesh(body, "FitKeepOut")
+        _recalc_normals(keep_body)
+        _inflate_along_normals(keep_body, args.keep_out)
+        _recalc_normals(keep_body)
+
+    exclude = [body, wrap_body] + ([keep_body] if keep_body is not None else [])
+    garments = _garment_objects(args.garment, exclude=exclude)
     armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
     if not armatures:
         print("main.py: no armature in the clothing scene", file=sys.stderr)
@@ -527,7 +598,7 @@ def main() -> None:
     for garment in garments:
         disabled = _disable_armature_modifiers(garment)
         print(f"fit {garment.name} verts={len(garment.data.vertices)}")
-        _shrinkwrap_outside(garment, wrap_body)
+        _shrinkwrap_outside(garment, wrap_body, label="OUTSIDE pre-cloth")
         _inflate_along_body_normals(garment, body, args.ease)
         pin = _make_pin_group(garment)
         _drape_cloth(
@@ -537,12 +608,26 @@ def main() -> None:
             gap=args.collision_gap,
             pin_group=pin,
         )
+        _smooth_garment(
+            garment,
+            iterations=args.smooth,
+            factor=args.smooth_factor,
+            pin_group=pin,
+        )
+        if keep_body is not None:
+            _shrinkwrap_outside(
+                garment,
+                keep_body,
+                label=f"OUTSIDE keep-out {args.keep_out}m",
+            )
         pin_vg = garment.vertex_groups.get(pin)
         if pin_vg is not None:
             garment.vertex_groups.remove(pin_vg)
         _restore_armature_modifiers(disabled)
         _assert_reasonable_bounds(garment)
 
+    if keep_body is not None:
+        _delete(keep_body)
     _delete(wrap_body)
     _delete(body)
     _export_glb(output_path, garments + armatures)

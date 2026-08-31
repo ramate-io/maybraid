@@ -8,7 +8,8 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Outside wrap onto an inflated body, a little body-normal ease, Cloth drape.
+# Outside wrap onto an inflated body, a little body-normal ease, Cloth drape,
+# light smooth, then Outside keep-out on the render body.
 
 set -euo pipefail
 
@@ -25,6 +26,9 @@ INFLATE=0.04
 EASE=0.02
 COLLISION_GAP=0.015
 CLOTH_FRAMES=24
+SMOOTH=3
+SMOOTH_FACTOR=0.35
+KEEP_OUT=0.02
 ALL=0
 CLOTHES_STEMS=()
 BODY_STEMS=()
@@ -42,6 +46,9 @@ Usage:
   --ease            Extra push along body normals after wrap, meters (default: ${EASE})
   --collision-gap   Cloth vs body thickness, meters (default: ${COLLISION_GAP})
   --cloth-frames    Cloth simulation frames (default: ${CLOTH_FRAMES}; 0 skips cloth)
+  --smooth          Smooth iterations after cloth (default: ${SMOOTH}; 0 skips)
+  --smooth-factor   Smooth strength per iteration (default: ${SMOOTH_FACTOR})
+  --keep-out        Post-cloth Outside clearance, meters (default: ${KEEP_OUT}; negative skips)
 EOF
 }
 
@@ -73,6 +80,18 @@ while [ "$#" -gt 0 ]; do
             ;;
         --cloth-frames)
             CLOTH_FRAMES="$2"
+            shift 2
+            ;;
+        --smooth)
+            SMOOTH="$2"
+            shift 2
+            ;;
+        --smooth-factor)
+            SMOOTH_FACTOR="$2"
+            shift 2
+            ;;
+        --keep-out)
+            KEEP_OUT="$2"
             shift 2
             ;;
         -h|--help)
@@ -149,7 +168,10 @@ for clothes in "${CLOTHES_STEMS[@]}"; do
             --inflate "$INFLATE" \
             --ease "$EASE" \
             --collision-gap "$COLLISION_GAP" \
-            --cloth-frames "$CLOTH_FRAMES"; then
+            --cloth-frames "$CLOTH_FRAMES" \
+            --smooth "$SMOOTH" \
+            --smooth-factor "$SMOOTH_FACTOR" \
+            --keep-out "$KEEP_OUT"; then
             echo "Failed to fit ${clothes} onto ${body}" >&2
             exit 1
         fi
