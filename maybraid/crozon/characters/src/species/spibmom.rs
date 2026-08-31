@@ -14,7 +14,7 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
 
 pub use assets::{SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh};
 pub use palette::{
@@ -137,7 +137,7 @@ impl CharacterRecipe for SpibmomConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::WUMBUS, |mesh| {
 			self.colors.clothing_color(mesh)
 		})
 	}

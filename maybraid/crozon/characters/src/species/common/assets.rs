@@ -94,6 +94,14 @@ impl BodyMesh {
 			Self::Full => BODY_FULL,
 		}
 	}
+
+	pub const fn clothing_host(self) -> crozon_character_items::ClothingHost {
+		use crozon_character_items::ClothingHost;
+		match self {
+			Self::Standard => ClothingHost::HUMANOID,
+			Self::Full => ClothingHost::LERON,
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]

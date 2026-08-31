@@ -8,8 +8,9 @@ use crozon_characters::{
 		brodler::{Brodler, BrodlerConfig},
 		caole::{Caole, CaoleConfig},
 		claber::{Claber, ClaberConfig},
-		common::nodes as humanoid,
+		common::{nodes as humanoid, BodyMesh},
 		croconot::{Croconot, CroconotConfig},
+		dui::DuiConfig,
 		epiphant::{Epiphant, EpiphantConfig},
 		hars::{Hars, HarsConfig},
 		sonyak::{Sonyak, SonyakConfig},
@@ -81,6 +82,49 @@ fn clothed_braidman_adds_clothing_layer() {
 	assert_eq!(clothed_parts.len(), inner_len + 1);
 	assert!(clothed_parts.labeled.contains_key(&Layer::new("clothing")));
 	assert_eq!(clothed.rig_nodes_for_level(LodSceneLevel::High).len(), 2);
+}
+
+fn clothing_scene_path(config: &impl CharacterRecipe) -> String {
+	config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.find(|part| part.slot == CharacterPartSlot::Clothing)
+		.map(|part| part.scene.path)
+		.expect("clothing part")
+}
+
+#[test]
+fn tank_top_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/tank_top.glb"
+	);
+}
+
+#[test]
+fn tank_top_on_full_braidman_uses_leron_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Full;
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/leron_biped_full_body/tank_top.glb"
+	);
+}
+
+#[test]
+fn tank_top_on_dui_uses_igeo_fit() {
+	let mut config = DuiConfig::default_preview();
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/igeo_biped_full_body/tank_top.glb"
+	);
 }
 
 #[test]

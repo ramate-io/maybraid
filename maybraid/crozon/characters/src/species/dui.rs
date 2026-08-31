@@ -11,7 +11,7 @@ pub mod pose;
 
 use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
 
 pub use assets::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh};
 pub use palette::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor};
@@ -120,7 +120,7 @@ impl CharacterRecipe for DuiConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::IGEO, |mesh| {
 			self.colors.clothing_color(mesh)
 		})
 	}

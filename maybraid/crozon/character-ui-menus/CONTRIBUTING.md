@@ -13,14 +13,20 @@ new garment.
 
 To expose a new clothing mesh in both species:
 
-1. Export the `.glb` under `maybraid/assets/characters/clothes/body/` (or
-   `clothes/head/` for hoods and other head wraps).
+1. Export the canonical `.glb` under `maybraid/assets/characters/clothes/body/` (or
+   `clothes/head/` for hoods and other head wraps). Menu thumbnails always use this
+   catalog path.
 2. In `maybraid/crozon/character-items/src/clothing.rs`:
    - Add a `CLOTHING_*` path constant for the file.
    - Add a variant to `ClothingMesh`.
    - Append it to `ClothingMesh::VALUES`.
-   - Add matching `label()` and `path()` arms. Labels use kebab-case (for example
-     `harem-pants-upper`); asset filenames may use snake_case.
+   - Add matching `label()`, `file_stem()`, and `path()` arms. Labels use kebab-case
+     (for example `harem-pants-upper`); asset filenames may use snake_case.
+   - If the garment has per-body fitted GLBs, return `true` from `uses_host_fit()`
+     and generate files at `clothes/{slot}/{body_stem}/{file_stem}.glb` via
+     `scripts/clothes-fit/fit.sh`. Species recipes pass a `ClothingHost` so
+     assembly loads the wrap for that body; slot mismatch (hood + body host) falls
+     back to the canonical path.
 3. `ListValues` and `AssetOption` for `ClothingMesh` in `crozon_characters` pick up the
    new variant automatically, so the UI, CLI (`--clothing`), and preview assembly work
    without further changes in this crate.

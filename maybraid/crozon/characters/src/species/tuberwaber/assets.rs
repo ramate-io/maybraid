@@ -25,6 +25,10 @@ impl TuberwaberBodyMesh {
 	pub const fn path(self) -> AssetPath {
 		BODY_TUBERWABER
 	}
+
+	pub const fn clothing_host(self) -> crozon_character_items::ClothingHost {
+		crozon_character_items::ClothingHost::TUBERWABER
+	}
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]

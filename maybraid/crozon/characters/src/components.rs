@@ -4,7 +4,7 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Component, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use crozon_character_items::{ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingHost, ClothingMesh, ItemColor};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
@@ -43,12 +43,16 @@ pub trait CharacterRecipe {
 	}
 }
 
-/// Map selected clothing meshes to [`ClothingLayer`]s with per-mesh colors.
+/// Map selected clothing meshes to [`ClothingLayer`]s fitted to `host`.
 pub fn clothing_layers(
 	clothing: impl IntoIterator<Item = ClothingMesh>,
+	host: ClothingHost,
 	mut color: impl FnMut(ClothingMesh) -> ItemColor,
 ) -> Vec<ClothingLayer> {
-	clothing.into_iter().map(|mesh| ClothingLayer::new(mesh, color(mesh))).collect()
+	clothing
+		.into_iter()
+		.map(|mesh| ClothingLayer::new(mesh, color(mesh), host))
+		.collect()
 }
 
 impl<T: CharacterComponents + ?Sized> CharacterComponents for &T {
@@ -66,18 +70,19 @@ impl<T: CharacterComponents + ?Sized> CharacterComponents for &T {
 pub struct ClothingLayer {
 	pub mesh: ClothingMesh,
 	pub color: ItemColor,
+	pub host: ClothingHost,
 }
 
 impl ClothingLayer {
-	pub fn new(mesh: ClothingMesh, color: ItemColor) -> Self {
-		Self { mesh, color }
+	pub fn new(mesh: ClothingMesh, color: ItemColor, host: ClothingHost) -> Self {
+		Self { mesh, color, host }
 	}
 
 	pub fn part_node(&self) -> PartNode {
 		PartNode::glb(
 			CharacterPartSlot::Clothing,
 			self.mesh.label(),
-			self.mesh.path(),
+			self.mesh.path_on(self.host),
 			AssetNormalization::IDENTITY,
 		)
 		.skinned(SkinRef::to(RigId::Body))

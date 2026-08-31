@@ -7,6 +7,8 @@
 # Canonical garments in maybraid/art/characters/clothes/body/ are not modified.
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
+#
+# Wrap target is a temporary body cage (subsurf + inflate), not the garment.
 
 set -euo pipefail
 
@@ -19,8 +21,10 @@ OUT_DIR="$REPO_ROOT/maybraid/assets/characters/clothes/body"
 SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
-INFLATE=0.2
-OFFSET=0.02
+INFLATE=0.04
+OFFSET=0.04
+CAGE_SUBSURF=1
+THICKNESS=0
 ALL=0
 CLOTHES_STEMS=()
 BODY_STEMS=()
@@ -28,14 +32,16 @@ BODY_STEMS=()
 usage() {
     cat <<EOF
 Usage:
-  $(basename "$0") --clothes <stem> --body <stem> [--inflate M] [--offset M]
-  $(basename "$0") --all [--inflate M] [--offset M]
+  $(basename "$0") --clothes <stem> --body <stem> [options]
+  $(basename "$0") --all [options]
 
-  --clothes   Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
-  --body      Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
-  --all       Fit every body-slot garment onto every biped mesh body
-  --inflate   Normal inflate before wrap (default: ${INFLATE})
-  --offset    Shrinkwrap keep-above offset (default: ${OFFSET})
+  --clothes         Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
+  --body            Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
+  --all             Fit every body-slot garment onto every biped mesh body
+  --inflate         Cage inflate along normals, meters (default: ${INFLATE})
+  --offset          Keep-above offset from the cage, meters (default: ${OFFSET})
+  --cage-subsurf    Catmull-Clark levels on the wrap cage (default: ${CAGE_SUBSURF})
+  --thickness       Solidify thickness after wrap, meters (default: ${THICKNESS}; 0 skips)
 EOF
 }
 
@@ -59,6 +65,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --offset)
             OFFSET="$2"
+            shift 2
+            ;;
+        --cage-subsurf)
+            CAGE_SUBSURF="$2"
+            shift 2
+            ;;
+        --thickness)
+            THICKNESS="$2"
             shift 2
             ;;
         -h|--help)
@@ -133,7 +147,9 @@ for clothes in "${CLOTHES_STEMS[@]}"; do
             --body "$body_blend" \
             --output "$out" \
             --inflate "$INFLATE" \
-            --offset "$OFFSET"; then
+            --offset "$OFFSET" \
+            --cage-subsurf "$CAGE_SUBSURF" \
+            --thickness "$THICKNESS"; then
             echo "Failed to fit ${clothes} onto ${body}" >&2
             exit 1
         fi

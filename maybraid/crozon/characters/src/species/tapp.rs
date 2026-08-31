@@ -15,7 +15,7 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
 
 pub use assets::{TappBeakMesh, TappHeadMesh};
 pub use palette::{TappBeakColor, TappEyeColor, TappPlumageColor};
@@ -124,7 +124,7 @@ impl CharacterRecipe for TappConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::WHELP, |mesh| {
 			self.colors.clothing_color(mesh)
 		})
 	}

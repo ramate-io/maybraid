@@ -6,9 +6,9 @@ armature). This script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-Steps: append the body's rest-pose mesh, inflate the garment along normals,
-shrinkwrap onto the body with a keep-above-surface offset, apply those
-deforms, drop the body, export the garment and armature.
+The wrap target is a temporary body *cage*: Catmull-Clark subsurf, then inflate
+along normals. The garment shrinkwraps onto that cage (nearest surface, keep-above
+offset). The render body is not modified.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -41,21 +41,33 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Inflate and shrinkwrap an open clothing blend onto a body"
+        description="Wrap an open clothing blend onto an inflated body cage"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
     parser.add_argument(
         "--inflate",
         type=float,
-        default=0.2,
-        help="Meters to push garment vertices along normals before wrap (default: 0.2)",
+        default=0.04,
+        help="Meters to push cage vertices along normals before wrap (default: 0.04)",
     )
     parser.add_argument(
         "--offset",
         type=float,
-        default=0.02,
-        help="Shrinkwrap keep-above-surface offset in meters (default: 0.02)",
+        default=0.04,
+        help="Keep-above-surface offset from the cage in meters (default: 0.04)",
+    )
+    parser.add_argument(
+        "--cage-subsurf",
+        type=int,
+        default=1,
+        help="Catmull-Clark levels on the wrap cage (default: 1; 0 skips)",
+    )
+    parser.add_argument(
+        "--thickness",
+        type=float,
+        default=0.0,
+        help="Solidify thickness after wrap, meters (default: 0 skips)",
     )
     parser.add_argument(
         "--garment",
@@ -86,6 +98,19 @@ def _select_only(objects) -> None:
         obj.select_set(True)
     if objects:
         bpy.context.view_layer.objects.active = objects[0]
+
+
+def _apply_modifier(obj, name: str) -> None:
+    import bpy
+
+    _select_only([obj])
+    ctx = bpy.context.copy()
+    ctx["object"] = obj
+    ctx["active_object"] = obj
+    ctx["selected_objects"] = [obj]
+    ctx["selected_editable_objects"] = [obj]
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.modifier_apply(modifier=name)
 
 
 def _append_body_meshes(body_path: str):
@@ -173,6 +198,18 @@ def _restore_armature_modifiers(disabled) -> None:
         mod.show_render = render
 
 
+def _recalc_normals(obj) -> None:
+    import bmesh
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+
+
 def _inflate_along_normals(obj, distance: float) -> None:
     import bmesh
 
@@ -181,14 +218,43 @@ def _inflate_along_normals(obj, distance: float) -> None:
     mesh = obj.data
     bm = bmesh.new()
     bm.from_mesh(mesh)
+    bm.normal_update()
     bm.verts.ensure_lookup_table()
-    for vert in bm.verts:
-        vert.normal_update()
     for vert in bm.verts:
         vert.co += vert.normal * distance
     bm.to_mesh(mesh)
     bm.free()
     mesh.update()
+
+
+def _apply_subsurf(obj, levels: int) -> None:
+    import bpy
+
+    if levels <= 0:
+        return
+    name = "FitCageSubsurf"
+    existing = obj.modifiers.get(name)
+    if existing is not None:
+        obj.modifiers.remove(existing)
+    mod = obj.modifiers.new(name, "SUBSURF")
+    mod.subdivision_type = "CATMULL_CLARK"
+    mod.levels = levels
+    mod.render_levels = levels
+    _apply_modifier(obj, name)
+
+
+def _make_cage(body, *, subsurf_levels: int, inflate: float):
+    import bpy
+
+    cage = body.copy()
+    cage.data = body.data.copy()
+    cage.name = "FitCage"
+    bpy.context.scene.collection.objects.link(cage)
+    _apply_subsurf(cage, subsurf_levels)
+    _recalc_normals(cage)
+    _inflate_along_normals(cage, inflate)
+    _recalc_normals(cage)
+    return cage
 
 
 def _shrinkwrap(garment, target, offset: float) -> None:
@@ -205,15 +271,38 @@ def _shrinkwrap(garment, target, offset: float) -> None:
     wrap.offset = offset
     # Apply against rest-pose verts; armature stays on the stack but disabled.
     garment.modifiers.move(garment.modifiers.find(name), 0)
+    _apply_modifier(garment, name)
 
-    _select_only([garment])
-    ctx = bpy.context.copy()
-    ctx["object"] = garment
-    ctx["active_object"] = garment
-    ctx["selected_objects"] = [garment]
-    ctx["selected_editable_objects"] = [garment]
-    with bpy.context.temp_override(**ctx):
-        bpy.ops.object.modifier_apply(modifier=name)
+
+def _solidify(obj, thickness: float) -> None:
+    import bpy
+
+    if thickness <= 0.0:
+        return
+    name = "ClothesFitSolidify"
+    existing = obj.modifiers.get(name)
+    if existing is not None:
+        obj.modifiers.remove(existing)
+    mod = obj.modifiers.new(name, "SOLIDIFY")
+    mod.thickness = thickness
+    # Original (wrapped) surface stays inner; new verts go outward.
+    mod.offset = 1.0
+    mod.use_even_offset = True
+    obj.modifiers.move(obj.modifiers.find(name), 0)
+    _apply_modifier(obj, name)
+
+
+def _assert_reasonable_bounds(obj, max_extent: float = 5.0) -> None:
+    import bpy
+
+    bpy.context.view_layer.update()
+    extent = max(obj.dimensions)
+    if extent > max_extent:
+        print(
+            f"main.py: garment {obj.name} extent {tuple(obj.dimensions)} exceeds {max_extent}m",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def _export_glb(output_path: str, objects) -> None:
@@ -263,8 +352,13 @@ def main() -> None:
 
     _object_mode()
     targets = _append_body_meshes(body_path)
-    target = _join_targets(targets)
-    garments = _garment_objects(args.garment, exclude=[target])
+    body = _join_targets(targets)
+    cage = _make_cage(
+        body,
+        subsurf_levels=args.cage_subsurf,
+        inflate=args.inflate,
+    )
+    garments = _garment_objects(args.garment, exclude=[body, cage])
     armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
     if not armatures:
         print("main.py: no armature in the clothing scene", file=sys.stderr)
@@ -272,11 +366,13 @@ def main() -> None:
 
     for garment in garments:
         disabled = _disable_armature_modifiers(garment)
-        _inflate_along_normals(garment, args.inflate)
-        _shrinkwrap(garment, target, args.offset)
+        _shrinkwrap(garment, cage, args.offset)
+        _solidify(garment, args.thickness)
         _restore_armature_modifiers(disabled)
+        _assert_reasonable_bounds(garment)
 
-    bpy.data.objects.remove(target, do_unlink=True)
+    bpy.data.objects.remove(cage, do_unlink=True)
+    bpy.data.objects.remove(body, do_unlink=True)
 
     _export_glb(output_path, garments + armatures)
 

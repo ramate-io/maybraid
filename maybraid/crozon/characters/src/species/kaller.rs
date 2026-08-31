@@ -15,7 +15,7 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
 
 pub use assets::{KallerHeadMesh, KallerHornMesh, KallerSnoutMesh};
 pub use palette::{KallerCrownColor, KallerEyeColor, KallerPlumageColor, KallerSnoutColor};
@@ -125,7 +125,7 @@ impl CharacterRecipe for KallerConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::SPARROW, |mesh| {
 			self.colors.clothing_color(mesh)
 		})
 	}

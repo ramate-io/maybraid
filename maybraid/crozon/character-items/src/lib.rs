@@ -11,5 +11,5 @@ pub mod palette;
 
 mod menu_traits;
 
-pub use clothing::{ClothingColor, ClothingMesh};
+pub use clothing::{ClothingColor, ClothingHost, ClothingMesh, ClothingSlot};
 pub use palette::ItemColor;

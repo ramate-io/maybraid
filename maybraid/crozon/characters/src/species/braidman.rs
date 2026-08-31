@@ -187,7 +187,7 @@ impl CharacterRecipe for BraidmanConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
+		crate::clothing_layers(self.clothing.iter().copied(), self.body.clothing_host(), |mesh| {
 			self.colors.clothing_color(mesh)
 		})
 	}
