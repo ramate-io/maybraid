@@ -13,9 +13,10 @@ new garment.
 
 To expose a new clothing mesh in both species:
 
-1. Export the `.glb` under `maybraid/assets/characters/clothes/`.
-2. In `maybraid/crozon/characters/src/species/common/assets.rs`:
-   - Add a `CLOTHING_*` `AssetPath` constant for the file.
+1. Export the `.glb` under `maybraid/assets/characters/clothes/body/` (or
+   `clothes/head/` for hoods and other head wraps).
+2. In `maybraid/crozon/character-items/src/clothing.rs`:
+   - Add a `CLOTHING_*` path constant for the file.
    - Add a variant to `ClothingMesh`.
    - Append it to `ClothingMesh::VALUES`.
    - Add matching `label()` and `path()` arms. Labels use kebab-case (for example

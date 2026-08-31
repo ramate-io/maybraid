@@ -61,7 +61,7 @@ impl CharacterComponents for Tipple {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("whelp", "characters/bodies/whelp_bird.glb")],
+			vec![humanoid::body_part("whelp", "characters/bodies/biped/whelp_bird.glb")],
 		);
 		out.extend_labeled(
 			"head",

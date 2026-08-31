@@ -1,2 +1,8 @@
 [tool.uv.workspace]
-members = ["scripts/glb", "scripts/armature-dump", "scripts/iconography-png"]
+members = [
+	"scripts/glb",
+	"scripts/armature-dump",
+	"scripts/iconography-png",
+	"scripts/blend-relink",
+	"scripts/clothes-fit",
+]

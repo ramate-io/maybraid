@@ -60,7 +60,7 @@ impl CharacterComponents for Lidder {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("crane", "characters/bodies/crane_body.glb")],
+			vec![humanoid::body_part("crane", "characters/bodies/biped/crane_body.glb")],
 		);
 		out.extend_labeled(
 			"head",

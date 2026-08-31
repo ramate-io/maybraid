@@ -4,21 +4,22 @@ use clap::ValueEnum;
 
 use crate::palette::ItemColor;
 
-const CLOTHING_BASKETBALL_CUT_SHIRT: &str = "characters/clothes/basketball_cut_shirt.glb";
-const CLOTHING_TUNIC: &str = "characters/clothes/tunic.glb";
-const CLOTHING_LONG_DRESS: &str = "characters/clothes/long_dress.glb";
-const CLOTHING_SHORT_DRESS: &str = "characters/clothes/short_dress.glb";
-const CLOTHING_FITTED_COAT: &str = "characters/clothes/fitted_coat.glb";
-const CLOTHING_QUARTER_COAT: &str = "characters/clothes/quarter_coat.glb";
-const CLOTHING_ROBE_COAT: &str = "characters/clothes/robe_coat.glb";
-const CLOTHING_SHORT_SLEEVED_ROBE_COAT: &str = "characters/clothes/short_sleeved_robe_coat.glb";
-const CLOTHING_TAILORED_COAT: &str = "characters/clothes/tailored_coat.glb";
-const CLOTHING_HOOD: &str = "characters/clothes/hood.glb";
-const CLOTHING_PANTS: &str = "characters/clothes/pants.glb";
-const CLOTHING_KNEE_HIGH_BOOTS: &str = "characters/clothes/knee_high_boots.glb";
-const CLOTHING_HAREM_PANTS: &str = "characters/clothes/harem_pants_unified.glb";
-const CLOTHING_HAREM_PANTS_UPPER: &str = "characters/clothes/harem_pants_top.glb";
-const CLOTHING_HAREM_PANTS_LOWER_WRAP: &str = "characters/clothes/harem_pants_bottom_wrap.glb";
+const CLOTHING_BASKETBALL_CUT_SHIRT: &str = "characters/clothes/body/basketball_cut_shirt.glb";
+const CLOTHING_TUNIC: &str = "characters/clothes/body/tunic.glb";
+const CLOTHING_LONG_DRESS: &str = "characters/clothes/body/long_dress.glb";
+const CLOTHING_SHORT_DRESS: &str = "characters/clothes/body/short_dress.glb";
+const CLOTHING_FITTED_COAT: &str = "characters/clothes/body/fitted_coat.glb";
+const CLOTHING_QUARTER_COAT: &str = "characters/clothes/body/quarter_coat.glb";
+const CLOTHING_ROBE_COAT: &str = "characters/clothes/body/robe_coat.glb";
+const CLOTHING_SHORT_SLEEVED_ROBE_COAT: &str =
+	"characters/clothes/body/short_sleeved_robe_coat.glb";
+const CLOTHING_TAILORED_COAT: &str = "characters/clothes/body/tailored_coat.glb";
+const CLOTHING_HOOD: &str = "characters/clothes/head/hood.glb";
+const CLOTHING_PANTS: &str = "characters/clothes/body/pants.glb";
+const CLOTHING_KNEE_HIGH_BOOTS: &str = "characters/clothes/body/knee_high_boots.glb";
+const CLOTHING_HAREM_PANTS: &str = "characters/clothes/body/harem_pants_unified.glb";
+const CLOTHING_HAREM_PANTS_UPPER: &str = "characters/clothes/body/harem_pants_top.glb";
+const CLOTHING_HAREM_PANTS_LOWER_WRAP: &str = "characters/clothes/body/harem_pants_bottom_wrap.glb";
 
 /// Shared clothing catalog; layers compose across species.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
