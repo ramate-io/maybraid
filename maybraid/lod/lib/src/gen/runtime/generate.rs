@@ -9,9 +9,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
-	keep_region_changed, GeneratingSpatialIndex, GenerationScheme, Id, MaterializeStatus,
-	StorageStatus, QUEUE_KEEP_SLACK_XZ,
+	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
+	GeneratingSpatialIndex, GenerationScheme, Id, MaterializeStatus, StorageStatus,
+	QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -60,16 +60,121 @@ impl Default for LodGenerateBudget {
 	}
 }
 
+/// Shared generate allowance split fairly across all registered drains.
+///
+/// Remainder slots rotate between drain identities each frame, so a budget
+/// smaller than the number of types cannot permanently starve later systems.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LodGenerateBudgetClock {
+	remaining: u32,
+	total: u32,
+	drain_count: u32,
+	extra_start: u32,
+	next_extra_start: u32,
+}
+
+impl LodGenerateBudgetClock {
+	fn reset(&mut self, total: u32, drain_count: u32) {
+		if self.drain_count != drain_count {
+			self.next_extra_start = 0;
+		}
+		self.remaining = total;
+		self.total = total;
+		self.drain_count = drain_count;
+		self.extra_start = self.next_extra_start;
+		let extra = if drain_count == 0 { 0 } else { total % drain_count };
+		if drain_count > 0 {
+			self.next_extra_start = (self.extra_start + extra) % drain_count;
+		}
+	}
+
+	fn quota(&self, drain_id: u32) -> u32 {
+		if self.drain_count == 0 || drain_id >= self.drain_count {
+			return 0;
+		}
+		let base = self.total / self.drain_count;
+		let extra = self.total % self.drain_count;
+		let offset = (drain_id + self.drain_count - self.extra_start) % self.drain_count;
+		base + u32::from(offset < extra)
+	}
+
+	fn finish_drain(&mut self, consumed: u32) {
+		self.remaining = self.remaining.saturating_sub(consumed);
+	}
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct LodGenerateDrainCount(u32);
+
+#[derive(Resource)]
+#[doc(hidden)]
+pub struct LodGenerateDrainId<T, S, M, F> {
+	id: u32,
+	_marker: PhantomData<fn() -> (T, S, M, F)>,
+}
+
 /// Pending origin ids for type `T`.
 #[derive(Resource, Debug)]
 pub struct LodGenerateQueue<T> {
-	pub pending: VecDeque<Id>,
+	pending: VecDeque<Id>,
+	pending_ids: HashSet<Id>,
+	scan_regions: VecDeque<Aabb3d>,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Default for LodGenerateQueue<T> {
 	fn default() -> Self {
-		Self { pending: VecDeque::new(), _marker: PhantomData }
+		Self {
+			pending: VecDeque::new(),
+			pending_ids: HashSet::new(),
+			scan_regions: VecDeque::new(),
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T> LodGenerateQueue<T> {
+	pub fn is_empty(&self) -> bool {
+		self.pending.is_empty()
+	}
+
+	pub fn contains(&self, id: &Id) -> bool {
+		self.pending_ids.contains(id)
+	}
+
+	pub fn clear(&mut self) {
+		self.pending.clear();
+		self.pending_ids.clear();
+		self.scan_regions.clear();
+	}
+
+	pub fn enqueue(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_back(id);
+		true
+	}
+
+	fn pop_front(&mut self) -> Option<Id> {
+		let id = self.pending.pop_front()?;
+		self.pending_ids.remove(&id);
+		Some(id)
+	}
+
+	fn enqueue_scan(&mut self, region: Aabb3d) {
+		if !self.scan_regions.iter().any(|queued| regions_match(*queued, region)) {
+			self.scan_regions.push_back(region);
+		}
+	}
+
+	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) {
+		let Some(keep) = keep else {
+			return;
+		};
+		self.pending.retain(|id| id_lives_in_keep(*id, keep, slack));
+		self.pending_ids.clear();
+		self.pending_ids.extend(self.pending.iter().copied());
 	}
 }
 
@@ -118,13 +223,25 @@ impl Plugin for LodGenerateSetsPlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
-		app.configure_sets(
-			Update,
-			(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
-				.chain()
-				.after(LodNodeSystems::Track),
-		);
+		app.init_resource::<LodGenerateBudget>()
+			.init_resource::<LodGenerateBudgetClock>()
+			.init_resource::<LodGenerateDrainCount>()
+			.configure_sets(
+				Update,
+				(LodGenerateSystems::Produce, LodGenerateSystems::Drain)
+					.chain()
+					.after(LodNodeSystems::Track),
+			)
+			.add_systems(Update, reset_lod_generate_budget.in_set(LodGenerateSystems::Produce));
 	}
+}
+
+fn reset_lod_generate_budget(
+	budget: Res<LodGenerateBudget>,
+	drains: Res<LodGenerateDrainCount>,
+	mut clock: ResMut<LodGenerateBudgetClock>,
+) {
+	clock.reset(budget.ids_per_frame, drains.0);
 }
 
 /// Read `F`-filtered [`LodNode`]s whose pose changed, emit [`LodGenerateRegion<M>`].
@@ -158,12 +275,12 @@ pub fn produce_lod_generate_regions<P, F, M>(
 pub fn drain_lod_generate<T, S, M, F>(
 	mut index: ResMut<S>,
 	mut queue: ResMut<LodGenerateQueue<T>>,
-	budget: Res<LodGenerateBudget>,
+	mut budget: ResMut<LodGenerateBudgetClock>,
+	drain_id: Res<LodGenerateDrainId<T, S, M, F>>,
 	mut regions: MessageReader<LodGenerateRegion<M>>,
 	keep: Res<LodGenerateKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut last_keep: Local<Option<Aabb3d>>,
-	mut pending_ids: Local<HashSet<Id>>,
 	mut generated: MessageWriter<LodGenerated<T>>,
 ) where
 	T: GenerationScheme<S> + Send + Sync + 'static,
@@ -171,17 +288,25 @@ pub fn drain_lod_generate<T, S, M, F>(
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
-	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
-	pending_ids.clear();
-	pending_ids.extend(queue.pending.iter().copied());
-
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
-	if keep_region_changed(*last_keep, keep.region) {
+	let keep_changed = keep_region_changed(*last_keep, keep.region);
+	if keep_changed {
+		let previous = *last_keep;
 		*last_keep = keep.region;
-		push_keep_region(&mut scan, keep.region);
+		queue.expire_outside_keep(keep.region, keep.slack_xz);
+		push_incremental_keep_regions(&mut scan, previous, keep.region);
 	}
-	let scanned = !scan.is_empty();
 	for region in scan {
+		queue.enqueue_scan(region);
+	}
+
+	let quota = budget.quota(drain_id.id);
+	if quota == 0 {
+		budget.finish_drain(0);
+		return;
+	}
+
+	let scanned = queue.scan_regions.pop_front().is_some_and(|region| {
 		for original in T::original_ids_for(&mut *index, region) {
 			if index.storage_status(original.0) != StorageStatus::NotTracked {
 				continue;
@@ -192,19 +317,20 @@ pub fn drain_lod_generate<T, S, M, F>(
 			{
 				continue;
 			}
-			if pending_ids.insert(original.0) {
-				queue.pending.push_back(original.0);
-			}
+			queue.enqueue(original.0);
 		}
-	}
+		true
+	});
 
 	if queue.pending.is_empty() {
+		budget.finish_drain(0);
 		return;
 	}
 
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let Some(lod_ref) = refs.first() else {
+		budget.finish_drain(0);
 		return;
 	};
 
@@ -217,26 +343,39 @@ pub fn drain_lod_generate<T, S, M, F>(
 		});
 	}
 
-	let n = budget.ids_per_frame.max(1) as usize;
+	let n = quota as usize;
+	let mut consumed = 0u32;
 	for _ in 0..n {
-		let Some(id) = queue.pending.pop_front() else {
+		let Some(id) = queue.pop_front() else {
 			break;
 		};
-		pending_ids.remove(&id);
+		consumed = consumed.saturating_add(1);
 		if index.get_or_generate(id, lod_ref) == Some(MaterializeStatus::Created) {
 			generated.write(LodGenerated::new(id));
 		}
 	}
+	budget.finish_drain(consumed);
 }
 
-fn push_keep_region(scan: &mut Vec<Aabb3d>, keep: Option<Aabb3d>) {
+fn push_incremental_keep_regions(
+	scan: &mut Vec<Aabb3d>,
+	previous: Option<Aabb3d>,
+	keep: Option<Aabb3d>,
+) {
 	let Some(keep_region) = keep else {
 		return;
 	};
-	if scan.iter().any(|region| regions_match(*region, keep_region)) {
-		return;
+	if let Some(index) = scan.iter().position(|region| regions_match(*region, keep_region)) {
+		scan.remove(index);
+	} else if previous.is_some() {
+		// An explicit message not matching the keep region is additional work.
+		// The keep delta below still covers camera movement.
 	}
-	scan.push(keep_region);
+	for region in entering_keep_regions(previous, keep_region) {
+		if !scan.iter().any(|candidate| regions_match(*candidate, region)) {
+			scan.push(region);
+		}
+	}
 }
 
 fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
@@ -317,14 +456,73 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_generate_sets(app);
+		let id = {
+			let mut drains = app.world_mut().resource_mut::<LodGenerateDrainCount>();
+			let id = drains.0;
+			drains.0 += 1;
+			id
+		};
 		app.init_resource::<LodGenerateBudget>()
 			.init_resource::<LodGenerateQueue<T>>()
 			.init_resource::<LodGenerateKeepRegion<M>>()
+			.insert_resource(LodGenerateDrainId::<T, S, M, F> { id, _marker: PhantomData })
 			.add_message::<LodGenerateRegion<M>>()
 			.add_message::<LodGenerated<T>>()
 			.add_systems(
 				Update,
 				drain_lod_generate::<T, S, M, F>.in_set(LodGenerateSystems::Drain),
 			);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn region(x0: f32, z0: f32, x1: f32, z1: f32) -> Aabb3d {
+		Aabb3d::from_min_max(Vec3::new(x0, -1.0, z0), Vec3::new(x1, 1.0, z1))
+	}
+
+	fn xz_area(region: Aabb3d) -> f32 {
+		(region.max.x - region.min.x) * (region.max.z - region.min.z)
+	}
+
+	#[test]
+	fn shared_clock_distributes_one_frame_cap() {
+		let mut clock = LodGenerateBudgetClock::default();
+		clock.reset(5, 2);
+		assert_eq!(clock.quota(0), 3);
+		assert_eq!(clock.quota(1), 2);
+		clock.finish_drain(5);
+		assert_eq!(clock.remaining, 0);
+	}
+
+	#[test]
+	fn remainder_slot_rotates_across_types() {
+		let mut clock = LodGenerateBudgetClock::default();
+		for expected in 0..3 {
+			clock.reset(1, 3);
+			for id in 0..3 {
+				assert_eq!(clock.quota(id), u32::from(id == expected));
+			}
+		}
+	}
+
+	#[test]
+	fn entering_regions_cover_only_moved_strip() {
+		let strips =
+			entering_keep_regions(Some(region(0.0, 0.0, 10.0, 10.0)), region(2.0, 0.0, 12.0, 10.0));
+		assert_eq!(strips.len(), 1);
+		assert_eq!(xz_area(strips[0]), 20.0);
+	}
+
+	#[test]
+	fn entering_regions_cover_expansion_without_overlap() {
+		let strips = entering_keep_regions(
+			Some(region(0.0, 0.0, 10.0, 10.0)),
+			region(-2.0, -2.0, 12.0, 12.0),
+		);
+		let area: f32 = strips.into_iter().map(xz_area).sum();
+		assert_eq!(area, 96.0);
 	}
 }

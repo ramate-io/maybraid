@@ -10,7 +10,7 @@ mod generate;
 mod tests;
 
 pub use generate::{
-	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateKeepRegion,
-	LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion, LodGenerateRegionPlugin,
-	LodGenerateSystems, LodGenerated,
+	drain_lod_generate, produce_lod_generate_regions, LodGenerateBudget, LodGenerateBudgetClock,
+	LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue, LodGenerateRegion,
+	LodGenerateRegionPlugin, LodGenerateSystems, LodGenerated,
 };

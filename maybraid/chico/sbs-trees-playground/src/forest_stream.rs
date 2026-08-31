@@ -368,8 +368,8 @@ impl ForestStreamLod<'_> {
 			self.generate_keep.region = None;
 			self.keep.region = None;
 			self.index.clear();
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			last_key.take();
 			return;
@@ -379,8 +379,8 @@ impl ForestStreamLod<'_> {
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
 			self.index.clear();
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			*last_key = Some(key);
 		}

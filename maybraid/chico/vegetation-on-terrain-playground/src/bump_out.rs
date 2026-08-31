@@ -213,8 +213,8 @@ impl BumpOutStreamLod<'_> {
 			self.present.enabled = false;
 			self.generate_keep.region = None;
 			self.keep.region = None;
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			last_key.take();
 			return;
@@ -223,8 +223,8 @@ impl BumpOutStreamLod<'_> {
 		let key = spec.key();
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			*last_key = Some(key);
 		}

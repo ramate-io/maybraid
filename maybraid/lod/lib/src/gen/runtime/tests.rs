@@ -49,7 +49,7 @@ fn drain_generate_materializes_one_id_per_budget() -> Result<()> {
 	.filter(|v| *v)
 	.count();
 	assert_eq!(created, 1);
-	assert!(!queue.pending.is_empty());
+	assert!(!queue.is_empty());
 	Ok(())
 }
 
@@ -108,8 +108,8 @@ fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(250.0)));
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(250.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -121,7 +121,7 @@ fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
 	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(0.0))).is_some());
 	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(250.0))).is_none());
 	let queue = app.world().resource::<LodGenerateQueue<Vegetation>>();
-	assert!(!queue.pending.contains(&Id::from_cell(cell(250.0))));
+	assert!(!queue.contains(&Id::from_cell(cell(250.0))));
 	Ok(())
 }
 
@@ -138,7 +138,7 @@ fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -153,7 +153,6 @@ fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 	let still_pending = app
 		.world()
 		.resource::<LodGenerateQueue<Vegetation>>()
-		.pending
 		.contains(&Id::from_cell(cell(0.0)));
 	let generated = SpatialIndex::<Vegetation>::get(
 		app.world().resource::<WorldIndex>(),
@@ -181,7 +180,7 @@ fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -196,7 +195,6 @@ fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
 	assert!(!app
 		.world()
 		.resource::<LodGenerateQueue<Vegetation>>()
-		.pending
 		.contains(&Id::from_cell(cell(0.0))));
 	assert!(SpatialIndex::<Vegetation>::get(
 		app.world().resource::<WorldIndex>(),

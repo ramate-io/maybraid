@@ -10,8 +10,8 @@ use bevy::prelude::*;
 
 use super::RegionPresenter;
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
-	keep_region_changed, Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
+	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
+	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -61,6 +61,73 @@ impl Default for LodPresentBudget {
 	}
 }
 
+/// Shared present allowance with rotating remainder slots across drains.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LodPresentBudgetClock(FairDrainClock);
+
+impl LodPresentBudgetClock {
+	fn reset(&mut self, total: u32, drain_count: u32) {
+		self.0.reset(total, drain_count);
+	}
+
+	fn quota(&self, drain_id: u32) -> u32 {
+		self.0.quota(drain_id)
+	}
+
+	fn finish_drain(&mut self, consumed: u32) {
+		self.0.finish_drain(consumed);
+	}
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FairDrainClock {
+	remaining: u32,
+	total: u32,
+	drain_count: u32,
+	extra_start: u32,
+	next_extra_start: u32,
+}
+
+impl FairDrainClock {
+	fn reset(&mut self, total: u32, drain_count: u32) {
+		if self.drain_count != drain_count {
+			self.next_extra_start = 0;
+		}
+		self.remaining = total;
+		self.total = total;
+		self.drain_count = drain_count;
+		self.extra_start = self.next_extra_start;
+		let extra = if drain_count == 0 { 0 } else { total % drain_count };
+		if drain_count > 0 {
+			self.next_extra_start = (self.extra_start + extra) % drain_count;
+		}
+	}
+
+	fn quota(&self, drain_id: u32) -> u32 {
+		if self.drain_count == 0 || drain_id >= self.drain_count {
+			return 0;
+		}
+		let base = self.total / self.drain_count;
+		let extra = self.total % self.drain_count;
+		let offset = (drain_id + self.drain_count - self.extra_start) % self.drain_count;
+		base + u32::from(offset < extra)
+	}
+
+	fn finish_drain(&mut self, consumed: u32) {
+		self.remaining = self.remaining.saturating_sub(consumed);
+	}
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct LodPresentDrainCount(u32);
+
+#[derive(Resource)]
+#[doc(hidden)]
+pub struct LodPresentDrainId<T, S, Pr, M, F> {
+	id: u32,
+	_marker: PhantomData<fn() -> (T, S, Pr, M, F)>,
+}
+
 /// How many leaving present ids may recursive-despawn per frame.
 ///
 /// Hide is uncapped (cheap `Visibility::Hidden`). Despawn is one grove id
@@ -76,16 +143,108 @@ impl Default for LodPresentCullBudget {
 	}
 }
 
+/// Shared cull allowance with rotating remainder slots across drains.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LodPresentCullBudgetClock(FairDrainClock);
+
+impl LodPresentCullBudgetClock {
+	fn reset(&mut self, total: u32, drain_count: u32) {
+		self.0.reset(total, drain_count);
+	}
+
+	fn quota(&self, drain_id: u32) -> u32 {
+		self.0.quota(drain_id)
+	}
+
+	fn finish_drain(&mut self, consumed: u32) {
+		self.0.finish_drain(consumed);
+	}
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct LodPresentCullDrainCount(u32);
+
+#[derive(Resource)]
+#[doc(hidden)]
+pub struct LodPresentCullDrainId<T, S, Pr, M> {
+	id: u32,
+	_marker: PhantomData<fn() -> (T, S, Pr, M)>,
+}
+
 /// Pending present ids for type `T`.
 #[derive(Resource, Debug)]
 pub struct LodPresentQueue<T> {
-	pub pending: VecDeque<Id>,
+	pending: VecDeque<Id>,
+	pending_ids: HashSet<Id>,
+	scan_regions: VecDeque<Aabb3d>,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Default for LodPresentQueue<T> {
 	fn default() -> Self {
-		Self { pending: VecDeque::new(), _marker: PhantomData }
+		Self {
+			pending: VecDeque::new(),
+			pending_ids: HashSet::new(),
+			scan_regions: VecDeque::new(),
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T> LodPresentQueue<T> {
+	pub fn is_empty(&self) -> bool {
+		self.pending.is_empty()
+	}
+
+	pub fn contains(&self, id: &Id) -> bool {
+		self.pending_ids.contains(id)
+	}
+
+	pub fn enqueue(&mut self, id: Id) -> bool {
+		self.enqueue_back(id)
+	}
+
+	pub fn clear(&mut self) {
+		self.pending.clear();
+		self.pending_ids.clear();
+		self.scan_regions.clear();
+	}
+
+	fn enqueue_back(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_back(id);
+		true
+	}
+
+	fn enqueue_front(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_front(id);
+		true
+	}
+
+	fn pop_front(&mut self) -> Option<Id> {
+		let id = self.pending.pop_front()?;
+		self.pending_ids.remove(&id);
+		Some(id)
+	}
+
+	fn enqueue_scan(&mut self, region: Aabb3d) {
+		if !self.scan_regions.iter().any(|queued| regions_match(*queued, region)) {
+			self.scan_regions.push_back(region);
+		}
+	}
+
+	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) {
+		let Some(keep) = keep else {
+			return;
+		};
+		self.pending.retain(|id| id_lives_in_keep(*id, keep, slack));
+		self.pending_ids.clear();
+		self.pending_ids.extend(self.pending.iter().copied());
 	}
 }
 
@@ -141,18 +300,37 @@ impl Plugin for LodPresentSetsPlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
-		app.configure_sets(
-			Update,
-			(
-				LodPresentSystems::Produce,
-				LodPresentSystems::Drain,
-				LodPresentSystems::ProduceCull,
-				LodPresentSystems::Cull,
+		app.init_resource::<LodPresentBudget>()
+			.init_resource::<LodPresentBudgetClock>()
+			.init_resource::<LodPresentDrainCount>()
+			.init_resource::<LodPresentCullBudget>()
+			.init_resource::<LodPresentCullBudgetClock>()
+			.init_resource::<LodPresentCullDrainCount>()
+			.configure_sets(
+				Update,
+				(
+					LodPresentSystems::Produce,
+					LodPresentSystems::Drain,
+					LodPresentSystems::ProduceCull,
+					LodPresentSystems::Cull,
+				)
+					.chain()
+					.after(LodNodeSystems::Track),
 			)
-				.chain()
-				.after(LodNodeSystems::Track),
-		);
+			.add_systems(Update, reset_lod_present_budgets.in_set(LodPresentSystems::Produce));
 	}
+}
+
+fn reset_lod_present_budgets(
+	present_budget: Res<LodPresentBudget>,
+	present_drains: Res<LodPresentDrainCount>,
+	cull_budget: Res<LodPresentCullBudget>,
+	cull_drains: Res<LodPresentCullDrainCount>,
+	mut present_clock: ResMut<LodPresentBudgetClock>,
+	mut cull_clock: ResMut<LodPresentCullBudgetClock>,
+) {
+	present_clock.reset(present_budget.ids_per_frame, present_drains.0);
+	cull_clock.reset(cull_budget.despawns_per_frame, cull_drains.0);
 }
 
 /// Read pose-changed drivers, emit [`LodPresentRegion<M>`], record keep AABB.
@@ -187,13 +365,13 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	mut queue: ResMut<LodPresentQueue<T>>,
-	budget: Res<LodPresentBudget>,
+	mut budget: ResMut<LodPresentBudgetClock>,
+	drain_id: Res<LodPresentDrainId<T, S, Pr, M, F>>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
 	mut generated: MessageReader<LodGenerated<T>>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut last_keep: Local<Option<Aabb3d>>,
-	mut pending_ids: Local<HashSet<Id>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -203,21 +381,37 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	F: QueryFilter + 'static,
 {
 	let mut presenter = presenter.into_inner();
-	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
-	pending_ids.clear();
-	pending_ids.extend(queue.pending.iter().copied());
-
 	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
 	if keep_region_changed(*last_keep, keep.region) {
+		let previous = *last_keep;
 		*last_keep = keep.region;
-		if let Some(keep_region) = keep.region {
-			if !scan.iter().any(|region| regions_match(*region, keep_region)) {
-				scan.push(keep_region);
-			}
+		queue.expire_outside_keep(keep.region, keep.slack_xz);
+		push_incremental_keep_regions(&mut scan, previous, keep.region);
+	}
+	for region in scan {
+		queue.enqueue_scan(region);
+	}
+
+	let mut reorder_pending = false;
+	for message in generated.read() {
+		if keep
+			.region
+			.is_some_and(|region| !id_lives_in_keep(message.id, region, keep.slack_xz))
+		{
+			continue;
+		}
+		if queue.enqueue_back(message.id) {
+			reorder_pending = true;
 		}
 	}
-	let mut reorder_pending = !scan.is_empty();
-	for region in scan {
+
+	let quota = budget.quota(drain_id.id);
+	if quota == 0 {
+		budget.finish_drain(0);
+		return;
+	}
+
+	if let Some(region) = queue.scan_regions.pop_front() {
 		for tracked in index.tracked_ids_for(region) {
 			let Some(version) = index.version(tracked.0) else {
 				continue;
@@ -233,33 +427,21 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				) {
 				continue;
 			}
-			if pending_ids.insert(tracked.0) {
-				queue.pending.push_back(tracked.0);
+			if queue.enqueue_back(tracked.0) {
 				reorder_pending = true;
 			}
 		}
 	}
 
-	for message in generated.read() {
-		if keep
-			.region
-			.is_some_and(|region| !id_lives_in_keep(message.id, region, keep.slack_xz))
-		{
-			continue;
-		}
-		if pending_ids.insert(message.id) {
-			queue.pending.push_back(message.id);
-			reorder_pending = true;
-		}
-	}
-
 	if queue.pending.is_empty() {
+		budget.finish_drain(0);
 		return;
 	}
 
 	let snapshots = collect_node_snapshots(&nodes);
 	let refs = lod_refs_from_snapshots(&snapshots);
 	let Some(lod_ref) = refs.first() else {
+		budget.finish_drain(0);
 		return;
 	};
 
@@ -272,13 +454,13 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		});
 	}
 
-	let n = budget.ids_per_frame.max(1) as usize;
+	let n = quota as usize;
 	let mut handled = 0;
 	while handled < n {
-		let Some(id) = queue.pending.pop_front() else {
+		let Some(id) = queue.pop_front() else {
 			break;
 		};
-		pending_ids.remove(&id);
+		handled += 1;
 		let Some(version) = index.version(id) else {
 			continue;
 		};
@@ -292,14 +474,32 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 			continue;
 		};
 		presenter.handle(id, version, value, lod_ref);
-		handled += 1;
 		// Grow-then-spawn presenters may consume a slot without stamping
 		// `presented_version`. Re-queue so the next slot can finish without a
 		// keep rescan.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs && pending_ids.insert(id) {
-			queue.pending.push_front(id);
+		if still_needs {
+			queue.enqueue_front(id);
+		}
+	}
+	budget.finish_drain(handled as u32);
+}
+
+fn push_incremental_keep_regions(
+	scan: &mut Vec<Aabb3d>,
+	previous: Option<Aabb3d>,
+	keep: Option<Aabb3d>,
+) {
+	let Some(keep_region) = keep else {
+		return;
+	};
+	if let Some(index) = scan.iter().position(|region| regions_match(*region, keep_region)) {
+		scan.remove(index);
+	}
+	for region in entering_keep_regions(previous, keep_region) {
+		if !scan.iter().any(|candidate| regions_match(*candidate, region)) {
+			scan.push(region);
 		}
 	}
 }
@@ -346,7 +546,8 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	presenter: StaticSystemParam<Pr>,
 	index: Res<S>,
 	keep: Res<LodPresentKeepRegion<M>>,
-	budget: Res<LodPresentCullBudget>,
+	mut budget: ResMut<LodPresentCullBudgetClock>,
+	drain_id: Res<LodPresentCullDrainId<T, S, Pr, M>>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -355,6 +556,7 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 	M: Send + Sync + 'static,
 {
 	let Some(keep_region) = keep.live_region() else {
+		budget.finish_drain(0);
 		return;
 	};
 	let keep_ids: HashSet<Id> = index
@@ -363,7 +565,14 @@ pub fn drain_lod_present_cull<T, S, Pr, M>(
 		.map(|tracked| tracked.0)
 		.collect();
 	let mut presenter = presenter.into_inner();
-	presenter.cull(&*index, &keep_ids, budget.despawns_per_frame);
+	let share = budget.quota(drain_id.id);
+	let stale = presenter
+		.presented_ids()
+		.into_iter()
+		.filter(|id| !keep_ids.contains(id))
+		.count() as u32;
+	presenter.cull(&*index, &keep_ids, share);
+	budget.finish_drain(share.min(stale));
 }
 
 /// Produce [`LodPresentRegion<M>`] from `F`-filtered [`LodNode`]s via strategy `P`.
@@ -441,9 +650,16 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_present_sets(app);
+		let id = {
+			let mut drains = app.world_mut().resource_mut::<LodPresentDrainCount>();
+			let id = drains.0;
+			drains.0 += 1;
+			id
+		};
 		app.init_resource::<LodPresentBudget>()
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()
+			.insert_resource(LodPresentDrainId::<T, S, Pr, M, F> { id, _marker: PhantomData })
 			.add_message::<LodPresentRegion<M>>()
 			.add_message::<LodGenerated<T>>()
 			.add_systems(
@@ -525,8 +741,15 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_present_sets(app);
+		let id = {
+			let mut drains = app.world_mut().resource_mut::<LodPresentCullDrainCount>();
+			let id = drains.0;
+			drains.0 += 1;
+			id
+		};
 		app.init_resource::<LodPresentCullBudget>()
 			.init_resource::<LodPresentKeepRegion<M>>()
+			.insert_resource(LodPresentCullDrainId::<T, S, Pr, M> { id, _marker: PhantomData })
 			.add_systems(
 				Update,
 				drain_lod_present_cull::<T, S, Pr, M>.in_set(LodPresentSystems::Cull),

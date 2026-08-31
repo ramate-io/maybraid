@@ -2,7 +2,9 @@ use anyhow::Result;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use crate::gen::tests::test_utils::{cell, span, RecordingPresenter, Vegetation, WorldIndex};
+use crate::gen::tests::test_utils::{
+	cell, span, RecordingPresenter, Terrain, Vegetation, WorldIndex,
+};
 use crate::gen::{GeneratingSpatialIndex, Id, LodGenerated, RegionPresenter, Version};
 use crate::lod_ref::{LodNode, LodNodePose, LodRef};
 use crate::presentation::{
@@ -47,8 +49,90 @@ impl RegionPresenter<Vegetation, WorldIndex> for RecordingParam<'_> {
 	}
 }
 
+impl RegionPresenter<Terrain, WorldIndex> for RecordingParam<'_> {
+	fn presented_version(&self, id: Id) -> Option<Version> {
+		RegionPresenter::<Terrain, WorldIndex>::presented_version(&*self.inner, id)
+	}
+
+	fn handle(&mut self, id: Id, version: Version, value: &Terrain, lod_ref: &LodRef) {
+		RegionPresenter::<Terrain, WorldIndex>::handle(
+			&mut *self.inner,
+			id,
+			version,
+			value,
+			lod_ref,
+		);
+	}
+
+	fn presented_ids(&self) -> Vec<Id> {
+		RegionPresenter::<Terrain, WorldIndex>::presented_ids(&*self.inner)
+	}
+
+	fn hide(&mut self, id: Id) {
+		RegionPresenter::<Terrain, WorldIndex>::hide(&mut *self.inner, id)
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		RegionPresenter::<Terrain, WorldIndex>::is_hidden(&*self.inner, id)
+	}
+
+	fn remove_stale(&mut self, wanted: &std::collections::HashSet<Id>) {
+		RegionPresenter::<Terrain, WorldIndex>::remove_stale(&mut *self.inner, wanted);
+	}
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct PresentChan;
+
+#[test]
+fn shared_budget_rotates_across_present_types() -> Result<()> {
+	let mut index = WorldIndex::default();
+	let identity = Transform::IDENTITY;
+	let terrain_bounds = cell(0.0);
+	let vegetation_bounds = cell(2.0);
+	let lod = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &terrain_bounds,
+	};
+	GeneratingSpatialIndex::<Terrain>::get_or_generate(
+		&mut index,
+		Id::from_cell(terrain_bounds),
+		&lod,
+	);
+	GeneratingSpatialIndex::<Vegetation>::get_or_generate(
+		&mut index,
+		Id::from_cell(vegetation_bounds),
+		&lod,
+	);
+
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(index)
+		.insert_resource(RecordingPresenter::default())
+		.insert_resource(LodPresentBudget { ids_per_frame: 1 })
+		.insert_resource({
+			let mut keep = LodPresentKeepRegion::<PresentChan>::default();
+			keep.region = Some(span(0.0, 4.0));
+			keep
+		})
+		.add_plugins((
+			LodPresentPlugin::<Terrain, WorldIndex, RecordingParam, PresentChan>::default(),
+			LodPresentPlugin::<Vegetation, WorldIndex, RecordingParam, PresentChan>::default(),
+		));
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+
+	app.update();
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert_eq!(presenter.terrain.len() + presenter.vegetation.len(), 1);
+
+	app.update();
+	let presenter = app.world().resource::<RecordingPresenter>();
+	assert_eq!(presenter.terrain.len(), 1);
+	assert_eq!(presenter.vegetation.len(), 1);
+	Ok(())
+}
 
 #[test]
 fn drain_present_picks_up_keep_region_without_a_new_message() -> Result<()> {
@@ -114,8 +198,8 @@ fn drain_present_drops_pending_outside_keep_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodPresentQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(far));
-			queue.pending.push_back(Id::from_cell(near));
+			queue.enqueue(Id::from_cell(far));
+			queue.enqueue(Id::from_cell(near));
 			queue
 		})
 		.add_plugins(
@@ -128,7 +212,7 @@ fn drain_present_drops_pending_outside_keep_slack() -> Result<()> {
 	assert!(presenter.vegetation.contains_key(&Id::from_cell(near)));
 	assert!(!presenter.vegetation.contains_key(&Id::from_cell(far)));
 	let queue = app.world().resource::<LodPresentQueue<Vegetation>>();
-	assert!(!queue.pending.contains(&Id::from_cell(far)));
+	assert!(!queue.contains(&Id::from_cell(far)));
 	Ok(())
 }
 
@@ -157,7 +241,7 @@ fn drain_present_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodPresentQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(edge));
+			queue.enqueue(Id::from_cell(edge));
 			queue
 		})
 		.add_plugins(
