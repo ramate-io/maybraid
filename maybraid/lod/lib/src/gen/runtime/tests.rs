@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::gen::runtime::{
 	LodGenerateBudget, LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateQueue,
-	LodGenerateRegion, LodGenerateRegionPlugin,
+	LodGenerateRegion, LodGenerateRegionPlugin, LodGenerateTimeBudget,
 };
 use crate::gen::tests::test_utils::{cell, Vegetation, WorldIndex};
 use crate::gen::{Id, SpatialIndex};
@@ -31,6 +31,10 @@ fn drain_generate_materializes_one_id_per_budget() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(WorldIndex::default())
 		.insert_resource(LodGenerateBudget { ids_per_frame: 1 })
+		.insert_resource(LodGenerateTimeBudget {
+			time_per_frame: std::time::Duration::ZERO,
+			..default()
+		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
 		.add_message::<LodGenerateRegion<GenChan>>();
 
@@ -49,7 +53,7 @@ fn drain_generate_materializes_one_id_per_budget() -> Result<()> {
 	.filter(|v| *v)
 	.count();
 	assert_eq!(created, 1);
-	assert!(!queue.pending.is_empty());
+	assert!(!queue.is_empty());
 	Ok(())
 }
 
@@ -59,6 +63,10 @@ fn drain_generate_prefers_ids_near_the_driver() -> Result<()> {
 	app.add_plugins(MinimalPlugins)
 		.insert_resource(WorldIndex::default())
 		.insert_resource(LodGenerateBudget { ids_per_frame: 1 })
+		.insert_resource(LodGenerateTimeBudget {
+			time_per_frame: std::time::Duration::ZERO,
+			..default()
+		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
 		.add_message::<LodGenerateRegion<GenChan>>();
 
@@ -96,6 +104,44 @@ fn drain_generate_picks_up_keep_region_without_a_new_message() -> Result<()> {
 }
 
 #[test]
+fn moving_keep_region_does_not_create_scan_work_without_an_impulse() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.insert_resource(WorldIndex::default())
+		.insert_resource(LodGenerateBudget { ids_per_frame: 8 })
+		.insert_resource(LodGenerateTimeBudget {
+			time_per_frame: std::time::Duration::ZERO,
+			..default()
+		})
+		.insert_resource({
+			let mut keep = LodGenerateKeepRegion::<GenChan>::default();
+			keep.region = Some(cell(0.0));
+			keep
+		})
+		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
+		.add_message::<LodGenerateRegion<GenChan>>();
+	app.world_mut().spawn((LodNode, LodNodePose::default(), Transform::IDENTITY));
+
+	app.update();
+	app.world_mut().resource_mut::<LodGenerateKeepRegion<GenChan>>().region = Some(cell(2.0));
+	app.update();
+	assert!(SpatialIndex::<Vegetation>::get(
+		app.world().resource::<WorldIndex>(),
+		Id::from_cell(cell(2.0)),
+	)
+	.is_none());
+
+	app.world_mut().write_message(LodGenerateRegion::<GenChan>::new(cell(2.0)));
+	app.update();
+	assert!(SpatialIndex::<Vegetation>::get(
+		app.world().resource::<WorldIndex>(),
+		Id::from_cell(cell(2.0)),
+	)
+	.is_some());
+	Ok(())
+}
+
+#[test]
 fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins)
@@ -108,8 +154,8 @@ fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(250.0)));
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(250.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -121,7 +167,7 @@ fn drain_generate_drops_pending_outside_keep_slack() -> Result<()> {
 	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(0.0))).is_some());
 	assert!(SpatialIndex::<Vegetation>::get(index, Id::from_cell(cell(250.0))).is_none());
 	let queue = app.world().resource::<LodGenerateQueue<Vegetation>>();
-	assert!(!queue.pending.contains(&Id::from_cell(cell(250.0))));
+	assert!(!queue.contains(&Id::from_cell(cell(250.0))));
 	Ok(())
 }
 
@@ -138,7 +184,7 @@ fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -153,7 +199,6 @@ fn drain_generate_keeps_pending_inside_tile_cross_slack() -> Result<()> {
 	let still_pending = app
 		.world()
 		.resource::<LodGenerateQueue<Vegetation>>()
-		.pending
 		.contains(&Id::from_cell(cell(0.0)));
 	let generated = SpatialIndex::<Vegetation>::get(
 		app.world().resource::<WorldIndex>(),
@@ -181,7 +226,7 @@ fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
 		})
 		.insert_resource({
 			let mut queue = LodGenerateQueue::<Vegetation>::default();
-			queue.pending.push_back(Id::from_cell(cell(0.0)));
+			queue.enqueue(Id::from_cell(cell(0.0)));
 			queue
 		})
 		.add_plugins(LodGeneratePlugin::<Vegetation, WorldIndex, GenChan>::default())
@@ -196,7 +241,6 @@ fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
 	assert!(!app
 		.world()
 		.resource::<LodGenerateQueue<Vegetation>>()
-		.pending
 		.contains(&Id::from_cell(cell(0.0))));
 	assert!(SpatialIndex::<Vegetation>::get(
 		app.world().resource::<WorldIndex>(),

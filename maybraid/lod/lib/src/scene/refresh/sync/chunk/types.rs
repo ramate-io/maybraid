@@ -109,7 +109,7 @@ pub struct LodChunkFulfillBudget {
 	pub cull_root_despawns_per_frame: u32,
 	/// Max new fulfill jobs started per frame (shared across all host `T`).
 	pub begins_per_frame: u32,
-	/// Max hosts with [`crate::LodLevelSpawnRequest`] one begin system may
+	/// Max hosts with [`crate::LodLevelSpawnRequest`] the shared begin system may
 	/// classify this frame (round-robin scan). Admission still uses
 	/// [`Self::begins_per_frame`] after sorting classified candidates by
 	/// viewer XZ distance. Empty clocks skip the scan entirely.
@@ -205,6 +205,10 @@ pub struct LodChunkBeginClock {
 	/// Which class the begin systems try first this frame.
 	pub first_class: FulfillClass,
 }
+
+/// Round-robin cursor for the shared type-erased begin candidate scan.
+#[derive(Resource, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LodChunkBeginScanCursor(pub u32);
 
 /// Number of `(parent_band, self_band)` drain slots (5×5 High→Other).
 pub const LOD_CHUNK_TUPLE_BAND_COUNT: usize = 25;

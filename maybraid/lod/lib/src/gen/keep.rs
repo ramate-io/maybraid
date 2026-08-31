@@ -53,6 +53,52 @@ pub fn keep_region_changed(previous: Option<Aabb3d>, current: Option<Aabb3d>) ->
 	}
 }
 
+/// Non-overlapping pieces of `current` that did not exist in `previous`.
+///
+/// Moving rectangular keep rings therefore scan perimeter strips instead of
+/// rescanning their full area.
+pub fn entering_keep_regions(previous: Option<Aabb3d>, current: Aabb3d) -> Vec<Aabb3d> {
+	let Some(previous) = previous else {
+		return vec![current];
+	};
+	let ix0 = previous.min.x.max(current.min.x);
+	let ix1 = previous.max.x.min(current.max.x);
+	let iz0 = previous.min.z.max(current.min.z);
+	let iz1 = previous.max.z.min(current.max.z);
+	if ix0 >= ix1 || iz0 >= iz1 {
+		return vec![current];
+	}
+	let mut regions = Vec::with_capacity(4);
+	push_region(
+		&mut regions,
+		Vec3::new(current.min.x, current.min.y, current.min.z),
+		Vec3::new(ix0, current.max.y, current.max.z),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix1, current.min.y, current.min.z),
+		Vec3::new(current.max.x, current.max.y, current.max.z),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix0, current.min.y, current.min.z),
+		Vec3::new(ix1, current.max.y, iz0),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix0, current.min.y, iz1),
+		Vec3::new(ix1, current.max.y, current.max.z),
+	);
+	regions
+}
+
+fn push_region(regions: &mut Vec<Aabb3d>, min: Vec3, max: Vec3) {
+	if max.x - min.x <= 1e-3 || max.z - min.z <= 1e-3 {
+		return;
+	}
+	regions.push(Aabb3d::from_min_max(min, max));
+}
+
 fn keep_regions_match(a: Aabb3d, b: Aabb3d) -> bool {
 	(a.min.x - b.min.x).abs() < 1e-3
 		&& (a.max.x - b.max.x).abs() < 1e-3

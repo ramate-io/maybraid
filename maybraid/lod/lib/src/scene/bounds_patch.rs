@@ -1,4 +1,8 @@
 //! Patch [`LodHostBounds`] and backend volumes from [`LodScene::scene_bounds`].
+//!
+//! Scene-specific observers compute bounds only when the scene component is
+//! inserted. One marshaller system per backend reacts to changed untyped bounds,
+//! avoiding one full query system per scene type every frame.
 
 use std::marker::PhantomData;
 
@@ -48,24 +52,49 @@ where
 		if !app.is_plugin_added::<crate::scene::refresh::LodRefreshCorePlugin>() {
 			app.add_plugins(crate::scene::refresh::LodRefreshCorePlugin);
 		}
+		if !app.is_plugin_added::<PatchSceneBoundsMarshallerPlugin<M>>() {
+			app.add_plugins(PatchSceneBoundsMarshallerPlugin::<M>::default());
+		}
+		app.add_observer(update_scene_bounds::<T>);
+	}
+}
+
+fn update_scene_bounds<T>(insert: On<Insert, T>, mut commands: Commands, scenes: Query<&T>)
+where
+	T: Component + SemanticLodScene + 'static,
+{
+	let Ok(scene) = scenes.get(insert.entity) else {
+		return;
+	};
+	if let Ok(mut entity) = commands.get_entity(insert.entity) {
+		entity.insert(LodHostBounds(scene.scene_bounds()));
+	}
+}
+
+struct PatchSceneBoundsMarshallerPlugin<M: LodSceneBoundsMarshaller> {
+	_marker: PhantomData<fn() -> M>,
+}
+
+impl<M: LodSceneBoundsMarshaller> Default for PatchSceneBoundsMarshallerPlugin<M> {
+	fn default() -> Self {
+		Self { _marker: PhantomData }
+	}
+}
+
+impl<M: LodSceneBoundsMarshaller> Plugin for PatchSceneBoundsMarshallerPlugin<M> {
+	fn build(&self, app: &mut App) {
 		app.add_systems(
 			Update,
-			patch_scene_bounds::<T, M>.before(LodRefreshSystems::ProduceLevels),
+			patch_marshaled_bounds::<M>.before(LodRefreshSystems::ProduceLevels),
 		);
 	}
 }
 
-fn patch_scene_bounds<T, M>(
+fn patch_marshaled_bounds<M: LodSceneBoundsMarshaller>(
 	mut commands: Commands,
-	hosts: Query<(Entity, &T), (With<LodSceneHost>, Or<(Added<T>, Changed<T>)>)>,
-) where
-	T: Component + SemanticLodScene + 'static,
-	M: LodSceneBoundsMarshaller,
-{
-	for (entity, scene) in &hosts {
-		let bounds = scene.scene_bounds();
-		commands
-			.entity(entity)
-			.insert((LodHostBounds(bounds), M::volume_from_bounds(bounds)));
+	hosts: Query<(Entity, &LodHostBounds), (With<LodSceneHost>, Changed<LodHostBounds>)>,
+) {
+	for (entity, bounds) in &hosts {
+		commands.entity(entity).insert(M::volume_from_bounds(bounds.0));
 	}
 }

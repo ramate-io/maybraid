@@ -30,6 +30,7 @@ pub use runtime::{
 	produce_lod_present_regions, LodPresentBudget, LodPresentCullBudget, LodPresentCullCursor,
 	LodPresentCullPlugin, LodPresentCullRegion, LodPresentCullRegionPlugin, LodPresentKeepRegion,
 	LodPresentPlugin, LodPresentQueue, LodPresentRegion, LodPresentRegionPlugin, LodPresentSystems,
+	LodPresentTimeBudget,
 };
 
 /// Presents one layer (`T`) of a spatial index over a region.

@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use crate::lod_ref::{point_bounds, LodNode, LodNodeBounds, LodNodePose};
 use crate::scene::host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::scene::level::LodSceneLevel;
-use crate::scene::SemanticLodScene;
+use crate::scene::{LodLevelProducer, SemanticLodScene};
 
 use super::super::super::viewer::LodViewer;
 use super::types::{LodCullInFlight, LodLevelRootPending};
@@ -70,5 +70,65 @@ pub fn cancel_unstarted_cull_for_desired_pending_roots<T: Component + SemanticLo
 			}
 		}
 		commands.entity(entity).remove::<LodCullInFlight>();
+	}
+}
+
+/// Type-erased resume pass shared by every semantic host type.
+pub fn cancel_unstarted_cull_for_desired_pending_roots_erased(world: &mut World) {
+	let viewer = {
+		let mut query = world.query_filtered::<
+			(Entity, &LodNodePose, Option<&LodNodeBounds>),
+			(With<LodNode>, With<LodViewer>),
+		>();
+		let mut iter = query.iter(world);
+		iter.next().map(|(entity, pose, bounds)| {
+			(
+				entity,
+				*pose,
+				bounds
+					.map(|bounds| bounds.0)
+					.unwrap_or_else(|| point_bounds(pose.current.translation)),
+			)
+		})
+	};
+	let roots: Vec<_> = {
+		let mut query = world
+			.query_filtered::<(Entity, &LodCullInFlight, &LodLevelRoot), With<LodLevelRootPending>>(
+			);
+		query
+			.iter(world)
+			.filter_map(|(entity, cull, root)| (!cull.started).then_some((entity, *root)))
+			.collect()
+	};
+
+	for (entity, root) in roots {
+		let Some(bag) = world.get::<ChildOf>(entity).map(|parent| parent.parent()) else {
+			continue;
+		};
+		if world.get::<LodLevelRoots>(bag).is_none() {
+			continue;
+		}
+		let Some(host) = world.get::<ChildOf>(bag).map(|parent| parent.parent()) else {
+			continue;
+		};
+		let Some(desired) = world.get::<LodSceneLevel>(host).copied() else {
+			continue;
+		};
+		if root.0 != desired {
+			continue;
+		}
+		if let Some((viewer_entity, pose, bounds)) = viewer {
+			let Some(producer) = world.get::<LodLevelProducer>(host).copied() else {
+				continue;
+			};
+			let lod_ref = pose.as_lod_ref(viewer_entity, &bounds);
+			if producer
+				.culls_for(world, host, &lod_ref, desired)
+				.is_some_and(|culls| culls.should_cull(root.0))
+			{
+				continue;
+			}
+		}
+		world.entity_mut(entity).remove::<LodCullInFlight>();
 	}
 }
