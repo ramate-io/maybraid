@@ -10,6 +10,7 @@ pub mod commands;
 pub mod diagnostics;
 mod forest;
 mod groves;
+mod material_lib;
 mod pitch;
 pub mod player;
 mod ui;
@@ -22,6 +23,7 @@ pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
+pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{Player, PlayerPlugin, PlaygroundMode};
 
 use avian3d::prelude::LinearVelocity;
@@ -235,6 +237,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 			);
 		}
 		register_vegetation_view(app);
+		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
+			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
+		}
 		register_forest_lod::<DurhamForestPresenter>(app);
 		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
 		if !app.is_plugin_added::<PlayerPlugin>() {

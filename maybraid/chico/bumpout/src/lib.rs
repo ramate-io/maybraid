@@ -13,25 +13,32 @@ mod material;
 mod neighborhood;
 
 use bevy::prelude::{App, Plugin};
+use chico_vegetation_shaders::BumpOutMaterialPlugin;
 
 pub use bump_out::BumpOut;
+pub use chico_vegetation_shaders::{
+	BumpOutMaterial, BumpOutUniform, CHICO_BUMP_OUT_MATERIAL, RASTER_AVERAGE_HEIGHT,
+	RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY, RASTER_HEIGHT_DEVIATION,
+};
 pub use material::{
-	BumpOutMaterial, BumpOutMaterialLib, BumpOutMaterialPlugin, BumpOutMaterialRefCache,
-	BumpOutMaterialRefPlugin, BumpOutUniform,
+	init_bump_out_material_caches, BumpOutMaterialLib, BumpOutMaterialRefCache,
+	BumpOutMaterialRefPlugin, BumpOutStandaloneMaterialLib,
 };
 pub use neighborhood::{
 	BumpOutNeighborhood, BumpOutStyle, BUMP_OUT_NEIGHBORHOOD_SAMPLES, BUMP_OUT_NEIGHBORHOOD_WIDTH,
-	RASTER_AVERAGE_HEIGHT, RASTER_BITE_SIZE, RASTER_BITE_SIZE_DEVIATION, RASTER_DENSITY,
-	RASTER_HEIGHT_DEVIATION,
 };
 
-pub const CHICO_BUMP_OUT_MATERIAL: &str = "chico_bump_out";
-
-/// Registers the bump-out shader and standalone deferred material resolver.
+/// Registers the bump-out shader and caches. Does not install a [`material_ref::MaterialRefPlugin`].
+///
+/// Standalone apps add [`BumpOutMaterialRefPlugin`]. Composed apps (vegetation / world)
+/// install one parent lib instead.
 pub struct ChicoBumpOutPlugin;
 
 impl Plugin for ChicoBumpOutPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((BumpOutMaterialPlugin, BumpOutMaterialRefPlugin));
+		if !app.is_plugin_added::<BumpOutMaterialPlugin>() {
+			app.add_plugins(BumpOutMaterialPlugin);
+		}
+		init_bump_out_material_caches(app);
 	}
 }

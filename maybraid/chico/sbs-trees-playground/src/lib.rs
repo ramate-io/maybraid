@@ -2,7 +2,6 @@
 
 pub mod camera;
 pub mod checkerboard_material;
-mod chico_material_lib;
 pub mod commands;
 pub mod diagnostics;
 pub mod forest_stream;
@@ -28,12 +27,12 @@ use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
-use chico_material_lib::ChicoMaterialRefPlugin;
 use chico_sbs_trees::ensure_chico_tree_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe, VegetationProceduralPlugin};
 use chico_vegetation_shaders::{
-	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
+	init_chico_material_caches, ChicoLeafMaterial, ChicoMaterialRefPlugin, ChicoStickMaterial,
+	ChicoVegetationShadersPlugin,
 };
 use commands::show::{sync_show, ShowConfig};
 use commands::RequestMeshStats;
@@ -69,9 +68,7 @@ pub fn register_vegetation_view(app: &mut App) {
 		app.add_plugins(FrondRenderItemPlugin::default());
 	}
 	app.add_plugins(ChicoVegetationShadersPlugin);
-	if !app.is_plugin_added::<ChicoMaterialRefPlugin>() {
-		app.add_plugins(ChicoMaterialRefPlugin);
-	}
+	init_chico_material_caches(app);
 	ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
 	ensure_enforce_caching_plugin::<CrookCylinder, ChicoStickMaterial>(app);
 	ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
@@ -88,6 +85,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		app.init_resource::<ShowConfig>();
 		register_vegetation_view(app);
+		if !app.is_plugin_added::<ChicoMaterialRefPlugin>() {
+			app.add_plugins(ChicoMaterialRefPlugin);
+		}
 		register_forest_lod::<ForestRegionPresenter>(app);
 		if !app.is_plugin_added::<PlaygroundTimingPlugin>() {
 			app.add_plugins(PlaygroundTimingPlugin);

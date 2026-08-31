@@ -14,7 +14,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::camera::primitives::Aabb;
 use bevy::prelude::*;
 use camera_controls::look::CameraLookPlugin;
-use chico_bumpout::{BumpOut, ChicoBumpOutPlugin};
+use chico_bumpout::{BumpOut, BumpOutMaterialRefPlugin, ChicoBumpOutPlugin};
 use commands::NeighborhoodValues;
 use game_commands::command::GameCommandPlugin;
 use ground::setup_ground;
@@ -77,6 +77,7 @@ impl Plugin for ChicoBumpOutPlaygroundPlugin {
 			.add_plugins(CameraLookPlugin::default())
 			.add_plugins(ChicoBumpOutPlugin)
 			.add_plugins(TerrainChunkRefPlugin::<PlaygroundTerrainBuilder>::default())
+			.add_plugins(BumpOutMaterialRefPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground, setup_tiles))

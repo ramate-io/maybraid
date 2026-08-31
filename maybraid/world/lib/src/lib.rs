@@ -6,10 +6,12 @@
 //! cover the grove fill ring.
 
 pub mod commands;
+mod material_lib;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
@@ -33,6 +35,7 @@ impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: true })
+			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: PlaygroundConfig::world_defaults(),
 				commands: false,
