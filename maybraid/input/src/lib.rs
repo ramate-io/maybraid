@@ -6,6 +6,7 @@ pub mod button;
 pub mod config;
 pub mod debug;
 pub mod gate;
+pub mod hid;
 pub mod history;
 pub mod pad;
 pub mod produce;
@@ -15,6 +16,7 @@ pub use analog::{Cardinal, Deadzone};
 pub use button::{ButtonPhase, ButtonStroke, PadButton, PAD_BUTTON_COUNT};
 pub use config::VirtualPadConfig;
 pub use gate::PadGameplayEnabled;
+pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use pad::VirtualPad;
 pub use surface::cursor::PadCursor;
@@ -42,6 +44,7 @@ impl VirtualPadPlugin {
 
 impl Plugin for VirtualPadPlugin {
 	fn build(&self, app: &mut App) {
+		hid::configure_backend(app);
 		app.insert_resource(self.config.clone())
 			.init_resource::<VirtualPad>()
 			.init_resource::<PadHistory>()

@@ -5,6 +5,7 @@ use chico_vegetation_on_terrain_playground::{
 	PendingStartupCommand, PlaygroundCommand, PlaygroundDiag, PlaygroundTimingPlugin,
 	VegetationOnTerrainPlugin,
 };
+use maybraid_input::PadHidPlugins;
 
 fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -31,7 +32,8 @@ fn main() {
 				}),
 				..default()
 			})
-			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
+			.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
+			.with_pad_hid(),
 	)
 	.insert_resource(PendingStartupCommand(startup))
 	.add_plugins(VegetationOnTerrainPlugin::default());

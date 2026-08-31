@@ -7,7 +7,7 @@ use crate::button::PadButton;
 use crate::config::VirtualPadConfig;
 use crate::pad::VirtualPad;
 
-/// Named sticks first; gilrs on macOS sometimes parks Xbox axes on [`GamepadAxis::Other`].
+/// Named sticks first; gilrs sometimes parks unmapped axes on [`GamepadAxis::Other`].
 pub struct GamepadAxes;
 
 impl GamepadAxes {

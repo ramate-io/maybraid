@@ -12,6 +12,20 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSString"] }
+objc2-game-controller = { version = "0.3", features = [
+	"GCController",
+	"GCDevice",
+	"GCExtendedGamepad",
+	"GCGamepad",
+	"GCControllerAxisInput",
+	"GCControllerButtonInput",
+	"GCControllerDirectionPad",
+	"GCPhysicalInputProfile",
+] }
+
 [dev-dependencies]
 anyhow = { workspace = true }
 

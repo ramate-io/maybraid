@@ -39,3 +39,8 @@ Set [`VirtualPadConfig::debug_overlay`] to dump raw `Gamepad` sticks/buttons
 and the virtual pad onto the screen (menu playground enables this). Menu
 stick threshold is `0.2` so a light tilt still navigates. Unmapped gilrs
 axes (`Other(0)` / `Other(1)`) fill in when `LeftStick` is idle.
+
+On macOS / iOS, chain `.with_pad_hid()` on `DefaultPlugins` so gilrs is not
+started. `VirtualPadPlugin` then polls Apple’s GameController framework into
+Bevy `Gamepad`. Xbox pads on macOS are claimed by that driver; IOKit (gilrs)
+can connect them without delivering reports. Linux and Windows keep gilrs.
