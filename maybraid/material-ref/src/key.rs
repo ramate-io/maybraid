@@ -16,6 +16,7 @@ pub struct MaterialRefKey {
 	pub name: MaterialId,
 	pub palette: Vec<[u32; 4]>,
 	pub noise: NoiseParamsKey,
+	pub parameters: Vec<(String, Vec<u32>)>,
 }
 
 impl From<&MaterialRef> for MaterialRefKey {
@@ -24,6 +25,13 @@ impl From<&MaterialRef> for MaterialRefKey {
 			name: r.name.clone(),
 			palette: r.palette.iter().map(color_bits).collect(),
 			noise: NoiseParamsKey::from(&r.noise),
+			parameters: r
+				.parameters
+				.iter()
+				.map(|(name, values)| {
+					(name.to_owned(), values.iter().map(|value| value.to_bits()).collect())
+				})
+				.collect(),
 		}
 	}
 }

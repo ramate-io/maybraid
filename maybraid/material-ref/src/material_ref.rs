@@ -1,4 +1,6 @@
-//! [`MaterialRef`] identity: named recipe + palette + noise.
+//! [`MaterialRef`] identity: named recipe + palette + noise + numeric parameter blocks.
+
+use std::collections::BTreeMap;
 
 use bevy::prelude::{Color, Component};
 use procedural_common::NoiseParams;
@@ -19,7 +21,51 @@ impl MaterialId {
 	}
 }
 
-/// Deferred material identity: recipe name, optional palette, and noise params.
+/// Schema-stable named numeric parameter blocks for a material recipe.
+///
+/// A sorted map makes equality and cache identity independent of insertion order. Domain material
+/// libraries own each block's meaning and GPU layout.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MaterialParameters {
+	blocks: BTreeMap<String, Vec<f32>>,
+}
+
+impl MaterialParameters {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn insert(
+		&mut self,
+		name: impl Into<String>,
+		values: impl IntoIterator<Item = f32>,
+	) -> Option<Vec<f32>> {
+		self.blocks.insert(name.into(), values.into_iter().collect())
+	}
+
+	pub fn with(mut self, name: impl Into<String>, values: impl IntoIterator<Item = f32>) -> Self {
+		self.insert(name, values);
+		self
+	}
+
+	pub fn get(&self, name: &str) -> Option<&[f32]> {
+		self.blocks.get(name).map(Vec::as_slice)
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (&str, &[f32])> {
+		self.blocks.iter().map(|(name, values)| (name.as_str(), values.as_slice()))
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.blocks.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.blocks.len()
+	}
+}
+
+/// Deferred material identity: recipe name, optional palette, noise, and numeric parameters.
 ///
 /// Resolved by a [`crate::MaterialLib`] into a concrete Bevy [`bevy::prelude::Material`]
 /// handle and inserted (typically as [`bevy::prelude::MeshMaterial3d`]).
@@ -28,11 +74,17 @@ pub struct MaterialRef {
 	pub name: MaterialId,
 	pub palette: Vec<Color>,
 	pub noise: NoiseParams,
+	pub parameters: MaterialParameters,
 }
 
 impl MaterialRef {
 	pub fn new(name: MaterialId) -> Self {
-		Self { name, palette: Vec::new(), noise: NoiseParams::default() }
+		Self {
+			name,
+			palette: Vec::new(),
+			noise: NoiseParams::default(),
+			parameters: MaterialParameters::default(),
+		}
 	}
 
 	pub fn default_material() -> Self {
@@ -51,6 +103,24 @@ impl MaterialRef {
 	pub fn with_noise(mut self, noise: NoiseParams) -> Self {
 		self.noise = noise;
 		self
+	}
+
+	pub fn with_parameter(
+		mut self,
+		name: impl Into<String>,
+		values: impl IntoIterator<Item = f32>,
+	) -> Self {
+		self.parameters.insert(name, values);
+		self
+	}
+
+	pub fn with_parameters(mut self, parameters: MaterialParameters) -> Self {
+		self.parameters = parameters;
+		self
+	}
+
+	pub fn parameter(&self, name: &str) -> Option<&[f32]> {
+		self.parameters.get(name)
 	}
 }
 
