@@ -8,8 +8,8 @@ armature). This script does not save the clothing file.
 
 Pipeline: shrinkwrap Outside onto an inflated body (pre-cloth keep-out), push
 verts a little farther along body normals (slack), Cloth-simulate against the
-render body, light-smooth the unpinned verts, then Outside keep-out onto the
-render body plus a small clearance. Topology and existing vertex groups stay.
+render body with stiff panels and strap-only pins, then Outside keep-out onto
+the render body plus a small clearance. Topology and existing vertex groups stay.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -32,8 +32,9 @@ HELPER_MESH_PREFIXES = (
 )
 
 PIN_GROUP = "FitPins"
-PIN_NAME_TOKENS = ("shoulder", "neck")
-PIN_NAME_EXCLUDE = ("thickness", "humerus", "forearm")
+PIN_NAME_TOKENS = ("shoulder",)
+PIN_NAME_EXCLUDE = ("thickness", "humerus", "forearm", "neck")
+PIN_MIN_WEIGHT = 0.6
 
 
 def _argv_after_dashdash() -> list[str]:
@@ -71,14 +72,14 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--cloth-frames",
         type=int,
-        default=24,
-        help="Frames to simulate cloth drape (default: 24)",
+        default=48,
+        help="Frames to simulate cloth drape (default: 48)",
     )
     parser.add_argument(
         "--smooth",
         type=int,
-        default=3,
-        help="Laplacian-smooth iterations after cloth (default: 3; 0 skips)",
+        default=0,
+        help="Vertex-smooth iterations after cloth (default: 0 skips; post-smooth usually looks worse)",
     )
     parser.add_argument(
         "--smooth-factor",
@@ -404,7 +405,7 @@ def _make_pin_group(obj) -> str:
     group_ids = {g.index for g in pin_groups}
     for vert in obj.data.vertices:
         for membership in vert.groups:
-            if membership.group in group_ids and membership.weight >= 0.25:
+            if membership.group in group_ids and membership.weight >= PIN_MIN_WEIGHT:
                 indices.add(vert.index)
                 break
     if not indices:
@@ -476,9 +477,9 @@ def _drape_cloth(garment, collider, *, frames: int, gap: float, pin_group: str) 
     settings.quality = 7
     settings.mass = 0.2
     settings.tension_stiffness = 15.0
-    settings.compression_stiffness = 15.0
-    settings.shear_stiffness = 5.0
-    settings.bending_stiffness = 0.5
+    settings.compression_stiffness = 40.0
+    settings.shear_stiffness = 15.0
+    settings.bending_stiffness = 25.0
     settings.vertex_group_mass = pin_group
     collide = cloth.collision_settings
     collide.use_collision = True
@@ -490,7 +491,11 @@ def _drape_cloth(garment, collider, *, frames: int, gap: float, pin_group: str) 
     cache.frame_end = frames
 
     before = _coords(garment)
-    print(f"cloth drape {frames} frames gap={gap} pin={pin_group}")
+    print(
+        f"cloth drape {frames} frames gap={gap} pin={pin_group} "
+        f"bend={settings.bending_stiffness} compress={settings.compression_stiffness} "
+        f"shear={settings.shear_stiffness}"
+    )
     baked = False
     try:
         with bpy.context.temp_override(

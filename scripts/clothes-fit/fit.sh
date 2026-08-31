@@ -8,8 +8,8 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Outside wrap onto an inflated body, a little body-normal ease, Cloth drape,
-# light smooth, then Outside keep-out on the render body.
+# Outside wrap onto an inflated body, a little body-normal ease, stiff Cloth
+# drape with strap-only pins, then Outside keep-out on the render body.
 
 set -euo pipefail
 
@@ -25,8 +25,8 @@ SKIP_CLOTHES='proto_robe'
 INFLATE=0.04
 EASE=0.02
 COLLISION_GAP=0.015
-CLOTH_FRAMES=24
-SMOOTH=3
+CLOTH_FRAMES=48
+SMOOTH=0
 SMOOTH_FACTOR=0.35
 KEEP_OUT=0.02
 ALL=0
