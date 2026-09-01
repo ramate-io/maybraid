@@ -6,14 +6,14 @@ script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-Pipeline: treat the garment as a solid, push any interior verts to the outside
-of the body, inflate a copy of the body by the same offset along its normals,
-boolean-subtract that cutter, then rebind to the Humanoid armature (automatic
+Pipeline: treat the garment as a solid, Catmull-Clark subdivide, shrinkwrap
+Outside along the body's target normals, decimate (ratio 0.3), boolean-subtract
+the (FitTo-clipped) body, then rebind to the Humanoid armature (automatic
 weights, or the body's groups if heat weighting fails).
 
 An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
-custom property sets both the wrap distance and the cutter inflate. Body-file
-empties win over the clothes file; ``--offset`` wins over both.
+custom property sets the wrap distance. Body-file empties win over the clothes
+file; ``--offset`` wins over both.
 
 ``FitTo_Torso`` / ``UpperBody`` / ``LowerBody`` / ``FullBody`` (or ``fit_to``)
 clips wrap and cutter to an armature-derived AABB so a tank does not snap onto
@@ -43,6 +43,8 @@ HELPER_MESH_PREFIXES = (
 DEFAULT_OFFSET = 0.04
 DEFAULT_FIT_TO = "FullBody"
 FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
+SUBSURF_LEVELS = 1
+DECIMATE_RATIO = 0.3
 
 # Bind-pose Humanoid fractions: "tiny bit" of the adjacent limb, flesh beyond bones.
 TORSO_ARM_FRAC = 0.20
@@ -68,7 +70,7 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit a solid garment by snapping to the body exterior, carving an inflated body, and rebinding"
+        description="Fit a solid garment by Catmull-Clark, Outside target-normal wrap, decimate, carve, and rebind"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
@@ -76,7 +78,7 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
         "--offset",
         type=float,
         default=None,
-        help="OUTSIDE wrap and cutter inflate, meters (default: 0.04, or FitOffset_* empty in the blend)",
+        help="OUTSIDE target-normal wrap distance, meters (default: 0.04, or FitOffset_* empty in the blend)",
     )
     parser.add_argument(
         "--garment",
@@ -527,40 +529,43 @@ def _strip_deform(obj) -> None:
         obj.vertex_groups.remove(group)
 
 
-def _inflate_along_normals(obj, distance: float) -> None:
-    import bmesh
-
-    if distance <= 0.0:
+def _catmull_clark(obj, levels: int = SUBSURF_LEVELS) -> None:
+    if levels <= 0:
         return
+    before = len(obj.data.vertices)
+    name = "FitSubsurf"
+    sub = obj.modifiers.new(name, "SUBSURF")
+    sub.subdivision_type = "CATMULL_CLARK"
+    sub.levels = levels
+    if hasattr(sub, "render_levels"):
+        sub.render_levels = levels
+    obj.modifiers.move(obj.modifiers.find(name), 0)
+    _apply_modifier(obj, name)
     _recalc_normals(obj)
-    mesh = obj.data
-    bm = bmesh.new()
-    bm.from_mesh(mesh)
-    bm.normal_update()
-    bm.verts.ensure_lookup_table()
-    for vert in bm.verts:
-        vert.co += vert.normal * distance
-    bm.to_mesh(mesh)
-    bm.free()
-    mesh.update()
+    print(f"Catmull-Clark levels={levels} verts={before}->{len(obj.data.vertices)}")
+
+
+def _decimate(obj, ratio: float = DECIMATE_RATIO) -> None:
+    if ratio >= 1.0:
+        return
+    before_v = len(obj.data.vertices)
+    before_f = len(obj.data.polygons)
+    name = "FitDecimate"
+    dec = obj.modifiers.new(name, "DECIMATE")
+    dec.decimate_type = "COLLAPSE"
+    dec.ratio = ratio
+    obj.modifiers.move(obj.modifiers.find(name), 0)
+    _apply_modifier(obj, name)
+    _merge_by_distance(obj)
     _recalc_normals(obj)
-
-
-def _make_cutter(body, offset: float):
-    if offset <= 0.0:
-        print("carve cutter is the bind-pose body (offset=0)")
-        return body, False
-    import bpy
-
-    cutter = _copy_mesh(body, "FitCutter")
-    _inflate_along_normals(cutter, offset)
-    bpy.context.view_layer.update()
+    faces = len(obj.data.polygons)
     print(
-        f"carve cutter inflated {offset}m "
-        f"dim={tuple(round(v, 4) for v in cutter.dimensions)} "
-        f"(body dim={tuple(round(v, 4) for v in body.dimensions)})"
+        f"decimate ratio={ratio} verts={before_v}->{len(obj.data.vertices)} "
+        f"faces={before_f}->{faces}"
     )
-    return cutter, True
+    if faces == 0:
+        print(f"main.py: decimate emptied {obj.name}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _shrinkwrap_outside(garment, target, offset: float) -> None:
@@ -568,7 +573,7 @@ def _shrinkwrap_outside(garment, target, offset: float) -> None:
     name = "FitWrap"
     wrap = garment.modifiers.new(name, "SHRINKWRAP")
     wrap.target = target
-    wrap.wrap_method = "NEAREST_SURFACEPOINT"
+    wrap.wrap_method = "TARGET_PROJECT"
     wrap.wrap_mode = "OUTSIDE"
     wrap.offset = offset
     garment.modifiers.move(garment.modifiers.find(name), 0)
@@ -576,7 +581,7 @@ def _shrinkwrap_outside(garment, target, offset: float) -> None:
     _recalc_normals(garment)
     after = _coords(garment)
     print(
-        f"shrinkwrap OUTSIDE offset={offset}m "
+        f"shrinkwrap OUTSIDE TARGET_PROJECT offset={offset}m "
         f"verts={len(garment.data.vertices)} moved={_moved_vert_count(before, after)}"
     )
 
@@ -645,8 +650,7 @@ def _carve_body(garment, body) -> None:
     _delete(backup)
     print(
         f"main.py: boolean carve emptied {garment.name}; "
-        "the solid must overlap the cutter without being fully inside it "
-        "(a large FitOffset can swallow a small blob)",
+        "the solid must overlap the body without being fully inside it",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -822,22 +826,21 @@ def main() -> None:
         )
         fit_body = _clip_body_to_aabb(body, aabb)
         owns_region = True
-    cutter, owns_cutter = _make_cutter(fit_body, offset)
 
     for garment in garments:
         print(f"fit {garment.name} verts={len(garment.data.vertices)}")
         _apply_shape_modifiers(garment)
         _strip_deform(garment)
         _apply_transform(garment)
+        _catmull_clark(garment)
         _shrinkwrap_outside(garment, fit_body, offset)
-        _carve_body(garment, cutter)
+        _decimate(garment)
+        _carve_body(garment, fit_body)
         _rerig(garment, armature, body)
         _assert_reasonable_bounds(garment)
 
     for obj in body_meta:
         _delete(obj)
-    if owns_cutter:
-        _delete(cutter)
     if owns_region:
         _delete(fit_body)
     _delete(body)

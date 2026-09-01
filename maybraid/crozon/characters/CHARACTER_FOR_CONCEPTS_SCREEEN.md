@@ -989,7 +989,6 @@ Gender and build presets below adjust the same body rig sliders as percent offse
         - **Perm Braid:** `PermBraid` `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
         - **Techno Edge:** `TechnoEdge` `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
 - **Clothes:** (can wear as many as you want at the same time; each remaps to the body rig, `NoChanges` fit)
-    - **Basketball Cut Shirt:** `BasketballCutShirt` `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/body/basketball_cut_shirt.glb).
     - **Tunic:** `Tunic` `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/body/tunic.glb).
     - **Long Dress:** `LongDress` `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/body/long_dress.glb).
     - **Short Dress:** `ShortDress` `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/body/short_dress.glb).

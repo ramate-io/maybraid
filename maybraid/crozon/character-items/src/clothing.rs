@@ -4,7 +4,6 @@ use clap::ValueEnum;
 
 use crate::palette::ItemColor;
 
-const CLOTHING_BASKETBALL_CUT_SHIRT: &str = "characters/clothes/body/basketball_cut_shirt.glb";
 const CLOTHING_TANK_TOP: &str = "characters/clothes/body/tank_top.glb";
 const CLOTHING_TUNIC: &str = "characters/clothes/body/tunic.glb";
 const CLOTHING_LONG_DRESS: &str = "characters/clothes/body/long_dress.glb";
@@ -88,7 +87,6 @@ impl ClothingHost {
 /// Shared clothing catalog; layers compose across species.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClothingMesh {
-	BasketballCutShirt,
 	TankTop,
 	Tunic,
 	LongDress,
@@ -108,7 +106,6 @@ pub enum ClothingMesh {
 
 impl ClothingMesh {
 	pub const VALUES: &'static [Self] = &[
-		Self::BasketballCutShirt,
 		Self::TankTop,
 		Self::Tunic,
 		Self::LongDress,
@@ -128,7 +125,6 @@ impl ClothingMesh {
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::BasketballCutShirt => "basketball-cut-shirt",
 			Self::TankTop => "tank-top",
 			Self::Tunic => "tunic",
 			Self::LongDress => "long-dress",
@@ -149,7 +145,6 @@ impl ClothingMesh {
 
 	pub const fn file_stem(self) -> &'static str {
 		match self {
-			Self::BasketballCutShirt => "basketball_cut_shirt",
 			Self::TankTop => "tank_top",
 			Self::Tunic => "tunic",
 			Self::LongDress => "long_dress",
@@ -177,13 +172,12 @@ impl ClothingMesh {
 
 	/// Garments with per-host fitted GLBs under `clothes/{slot}/{host}/`.
 	pub const fn uses_host_fit(self) -> bool {
-		matches!(self, Self::TankTop)
+		matches!(self, Self::TankTop | Self::FittedCoat)
 	}
 
 	/// Unfitted catalog path relative to the `maybraid/assets` root.
 	pub const fn path(self) -> &'static str {
 		match self {
-			Self::BasketballCutShirt => CLOTHING_BASKETBALL_CUT_SHIRT,
 			Self::TankTop => CLOTHING_TANK_TOP,
 			Self::Tunic => CLOTHING_TUNIC,
 			Self::LongDress => CLOTHING_LONG_DRESS,
@@ -256,6 +250,14 @@ mod tests {
 		assert_eq!(
 			ClothingMesh::TankTop.path_on(ClothingHost::IGEO),
 			"characters/clothes/body/igeo_biped_full_body/tank_top.glb"
+		);
+	}
+
+	#[test]
+	fn fitted_coat_fits_igeo_body() {
+		assert_eq!(
+			ClothingMesh::FittedCoat.path_on(ClothingHost::IGEO),
+			"characters/clothes/body/igeo_biped_full_body/fitted_coat.glb"
 		);
 	}
 

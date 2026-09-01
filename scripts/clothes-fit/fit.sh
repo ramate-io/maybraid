@@ -8,8 +8,8 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Each garment is treated as a solid: verts inside the body snap outside,
-# an offset-inflated body is boolean-subtracted, then the result is rebound
+# Each garment is treated as a solid: Catmull-Clark, shrinkwrap Outside along
+# body target normals, decimate 0.3, boolean-subtract the body, then rebind
 # to Humanoid.
 
 set -euo pipefail
@@ -23,7 +23,7 @@ OUT_DIR="$REPO_ROOT/maybraid/assets/characters/clothes/body"
 SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
-# Optional empty FitOffset_0.04 (or FitOffset_4cm) sets wrap + cutter inflate.
+# Optional empty FitOffset_0.04 (or FitOffset_4cm) sets wrap distance.
 # Optional empty FitTo_Torso (UpperBody, LowerBody, FullBody) clips wrap + cutter.
 
 OFFSET=""
@@ -41,7 +41,7 @@ Usage:
   --clothes   Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
   --body      Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
   --all       Fit every body-slot garment onto every biped mesh body
-  --offset    Wrap distance and cutter inflate, meters (default: 0.04, or FitOffset_* empty)
+  --offset    Wrap distance outside the body, meters (default: 0.04, or FitOffset_* empty)
   --fit-to    FullBody, Torso, UpperBody, or LowerBody (default: FullBody, or FitTo_* empty)
 EOF
 }

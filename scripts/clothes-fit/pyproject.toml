@@ -1,7 +1,7 @@
 [project]
 name = "maybraid-clothes-fit"
 version = "0.1.0"
-description = "Headless Blender clothing fit: snap solid to a FitTo body region, boolean-carve an inflated cutter, rebind armature"
+description = "Headless Blender clothing fit: Catmull-Clark, Outside target-normal wrap, decimate, carve FitTo body, rebind armature"
 requires-python = ">=3.11"
 dependencies = []
 
