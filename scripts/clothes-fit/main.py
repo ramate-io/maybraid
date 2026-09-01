@@ -7,9 +7,18 @@ script does not save the clothing file.
         --body body.blend --output fitted.glb
 
 Pipeline: treat the garment as a solid, push any interior verts to the outside
-of the body, boolean-subtract the body to carve a cavity, then rebind to the
-Humanoid armature (automatic weights, or the body's groups if heat weighting
-fails).
+of the body, inflate a copy of the body by the same offset along its normals,
+boolean-subtract that cutter, then rebind to the Humanoid armature (automatic
+weights, or the body's groups if heat weighting fails).
+
+An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
+custom property sets both the wrap distance and the cutter inflate. Body-file
+empties win over the clothes file; ``--offset`` wins over both.
+
+``FitTo_Torso`` / ``UpperBody`` / ``LowerBody`` / ``FullBody`` (or ``fit_to``)
+clips wrap and cutter to an armature-derived AABB so a tank does not snap onto
+the arms. Wrap and carve use the same clipped body; weight transfer still uses
+the full mesh. ``--fit-to`` wins over the blends.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -31,6 +40,23 @@ HELPER_MESH_PREFIXES = (
     "nurbspath",
 )
 
+DEFAULT_OFFSET = 0.04
+DEFAULT_FIT_TO = "FullBody"
+FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
+
+# Bind-pose Humanoid fractions: "tiny bit" of the adjacent limb, flesh beyond bones.
+TORSO_ARM_FRAC = 0.20
+TORSO_LEG_FRAC = 0.25
+LOWER_HIP_FRAC = 0.60
+HAND_PAD_FRAC = 0.15
+LEG_FLESH_PAD = 0.12
+
+
+def _object_stem(name: str) -> str:
+    import re
+
+    return re.sub(r"\.\d{3}$", "", name)
+
 
 def _argv_after_dashdash() -> list[str]:
     argv = sys.argv
@@ -42,15 +68,15 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit a solid garment by snapping to the body exterior, carving the body out, and rebinding"
+        description="Fit a solid garment by snapping to the body exterior, carving an inflated body, and rebinding"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
     parser.add_argument(
         "--offset",
         type=float,
-        default=0.04,
-        help="Distance outside the body for shrinkwrap, meters (default: 0.04)",
+        default=None,
+        help="OUTSIDE wrap and cutter inflate, meters (default: 0.04, or FitOffset_* empty in the blend)",
     )
     parser.add_argument(
         "--garment",
@@ -58,12 +84,226 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
         default=[],
         help="Optional garment object name (repeatable). Default: non-helper mesh objects",
     )
+    parser.add_argument(
+        "--fit-to",
+        choices=FIT_TO_REGIONS,
+        default=None,
+        help="Body region for wrap and carve (default: FullBody, or FitTo_* empty in the blend)",
+    )
     return parser.parse_args(args)
 
 
 def _is_helper_mesh(name: str) -> bool:
-    stem = name.split(".", 1)[0].lower()
+    stem = _object_stem(name).lower()
     return stem in HELPER_MESH_PREFIXES or any(stem.startswith(p) for p in HELPER_MESH_PREFIXES)
+
+
+def _parse_length(token: str) -> float:
+    text = token.strip().lower().replace(",", ".")
+    if text.endswith("cm"):
+        return float(text[:-2]) * 0.01
+    if text.endswith("mm"):
+        return float(text[:-2]) * 0.001
+    if text.endswith("m") and len(text) > 1 and not text[-2].isalpha():
+        return float(text[:-1])
+    return float(text)
+
+
+def _named_fit_offset(name: str) -> float | None:
+    stem = _object_stem(name)
+    lower = stem.lower()
+    for prefix in ("FitOffset", "FitOutside"):
+        needle = prefix.lower() + "_"
+        if lower.startswith(needle):
+            try:
+                return _parse_length(stem[len(prefix) + 1 :])
+            except ValueError:
+                return None
+    return None
+
+
+def _is_fit_offset_object(obj) -> bool:
+    if _named_fit_offset(obj.name) is not None:
+        return True
+    return "fit_offset" in obj
+
+
+def _named_fit_to(name: str) -> str | None:
+    stem = _object_stem(name)
+    lower = stem.lower()
+    if not lower.startswith("fitto_"):
+        return None
+    token = stem.split("_", 1)[1].replace("_", "").lower()
+    for region in FIT_TO_REGIONS:
+        if token == region.lower():
+            return region
+    return None
+
+
+def _is_fit_to_object(obj) -> bool:
+    if _named_fit_to(obj.name) is not None:
+        return True
+    return "fit_to" in obj
+
+
+def _is_fit_meta_object(obj) -> bool:
+    return _is_fit_offset_object(obj) or _is_fit_to_object(obj)
+
+
+def _read_fit_offset(objects) -> float | None:
+    found = None
+    for obj in objects:
+        if "fit_offset" in obj:
+            found = float(obj["fit_offset"])
+        parsed = _named_fit_offset(obj.name)
+        if parsed is not None:
+            found = parsed
+    return found
+
+
+def _read_fit_to(objects) -> str | None:
+    found = None
+    for obj in objects:
+        if "fit_to" in obj:
+            token = str(obj["fit_to"]).replace("_", "").lower()
+            match = next((r for r in FIT_TO_REGIONS if r.lower() == token), None)
+            if match is None:
+                print(f"main.py: unknown fit_to={obj['fit_to']!r} on {obj.name}", file=sys.stderr)
+                sys.exit(1)
+            found = match
+        parsed = _named_fit_to(obj.name)
+        if parsed is not None:
+            found = parsed
+        elif _is_fit_to_prefix(obj.name):
+            print(f"main.py: unknown FitTo region on {obj.name}", file=sys.stderr)
+            sys.exit(1)
+    return found
+
+
+def _is_fit_to_prefix(name: str) -> bool:
+    return _object_stem(name).lower().startswith("fitto_")
+
+
+def _bone_ends(armature, name: str):
+    bone = armature.data.bones.get(name)
+    if bone is None:
+        print(f"main.py: armature {armature.name!r} missing bone {name}", file=sys.stderr)
+        sys.exit(1)
+    mw = armature.matrix_world
+    return mw @ bone.head_local, mw @ bone.tail_local, bone.length
+
+
+def _mesh_axis_bounds(obj, axis: int) -> tuple[float, float]:
+    coords = [vert.co[axis] for vert in obj.data.vertices]
+    return min(coords), max(coords)
+
+
+def _region_aabb(armature, region: str, body) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]] | None:
+    if region == "FullBody":
+        return None
+
+    y_lo, y_hi = _mesh_axis_bounds(body, 1)
+    _sh_l_h, sh_l_t, _sh_l_len = _bone_ends(armature, "shoulder.L")
+    _sh_r_h, sh_r_t, _sh_r_len = _bone_ends(armature, "shoulder.R")
+    _hum_l_h, _hum_l_t, hum_len = _bone_ends(armature, "humerus.L")
+    _fa_l_h, fa_l_t, fa_len = _bone_ends(armature, "forearm.L")
+    _fa_r_h, fa_r_t, _fa_r_len = _bone_ends(armature, "forearm.R")
+    femur_h, _femur_t, femur_len = _bone_ends(armature, "femur.L")
+    _shin_h, shin_t, _shin_len = _bone_ends(armature, "shin.L")
+    _root_h, _root_t, root_len = _bone_ends(armature, "root")
+    _neck_h, neck_t, _neck_len = _bone_ends(armature, "upper_neck")
+    pelvis_h, pelvis_t, _pelvis_len = _bone_ends(armature, "pelvis.L")
+    _th_h, _th_t, thigh_thick = _bone_ends(armature, "thigh_thickness.L")
+
+    hip_z = femur_h.z
+    neck_z = neck_t.z
+    torso_z_lo = hip_z - TORSO_LEG_FRAC * femur_len
+    shoulder_x = max(abs(sh_l_t.x), abs(sh_r_t.x))
+    torso_x = shoulder_x + TORSO_ARM_FRAC * hum_len
+    arm_x = max(abs(fa_l_t.x), abs(fa_r_t.x)) + HAND_PAD_FRAC * fa_len
+    leg_x = max(abs(pelvis_h.x), abs(pelvis_t.x)) + thigh_thick + LEG_FLESH_PAD
+    foot_z = min(shin_t.z, _mesh_axis_bounds(body, 2)[0]) - 0.04
+    lower_z_hi = hip_z + LOWER_HIP_FRAC * root_len
+
+    if region == "Torso":
+        x_hi = torso_x
+        z_lo, z_hi = torso_z_lo, neck_z
+    elif region == "UpperBody":
+        x_hi = arm_x
+        z_lo, z_hi = torso_z_lo, neck_z
+    elif region == "LowerBody":
+        x_hi = leg_x
+        z_lo, z_hi = foot_z, lower_z_hi
+    else:
+        print(f"main.py: unknown fit region {region}", file=sys.stderr)
+        sys.exit(1)
+
+    return (-x_hi, x_hi), (y_lo, y_hi), (z_lo, z_hi)
+
+
+def _make_aabb_cube(aabb, name: str):
+    import bmesh
+    import bpy
+    from mathutils import Vector
+
+    (x_lo, x_hi), (y_lo, y_hi), (z_lo, z_hi) = aabb
+    mesh = bpy.data.meshes.new(name)
+    cube = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(cube)
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=2.0)
+    center = Vector(((x_lo + x_hi) * 0.5, (y_lo + y_hi) * 0.5, (z_lo + z_hi) * 0.5))
+    scale = Vector(((x_hi - x_lo) * 0.5, (y_hi - y_lo) * 0.5, (z_hi - z_lo) * 0.5))
+    bmesh.ops.scale(bm, verts=list(bm.verts), vec=scale)
+    bmesh.ops.translate(bm, verts=list(bm.verts), vec=center)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    return cube
+
+
+def _clip_body_to_aabb(body, aabb):
+    clipped = _copy_mesh(body, "FitRegion")
+    cube = _make_aabb_cube(aabb, "FitRegionCube")
+    _recalc_normals(clipped)
+    backup = _copy_mesh(clipped, "FitRegionBackup")
+    for solver in ("FLOAT", "EXACT", "MANIFOLD"):
+        existing = clipped.modifiers.get("FitClip")
+        if existing is not None:
+            clipped.modifiers.remove(existing)
+        _restore_mesh(clipped, backup)
+        clip = clipped.modifiers.new("FitClip", "BOOLEAN")
+        clip.operation = "INTERSECT"
+        clip.operand_type = "OBJECT"
+        clip.object = cube
+        if hasattr(clip, "solver"):
+            try:
+                clip.solver = solver
+            except TypeError:
+                print(f"boolean solver {solver} unavailable")
+                clipped.modifiers.remove(clip)
+                continue
+        try:
+            _apply_modifier(clipped, "FitClip")
+        except Exception as exc:
+            print(f"region intersect {solver} apply failed ({exc})")
+            continue
+        faces = len(clipped.data.polygons)
+        print(
+            f"fit region INTERSECT {solver} verts={len(backup.data.vertices)}->"
+            f"{len(clipped.data.vertices)} faces={len(backup.data.polygons)}->{faces}"
+        )
+        if faces > 0:
+            _delete(backup)
+            _delete(cube)
+            _merge_by_distance(clipped)
+            _recalc_normals(clipped)
+            return clipped
+    _delete(backup)
+    _delete(cube)
+    _delete(clipped)
+    print("main.py: FitTo cube missed the body mesh", file=sys.stderr)
+    sys.exit(1)
 
 
 def _object_mode() -> None:
@@ -103,8 +343,14 @@ def _append_body_meshes(body_path: str):
         data_to.objects = list(data_from.objects)
 
     imported = []
+    meta = []
     for obj in data_to.objects:
         if obj is None:
+            continue
+        if _is_fit_meta_object(obj) and obj.type != "MESH":
+            if obj.name not in bpy.context.scene.collection.objects:
+                bpy.context.scene.collection.objects.link(obj)
+            meta.append(obj)
             continue
         if obj.type != "MESH":
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -122,7 +368,7 @@ def _append_body_meshes(body_path: str):
         for mod in list(obj.modifiers):
             obj.modifiers.remove(mod)
 
-    return imported
+    return imported, meta
 
 
 def _join_targets(targets):
@@ -281,6 +527,42 @@ def _strip_deform(obj) -> None:
         obj.vertex_groups.remove(group)
 
 
+def _inflate_along_normals(obj, distance: float) -> None:
+    import bmesh
+
+    if distance <= 0.0:
+        return
+    _recalc_normals(obj)
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.normal_update()
+    bm.verts.ensure_lookup_table()
+    for vert in bm.verts:
+        vert.co += vert.normal * distance
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.update()
+    _recalc_normals(obj)
+
+
+def _make_cutter(body, offset: float):
+    if offset <= 0.0:
+        print("carve cutter is the bind-pose body (offset=0)")
+        return body, False
+    import bpy
+
+    cutter = _copy_mesh(body, "FitCutter")
+    _inflate_along_normals(cutter, offset)
+    bpy.context.view_layer.update()
+    print(
+        f"carve cutter inflated {offset}m "
+        f"dim={tuple(round(v, 4) for v in cutter.dimensions)} "
+        f"(body dim={tuple(round(v, 4) for v in body.dimensions)})"
+    )
+    return cutter, True
+
+
 def _shrinkwrap_outside(garment, target, offset: float) -> None:
     before = _coords(garment)
     name = "FitWrap"
@@ -324,7 +606,7 @@ def _restore_mesh(dst, src) -> None:
 def _carve_body(garment, body) -> None:
     print(
         f"carve {garment.name} dim={tuple(round(v, 4) for v in garment.dimensions)} "
-        f"vs body dim={tuple(round(v, 4) for v in body.dimensions)}"
+        f"vs cutter dim={tuple(round(v, 4) for v in body.dimensions)}"
     )
     _recalc_normals(garment)
     _recalc_normals(body)
@@ -363,7 +645,8 @@ def _carve_body(garment, body) -> None:
     _delete(backup)
     print(
         f"main.py: boolean carve emptied {garment.name}; "
-        "the solid must overlap the body without being fully inside it",
+        "the solid must overlap the cutter without being fully inside it "
+        "(a large FitOffset can swallow a small blob)",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -500,21 +783,63 @@ def main() -> None:
         sys.exit(1)
 
     _object_mode()
-    body = _join_targets(_append_body_meshes(body_path))
+    clothes_objects = list(bpy.data.objects)
+    targets, body_meta = _append_body_meshes(body_path)
+    body = _join_targets(targets)
     _apply_transform(body)
+    offset = DEFAULT_OFFSET
+    clothes_offset = _read_fit_offset(clothes_objects)
+    if clothes_offset is not None:
+        offset = clothes_offset
+    body_offset = _read_fit_offset(body_meta)
+    if body_offset is not None:
+        offset = body_offset
+    if args.offset is not None:
+        offset = args.offset
+    offset = max(0.0, offset)
+    print(f"fit offset={offset}m")
     garments = _garment_objects(args.garment, exclude=[body])
     armature = _scene_armature()
+    region = DEFAULT_FIT_TO
+    clothes_region = _read_fit_to(clothes_objects)
+    if clothes_region is not None:
+        region = clothes_region
+    body_region = _read_fit_to(body_meta)
+    if body_region is not None:
+        region = body_region
+    if args.fit_to is not None:
+        region = args.fit_to
+    aabb = _region_aabb(armature, region, body)
+    if aabb is None:
+        print(f"fit_to={region}")
+        fit_body = body
+        owns_region = False
+    else:
+        (x_lo, x_hi), (y_lo, y_hi), (z_lo, z_hi) = aabb
+        print(
+            f"fit_to={region} "
+            f"x=[{x_lo:.3f},{x_hi:.3f}] y=[{y_lo:.3f},{y_hi:.3f}] z=[{z_lo:.3f},{z_hi:.3f}]"
+        )
+        fit_body = _clip_body_to_aabb(body, aabb)
+        owns_region = True
+    cutter, owns_cutter = _make_cutter(fit_body, offset)
 
     for garment in garments:
         print(f"fit {garment.name} verts={len(garment.data.vertices)}")
         _apply_shape_modifiers(garment)
         _strip_deform(garment)
         _apply_transform(garment)
-        _shrinkwrap_outside(garment, body, max(0.0, args.offset))
-        _carve_body(garment, body)
+        _shrinkwrap_outside(garment, fit_body, offset)
+        _carve_body(garment, cutter)
         _rerig(garment, armature, body)
         _assert_reasonable_bounds(garment)
 
+    for obj in body_meta:
+        _delete(obj)
+    if owns_cutter:
+        _delete(cutter)
+    if owns_region:
+        _delete(fit_body)
     _delete(body)
     _detach_helpers(garments + [armature])
     _export_glb(output_path, garments + [armature])

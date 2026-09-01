@@ -9,7 +9,8 @@
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
 # Each garment is treated as a solid: verts inside the body snap outside,
-# the body is boolean-subtracted, then the result is rebound to Humanoid.
+# an offset-inflated body is boolean-subtracted, then the result is rebound
+# to Humanoid.
 
 set -euo pipefail
 
@@ -22,7 +23,11 @@ OUT_DIR="$REPO_ROOT/maybraid/assets/characters/clothes/body"
 SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
-OFFSET=0.04
+# Optional empty FitOffset_0.04 (or FitOffset_4cm) sets wrap + cutter inflate.
+# Optional empty FitTo_Torso (UpperBody, LowerBody, FullBody) clips wrap + cutter.
+
+OFFSET=""
+FIT_TO=""
 ALL=0
 CLOTHES_STEMS=()
 BODY_STEMS=()
@@ -36,7 +41,8 @@ Usage:
   --clothes   Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
   --body      Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
   --all       Fit every body-slot garment onto every biped mesh body
-  --offset    Shrinkwrap distance outside the body, meters (default: ${OFFSET})
+  --offset    Wrap distance and cutter inflate, meters (default: 0.04, or FitOffset_* empty)
+  --fit-to    FullBody, Torso, UpperBody, or LowerBody (default: FullBody, or FitTo_* empty)
 EOF
 }
 
@@ -56,6 +62,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --offset)
             OFFSET="$2"
+            shift 2
+            ;;
+        --fit-to)
+            FIT_TO="$2"
             shift 2
             ;;
         -h|--help)
@@ -126,10 +136,17 @@ for clothes in "${CLOTHES_STEMS[@]}"; do
         out="$OUT_DIR/${body}/${clothes}.glb"
         mkdir -p "$(dirname "$out")"
         echo "Fitting ${clothes} → ${body}"
+        extra=()
+        if [ -n "$OFFSET" ]; then
+            extra+=(--offset "$OFFSET")
+        fi
+        if [ -n "$FIT_TO" ]; then
+            extra+=(--fit-to "$FIT_TO")
+        fi
         if ! blender --background "$clothes_blend" --python "$FIT_SCRIPT" -- \
             --body "$body_blend" \
             --output "$out" \
-            --offset "$OFFSET"; then
+            ${extra[@]+"${extra[@]}"}; then
             echo "Failed to fit ${clothes} onto ${body}" >&2
             exit 1
         fi
