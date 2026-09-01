@@ -23,7 +23,7 @@ SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
 # Optional empty FitOffset_0.04 (or FitOffset_4cm) sets wrap distance.
-# Optional empty FitTo_Torso (UpperBody, LowerBody, FullBody) clips wrap.
+# Optional empty FitTo_Torso (UpperBody, LowerBody, LegsAndTorso, FullBody) clips wrap.
 
 OFFSET=""
 FIT_TO=""
@@ -41,7 +41,8 @@ Usage:
   --body      Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
   --all       Fit every body-slot garment onto every biped mesh body
   --offset    Wrap distance outside the body, meters (default: 0.04, or FitOffset_* empty)
-  --fit-to    FullBody, Torso, UpperBody, or LowerBody (default: FullBody, or FitTo_* empty)
+  --fit-to    FullBody, Torso, UpperBody, LowerBody, or LegsAndTorso
+              (default: FullBody, or FitTo_* empty)
 EOF
 }
 

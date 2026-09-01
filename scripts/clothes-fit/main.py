@@ -16,9 +16,11 @@ An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
 custom property sets the wrap distance. Body-file empties win over the clothes
 file; ``--offset`` wins over both.
 
-``FitTo_Torso`` / ``UpperBody`` / ``LowerBody`` / ``FullBody`` (or ``fit_to``)
-clips wrap to an armature-derived AABB so a tank does not snap onto the arms.
-Weight transfer still uses the full mesh. ``--fit-to`` wins over the blends.
+``FitTo_Torso`` / ``UpperBody`` / ``LowerBody`` / ``LegsAndTorso`` / ``FullBody``
+(or ``fit_to``) clips wrap to an armature-derived AABB so a tank does not snap
+onto the arms. ``LegsAndTorso`` is the full body minus the arms (togas and
+similar). Weight transfer still uses the full mesh. ``--fit-to`` wins over the
+blends.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -42,7 +44,7 @@ HELPER_MESH_PREFIXES = (
 
 DEFAULT_OFFSET = 0.04
 DEFAULT_FIT_TO = "FullBody"
-FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
+FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody", "LegsAndTorso")
 INSIDE_EPS = 1e-5
 HOST_BODY_PREFIXES = ("humanoidfullbody", "fittarget_", "fitregion")
 
@@ -241,6 +243,9 @@ def _region_aabb(armature, region: str, body) -> tuple[tuple[float, float], tupl
     elif region == "LowerBody":
         x_hi = leg_x
         z_lo, z_hi = foot_z, lower_z_hi
+    elif region == "LegsAndTorso":
+        x_hi = max(torso_x, leg_x)
+        z_lo, z_hi = foot_z, _mesh_axis_bounds(body, 2)[1]
     else:
         print(f"main.py: unknown fit region {region}", file=sys.stderr)
         sys.exit(1)
