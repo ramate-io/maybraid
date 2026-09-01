@@ -6,11 +6,11 @@ script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-Pipeline: treat the garment as a solid, Catmull-Clark subdivide, shrinkwrap
-Outside along the body's target normals until vertices are outside (or the
-inside-count stops dropping), decimate (ratio 0.3), boolean-subtract the
-(FitTo-clipped) body, then rebind to the Humanoid armature (automatic
-weights, or the body's groups if heat weighting fails).
+Pipeline: treat the garment as a solid, shrinkwrap Outside along the body's
+target normals until vertices are outside (or the inside-count stops dropping),
+decimate (ratio 0.3), boolean-subtract the (FitTo-clipped) body, then rebind
+to the Humanoid armature (automatic weights, or the body's groups if heat
+weighting fails).
 
 An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
 custom property sets the wrap distance. Body-file empties win over the clothes
@@ -44,7 +44,6 @@ HELPER_MESH_PREFIXES = (
 DEFAULT_OFFSET = 0.04
 DEFAULT_FIT_TO = "FullBody"
 FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
-SUBSURF_LEVELS = 1
 DECIMATE_RATIO = 0.3
 WRAP_MAX_ITERS = 5
 INSIDE_EPS = 1e-5
@@ -73,7 +72,7 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit a solid garment by Catmull-Clark, looped Outside target-normal wrap, decimate, carve, and rebind"
+        description="Fit a solid garment by looped Outside target-normal wrap, decimate, carve, and rebind"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
@@ -532,22 +531,6 @@ def _strip_deform(obj) -> None:
         obj.vertex_groups.remove(group)
 
 
-def _catmull_clark(obj, levels: int = SUBSURF_LEVELS) -> None:
-    if levels <= 0:
-        return
-    before = len(obj.data.vertices)
-    name = "FitSubsurf"
-    sub = obj.modifiers.new(name, "SUBSURF")
-    sub.subdivision_type = "CATMULL_CLARK"
-    sub.levels = levels
-    if hasattr(sub, "render_levels"):
-        sub.render_levels = levels
-    obj.modifiers.move(obj.modifiers.find(name), 0)
-    _apply_modifier(obj, name)
-    _recalc_normals(obj)
-    print(f"Catmull-Clark levels={levels} verts={before}->{len(obj.data.vertices)}")
-
-
 def _decimate(obj, ratio: float = DECIMATE_RATIO) -> None:
     if ratio >= 1.0:
         return
@@ -894,7 +877,6 @@ def main() -> None:
         _apply_shape_modifiers(garment)
         _strip_deform(garment)
         _apply_transform(garment)
-        _catmull_clark(garment)
         _wrap_until_outside(garment, fit_body, offset)
         _decimate(garment)
         _carve_body(garment, fit_body)

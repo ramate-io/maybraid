@@ -8,9 +8,9 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Each garment is treated as a solid: Catmull-Clark, shrinkwrap Outside along
-# body target normals until verts are outside, decimate 0.3, boolean-subtract
-# the body, then rebind to Humanoid.
+# Each garment is treated as a solid: shrinkwrap Outside along body target
+# normals until verts are outside, decimate 0.3, boolean-subtract the body,
+# then rebind to Humanoid.
 
 set -euo pipefail
 
