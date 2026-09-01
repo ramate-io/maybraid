@@ -1,16 +1,20 @@
 //! Assembled world model: Durham terrain, streamed forest, sky dome.
 //!
-//! Character mode is the default. Forest present / generate are 2 km / 3 km;
-//! vegetation LOD bullseye / lattice are widened to match.
+//! Character mode is the default. Forest grove fill is 1 km present / 3 km
+//! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
+//! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
+//! cover the grove fill ring.
 
 mod camera;
 pub mod commands;
 mod control;
+mod material_lib;
 mod ui;
 
 pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
@@ -36,8 +40,8 @@ const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	combine_rule: CoefficientCombine::Max,
 };
 
-/// ±2 km so produce covers the 2 km present ring (stream-radius 2).
-const WORLD_BULLSEYE_OUTER_M: f32 = 4_000.0;
+/// ±1 km so produce covers the 1 km grove present ring.
+const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
@@ -51,6 +55,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
+			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: true,
 				..default()

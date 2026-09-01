@@ -598,7 +598,7 @@ pub struct ShowForest {
 	)]
 	pub noise: NoiseParams,
 
-	/// Present-ring multiplier (`1` = 1 km present / 2 km generate; `0` = one 100 m tile).
+	/// Present-ring multiplier (`1` = 1 km present / 3 km generate; `0` = one 100 m tile).
 	#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
 	pub stream_radius: u32,
 }

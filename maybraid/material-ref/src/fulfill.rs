@@ -138,8 +138,15 @@ pub enum MaterialRefSystems {
 pub(crate) struct MaterialRefShared;
 
 /// True after the first [`MaterialRefPlugin`] has installed the shared invalidate system.
-pub(crate) fn material_ref_shared_installed(app: &App) -> bool {
+///
+/// App crates that compose domain libs should install one fulfill plugin. Later
+/// plugins (including [`crate::StandardMaterialRefPlugin`]) skip when this is set.
+pub fn material_ref_plugin_installed(app: &App) -> bool {
 	app.world().contains_resource::<MaterialRefShared>()
+}
+
+pub(crate) fn material_ref_shared_installed(app: &App) -> bool {
+	material_ref_plugin_installed(app)
 }
 
 /// Installs fulfill for material lib `L` (a [`SystemParam`] whose item implements [`MaterialLib`]).

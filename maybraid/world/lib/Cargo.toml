@@ -19,6 +19,7 @@ game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }

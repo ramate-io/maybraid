@@ -102,3 +102,9 @@ pub trait NormalizeChunk {
 		cascade_chunk.clone()
 	}
 }
+
+impl<T: NormalizeChunk + ?Sized> NormalizeChunk for std::sync::Arc<T> {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		self.as_ref().normalize_chunk(cascade_chunk)
+	}
+}

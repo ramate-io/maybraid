@@ -7,8 +7,9 @@
 //! - [`MaterialRefPlugin`]`<L>` — fulfill system generic over that SystemParam
 //! - [`StandardMaterialLib`] / [`StandardMaterialRefPlugin`] — reference implementor
 //!
-//! Domain crates add their own SystemParam libs (e.g. Chico leaf + stick) that fork on
-//! [`MaterialId`] and insert the matching `MeshMaterial3d<M>`.
+//! Domain crates add their own SystemParam libs (e.g. Chico leaf + stick) that
+//! [`MaterialLib::try_fulfill`] only the recipes they own. App crates compose those
+//! libs in one [`MaterialRefPlugin`] so two fulfills never race the same root.
 
 mod fulfill;
 mod key;
@@ -19,13 +20,15 @@ mod standard;
 
 pub use fulfill::{
 	fulfill_material_ref_descendants, fulfill_material_ref_roots,
-	invalidate_changed_material_ref_roots, restamp_material_ref_descendants_of_changed,
-	MaterialRefPlugin, MaterialRefSystems,
+	invalidate_changed_material_ref_roots, material_ref_plugin_installed,
+	restamp_material_ref_descendants_of_changed, MaterialRefPlugin, MaterialRefSystems,
 };
 pub use key::{hash_material_ref, MaterialRefCache, MaterialRefKey, NoiseParamsKey};
 pub use lib_trait::MaterialLib;
 pub use material_ref::{
-	MaterialId, MaterialRef, MaterialRefApplied, MaterialRefRoot, PropagateToDescendants,
+	MaterialId, MaterialRasters, MaterialRef, MaterialRefApplied, MaterialRefRoot, MaterialScalars,
+	PropagateToDescendants, MATERIAL_PALETTE_SLOTS, MATERIAL_RASTER_CHANNELS,
+	MATERIAL_RASTER_SAMPLES, MATERIAL_RASTER_WIDTH, MATERIAL_SCALAR_FLOATS,
 };
 pub use reference::ReferenceMaterial;
 pub use standard::{StandardMaterialLib, StandardMaterialRefCache, StandardMaterialRefPlugin};
@@ -56,6 +59,29 @@ mod tests {
 		let other_name = MaterialRef::named("bark").with_palette([Color::srgb(0.1, 0.5, 0.2)]);
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_color));
 		assert_ne!(MaterialRefKey::from(&base), MaterialRefKey::from(&other_name));
+		Ok(())
+	}
+
+	#[test]
+	fn material_raster_key_is_bit_stable_and_channel_indexed() -> anyhow::Result<()> {
+		let samples_a = [0.25, 0.75, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+		let samples_b = [2.0, -0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+		let a = MaterialRef::named("bump_out")
+			.with_raster(0, samples_a)
+			.with_raster(1, samples_b)
+			.with_scalars([0.04, 0.9]);
+		let b = MaterialRef::named("bump_out")
+			.with_raster(1, samples_b)
+			.with_raster(0, samples_a)
+			.with_scalars([0.04, 0.9]);
+		let positive_zero = MaterialRef::named("bump_out")
+			.with_raster(0, samples_a)
+			.with_raster(1, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+			.with_scalars([0.04, 0.9]);
+
+		assert_eq!(MaterialRefKey::from(&a), MaterialRefKey::from(&b));
+		assert_ne!(MaterialRefKey::from(&a), MaterialRefKey::from(&positive_zero));
+		assert_eq!(a.raster(0), Some(samples_a));
 		Ok(())
 	}
 
@@ -155,12 +181,13 @@ mod tests {
 	struct NoopMaterialLib;
 
 	impl MaterialLib for NoopMaterialLib {
-		fn fulfill(
+		fn try_fulfill(
 			&mut self,
 			_entity: Entity,
 			_material_ref: &MaterialRef,
 			_commands: &mut Commands,
-		) {
+		) -> bool {
+			false
 		}
 	}
 

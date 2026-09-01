@@ -20,6 +20,7 @@ impl Plugin for DurhamTerrainShaderPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "durham_terrain_shader.wgsl");
 		app.add_plugins(MaterialPlugin::<DurhamTerrainShader>::default());
+		app.add_plugins(crate::RefractionWaterPlugin);
 	}
 }
 

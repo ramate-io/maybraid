@@ -2204,6 +2204,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-bumpout"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico-vegetation-shaders",
+ "material-ref",
+ "procedural-common",
+ "terrain-chunk-ref",
+]
+
+[[package]]
+name = "chico-bumpout-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "chico-bumpout",
+ "clap",
+ "game-commands",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "sdf",
+ "terrain-chunk-ref",
+]
+
+[[package]]
 name = "chico-forests"
 version = "0.0.1"
 dependencies = [
@@ -2351,10 +2380,12 @@ version = "0.0.1"
 dependencies = [
  "avian3d",
  "bevy",
+ "chico-bumpout",
  "chico-forests",
  "chico-groves",
  "chico-sbs-trees-playground",
  "chico-vegetation-components",
+ "chico-vegetation-shaders",
  "clap",
  "crozon-characters",
  "durham-terrain",
@@ -2363,10 +2394,13 @@ dependencies = [
  "ground-avian",
  "lod",
  "lod-avian",
+ "lod-cascade",
  "log",
+ "material-ref",
  "maybraid-input",
  "procedural-common",
  "render-item",
+ "terrain-chunk-ref",
 ]
 
 [[package]]
@@ -2374,6 +2408,8 @@ name = "chico-vegetation-shaders"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "chico-vegetation-components",
+ "material-ref",
 ]
 
 [[package]]
@@ -4404,6 +4440,7 @@ dependencies = [
  "lod",
  "lod-avian",
  "log",
+ "material-ref",
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-sky",
@@ -6389,6 +6426,17 @@ dependencies = [
  "sdf",
  "serde",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "terrain-chunk-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chunk",
+ "lod-cascade",
+ "render-item",
 ]
 
 [[package]]

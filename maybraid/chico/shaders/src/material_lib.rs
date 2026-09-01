@@ -1,4 +1,4 @@
-//! Playground [`MaterialLib`]: leaf / stick / frond named recipes + green default.
+//! [`MaterialLib`] for Chico vegetation shaders: leaf / stick / frond recipes only.
 
 use bevy::ecs::system::SystemParam;
 use bevy::light::NotShadowCaster;
@@ -6,11 +6,12 @@ use bevy::prelude::*;
 use chico_vegetation_components::{
 	CHICO_FROND_MATERIAL, CHICO_LEAF_MATERIAL, CHICO_STICK_MATERIAL,
 };
-use chico_vegetation_shaders::{ChicoFrondMaterial, ChicoLeafMaterial, ChicoStickMaterial};
 use material_ref::{
 	MaterialId, MaterialLib, MaterialRef, MaterialRefCache, MaterialRefKey, MaterialRefPlugin,
 	StandardMaterialLib, StandardMaterialRefCache,
 };
+
+use crate::{ChicoFrondMaterial, ChicoLeafMaterial, ChicoStickMaterial};
 
 /// Cache of resolved [`ChicoLeafMaterial`] handles.
 pub type ChicoLeafMaterialRefCache = MaterialRefCache<ChicoLeafMaterial>;
@@ -21,10 +22,17 @@ pub type ChicoStickMaterialRefCache = MaterialRefCache<ChicoStickMaterial>;
 /// Cache of resolved [`ChicoFrondMaterial`] handles.
 pub type ChicoFrondMaterialRefCache = MaterialRefCache<ChicoFrondMaterial>;
 
-/// Multi-type lib: leaf / stick / frond named recipes + green [`StandardMaterial`] default.
+/// Inserts leaf / stick / frond material caches. Idempotent.
+pub fn init_chico_material_caches(app: &mut App) {
+	app.init_resource::<StandardMaterialRefCache>()
+		.init_resource::<ChicoLeafMaterialRefCache>()
+		.init_resource::<ChicoStickMaterialRefCache>()
+		.init_resource::<ChicoFrondMaterialRefCache>();
+}
+
+/// Leaf / stick / frond named recipes. Does not fall through to [`StandardMaterial`].
 #[derive(SystemParam)]
 pub struct ChicoMaterialLib<'w> {
-	pub standard: StandardMaterialLib<'w>,
 	pub leaf_materials: ResMut<'w, Assets<ChicoLeafMaterial>>,
 	pub leaf_cache: ResMut<'w, ChicoLeafMaterialRefCache>,
 	pub stick_materials: ResMut<'w, Assets<ChicoStickMaterial>>,
@@ -66,7 +74,12 @@ impl ChicoMaterialLib<'_> {
 }
 
 impl MaterialLib for ChicoMaterialLib<'_> {
-	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
 		match &material_ref.name {
 			MaterialId::Name(name) if name == CHICO_LEAF_MATERIAL => {
 				let handle = self.resolve_leaf(material_ref);
@@ -75,6 +88,7 @@ impl MaterialLib for ChicoMaterialLib<'_> {
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert(MeshMaterial3d(handle))
 					.insert(NotShadowCaster);
+				true
 			}
 			MaterialId::Name(name) if name == CHICO_STICK_MATERIAL => {
 				let handle = self.resolve_stick(material_ref);
@@ -83,6 +97,7 @@ impl MaterialLib for ChicoMaterialLib<'_> {
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert(MeshMaterial3d(handle))
 					.insert(NotShadowCaster);
+				true
 			}
 			MaterialId::Name(name) if name == CHICO_FROND_MATERIAL => {
 				let handle = self.resolve_frond(material_ref);
@@ -91,12 +106,33 @@ impl MaterialLib for ChicoMaterialLib<'_> {
 					.remove::<MeshMaterial3d<StandardMaterial>>()
 					.insert(MeshMaterial3d(handle))
 					.insert(NotShadowCaster);
+				true
 			}
-			_ => {
-				self.standard.fulfill(entity, material_ref, commands);
-				commands.entity(entity).insert(NotShadowCaster);
-			}
+			_ => false,
 		}
+	}
+}
+
+/// Shaders-crate standalone lib: Chico recipes, then [`StandardMaterialLib`].
+#[derive(SystemParam)]
+pub struct ChicoStandaloneMaterialLib<'w> {
+	pub chico: ChicoMaterialLib<'w>,
+	pub standard: StandardMaterialLib<'w>,
+}
+
+impl MaterialLib for ChicoStandaloneMaterialLib<'_> {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
+		self.chico.try_fulfill(entity, material_ref, commands)
+			|| self.standard.try_fulfill(entity, material_ref, commands)
+	}
+
+	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
+		let _ = self.try_fulfill(entity, material_ref, commands);
 	}
 }
 
@@ -127,15 +163,18 @@ fn frond_from_ref(material_ref: &MaterialRef) -> ChicoFrondMaterial {
 	mat
 }
 
-/// Registers caches + [`MaterialRefPlugin`] for [`ChicoMaterialLib`].
+/// Registers caches + [`MaterialRefPlugin`] for [`ChicoStandaloneMaterialLib`].
+///
+/// Vegetation / world apps that compose several domain libs should call
+/// [`init_chico_material_caches`] and skip this plugin.
 pub struct ChicoMaterialRefPlugin;
 
 impl Plugin for ChicoMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<StandardMaterialRefCache>()
-			.init_resource::<ChicoLeafMaterialRefCache>()
-			.init_resource::<ChicoStickMaterialRefCache>()
-			.init_resource::<ChicoFrondMaterialRefCache>()
-			.add_plugins(MaterialRefPlugin::<ChicoMaterialLib<'_>>::default());
+		init_chico_material_caches(app);
+		if material_ref::material_ref_plugin_installed(app) {
+			return;
+		}
+		app.add_plugins(MaterialRefPlugin::<ChicoStandaloneMaterialLib<'_>>::default());
 	}
 }

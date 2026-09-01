@@ -9,6 +9,17 @@
     pbr_functions as fns,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
+#ifdef DISTANCE_FOG
+#import bevy_pbr::mesh_view_bindings::fog
+#endif
+
+fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
+#ifdef DISTANCE_FOG
+    return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
+#else
+    return color;
+#endif
+}
 
 struct DurhamSwatch {
     left: vec4<f32>,
@@ -220,9 +231,19 @@ fn fragment(
     let edge_intensity = mix(1.0, saturate(style_params.z), edge_ink);
 
     let shaded = lit_color.rgb * edge_intensity;
-    let toned = tone_mapping(vec4<f32>(shaded, 1.0), view.color_grading);
+    let lit = with_distance_fog(
+        vec4<f32>(shaded, 1.0),
+        mesh.world_position.xyz,
+        mesh.position.xy,
+    );
+    let toned = tone_mapping(lit, view.color_grading);
+    let unlit = with_distance_fog(
+        vec4<f32>(ground * edge_intensity, 1.0),
+        mesh.world_position.xyz,
+        mesh.position.xy,
+    );
     let lit_mix = saturate(style_params.w);
-    let final_color = mix(ground * edge_intensity, toned.rgb, lit_mix);
+    let final_color = mix(unlit.rgb, toned.rgb, lit_mix);
 
     return vec4<f32>(final_color, 1.0);
 }

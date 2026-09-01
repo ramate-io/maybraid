@@ -2,8 +2,8 @@
 //!
 //! Submodules:
 //! - [`regions`] — strategy `P` + nodes `F` → [`LodSceneRefreshRegion<M>`]
-//! - [`cull_regions`] — rotating cull lattice → untyped AABB cache → per-`T` enqueue
-//! - [`levels`] — untyped region AABB → shared host-hit cache → per-`T` levels
+//! - [`cull_regions`] — rotating cull lattice → untyped AABB cache → erased enqueue
+//! - [`levels`] — untyped region AABB → shared host-hit cache → one erased level pass
 //! - [`entities`] — one untyped fold: max level → write [`crate::LodSceneLevel`]
 //! - [`sync`] — root sync, chunk fulfill, cull
 //!
@@ -12,10 +12,10 @@
 //! - [`LodSceneRefreshRegionPlugin<P, F, M>`] — region production
 //! - [`LodSceneCullRegionPlugin<P, F, M>`] — cull region production
 //! - [`LodSceneRefreshLevelsFillPlugin<I, F>`] — once: snapshots + host hits
-//! - [`LodSceneRefreshLevelsPlugin<T>`] — per-type emit from the shared cache
+//! - [`LodSceneRefreshLevelsPlugin<T>`] — register `T` with the shared emitter
 //! - [`LodSceneRefreshSyncPlugin<T, F>`] — chunk fulfill + optional full-scan cull
 //! - [`LodSceneCullProduceFillPlugin<I, F>`] — once: cull snapshots + host hits
-//! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — fill + per-`T` enqueue from cache
+//! - [`LodSceneRegionCullPlugin<I, M, T, F>`] — producer registration over shared enqueue
 //! - [`LodSceneRefreshPlugin<T, M, I, F>`] — fill + emit + sync (region separate)
 
 mod bounds;
@@ -39,20 +39,22 @@ use crate::scene::SemanticLodScene;
 
 pub use bounds::LodHostBounds;
 pub use cull_regions::{
-	fill_lod_cull_produce_cache, produce_lod_cull_for_region, produce_lod_cull_regions,
-	sync_cullable_roots_marker, sync_nested_refresh_allowed, LodCullMarkerPlugin,
-	LodCullProduceCache, LodCullRegionCursor, LodCullRegions, LodCullRegionsStatus,
-	LodHostHasCullableRoots, LodNestedRefreshAllowed, LodNestedRefreshBlocked,
-	LodNestedRefreshSyncBudget, LodSceneCullAabb, LodSceneCullProduceFillPlugin,
-	LodSceneCullRegion, LodSceneCullRegionPlugin, LodSceneRegionCullPlugin, OpenLattice,
+	fill_lod_cull_produce_cache, produce_lod_cull_for_region, produce_lod_cull_for_region_erased,
+	produce_lod_cull_regions, sync_cullable_roots_marker, sync_nested_refresh_allowed,
+	LodCullMarkerPlugin, LodCullProduceCache, LodCullRegionCursor, LodCullRegions,
+	LodCullRegionsStatus, LodHostHasCullableRoots, LodNestedRefreshAllowed,
+	LodNestedRefreshBlocked, LodNestedRefreshSyncBudget, LodSceneCullAabb,
+	LodSceneCullProduceFillPlugin, LodSceneCullRegion, LodSceneCullRegionPlugin,
+	LodSceneRegionCullPlugin, OpenLattice,
 };
 pub use entities::{
 	dominant_lod_ref, refresh_lod_host_levels, update_lod_host_levels,
 	LodSceneRefreshEntitiesPlugin,
 };
 pub use levels::{
-	fill_lod_produce_cache, produce_lod_refresh_levels, LodProduceCache, LodSceneRefreshAabb,
-	LodSceneRefreshLevel, LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
+	fill_lod_produce_cache, produce_lod_refresh_levels, produce_lod_refresh_levels_erased,
+	LodLevelProducer, LodProduceCache, LodSceneRefreshAabb, LodSceneRefreshLevel,
+	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
 	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
@@ -60,13 +62,14 @@ pub use regions::{
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill,
-	cancel_unstarted_cull_for_desired_pending_roots, complete_chunk_lod_fulfill,
+	apply_lod_cull_requests, begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,
+	cancel_unstarted_cull_for_desired_pending_roots,
+	cancel_unstarted_cull_for_desired_pending_roots_erased, complete_chunk_lod_fulfill,
 	cull_lod_level_roots, drain_chunk_lod_fulfill, drain_lod_cull, enqueue_lod_cull,
-	reset_lod_chunk_budget, LodChunkAtomicOverrun, LodChunkBudgetClock, LodChunkBudgetPlugin,
-	LodChunkCullSystems, LodChunkDrainDiagnostics, LodChunkFulfillBudget, LodChunkFulfillSystems,
-	LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLazyPending, LodLevelRootPending,
-	LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
+	reset_lod_chunk_budget, LodChunkAtomicOverrun, LodChunkBeginScanCursor, LodChunkBudgetClock,
+	LodChunkBudgetPlugin, LodChunkCullSystems, LodChunkDrainDiagnostics, LodChunkFulfillBudget,
+	LodChunkFulfillSystems, LodChunkFulfillment, LodCullInFlight, LodCullRequest, LodLazyPending,
+	LodLevelRootPending, LodLevelRootStreamed, LodSceneHostStreamed, LodSceneRefreshChunkPlugin,
 	LodSceneRefreshSyncPlugin,
 };
 pub use viewer::LodViewer;
@@ -95,7 +98,7 @@ pub enum LodRefreshSystems {
 pub enum LodLevelProduceSystems {
 	/// Snapshots + untyped host hits ([`fill_lod_produce_cache`]).
 	FillCache,
-	/// Per-`T` [`produce_lod_refresh_levels`].
+	/// Shared hit-driven level emission.
 	Emit,
 }
 
@@ -145,6 +148,7 @@ impl Plugin for LodRefreshCorePlugin {
 				Update,
 				(
 					refresh_lod_host_levels.in_set(LodRefreshSystems::UpdateLevels),
+					produce_lod_refresh_levels_erased.in_set(LodLevelProduceSystems::Emit),
 					settle_lod_level_root_visibility
 						.before(sync_lod_level_roots)
 						.in_set(LodRefreshSystems::SyncRoots),
@@ -154,10 +158,11 @@ impl Plugin for LodRefreshCorePlugin {
 	}
 }
 
-/// Fill + per-`T` emit + chunk sync. `I` is an untyped [`LodSceneHostIndex`].
+/// Fill + shared typed-callback emit + chunk sync. `I` is an untyped
+/// [`LodSceneHostIndex`].
 ///
 /// Channel `M` is kept so existing `AvianLodSceneRefreshPlugin<T, M, F>` adds
-/// stay valid; produce itself is registered once per `T`. Add
+/// stay valid; each `T` registers a callback while produce runs once. Add
 /// [`LodSceneRefreshRegionPlugin`] separately for region production.
 /// Use [`Self::without_full_scan_cull`] with [`LodSceneRegionCullPlugin`] for
 /// lattice-scoped cull enqueue.

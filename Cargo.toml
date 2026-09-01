@@ -19,6 +19,7 @@ members = [
 
   "maybraid/scene-ref",
   "maybraid/material-ref",
+  "maybraid/terrain-chunk-ref",
 
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
@@ -57,6 +58,8 @@ members = [
   "maybraid/chico/shaders",
   "maybraid/chico/sbs-trees",
   "maybraid/chico/sbs-trees-playground",
+  "maybraid/chico/bumpout",
+  "maybraid/chico/bumpout-playground",
   "maybraid/chico/vegetation-on-terrain-playground",
   "maybraid/sky/lib",
   "maybraid/world/lib",
@@ -222,6 +225,7 @@ maybraid-character-controller = { path = "maybraid/controllers/character" }
 
 scene-ref = { path = "maybraid/scene-ref" }
 material-ref = { path = "maybraid/material-ref" }
+terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
 
 avian3d = "0.7"
 
@@ -248,6 +252,7 @@ malo-animations = { path = "maybraid/crozon/animations" }
 procedural-common = { path = "maybraid/procedural/common" }
 
 chico = { path = "maybraid/chico/lib" }
+chico-bumpout = { path = "maybraid/chico/bumpout" }
 chico-sbs-trees = { path = "maybraid/chico/sbs-trees" }
 chico-sdf = { path = "maybraid/chico/sdf" }
 chico-ball-components = { path = "maybraid/chico/ball-components" }

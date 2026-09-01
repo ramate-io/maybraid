@@ -19,6 +19,17 @@
     pbr_functions as fns,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
+#ifdef DISTANCE_FOG
+#import bevy_pbr::mesh_view_bindings::fog
+#endif
+
+fn with_distance_fog(color: vec4<f32>, world_position: vec3<f32>, frag_xy: vec2<f32>) -> vec4<f32> {
+#ifdef DISTANCE_FOG
+    return fns::apply_fog(fog, color, world_position, view.world_position.xyz, frag_xy);
+#else
+    return color;
+#endif
+}
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> base_color: vec4<f32>;
@@ -357,6 +368,11 @@ fn fragment(
     }
     occ = mix(occ, 1.0, saturate((view_dist - 32.0) / 48.0));
     let lifted = (albedo * sun + albedo * sky * sky_rgb) * occ;
+    let fogged = with_distance_fog(
+        vec4<f32>(lifted, alpha),
+        mesh.world_position.xyz,
+        mesh.position.xy,
+    );
 
-    return tone_mapping(vec4<f32>(lifted, alpha), view.color_grading);
+    return tone_mapping(fogged, view.color_grading);
 }

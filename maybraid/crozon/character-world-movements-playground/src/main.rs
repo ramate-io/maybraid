@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use crozon_character_world_movements_playground::{
-	CharacterSpecies, PendingStartupCommand, PlaygroundCommand,
-	CharacterWorldMovementsPlaygroundPlugin,
+	CharacterSpecies, CharacterWorldMovementsPlaygroundPlugin, PendingStartupCommand,
+	PlaygroundCommand,
 };
 
 fn assets_root() -> PathBuf {
@@ -15,9 +15,8 @@ fn main() {
 		eprintln!("{e}");
 		std::process::exit(2);
 	});
-	let startup = startup.or(Some(PlaygroundCommand::SetCharacter {
-		species: CharacterSpecies::Braidman,
-	}));
+	let startup =
+		startup.or(Some(PlaygroundCommand::SetCharacter { species: CharacterSpecies::Braidman }));
 
 	let assets_path = assets_root();
 	App::new()

@@ -40,10 +40,12 @@ use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
+use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
+	TERRAIN_CELL_SIZE,
 };
 pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
 pub use config::TerrainConfig;
@@ -90,6 +92,9 @@ pub use presentation::{
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 
+/// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.
+pub type TerrainMeshBuilder = CpuShotBuilder<Arc<ComposedTerrain>>;
+
 /// Jersey-composed terrain **before** Marazion watershed stamps.
 #[derive(Debug, Clone, Component)]
 pub struct PreWatershedTerrain {
@@ -131,7 +136,7 @@ pub struct Terrain {
 	/// apron before SDF compose so [`crate::water::Water`] can evaluate wet
 	/// volume against the finished heightfield.
 	pub marazion_fills: Vec<WaterFill>,
-	pub sdf: ComposedTerrain,
+	pub sdf: Arc<ComposedTerrain>,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
@@ -150,11 +155,16 @@ impl Terrain {
 		ComposedTerrain::from_terrain(sdf)
 	}
 
+	/// Shared CpuShot identity for fill [`Cached`] dispatch and overlay chunk refs.
+	pub fn mesh_builder(&self) -> TerrainMeshBuilder {
+		CpuShotBuilder::new(Arc::clone(&self.sdf)).with_wall_faces(self.wall_faces)
+	}
+
 	pub fn scene(&self) -> impl Scene + 'static {
 		// Shared origin-cell lattice with [`crate::water::Water::scene`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
-		let builder = CpuShotBuilder::new(self.sdf.clone()).with_wall_faces(self.wall_faces);
+		let builder = self.mesh_builder();
 		let material = self.material.clone();
 		bsn! {
 			template_value(transform)
@@ -460,8 +470,11 @@ where
 			lod_ref,
 		)?
 		.clone();
-		let compiled = complex_cell.complex.compile();
-		let marazion_fills = compiled.fills;
+		let marazion_fills = if complex_cell.complex.is_empty() {
+			Vec::new()
+		} else {
+			vec![WaterFill::from_hydro(Arc::clone(&complex_cell.complex))]
+		};
 
 		// Keep stage cells materialized for later policy work; elevation uses
 		// the cellular HydroComplex directly (internal carve → rim → apron).
@@ -482,10 +495,10 @@ where
 		)?;
 
 		if !complex_cell.complex.is_empty() {
-			modulations.push(ComposedElevationOp::Hydro(complex_cell.complex));
+			modulations.push(ComposedElevationOp::Hydro(Arc::clone(&complex_cell.complex)));
 		}
 
-		let sdf = Self::compose_sdf(&pre.base, &modulations);
+		let sdf = Arc::new(Self::compose_sdf(&pre.base, &modulations));
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,

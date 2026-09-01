@@ -44,6 +44,68 @@ pub fn id_xz_distance2(id: Id, origin: Vec3) -> f32 {
 	dx * dx + dz * dz
 }
 
+/// True when the keep AABB appeared, vanished, or moved.
+pub fn keep_region_changed(previous: Option<Aabb3d>, current: Option<Aabb3d>) -> bool {
+	match (previous, current) {
+		(Some(a), Some(b)) => !keep_regions_match(a, b),
+		(None, None) => false,
+		_ => true,
+	}
+}
+
+/// Non-overlapping pieces of `current` that did not exist in `previous`.
+///
+/// Moving rectangular keep rings therefore scan perimeter strips instead of
+/// rescanning their full area.
+pub fn entering_keep_regions(previous: Option<Aabb3d>, current: Aabb3d) -> Vec<Aabb3d> {
+	let Some(previous) = previous else {
+		return vec![current];
+	};
+	let ix0 = previous.min.x.max(current.min.x);
+	let ix1 = previous.max.x.min(current.max.x);
+	let iz0 = previous.min.z.max(current.min.z);
+	let iz1 = previous.max.z.min(current.max.z);
+	if ix0 >= ix1 || iz0 >= iz1 {
+		return vec![current];
+	}
+	let mut regions = Vec::with_capacity(4);
+	push_region(
+		&mut regions,
+		Vec3::new(current.min.x, current.min.y, current.min.z),
+		Vec3::new(ix0, current.max.y, current.max.z),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix1, current.min.y, current.min.z),
+		Vec3::new(current.max.x, current.max.y, current.max.z),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix0, current.min.y, current.min.z),
+		Vec3::new(ix1, current.max.y, iz0),
+	);
+	push_region(
+		&mut regions,
+		Vec3::new(ix0, current.min.y, iz1),
+		Vec3::new(ix1, current.max.y, current.max.z),
+	);
+	regions
+}
+
+fn push_region(regions: &mut Vec<Aabb3d>, min: Vec3, max: Vec3) {
+	if max.x - min.x <= 1e-3 || max.z - min.z <= 1e-3 {
+		return;
+	}
+	regions.push(Aabb3d::from_min_max(min, max));
+}
+
+fn keep_regions_match(a: Aabb3d, b: Aabb3d) -> bool {
+	(a.min.x - b.min.x).abs() < 1e-3
+		&& (a.max.x - b.max.x).abs() < 1e-3
+		&& (a.min.z - b.min.z).abs() < 1e-3
+		&& (a.max.z - b.max.z).abs() < 1e-3
+}
+
 /// Drop pending origin ids whose cell sits outside keep + `slack`.
 ///
 /// No keep AABB → no expiry (nothing is known to be live).
@@ -93,5 +155,12 @@ mod tests {
 	fn bytes_id_without_origin_stays() {
 		let id = Id::Bytes(crate::gen::Bytes([0; 32]));
 		assert!(id_lives_in_keep(id, cell(0.0), QUEUE_KEEP_SLACK_XZ));
+	}
+
+	#[test]
+	fn keep_region_change_ignores_identical_aabb() {
+		assert!(!keep_region_changed(Some(cell(0.0)), Some(cell(0.0))));
+		assert!(keep_region_changed(None, Some(cell(0.0))));
+		assert!(keep_region_changed(Some(cell(0.0)), Some(cell(100.0))));
 	}
 }
