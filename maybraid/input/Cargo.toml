@@ -1,0 +1,33 @@
+[package]
+name = "maybraid-input"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy = { workspace = true }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSString"] }
+objc2-game-controller = { version = "0.3", features = [
+	"GCController",
+	"GCDevice",
+	"GCExtendedGamepad",
+	"GCGamepad",
+	"GCControllerAxisInput",
+	"GCControllerButtonInput",
+	"GCControllerDirectionPad",
+	"GCPhysicalInputProfile",
+] }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

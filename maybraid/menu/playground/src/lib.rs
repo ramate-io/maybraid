@@ -18,9 +18,11 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
+use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_menu_controller::{MenuController, MenuControllerPlugin};
 use menu_screens::{
 	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems,
+	LoadingScreenSystems, MenuScreen,
 };
 
 use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
@@ -44,17 +46,20 @@ impl Plugin for MenuPlaygroundPlugin {
 			toggle_keys: Vec::new(),
 			..CameraLookConfig::default()
 		}))
+		.add_plugins(VirtualPadPlugin::new(VirtualPadConfig { debug_overlay: true, ..default() }))
 		.add_plugins((
 			HomeScreenPlugin,
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
+			MenuControllerPlugin,
 		))
 		.add_systems(
 			Startup,
 			(camera::setup_camera, add_lod_viewer_to_camera.after(camera::setup_camera)),
 		)
+		.add_systems(PreUpdate, attach_menu_controllers)
 		.add_systems(
 			Update,
 			(
@@ -80,6 +85,15 @@ fn add_lod_viewer_to_camera(
 
 fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
 	screens.is_empty()
+}
+
+fn attach_menu_controllers(
+	mut commands: Commands,
+	screens: Query<Entity, (With<MenuScreen>, Without<MenuController>)>,
+) {
+	for entity in &screens {
+		commands.entity(entity).insert(MenuController::default());
+	}
 }
 
 fn echo_home_choice(

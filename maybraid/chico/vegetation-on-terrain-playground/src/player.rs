@@ -12,6 +12,7 @@ use durham_terrain_models::{
 };
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
+use maybraid_input::{PadButton, VirtualPad};
 use std::f32::consts::PI;
 
 use crate::camera::CameraController;
@@ -22,11 +23,12 @@ pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
 const MOVE_ACCEL: f32 = 40.0;
 const MOVE_DAMPING: f32 = 0.92;
 const JUMP_IMPULSE: f32 = 8.0;
-const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
+/// Default walkable slope (~81°). Playgrounds override via [`CharacterLocomotion`].
+const DEFAULT_MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 /// Third-person orbit for a ~2 m humanoid (capsule center is hip height).
-const CAMERA_DISTANCE: f32 = 3.6;
-const CAMERA_HEIGHT: f32 = 1.1;
-const CAMERA_LOOK_HEIGHT: f32 = 0.65;
+pub const CAMERA_DISTANCE: f32 = 3.6;
+pub const CAMERA_HEIGHT: f32 = 1.1;
+pub const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
@@ -35,10 +37,25 @@ const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
 
 /// Camera-relative WASD wish on XZ. Zero when no move input.
 #[derive(Component, Default)]
-pub(crate) struct MoveWish(pub Vec3);
+pub struct MoveWish(pub Vec3);
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct PlayerControlSystems;
+pub struct PlayerControlSystems;
+
+/// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
+/// (~81°) max slope. World playground uses a shallower cap so 80°+ walls do
+/// not count as floor.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct CharacterLocomotion {
+	/// Hits steeper than this (radians from up) are not grounded.
+	pub max_slope_angle: f32,
+}
+
+impl Default for CharacterLocomotion {
+	fn default() -> Self {
+		Self { max_slope_angle: DEFAULT_MAX_SLOPE_ANGLE }
+	}
+}
 
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -87,10 +104,30 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
-#[derive(Message)]
-enum MovementAction {
+#[derive(Message, Clone, Copy, Debug)]
+pub enum MovementAction {
 	Move(Vec2),
 	Jump,
+}
+
+/// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct PadMovementEnabled(pub bool);
+
+impl Default for PadMovementEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+/// When false, a downstream system owns the character camera (world first/third POV).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct CharacterCameraFollowEnabled(pub bool);
+
+impl Default for CharacterCameraFollowEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
 }
 
 pub struct PlayerPlugin;
@@ -98,6 +135,9 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundMode>()
+			.init_resource::<PadMovementEnabled>()
+			.init_resource::<CharacterCameraFollowEnabled>()
+			.init_resource::<CharacterLocomotion>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -121,6 +161,7 @@ fn spawn_player(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
+	locomotion: Res<CharacterLocomotion>,
 ) {
 	// Startup: composed cells are not in the store yet. Hold above base noise
 	// so the capsule / follow-cam are not born under jersey plateaus.
@@ -150,7 +191,7 @@ fn spawn_player(
 			MovementAcceleration(MOVE_ACCEL),
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
-			MaxSlopeAngle(MAX_SLOPE_ANGLE),
+			MaxSlopeAngle(locomotion.max_slope_angle),
 			MoveWish::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
@@ -242,11 +283,15 @@ pub fn respawn_player_on_layout(
 fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
-	keyboard: Res<ButtonInput<KeyCode>>,
+	pad_movement: Res<PadMovementEnabled>,
+	pad: Res<VirtualPad>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut writer: MessageWriter<MovementAction>,
 ) {
+	if !pad_movement.0 {
+		return;
+	}
 	if *mode != PlaygroundMode::Character || text_focus.0 {
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
@@ -254,14 +299,7 @@ fn keyboard_movement_input(
 		return;
 	}
 
-	let up = keyboard.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
-	let down = keyboard.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-	let left = keyboard.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
-	let right = keyboard.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
-
-	let direction =
-		Vec2::new(right as i8 as f32 - left as i8 as f32, up as i8 as f32 - down as i8 as f32)
-			.clamp_length_max(1.0);
+	let direction = pad.move_stick.clamp_length_max(1.0);
 
 	let wish_dir = if direction != Vec2::ZERO {
 		if let Ok(camera) = cameras.single() {
@@ -282,7 +320,7 @@ fn keyboard_movement_input(
 	if direction != Vec2::ZERO {
 		writer.write(MovementAction::Move(direction));
 	}
-	if keyboard.just_pressed(KeyCode::Space) {
+	if pad.just_pressed(PadButton::A) {
 		writer.write(MovementAction::Jump);
 	}
 }
@@ -397,9 +435,13 @@ fn apply_movement_damping(
 
 fn follow_character_camera(
 	mode: Res<PlaygroundMode>,
+	follow: Res<CharacterCameraFollowEnabled>,
 	players: Query<&Transform, (With<Player>, Without<Camera3d>)>,
 	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
 ) {
+	if !follow.0 {
+		return;
+	}
 	if *mode != PlaygroundMode::Character {
 		return;
 	}
@@ -429,5 +471,12 @@ mod tests {
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 		let hold = holding_elevation(&base, 0.0, 0.0);
 		assert!(hold > base.height_at(0.0, 0.0) + 50.0);
+	}
+
+	#[test]
+	fn default_locomotion_keeps_legacy_slope() {
+		assert!(
+			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
+		);
 	}
 }

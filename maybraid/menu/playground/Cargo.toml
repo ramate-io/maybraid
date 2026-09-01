@@ -20,6 +20,8 @@ crozon-characters = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 maybraid-character-ui-menu-renderer = { workspace = true }
+maybraid-input = { workspace = true }
+maybraid-menu-controller = { workspace = true }
 menu-components = { workspace = true }
 menu-screens = { workspace = true }
 

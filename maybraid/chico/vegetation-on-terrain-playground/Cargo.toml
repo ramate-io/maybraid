@@ -34,6 +34,7 @@ terrain-chunk-ref = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+maybraid-input = { workspace = true }
 material-ref = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 

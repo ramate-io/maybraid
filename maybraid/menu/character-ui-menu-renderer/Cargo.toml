@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 character-ui-menu = { workspace = true }
+maybraid-input = { workspace = true }
 menu-components = { workspace = true }
 
 [lints]

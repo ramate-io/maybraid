@@ -13,10 +13,27 @@ use crate::theme::{
 	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, HEADER_FONT_SIZE,
 	HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER,
 };
+use maybraid_input::{MenuNav, MenuNavImpulse};
 
 /// When `true`, arrow keys, Enter, and pick activations stay with the command line.
 #[derive(Resource, Default, Clone, Copy, Debug)]
 pub struct TextMenuInputLock(pub bool);
+
+/// When `false`, raw keyboard nav is off so a [`MenuNavImpulse`] controller owns it.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct KeyboardMenuNav(pub bool);
+
+impl Default for KeyboardMenuNav {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+impl KeyboardMenuNav {
+	pub fn is_enabled(self) -> bool {
+		self.0
+	}
+}
 
 /// Root of a vertical text menu. [`selected`] is the keyboard / hover index.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -36,6 +53,14 @@ impl TextMenu {
 		}
 		let n = self.item_count as i32;
 		self.selected = (self.selected as i32 + delta).rem_euclid(n) as usize;
+	}
+
+	pub fn apply_nav(&mut self, nav: MenuNav) {
+		match nav {
+			MenuNav::Up | MenuNav::Left => self.step(-1),
+			MenuNav::Down | MenuNav::Right => self.step(1),
+			MenuNav::Select | MenuNav::Back => {}
+		}
 	}
 }
 
@@ -316,12 +341,13 @@ pub fn emit_menu_activate_on_click<E: Component + Copy>(
 /// Trigger [`MenuActivate<E>`] for the keyboard-selected row.
 pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	menus: Query<(Entity, &TextMenu)>,
 	items: Query<(&TextMenuItem, &E, &ChildOf)>,
 	mut commands: Commands,
 ) {
-	if lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
+	if !keyboard_nav.is_enabled() || lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
 		return;
 	}
 	for (menu_entity, menu) in &menus {
@@ -329,6 +355,40 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 			commands.trigger(MenuActivate { entity: menu_entity, choice });
 		}
 	}
+}
+
+/// Activate the focused row when a controller fires [`MenuNav::Select`].
+pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	menus: Query<&TextMenu>,
+	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	mut commands: Commands,
+) {
+	if lock.0 || impulse.event().nav != MenuNav::Select {
+		return;
+	}
+	let menu_entity = impulse.entity;
+	let Ok(menu) = menus.get(menu_entity) else {
+		return;
+	};
+	if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+		commands.trigger(MenuActivate { entity: menu_entity, choice });
+	}
+}
+
+pub fn apply_text_menu_nav(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	mut menus: Query<&mut TextMenu>,
+) {
+	if lock.0 {
+		return;
+	}
+	let Ok(mut menu) = menus.get_mut(impulse.entity) else {
+		return;
+	};
+	menu.apply_nav(impulse.event().nav);
 }
 
 /// Screen-boundary adapter: [`MenuActivate<E>`] → [`Message<E>`].
@@ -341,10 +401,11 @@ pub fn republish_menu_activate<E: Message + Copy>(
 
 pub fn navigate_text_menus(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	mut menus: Query<&mut TextMenu>,
 ) {
-	if lock.0 {
+	if !keyboard_nav.is_enabled() || lock.0 {
 		return;
 	}
 	let delta = if keyboard.just_pressed(KeyCode::ArrowDown) {

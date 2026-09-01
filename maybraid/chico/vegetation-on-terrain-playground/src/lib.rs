@@ -17,14 +17,17 @@ mod ui;
 
 pub use bump_out::DurhamCanopyBumpOutPresenter;
 pub use camera::CameraController;
-pub use character::{CharacterSpecies, RequestSetCharacter};
+pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
-pub use player::{Player, PlayerPlugin, PlaygroundMode};
+pub use player::{
+	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
+	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+};
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
@@ -54,16 +57,19 @@ use durham_terrain_models::{
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
-use game_commands::command::{capture_command_line_input, GameCommandPlugin};
+use game_commands::command::{
+	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
+};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{
 	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
-	AwaitingTerrainSurface, PlayerControlSystems,
+	AwaitingTerrainSurface,
 };
 use render_item::mesh::handle::{EnforceCachingPlugin, EnforcedCaches};
 use std::f32::consts::PI;
@@ -242,6 +248,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 		}
 		register_forest_lod::<DurhamForestPresenter>(app);
 		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+		if !app.is_plugin_added::<VirtualPadPlugin>() {
+			app.add_plugins(VirtualPadPlugin::default());
+		}
 		if !app.is_plugin_added::<PlayerPlugin>() {
 			app.add_plugins(PlayerPlugin);
 		}
@@ -257,6 +266,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
+			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
@@ -660,6 +670,15 @@ fn spawn_groves(
 		config.tile_radius
 	);
 	dirty.0 = false;
+}
+
+fn sync_pad_gameplay(
+	focus: Option<Res<TextEntryFocus>>,
+	blocked: Option<Res<TextEntryBlocked>>,
+	mut enabled: ResMut<PadGameplayEnabled>,
+) {
+	let text = focus.is_some_and(|focus| focus.0) || blocked.is_some_and(|blocked| blocked.0);
+	enabled.0 = !text;
 }
 
 #[cfg(test)]
