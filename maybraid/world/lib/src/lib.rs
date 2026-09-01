@@ -25,8 +25,8 @@ use chico_vegetation_on_terrain_playground::{
 	RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use durham_terrain_models::TerrainFrictionConfig;
-use game_commands::command::GameCommandPlugin;
-use game_commands::ui::GameCommandDrawerConfig;
+use game_commands::command::{GameCommandPlugin, TextEntryFocus};
+use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
@@ -47,18 +47,38 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
-pub struct WorldPlugin;
+/// Assembled world: Durham terrain, streamed forest, sky dome, character.
+///
+/// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
+/// The game executable uses [`WorldPlugin::game`].
+pub struct WorldPlugin {
+	/// `/` console, FPS HUD, and virtual-pad dump.
+	pub debug_chrome: bool,
+}
+
+impl Default for WorldPlugin {
+	fn default() -> Self {
+		Self { debug_chrome: true }
+	}
+}
+
+impl WorldPlugin {
+	/// World systems without playground overlays.
+	pub fn game() -> Self {
+		Self { debug_chrome: false }
+	}
+}
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(PlaygroundMode::Character)
-			.insert_resource(PlaygroundDiag { fps: true })
+			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
 			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
-				debug_overlay: true,
+				debug_overlay: self.debug_chrome,
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
@@ -75,39 +95,46 @@ impl Plugin for WorldPlugin {
 				outer_extent: WORLD_LATTICE_OUTER_M,
 				tile_size: 500.0,
 			})
-			.add_plugins(SkyDomePlugin::default())
-			.add_plugins(PlaygroundTimingPlugin)
-			.add_plugins(
+			.add_plugins(SkyDomePlugin::default());
+		if self.debug_chrome {
+			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
 						toggle_keys: vec![KeyCode::F1, KeyCode::KeyY],
 						toggle_gamepad_buttons: Vec::new(),
 					}),
-			)
-			.add_systems(PostStartup, spawn_default_braidman)
-			.add_systems(
+			);
+		} else {
+			app.init_resource::<TextEntryFocus>().init_resource::<GameCommandStatusText>();
+		}
+		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
+			Update,
+			control::apply_intents_to_movement
+				.after(CharacterControlSystems)
+				.before(PlayerControlSystems),
+		);
+		if self.debug_chrome {
+			app.add_systems(
 				Update,
 				(
-					control::apply_intents_to_movement
-						.after(CharacterControlSystems)
-						.before(PlayerControlSystems),
 					control::echo_character_intents
 						.after(CharacterControlSystems)
 						.before(game_commands::ui::update_debug_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
-			)
-			.add_systems(
-				PostUpdate,
-				camera::turn_body_with_look.before(TransformSystems::Propagate),
-			)
-			.add_systems(
-				PostUpdate,
-				(camera::sync_first_person_head_visibility, camera::follow_world_camera)
-					.chain()
-					.after(TransformSystems::Propagate),
 			);
+		}
+		app.add_systems(
+			PostUpdate,
+			camera::turn_body_with_look.before(TransformSystems::Propagate),
+		)
+		.add_systems(
+			PostUpdate,
+			(camera::sync_first_person_head_visibility, camera::follow_world_camera)
+				.chain()
+				.after(TransformSystems::Propagate),
+		);
 	}
 }
 

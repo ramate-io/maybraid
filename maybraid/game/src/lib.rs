@@ -10,7 +10,7 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::{MenuNav, MenuNavPad};
 use maybraid_menu_controller::{MenuController, MenuControllerPlugin};
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
-use menu_components::{ActiveOverlayKey, TextMenuSystems};
+use menu_components::{ActiveOverlayKey, TextMenuSystems, MENU_CLEAR};
 use menu_playground::{
 	request_show_character, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
 };
@@ -20,20 +20,24 @@ use menu_screens::{
 };
 use std::path::{Path, PathBuf};
 
-const HOME_BACKDROP: Color = Color::srgb(0.08, 0.10, 0.14);
-
-/// Shared Maybraid asset tree (`maybraid/assets`). This crate sits one level
-/// shallower than `maybraid/*/playground`, so the relative path is `../assets`.
+/// Crate-local asset directory (`maybraid/game/assets`).
 pub fn assets_root() -> PathBuf {
-	Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets")
+	Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
+
+/// Durham / vegetation sky wash while the 3D camera is live.
+const WORLD_SKY: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
+
+#[derive(Component)]
+struct MenuUiCamera;
 
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<GameFlow>()
-			.add_plugins(WorldPlugin)
+			.add_plugins(WorldPlugin::game())
+			.insert_resource(ClearColor(MENU_CLEAR))
 			.add_plugins((
 				HomeScreenPlugin,
 				InGameScreenPlugin,
@@ -41,8 +45,8 @@ impl Plugin for GamePlugin {
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
 			))
-			.add_systems(Startup, show_home)
-			.add_systems(PostStartup, sync_world_gameplay)
+			.add_systems(Startup, (show_home, spawn_menu_ui_camera))
+			.add_systems(PostStartup, (sync_cameras, sync_clear_color, sync_world_gameplay))
 			.add_systems(PreUpdate, attach_menu_controllers)
 			.add_systems(
 				Update,
@@ -53,8 +57,10 @@ impl Plugin for GamePlugin {
 					overlay_in_game_from_start
 						.after(CharacterControlSystems)
 						.before(TextMenuSystems::Navigate),
-					paint_home_backdrop,
 					sync_preview_camera,
+					paint_home_backdrop,
+					sync_clear_color,
+					sync_cameras,
 					sync_world_gameplay,
 				),
 			);
@@ -65,13 +71,8 @@ fn show_home(mut commands: Commands) {
 	request_show_home(&mut commands);
 }
 
-fn attach_menu_controllers(
-	mut commands: Commands,
-	screens: Query<Entity, (With<MenuScreen>, Without<MenuController>)>,
-) {
-	for entity in &screens {
-		commands.entity(entity).insert(MenuController::default());
-	}
+fn spawn_menu_ui_camera(mut commands: Commands) {
+	commands.spawn((Camera2d, MenuUiCamera, Camera { order: 1, ..default() }));
 }
 
 fn paint_home_backdrop(
@@ -79,7 +80,20 @@ fn paint_home_backdrop(
 	homes: Query<Entity, (With<HomeScreen>, Without<BackgroundColor>)>,
 ) {
 	for entity in &homes {
-		commands.entity(entity).insert(BackgroundColor(HOME_BACKDROP));
+		commands.entity(entity).insert(BackgroundColor(MENU_CLEAR));
+	}
+}
+
+fn sync_clear_color(flow: Res<GameFlow>, mut clear: ResMut<ClearColor>) {
+	clear.0 = if *flow == GameFlow::Home { MENU_CLEAR } else { WORLD_SKY };
+}
+
+fn attach_menu_controllers(
+	mut commands: Commands,
+	screens: Query<Entity, (With<MenuScreen>, Without<MenuController>)>,
+) {
+	for entity in &screens {
+		commands.entity(entity).insert(MenuController::default());
 	}
 }
 
@@ -162,6 +176,20 @@ fn character_back_to_home(
 	*flow = GameFlow::Home;
 }
 
+fn sync_cameras(
+	flow: Res<GameFlow>,
+	mut world_cameras: Query<&mut Camera, (With<Camera3d>, Without<MenuUiCamera>)>,
+	mut ui_cameras: Query<&mut Camera, (With<MenuUiCamera>, Without<Camera3d>)>,
+) {
+	let world = *flow != GameFlow::Home;
+	for mut camera in &mut world_cameras {
+		camera.is_active = world;
+	}
+	for mut camera in &mut ui_cameras {
+		camera.is_active = !world;
+	}
+}
+
 fn sync_world_gameplay(
 	flow: Res<GameFlow>,
 	overlay: Query<(), With<InGameScreen>>,
@@ -203,7 +231,7 @@ mod tests {
 	use super::assets_root;
 
 	#[test]
-	fn assets_root_points_at_maybraid_assets() {
+	fn crate_assets_contain_barlow() {
 		let font = assets_root().join("fonts/barlow/BarlowSemiCondensed-Regular.ttf");
 		assert!(font.is_file(), "expected Barlow at {}", font.display());
 	}

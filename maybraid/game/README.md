@@ -10,3 +10,5 @@ home. Training Ground and Settings are not wired yet.
 ```bash
 cargo run -p maybraid
 ```
+
+Assets live in this crate’s `assets/` directory (Bevy’s usual layout).

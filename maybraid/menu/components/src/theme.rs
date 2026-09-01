@@ -19,6 +19,9 @@ pub const HEADER_FONT_SIZE: f32 = 96.0;
 /// Large option labels, still smaller than [`HEADER_FONT_SIZE`].
 pub const ITEM_FONT_SIZE: f32 = 48.0;
 
+/// Full-screen menu wash (home and other title screens).
+pub const MENU_CLEAR: Color = Color::srgb(0.08, 0.10, 0.14);
+
 /// Idle menu yellow.
 pub const TEXT_YELLOW: Color = Color::srgb(1.0, 0.86, 0.22);
 
