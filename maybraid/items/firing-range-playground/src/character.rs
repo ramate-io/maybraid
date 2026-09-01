@@ -1,12 +1,13 @@
-//! Brodler visual, walk/run clips, gun synced to `forearm.R` in world space.
+//! Held firearm: chest pose, look-yaw clamp, handheld scale.
 
 use avian3d::prelude::LinearVelocity;
 use bevy::ecs::query::Has;
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use crozon_characters::{
-	character_bounds, species::brodler::BrodlerConfig, AnimClip, AnimRef, AnimRefRoot, BoneMap,
-	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	character_bounds, species::brodler::BrodlerConfig, AnimBone, AnimClip, AnimRef, AnimRefRoot,
+	BoneMap, CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
 	ComponentsOnly, RigSkeletonKind,
 };
 use firearms::{
@@ -14,7 +15,7 @@ use firearms::{
 };
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_6, PI, TAU};
 
 use crate::camera::CameraController;
 use crate::hold::HoldingArms;
@@ -22,22 +23,38 @@ use crate::player::{CharacterController, Jumping, MoveWish, Player};
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
-const HAND_BONE: &str = "forearm.R";
-/// Meters along unscaled forearm +Y from the joint to the palm.
-const FOREARM_TO_PALM: f32 = 0.18;
-/// Gun-local offset after aim (right, down, forward along the bore).
-const PALM_OFFSET: Vec3 = Vec3::new(0.04, -0.05, 0.08);
+/// Kit GLBs are meter-authored; a held bullpup should be about this long.
+const HELD_LENGTH: f32 = 0.72;
+/// Receiver sits this fraction of the held gun's world length in front of the chest.
+const FORWARD_OF_LENGTH: f32 = 0.4;
+/// Fraction of the way from chest-mid to `shoulder.R`.
+const RIGHT_ALONG_SHOULDERS: f32 = 0.4;
+/// Look yaw may lead the body by this much (full cone is 2×).
+pub(crate) const AIM_YAW_LIMIT: f32 = FRAC_PI_6;
 
 /// Nested character host on the player capsule.
 #[derive(Component)]
 pub(crate) struct PlayerVisual;
 
 #[derive(Component)]
-pub(crate) struct HeldFirearm;
+pub(crate) struct HeldFirearm {
+	pub scale: f32,
+	/// Longest AABB side of the meter-authored kit, before handheld scale.
+	pub authored_length: f32,
+}
 
-/// World-space follow target: the character's `forearm.R` bone.
-#[derive(Component)]
-pub(crate) struct GunHandSocket(Entity);
+pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
+	let size = bounds.max - bounds.min;
+	size.x.max(size.y).max(size.z).max(1e-3)
+}
+
+pub(crate) fn held_scale_from_bounds(bounds: Aabb3d) -> f32 {
+	(HELD_LENGTH / authored_length(bounds)).clamp(0.15, 1.0)
+}
+
+pub(crate) fn gun_world_length(held: &HeldFirearm) -> f32 {
+	held.scale * held.authored_length
+}
 
 pub(crate) fn spawn_player_character(
 	mut commands: Commands,
@@ -77,13 +94,15 @@ pub(crate) fn spawn_player_character(
 pub(crate) fn spawn_held_firearm(mut commands: Commands) {
 	let kit = FirearmConcept::Bullpup.kit();
 	let bounds = firearm_bounds(&kit);
+	let length = authored_length(bounds);
+	let scale = held_scale_from_bounds(bounds);
 	let entities = spawn_firearm_components(&mut commands, &kit, Transform::IDENTITY, bounds);
 	for entity in entities {
 		commands.entity(entity).insert((
 			Name::new("held-bullpup"),
 			Weapon::bolt(),
 			FireOnTrigger,
-			HeldFirearm,
+			HeldFirearm { scale, authored_length: length },
 		));
 	}
 }
@@ -105,79 +124,96 @@ pub(crate) fn stamp_holding_arms(
 	}
 }
 
-pub(crate) fn bind_gun_socket(
-	mut commands: Commands,
-	guns: Query<Entity, (With<HeldFirearm>, With<FirearmRoot>, Without<GunHandSocket>)>,
-	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
-	rigs: Query<(Entity, &CharacterRig, &BoneMap)>,
-) {
-	let Ok(gun) = guns.single() else {
-		return;
-	};
-	let Ok(members) = visuals.single() else {
-		return;
-	};
-	let Some(hand) = hand_bone(members, &rigs) else {
-		return;
-	};
-	commands.entity(gun).insert(GunHandSocket(hand));
-}
-
-fn hand_bone(
-	members: &CharacterMembers,
-	rigs: &Query<(Entity, &CharacterRig, &BoneMap)>,
-) -> Option<Entity> {
-	for member in members.iter() {
-		let Ok((_, rig, map)) = rigs.get(member) else {
-			continue;
-		};
-		if rig.role != CharacterRigRole::Body {
-			continue;
-		}
-		return map.by_name.get(HAND_BONE).copied();
-	}
-	None
-}
-
-/// World pose: socket translation, player yaw, camera pitch, authored scale.
-pub(crate) fn gun_world_transform(hand: &GlobalTransform, facing: Vec3, pitch: f32) -> Transform {
-	let rotation = gun_aim_rotation(facing, pitch);
-	let along = (hand.rotation() * Vec3::Y).normalize_or(Vec3::Y);
-	let socket = hand.translation() + along * FOREARM_TO_PALM;
-	Transform { translation: socket + rotation * PALM_OFFSET, rotation, scale: Vec3::ONE }
-}
-
-/// Yaw so rest +Z matches the player's XZ facing; pitch matches the camera (look-down is negative).
-pub(crate) fn gun_aim_rotation(facing: Vec3, pitch: f32) -> Quat {
-	let xz = Vec3::new(facing.x, 0.0, facing.z);
-	let yaw = if xz.length_squared() < 1e-8 {
+/// Horizontal yaw with +Z = 0, +X = +π/2.
+pub(crate) fn yaw_xz(dir: Vec3) -> f32 {
+	let xz = Vec3::new(dir.x, 0.0, dir.z);
+	if xz.length_squared() < 1e-8 {
 		0.0
 	} else {
 		let n = xz.normalize();
 		n.x.atan2(n.z)
-	};
-	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch)
+	}
 }
 
-pub(crate) fn sync_gun_to_hand(
+pub(crate) fn wrap_pi(angle: f32) -> f32 {
+	(angle + PI).rem_euclid(TAU) - PI
+}
+
+/// Look yaw, clamped to ±[`AIM_YAW_LIMIT`] of body facing.
+pub(crate) fn clamped_aim_yaw(facing: Vec3, look: Vec3) -> f32 {
+	let face = yaw_xz(facing);
+	let delta = wrap_pi(yaw_xz(look) - face).clamp(-AIM_YAW_LIMIT, AIM_YAW_LIMIT);
+	face + delta
+}
+
+pub(crate) fn gun_aim_rotation(facing: Vec3, look: Vec3, pitch: f32) -> Quat {
+	Quat::from_rotation_y(clamped_aim_yaw(facing, look)) * Quat::from_rotation_x(-pitch)
+}
+
+pub(crate) fn hold_translation(
+	shoulder_l: Vec3,
+	shoulder_r: Vec3,
+	facing: Vec3,
+	gun_world_length: f32,
+) -> Vec3 {
+	let mid = (shoulder_l + shoulder_r) * 0.5;
+	let facing = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
+	mid + facing * (gun_world_length * FORWARD_OF_LENGTH)
+		+ (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
+}
+
+pub(crate) fn pose_held_firearm(
 	cameras: Query<&CameraController, With<Camera3d>>,
-	visuals: Query<&GlobalTransform, With<PlayerVisual>>,
-	hands: Query<&GlobalTransform, Without<HeldFirearm>>,
-	mut guns: Query<(&GunHandSocket, &mut Transform), With<HeldFirearm>>,
+	visuals: Query<
+		(&Transform, &CharacterMembers),
+		(With<PlayerVisual>, Without<HeldFirearm>, Without<AnimBone>),
+	>,
+	maps: Query<&BoneMap, Without<HeldFirearm>>,
+	globals: Query<&GlobalTransform, Without<HeldFirearm>>,
+	mut guns: Query<
+		(&HeldFirearm, &mut Transform),
+		(With<FirearmRoot>, Without<Player>, Without<PlayerVisual>),
+	>,
 ) {
 	let Ok(camera) = cameras.single() else {
 		return;
 	};
-	let Ok(visual) = visuals.single() else {
+	let Ok((visual, members)) = visuals.single() else {
 		return;
 	};
-	let facing = visual.rotation() * Vec3::Z;
-	for (socket, mut transform) in &mut guns {
-		let Ok(hand) = hands.get(socket.0) else {
+	let Some(shoulder_l) = named_translation(members, &maps, &globals, "shoulder.L") else {
+		return;
+	};
+	let Some(shoulder_r) = named_translation(members, &maps, &globals, "shoulder.R") else {
+		return;
+	};
+	let facing = visual.rotation * Vec3::Z;
+	let look = Quat::from_axis_angle(Vec3::Y, camera.yaw) * -Vec3::Z;
+	let rotation = gun_aim_rotation(facing, look, camera.pitch);
+	for (held, mut transform) in &mut guns {
+		let translation = hold_translation(shoulder_l, shoulder_r, facing, gun_world_length(held));
+		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
+	}
+}
+
+fn named_translation(
+	members: &CharacterMembers,
+	maps: &Query<&BoneMap, Without<HeldFirearm>>,
+	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	name: &str,
+) -> Option<Vec3> {
+	for member in members.iter() {
+		let Ok(map) = maps.get(member) else {
 			continue;
 		};
-		*transform = gun_world_transform(hand, facing, camera.pitch);
+		let Some(&entity) = map.by_name.get(name) else {
+			continue;
+		};
+		if let Ok(global) = globals.get(entity) {
+			return Some(global.translation());
+		}
 	}
+	None
 }
 
 pub(crate) fn drive_player_locomotion(
@@ -225,19 +261,70 @@ pub(crate) fn drive_player_locomotion(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 
 	#[test]
-	fn aim_yaw_sends_bore_along_player_facing() {
-		let q = gun_aim_rotation(Vec3::X, 0.0);
+	fn facing_plus_x_sends_bore_plus_x() {
+		let q = gun_aim_rotation(Vec3::X, Vec3::X, 0.0);
 		assert!((q * Vec3::Z - Vec3::X).length() < 1e-4, "bore {}", q * Vec3::Z);
 		assert!((q * Vec3::NEG_Y - Vec3::NEG_Y).length() < 1e-4, "grip {}", q * Vec3::NEG_Y);
 	}
 
 	#[test]
+	fn look_within_limit_tracks() {
+		let look = Quat::from_rotation_y(0.2) * Vec3::Z;
+		let yaw = clamped_aim_yaw(Vec3::Z, look);
+		assert!((yaw - 0.2).abs() < 1e-4, "{yaw}");
+	}
+
+	#[test]
+	fn look_beyond_limit_clamps() {
+		let yaw = clamped_aim_yaw(Vec3::Z, Vec3::X);
+		assert!((yaw - AIM_YAW_LIMIT).abs() < 1e-4, "{yaw}");
+		let yaw = clamped_aim_yaw(Vec3::Z, Vec3::NEG_X);
+		assert!((yaw + AIM_YAW_LIMIT).abs() < 1e-4, "{yaw}");
+	}
+
+	#[test]
 	fn look_down_pitches_bore_down() {
-		let q = gun_aim_rotation(Vec3::Z, -0.4);
+		let q = gun_aim_rotation(Vec3::Z, Vec3::Z, -0.4);
 		let bore = q * Vec3::Z;
-		assert!(bore.y < 0.0, "bore {}", bore);
-		assert!(bore.z > 0.0, "bore {}", bore);
+		assert!(bore.y < 0.0, "bore {bore}");
+		assert!(bore.z > 0.0, "bore {bore}");
+	}
+
+	#[test]
+	fn hold_sits_at_shoulder_height() {
+		let left = Vec3::new(-0.4, 1.9, 0.0);
+		let right = Vec3::new(0.4, 1.9, 0.0);
+		let at = hold_translation(left, right, Vec3::Z, 0.72);
+		assert!((at.y - 1.9).abs() < 1e-4, "{at}");
+		assert!(at.z > 0.2, "{at}");
+		assert!(at.x > 0.0, "{at}");
+	}
+
+	#[test]
+	fn hold_forward_scales_with_gun_length() {
+		let left = Vec3::new(-0.2, 1.0, 0.0);
+		let right = Vec3::new(0.2, 1.0, 0.0);
+		let short = hold_translation(left, right, Vec3::Z, 0.5);
+		let long = hold_translation(left, right, Vec3::Z, 1.0);
+		assert!((long.z - short.z - 0.5 * FORWARD_OF_LENGTH).abs() < 1e-4);
+	}
+
+	#[test]
+	fn pose_held_firearm_queries_are_disjoint() {
+		let mut world = World::new();
+		world
+			.run_system_once(pose_held_firearm)
+			.expect("disjoint player / visual / gun Transform queries");
+	}
+
+	#[test]
+	fn held_scale_shrinks_meter_kit() {
+		let bounds = Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -2.2), Vec3::new(0.5, 1.4, 0.5));
+		let scale = held_scale_from_bounds(bounds);
+		assert!(scale < 0.5, "{scale}");
+		assert!((scale * 2.7 - HELD_LENGTH).abs() < 0.05, "{scale}");
 	}
 }

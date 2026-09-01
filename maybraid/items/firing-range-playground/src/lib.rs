@@ -51,16 +51,17 @@ impl Plugin for FiringRangePlugin {
 					camera::release_modifiers_on_focus_change,
 					character::spawn_player_character,
 					character::stamp_holding_arms,
-					character::bind_gun_socket,
 					control::apply_intents
 						.after(CharacterControlSystems)
 						.before(PlayerControlSystems),
 					control::face_player.after(PlayerControlSystems),
+					character::pose_held_firearm.after(control::face_player),
 					character::drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),
-					hold::apply_hold_pose.after(CharacterMotionSystems::Anim),
-					character::sync_gun_to_hand.after(hold::apply_hold_pose),
+					hold::sync_hands_to_firearm
+						.after(CharacterMotionSystems::Anim)
+						.after(character::pose_held_firearm),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
