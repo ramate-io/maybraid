@@ -1,7 +1,7 @@
 [project]
 name = "maybraid-clothes-fit"
 version = "0.1.0"
-description = "Headless Blender clothing fit: inflate along normals, shrinkwrap to a bind-pose body, export garment + armature"
+description = "Headless Blender clothing fit: snap solid to body exterior, boolean-carve the body, rebind armature"
 requires-python = ">=3.11"
 dependencies = []
 

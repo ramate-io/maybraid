@@ -8,8 +8,8 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Outside wrap onto an inflated body, a little body-normal ease, stiff Cloth
-# drape with strap-only pins, then Outside keep-out on the render body.
+# Each garment is treated as a solid: verts inside the body snap outside,
+# the body is boolean-subtracted, then the result is rebound to Humanoid.
 
 set -euo pipefail
 
@@ -22,13 +22,7 @@ OUT_DIR="$REPO_ROOT/maybraid/assets/characters/clothes/body"
 SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
-INFLATE=0.04
-EASE=0.02
-COLLISION_GAP=0.015
-CLOTH_FRAMES=48
-SMOOTH=0
-SMOOTH_FACTOR=0.35
-KEEP_OUT=0.02
+OFFSET=0.04
 ALL=0
 CLOTHES_STEMS=()
 BODY_STEMS=()
@@ -39,16 +33,10 @@ Usage:
   $(basename "$0") --clothes <stem> --body <stem> [options]
   $(basename "$0") --all [options]
 
-  --clothes         Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
-  --body            Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
-  --all             Fit every body-slot garment onto every biped mesh body
-  --inflate         Inflate the Outside-wrap target, meters (default: ${INFLATE})
-  --ease            Extra push along body normals after wrap, meters (default: ${EASE})
-  --collision-gap   Cloth vs body thickness, meters (default: ${COLLISION_GAP})
-  --cloth-frames    Cloth simulation frames (default: ${CLOTH_FRAMES}; 0 skips cloth)
-  --smooth          Smooth iterations after cloth (default: ${SMOOTH}; 0 skips)
-  --smooth-factor   Smooth strength per iteration (default: ${SMOOTH_FACTOR})
-  --keep-out        Post-cloth Outside clearance, meters (default: ${KEEP_OUT}; negative skips)
+  --clothes   Clothing blend stem (repeatable). File: ${CLOTHES_DIR}/<stem>.blend
+  --body      Bind-pose body blend stem (repeatable). File: ${BODIES_DIR}/<stem>.blend
+  --all       Fit every body-slot garment onto every biped mesh body
+  --offset    Shrinkwrap distance outside the body, meters (default: ${OFFSET})
 EOF
 }
 
@@ -66,32 +54,8 @@ while [ "$#" -gt 0 ]; do
             ALL=1
             shift
             ;;
-        --inflate)
-            INFLATE="$2"
-            shift 2
-            ;;
-        --ease)
-            EASE="$2"
-            shift 2
-            ;;
-        --collision-gap)
-            COLLISION_GAP="$2"
-            shift 2
-            ;;
-        --cloth-frames)
-            CLOTH_FRAMES="$2"
-            shift 2
-            ;;
-        --smooth)
-            SMOOTH="$2"
-            shift 2
-            ;;
-        --smooth-factor)
-            SMOOTH_FACTOR="$2"
-            shift 2
-            ;;
-        --keep-out)
-            KEEP_OUT="$2"
+        --offset)
+            OFFSET="$2"
             shift 2
             ;;
         -h|--help)
@@ -165,13 +129,7 @@ for clothes in "${CLOTHES_STEMS[@]}"; do
         if ! blender --background "$clothes_blend" --python "$FIT_SCRIPT" -- \
             --body "$body_blend" \
             --output "$out" \
-            --inflate "$INFLATE" \
-            --ease "$EASE" \
-            --collision-gap "$COLLISION_GAP" \
-            --cloth-frames "$CLOTH_FRAMES" \
-            --smooth "$SMOOTH" \
-            --smooth-factor "$SMOOTH_FACTOR" \
-            --keep-out "$KEEP_OUT"; then
+            --offset "$OFFSET"; then
             echo "Failed to fit ${clothes} onto ${body}" >&2
             exit 1
         fi
