@@ -64,7 +64,8 @@ impl Plugin for FiringRangePlugin {
 						.after(character::pose_held_firearm),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
-			);
+			)
+			.add_systems(PostUpdate, reticle::update_reticle.after(TransformSystems::Propagate));
 	}
 }
 

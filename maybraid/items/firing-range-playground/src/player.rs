@@ -17,6 +17,8 @@ const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 pub(crate) const CAMERA_DISTANCE: f32 = 3.6;
 pub(crate) const CAMERA_HEIGHT: f32 = 1.1;
 pub(crate) const CAMERA_LOOK_HEIGHT: f32 = 0.65;
+/// Shift the look target right so the character composes left of the reticle.
+const CAMERA_SHOULDER_OFFSET: f32 = 0.7;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
@@ -240,7 +242,8 @@ fn follow_character_camera(
 	let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
 	let rotation = yaw * pitch;
 	let offset = rotation * Vec3::new(0.0, 0.0, CAMERA_DISTANCE) + Vec3::Y * CAMERA_HEIGHT;
-	let target = player.translation + Vec3::Y * CAMERA_LOOK_HEIGHT;
+	let target =
+		player.translation + Vec3::Y * CAMERA_LOOK_HEIGHT + yaw * Vec3::X * CAMERA_SHOULDER_OFFSET;
 	camera_transform.translation = target + offset;
 	camera_transform.look_at(target, Vec3::Y);
 }

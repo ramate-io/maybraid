@@ -25,10 +25,10 @@ const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 /// Kit GLBs are meter-authored; a held bullpup should be about this long.
 const HELD_LENGTH: f32 = 0.72;
-/// Receiver sits this fraction of the held gun's world length in front of the chest.
-const FORWARD_OF_LENGTH: f32 = 0.4;
+/// Receiver distance from the shoulder line as a fraction of full arm reach.
+const FORWARD_OF_ARM_REACH: f32 = 0.42;
 /// Fraction of the way from chest-mid to `shoulder.R`.
-const RIGHT_ALONG_SHOULDERS: f32 = 0.4;
+const RIGHT_ALONG_SHOULDERS: f32 = 0.35;
 /// Look yaw may lead the body by this much (full cone is 2×).
 pub(crate) const AIM_YAW_LIMIT: f32 = FRAC_PI_6;
 
@@ -39,8 +39,6 @@ pub(crate) struct PlayerVisual;
 #[derive(Component)]
 pub(crate) struct HeldFirearm {
 	pub scale: f32,
-	/// Longest AABB side of the meter-authored kit, before handheld scale.
-	pub authored_length: f32,
 }
 
 pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
@@ -50,10 +48,6 @@ pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
 
 pub(crate) fn held_scale_from_bounds(bounds: Aabb3d) -> f32 {
 	(HELD_LENGTH / authored_length(bounds)).clamp(0.15, 1.0)
-}
-
-pub(crate) fn gun_world_length(held: &HeldFirearm) -> f32 {
-	held.scale * held.authored_length
 }
 
 pub(crate) fn spawn_player_character(
@@ -94,7 +88,6 @@ pub(crate) fn spawn_player_character(
 pub(crate) fn spawn_held_firearm(mut commands: Commands) {
 	let kit = FirearmConcept::Bullpup.kit();
 	let bounds = firearm_bounds(&kit);
-	let length = authored_length(bounds);
 	let scale = held_scale_from_bounds(bounds);
 	let entities = spawn_firearm_components(&mut commands, &kit, Transform::IDENTITY, bounds);
 	for entity in entities {
@@ -102,7 +95,7 @@ pub(crate) fn spawn_held_firearm(mut commands: Commands) {
 			Name::new("held-bullpup"),
 			Weapon::bolt(),
 			FireOnTrigger,
-			HeldFirearm { scale, authored_length: length },
+			HeldFirearm { scale },
 		));
 	}
 }
@@ -154,12 +147,11 @@ pub(crate) fn hold_translation(
 	shoulder_l: Vec3,
 	shoulder_r: Vec3,
 	facing: Vec3,
-	gun_world_length: f32,
+	arm_reach: f32,
 ) -> Vec3 {
 	let mid = (shoulder_l + shoulder_r) * 0.5;
 	let facing = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
-	mid + facing * (gun_world_length * FORWARD_OF_LENGTH)
-		+ (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
+	mid + facing * (arm_reach * FORWARD_OF_ARM_REACH) + (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
 }
 
 pub(crate) fn pose_held_firearm(
@@ -187,13 +179,39 @@ pub(crate) fn pose_held_firearm(
 	let Some(shoulder_r) = named_translation(members, &maps, &globals, "shoulder.R") else {
 		return;
 	};
+	let Some(arm_reach) = average_arm_reach(members, &maps, &globals) else {
+		return;
+	};
 	let facing = visual.rotation * Vec3::Z;
 	let look = Quat::from_axis_angle(Vec3::Y, camera.yaw) * -Vec3::Z;
 	let rotation = gun_aim_rotation(facing, look, camera.pitch);
 	for (held, mut transform) in &mut guns {
-		let translation = hold_translation(shoulder_l, shoulder_r, facing, gun_world_length(held));
+		let translation = hold_translation(shoulder_l, shoulder_r, facing, arm_reach);
 		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
 	}
+}
+
+/// Estimate shoulder-to-palm reach from hierarchy segment lengths.
+///
+/// Humanoid v0 has no hand bone, so the forearm is approximated as the same
+/// length as the humerus. Parent-child distances include species bone scaling.
+fn average_arm_reach(
+	members: &CharacterMembers,
+	maps: &Query<&BoneMap, Without<HeldFirearm>>,
+	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+) -> Option<f32> {
+	let mut sum = 0.0;
+	let mut count = 0;
+	for suffix in ["L", "R"] {
+		let shoulder = named_translation(members, maps, globals, &format!("shoulder.{suffix}"))?;
+		let humerus = named_translation(members, maps, globals, &format!("humerus.{suffix}"))?;
+		let forearm = named_translation(members, maps, globals, &format!("forearm.{suffix}"))?;
+		let clavicle = shoulder.distance(humerus);
+		let upper = humerus.distance(forearm);
+		sum += clavicle + upper * 2.0;
+		count += 1;
+	}
+	(count > 0).then_some(sum / count as f32)
 }
 
 fn named_translation(
@@ -299,17 +317,17 @@ mod tests {
 		let right = Vec3::new(0.4, 1.9, 0.0);
 		let at = hold_translation(left, right, Vec3::Z, 0.72);
 		assert!((at.y - 1.9).abs() < 1e-4, "{at}");
-		assert!(at.z > 0.2, "{at}");
+		assert!(at.z > 0.3, "{at}");
 		assert!(at.x > 0.0, "{at}");
 	}
 
 	#[test]
-	fn hold_forward_scales_with_gun_length() {
+	fn hold_forward_scales_with_arm_reach() {
 		let left = Vec3::new(-0.2, 1.0, 0.0);
 		let right = Vec3::new(0.2, 1.0, 0.0);
 		let short = hold_translation(left, right, Vec3::Z, 0.5);
 		let long = hold_translation(left, right, Vec3::Z, 1.0);
-		assert!((long.z - short.z - 0.5 * FORWARD_OF_LENGTH).abs() < 1e-4);
+		assert!((long.z - short.z - 0.5 * FORWARD_OF_ARM_REACH).abs() < 1e-4);
 	}
 
 	#[test]
