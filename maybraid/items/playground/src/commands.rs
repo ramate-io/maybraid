@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use clap::{Args, Parser};
 use firearms::{
-	BarrelMesh, BodyMesh, FirearmConcept, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh,
+	BarrelMesh, BodyMesh, FirearmConcept, FirearmKit, FirearmPose, GripMesh, KitBone, StockMesh,
+	TriggerBoxMesh,
 };
 use game_commands::command::{CommandScript, GameCommand};
 
@@ -29,6 +30,8 @@ pub enum PlaygroundCommand {
 	},
 	/// Set individual kit slots. Omitted flags keep the current kit; `none` clears an optional slot.
 	Kit(KitArgs),
+	/// Set length (bone Y) and/or thickness (bone XZ) on a kit bone. Omitted flags keep the current value.
+	Scale(ScaleArgs),
 }
 
 #[derive(Clone, Copy, Args, Debug, Default, PartialEq, Eq)]
@@ -91,6 +94,45 @@ impl KitArgs {
 	}
 }
 
+#[derive(Clone, Copy, Args, Debug, Default, PartialEq)]
+#[command(rename_all = "kebab-case")]
+pub struct ScaleArgs {
+	/// Kit bone: `body`, `barrel`, `trigger-box`, `grip`, `stock`.
+	#[arg(value_enum)]
+	pub bone: KitBone,
+	#[arg(long)]
+	pub length: Option<f32>,
+	#[arg(long)]
+	pub thickness: Option<f32>,
+}
+
+impl ScaleArgs {
+	fn apply(self, pose: &mut FirearmPose) {
+		let fit = pose.fit_mut(self.bone);
+		if let Some(length) = self.length {
+			fit.length = length;
+		}
+		if let Some(thickness) = self.thickness {
+			fit.thickness = thickness;
+		}
+	}
+
+	fn summary(&self) -> String {
+		let mut parts = vec![self.bone.label().to_string()];
+		if let Some(length) = self.length {
+			parts.push(format!("--length {length}"));
+		}
+		if let Some(thickness) = self.thickness {
+			parts.push(format!("--thickness {thickness}"));
+		}
+		if self.length.is_none() && self.thickness.is_none() {
+			format!("scale {} (unchanged)", self.bone.label())
+		} else {
+			format!("scale {}", parts.join(" "))
+		}
+	}
+}
+
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
 		<Self as GameCommand>::long_help_string()
@@ -108,13 +150,20 @@ impl PlaygroundCommand {
 				let kit = concept.kit();
 				*console = format!("show {}", concept.label());
 				commands.queue(move |world: &mut World| {
-					*world.resource_mut::<PreviewConfig>() = PreviewConfig { kit };
+					*world.resource_mut::<PreviewConfig>() =
+						PreviewConfig { kit, pose: FirearmPose::default() };
 				});
 			}
 			Self::Kit(args) => {
 				*console = args.summary();
 				commands.queue(move |world: &mut World| {
 					args.apply(&mut world.resource_mut::<PreviewConfig>().kit);
+				});
+			}
+			Self::Scale(args) => {
+				*console = args.summary();
+				commands.queue(move |world: &mut World| {
+					args.apply(&mut world.resource_mut::<PreviewConfig>().pose);
 				});
 			}
 		}
@@ -146,7 +195,7 @@ mod tests {
 	#[test]
 	fn parses_kit_slot_flags() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line(
-			"kit --body silopup --barrel laznard --grip none",
+			"kit --body silopup --barrel laznard --grip none --trigger-box paddle",
 		)?;
 		let PlaygroundCommand::Kit(args) = command else {
 			return Err("expected kit".into());
@@ -154,7 +203,7 @@ mod tests {
 		assert_eq!(args.body, Some(BodyMesh::Silopup));
 		assert_eq!(args.barrel, Some(BarrelMesh::Laznard));
 		assert_eq!(args.grip, Some(GripMesh::None));
-		assert!(args.trigger_box.is_none());
+		assert_eq!(args.trigger_box, Some(TriggerBoxMesh::Paddle));
 		assert!(args.stock.is_none());
 		Ok(())
 	}
@@ -171,5 +220,24 @@ mod tests {
 		assert_eq!(kit.body, BodyMesh::Bullpup);
 		assert_eq!(kit.barrel, BarrelMesh::Laznard);
 		assert_eq!(kit.grip, GripMesh::None);
+	}
+
+	#[test]
+	fn parses_scale_length_and_thickness() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"scale barrel --length 1.5 --thickness 0.8",
+		)?;
+		let PlaygroundCommand::Scale(args) = command else {
+			return Err("expected scale".into());
+		};
+		assert_eq!(args.bone, KitBone::Barrel);
+		assert_eq!(args.length, Some(1.5));
+		assert_eq!(args.thickness, Some(0.8));
+		let mut pose = FirearmPose::default();
+		args.apply(&mut pose);
+		assert_eq!(pose.barrel.length, 1.5);
+		assert_eq!(pose.barrel.thickness, 0.8);
+		assert_eq!(pose.body.length, 1.0);
+		Ok(())
 	}
 }

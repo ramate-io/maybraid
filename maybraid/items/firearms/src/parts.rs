@@ -9,27 +9,19 @@ pub enum BodyMesh {
 	#[default]
 	Bullpup,
 	Silopup,
-	Keelripe,
 	Reltor,
 	Samsonist,
 	Snailer,
 }
 
 impl BodyMesh {
-	pub const VALUES: &'static [Self] = &[
-		Self::Bullpup,
-		Self::Silopup,
-		Self::Keelripe,
-		Self::Reltor,
-		Self::Samsonist,
-		Self::Snailer,
-	];
+	pub const VALUES: &'static [Self] =
+		&[Self::Bullpup, Self::Silopup, Self::Reltor, Self::Samsonist, Self::Snailer];
 
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Bullpup => "bullpup",
 			Self::Silopup => "silopup",
-			Self::Keelripe => "keelripe",
 			Self::Reltor => "reltor",
 			Self::Samsonist => "samsonist",
 			Self::Snailer => "snailer",
@@ -40,7 +32,6 @@ impl BodyMesh {
 		match self {
 			Self::Bullpup => guns::BULLPUP_BODY,
 			Self::Silopup => guns::SILOPUP_BODY,
-			Self::Keelripe => guns::KEELRIPE_BODY,
 			Self::Reltor => guns::RELTOR_BODY,
 			Self::Samsonist => guns::SAMSONIST_BODY,
 			Self::Snailer => guns::SNAILER_BODY,
@@ -88,17 +79,30 @@ impl BarrelMesh {
 pub enum TriggerBoxMesh {
 	#[default]
 	None,
+	Keelripe,
+	Paddle,
+	Reltor,
 }
 
 impl TriggerBoxMesh {
-	pub const VALUES: &'static [Self] = &[Self::None];
+	pub const VALUES: &'static [Self] = &[Self::None, Self::Keelripe, Self::Paddle, Self::Reltor];
 
 	pub const fn label(self) -> &'static str {
-		"none"
+		match self {
+			Self::None => "none",
+			Self::Keelripe => "keelripe",
+			Self::Paddle => "paddle",
+			Self::Reltor => "reltor",
+		}
 	}
 
 	pub const fn path(self) -> Option<AssetPath> {
-		None
+		match self {
+			Self::None => None,
+			Self::Keelripe => Some(guns::KEELRIPE_BOX),
+			Self::Paddle => Some(guns::PADDLE_BOX),
+			Self::Reltor => Some(guns::RELTOR_BOX),
+		}
 	}
 
 	pub fn node(self) -> Option<PartNode> {
@@ -110,23 +114,23 @@ impl TriggerBoxMesh {
 pub enum GripMesh {
 	#[default]
 	None,
-	Bullpup,
+	BumpHandle,
 }
 
 impl GripMesh {
-	pub const VALUES: &'static [Self] = &[Self::None, Self::Bullpup];
+	pub const VALUES: &'static [Self] = &[Self::None, Self::BumpHandle];
 
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::None => "none",
-			Self::Bullpup => "bullpup",
+			Self::BumpHandle => "bump-handle",
 		}
 	}
 
 	pub const fn path(self) -> Option<AssetPath> {
 		match self {
 			Self::None => None,
-			Self::Bullpup => Some(guns::BULLPUP_GRIP),
+			Self::BumpHandle => Some(guns::BUMP_HANDLE),
 		}
 	}
 
@@ -154,5 +158,41 @@ impl StockMesh {
 
 	pub fn node(self) -> Option<PartNode> {
 		self.path().map(|path| PartNode::stock(self.label(), path.as_str()))
+	}
+}
+
+/// Kit socket bones that can be lengthened / thickened in the playground.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum KitBone {
+	#[default]
+	Body,
+	Barrel,
+	TriggerBox,
+	Grip,
+	Stock,
+}
+
+impl KitBone {
+	pub const VALUES: &'static [Self] =
+		&[Self::Body, Self::Barrel, Self::TriggerBox, Self::Grip, Self::Stock];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Body => "body",
+			Self::Barrel => "barrel",
+			Self::TriggerBox => "trigger-box",
+			Self::Grip => "grip",
+			Self::Stock => "stock",
+		}
+	}
+
+	pub const fn bone_name(self) -> &'static str {
+		match self {
+			Self::Body => "body",
+			Self::Barrel => "barrel",
+			Self::TriggerBox => "trigger_box",
+			Self::Grip => "grip",
+			Self::Stock => "stock",
+		}
 	}
 }

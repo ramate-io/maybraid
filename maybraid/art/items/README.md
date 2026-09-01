@@ -9,7 +9,7 @@ Firearm kit authoring (bone-space meshes, slots, hand landmarks) is in [`guns/RE
 | [`guns/rigs/`](guns/rigs/) | Shared firearm receiver armature |
 | [`guns/bodies/`](guns/bodies/) | Receiver / body meshes |
 | [`guns/barrels/`](guns/barrels/) | Barrel meshes |
-| [`guns/trigger_boxes/`](guns/trigger_boxes/) | Fire-control box meshes (none yet) |
+| [`guns/trigger_boxes/`](guns/trigger_boxes/) | Fire-control box meshes |
 | [`guns/grips/`](guns/grips/) | Grip meshes |
 | [`guns/stocks/`](guns/stocks/) | Stock meshes (none yet) |
 | [`guns/concepts/`](guns/concepts/) | Baked one-mesh kits |

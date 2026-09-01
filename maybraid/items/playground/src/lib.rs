@@ -10,7 +10,7 @@ pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
-use firearms::FirearmHostsPlugin;
+use firearms::{FirearmHostSystems, FirearmHostsPlugin};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use preview::{sync_preview, PreviewConfig};
 
@@ -31,7 +31,10 @@ impl Plugin for ItemsPlaygroundPlugin {
 				(
 					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller,
-					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
+					sync_preview
+						.after(capture_command_line_input::<PlaygroundCommand>)
+						.after(FirearmHostSystems::Membership)
+						.before(FirearmHostSystems::Pose),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

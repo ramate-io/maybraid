@@ -16,9 +16,11 @@ Each folder is one replaceable mesh. Trigger boxes used to be modeled into the b
 | [`concepts/`](concepts/) | (none) | Baked one-mesh kits; skip assembly |
 | [`rigs/`](rigs/) | — | Shared receiver armature |
 
-Empty directories are placeholders (`stocks/`, `trigger_boxes/`), not missing exports.
+Empty directories are placeholders (`stocks/`), not missing exports.
 
 Runtime kits always have a body. Barrel, trigger box, grip, and stock are optional (`none` in the playground `kit` command).
+
+Trigger-box meshes: `keelripe_box`, `paddle_box`, `reltor_box`. The grip catalog is `bump_handle`. Keelripe is a trigger box, not a body.
 
 ## Receiver armature
 

@@ -138,12 +138,9 @@ impl LodScene for PartNode {
 	}
 }
 
-/// Kit bones on the last exported [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
-///
-/// The Blender source also has `trigger_box` and the hand chains
-/// (`grip_arm` / `grip_point`, `trigger_arm` / `trigger_ledge` / `trigger_point`).
-/// Add those names after re-exporting the GLB (`maybraid/art/items/guns/README.md`).
-pub const RECEIVER_LANDMARKS: &[&str] = &["body", "barrel", "grip", "stock"];
+/// Kit and hand bones on [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
+pub const RECEIVER_LANDMARKS: &[&str] =
+	&["body", "barrel", "grip", "stock", "trigger_box", "grip_point", "trigger_point"];
 
 /// Authoring IR for a firearm receiver armature — also the fine-phase host.
 ///

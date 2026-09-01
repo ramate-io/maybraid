@@ -39,10 +39,12 @@ pub mod guns {
 	pub const BULLPUP_BODY: AssetPath = AssetPath::new("items/guns/bodies/bullpup_body.glb");
 	pub const BULLPUP_FULL_CONCEPT: AssetPath =
 		AssetPath::new("items/guns/concepts/bullpup_full_concept.glb");
-	pub const BULLPUP_GRIP: AssetPath = AssetPath::new("items/guns/grips/bullpup_grip.glb");
-	pub const KEELRIPE_BODY: AssetPath = AssetPath::new("items/guns/bodies/keelripe_body.glb");
+	pub const BUMP_HANDLE: AssetPath = AssetPath::new("items/guns/grips/bump_handle.glb");
+	pub const KEELRIPE_BOX: AssetPath = AssetPath::new("items/guns/trigger_boxes/keelripe_box.glb");
 	pub const LAZNARD_BARREL: AssetPath = AssetPath::new("items/guns/barrels/laznard_barrel.glb");
+	pub const PADDLE_BOX: AssetPath = AssetPath::new("items/guns/trigger_boxes/paddle_box.glb");
 	pub const RELTOR_BODY: AssetPath = AssetPath::new("items/guns/bodies/reltor_body.glb");
+	pub const RELTOR_BOX: AssetPath = AssetPath::new("items/guns/trigger_boxes/reltor_box.glb");
 	pub const SAMSONIST_BODY: AssetPath = AssetPath::new("items/guns/bodies/samsonist_body.glb");
 	pub const SILOPUP_BODY: AssetPath = AssetPath::new("items/guns/bodies/silopup_body.glb");
 	pub const SILOPUP_FULL_CONCEPT: AssetPath =

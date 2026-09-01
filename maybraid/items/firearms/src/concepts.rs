@@ -13,31 +13,23 @@ use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
 /// Mix arbitrary parts in the playground with `kit --barrel laznard` (etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, bevy::prelude::Component)]
 pub enum FirearmConcept {
-	/// Body + barrel + grip.
+	/// Body + barrel + bump-handle grip.
 	#[default]
 	Bullpup,
 	Silopup,
-	Keelripe,
 	Reltor,
 	Samsonist,
 	Snailer,
 }
 
 impl FirearmConcept {
-	pub const ALL: [Self; 6] = [
-		Self::Bullpup,
-		Self::Silopup,
-		Self::Keelripe,
-		Self::Reltor,
-		Self::Samsonist,
-		Self::Snailer,
-	];
+	pub const ALL: [Self; 5] =
+		[Self::Bullpup, Self::Silopup, Self::Reltor, Self::Samsonist, Self::Snailer];
 
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Bullpup => "bullpup",
 			Self::Silopup => "silopup",
-			Self::Keelripe => "keelripe",
 			Self::Reltor => "reltor",
 			Self::Samsonist => "samsonist",
 			Self::Snailer => "snailer",
@@ -48,7 +40,6 @@ impl FirearmConcept {
 		match self {
 			Self::Bullpup => BodyMesh::Bullpup,
 			Self::Silopup => BodyMesh::Silopup,
-			Self::Keelripe => BodyMesh::Keelripe,
 			Self::Reltor => BodyMesh::Reltor,
 			Self::Samsonist => BodyMesh::Samsonist,
 			Self::Snailer => BodyMesh::Snailer,
@@ -62,8 +53,13 @@ impl FirearmConcept {
 				body: BodyMesh::Bullpup,
 				barrel: BarrelMesh::Bullpup,
 				trigger_box: TriggerBoxMesh::None,
-				grip: GripMesh::Bullpup,
+				grip: GripMesh::BumpHandle,
 				stock: StockMesh::None,
+			},
+			Self::Reltor => FirearmKit {
+				body: BodyMesh::Reltor,
+				trigger_box: TriggerBoxMesh::Reltor,
+				..FirearmKit::default()
 			},
 			other => FirearmKit::body(other.body()),
 		}
@@ -128,7 +124,7 @@ mod tests {
 		let kit = gun.kit();
 		assert_eq!(kit.body, BodyMesh::Bullpup);
 		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
-		assert_eq!(kit.grip, GripMesh::Bullpup);
+		assert_eq!(kit.grip, GripMesh::BumpHandle);
 		let rigs = gun.rig_nodes_for_level(LodSceneLevel::High).flatten();
 		let bodies = gun.body_nodes_for_level(LodSceneLevel::High).flatten();
 		let barrels = gun.barrel_nodes_for_level(LodSceneLevel::High).flatten();
@@ -157,14 +153,17 @@ mod tests {
 	}
 
 	#[test]
+	fn reltor_includes_its_trigger_box() {
+		let gun = FirearmConcept::Reltor;
+		let boxes = gun.trigger_box_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(boxes[0].slot, FirearmPartSlot::TriggerBox);
+		assert_eq!(boxes[0].socket, Some(SocketRef::bone("trigger_box")));
+		assert_eq!(boxes[0].scene.path, guns::RELTOR_BOX.as_str());
+	}
+
+	#[test]
 	fn body_only_concepts_have_no_kit_attachments() {
-		for gun in [
-			FirearmConcept::Silopup,
-			FirearmConcept::Keelripe,
-			FirearmConcept::Reltor,
-			FirearmConcept::Samsonist,
-			FirearmConcept::Snailer,
-		] {
+		for gun in [FirearmConcept::Silopup, FirearmConcept::Samsonist, FirearmConcept::Snailer] {
 			assert_eq!(gun.body_nodes_for_level(LodSceneLevel::High).len(), 1);
 			assert!(gun.barrel_nodes_for_level(LodSceneLevel::High).is_empty());
 			assert!(gun.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());

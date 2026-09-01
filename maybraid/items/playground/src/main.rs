@@ -16,7 +16,7 @@ fn main() {
 		println!("Startup command from argv (same as in-game / text).");
 	} else {
 		println!(
-			"Items playground — press / for commands (`show bullpup`, `kit --barrel laznard`)."
+			"Items playground — press / for commands (`show bullpup`, `kit --barrel laznard`, `scale barrel --length 1.5`)."
 		);
 	}
 
