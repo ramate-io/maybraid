@@ -45,7 +45,7 @@ pub use base_noise::BaseTerrainNoise;
 pub use cell::{
 	MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
-pub use collider::{TerrainTrimeshCollider, TERRAIN_FRICTION};
+pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
 pub use jersey::{

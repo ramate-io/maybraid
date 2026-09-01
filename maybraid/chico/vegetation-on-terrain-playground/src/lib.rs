@@ -14,15 +14,15 @@ pub mod player;
 mod ui;
 
 pub use camera::CameraController;
-pub use character::{CharacterSpecies, RequestSetCharacter};
+pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
 pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use player::{
-	MoveWish, MovementAction, PadMovementEnabled, Player, PlayerControlSystems, PlayerPlugin,
-	PlaygroundMode,
+	CharacterLocomotion, MoveWish, MovementAction, PadMovementEnabled, Player, PlayerCapsule,
+	PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;

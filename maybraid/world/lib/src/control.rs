@@ -7,6 +7,8 @@ use chico_vegetation_on_terrain_playground::{
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 
+use crate::camera::CameraPov;
+
 pub(crate) fn apply_intents_to_movement(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
@@ -14,6 +16,7 @@ pub(crate) fn apply_intents_to_movement(
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut movement: MessageWriter<MovementAction>,
+	mut pov: ResMut<CameraPov>,
 ) {
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
@@ -21,6 +24,9 @@ pub(crate) fn apply_intents_to_movement(
 		match *intent {
 			CharacterIntent::Move(value) => move_stick = value,
 			CharacterIntent::Jump => jump = true,
+			CharacterIntent::SwapPov => {
+				*pov = (*pov).toggle();
+			}
 			_ => {}
 		}
 	}

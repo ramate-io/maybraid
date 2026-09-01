@@ -23,11 +23,12 @@ pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
 const MOVE_ACCEL: f32 = 40.0;
 const MOVE_DAMPING: f32 = 0.92;
 const JUMP_IMPULSE: f32 = 8.0;
-const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
+/// Default walkable slope (~81°). Playgrounds override via [`CharacterLocomotion`].
+const DEFAULT_MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 /// Third-person orbit for a ~2 m humanoid (capsule center is hip height).
-const CAMERA_DISTANCE: f32 = 3.6;
-const CAMERA_HEIGHT: f32 = 1.1;
-const CAMERA_LOOK_HEIGHT: f32 = 0.65;
+pub const CAMERA_DISTANCE: f32 = 3.6;
+pub const CAMERA_HEIGHT: f32 = 1.1;
+pub const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
@@ -40,6 +41,21 @@ pub struct MoveWish(pub Vec3);
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlayerControlSystems;
+
+/// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
+/// (~81°) max slope. World playground uses a shallower cap so 80°+ walls do
+/// not count as floor.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct CharacterLocomotion {
+	/// Hits steeper than this (radians from up) are not grounded.
+	pub max_slope_angle: f32,
+}
+
+impl Default for CharacterLocomotion {
+	fn default() -> Self {
+		Self { max_slope_angle: DEFAULT_MAX_SLOPE_ANGLE }
+	}
+}
 
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -110,6 +126,7 @@ impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundMode>()
 			.init_resource::<PadMovementEnabled>()
+			.init_resource::<CharacterLocomotion>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -133,6 +150,7 @@ fn spawn_player(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
+	locomotion: Res<CharacterLocomotion>,
 ) {
 	// Startup: composed cells are not in the store yet. Hold above base noise
 	// so the capsule / follow-cam are not born under jersey plateaus.
@@ -162,7 +180,7 @@ fn spawn_player(
 			MovementAcceleration(MOVE_ACCEL),
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
-			MaxSlopeAngle(MAX_SLOPE_ANGLE),
+			MaxSlopeAngle(locomotion.max_slope_angle),
 			MoveWish::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
@@ -438,5 +456,12 @@ mod tests {
 		let base = BaseTerrainNoise::from_config(&TerrainConfig::new(42));
 		let hold = holding_elevation(&base, 0.0, 0.0);
 		assert!(hold > base.height_at(0.0, 0.0) + 50.0);
+	}
+
+	#[test]
+	fn default_locomotion_keeps_legacy_slope() {
+		assert!(
+			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
+		);
 	}
 }

@@ -4394,11 +4394,14 @@ dependencies = [
 name = "maybraid-world"
 version = "0.0.1"
 dependencies = [
+ "avian3d",
  "bevy",
  "chico-vegetation-on-terrain-playground",
  "clap",
+ "durham-terrain-models",
  "game-commands",
  "lod",
+ "lod-avian",
  "log",
  "maybraid-character-controller",
  "maybraid-input",
