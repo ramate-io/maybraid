@@ -7,8 +7,9 @@ script does not save the clothing file.
         --body body.blend --output fitted.glb
 
 Pipeline: treat the garment as a solid, Catmull-Clark subdivide, shrinkwrap
-Outside along the body's target normals, decimate (ratio 0.3), boolean-subtract
-the (FitTo-clipped) body, then rebind to the Humanoid armature (automatic
+Outside along the body's target normals until vertices are outside (or the
+inside-count stops dropping), decimate (ratio 0.3), boolean-subtract the
+(FitTo-clipped) body, then rebind to the Humanoid armature (automatic
 weights, or the body's groups if heat weighting fails).
 
 An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
@@ -45,6 +46,8 @@ DEFAULT_FIT_TO = "FullBody"
 FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
 SUBSURF_LEVELS = 1
 DECIMATE_RATIO = 0.3
+WRAP_MAX_ITERS = 5
+INSIDE_EPS = 1e-5
 
 # Bind-pose Humanoid fractions: "tiny bit" of the adjacent limb, flesh beyond bones.
 TORSO_ARM_FRAC = 0.20
@@ -70,7 +73,7 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit a solid garment by Catmull-Clark, Outside target-normal wrap, decimate, carve, and rebind"
+        description="Fit a solid garment by Catmull-Clark, looped Outside target-normal wrap, decimate, carve, and rebind"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
@@ -568,7 +571,33 @@ def _decimate(obj, ratio: float = DECIMATE_RATIO) -> None:
         sys.exit(1)
 
 
-def _shrinkwrap_outside(garment, target, offset: float) -> None:
+def _surface_bvh(obj):
+    import bmesh
+    from mathutils.bvhtree import BVHTree
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.transform(obj.matrix_world)
+    bm.normal_update()
+    tree = BVHTree.FromBMesh(bm, epsilon=1e-6)
+    bm.free()
+    return tree
+
+
+def _inside_vert_count(garment, bvh, eps: float = INSIDE_EPS) -> int:
+    mw = garment.matrix_world
+    inside = 0
+    for vert in garment.data.vertices:
+        point = mw @ vert.co
+        loc, normal, _index, _dist = bvh.find_nearest(point)
+        if loc is None:
+            continue
+        if (point - loc).dot(normal) < -eps:
+            inside += 1
+    return inside
+
+
+def _shrinkwrap_outside(garment, target, offset: float) -> int:
     before = _coords(garment)
     name = "FitWrap"
     wrap = garment.modifiers.new(name, "SHRINKWRAP")
@@ -580,10 +609,43 @@ def _shrinkwrap_outside(garment, target, offset: float) -> None:
     _apply_modifier(garment, name)
     _recalc_normals(garment)
     after = _coords(garment)
+    moved = _moved_vert_count(before, after)
     print(
         f"shrinkwrap OUTSIDE TARGET_PROJECT offset={offset}m "
-        f"verts={len(garment.data.vertices)} moved={_moved_vert_count(before, after)}"
+        f"verts={len(garment.data.vertices)} moved={moved}"
     )
+    return moved
+
+
+def _wrap_until_outside(garment, target, offset: float) -> None:
+    bvh = _surface_bvh(target)
+    total = len(garment.data.vertices)
+    best = _copy_mesh(garment, "FitWrapBest")
+    best_inside = _inside_vert_count(garment, bvh)
+    print(f"wrap start inside={best_inside}/{total}")
+    for step in range(1, WRAP_MAX_ITERS + 1):
+        moved = _shrinkwrap_outside(garment, target, offset)
+        inside = _inside_vert_count(garment, bvh)
+        print(f"wrap {step}/{WRAP_MAX_ITERS} inside={inside}/{total}")
+        improved = False
+        if inside < best_inside:
+            _restore_mesh(best, garment)
+            best_inside = inside
+            improved = True
+        elif inside > best_inside:
+            print("wrap inside rose; restoring best")
+            _restore_mesh(garment, best)
+            break
+        if inside == 0:
+            break
+        if moved == 0:
+            print("wrap moved no verts")
+            break
+        if not improved:
+            print("wrap plateau")
+            break
+    _delete(best)
+    print(f"wrap done inside={_inside_vert_count(garment, bvh)}/{len(garment.data.vertices)}")
 
 
 def _copy_mesh(obj, name: str):
@@ -833,7 +895,7 @@ def main() -> None:
         _strip_deform(garment)
         _apply_transform(garment)
         _catmull_clark(garment)
-        _shrinkwrap_outside(garment, fit_body, offset)
+        _wrap_until_outside(garment, fit_body, offset)
         _decimate(garment)
         _carve_body(garment, fit_body)
         _rerig(garment, armature, body)
