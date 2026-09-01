@@ -4074,6 +4074,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "items-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "clap",
+ "firearms",
+ "game-commands",
+ "lod",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

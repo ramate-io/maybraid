@@ -12,7 +12,7 @@ pub mod scene_children;
 
 pub use assets::AssetPath;
 pub use layer::{Layer, Layers};
-pub use nodes::{FirearmPartSlot, PartNode, RigNode};
+pub use nodes::{FirearmPartSlot, PartNode, RigNode, RECEIVER_LANDMARKS};
 pub use plugin::{add_firearm_components_host, FirearmComponentsPlugin, FirearmHostSystems};
 pub use rigs::{
 	AssemblyHost, AssemblyMembers as FirearmMembers, AssemblyRoot, BoneMap, MemberOf, SocketRef,
@@ -54,6 +54,10 @@ pub trait FirearmComponents {
 	fn grip_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		Layers::new()
 	}
+
+	fn stock_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::new()
+	}
 }
 
 impl<T: FirearmComponents + ?Sized> FirearmComponents for &T {
@@ -71,6 +75,10 @@ impl<T: FirearmComponents + ?Sized> FirearmComponents for &T {
 
 	fn grip_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		(**self).grip_nodes_for_level(level)
+	}
+
+	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		(**self).stock_nodes_for_level(level)
 	}
 }
 
@@ -127,6 +135,10 @@ impl<T: FirearmComponents + Send + Sync + 'static> FirearmComponents for Compone
 
 	fn grip_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		self.0.grip_nodes_for_level(level)
+	}
+
+	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.0.stock_nodes_for_level(level)
 	}
 }
 
@@ -189,6 +201,9 @@ pub fn firearm_scene_chunks(
 	for node in firearm.grip_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
+	for node in firearm.stock_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
 	if chunks.is_empty() {
 		SceneChunk::primitive(scene_children(Vec::new()))
 	} else {
@@ -214,6 +229,9 @@ pub fn append_component_scenes(
 	for node in firearm.grip_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
+	for node in firearm.stock_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.host(lod_ref)));
+	}
 }
 
 pub fn component_only_scene(
@@ -228,7 +246,7 @@ pub fn component_only_scene(
 
 /// Approximate AABB for a handheld firearm (bands are identical for now).
 pub fn firearm_bounds(_firearm: &impl FirearmComponents) -> Aabb3d {
-	Aabb3d::from_min_max(Vec3::new(-0.5, -0.3, -1.0), Vec3::new(0.5, 0.5, 0.5))
+	Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -2.2), Vec3::new(0.5, 1.4, 0.5))
 }
 
 /// Spawn a [`ComponentsOnly`] firearm host; chunk fulfill streams the first level.

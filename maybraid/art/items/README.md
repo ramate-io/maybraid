@@ -4,5 +4,5 @@ Blender sources for handheld items. Runtime GLBs mirror this layout under `maybr
 
 | Folder | Role |
 |--------|------|
-| [`guns/`](guns/) | Firearm kits: receiver bodies, barrels, grips, and baked full-concept meshes |
+| [`guns/`](guns/) | Firearm kits: shared receiver rig, bodies, barrels, grips, and baked full-concept meshes |
 | [`melee/`](melee/) | Melee kits (blade / guard / handle) |

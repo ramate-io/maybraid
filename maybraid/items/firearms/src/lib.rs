@@ -1,18 +1,18 @@
 //! Maybraid firearm recipes: kit assembly over [`firearms_components`].
 //!
 //! [`FirearmConcept`] is the character-recipe analogue: a named gun that emits
-//! [`FirearmComponents`] nodes (body / barrel / grip), socketed onto a receiver
-//! rig when one exists.
+//! [`FirearmComponents`] nodes (receiver rig + body / barrel / grip), socketed
+//! onto `body` / `barrel` / `grip` / `stock`.
 
 pub mod concepts;
 pub mod plugin;
 
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
-	add_firearm_components_host, spawn_firearm_components, AssetPath, BoneMap, ComponentsOnly,
-	FirearmComponents, FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers,
+	add_firearm_components_host, firearm_bounds, spawn_firearm_components, AssetPath, BoneMap,
+	ComponentsOnly, FirearmComponents, FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers,
 	FirearmPartSlot, FirearmRoot, Layer, Layers, MemberOf, PartNode, RigNode, SocketRef,
-	SocketRefApplied, SocketRefRoot,
+	SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
 };
 pub use plugin::FirearmHostsPlugin;
 

@@ -20,6 +20,7 @@ pub enum FirearmPartSlot {
 	Body,
 	Barrel,
 	Grip,
+	Stock,
 	/// Baked one-mesh concept (skips kit assembly).
 	Concept,
 }
@@ -28,9 +29,11 @@ impl FirearmPartSlot {
 	/// Bone name a kit part sockets onto when a receiver rig is present.
 	pub const fn socket_bone(self) -> Option<&'static str> {
 		match self {
+			Self::Body => Some("body"),
 			Self::Barrel => Some("barrel"),
 			Self::Grip => Some("grip"),
-			Self::Body | Self::Concept => None,
+			Self::Stock => Some("stock"),
+			Self::Concept => None,
 		}
 	}
 }
@@ -70,6 +73,10 @@ impl PartNode {
 
 	pub fn grip(label: &'static str, path: impl Into<String>) -> Self {
 		Self::glb(FirearmPartSlot::Grip, label, path)
+	}
+
+	pub fn stock(label: &'static str, path: impl Into<String>) -> Self {
+		Self::glb(FirearmPartSlot::Stock, label, path)
 	}
 
 	pub fn concept(label: &'static str, path: impl Into<String>) -> Self {
@@ -121,10 +128,12 @@ impl LodScene for PartNode {
 	}
 }
 
+/// Named bones on [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
+pub const RECEIVER_LANDMARKS: &[&str] = &["body", "barrel", "grip", "stock"];
+
 /// Authoring IR for a firearm receiver armature — also the fine-phase host.
 ///
-/// Kit parts socket onto named bones (`barrel`, `grip`, …). When no armature GLB
-/// is present yet, omit this node and socket fulfill parents under [`crate::FirearmRoot`].
+/// Kit parts socket onto named bones (`body`, `barrel`, `grip`, `stock`).
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct RigNode {
 	pub label: &'static str,
@@ -174,7 +183,7 @@ impl LodScene for RigNode {
 			template_value(node)
 			Transform::IDENTITY
 			AssemblyHost
-			template_value(RigRoot::new(RigKey::named("receiver")))
+			template_value(RigRoot::new(RigKey::named("receiver")).with_landmarks(RECEIVER_LANDMARKS))
 			template_value(BoneMap::default())
 			template_value(ActiveRigPose::default())
 			template_value(BindPose::default())

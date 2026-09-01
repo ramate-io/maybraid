@@ -34,6 +34,7 @@ impl std::fmt::Display for AssetPath {
 pub mod guns {
 	use super::AssetPath;
 
+	pub const FIREARM_RIG: AssetPath = AssetPath::new("items/guns/firearm_rig.glb");
 	pub const BULLPUP_BARREL: AssetPath = AssetPath::new("items/guns/bullpup_barrel.glb");
 	pub const BULLPUP_BODY: AssetPath = AssetPath::new("items/guns/bullpup_body.glb");
 	pub const BULLPUP_FULL_CONCEPT: AssetPath =

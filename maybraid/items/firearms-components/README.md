@@ -8,9 +8,9 @@ Higher-order firearms in [`firearms`](../firearms/) implement [`FirearmComponent
 
 | Node | Role |
 |------|------|
-| [`RigNode`](src/nodes.rs) | Optional receiver armature. Kit parts socket onto named bones (`barrel`, `grip`). |
-| [`PartNode`](src/nodes.rs) | Body, barrel, grip, or a baked full-concept mesh. |
+| [`RigNode`](src/nodes.rs) | Shared receiver armature (`body`, `barrel`, `grip`, `stock`). |
+| [`PartNode`](src/nodes.rs) | Body, barrel, grip, stock, or a baked full-concept mesh. |
 
-Until a receiver rig GLB exists, socket fulfill parents kit parts under the firearm root at authored pose. The same [`SocketRef`](../../rigs/src/socket.rs) will parent under bones once a [`RigNode`](src/nodes.rs) is present. Armature indexing and pose live in [`rigs`](../../rigs/).
+Until a kit piece exists for a slot, that method returns empty. Armature indexing and pose live in [`rigs`](../../rigs/). The shared receiver is [`firearm_rig.glb`](../../assets/items/guns/firearm_rig.glb).
 
 Blender sources live under [`maybraid/art/items/guns/`](../../art/items/guns/); runtime GLBs under `maybraid/assets/items/guns/`.

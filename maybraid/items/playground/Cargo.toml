@@ -1,0 +1,25 @@
+[package]
+name = "items-playground"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[bin]]
+name = "items-playground"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+camera-controls = { workspace = true }
+clap = { workspace = true }
+firearms = { workspace = true }
+game-commands = { workspace = true }
+lod = { workspace = true }
+
+[lints]
+workspace = true
