@@ -1,5 +1,5 @@
 [package]
-name = "maybraid-world"
+name = "maybraid-character-controller"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -11,14 +11,10 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-clap = { workspace = true }
-game-commands = { workspace = true }
-log = { workspace = true }
-lod = { workspace = true }
-maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
-maybraid-sky = { workspace = true }
-chico-vegetation-on-terrain-playground = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

@@ -4344,6 +4344,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-character-controller"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-input",
+]
+
+[[package]]
 name = "maybraid-character-ui-menu-renderer"
 version = "0.0.1"
 dependencies = [
@@ -4391,6 +4400,8 @@ dependencies = [
  "game-commands",
  "lod",
  "log",
+ "maybraid-character-controller",
+ "maybraid-input",
  "maybraid-sky",
 ]
 
@@ -4399,6 +4410,7 @@ name = "maybraid-world-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "maybraid-input",
  "maybraid-world",
 ]
 

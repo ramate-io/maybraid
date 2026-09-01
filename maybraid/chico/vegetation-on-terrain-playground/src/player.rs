@@ -36,10 +36,10 @@ const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
 
 /// Camera-relative WASD wish on XZ. Zero when no move input.
 #[derive(Component, Default)]
-pub(crate) struct MoveWish(pub Vec3);
+pub struct MoveWish(pub Vec3);
 
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct PlayerControlSystems;
+pub struct PlayerControlSystems;
 
 /// Playground interaction mode.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -88,10 +88,20 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
-#[derive(Message)]
-enum MovementAction {
+#[derive(Message, Clone, Copy, Debug)]
+pub enum MovementAction {
 	Move(Vec2),
 	Jump,
+}
+
+/// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct PadMovementEnabled(pub bool);
+
+impl Default for PadMovementEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
 }
 
 pub struct PlayerPlugin;
@@ -99,6 +109,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundMode>()
+			.init_resource::<PadMovementEnabled>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -243,11 +254,15 @@ pub fn respawn_player_on_layout(
 fn keyboard_movement_input(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
+	pad_movement: Res<PadMovementEnabled>,
 	pad: Res<VirtualPad>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut writer: MessageWriter<MovementAction>,
 ) {
+	if !pad_movement.0 {
+		return;
+	}
 	if *mode != PlaygroundMode::Character || text_focus.0 {
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;

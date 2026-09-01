@@ -20,7 +20,10 @@ pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
-pub use player::{Player, PlayerPlugin, PlaygroundMode};
+pub use player::{
+	MoveWish, MovementAction, PadMovementEnabled, Player, PlayerControlSystems, PlayerPlugin,
+	PlaygroundMode,
+};
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
@@ -60,7 +63,7 @@ use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{
 	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
-	AwaitingTerrainSurface, PlayerControlSystems,
+	AwaitingTerrainSurface,
 };
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;

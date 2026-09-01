@@ -4,6 +4,7 @@
 //! vegetation LOD bullseye / lattice are widened to match.
 
 pub mod commands;
+mod control;
 mod ui;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -11,12 +12,14 @@ pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterSpecies, PlaygroundConfig, PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin,
-	RequestSetCharacter, VegetationOnTerrainPlugin,
+	CharacterSpecies, PadMovementEnabled, PlayerControlSystems, PlaygroundConfig, PlaygroundDiag,
+	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use game_commands::command::GameCommandPlugin;
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
+use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
+use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
 
 /// ±2 km so produce covers the 2 km present ring (stream-radius 2).
@@ -31,10 +34,16 @@ impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: true })
+			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
+				debug_overlay: true,
+				..default()
+			}))
+			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: PlaygroundConfig::world_defaults(),
 				commands: false,
 			})
+			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -54,7 +63,15 @@ impl Plugin for WorldPlugin {
 			.add_systems(PostStartup, spawn_default_braidman)
 			.add_systems(
 				Update,
-				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+				(
+					control::apply_intents_to_movement
+						.after(CharacterControlSystems)
+						.before(PlayerControlSystems),
+					control::echo_character_intents
+						.after(CharacterControlSystems)
+						.before(game_commands::ui::update_debug_ui),
+					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+				),
 			);
 	}
 }
