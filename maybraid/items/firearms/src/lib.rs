@@ -9,6 +9,7 @@ pub mod kit;
 pub mod parts;
 pub mod plugin;
 pub mod pose;
+pub mod projectiles;
 
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
@@ -22,6 +23,10 @@ pub use kit::FirearmKit;
 pub use parts::{BarrelMesh, BodyMesh, GripMesh, KitBone, StockMesh, TriggerBoxMesh};
 pub use plugin::FirearmHostsPlugin;
 pub use pose::{BoneFit, FirearmPose};
+pub use projectiles::{
+	BoltSpec, BulletSpec, FirearmWeaponsPlugin, Flight, LaserBeam, LaserSpec, ProjectileLoad,
+	Weapon, WeaponsArmed, BARREL_REST_LENGTH,
+};
 
 /// Config → inner [`FirearmComponents`] recipe.
 ///

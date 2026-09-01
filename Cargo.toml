@@ -70,6 +70,7 @@ members = [
   "maybraid/items/firearms-components",
   "maybraid/items/firearms",
   "maybraid/items/playground",
+  "maybraid/items/firing-range-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -277,6 +278,7 @@ maybraid-input = { path = "maybraid/input" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
 items-playground = { path = "maybraid/items/playground" }
+firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 
 gimme-core = { path = "maybraid/gimme/core" }
 gimme-gen = { path = "maybraid/gimme/gen" }

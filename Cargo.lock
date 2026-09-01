@@ -3271,6 +3271,7 @@ dependencies = [
 name = "firearms"
 version = "0.0.1"
 dependencies = [
+ "avian3d",
  "bevy",
  "clap",
  "firearms-components",
@@ -3286,6 +3287,19 @@ dependencies = [
  "lod",
  "rigs",
  "scene-ref",
+]
+
+[[package]]
+name = "firing-range-playground"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "camera-controls",
+ "clap",
+ "firearms",
+ "game-commands",
+ "lod",
 ]
 
 [[package]]
