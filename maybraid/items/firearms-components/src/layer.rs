@@ -1,6 +1,6 @@
 //! Provenance layers for [`crate::FirearmComponents`] node maps.
 //!
-//! A [`Layer`] is **not** a node-type tag (body vs barrel vs grip). Domain type
+//! A [`Layer`] is **not** a node-type tag (body vs barrel vs trigger box). Domain type
 //! stays on the trait method. Layer records where geometry came from so parents
 //! can apply policy. Prefer [`Layers::free`] until a provenance name is
 //! meaningful. Firearms compose by [`Layers::extend`].

@@ -3272,6 +3272,7 @@ name = "firearms"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "clap",
  "firearms-components",
  "lod",
  "scene-ref",

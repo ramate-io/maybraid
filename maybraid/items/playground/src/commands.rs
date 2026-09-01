@@ -1,8 +1,10 @@
 //! In-game clap commands for the items playground.
 
 use bevy::prelude::*;
-use clap::Parser;
-use firearms::FirearmConcept;
+use clap::{Args, Parser};
+use firearms::{
+	BarrelMesh, BodyMesh, FirearmConcept, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh,
+};
 use game_commands::command::{CommandScript, GameCommand};
 
 use crate::preview::PreviewConfig;
@@ -21,10 +23,72 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
-	/// Spawn a firearm concept on the shared receiver rig.
+	/// Spawn a named firearm concept (body plus that kit's optional parts).
 	Show {
 		concept: FirearmConcept,
 	},
+	/// Set individual kit slots. Omitted flags keep the current kit; `none` clears an optional slot.
+	Kit(KitArgs),
+}
+
+#[derive(Clone, Copy, Args, Debug, Default, PartialEq, Eq)]
+#[command(rename_all = "kebab-case")]
+pub struct KitArgs {
+	/// Required slot. Always a body mesh (no `none`).
+	#[arg(long, value_enum)]
+	pub body: Option<BodyMesh>,
+	#[arg(long, value_enum)]
+	pub barrel: Option<BarrelMesh>,
+	#[arg(long, value_enum)]
+	pub trigger_box: Option<TriggerBoxMesh>,
+	#[arg(long, value_enum)]
+	pub grip: Option<GripMesh>,
+	#[arg(long, value_enum)]
+	pub stock: Option<StockMesh>,
+}
+
+impl KitArgs {
+	fn apply(self, kit: &mut FirearmKit) {
+		if let Some(body) = self.body {
+			kit.body = body;
+		}
+		if let Some(barrel) = self.barrel {
+			kit.barrel = barrel;
+		}
+		if let Some(trigger_box) = self.trigger_box {
+			kit.trigger_box = trigger_box;
+		}
+		if let Some(grip) = self.grip {
+			kit.grip = grip;
+		}
+		if let Some(stock) = self.stock {
+			kit.stock = stock;
+		}
+	}
+
+	fn summary(&self) -> String {
+		let mut parts = Vec::new();
+		if let Some(body) = self.body {
+			parts.push(format!("--body {}", body.label()));
+		}
+		if let Some(barrel) = self.barrel {
+			parts.push(format!("--barrel {}", barrel.label()));
+		}
+		if let Some(trigger_box) = self.trigger_box {
+			parts.push(format!("--trigger-box {}", trigger_box.label()));
+		}
+		if let Some(grip) = self.grip {
+			parts.push(format!("--grip {}", grip.label()));
+		}
+		if let Some(stock) = self.stock {
+			parts.push(format!("--stock {}", stock.label()));
+		}
+		if parts.is_empty() {
+			"kit (unchanged)".into()
+		} else {
+			format!("kit {}", parts.join(" "))
+		}
+	}
 }
 
 impl PlaygroundCommand {
@@ -41,8 +105,17 @@ impl PlaygroundCommand {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
 			Self::Show { concept } => {
-				commands.insert_resource(PreviewConfig { concept });
+				let kit = concept.kit();
 				*console = format!("show {}", concept.label());
+				commands.queue(move |world: &mut World| {
+					*world.resource_mut::<PreviewConfig>() = PreviewConfig { kit };
+				});
+			}
+			Self::Kit(args) => {
+				*console = args.summary();
+				commands.queue(move |world: &mut World| {
+					args.apply(&mut world.resource_mut::<PreviewConfig>().kit);
+				});
 			}
 		}
 	}
@@ -68,5 +141,35 @@ mod tests {
 		};
 		assert_eq!(concept, FirearmConcept::Bullpup);
 		Ok(())
+	}
+
+	#[test]
+	fn parses_kit_slot_flags() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line(
+			"kit --body silopup --barrel laznard --grip none",
+		)?;
+		let PlaygroundCommand::Kit(args) = command else {
+			return Err("expected kit".into());
+		};
+		assert_eq!(args.body, Some(BodyMesh::Silopup));
+		assert_eq!(args.barrel, Some(BarrelMesh::Laznard));
+		assert_eq!(args.grip, Some(GripMesh::None));
+		assert!(args.trigger_box.is_none());
+		assert!(args.stock.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn kit_patch_keeps_omitted_slots() {
+		let mut kit = FirearmConcept::Bullpup.kit();
+		KitArgs {
+			barrel: Some(BarrelMesh::Laznard),
+			grip: Some(GripMesh::None),
+			..KitArgs::default()
+		}
+		.apply(&mut kit);
+		assert_eq!(kit.body, BodyMesh::Bullpup);
+		assert_eq!(kit.barrel, BarrelMesh::Laznard);
+		assert_eq!(kit.grip, GripMesh::None);
 	}
 }

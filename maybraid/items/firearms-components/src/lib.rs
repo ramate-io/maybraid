@@ -51,6 +51,10 @@ pub trait FirearmComponents {
 		Layers::new()
 	}
 
+	fn trigger_box_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::new()
+	}
+
 	fn grip_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		Layers::new()
 	}
@@ -71,6 +75,10 @@ impl<T: FirearmComponents + ?Sized> FirearmComponents for &T {
 
 	fn barrel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		(**self).barrel_nodes_for_level(level)
+	}
+
+	fn trigger_box_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		(**self).trigger_box_nodes_for_level(level)
 	}
 
 	fn grip_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
@@ -137,6 +145,10 @@ impl<T: FirearmComponents + Send + Sync + 'static> FirearmComponents for Compone
 		self.0.grip_nodes_for_level(level)
 	}
 
+	fn trigger_box_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.0.trigger_box_nodes_for_level(level)
+	}
+
 	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		self.0.stock_nodes_for_level(level)
 	}
@@ -201,6 +213,9 @@ pub fn firearm_scene_chunks(
 	for node in firearm.grip_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
+	for node in firearm.trigger_box_nodes_for_level(level).flatten() {
+		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	}
 	for node in firearm.stock_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
@@ -227,6 +242,9 @@ pub fn append_component_scenes(
 		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in firearm.grip_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.host(lod_ref)));
+	}
+	for node in firearm.trigger_box_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
 	for node in firearm.stock_nodes_for_level(level).flatten() {

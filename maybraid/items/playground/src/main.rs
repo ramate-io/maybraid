@@ -15,7 +15,9 @@ fn main() {
 	if startup.is_some() {
 		println!("Startup command from argv (same as in-game / text).");
 	} else {
-		println!("Items playground — press / for commands (`show bullpup`).");
+		println!(
+			"Items playground — press / for commands (`show bullpup`, `kit --barrel laznard`)."
+		);
 	}
 
 	let assets_path = assets_root();

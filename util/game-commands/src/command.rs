@@ -175,6 +175,17 @@ pub fn run_script_file<T: GameCommand>(path: &Path, commands: &mut Commands, con
 	}
 }
 
+fn chord_held(keyboard: &ButtonInput<KeyCode>) -> bool {
+	keyboard.any_pressed([
+		KeyCode::ControlLeft,
+		KeyCode::ControlRight,
+		KeyCode::SuperLeft,
+		KeyCode::SuperRight,
+		KeyCode::AltLeft,
+		KeyCode::AltRight,
+	])
+}
+
 pub fn toggle_text_entry_focus(
 	keyboard: Res<ButtonInput<KeyCode>>,
 	drawer_visible: Option<Res<crate::ui::GameCommandDrawerVisible>>,
@@ -187,6 +198,9 @@ pub fn toggle_text_entry_focus(
 	}
 	if drawer_visible.is_some_and(|visible| !visible.0) {
 		focus.0 = false;
+		return;
+	}
+	if chord_held(&keyboard) {
 		return;
 	}
 	if keyboard.just_pressed(KeyCode::Slash) {
@@ -205,6 +219,13 @@ pub fn capture_command_line_input<T: GameCommand>(
 	blocked: Option<Res<TextEntryBlocked>>,
 ) {
 	if blocked.is_some_and(|blocked| blocked.0) || !focus.0 {
+		return;
+	}
+
+	// Ctrl/Cmd/Alt chords must not type into the buffer. Drain so those key
+	// texts do not fall through once the modifier is released.
+	if chord_held(&keyboard) {
+		reader.clear();
 		return;
 	}
 

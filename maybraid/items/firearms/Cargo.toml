@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+clap = { workspace = true }
 firearms-components = { workspace = true }
 lod = { workspace = true }
 scene-ref = { workspace = true }

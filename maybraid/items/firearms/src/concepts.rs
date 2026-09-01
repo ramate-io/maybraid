@@ -1,13 +1,19 @@
-//! Named firearm kits assembled from [`firearms_components`] nodes.
+//! Named firearm presets: a body plus whatever optional slots that kit fills.
 
-use firearms_components::assets::guns;
-use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
 use lod::gen::LodSceneLevel;
 
-/// Authored firearm concepts currently in `maybraid/art/items/guns/`.
+use crate::kit::FirearmKit;
+use crate::parts::{BarrelMesh, BodyMesh, GripMesh, StockMesh, TriggerBoxMesh};
+use firearms_components::assets::guns;
+use firearms_components::{FirearmComponents, Layers, PartNode, RigNode};
+
+/// Authored firearm concepts currently in `maybraid/art/items/guns/{bodies,barrels,grips,…}/`.
+///
+/// Each concept is a [`FirearmKit`]: body is required, other slots may be empty.
+/// Mix arbitrary parts in the playground with `kit --barrel laznard` (etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, bevy::prelude::Component)]
 pub enum FirearmConcept {
-	/// Receiver + barrel + grip, socketed onto `body` / `barrel` / `grip` bones.
+	/// Body + barrel + grip.
 	#[default]
 	Bullpup,
 	Silopup,
@@ -15,19 +21,16 @@ pub enum FirearmConcept {
 	Reltor,
 	Samsonist,
 	Snailer,
-	/// Barrel-only concept (sits on the shared receiver `barrel` bone).
-	Laznard,
 }
 
 impl FirearmConcept {
-	pub const ALL: [Self; 7] = [
+	pub const ALL: [Self; 6] = [
 		Self::Bullpup,
 		Self::Silopup,
 		Self::Keelripe,
 		Self::Reltor,
 		Self::Samsonist,
 		Self::Snailer,
-		Self::Laznard,
 	];
 
 	pub fn label(self) -> &'static str {
@@ -38,7 +41,31 @@ impl FirearmConcept {
 			Self::Reltor => "reltor",
 			Self::Samsonist => "samsonist",
 			Self::Snailer => "snailer",
-			Self::Laznard => "laznard",
+		}
+	}
+
+	pub fn body(self) -> BodyMesh {
+		match self {
+			Self::Bullpup => BodyMesh::Bullpup,
+			Self::Silopup => BodyMesh::Silopup,
+			Self::Keelripe => BodyMesh::Keelripe,
+			Self::Reltor => BodyMesh::Reltor,
+			Self::Samsonist => BodyMesh::Samsonist,
+			Self::Snailer => BodyMesh::Snailer,
+		}
+	}
+
+	/// Kit this named concept expands to (empty optional slots stay `none`).
+	pub fn kit(self) -> FirearmKit {
+		match self {
+			Self::Bullpup => FirearmKit {
+				body: BodyMesh::Bullpup,
+				barrel: BarrelMesh::Bullpup,
+				trigger_box: TriggerBoxMesh::None,
+				grip: GripMesh::Bullpup,
+				stock: StockMesh::None,
+			},
+			other => FirearmKit::body(other.body()),
 		}
 	}
 
@@ -64,45 +91,29 @@ impl std::str::FromStr for FirearmConcept {
 	}
 }
 
-fn receiver_rig() -> RigNode {
-	RigNode::receiver("firearm-rig", guns::FIREARM_RIG.as_str())
-}
-
 impl FirearmComponents for FirearmConcept {
-	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
-		Layers::from_labeled("receiver", vec![receiver_rig()])
+	fn rig_nodes_for_level(&self, level: LodSceneLevel) -> Layers<RigNode> {
+		self.kit().rig_nodes_for_level(level)
 	}
 
-	fn body_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
-		let node = match self {
-			Self::Bullpup => PartNode::body("bullpup-body", guns::BULLPUP_BODY.as_str()),
-			Self::Silopup => PartNode::body("silopup-body", guns::SILOPUP_BODY.as_str()),
-			Self::Keelripe => PartNode::body("keelripe-body", guns::KEELRIPE_BODY.as_str()),
-			Self::Reltor => PartNode::body("reltor-body", guns::RELTOR_BODY.as_str()),
-			Self::Samsonist => PartNode::body("samsonist-body", guns::SAMSONIST_BODY.as_str()),
-			Self::Snailer => PartNode::body("snailer-body", guns::SNAILER_BODY.as_str()),
-			Self::Laznard => return Layers::new(),
-		};
-		Layers::from_labeled("body", vec![node])
+	fn body_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().body_nodes_for_level(level)
 	}
 
-	fn barrel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
-		let node = match self {
-			Self::Bullpup => PartNode::barrel("bullpup-barrel", guns::BULLPUP_BARREL.as_str()),
-			Self::Laznard => PartNode::barrel("laznard-barrel", guns::LAZNARD_BARREL.as_str()),
-			_ => return Layers::new(),
-		};
-		Layers::from_labeled("barrel", vec![node])
+	fn barrel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().barrel_nodes_for_level(level)
 	}
 
-	fn grip_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
-		match self {
-			Self::Bullpup => Layers::from_labeled(
-				"grip",
-				vec![PartNode::grip("bullpup-grip", guns::BULLPUP_GRIP.as_str())],
-			),
-			_ => Layers::new(),
-		}
+	fn trigger_box_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().trigger_box_nodes_for_level(level)
+	}
+
+	fn grip_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().grip_nodes_for_level(level)
+	}
+
+	fn stock_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
+		self.kit().stock_nodes_for_level(level)
 	}
 }
 
@@ -114,6 +125,10 @@ mod tests {
 	#[test]
 	fn bullpup_assembles_body_barrel_grip_on_the_receiver() {
 		let gun = FirearmConcept::Bullpup;
+		let kit = gun.kit();
+		assert_eq!(kit.body, BodyMesh::Bullpup);
+		assert_eq!(kit.barrel, BarrelMesh::Bullpup);
+		assert_eq!(kit.grip, GripMesh::Bullpup);
 		let rigs = gun.rig_nodes_for_level(LodSceneLevel::High).flatten();
 		let bodies = gun.body_nodes_for_level(LodSceneLevel::High).flatten();
 		let barrels = gun.barrel_nodes_for_level(LodSceneLevel::High).flatten();
@@ -125,15 +140,19 @@ mod tests {
 		assert_eq!(bodies[0].socket, Some(SocketRef::bone("body")));
 		assert_eq!(barrels[0].socket, Some(SocketRef::bone("barrel")));
 		assert_eq!(grips[0].socket, Some(SocketRef::bone("grip")));
+		assert!(gun.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());
 		assert!(gun.stock_nodes_for_level(LodSceneLevel::High).is_empty());
 	}
 
 	#[test]
-	fn every_concept_emits_the_shared_receiver() {
+	fn every_concept_emits_the_shared_receiver_and_a_body() {
 		for gun in FirearmConcept::ALL {
+			let kit = gun.kit();
+			assert_eq!(kit.body, gun.body());
 			let rigs = gun.rig_nodes_for_level(LodSceneLevel::High).flatten();
 			assert_eq!(rigs.len(), 1);
 			assert_eq!(rigs[0].scene.path, guns::FIREARM_RIG.as_str());
+			assert_eq!(gun.body_nodes_for_level(LodSceneLevel::High).len(), 1);
 		}
 	}
 
@@ -148,15 +167,9 @@ mod tests {
 		] {
 			assert_eq!(gun.body_nodes_for_level(LodSceneLevel::High).len(), 1);
 			assert!(gun.barrel_nodes_for_level(LodSceneLevel::High).is_empty());
+			assert!(gun.trigger_box_nodes_for_level(LodSceneLevel::High).is_empty());
 			assert!(gun.grip_nodes_for_level(LodSceneLevel::High).is_empty());
 			assert!(gun.stock_nodes_for_level(LodSceneLevel::High).is_empty());
 		}
-	}
-
-	#[test]
-	fn laznard_is_barrel_only() {
-		let gun = FirearmConcept::Laznard;
-		assert!(gun.body_nodes_for_level(LodSceneLevel::High).is_empty());
-		assert_eq!(gun.barrel_nodes_for_level(LodSceneLevel::High).len(), 1);
 	}
 }

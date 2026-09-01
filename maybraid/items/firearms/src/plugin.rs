@@ -5,9 +5,9 @@ use firearms_components::{add_firearm_components_host, FirearmComponentsPlugin};
 use lod::LodRefreshCorePlugin;
 use scene_ref::SceneRefPlugin;
 
-use crate::concepts::FirearmConcept;
+use crate::kit::FirearmKit;
 
-/// Scene-ref, LOD refresh, socket fulfill, and the concept host.
+/// Scene-ref, LOD refresh, socket fulfill, and the kit host.
 ///
 /// Playgrounds that spawn [`crate::ComponentsOnly`] via [`lod::LodScene::host`]
 /// add this once.
@@ -24,6 +24,6 @@ impl Plugin for FirearmHostsPlugin {
 		if !app.is_plugin_added::<FirearmComponentsPlugin>() {
 			app.add_plugins(FirearmComponentsPlugin);
 		}
-		add_firearm_components_host::<FirearmConcept>(app);
+		add_firearm_components_host::<FirearmKit>(app);
 	}
 }

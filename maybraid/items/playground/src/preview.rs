@@ -1,22 +1,22 @@
-//! Spawn the selected [`FirearmConcept`] via LodScene host fulfill.
+//! Spawn the selected [`FirearmKit`] via LodScene host fulfill.
 
 use bevy::prelude::*;
-use firearms::{firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmRoot};
+use firearms::{firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit, FirearmRoot};
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq)]
 pub struct PreviewConfig {
-	pub concept: FirearmConcept,
+	pub kit: FirearmKit,
 }
 
 impl Default for PreviewConfig {
 	fn default() -> Self {
-		Self { concept: FirearmConcept::Bullpup }
+		Self { kit: FirearmConcept::Bullpup.kit() }
 	}
 }
 
 #[derive(Resource, Default)]
 pub(crate) struct PreviewSyncState {
-	spawned: Option<FirearmConcept>,
+	spawned: Option<FirearmKit>,
 }
 
 pub(crate) fn sync_preview(
@@ -25,7 +25,7 @@ pub(crate) fn sync_preview(
 	mut sync: Local<PreviewSyncState>,
 	roots: Query<Entity, With<FirearmRoot>>,
 ) {
-	if sync.spawned == Some(config.concept) {
+	if sync.spawned == Some(config.kit) {
 		return;
 	}
 
@@ -33,12 +33,12 @@ pub(crate) fn sync_preview(
 		commands.entity(entity).try_despawn();
 	}
 
-	let concept = config.concept;
+	let kit = config.kit;
 	spawn_firearm_components(
 		&mut commands,
-		&concept,
+		&kit,
 		Transform::from_xyz(0.0, 1.0, 0.0),
-		firearm_bounds(&concept),
+		firearm_bounds(&kit),
 	);
-	sync.spawned = Some(concept);
+	sync.spawned = Some(kit);
 }

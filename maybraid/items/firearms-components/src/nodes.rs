@@ -14,11 +14,16 @@ use rigs::{
 };
 
 /// Semantic slot for a firearm mesh or armature.
+///
+/// Kit meshes author in bone space (GLB +Y = socket bone length). Hand
+/// landmarks (`grip_point`, `trigger_point`) are not slots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
 pub enum FirearmPartSlot {
 	#[default]
 	Body,
 	Barrel,
+	/// Fire-control box; used to be modeled into the body.
+	TriggerBox,
 	Grip,
 	Stock,
 	/// Baked one-mesh concept (skips kit assembly).
@@ -31,6 +36,7 @@ impl FirearmPartSlot {
 		match self {
 			Self::Body => Some("body"),
 			Self::Barrel => Some("barrel"),
+			Self::TriggerBox => Some("trigger_box"),
 			Self::Grip => Some("grip"),
 			Self::Stock => Some("stock"),
 			Self::Concept => None,
@@ -69,6 +75,10 @@ impl PartNode {
 
 	pub fn barrel(label: &'static str, path: impl Into<String>) -> Self {
 		Self::glb(FirearmPartSlot::Barrel, label, path)
+	}
+
+	pub fn trigger_box(label: &'static str, path: impl Into<String>) -> Self {
+		Self::glb(FirearmPartSlot::TriggerBox, label, path)
 	}
 
 	pub fn grip(label: &'static str, path: impl Into<String>) -> Self {
@@ -128,12 +138,17 @@ impl LodScene for PartNode {
 	}
 }
 
-/// Named bones on [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
+/// Kit bones on the last exported [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
+///
+/// The Blender source also has `trigger_box` and the hand chains
+/// (`grip_arm` / `grip_point`, `trigger_arm` / `trigger_ledge` / `trigger_point`).
+/// Add those names after re-exporting the GLB (`maybraid/art/items/guns/README.md`).
 pub const RECEIVER_LANDMARKS: &[&str] = &["body", "barrel", "grip", "stock"];
 
 /// Authoring IR for a firearm receiver armature — also the fine-phase host.
 ///
-/// Kit parts socket onto named bones (`body`, `barrel`, `grip`, `stock`).
+/// Kit parts socket onto `body` / `barrel` / `trigger_box` / `grip` / `stock`.
+/// Hands bind to `grip_point` / `trigger_point`, not to kit meshes.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct RigNode {
 	pub label: &'static str,

@@ -30,31 +30,32 @@ impl std::fmt::Display for AssetPath {
 	}
 }
 
-/// Firearm GLBs under `items/guns/`.
+/// Firearm GLBs under `items/guns/{rigs,bodies,barrels,trigger_boxes,grips,stocks,concepts}/`.
 pub mod guns {
 	use super::AssetPath;
 
-	pub const FIREARM_RIG: AssetPath = AssetPath::new("items/guns/firearm_rig.glb");
-	pub const BULLPUP_BARREL: AssetPath = AssetPath::new("items/guns/bullpup_barrel.glb");
-	pub const BULLPUP_BODY: AssetPath = AssetPath::new("items/guns/bullpup_body.glb");
+	pub const FIREARM_RIG: AssetPath = AssetPath::new("items/guns/rigs/firearm_rig.glb");
+	pub const BULLPUP_BARREL: AssetPath = AssetPath::new("items/guns/barrels/bullpup_barrel.glb");
+	pub const BULLPUP_BODY: AssetPath = AssetPath::new("items/guns/bodies/bullpup_body.glb");
 	pub const BULLPUP_FULL_CONCEPT: AssetPath =
-		AssetPath::new("items/guns/bullpup_full_concept.glb");
-	pub const BULLPUP_GRIP: AssetPath = AssetPath::new("items/guns/bullpup_grip.glb");
-	pub const KEELRIPE_BODY: AssetPath = AssetPath::new("items/guns/keelripe_body.glb");
-	pub const LAZNARD_BARREL: AssetPath = AssetPath::new("items/guns/laznard_barrel.glb");
-	pub const RELTOR_BODY: AssetPath = AssetPath::new("items/guns/reltor_body.glb");
-	pub const SAMSONIST_BODY: AssetPath = AssetPath::new("items/guns/samsonist_body.glb");
-	pub const SILOPUP_BODY: AssetPath = AssetPath::new("items/guns/silopup_body.glb");
+		AssetPath::new("items/guns/concepts/bullpup_full_concept.glb");
+	pub const BULLPUP_GRIP: AssetPath = AssetPath::new("items/guns/grips/bullpup_grip.glb");
+	pub const KEELRIPE_BODY: AssetPath = AssetPath::new("items/guns/bodies/keelripe_body.glb");
+	pub const LAZNARD_BARREL: AssetPath = AssetPath::new("items/guns/barrels/laznard_barrel.glb");
+	pub const RELTOR_BODY: AssetPath = AssetPath::new("items/guns/bodies/reltor_body.glb");
+	pub const SAMSONIST_BODY: AssetPath = AssetPath::new("items/guns/bodies/samsonist_body.glb");
+	pub const SILOPUP_BODY: AssetPath = AssetPath::new("items/guns/bodies/silopup_body.glb");
 	pub const SILOPUP_FULL_CONCEPT: AssetPath =
-		AssetPath::new("items/guns/silopup_full_concept.glb");
-	pub const SNAILER_BODY: AssetPath = AssetPath::new("items/guns/snailer_body.glb");
+		AssetPath::new("items/guns/concepts/silopup_full_concept.glb");
+	pub const SNAILER_BODY: AssetPath = AssetPath::new("items/guns/bodies/snailer_body.glb");
 }
 
-/// Melee GLBs under `items/melee/` (catalogued here until a melee crate exists).
+/// Melee GLBs under `items/melee/{blades,guards,handles}/` (until a melee crate exists).
 pub mod melee {
 	use super::AssetPath;
 
-	pub const LICUCIAN_BLADE: AssetPath = AssetPath::new("items/melee/licucian_blade.glb");
-	pub const LICUCIAN_GUARD: AssetPath = AssetPath::new("items/melee/licucian_guard.glb");
-	pub const LICUCIAN_HANDLE: AssetPath = AssetPath::new("items/melee/licucian_handle.glb");
+	pub const LICUCIAN_BLADE: AssetPath = AssetPath::new("items/melee/blades/licucian_blade.glb");
+	pub const LICUCIAN_GUARD: AssetPath = AssetPath::new("items/melee/guards/licucian_guard.glb");
+	pub const LICUCIAN_HANDLE: AssetPath =
+		AssetPath::new("items/melee/handles/licucian_handle.glb");
 }

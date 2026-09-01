@@ -2,7 +2,9 @@
 
 Firearm recipes assembled from [`firearms-components`](../firearms-components/).
 
-A [`FirearmConcept`](src/concepts.rs) emits a shared receiver [`RigNode`] plus body / barrel / grip [`PartNode`]s. Kit pieces socket onto `body` / `barrel` / `grip` / `stock`. There is no stock mesh yet.
+A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optional barrel / trigger-box / grip / stock. Named [`FirearmConcept`](src/concepts.rs) values are presets of that kit (Bullpup fills barrel + grip; the others are body-only). Mix parts in the playground with `kit --barrel laznard`.
+
+Authoring (bone-space meshes, slots, armature tree): [`maybraid/art/items/guns/README.md`](../../art/items/guns/README.md).
 
 ```bash
 cargo run -p items-playground

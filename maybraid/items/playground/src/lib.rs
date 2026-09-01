@@ -29,6 +29,7 @@ impl Plugin for ItemsPlaygroundPlugin {
 			.add_systems(
 				Update,
 				(
+					camera::release_modifiers_on_focus_change.before(camera::camera_controller),
 					camera::camera_controller,
 					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
