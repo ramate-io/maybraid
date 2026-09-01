@@ -342,7 +342,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 /// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.
 fn apply_mesh_stats(
 	mut commands: Commands,
-	mut status: ResMut<GameCommandStatusText>,
+	mut status: Option<ResMut<GameCommandStatusText>>,
 	mesh_assets: Res<Assets<Mesh>>,
 	requests: Query<Entity, With<RequestMeshStats>>,
 	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
@@ -382,12 +382,13 @@ fn apply_mesh_stats(
 		let lod_hosts = lod_hosts.iter().count();
 		let probes_total = foliage_probes + stick_probes;
 
-		status.0 = format!(
+		let text = format!(
 			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}\n  probes: foliage={foliage_probes} stick={stick_probes} total={probes_total}\n  lod_hosts={lod_hosts}",
 			unique_handles.len(),
 			visible_unique_handles.len(),
 		);
-		info!("{}", status.0);
+		info!("{text}");
+		ui::write_status(&mut status, text);
 		commands.entity(entity).despawn();
 	}
 }
@@ -443,7 +444,7 @@ fn apply_commands(
 	mut terrain_assets: ResMut<TerrainPresentationAssets>,
 	mut terrain_dirty: ResMut<TerrainPresentationDirty>,
 	mut groves_dirty: ResMut<GrovesDirty>,
-	mut status: ResMut<GameCommandStatusText>,
+	mut status: Option<ResMut<GameCommandStatusText>>,
 	grove: Query<(Entity, &RequestGrove)>,
 	forest: Query<(Entity, &RequestForest)>,
 	terrain_radius: Query<(Entity, &RequestTerrainRadius)>,
@@ -455,7 +456,7 @@ fn apply_commands(
 		playground.grove = request.0;
 		playground.forest = None;
 		groves_dirty.0 = true;
-		status.0 = format!("grove {}", request.0.label());
+		ui::write_status(&mut status, format!("grove {}", request.0.label()));
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &forest {
@@ -474,7 +475,7 @@ fn apply_commands(
 		}
 		groves_dirty.0 = true;
 		let layering = spec.layering.map(|k| k.as_kebab()).unwrap_or("hopscotch");
-		status.0 = format!("forest {layering} r={}", spec.stream_radius);
+		ui::write_status(&mut status, format!("forest {layering} r={}", spec.stream_radius));
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &terrain_radius {
@@ -487,24 +488,24 @@ fn apply_commands(
 			terrain_dirty.0 = true;
 		}
 		groves_dirty.0 = true;
-		status.0 = format!("terrain-radius {cells}");
+		ui::write_status(&mut status, format!("terrain-radius {cells}"));
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &grove_extent {
 		playground.grove_extent_xz = request.0.max(1.0);
 		groves_dirty.0 = true;
-		status.0 = format!("grove-extent {}", playground.grove_extent_xz);
+		ui::write_status(&mut status, format!("grove-extent {}", playground.grove_extent_xz));
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &tile_radius {
 		playground.tile_radius = request.0.max(0);
 		groves_dirty.0 = true;
-		status.0 = format!("tile-radius {}", playground.tile_radius);
+		ui::write_status(&mut status, format!("tile-radius {}", playground.tile_radius));
 		commands.entity(entity).despawn();
 	}
 	for entity in &rebuild {
 		groves_dirty.0 = true;
-		status.0 = "rebuild".into();
+		ui::write_status(&mut status, "rebuild");
 		commands.entity(entity).despawn();
 	}
 }
@@ -512,7 +513,7 @@ fn apply_commands(
 fn apply_mode_commands(
 	mut commands: Commands,
 	mut mode: ResMut<PlaygroundMode>,
-	mut status: ResMut<GameCommandStatusText>,
+	mut status: Option<ResMut<GameCommandStatusText>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	store: Res<TerrainEntryStore>,
@@ -523,7 +524,7 @@ fn apply_mode_commands(
 ) {
 	for entity in &free {
 		*mode = PlaygroundMode::Free;
-		status.0 = "mode free".into();
+		ui::write_status(&mut status, "mode free");
 		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
 			refocus_camera_on_elevation(
 				&layout,
@@ -537,7 +538,7 @@ fn apply_mode_commands(
 
 	for entity in &character {
 		*mode = PlaygroundMode::Character;
-		status.0 = "mode character — WASD move, mouse look, Space jump".into();
+		ui::write_status(&mut status, "mode character — WASD move, mouse look, Space jump");
 		if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
 			let center = layout.region_center_xz();
 			if let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) {

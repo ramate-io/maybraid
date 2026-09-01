@@ -4380,6 +4380,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-character-playground",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "maybraid-menu-controller",
+ "maybraid-world",
+ "menu-components",
+ "menu-playground",
+ "menu-screens",
+]
+
+[[package]]
 name = "maybraid-character-controller"
 version = "0.0.1"
 dependencies = [
@@ -4504,6 +4519,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "game-commands",
+ "maybraid-menu-controller",
  "menu-components",
 ]
 

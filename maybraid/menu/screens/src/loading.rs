@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use maybraid_menu_controller::MenuController;
 use menu_components::{
 	set_loading_explainer, set_loading_progress, LoadingBarFill, LoadingExplainer, LoadingStack,
 	MenuComponentsPlugin,
@@ -33,6 +34,7 @@ impl LoadingScreen {
 		bsn! {
 			LoadingScreen
 			MenuScreen
+			MenuController
 			Node {
 				width: percent(100),
 				height: percent(100),

@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use maybraid_menu_controller::MenuController;
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
@@ -69,6 +70,7 @@ impl InGameScreen {
 		bsn! {
 			InGameScreen
 			MenuScreen
+			MenuController
 			Node {
 				width: percent(100),
 				height: percent(100),

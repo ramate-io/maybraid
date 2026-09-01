@@ -6,8 +6,13 @@ mod loading_demo;
 mod preview;
 mod ui;
 
+pub use character::{
+	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
+	RequestShowCharacter,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use preview::CharacterPreviewPlugin;
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -19,14 +24,11 @@ use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
-use maybraid_menu_controller::{MenuController, MenuControllerPlugin};
+use maybraid_menu_controller::MenuControllerPlugin;
 use menu_screens::{
 	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems, MenuScreen,
+	LoadingScreenSystems,
 };
-
-use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
-use crate::preview::CharacterPreviewPlugin;
 
 pub struct MenuPlaygroundPlugin;
 
@@ -59,7 +61,6 @@ impl Plugin for MenuPlaygroundPlugin {
 			Startup,
 			(camera::setup_camera, add_lod_viewer_to_camera.after(camera::setup_camera)),
 		)
-		.add_systems(PreUpdate, attach_menu_controllers)
 		.add_systems(
 			Update,
 			(
@@ -85,15 +86,6 @@ fn add_lod_viewer_to_camera(
 
 fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
 	screens.is_empty()
-}
-
-fn attach_menu_controllers(
-	mut commands: Commands,
-	screens: Query<Entity, (With<MenuScreen>, Without<MenuController>)>,
-) {
-	for entity in &screens {
-		commands.entity(entity).insert(MenuController::default());
-	}
 }
 
 fn echo_home_choice(

@@ -64,6 +64,7 @@ members = [
   "maybraid/sky/lib",
   "maybraid/world/lib",
   "maybraid/world/playground",
+  "maybraid/game",
   "maybraid/input",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
@@ -266,6 +267,7 @@ chico-vegetation-shaders = { path = "maybraid/chico/shaders" }
 chico-vegetation-on-terrain-playground = { path = "maybraid/chico/vegetation-on-terrain-playground" }
 maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
+maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
 
 gimme-core = { path = "maybraid/gimme/core" }

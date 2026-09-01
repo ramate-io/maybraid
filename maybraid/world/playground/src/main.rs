@@ -30,6 +30,6 @@ fn main() {
 				.with_pad_hid(),
 		)
 		.insert_resource(PendingStartupCommand(startup))
-		.add_plugins(WorldPlugin)
+		.add_plugins(WorldPlugin::default())
 		.run();
 }

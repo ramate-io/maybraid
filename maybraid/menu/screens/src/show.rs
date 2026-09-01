@@ -2,6 +2,13 @@
 
 use bevy::prelude::*;
 
+/// Despawn full-screen menu roots (home, in-game, character, loading).
+pub fn despawn_menu_screens(commands: &mut Commands, existing: impl IntoIterator<Item = Entity>) {
+	for entity in existing {
+		commands.entity(entity).despawn();
+	}
+}
+
 /// If any request entities exist, despawn every [`crate::MenuScreen`] and those
 /// requests. Returns whether the caller should spawn a replacement.
 pub fn take_menu_show_request(
@@ -13,11 +20,7 @@ pub fn take_menu_show_request(
 	if requests.is_empty() {
 		return false;
 	}
-	for entity in existing {
-		commands.entity(entity).despawn();
-	}
-	for entity in requests {
-		commands.entity(entity).despawn();
-	}
+	despawn_menu_screens(commands, existing);
+	despawn_menu_screens(commands, requests);
 	true
 }

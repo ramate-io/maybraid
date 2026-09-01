@@ -45,3 +45,12 @@ pub(crate) fn sync_command_status_text(
 		),
 	};
 }
+
+pub(crate) fn write_status(
+	status: &mut Option<ResMut<GameCommandStatusText>>,
+	text: impl Into<String>,
+) {
+	if let Some(status) = status {
+		status.0 = text.into();
+	}
+}
