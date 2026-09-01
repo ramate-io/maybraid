@@ -26,13 +26,12 @@ const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 /// Kit GLBs are meter-authored; a held bullpup should be about this long.
 const HELD_LENGTH: f32 = 0.72;
-/// Place the firing line between the right pectoral and eye.
-const RIGHT_ALONG_SHOULDERS: f32 = 0.72;
-/// Prefer a comfortably bent arm and reserve the final reach for aiming.
-const PREFERRED_REACH: f32 = 0.48;
-const MAX_REACH: f32 = 0.88;
+/// Fraction of the humerus-to-humerus half-width toward the trigger arm.
+const STOCK_ALONG_RIGHT_CHEST: f32 = 0.82;
+/// Small clearance forward of the shoulder pocket, as a fraction of arm length.
+const STOCK_FORWARD_OF_ARM_REACH: f32 = 0.3;
 /// Look yaw may lead the body by this much (full cone is 2×).
-pub(crate) const AIM_YAW_LIMIT: f32 = FRAC_PI_6;
+pub(crate) const AIM_YAW_LIMIT: f32 = FRAC_PI_6 / 2.0;
 
 /// Nested character host on the player capsule.
 #[derive(Component)]
@@ -43,51 +42,10 @@ pub(crate) struct HeldFirearm {
 	pub scale: f32,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct HandReach {
-	origin: Vec3,
-	socket_offset: Vec3,
-	length: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct AimLine {
-	origin: Vec3,
-	direction: Vec3,
-}
-
-impl AimLine {
-	/// Pick the common point on the firing line that both socket reaches support.
-	fn lock_for(self, hands: [HandReach; 2]) -> Vec3 {
-		let direction = self.direction.normalize_or(Vec3::Z);
-		let mut lower = 0.0_f32;
-		let mut upper = f32::INFINITY;
-		let mut preferred = 0.0;
-
-		for hand in hands {
-			let relative = self.origin + hand.socket_offset - hand.origin;
-			let center = -relative.dot(direction);
-			let perpendicular = relative + direction * center;
-			let perpendicular_sq = perpendicular.length_squared();
-			let maximum = hand.length * MAX_REACH;
-			let radius = (maximum * maximum - perpendicular_sq).max(0.0).sqrt();
-			lower = lower.max(center - radius);
-			upper = upper.min(center + radius);
-
-			let comfortable = hand.length * PREFERRED_REACH;
-			let forward = (comfortable * comfortable - perpendicular_sq).max(0.0).sqrt();
-			preferred += center + forward;
-		}
-
-		preferred /= hands.len() as f32;
-		let along = if lower <= upper {
-			preferred.clamp(lower, upper)
-		} else {
-			// No exact shared interval: split the least-overreach gap.
-			(lower + upper) * 0.5
-		}
-		.max(0.0);
-		self.origin + direction * along
+impl HeldFirearm {
+	/// Root translation that keeps an authored socket fixed at `anchor`.
+	fn root_translation_for(&self, anchor: Vec3, rotation: Quat, socket_local: Vec3) -> Vec3 {
+		anchor - rotation * (socket_local * self.scale)
 	}
 }
 
@@ -193,12 +151,18 @@ pub(crate) fn gun_aim_rotation(facing: Vec3, look: Vec3, pitch: f32) -> Quat {
 	Quat::from_rotation_y(clamped_aim_yaw(facing, look)) * Quat::from_rotation_x(-pitch)
 }
 
-fn shoulder_line_origin(shoulder_l: Vec3, shoulder_r: Vec3, facing: Vec3) -> Vec3 {
-	let mid = (shoulder_l + shoulder_r) * 0.5;
+fn right_shoulder_anchor(
+	left_origin: Vec3,
+	right_origin: Vec3,
+	facing: Vec3,
+	arm_length: f32,
+) -> Vec3 {
+	let mid = (left_origin + right_origin) * 0.5;
+	let right = (right_origin - left_origin).normalize_or(Vec3::X);
 	let forward = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
-	let anatomical_right = Vec3::Y.cross(forward);
-	let half_width = shoulder_l.distance(shoulder_r) * 0.5;
-	mid + anatomical_right * (half_width * RIGHT_ALONG_SHOULDERS)
+	let half_width = left_origin.distance(right_origin) * 0.5;
+	mid + right * (half_width * STOCK_ALONG_RIGHT_CHEST)
+		+ forward * (arm_length * STOCK_FORWARD_OF_ARM_REACH)
 }
 
 pub(crate) fn pose_held_firearm(
@@ -220,48 +184,23 @@ pub(crate) fn pose_held_firearm(
 	let Ok((visual, members)) = visuals.single() else {
 		return;
 	};
-	let Some(shoulder_l) = named_translation(members, &maps, &globals, "shoulder.L") else {
-		return;
-	};
-	let Some(shoulder_r) = named_translation(members, &maps, &globals, "shoulder.R") else {
-		return;
-	};
 	let Some((right_origin, right_length)) = arm_measure(members, &maps, &globals, "R") else {
 		return;
 	};
-	let Some((left_origin, left_length)) = arm_measure(members, &maps, &globals, "L") else {
+	let Some((left_origin, _left_length)) = arm_measure(members, &maps, &globals, "L") else {
 		return;
 	};
 	let facing = visual.rotation * Vec3::Z;
 	let look = Quat::from_axis_angle(Vec3::Y, camera.yaw) * -Vec3::Z;
 	let rotation = gun_aim_rotation(facing, look, camera.pitch);
 	for (gun_members, held, previous_root, mut transform) in &mut guns {
-		let Some(trigger_local) =
-			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "trigger_point")
+		let Some(stock_local) =
+			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "stock")
 		else {
 			continue;
 		};
-		let Some(grip_local) =
-			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "grip_point")
-		else {
-			continue;
-		};
-		let line = AimLine {
-			origin: shoulder_line_origin(shoulder_l, shoulder_r, facing),
-			direction: rotation * Vec3::Z,
-		};
-		let translation = line.lock_for([
-			HandReach {
-				origin: right_origin,
-				socket_offset: rotation * (trigger_local * held.scale),
-				length: right_length,
-			},
-			HandReach {
-				origin: left_origin,
-				socket_offset: rotation * (grip_local * held.scale),
-				length: left_length,
-			},
-		]);
+		let anchor = right_shoulder_anchor(left_origin, right_origin, facing, right_length);
+		let translation = held.root_translation_for(anchor, rotation, stock_local);
 		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
 	}
 }
@@ -396,38 +335,32 @@ mod tests {
 	}
 
 	#[test]
-	fn hold_locks_to_firing_line_at_comfortable_reach() {
-		let line = AimLine { origin: Vec3::new(0.1, 1.9, 0.0), direction: Vec3::Z };
-		let hands = [
-			HandReach { origin: Vec3::new(0.3, 1.9, 0.0), socket_offset: Vec3::ZERO, length: 0.7 },
-			HandReach { origin: Vec3::new(-0.3, 1.9, 0.0), socket_offset: Vec3::ZERO, length: 0.7 },
-		];
-		let at = line.lock_for(hands);
-		assert!((at.x - line.origin.x).abs() < 1e-4, "{at}");
-		assert!((at.y - line.origin.y).abs() < 1e-4, "{at}");
-		assert!(at.z > 0.1 && at.z < 0.6, "{at}");
-	}
-
-	#[test]
-	fn firing_line_uses_displayed_right_shoulder_pocket() {
-		let left_suffix = Vec3::new(0.4, 1.9, 0.0);
-		let right_suffix = Vec3::new(-0.4, 1.9, 0.0);
-		let at = shoulder_line_origin(left_suffix, right_suffix, Vec3::Z);
+	fn shoulder_anchor_has_small_forward_clearance() {
+		let left = Vec3::new(-0.4, 1.9, 0.0);
+		let right = Vec3::new(0.4, 1.9, 0.0);
+		let at = right_shoulder_anchor(left, right, Vec3::Z, 0.7);
 		assert!(at.x > 0.0, "{at}");
+		assert!((at.y - 1.9).abs() < 1e-4, "{at}");
+		assert!((at.z - 0.7 * STOCK_FORWARD_OF_ARM_REACH).abs() < 1e-4, "{at}");
 	}
 
 	#[test]
-	fn forward_socket_offset_tucks_root_back() {
-		let line = AimLine { origin: Vec3::ZERO, direction: Vec3::Z };
-		let centered = [
-			HandReach { origin: Vec3::ZERO, socket_offset: Vec3::ZERO, length: 0.7 },
-			HandReach { origin: Vec3::ZERO, socket_offset: Vec3::ZERO, length: 0.7 },
-		];
-		let forward = [
-			HandReach { socket_offset: Vec3::Z * 0.2, ..centered[0] },
-			HandReach { socket_offset: Vec3::Z * 0.2, ..centered[1] },
-		];
-		assert!(line.lock_for(forward).z < line.lock_for(centered).z);
+	fn shoulder_anchor_uses_measured_trigger_arm_side() {
+		let left = Vec3::new(0.4, 1.9, 0.0);
+		let right = Vec3::new(-0.4, 1.9, 0.0);
+		let at = right_shoulder_anchor(left, right, Vec3::Z, 0.7);
+		assert!(at.x < 0.0, "{at}");
+	}
+
+	#[test]
+	fn root_translation_pins_stock_socket() {
+		let held = HeldFirearm { scale: 0.25 };
+		let anchor = Vec3::new(0.3, 1.7, 0.2);
+		let rotation = Quat::from_euler(EulerRot::YXZ, 0.4, -0.2, 0.0);
+		let socket = Vec3::new(-0.1, 0.0, -0.5);
+		let root = held.root_translation_for(anchor, rotation, socket);
+		let pinned = root + rotation * (socket * held.scale);
+		assert!((pinned - anchor).length() < 1e-5, "{pinned} vs {anchor}");
 	}
 
 	#[test]
