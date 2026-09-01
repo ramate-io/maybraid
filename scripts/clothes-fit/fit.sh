@@ -8,9 +8,8 @@
 # Fitted GLBs are written to
 # maybraid/assets/characters/clothes/body/{body}/{garment}.glb
 #
-# Each garment is treated as a solid: shrinkwrap Outside along body target
-# normals until verts are outside, decimate 0.3, boolean-subtract the body,
-# then rebind to Humanoid.
+# Each garment gets one Shrinkwrap (Target Normal Project, Outside) onto the
+# bind-pose body, then rebind to Humanoid.
 
 set -euo pipefail
 
@@ -24,7 +23,7 @@ SKIP_BODY_PATTERNS='_rig|_playground|_parts'
 SKIP_CLOTHES='proto_robe'
 
 # Optional empty FitOffset_0.04 (or FitOffset_4cm) sets wrap distance.
-# Optional empty FitTo_Torso (UpperBody, LowerBody, FullBody) clips wrap + cutter.
+# Optional empty FitTo_Torso (UpperBody, LowerBody, FullBody) clips wrap.
 
 OFFSET=""
 FIT_TO=""

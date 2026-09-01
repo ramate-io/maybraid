@@ -6,20 +6,19 @@ script does not save the clothing file.
     blender --background clothes.blend --python scripts/clothes-fit/main.py -- \\
         --body body.blend --output fitted.glb
 
-Pipeline: treat the garment as a solid, shrinkwrap Outside along the body's
-target normals until vertices are outside (or the inside-count stops dropping),
-decimate (ratio 0.3), boolean-subtract the (FitTo-clipped) body, then rebind
-to the Humanoid armature (automatic weights, or the body's groups if heat
-weighting fails).
+Pipeline: shrinkwrap the garment once (Target Normal Project, Outside) onto
+the (optional FitTo-clipped) body, then bind it to the Humanoid armature.
+Existing modifiers are stripped, not applied, so a viewport Shrinkwrap is not
+baked before the fitter wraps again. Existing complete weights are preserved;
+otherwise weights transfer from the fitted body's nearest surface.
 
 An empty named ``FitOffset_0.04`` (also ``FitOffset_4cm``) or a ``fit_offset``
 custom property sets the wrap distance. Body-file empties win over the clothes
 file; ``--offset`` wins over both.
 
 ``FitTo_Torso`` / ``UpperBody`` / ``LowerBody`` / ``FullBody`` (or ``fit_to``)
-clips wrap and cutter to an armature-derived AABB so a tank does not snap onto
-the arms. Wrap and carve use the same clipped body; weight transfer still uses
-the full mesh. ``--fit-to`` wins over the blends.
+clips wrap to an armature-derived AABB so a tank does not snap onto the arms.
+Weight transfer still uses the full mesh. ``--fit-to`` wins over the blends.
 
 Requires Blender's bundled Python (``bpy``).
 """
@@ -44,9 +43,8 @@ HELPER_MESH_PREFIXES = (
 DEFAULT_OFFSET = 0.04
 DEFAULT_FIT_TO = "FullBody"
 FIT_TO_REGIONS = ("FullBody", "Torso", "UpperBody", "LowerBody")
-DECIMATE_RATIO = 0.3
-WRAP_MAX_ITERS = 5
 INSIDE_EPS = 1e-5
+HOST_BODY_PREFIXES = ("humanoidfullbody", "fittarget_", "fitregion")
 
 # Bind-pose Humanoid fractions: "tiny bit" of the adjacent limb, flesh beyond bones.
 TORSO_ARM_FRAC = 0.20
@@ -72,7 +70,7 @@ def _argv_after_dashdash() -> list[str]:
 
 def _parse_args(args: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit a solid garment by looped Outside target-normal wrap, decimate, carve, and rebind"
+        description="Fit a garment with one Outside target-normal shrinkwrap, then rebind"
     )
     parser.add_argument("--body", required=True, help="Bind-pose body .blend to wrap onto")
     parser.add_argument("--output", required=True, help="Destination .glb path")
@@ -92,7 +90,7 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
         "--fit-to",
         choices=FIT_TO_REGIONS,
         default=None,
-        help="Body region for wrap and carve (default: FullBody, or FitTo_* empty in the blend)",
+        help="Body region for wrap (default: FullBody, or FitTo_* empty in the blend)",
     )
     return parser.parse_args(args)
 
@@ -100,6 +98,11 @@ def _parse_args(args: list[str]) -> argparse.Namespace:
 def _is_helper_mesh(name: str) -> bool:
     stem = _object_stem(name).lower()
     return stem in HELPER_MESH_PREFIXES or any(stem.startswith(p) for p in HELPER_MESH_PREFIXES)
+
+
+def _is_host_body_mesh(name: str) -> bool:
+    stem = _object_stem(name).lower()
+    return any(stem.startswith(p) for p in HOST_BODY_PREFIXES)
 
 
 def _parse_length(token: str) -> float:
@@ -411,7 +414,11 @@ def _garment_objects(requested_names: list[str], exclude):
     if not meshes:
         print("main.py: no garment mesh objects found", file=sys.stderr)
         sys.exit(1)
-    garments = [obj for obj in meshes if not _is_helper_mesh(obj.name)]
+    garments = [
+        obj
+        for obj in meshes
+        if not _is_helper_mesh(obj.name) and not _is_host_body_mesh(obj.name)
+    ]
     if garments:
         return garments
     meshes.sort(key=lambda obj: len(obj.data.vertices), reverse=True)
@@ -511,47 +518,16 @@ def _merge_by_distance(obj, dist: float = 1e-5) -> None:
     obj.data.update()
 
 
-def _apply_shape_modifiers(obj) -> None:
-    for mod in list(obj.modifiers):
-        if mod.type == "ARMATURE":
-            continue
-        try:
-            _apply_modifier(obj, mod.name)
-        except Exception as exc:
-            print(f"skipping modifier {mod.name} ({exc})")
-            if obj.modifiers.get(mod.name) is not None:
-                obj.modifiers.remove(mod)
-
-
-def _strip_deform(obj) -> None:
+def _strip_modifiers(obj) -> None:
     obj.parent = None
     for mod in list(obj.modifiers):
+        print(f"stripping live {mod.type} {mod.name} (not applying)")
         obj.modifiers.remove(mod)
+
+
+def _clear_vertex_groups(obj) -> None:
     for group in list(obj.vertex_groups):
         obj.vertex_groups.remove(group)
-
-
-def _decimate(obj, ratio: float = DECIMATE_RATIO) -> None:
-    if ratio >= 1.0:
-        return
-    before_v = len(obj.data.vertices)
-    before_f = len(obj.data.polygons)
-    name = "FitDecimate"
-    dec = obj.modifiers.new(name, "DECIMATE")
-    dec.decimate_type = "COLLAPSE"
-    dec.ratio = ratio
-    obj.modifiers.move(obj.modifiers.find(name), 0)
-    _apply_modifier(obj, name)
-    _merge_by_distance(obj)
-    _recalc_normals(obj)
-    faces = len(obj.data.polygons)
-    print(
-        f"decimate ratio={ratio} verts={before_v}->{len(obj.data.vertices)} "
-        f"faces={before_f}->{faces}"
-    )
-    if faces == 0:
-        print(f"main.py: decimate emptied {obj.name}", file=sys.stderr)
-        sys.exit(1)
 
 
 def _surface_bvh(obj):
@@ -590,7 +566,6 @@ def _shrinkwrap_outside(garment, target, offset: float) -> int:
     wrap.offset = offset
     garment.modifiers.move(garment.modifiers.find(name), 0)
     _apply_modifier(garment, name)
-    _recalc_normals(garment)
     after = _coords(garment)
     moved = _moved_vert_count(before, after)
     print(
@@ -600,34 +575,12 @@ def _shrinkwrap_outside(garment, target, offset: float) -> int:
     return moved
 
 
-def _wrap_until_outside(garment, target, offset: float) -> None:
+def _wrap_once(garment, target, offset: float) -> None:
     bvh = _surface_bvh(target)
     total = len(garment.data.vertices)
-    best = _copy_mesh(garment, "FitWrapBest")
-    best_inside = _inside_vert_count(garment, bvh)
-    print(f"wrap start inside={best_inside}/{total}")
-    for step in range(1, WRAP_MAX_ITERS + 1):
-        moved = _shrinkwrap_outside(garment, target, offset)
-        inside = _inside_vert_count(garment, bvh)
-        print(f"wrap {step}/{WRAP_MAX_ITERS} inside={inside}/{total}")
-        improved = False
-        if inside < best_inside:
-            _restore_mesh(best, garment)
-            best_inside = inside
-            improved = True
-        elif inside > best_inside:
-            print("wrap inside rose; restoring best")
-            _restore_mesh(garment, best)
-            break
-        if inside == 0:
-            break
-        if moved == 0:
-            print("wrap moved no verts")
-            break
-        if not improved:
-            print("wrap plateau")
-            break
-    _delete(best)
+    inside = _inside_vert_count(garment, bvh)
+    print(f"wrap start inside={inside}/{total}")
+    _shrinkwrap_outside(garment, target, offset)
     print(f"wrap done inside={_inside_vert_count(garment, bvh)}/{len(garment.data.vertices)}")
 
 
@@ -651,54 +604,6 @@ def _restore_mesh(dst, src) -> None:
     if old.users == 0:
         bpy.data.meshes.remove(old)
     dst.data.update()
-
-
-def _carve_body(garment, body) -> None:
-    print(
-        f"carve {garment.name} dim={tuple(round(v, 4) for v in garment.dimensions)} "
-        f"vs cutter dim={tuple(round(v, 4) for v in body.dimensions)}"
-    )
-    _recalc_normals(garment)
-    _recalc_normals(body)
-    backup = _copy_mesh(garment, f"FitCarveBackup_{garment.name}")
-    for solver in ("FLOAT", "EXACT", "MANIFOLD"):
-        existing = garment.modifiers.get("FitCarve")
-        if existing is not None:
-            garment.modifiers.remove(existing)
-        _restore_mesh(garment, backup)
-        carve = garment.modifiers.new("FitCarve", "BOOLEAN")
-        carve.operation = "DIFFERENCE"
-        carve.operand_type = "OBJECT"
-        carve.object = body
-        if hasattr(carve, "solver"):
-            try:
-                carve.solver = solver
-            except TypeError:
-                print(f"boolean solver {solver} unavailable")
-                garment.modifiers.remove(carve)
-                continue
-        try:
-            _apply_modifier(garment, "FitCarve")
-        except Exception as exc:
-            print(f"boolean {solver} apply failed ({exc})")
-            continue
-        faces = len(garment.data.polygons)
-        print(
-            f"boolean DIFFERENCE {solver} verts={len(backup.data.vertices)}->"
-            f"{len(garment.data.vertices)} faces={len(backup.data.polygons)}->{faces}"
-        )
-        if faces > 0:
-            _delete(backup)
-            _merge_by_distance(garment)
-            _recalc_normals(garment)
-            return
-    _delete(backup)
-    print(
-        f"main.py: boolean carve emptied {garment.name}; "
-        "the solid must overlap the body without being fully inside it",
-        file=sys.stderr,
-    )
-    sys.exit(1)
 
 
 def _weighted_vert_count(obj) -> int:
@@ -745,31 +650,16 @@ def _bind_armature(garment, armature) -> None:
 
 
 def _rerig(garment, armature, body) -> None:
-    import bpy
-
-    _select_only([garment, armature])
-    bpy.context.view_layer.objects.active = armature
-    result = {"CANCELLED"}
-    try:
-        with bpy.context.temp_override(
-            object=armature,
-            active_object=armature,
-            selected_objects=[garment, armature],
-            selected_editable_objects=[garment, armature],
-        ):
-            result = bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-    except Exception as exc:
-        print(f"automatic weights failed ({exc})")
     weighted = _weighted_vert_count(garment)
-    if "FINISHED" in result and weighted == len(garment.data.vertices):
-        print(f"rerig automatic weights verts={weighted}")
-        return
-    print(
-        f"automatic weights incomplete ({result}, {weighted}/"
-        f"{len(garment.data.vertices)} weighted); transferring from body"
-    )
-    _strip_deform(garment)
-    _transfer_weights_from_body(garment, body)
+    if weighted == len(garment.data.vertices):
+        print(f"preserving authored weights verts={weighted}")
+    else:
+        print(
+            f"authored weights incomplete ({weighted}/{len(garment.data.vertices)}); "
+            "transferring from body"
+        )
+        _clear_vertex_groups(garment)
+        _transfer_weights_from_body(garment, body)
     _bind_armature(garment, armature)
 
 
@@ -874,12 +764,9 @@ def main() -> None:
 
     for garment in garments:
         print(f"fit {garment.name} verts={len(garment.data.vertices)}")
-        _apply_shape_modifiers(garment)
-        _strip_deform(garment)
+        _strip_modifiers(garment)
         _apply_transform(garment)
-        _wrap_until_outside(garment, fit_body, offset)
-        _decimate(garment)
-        _carve_body(garment, fit_body)
+        _wrap_once(garment, fit_body, offset)
         _rerig(garment, armature, body)
         _assert_reasonable_bounds(garment)
 
