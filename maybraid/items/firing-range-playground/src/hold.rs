@@ -17,8 +17,8 @@ pub(crate) struct HoldingArms;
 const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
 const RIGHT_POLE: Vec3 = Vec3::new(0.25, -1.0, -0.1);
 const LEFT_POLE: Vec3 = Vec3::new(-0.4, -1.0, 0.05);
-/// Positive Y-yaw moves body-right (+X) back toward −Z.
-const FIRING_TORSO_YAW: f32 = 0.34;
+/// Imported humanoid articulation needs negative swing to draw its right shoulder rearward.
+const FIRING_TORSO_YAW: f32 = -0.84;
 
 /// Point both arms at `trigger_point` / `grip_point`.
 pub(crate) fn sync_hands_to_firearm(
@@ -273,7 +273,7 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		pose_firing_torso(&mut rig);
 		let spine = rig.spine_pose();
-		assert!(spine.lumbar.swing > 0.0);
+		assert!(spine.lumbar.swing < 0.0);
 		assert!(spine.midback.swing.abs() > spine.lumbar.swing.abs());
 		assert!(spine.upper_back.swing.abs() > spine.midback.swing.abs());
 		Ok(())
