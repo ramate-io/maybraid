@@ -12,7 +12,7 @@ A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optio
 | Bullet | Same capsule | Gravity on, despawn at max range |
 | Laser | Beam along bone +Y | Grows from the muzzle, wraps after max time |
 
-Muzzle is the barrel tail (`bone-local +Y` of rest length 1). Kits author along bone +Y; rotate the host if the range should fire world +X.
+Muzzle is the barrel tail (`bone-local +Y` of rest length 1). Runtime rest (after the armature’s glTF +90° X) has bore along +Z and grip down; [`aim_plus_x`](src/pose.rs) yaws that onto world +X.
 
 Authoring (bone-space meshes, slots, armature tree): [`maybraid/art/items/guns/README.md`](../../art/items/guns/README.md).
 

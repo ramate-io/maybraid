@@ -61,7 +61,7 @@ Same rule on every slot, even when bones point different ways in armature space.
 - `stock` runs along armature **−Z** (butt)
 - `grip` / `trigger_box` run along armature **−Y** (down the handle)
 
-After glTF (Z-up → Y-up) the bore reads as Bevy **+Y**. Lay the assembled gun into world aim with a rotation on the firearm host, not by re-authoring each mesh into world-horizontal.
+After glTF the armature node already carries Blender’s +90° X (−Y forward, +Z up → runtime bore **+Z**, grip **−Y**). [`aim_plus_x`](../../../items/firearms/src/pose.rs) is a Y yaw onto world +X. Pitching around X puts the bore into the ground. Do not re-author each mesh into world-horizontal.
 
 ### Why not `AlongBone`
 

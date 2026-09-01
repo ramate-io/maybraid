@@ -1,8 +1,17 @@
 //! Playground / recipe proportion pose for kit bones.
 
+use bevy::prelude::*;
 use firearms_components::{BoneScale, ResolvedRigPose, RigPoseLayer};
+use std::f32::consts::FRAC_PI_2;
 
 use crate::parts::KitBone;
+
+/// Blender rest is −Y forward, +Z up. The exported armature already applies the
+/// glTF +90° X, so runtime rest has bore along +Z and the grip hanging −Y.
+/// Yaw that onto world +X; do not pitch, or the bore goes into the ground.
+pub fn aim_plus_x() -> Quat {
+	Quat::from_rotation_y(FRAC_PI_2)
+}
 
 /// Length (bone local Y) and thickness (bone local XZ) multipliers. `1.0` is bind.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -81,6 +90,13 @@ impl FirearmPose {
 mod tests {
 	use super::*;
 	use bevy::math::Vec3;
+
+	#[test]
+	fn aim_plus_x_sends_bore_forward_and_grip_down() {
+		let q = aim_plus_x();
+		assert!((q * Vec3::Z - Vec3::X).length() < 1.0e-4, "bore {}", q * Vec3::Z);
+		assert!((q * Vec3::NEG_Y - Vec3::NEG_Y).length() < 1.0e-4, "grip {}", q * Vec3::NEG_Y);
+	}
 
 	#[test]
 	fn length_and_thickness_compose_on_y_and_xz() {

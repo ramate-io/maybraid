@@ -2,8 +2,9 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use firearms::{firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit, Weapon};
-use std::f32::consts::FRAC_PI_2;
+use firearms::{
+	aim_plus_x, firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit, Weapon,
+};
 
 pub fn setup_range(
 	mut commands: Commands,
@@ -14,7 +15,7 @@ pub fn setup_range(
 	spawn_targets(&mut commands, &mut meshes, &mut materials);
 
 	let kit = FirearmConcept::Bullpup.kit();
-	let aim = Quat::from_rotation_z(-FRAC_PI_2);
+	let aim = aim_plus_x();
 	let stations = [
 		("bolt", Weapon::bolt(), Vec3::new(0.0, 1.25, -3.2)),
 		("bullet", Weapon::bullet(), Vec3::new(0.0, 1.25, 0.0)),
