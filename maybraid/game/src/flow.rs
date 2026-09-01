@@ -3,8 +3,9 @@
 use bevy::prelude::*;
 use menu_screens::HomeMenuChoice;
 
-/// Which shell the executable is showing. World gameplay is only live in [`Self::World`].
-#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// Which shell the executable is showing. World gameplay is only live in
+/// [`Self::World`] while [`WorldPause`] is [`WorldPause::Playing`].
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum GameFlow {
 	#[default]
 	Home,
@@ -12,21 +13,32 @@ pub enum GameFlow {
 	World,
 }
 
-/// Home-row destinations that the executable implements.
-pub fn home_destination(choice: HomeMenuChoice) -> Option<GameFlow> {
-	match choice {
-		HomeMenuChoice::Discovery | HomeMenuChoice::Reliquary => Some(GameFlow::World),
-		HomeMenuChoice::Characters => Some(GameFlow::Characters),
-		HomeMenuChoice::TrainingGround | HomeMenuChoice::Settings => None,
-	}
+/// Pause overlay while [`GameFlow::World`] is active. Absent in other shells.
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(GameFlow = GameFlow::World)]
+pub enum WorldPause {
+	#[default]
+	Playing,
+	Menu,
 }
 
-/// In-game brand label for Discovery / Reliquary. `None` when the choice is not a world mode.
-pub fn world_mode_label(choice: HomeMenuChoice) -> Option<&'static str> {
-	match choice {
-		HomeMenuChoice::Discovery => Some("Discovery"),
-		HomeMenuChoice::Reliquary => Some("Reliquary"),
-		_ => None,
+/// What the executable does with a home-row pick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomeRoute {
+	World { label: &'static str },
+	Characters,
+	Unimplemented,
+}
+
+impl HomeRoute {
+	pub fn from_choice(choice: HomeMenuChoice) -> Self {
+		match choice {
+			HomeMenuChoice::Discovery | HomeMenuChoice::Reliquary => {
+				Self::World { label: choice.label() }
+			}
+			HomeMenuChoice::Characters => Self::Characters,
+			HomeMenuChoice::TrainingGround | HomeMenuChoice::Settings => Self::Unimplemented,
+		}
 	}
 }
 
@@ -36,21 +48,27 @@ mod tests {
 
 	#[test]
 	fn discovery_and_reliquary_enter_world() {
-		assert_eq!(home_destination(HomeMenuChoice::Discovery), Some(GameFlow::World));
-		assert_eq!(home_destination(HomeMenuChoice::Reliquary), Some(GameFlow::World));
-		assert_eq!(world_mode_label(HomeMenuChoice::Discovery), Some("Discovery"));
-		assert_eq!(world_mode_label(HomeMenuChoice::Reliquary), Some("Reliquary"));
+		assert_eq!(
+			HomeRoute::from_choice(HomeMenuChoice::Discovery),
+			HomeRoute::World { label: "Discovery" }
+		);
+		assert_eq!(
+			HomeRoute::from_choice(HomeMenuChoice::Reliquary),
+			HomeRoute::World { label: "Reliquary" }
+		);
 	}
 
 	#[test]
 	fn characters_is_its_own_shell() {
-		assert_eq!(home_destination(HomeMenuChoice::Characters), Some(GameFlow::Characters));
-		assert_eq!(world_mode_label(HomeMenuChoice::Characters), None);
+		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Characters), HomeRoute::Characters);
 	}
 
 	#[test]
 	fn training_and_settings_stay_on_home() {
-		assert_eq!(home_destination(HomeMenuChoice::TrainingGround), None);
-		assert_eq!(home_destination(HomeMenuChoice::Settings), None);
+		assert_eq!(
+			HomeRoute::from_choice(HomeMenuChoice::TrainingGround),
+			HomeRoute::Unimplemented
+		);
+		assert_eq!(HomeRoute::from_choice(HomeMenuChoice::Settings), HomeRoute::Unimplemented);
 	}
 }

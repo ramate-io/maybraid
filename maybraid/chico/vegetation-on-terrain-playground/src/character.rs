@@ -113,7 +113,7 @@ pub struct RequestSetCharacter {
 
 pub(crate) fn apply_set_character(
 	mut commands: Commands,
-	mut status: ResMut<GameCommandStatusText>,
+	mut status: Option<ResMut<GameCommandStatusText>>,
 	requests: Query<(Entity, &RequestSetCharacter)>,
 	players: Query<Entity, With<Player>>,
 	visuals: Query<Entity, With<PlayerVisual>>,
@@ -138,9 +138,12 @@ pub(crate) fn apply_set_character(
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
 		commands.spawn(RequestModeCharacter);
-		status.0 = format!(
-			"set-character {} — mode character, WASD move, Space jump",
-			request.species.label()
+		crate::ui::write_status(
+			&mut status,
+			format!(
+				"set-character {} — mode character, WASD move, Space jump",
+				request.species.label()
+			),
 		);
 		commands.entity(entity).despawn();
 	}

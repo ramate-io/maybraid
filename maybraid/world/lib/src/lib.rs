@@ -26,7 +26,7 @@ use chico_vegetation_on_terrain_playground::{
 };
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
-use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
+use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
@@ -106,7 +106,7 @@ impl Plugin for WorldPlugin {
 					}),
 			);
 		} else {
-			app.init_resource::<TextEntryFocus>().init_resource::<GameCommandStatusText>();
+			app.init_resource::<TextEntryFocus>();
 		}
 		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
 			Update,

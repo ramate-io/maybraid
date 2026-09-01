@@ -1,43 +1,41 @@
 //! Maybraid game executable: home shell over the world playground.
 
 mod flow;
+mod shell;
 
-pub use flow::{home_destination, world_mode_label, GameFlow};
+pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
-use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::{MenuNav, MenuNavPad};
-use maybraid_menu_controller::{MenuController, MenuControllerPlugin};
+use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
-use menu_components::{ActiveOverlayKey, TextMenuSystems, MENU_CLEAR};
-use menu_playground::{
-	request_show_character, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
-};
+use menu_components::{ActiveOverlayKey, MENU_CLEAR};
+use menu_playground::{CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin};
 use menu_screens::{
-	request_show_home, request_show_in_game, GameMode, HomeMenuChoice, HomeScreen,
-	HomeScreenPlugin, InGameMenuChoice, InGameScreen, InGameScreenPlugin, MenuScreen,
+	GameMode, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
 };
 use std::path::{Path, PathBuf};
+
+use crate::shell::{
+	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
+	enter_world, enter_world_menu, exit_world_menu, spawn_menu_ui_camera,
+};
 
 /// Crate-local asset directory (`maybraid/game/assets`).
 pub fn assets_root() -> PathBuf {
 	Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
 
-/// Durham / vegetation sky wash while the 3D camera is live.
-const WORLD_SKY: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
-
-#[derive(Component)]
-struct MenuUiCamera;
-
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<GameFlow>()
-			.add_plugins(WorldPlugin::game())
+		app.add_plugins(WorldPlugin::game())
+			.insert_resource(WorldGameplayEnabled(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
+			.init_state::<GameFlow>()
+			.add_sub_state::<WorldPause>()
 			.add_plugins((
 				HomeScreenPlugin,
 				InGameScreenPlugin,
@@ -45,185 +43,87 @@ impl Plugin for GamePlugin {
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
 			))
-			.add_systems(Startup, (show_home, spawn_menu_ui_camera))
-			.add_systems(PostStartup, (sync_cameras, sync_clear_color, sync_world_gameplay))
-			.add_systems(PreUpdate, attach_menu_controllers)
+			.add_systems(Startup, spawn_menu_ui_camera)
+			.add_systems(OnEnter(GameFlow::Home), (enter_home, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::Characters),
+				(enter_characters, apply_shell_look, attach_preview_camera),
+			)
+			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
+			.add_systems(OnEnter(GameFlow::World), (enter_world, apply_shell_look))
+			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
+			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
+			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
+			.add_systems(PostStartup, apply_shell_look)
 			.add_systems(
 				Update,
 				(
-					route_home_choice,
-					route_in_game_choice,
-					character_back_to_home,
-					overlay_in_game_from_start
+					route_home_choice.run_if(in_state(GameFlow::Home)),
+					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
+					character_back_to_home.run_if(in_state(GameFlow::Characters)),
+					toggle_world_pause
 						.after(CharacterControlSystems)
-						.before(TextMenuSystems::Navigate),
-					sync_preview_camera,
-					paint_home_backdrop,
-					sync_clear_color,
-					sync_cameras,
-					sync_world_gameplay,
+						.run_if(in_state(GameFlow::World)),
 				),
 			);
 	}
 }
 
-fn show_home(mut commands: Commands) {
-	request_show_home(&mut commands);
-}
-
-fn spawn_menu_ui_camera(mut commands: Commands) {
-	commands.spawn((Camera2d, MenuUiCamera, Camera { order: 1, ..default() }));
-}
-
-fn paint_home_backdrop(
-	mut commands: Commands,
-	homes: Query<Entity, (With<HomeScreen>, Without<BackgroundColor>)>,
-) {
-	for entity in &homes {
-		commands.entity(entity).insert(BackgroundColor(MENU_CLEAR));
-	}
-}
-
-fn sync_clear_color(flow: Res<GameFlow>, mut clear: ResMut<ClearColor>) {
-	clear.0 = if *flow == GameFlow::Home { MENU_CLEAR } else { WORLD_SKY };
-}
-
-fn attach_menu_controllers(
-	mut commands: Commands,
-	screens: Query<Entity, (With<MenuScreen>, Without<MenuController>)>,
-) {
-	for entity in &screens {
-		commands.entity(entity).insert(MenuController::default());
-	}
-}
-
 fn route_home_choice(
-	mut commands: Commands,
 	mut choices: MessageReader<HomeMenuChoice>,
-	mut flow: ResMut<GameFlow>,
+	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
-	screens: Query<Entity, With<MenuScreen>>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
 	};
-	match home_destination(choice) {
-		Some(GameFlow::World) => {
-			if let Some(label) = world_mode_label(choice) {
-				mode.label = String::from(label);
-			}
-			despawn_menu_screens(&mut commands, &screens);
-			*flow = GameFlow::World;
+	match HomeRoute::from_choice(choice) {
+		HomeRoute::World { label } => {
+			mode.label = String::from(label);
+			flow.set(GameFlow::World);
 		}
-		Some(GameFlow::Characters) => {
-			request_show_character(&mut commands);
-			*flow = GameFlow::Characters;
-		}
-		Some(GameFlow::Home) | None => {}
+		HomeRoute::Characters => flow.set(GameFlow::Characters),
+		HomeRoute::Unimplemented => {}
 	}
 }
 
 fn route_in_game_choice(
-	mut commands: Commands,
 	mut choices: MessageReader<InGameMenuChoice>,
-	mut flow: ResMut<GameFlow>,
+	mut flow: ResMut<NextState<GameFlow>>,
 ) {
-	for choice in choices.read() {
-		if *choice == InGameMenuChoice::Leave {
-			*flow = GameFlow::Home;
-			request_show_home(&mut commands);
-		}
+	if choices.read().any(|choice| *choice == InGameMenuChoice::Leave) {
+		flow.set(GameFlow::Home);
 	}
 }
 
-fn overlay_in_game_from_start(
-	mut commands: Commands,
-	flow: Res<GameFlow>,
+fn toggle_world_pause(
+	pause: Res<State<WorldPause>>,
+	mut next: ResMut<NextState<WorldPause>>,
+	mut gameplay: ResMut<WorldGameplayEnabled>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut nav: ResMut<MenuNavPad>,
-	overlay: Query<Entity, With<InGameScreen>>,
 ) {
-	if *flow != GameFlow::World {
-		return;
-	}
 	if !intents.read().any(|intent| matches!(intent, CharacterIntent::InGameMenu)) {
 		return;
 	}
-	nav.events.retain(|event| *event != MenuNav::Select);
-	if overlay.is_empty() {
-		request_show_in_game(&mut commands);
-	} else {
-		for entity in &overlay {
-			commands.entity(entity).despawn();
+	match pause.get() {
+		WorldPause::Playing => {
+			gameplay.0 = false;
+			next.set(WorldPause::Menu);
 		}
+		WorldPause::Menu => next.set(WorldPause::Playing),
 	}
 }
 
 fn character_back_to_home(
-	mut commands: Commands,
-	mut flow: ResMut<GameFlow>,
+	mut flow: ResMut<NextState<GameFlow>>,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
 	screens: Query<(), With<CharacterScreen>>,
 ) {
-	if *flow != GameFlow::Characters || screens.is_empty() {
+	if screens.is_empty() || overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
 		return;
 	}
-	if overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
-		return;
-	}
-	request_show_home(&mut commands);
-	*flow = GameFlow::Home;
-}
-
-fn sync_cameras(
-	flow: Res<GameFlow>,
-	mut world_cameras: Query<&mut Camera, (With<Camera3d>, Without<MenuUiCamera>)>,
-	mut ui_cameras: Query<&mut Camera, (With<MenuUiCamera>, Without<Camera3d>)>,
-) {
-	let world = *flow != GameFlow::Home;
-	for mut camera in &mut world_cameras {
-		camera.is_active = world;
-	}
-	for mut camera in &mut ui_cameras {
-		camera.is_active = !world;
-	}
-}
-
-fn sync_world_gameplay(
-	flow: Res<GameFlow>,
-	overlay: Query<(), With<InGameScreen>>,
-	mut gameplay: ResMut<WorldGameplayEnabled>,
-) {
-	gameplay.0 = *flow == GameFlow::World && overlay.is_empty();
-}
-
-fn sync_preview_camera(
-	mut commands: Commands,
-	flow: Res<GameFlow>,
-	cameras: Query<Entity, (With<Camera3d>, Without<PreviewCameraController>)>,
-	preview: Query<Entity, (With<Camera3d>, With<PreviewCameraController>)>,
-) {
-	if *flow == GameFlow::Characters {
-		for entity in &cameras {
-			commands.entity(entity).insert(PreviewCameraController {
-				speed: 6.0,
-				sensitivity: 0.005,
-				yaw: 0.0,
-				pitch: 0.0,
-			});
-		}
-	} else {
-		for entity in &preview {
-			commands.entity(entity).remove::<PreviewCameraController>();
-		}
-	}
-}
-
-fn despawn_menu_screens(commands: &mut Commands, screens: &Query<Entity, With<MenuScreen>>) {
-	for entity in screens {
-		commands.entity(entity).despawn();
-	}
+	flow.set(GameFlow::Home);
 }
 
 #[cfg(test)]

@@ -4519,6 +4519,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "game-commands",
+ "maybraid-menu-controller",
  "menu-components",
 ]
 

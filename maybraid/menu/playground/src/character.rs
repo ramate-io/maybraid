@@ -9,6 +9,7 @@ use maybraid_character_ui_menu_renderer::{
 	MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
 	OverlaySelectViewport, RenderContext,
 };
+use maybraid_menu_controller::MenuController;
 use menu_components::{
 	spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate,
 	MenuFocus, ShortTextChange, PANEL_ROW_GAP,
@@ -142,6 +143,7 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> Entity {
 		.spawn((
 			CharacterScreen,
 			MenuScreen,
+			MenuController::default(),
 			Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
 			Pickable::IGNORE,
 		))
