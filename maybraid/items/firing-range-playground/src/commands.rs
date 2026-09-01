@@ -19,9 +19,9 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
-	/// Stop auto-fire (lasers freeze).
+	/// Stop the held firearm from firing.
 	Pause,
-	/// Resume auto-fire.
+	/// Resume firing.
 	Resume,
 }
 

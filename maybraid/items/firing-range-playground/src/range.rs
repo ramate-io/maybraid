@@ -1,51 +1,17 @@
-//! Three bullpup stations: bolt, bullet, laser, aimed downrange (+X).
+//! Ground and static cube targets downrange (+X).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use firearms::{
-	aim_plus_x, firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit,
-	PenetrationCost, Weapon,
-};
+use firearms::PenetrationCost;
 use lod_avian::PhysicsInteractionLayer;
 
-pub fn setup_range(
+pub(crate) fn setup_range(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	spawn_ground(&mut commands, &mut meshes, &mut materials);
 	spawn_targets(&mut commands, &mut meshes, &mut materials);
-
-	let kit = FirearmConcept::Bullpup.kit();
-	let aim = aim_plus_x();
-	let stations = [
-		("bolt", Weapon::bolt(), Vec3::new(0.0, 1.25, -3.2)),
-		("bullet", Weapon::bullet(), Vec3::new(0.0, 1.25, 0.0)),
-		("laser", Weapon::laser(), Vec3::new(0.0, 1.25, 3.2)),
-	];
-	for (label, weapon, at) in stations {
-		spawn_station(
-			&mut commands,
-			&kit,
-			weapon,
-			label,
-			Transform { translation: at, rotation: aim, scale: Vec3::ONE },
-		);
-	}
-}
-
-fn spawn_station(
-	commands: &mut Commands,
-	kit: &FirearmKit,
-	weapon: Weapon,
-	label: &'static str,
-	transform: Transform,
-) {
-	let bounds = firearm_bounds(kit);
-	let entities = spawn_firearm_components(commands, kit, transform, bounds);
-	for entity in entities {
-		commands.entity(entity).insert((Name::new(label), weapon));
-	}
 }
 
 fn spawn_ground(

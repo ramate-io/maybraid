@@ -6,6 +6,7 @@
 
 use avian3d::prelude::*;
 use avian3d::schedule::PhysicsSchedulePlugin;
+use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
 
@@ -23,6 +24,14 @@ impl Default for WeaponsArmed {
 		Self(true)
 	}
 }
+
+/// This [`Weapon`] only fires while [`TriggerFire`] is set (right trigger / click).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct FireOnTrigger;
+
+/// Held analog fire (RT). Playgrounds set this from [`CharacterIntent::UseItem`].
+#[derive(Resource, Clone, Copy, Default)]
+pub struct TriggerFire(pub bool);
 
 /// Multiplier on path length spent inside this collider. Missing is `1.0`.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
@@ -188,7 +197,7 @@ impl Plugin for FirearmWeaponsPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
-		app.init_resource::<WeaponsArmed>().add_systems(
+		app.init_resource::<WeaponsArmed>().init_resource::<TriggerFire>().add_systems(
 			PostUpdate,
 			(fire_weapons, tick_lasers, tick_flights)
 				.after(TransformSystems::Propagate)
@@ -355,6 +364,9 @@ fn spawn_flight(
 ) {
 	let transform = capsule_along_y(direction, muzzle, length, radius);
 	let origin = transform.translation;
+	let collider = Collider::capsule(radius, length);
+	// Sensors do not contribute collider mass; set it explicitly so Avian
+	// does not warn about a massless dynamic body.
 	commands.spawn((
 		Name::new("projectile"),
 		transform,
@@ -362,7 +374,8 @@ fn spawn_flight(
 		Mesh3d(meshes.add(Capsule3d::new(radius, length))),
 		MeshMaterial3d(materials.add(glow_material(color))),
 		RigidBody::Dynamic,
-		Collider::capsule(radius, length),
+		MassPropertiesBundle::from_shape(&collider, 1.0),
+		collider,
 		Sensor,
 		PhysicsInteractionLayer::projectile_layers(),
 		LockedAxes::ROTATION_LOCKED,
@@ -412,9 +425,13 @@ pub fn fire_weapons(
 	mut commands: Commands,
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
+	trigger: Res<TriggerFire>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
-	mut weapons: Query<(Entity, &FirearmMembers, &mut Weapon), With<FirearmRoot>>,
+	mut weapons: Query<
+		(Entity, &FirearmMembers, &mut Weapon, Has<FireOnTrigger>),
+		With<FirearmRoot>,
+	>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
@@ -423,7 +440,13 @@ pub fn fire_weapons(
 		return;
 	}
 	let dt = time.delta_secs();
-	for (_root, members, mut weapon) in &mut weapons {
+	for (_root, members, mut weapon, manual) in &mut weapons {
+		if manual && !trigger.0 {
+			if matches!(weapon.load, ProjectileLoad::Bolt(_) | ProjectileLoad::Bullet(_)) {
+				weapon.cooldown -= dt;
+			}
+			continue;
+		}
 		let Some((barrel, global)) = barrel_global(members, &maps, &globals) else {
 			continue;
 		};

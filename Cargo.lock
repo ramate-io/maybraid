@@ -3296,12 +3296,15 @@ version = "0.0.1"
 dependencies = [
  "avian3d",
  "bevy",
- "camera-controls",
  "clap",
+ "crozon-characters",
+ "crozon-rigs",
  "firearms",
  "game-commands",
  "lod",
  "lod-avian",
+ "maybraid-character-controller",
+ "maybraid-input",
 ]
 
 [[package]]

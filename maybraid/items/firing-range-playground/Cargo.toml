@@ -16,12 +16,15 @@ path = "src/main.rs"
 [dependencies]
 avian3d = { workspace = true }
 bevy = { workspace = true }
-camera-controls = { workspace = true }
 clap = { workspace = true }
+crozon-characters = { workspace = true }
+crozon-rigs = { workspace = true }
 firearms = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+maybraid-character-controller = { workspace = true }
+maybraid-input = { workspace = true }
 
 [lints]
 workspace = true

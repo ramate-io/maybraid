@@ -1,15 +1,11 @@
 # Firing range
 
-Kit firearms auto-fire emissive projectiles downrange. Three stations (bolt, bullet, laser) share the bullpup kit. Characters land here later.
+Third-person Brodler on a flat range. Pad / WASD drives the character controller. The held bullpup fires on right trigger or left click.
 
 ```bash
 cargo run -p firing-range-playground
 ```
 
-Press `/` then `pause` / `resume`. `L` toggles look. WASD + Space fly.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. `/` then `pause` / `resume`.
 
-| Kind | Behavior |
-|------|----------|
-| Bolt | Capsule, no gravity; dies on path / through-solid / age |
-| Bullet | Same capsule, gravity on; same budgets (thinner penetration) |
-| Laser | Beam grows from the barrel, then resets after `max_time` |
+The gun is not parented to the hand (that inherited the forearm scale). Each frame it copies `forearm.R`'s world translation, uses the player's facing for yaw, and the camera pitch for pitch. Walk/run still play; a hold overlay then overwrites both arms.
