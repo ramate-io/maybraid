@@ -3265,6 +3265,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "firearms"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "firearms-components",
+ "lod",
+ "scene-ref",
+]
+
+[[package]]
+name = "firearms-components"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "lod",
+ "scene-ref",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

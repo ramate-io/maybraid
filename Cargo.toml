@@ -66,6 +66,8 @@ members = [
   "maybraid/world/playground",
   "maybraid/game",
   "maybraid/input",
+  "maybraid/items/firearms-components",
+  "maybraid/items/firearms",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -269,6 +271,8 @@ maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
+firearms-components = { path = "maybraid/items/firearms-components" }
+firearms = { path = "maybraid/items/firearms" }
 
 gimme-core = { path = "maybraid/gimme/core" }
 gimme-gen = { path = "maybraid/gimme/gen" }
