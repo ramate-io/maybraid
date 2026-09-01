@@ -9,7 +9,9 @@ use lod::SceneChunk;
 use scene_ref::SceneRef;
 
 use crate::scene_children::maybe_component;
-use crate::socket::{SocketRef, SocketRefRoot};
+use rigs::{
+	ActiveRigPose, AssemblyHost, BindPose, BoneMap, RigKey, RigRoot, SocketRef, SocketRefRoot,
+};
 
 /// Semantic slot for a firearm mesh or armature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Component)]
@@ -54,7 +56,7 @@ impl PartNode {
 			slot,
 			label,
 			scene: SceneRef::glb(path),
-			socket: slot.socket_bone().map(SocketRef::on),
+			socket: slot.socket_bone().map(SocketRef::bone),
 		}
 	}
 
@@ -112,6 +114,7 @@ impl LodScene for PartNode {
 			bsn! {
 				template_value(node)
 				Transform::IDENTITY
+				AssemblyHost
 			},
 			maybe_component(socket),
 		)
@@ -170,18 +173,11 @@ impl LodScene for RigNode {
 		bsn! {
 			template_value(node)
 			Transform::IDENTITY
-			FirearmRig
+			AssemblyHost
+			template_value(RigRoot::new(RigKey::named("receiver")))
 			template_value(BoneMap::default())
+			template_value(ActiveRigPose::default())
+			template_value(BindPose::default())
 		}
 	}
-}
-
-/// Marker on a [`RigNode`] host: this entity owns the receiver [`BoneMap`].
-#[derive(Component, Clone, Copy, Default)]
-pub struct FirearmRig;
-
-/// Named-bone index for one [`FirearmRig`] (scoped to that armature).
-#[derive(Component, Default, Clone)]
-pub struct BoneMap {
-	pub by_name: std::collections::HashMap<String, bevy::prelude::Entity>,
 }

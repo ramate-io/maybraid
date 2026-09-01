@@ -29,6 +29,9 @@ pub use markers::{AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendTerrai
 pub use pitch::TerrainPitch;
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
 pub use policy::{motion_policy, MotionPolicy};
-pub use rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
+pub use rig::{
+	bone_map_ready, missing_landmark_bones, BoneMap, CharacterRig, CharacterRigRole,
+	RigSkeletonKind,
+};
 pub use shown::shown_level_root;
 pub use sync::sync_motion_markers;

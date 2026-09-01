@@ -90,8 +90,8 @@ mod tests {
 		assert_eq!(bodies[0].slot, FirearmPartSlot::Body);
 		assert_eq!(barrels[0].slot, FirearmPartSlot::Barrel);
 		assert_eq!(grips[0].slot, FirearmPartSlot::Grip);
-		assert_eq!(barrels[0].socket, Some(SocketRef::on("barrel")));
-		assert_eq!(grips[0].socket, Some(SocketRef::on("grip")));
+		assert_eq!(barrels[0].socket, Some(SocketRef::bone("barrel")));
+		assert_eq!(grips[0].socket, Some(SocketRef::bone("grip")));
 		assert!(bodies[0].socket.is_none());
 		assert!(gun.rig_nodes_for_level(LodSceneLevel::High).is_empty());
 	}

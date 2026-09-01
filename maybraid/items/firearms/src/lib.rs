@@ -11,8 +11,8 @@ pub use concepts::FirearmConcept;
 pub use firearms_components::{
 	add_firearm_components_host, spawn_firearm_components, AssetPath, BoneMap, ComponentsOnly,
 	FirearmComponents, FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers,
-	FirearmPartSlot, FirearmRig, FirearmRoot, Layer, Layers, MemberOf, PartNode, RigNode,
-	SocketRef, SocketRefApplied, SocketRefRoot,
+	FirearmPartSlot, FirearmRoot, Layer, Layers, MemberOf, PartNode, RigNode, SocketRef,
+	SocketRefApplied, SocketRefRoot,
 };
 pub use plugin::FirearmHostsPlugin;
 

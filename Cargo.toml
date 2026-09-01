@@ -40,6 +40,7 @@ members = [
   "maybraid/sdf/common",
   "maybraid/sdf/common-playground",
 
+  "maybraid/rigs",
   "maybraid/crozon/animations",
   "maybraid/crozon/character-motion",
   "maybraid/crozon/bevy-character-ui-menu-renderer",
@@ -250,6 +251,7 @@ crozon-character-items = { path = "maybraid/crozon/character-items" }
 crozon-character-ui-menus = { path = "maybraid/crozon/character-ui-menus" }
 crozon-characters = { path = "maybraid/crozon/characters" }
 crozon-character-motion = { path = "maybraid/crozon/character-motion" }
+rigs = { path = "maybraid/rigs" }
 crozon-rigs = { path = "maybraid/crozon/rigs" }
 malo-animations = { path = "maybraid/crozon/animations" }
 procedural-common = { path = "maybraid/procedural/common" }

@@ -2,7 +2,7 @@
 //!
 //! [`MemberOf`] cannot be stamped from [`lod::LodScene::host`] because
 //! [`lod::LodRef::entity`] is [`Entity::PLACEHOLDER`] at recipe build. Walk
-//! [`ChildOf`] up to [`CharacterRoot`] **before** socket fulfill (and retries
+//! [`ChildOf`] to [`rigs::AssemblyRoot`] **before** socket fulfill (and retries
 //! until the parent chain is ready); after sockets, [`ChildOf`] is the bone and
 //! [`MemberOf`] still means “this character.”
 
@@ -11,54 +11,20 @@ use bevy::prelude::CommandsSceneExt;
 use bevy::prelude::*;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use rigs::AssemblyMembers;
 
 use crate::assembly::CharacterPartSlot;
-use crate::nodes::{PartNode, RigNode};
+use crate::nodes::PartNode;
 use crate::rig::{BoneMap, CharacterRig, CharacterRigRole};
 
-/// Marker on the [`crate::ComponentsOnly`] character host (see [`lod::LodScene::host`]).
+pub use rigs::{stamp_assembly_members as stamp_character_members, MemberOf};
+
+/// Domain marker on the character assembly host (see [`lod::LodScene::host`]).
 #[derive(Component, Clone, Copy, Default)]
 pub struct CharacterRoot;
 
-/// Source of truth: this nested host belongs to the character at `0`.
-#[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = CharacterMembers)]
-pub struct MemberOf(pub Entity);
-
-/// All [`PartNode`] / [`RigNode`] hosts that belong to a [`CharacterRoot`].
-#[derive(Component, Debug)]
-#[relationship_target(relationship = MemberOf)]
-pub struct CharacterMembers(Vec<Entity>);
-
-/// Stamp [`MemberOf`] on nested hosts that do not have it yet, by walking
-/// [`ChildOf`] to [`CharacterRoot`]. Retries until the parent chain reaches the
-/// character (covers spawn after this system in the same frame).
-pub fn stamp_character_members(
-	mut commands: Commands,
-	hosts: Query<Entity, (Or<(With<PartNode>, With<RigNode>)>, Without<MemberOf>)>,
-	child_of: Query<&ChildOf>,
-	roots: Query<(), With<CharacterRoot>>,
-) {
-	for entity in &hosts {
-		let Some(root) = character_root_of(entity, &child_of, &roots) else {
-			continue;
-		};
-		commands.entity(entity).insert(MemberOf(root));
-	}
-}
-
-fn character_root_of(
-	mut entity: Entity,
-	child_of: &Query<&ChildOf>,
-	roots: &Query<(), With<CharacterRoot>>,
-) -> Option<Entity> {
-	loop {
-		if roots.contains(entity) {
-			return Some(entity);
-		}
-		entity = child_of.get(entity).ok()?.parent();
-	}
-}
+/// All nested hosts that belong to a character [`AssemblyRoot`].
+pub type CharacterMembers = AssemblyMembers;
 
 /// The rig among `members` whose [`CharacterRig::role`] matches `role`.
 pub fn find_member_rig<'a>(

@@ -37,8 +37,8 @@ pub use anim::{
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
-	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed, ClothingLayer,
-	ComponentsOnly,
+	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
+	ClothingLayer, ComponentsOnly,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{
@@ -64,6 +64,7 @@ pub use rig::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, NoMatchingArmature, PartRigRef, ResolvedPoseApplied,
 	RigBindScales, RigSkeletonKind,
 };
+pub use rigs::{AssemblyHost, AssemblyRoot, RigKey, RigPlugin, RigRoot, RigSystems};
 pub use skin::{
 	fulfill_skin_ref_roots, invalidate_changed_skin_ref_roots, prune_duplicate_part_scenes,
 	remap_part_skin_to_rig,

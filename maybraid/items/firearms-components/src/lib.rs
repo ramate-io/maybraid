@@ -6,18 +6,18 @@
 
 pub mod assets;
 pub mod layer;
-pub mod member;
 pub mod nodes;
 pub mod plugin;
 pub mod scene_children;
-pub mod socket;
 
 pub use assets::AssetPath;
 pub use layer::{Layer, Layers};
-pub use member::{FirearmMembers, FirearmRoot, MemberOf};
-pub use nodes::{BoneMap, FirearmPartSlot, FirearmRig, PartNode, RigNode};
+pub use nodes::{FirearmPartSlot, PartNode, RigNode};
 pub use plugin::{add_firearm_components_host, FirearmComponentsPlugin, FirearmHostSystems};
-pub use socket::{SocketRef, SocketRefApplied, SocketRefRoot};
+pub use rigs::{
+	AssemblyHost, AssemblyMembers as FirearmMembers, AssemblyRoot, BoneMap, MemberOf, SocketRef,
+	SocketRefApplied, SocketRefRoot,
+};
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
@@ -28,6 +28,10 @@ use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
 
 use crate::scene_children::scene_children;
+
+/// Domain marker on the firearm assembly host.
+#[derive(Component, Clone, Copy, Default)]
+pub struct FirearmRoot;
 
 /// Domain IR exposed by a firearm (or firearm wrapper) for structural composition.
 ///
@@ -159,6 +163,7 @@ impl<T: FirearmComponents + Send + Sync + 'static> LodScene for ComponentsOnly<T
 		let host = self.clone();
 		bsn! {
 			template_value(host)
+			AssemblyRoot
 			FirearmRoot
 			Visibility::default()
 		}
@@ -255,6 +260,6 @@ where
 			},
 		))
 		.id();
-	commands.entity(entity).insert((host, FirearmRoot));
+	commands.entity(entity).insert((host, AssemblyRoot, FirearmRoot));
 	vec![entity]
 }

@@ -2857,6 +2857,7 @@ dependencies = [
  "ground",
  "lod",
  "malo-animations",
+ "rigs",
 ]
 
 [[package]]
@@ -2918,6 +2919,7 @@ dependencies = [
  "crozon-rigs",
  "lod",
  "material-ref",
+ "rigs",
  "scene-ref",
 ]
 
@@ -2929,6 +2931,7 @@ dependencies = [
  "clap",
  "game-commands",
  "log",
+ "rigs",
 ]
 
 [[package]]
@@ -3280,6 +3283,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "lod",
+ "rigs",
  "scene-ref",
 ]
 
@@ -5918,6 +5922,13 @@ dependencies = [
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
+]
+
+[[package]]
+name = "rigs"
+version = "0.0.1"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "crozon-character-motion"
+name = "rigs"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -11,14 +11,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-crozon-rigs = { workspace = true }
-ground = { workspace = true }
-lod = { workspace = true }
-malo-animations = { workspace = true }
-rigs = { workspace = true }
-
-[dev-dependencies]
-anyhow = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,4 +1,4 @@
-//! Per-band motion stamps for **host** markers. Bake defaults at spawn; 
+//! Per-band motion stamps for **host** markers. Bake defaults at spawn;
 //! [`crate::sync::sync_motion_markers`] keeps them aligned with the shown LOD band.
 //!
 //! [`motion_policy`] is the default linear ramp, not a registry of regimes.
