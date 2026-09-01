@@ -23,6 +23,8 @@ use crozon_characters::{
 };
 use lod_avian::PhysicsInteractionLayer;
 
+use crate::control::WorldGameplayEnabled;
+
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;
 const CAMERA_COLLISION_SKIN: f32 = 0.08;
 const CAMERA_COLLISION_MIN: f32 = 0.12;
@@ -56,6 +58,7 @@ impl CameraPov {
 pub(crate) fn follow_world_camera(
 	mode: Res<PlaygroundMode>,
 	pov: Res<CameraPov>,
+	gameplay: Res<WorldGameplayEnabled>,
 	spatial: SpatialQuery,
 	players: Query<Entity, (With<Player>, Without<Camera3d>)>,
 	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
@@ -64,7 +67,7 @@ pub(crate) fn follow_world_camera(
 	globals: Query<&GlobalTransform, Without<Camera3d>>,
 	mut cameras: Query<(&mut Transform, &mut GlobalTransform, &CameraController), With<Camera3d>>,
 ) {
-	if *mode != PlaygroundMode::Character {
+	if *mode != PlaygroundMode::Character || !gameplay.0 {
 		return;
 	}
 	let Ok(player_entity) = players.single() else {

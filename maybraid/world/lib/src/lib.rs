@@ -13,6 +13,7 @@ mod ui;
 
 pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 
@@ -67,6 +68,7 @@ impl Plugin for WorldPlugin {
 			})
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
+			.init_resource::<WorldGameplayEnabled>()
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -80,7 +82,7 @@ impl Plugin for WorldPlugin {
 					.with_drawer_config(GameCommandDrawerConfig {
 						open_at_start: false,
 						toggle_keys: vec![KeyCode::F1, KeyCode::KeyY],
-						..default()
+						toggle_gamepad_buttons: Vec::new(),
 					}),
 			)
 			.add_systems(PostStartup, spawn_default_braidman)

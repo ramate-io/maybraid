@@ -9,15 +9,34 @@ use maybraid_character_controller::CharacterIntent;
 
 use crate::camera::CameraPov;
 
+/// When `false`, world movement / POV intents are ignored (menus, pause overlay).
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldGameplayEnabled(pub bool);
+
+impl Default for WorldGameplayEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
 pub(crate) fn apply_intents_to_movement(
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
+	gameplay: Res<WorldGameplayEnabled>,
 	mut intents: MessageReader<CharacterIntent>,
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut movement: MessageWriter<MovementAction>,
 	mut pov: ResMut<CameraPov>,
 ) {
+	if !gameplay.0 || *mode != PlaygroundMode::Character || text_focus.0 {
+		for _ in intents.read() {}
+		for mut wish in &mut wishes {
+			wish.0 = Vec3::ZERO;
+		}
+		return;
+	}
+
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
 	for intent in intents.read() {
@@ -29,13 +48,6 @@ pub(crate) fn apply_intents_to_movement(
 			}
 			_ => {}
 		}
-	}
-
-	if *mode != PlaygroundMode::Character || text_focus.0 {
-		for mut wish in &mut wishes {
-			wish.0 = Vec3::ZERO;
-		}
-		return;
 	}
 
 	let wish_dir = if move_stick != Vec2::ZERO {

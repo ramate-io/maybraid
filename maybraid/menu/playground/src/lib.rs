@@ -6,8 +6,13 @@ mod loading_demo;
 mod preview;
 mod ui;
 
+pub use character::{
+	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
+	RequestShowCharacter,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use preview::CharacterPreviewPlugin;
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -24,9 +29,6 @@ use menu_screens::{
 	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
 	LoadingScreenSystems, MenuScreen,
 };
-
-use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
-use crate::preview::CharacterPreviewPlugin;
 
 pub struct MenuPlaygroundPlugin;
 
