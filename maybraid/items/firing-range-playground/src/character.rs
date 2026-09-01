@@ -26,7 +26,7 @@ const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 /// Kit GLBs are meter-authored; a held bullpup should be about this long.
 const HELD_LENGTH: f32 = 0.72;
-/// Place the firing line between the right pectoral and eye, near `shoulder.R`.
+/// Place the firing line between the right pectoral and eye.
 const RIGHT_ALONG_SHOULDERS: f32 = 0.72;
 /// Prefer a comfortably bent arm and reserve the final reach for aiming.
 const PREFERRED_REACH: f32 = 0.48;
@@ -193,9 +193,12 @@ pub(crate) fn gun_aim_rotation(facing: Vec3, look: Vec3, pitch: f32) -> Quat {
 	Quat::from_rotation_y(clamped_aim_yaw(facing, look)) * Quat::from_rotation_x(-pitch)
 }
 
-fn shoulder_line_origin(shoulder_l: Vec3, shoulder_r: Vec3) -> Vec3 {
+fn shoulder_line_origin(shoulder_l: Vec3, shoulder_r: Vec3, facing: Vec3) -> Vec3 {
 	let mid = (shoulder_l + shoulder_r) * 0.5;
-	mid + (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
+	let forward = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
+	let anatomical_right = Vec3::Y.cross(forward);
+	let half_width = shoulder_l.distance(shoulder_r) * 0.5;
+	mid + anatomical_right * (half_width * RIGHT_ALONG_SHOULDERS)
 }
 
 pub(crate) fn pose_held_firearm(
@@ -244,7 +247,7 @@ pub(crate) fn pose_held_firearm(
 			continue;
 		};
 		let line = AimLine {
-			origin: shoulder_line_origin(shoulder_l, shoulder_r),
+			origin: shoulder_line_origin(shoulder_l, shoulder_r, facing),
 			direction: rotation * Vec3::Z,
 		};
 		let translation = line.lock_for([
@@ -403,6 +406,14 @@ mod tests {
 		assert!((at.x - line.origin.x).abs() < 1e-4, "{at}");
 		assert!((at.y - line.origin.y).abs() < 1e-4, "{at}");
 		assert!(at.z > 0.1 && at.z < 0.6, "{at}");
+	}
+
+	#[test]
+	fn firing_line_uses_displayed_right_shoulder_pocket() {
+		let left_suffix = Vec3::new(0.4, 1.9, 0.0);
+		let right_suffix = Vec3::new(-0.4, 1.9, 0.0);
+		let at = shoulder_line_origin(left_suffix, right_suffix, Vec3::Z);
+		assert!(at.x > 0.0, "{at}");
 	}
 
 	#[test]
