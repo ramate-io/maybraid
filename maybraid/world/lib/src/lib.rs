@@ -92,7 +92,9 @@ impl Plugin for WorldPlugin {
 			)
 			.add_systems(
 				PostUpdate,
-				(camera::follow_world_camera, camera::sync_pov_visibility).chain(),
+				(camera::sync_first_person_head_visibility, camera::follow_world_camera)
+					.chain()
+					.after(TransformSystems::Propagate),
 			);
 	}
 }

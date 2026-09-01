@@ -3,20 +3,30 @@
 //! This lives in the world playground on purpose. Extract the orbit, R3 POV
 //! toggle, and shapecast pull-in into a shared follow-cam crate when a second
 //! playground needs the same rig.
+//!
+//! First person sockets to `nose_socket` and hides face parts. Head rig stays
+//! so the bone still updates; look rotation stays on [`CameraController`].
 
 use avian3d::prelude::{Collider, ShapeCastConfig, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	player::{CAMERA_DISTANCE, CAMERA_HEIGHT, CAMERA_LOOK_HEIGHT},
-	CameraController, Player, PlayerCapsule, PlayerVisual, PlaygroundMode,
+	CameraController, Player, PlayerVisual, PlaygroundMode,
+};
+use crozon_characters::{
+	find_member_rig, BoneMap, CharacterMembers, CharacterPartSlot, CharacterRig, CharacterRigRole,
+	PartNode,
 };
 use lod_avian::PhysicsInteractionLayer;
 
 const CAMERA_COLLISION_RADIUS: f32 = 0.18;
 const CAMERA_COLLISION_SKIN: f32 = 0.08;
 const CAMERA_COLLISION_MIN: f32 = 0.12;
-/// Eyes sit a bit above the third-person look-at (chest).
+/// Capsule fallback when the visual has no `nose_socket`.
 const FIRST_PERSON_EYE_OFFSET: f32 = CAMERA_LOOK_HEIGHT + 0.12;
+/// Sit just in front of the nose along look so the near plane misses the neck.
+const FIRST_PERSON_FORWARD: f32 = 0.12;
+const NOSE_SOCKET: &str = "nose_socket";
 
 /// World-playground camera POV. Default matches the vegetation third-person orbit.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,6 +51,9 @@ pub(crate) fn follow_world_camera(
 	pov: Res<CameraPov>,
 	spatial: SpatialQuery,
 	players: Query<(Entity, &Transform), (With<Player>, Without<Camera3d>)>,
+	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	rigs: Query<(Entity, &CharacterRig, &BoneMap)>,
+	globals: Query<&GlobalTransform>,
 	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
 ) {
 	if *mode != PlaygroundMode::Character {
@@ -59,7 +72,8 @@ pub(crate) fn follow_world_camera(
 
 	match *pov {
 		CameraPov::FirstPerson => {
-			camera_transform.translation = player.translation + Vec3::Y * FIRST_PERSON_EYE_OFFSET;
+			let translation = first_person_translation(player, rotation, &visuals, &rigs, &globals);
+			camera_transform.translation = translation;
 			camera_transform.rotation = rotation;
 		}
 		CameraPov::ThirdPerson => {
@@ -73,19 +87,81 @@ pub(crate) fn follow_world_camera(
 	}
 }
 
-pub(crate) fn sync_pov_visibility(
+/// Hide face meshes in first person; leave body / neck / clothing.
+pub(crate) fn sync_first_person_head_visibility(
+	mode: Res<PlaygroundMode>,
 	pov: Res<CameraPov>,
-	mut visuals: Query<&mut Visibility, (With<PlayerVisual>, Without<PlayerCapsule>)>,
-	mut capsules: Query<&mut Visibility, (With<PlayerCapsule>, Without<PlayerVisual>)>,
+	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	parts: Query<&PartNode>,
+	mut visibilities: Query<&mut Visibility>,
 ) {
-	let first = *pov == CameraPov::FirstPerson;
-	let has_visual = !visuals.is_empty();
-	for mut visibility in &mut visuals {
-		*visibility = if first { Visibility::Hidden } else { Visibility::Inherited };
+	let hide = *mode == PlaygroundMode::Character && *pov == CameraPov::FirstPerson;
+	let visibility = if hide { Visibility::Hidden } else { Visibility::Inherited };
+	for members in &visuals {
+		for member in members.iter() {
+			let Ok(part) = parts.get(member) else {
+				continue;
+			};
+			if !is_first_person_hidden_slot(part.slot) {
+				continue;
+			}
+			if let Ok(mut vis) = visibilities.get_mut(member) {
+				*vis = visibility;
+			}
+		}
 	}
-	for mut visibility in &mut capsules {
-		*visibility = if first || has_visual { Visibility::Hidden } else { Visibility::Inherited };
+}
+
+fn first_person_translation(
+	player: &Transform,
+	look_rotation: Quat,
+	visuals: &Query<&CharacterMembers, With<PlayerVisual>>,
+	rigs: &Query<(Entity, &CharacterRig, &BoneMap)>,
+	globals: &Query<&GlobalTransform>,
+) -> Vec3 {
+	let nose = visuals.iter().find_map(|members| nose_socket_world(members, rigs, globals));
+	match nose {
+		Some(origin) => first_person_camera_origin(origin, look_rotation, FIRST_PERSON_FORWARD),
+		None => player.translation + Vec3::Y * FIRST_PERSON_EYE_OFFSET,
 	}
+}
+
+fn nose_socket_world(
+	members: &CharacterMembers,
+	rigs: &Query<(Entity, &CharacterRig, &BoneMap)>,
+	globals: &Query<&GlobalTransform>,
+) -> Option<Vec3> {
+	for role in [CharacterRigRole::Head, CharacterRigRole::Body] {
+		let Some((_, map)) = find_member_rig(members, role, rigs) else {
+			continue;
+		};
+		let Some(&bone) = map.by_name.get(NOSE_SOCKET) else {
+			continue;
+		};
+		if let Ok(global) = globals.get(bone) {
+			return Some(global.translation());
+		}
+	}
+	None
+}
+
+pub(crate) fn first_person_camera_origin(nose: Vec3, look_rotation: Quat, forward_m: f32) -> Vec3 {
+	nose + look_rotation * Vec3::new(0.0, 0.0, -forward_m)
+}
+
+pub(crate) fn is_first_person_hidden_slot(slot: CharacterPartSlot) -> bool {
+	matches!(
+		slot,
+		CharacterPartSlot::HeadMesh
+			| CharacterPartSlot::Nose
+			| CharacterPartSlot::Mouth
+			| CharacterPartSlot::EyeLeft
+			| CharacterPartSlot::EyeRight
+			| CharacterPartSlot::EarLeft
+			| CharacterPartSlot::EarRight
+			| CharacterPartSlot::Hair
+			| CharacterPartSlot::Horns
+	)
 }
 
 fn obstructed_camera_translation(
@@ -150,9 +226,19 @@ mod tests {
 	}
 
 	#[test]
-	fn sync_pov_visibility_queries_are_disjoint() {
-		let mut app = App::new();
-		app.init_resource::<CameraPov>().add_systems(Update, sync_pov_visibility);
-		app.update();
+	fn first_person_hides_face_not_body() {
+		assert!(is_first_person_hidden_slot(CharacterPartSlot::HeadMesh));
+		assert!(is_first_person_hidden_slot(CharacterPartSlot::Nose));
+		assert!(is_first_person_hidden_slot(CharacterPartSlot::Hair));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::BodyMesh));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::NeckMesh));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::Clothing));
+	}
+
+	#[test]
+	fn first_person_origin_sits_along_look() {
+		let nose = Vec3::new(1.0, 2.0, 3.0);
+		let origin = first_person_camera_origin(nose, Quat::IDENTITY, 0.12);
+		assert!((origin - Vec3::new(1.0, 2.0, 2.88)).length() < 1e-5);
 	}
 }

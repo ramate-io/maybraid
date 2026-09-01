@@ -4398,6 +4398,7 @@ dependencies = [
  "bevy",
  "chico-vegetation-on-terrain-playground",
  "clap",
+ "crozon-characters",
  "durham-terrain-models",
  "game-commands",
  "lod",
