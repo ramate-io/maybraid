@@ -5,6 +5,44 @@ use crate::RiggedAxis;
 /// Local axis along which humanoid bones typically carry their bind length.
 pub const BONE_LENGTH_AXIS: Vec3 = Vec3::Y;
 
+/// Directions and elbow flex for a two-segment reach in one coordinate space.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TwoBoneAim {
+	pub upper_along: Vec3,
+	pub lower_along: Vec3,
+	/// Zero when straight; increases as the elbow closes.
+	pub flex: f32,
+}
+
+impl TwoBoneAim {
+	/// Solve a two-segment reach toward `target`, bending toward `pole`.
+	///
+	/// `target` and `pole` are relative to the upper segment's origin. Targets
+	/// outside the reachable annulus are clamped without changing direction.
+	pub fn reach(target: Vec3, pole: Vec3, upper_length: f32, lower_length: f32) -> Option<Self> {
+		const EPSILON: f32 = 1e-4;
+		if upper_length <= EPSILON || lower_length <= EPSILON {
+			return None;
+		}
+		let toward = target.try_normalize()?;
+		let pole = (pole - toward * pole.dot(toward)).try_normalize()?;
+		let minimum = (upper_length - lower_length).abs() + EPSILON;
+		let maximum = upper_length + lower_length - EPSILON;
+		let distance = target.length().clamp(minimum, maximum);
+		let upper_forward = ((upper_length * upper_length + distance * distance
+			- lower_length * lower_length)
+			/ (2.0 * upper_length * distance))
+			.clamp(-1.0, 1.0);
+		let upper_out = (1.0 - upper_forward * upper_forward).sqrt();
+		let elbow = toward * (upper_length * upper_forward) + pole * (upper_length * upper_out);
+		let target = toward * distance;
+		let upper_along = elbow.normalize_or(toward);
+		let lower_along = (target - elbow).normalize_or(toward);
+		let flex = upper_along.angle_between(lower_along);
+		Some(Self { upper_along, lower_along, flex })
+	}
+}
+
 /// Local bone rotation that aims [`BONE_LENGTH_AXIS`] along `along_parent`, then rolls.
 ///
 /// `along_parent` is the desired length direction in the bone's **parent** space.
@@ -133,6 +171,24 @@ mod tests {
 		let rot = rotation_along_with_roll(rest, along, FRAC_PI_2, BONE_LENGTH_AXIS);
 		let aimed = (rot * BONE_LENGTH_AXIS).normalize();
 		assert!(aimed.dot(along) > 0.999, "roll must not disturb aim, got {aimed:?} vs {along:?}");
+	}
+
+	#[test]
+	fn two_bone_reach_hits_reachable_target() -> Result<(), &'static str> {
+		let target = Vec3::new(0.2, 0.0, 1.2);
+		let aim = TwoBoneAim::reach(target, Vec3::NEG_Y, 0.7, 0.7).ok_or("missing reach")?;
+		let elbow = aim.upper_along * 0.7;
+		let hand = elbow + aim.lower_along * 0.7;
+		assert!((hand - target).length() < 1e-4, "{hand:?} vs {target:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn two_bone_reach_clamps_unreachable_target_straight() -> Result<(), &'static str> {
+		let aim = TwoBoneAim::reach(Vec3::Z * 10.0, Vec3::NEG_Y, 0.5, 0.5)
+			.ok_or("missing clamped reach")?;
+		assert!(aim.flex < 0.05, "expected nearly straight reach, got {}", aim.flex);
+		Ok(())
 	}
 
 	#[test]

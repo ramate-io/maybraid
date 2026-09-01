@@ -6,12 +6,13 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use crozon_characters::{
-	character_bounds, species::brodler::BrodlerConfig, AnimBone, AnimClip, AnimRef, AnimRefRoot,
+	character_bounds, species::braidman::BraidmanConfig, AnimBone, AnimClip, AnimRef, AnimRefRoot,
 	BoneMap, CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
 	ComponentsOnly, RigSkeletonKind,
 };
 use firearms::{
-	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmRoot, Weapon,
+	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
+	FirearmRoot, Weapon,
 };
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -25,10 +26,11 @@ const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
 /// Kit GLBs are meter-authored; a held bullpup should be about this long.
 const HELD_LENGTH: f32 = 0.72;
-/// Receiver distance from the shoulder line as a fraction of full arm reach.
-const FORWARD_OF_ARM_REACH: f32 = 0.42;
-/// Fraction of the way from chest-mid to `shoulder.R`.
-const RIGHT_ALONG_SHOULDERS: f32 = 0.35;
+/// Place the firing line between the right pectoral and eye, near `shoulder.R`.
+const RIGHT_ALONG_SHOULDERS: f32 = 0.72;
+/// Prefer a comfortably bent arm and reserve the final reach for aiming.
+const PREFERRED_REACH: f32 = 0.48;
+const MAX_REACH: f32 = 0.88;
 /// Look yaw may lead the body by this much (full cone is 2×).
 pub(crate) const AIM_YAW_LIMIT: f32 = FRAC_PI_6;
 
@@ -39,6 +41,54 @@ pub(crate) struct PlayerVisual;
 #[derive(Component)]
 pub(crate) struct HeldFirearm {
 	pub scale: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HandReach {
+	origin: Vec3,
+	socket_offset: Vec3,
+	length: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AimLine {
+	origin: Vec3,
+	direction: Vec3,
+}
+
+impl AimLine {
+	/// Pick the common point on the firing line that both socket reaches support.
+	fn lock_for(self, hands: [HandReach; 2]) -> Vec3 {
+		let direction = self.direction.normalize_or(Vec3::Z);
+		let mut lower = 0.0_f32;
+		let mut upper = f32::INFINITY;
+		let mut preferred = 0.0;
+
+		for hand in hands {
+			let relative = self.origin + hand.socket_offset - hand.origin;
+			let center = -relative.dot(direction);
+			let perpendicular = relative + direction * center;
+			let perpendicular_sq = perpendicular.length_squared();
+			let maximum = hand.length * MAX_REACH;
+			let radius = (maximum * maximum - perpendicular_sq).max(0.0).sqrt();
+			lower = lower.max(center - radius);
+			upper = upper.min(center + radius);
+
+			let comfortable = hand.length * PREFERRED_REACH;
+			let forward = (comfortable * comfortable - perpendicular_sq).max(0.0).sqrt();
+			preferred += center + forward;
+		}
+
+		preferred /= hands.len() as f32;
+		let along = if lower <= upper {
+			preferred.clamp(lower, upper)
+		} else {
+			// No exact shared interval: split the least-overreach gap.
+			(lower + upper) * 0.5
+		}
+		.max(0.0);
+		self.origin + direction * along
+	}
 }
 
 pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
@@ -61,7 +111,7 @@ pub(crate) fn spawn_player_character(
 	let Ok(player) = players.single() else {
 		return;
 	};
-	let clothed = CharacterRecipe::clothed(&BrodlerConfig::default_preview());
+	let clothed = CharacterRecipe::clothed(&BraidmanConfig::default_preview());
 	let bounds = character_bounds(&clothed);
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
@@ -143,15 +193,9 @@ pub(crate) fn gun_aim_rotation(facing: Vec3, look: Vec3, pitch: f32) -> Quat {
 	Quat::from_rotation_y(clamped_aim_yaw(facing, look)) * Quat::from_rotation_x(-pitch)
 }
 
-pub(crate) fn hold_translation(
-	shoulder_l: Vec3,
-	shoulder_r: Vec3,
-	facing: Vec3,
-	arm_reach: f32,
-) -> Vec3 {
+fn shoulder_line_origin(shoulder_l: Vec3, shoulder_r: Vec3) -> Vec3 {
 	let mid = (shoulder_l + shoulder_r) * 0.5;
-	let facing = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
-	mid + facing * (arm_reach * FORWARD_OF_ARM_REACH) + (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
+	mid + (shoulder_r - mid) * RIGHT_ALONG_SHOULDERS
 }
 
 pub(crate) fn pose_held_firearm(
@@ -163,7 +207,7 @@ pub(crate) fn pose_held_firearm(
 	maps: Query<&BoneMap, Without<HeldFirearm>>,
 	globals: Query<&GlobalTransform, Without<HeldFirearm>>,
 	mut guns: Query<
-		(&HeldFirearm, &mut Transform),
+		(&FirearmMembers, &HeldFirearm, &GlobalTransform, &mut Transform),
 		(With<FirearmRoot>, Without<Player>, Without<PlayerVisual>),
 	>,
 ) {
@@ -179,39 +223,67 @@ pub(crate) fn pose_held_firearm(
 	let Some(shoulder_r) = named_translation(members, &maps, &globals, "shoulder.R") else {
 		return;
 	};
-	let Some(arm_reach) = average_arm_reach(members, &maps, &globals) else {
+	let Some((right_origin, right_length)) = arm_measure(members, &maps, &globals, "R") else {
+		return;
+	};
+	let Some((left_origin, left_length)) = arm_measure(members, &maps, &globals, "L") else {
 		return;
 	};
 	let facing = visual.rotation * Vec3::Z;
 	let look = Quat::from_axis_angle(Vec3::Y, camera.yaw) * -Vec3::Z;
 	let rotation = gun_aim_rotation(facing, look, camera.pitch);
-	for (held, mut transform) in &mut guns {
-		let translation = hold_translation(shoulder_l, shoulder_r, facing, arm_reach);
+	for (gun_members, held, previous_root, mut transform) in &mut guns {
+		let Some(trigger_local) =
+			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "trigger_point")
+		else {
+			continue;
+		};
+		let Some(grip_local) =
+			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "grip_point")
+		else {
+			continue;
+		};
+		let line = AimLine {
+			origin: shoulder_line_origin(shoulder_l, shoulder_r),
+			direction: rotation * Vec3::Z,
+		};
+		let translation = line.lock_for([
+			HandReach {
+				origin: right_origin,
+				socket_offset: rotation * (trigger_local * held.scale),
+				length: right_length,
+			},
+			HandReach {
+				origin: left_origin,
+				socket_offset: rotation * (grip_local * held.scale),
+				length: left_length,
+			},
+		]);
 		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
 	}
 }
 
-/// Estimate shoulder-to-palm reach from hierarchy segment lengths.
-///
-/// Humanoid v0 has no hand bone, so the forearm is approximated as the same
-/// length as the humerus. Parent-child distances include species bone scaling.
-fn average_arm_reach(
+/// Humerus origin and shoulder-to-palm length for one side.
+fn arm_measure(
 	members: &CharacterMembers,
 	maps: &Query<&BoneMap, Without<HeldFirearm>>,
 	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
-) -> Option<f32> {
-	let mut sum = 0.0;
-	let mut count = 0;
-	for suffix in ["L", "R"] {
-		let shoulder = named_translation(members, maps, globals, &format!("shoulder.{suffix}"))?;
-		let humerus = named_translation(members, maps, globals, &format!("humerus.{suffix}"))?;
-		let forearm = named_translation(members, maps, globals, &format!("forearm.{suffix}"))?;
-		let clavicle = shoulder.distance(humerus);
-		let upper = humerus.distance(forearm);
-		sum += clavicle + upper * 2.0;
-		count += 1;
-	}
-	(count > 0).then_some(sum / count as f32)
+	suffix: &str,
+) -> Option<(Vec3, f32)> {
+	let humerus = named_translation(members, maps, globals, &format!("humerus.{suffix}"))?;
+	let forearm = named_translation(members, maps, globals, &format!("forearm.{suffix}"))?;
+	Some((humerus, humerus.distance(forearm) * 2.0))
+}
+
+fn firearm_landmark_local(
+	members: &FirearmMembers,
+	root: &GlobalTransform,
+	maps: &Query<&BoneMap, Without<HeldFirearm>>,
+	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	name: &str,
+) -> Option<Vec3> {
+	let world = named_translation_from(members.iter(), maps, globals, name)?;
+	Some(root.affine().inverse().transform_point3(world))
 }
 
 fn named_translation(
@@ -220,7 +292,16 @@ fn named_translation(
 	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
 	name: &str,
 ) -> Option<Vec3> {
-	for member in members.iter() {
+	named_translation_from(members.iter(), maps, globals, name)
+}
+
+fn named_translation_from(
+	members: impl Iterator<Item = Entity>,
+	maps: &Query<&BoneMap, Without<HeldFirearm>>,
+	globals: &Query<&GlobalTransform, Without<HeldFirearm>>,
+	name: &str,
+) -> Option<Vec3> {
+	for member in members {
 		let Ok(map) = maps.get(member) else {
 			continue;
 		};
@@ -312,30 +393,37 @@ mod tests {
 	}
 
 	#[test]
-	fn hold_sits_at_shoulder_height() {
-		let left = Vec3::new(-0.4, 1.9, 0.0);
-		let right = Vec3::new(0.4, 1.9, 0.0);
-		let at = hold_translation(left, right, Vec3::Z, 0.72);
-		assert!((at.y - 1.9).abs() < 1e-4, "{at}");
-		assert!(at.z > 0.3, "{at}");
-		assert!(at.x > 0.0, "{at}");
+	fn hold_locks_to_firing_line_at_comfortable_reach() {
+		let line = AimLine { origin: Vec3::new(0.1, 1.9, 0.0), direction: Vec3::Z };
+		let hands = [
+			HandReach { origin: Vec3::new(0.3, 1.9, 0.0), socket_offset: Vec3::ZERO, length: 0.7 },
+			HandReach { origin: Vec3::new(-0.3, 1.9, 0.0), socket_offset: Vec3::ZERO, length: 0.7 },
+		];
+		let at = line.lock_for(hands);
+		assert!((at.x - line.origin.x).abs() < 1e-4, "{at}");
+		assert!((at.y - line.origin.y).abs() < 1e-4, "{at}");
+		assert!(at.z > 0.1 && at.z < 0.6, "{at}");
 	}
 
 	#[test]
-	fn hold_forward_scales_with_arm_reach() {
-		let left = Vec3::new(-0.2, 1.0, 0.0);
-		let right = Vec3::new(0.2, 1.0, 0.0);
-		let short = hold_translation(left, right, Vec3::Z, 0.5);
-		let long = hold_translation(left, right, Vec3::Z, 1.0);
-		assert!((long.z - short.z - 0.5 * FORWARD_OF_ARM_REACH).abs() < 1e-4);
+	fn forward_socket_offset_tucks_root_back() {
+		let line = AimLine { origin: Vec3::ZERO, direction: Vec3::Z };
+		let centered = [
+			HandReach { origin: Vec3::ZERO, socket_offset: Vec3::ZERO, length: 0.7 },
+			HandReach { origin: Vec3::ZERO, socket_offset: Vec3::ZERO, length: 0.7 },
+		];
+		let forward = [
+			HandReach { socket_offset: Vec3::Z * 0.2, ..centered[0] },
+			HandReach { socket_offset: Vec3::Z * 0.2, ..centered[1] },
+		];
+		assert!(line.lock_for(forward).z < line.lock_for(centered).z);
 	}
 
 	#[test]
-	fn pose_held_firearm_queries_are_disjoint() {
+	fn pose_held_firearm_queries_are_disjoint() -> Result<(), bevy::ecs::system::RunSystemError> {
 		let mut world = World::new();
-		world
-			.run_system_once(pose_held_firearm)
-			.expect("disjoint player / visual / gun Transform queries");
+		world.run_system_once(pose_held_firearm)?;
+		Ok(())
 	}
 
 	#[test]
