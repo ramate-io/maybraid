@@ -3,8 +3,10 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use firearms::{
-	aim_plus_x, firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit, Weapon,
+	aim_plus_x, firearm_bounds, spawn_firearm_components, FirearmConcept, FirearmKit,
+	PenetrationCost, Weapon,
 };
+use lod_avian::PhysicsInteractionLayer;
 
 pub fn setup_range(
 	mut commands: Commands,
@@ -64,6 +66,8 @@ fn spawn_ground(
 		Transform::from_xyz(20.0, -0.1, 0.0),
 		RigidBody::Static,
 		Collider::cuboid(80.0, 0.2, 40.0),
+		PhysicsInteractionLayer::fixed_layers(),
+		PenetrationCost(4.0),
 	));
 }
 
@@ -86,6 +90,8 @@ fn spawn_targets(
 			Transform::from_xyz(18.0, 0.8, z),
 			RigidBody::Static,
 			Collider::cuboid(0.4, 1.6, 1.2),
+			PhysicsInteractionLayer::fixed_layers(),
+			PenetrationCost(1.0),
 		));
 	}
 }

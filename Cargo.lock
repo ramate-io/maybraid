@@ -3276,6 +3276,7 @@ dependencies = [
  "clap",
  "firearms-components",
  "lod",
+ "lod-avian",
  "scene-ref",
 ]
 
@@ -3300,6 +3301,7 @@ dependencies = [
  "firearms",
  "game-commands",
  "lod",
+ "lod-avian",
 ]
 
 [[package]]

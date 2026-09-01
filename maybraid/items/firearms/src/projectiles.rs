@@ -1,8 +1,13 @@
 //! Emissive blaster projectiles spawned from the receiver `barrel` bone.
+//!
+//! Bolts and bullets are query-only (`Sensor` + projectile layer). They do not
+//! bounce: a sweep along each step charges [`Flight::through`] while overlapping
+//! [`PhysicsInteractionLayer::Fixed`]. Lasers are visuals only.
 
 use avian3d::prelude::*;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
+use lod_avian::PhysicsInteractionLayer;
 
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 
@@ -19,12 +24,24 @@ impl Default for WeaponsArmed {
 	}
 }
 
+/// Multiplier on path length spent inside this collider. Missing is `1.0`.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct PenetrationCost(pub f32);
+
+impl Default for PenetrationCost {
+	fn default() -> Self {
+		Self(1.0)
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BoltSpec {
 	pub length: f32,
 	pub radius: f32,
 	pub speed: f32,
 	pub max_range: f32,
+	pub max_age: f32,
+	pub penetration: f32,
 	pub color: Color,
 }
 
@@ -35,6 +52,8 @@ impl Default for BoltSpec {
 			radius: 0.055,
 			speed: 42.0,
 			max_range: 36.0,
+			max_age: 2.0,
+			penetration: 0.85,
 			color: Color::srgb(0.35, 0.95, 1.0),
 		}
 	}
@@ -46,6 +65,8 @@ pub struct BulletSpec {
 	pub radius: f32,
 	pub speed: f32,
 	pub max_range: f32,
+	pub max_age: f32,
+	pub penetration: f32,
 	pub color: Color,
 }
 
@@ -56,6 +77,8 @@ impl Default for BulletSpec {
 			radius: 0.04,
 			speed: 28.0,
 			max_range: 42.0,
+			max_age: 3.0,
+			penetration: 0.25,
 			color: Color::srgb(1.0, 0.72, 0.22),
 		}
 	}
@@ -119,10 +142,36 @@ impl Weapon {
 	}
 }
 
+/// Path / time / through-solid budgets for a bolt or bullet.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Flight {
 	pub origin: Vec3,
+	pub last: Vec3,
+	pub path: f32,
+	pub through: f32,
+	pub age: f32,
 	pub max_range: f32,
+	pub max_through: f32,
+	pub max_age: f32,
+}
+
+impl Flight {
+	pub fn spawn(origin: Vec3, max_range: f32, max_through: f32, max_age: f32) -> Self {
+		Self {
+			origin,
+			last: origin,
+			path: 0.0,
+			through: 0.0,
+			age: 0.0,
+			max_range,
+			max_through,
+			max_age,
+		}
+	}
+
+	pub fn exhausted(self) -> bool {
+		self.path > self.max_range || self.through > self.max_through || self.age > self.max_age
+	}
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -141,7 +190,7 @@ impl Plugin for FirearmWeaponsPlugin {
 		}
 		app.init_resource::<WeaponsArmed>().add_systems(
 			PostUpdate,
-			(fire_weapons, tick_lasers, despawn_spent_flights)
+			(fire_weapons, tick_lasers, tick_flights)
 				.after(TransformSystems::Propagate)
 				.after(FirearmHostSystems::Pose),
 		);
@@ -154,6 +203,35 @@ pub fn muzzle_world(global: &GlobalTransform) -> (Vec3, Vec3) {
 	let origin = global.translation();
 	let dir = (muzzle - origin).normalize_or(Vec3::Y);
 	(muzzle, dir)
+}
+
+/// Solid length along a step of `ds`.
+///
+/// `forward_hit` / `backward_hit` are distances to the first face from each end.
+pub fn through_length(
+	ds: f32,
+	start_inside: bool,
+	end_inside: bool,
+	forward_hit: Option<f32>,
+	backward_hit: Option<f32>,
+) -> f32 {
+	if ds <= 1e-8 {
+		return 0.0;
+	}
+	let clamp = |x: f32| x.clamp(0.0, ds);
+	match (start_inside, end_inside) {
+		(true, true) => ds,
+		(false, false) => match (forward_hit, backward_hit) {
+			(Some(enter), Some(leave)) => clamp(ds - enter - leave),
+			_ => 0.0,
+		},
+		(false, true) => clamp(ds - forward_hit.unwrap_or(0.0)),
+		(true, false) => match (forward_hit, backward_hit) {
+			(Some(exit), _) => clamp(exit),
+			(_, Some(air)) => clamp(ds - air),
+			(None, None) => ds,
+		},
+	}
 }
 
 fn barrel_global<'a>(
@@ -188,6 +266,78 @@ fn capsule_along_y(direction: Vec3, muzzle: Vec3, length: f32, radius: f32) -> T
 	Transform { translation: center, rotation, scale: Vec3::ONE }
 }
 
+fn penetration_filter(exclude: Entity) -> SpatialQueryFilter {
+	SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed).with_excluded_entities([exclude])
+}
+
+fn overlapping(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	at: Vec3,
+	rotation: Quat,
+	filter: &SpatialQueryFilter,
+) -> bool {
+	!spatial.shape_intersections(collider, at, rotation, filter).is_empty()
+}
+
+fn first_hit_cost(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	at: Vec3,
+	rotation: Quat,
+	filter: &SpatialQueryFilter,
+	costs: &Query<&PenetrationCost>,
+) -> f32 {
+	spatial
+		.shape_intersections(collider, at, rotation, filter)
+		.into_iter()
+		.find_map(|entity| costs.get(entity).ok().map(|cost| cost.0))
+		.unwrap_or(1.0)
+}
+
+fn sweep_hit(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	origin: Vec3,
+	rotation: Quat,
+	direction: Dir3,
+	ds: f32,
+	filter: &SpatialQueryFilter,
+) -> Option<f32> {
+	let config = ShapeCastConfig::from_max_distance(ds);
+	let hit = spatial.cast_shape(collider, origin, rotation, direction, &config, filter)?;
+	(hit.distance < ds - 1e-4).then_some(hit.distance)
+}
+
+fn through_on_step(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	start: Vec3,
+	end: Vec3,
+	rotation: Quat,
+	filter: &SpatialQueryFilter,
+	costs: &Query<&PenetrationCost>,
+) -> f32 {
+	let delta = end - start;
+	let ds = delta.length();
+	if ds <= 1e-5 {
+		return 0.0;
+	}
+	let Ok(dir) = Dir3::new(delta) else {
+		return 0.0;
+	};
+	let Ok(back) = Dir3::new(-delta) else {
+		return 0.0;
+	};
+	let start_inside = overlapping(spatial, collider, start, rotation, filter);
+	let end_inside = overlapping(spatial, collider, end, rotation, filter);
+	let forward = sweep_hit(spatial, collider, start, rotation, dir, ds, filter);
+	let backward = sweep_hit(spatial, collider, end, rotation, back, ds, filter);
+	let sample_at = if end_inside { end } else { start };
+	let cost = first_hit_cost(spatial, collider, sample_at, rotation, filter, costs);
+	through_length(ds, start_inside, end_inside, forward, backward) * cost
+}
+
 fn spawn_flight(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
@@ -198,10 +348,13 @@ fn spawn_flight(
 	radius: f32,
 	speed: f32,
 	max_range: f32,
+	max_through: f32,
+	max_age: f32,
 	color: Color,
 	gravity: f32,
 ) {
 	let transform = capsule_along_y(direction, muzzle, length, radius);
+	let origin = transform.translation;
 	commands.spawn((
 		Name::new("projectile"),
 		transform,
@@ -210,11 +363,13 @@ fn spawn_flight(
 		MeshMaterial3d(materials.add(glow_material(color))),
 		RigidBody::Dynamic,
 		Collider::capsule(radius, length),
+		Sensor,
+		PhysicsInteractionLayer::projectile_layers(),
 		LockedAxes::ROTATION_LOCKED,
 		LinearVelocity(direction * speed),
 		GravityScale(gravity),
 		Restitution::ZERO,
-		Flight { origin: muzzle, max_range },
+		Flight::spawn(origin, max_range, max_through, max_age),
 	));
 }
 
@@ -235,8 +390,6 @@ fn spawn_laser(
 			MeshMaterial3d(materials.add(glow_material(spec.color))),
 			ChildOf(barrel),
 			LaserBeam { spec, age: 0.0 },
-			RigidBody::Kinematic,
-			Collider::capsule(spec.radius, 0.05),
 		))
 		.id()
 }
@@ -249,18 +402,10 @@ fn laser_local(spec: LaserSpec, age: f32) -> (Vec3, Vec3) {
 	(translation, scale)
 }
 
-fn apply_laser_pose(
-	transform: &mut Transform,
-	collider: Option<&mut Collider>,
-	spec: LaserSpec,
-	age: f32,
-) {
+fn apply_laser_pose(transform: &mut Transform, spec: LaserSpec, age: f32) {
 	let (translation, scale) = laser_local(spec, age);
 	transform.translation = translation;
 	transform.scale = scale;
-	if let Some(collider) = collider {
-		*collider = Collider::capsule(spec.radius, scale.y.max(0.05));
-	}
 }
 
 pub fn fire_weapons(
@@ -307,6 +452,8 @@ pub fn fire_weapons(
 					spec.radius,
 					spec.speed,
 					spec.max_range,
+					spec.penetration,
+					spec.max_age,
 					spec.color,
 					0.0,
 				);
@@ -328,6 +475,8 @@ pub fn fire_weapons(
 					spec.radius,
 					spec.speed,
 					spec.max_range,
+					spec.penetration,
+					spec.max_age,
 					spec.color,
 					1.0,
 				);
@@ -339,27 +488,40 @@ pub fn fire_weapons(
 pub fn tick_lasers(
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
-	mut lasers: Query<(&mut LaserBeam, &mut Transform, &mut Collider)>,
+	mut lasers: Query<(&mut LaserBeam, &mut Transform)>,
 ) {
 	if !armed.0 {
 		return;
 	}
 	let dt = time.delta_secs();
-	for (mut beam, mut transform, mut collider) in &mut lasers {
+	for (mut beam, mut transform) in &mut lasers {
 		beam.age += dt;
 		if beam.age >= beam.spec.max_time {
 			beam.age = 0.0;
 		}
-		apply_laser_pose(&mut transform, Some(&mut collider), beam.spec, beam.age);
+		apply_laser_pose(&mut transform, beam.spec, beam.age);
 	}
 }
 
-pub fn despawn_spent_flights(
+pub fn tick_flights(
+	time: Res<Time>,
+	spatial: SpatialQuery,
+	costs: Query<&PenetrationCost>,
 	mut commands: Commands,
-	flights: Query<(Entity, &Transform, &Flight)>,
+	mut flights: Query<(Entity, &mut Flight, &Transform, &Collider)>,
 ) {
-	for (entity, transform, flight) in &flights {
-		if transform.translation.distance(flight.origin) > flight.max_range {
+	let dt = time.delta_secs();
+	for (entity, mut flight, transform, collider) in &mut flights {
+		let pos = transform.translation;
+		let rotation = transform.rotation;
+		let filter = penetration_filter(entity);
+		let ds = pos.distance(flight.last);
+		flight.age += dt;
+		flight.path += ds;
+		flight.through +=
+			through_on_step(&spatial, collider, flight.last, pos, rotation, &filter, &costs);
+		flight.last = pos;
+		if flight.exhausted() {
 			commands.entity(entity).try_despawn();
 		}
 	}
@@ -396,5 +558,33 @@ mod tests {
 		assert_eq!(Weapon::bolt().load.label(), "bolt");
 		assert_eq!(Weapon::bullet().load.label(), "bullet");
 		assert_eq!(Weapon::laser().load.label(), "laser");
+	}
+
+	#[test]
+	fn through_length_air_and_solid() {
+		assert_eq!(through_length(1.0, false, false, None, None), 0.0);
+		assert_eq!(through_length(1.0, true, true, None, None), 1.0);
+		assert_eq!(through_length(0.0, true, true, None, None), 0.0);
+	}
+
+	#[test]
+	fn through_length_enter_and_thin_wall() {
+		assert!((through_length(1.0, false, true, Some(0.3), None) - 0.7).abs() < 1e-5);
+		assert!((through_length(1.0, false, false, Some(0.4), Some(0.4)) - 0.2).abs() < 1e-5);
+		assert!((through_length(1.0, true, false, Some(0.4), Some(0.6)) - 0.4).abs() < 1e-5);
+	}
+
+	#[test]
+	fn flight_exhausts_on_any_budget() {
+		let mut flight = Flight::spawn(Vec3::ZERO, 10.0, 1.0, 2.0);
+		assert!(!flight.exhausted());
+		flight.path = 10.1;
+		assert!(flight.exhausted());
+		flight.path = 0.0;
+		flight.through = 1.1;
+		assert!(flight.exhausted());
+		flight.through = 0.0;
+		flight.age = 2.1;
+		assert!(flight.exhausted());
 	}
 }

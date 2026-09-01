@@ -21,6 +21,7 @@ clap = { workspace = true }
 firearms = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
+lod-avian = { workspace = true }
 
 [lints]
 workspace = true

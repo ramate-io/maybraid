@@ -24,8 +24,8 @@ pub use parts::{BarrelMesh, BodyMesh, GripMesh, KitBone, StockMesh, TriggerBoxMe
 pub use plugin::FirearmHostsPlugin;
 pub use pose::{aim_plus_x, BoneFit, FirearmPose};
 pub use projectiles::{
-	BoltSpec, BulletSpec, FirearmWeaponsPlugin, Flight, LaserBeam, LaserSpec, ProjectileLoad,
-	Weapon, WeaponsArmed, BARREL_REST_LENGTH,
+	BoltSpec, BulletSpec, FirearmWeaponsPlugin, Flight, LaserBeam, LaserSpec, PenetrationCost,
+	ProjectileLoad, Weapon, WeaponsArmed, BARREL_REST_LENGTH,
 };
 
 /// Config → inner [`FirearmComponents`] recipe.

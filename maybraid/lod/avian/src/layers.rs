@@ -12,6 +12,7 @@
 //! | [`PhysicsInteractionLayer::Generate`] | Generated-id volumes | none (query-only) |
 //! | [`PhysicsInteractionLayer::Present`] | Presented-id volumes | none (query-only) |
 //! | [`PhysicsInteractionLayer::Host`] | Scene-host volumes | none (query-only) |
+//! | [`PhysicsInteractionLayer::Projectile`] | Blaster bolts / bullets | none (query-only; sweeps query Fixed) |
 //! | [`PhysicsInteractionLayer::Fixed`] | Terrain / buildings | [`Animated`](PhysicsInteractionLayer::Animated) |
 //! | [`PhysicsInteractionLayer::Animated`] | Characters / movers | [`Fixed`](PhysicsInteractionLayer::Fixed) |
 
@@ -44,6 +45,8 @@ pub enum PhysicsInteractionLayer {
 	Generate,
 	/// Presented-id volumes ([`AvianLodPresentBoundsMarshaller`]). Query-only.
 	Present,
+	/// Bolts / bullets. Query-only; they sweep [`Fixed`](Self::Fixed) instead of contacting.
+	Projectile,
 }
 
 impl PhysicsInteractionLayer {
@@ -60,6 +63,11 @@ impl PhysicsInteractionLayer {
 	/// Scene hosts: member of [`Host`](Self::Host), contacts nobody.
 	pub fn host_layers() -> CollisionLayers {
 		CollisionLayers::new(Self::Host, LayerMask::NONE)
+	}
+
+	/// Projectiles: member of [`Projectile`](Self::Projectile), contacts nobody.
+	pub fn projectile_layers() -> CollisionLayers {
+		CollisionLayers::new(Self::Projectile, LayerMask::NONE)
 	}
 
 	/// Fixed geometry: member of [`Fixed`](Self::Fixed), contacts [`Animated`](Self::Animated) only.
@@ -130,11 +138,12 @@ impl LodSceneBoundsMarshaller for AvianLodSceneBoundsMarshaller {
 mod tests {
 	use super::*;
 
-	fn query_only_layers() -> [CollisionLayers; 3] {
+	fn query_only_layers() -> [CollisionLayers; 4] {
 		[
 			PhysicsInteractionLayer::generate_layers(),
 			PhysicsInteractionLayer::present_layers(),
 			PhysicsInteractionLayer::host_layers(),
+			PhysicsInteractionLayer::projectile_layers(),
 		]
 	}
 

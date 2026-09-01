@@ -10,6 +10,6 @@ Press `/` then `pause` / `resume`. `L` toggles look. WASD + Space fly.
 
 | Kind | Behavior |
 |------|----------|
-| Bolt | Capsule, no gravity, despawns at max range |
-| Bullet | Same capsule, gravity on, despawns at max range |
+| Bolt | Capsule, no gravity; dies on path / through-solid / age |
+| Bullet | Same capsule, gravity on; same budgets (thinner penetration) |
 | Laser | Beam grows from the barrel, then resets after `max_time` |
