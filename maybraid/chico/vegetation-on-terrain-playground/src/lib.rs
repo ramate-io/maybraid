@@ -21,8 +21,8 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use player::{
-	CharacterLocomotion, MoveWish, MovementAction, PadMovementEnabled, Player, PlayerCapsule,
-	PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction, PadMovementEnabled,
+	Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;

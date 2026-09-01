@@ -15,9 +15,9 @@ pub use game_commands::command::PendingStartupCommand;
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterLocomotion, CharacterSpecies, PadMovementEnabled, PlayerControlSystems,
-	PlaygroundConfig, PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter,
-	VegetationOnTerrainPlugin,
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
+	PlayerControlSystems, PlaygroundConfig, PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin,
+	RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::GameCommandPlugin;
@@ -61,6 +61,7 @@ impl Plugin for WorldPlugin {
 				commands: false,
 			})
 			.insert_resource(PadMovementEnabled(false))
+			.insert_resource(CharacterCameraFollowEnabled(false))
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -89,6 +90,10 @@ impl Plugin for WorldPlugin {
 						.before(game_commands::ui::update_debug_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
+			)
+			.add_systems(
+				PostUpdate,
+				camera::turn_body_with_look.before(TransformSystems::Propagate),
 			)
 			.add_systems(
 				PostUpdate,

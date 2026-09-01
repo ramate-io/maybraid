@@ -120,12 +120,23 @@ impl Default for PadMovementEnabled {
 	}
 }
 
+/// When false, a downstream system owns the character camera (world first/third POV).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct CharacterCameraFollowEnabled(pub bool);
+
+impl Default for CharacterCameraFollowEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundMode>()
 			.init_resource::<PadMovementEnabled>()
+			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
@@ -424,9 +435,13 @@ fn apply_movement_damping(
 
 fn follow_character_camera(
 	mode: Res<PlaygroundMode>,
+	follow: Res<CharacterCameraFollowEnabled>,
 	players: Query<&Transform, (With<Player>, Without<Camera3d>)>,
 	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
 ) {
+	if !follow.0 {
+		return;
+	}
 	if *mode != PlaygroundMode::Character {
 		return;
 	}
