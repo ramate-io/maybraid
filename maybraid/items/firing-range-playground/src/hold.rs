@@ -15,7 +15,8 @@ use crate::character::{HeldFirearm, PlayerVisual};
 pub(crate) struct HoldingArms;
 
 const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
-const RIGHT_POLE: Vec3 = Vec3::new(0.25, -1.0, -0.1);
+/// Right elbow wings outward (body −X) and down at roughly 45°.
+const RIGHT_POLE: Vec3 = Vec3::new(-1.0, -1.0, -0.1);
 const LEFT_POLE: Vec3 = Vec3::new(-0.4, -1.0, 0.05);
 /// Imported humanoid articulation needs negative swing to draw its right shoulder rearward.
 const FIRING_TORSO_YAW: f32 = -0.84;
@@ -265,6 +266,16 @@ mod tests {
 		let roll = best_humerus_roll(&rig, Side::Right, reach, -HUMERUS_ROLL);
 		let lower = lower_arm_direction(&rig, Side::Right, reach, roll);
 		assert!(lower.dot(reach.lower_along) > 0.95, "{lower:?} vs {reach:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn right_elbow_pole_wings_out_and_down() -> Result<(), &'static str> {
+		let reach =
+			TwoBoneAim::reach(Vec3::Z * 0.7, RIGHT_POLE, 0.5, 0.5).ok_or("missing reach")?;
+		assert!(reach.upper_along.x < 0.0, "{reach:?}");
+		assert!(reach.upper_along.y < 0.0, "{reach:?}");
+		assert!((reach.upper_along.x.abs() - reach.upper_along.y.abs()).abs() < 1e-4, "{reach:?}");
 		Ok(())
 	}
 
