@@ -30,6 +30,23 @@ impl MovementLocation {
 		self.contains_xz(other) && (other.y - self.point.y).abs() <= self.vertical_slop()
 	}
 
+	/// Whether `other` crossed the XZ plane through this point along the segment
+	/// from `segment_start`, while remaining inside a bounded lateral corridor.
+	pub fn crossed_xz_from(self, segment_start: Vec3, other: Vec3, corridor: f32) -> bool {
+		if (other.y - self.point.y).abs() > self.vertical_slop() {
+			return false;
+		}
+		let incoming = self.point.xz() - segment_start.xz();
+		let length = incoming.length();
+		if length <= 1e-4 {
+			return false;
+		}
+		let offset = other.xz() - self.point.xz();
+		let crossed_plane = offset.dot(incoming) >= 0.0;
+		let lateral_distance = offset.perp_dot(incoming).abs() / length;
+		crossed_plane && lateral_distance <= corridor.max(0.0)
+	}
+
 	pub fn vertical_slop(self) -> f32 {
 		(self.radius + 0.45).max(0.7)
 	}
@@ -95,6 +112,16 @@ mod tests {
 		let wish = loc.xz_wish_from(Vec3::ZERO);
 		assert!((wish.x - 1.0).abs() < 1e-4, "{wish}");
 		assert!(wish.y.abs() < 1e-6);
+		Ok(())
+	}
+
+	#[test]
+	fn crossed_xz_requires_the_plane_corridor_and_height() -> anyhow::Result<()> {
+		let loc = MovementLocation::new(Vec3::X, 0.1);
+		assert!(loc.crossed_xz_from(Vec3::ZERO, Vec3::new(1.2, 0.0, 0.2), 0.4));
+		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(1.2, 0.0, 0.8), 0.4));
+		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(0.8, 0.0, 0.0), 0.4));
+		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(1.2, 2.0, 0.0), 0.4));
 		Ok(())
 	}
 

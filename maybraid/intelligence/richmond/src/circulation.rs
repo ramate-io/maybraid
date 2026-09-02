@@ -76,6 +76,28 @@ impl CirculationStairwell {
 			pts[start..].to_vec()
 		}
 	}
+
+	/// Polyline points from `from` toward a destination on this stair, stopping
+	/// approximately `standoff` metres of stair travel before it.
+	pub fn route_toward(&self, from: Vec3, destination: Vec3, standoff: f32) -> Vec<Vec3> {
+		if self.polyline.is_empty() {
+			return Vec::new();
+		}
+		let start = nearest_point_index(&self.polyline, from);
+		let goal = nearest_point_index(&self.polyline, destination);
+		let mut stop = goal;
+		let mut remaining = standoff.max(0.0);
+		while stop != start && remaining > 0.0 {
+			let next = if stop > start { stop - 1 } else { stop + 1 };
+			remaining -= self.polyline[stop].distance(self.polyline[next]);
+			stop = next;
+		}
+		if start <= stop {
+			self.polyline[start..=stop].to_vec()
+		} else {
+			self.polyline[stop..=start].iter().rev().copied().collect()
+		}
+	}
 }
 
 fn nearest_point_index(points: &[Vec3], from: Vec3) -> usize {
@@ -136,8 +158,18 @@ pub fn circulation_from_stairwell(
 		}
 	}
 	if let Some(lineup) = lineup {
-		// Approach the first flight centerline before climbing. This makes the
-		// route turn on the run-in slab instead of cutting across the ramp side.
+		// Use the bounded Manhattan corner between the mouth and lineup. Projecting
+		// the other way makes the route reverse onto the stairs; adding a run-in
+		// behind the lineup can push it outside the available floor and into a wall.
+		let mouth = polyline[0];
+		let travel = tread_points
+			.first()
+			.map(|first| (*first - lineup).with_y(0.0).normalize_or_zero())
+			.unwrap_or(Vec3::ZERO);
+		let corner = mouth + travel * (lineup - mouth).dot(travel);
+		if (corner - mouth).with_y(0.0).length() > 0.08 {
+			polyline.push(corner);
+		}
 		polyline.push(lineup);
 	}
 	polyline.extend(tread_points);
@@ -225,10 +257,25 @@ mod tests {
 		let last = link.polyline.last().copied().unwrap_or_default();
 		assert!(last.y > first.y + 1.0, "{} vs {}", last.y, first.y);
 		assert!(link.landing.y > link.mouth.y);
-		let lineup = link.polyline[1];
-		let first_tread = link.polyline[2];
+		let corner = link.polyline[1];
+		let lineup = link.polyline[2];
+		let first_tread = link.polyline[3];
 		let first_node = stairwell.stairs().first().expect("first flight");
 		let travel = (first_node.placement.rotation() * Vec3::X).with_y(0.0).normalize();
+		let outer_run = (corner - link.mouth).with_y(0.0).normalize();
+		let cross_run = (lineup - corner).with_y(0.0).normalize();
+		assert!(
+			outer_run.dot(cross_run).abs() < 1e-4,
+			"stair lead-up should use a right-angle turn: {outer_run}, {cross_run}"
+		);
+		assert!(
+			(corner - lineup).dot(travel).abs() < 1e-4,
+			"corner must not extend beyond the lineup along stair travel: {corner} vs {lineup}"
+		);
+		assert!(
+			corner.distance(link.mouth) <= lineup.distance(link.mouth),
+			"corner should remain inside the mouth-lineup bounds: {corner}"
+		);
 		let entry_direction = (first_tread - lineup).with_y(0.0).normalize();
 		assert!(
 			entry_direction.dot(travel) > 0.99,
@@ -250,6 +297,27 @@ mod tests {
 			(exit.xz() - face).dot(outward) > 0.6,
 			"exit should finish outside the well on the next floor: exit={exit}, face={face}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn route_toward_stops_on_the_stair_before_the_destination() -> anyhow::Result<()> {
+		let link = CirculationStairwell {
+			from_storey: 0,
+			to_storey: 1,
+			well: Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(4.0)),
+			mouth: Vec3::ZERO,
+			landing: Vec3::new(4.0, 4.0, 0.0),
+			polyline: (0..=4).map(|i| Vec3::new(i as f32, i as f32, 0.0)).collect(),
+		};
+		let route = link.route_toward(link.mouth, link.polyline[4], 1.5);
+		assert_eq!(route.first().copied(), Some(link.polyline[0]));
+		assert_eq!(route.last().copied(), Some(link.polyline[2]));
+		assert!(!route.contains(&link.landing));
+		let descending = link.route_toward(link.landing, link.mouth, 1.5);
+		assert_eq!(descending.first().copied(), Some(link.polyline[4]));
+		assert_eq!(descending.last().copied(), Some(link.polyline[2]));
+		assert!(!descending.contains(&link.mouth));
 		Ok(())
 	}
 

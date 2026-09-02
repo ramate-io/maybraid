@@ -82,6 +82,112 @@ impl RichmondAvianMovementSurface<'_, '_> {
 		}
 		Some(chain)
 	}
+
+	fn candidates_to_stair_goal<A: MovementSheet>(
+		&mut self,
+		from: MovementLocation,
+		from_id: u32,
+		exclude: &[Entity],
+		ability: &A,
+		objective: MovementObjective,
+		budget: CandidateBudget,
+		goal_link: &CirculationStairwell,
+		goal_walk: Vec3,
+	) -> Option<Vec<MovementCandidate<MovementStep>>> {
+		let from_walk = from.point - Vec3::Y * ability.feet_below_origin();
+		let on_link = self.link_on_actor(from_walk).cloned();
+		let already_on_goal = on_link.as_ref().is_some_and(|link| link == goal_link);
+		let entry_storey = if already_on_goal {
+			from_id
+		} else {
+			let lower_steps = from_id.abs_diff(goal_link.from_storey);
+			let upper_steps = from_id.abs_diff(goal_link.to_storey);
+			if lower_steps < upper_steps
+				|| (lower_steps == upper_steps
+					&& goal_walk.distance_squared(goal_link.mouth)
+						<= goal_walk.distance_squared(goal_link.landing))
+			{
+				goal_link.from_storey
+			} else {
+				goal_link.to_storey
+			}
+		};
+		let chain = if already_on_goal {
+			Vec::new()
+		} else {
+			self.climb_chain(from_id, entry_storey, from.point)?
+		};
+		let going_up = entry_storey > from_id;
+		let approach = chain
+			.first()
+			.map(|link| if going_up { link.mouth } else { link.landing })
+			.unwrap_or_else(|| {
+				if entry_storey == goal_link.from_storey {
+					goal_link.mouth
+				} else {
+					goal_link.landing
+				}
+			});
+		let approach_radius = (ability.agent_radius() * 0.75).clamp(0.25, 0.45);
+		let approach_loc = lift_location(approach, ability, approach_radius);
+		let prefixes = if already_on_goal || on_link.is_some() || approach_loc.contains(from.point)
+		{
+			vec![(Vec::new(), 0.0, MovementCandidateHints::default())]
+		} else {
+			let floor_y = self.storey(from_id).map(|storey| storey.floor_y).unwrap_or(from_walk.y);
+			mouth_prefixes(&self.avian, from, exclude, ability, approach_loc, budget, floor_y)
+		};
+
+		let climb_arrival = (ability.agent_radius() * 0.55).clamp(0.18, 0.3);
+		let mut route_steps = Vec::new();
+		let mut route_cost = 0.0;
+		let mut cursor_walk = if already_on_goal {
+			from_walk
+		} else if on_link.is_some() {
+			from_walk
+		} else {
+			approach
+		};
+		let mut cursor = if already_on_goal || on_link.is_some() {
+			from.point
+		} else {
+			lift_location(cursor_walk, ability, climb_arrival).point
+		};
+		for link in chain {
+			for point in link.oriented_polyline(going_up, cursor_walk) {
+				let location = lift_location(point, ability, climb_arrival);
+				route_cost += location.point.distance(cursor);
+				route_steps.push(MovementStep::MoveTo(location));
+				cursor = location.point;
+				cursor_walk = point;
+			}
+		}
+
+		if !already_on_goal {
+			cursor_walk = if entry_storey == goal_link.from_storey {
+				goal_link.mouth
+			} else {
+				goal_link.landing
+			};
+		}
+		for point in goal_link.route_toward(cursor_walk, goal_walk, objective.location().radius) {
+			let location = lift_location(point, ability, climb_arrival);
+			route_cost += location.point.distance(cursor);
+			route_steps.push(MovementStep::MoveTo(location));
+			cursor = location.point;
+		}
+
+		Some(
+			prefixes
+				.into_iter()
+				.take(budget.max_candidates.max(1))
+				.map(|(mut steps, prefix_cost, hints)| {
+					append_distinct_transit_steps(&mut steps, route_steps.iter().copied());
+					MovementCandidate::new(steps, prefix_cost + route_cost, hints)
+				})
+				.collect(),
+		)
+	}
 }
 
 trait XzDist {
@@ -110,6 +216,17 @@ where
 		let Some(from_id) = self.storey_at(from.point) else {
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		};
+		let from_walk = from.point - Vec3::Y * ability.feet_below_origin();
+		let goal_walk = goal - Vec3::Y * ability.feet_below_origin();
+		if ability.can_use_stairs() {
+			if let Some(goal_link) = self.link_on_actor(goal_walk).cloned() {
+				if let Some(candidates) = self.candidates_to_stair_goal(
+					from, from_id, exclude, ability, objective, budget, &goal_link, goal_walk,
+				) {
+					return candidates;
+				}
+			}
+		}
 		let Some(to_id) = self.storey_at(goal) else {
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		};
@@ -129,7 +246,6 @@ where
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		}
 
-		let from_walk = from.point - Vec3::Y * ability.feet_below_origin();
 		let on_stairs = self.link_on_actor(from_walk);
 		let chain = match (on_stairs, self.climb_chain(from_id, to_id, from.point)) {
 			(Some(link), _) if link_serves(link, from_id, to_id) => vec![link],
@@ -203,7 +319,7 @@ where
 					break;
 				}
 				let mut steps = prefix_steps.clone();
-				steps.extend(climb_steps.iter().copied());
+				append_distinct_transit_steps(&mut steps, climb_steps.iter().copied());
 				steps.extend(tail.clone().into_steps());
 				let hints = merge_hints(prefix_hints, tail.hints.as_candidate_hints());
 				out.push(MovementCandidate::new(
@@ -220,6 +336,23 @@ where
 fn link_serves(link: &CirculationStairwell, from_id: u32, to_id: u32) -> bool {
 	(link.from_storey == from_id && link.to_storey == to_id)
 		|| (link.from_storey == to_id && link.to_storey == from_id)
+}
+
+fn append_distinct_transit_steps(
+	steps: &mut Vec<MovementStep>,
+	additions: impl IntoIterator<Item = MovementStep>,
+) {
+	for step in additions {
+		let duplicate = match (steps.last(), step) {
+			(Some(MovementStep::MoveTo(previous)), MovementStep::MoveTo(next)) => {
+				previous.point.distance_squared(next.point) <= 1e-4
+			}
+			_ => false,
+		};
+		if !duplicate {
+			steps.push(step);
+		}
+	}
 }
 
 fn mouth_prefixes<A: MovementSheet>(
@@ -339,5 +472,20 @@ mod tests {
 		let merged = merge_hints(prefix, tail);
 		assert!((merged.fall_risk - 0.7).abs() < 1e-4);
 		assert!((merged.min_clearance - 0.5).abs() < 1e-4);
+	}
+
+	#[test]
+	fn composed_transit_steps_drop_duplicate_join_point() {
+		let join = Vec3::new(1.0, 2.0, 3.0);
+		let mut steps = vec![MovementStep::MoveTo(MovementLocation::new(join, 0.4))];
+		append_distinct_transit_steps(
+			&mut steps,
+			[
+				MovementStep::MoveTo(MovementLocation::new(join, 0.2)),
+				MovementStep::MoveTo(MovementLocation::new(join + Vec3::X, 0.2)),
+			],
+		);
+		assert_eq!(steps.len(), 2);
+		assert_eq!(steps[0], MovementStep::MoveTo(MovementLocation::new(join, 0.4)));
 	}
 }
