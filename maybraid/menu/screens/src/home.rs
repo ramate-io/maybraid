@@ -1,16 +1,16 @@
 //! Maybraid home screen: bottom-left title plus destination labels.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use maybraid_menu_controller::MenuController;
-use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
 use menu_components::single_select::text_cursor::TextCursorColumn;
-use menu_components::single_select::{republish_menu_activate, MenuFocus};
-use menu_components::{TextMenuPlugin, MENU_CLEAR};
+use menu_components::single_select::{MenuFocus, republish_menu_activate};
+use menu_components::{MENU_CLEAR, TextMenuPlugin};
 
+use crate::MenuScreen;
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
-use crate::MenuScreen;
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
 #[derive(Component, Debug, Clone, Copy)]

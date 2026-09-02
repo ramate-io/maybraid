@@ -5,8 +5,8 @@
 //! keyboard types into the same visible line. Submit emits [`ShortTextChange`].
 
 use bevy::ecs::event::EntityEvent;
-use bevy::input::keyboard::KeyboardInput;
 use bevy::input::ButtonState;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
@@ -20,11 +20,11 @@ use crate::theme::{
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 
+use super::HudFonts;
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
 use super::hud_menu::{HudMenu, HudMenuItem};
 use super::text::{spawn_cursor_slot_sized, spawn_hud_text};
-use super::HudFonts;
 
 /// IR / host key for a short-text field.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,11 +178,7 @@ fn spawn_short_text_line(
 }
 
 fn row_value_display(value: &str) -> String {
-	if value.is_empty() {
-		String::from("  —")
-	} else {
-		format!("  {value}")
-	}
+	if value.is_empty() { String::from("  —") } else { format!("  {value}") }
 }
 
 fn modal_value_display(value: &str) -> String {

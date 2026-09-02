@@ -376,5 +376,6 @@ pub enum MenuEvent {
 	SetAsset(CharacterField, AssetValue),
 	SliderDelta(CharacterField, f32),
 	ToggleClothing(ClothingMesh),
+	ToggleInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
 }

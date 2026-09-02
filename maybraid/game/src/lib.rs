@@ -11,9 +11,13 @@ use maybraid_input::{MenuNav, MenuNavPad};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
 use menu_components::{ActiveOverlayKey, MENU_CLEAR};
-use menu_playground::{CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin};
+use menu_playground::{
+	CharacterMenuState, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
+	request_show_character,
+};
 use menu_screens::{
-	GameMode, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin,
+	CreateCharacterPlugin, CreateCharacterReady, GameMode, HomeMenuChoice, HomeScreenPlugin,
+	InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen, request_show_create_character,
 };
 use std::path::{Path, PathBuf};
 
@@ -39,6 +43,7 @@ impl Plugin for GamePlugin {
 			.add_plugins((
 				HomeScreenPlugin,
 				InGameScreenPlugin,
+				CreateCharacterPlugin,
 				CharacterScreenPlugin,
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
@@ -60,6 +65,7 @@ impl Plugin for GamePlugin {
 				(
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
+					open_create_character_hud.run_if(in_state(GameFlow::Characters)),
 					character_back_to_home.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
 						.after(CharacterControlSystems)
@@ -114,11 +120,23 @@ fn toggle_world_pause(
 	}
 }
 
+fn open_create_character_hud(
+	mut ready: MessageReader<CreateCharacterReady>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	mut commands: Commands,
+) {
+	let Some(ready) = ready.read().last() else {
+		return;
+	};
+	*menu_state = CharacterMenuState::for_create(ready.items.clone());
+	request_show_character(&mut commands);
+}
+
 fn character_back_to_home(
 	mut flow: ResMut<NextState<GameFlow>>,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
-	screens: Query<(), With<CharacterScreen>>,
+	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
 ) {
 	if screens.is_empty() || overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
 		return;

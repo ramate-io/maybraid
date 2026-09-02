@@ -161,6 +161,18 @@ pub struct ItemRow<E> {
 	pub materials: Vec<SelectChoice<E>>,
 }
 
+/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
+/// (Maybraid son), not by exclusive single-select.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GridCatalogChoice<E> {
+	pub label: String,
+	pub path: &'static str,
+	pub thumbnail_camera: ThumbnailCamera,
+	pub preview: PreviewColor,
+	pub selected: bool,
+	pub event: E,
+}
+
 /// Renderer-agnostic menu tree. Generic over the host event type `E`, which is
 /// embedded in leaves at lowering time; renderers forward it verbatim.
 #[derive(Clone, Debug, PartialEq)]
@@ -186,6 +198,8 @@ pub enum MenuNode<E> {
 	/// Block-labeled multi-select of items, each row pairing a toggle button
 	/// with color swatches and look tiles (e.g. clothing layers).
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
+	/// Wrapping grid of owned items with a selection cap (`max_selected`).
+	GridCatalog { label: &'static str, max_selected: usize, choices: Vec<GridCatalogChoice<E>> },
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.
 	ShortText { label: &'static str, value: String, max_len: usize },
@@ -296,6 +310,15 @@ impl<E> MenuNode<E> {
 				.map(|value| AssetChoice::new(*value, *value == select.value, event(*value)))
 				.collect(),
 		}
+	}
+
+	/// Owned-item grid. `max_selected` is the wear/equip cap the host enforces.
+	pub fn grid_catalog(
+		label: &'static str,
+		max_selected: usize,
+		choices: impl IntoIterator<Item = GridCatalogChoice<E>>,
+	) -> Self {
+		Self::GridCatalog { label, max_selected, choices: choices.into_iter().collect() }
 	}
 
 	/// Short typed label; `max_len` is a hard cap on the stored value.

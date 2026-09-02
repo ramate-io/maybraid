@@ -18,7 +18,7 @@ pub use characters::{
 	wumbus::WumbusMenu, ylter::YilterMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
-pub use focus::BODY_FOCUS;
+pub use focus::{spin_reveal_focus, BODY_FOCUS, SPIN_REVEAL_FOCUS};
 
 pub use character_ui_menu::{AssetOption, LabelOption, ListValues, StringIdentified, SwatchOption};
 

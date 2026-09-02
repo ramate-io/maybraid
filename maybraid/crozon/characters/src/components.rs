@@ -88,16 +88,29 @@ impl ClothingLayer {
 	}
 
 	pub fn part_node(&self) -> PartNode {
-		PartNode::glb(
+		self.part_node_skinned(true)
+	}
+
+	/// Bind-pose mesh with no body armature — used for isolated item previews.
+	pub fn preview_part_node(&self) -> PartNode {
+		self.part_node_skinned(false)
+	}
+
+	fn part_node_skinned(&self, skinned: bool) -> PartNode {
+		let node = PartNode::glb(
 			CharacterPartSlot::Clothing,
 			self.mesh.label(),
 			self.mesh.path_on(self.host),
 			AssetNormalization::IDENTITY,
 		)
-		.skinned(SkinRef::to(RigId::Body))
 		.with_material(
 			MaterialRef::named(self.material.recipe_id()).with_palette([self.color.color()]),
-		)
+		);
+		if skinned {
+			node.skinned(SkinRef::to(RigId::Body))
+		} else {
+			node
+		}
 	}
 }
 

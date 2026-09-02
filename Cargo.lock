@@ -4630,6 +4630,7 @@ dependencies = [
  "camera-controls",
  "character-ui-menu",
  "clap",
+ "crozon-character-items",
  "crozon-character-playground",
  "crozon-character-ui-menus",
  "crozon-characters",
@@ -4647,6 +4648,7 @@ name = "menu-screens"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "crozon-character-items",
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",

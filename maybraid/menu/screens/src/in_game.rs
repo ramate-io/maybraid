@@ -1,13 +1,13 @@
 //! In-game pause menu: centered actions plus upper-left brand / mode.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::{Scene, bsn};
 use maybraid_menu_controller::MenuController;
 use menu_components::single_select::republish_menu_activate;
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::{
-	set_brand_mode_title, BrandModeLine, BrandModeTitle, TextColumnAlign, TextColumnAnchor,
-	TextMenuPlugin,
+	BrandModeLine, BrandModeTitle, TextColumnAlign, TextColumnAnchor, TextMenuPlugin,
+	set_brand_mode_title,
 };
 
 use crate::input::add_menu_input;

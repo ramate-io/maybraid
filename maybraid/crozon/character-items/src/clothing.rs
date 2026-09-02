@@ -11,7 +11,6 @@ const CLOTHING_SHORT_DRESS: &str = "characters/clothes/body/short_dress.glb";
 const CLOTHING_FITTED_COAT: &str = "characters/clothes/body/fitted_coat.glb";
 const CLOTHING_ROBE_COAT: &str = "characters/clothes/body/robe_coat.glb";
 const CLOTHING_ROBE: &str = "characters/clothes/body/robe.glb";
-const CLOTHING_HOOD: &str = "characters/clothes/head/hood.glb";
 const CLOTHING_PANTS: &str = "characters/clothes/body/pants.glb";
 const CLOTHING_KNEE_HIGH_BOOTS: &str = "characters/clothes/body/knee_high_boots.glb";
 const CLOTHING_HAREM_PANTS: &str = "characters/clothes/body/harem_pants_unified.glb";
@@ -81,6 +80,25 @@ impl ClothingHost {
 	}
 }
 
+/// Catalog role. Wear rules stay open; generation and preview framing use this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ClothingKind {
+	Lower,
+	Upper,
+	Full,
+	Footwear,
+}
+
+impl ClothingKind {
+	/// Meshes the starter roll may pick for a lower.
+	pub const STARTER_LOWERS: &'static [ClothingMesh] =
+		&[ClothingMesh::HaremPants, ClothingMesh::Pants];
+
+	/// Meshes the starter roll may pick for an upper.
+	pub const STARTER_UPPERS: &'static [ClothingMesh] =
+		&[ClothingMesh::TankTop, ClothingMesh::Tunic];
+}
+
 /// Shared clothing catalog; layers compose across species.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClothingMesh {
@@ -91,7 +109,6 @@ pub enum ClothingMesh {
 	FittedCoat,
 	RobeCoat,
 	Robe,
-	Hood,
 	Pants,
 	KneeHighBoots,
 	HaremPants,
@@ -108,7 +125,6 @@ impl ClothingMesh {
 		Self::FittedCoat,
 		Self::RobeCoat,
 		Self::Robe,
-		Self::Hood,
 		Self::Pants,
 		Self::KneeHighBoots,
 		Self::HaremPants,
@@ -125,7 +141,6 @@ impl ClothingMesh {
 			Self::FittedCoat => "fitted-coat",
 			Self::RobeCoat => "robe-coat",
 			Self::Robe => "robe",
-			Self::Hood => "hood",
 			Self::Pants => "pants",
 			Self::KneeHighBoots => "knee-high-boots",
 			Self::HaremPants => "harem-pants",
@@ -143,7 +158,6 @@ impl ClothingMesh {
 			Self::FittedCoat => "fitted_coat",
 			Self::RobeCoat => "robe_coat",
 			Self::Robe => "robe",
-			Self::Hood => "hood",
 			Self::Pants => "pants",
 			Self::KneeHighBoots => "knee_high_boots",
 			Self::HaremPants => "harem_pants_unified",
@@ -153,14 +167,21 @@ impl ClothingMesh {
 	}
 
 	pub const fn slot(self) -> ClothingSlot {
+		ClothingSlot::Body
+	}
+
+	pub const fn kind(self) -> ClothingKind {
 		match self {
-			Self::Hood => ClothingSlot::Head,
-			_ => ClothingSlot::Body,
+			Self::Pants | Self::HaremPants | Self::HaremPantsLowerWrap => ClothingKind::Lower,
+			Self::TankTop | Self::Tunic | Self::HaremPantsUpper | Self::FittedCoat => {
+				ClothingKind::Upper
+			}
+			Self::KneeHighBoots => ClothingKind::Footwear,
+			Self::LongDress | Self::ShortDress | Self::RobeCoat | Self::Robe => ClothingKind::Full,
 		}
 	}
 
 	/// Body garments with per-host fitted GLBs under `clothes/body/{host}/`.
-	/// The hood stays on the unfitted head catalog path.
 	pub const fn uses_host_fit(self) -> bool {
 		matches!(self.slot(), ClothingSlot::Body)
 	}
@@ -175,7 +196,6 @@ impl ClothingMesh {
 			Self::FittedCoat => CLOTHING_FITTED_COAT,
 			Self::RobeCoat => CLOTHING_ROBE_COAT,
 			Self::Robe => CLOTHING_ROBE,
-			Self::Hood => CLOTHING_HOOD,
 			Self::Pants => CLOTHING_PANTS,
 			Self::KneeHighBoots => CLOTHING_KNEE_HIGH_BOOTS,
 			Self::HaremPants => CLOTHING_HAREM_PANTS,
@@ -284,25 +304,16 @@ mod tests {
 	#[test]
 	fn every_body_garment_uses_host_fit() {
 		for clothing in ClothingMesh::VALUES {
-			if clothing.slot() == ClothingSlot::Body {
-				assert!(clothing.uses_host_fit(), "{}", clothing.label());
-				assert_eq!(
-					clothing.path_on(ClothingHost::IGEO),
-					format!(
-						"characters/clothes/body/igeo_biped_full_body/{}.glb",
-						clothing.file_stem()
-					)
-				);
-			} else {
-				assert!(!clothing.uses_host_fit(), "{}", clothing.label());
-				assert_eq!(clothing.path_on(ClothingHost::IGEO), clothing.path());
-			}
+			assert_eq!(clothing.slot(), ClothingSlot::Body);
+			assert!(clothing.uses_host_fit(), "{}", clothing.label());
+			assert_eq!(
+				clothing.path_on(ClothingHost::IGEO),
+				format!(
+					"characters/clothes/body/igeo_biped_full_body/{}.glb",
+					clothing.file_stem()
+				)
+			);
 		}
-	}
-
-	#[test]
-	fn hood_ignores_body_host() {
-		assert_eq!(ClothingMesh::Hood.path_on(ClothingHost::IGEO), ClothingMesh::Hood.path());
 	}
 
 	#[test]
@@ -311,5 +322,15 @@ mod tests {
 			ClothingMesh::TankTop.path_on(ClothingHost::Canonical),
 			ClothingMesh::TankTop.path()
 		);
+	}
+
+	#[test]
+	fn starter_pools_match_kinds() {
+		for mesh in ClothingKind::STARTER_LOWERS {
+			assert_eq!(mesh.kind(), ClothingKind::Lower);
+		}
+		for mesh in ClothingKind::STARTER_UPPERS {
+			assert_eq!(mesh.kind(), ClothingKind::Upper);
+		}
 	}
 }

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy::text::FontSourceTemplate;
+use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::icons::maybraid::AnimatedIcon;
 
@@ -10,7 +10,8 @@ use super::text_menu::{
 	TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem, TextMenuItemLabel,
 };
 use crate::theme::{
-	BARLOW_SEMIBOLD, CURSOR_ICON_GAP, CURSOR_ICON_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW,
+	BARLOW_SEMIBOLD, CURSOR_ICON_GAP, CURSOR_ICON_SIZE, DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 /// Marker on a text-cursor column. Shares [`TextMenu`] selection with the plain column.
@@ -84,6 +85,72 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			template_value(node)
 			Children [ {children} ]
 		}
+	}
+}
+
+/// Cursor-marked action plus a separate caption under it (e.g. Next + progress).
+///
+/// The mark lives on the label row only, same as [`TextCursorColumn`]. Subtext is
+/// its own node, indented to line up with the title.
+pub struct ButtonWithSubtext<E> {
+	pub label: String,
+	pub subtext: String,
+	pub action: E,
+	pub anchor: TextColumnAnchor,
+}
+
+impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSubtext<E> {
+	pub fn new(label: impl Into<String>, subtext: impl Into<String>, action: E) -> Self {
+		Self {
+			label: label.into(),
+			subtext: subtext.into(),
+			action,
+			anchor: TextColumnAnchor::BottomRight,
+		}
+	}
+
+	pub fn anchored(mut self, anchor: TextColumnAnchor) -> Self {
+		self.anchor = anchor;
+		self
+	}
+
+	pub fn scene(self) -> impl Scene + 'static {
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(cursor_item_scene(
+				TextMenuItem::yellow(0),
+				self.label,
+				self.action,
+				TextColumnAlign::Start,
+			)),
+			Box::new(subtext_caption_scene(self.subtext)),
+		];
+		let node = self.anchor.node(TextColumnAlign::Start);
+		bsn! {
+			TextCursorMenu
+			template_value(TextMenu::new(1))
+			template_value(node)
+			Children [ {children} ]
+		}
+	}
+}
+
+fn subtext_caption_scene(subtext: String) -> impl Scene + 'static {
+	let margin = UiRect { left: Val::Px(CURSOR_ICON_SIZE + CURSOR_ICON_GAP), ..default() };
+	bsn! {
+		Node {
+			margin: margin,
+		}
+		Pickable::IGNORE
+		Children [(
+			template_value(Text::new(subtext))
+			TextFont {
+				font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
+				font_size: px(DESCRIPTION_FONT_SIZE),
+			}
+			TextColor(TEXT_YELLOW_FAINT)
+			TextLayout::new(Justify::Left, bevy::text::LineBreak::NoWrap)
+			Pickable::IGNORE
+		)]
 	}
 }
 

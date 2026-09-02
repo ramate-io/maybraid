@@ -8,8 +8,8 @@ use crate::theme::{
 	TEXT_YELLOW_HOVER,
 };
 
-use super::display::menu_display_name;
 use super::HudFonts;
+use super::display::menu_display_name;
 
 const TILE_LABEL_MAX_CHARS: usize = 16;
 
@@ -67,6 +67,72 @@ pub fn spawn_asset_tile(
 				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 				TextBounds::new(bounds, bounds),
+				Pickable::IGNORE,
+			));
+		});
+}
+
+/// Pickable catalog cell. Selected cells show the Maybraid son instead of a
+/// yellow border.
+pub fn spawn_grid_catalog_tile(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	label: &str,
+	selected: bool,
+	thumbnail: Option<Handle<Image>>,
+	extra: impl Bundle,
+) {
+	parent
+		.spawn((
+			Button,
+			extra,
+			Node {
+				min_width: Val::Px(PANEL_TILE_MIN_WIDTH),
+				min_height: Val::Px(PANEL_TILE_MIN_HEIGHT),
+				padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+				flex_direction: FlexDirection::Column,
+				justify_content: JustifyContent::Center,
+				align_items: AlignItems::Center,
+				row_gap: Val::Px(PANEL_CHIP_GAP),
+				..default()
+			},
+			BackgroundColor(Color::NONE),
+		))
+		.with_children(|button| {
+			button
+				.spawn((
+					Node {
+						width: Val::Px(54.0),
+						height: Val::Px(54.0),
+						justify_content: JustifyContent::Center,
+						align_items: AlignItems::Center,
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|slot| {
+					if let Some(thumbnail) = thumbnail {
+						slot.spawn((
+							ImageNode::new(thumbnail),
+							Node { width: Val::Px(54.0), height: Val::Px(54.0), ..default() },
+							Pickable::IGNORE,
+						));
+					}
+					if selected {
+						crate::icons::Icon::maybraid(22.0, TEXT_YELLOW).spawn(
+							slot,
+							fonts.logo.clone(),
+							Visibility::Inherited,
+						);
+					}
+				});
+			let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
+			button.spawn((
+				Text::new(label),
+				fonts.item(PANEL_ITEM_FONT_SIZE),
+				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
+				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+				TextBounds::new(bounds, bounds * 1.6),
 				Pickable::IGNORE,
 			));
 		});

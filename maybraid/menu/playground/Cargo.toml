@@ -15,6 +15,7 @@ camera-controls = { workspace = true }
 character-ui-menu = { workspace = true }
 clap = { workspace = true }
 crozon-character-playground = { workspace = true }
+crozon-character-items = { workspace = true }
 crozon-character-ui-menus = { workspace = true }
 crozon-characters = { workspace = true }
 game-commands = { workspace = true }

@@ -10,8 +10,9 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::theme::{
-	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, HEADER_FONT_SIZE,
-	HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
+	HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW,
+	TEXT_YELLOW_HOVER,
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 
@@ -159,6 +160,8 @@ pub enum TextColumnAnchor {
 	/// Home-style: inset from the bottom-left.
 	#[default]
 	BottomLeft,
+	/// Inset from the bottom-right.
+	BottomRight,
 	/// Pause-style: shrink-wrap and let the parent flex-center this node.
 	Center,
 }
@@ -204,6 +207,15 @@ impl TextColumnAnchor {
 				position_type: PositionType::Absolute,
 				left: Val::Px(COLUMN_INSET),
 				bottom: Val::Px(COLUMN_BOTTOM),
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
+			Self::BottomRight => Node {
+				position_type: PositionType::Absolute,
+				right: Val::Px(CORNER_INSET),
+				bottom: Val::Px(CORNER_BOTTOM),
 				flex_direction: FlexDirection::Column,
 				align_items,
 				row_gap: Val::Px(ITEM_ROW_GAP),

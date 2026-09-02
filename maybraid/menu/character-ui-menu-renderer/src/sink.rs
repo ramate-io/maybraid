@@ -2,14 +2,14 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SwatchChoice,
-	ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
+	SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_group_label, spawn_hud_text, spawn_labeled_row, spawn_section_header,
-	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
-	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_LABEL_FONT_SIZE,
-	PANEL_ROW_GAP, TEXT_YELLOW,
+	HudFonts, HudMenu, HudMenuItem, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, ShortTextField,
+	ShortTextKey, TEXT_YELLOW, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
+	spawn_hud_text, spawn_labeled_row, spawn_section_header, spawn_short_text_button,
+	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
 };
 
 use crate::justify::MenuJustify;
@@ -183,6 +183,13 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					self.header(parent, context, label, Some(overlay_summary_value(node)));
 				}
 			}
+			MenuNode::GridCatalog { label, choices, .. } => {
+				if self.interior {
+					self.grid_catalog(choices, parent, context);
+				} else {
+					self.header(parent, context, label, Some(overlay_summary_value(node)));
+				}
+			}
 			MenuNode::ShortText { label, value, max_len } => {
 				self.short_text(parent, context, label, value, *max_len);
 			}
@@ -290,6 +297,27 @@ impl MaybraidMenuSink {
 		}
 	}
 
+	fn grid_catalog<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		choices: &[GridCatalogChoice<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		spawn_tile_grid(parent, self.justify.content(), |grid| {
+			for choice in choices {
+				let thumbnail = grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
+				spawn_grid_catalog_tile(
+					grid,
+					context.fonts,
+					&choice.label,
+					choice.selected,
+					thumbnail,
+					(MenuButton(choice.event), context.stamp_hud_item()),
+				);
+			}
+		});
+	}
+
 	fn item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		&self,
 		row: &ItemRow<E>,
@@ -348,20 +376,31 @@ pub(crate) fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailC
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
-	if context.asset_thumbnails != AssetThumbnailDisplay::None && !choice.path.is_empty() {
-		context.prewarm.push(ThumbnailRequest::new(
-			choice.path,
-			color_key(preview),
-			choice.thumbnail_camera,
-		));
+	thumbnail_image(choice.label, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+	choice: &GridCatalogChoice<E>,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	thumbnail_image(choice.path, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn thumbnail_image<C: MenuThumbnailContext>(
+	label: &'static str,
+	path: &'static str,
+	camera: character_ui_menu::ThumbnailCamera,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	if context.asset_thumbnails != AssetThumbnailDisplay::None && !path.is_empty() {
+		context.prewarm.push(ThumbnailRequest::new(path, color_key(preview), camera));
 	}
 	match context.asset_thumbnails {
-		AssetThumbnailDisplay::Inline => context.thumbnails.image_for_asset(
-			choice.label,
-			choice.path,
-			preview,
-			choice.thumbnail_camera,
-		),
+		AssetThumbnailDisplay::Inline => {
+			context.thumbnails.image_for_asset(label, path, preview, camera)
+		}
 		_ => None,
 	}
 }

@@ -5,8 +5,9 @@ use crozon_characters::species::{
 };
 
 use crate::{
-	character::CharacterMenu,
+	character::{CharacterMenu, ConceptSpecies},
 	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
+	MenuEvent,
 };
 
 #[test]
@@ -436,5 +437,57 @@ fn body_color_syncs_skin() -> anyhow::Result<()> {
 	assert_eq!(config.colors.body, ItemColor::Warm);
 	assert_eq!(config.colors.head, ItemColor::Warm);
 	assert_eq!(config.colors.nose, ItemColor::Warm);
+	Ok(())
+}
+
+#[test]
+fn create_menu_restricts_species_to_humanoids() -> anyhow::Result<()> {
+	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+
+	let items = vec![InventoryItem::clothing(
+		ClothingMesh::TankTop,
+		ClothingMaterial::Cloth,
+		ItemColor::Natural,
+	)];
+	let mut menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let MenuNode::SectionSelect { groups, .. } = &nodes[1] else {
+		anyhow::bail!("expected species SectionSelect");
+	};
+	assert_eq!(groups.len(), 1);
+	assert_eq!(groups[0].choices.len(), ConceptSpecies::HUMANOIDS.len());
+	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brenal)));
+	assert_eq!(menu.species.value, ConceptSpecies::Braidman);
+	assert!(menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brodler)));
+	assert_eq!(menu.species.value, ConceptSpecies::Brodler);
+	Ok(())
+}
+
+#[test]
+fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
+	use crozon_character_items::{
+		ClothingMaterial, ClothingMesh, InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
+	};
+
+	let items: Vec<_> = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Hawaiian, ItemColor::Red),
+	];
+	let expected_name = items[0].name();
+	let mut menu = CharacterMenu::for_create(items);
+	let nodes = menu.braidman.clothing.value.menu_nodes();
+	let MenuNode::GridCatalog { max_selected, choices, .. } = &nodes[0] else {
+		anyhow::bail!("expected clothing to lower to a GridCatalog");
+	};
+	assert_eq!(*max_selected, WORN_CLOTHING_LIMIT);
+	assert_eq!(choices.len(), 3);
+	assert!(choices[0].selected);
+	assert!(choices[1].selected);
+	assert!(!choices[2].selected);
+	assert_eq!(choices[0].label, expected_name);
+	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
+	assert!(!menu.inventory.as_ref().expect("create inventory").is_worn(0));
+	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Hars)));
 	Ok(())
 }

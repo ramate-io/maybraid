@@ -23,11 +23,12 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_input::VirtualPadPlugin;
 use maybraid_menu_controller::MenuControllerPlugin;
 use menu_screens::{
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems,
+	CreateCharacterPlugin, CreateCharacterReady, HomeMenuChoice, HomeScreenPlugin,
+	InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems,
+	SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -48,11 +49,12 @@ impl Plugin for MenuPlaygroundPlugin {
 			toggle_keys: Vec::new(),
 			..CameraLookConfig::default()
 		}))
-		.add_plugins(VirtualPadPlugin::new(VirtualPadConfig { debug_overlay: true, ..default() }))
+		.add_plugins(VirtualPadPlugin::default())
 		.add_plugins((
 			HomeScreenPlugin,
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
+			CreateCharacterPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
 			MenuControllerPlugin,
@@ -68,6 +70,7 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_home_choice,
 				echo_in_game_choice,
 				echo_character_menu,
+				open_create_character_hud,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -84,7 +87,9 @@ fn add_lod_viewer_to_camera(
 	}
 }
 
-fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
+fn character_screen_closed(
+	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
+) -> bool {
 	screens.is_empty()
 }
 
@@ -121,4 +126,16 @@ fn echo_character_menu(
 			}
 		}
 	}
+}
+
+fn open_create_character_hud(
+	mut ready: MessageReader<CreateCharacterReady>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	mut commands: Commands,
+) {
+	let Some(ready) = ready.read().last() else {
+		return;
+	};
+	*menu_state = CharacterMenuState::for_create(ready.items.clone());
+	request_show_character(&mut commands);
 }

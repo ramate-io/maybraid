@@ -1,7 +1,7 @@
 //! Description copy in the remainder of the screen, to the right of the menu.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
