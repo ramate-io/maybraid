@@ -6,7 +6,7 @@ Braidman on a flat range. Pad / WASD drives the character controller. The held b
 cargo run -p firing-range-playground
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. In first person the weapon tracks look and the body turns once look leaves a 60° cone. `/` then `pause` / `resume`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. First person uses a wider hipfire FOV (~75° vertical) and tightens toward the sight on focus. In first person the weapon tracks look and the body turns once look leaves a 60° cone. `/` then `pause` / `resume`.
 
 The held bullpup pins its authored `stock` socket to the trigger shoulder. Yaw tracks look within the configured body-facing limit; pitch matches the camera. Kit meshes are meter-authored and uniformly scaled down to ~0.7 m.
 

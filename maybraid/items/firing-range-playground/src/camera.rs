@@ -35,6 +35,12 @@ pub struct CameraController {
 /// Free look relative to the body before the torso has to follow.
 const MAX_LOOK_YAW: f32 = 60.0_f32.to_radians();
 const BODY_TURN_RATE: f32 = 8.0;
+/// Bevy default; keep the third-person orbit cinematic.
+const THIRD_PERSON_FOV: f32 = 45.0_f32.to_radians();
+/// Hipfire ≈ Source/Quake 90° on 16:9 Hor+ (~74° vertical).
+const FIRST_PERSON_FOV: f32 = 75.0_f32.to_radians();
+/// Mild iron-sight zoom from hipfire.
+const SIGHT_FOV: f32 = 50.0_f32.to_radians();
 
 pub(crate) fn setup_camera(mut commands: Commands) {
 	// Behind the player, looking downrange (+X). Follow overwrites translation.
@@ -44,7 +50,12 @@ pub(crate) fn setup_camera(mut commands: Commands) {
 		Camera3d::default(),
 		lod::LodViewer,
 		Transform::from_translation(Vec3::new(-3.6, 1.8, 0.0)).looking_at(Vec3::Y * 0.65, Vec3::Y),
-		Projection::Perspective(PerspectiveProjection { near: 0.05, far: 4000.0, ..default() }),
+		Projection::Perspective(PerspectiveProjection {
+			fov: THIRD_PERSON_FOV,
+			near: 0.05,
+			far: 4000.0,
+			..default()
+		}),
 		CameraController {
 			sensitivity: 0.005,
 			yaw,
@@ -102,6 +113,25 @@ pub(crate) fn turn_body_with_look(
 		set_body_yaw(&mut visual, body + applied);
 	}
 	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&visual), MAX_LOOK_YAW);
+}
+
+pub(crate) fn sync_camera_fov(
+	mut cameras: Query<(&CameraController, &mut Projection), With<Camera3d>>,
+) {
+	let Ok((controller, mut projection)) = cameras.single_mut() else {
+		return;
+	};
+	let Projection::Perspective(perspective) = projection.as_mut() else {
+		return;
+	};
+	perspective.fov = vertical_fov(controller.pov, controller.focus_blend);
+}
+
+fn vertical_fov(pov: CameraPov, focus_blend: f32) -> f32 {
+	match pov {
+		CameraPov::ThirdPerson => THIRD_PERSON_FOV,
+		CameraPov::FirstPerson => FIRST_PERSON_FOV + (SIGHT_FOV - FIRST_PERSON_FOV) * focus_blend,
+	}
 }
 
 /// Camera yaw of mesh +Z (`-forward()`), matching `face_player` / gun facing.
@@ -175,5 +205,24 @@ mod tests {
 		let target = follow_body_yaw(look, body, MAX_LOOK_YAW);
 		assert!(target < look);
 		assert!((clamp_look_yaw(look, target, MAX_LOOK_YAW) - look).abs() < 1e-4);
+	}
+
+	#[test]
+	fn first_person_hipfire_is_wider_than_orbit() {
+		assert!(
+			vertical_fov(CameraPov::FirstPerson, 0.0) > vertical_fov(CameraPov::ThirdPerson, 0.0)
+		);
+		assert!((vertical_fov(CameraPov::FirstPerson, 0.0) - FIRST_PERSON_FOV).abs() < 1e-5);
+		assert!((vertical_fov(CameraPov::ThirdPerson, 1.0) - THIRD_PERSON_FOV).abs() < 1e-5);
+	}
+
+	#[test]
+	fn sight_focus_narrows_first_person_fov() {
+		assert!(
+			vertical_fov(CameraPov::FirstPerson, 1.0) < vertical_fov(CameraPov::FirstPerson, 0.0)
+		);
+		assert!((vertical_fov(CameraPov::FirstPerson, 1.0) - SIGHT_FOV).abs() < 1e-5);
+		let mid = vertical_fov(CameraPov::FirstPerson, 0.5);
+		assert!((mid - (FIRST_PERSON_FOV + SIGHT_FOV) * 0.5).abs() < 1e-5);
 	}
 }
