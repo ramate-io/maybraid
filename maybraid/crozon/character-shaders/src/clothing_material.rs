@@ -93,11 +93,9 @@ impl Material for ClothingShaderMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
-		if self.params.kind == KIND_TATTERED {
-			AlphaMode::Mask(0.15)
-		} else {
-			AlphaMode::Opaque
-		}
+		// Tattered chews holes with fragment `discard` (Chico leaf cheese).
+		// Opaque ignores alpha, so Mask would never punch through.
+		AlphaMode::Opaque
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {

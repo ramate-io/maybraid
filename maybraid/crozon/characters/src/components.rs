@@ -48,12 +48,12 @@ pub trait CharacterRecipe {
 pub fn clothing_layers(
 	clothing: impl IntoIterator<Item = ClothingMesh>,
 	host: ClothingHost,
-	material: ClothingMaterial,
+	mut material: impl FnMut(ClothingMesh) -> ClothingMaterial,
 	mut color: impl FnMut(ClothingMesh) -> ItemColor,
 ) -> Vec<ClothingLayer> {
 	clothing
 		.into_iter()
-		.map(|mesh| ClothingLayer::new(mesh, color(mesh), host).with_material(material))
+		.map(|mesh| ClothingLayer::new(mesh, color(mesh), host).with_material(material(mesh)))
 		.collect()
 }
 

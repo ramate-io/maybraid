@@ -75,6 +75,7 @@ impl From<&ChupriConfig> for ChupriMenu {
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
 					config.colors.clothing_material,
+					config.colors.clothing_materials.clone(),
 				),
 			)
 			.with_camera_focus(CHUPRI_BODY_FOCUS),
@@ -97,6 +98,7 @@ impl From<&ChupriMenu> for ChupriConfig {
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
 				clothing_material: menu.clothing.value.material.value,
+				clothing_materials: menu.clothing.value.item_materials.clone(),
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -191,7 +193,7 @@ impl ChupriMenu {
 			CharacterField::ChupriBeak => self.head_features.value.beak.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
 			CharacterField::Clothing(_)
-			| CharacterField::ClothingMaterial
+			| CharacterField::ClothingMaterial(_)
 			| CharacterField::Animation => Some(CHUPRI_BODY_FOCUS),
 			_ => None,
 		}

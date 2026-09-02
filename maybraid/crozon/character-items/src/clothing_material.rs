@@ -2,6 +2,8 @@
 
 use clap::ValueEnum;
 
+use crate::clothing::ClothingMesh;
+
 /// Named clothing looks. Palette[0] is the user color; the recipe is the shader.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClothingMaterial {
@@ -65,6 +67,39 @@ impl ClothingMaterial {
 	}
 }
 
+/// Per-layer surface override; falls back to the default recipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClothingMaterialChoice {
+	pub clothing: ClothingMesh,
+	pub material: ClothingMaterial,
+}
+
+impl ClothingMaterialChoice {
+	pub fn resolve(
+		overrides: &[ClothingMaterialChoice],
+		default: ClothingMaterial,
+		clothing: ClothingMesh,
+	) -> ClothingMaterial {
+		overrides
+			.iter()
+			.find(|choice| choice.clothing == clothing)
+			.map(|choice| choice.material)
+			.unwrap_or(default)
+	}
+
+	pub fn set(
+		overrides: &mut Vec<ClothingMaterialChoice>,
+		clothing: ClothingMesh,
+		material: ClothingMaterial,
+	) {
+		if let Some(choice) = overrides.iter_mut().find(|choice| choice.clothing == clothing) {
+			choice.material = material;
+		} else {
+			overrides.push(ClothingMaterialChoice { clothing, material });
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -75,5 +110,33 @@ mod tests {
 			assert!(ClothingMaterial::is_clothing_recipe(material.recipe_id()));
 			assert!(!material.label().is_empty());
 		}
+	}
+
+	#[test]
+	fn per_item_choice_overrides_default() {
+		use crate::clothing::ClothingMesh;
+
+		let mut overrides = Vec::new();
+		ClothingMaterialChoice::set(
+			&mut overrides,
+			ClothingMesh::Tunic,
+			ClothingMaterial::Tattered,
+		);
+		assert_eq!(
+			ClothingMaterialChoice::resolve(
+				&overrides,
+				ClothingMaterial::Cloth,
+				ClothingMesh::Tunic
+			),
+			ClothingMaterial::Tattered
+		);
+		assert_eq!(
+			ClothingMaterialChoice::resolve(
+				&overrides,
+				ClothingMaterial::Cloth,
+				ClothingMesh::Pants
+			),
+			ClothingMaterial::Cloth
+		);
 	}
 }

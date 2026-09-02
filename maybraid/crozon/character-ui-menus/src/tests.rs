@@ -358,14 +358,18 @@ fn clothing_material_applies_to_braidman() -> anyhow::Result<()> {
 	use crate::{AssetValue, CharacterField, MenuEvent};
 
 	let mut menu = CharacterMenu::default();
-	assert_eq!(menu.braidman.clothing.value.material.value, ClothingMaterial::Cloth);
+	let tunic = ClothingMesh::Tunic;
+	assert!(menu.apply(MenuEvent::ToggleClothing(tunic)));
+	assert_eq!(menu.braidman.clothing.value.material_for(tunic), ClothingMaterial::Cloth);
 	assert!(menu.apply(MenuEvent::SetAsset(
-		CharacterField::ClothingMaterial,
+		CharacterField::ClothingMaterial(tunic),
 		AssetValue::ClothingMaterial(ClothingMaterial::Glitter),
 	)));
-	assert_eq!(menu.braidman.clothing.value.material.value, ClothingMaterial::Glitter);
+	assert_eq!(menu.braidman.clothing.value.material_for(tunic), ClothingMaterial::Glitter);
 	let config = crozon_characters::species::braidman::BraidmanConfig::from(&menu.braidman);
-	assert_eq!(config.colors.clothing_material, ClothingMaterial::Glitter);
+	assert_eq!(config.colors.clothing_material, ClothingMaterial::Cloth);
+	assert_eq!(config.colors.clothing_material_for(tunic), ClothingMaterial::Glitter);
+	assert_eq!(config.colors.clothing_material_for(ClothingMesh::Pants), ClothingMaterial::Cloth);
 	Ok(())
 }
 
@@ -407,15 +411,12 @@ fn clothing_swatches_only_lower_for_worn_layers() -> anyhow::Result<()> {
 	let coat = ClothingMesh::FittedCoat;
 	assert!(menu.apply(MenuEvent::ToggleClothing(coat)));
 	let nodes = menu.braidman.clothing.value.menu_nodes();
-	assert!(
-		matches!(nodes[0], MenuNode::SectionSelect { label: "Material", .. }),
-		"expected a Material picker before clothing rows"
-	);
-	let MenuNode::ItemMultiSelect { rows, .. } = &nodes[1] else {
+	let MenuNode::ItemMultiSelect { rows, .. } = &nodes[0] else {
 		anyhow::bail!("expected clothing to lower to an ItemMultiSelect");
 	};
 	for row in rows {
 		assert_eq!(row.asset.selected, !row.colors.is_empty());
+		assert_eq!(row.asset.selected, !row.materials.is_empty());
 	}
 	Ok(())
 }

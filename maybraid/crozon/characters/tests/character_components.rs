@@ -103,6 +103,34 @@ fn clothing_layer_uses_named_shader_recipe() {
 	);
 }
 
+#[test]
+fn clothing_layers_use_per_item_shader_recipes() {
+	let mut config = BraidmanConfig::default_preview();
+	config.clothing.push(ClothingMesh::Tunic);
+	config.clothing.push(ClothingMesh::Pants);
+	config
+		.colors
+		.set_clothing_material(ClothingMesh::Tunic, ClothingMaterial::Tattered);
+	config
+		.colors
+		.set_clothing_material(ClothingMesh::Pants, ClothingMaterial::Glitter);
+	let recipes: Vec<_> = config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.filter(|part| part.slot == CharacterPartSlot::Clothing)
+		.map(|part| part.material.name)
+		.collect();
+	assert_eq!(
+		recipes,
+		vec![
+			material_ref::MaterialId::named("clothing_tattered"),
+			material_ref::MaterialId::named("clothing_glitter"),
+		]
+	);
+}
+
 fn clothing_scene_path(config: &impl CharacterRecipe) -> String {
 	config
 		.clothed()

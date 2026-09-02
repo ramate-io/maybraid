@@ -29,7 +29,7 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum)]
 	pub clothing: Vec<ClothingMesh>,
 
-	/// Surface recipe applied to every worn clothing layer.
+	/// Default surface recipe for worn layers without a per-item override.
 	#[arg(long, value_enum, default_value_t = ClothingMaterial::Cloth)]
 	pub clothing_material: ClothingMaterial,
 

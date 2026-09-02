@@ -15,7 +15,7 @@ use crate::{
 };
 
 use crozon_character_items::{
-	ClothingColor, ClothingHost, ClothingMaterial, ClothingMesh, ItemColor,
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
 
 pub use assets::{MygrHeadMesh, MygrMouthMesh};
@@ -29,6 +29,7 @@ pub struct MygrColors {
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
 	pub clothing_material: ClothingMaterial,
+	pub clothing_materials: Vec<ClothingMaterialChoice>,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -41,6 +42,7 @@ impl Default for MygrColors {
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
 			clothing_material: ClothingMaterial::Cloth,
+			clothing_materials: Vec::new(),
 			clothing: Vec::new(),
 		}
 	}
@@ -64,6 +66,14 @@ impl MygrColors {
 
 	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
 		ClothingColor::set(&mut self.clothing, clothing, color);
+	}
+
+	pub fn clothing_material_for(&self, clothing: ClothingMesh) -> ClothingMaterial {
+		ClothingMaterialChoice::resolve(&self.clothing_materials, self.clothing_material, clothing)
+	}
+
+	pub fn set_clothing_material(&mut self, clothing: ClothingMesh, material: ClothingMaterial) {
+		ClothingMaterialChoice::set(&mut self.clothing_materials, clothing, material);
 	}
 }
 
@@ -128,7 +138,7 @@ impl CharacterRecipe for MygrConfig {
 		crate::clothing_layers(
 			self.clothing.iter().copied(),
 			ClothingHost::LERON,
-			self.colors.clothing_material,
+			|mesh| self.colors.clothing_material_for(mesh),
 			|mesh| self.colors.clothing_color(mesh),
 		)
 	}

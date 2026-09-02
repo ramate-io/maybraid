@@ -234,21 +234,24 @@ fn space_suit_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(tint, 0.18);
 }
 
-/// Worn cloth: same thread pattern, stained, with discarded holes.
+/// Worn cloth: same thread pattern, stained and frayed. Holes are discarded
+/// in the fragment entry (Opaque ignores alpha; helpers cannot punch through).
 fn tattered_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
     let cloth = cloth_look(base, uv);
     let wear = fbm(vec3<f32>(uv * 5.2, local_pos.y * 2.2));
-    let ragged = value_noise_3d(vec3<f32>(uv * 22.0, 4.4));
     let stain = value_noise_3d(vec3<f32>(uv * 3.6, 2.7));
-    let hole = step(0.76, wear) * step(0.42, ragged);
-    let fray_speck = step(0.70, wear) * step(0.93, hash21(floor(uv * 190.0)));
-    if (hole + fray_speck > 0.5) {
-        discard;
-    }
     let dirt = mix(cloth.xyz, cloth.xyz * vec3<f32>(0.28, 0.22, 0.16), stain * 0.65);
     let fray = smoothstep(0.58, 0.78, wear);
     let tint = mix(dirt, dirt * 0.55, fray);
     return vec4<f32>(tint, mix(cloth.w, 0.92, fray));
+}
+
+/// UV-space moth-eaten blotches, same mix as Chico leaf interior cheese.
+fn tatter_hole_alpha(uv: vec2<f32>) -> f32 {
+    let blot = fbm(vec3<f32>(uv * 7.0, 1.4)) * 0.62
+        + value_noise_3d(vec3<f32>(uv * 18.0, 6.2)) * 0.38;
+    let fw = max(fwidth(blot) * 1.35, 0.01);
+    return smoothstep(0.40 - fw, 0.40 + fw, blot);
 }
 
 fn hawaiian_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
@@ -330,6 +333,10 @@ fn fragment(
             metallic = 0.82;
         }
         case KIND_TATTERED: {
+            // Opaque ignores alpha; discard here like Chico leaf cheese.
+            if (tatter_hole_alpha(uv) < 0.08) {
+                discard;
+            }
             look = tattered_look(base, uv, mesh.local_pos);
             metallic = 0.02;
         }

@@ -215,7 +215,7 @@ pub enum CharacterField {
 	SpibmomCrownColor,
 	SpibmomSpineColor,
 	Clothing(ClothingMesh),
-	ClothingMaterial,
+	ClothingMaterial(ClothingMesh),
 	ShoulderWidth,
 	HipWidth,
 	ChestThickness,
