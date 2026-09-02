@@ -166,6 +166,28 @@ pub(crate) fn apply_character_movement(
 	}
 }
 
+/// Apply [`MoveWish`] for non-player capsules (NPC intelligence, etc.).
+///
+/// Pad-driven players use [`apply_character_movement`] from [`MovementAction`] instead.
+pub(crate) fn apply_wish_movement(
+	time: Res<Time>,
+	mut controllers: Query<
+		(&MoveWish, &MovementAcceleration, &mut LinearVelocity),
+		(With<CharacterController>, Without<Player>),
+	>,
+) {
+	let dt = time.delta_secs();
+	for (wish, accel, mut velocity) in &mut controllers {
+		let dir = Vec3::new(wish.0.x, 0.0, wish.0.z);
+		if dir.length_squared() < 1e-6 {
+			continue;
+		}
+		let dir = dir.normalize();
+		velocity.x += dir.x * accel.0 * dt;
+		velocity.z += dir.z * accel.0 * dt;
+	}
+}
+
 pub(crate) fn apply_movement_damping(
 	mut query: Query<(&MovementDampingFactor, &mut LinearVelocity), With<CharacterController>>,
 ) {

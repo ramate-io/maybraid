@@ -62,6 +62,7 @@ impl Plugin for PlayerPlugin {
 				(
 					body::update_grounded,
 					body::apply_character_movement,
+					body::apply_wish_movement,
 					body::apply_movement_damping,
 				)
 					.chain()
