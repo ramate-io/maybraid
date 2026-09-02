@@ -578,6 +578,10 @@ fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
 		.find(|row| row.label == "Pace")
 		.map(|row| row.value.as_str());
 	assert_eq!(pace, Some(sheet.pace_equation()).as_deref());
+	assert_eq!(
+		cards[0].rows.iter().find(|row| row.label == "Pace").map(|row| row.tone),
+		Some(character_ui_menu::StatTone::Formula)
+	);
 	assert_eq!(cards.len(), 4);
 	assert_eq!(cards[3].title, weapon_name);
 	assert!(menu.overlay_editable("Loadout"));

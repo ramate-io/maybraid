@@ -185,6 +185,8 @@ pub enum StatTone {
 	Neutral,
 	Plus,
 	Minus,
+	/// Derived formula, e.g. the pace equation.
+	Formula,
 }
 
 impl StatTone {
@@ -227,6 +229,10 @@ impl StatLine {
 		let value = value.into();
 		let tone = StatTone::from_text(&value);
 		Self { label: label.into(), value, tone }
+	}
+
+	pub fn formula(label: impl Into<String>, value: impl Into<String>) -> Self {
+		Self { label: label.into(), value: value.into(), tone: StatTone::Formula }
 	}
 }
 

@@ -181,6 +181,7 @@ fn playground_tone_color(tone: StatTone) -> Color {
 	match tone {
 		StatTone::Plus => PLUS_COLOR,
 		StatTone::Minus => MINUS_COLOR,
+		StatTone::Formula => VALUE_COLOR,
 		StatTone::Neutral => MUTED,
 	}
 }
@@ -275,8 +276,8 @@ impl BevyMenuSink {
 					width: Val::Percent(100.0),
 					flex_direction: FlexDirection::Row,
 					flex_wrap: FlexWrap::Wrap,
-					column_gap: Val::Px(8.0),
-					row_gap: Val::Px(MENU_VERTICAL_GAP),
+					column_gap: Val::Px(12.0),
+					row_gap: Val::Px(20.0),
 					align_items: AlignItems::FlexStart,
 					..default()
 				},
@@ -289,13 +290,14 @@ impl BevyMenuSink {
 							width: Val::Percent(31.0),
 							min_width: Val::Px(140.0),
 							flex_direction: FlexDirection::Column,
-							row_gap: Val::Px(2.0),
+							row_gap: Val::Px(8.0),
+							padding: UiRect::vertical(Val::Px(6.0)),
 							..default()
 						},
 						Pickable::IGNORE,
 					))
 					.with_children(|column| {
-						text(column, &card.title, 11.0, Color::WHITE);
+						text(column, &card.title, 14.0, Color::WHITE);
 						for row in &card.rows {
 							inline_label_row(column, &row.label, |line| {
 								text(line, &row.value, 10.0, playground_tone_color(row.tone));

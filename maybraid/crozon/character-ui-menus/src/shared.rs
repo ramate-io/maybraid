@@ -268,7 +268,13 @@ pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
 			rows: total
 				.stat_rows()
 				.into_iter()
-				.map(|(label, value)| StatLine::from_display(label, value))
+				.map(|(label, value)| {
+					if label == "Pace" {
+						StatLine::formula(label, value)
+					} else {
+						StatLine::from_display(label, value)
+					}
+				})
 				.collect(),
 		},
 		StatCard {

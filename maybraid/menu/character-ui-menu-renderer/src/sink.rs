@@ -9,8 +9,9 @@ use menu_components::{
 	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action,
 	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
 	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
-	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_ITEM_FONT_SIZE,
-	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_BLOCK_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME,
+	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
@@ -318,11 +319,25 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		spawn_tile_grid(parent, self.justify.content(), |grid| {
-			for card in cards {
-				self.stat_card(grid, context, card);
-			}
-		});
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					column_gap: Val::Px(16.0),
+					row_gap: Val::Px(36.0),
+					align_items: AlignItems::FlexStart,
+					justify_content: self.justify.content(),
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|grid| {
+				for card in cards {
+					self.stat_card(grid, context, card);
+				}
+			});
 	}
 
 	fn stat_card<C>(
@@ -337,7 +352,8 @@ impl MaybraidMenuSink {
 					width: Val::Percent(31.0),
 					min_width: Val::Px(168.0),
 					flex_direction: FlexDirection::Column,
-					row_gap: Val::Px(PANEL_ROW_GAP),
+					row_gap: Val::Px(18.0),
+					padding: UiRect::vertical(Val::Px(8.0)),
 					align_items: AlignItems::FlexStart,
 					..default()
 				},
@@ -346,7 +362,7 @@ impl MaybraidMenuSink {
 			.with_children(|column| {
 				spawn_hud_text(
 					column,
-					context.fonts.item(PANEL_LABEL_FONT_SIZE),
+					context.fonts.header(PANEL_BLOCK_FONT_SIZE),
 					&card.title,
 					TEXT_YELLOW,
 					bevy::text::Justify::Left,
@@ -639,6 +655,7 @@ fn stat_tone_color(tone: StatTone) -> Color {
 	match tone {
 		StatTone::Plus => TEXT_LIME,
 		StatTone::Minus => TEXT_SALMON,
+		StatTone::Formula => TEXT_LIGHT_BLUE,
 		StatTone::Neutral => TEXT_YELLOW_FAINT,
 	}
 }

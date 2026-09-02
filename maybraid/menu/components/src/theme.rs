@@ -37,6 +37,9 @@ pub const TEXT_LIME: Color = Color::srgb(0.55, 0.92, 0.38);
 /// Negative modifier (`-4`).
 pub const TEXT_SALMON: Color = Color::srgb(0.95, 0.45, 0.42);
 
+/// Derived formula (pace equation).
+pub const TEXT_LIGHT_BLUE: Color = Color::srgb(0.62, 0.86, 1.0);
+
 /// Description line under the menu column.
 pub const DESCRIPTION_FONT_SIZE: f32 = 22.0;
 
