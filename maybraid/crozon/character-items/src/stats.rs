@@ -79,8 +79,9 @@ impl FireMode {
 }
 
 /// Clothing buffs plus carried weight. Most axes stay 0; one to three roll
-/// in ±4–16 (mixed signs when two or more land). Weight always rolls and is
-/// biased by mesh bulk.
+/// in ±4–16 (mixed signs when two or more land). A negative is never alone:
+/// a lone minus gains a paired plus on another axis. Weight always rolls and
+/// is biased by mesh bulk.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ClothingStats {
@@ -375,6 +376,11 @@ fn generate_clothing(rng: &mut ItemRng, mesh: ClothingMesh) -> ClothingStats {
 				*value = -*value;
 			}
 		}
+	} else if assigned.first().is_some_and(|(_, value)| *value < 0) {
+		let used = assigned[0].0;
+		let axis = axes.into_iter().find(|axis| *axis != used).unwrap_or(0);
+		let magnitude = rng.in_range(4, 16) as i16;
+		assigned.push((axis, magnitude));
 	}
 	let mut stats = ClothingStats { weight, ..ClothingStats::default() };
 	for (axis, value) in assigned {
@@ -531,6 +537,14 @@ mod tests {
 				.into_iter()
 				.filter(|value| *value != 0)
 				.collect();
+				if deltas.iter().any(|value| *value < 0) {
+					assert!(
+						deltas.iter().any(|value| *value > 0),
+						"negative without a plus: {:?} {:?}",
+						mesh,
+						deltas
+					);
+				}
 				if deltas.len() >= 2 {
 					assert!(
 						deltas.iter().any(|value| *value > 0)
