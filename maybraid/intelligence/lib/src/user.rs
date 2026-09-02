@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::ability::MovementAbility;
 use crate::candidate::MovementCandidate;
 use crate::objective::MovementObjective;
-use crate::step::MovementStep;
+use crate::step::{MovementDrive, MovementStep};
 
 /// Per-user scoring knobs. Budget and standoffs live on [`MovementAbility`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,6 +80,66 @@ where
 	pub fn at_plan_end(&self) -> bool {
 		self.cursor >= self.plan.len()
 	}
+
+	pub fn pick_best_candidate(
+		&self,
+		candidates: impl IntoIterator<Item = MovementCandidate<I>>,
+	) -> Option<MovementCandidate<I>> {
+		let mut best: Option<(f32, MovementCandidate<I>)> = None;
+		for candidate in candidates {
+			let score = self.score_candidate(&candidate);
+			let take = best.as_ref().is_none_or(|(best_score, _)| score < *best_score);
+			if take {
+				best = Some((score, candidate));
+			}
+		}
+		best.map(|(_, candidate)| candidate)
+	}
+}
+
+/// Result of advancing a plan toward the next [`crate::MovementDrive`] target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MovementDriveResult {
+	Wish(Vec3),
+	Hold,
+	Stuck { wish: Vec3 },
+}
+
+impl<I, A> MovementIntelligence<I, A>
+where
+	I: MovementDrive + Send + Sync + 'static,
+	A: Send + Sync + 'static,
+{
+	pub fn drive(&mut self, dt: f32, position: Vec3) -> MovementDriveResult {
+		loop {
+			if self.at_plan_end() {
+				return MovementDriveResult::Hold;
+			}
+			let Some(target) = self.plan.get(self.cursor).and_then(I::drive_target) else {
+				self.cursor += 1;
+				continue;
+			};
+			if target.contains_xz(position) {
+				self.cursor += 1;
+				self.stuck_seconds = 0.0;
+				self.last_goal_distance = f32::MAX;
+				continue;
+			}
+			let dist = target.xz_distance(position);
+			let wish = target.xz_wish_from(position);
+			if dist + 0.08 < self.last_goal_distance {
+				self.last_goal_distance = dist;
+				self.stuck_seconds = 0.0;
+			} else {
+				self.stuck_seconds += dt;
+				if self.stuck_seconds >= self.settings.stuck_timeout {
+					self.stuck_seconds = 0.0;
+					return MovementDriveResult::Stuck { wish };
+				}
+			}
+			return MovementDriveResult::Wish(wish);
+		}
+	}
 }
 
 /// Higher-order request to rebuild [`MovementIntelligence::plan`] for the current objective.
@@ -118,6 +178,22 @@ mod tests {
 		let open = brain.score_candidate(&candidate(0.0, 1.0, 10.0));
 		assert!(peek < cover, "{peek} vs cover {cover}");
 		assert!(peek < open, "{peek} vs open {open}");
+		Ok(())
+	}
+
+	#[test]
+	fn drive_holds_when_plan_is_empty() -> anyhow::Result<()> {
+		let mut brain = MovementIntelligence::new(vantage());
+		assert_eq!(brain.drive(0.016, Vec3::ZERO), MovementDriveResult::Hold);
+		Ok(())
+	}
+
+	#[test]
+	fn drive_advances_when_inside_waypoint() -> anyhow::Result<()> {
+		let mut brain = MovementIntelligence::new(vantage());
+		brain.adopt_plan(vec![MovementStep::MoveTo(MovementLocation::new(Vec3::ZERO, 1.0))]);
+		assert_eq!(brain.drive(0.016, Vec3::new(0.2, 0.0, 0.1)), MovementDriveResult::Hold);
+		assert!(brain.at_plan_end());
 		Ok(())
 	}
 }

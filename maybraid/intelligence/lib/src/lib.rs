@@ -12,19 +12,22 @@ mod objective;
 mod plugin;
 mod step;
 mod surface;
+pub mod testing;
 mod user;
 
 use bevy::prelude::*;
 use player::PlayerSystems;
 
-pub use ability::{Covering, MovementAbility, MovementBody, VantageStandoffs};
+pub use ability::{Covering, MovementAbility, MovementBody, MovementSheet, VantageStandoffs};
 pub use candidate::{MovementCandidate, MovementCandidateHints};
 pub use location::MovementLocation;
 pub use objective::MovementObjective;
 pub use plugin::MovementIntelligencePlugin;
 pub use step::{MovementDrive, MovementStep};
 pub use surface::{CandidateBudget, MovementIntelligenceLimits, MovementIntelligenceSurface};
-pub use user::{MovementIntelligence, MovementIntelligenceSettings, ReplanMovement};
+pub use user::{
+	MovementDriveResult, MovementIntelligence, MovementIntelligenceSettings, ReplanMovement,
+};
 
 /// Plan, then write [`player::MoveWish`], before capsule accel.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]

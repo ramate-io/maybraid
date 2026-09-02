@@ -45,6 +45,7 @@ pub struct MovementAbility {
 	pub hip_height: f32,
 	pub candidate_budget: CandidateBudget,
 	pub vantage_standoffs: VantageStandoffs,
+	pub vantage_azimuths: u32,
 }
 
 impl Default for MovementAbility {
@@ -59,6 +60,7 @@ impl Default for MovementAbility {
 			hip_height: 0.55,
 			candidate_budget: CandidateBudget::default(),
 			vantage_standoffs: VantageStandoffs::default(),
+			vantage_azimuths: 8,
 		}
 	}
 }
@@ -66,6 +68,7 @@ impl Default for MovementAbility {
 /// Dimensions a collider-backed surface needs from [`MovementAbility`] (or another bag).
 pub trait MovementBody {
 	fn agent_radius(&self) -> f32;
+	fn max_step(&self) -> f32;
 	fn feet_below_origin(&self) -> f32;
 	fn eye_height(&self) -> f32;
 	fn hip_height(&self) -> f32;
@@ -83,11 +86,21 @@ pub trait MovementBody {
 pub trait Covering {
 	fn candidate_budget(&self) -> CandidateBudget;
 	fn vantage_standoffs(&self) -> &[f32];
+	fn vantage_azimuths(&self) -> u32;
 }
+
+/// Body + covering. Plugin and collider surfaces take this bound.
+pub trait MovementSheet: MovementBody + Covering {}
+
+impl<T: MovementBody + Covering> MovementSheet for T {}
 
 impl MovementBody for MovementAbility {
 	fn agent_radius(&self) -> f32 {
 		self.agent_radius
+	}
+
+	fn max_step(&self) -> f32 {
+		self.max_step
 	}
 
 	fn feet_below_origin(&self) -> f32 {
@@ -110,6 +123,10 @@ impl Covering for MovementAbility {
 
 	fn vantage_standoffs(&self) -> &[f32] {
 		self.vantage_standoffs.as_slice()
+	}
+
+	fn vantage_azimuths(&self) -> u32 {
+		self.vantage_azimuths.max(1)
 	}
 }
 
@@ -134,6 +151,7 @@ mod tests {
 	fn default_covering_exposes_standoffs_and_budget() -> anyhow::Result<()> {
 		let ability = MovementAbility::default();
 		assert_eq!(ability.vantage_standoffs(), &[3.5, 6.5, 10.0]);
+		assert_eq!(ability.vantage_azimuths(), 8);
 		assert_eq!(ability.candidate_budget().max_candidates, 16);
 		Ok(())
 	}

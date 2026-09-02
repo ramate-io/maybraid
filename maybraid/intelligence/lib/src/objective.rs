@@ -42,6 +42,10 @@ impl MovementObjective {
 			_ => 0.0,
 		}
 	}
+
+	pub fn is_vantage_on(self) -> bool {
+		matches!(self, Self::VantageOn { .. })
+	}
 }
 
 #[cfg(test)]

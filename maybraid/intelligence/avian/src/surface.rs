@@ -1,15 +1,21 @@
 //! Sample endpoints for an objective, probe walk chains against Fixed colliders.
+//!
+//! [`VantageOn`](MovementObjective::VantageOn) ranks standpoints with cheap hide/sightline
+//! rays, then spends walk probes on the best first.
 
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
-use movement_intelligence::{
-	CandidateBudget, Covering, MovementBody, MovementLocation, MovementObjective,
-};
+use movement_intelligence::{CandidateBudget, MovementLocation, MovementObjective, MovementSheet};
 use std::f32::consts::TAU;
 
 use crate::path::{AvianColliderPath, AvianPathHints};
+
+struct RankedStandpoint {
+	location: MovementLocation,
+	hints: AvianPathHints,
+}
 
 /// Avian [`SpatialQuery`] over [`PhysicsInteractionLayer::Fixed`].
 #[derive(SystemParam)]
@@ -18,7 +24,7 @@ pub struct AvianMovementSurface<'w, 's> {
 }
 
 impl AvianMovementSurface<'_, '_> {
-	pub fn collider_paths<A: MovementBody + Covering>(
+	pub fn collider_paths<A: MovementSheet>(
 		&self,
 		from: MovementLocation,
 		exclude: &[Entity],
@@ -26,20 +32,33 @@ impl AvianMovementSurface<'_, '_> {
 		objective: MovementObjective,
 		budget: CandidateBudget,
 	) -> Vec<AvianColliderPath> {
-		let filter = self.filter(exclude);
-		let samples = Self::sample_endpoints(from, ability, objective, budget);
+		let filter = Self::filter(exclude);
+		let mut ranked = self.rank_standpoints(from, ability, objective, budget, &filter);
+		if objective.is_vantage_on() {
+			ranked.sort_by(|a, b| {
+				a.hints
+					.as_candidate_hints()
+					.covering_score(objective)
+					.total_cmp(&b.hints.as_candidate_hints().covering_score(objective))
+			});
+		}
+
 		let mut paths = Vec::new();
-		for sample in samples {
+		for sample in ranked {
 			if paths.len() >= budget.max_candidates {
 				break;
 			}
-			let Some(waypoints) =
-				self.probe_walk(from.point, sample.point, ability, budget.max_steps, &filter)
-			else {
+			let Some(waypoints) = self.probe_walk(
+				from.point,
+				sample.location.point,
+				ability,
+				budget.max_steps,
+				&filter,
+			) else {
 				continue;
 			};
-			let end = waypoints.last().copied().unwrap_or(sample.point);
-			let arrival = MovementLocation::new(end, sample.radius);
+			let end = waypoints.last().copied().unwrap_or(sample.location.point);
+			let arrival = MovementLocation::new(end, sample.location.radius);
 			let mut points: Vec<MovementLocation> = waypoints
 				.iter()
 				.take(waypoints.len().saturating_sub(1))
@@ -47,18 +66,39 @@ impl AvianMovementSurface<'_, '_> {
 				.collect();
 			points.push(arrival);
 			let cost = path_length(from.point, &waypoints);
-			let hints = self.objective_hints(ability, objective, sample.point, &filter);
-			paths.push(AvianColliderPath { points, cost, hints });
+			paths.push(AvianColliderPath { points, cost, hints: sample.hints });
 		}
 		paths
 	}
 
-	fn filter(&self, exclude: &[Entity]) -> SpatialQueryFilter {
+	fn filter(exclude: &[Entity]) -> SpatialQueryFilter {
 		SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)
 			.with_excluded_entities(exclude.iter().copied())
 	}
 
-	fn sample_endpoints<A: MovementBody + Covering>(
+	fn rank_standpoints<A: MovementSheet>(
+		&self,
+		from: MovementLocation,
+		ability: &A,
+		objective: MovementObjective,
+		budget: CandidateBudget,
+		filter: &SpatialQueryFilter,
+	) -> Vec<RankedStandpoint> {
+		let samples = Self::sample_endpoints(from, ability, objective, budget);
+		samples
+			.into_iter()
+			.map(|location| {
+				let hints = if objective.is_vantage_on() {
+					self.objective_hints(ability, objective, location.point, filter)
+				} else {
+					AvianPathHints::default()
+				};
+				RankedStandpoint { location, hints }
+			})
+			.collect()
+	}
+
+	fn sample_endpoints<A: MovementSheet>(
 		from: MovementLocation,
 		ability: &A,
 		objective: MovementObjective,
@@ -67,26 +107,29 @@ impl AvianMovementSurface<'_, '_> {
 		let location = objective.location();
 		let y = from.point.y;
 		let arrival = ability.agent_radius() * 1.25;
+		let azimuths = ability.vantage_azimuths();
 		match objective {
 			MovementObjective::Reach(_) => {
-				let mut samples = vec![MovementLocation::new(
-					with_y(location.point, y),
-					location.radius.max(arrival),
-				)];
-				samples.extend(ring(
+				let mut samples =
+					vec![location.with_y(y).with_radius(location.radius.max(arrival))];
+				samples.extend(MovementLocation::ring_around(
 					location.point,
 					y,
 					(location.radius * 0.65).max(0.4),
-					6,
+					azimuths,
 					arrival,
 				));
 				samples
 			}
-			MovementObjective::EdgeOf(_) => {
-				ring(location.point, y, location.radius.max(arrival), 8, arrival)
-			}
+			MovementObjective::EdgeOf(_) => MovementLocation::ring_around(
+				location.point,
+				y,
+				location.radius.max(arrival),
+				azimuths,
+				arrival,
+			),
 			MovementObjective::FleeFrom(_) => {
-				Self::flee_samples(from.point, location, y, arrival, budget)
+				Self::flee_samples(from.point, location, y, arrival, budget, azimuths)
 			}
 			MovementObjective::VantageOn { .. } => {
 				Self::vantage_samples(ability, location.point, y, arrival, budget)
@@ -100,6 +143,7 @@ impl AvianMovementSurface<'_, '_> {
 		y: f32,
 		arrival: f32,
 		budget: CandidateBudget,
+		azimuths: u32,
 	) -> Vec<MovementLocation> {
 		let away = {
 			let delta = Vec3::new(from.x - location.point.x, 0.0, from.z - location.point.z);
@@ -111,9 +155,9 @@ impl AvianMovementSurface<'_, '_> {
 		};
 		let radius = location.radius.max(1.0) + 2.0;
 		let mut samples = Vec::new();
-		let n = 8.min(budget.max_candidates.max(1));
+		let n = (azimuths as usize).min(budget.max_candidates.max(1)).max(1) as u32;
 		for i in 0..n {
-			let yaw = (i as f32 / n as f32) * TAU;
+			let yaw = i as f32 / n as f32 * TAU;
 			let dir = Quat::from_axis_angle(Vec3::Y, yaw) * away;
 			let dist = radius.min(budget.horizon);
 			samples.push(MovementLocation::new(
@@ -124,28 +168,34 @@ impl AvianMovementSurface<'_, '_> {
 		samples
 	}
 
-	fn vantage_samples<A: Covering>(
+	fn vantage_samples<A: movement_intelligence::Covering>(
 		ability: &A,
 		center: Vec3,
 		y: f32,
 		arrival: f32,
 		budget: CandidateBudget,
 	) -> Vec<MovementLocation> {
-		let rings = ability.vantage_standoffs();
+		let azimuths = ability.vantage_azimuths();
 		let mut samples = Vec::new();
-		for radius in rings {
+		for radius in ability.vantage_standoffs() {
 			if *radius > budget.horizon {
 				continue;
 			}
-			samples.extend(ring(center, y, *radius, 8, arrival));
+			samples.extend(MovementLocation::ring_around(center, y, *radius, azimuths, arrival));
 		}
 		if samples.is_empty() {
-			samples.extend(ring(center, y, budget.horizon.min(8.0).max(2.0), 8, arrival));
+			samples.extend(MovementLocation::ring_around(
+				center,
+				y,
+				budget.horizon.min(8.0).max(2.0),
+				azimuths,
+				arrival,
+			));
 		}
 		samples
 	}
 
-	fn probe_walk<A: MovementBody>(
+	fn probe_walk<A: movement_intelligence::MovementBody>(
 		&self,
 		from: Vec3,
 		to: Vec3,
@@ -171,7 +221,8 @@ impl AvianMovementSurface<'_, '_> {
 		}
 		let dir = delta / len;
 		let perp = Vec3::new(-dir.z, 0.0, dir.x);
-		for dist in [1.6_f32, 2.8, 4.2] {
+		let step = ability.max_step().max(0.1);
+		for dist in [step * 4.0, step * 7.0, step * 10.5] {
 			for sign in [1.0, -1.0] {
 				let via = Vec3::new(
 					from.x + dir.x * (len * 0.45) + perp.x * dist * sign,
@@ -217,7 +268,7 @@ impl AvianMovementSurface<'_, '_> {
 		}
 	}
 
-	fn objective_hints<A: MovementBody>(
+	fn objective_hints<A: movement_intelligence::MovementBody>(
 		&self,
 		ability: &A,
 		objective: MovementObjective,
@@ -245,22 +296,6 @@ impl AvianMovementSurface<'_, '_> {
 			_ => 0.0,
 		}
 	}
-}
-
-fn with_y(point: Vec3, y: f32) -> Vec3 {
-	Vec3::new(point.x, y, point.z)
-}
-
-fn ring(center: Vec3, y: f32, radius: f32, count: u32, arrival: f32) -> Vec<MovementLocation> {
-	(0..count)
-		.map(|i| {
-			let yaw = i as f32 / count as f32 * TAU;
-			MovementLocation::new(
-				Vec3::new(center.x + radius * yaw.cos(), y, center.z + radius * yaw.sin()),
-				arrival,
-			)
-		})
-		.collect()
 }
 
 fn path_length(start: Vec3, waypoints: &[Vec3]) -> f32 {

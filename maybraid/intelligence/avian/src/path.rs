@@ -12,6 +12,16 @@ pub struct AvianPathHints {
 	pub min_clearance: f32,
 }
 
+impl AvianPathHints {
+	pub fn as_candidate_hints(self) -> MovementCandidateHints {
+		MovementCandidateHints {
+			hide: self.hide,
+			sightline: self.sightline,
+			min_clearance: self.min_clearance,
+		}
+	}
+}
+
 /// Native product of the Avian movement surface.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AvianColliderPath {
@@ -27,11 +37,7 @@ impl AvianColliderPath {
 
 	pub fn into_movement_candidate(self) -> MovementCandidate<MovementStep> {
 		let cost = self.cost;
-		let hints = MovementCandidateHints {
-			hide: self.hints.hide,
-			sightline: self.hints.sightline,
-			min_clearance: self.hints.min_clearance,
-		};
+		let hints = self.hints.as_candidate_hints();
 		MovementCandidate::new(self.into_steps(), cost, hints)
 	}
 }

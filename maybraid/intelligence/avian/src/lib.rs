@@ -7,7 +7,10 @@ mod surface;
 
 use bevy::prelude::*;
 
-use movement_intelligence::{MovementCandidate, MovementIntelligenceSurface, MovementStep};
+use movement_intelligence::{
+	CandidateBudget, MovementCandidate, MovementIntelligenceSurface, MovementLocation,
+	MovementObjective, MovementSheet, MovementStep,
+};
 
 pub use path::{AvianColliderPath, AvianPathHints};
 pub use surface::AvianMovementSurface;
@@ -27,19 +30,15 @@ impl From<AvianColliderPath> for Vec<MovementStep> {
 impl<I, A> MovementIntelligenceSurface<I, A> for AvianMovementSurface<'_, '_>
 where
 	MovementCandidate<I>: From<AvianColliderPath>,
-	A: movement_intelligence::MovementBody
-		+ movement_intelligence::Covering
-		+ Send
-		+ Sync
-		+ 'static,
+	A: MovementSheet + Send + Sync + 'static,
 {
 	fn recommend_candidates(
 		&mut self,
-		from: movement_intelligence::MovementLocation,
+		from: MovementLocation,
 		exclude: &[Entity],
 		ability: &A,
-		objective: movement_intelligence::MovementObjective,
-		budget: movement_intelligence::CandidateBudget,
+		objective: MovementObjective,
+		budget: CandidateBudget,
 	) -> Vec<MovementCandidate<I>> {
 		self.collider_paths(from, exclude, ability, objective, budget)
 			.into_iter()
@@ -51,7 +50,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use movement_intelligence::{MovementCandidateHints, MovementLocation};
+	use movement_intelligence::MovementCandidateHints;
 
 	#[test]
 	fn avian_collider_path_converts_to_move_to() -> anyhow::Result<()> {

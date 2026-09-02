@@ -7,4 +7,4 @@ Movement intelligence crates for Maybraid.
 
 The brain writes [`MoveWish`](../player/src/body.rs). It does not lock onto other entities: a higher-order system writes the objective and inserts [`ReplanMovement`](lib/src/user.rs) when it wants a new plan.
 
-Budget and vantage standoffs live on per-character [`MovementAbility`](lib/src/ability.rs) ([`Covering`](lib/src/ability.rs)). [`MovementIntelligenceLimits`](lib/src/surface.rs) is a system-wide max; each replan uses `character.clamp_to(limits)`.
+Budget, vantage standoffs, and azimuths live on per-character [`MovementAbility`](lib/src/ability.rs) ([`Covering`](lib/src/ability.rs)). [`MovementIntelligenceLimits`](lib/src/surface.rs) is a system-wide max; each replan uses `character.clamp_to(limits)`. Avian `VantageOn` ranks hide/sightline cheaply, then walk-probes the best standpoints first.
