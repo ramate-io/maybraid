@@ -4,7 +4,7 @@
 //! is the bag those layers are chosen from. Stats/buffs are stubbed until the
 //! in-game inventory panel lands.
 
-use crate::{ClothingMaterial, ClothingMesh, ItemColor};
+use crate::{ClothingMaterial, ClothingMesh, ItemColor, hashed_item_name};
 
 /// How many garments character creation rolls before the body editor.
 pub const STARTER_CLOTHING_COUNT: usize = 3;
@@ -95,6 +95,15 @@ impl InventoryItem {
 
 	pub const fn label(&self) -> &'static str {
 		self.item().label()
+	}
+
+	/// Hash-picked display name from look, color, and mesh word lists.
+	pub fn name(&self) -> String {
+		match self {
+			Self::Clothing { item: Item::Clothing(mesh), material, .. } => {
+				hashed_item_name(*mesh, material.id, material.color)
+			}
+		}
 	}
 
 	pub const fn path(&self) -> &'static str {
@@ -242,5 +251,6 @@ mod tests {
 		let a = random_starter_clothing(&mut ItemRng::from_seed(42), 3);
 		let b = random_starter_clothing(&mut ItemRng::from_seed(42), 3);
 		assert_eq!(a, b);
+		assert_ne!(a[0].name(), a[0].label());
 	}
 }

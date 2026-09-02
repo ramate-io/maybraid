@@ -23,11 +23,12 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_input::VirtualPadPlugin;
 use maybraid_menu_controller::MenuControllerPlugin;
 use menu_screens::{
 	CreateCharacterPlugin, CreateCharacterReady, HomeMenuChoice, HomeScreenPlugin,
 	InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems,
+	SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -48,7 +49,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			toggle_keys: Vec::new(),
 			..CameraLookConfig::default()
 		}))
-		.add_plugins(VirtualPadPlugin::new(VirtualPadConfig { debug_overlay: true, ..default() }))
+		.add_plugins(VirtualPadPlugin::default())
 		.add_plugins((
 			HomeScreenPlugin,
 			InGameScreenPlugin,
@@ -86,7 +87,9 @@ fn add_lod_viewer_to_camera(
 	}
 }
 
-fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
+fn character_screen_closed(
+	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
+) -> bool {
 	screens.is_empty()
 }
 

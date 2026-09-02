@@ -32,8 +32,9 @@ pub use loading::{
 };
 pub use show::{despawn_menu_screens, take_menu_show_request};
 pub use spin_reveal::{
-	RequestShowSpinReveal, SpinRevealChoice, SpinRevealFinished, SpinRevealItems, SpinRevealScreen,
-	SpinRevealScreenPlugin, SpinRevealSystems, request_show_spin_reveal,
+	RequestShowSpinReveal, SpinRevealChoice, SpinRevealCurrent, SpinRevealFinished,
+	SpinRevealItems, SpinRevealScreen, SpinRevealScreenPlugin, SpinRevealSystems,
+	request_show_spin_reveal,
 };
 
 /// Marker on every full-screen menu root so show-requests can replace each other.

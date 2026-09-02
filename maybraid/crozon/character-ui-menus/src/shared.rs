@@ -189,7 +189,7 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 			let mesh = item.mesh()?;
 			let asset = mesh.asset();
 			Some(GridCatalogChoice {
-				label: item.label(),
+				label: item.name(),
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::of(item.material().color),

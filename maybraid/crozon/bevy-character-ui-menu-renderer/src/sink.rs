@@ -241,7 +241,7 @@ impl BevyMenuSink {
 						grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
 					render_asset_button(
 						grid,
-						choice.label,
+						&choice.label,
 						choice.event,
 						choice.selected,
 						thumbnail,
@@ -359,7 +359,7 @@ fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailConte
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
-	thumbnail_image(choice.label, choice.path, choice.thumbnail_camera, preview, context)
+	thumbnail_image(choice.path, choice.path, choice.thumbnail_camera, preview, context)
 }
 
 fn thumbnail_image<C: MenuThumbnailContext>(

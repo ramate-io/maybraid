@@ -128,11 +128,11 @@ pub fn spawn_grid_catalog_tile(
 				});
 			let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
 			button.spawn((
-				Text::new(tile_label(&menu_display_name(label))),
+				Text::new(label),
 				fonts.item(PANEL_ITEM_FONT_SIZE),
 				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
-				TextBounds::new(bounds, bounds),
+				TextBounds::new(bounds, bounds * 1.6),
 				Pickable::IGNORE,
 			));
 		});

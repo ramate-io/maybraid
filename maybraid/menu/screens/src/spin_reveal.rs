@@ -1,12 +1,13 @@
-//! Spin-and-reveal screen for starter clothing (picture or camera slot).
+//! Spin-and-reveal screen for starter clothing.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn};
+use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::text::{FontSourceTemplate, LineBreak};
 use crozon_character_items::InventoryItem;
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	MENU_CLEAR, SPIN_REVEAL_SECS, SpinRevealSlot, TextCursorColumn, TextMenuPlugin,
-	republish_menu_activate,
+	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
+	SpinningIcon, TEXT_YELLOW, TextCursorColumn, TextMenuPlugin, republish_menu_activate,
 };
 
 use crate::MenuScreen;
@@ -20,6 +21,13 @@ pub struct RequestShowSpinReveal;
 /// Items to reveal, in order.
 #[derive(Resource, Clone, Debug)]
 pub struct SpinRevealItems(pub Vec<InventoryItem>);
+
+/// The garment currently on the roll, for hosts that spawn a live preview.
+#[derive(Resource, Clone, Debug)]
+pub struct SpinRevealCurrent {
+	pub item: InventoryItem,
+	pub revealed: bool,
+}
 
 /// Marker on the spawned spin-and-reveal root.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -133,35 +141,80 @@ fn rebuild_spin_reveal(
 	let revealed = !phase.spinning;
 	let last = index + 1 >= items.0.len();
 	let action = if revealed && last { "Continue" } else { "Next" };
+	commands.insert_resource(SpinRevealCurrent { item: items.0[index].clone(), revealed });
 	commands.spawn_scene(spin_scene(&items.0[index], revealed, action));
 	phase.dirty = false;
 }
 
 fn spin_scene(item: &InventoryItem, revealed: bool, action: &'static str) -> impl Scene + 'static {
-	let material = item.material();
-	let subtitle = format!("{} · {}", material.id.label(), material.color.label());
-	let mut slot = SpinRevealSlot::camera(item.label(), subtitle, item.path());
-	slot.revealed = revealed;
-	let children: Vec<Box<dyn Scene>> = vec![
-		Box::new(slot.scene()),
-		Box::new(TextCursorColumn::untitled([(action, SpinRevealChoice::Advance)]).scene()),
-	];
+	let name = item.name();
+	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(bottom_chrome(name, action, revealed))];
+	if !revealed {
+		children.push(Box::new(centered_spinner()));
+	}
+	let background = if revealed { Color::NONE } else { MENU_CLEAR };
 	bsn! {
 		SpinRevealScreen
 		MenuScreen
 		MenuController
-		BackgroundColor(MENU_CLEAR)
+		BackgroundColor(background)
 		Node {
 			width: percent(100),
 			height: percent(100),
-			justify_content: JustifyContent::Center,
-			align_items: AlignItems::Center,
-			flex_direction: FlexDirection::Column,
-			row_gap: px(32),
 		}
 		Pickable::IGNORE
 		on(republish_menu_activate::<SpinRevealChoice>)
 		Children [ {children} ]
+	}
+}
+
+fn centered_spinner() -> impl Scene + 'static {
+	let mark: Vec<Box<dyn Scene>> =
+		vec![Box::new(SpinningIcon::maybraid_scene(LOADING_ICON_SIZE, TEXT_YELLOW))];
+	bsn! {
+		Node {
+			position_type: PositionType::Absolute,
+			width: percent(100),
+			height: percent(100),
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+		}
+		Pickable::IGNORE
+		Children [ {mark} ]
+	}
+}
+
+fn bottom_chrome(name: String, action: &'static str, revealed: bool) -> impl Scene + 'static {
+	let mut children: Vec<Box<dyn Scene>> = Vec::new();
+	if revealed {
+		children.push(Box::new(caption_line(name, PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW)));
+	}
+	children
+		.push(Box::new(TextCursorColumn::untitled([(action, SpinRevealChoice::Advance)]).scene()));
+	bsn! {
+		Node {
+			position_type: PositionType::Absolute,
+			bottom: px(48),
+			width: percent(100),
+			flex_direction: FlexDirection::Column,
+			align_items: AlignItems::Center,
+			row_gap: px(16),
+		}
+		Pickable::IGNORE
+		Children [ {children} ]
+	}
+}
+
+fn caption_line(text: String, size: f32, color: Color) -> impl Scene + 'static {
+	bsn! {
+		template_value(Text::new(text))
+		TextFont {
+			font: FontSourceTemplate::Handle(BARLOW_SEMIBOLD),
+			font_size: px(size),
+		}
+		TextColor(color)
+		TextLayout::new(Justify::Center, LineBreak::WordBoundary)
+		Pickable::IGNORE
 	}
 }
 
@@ -195,6 +248,7 @@ fn finish_spin_reveal(
 	}
 	finished.write(SpinRevealFinished { items: items.0.clone() });
 	commands.remove_resource::<SpinRevealPhase>();
+	commands.remove_resource::<SpinRevealCurrent>();
 }
 
 impl SpinRevealScreen {

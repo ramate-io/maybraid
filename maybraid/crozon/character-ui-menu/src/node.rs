@@ -163,9 +163,9 @@ pub struct ItemRow<E> {
 
 /// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
 /// (Maybraid son), not by exclusive single-select.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GridCatalogChoice<E> {
-	pub label: &'static str,
+	pub label: String,
 	pub path: &'static str,
 	pub thumbnail_camera: ThumbnailCamera,
 	pub preview: PreviewColor,

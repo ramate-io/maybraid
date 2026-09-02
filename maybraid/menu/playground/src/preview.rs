@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
+use crozon_character_items::InventoryItem;
 use crozon_character_ui_menus::{
 	CharacterField, CharacterMenu, ConceptSpecies, MenuEvent, BODY_FOCUS,
 };
@@ -13,9 +14,11 @@ use crozon_characters::{
 	character_bounds, AnimRef, AnimRefRoot, BoneMap, CharacterComponents, CharacterHostSystems,
 	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, ComponentsOnly,
 };
+use crozon_characters::species::braidman::BraidmanConfig;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
+use menu_screens::{SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems};
 
 use crate::character::{CharacterMenuState, CharacterScreen};
 
@@ -48,7 +51,7 @@ impl Plugin for CharacterPreviewPlugin {
 			.add_systems(
 				Update,
 				(
-					sync_preview,
+					sync_preview.after(SpinRevealSystems::Apply),
 					stamp_preview_animation
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
@@ -79,34 +82,65 @@ fn setup_lighting(mut commands: Commands) {
 fn sync_preview(
 	mut commands: Commands,
 	screens: Query<Entity, With<CharacterScreen>>,
+	spin_screens: Query<Entity, With<SpinRevealScreen>>,
 	menu_state: Res<CharacterMenuState>,
+	spin: Option<Res<SpinRevealCurrent>>,
 	mut sync: ResMut<PreviewSyncState>,
 	mut pending: ResMut<PendingCameraFocus>,
 	roots: Query<Entity, With<CharacterPreviewRoot>>,
 ) {
-	if screens.is_empty() {
+	if !screens.is_empty() {
+		let key = format!("{:?}", menu_state.0);
+		if sync.key == key && !roots.is_empty() {
+			return;
+		}
+		sync.key = key;
 		for entity in &roots {
 			commands.entity(entity).despawn();
 		}
-		sync.key.clear();
-		pending.focus = None;
+		spawn_from_menu(&mut commands, &menu_state.0);
 		pending.resolved = None;
+		if pending.focus.is_none() {
+			pending.focus = Some(default_body_focus(&menu_state.0));
+		}
 		return;
 	}
 
-	let key = format!("{:?}", menu_state.0);
-	if sync.key == key && !roots.is_empty() {
-		return;
+	if !spin_screens.is_empty() {
+		if let Some(spin) = spin {
+			let key = format!("spin:{:?}", spin.item);
+			if sync.key == key && !roots.is_empty() {
+				return;
+			}
+			sync.key = key;
+			for entity in &roots {
+				commands.entity(entity).despawn();
+			}
+			spawn_from_item(&mut commands, &spin.item);
+			pending.resolved = None;
+			pending.focus = Some(BODY_FOCUS);
+			return;
+		}
 	}
-	sync.key = key;
+
 	for entity in &roots {
 		commands.entity(entity).despawn();
 	}
-	spawn_from_menu(&mut commands, &menu_state.0);
+	sync.key.clear();
+	pending.focus = None;
 	pending.resolved = None;
-	if pending.focus.is_none() {
-		pending.focus = Some(default_body_focus(&menu_state.0));
-	}
+}
+
+fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
+	let Some(mesh) = item.mesh() else {
+		return;
+	};
+	let material = item.material();
+	let mut config = BraidmanConfig::default_preview();
+	config.clothing = vec![mesh];
+	config.colors.set_clothing_color(mesh, material.color);
+	config.colors.set_clothing_material(mesh, material.id);
+	spawn_clothed(commands, &config.clothed());
 }
 
 fn spawn_from_menu(commands: &mut Commands, menu: &CharacterMenu) {
