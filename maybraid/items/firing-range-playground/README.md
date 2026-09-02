@@ -4,11 +4,13 @@ Braidman on a flat range, plus a standing NPC braidman down-left of the pad
 body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
 followed player fires from the pad. The NPC installs
 [`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
-the player into [`FirearmObjective`](../../intelligence/combat/firearm/src/target.rs)
-and [`FirearmMovementObjective`](../../intelligence/combat/firearm/src/target.rs).
+the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
+visible observations feed both firearm objective lists until spotting memory
+expires.
 Firearm movement writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
 / flee into [`movement-intelligence`](../../intelligence/movement/lib); firearm
-combat aims [`PlayerLook`](../../player/src/identity.rs) and the held trigger.
+combat aims [`PlayerLook`](../../player/src/identity.rs) and fires only when the
+propagated barrel is aligned and the obstruction policy permits it.
 
 ```bash
 cargo run -p firing-range-playground

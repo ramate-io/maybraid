@@ -1,12 +1,16 @@
 //! Firearm combat brain: who to shoot, how to aim, when to fire.
 
+use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use crozon_characters::CharacterRoot;
 use firearm_user::FirearmUser;
-use firearms::WeaponTrigger;
+use firearms::{muzzle_world, BoneMap, FirearmMembers, RigRoot, WeaponTrigger};
+use lod_avian::PhysicsInteractionLayer;
+use movement_intelligence::{MovementBody, MovementIntelligence};
 use player::PlayerLook;
 use std::f32::consts::FRAC_PI_2;
 
-use crate::target::{pick_target, FirearmObjective};
+use crate::target::{pick_target, FirearmObjective, SpottedTarget};
 
 /// How a firearm combatant aims and stays on a target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -17,11 +21,24 @@ pub struct FirearmIntelligenceSettings {
 	pub headshots: f32,
 	/// 0..=1. Stick to the current target versus the nearest.
 	pub focus: f32,
+	/// 0..=1. Frequency of trigger opportunities once sufficiently aimed.
+	pub trigger_happiness: f32,
+	/// 0..=1. Willingness to fire through an obstructed line of fire.
+	pub wall_firing: f32,
+	/// Seconds a last-known observation remains actionable.
+	pub target_spotting_memory: f32,
 }
 
 impl Default for FirearmIntelligenceSettings {
 	fn default() -> Self {
-		Self { accuracy: 0.75, headshots: 0.15, focus: 0.6 }
+		Self {
+			accuracy: 0.75,
+			headshots: 0.15,
+			focus: 0.6,
+			trigger_happiness: 0.45,
+			wall_firing: 0.0,
+			target_spotting_memory: 2.5,
+		}
 	}
 }
 
@@ -30,71 +47,179 @@ impl Default for FirearmIntelligenceSettings {
 pub struct FirearmIntelligence {
 	pub objective: FirearmObjective,
 	pub settings: FirearmIntelligenceSettings,
-	engaged: Option<Entity>,
+	pub(crate) engaged: Option<Entity>,
+	aiming_head: bool,
+	next_aim_choice_at: f32,
+	next_trigger_at: f32,
 }
 
 impl FirearmIntelligence {
 	pub fn new(objective: FirearmObjective) -> Self {
-		Self { objective, settings: FirearmIntelligenceSettings::default(), engaged: None }
-	}
-
-	pub fn aim_height(&self, feet_y: f32, hip_height: f32, eye_height: f32) -> f32 {
-		let mass = feet_y + hip_height;
-		let head = feet_y + eye_height;
-		mass.lerp(head, self.settings.headshots.clamp(0.0, 1.0))
+		Self {
+			objective,
+			settings: FirearmIntelligenceSettings::default(),
+			engaged: None,
+			aiming_head: false,
+			next_aim_choice_at: 0.0,
+			next_trigger_at: 0.0,
+		}
 	}
 }
 
-const HIP_HEIGHT: f32 = 0.55;
-const EYE_HEIGHT: f32 = 1.45;
-const FEET_BELOW_ORIGIN: f32 = 0.9;
-
-pub(crate) fn engage_firearm_targets(
+/// Select a remembered target and turn the user's desired look toward it.
+pub(crate) fn aim_at_firearm_targets(
 	time: Res<Time>,
-	mut combatants: Query<(Entity, &mut FirearmIntelligence, &mut PlayerLook, &FirearmUser)>,
-	transforms: Query<&Transform>,
-	mut triggers: Query<&mut WeaponTrigger>,
+	mut combatants: Query<(
+		Entity,
+		&Transform,
+		&MovementIntelligence,
+		&mut FirearmIntelligence,
+		&mut PlayerLook,
+	)>,
 ) {
 	let elapsed = time.elapsed_secs();
-	for (entity, mut brain, mut look, user) in &mut combatants {
-		let Ok(from_tf) = transforms.get(entity) else {
+	for (entity, transform, movement, mut brain, mut look) in &mut combatants {
+		let from = movement.ability.eye_point(transform.translation);
+		let Some(target) =
+			pick_target(from, &brain.objective.0, brain.engaged, brain.settings.focus).copied()
+		else {
+			brain.engaged = None;
 			continue;
 		};
-		let from = from_tf.translation;
-		let picked = pick_target(
-			from,
-			&brain.objective.0,
-			|target| transforms.get(target).ok().map(|tf| tf.translation),
-			brain.engaged,
-			brain.settings.focus,
-		);
-		brain.engaged = picked;
-		let Some(target) = picked else {
-			if let Ok(mut trigger) = triggers.get_mut(user.held) {
-				trigger.0 = false;
-			}
-			continue;
-		};
-		let Ok(target_tf) = transforms.get(target) else {
-			continue;
-		};
-		let feet_y = target_tf.translation.y - FEET_BELOW_ORIGIN;
-		let aim_at = Vec3::new(
-			target_tf.translation.x,
-			brain.aim_height(feet_y, HIP_HEIGHT, EYE_HEIGHT),
-			target_tf.translation.z,
-		);
-		let to = aim_at - from;
+		if brain.engaged != Some(target.entity) || elapsed >= brain.next_aim_choice_at {
+			brain.aiming_head = frac_noise(
+				entity.to_bits() as f32 * 0.013
+					+ target.entity.to_bits() as f32 * 0.019
+					+ elapsed.floor(),
+			) < brain.settings.headshots.clamp(0.0, 1.0);
+			brain.next_aim_choice_at = elapsed + 1.5;
+		}
+		brain.engaged = Some(target.entity);
+		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
+		let to = target.aim_point(headshots) - from;
 		let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
 		look.yaw = yaw;
 		look.pitch = pitch;
-		let aimed = look_dir(yaw, pitch);
-		let desired = to.normalize_or_zero();
-		let threshold = 0.85_f32.lerp(0.995, brain.settings.accuracy.clamp(0.0, 1.0));
-		if let Ok(mut trigger) = triggers.get_mut(user.held) {
-			trigger.0 = desired.dot(aimed) >= threshold;
+	}
+}
+
+/// Turn the visual body toward combat look before the held-firearm pose applies
+/// its local yaw cone.
+pub(crate) fn orient_firearm_combatants(
+	time: Res<Time>,
+	combatants: Query<(&PlayerLook, &FirearmIntelligence)>,
+	mut visuals: Query<(&ChildOf, &mut Transform), With<CharacterRoot>>,
+) {
+	let amount = (time.delta_secs() * 5.0).clamp(0.0, 1.0);
+	for (child_of, mut visual) in &mut visuals {
+		let Ok((look, brain)) = combatants.get(child_of.parent()) else {
+			continue;
+		};
+		if brain.engaged.is_none() {
+			continue;
+		}
+		let forward = Quat::from_axis_angle(Vec3::Y, look.yaw) * -Vec3::Z;
+		let mut target = *visual;
+		target.look_to(-forward, Vec3::Y);
+		visual.rotation = visual.rotation.slerp(target.rotation, amount);
+	}
+}
+
+/// Pulse the held trigger only when the actual propagated firearm bore is
+/// aligned and the current obstruction policy allows the shot.
+pub(crate) fn fire_at_spotted_targets(
+	spatial: SpatialQuery,
+	time: Res<Time>,
+	mut combatants: Query<(Entity, &mut FirearmIntelligence, &FirearmUser)>,
+	guns: Query<&FirearmMembers>,
+	maps: Query<&BoneMap, With<RigRoot>>,
+	globals: Query<&GlobalTransform>,
+	mut triggers: Query<&mut WeaponTrigger>,
+) {
+	let now = time.elapsed_secs();
+	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	for (entity, mut brain, user) in &mut combatants {
+		let target = engaged_target(&brain).copied();
+		let Some(target) = target else {
+			set_trigger(user, false, &mut triggers);
+			continue;
+		};
+		let Some(global) = barrel_global(user.held, &guns, &maps, &globals) else {
+			set_trigger(user, false, &mut triggers);
+			continue;
+		};
+		let (muzzle, bore) = muzzle_world(global);
+		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
+		let aim_at = target.aim_point(headshots);
+		let delta = aim_at - muzzle;
+		let distance = delta.length();
+		if distance <= 1e-4 {
+			set_trigger(user, false, &mut triggers);
+			continue;
+		}
+		let desired = delta / distance;
+		let alignment = 0.94_f32.lerp(0.995, brain.settings.accuracy.clamp(0.0, 1.0));
+		let aligned = bore.dot(desired) >= alignment;
+		let blocked = spatial
+			.cast_ray(muzzle, Dir3::new_unchecked(desired), distance, true, &filter)
+			.is_some_and(|hit| hit.distance < distance - 0.05);
+		let obstruction_allowed =
+			!blocked || willing_to_fire_through_wall(entity, now, brain.settings.wall_firing);
+		let happiness = brain.settings.trigger_happiness.clamp(0.0, 1.0);
+		let ready = happiness > 0.0 && now >= brain.next_trigger_at;
+		let fire = aligned && obstruction_allowed && ready;
+		set_trigger(user, fire, &mut triggers);
+		if fire {
+			brain.next_trigger_at = now + trigger_interval(happiness);
 		}
 	}
+}
+
+fn engaged_target(brain: &FirearmIntelligence) -> Option<&SpottedTarget> {
+	let engaged = brain.engaged?;
+	brain.objective.0.iter().find(|target| target.entity == engaged)
+}
+
+fn barrel_global<'a>(
+	held: Entity,
+	guns: &Query<&FirearmMembers>,
+	maps: &Query<&BoneMap, With<RigRoot>>,
+	globals: &'a Query<&GlobalTransform>,
+) -> Option<&'a GlobalTransform> {
+	let members = guns.get(held).ok()?;
+	for member in members.iter() {
+		let Ok(map) = maps.get(member) else {
+			continue;
+		};
+		let Some(&barrel) = map.by_name.get("barrel") else {
+			continue;
+		};
+		if let Ok(global) = globals.get(barrel) {
+			return Some(global);
+		}
+	}
+	None
+}
+
+fn set_trigger(user: &FirearmUser, fire: bool, triggers: &mut Query<&mut WeaponTrigger>) {
+	if let Ok(mut trigger) = triggers.get_mut(user.held) {
+		trigger.0 = fire;
+	}
+}
+
+fn trigger_interval(happiness: f32) -> f32 {
+	1.8_f32.lerp(0.18, happiness.clamp(0.0, 1.0))
+}
+
+fn willing_to_fire_through_wall(entity: Entity, now: f32, willingness: f32) -> bool {
+	let willingness = willingness.clamp(0.0, 1.0);
+	if willingness <= 0.0 {
+		return false;
+	}
+	if willingness >= 1.0 {
+		return true;
+	}
+	frac_noise(entity.to_bits() as f32 * 0.017 + now.floor() * 7.13) < willingness
 }
 
 fn look_angles(to: Vec3, accuracy: f32, entity: Entity, elapsed: f32) -> (f32, f32) {
@@ -106,6 +231,7 @@ fn look_angles(to: Vec3, accuracy: f32, entity: Entity, elapsed: f32) -> (f32, f
 	(yaw, pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1))
 }
 
+#[cfg(test)]
 fn look_dir(yaw: f32, pitch: f32) -> Vec3 {
 	Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_rotation_x(-pitch) * -Vec3::Z
 }
@@ -116,7 +242,7 @@ fn jitter(entity: Entity, elapsed: f32) -> Vec2 {
 }
 
 fn frac_noise(x: f32) -> f32 {
-	(x.sin() * 43758.5453).fract().abs()
+	(x.sin() * 43_758.547).fract().abs()
 }
 
 #[cfg(test)]
@@ -134,11 +260,13 @@ mod tests {
 	}
 
 	#[test]
-	fn aim_height_lerps_toward_the_head() {
-		let mut brain = FirearmIntelligence::new(FirearmObjective::default());
-		brain.settings.headshots = 0.0;
-		assert!((brain.aim_height(0.0, 0.55, 1.45) - 0.55).abs() < 1e-4);
-		brain.settings.headshots = 1.0;
-		assert!((brain.aim_height(0.0, 0.55, 1.45) - 1.45).abs() < 1e-4);
+	fn trigger_happiness_shortens_the_interval() {
+		assert!(trigger_interval(1.0) < trigger_interval(0.0));
+	}
+
+	#[test]
+	fn zero_wall_firing_rejects_obstructions() {
+		assert!(!willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 0.0));
+		assert!(willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 1.0));
 	}
 }

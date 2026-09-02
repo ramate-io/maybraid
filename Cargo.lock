@@ -3323,9 +3323,12 @@ name = "firearm-intelligence"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
+ "crozon-characters",
  "firearm-user",
  "firearms",
+ "lod-avian",
  "movement-intelligence",
  "player",
 ]

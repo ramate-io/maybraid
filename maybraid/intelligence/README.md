@@ -14,4 +14,4 @@ Walk colliders for Richmond IR live in [`richmond-building-physics`](../richmond
 
 ## Combat
 
-- [`firearm-intelligence`](combat/firearm) — [`FirearmIntelligence`](combat/firearm/src/combat.rs) fields [`FirearmObjective`](combat/firearm/src/target.rs) (who to shoot). [`FirearmMovementIntelligence`](combat/firearm/src/movement.rs) fields [`FirearmMovementObjective`](combat/firearm/src/target.rs) and writes `MovementObjective` + `ReplanMovement`.
+- [`firearm-intelligence`](combat/firearm) — sightline probes turn [`FirearmSpotting`](combat/firearm/src/target.rs) candidates into remembered [`SpottedTarget`](combat/firearm/src/target.rs) snapshots. [`FirearmIntelligence`](combat/firearm/src/combat.rs) aims and gates the actual firearm trigger; [`FirearmMovementIntelligence`](combat/firearm/src/movement.rs) writes `MovementObjective` + `ReplanMovement` from the same observations.

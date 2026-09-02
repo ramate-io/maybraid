@@ -97,6 +97,11 @@ pub struct LaserBeam {
 }
 
 /// Avian flights + fire / despawn / laser grow. Hosts still add [`crate::FirearmHostsPlugin`].
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FirearmWeaponSystems {
+	Fire,
+}
+
 pub struct FirearmWeaponsPlugin;
 
 impl Plugin for FirearmWeaponsPlugin {
@@ -111,7 +116,12 @@ impl Plugin for FirearmWeaponsPlugin {
 			.add_systems(Startup, setup_impact_effects)
 			.add_systems(
 				PostUpdate,
-				(fire_weapons, tick_lasers, spawn_impacts_from_contacts, tick_impact_bursts)
+				(
+					fire_weapons.in_set(FirearmWeaponSystems::Fire),
+					tick_lasers,
+					spawn_impacts_from_contacts,
+					tick_impact_bursts,
+				)
 					.after(TransformSystems::Propagate)
 					.after(FirearmHostSystems::Pose)
 					.after(tick_flights),

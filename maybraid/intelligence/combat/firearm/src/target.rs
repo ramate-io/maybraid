@@ -1,97 +1,146 @@
-//! Combat target list shared by firearm combat and firearm movement.
+//! Perception candidates and spotted target snapshots.
 
 use bevy::prelude::*;
 
-/// Someone a firearm combatant may shoot at or stand relative to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Semantic target shape used for spotting and body/head aim points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TargetCapsule {
+	pub radius: f32,
+	pub half_height: f32,
+}
+
+impl TargetCapsule {
+	pub fn new(radius: f32, half_height: f32) -> Self {
+		Self { radius: radius.max(0.0), half_height: half_height.max(radius) }
+	}
+
+	pub fn center_mass(self, origin: Vec3) -> Vec3 {
+		origin
+	}
+
+	pub fn head(self, origin: Vec3) -> Vec3 {
+		origin + Vec3::Y * (self.half_height - self.radius * 0.5).max(0.0)
+	}
+}
+
+/// A possible enemy supplied to the spotting system.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CombatTarget {
 	pub entity: Entity,
+	pub capsule: TargetCapsule,
+}
+
+impl CombatTarget {
+	pub fn new(entity: Entity, capsule: TargetCapsule) -> Self {
+		Self { entity, capsule }
+	}
+}
+
+/// Targets perception should try to observe.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct FirearmSpotting {
+	pub candidates: Vec<CombatTarget>,
+}
+
+/// Last observed state of one combat target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpottedTarget {
+	pub entity: Entity,
+	/// Capsule origin at the observation time.
+	pub position: Vec3,
+	pub capsule: TargetCapsule,
+	pub movement_vector: Vec3,
+	/// [`Time::elapsed_secs`] when this observation was made.
+	pub spotted_at: f32,
+}
+
+impl SpottedTarget {
+	pub fn aim_point(self, headshots: f32) -> Vec3 {
+		self.capsule
+			.center_mass(self.position)
+			.lerp(self.capsule.head(self.position), headshots.clamp(0.0, 1.0))
+	}
 }
 
 /// Who to shoot. Written by perception; fielded by [`crate::FirearmIntelligence`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FirearmObjective(pub Vec<CombatTarget>);
-
-impl FirearmObjective {
-	pub fn from_target(entity: Entity) -> Self {
-		Self(vec![CombatTarget { entity }])
-	}
-}
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FirearmObjective(pub Vec<SpottedTarget>);
 
 /// Who to stand relative to. Written by perception; fielded by
 /// [`crate::FirearmMovementIntelligence`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct FirearmMovementObjective(pub Vec<CombatTarget>);
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FirearmMovementObjective(pub Vec<SpottedTarget>);
 
-impl FirearmMovementObjective {
-	pub fn from_target(entity: Entity) -> Self {
-		Self(vec![CombatTarget { entity }])
-	}
-}
-
-/// Pick a target from `candidates` given current `from` and optional sticky `engaged`.
+/// Pick an observation given current `from` and optional sticky `engaged`.
 ///
 /// `focus` 0 always takes the nearest. `focus` 1 keeps `engaged` until it leaves
 /// the list. In between, switch only when the nearest is closer by more than
 /// `focus` × 8 m.
 pub fn pick_target(
 	from: Vec3,
-	candidates: &[CombatTarget],
-	positions: impl Fn(Entity) -> Option<Vec3>,
+	candidates: &[SpottedTarget],
 	engaged: Option<Entity>,
 	focus: f32,
-) -> Option<Entity> {
-	let mut nearest: Option<(Entity, f32)> = None;
-	let mut engaged_dist = None;
+) -> Option<&SpottedTarget> {
+	let mut nearest: Option<(&SpottedTarget, f32)> = None;
+	let mut engaged_target = None;
 	for target in candidates {
-		let Some(point) = positions(target.entity) else {
-			continue;
-		};
-		let dist = Vec2::new(from.x, from.z).distance(Vec2::new(point.x, point.z));
+		let dist =
+			Vec2::new(from.x, from.z).distance(Vec2::new(target.position.x, target.position.z));
 		if engaged == Some(target.entity) {
-			engaged_dist = Some(dist);
+			engaged_target = Some((target, dist));
 		}
 		let take = nearest.is_none_or(|(_, best)| dist < best);
 		if take {
-			nearest = Some((target.entity, dist));
+			nearest = Some((target, dist));
 		}
 	}
-	let (nearest_entity, nearest_dist) = nearest?;
-	let Some(engaged_entity) = engaged else {
-		return Some(nearest_entity);
-	};
-	let Some(engaged_dist) = engaged_dist else {
-		return Some(nearest_entity);
+	let (nearest_target, nearest_dist) = nearest?;
+	let Some((engaged_target, engaged_dist)) = engaged_target else {
+		return Some(nearest_target);
 	};
 	let stick = focus.clamp(0.0, 1.0) * 8.0;
 	if nearest_dist + stick < engaged_dist {
-		Some(nearest_entity)
+		Some(nearest_target)
 	} else {
-		Some(engaged_entity)
+		Some(engaged_target)
 	}
+}
+
+pub(crate) fn upsert_observation(targets: &mut Vec<SpottedTarget>, observation: SpottedTarget) {
+	if let Some(target) = targets.iter_mut().find(|target| target.entity == observation.entity) {
+		*target = observation;
+	} else {
+		targets.push(observation);
+	}
+}
+
+pub(crate) fn retain_recent(targets: &mut Vec<SpottedTarget>, now: f32, memory: f32) {
+	let memory = memory.max(0.0);
+	targets.retain(|target| now - target.spotted_at <= memory);
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
-	fn pos(map: &[(Entity, Vec3)]) -> impl Fn(Entity) -> Option<Vec3> + '_ {
-		|entity| map.iter().find(|(id, _)| *id == entity).map(|(_, p)| *p)
+	fn spotted(entity: Entity, position: Vec3) -> SpottedTarget {
+		SpottedTarget {
+			entity,
+			position,
+			capsule: TargetCapsule::new(0.4, 0.9),
+			movement_vector: Vec3::ZERO,
+			spotted_at: 0.0,
+		}
 	}
 
 	#[test]
 	fn pick_target_takes_nearest_when_unfocused() -> anyhow::Result<()> {
 		let a = Entity::from_bits(1);
 		let b = Entity::from_bits(2);
-		let map = [(a, Vec3::X * 4.0), (b, Vec3::X * 2.0)];
-		let picked = pick_target(
-			Vec3::ZERO,
-			&[CombatTarget { entity: a }, CombatTarget { entity: b }],
-			pos(&map),
-			Some(a),
-			0.0,
-		);
-		assert_eq!(picked, Some(b));
+		let targets = [spotted(a, Vec3::X * 4.0), spotted(b, Vec3::X * 2.0)];
+		let picked = pick_target(Vec3::ZERO, &targets, Some(a), 0.0);
+		assert_eq!(picked.map(|target| target.entity), Some(b));
 		Ok(())
 	}
 
@@ -99,15 +148,25 @@ mod tests {
 	fn pick_target_keeps_engaged_when_focused() -> anyhow::Result<()> {
 		let a = Entity::from_bits(1);
 		let b = Entity::from_bits(2);
-		let map = [(a, Vec3::X * 4.0), (b, Vec3::X * 2.0)];
-		let picked = pick_target(
-			Vec3::ZERO,
-			&[CombatTarget { entity: a }, CombatTarget { entity: b }],
-			pos(&map),
-			Some(a),
-			1.0,
-		);
-		assert_eq!(picked, Some(a));
+		let targets = [spotted(a, Vec3::X * 4.0), spotted(b, Vec3::X * 2.0)];
+		let picked = pick_target(Vec3::ZERO, &targets, Some(a), 1.0);
+		assert_eq!(picked.map(|target| target.entity), Some(a));
+		Ok(())
+	}
+
+	#[test]
+	fn memory_expires_old_observations() -> anyhow::Result<()> {
+		let mut targets = vec![spotted(Entity::from_bits(1), Vec3::ZERO)];
+		retain_recent(&mut targets, 1.1, 1.0);
+		assert!(targets.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn aim_point_blends_center_mass_and_head() -> anyhow::Result<()> {
+		let target = spotted(Entity::from_bits(1), Vec3::ZERO);
+		assert_eq!(target.aim_point(0.0), Vec3::ZERO);
+		assert!(target.aim_point(1.0).y > 0.0);
 		Ok(())
 	}
 }

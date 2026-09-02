@@ -7,7 +7,7 @@ use movement_intelligence::{
 
 use crate::target::{pick_target, FirearmMovementObjective};
 
-const REFRESH_DISTANCE: f32 = 1.35;
+const REFRESH_DISTANCE: f32 = 0.6;
 
 /// How a firearm combatant stands relative to its targets.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,11 +35,12 @@ impl Default for FirearmMovementIntelligenceSettings {
 pub struct FirearmMovementIntelligence {
 	pub objective: FirearmMovementObjective,
 	pub settings: FirearmMovementIntelligenceSettings,
+	driving: bool,
 }
 
 impl FirearmMovementIntelligence {
 	pub fn new(objective: FirearmMovementObjective) -> Self {
-		Self { objective, settings: FirearmMovementIntelligenceSettings::default() }
+		Self { objective, settings: FirearmMovementIntelligenceSettings::default(), driving: false }
 	}
 
 	pub fn compose(&self, from: Vec3, target: Vec3) -> MovementObjective {
@@ -64,27 +65,31 @@ impl FirearmMovementIntelligence {
 }
 
 pub(crate) fn write_firearm_movement_objectives(
-	mut combatants: Query<(Entity, &FirearmMovementIntelligence, &mut MovementIntelligence)>,
-	transforms: Query<&Transform>,
+	mut combatants: Query<(
+		Entity,
+		&Transform,
+		&mut FirearmMovementIntelligence,
+		&mut MovementIntelligence,
+	)>,
 	mut commands: Commands,
 ) {
-	for (entity, brain, mut movement) in &mut combatants {
-		let Ok(from_tf) = transforms.get(entity) else {
+	for (entity, transform, mut brain, mut movement) in &mut combatants {
+		let Some(target) =
+			pick_target(transform.translation, &brain.objective.0, None, 0.0).copied()
+		else {
+			if brain.driving {
+				brain.driving = false;
+				movement.objective = MovementObjective::Reach(MovementLocation::new(
+					transform.translation,
+					movement.ability.agent_radius,
+				));
+				movement.adopt_plan(Vec::new());
+				commands.entity(entity).remove::<ReplanMovement>();
+			}
 			continue;
 		};
-		let Some(target) = pick_target(
-			from_tf.translation,
-			&brain.objective.0,
-			|target| transforms.get(target).ok().map(|tf| tf.translation),
-			None,
-			0.0,
-		) else {
-			continue;
-		};
-		let Ok(target_tf) = transforms.get(target) else {
-			continue;
-		};
-		let next = brain.compose(from_tf.translation, target_tf.translation);
+		brain.driving = true;
+		let next = brain.compose(transform.translation, target.position);
 		if !should_replan(movement.objective, next) {
 			continue;
 		}
