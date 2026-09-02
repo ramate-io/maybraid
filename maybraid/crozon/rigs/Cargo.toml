@@ -14,6 +14,7 @@ bevy = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+rigs = { workspace = true }
 
 [lints]
 workspace = true

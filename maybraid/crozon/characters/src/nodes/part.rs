@@ -14,6 +14,7 @@ use crate::assets::AssetNormalization;
 use crate::rig::CharacterPart;
 use crate::scene_children::maybe_component;
 use crate::socket::{RigId, SkinRef, SkinRefRoot, SocketRef, SocketRefRoot};
+use rigs::AssemblyHost;
 
 /// Authoring IR for a character mesh or feature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -176,6 +177,7 @@ impl LodScene for PartNode {
 				template_value(part)
 				template_value(material)
 				PropagateToDescendants
+				AssemblyHost
 			},
 			maybe_component(socket),
 			maybe_component(skin),

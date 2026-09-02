@@ -45,10 +45,13 @@
 //!    so no respawn and no readiness reset is needed.
 
 use bevy::prelude::*;
-use crozon_characters::{CharacterRig, CharacterRoot, MemberOf, RigId, RigNode, SocketRefRoot};
+use crozon_characters::{
+	AssemblyHost, AssemblyRoot, BoneMap, CharacterRig, CharacterRoot, MemberOf, RigId, RigNode,
+	RigRoot, SocketRefRoot,
+};
 
 use crate::preview::ConceptPreviewConfig;
-use crate::skinning::{ActiveRigPose, BoneMap, CharacterRigRole, RigBindScales};
+use crate::skinning::{ActiveRigPose, CharacterRigRole, RigBindScales};
 
 #[derive(Component)]
 pub struct FocusReferenceRoot;
@@ -184,6 +187,7 @@ fn spawn_focus_reference(commands: &mut Commands, asset_server: &AssetServer, no
 	};
 	let root = commands
 		.spawn((
+			AssemblyRoot,
 			CharacterRoot,
 			FocusReferenceRoot,
 			Visibility::Hidden,
@@ -198,6 +202,8 @@ fn spawn_focus_reference(commands: &mut Commands, asset_server: &AssetServer, no
 		),
 		CharacterRig { role: CharacterRigRole::Body, skeleton: body.skeleton },
 		FocusReferenceRig,
+		AssemblyHost,
+		RigRoot::new(RigId::Body.into()).with_landmarks(body.skeleton.landmark_bones()),
 		BoneMap::default(),
 		ActiveRigPose { pose: body.pose.clone() },
 		RigBindScales::default(),
@@ -215,6 +221,8 @@ fn spawn_focus_reference(commands: &mut Commands, asset_server: &AssetServer, no
 			),
 			CharacterRig { role: CharacterRigRole::Neck, skeleton: neck.skeleton },
 			FocusReferenceRig,
+			AssemblyHost,
+			RigRoot::new(RigId::Neck.into()).with_landmarks(neck.skeleton.landmark_bones()),
 			BoneMap::default(),
 			ActiveRigPose { pose: neck.pose.clone() },
 			RigBindScales::default(),
@@ -247,6 +255,8 @@ fn spawn_focus_reference(commands: &mut Commands, asset_server: &AssetServer, no
 		),
 		CharacterRig { role: CharacterRigRole::Head, skeleton: head.skeleton },
 		FocusReferenceRig,
+		AssemblyHost,
+		RigRoot::new(RigId::Head.into()).with_landmarks(head.skeleton.landmark_bones()),
 		BoneMap::default(),
 		MemberOf(root),
 		ChildOf(root),

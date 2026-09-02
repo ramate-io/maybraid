@@ -52,8 +52,8 @@ pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 pub use member::{
-	attach_part_node, find_member_rig, find_part_member, stamp_character_members, CharacterMembers,
-	CharacterRoot, MemberOf,
+	attach_part_node, find_member_rig, find_part_member, hide_socketed_parts,
+	stamp_character_members, CharacterMembers, CharacterRoot, MemberOf,
 };
 pub use nodes::{PartNode, RigNode};
 pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};
@@ -65,6 +65,7 @@ pub use rig::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, NoMatchingArmature, PartRigRef, ResolvedPoseApplied,
 	RigBindScales, RigSkeletonKind,
 };
+pub use rigs::{AssemblyHost, AssemblyRoot, RigKey, RigPlugin, RigRoot, RigSystems};
 pub use skin::{
 	fulfill_skin_ref_roots, invalidate_changed_skin_ref_roots, prune_duplicate_part_scenes,
 	remap_part_skin_to_rig,

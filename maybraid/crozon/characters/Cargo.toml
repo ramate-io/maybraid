@@ -20,6 +20,7 @@ crozon-character-shaders = { workspace = true }
 crozon-rigs = { workspace = true }
 lod = { workspace = true }
 material-ref = { workspace = true }
+rigs = { workspace = true }
 scene-ref = { workspace = true }
 
 [dev-dependencies]

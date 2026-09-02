@@ -16,6 +16,7 @@ use crate::rig::{
 use crate::scene_children::maybe_component;
 use crate::socket::{RigId, SocketRef, SocketRefRoot};
 use crozon_character_motion::{motion_policy, AnimRefRoot};
+use rigs::{AssemblyHost, RigRoot};
 
 /// Authoring IR for a character armature — also the fine-phase host component.
 #[derive(Debug, Clone, PartialEq, Component)]
@@ -148,12 +149,15 @@ impl LodScene for RigNode {
 		let policy = motion_policy(level);
 		let bones = body.then_some(()).and(policy.animate_bones());
 		let effects = body.then_some(()).and(policy.animate_effects());
+		let rig_root = RigRoot::new(node.id.into()).with_landmarks(node.skeleton.landmark_bones());
 		(
 			bsn! {
 				template_value(node)
 				template_value(transform)
 				template_value(rig)
 				LodCharacterRig
+				AssemblyHost
+				template_value(rig_root)
 				template_value(BoneMap::default())
 				template_value(pose)
 				template_value(RigBindScales::default())

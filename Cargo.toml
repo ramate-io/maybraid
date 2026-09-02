@@ -40,6 +40,7 @@ members = [
   "maybraid/sdf/common",
   "maybraid/sdf/common-playground",
 
+  "maybraid/rigs",
   "maybraid/crozon/animations",
   "maybraid/crozon/character-motion",
   "maybraid/crozon/bevy-character-ui-menu-renderer",
@@ -67,6 +68,14 @@ members = [
   "maybraid/world/playground",
   "maybraid/game",
   "maybraid/input",
+  "maybraid/player",
+  "maybraid/player-camera",
+  "maybraid/projectiles",
+  "maybraid/items/firearms-components",
+  "maybraid/items/firearms",
+  "maybraid/items/firearm-user",
+  "maybraid/items/playground",
+  "maybraid/items/firing-range-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -175,6 +184,7 @@ chrono = { version = "0.4.41" }
 reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
 bevy = { version = "0.19.0" }
+bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 js-sys = "0.3"
 log = "0.4"
 console_log = "1"
@@ -250,6 +260,7 @@ crozon-character-shaders = { path = "maybraid/crozon/character-shaders" }
 crozon-character-ui-menus = { path = "maybraid/crozon/character-ui-menus" }
 crozon-characters = { path = "maybraid/crozon/characters" }
 crozon-character-motion = { path = "maybraid/crozon/character-motion" }
+rigs = { path = "maybraid/rigs" }
 crozon-rigs = { path = "maybraid/crozon/rigs" }
 malo-animations = { path = "maybraid/crozon/animations" }
 procedural-common = { path = "maybraid/procedural/common" }
@@ -271,6 +282,14 @@ maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
+player = { path = "maybraid/player" }
+player-camera = { path = "maybraid/player-camera" }
+projectiles = { path = "maybraid/projectiles" }
+firearms-components = { path = "maybraid/items/firearms-components" }
+firearms = { path = "maybraid/items/firearms" }
+firearm-user = { path = "maybraid/items/firearm-user" }
+items-playground = { path = "maybraid/items/playground" }
+firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 
 gimme-core = { path = "maybraid/gimme/core" }
 gimme-gen = { path = "maybraid/gimme/gen" }

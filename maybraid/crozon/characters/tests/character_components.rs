@@ -349,8 +349,8 @@ fn assert_head_parent(character: &impl CharacterComponents, parent: RigId, bone:
 		.find(|rig| rig.id == RigId::Head)
 		.expect("head rig");
 	let socket = head.socket.expect("head socket");
-	assert_eq!(socket.rig, parent);
-	assert_eq!(socket.bone, bone);
+	assert_eq!(socket.rig, Some(parent.into()));
+	assert_eq!(socket.bone, Some(bone));
 }
 
 fn assert_empty_clothing(inner: &impl CharacterComponents, clothed: &impl CharacterComponents) {
