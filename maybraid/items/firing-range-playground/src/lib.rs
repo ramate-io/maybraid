@@ -15,6 +15,10 @@ use buildings_lod::FiringRangeBuildingsLodPlugin;
 use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterHostsPlugin, CharacterRecipe, CharacterRoot,
 };
+use firearm_intelligence::{
+	FirearmIntelligence, FirearmIntelligencePlugin, FirearmIntelligenceSystems,
+	FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
+};
 use firearm_user::{spawn_held_firearm, spawn_reticle, FirearmUserPlugin};
 use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -24,7 +28,7 @@ use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligence, MovementIntelligenceLimits, MovementIntelligencePlugin,
-	MovementIntelligenceSystems, ReplanMovement,
+	MovementLocation, MovementObjective, ReplanMovement,
 };
 use movement_intelligence_richmond::RichmondAvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
@@ -58,8 +62,8 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
 		.add_plugins(BuildingWalkColliderPlugin)
 		.add_plugins(MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default())
+		.add_plugins(FirearmIntelligencePlugin)
 		.add_plugins(MovementRealizationPlugin)
-		.init_resource::<vantage::NpcVantageRefresh>()
 		.init_resource::<LesHallesSpawn>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
@@ -83,7 +87,7 @@ impl Plugin for FiringRangePlugin {
 			(
 				spawn_player_character,
 				spawn_npc_character,
-				vantage::refresh_npc_vantage.before(MovementIntelligenceSystems::Replan),
+				vantage::assign_player_combat_targets.before(FirearmIntelligenceSystems::Movement),
 				les_halles::draw_circulation_gizmos,
 				apply_parent_confines.after(LodRefreshSystems::Cull),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
@@ -122,9 +126,17 @@ fn spawn_npc_system(
 		&mut meshes,
 		&mut materials,
 	);
-	let mut brain = MovementIntelligence::new(vantage::vantage_on_player(spawn.player));
-	brain.ability.candidate_budget.horizon = 80.0;
-	commands.entity(npc).insert((brain, ReplanMovement));
+	let mut movement = MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(
+		spawn.player,
+		1.4,
+	)));
+	movement.ability.candidate_budget.horizon = 80.0;
+	commands.entity(npc).insert((
+		movement,
+		FirearmMovementIntelligence::new(FirearmMovementObjective::default()),
+		FirearmIntelligence::new(FirearmObjective::default()),
+		ReplanMovement,
+	));
 }
 
 fn spawn_held_system(mut commands: Commands, bodies: Query<Entity, Or<(With<Player>, With<Npc>)>>) {

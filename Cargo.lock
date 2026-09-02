@@ -3319,6 +3319,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "firearm-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "firearm-user",
+ "firearms",
+ "movement-intelligence",
+ "player",
+]
+
+[[package]]
 name = "firearm-user"
 version = "0.0.1"
 dependencies = [
@@ -3366,6 +3378,7 @@ dependencies = [
  "bevy",
  "clap",
  "crozon-characters",
+ "firearm-intelligence",
  "firearm-user",
  "firearms",
  "game-commands",

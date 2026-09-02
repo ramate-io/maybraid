@@ -1,14 +1,14 @@
 # Firing range
 
 Braidman on a flat range, plus a standing NPC braidman down-left of the pad
-body. Both hold a bullpup through [`firearm-user`](../firearm-user/); only the
-followed player fires and drives the reticle. The NPC uses
-[`movement-intelligence`](../../intelligence/lib) with an Avian collider
-surface: the playground writes [`VantageOn`](../../intelligence/lib/src/objective.rs)
-the player and requests a replan when the player has moved.
-
-The playground registers player, camera, firearm-user, weapons, and movement
-intelligence plugins; the pad, cover crates, and vantage refresh stay here.
+body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
+followed player fires from the pad. The NPC installs
+[`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
+the player into [`FirearmObjective`](../../intelligence/combat/firearm/src/target.rs)
+and [`FirearmMovementObjective`](../../intelligence/combat/firearm/src/target.rs).
+Firearm movement writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
+/ flee into [`movement-intelligence`](../../intelligence/movement/lib); firearm
+combat aims [`PlayerLook`](../../player/src/identity.rs) and the held trigger.
 
 ```bash
 cargo run -p firing-range-playground
