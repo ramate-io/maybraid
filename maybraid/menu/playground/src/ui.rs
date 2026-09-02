@@ -1,13 +1,15 @@
 use bevy::prelude::*;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
-use menu_screens::{HomeScreen, InGameScreen, LoadingScreen};
+use menu_screens::{GalleryScreen, HomeScreen, InGameScreen, LoadingScreen};
 
 use crate::character::CharacterScreen;
+use crate::weapon_gallery::WeaponGalleryScreen;
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Maybraid menu playground — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `show home`, `show in-game`, `show character`, `help`".into(),
+		empty_console_text:
+			"Console: `show home`, `show weapons`, `show in-game`, `show character`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.10, 0.14, 0.82),
 		controls_hint:
 			"stick/dpad or arrows — A/Enter choose — B/Esc back — Y or F1 drawer — / cmd".into(),
@@ -19,6 +21,8 @@ pub(crate) fn sync_command_status_text(
 	in_game: Query<(), With<InGameScreen>>,
 	loading: Query<(), With<LoadingScreen>>,
 	character: Query<(), With<CharacterScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
+	weapons: Query<(), With<WeaponGalleryScreen>>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	status.0 = if !home.is_empty() {
@@ -29,6 +33,10 @@ pub(crate) fn sync_command_status_text(
 		"screen=loading".into()
 	} else if !character.is_empty() {
 		"screen=character".into()
+	} else if !gallery.is_empty() {
+		"screen=gallery".into()
+	} else if !weapons.is_empty() {
+		"screen=weapons".into()
 	} else {
 		"no screen".into()
 	};

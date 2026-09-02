@@ -4,7 +4,9 @@ pub mod character;
 pub mod commands;
 mod loading_demo;
 mod preview;
+mod session;
 mod ui;
+mod weapon_gallery;
 
 pub use character::{
 	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
@@ -13,6 +15,11 @@ pub use character::{
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::CharacterPreviewPlugin;
+pub use session::{
+	save_editing_character, ActiveCharacter, CharacterSession, CharacterSessionPlugin,
+	EditingCharacter,
+};
+pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -23,11 +30,13 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_input::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
+use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed};
 use menu_screens::{
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems,
+	cancel_pending_create, request_show_gallery, request_show_home, CreateCharacterPlugin,
+	GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice,
+	InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -48,13 +57,16 @@ impl Plugin for MenuPlaygroundPlugin {
 			toggle_keys: Vec::new(),
 			..CameraLookConfig::default()
 		}))
-		.add_plugins(VirtualPadPlugin::new(VirtualPadConfig { debug_overlay: true, ..default() }))
+		.add_plugins(VirtualPadPlugin::default())
 		.add_plugins((
 			HomeScreenPlugin,
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
+			CreateCharacterPlugin,
+			CharacterSessionPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
+			WeaponGalleryPlugin,
 			MenuControllerPlugin,
 		))
 		.add_systems(
@@ -68,6 +80,8 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_home_choice,
 				echo_in_game_choice,
 				echo_character_menu,
+				echo_gallery_choice,
+				editor_back,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -84,16 +98,25 @@ fn add_lod_viewer_to_camera(
 	}
 }
 
-fn character_screen_closed(screens: Query<(), With<CharacterScreen>>) -> bool {
+fn character_screen_closed(
+	screens: Query<
+		(),
+		Or<(With<CharacterScreen>, With<SpinRevealScreen>, With<HomeScreen>, With<GalleryScreen>)>,
+	>,
+) -> bool {
 	screens.is_empty()
 }
 
 fn echo_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut console: ResMut<CommandConsoleOutput>,
+	mut commands: Commands,
 ) {
 	for choice in choices.read() {
 		console.0 = format!("home: {}", choice.label());
+		if *choice == HomeMenuChoice::Characters {
+			request_show_gallery(&mut commands);
+		}
 	}
 }
 
@@ -120,5 +143,49 @@ fn echo_character_menu(
 				console.0 = format!("character focus: {focus:?}");
 			}
 		}
+	}
+}
+
+fn echo_gallery_choice(
+	mut choices: MessageReader<GalleryChoice>,
+	mut console: ResMut<CommandConsoleOutput>,
+) {
+	for choice in choices.read() {
+		console.0 = match choice {
+			GalleryChoice::New => String::from("gallery: new character"),
+			GalleryChoice::Select(id) => format!("gallery: {}", id.to_hex()),
+		};
+	}
+}
+
+fn editor_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	character: Query<(), With<CharacterScreen>>,
+	spin: Query<(), With<SpinRevealScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
+	weapons: Query<(), With<WeaponGalleryScreen>>,
+) {
+	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
+		return;
+	}
+	if !character.is_empty() {
+		// Leave without writing; [`save_editing_character`] is Save-only.
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !spin.is_empty() {
+		cancel_pending_create(&mut commands);
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !gallery.is_empty() {
+		request_show_home(&mut commands);
+		return;
+	}
+	if !weapons.is_empty() {
+		request_show_home(&mut commands);
 	}
 }

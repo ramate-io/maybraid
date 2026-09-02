@@ -161,6 +161,88 @@ pub struct ItemRow<E> {
 	pub materials: Vec<SelectChoice<E>>,
 }
 
+/// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
+/// (Maybraid son for clothing, 1-based rank for weapons).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GridCatalogChoice<E> {
+	pub label: String,
+	/// Compact stat line under the name (weight, DPC, fire mode).
+	pub detail: String,
+	pub path: &'static str,
+	pub thumbnail_camera: ThumbnailCamera,
+	pub preview: PreviewColor,
+	pub selected: bool,
+	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
+	/// this `None` and uses the Maybraid son for selection.
+	pub rank: Option<u8>,
+	pub event: E,
+}
+
+/// Plus / minus / read-only tone for a loadout or catalog value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StatTone {
+	#[default]
+	Neutral,
+	Plus,
+	Minus,
+	/// Derived formula, e.g. the pace equation.
+	Formula,
+}
+
+impl StatTone {
+	pub fn from_i16(value: i16) -> Self {
+		if value > 0 {
+			Self::Plus
+		} else if value < 0 {
+			Self::Minus
+		} else {
+			Self::Neutral
+		}
+	}
+
+	pub fn from_text(value: &str) -> Self {
+		let trimmed = value.trim();
+		if trimmed.starts_with('+') {
+			Self::Plus
+		} else if trimmed.starts_with('-') {
+			Self::Minus
+		} else {
+			Self::Neutral
+		}
+	}
+}
+
+/// One labeled number inside a [`StatCard`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatLine {
+	pub label: String,
+	pub value: String,
+	pub tone: StatTone,
+}
+
+impl StatLine {
+	pub fn unsigned(label: impl Into<String>, value: impl Into<String>) -> Self {
+		Self { label: label.into(), value: value.into(), tone: StatTone::Neutral }
+	}
+
+	pub fn from_display(label: impl Into<String>, value: impl Into<String>) -> Self {
+		let value = value.into();
+		let tone = StatTone::from_text(&value);
+		Self { label: label.into(), value, tone }
+	}
+
+	pub fn formula(label: impl Into<String>, value: impl Into<String>) -> Self {
+		Self { label: label.into(), value: value.into(), tone: StatTone::Formula }
+	}
+}
+
+/// Titled column in a [`MenuNode::StatGrid`] (Total / Base / Buffs / weapons).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatCard {
+	pub title: String,
+	pub rows: Vec<StatLine>,
+}
+
 /// Renderer-agnostic menu tree. Generic over the host event type `E`, which is
 /// embedded in leaves at lowering time; renderers forward it verbatim.
 #[derive(Clone, Debug, PartialEq)]
@@ -186,9 +268,18 @@ pub enum MenuNode<E> {
 	/// Block-labeled multi-select of items, each row pairing a toggle button
 	/// with color swatches and look tiles (e.g. clothing layers).
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
+	/// Wrapping grid of owned items with a selection cap (`max_selected`).
+	GridCatalog { label: &'static str, max_selected: usize, choices: Vec<GridCatalogChoice<E>> },
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.
 	ShortText { label: &'static str, value: String, max_len: usize },
+	/// Full-width action (e.g. Save Character). Fires `event` on activate.
+	Action { label: &'static str, event: E },
+	/// Read-only labeled value (compiled loadout rows, item stats).
+	LabeledValue { label: String, value: String },
+	/// Wrapping grid of titled stat columns (loadout Total / Base / Buffs,
+	/// then queued weapons).
+	StatGrid { cards: Vec<StatCard> },
 }
 
 impl<E> MenuNode<E> {
@@ -298,6 +389,15 @@ impl<E> MenuNode<E> {
 		}
 	}
 
+	/// Owned-item grid. `max_selected` is the wear/equip cap the host enforces.
+	pub fn grid_catalog(
+		label: &'static str,
+		max_selected: usize,
+		choices: impl IntoIterator<Item = GridCatalogChoice<E>>,
+	) -> Self {
+		Self::GridCatalog { label, max_selected, choices: choices.into_iter().collect() }
+	}
+
 	/// Short typed label; `max_len` is a hard cap on the stored value.
 	pub fn short_text(label: &'static str, value: impl Into<String>, max_len: usize) -> Self {
 		let mut value = value.into();
@@ -305,6 +405,21 @@ impl<E> MenuNode<E> {
 			value = value.chars().take(max_len).collect();
 		}
 		Self::ShortText { label, value, max_len }
+	}
+
+	/// Full-width labeled action that fires `event` when activated.
+	pub fn action(label: &'static str, event: E) -> Self {
+		Self::Action { label, event }
+	}
+
+	/// Read-only name / value pair.
+	pub fn labeled_value(label: impl Into<String>, value: impl Into<String>) -> Self {
+		Self::LabeledValue { label: label.into(), value: value.into() }
+	}
+
+	/// Wrapping grid of titled stat columns.
+	pub fn stat_grid(cards: impl IntoIterator<Item = StatCard>) -> Self {
+		Self::StatGrid { cards: cards.into_iter().collect() }
 	}
 }
 

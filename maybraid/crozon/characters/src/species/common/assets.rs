@@ -1,6 +1,7 @@
 //! Shared humanoid asset paths and mesh enums used by multiple species.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::assets::AssetPath;
 
@@ -71,7 +72,8 @@ pub const HAIR_FLOWING_EDGY_CURLS: AssetPath =
 	AssetPath::new("characters/hair/flowing_edgy_curls.glb");
 pub const HAIR_PERM_BRAID: AssetPath = AssetPath::new("characters/hair/perm_braid.glb");
 pub const HAIR_TECHNO_EDGE: AssetPath = AssetPath::new("characters/hair/techno_edge.glb");
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum BodyMesh {
 	#[default]
 	Standard,
@@ -104,7 +106,8 @@ impl BodyMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum HeadMesh {
 	#[default]
 	Standard,
@@ -132,7 +135,8 @@ impl HeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum EyeMesh {
 	#[default]
 	Standard,
@@ -157,7 +161,8 @@ impl EyeMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum NoseMesh {
 	#[default]
 	Standard,
@@ -196,7 +201,8 @@ impl NoseMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum MouthMesh {
 	#[default]
 	Standard,
@@ -214,7 +220,8 @@ impl MouthMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum EarMesh {
 	#[default]
 	Standard,
@@ -242,7 +249,8 @@ impl EarMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum HairMesh {
 	#[default]
 	None,

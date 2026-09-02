@@ -17,6 +17,7 @@ use crate::{
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::{WumbusHeadMesh, WumbusHornMesh, WumbusMouthMesh};
 pub use palette::{
@@ -24,7 +25,7 @@ pub use palette::{
 	WumbusSpineColor,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WumbusColors {
 	pub skin: WumbusSkinColor,
 	pub eyes: WumbusEyeColor,
@@ -89,7 +90,7 @@ impl WumbusColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WumbusConfig {
 	pub horns: WumbusHornMesh,
 	pub eye: EyeMesh,

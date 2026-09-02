@@ -1,8 +1,30 @@
 use bevy_math::Vec3;
 use character_ui_menu::{CameraFocus, FocusRig};
+use crozon_character_items::ClothingKind;
 
 pub const BODY_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Body, "root", Vec3::new(-1.0, 1.0, 4.0), Vec3::new(2.0, 0.0, -2.0));
+
+/// Default front-on body framing (full-length garments in the tile).
+pub const SPIN_REVEAL_FOCUS: CameraFocus =
+	CameraFocus::new(FocusRig::Body, "root", Vec3::new(0.0, 1.0, 4.2), Vec3::new(0.0, 1.0, 0.0));
+
+/// World-space framing for an unskinned garment. Fitted meshes are hip-origin
+/// (waist at y = 0, legs in −Y), so lowers look below the origin.
+pub fn spin_reveal_focus(kind: ClothingKind) -> CameraFocus {
+	let (camera, look) = match kind {
+		ClothingKind::Lower => (Vec3::new(0.0, -0.5, 3.0), Vec3::new(0.0, -0.5, 0.0)),
+		ClothingKind::Upper => (Vec3::new(0.0, 0.35, 3.0), Vec3::new(0.0, 0.35, 0.0)),
+		ClothingKind::Footwear => (Vec3::new(0.0, -0.85, 2.4), Vec3::new(0.0, -0.85, 0.0)),
+		ClothingKind::Full => (Vec3::new(0.0, -0.15, 4.2), Vec3::new(0.0, -0.15, 0.0)),
+	};
+	CameraFocus::new(FocusRig::Body, "root", camera, look)
+}
+
+/// World-space framing for an assembled firearm kit at the origin.
+pub fn spin_reveal_firearm_focus() -> CameraFocus {
+	CameraFocus::new(FocusRig::Body, "root", Vec3::new(1.6, 0.4, 2.2), Vec3::ZERO)
+}
 
 pub const HEAD_ROOT_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Head, "root", Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.05, 0.0));

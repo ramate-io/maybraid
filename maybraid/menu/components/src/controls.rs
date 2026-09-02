@@ -16,7 +16,7 @@ pub mod swatch;
 pub mod text;
 pub mod tile;
 
-pub use button::spawn_text_button;
+pub use button::{spawn_corner_action, spawn_hud_action, spawn_text_button};
 pub use display::menu_display_name;
 pub use fonts::HudFonts;
 pub use hud_menu::{
@@ -29,7 +29,7 @@ pub use scroll::{
 	HudScrollThumb, HudScrollTrack, HudScrollViewport,
 };
 pub use section::{
-	spawn_section_header, sync_overlay_header_cursors, ActiveOverlayKey, OverlayHeader,
+	spawn_section_header, sync_hud_cursors, ActiveOverlayKey, CursorRow, OverlayHeader,
 	OverlayHeaderKey,
 };
 pub use short_text::{
@@ -44,6 +44,6 @@ pub use stepper::spawn_stepper;
 pub use swatch::{color_from_hex, spawn_swatch, spawn_swatch_row};
 pub use text::{
 	spawn_block_label, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_group_label,
-	spawn_header_line, spawn_hud_text, spawn_panel_title,
+	spawn_header_line, spawn_hud_plain, spawn_hud_text, spawn_panel_title,
 };
-pub use tile::{spawn_asset_tile, spawn_tile_grid};
+pub use tile::{spawn_asset_tile, spawn_grid_catalog_tile, spawn_tile_grid, SlotRank};

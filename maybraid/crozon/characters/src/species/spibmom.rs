@@ -17,6 +17,7 @@ use crate::{
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::{SpibmomCrownMesh, SpibmomHeadMesh, SpibmomMouthMesh};
 pub use palette::{
@@ -24,7 +25,7 @@ pub use palette::{
 	SpibmomSpineColor,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpibmomColors {
 	pub skin: SpibmomSkinColor,
 	pub eyes: SpibmomEyeColor,
@@ -89,7 +90,7 @@ impl SpibmomColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpibmomConfig {
 	pub eye: EyeMesh,
 	pub hair: HairMesh,

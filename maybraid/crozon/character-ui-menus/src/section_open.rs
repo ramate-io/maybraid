@@ -11,6 +11,8 @@ impl SectionOpen for SectionOpenState {
 			"Head & Features" => SectionId::HeadFeatures,
 			"Hair" => SectionId::Hair,
 			"Clothing" => SectionId::Clothing,
+			"Weapons" => SectionId::Weapons,
+			"Loadout" => SectionId::Loadout,
 			"Animation" => SectionId::Animation,
 			_ => return true,
 		};

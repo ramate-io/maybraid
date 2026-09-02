@@ -1,10 +1,12 @@
 //! Mygr asset catalog.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::species::common::assets::{HEAD_ORTHO_BEAR, MOUTH_CANINE_SNOUT};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum MygrHeadMesh {
 	#[default]
 	OrthoBear,
@@ -22,7 +24,8 @@ impl MygrHeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum MygrMouthMesh {
 	#[default]
 	CanineSnout,

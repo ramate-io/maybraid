@@ -6,8 +6,8 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SelectChoice,
-	SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
+	SectionOpen, SelectChoice, StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 
 use crate::widgets::{
@@ -151,16 +151,40 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 					self.item_row(row, parent, context);
 				}
 			}
+			MenuNode::GridCatalog { label, choices, .. } => {
+				block_label(parent, label);
+				self.grid_catalog(choices, parent, context);
+			}
 			MenuNode::ShortText { label, value, .. } => {
 				inline_label_row(parent, label, |row| {
 					text(row, value, 11.0, VALUE_COLOR);
 				});
 			}
+			MenuNode::Action { label, event } => {
+				render_button(parent, label, *event, false);
+			}
+			MenuNode::LabeledValue { label, value } => {
+				inline_label_row(parent, label, |row| {
+					text(row, value, 11.0, playground_tone_color(StatTone::from_text(value)));
+				});
+			}
+			MenuNode::StatGrid { cards } => self.stat_grid(cards, parent),
 		}
 	}
 }
 
 const VALUE_COLOR: Color = Color::srgb(0.85, 0.95, 1.0);
+const PLUS_COLOR: Color = Color::srgb(0.55, 0.92, 0.38);
+const MINUS_COLOR: Color = Color::srgb(0.95, 0.45, 0.42);
+
+fn playground_tone_color(tone: StatTone) -> Color {
+	match tone {
+		StatTone::Plus => PLUS_COLOR,
+		StatTone::Minus => MINUS_COLOR,
+		StatTone::Formula => VALUE_COLOR,
+		StatTone::Neutral => MUTED,
+	}
+}
 
 impl BevyMenuSink {
 	fn section<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
@@ -209,6 +233,77 @@ impl BevyMenuSink {
 					});
 				if open {
 					self.render_nodes(children, section, context);
+				}
+			});
+	}
+
+	fn grid_catalog<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		choices: &[GridCatalogChoice<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					column_gap: Val::Px(8.0),
+					row_gap: Val::Px(MENU_VERTICAL_GAP),
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|grid| {
+				for choice in choices {
+					let thumbnail =
+						grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
+					let label = if choice.detail.is_empty() {
+						choice.label.clone()
+					} else {
+						format!("{}\n{}", choice.label, choice.detail)
+					};
+					render_asset_button(grid, &label, choice.event, choice.selected, thumbnail);
+				}
+			});
+	}
+
+	fn stat_grid(&self, cards: &[StatCard], parent: &mut ChildSpawnerCommands) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					column_gap: Val::Px(12.0),
+					row_gap: Val::Px(20.0),
+					align_items: AlignItems::FlexStart,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|grid| {
+				for card in cards {
+					grid.spawn((
+						Node {
+							width: Val::Percent(31.0),
+							min_width: Val::Px(140.0),
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(8.0),
+							padding: UiRect::vertical(Val::Px(6.0)),
+							..default()
+						},
+						Pickable::IGNORE,
+					))
+					.with_children(|column| {
+						text(column, &card.title, 14.0, Color::WHITE);
+						for row in &card.rows {
+							inline_label_row(column, &row.label, |line| {
+								text(line, &row.value, 10.0, playground_tone_color(row.tone));
+							});
+						}
+					});
 				}
 			});
 	}
@@ -314,20 +409,31 @@ fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
-	if context.asset_thumbnails != AssetThumbnailDisplay::None && !choice.path.is_empty() {
-		context.prewarm.push(ThumbnailRequest::new(
-			choice.path,
-			color_key(preview),
-			choice.thumbnail_camera,
-		));
+	thumbnail_image(choice.label, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+	choice: &GridCatalogChoice<E>,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	thumbnail_image(choice.path, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn thumbnail_image<C: MenuThumbnailContext>(
+	label: &'static str,
+	path: &'static str,
+	camera: character_ui_menu::ThumbnailCamera,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	if context.asset_thumbnails != AssetThumbnailDisplay::None && !path.is_empty() {
+		context.prewarm.push(ThumbnailRequest::new(path, color_key(preview), camera));
 	}
 	match context.asset_thumbnails {
-		AssetThumbnailDisplay::Inline => context.thumbnails.image_for_asset(
-			choice.label,
-			choice.path,
-			preview,
-			choice.thumbnail_camera,
-		),
+		AssetThumbnailDisplay::Inline => {
+			context.thumbnails.image_for_asset(label, path, preview, camera)
+		}
 		_ => None,
 	}
 }

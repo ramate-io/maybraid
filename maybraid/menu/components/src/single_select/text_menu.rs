@@ -10,8 +10,9 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, Justify};
 
 use crate::theme::{
-	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, HEADER_FONT_SIZE,
-	HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_SEMIBOLD, COLUMN_BOTTOM, COLUMN_INSET, CORNER_BOTTOM, CORNER_INSET,
+	HEADER_FONT_SIZE, HEADER_MARGIN_BOTTOM, ITEM_FONT_SIZE, ITEM_ROW_GAP, TEXT_YELLOW,
+	TEXT_YELLOW_HOVER,
 };
 use maybraid_input::{MenuNav, MenuNavImpulse};
 
@@ -45,6 +46,13 @@ pub struct TextMenu {
 impl TextMenu {
 	pub fn new(item_count: usize) -> Self {
 		Self { selected: 0, item_count }
+	}
+
+	pub fn with_selected(item_count: usize, selected: usize) -> Self {
+		Self {
+			selected: if item_count == 0 { 0 } else { selected.min(item_count - 1) },
+			item_count,
+		}
 	}
 
 	pub fn step(&mut self, delta: i32) {
@@ -156,9 +164,13 @@ impl TextMenuHeader {
 /// Where a shrink-wrapped text column sits on the screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TextColumnAnchor {
-	/// Home-style: inset from the bottom-left.
+	/// Home and gallery: inset from the top-left.
 	#[default]
+	TopLeft,
+	/// Inset from the bottom-left (above a description strip).
 	BottomLeft,
+	/// Inset from the bottom-right.
+	BottomRight,
 	/// Pause-style: shrink-wrap and let the parent flex-center this node.
 	Center,
 }
@@ -200,10 +212,28 @@ impl TextColumnAnchor {
 	pub fn node(self, align: TextColumnAlign) -> Node {
 		let align_items = align.items();
 		match self {
+			Self::TopLeft => Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(COLUMN_INSET),
+				top: Val::Px(COLUMN_INSET),
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
 			Self::BottomLeft => Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(COLUMN_INSET),
 				bottom: Val::Px(COLUMN_BOTTOM),
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
+			Self::BottomRight => Node {
+				position_type: PositionType::Absolute,
+				right: Val::Px(CORNER_INSET),
+				bottom: Val::Px(CORNER_BOTTOM),
 				flex_direction: FlexDirection::Column,
 				align_items,
 				row_gap: Val::Px(ITEM_ROW_GAP),
@@ -235,7 +265,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 		Self {
 			header: header.into(),
 			items: items.into_iter().map(|(label, action)| (label.into(), action)).collect(),
-			anchor: TextColumnAnchor::BottomLeft,
+			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
 		}
 	}
@@ -266,21 +296,47 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 	}
 }
 
+/// Walk parents from a row to the [`TextMenu`] that owns it.
+///
+/// Cursor columns wrap each pickable in a layout node (for subtext), so the
+/// immediate parent is not the menu.
+pub fn text_menu_entity(
+	start: Entity,
+	child_of: &Query<&ChildOf>,
+	menus: &Query<(), With<TextMenu>>,
+) -> Option<Entity> {
+	let mut entity = start;
+	loop {
+		if menus.contains(entity) {
+			return Some(entity);
+		}
+		entity = child_of.get(entity).ok()?.parent();
+	}
+}
+
 pub fn select_text_menu_item_on_over(
 	over: On<Pointer<Over>>,
-	items: Query<(&TextMenuItem, &ChildOf)>,
+	items: Query<&TextMenuItem>,
+	child_of: Query<&ChildOf>,
 	mut menus: Query<&mut TextMenu>,
 ) {
-	let Ok((item, child_of)) = items.get(over.entity) else {
+	let Ok(item) = items.get(over.entity) else {
 		return;
 	};
-	let Ok(mut menu) = menus.get_mut(child_of.parent()) else {
-		return;
-	};
-	if menu.item_count == 0 {
-		return;
+	let mut entity = over.entity;
+	loop {
+		if let Ok(mut menu) = menus.get_mut(entity) {
+			if menu.item_count == 0 {
+				return;
+			}
+			menu.selected = item.index.min(menu.item_count - 1);
+			return;
+		}
+		let Ok(parent) = child_of.get(entity) else {
+			return;
+		};
+		entity = parent.parent();
 	}
-	menu.selected = item.index.min(menu.item_count - 1);
 }
 
 /// In-screen focus: triggered on the [`TextMenu`], bubbles to the screen root.
@@ -303,20 +359,35 @@ fn selected_choice<E: Component + Copy>(
 	menu_entity: Entity,
 	menu: &TextMenu,
 	items: &Query<(&TextMenuItem, &E, &ChildOf)>,
+	child_of: &Query<&ChildOf>,
 ) -> Option<E> {
-	items.iter().find_map(|(item, choice, child_of)| {
-		(child_of.parent() == menu_entity && item.index == menu.selected).then_some(*choice)
+	items.iter().find_map(|(item, choice, item_child)| {
+		(item.index == menu.selected && entity_is_under(item_child.parent(), menu_entity, child_of))
+			.then_some(*choice)
 	})
+}
+
+fn entity_is_under(mut entity: Entity, ancestor: Entity, child_of: &Query<&ChildOf>) -> bool {
+	loop {
+		if entity == ancestor {
+			return true;
+		}
+		let Ok(parent) = child_of.get(entity) else {
+			return false;
+		};
+		entity = parent.parent();
+	}
 }
 
 /// Trigger [`MenuFocus<E>`] on a menu when its [`TextMenu::selected`] changes.
 pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 	menus: Query<(Entity, &TextMenu), Changed<TextMenu>>,
 	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
 	for (menu_entity, menu) in &menus {
-		if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+		if let Some(choice) = selected_choice(menu_entity, menu, &items, &child_of) {
 			commands.trigger(MenuFocus { entity: menu_entity, choice });
 		}
 	}
@@ -326,16 +397,21 @@ pub fn emit_menu_focus<E: Component + Copy + Send + Sync + 'static>(
 pub fn emit_menu_activate_on_click<E: Component + Copy>(
 	click: On<Pointer<Click>>,
 	lock: Res<TextMenuInputLock>,
-	items: Query<(&E, &ChildOf), With<TextMenuItem>>,
+	items: Query<&E, With<TextMenuItem>>,
+	child_of: Query<&ChildOf>,
+	menus: Query<(), With<TextMenu>>,
 	mut commands: Commands,
 ) {
 	if lock.0 {
 		return;
 	}
-	let Ok((choice, child_of)) = items.get(click.entity) else {
+	let Ok(choice) = items.get(click.entity) else {
 		return;
 	};
-	commands.trigger(MenuActivate { entity: child_of.parent(), choice: *choice });
+	let Some(menu_entity) = text_menu_entity(click.entity, &child_of, &menus) else {
+		return;
+	};
+	commands.trigger(MenuActivate { entity: menu_entity, choice: *choice });
 }
 
 /// Trigger [`MenuActivate<E>`] for the keyboard-selected row.
@@ -345,13 +421,14 @@ pub fn emit_menu_activate_on_enter<E: Component + Copy + Send + Sync + 'static>(
 	lock: Res<TextMenuInputLock>,
 	menus: Query<(Entity, &TextMenu)>,
 	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
 	if !keyboard_nav.is_enabled() || lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
 		return;
 	}
 	for (menu_entity, menu) in &menus {
-		if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+		if let Some(choice) = selected_choice(menu_entity, menu, &items, &child_of) {
 			commands.trigger(MenuActivate { entity: menu_entity, choice });
 		}
 	}
@@ -363,6 +440,7 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	lock: Res<TextMenuInputLock>,
 	menus: Query<&TextMenu>,
 	items: Query<(&TextMenuItem, &E, &ChildOf)>,
+	child_of: Query<&ChildOf>,
 	mut commands: Commands,
 ) {
 	if lock.0 || impulse.event().nav != MenuNav::Select {
@@ -372,7 +450,7 @@ pub fn emit_menu_activate_on_nav<E: Component + Copy + Send + Sync + 'static>(
 	let Ok(menu) = menus.get(menu_entity) else {
 		return;
 	};
-	if let Some(choice) = selected_choice(menu_entity, menu, &items) {
+	if let Some(choice) = selected_choice(menu_entity, menu, &items, &child_of) {
 		commands.trigger(MenuActivate { entity: menu_entity, choice });
 	}
 }
@@ -422,11 +500,12 @@ pub fn navigate_text_menus(
 
 pub fn sync_text_menu_item_colors(
 	menus: Query<&TextMenu>,
-	items: Query<(&TextMenuItem, &ChildOf, &Children)>,
+	child_of: Query<&ChildOf>,
+	items: Query<(Entity, &TextMenuItem, &Children)>,
 	mut labels: Query<&mut TextColor, With<TextMenuItemLabel>>,
 ) {
-	for (item, child_of, children) in &items {
-		let Ok(menu) = menus.get(child_of.parent()) else {
+	for (entity, item, children) in &items {
+		let Some(menu) = text_menu_for_item(entity, &child_of, &menus) else {
 			continue;
 		};
 		let color = if item.index == menu.selected { item.active } else { item.idle };
@@ -438,10 +517,25 @@ pub fn sync_text_menu_item_colors(
 	}
 }
 
+fn text_menu_for_item<'a>(
+	start: Entity,
+	child_of: &Query<&ChildOf>,
+	menus: &'a Query<&TextMenu>,
+) -> Option<&'a TextMenu> {
+	let mut entity = start;
+	loop {
+		if let Ok(menu) = menus.get(entity) {
+			return Some(menu);
+		}
+		entity = child_of.get(entity).ok()?.parent();
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::{TextColumnAlign, TextMenu};
-	use bevy::prelude::{AlignItems, JustifyContent};
+	use super::{TextColumnAlign, TextColumnAnchor, TextMenu};
+	use crate::theme::COLUMN_INSET;
+	use bevy::prelude::{AlignItems, JustifyContent, Val};
 	use bevy::text::Justify;
 
 	#[test]
@@ -460,5 +554,19 @@ mod tests {
 		assert_eq!(menu.selected, 4);
 		menu.step(1);
 		assert_eq!(menu.selected, 0);
+	}
+
+	#[test]
+	fn with_selected_clamps() {
+		assert_eq!(TextMenu::with_selected(3, 5).selected, 2);
+		assert_eq!(TextMenu::with_selected(0, 2).selected, 0);
+	}
+
+	#[test]
+	fn top_left_pins_header_to_the_window_corner() {
+		let node = TextColumnAnchor::TopLeft.node(TextColumnAlign::Start);
+		assert_eq!(node.left, Val::Px(COLUMN_INSET));
+		assert_eq!(node.top, Val::Px(COLUMN_INSET));
+		assert_eq!(node.bottom, Val::Auto);
 	}
 }

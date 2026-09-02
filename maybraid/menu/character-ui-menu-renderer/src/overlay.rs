@@ -18,6 +18,7 @@ pub fn is_select_node<E>(node: &MenuNode<E>) -> bool {
 		MenuNode::SectionSelect { .. }
 			| MenuNode::BlockAsset { .. }
 			| MenuNode::ItemMultiSelect { .. }
+			| MenuNode::GridCatalog { .. }
 	)
 }
 
@@ -50,12 +51,15 @@ pub fn primary_select<'a, E>(children: &'a [MenuNode<E>]) -> Option<&'a MenuNode
 pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 	match node {
 		MenuNode::SectionSelect { .. } | MenuNode::BlockAsset { .. } => true,
-		MenuNode::ItemMultiSelect { .. } => false,
+		MenuNode::ItemMultiSelect { .. } | MenuNode::GridCatalog { .. } => false,
 		MenuNode::Section { children, .. } => {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
-		MenuNode::ShortText { .. } => false,
+		MenuNode::ShortText { .. }
+		| MenuNode::Action { .. }
+		| MenuNode::LabeledValue { .. }
+		| MenuNode::StatGrid { .. } => false,
 		_ => false,
 	}
 }
@@ -91,25 +95,31 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 				find_overlay_node(children, key)
 			}
 		}
-		MenuNode::BlockAsset { label, .. } | MenuNode::ItemMultiSelect { label, .. }
+		MenuNode::BlockAsset { label, .. }
+		| MenuNode::ItemMultiSelect { label, .. }
+		| MenuNode::GridCatalog { label, .. }
 			if *label == key =>
 		{
 			Some(node)
 		}
 		MenuNode::ShortText { .. }
+		| MenuNode::Action { .. }
+		| MenuNode::LabeledValue { .. }
+		| MenuNode::StatGrid { .. }
 		| MenuNode::LabeledCycle { .. }
 		| MenuNode::LabeledSlider { .. }
 		| MenuNode::LabeledSwatch { .. }
 		| MenuNode::BlockAsset { .. }
-		| MenuNode::ItemMultiSelect { .. } => None,
+		| MenuNode::ItemMultiSelect { .. }
+		| MenuNode::GridCatalog { .. } => None,
 	}
 }
 
 pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 	match node {
-		MenuNode::Section { children, .. } => {
-			primary_select(children).map(overlay_summary_value).unwrap_or_default()
-		}
+		MenuNode::Section { children, .. } => primary_select(children)
+			.map(overlay_summary_value)
+			.unwrap_or_else(|| labeled_values_preview(children)),
 		MenuNode::SectionSelect { groups, .. } => {
 			selected_select_label(groups).unwrap_or("—").to_string()
 		}
@@ -122,7 +132,61 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 			let worn = rows.iter().filter(|row| row.asset.selected).count();
 			format!("{worn} worn")
 		}
+		MenuNode::GridCatalog { label, choices, .. } => {
+			let count = choices.iter().filter(|choice| choice.selected).count();
+			if *label == "Weapons" {
+				format!("{count} queued")
+			} else {
+				format!("{count} worn")
+			}
+		}
+		MenuNode::LabeledValue { value, .. } => value.clone(),
+		MenuNode::StatGrid { cards } => stat_grid_preview(cards),
 		_ => String::new(),
+	}
+}
+
+pub(crate) fn labeled_values_preview<E>(children: &[MenuNode<E>]) -> String {
+	let flat = flatten_nodes(children);
+	if let Some(preview) = flat.iter().find_map(|node| match node {
+		MenuNode::StatGrid { cards } => Some(stat_grid_preview(cards)),
+		_ => None,
+	}) {
+		if !preview.is_empty() {
+			return preview;
+		}
+	}
+	let rows: Vec<_> = flat
+		.into_iter()
+		.filter_map(|node| match node {
+			MenuNode::LabeledValue { label, value } => Some((label.as_str(), value.as_str())),
+			_ => None,
+		})
+		.collect();
+	let health = rows.iter().find(|(label, _)| *label == "Health").map(|(_, value)| *value);
+	let weight = rows.iter().find(|(label, _)| *label == "Weight").map(|(_, value)| *value);
+	match (health, weight) {
+		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),
+		(Some(health), None) => format!("{health} HP"),
+		_ => rows.first().map(|(_, value)| (*value).to_string()).unwrap_or_default(),
+	}
+}
+
+fn stat_grid_preview(cards: &[character_ui_menu::StatCard]) -> String {
+	let total = cards.iter().find(|card| card.title == "Total Stats");
+	let health = total.and_then(|card| {
+		card.rows.iter().find(|row| row.label == "Health").map(|row| row.value.as_str())
+	});
+	let weight = total.and_then(|card| {
+		card.rows
+			.iter()
+			.find(|row| row.label == "Added Weight")
+			.map(|row| row.value.as_str())
+	});
+	match (health, weight) {
+		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),
+		(Some(health), None) => format!("{health} HP"),
+		_ => cards.first().map(|card| card.title.clone()).unwrap_or_default(),
 	}
 }
 
@@ -139,6 +203,7 @@ pub fn spawn_overlay_shell(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	title: &str,
+	title_color: Color,
 ) -> Entity {
 	let mut viewport = Entity::PLACEHOLDER;
 	parent
@@ -195,7 +260,14 @@ pub fn spawn_overlay_shell(
 						Pickable::IGNORE,
 					))
 					.with_children(|header| {
-						spawn_header_line(header, fonts, title, None, PANEL_HEADER_FONT_SIZE);
+						spawn_header_line(
+							header,
+							fonts,
+							title,
+							None,
+							PANEL_HEADER_FONT_SIZE,
+							title_color,
+						);
 						spawn_text_button(header, fonts, "back", CloseOverlaySelect);
 					});
 				viewport = menu_components::spawn_scroll_pane(

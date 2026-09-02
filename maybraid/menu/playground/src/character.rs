@@ -2,17 +2,20 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{AssetThumbnailDisplay, MenuComponent};
+use crozon_character_items::Inventory;
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use maybraid_character_ui_menu_renderer::{
 	find_overlay_node, overlay_closes_on_pick, render_overlay_body, spawn_overlay_shell,
 	CharacterHudSystems, CharacterMenuEvent, MaybraidCharacterMenuRendererPlugin, MaybraidMenuSink,
-	MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
+	MenuButton, MenuJustify, MenuSink, NoThumbnails, OverlayClose, OverlayOpen, OverlaySelectRoot,
 	OverlaySelectViewport, RenderContext,
 };
 use maybraid_menu_controller::MenuController;
+use menu_components::theme::{CORNER_BOTTOM, CORNER_INSET};
 use menu_components::{
-	spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudOverlayMenu, MenuActivate,
-	MenuFocus, ShortTextChange, PANEL_ROW_GAP,
+	spawn_corner_action, spawn_scroll_pane, ActiveOverlayKey, HudFonts, HudMenu, HudMenuItem,
+	HudOverlayMenu, MenuActivate, MenuFocus, ScreenBack, ShortTextChange, PANEL_ROW_GAP,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 use menu_screens::{take_menu_show_request, MenuScreen};
 
@@ -36,9 +39,47 @@ impl Default for CharacterMenuState {
 	}
 }
 
+impl CharacterMenuState {
+	pub fn for_create(items: Vec<crozon_character_items::InventoryItem>) -> Self {
+		Self(CharacterMenu::for_create(items))
+	}
+}
+
+/// Snapshot of a saved character when the editor opened (or last saved).
+#[derive(Resource, Clone, Debug, PartialEq)]
+pub struct CharacterEditBaseline {
+	pub name: String,
+	pub inventory: Inventory,
+}
+
+impl CharacterEditBaseline {
+	pub fn capture(menu: &CharacterMenu) -> Self {
+		Self { name: menu.saved_name(), inventory: menu.inventory.clone().unwrap_or_default() }
+	}
+
+	pub fn is_dirty(&self, menu: &CharacterMenu) -> bool {
+		menu.saved_name() != self.name || menu.inventory.as_ref() != Some(&self.inventory)
+	}
+}
+
+/// Create always offers Save Character. Saved characters offer Save Changes once dirty.
+pub fn save_chrome(
+	menu: &CharacterMenu,
+	baseline: Option<&CharacterEditBaseline>,
+) -> Option<&'static str> {
+	if menu.is_create() {
+		Some("Save Character")
+	} else if baseline.is_some_and(|baseline| baseline.is_dirty(menu)) {
+		Some("Save Changes")
+	} else {
+		None
+	}
+}
+
 #[derive(Resource, Default)]
 struct CharacterUiSyncState {
 	menu_dirty: bool,
+	save_label: Option<&'static str>,
 }
 
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +95,12 @@ struct OverlayUiSyncState {
 
 #[derive(Component)]
 struct CharacterPanelViewport;
+
+#[derive(Component)]
+struct CharacterSaveCorner;
+
+#[derive(Component)]
+struct CharacterBackCorner;
 
 pub fn request_show_character(commands: &mut Commands) {
 	commands.spawn(RequestShowCharacter);
@@ -88,6 +135,7 @@ fn apply_show_character(
 	requests: Query<Entity, With<RequestShowCharacter>>,
 	existing: Query<Entity, With<MenuScreen>>,
 	menu_state: Res<CharacterMenuState>,
+	baseline: Option<Res<CharacterEditBaseline>>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
 	mut overlay: ResMut<OverlaySelectState>,
 	mut overlay_sync: ResMut<OverlayUiSyncState>,
@@ -101,12 +149,16 @@ fn apply_show_character(
 	overlay_sync.menu_dirty = false;
 	active_overlay.0 = None;
 	sync_state.menu_dirty = false;
-	let viewport = spawn_character_ui_shell(&mut commands);
+	sync_state.save_label = save_chrome(&menu_state.0, baseline.as_deref());
+	let (viewport, save_corner, back_corner) = spawn_character_ui_shell(&mut commands);
 	rebuild_character_ui_panel(
 		&mut commands,
 		&HudFonts::load(asset_server.as_ref()),
 		menu_state.as_ref(),
+		baseline.as_deref(),
 		[viewport],
+		Some(save_corner),
+		Some(back_corner),
 		&[],
 	);
 }
@@ -116,29 +168,41 @@ fn sync_character_ui(
 	asset_server: Res<AssetServer>,
 	screens: Query<Entity, With<CharacterScreen>>,
 	menu_state: Res<CharacterMenuState>,
+	baseline: Option<Res<CharacterEditBaseline>>,
 	mut sync_state: ResMut<CharacterUiSyncState>,
 	viewports: Query<(Entity, Option<&HudMenu>), With<CharacterPanelViewport>>,
+	save_corners: Query<Entity, With<CharacterSaveCorner>>,
+	back_corners: Query<Entity, With<CharacterBackCorner>>,
 ) {
 	if screens.is_empty() {
 		return;
 	}
-	if !sync_state.menu_dirty && !menu_state.is_changed() {
+	let save_label = save_chrome(&menu_state.0, baseline.as_deref());
+	if !sync_state.menu_dirty && !menu_state.is_changed() && sync_state.save_label == save_label {
 		return;
 	}
 	sync_state.menu_dirty = false;
+	sync_state.save_label = save_label;
 	let previous: Vec<(Entity, Option<HudMenu>)> =
 		viewports.iter().map(|(entity, menu)| (entity, menu.copied())).collect();
+	let save_corner = save_corners.iter().next();
+	let back_corner = back_corners.iter().next();
 	rebuild_character_ui_panel(
 		&mut commands,
 		&HudFonts::load(asset_server.as_ref()),
 		menu_state.as_ref(),
+		baseline.as_deref(),
 		previous.iter().map(|(entity, _)| *entity),
+		save_corner,
+		back_corner,
 		&previous,
 	);
 }
 
-fn spawn_character_ui_shell(commands: &mut Commands) -> Entity {
+fn spawn_character_ui_shell(commands: &mut Commands) -> (Entity, Entity, Entity) {
 	let mut viewport = Entity::PLACEHOLDER;
+	let mut save_corner = Entity::PLACEHOLDER;
+	let mut back_corner = Entity::PLACEHOLDER;
 	commands
 		.spawn((
 			CharacterScreen,
@@ -170,15 +234,44 @@ fn spawn_character_ui_shell(commands: &mut Commands) -> Entity {
 					PANEL_ROW_GAP,
 				);
 			});
+			save_corner = root
+				.spawn((
+					CharacterSaveCorner,
+					Node {
+						position_type: PositionType::Absolute,
+						right: Val::Px(CORNER_INSET),
+						bottom: Val::Px(CORNER_BOTTOM),
+						flex_direction: FlexDirection::Column,
+						align_items: AlignItems::FlexEnd,
+						..default()
+					},
+				))
+				.id();
+			back_corner = root
+				.spawn((
+					CharacterBackCorner,
+					Node {
+						position_type: PositionType::Absolute,
+						left: Val::Px(CORNER_INSET),
+						bottom: Val::Px(CORNER_BOTTOM),
+						flex_direction: FlexDirection::Column,
+						align_items: AlignItems::FlexStart,
+						..default()
+					},
+				))
+				.id();
 		});
-	viewport
+	(viewport, save_corner, back_corner)
 }
 
 fn rebuild_character_ui_panel(
 	commands: &mut Commands,
 	fonts: &HudFonts,
 	menu_state: &CharacterMenuState,
+	baseline: Option<&CharacterEditBaseline>,
 	viewports: impl IntoIterator<Item = Entity>,
+	save_corner: Option<Entity>,
+	back_corner: Option<Entity>,
 	previous: &[(Entity, Option<HudMenu>)],
 ) {
 	let mut prewarm = Vec::new();
@@ -193,6 +286,29 @@ fn rebuild_character_ui_panel(
 			item_count =
 				populate_character_ui_panel(panel, fonts, menu_state, viewport, &mut prewarm);
 		});
+		if let Some(corner) = back_corner {
+			commands.entity(corner).despawn_related::<Children>();
+			commands.entity(corner).with_children(|corner| {
+				spawn_corner_action(corner, fonts, "Back", ScreenBack);
+			});
+		}
+		if let Some(corner) = save_corner {
+			commands.entity(corner).despawn_related::<Children>();
+			if let Some(label) = save_chrome(&menu_state.0, baseline) {
+				commands.entity(corner).with_children(|corner| {
+					spawn_corner_action(
+						corner,
+						fonts,
+						label,
+						(
+							MenuButton(MenuEvent::Save),
+							HudMenuItem { index: item_count, menu: viewport },
+						),
+					);
+				});
+				item_count += 1;
+			}
+		}
 		commands.entity(viewport).insert(HudMenu::retain(item_count, keep));
 	}
 }
@@ -212,6 +328,8 @@ fn populate_character_ui_panel(
 		prewarm,
 		hud_menu,
 		hud_item_count: 0,
+		interactive: true,
+		lock_appearance: menu_state.0.appearance_locked(),
 	};
 	MaybraidMenuSink::new(MenuJustify::Right).render_nodes(
 		&menu_state.0.menu_nodes(),
@@ -263,15 +381,31 @@ fn sync_overlay_select(
 			commands.entity(entity).despawn();
 		}
 		let mut viewport = Entity::PLACEHOLDER;
+		let title_color =
+			if menu_state.0.overlay_editable(key) { TEXT_YELLOW } else { TEXT_YELLOW_FAINT };
 		commands.entity(screen).with_children(|root| {
-			viewport = spawn_overlay_shell(root, &fonts, key);
+			viewport = spawn_overlay_shell(root, &fonts, key, title_color);
 		});
-		populate_overlay_viewport(&mut commands, viewport, &fonts, node, None);
+		populate_overlay_viewport(
+			&mut commands,
+			viewport,
+			&fonts,
+			node,
+			None,
+			menu_state.0.overlay_editable(key),
+		);
 		return;
 	}
 
 	for (viewport, menu) in &viewports {
-		populate_overlay_viewport(&mut commands, viewport, &fonts, node, menu.copied());
+		populate_overlay_viewport(
+			&mut commands,
+			viewport,
+			&fonts,
+			node,
+			menu.copied(),
+			menu_state.0.overlay_editable(key),
+		);
 	}
 }
 
@@ -281,6 +415,7 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 	fonts: &HudFonts,
 	node: &character_ui_menu::MenuNode<E>,
 	previous: Option<HudMenu>,
+	interactive: bool,
 ) {
 	let mut prewarm = Vec::new();
 	let mut thumbnails = NoThumbnails;
@@ -294,6 +429,8 @@ fn populate_overlay_viewport<E: Copy + Send + Sync + 'static>(
 			prewarm: &mut prewarm,
 			hud_menu: viewport,
 			hud_item_count: 0,
+			interactive,
+			lock_appearance: !interactive,
 		};
 		render_overlay_body(node, body, &mut context, MenuJustify::Left);
 		item_count = context.hud_item_count;
@@ -375,6 +512,7 @@ fn on_menu_focus(
 fn on_short_text_change(
 	change: On<ShortTextChange>,
 	mut menu_state: ResMut<CharacterMenuState>,
+	mut ui_sync: ResMut<CharacterUiSyncState>,
 	screens: Query<Entity, With<CharacterScreen>>,
 ) {
 	if screens.is_empty() {
@@ -383,5 +521,33 @@ fn on_short_text_change(
 	if change.event().key != "Name" {
 		return;
 	}
-	menu_state.bypass_change_detection().0.name = change.event().value.clone();
+	menu_state.0.name = change.event().value.clone();
+	ui_sync.menu_dirty = true;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{save_chrome, CharacterEditBaseline};
+	use crozon_character_items::Inventory;
+	use crozon_character_ui_menus::CharacterMenu;
+
+	#[test]
+	fn save_chrome_create_and_dirty_saved() {
+		let create = CharacterMenu::for_create(Vec::new());
+		assert_eq!(save_chrome(&create, None), Some("Save Character"));
+
+		let saved = CharacterMenu::for_saved(
+			String::from("Misty"),
+			&create.appearance(),
+			Inventory::default(),
+		);
+		let baseline = CharacterEditBaseline::capture(&saved);
+		assert_eq!(save_chrome(&saved, Some(&baseline)), None);
+
+		let mut dirty = saved.clone();
+		dirty.name = String::from("Mist");
+		assert_eq!(save_chrome(&dirty, Some(&baseline)), Some("Save Changes"));
+		assert!(baseline.is_dirty(&dirty));
+		assert!(!baseline.is_dirty(&saved));
+	}
 }
