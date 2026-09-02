@@ -51,13 +51,19 @@ impl Plugin for GamePlugin {
 				MenuControllerPlugin,
 			))
 			.add_systems(Startup, spawn_menu_ui_camera)
-			.add_systems(OnEnter(GameFlow::Home), (enter_home, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::Home),
+				(enter_home, apply_shell_look, attach_preview_camera),
+			)
 			.add_systems(
 				OnEnter(GameFlow::Characters),
 				(enter_characters, apply_shell_look, attach_preview_camera),
 			)
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
-			.add_systems(OnEnter(GameFlow::World), (enter_world, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::World),
+				(enter_world, apply_shell_look, detach_preview_camera),
+			)
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)

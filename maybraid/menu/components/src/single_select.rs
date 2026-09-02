@@ -4,9 +4,9 @@ pub mod text_cursor;
 pub mod text_menu;
 
 pub use text_cursor::{
-	consume_screen_back, emit_screen_back_on_click, screen_back_scene, sync_text_cursor_icons,
-	ButtonWithSubtext, ScreenBack, ScreenBackPressed, TextCursorColumn, TextCursorMenu,
-	TextCursorRow, TextCursorSlot,
+	consume_screen_back, emit_screen_back_on_click, emit_screen_edit_on_click, screen_back_scene,
+	screen_edit_scene, sync_text_cursor_icons, ButtonWithSubtext, ScreenBack, ScreenBackPressed,
+	ScreenEdit, ScreenEditPressed, TextCursorColumn, TextCursorMenu, TextCursorRow, TextCursorSlot,
 };
 pub use text_menu::{
 	apply_text_menu_nav, emit_menu_activate_on_click, emit_menu_activate_on_enter,

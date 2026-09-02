@@ -6,7 +6,7 @@ use maybraid_menu_controller::MenuController;
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::single_select::{republish_menu_activate, MenuFocus};
-use menu_components::{TextMenuPlugin, MENU_CLEAR};
+use menu_components::TextMenuPlugin;
 
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
@@ -80,7 +80,7 @@ impl HomeScreen {
 			HomeScreen
 			MenuScreen
 			MenuController
-			BackgroundColor(MENU_CLEAR)
+			BackgroundColor(Color::NONE)
 			Node {
 				width: percent(100),
 				height: percent(100),

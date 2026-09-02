@@ -8,10 +8,11 @@ use crozon_character_model_user::{
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use crozon_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
-use menu_components::MenuActivate;
+use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
+use menu_components::{MenuActivate, ScreenEditPressed};
 use menu_screens::{
 	request_show_create_character_id, request_show_gallery, CreateCharacterReady, GalleryChoice,
-	GalleryScreenPlugin,
+	GalleryScreen, GalleryScreenPlugin,
 };
 
 use crate::character::{
@@ -25,6 +26,12 @@ pub struct CharacterSession;
 /// Id of the character open in the editor.
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct EditingCharacter {
+	pub id: CharacterId,
+}
+
+/// Character shown on home and in the gallery pane.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ActiveCharacter {
 	pub id: CharacterId,
 }
 
@@ -43,7 +50,16 @@ impl Plugin for CharacterSessionPlugin {
 		}
 		app.insert_resource(SaveRoot::workspace())
 			.add_observer(on_save_character)
-			.add_systems(Update, (open_gallery_choice, open_create_character_hud));
+			.add_systems(Startup, load_active_character)
+			.add_systems(
+				Update,
+				(
+					open_gallery_choice,
+					open_gallery_edit,
+					open_create_character_hud,
+					sync_gallery_active_caption,
+				),
+			);
 	}
 }
 
@@ -88,12 +104,58 @@ pub fn save_editing_character(
 	Ok(())
 }
 
+pub fn set_active_character(commands: &mut Commands, root: &SaveRoot, id: CharacterId) {
+	commands.insert_resource(ActiveCharacter { id });
+	if let Err(error) = crozon_character_persist::save_active(root, id) {
+		warn!("failed to save active character {}: {error}", id.to_hex());
+	}
+}
+
+fn load_active_character(mut commands: Commands, save_root: Res<SaveRoot>) {
+	if let Some(id) = crozon_character_persist::load_active(&save_root) {
+		if save_root.character_path(id).is_file() {
+			commands.insert_resource(ActiveCharacter { id });
+			return;
+		}
+	}
+	let Ok(ids) = save_root.list_ids() else {
+		return;
+	};
+	let Some(id) = ids.first().copied() else {
+		return;
+	};
+	set_active_character(&mut commands, &save_root, id);
+}
+
+fn sync_gallery_active_caption(
+	active: Option<Res<ActiveCharacter>>,
+	save_root: Res<SaveRoot>,
+	screens: Query<Entity, With<GalleryScreen>>,
+	children: Query<&Children>,
+	mut lines: Query<&mut Text, With<TextMenuDescription>>,
+	mut last: Local<Option<(Entity, Option<CharacterId>)>>,
+) {
+	let Ok(root) = screens.single() else {
+		*last = None;
+		return;
+	};
+	let id = active.map(|active| active.id);
+	if last.as_ref().is_some_and(|(entity, stored)| *entity == root && *stored == id) {
+		return;
+	}
+	*last = Some((root, id));
+	let caption = id
+		.and_then(|id| {
+			crozon_character_model_user::load(&save_root, id).ok().map(|model| model.name)
+		})
+		.unwrap_or_default();
+	set_description_for_menu(root, caption, &children, &mut lines);
+}
+
 fn open_gallery_choice(
 	mut choices: MessageReader<GalleryChoice>,
 	save_root: Res<SaveRoot>,
-	mut menu_state: ResMut<CharacterMenuState>,
 	mut commands: Commands,
-	sessions: SessionQuery,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -105,35 +167,67 @@ fn open_gallery_choice(
 			commands.remove_resource::<CharacterEditBaseline>();
 			request_show_create_character_id(&mut commands, id);
 		}
-		GalleryChoice::Open(id) => {
-			let model = match crozon_character_model_user::load(&save_root, id) {
-				Ok(model) => model,
-				Err(error) => {
-					warn!("failed to load character {}: {error}", id.to_hex());
-					return;
-				}
-			};
-			let inventory = match crozon_inventory_user::load(&save_root, id) {
-				Ok(inventory) => inventory,
-				Err(error) => {
-					warn!("failed to load inventory {}: {error}", id.to_hex());
-					return;
-				}
-			};
-			commands.insert_resource(EditingCharacter { id });
-			spawn_session(
-				&mut commands,
-				&sessions,
-				id,
-				model.name.clone(),
-				model.appearance.clone(),
-				inventory.clone(),
-			);
-			menu_state.0 = CharacterMenu::for_saved(model.name, &model.appearance, inventory);
-			commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
-			request_show_character(&mut commands);
+		GalleryChoice::Select(id) => {
+			if let Err(error) = crozon_character_model_user::load(&save_root, id) {
+				warn!("failed to load character {}: {error}", id.to_hex());
+				return;
+			}
+			set_active_character(&mut commands, &save_root, id);
 		}
 	}
+}
+
+fn open_gallery_edit(
+	mut edits: MessageReader<ScreenEditPressed>,
+	gallery: Query<(), With<GalleryScreen>>,
+	save_root: Res<SaveRoot>,
+	active: Option<Res<ActiveCharacter>>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	mut commands: Commands,
+	sessions: SessionQuery,
+) {
+	if gallery.is_empty() || edits.read().next().is_none() {
+		return;
+	}
+	let Some(active) = active else {
+		return;
+	};
+	open_saved_editor(&mut commands, &sessions, &mut menu_state, &save_root, active.id);
+}
+
+fn open_saved_editor(
+	commands: &mut Commands,
+	sessions: &SessionQuery,
+	menu_state: &mut CharacterMenuState,
+	save_root: &SaveRoot,
+	id: CharacterId,
+) {
+	let model = match crozon_character_model_user::load(save_root, id) {
+		Ok(model) => model,
+		Err(error) => {
+			warn!("failed to load character {}: {error}", id.to_hex());
+			return;
+		}
+	};
+	let inventory = match crozon_inventory_user::load(save_root, id) {
+		Ok(inventory) => inventory,
+		Err(error) => {
+			warn!("failed to load inventory {}: {error}", id.to_hex());
+			return;
+		}
+	};
+	commands.insert_resource(EditingCharacter { id });
+	spawn_session(
+		commands,
+		sessions,
+		id,
+		model.name.clone(),
+		model.appearance.clone(),
+		inventory.clone(),
+	);
+	menu_state.0 = CharacterMenu::for_saved(model.name, &model.appearance, inventory);
+	commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
+	request_show_character(commands);
 }
 
 fn open_create_character_hud(
@@ -180,6 +274,7 @@ fn on_save_character(
 		warn!("failed to save character {}: {error}", editing.id.to_hex());
 		return;
 	}
+	set_active_character(&mut commands, &save_root, editing.id);
 	if menu_state.0.is_create() {
 		commands.remove_resource::<CharacterEditBaseline>();
 		request_show_gallery(&mut commands);

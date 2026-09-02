@@ -39,9 +39,10 @@ pub use loading::{
 pub use single_select::{
 	apply_text_menu_nav, consume_screen_back, emit_menu_activate_on_click,
 	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus,
-	emit_screen_back_on_click, navigate_text_menus, republish_menu_activate, screen_back_scene,
-	select_text_menu_item_on_over, sync_text_cursor_icons, sync_text_menu_item_colors,
-	ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus, ScreenBack, ScreenBackPressed,
+	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
+	republish_menu_activate, screen_back_scene, screen_edit_scene, select_text_menu_item_on_over,
+	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
+	MenuActivate, MenuFocus, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
 	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
 	TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem,
 	TextMenuItemLabel,
@@ -51,8 +52,8 @@ pub use spin_reveal::{
 	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
 };
 pub use theme::{
-	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE,
-	LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE,
+	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE,
 	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 	TEXT_YELLOW_HOVER,
 };
@@ -76,6 +77,7 @@ impl Plugin for MenuComponentsPlugin {
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
 			.add_message::<ScreenBackPressed>()
+			.add_message::<ScreenEditPressed>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
 			.add_observer(select_text_menu_item_on_over)
 			.add_observer(select_hud_item_on_over)
@@ -83,6 +85,7 @@ impl Plugin for MenuComponentsPlugin {
 			.add_observer(apply_hud_menu_nav)
 			.add_observer(on_hud_scroll)
 			.add_observer(emit_screen_back_on_click)
+			.add_observer(emit_screen_edit_on_click)
 			.add_observer(controls::emit_short_text_toggle_on_click)
 			.add_observer(controls::emit_short_text_toggle_on_nav)
 			.add_observer(controls::emit_short_text_submit_on_click)

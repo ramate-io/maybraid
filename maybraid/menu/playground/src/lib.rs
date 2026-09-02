@@ -15,7 +15,8 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::CharacterPreviewPlugin;
 pub use session::{
-	save_editing_character, CharacterSession, CharacterSessionPlugin, EditingCharacter,
+	save_editing_character, ActiveCharacter, CharacterSession, CharacterSessionPlugin,
+	EditingCharacter,
 };
 
 use bevy::prelude::*;
@@ -33,7 +34,7 @@ use maybraid_menu_controller::MenuControllerPlugin;
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed};
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, request_show_home, CreateCharacterPlugin,
-	GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice,
+	GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreen, HomeScreenPlugin, InGameMenuChoice,
 	InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 };
 
@@ -96,7 +97,10 @@ fn add_lod_viewer_to_camera(
 }
 
 fn character_screen_closed(
-	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
+	screens: Query<
+		(),
+		Or<(With<CharacterScreen>, With<SpinRevealScreen>, With<HomeScreen>, With<GalleryScreen>)>,
+	>,
 ) -> bool {
 	screens.is_empty()
 }
@@ -147,7 +151,7 @@ fn echo_gallery_choice(
 	for choice in choices.read() {
 		console.0 = match choice {
 			GalleryChoice::New => String::from("gallery: new character"),
-			GalleryChoice::Open(id) => format!("gallery: {}", id.to_hex()),
+			GalleryChoice::Select(id) => format!("gallery: {}", id.to_hex()),
 		};
 	}
 }

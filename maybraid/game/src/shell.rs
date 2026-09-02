@@ -50,13 +50,12 @@ pub(crate) fn apply_shell_look(
 	mut gameplay: ResMut<WorldGameplayEnabled>,
 ) {
 	let flow = *flow.get();
-	let world_3d = flow != GameFlow::Home;
 	clear.0 = if flow == GameFlow::Home { MENU_CLEAR } else { WORLD_SKY };
 	for mut camera in &mut world_cameras {
-		camera.is_active = world_3d;
+		camera.is_active = true;
 	}
 	for mut camera in &mut ui_cameras {
-		camera.is_active = !world_3d;
+		camera.is_active = false;
 	}
 	gameplay.0 =
 		flow == GameFlow::World && pause.is_some_and(|pause| *pause.get() == WorldPause::Playing);

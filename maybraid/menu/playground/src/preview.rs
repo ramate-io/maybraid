@@ -4,8 +4,10 @@ use std::f32::consts::PI;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
+use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_items::{ClothingHost, ClothingMesh, InventoryItem, ItemColor};
+use crozon_character_persist::SaveRoot;
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::{
 	spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies, MenuEvent, BODY_FOCUS,
@@ -19,9 +21,13 @@ use lod::gen::LodScene;
 use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use menu_screens::{SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems};
+use menu_components::DESCRIPTION_PANE_LEFT_PERCENT;
+use menu_screens::{
+	GalleryScreen, HomeScreen, SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems,
+};
 
 use crate::character::{CharacterMenuState, CharacterScreen};
+use crate::session::ActiveCharacter;
 
 #[derive(Component)]
 struct CharacterPreviewRoot;
@@ -29,12 +35,14 @@ struct CharacterPreviewRoot;
 #[derive(Resource, Default)]
 struct PreviewSyncState {
 	key: String,
+	anim: Option<AnimRef>,
 }
 
 #[derive(Resource, Default)]
 struct PendingCameraFocus {
 	focus: Option<CameraFocus>,
 	resolved: Option<Transform>,
+	look_at: Option<Vec3>,
 }
 
 pub struct CharacterPreviewPlugin;
@@ -85,26 +93,26 @@ fn sync_preview(
 	mut commands: Commands,
 	screens: Query<Entity, With<CharacterScreen>>,
 	spin_screens: Query<Entity, With<SpinRevealScreen>>,
+	home: Query<Entity, With<HomeScreen>>,
+	gallery: Query<Entity, With<GalleryScreen>>,
 	menu_state: Res<CharacterMenuState>,
 	spin: Option<Res<SpinRevealCurrent>>,
+	active: Option<Res<ActiveCharacter>>,
+	save_root: Option<Res<SaveRoot>>,
 	mut sync: ResMut<PreviewSyncState>,
 	mut pending: ResMut<PendingCameraFocus>,
 	roots: Query<Entity, With<CharacterPreviewRoot>>,
 ) {
 	if !screens.is_empty() {
-		let key = format!("{:?}", menu_state.0);
-		if sync.key == key && !roots.is_empty() {
-			return;
-		}
-		sync.key = key;
-		for entity in &roots {
-			commands.entity(entity).despawn();
-		}
-		spawn_from_menu(&mut commands, &menu_state.0);
-		pending.resolved = None;
-		if pending.focus.is_none() {
-			pending.focus = Some(default_body_focus(&menu_state.0));
-		}
+		respawn_from_menu(
+			&mut commands,
+			&mut sync,
+			&mut pending,
+			&roots,
+			&menu_state.0,
+			format!("{:?}", menu_state.0),
+			false,
+		);
 		return;
 	}
 
@@ -115,6 +123,7 @@ fn sync_preview(
 				return;
 			}
 			sync.key = key;
+			sync.anim = None;
 			for entity in &roots {
 				commands.entity(entity).despawn();
 			}
@@ -125,12 +134,80 @@ fn sync_preview(
 		}
 	}
 
-	for entity in &roots {
+	if home.is_empty() && gallery.is_empty() {
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+		return;
+	}
+
+	let Some(active) = active else {
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+		return;
+	};
+	let Some(save_root) = save_root else {
+		return;
+	};
+	let Some(menu) = menu_for_saved(&save_root, active.id) else {
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+		return;
+	};
+	respawn_from_menu(
+		&mut commands,
+		&mut sync,
+		&mut pending,
+		&roots,
+		&menu,
+		format!("active:{}", active.id.to_hex()),
+		true,
+	);
+}
+
+fn respawn_from_menu(
+	commands: &mut Commands,
+	sync: &mut PreviewSyncState,
+	pending: &mut PendingCameraFocus,
+	roots: &Query<Entity, With<CharacterPreviewRoot>>,
+	menu: &CharacterMenu,
+	key: String,
+	force_focus: bool,
+) {
+	if sync.key == key && !roots.is_empty() {
+		return;
+	}
+	sync.key = key;
+	sync.anim = Some(AnimRef::from(menu.animation()));
+	for entity in roots {
+		commands.entity(entity).despawn();
+	}
+	spawn_from_menu(commands, menu);
+	pending.resolved = None;
+	if force_focus || pending.focus.is_none() {
+		pending.focus = Some(default_body_focus(menu));
+	}
+}
+
+fn clear_preview(
+	commands: &mut Commands,
+	sync: &mut PreviewSyncState,
+	pending: &mut PendingCameraFocus,
+	roots: &Query<Entity, With<CharacterPreviewRoot>>,
+) {
+	for entity in roots {
 		commands.entity(entity).despawn();
 	}
 	sync.key.clear();
+	sync.anim = None;
 	pending.focus = None;
 	pending.resolved = None;
+	pending.look_at = None;
+}
+
+fn menu_for_saved(
+	root: &SaveRoot,
+	id: crozon_character_persist::CharacterId,
+) -> Option<CharacterMenu> {
+	let model = crozon_character_model_user::load(root, id).ok()?;
+	let inventory = crozon_inventory_user::load(root, id).ok()?;
+	Some(CharacterMenu::for_saved(model.name, &model.appearance, inventory))
 }
 
 fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
@@ -230,7 +307,9 @@ where
 
 fn stamp_preview_animation(
 	mut commands: Commands,
+	sync: Res<PreviewSyncState>,
 	menu_state: Res<CharacterMenuState>,
+	character_screens: Query<Entity, With<CharacterScreen>>,
 	spin_screens: Query<Entity, With<SpinRevealScreen>>,
 	roots: Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: Query<&CharacterRig>,
@@ -239,7 +318,14 @@ fn stamp_preview_animation(
 	if !spin_screens.is_empty() {
 		return;
 	}
-	let desired = AnimRef::from(menu_state.0.animation());
+	let desired = if character_screens.is_empty() {
+		let Some(anim) = sync.anim else {
+			return;
+		};
+		anim
+	} else {
+		AnimRef::from(menu_state.0.animation())
+	};
 	for members in &roots {
 		for member in members.iter() {
 			if !rigs.get(member).is_ok_and(|rig| rig.role == CharacterRigRole::Body) {
@@ -270,7 +356,13 @@ fn queue_preview_camera_focus(
 
 fn apply_preview_camera_focus(
 	mut pending: ResMut<PendingCameraFocus>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	mut cameras: Query<
+		(&mut Transform, &mut CameraController, &mut Camera, &Projection),
+		With<Camera3d>,
+	>,
+	windows: Query<&Window, With<PrimaryWindow>>,
+	home: Query<(), With<HomeScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
 	roots: Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: Query<(Entity, &CharacterRig, &BoneMap, &GlobalTransform)>,
 	transforms: Query<&GlobalTransform>,
@@ -278,18 +370,33 @@ fn apply_preview_camera_focus(
 	let Some(focus) = pending.focus else {
 		return;
 	};
-	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
+	let Ok((mut transform, mut controller, mut camera, projection)) = cameras.single_mut() else {
 		return;
 	};
+	camera.viewport = None;
 	let target = if let Some(resolved) = pending.resolved {
 		resolved
-	} else if let Some(resolved) = resolve_focus_transform(focus, &roots, &rigs, &transforms) {
+	} else if let Some((resolved, look_at)) =
+		resolve_focus_transform(focus, &roots, &rigs, &transforms)
+	{
 		pending.resolved = Some(resolved);
+		pending.look_at = Some(look_at);
 		resolved
 	} else {
+		pending.look_at = Some(focus.look_at_offset);
 		Transform::from_translation(focus.camera_offset).looking_at(focus.look_at_offset, Vec3::Y)
 	};
 	*transform = target;
+	if !home.is_empty() || !gallery.is_empty() {
+		let aspect = windows
+			.single()
+			.ok()
+			.map(|window| window.width() / window.height().max(1.0))
+			.unwrap_or(16.0 / 9.0);
+		let look_at =
+			pending.look_at.unwrap_or_else(|| target.translation + *target.forward() * 4.0);
+		offset_camera_into_display_pane(&mut transform, projection, look_at, aspect);
+	}
 	sync_controller_from_transform(&mut controller, &transform);
 }
 
@@ -303,7 +410,7 @@ fn resolve_focus_transform(
 	roots: &Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: &Query<(Entity, &CharacterRig, &BoneMap, &GlobalTransform)>,
 	transforms: &Query<&GlobalTransform>,
-) -> Option<Transform> {
+) -> Option<(Transform, Vec3)> {
 	let role = match focus.rig {
 		FocusRig::Body => CharacterRigRole::Body,
 		FocusRig::Head => CharacterRigRole::Head,
@@ -324,7 +431,10 @@ fn resolve_focus_transform(
 			};
 			let camera_pos = socket_oriented_point(&socket_gt, focus.camera_offset);
 			let look_at = socket_oriented_point(&socket_gt, focus.look_at_offset);
-			return Some(Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y));
+			return Some((
+				Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y),
+				look_at,
+			));
 		}
 	}
 	None
@@ -342,4 +452,25 @@ fn sync_controller_from_transform(controller: &mut CameraController, transform: 
 	controller.yaw = sin_yaw.atan2(cos_yaw);
 	let sin_pitch = 2.0 * (w * x - y * z);
 	controller.pitch = sin_pitch.clamp(-1.0, 1.0).asin();
+}
+
+/// Shift the framed body into the right-hand display pane so the left menu
+/// does not sit on top of it. NDC x = 0 is screen center.
+fn offset_camera_into_display_pane(
+	transform: &mut Transform,
+	projection: &Projection,
+	look_at: Vec3,
+	aspect: f32,
+) {
+	let Projection::Perspective(perspective) = projection else {
+		return;
+	};
+	let depth = transform.translation.distance(look_at).max(0.1);
+	let half_height = (perspective.fov * 0.5).tan() * depth;
+	let half_width = half_height * aspect.max(0.1);
+	let pane_center = (DESCRIPTION_PANE_LEFT_PERCENT + 100.0) * 0.005;
+	let ndc_x = pane_center * 2.0 - 1.0;
+	transform.translation -= *transform.right() * ndc_x * half_width;
+	let ndc_y = 0.16;
+	transform.translation -= *transform.up() * ndc_y * half_height;
 }

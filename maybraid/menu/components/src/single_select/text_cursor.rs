@@ -49,6 +49,7 @@ pub struct TextCursorColumn<E> {
 	pub items: Vec<TextCursorRow<E>>,
 	pub anchor: TextColumnAnchor,
 	pub align: TextColumnAlign,
+	pub selected: usize,
 }
 
 impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorColumn<E> {
@@ -64,6 +65,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 				.collect(),
 			anchor: TextColumnAnchor::BottomLeft,
 			align: TextColumnAlign::Start,
+			selected: 0,
 		}
 	}
 
@@ -77,6 +79,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 				.collect(),
 			anchor: TextColumnAnchor::BottomLeft,
 			align: TextColumnAlign::Start,
+			selected: 0,
 		}
 	}
 
@@ -89,6 +92,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 			items: items.into_iter().collect(),
 			anchor: TextColumnAnchor::BottomLeft,
 			align: TextColumnAlign::Start,
+			selected: 0,
 		}
 	}
 
@@ -102,20 +106,31 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		self
 	}
 
+	pub fn with_selected(mut self, selected: usize) -> Self {
+		self.selected = selected;
+		self
+	}
+
 	pub fn scene(self) -> impl Scene + 'static {
 		let item_count = self.items.len();
+		let selected = if item_count == 0 { 0 } else { self.selected.min(item_count - 1) };
 		let mut children: Vec<Box<dyn Scene>> =
 			Vec::with_capacity(item_count + usize::from(self.header.is_some()));
 		if let Some(header) = self.header {
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
 		for (index, row) in self.items.into_iter().enumerate() {
-			children.push(Box::new(cursor_row_scene(TextMenuItem::yellow(index), row, self.align)));
+			children.push(Box::new(cursor_row_scene(
+				TextMenuItem::yellow(index),
+				row,
+				self.align,
+				selected,
+			)));
 		}
 		let node = self.anchor.node(self.align);
 		bsn! {
 			TextCursorMenu
-			template_value(TextMenu::new(item_count))
+			template_value(TextMenu::with_selected(item_count, selected))
 			template_value(node)
 			Children [ {children} ]
 		}
@@ -155,6 +170,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 				self.label,
 				self.action,
 				TextColumnAlign::Start,
+				0,
 			)),
 			Box::new(subtext_caption_scene(self.subtext)),
 		];
@@ -224,16 +240,57 @@ pub fn consume_screen_back(
 	clicked || nav.just_pressed(MenuNav::Back)
 }
 
+/// Lower-right screen chrome. Click opens the active character in the editor.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct ScreenEdit;
+
+#[derive(Message, Debug, Default, Clone, Copy)]
+pub struct ScreenEditPressed;
+
+pub fn screen_edit_scene() -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![
+		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start)),
+		Box::new(cursor_label_scene(String::from("Edit"), TextColumnAlign::Start)),
+	];
+	bsn! {
+		Button
+		ScreenEdit
+		CursorRow
+		Node {
+			position_type: PositionType::Absolute,
+			right: px(CORNER_INSET),
+			bottom: px(CORNER_BOTTOM),
+			flex_direction: FlexDirection::Row,
+			align_items: AlignItems::Center,
+			column_gap: px(CURSOR_ICON_GAP),
+			padding: UiRect::axes(px(0.0), px(2.0)),
+		}
+		BackgroundColor(Color::NONE)
+		Children [ {children} ]
+	}
+}
+
+pub fn emit_screen_edit_on_click(
+	click: On<Pointer<Click>>,
+	edits: Query<(), With<ScreenEdit>>,
+	mut pressed: MessageWriter<ScreenEditPressed>,
+) {
+	if edits.contains(click.entity) {
+		pressed.write(ScreenEditPressed);
+	}
+}
+
 fn cursor_row_scene<E>(
 	item: TextMenuItem,
 	row: TextCursorRow<E>,
 	align: TextColumnAlign,
+	selected: usize,
 ) -> impl Scene + 'static
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 {
 	let mut children: Vec<Box<dyn Scene>> =
-		vec![Box::new(cursor_item_scene(item, row.label, row.action, align))];
+		vec![Box::new(cursor_item_scene(item, row.label, row.action, align, selected))];
 	if let Some(subtext) = row.subtext {
 		children.push(Box::new(subtext_caption_scene(subtext)));
 	}
@@ -272,11 +329,13 @@ fn cursor_item_scene<E>(
 	label: String,
 	action: E,
 	align: TextColumnAlign,
+	selected: usize,
 ) -> impl Scene + 'static
 where
 	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
 {
-	let visibility = if item.index == 0 { Visibility::Inherited } else { Visibility::Hidden };
+	let visibility =
+		if item.index == selected { Visibility::Inherited } else { Visibility::Hidden };
 	let children: Vec<Box<dyn Scene>> = vec![
 		Box::new(cursor_slot_scene(visibility, align)),
 		Box::new(cursor_label_scene(label, align)),
@@ -351,13 +410,14 @@ fn cursor_label_scene(label: String, align: TextColumnAlign) -> impl Scene {
 /// Show the animated mark only in the selected row’s gutter.
 pub fn sync_text_cursor_icons(
 	menus: Query<&TextMenu, With<TextCursorMenu>>,
-	items: Query<(Entity, &TextMenuItem, &ChildOf)>,
+	items: Query<(Entity, &TextMenuItem)>,
+	child_of: Query<&ChildOf>,
 	children: Query<&Children>,
 	slots: Query<(), With<TextCursorSlot>>,
 	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
 ) {
-	for (item_entity, item, child_of) in &items {
-		let Ok(menu) = menus.get(child_of.parent()) else {
+	for (item_entity, item) in &items {
+		let Some(menu) = text_cursor_menu(item_entity, &child_of, &menus) else {
 			continue;
 		};
 		let show = item.index == menu.selected;
@@ -377,5 +437,19 @@ pub fn sync_text_cursor_icons(
 				}
 			}
 		}
+	}
+}
+
+fn text_cursor_menu<'a>(
+	start: Entity,
+	child_of: &Query<&ChildOf>,
+	menus: &'a Query<&TextMenu, With<TextCursorMenu>>,
+) -> Option<&'a TextMenu> {
+	let mut entity = start;
+	loop {
+		if let Ok(menu) = menus.get(entity) {
+			return Some(menu);
+		}
+		entity = child_of.get(entity).ok()?.parent();
 	}
 }

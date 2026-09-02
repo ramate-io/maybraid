@@ -14,6 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const CHARACTERS_DIR: &str = "characters";
 const INVENTORIES_DIR: &str = "inventories";
+const ACTIVE_FILE: &str = "active.json";
 
 static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -96,6 +97,10 @@ impl SaveRoot {
 		self.inventories_dir().join(format!("{}.json", id.to_hex()))
 	}
 
+	pub fn active_path(&self) -> PathBuf {
+		self.path.join(ACTIVE_FILE)
+	}
+
 	pub fn ensure_dirs(&self) -> io::Result<()> {
 		fs::create_dir_all(self.characters_dir())?;
 		fs::create_dir_all(self.inventories_dir())?;
@@ -143,6 +148,26 @@ fn remove_if_exists(path: &Path) -> io::Result<()> {
 	}
 }
 
+#[derive(Serialize, Deserialize)]
+struct ActiveFile {
+	version: u32,
+	id: CharacterId,
+}
+
+/// Write the id shown on home and in the gallery pane.
+pub fn save_active(root: &SaveRoot, id: CharacterId) -> Result<(), PersistError> {
+	root.ensure_dirs()?;
+	let json = serde_json::to_string_pretty(&ActiveFile { version: 1, id })?;
+	fs::write(root.active_path(), json)?;
+	Ok(())
+}
+
+pub fn load_active(root: &SaveRoot) -> Option<CharacterId> {
+	let json = fs::read_to_string(root.active_path()).ok()?;
+	let file: ActiveFile = serde_json::from_str(&json).ok()?;
+	Some(file.id)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PersistError {
 	#[error(transparent)]
@@ -176,5 +201,14 @@ mod tests {
 		assert!(root.list_ids().expect("list").is_empty());
 		assert!(!root.character_path(id).exists());
 		assert!(!root.inventory_path(id).exists());
+	}
+
+	#[test]
+	fn active_id_round_trips() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(7);
+		save_active(&root, id).expect("save");
+		assert_eq!(load_active(&root), Some(id));
 	}
 }
