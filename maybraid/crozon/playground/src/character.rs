@@ -6,8 +6,8 @@ use crate::skinning::{
 	NeedsSocketPlacement, PartRigRef, HEAD_SCALE, HEAD_SOCKET_BONE,
 };
 
-pub const DEFAULT_RIG: &str = "characters/bodies/humanoid_rig.glb";
-pub const DEFAULT_BODY: &str = "characters/bodies/humanoid_playground.glb";
+pub const DEFAULT_RIG: &str = "characters/bodies/biped/humanoid_rig.glb";
+pub const DEFAULT_BODY: &str = "characters/bodies/biped/humanoid_playground.glb";
 
 #[derive(Component)]
 pub struct CharacterRoot;

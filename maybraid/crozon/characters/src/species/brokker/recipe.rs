@@ -54,7 +54,7 @@ impl CharacterComponents for Brokker {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("libird", "characters/bodies/libird_body.glb")],
+			vec![humanoid::body_part("libird", "characters/bodies/biped/libird_body.glb")],
 		);
 		out.extend_labeled(
 			"head",

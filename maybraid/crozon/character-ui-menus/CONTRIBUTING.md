@@ -13,13 +13,28 @@ new garment.
 
 To expose a new clothing mesh in both species:
 
-1. Export the `.glb` under `maybraid/assets/characters/clothes/`.
-2. In `maybraid/crozon/characters/src/species/common/assets.rs`:
-   - Add a `CLOTHING_*` `AssetPath` constant for the file.
+1. The blend-export pre-commit hook writes the canonical `.glb` under
+   `maybraid/assets/characters/clothes/body/` (or `clothes/head/` for hoods).
+   Menu thumbnails always use this catalog path. Body garments also have host-fit
+   GLBs at `clothes/body/{body_stem}/{file_stem}.glb` from
+   `scripts/clothes-fit/fit.sh`; blend-export must not overwrite those.
+2. In `maybraid/crozon/character-items/src/clothing.rs`:
+   - Add a `CLOTHING_*` path constant for the file.
    - Add a variant to `ClothingMesh`.
    - Append it to `ClothingMesh::VALUES`.
-   - Add matching `label()` and `path()` arms. Labels use kebab-case (for example
-     `harem-pants-upper`); asset filenames may use snake_case.
+   - Add matching `label()`, `file_stem()`, and `path()` arms. Labels use kebab-case
+     (for example `harem-pants-upper`); asset filenames may use snake_case.
+   - Body garments always resolve through `path_on(host)` as
+     `clothes/body/{body_stem}/{file_stem}.glb`. Generate those files with
+     `scripts/clothes-fit/fit.sh`. The hood stays on the unfitted head catalog
+     path; a body host does not rewrite it.
+   - Clothing color and surface recipe are independent of the mesh. Species
+     menus share `ClothingMenu`: color swatches and look tiles (`space-suit`,
+     `tattered`, `hawaiian`, `cloth`, `scales`, `wizards-veins`, `glitter`) per
+     worn layer. Unset layers fall back to `clothing_material` / `clothing_default`.
+     Assembly stamps `MaterialRef::named(recipe_id).with_palette([color])`; Crozon’s
+     MaterialLib claims those names and packs palette / noise / scalars / rasters
+     onto the clothing shader uniform.
 3. `ListValues` and `AssetOption` for `ClothingMesh` in `crozon_characters` pick up the
    new variant automatically, so the UI, CLI (`--clothing`), and preview assembly work
    without further changes in this crate.

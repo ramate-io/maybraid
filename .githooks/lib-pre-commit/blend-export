@@ -13,6 +13,12 @@ EXPORT_SCRIPT="$REPO_ROOT/scripts/glb/main.py"
 ART_PREFIX="maybraid/art/"
 ASSETS_PREFIX="maybraid/assets/"
 
+# Art `.blend` files still 1:1-export to `assets/…/*.glb` (menu thumbnails).
+# Body garments also have host-fit GLBs at
+# `assets/characters/clothes/body/{host}/{garment}.glb` from
+# `scripts/clothes-fit`. Those are not a blend mirror: never export over them,
+# and when a clothing blend is deleted, remove those host-fit copies too.
+
 echo "Running pre-commit hook: Exporting .blend files to .glb..."
 
 if ! command -v blender &> /dev/null; then
@@ -44,22 +50,42 @@ blend_to_glb() {
     echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.glb/'
 }
 
+is_body_clothing_blend() {
+    case "$1" in
+        maybraid/art/characters/clothes/body/*.blend) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+stage_remove_asset() {
+    local path="$1"
+    if [ ! -e "$path" ] && ! git ls-files --error-unmatch -- "$path" &>/dev/null; then
+        return 0
+    fi
+    echo "🗑️  Removing ${path}"
+    if git ls-files --error-unmatch -- "$path" &>/dev/null; then
+        git rm -f --quiet -- "$path"
+    else
+        rm -f -- "$path"
+    fi
+    REMOVED=$((REMOVED + 1))
+}
+
 # Remove the mirrored .glb for a deleted .blend and stage the deletion.
 remove_glb_for_blend() {
     local blend_file="$1"
     local glb_file="${ASSETS_PREFIX}$(blend_to_glb "$blend_file")"
+    stage_remove_asset "$glb_file"
 
-    if [ ! -e "$glb_file" ] && ! git ls-files --error-unmatch -- "$glb_file" &>/dev/null; then
-        return 0
+    if is_body_clothing_blend "$blend_file"; then
+        local stem
+        stem="$(basename "$blend_file" .blend)"
+        local host_glb
+        while IFS= read -r host_glb || [ -n "$host_glb" ]; do
+            [ -z "$host_glb" ] && continue
+            stage_remove_asset "$host_glb"
+        done < <(git ls-files -- "maybraid/assets/characters/clothes/body/*/${stem}.glb")
     fi
-
-    echo "🗑️  Removing ${glb_file} (source ${blend_file} deleted)"
-    if git ls-files --error-unmatch -- "$glb_file" &>/dev/null; then
-        git rm -f --quiet -- "$glb_file"
-    else
-        rm -f -- "$glb_file"
-    fi
-    REMOVED=$((REMOVED + 1))
 }
 
 REMOVED=0
@@ -119,6 +145,12 @@ while IFS= read -r blend_file || [ -n "$blend_file" ]; do
     CURRENT=$((CURRENT + 1))
     relative_path="$(blend_to_glb "$blend_file")"
     glb_file="${ASSETS_PREFIX}${relative_path}"
+
+    # Never write a catalog export into a host-fit directory.
+    if [ -d "$glb_file" ]; then
+        echo "❌ Refusing to export over directory ${glb_file} (host-fit clothing lives here)"
+        exit 1
+    fi
 
     # Indexed but missing on disk (e.g. AD / worktree deletion) — clean GLB, skip Blender.
     if [ ! -f "$blend_file" ]; then

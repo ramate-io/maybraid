@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
-use crozon_character_items::ClothingMesh;
+use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
 		braidman::{sliders::BraidmanSliders, BraidmanConfig},
@@ -53,6 +53,10 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum)]
 	pub clothing: Vec<ClothingMesh>,
 
+	/// Default surface recipe for worn layers without a per-item override.
+	#[arg(long, value_enum, default_value_t = ClothingMaterial::Cloth)]
+	pub clothing_material: ClothingMaterial,
+
 	/// Procedural body animation used to inspect sockets and skinning under motion.
 	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
 	pub animation: ConceptAnimation,
@@ -101,7 +105,12 @@ impl PreviewArgs {
 				ear: self.ear,
 				hair: self.hair,
 				clothing: self.clothing,
-				colors: Default::default(),
+				colors: {
+					let mut colors =
+						crozon_characters::species::braidman::BraidmanColors::default();
+					colors.clothing_material = self.clothing_material;
+					colors
+				},
 				sliders,
 			},
 			self.animation,

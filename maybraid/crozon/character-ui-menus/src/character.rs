@@ -1473,6 +1473,9 @@ impl CharacterMenu {
 
 	fn apply_braidman(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.braidman;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
@@ -2065,6 +2068,9 @@ impl CharacterMenu {
 
 	fn apply_brodler(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brodler;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2141,6 +2147,9 @@ impl CharacterMenu {
 
 	fn apply_mygr(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.mygr;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2199,6 +2208,9 @@ impl CharacterMenu {
 
 	fn apply_dui(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.dui;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::DuiNose, delta) => {
@@ -2258,6 +2270,9 @@ impl CharacterMenu {
 
 	fn apply_lidder(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.lidder;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2316,6 +2331,9 @@ impl CharacterMenu {
 
 	fn apply_chupri(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.chupri;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2374,6 +2392,9 @@ impl CharacterMenu {
 
 	fn apply_brokker(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brokker;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2428,6 +2449,9 @@ impl CharacterMenu {
 
 	fn apply_tipple(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.tipple;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2486,6 +2510,9 @@ impl CharacterMenu {
 
 	fn apply_topple(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.topple;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2544,6 +2571,9 @@ impl CharacterMenu {
 
 	fn apply_kispar(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.kispar;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2602,6 +2632,9 @@ impl CharacterMenu {
 
 	fn apply_tapp(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.tapp;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2660,6 +2693,9 @@ impl CharacterMenu {
 
 	fn apply_kaller(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.kaller;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2718,6 +2754,9 @@ impl CharacterMenu {
 
 	fn apply_kappler(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.kappler;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2776,6 +2815,9 @@ impl CharacterMenu {
 
 	fn apply_wumbus(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.wumbus;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::WumbusHorns, delta) => {
@@ -2850,6 +2892,9 @@ impl CharacterMenu {
 
 	fn apply_lero(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.lero;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -2912,6 +2957,9 @@ impl CharacterMenu {
 
 	fn apply_spibmom(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.spibmom;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -3051,6 +3099,9 @@ impl CharacterMenu {
 
 	fn apply_tuberwaber(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.tuberwaber;
+		if crate::shared::apply_clothing_event(&mut menu.clothing.value, event) {
+			return true;
+		}
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {

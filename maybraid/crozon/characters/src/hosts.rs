@@ -1,11 +1,14 @@
 //! Register nested character LodScene hosts (all species) plus fulfill plugins.
 
 use bevy::prelude::*;
+use crozon_character_shaders::CrozonCharacterShadersPlugin;
 use lod::{add_lod_refresh_chunk_for, LodRefreshCorePlugin};
 use material_ref::StandardMaterialRefPlugin;
 use scene_ref::SceneRefPlugin;
 
 use crozon_character_motion::{CharacterMotionPlugin, CharacterMotionSystems};
+
+use crate::material_lib::CrozonMaterialRefPlugin;
 
 use crate::plugin::{
 	add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems,
@@ -29,6 +32,12 @@ impl Plugin for CharacterHostsPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<SceneRefPlugin>() {
 			app.add_plugins(SceneRefPlugin);
+		}
+		if !app.is_plugin_added::<CrozonCharacterShadersPlugin>() {
+			app.add_plugins(CrozonCharacterShadersPlugin);
+		}
+		if !app.is_plugin_added::<CrozonMaterialRefPlugin>() {
+			app.add_plugins(CrozonMaterialRefPlugin);
 		}
 		if !app.is_plugin_added::<StandardMaterialRefPlugin>() {
 			app.add_plugins(StandardMaterialRefPlugin);

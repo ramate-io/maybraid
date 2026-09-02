@@ -152,12 +152,13 @@ impl<E> AssetChoice<E> {
 	}
 }
 
-/// One toggleable item with its own preview tint and per-item color swatches.
+/// One toggleable item with its own preview tint, color swatches, and look tiles.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ItemRow<E> {
 	pub asset: AssetChoice<E>,
 	pub preview: PreviewColor,
 	pub colors: Vec<SwatchChoice<E>>,
+	pub materials: Vec<SelectChoice<E>>,
 }
 
 /// Renderer-agnostic menu tree. Generic over the host event type `E`, which is
@@ -183,7 +184,7 @@ pub enum MenuNode<E> {
 	/// Block-labeled grid of asset buttons with thumbnail previews.
 	BlockAsset { label: &'static str, preview: PreviewColor, choices: Vec<AssetChoice<E>> },
 	/// Block-labeled multi-select of items, each row pairing a toggle button
-	/// with its color swatches (e.g. clothing layers).
+	/// with color swatches and look tiles (e.g. clothing layers).
 	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.

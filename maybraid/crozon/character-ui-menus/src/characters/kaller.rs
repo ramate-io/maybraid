@@ -73,6 +73,8 @@ impl From<&KallerConfig> for KallerMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
+					config.colors.clothing_materials.clone(),
 				),
 			)
 			.with_camera_focus(SMALL_BIRD_BODY_FOCUS),
@@ -94,6 +96,8 @@ impl From<&KallerMenu> for KallerConfig {
 				crown: menu.head_features.value.crown_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
+				clothing_materials: menu.clothing.value.item_materials.clone(),
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -184,7 +188,9 @@ impl KallerMenu {
 			CharacterField::KallerHead => self.head.value.head.camera_focus,
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(SMALL_BIRD_BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial(_)
+			| CharacterField::Animation => Some(SMALL_BIRD_BODY_FOCUS),
 			_ => None,
 		}
 	}

@@ -61,7 +61,7 @@ impl CharacterComponents for Kispar {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("sparrow", "characters/bodies/sparrow_body.glb")],
+			vec![humanoid::body_part("sparrow", "characters/bodies/biped/sparrow_body.glb")],
 		);
 		out.extend_labeled(
 			"head",

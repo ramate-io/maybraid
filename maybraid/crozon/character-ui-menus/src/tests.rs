@@ -352,6 +352,28 @@ fn clothing_toggle_and_color() -> anyhow::Result<()> {
 }
 
 #[test]
+fn clothing_material_applies_to_braidman() -> anyhow::Result<()> {
+	use crozon_character_items::ClothingMaterial;
+
+	use crate::{AssetValue, CharacterField, MenuEvent};
+
+	let mut menu = CharacterMenu::default();
+	let tunic = ClothingMesh::Tunic;
+	assert!(menu.apply(MenuEvent::ToggleClothing(tunic)));
+	assert_eq!(menu.braidman.clothing.value.material_for(tunic), ClothingMaterial::Cloth);
+	assert!(menu.apply(MenuEvent::SetAsset(
+		CharacterField::ClothingMaterial(tunic),
+		AssetValue::ClothingMaterial(ClothingMaterial::Glitter),
+	)));
+	assert_eq!(menu.braidman.clothing.value.material_for(tunic), ClothingMaterial::Glitter);
+	let config = crozon_characters::species::braidman::BraidmanConfig::from(&menu.braidman);
+	assert_eq!(config.colors.clothing_material, ClothingMaterial::Cloth);
+	assert_eq!(config.colors.clothing_material_for(tunic), ClothingMaterial::Glitter);
+	assert_eq!(config.colors.clothing_material_for(ClothingMesh::Pants), ClothingMaterial::Cloth);
+	Ok(())
+}
+
+#[test]
 fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 	let menu = CharacterMenu::default();
 	let nodes = menu.menu_nodes();
@@ -394,6 +416,7 @@ fn clothing_swatches_only_lower_for_worn_layers() -> anyhow::Result<()> {
 	};
 	for row in rows {
 		assert_eq!(row.asset.selected, !row.colors.is_empty());
+		assert_eq!(row.asset.selected, !row.materials.is_empty());
 	}
 	Ok(())
 }

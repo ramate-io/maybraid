@@ -78,7 +78,7 @@ impl CharacterComponents for Wumbus {
 		let mut out = Layers::from_labeled(
 			"body",
 			vec![
-				humanoid::body_part("wumbus", "characters/bodies/wumbus_biped_full_body.glb"),
+				humanoid::body_part("wumbus", "characters/bodies/biped/wumbus_biped_full_body.glb"),
 				humanoid::spine(
 					"snail-back",
 					"characters/spines/snail_back_full_exo.glb",

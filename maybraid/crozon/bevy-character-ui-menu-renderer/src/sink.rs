@@ -6,8 +6,8 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SwatchChoice,
-	ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SelectChoice,
+	SwatchChoice, ThumbnailRequest,
 };
 
 use crate::widgets::{
@@ -224,23 +224,38 @@ impl BevyMenuSink {
 			.spawn((
 				Node {
 					width: Val::Percent(100.0),
-					flex_direction: FlexDirection::Row,
-					column_gap: Val::Px(6.0),
+					flex_direction: FlexDirection::Column,
 					row_gap: Val::Px(MENU_VERTICAL_GAP),
-					align_items: AlignItems::Center,
 					..default()
 				},
 				Pickable::IGNORE,
 			))
 			.with_children(|item| {
-				render_asset_button(
-					item,
-					row.asset.label,
-					row.asset.event,
-					row.asset.selected,
-					thumbnail,
-				);
-				swatch_row(item, &row.colors);
+				item.spawn((
+					Node {
+						width: Val::Percent(100.0),
+						flex_direction: FlexDirection::Row,
+						column_gap: Val::Px(6.0),
+						row_gap: Val::Px(MENU_VERTICAL_GAP),
+						align_items: AlignItems::Center,
+						flex_wrap: FlexWrap::Wrap,
+						..default()
+					},
+					Pickable::IGNORE,
+				))
+				.with_children(|top| {
+					render_asset_button(
+						top,
+						row.asset.label,
+						row.asset.event,
+						row.asset.selected,
+						thumbnail,
+					);
+					swatch_row(top, &row.colors);
+				});
+				if !row.materials.is_empty() {
+					select_row(item, &row.materials);
+				}
 			});
 	}
 }
@@ -273,6 +288,23 @@ fn swatch_row<E: Copy + Send + Sync + 'static>(
 				BackgroundColor(color_from_hex(choice.color_hex)),
 				crate::widgets::MenuButton(choice.event),
 			));
+		}
+	});
+}
+
+fn select_row<E: Copy + Send + Sync + 'static>(
+	parent: &mut ChildSpawnerCommands,
+	choices: &[SelectChoice<E>],
+) {
+	parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+		for choice in choices {
+			row.spawn((
+				Button,
+				select_tile_node(),
+				BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
+				crate::widgets::MenuButton(choice.event),
+			))
+			.with_children(|button| tile_text(button, choice.label, 9.0, Color::WHITE));
 		}
 	});
 }

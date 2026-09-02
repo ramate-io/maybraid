@@ -15,7 +15,9 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
+};
 
 pub use assets::{BrokkerHeadMesh, BrokkerSnoutMesh};
 pub use palette::{BrokkerEyeColor, BrokkerPlumageColor, BrokkerSnoutColor};
@@ -27,6 +29,8 @@ pub struct BrokkerColors {
 	pub snout: BrokkerSnoutColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
+	pub clothing_materials: Vec<ClothingMaterialChoice>,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -38,6 +42,8 @@ impl Default for BrokkerColors {
 			snout: BrokkerSnoutColor::Horn,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
+			clothing_materials: Vec::new(),
 			clothing: Vec::new(),
 		}
 	}
@@ -60,6 +66,14 @@ impl BrokkerColors {
 
 	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
 		ClothingColor::set(&mut self.clothing, clothing, color);
+	}
+
+	pub fn clothing_material_for(&self, clothing: ClothingMesh) -> ClothingMaterial {
+		ClothingMaterialChoice::resolve(&self.clothing_materials, self.clothing_material, clothing)
+	}
+
+	pub fn set_clothing_material(&mut self, clothing: ClothingMesh, material: ClothingMaterial) {
+		ClothingMaterialChoice::set(&mut self.clothing_materials, clothing, material);
 	}
 }
 
@@ -121,8 +135,11 @@ impl CharacterRecipe for BrokkerConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			ClothingHost::LIBIRD,
+			|mesh| self.colors.clothing_material_for(mesh),
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

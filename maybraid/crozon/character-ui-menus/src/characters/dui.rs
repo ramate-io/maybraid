@@ -71,6 +71,8 @@ impl From<&DuiConfig> for DuiMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
+					config.colors.clothing_materials.clone(),
 				),
 			)
 			.with_camera_focus(BODY_FOCUS),
@@ -92,6 +94,8 @@ impl From<&DuiMenu> for DuiConfig {
 				mouth: menu.head_features.value.mouth_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
+				clothing_materials: menu.clothing.value.item_materials.clone(),
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -179,7 +183,9 @@ impl DuiMenu {
 			}
 			CharacterField::DuiMouth => self.head_features.value.mouth.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial(_)
+			| CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

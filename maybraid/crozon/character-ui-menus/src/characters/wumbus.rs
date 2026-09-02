@@ -83,6 +83,8 @@ impl From<&WumbusConfig> for WumbusMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
+					config.colors.clothing_materials.clone(),
 				),
 			)
 			.with_camera_focus(BODY_FOCUS),
@@ -107,6 +109,8 @@ impl From<&WumbusMenu> for WumbusConfig {
 				spine: menu.head.value.spine_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
+				clothing_materials: menu.clothing.value.item_materials.clone(),
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -220,7 +224,9 @@ impl WumbusMenu {
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::WumbusMouth => self.head_features.value.snout.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial(_)
+			| CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

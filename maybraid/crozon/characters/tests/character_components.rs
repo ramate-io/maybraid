@@ -1,6 +1,6 @@
 //! CharacterComponents / Clothed composition tests.
 
-use crozon_character_items::ClothingMesh;
+use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
 		braidman::{Braidman, BraidmanConfig},
@@ -8,8 +8,9 @@ use crozon_characters::{
 		brodler::{Brodler, BrodlerConfig},
 		caole::{Caole, CaoleConfig},
 		claber::{Claber, ClaberConfig},
-		common::nodes as humanoid,
+		common::{nodes as humanoid, BodyMesh},
 		croconot::{Croconot, CroconotConfig},
+		dui::DuiConfig,
 		epiphant::{Epiphant, EpiphantConfig},
 		hars::{Hars, HarsConfig},
 		sonyak::{Sonyak, SonyakConfig},
@@ -81,6 +82,137 @@ fn clothed_braidman_adds_clothing_layer() {
 	assert_eq!(clothed_parts.len(), inner_len + 1);
 	assert!(clothed_parts.labeled.contains_key(&Layer::new("clothing")));
 	assert_eq!(clothed.rig_nodes_for_level(LodSceneLevel::High).len(), 2);
+}
+
+#[test]
+fn clothing_layer_uses_named_shader_recipe() {
+	let mut config = BraidmanConfig::default_preview();
+	config.clothing.push(ClothingMesh::Tunic);
+	config.colors.clothing_material = ClothingMaterial::Glitter;
+	let part = config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.find(|part| part.slot == CharacterPartSlot::Clothing)
+		.expect("clothing part");
+	assert_eq!(part.material.name, material_ref::MaterialId::named("clothing_glitter"));
+	assert_eq!(
+		part.material.palette.first().copied(),
+		Some(config.colors.clothing_color(ClothingMesh::Tunic).color())
+	);
+}
+
+#[test]
+fn clothing_layers_use_per_item_shader_recipes() {
+	let mut config = BraidmanConfig::default_preview();
+	config.clothing.push(ClothingMesh::Tunic);
+	config.clothing.push(ClothingMesh::Pants);
+	config
+		.colors
+		.set_clothing_material(ClothingMesh::Tunic, ClothingMaterial::Tattered);
+	config
+		.colors
+		.set_clothing_material(ClothingMesh::Pants, ClothingMaterial::Glitter);
+	let recipes: Vec<_> = config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.filter(|part| part.slot == CharacterPartSlot::Clothing)
+		.map(|part| part.material.name)
+		.collect();
+	assert_eq!(
+		recipes,
+		vec![
+			material_ref::MaterialId::named("clothing_tattered"),
+			material_ref::MaterialId::named("clothing_glitter"),
+		]
+	);
+}
+
+fn clothing_scene_path(config: &impl CharacterRecipe) -> String {
+	config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.find(|part| part.slot == CharacterPartSlot::Clothing)
+		.map(|part| part.scene.path)
+		.expect("clothing part")
+}
+
+#[test]
+fn tank_top_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/tank_top.glb"
+	);
+}
+
+#[test]
+fn tank_top_on_full_braidman_uses_leron_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Full;
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/leron_biped_full_body/tank_top.glb"
+	);
+}
+
+#[test]
+fn tank_top_on_dui_uses_igeo_fit() {
+	let mut config = DuiConfig::default_preview();
+	config.clothing.push(ClothingMesh::TankTop);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/igeo_biped_full_body/tank_top.glb"
+	);
+}
+
+#[test]
+fn fitted_coat_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::FittedCoat);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/fitted_coat.glb"
+	);
+}
+
+#[test]
+fn long_dress_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::LongDress);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/long_dress.glb"
+	);
+}
+
+#[test]
+fn short_dress_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::ShortDress);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/short_dress.glb"
+	);
+}
+
+#[test]
+fn robe_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::Robe);
+	assert_eq!(clothing_scene_path(&config), "characters/clothes/body/humanoid_full_body/robe.glb");
 }
 
 #[test]

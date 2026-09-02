@@ -16,6 +16,7 @@ pub mod components;
 pub mod concepts;
 pub mod hosts;
 pub mod layer;
+pub mod material_lib;
 pub mod member;
 pub mod menu_traits;
 pub mod nodes;
@@ -37,8 +38,8 @@ pub use anim::{
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
-	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed, ClothingLayer,
-	ComponentsOnly,
+	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
+	ClothingLayer, ComponentsOnly,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{

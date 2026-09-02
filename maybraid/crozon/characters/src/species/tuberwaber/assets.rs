@@ -6,7 +6,7 @@ use crate::assets::AssetPath;
 
 pub use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
 
-const BODY_TUBERWABER: AssetPath = AssetPath::new("characters/bodies/tuberwaber_body.glb");
+const BODY_TUBERWABER: AssetPath = AssetPath::new("characters/bodies/biped/tuberwaber_body.glb");
 const HEAD_TUBERWABER: AssetPath = AssetPath::new("characters/heads/tuberwaber_head.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
@@ -24,6 +24,10 @@ impl TuberwaberBodyMesh {
 
 	pub const fn path(self) -> AssetPath {
 		BODY_TUBERWABER
+	}
+
+	pub const fn clothing_host(self) -> crozon_character_items::ClothingHost {
+		crozon_character_items::ClothingHost::TUBERWABER
 	}
 }
 

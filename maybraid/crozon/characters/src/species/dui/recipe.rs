@@ -58,7 +58,7 @@ impl CharacterComponents for Dui {
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		let mut out = Layers::from_labeled(
 			"body",
-			vec![humanoid::body_part("igeo", "characters/bodies/igeo_biped_full_body.glb")],
+			vec![humanoid::body_part("igeo", "characters/bodies/biped/igeo_biped_full_body.glb")],
 		);
 		out.extend_labeled(
 			"head",

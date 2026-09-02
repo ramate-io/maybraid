@@ -6,7 +6,7 @@ use crate::{assets::AssetPath, species::common::assets::HEAD_STANDARD_PRONOGRADE
 
 pub use crate::species::common::EyeMesh;
 
-const BODY_EPIPHANT: AssetPath = AssetPath::new("characters/bodies/epiphant.glb");
+const BODY_EPIPHANT: AssetPath = AssetPath::new("characters/bodies/quadruped/epiphant.glb");
 const EAR_EPIPHANT: AssetPath = AssetPath::new("characters/ears/epiphant_ear_left.glb");
 const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.glb");
 

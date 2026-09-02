@@ -892,14 +892,14 @@ Gender and build presets below adjust the same body rig sliders as percent offse
 
 `Braidman` is a relatively plain humanoid species.
 
-- **Body Rig:** `Humanoid` `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/humanoid_rig.glb)
+- **Body Rig:** `Humanoid` `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/biped/humanoid_rig.glb)
     - **Base bone scales:**
         - Lower chest width group: `0.8`.
         - Waist width group: `1.2`.
         - Other body bones: species baseline `1.0`.
 - **Body Meshes:** 
-    - **Standard:** `HumanoidFullBody` `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/humanoid_full_body.glb)
-    - **Full:** `LeronBipedFullBody` `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/leron_biped_full_body.glb)
+    - **Standard:** `HumanoidFullBody` `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/biped/humanoid_full_body.glb)
+    - **Full:** `LeronBipedFullBody` `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/biped/leron_biped_full_body.glb)
 - **Body Rig Sliders:**
     - **Height:** from 0.5 to 1.5 of the species baseline height.
         - Scaling height increases the length of the legs, arms, and spinal bones. 
@@ -989,15 +989,12 @@ Gender and build presets below adjust the same body rig sliders as percent offse
         - **Perm Braid:** `PermBraid` `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
         - **Techno Edge:** `TechnoEdge` `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
 - **Clothes:** (can wear as many as you want at the same time; each remaps to the body rig, `NoChanges` fit)
-    - **Basketball Cut Shirt:** `BasketballCutShirt` `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb).
-    - **Tunic:** `Tunic` `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb).
-    - **Long Dress:** `LongDress` `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/long_dress.glb).
-    - **Short Dress:** `ShortDress` `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/short_dress.glb).
-    - **Fitted Coat:** `FittedCoat` `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/fitted_coat.glb).
-    - **Quarter Coat:** `QuarterCoat` `Mesh` in [`assets/clothes/quarter_coat.glb`](../../assets/characters/clothes/quarter_coat.glb).
-    - **Robe Coat:** `RobeCoat` `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/robe_coat.glb).
-    - **Short-sleeved Robe Coat:** `ShortSleevedRobeCoat` `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/short_sleeved_robe_coat.glb).
-    - **Tailored Coat:** `TailoredCoat` `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/tailored_coat.glb).
+    - **Tunic:** `Tunic` `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/body/tunic.glb).
+    - **Long Dress:** `LongDress` `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/body/long_dress.glb).
+    - **Short Dress:** `ShortDress` `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/body/short_dress.glb).
+    - **Fitted Coat:** `FittedCoat` `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/body/fitted_coat.glb).
+    - **Robe Coat:** `RobeCoat` `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/body/robe_coat.glb).
+    - **Robe:** `Robe` `Mesh` in [`assets/clothes/robe.glb`](../../assets/characters/clothes/body/robe.glb).
 - **Animations:** walk, run, two-footed jump, tucked flip (humanoid-compatible; see [`crozon/animations`](../animations/)).
 - **Genders:** (percent offsets on body rig sliders after species baseline)
     - **Male:**

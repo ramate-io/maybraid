@@ -4,17 +4,20 @@ use clap::ValueEnum;
 
 use crate::assets::AssetPath;
 
-pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/humanoid_rig.glb");
-pub const QUADRUPED_RIG: AssetPath = AssetPath::new("characters/bodies/quadruped_rig.glb");
-pub const FORELIMBED_RIG: AssetPath = AssetPath::new("characters/bodies/forelimbed_rig.glb");
-pub const BODY_SHARK: AssetPath = AssetPath::new("characters/bodies/shark.glb");
-pub const BODY_WHALE: AssetPath = AssetPath::new("characters/bodies/whale.glb");
-pub const BODY_SPRITE_FISH: AssetPath = AssetPath::new("characters/bodies/sprite_fish.glb");
+pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/biped/humanoid_rig.glb");
+pub const QUADRUPED_RIG: AssetPath =
+	AssetPath::new("characters/bodies/quadruped/quadruped_rig.glb");
+pub const FORELIMBED_RIG: AssetPath =
+	AssetPath::new("characters/bodies/forelimbed/forelimbed_rig.glb");
+pub const BODY_SHARK: AssetPath = AssetPath::new("characters/bodies/forelimbed/shark.glb");
+pub const BODY_WHALE: AssetPath = AssetPath::new("characters/bodies/forelimbed/whale.glb");
+pub const BODY_SPRITE_FISH: AssetPath =
+	AssetPath::new("characters/bodies/forelimbed/sprite_fish.glb");
 pub const BODY_GUMBUS: AssetPath =
-	AssetPath::new("characters/bodies/gumbus_quadruped_full_body.glb");
+	AssetPath::new("characters/bodies/quadruped/gumbus_quadruped_full_body.glb");
 pub const BODY_DRAGLOON: AssetPath =
-	AssetPath::new("characters/bodies/dragloon_quadruped_full_body.glb");
-pub const BODY_RUMBLER: AssetPath = AssetPath::new("characters/bodies/rumbler.glb");
+	AssetPath::new("characters/bodies/quadruped/dragloon_quadruped_full_body.glb");
+pub const BODY_RUMBLER: AssetPath = AssetPath::new("characters/bodies/quadruped/rumbler.glb");
 pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pronograde_head.glb");
 /// Pronograde canine head mesh (`bear_head.glb` shares the pronograde rig layout).
 pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");
@@ -29,8 +32,10 @@ pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 pub const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
 pub const TAIL_LERODON_QUADRUPED: AssetPath =
 	AssetPath::new("characters/tails/lerodon_tail_quadruped.glb");
-pub const BODY_STANDARD: AssetPath = AssetPath::new("characters/bodies/humanoid_full_body.glb");
-pub const BODY_FULL: AssetPath = AssetPath::new("characters/bodies/leron_biped_full_body.glb");
+pub const BODY_STANDARD: AssetPath =
+	AssetPath::new("characters/bodies/biped/humanoid_full_body.glb");
+pub const BODY_FULL: AssetPath =
+	AssetPath::new("characters/bodies/biped/leron_biped_full_body.glb");
 pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head.glb");
 pub const HEAD_STANDARD: AssetPath = AssetPath::new("characters/heads/meerkat_head_v2.glb");
 pub const HEAD_STANDARD_PRONOGRADE: AssetPath =
@@ -87,6 +92,14 @@ impl BodyMesh {
 		match self {
 			Self::Standard => BODY_STANDARD,
 			Self::Full => BODY_FULL,
+		}
+	}
+
+	pub const fn clothing_host(self) -> crozon_character_items::ClothingHost {
+		use crozon_character_items::ClothingHost;
+		match self {
+			Self::Standard => ClothingHost::HUMANOID,
+			Self::Full => ClothingHost::LERON,
 		}
 	}
 }

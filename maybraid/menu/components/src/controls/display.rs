@@ -30,7 +30,7 @@ mod tests {
 	#[test]
 	fn title_cases_kebab_and_plain() {
 		assert_eq!(menu_display_name("braidman"), "Braidman");
-		assert_eq!(menu_display_name("basketball-cut-shirt"), "Basketball Cut Shirt");
+		assert_eq!(menu_display_name("fitted-coat"), "Fitted Coat");
 		assert_eq!(menu_display_name("still"), "Still");
 		assert_eq!(menu_display_name("Head & Features"), "Head & Features");
 		assert_eq!(menu_display_name("2 worn"), "2 Worn");

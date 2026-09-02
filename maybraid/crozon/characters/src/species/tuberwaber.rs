@@ -18,7 +18,9 @@ use crate::{
 };
 
 use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
+};
 use sliders::TuberwaberSliders;
 
 pub use assets::{TuberwaberBodyMesh, TuberwaberHeadMesh};
@@ -34,6 +36,8 @@ pub struct TuberwaberColors {
 	pub horns: TuberwaberColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
+	pub clothing_materials: Vec<ClothingMaterialChoice>,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -49,6 +53,8 @@ impl Default for TuberwaberColors {
 			horns: TuberwaberColor::Slate,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
+			clothing_materials: Vec::new(),
 			clothing: Vec::new(),
 		}
 	}
@@ -84,6 +90,14 @@ impl TuberwaberColors {
 
 	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
 		ClothingColor::set(&mut self.clothing, clothing, color);
+	}
+
+	pub fn clothing_material_for(&self, clothing: ClothingMesh) -> ClothingMaterial {
+		ClothingMaterialChoice::resolve(&self.clothing_materials, self.clothing_material, clothing)
+	}
+
+	pub fn set_clothing_material(&mut self, clothing: ClothingMesh, material: ClothingMaterial) {
+		ClothingMaterialChoice::set(&mut self.clothing_materials, clothing, material);
 	}
 }
 
@@ -185,8 +199,11 @@ impl CharacterRecipe for TuberwaberConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			self.body.clothing_host(),
+			|mesh| self.colors.clothing_material_for(mesh),
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }
