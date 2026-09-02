@@ -160,7 +160,5 @@ fn needs_body_visual<BodyFilter: QueryFilter, VisualFilter: QueryFilter>(
 	bodies: Query<Entity, BodyFilter>,
 	visuals: Query<&ChildOf, VisualFilter>,
 ) -> Option<Entity> {
-	let body = bodies.single().ok()?;
-	let has_visual = visuals.iter().any(|child| child.parent() == body);
-	(!has_visual).then_some(body)
+	bodies.iter().find(|&body| !visuals.iter().any(|child| child.parent() == body))
 }

@@ -4,7 +4,8 @@ Braidman on a flat range, plus a standing NPC braidman down-left of the pad
 body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
 followed player fires from the pad. The NPC installs
 [`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
-the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
+the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs)
+(and, in free-for-all, every other live combatant);
 visible observations feed firearm combat until spotting memory expires.
 The NPC traces `vision` capsule samples per frame (default 9) and spends
 `focus` of that budget on the highest-ranked target.
@@ -23,10 +24,18 @@ Health is shown on a persistent top HUD and as a bar above each capsule; the
 player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until an actual
-player projectile spawns. Respawning either combatant resets that ceasefire.
+player projectile spawns. Player death (or switching mode) resets that ceasefire.
+
+`free-for-all` is a generated-loadout benchmark: one rolled player (starter
+clothing + primary firearm from
+[`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
+NPCs, all of whom list every other combatant as a spotting candidate. Combat
+still waits for the player's first shot. `duel` restores the 1v1 bullpup pad
+fight.
 
 ```bash
 cargo run -p firing-range-playground
+cargo run -p firing-range-playground -- free-for-all --npcs 8
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `duel`.

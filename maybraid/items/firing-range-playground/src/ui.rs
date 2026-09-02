@@ -6,36 +6,41 @@ use player::{Npc, Player};
 
 use crate::damage::Health;
 use crate::engagement::NpcEngagement;
+use crate::session::{RangeMode, RangeSession};
 
 pub(crate) fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Firing range - WASD move - mouse look - R3 POV - RMB / LT focus - click / RT fire"
 			.into(),
-		empty_console_text: "Console: `pause`, `resume`, `help`".into(),
+		empty_console_text: "Console: `pause`, `resume`, `free-for-all`, `duel`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "help — pause — resume — Enter — history".into(),
+		controls_hint: "help — pause — resume — free-for-all — duel — Enter — history".into(),
 	}
 }
 
 pub(crate) fn sync_command_status_text(
 	armed: Res<WeaponsArmed>,
 	engagement: Res<NpcEngagement>,
-	players: Query<(Entity, &Health), With<Player>>,
-	npcs: Query<(Entity, &Health), With<Npc>>,
+	session: Res<RangeSession>,
+	players: Query<&Health, With<Player>>,
+	npcs: Query<&Health, With<Npc>>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	let fire = if armed.0 { "armed" } else { "paused" };
-	let player = players.single().ok();
-	let npc = npcs.single().ok();
-	let player_health = player.map_or("--".into(), |(_, health)| health_text(health));
-	let npc_health = npc.map_or("--".into(), |(_, health)| health_text(health));
-	let response = match (player, npc) {
-		(Some((player, _)), Some((npc, _))) if engagement.is_provoked(player, npc) => "engaged",
-		_ => "waiting for player shot",
+	let player_health = players.single().ok().map_or_else(|| "--".into(), health_text);
+	let npc_n = npcs.iter().count();
+	let npc_health = if session.mode == RangeMode::FreeForAll {
+		format!("{npc_n}/{}", session.npc_count)
+	} else {
+		npcs.single().ok().map_or_else(|| "--".into(), health_text)
 	};
-	status.0 = format!(
-		"player bolt | {fire} | npc {response} | health: player {player_health} · npc {npc_health}"
-	);
+	let response = if engagement.is_live() { "engaged" } else { "waiting for player shot" };
+	let mode = match session.mode {
+		RangeMode::Duel => "duel",
+		RangeMode::FreeForAll => "ffa",
+	};
+	status.0 =
+		format!("{mode} | {fire} | {response} | health: player {player_health} · npc {npc_health}");
 }
 
 fn health_text(health: &Health) -> String {

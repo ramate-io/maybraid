@@ -3419,6 +3419,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "clap",
+ "crozon-character-items",
  "crozon-characters",
  "firearm-intelligence",
  "firearm-user",

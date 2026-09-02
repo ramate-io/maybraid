@@ -10,7 +10,14 @@ pub(crate) const RESPAWN_SECS: f32 = 2.0;
 #[derive(Resource, Default)]
 pub(crate) struct CombatRespawn {
 	pub player_at: Option<f32>,
-	pub npc_at: Option<f32>,
+	pub npc_at: Vec<f32>,
+}
+
+impl CombatRespawn {
+	pub fn clear(&mut self) {
+		self.player_at = None;
+		self.npc_at.clear();
+	}
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
@@ -82,6 +89,7 @@ type DeadCombatants<'w, 's> =
 pub(crate) fn despawn_dead(
 	time: Res<Time>,
 	mut respawn: ResMut<CombatRespawn>,
+	mut engagement: ResMut<crate::engagement::NpcEngagement>,
 	mut commands: Commands,
 	combatants: DeadCombatants,
 ) {
@@ -92,9 +100,10 @@ pub(crate) fn despawn_dead(
 		}
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
+			engagement.reset();
 		}
 		if is_npc {
-			respawn.npc_at = Some(now + RESPAWN_SECS);
+			respawn.npc_at.push(now + RESPAWN_SECS);
 		}
 		if let Some(user) = user {
 			commands.entity(user.held).try_despawn();

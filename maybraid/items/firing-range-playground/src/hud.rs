@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
 
 use crate::damage::{DamageTaken, Health};
+use crate::session::RangeSession;
 
 const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
@@ -28,7 +29,18 @@ pub(crate) struct HudBarFill;
 pub(crate) struct HudBarLabel;
 
 #[derive(Component)]
-pub(crate) struct WorldHealthAnchor;
+pub(crate) struct CombatHudRoot;
+
+#[derive(Component)]
+pub(crate) struct WorldHudFill;
+
+#[derive(Component)]
+pub(crate) struct WorldHudLabel;
+
+#[derive(Component)]
+pub(crate) struct WorldHealthAnchor {
+	target: Entity,
+}
 
 #[derive(Component)]
 pub(crate) struct DamageTick {
@@ -48,6 +60,7 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 	commands
 		.spawn((
 			Name::new("combat-hud"),
+			CombatHudRoot,
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),
@@ -74,7 +87,6 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 				spawn_screen_bar(row, CombatantHud::Player, "YOU");
 				spawn_screen_bar(row, CombatantHud::Npc, "NPC");
 			});
-			spawn_world_bar(root, CombatantHud::Npc);
 			root.spawn((
 				Node {
 					position_type: PositionType::Absolute,
@@ -159,11 +171,10 @@ fn spawn_screen_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud, title
 		});
 }
 
-fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
-	parent
-		.spawn((
-			kind,
-			WorldHealthAnchor,
+fn spawn_world_bar(parent: Entity, target: Entity, commands: &mut Commands) {
+	commands.entity(parent).with_children(|root| {
+		root.spawn((
+			WorldHealthAnchor { target },
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),
@@ -180,8 +191,7 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 		))
 		.with_children(|anchor| {
 			anchor.spawn((
-				kind,
-				HudBarLabel,
+				WorldHudLabel,
 				Text::new(""),
 				TextFont { font_size: FontSize::Px(12.0), ..default() },
 				TextColor(Color::srgb(1.0, 1.0, 1.0)),
@@ -198,8 +208,7 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 				))
 				.with_children(|track| {
 					track.spawn((
-						kind,
-						HudBarFill,
+						WorldHudFill,
 						Node {
 							width: Val::Percent(100.0),
 							height: Val::Percent(100.0),
@@ -210,49 +219,115 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 					));
 				});
 		});
+	});
+}
+
+pub(crate) fn ensure_world_health_bars(
+	mut commands: Commands,
+	hud: Query<Entity, With<CombatHudRoot>>,
+	npcs: Query<Entity, With<Npc>>,
+	anchors: Query<(Entity, &WorldHealthAnchor)>,
+) {
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let live: Vec<Entity> = npcs.iter().collect();
+	let existing: Vec<(Entity, Entity)> =
+		anchors.iter().map(|(entity, anchor)| (entity, anchor.target)).collect();
+	for (entity, target) in &existing {
+		if !live.contains(target) {
+			commands.entity(*entity).try_despawn();
+		}
+	}
+	for npc in live {
+		if existing.iter().any(|(_, target)| *target == npc) {
+			continue;
+		}
+		spawn_world_bar(hud, npc, &mut commands);
+	}
 }
 
 pub(crate) fn sync_health_hud(
+	session: Res<RangeSession>,
 	players: Query<&Health, With<Player>>,
 	npcs: Query<&Health, With<Npc>>,
 	mut fills: Query<(&CombatantHud, &mut Node, &mut BackgroundColor), With<HudBarFill>>,
 	mut labels: Query<(&CombatantHud, &mut Text), With<HudBarLabel>>,
 ) {
 	let player = players.single().ok().copied();
+	let alive = npcs.iter().count();
+	let total = session.npc_count.max(1);
 	let npc = npcs.single().ok().copied();
+	let field_fraction = (alive as f32 / total as f32).clamp(0.0, 1.0);
 	for (kind, mut node, mut color) in &mut fills {
-		let health = readout(*kind, player, npc);
-		node.width = Val::Percent(health.map(Health::fraction).unwrap_or(0.0) * 100.0);
-		color.0 = bar_color(health.map(Health::fraction).unwrap_or(0.0));
+		let fraction = match *kind {
+			CombatantHud::Player => player.map(Health::fraction).unwrap_or(0.0),
+			CombatantHud::Npc if session.is_free_for_all() => field_fraction,
+			CombatantHud::Npc => npc.map(Health::fraction).unwrap_or(0.0),
+		};
+		node.width = Val::Percent(fraction * 100.0);
+		color.0 = bar_color(fraction);
 	}
 	for (kind, mut text) in &mut labels {
-		text.0 = label_text(*kind, readout(*kind, player, npc));
+		text.0 = match *kind {
+			CombatantHud::Player => label_text(CombatantHud::Player, player),
+			CombatantHud::Npc if session.is_free_for_all() => {
+				format!("FIELD  {alive}/{total}")
+			}
+			CombatantHud::Npc => label_text(CombatantHud::Npc, npc),
+		};
 	}
 }
 
+type WorldBarFills<'w, 's> = Query<
+	'w,
+	's,
+	(&'static mut Node, &'static mut BackgroundColor),
+	(With<WorldHudFill>, Without<WorldHealthAnchor>),
+>;
+
 pub(crate) fn sync_world_health_bars(
 	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-	npcs: Query<&GlobalTransform, With<Npc>>,
-	mut anchors: Query<(&mut Node, &mut Visibility), With<WorldHealthAnchor>>,
+	npcs: Query<(&GlobalTransform, &Health), With<Npc>>,
+	mut anchors: Query<(Entity, &WorldHealthAnchor, &mut Node, &mut Visibility)>,
+	children: Query<&Children>,
+	mut fills: WorldBarFills,
+	mut labels: Query<&mut Text, With<WorldHudLabel>>,
 ) {
 	let Ok((camera, camera_transform)) = cameras.single() else {
 		return;
 	};
-	let Some(npc) = npcs.single().ok().copied() else {
-		for (_, mut visibility) in &mut anchors {
+	for (anchor_entity, anchor, mut node, mut visibility) in &mut anchors {
+		let Ok((transform, health)) = npcs.get(anchor.target) else {
 			*visibility = Visibility::Hidden;
-		}
-		return;
-	};
-	let head = npc.translation() + Vec3::Y * HEAD_LIFT;
-	let screen = camera.world_to_viewport(camera_transform, head).ok();
-	for (mut node, mut visibility) in &mut anchors {
-		if let Some(screen) = screen {
+			continue;
+		};
+		let head = transform.translation() + Vec3::Y * HEAD_LIFT;
+		if let Ok(screen) = camera.world_to_viewport(camera_transform, head) {
 			node.left = Val::Px(screen.x - WORLD_BAR_WIDTH * 0.5);
 			node.top = Val::Px(screen.y - 22.0);
 			*visibility = Visibility::Visible;
 		} else {
 			*visibility = Visibility::Hidden;
+			continue;
+		}
+		let Ok(kids) = children.get(anchor_entity) else {
+			continue;
+		};
+		for child in kids {
+			if let Ok(mut text) = labels.get_mut(*child) {
+				text.0 = format!("{:.0}", health.current);
+			}
+			let Ok(grand) = children.get(*child) else {
+				continue;
+			};
+			for grandchild in grand {
+				let Ok((mut fill, mut color)) = fills.get_mut(*grandchild) else {
+					continue;
+				};
+				fill.width = Val::Percent(health.fraction() * 100.0);
+				color.0 = bar_color(health.fraction());
+			}
 		}
 	}
 }
@@ -314,13 +389,6 @@ pub(crate) fn update_damage_indicators(
 		fill.0 = Color::srgba(1.0, 0.22, 0.16, alpha);
 		*border = BorderColor::all(Color::srgba(1.0, 0.9, 0.75, alpha * 0.9));
 		*visibility = Visibility::Visible;
-	}
-}
-
-fn readout(kind: CombatantHud, player: Option<Health>, npc: Option<Health>) -> Option<Health> {
-	match kind {
-		CombatantHud::Player => player,
-		CombatantHud::Npc => npc,
 	}
 }
 

@@ -1,9 +1,11 @@
 //! In-game clap commands for the firing range.
 
 use bevy::prelude::*;
-use clap::Parser;
+use clap::{Args, Parser};
 use firearms::WeaponsArmed;
 use game_commands::command::{CommandScript, GameCommand};
+
+use crate::session::{RangeSession, DEFAULT_FFA_NPCS};
 
 pub const PLAYGROUND_CLI_NAME: &str = "firing-range";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -23,6 +25,21 @@ pub enum PlaygroundCommand {
 	Pause,
 	/// Resume firing.
 	Resume,
+	/// One generated player vs n generated NPCs. Combat waits for a player shot.
+	FreeForAll(FreeForAllArgs),
+	/// Restore the 1v1 pad fight (default clothing, bullpup).
+	Duel,
+}
+
+#[derive(Clone, Args, Debug, Default, PartialEq, Eq)]
+#[command(rename_all = "kebab-case")]
+pub struct FreeForAllArgs {
+	/// How many NPCs to roll. Default 6.
+	#[arg(long, default_value_t = DEFAULT_FFA_NPCS)]
+	pub npcs: u16,
+	/// Optional loadout RNG seed. Omit for entropy.
+	#[arg(long)]
+	pub seed: Option<u64>,
 }
 
 impl PlaygroundCommand {
@@ -46,6 +63,23 @@ impl PlaygroundCommand {
 				commands.insert_resource(WeaponsArmed(true));
 				*console = "resume".into();
 			}
+			Self::FreeForAll(args) => {
+				let npcs = args.npcs.max(1);
+				commands.queue(move |world: &mut World| {
+					let mut session = world.resource_mut::<RangeSession>();
+					session.enter_free_for_all(npcs, args.seed);
+				});
+				*console = match args.seed {
+					Some(seed) => format!("free-for-all npcs={npcs} seed={seed}"),
+					None => format!("free-for-all npcs={npcs}"),
+				};
+			}
+			Self::Duel => {
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<RangeSession>().enter_duel();
+				});
+				*console = "duel".into();
+			}
 		}
 	}
 }
@@ -66,6 +100,27 @@ mod tests {
 	fn parses_pause() -> Result<(), String> {
 		let command = <PlaygroundCommand as GameCommand>::parse_line("pause")?;
 		assert!(matches!(command, PlaygroundCommand::Pause));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_free_for_all_defaults() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("free-for-all")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::FreeForAll(FreeForAllArgs { npcs: DEFAULT_FFA_NPCS, seed: None })
+		));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_free_for_all_npcs_and_seed() -> Result<(), String> {
+		let command =
+			<PlaygroundCommand as GameCommand>::parse_line("free-for-all --npcs 8 --seed 3")?;
+		assert!(matches!(
+			command,
+			PlaygroundCommand::FreeForAll(FreeForAllArgs { npcs: 8, seed: Some(3) })
+		));
 		Ok(())
 	}
 }
