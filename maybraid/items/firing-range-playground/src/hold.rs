@@ -17,11 +17,17 @@ pub(crate) struct HoldingArms;
 const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
 /// Right elbow wings outward (body −X) and down at roughly 45°.
 const RIGHT_POLE: Vec3 = Vec3::new(-1.0, -1.0, -0.1);
-const LEFT_POLE: Vec3 = Vec3::new(-0.4, -1.0, 0.05);
+/// Left elbow wings out (body +X) and a little forward. TwoBoneAim puts a bent
+/// elbow along this pole; a downward pole therefore hangs the humerus on the ribs.
+const LEFT_POLE: Vec3 = Vec3::new(1.0, -0.25, 1.0);
 /// Imported humanoid articulation needs negative swing to draw its right shoulder rearward.
 const FIRING_TORSO_YAW: f32 = -0.84;
+/// Support hand wraps the grip kit socket, not the distal `grip_point` at the handle bottom.
+const GRIP_SOCKET: &str = "grip";
+/// Lengthen the support arm so the hand actually arrives on the socket.
+const LEFT_REACH_STRETCH: f32 = 1.15;
 
-/// Point both arms at `trigger_point` / `grip_point`.
+/// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
 pub(crate) fn sync_hands_to_firearm(
 	visuals: Query<(&GlobalTransform, &CharacterMembers), (With<PlayerVisual>, Without<AnimBone>)>,
 	guns: Query<
@@ -38,7 +44,7 @@ pub(crate) fn sync_hands_to_firearm(
 	};
 	let body_rot = visual.rotation();
 	let trigger = gun_landmark(&guns, &gun_maps, &globals, "trigger_point");
-	let grip = gun_landmark(&guns, &gun_maps, &globals, "grip_point");
+	let grip = gun_landmark(&guns, &gun_maps, &globals, GRIP_SOCKET);
 	let (Some(trigger), Some(grip)) = (trigger, grip) else {
 		return;
 	};
@@ -54,24 +60,26 @@ pub(crate) fn sync_hands_to_firearm(
 		pose_firing_torso(&mut rig);
 		reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 		reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
-		let Some(right) = arm_reach(
+		let right = arm_reach(
 			&rig,
 			Side::Right,
 			target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
 			RIGHT_POLE,
-		) else {
-			continue;
-		};
-		let Some(left) = arm_reach(
+			1.0,
+		);
+		let left = arm_reach(
 			&rig,
 			Side::Left,
 			target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
 			LEFT_POLE,
-		) else {
-			continue;
-		};
-		pose_arm(&mut rig, Side::Right, right);
-		pose_arm(&mut rig, Side::Left, left);
+			LEFT_REACH_STRETCH,
+		);
+		if let Some(right) = right {
+			pose_arm(&mut rig, Side::Right, right, 1.0);
+		}
+		if let Some(left) = left {
+			pose_arm(&mut rig, Side::Left, left, LEFT_REACH_STRETCH);
+		}
 		write_hold_bones(&rig, map, &mut bones);
 	}
 }
@@ -129,19 +137,25 @@ fn arm_reach(
 	side: Side,
 	target: Option<Vec3>,
 	pole: Vec3,
+	stretch: f32,
 ) -> Option<TwoBoneAim> {
 	let arm = rig.arm_pose(side);
-	let upper_length = arm.forearm.transform.translation.length();
-	TwoBoneAim::reach(target?, pole, upper_length, upper_length)
+	let upper_length = arm.forearm.transform.translation.length() * stretch;
+	let target = target?;
+	TwoBoneAim::reach(target, pole, upper_length, upper_length).or_else(|| {
+		TwoBoneAim::reach(target, Vec3::X * side.sign() + Vec3::Z, upper_length, upper_length)
+	})
 }
 
-fn pose_arm(rig: &mut HumanoidV0Rig, side: Side, reach: TwoBoneAim) {
+fn pose_arm(rig: &mut HumanoidV0Rig, side: Side, reach: TwoBoneAim, stretch: f32) {
 	let roll = best_humerus_roll(rig, side, reach, HUMERUS_ROLL * side.sign());
 	let mut arm = rig.arm_pose(side);
 	arm.humerus = rig.humerus_along_with_roll(side, reach.upper_along, roll);
+	arm.humerus.transform.translation *= stretch;
 	rig.pose_arm(arm);
 	let mut arm = rig.arm_pose(side);
 	arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, reach.flex);
+	arm.forearm.transform.translation *= stretch;
 	rig.pose_arm(arm);
 }
 
@@ -276,6 +290,76 @@ mod tests {
 		assert!(reach.upper_along.x < 0.0, "{reach:?}");
 		assert!(reach.upper_along.y < 0.0, "{reach:?}");
 		assert!((reach.upper_along.x.abs() - reach.upper_along.y.abs()).abs() < 1e-4, "{reach:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn support_hand_targets_grip_socket() {
+		assert_eq!(GRIP_SOCKET, "grip");
+		assert_ne!(GRIP_SOCKET, "grip_point");
+	}
+
+	#[test]
+	fn support_arm_stretch_reaches_past_equal_segments() -> Result<(), &'static str> {
+		let far = Vec3::Z * 1.1;
+		let short = TwoBoneAim::reach(far, LEFT_POLE, 0.5, 0.5).ok_or("missing short reach")?;
+		let stretched =
+			TwoBoneAim::reach(far, LEFT_POLE, 0.5 * LEFT_REACH_STRETCH, 0.5 * LEFT_REACH_STRETCH)
+				.ok_or("missing stretched reach")?;
+		assert!(stretched.flex > short.flex, "short {short:?} stretched {stretched:?}");
+		Ok(())
+	}
+
+	#[test]
+	fn left_humerus_swings_forward_to_a_close_grip() -> Result<(), &'static str> {
+		// Grip sits in front of the left shoulder, inside rest length — the case
+		// where a downward pole parks the humerus on the ribs.
+		let target = Vec3::new(0.2, -0.15, 0.55);
+		let reach = TwoBoneAim::reach(target, LEFT_POLE, 0.5, 0.5).ok_or("missing reach")?;
+		assert!(
+			reach.upper_along.z > 0.25,
+			"humerus should swing forward, got {:?}",
+			reach.upper_along
+		);
+		assert!(
+			reach.upper_along.x > 0.3,
+			"left elbow should wing out (+X), got {:?}",
+			reach.upper_along
+		);
+		assert!(
+			reach.upper_along.y > -0.4,
+			"humerus should not hang down the ribs, got {:?}",
+			reach.upper_along
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn pose_arm_aims_humerus_length_along_reach() -> Result<(), &'static str> {
+		let mut rig = HumanoidV0Rig::imported();
+		let reach = TwoBoneAim::reach(Vec3::new(0.2, -0.15, 0.55), LEFT_POLE, 0.5, 0.5)
+			.ok_or("missing reach")?;
+		pose_arm(&mut rig, Side::Left, reach, 1.0);
+		let humerus = rig.arm_pose(Side::Left).humerus;
+		let along = (humerus.transform.rotation * BONE_LENGTH_AXIS).normalize_or(Vec3::Y);
+		assert!(
+			along.dot(reach.upper_along) > 0.97,
+			"expected aim along {:?}, got {along:?}",
+			reach.upper_along
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn downward_pole_would_hang_the_left_humerus() -> Result<(), &'static str> {
+		let target = Vec3::new(0.2, -0.15, 0.55);
+		let hung = TwoBoneAim::reach(target, Vec3::new(-0.4, -1.0, 0.05), 0.5, 0.5)
+			.ok_or("missing hung reach")?;
+		assert!(
+			hung.upper_along.y < -0.5,
+			"old pole is the hang we are leaving, got {:?}",
+			hung.upper_along
+		);
 		Ok(())
 	}
 

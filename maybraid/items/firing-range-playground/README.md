@@ -10,4 +10,4 @@ WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fir
 
 The held bullpup pins its authored `stock` socket to the trigger shoulder. Yaw tracks look within the configured body-facing limit; pitch matches the camera. Kit meshes are meter-authored and uniformly scaled down to ~0.7 m.
 
-After walk/run, `sync_hands_to_firearm` replaces the full locomotion arm pose with two-bone reaches toward `trigger_point` / `grip_point`. The reticle is an emissive world marker at the first fixed hit along the firearm barrel.
+After walk/run, `sync_hands_to_firearm` replaces the full locomotion arm pose with two-bone reaches toward `trigger_point` and the `grip` socket. The reticle is an emissive world marker at the first fixed hit along the firearm barrel.

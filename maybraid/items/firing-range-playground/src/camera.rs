@@ -193,7 +193,7 @@ mod tests {
 
 	#[test]
 	fn body_stays_put_inside_look_cone() {
-		let look = -FRAC_PI_2 + 0.3;
+		let look = -FRAC_PI_2 + MAX_LOOK_YAW * 0.5;
 		let body = -FRAC_PI_2;
 		assert!((follow_body_yaw(look, body, MAX_LOOK_YAW) - body).abs() < 1e-5);
 	}
