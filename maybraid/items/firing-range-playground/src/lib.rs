@@ -173,6 +173,7 @@ fn spawn_npc_at(
 	let mut combat_movement = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
 	combat_movement.settings.range = (8.0, 1.0);
 	combat_movement.settings.cover = 0.5;
+	combat_movement.settings.flee = (0.0, 8.0);
 	commands.entity(npc).insert((
 		movement,
 		combat_movement,

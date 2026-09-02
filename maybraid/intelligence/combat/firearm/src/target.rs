@@ -130,6 +130,25 @@ pub(crate) fn retain_recent(targets: &mut Vec<SpottedTarget>, now: f32, memory: 
 	targets.retain(|target| now - target.spotted_at <= memory);
 }
 
+pub(crate) fn retain_live_candidates(
+	targets: &mut Vec<SpottedTarget>,
+	candidates: &[CombatTarget],
+	now: f32,
+	memory: f32,
+) {
+	retain_recent(targets, now, memory);
+	targets.retain(|target| candidates.iter().any(|candidate| candidate.entity == target.entity));
+}
+
+/// Translate a remembered aim point onto the target's current capsule origin.
+pub(crate) fn live_aim_point(target: SpottedTarget, headshots: f32, current: Option<Vec3>) -> Vec3 {
+	let point = target.aim_point(headshots);
+	match current {
+		Some(position) => point + (position - target.position),
+		None => point,
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -173,6 +192,24 @@ mod tests {
 		retain_recent(&mut targets, 1.1, 1.0);
 		assert!(targets.is_empty());
 		Ok(())
+	}
+
+	#[test]
+	fn memory_drops_entities_that_left_the_candidate_list() {
+		let a = Entity::from_bits(1);
+		let b = Entity::from_bits(2);
+		let mut targets = vec![spotted(a, Vec3::ZERO), spotted(b, Vec3::X)];
+		let candidates = [CombatTarget::new(b, TargetCapsule::new(0.4, 0.9))];
+		retain_live_candidates(&mut targets, &candidates, 0.1, 1.0);
+		assert_eq!(targets.len(), 1);
+		assert_eq!(targets[0].entity, b);
+	}
+
+	#[test]
+	fn live_aim_follows_the_current_capsule_origin() {
+		let target = spotted(Entity::from_bits(1), Vec3::ZERO);
+		let moved = live_aim_point(target, 0.0, Some(Vec3::X * 2.0));
+		assert_eq!(moved, Vec3::X * 2.0);
 	}
 
 	#[test]

@@ -114,7 +114,10 @@ pub(crate) fn gun_aim_rotation_for(
 	aim_yaw_limit: f32,
 ) -> Quat {
 	let yaw = if track_look { yaw_xz(look) } else { clamped_aim_yaw(facing, look, aim_yaw_limit) };
-	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch)
+	// PlayerLook uses a -Z viewing axis, while the firearm's bore is +Z.
+	// Yaw already turns +Z onto the horizontal look direction; pitch must keep
+	// its sign to produce the same vertical direction from the opposite axis.
+	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch)
 }
 
 fn right_shoulder_anchor(
@@ -256,6 +259,22 @@ mod tests {
 		let look = Vec3::X;
 		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true, settings().aim_yaw_limit);
 		assert!((q * Vec3::Z - look).length() < 1e-4, "bore {}", q * Vec3::Z);
+	}
+
+	#[test]
+	fn negative_player_pitch_sends_bore_up() {
+		let q = gun_aim_rotation_for(Vec3::NEG_Z, Vec3::NEG_Z, -0.25, true, std::f32::consts::PI);
+		let bore = q * Vec3::Z;
+		assert!(bore.y > 0.2, "{bore}");
+		assert!(bore.z < -0.9, "{bore}");
+	}
+
+	#[test]
+	fn positive_player_pitch_sends_bore_down() {
+		let q = gun_aim_rotation_for(Vec3::NEG_Z, Vec3::NEG_Z, 0.25, true, std::f32::consts::PI);
+		let bore = q * Vec3::Z;
+		assert!(bore.y < -0.2, "{bore}");
+		assert!(bore.z < -0.9, "{bore}");
 	}
 
 	#[test]

@@ -11,7 +11,7 @@ use player::{PlayerLook, PlayerYawOwner};
 use std::f32::consts::FRAC_PI_2;
 
 use crate::los::clear_segment;
-use crate::target::{pick_target, FirearmObjective, SpottedTarget};
+use crate::target::{live_aim_point, pick_target, FirearmObjective, SpottedTarget};
 
 /// How a firearm combatant aims and stays on a target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -83,8 +83,8 @@ impl FirearmIntelligence {
 
 /// Select a remembered target and turn the user's desired look toward it.
 ///
-/// Look is computed from the last posed muzzle when available. Aiming from the
-/// eyes with a right-shoulder gun parallel-offsets shots past the target.
+/// Look is solved from the stock (the pose pivot), not the muzzle. The gun
+/// rotates about the shoulder; aiming from the barrel tip pitches the bore high.
 pub(crate) fn aim_at_firearm_targets(
 	time: Res<Time>,
 	mut combatants: Query<(
@@ -98,13 +98,11 @@ pub(crate) fn aim_at_firearm_targets(
 	guns: Query<&FirearmMembers>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
+	bodies: Query<&Transform, Without<FirearmIntelligence>>,
 ) {
 	let elapsed = time.elapsed_secs();
 	for (entity, transform, movement, user, mut brain, mut look) in &mut combatants {
-		let from = barrel_global(user.held, &guns, &maps, &globals)
-			.map(muzzle_world)
-			.map(|(muzzle, _)| muzzle)
-			.unwrap_or_else(|| movement.ability.eye_point(transform.translation));
+		let from = aim_pivot(user.held, transform.translation, movement, &guns, &maps, &globals);
 		let Some(target) =
 			pick_target(from, &brain.objective.0, brain.engaged, brain.settings.focus).copied()
 		else {
@@ -121,7 +119,8 @@ pub(crate) fn aim_at_firearm_targets(
 		}
 		brain.engaged = Some(target.entity);
 		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
-		let to = target.aim_point(headshots) - from;
+		let current = bodies.get(target.entity).ok().map(|transform| transform.translation);
+		let to = live_aim_point(target, headshots, current) - from;
 		let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
 		look.yaw = yaw;
 		look.pitch = pitch;
@@ -179,22 +178,19 @@ pub(crate) fn fire_at_spotted_targets(
 			set_trigger(user, false, &mut triggers);
 			continue;
 		};
-		let Some(global) = barrel_global(user.held, &guns, &maps, &globals) else {
+		let Some(global) = gun_landmark(user.held, "barrel", &guns, &maps, &globals) else {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		};
 		let (muzzle, bore) = muzzle_world(global);
-		if !target.is_fresh(now, brain.settings.fire_spotting_freshness) {
-			brain.on_target = false;
-			set_trigger(user, false, &mut triggers);
-			continue;
-		}
+		let fresh = target.is_fresh(now, brain.settings.fire_spotting_freshness);
 		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
 		let aim_at = target.aim_point(headshots);
-		let delta = aim_at - muzzle;
+		let center = target.capsule.center_mass(target.position);
+		let delta = center - muzzle;
 		let distance = delta.length();
-		if distance <= 1e-4 {
+		if !fresh || distance <= 1e-4 {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
@@ -205,16 +201,19 @@ pub(crate) fn fire_at_spotted_targets(
 		let blocked = !clear_segment(muzzle, aim_at, &spatial, &filter);
 		let obstruction_allowed =
 			!blocked || willing_to_fire_through_wall(entity, now, brain.settings.wall_firing);
-		let happiness = brain.settings.trigger_happiness.clamp(0.0, 1.0);
-		let can = aligned && obstruction_allowed && happiness > 0.0;
-		if !can {
+		if !hold_trigger(
+			aligned,
+			obstruction_allowed,
+			brain.on_target,
+			brain.settings.trigger_happiness,
+		) {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		}
 		if !brain.on_target {
 			brain.on_target = true;
-			brain.next_trigger_at = now + acquire_delay(happiness);
+			brain.next_trigger_at = now + acquire_delay(brain.settings.trigger_happiness);
 		}
 		set_trigger(user, now >= brain.next_trigger_at, &mut triggers);
 	}
@@ -225,8 +224,9 @@ fn engaged_target(brain: &FirearmIntelligence) -> Option<&SpottedTarget> {
 	brain.objective.0.iter().find(|target| target.entity == engaged)
 }
 
-fn barrel_global<'a>(
+fn gun_landmark<'a>(
 	held: Entity,
+	name: &str,
 	guns: &Query<&FirearmMembers>,
 	maps: &Query<&BoneMap, With<RigRoot>>,
 	globals: &'a Query<&GlobalTransform>,
@@ -236,14 +236,31 @@ fn barrel_global<'a>(
 		let Ok(map) = maps.get(member) else {
 			continue;
 		};
-		let Some(&barrel) = map.by_name.get("barrel") else {
+		let Some(&entity) = map.by_name.get(name) else {
 			continue;
 		};
-		if let Ok(global) = globals.get(barrel) {
+		if let Ok(global) = globals.get(entity) {
 			return Some(global);
 		}
 	}
 	None
+}
+
+fn aim_pivot(
+	held: Entity,
+	body: Vec3,
+	movement: &MovementIntelligence,
+	guns: &Query<&FirearmMembers>,
+	maps: &Query<&BoneMap, With<RigRoot>>,
+	globals: &Query<&GlobalTransform>,
+) -> Vec3 {
+	if let Some(stock) = gun_landmark(held, "stock", guns, maps, globals) {
+		return stock.translation();
+	}
+	if let Ok(root) = globals.get(held) {
+		return root.translation();
+	}
+	movement.ability.eye_point(body)
 }
 
 fn set_trigger(user: &FirearmUser, fire: bool, triggers: &mut Query<&mut WeaponTrigger>) {
@@ -254,6 +271,15 @@ fn set_trigger(user: &FirearmUser, fire: bool, triggers: &mut Query<&mut WeaponT
 
 fn acquire_delay(happiness: f32) -> f32 {
 	0.45 * (1.0 - happiness.clamp(0.0, 1.0))
+}
+
+/// First shot needs a bore on the capsule. After that, keep holding through a
+/// frame of jitter so a lock is not dropped the way a fresh respawn never is.
+fn hold_trigger(aligned: bool, obstruction_allowed: bool, on_target: bool, happiness: f32) -> bool {
+	if happiness <= 0.0 || !obstruction_allowed {
+		return false;
+	}
+	aligned || on_target
 }
 
 /// Cosine of the allowed bore error. Tightens with range so a passing shot can
@@ -290,7 +316,7 @@ fn look_dir(yaw: f32, pitch: f32) -> Vec3 {
 }
 
 fn jitter(entity: Entity, elapsed: f32) -> Vec2 {
-	let seed = entity.to_bits() as f32 * 0.013 + elapsed;
+	let seed = entity.to_bits() as f32 * 0.013 + elapsed.floor();
 	Vec2::new(frac_noise(seed), frac_noise(seed * 1.37)) * 2.0 - Vec2::ONE
 }
 
@@ -327,19 +353,43 @@ mod tests {
 	}
 
 	#[test]
-	fn right_offset_muzzle_aims_left_of_eye() {
+	fn right_offset_pivot_aims_left_of_eye() {
 		let target = Vec3::new(0.0, 1.0, -10.0);
 		let (eye_yaw, _) =
 			look_angles(target - Vec3::new(0.0, 1.0, 0.0), 1.0, Entity::from_bits(1), 0.0);
-		let (muzzle_yaw, _) =
+		let (stock_yaw, _) =
 			look_angles(target - Vec3::new(0.3, 1.0, 0.0), 1.0, Entity::from_bits(1), 0.0);
-		assert!(muzzle_yaw > eye_yaw, "{muzzle_yaw} vs {eye_yaw}");
+		assert!(stock_yaw > eye_yaw, "{stock_yaw} vs {eye_yaw}");
+	}
+
+	#[test]
+	fn raised_muzzle_is_not_the_pose_pivot() {
+		let target = Vec3::new(0.0, 1.05, -8.0);
+		let stock = Vec3::new(0.25, 1.35, 0.0);
+		let muzzle = Vec3::new(0.25, 1.55, -0.55);
+		let (stock_yaw, stock_pitch) = look_angles(target - stock, 1.0, Entity::from_bits(1), 0.0);
+		let (muzzle_yaw, muzzle_pitch) =
+			look_angles(target - muzzle, 1.0, Entity::from_bits(1), 0.0);
+		let stock_dir = look_dir(stock_yaw, stock_pitch);
+		let muzzle_dir = look_dir(muzzle_yaw, muzzle_pitch);
+		assert!(
+			(stock_dir - muzzle_dir).length() > 0.01,
+			"stock {stock_dir} vs muzzle {muzzle_dir}"
+		);
 	}
 
 	#[test]
 	fn zero_wall_firing_rejects_obstructions() {
 		assert!(!willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 0.0));
 		assert!(willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 1.0));
+	}
+
+	#[test]
+	fn hold_trigger_keeps_a_lock_through_a_missed_alignment() {
+		assert!(hold_trigger(false, true, true, 0.9));
+		assert!(!hold_trigger(false, true, false, 0.9));
+		assert!(!hold_trigger(true, false, true, 0.9));
+		assert!(!hold_trigger(true, true, false, 0.0));
 	}
 
 	#[test]

@@ -9,7 +9,7 @@ use crate::combat::FirearmIntelligence;
 use crate::los::clear_segment;
 use crate::movement::FirearmMovementIntelligence;
 use crate::target::{
-	retain_recent, upsert_observation, FirearmSpotting, SpottedTarget, TargetCapsule,
+	retain_live_candidates, upsert_observation, FirearmSpotting, SpottedTarget, TargetCapsule,
 };
 
 pub(crate) fn spot_firearm_targets(
@@ -28,7 +28,7 @@ pub(crate) fn spot_firearm_targets(
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 	for (transform, movement, spotting, mut combat, mut combat_movement) in &mut spotters {
 		let memory = combat.settings.target_spotting_memory.max(0.0);
-		retain_recent(&mut combat.objective.0, now, memory);
+		retain_live_candidates(&mut combat.objective.0, &spotting.candidates, now, memory);
 		combat_movement.objective.0.clear();
 
 		let observer = movement.ability.eye_point(transform.translation);

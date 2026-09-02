@@ -6,14 +6,15 @@ followed player fires from the pad. The NPC installs
 [`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
 the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
 visible observations feed firearm combat until spotting memory expires.
-Look tracks the last visible point; fire needs that sightline to stay fresh.
+Look tracks the live capsule; fire needs that sightline to stay fresh.
 Firearm movement hunts those candidates even without a current sightline, then
-writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs) / flee
+writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
 into [`movement-intelligence`](../../intelligence/movement/lib) at an ~8 m
-standoff. Lost sightlines raise sightline weight so the NPC does not glue to a
-cover crack. Firearm combat aims [`PlayerLook`](../../player/src/identity.rs)
-from the posed muzzle and holds the trigger while the barrel is on a freshly
-spotted point; `trigger_happiness` is only the delay before that first pull.
+standoff (no close-range flee). Lost sightlines raise sightline weight so the
+NPC does not glue to a cover crack. Firearm combat aims
+[`PlayerLook`](../../player/src/identity.rs) from the stock (shoulder pivot), not
+the muzzle, and holds the trigger after the first on-target acquire;
+`trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
 Each character starts with 100 health and takes 25 damage per bolt contact.
 Health is shown on a persistent top HUD and as a bar above each capsule; the
