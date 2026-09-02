@@ -9,9 +9,8 @@ use menu_components::{
 	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action,
 	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
 	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
-	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_GROUP_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIME, TEXT_SALMON,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_ITEM_FONT_SIZE,
+	PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
@@ -370,9 +369,9 @@ impl MaybraidMenuSink {
 			if !label.is_empty() && label != "—" {
 				spawn_hud_text(
 					row,
-					context.fonts.item(PANEL_GROUP_FONT_SIZE),
+					context.fonts.item(PANEL_LABEL_FONT_SIZE),
 					label,
-					TEXT_YELLOW_FAINT,
+					TEXT_YELLOW,
 					bevy::text::Justify::Left,
 				);
 			}

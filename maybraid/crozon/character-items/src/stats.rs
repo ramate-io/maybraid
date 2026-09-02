@@ -307,6 +307,11 @@ impl CharacterSheet {
 		(10_000 / (100 + u32::from(self.weight))).min(100) as u16
 	}
 
+	/// `68% = 10000 / (100 + 46)` so the loadout can show how pace is derived.
+	pub fn pace_equation(self) -> String {
+		format!("{}% = 10000 / (100 + {})", self.pace(), self.weight)
+	}
+
 	pub fn stat_rows(self) -> Vec<(String, String)> {
 		vec![
 			(String::from("Health"), self.health.to_string()),
@@ -314,9 +319,9 @@ impl CharacterSheet {
 			(String::from("Jump"), self.jump.to_string()),
 			(String::from("Agility"), self.agility.to_string()),
 			(String::from("Strength"), self.strength.to_string()),
-			(String::from("Damage"), signed_or_zero(self.damage)),
-			(String::from("Weight"), self.weight.to_string()),
-			(String::from("Pace"), format!("{}%", self.pace())),
+			(String::from("Damage Bonus"), signed_or_zero(self.damage)),
+			(String::from("Added Weight"), self.weight.to_string()),
+			(String::from("Pace"), self.pace_equation()),
 		]
 	}
 
@@ -327,8 +332,8 @@ impl CharacterSheet {
 			(String::from("Jump"), BASE_JUMP.to_string()),
 			(String::from("Agility"), BASE_AGILITY.to_string()),
 			(String::from("Strength"), BASE_STRENGTH.to_string()),
-			(String::from("Damage"), String::from("0")),
-			(String::from("Weight"), String::from("0")),
+			(String::from("Damage Bonus"), String::from("0")),
+			(String::from("Added Weight"), String::from("0")),
 		]
 	}
 
@@ -700,6 +705,10 @@ mod tests {
 		assert_eq!(sheet.health, BASE_HEALTH + clothing_stats.health);
 		assert_eq!(sheet.weight, clothing_stats.weight + gun_stats.weight);
 		assert!(sheet.pace() <= 100);
+		assert_eq!(
+			sheet.pace_equation(),
+			format!("{}% = 10000 / (100 + {})", sheet.pace(), sheet.weight)
+		);
 	}
 
 	#[test]

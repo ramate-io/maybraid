@@ -178,7 +178,10 @@ fn stat_grid_preview(cards: &[character_ui_menu::StatCard]) -> String {
 		card.rows.iter().find(|row| row.label == "Health").map(|row| row.value.as_str())
 	});
 	let weight = total.and_then(|card| {
-		card.rows.iter().find(|row| row.label == "Weight").map(|row| row.value.as_str())
+		card.rows
+			.iter()
+			.find(|row| row.label == "Added Weight")
+			.map(|row| row.value.as_str())
 	});
 	match (health, weight) {
 		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),

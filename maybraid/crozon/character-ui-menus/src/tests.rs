@@ -568,6 +568,16 @@ fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
 		.find(|row| row.label == "Health")
 		.map(|row| row.value.as_str());
 	assert_eq!(health, Some(sheet.health.to_string()).as_deref());
+	assert!(cards[0].rows.iter().any(|row| row.label == "Damage Bonus"));
+	assert!(cards[0].rows.iter().any(|row| row.label == "Added Weight"));
+	assert!(cards[1].rows.iter().any(|row| row.label == "Damage Bonus"));
+	assert!(cards[1].rows.iter().any(|row| row.label == "Added Weight"));
+	let pace = cards[0]
+		.rows
+		.iter()
+		.find(|row| row.label == "Pace")
+		.map(|row| row.value.as_str());
+	assert_eq!(pace, Some(sheet.pace_equation()).as_deref());
 	assert_eq!(cards.len(), 4);
 	assert_eq!(cards[3].title, weapon_name);
 	assert!(menu.overlay_editable("Loadout"));
