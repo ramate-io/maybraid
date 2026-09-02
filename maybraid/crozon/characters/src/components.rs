@@ -4,10 +4,11 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use bevy::prelude::{Component, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use crozon_character_items::{ClothingHost, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingHost, ClothingMaterial, ClothingMesh, ItemColor};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
+use material_ref::MaterialRef;
 
 use crate::assembly::CharacterPartSlot;
 use crate::assets::AssetNormalization;
@@ -47,11 +48,12 @@ pub trait CharacterRecipe {
 pub fn clothing_layers(
 	clothing: impl IntoIterator<Item = ClothingMesh>,
 	host: ClothingHost,
+	material: ClothingMaterial,
 	mut color: impl FnMut(ClothingMesh) -> ItemColor,
 ) -> Vec<ClothingLayer> {
 	clothing
 		.into_iter()
-		.map(|mesh| ClothingLayer::new(mesh, color(mesh), host))
+		.map(|mesh| ClothingLayer::new(mesh, color(mesh), host).with_material(material))
 		.collect()
 }
 
@@ -70,12 +72,18 @@ impl<T: CharacterComponents + ?Sized> CharacterComponents for &T {
 pub struct ClothingLayer {
 	pub mesh: ClothingMesh,
 	pub color: ItemColor,
+	pub material: ClothingMaterial,
 	pub host: ClothingHost,
 }
 
 impl ClothingLayer {
 	pub fn new(mesh: ClothingMesh, color: ItemColor, host: ClothingHost) -> Self {
-		Self { mesh, color, host }
+		Self { mesh, color, material: ClothingMaterial::Cloth, host }
+	}
+
+	pub fn with_material(mut self, material: ClothingMaterial) -> Self {
+		self.material = material;
+		self
 	}
 
 	pub fn part_node(&self) -> PartNode {
@@ -86,7 +94,9 @@ impl ClothingLayer {
 			AssetNormalization::IDENTITY,
 		)
 		.skinned(SkinRef::to(RigId::Body))
-		.with_base_color(self.color.color())
+		.with_material(
+			MaterialRef::named(self.material.recipe_id()).with_palette([self.color.color()]),
+		)
 	}
 }
 

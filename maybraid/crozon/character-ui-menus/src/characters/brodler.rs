@@ -87,6 +87,7 @@ impl From<&BrodlerConfig> for BrodlerMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
 				),
 			)
 			.with_camera_focus(BODY_FOCUS),
@@ -113,6 +114,7 @@ impl From<&BrodlerMenu> for BrodlerConfig {
 				mouth: menu.head_features.value.mouth_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -216,7 +218,9 @@ impl BrodlerMenu {
 			CharacterField::Mouth => self.head_features.value.mouth.camera_focus,
 			CharacterField::Ear => self.head_features.value.ear.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial
+			| CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

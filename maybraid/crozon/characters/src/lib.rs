@@ -16,6 +16,7 @@ pub mod components;
 pub mod concepts;
 pub mod hosts;
 pub mod layer;
+pub mod material_lib;
 pub mod member;
 pub mod menu_traits;
 pub mod nodes;

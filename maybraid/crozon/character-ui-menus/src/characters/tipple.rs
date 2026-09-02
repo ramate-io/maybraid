@@ -73,6 +73,7 @@ impl From<&TippleConfig> for TippleMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
 				),
 			)
 			.with_camera_focus(TIPPLE_BODY_FOCUS),
@@ -94,6 +95,7 @@ impl From<&TippleMenu> for TippleConfig {
 				beak: menu.head_features.value.beak_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -187,7 +189,9 @@ impl TippleMenu {
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::TippleBeak => self.head_features.value.beak.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(TIPPLE_BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial
+			| CharacterField::Animation => Some(TIPPLE_BODY_FOCUS),
 			_ => None,
 		}
 	}

@@ -15,7 +15,9 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMesh, ItemColor,
+};
 
 pub use assets::{TippleBeakMesh, TippleHeadMesh};
 pub use palette::{TippleBeakColor, TippleEyeColor, TipplePlumageColor};
@@ -27,6 +29,7 @@ pub struct TippleColors {
 	pub beak: TippleBeakColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -38,6 +41,7 @@ impl Default for TippleColors {
 			beak: TippleBeakColor::Orange,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
 			clothing: Vec::new(),
 		}
 	}
@@ -124,8 +128,11 @@ impl CharacterRecipe for TippleConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::WHELP, |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			ClothingHost::WHELP,
+			self.colors.clothing_material,
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

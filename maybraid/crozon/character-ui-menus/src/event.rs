@@ -1,4 +1,4 @@
-use crozon_character_items::{ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingMaterial, ClothingMesh, ItemColor};
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
@@ -215,6 +215,7 @@ pub enum CharacterField {
 	SpibmomCrownColor,
 	SpibmomSpineColor,
 	Clothing(ClothingMesh),
+	ClothingMaterial,
 	ShoulderWidth,
 	HipWidth,
 	ChestThickness,
@@ -300,6 +301,7 @@ pub enum AssetValue {
 	Ear(EarMesh),
 	Hair(HairMesh),
 	Animation(ConceptAnimation),
+	ClothingMaterial(ClothingMaterial),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -16,7 +16,7 @@ use crate::{
 };
 
 use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingMaterial, ClothingMesh, ItemColor};
 use sliders::BraidmanSliders;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +29,7 @@ pub struct BraidmanColors {
 	pub ears: ItemColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -44,6 +45,7 @@ impl Default for BraidmanColors {
 			ears: body,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
 			clothing: Vec::new(),
 		}
 	}
@@ -187,8 +189,11 @@ impl CharacterRecipe for BraidmanConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), self.body.clothing_host(), |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			self.body.clothing_host(),
+			self.colors.clothing_material,
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

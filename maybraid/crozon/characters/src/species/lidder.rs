@@ -15,7 +15,9 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMesh, ItemColor,
+};
 
 pub use assets::{LidderBeakMesh, LidderHeadMesh};
 pub use palette::{LidderBeakColor, LidderEyeColor, LidderPlumageColor};
@@ -27,6 +29,7 @@ pub struct LidderColors {
 	pub beak: LidderBeakColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -39,6 +42,7 @@ impl Default for LidderColors {
 			// Crest tint follows plumage; this field is only for shared hair menus.
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
 			clothing: Vec::new(),
 		}
 	}
@@ -125,8 +129,11 @@ impl CharacterRecipe for LidderConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::CRANE, |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			ClothingHost::CRANE,
+			self.colors.clothing_material,
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

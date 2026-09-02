@@ -16,7 +16,9 @@ use crate::{
 	CharacterRecipe, ClothingLayer,
 };
 
-use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMesh, ItemColor,
+};
 
 pub use assets::{ChupriBeakMesh, ChupriHeadMesh};
 pub use palette::{ChupriBeakColor, ChupriEyeColor, ChupriPlumageColor};
@@ -28,6 +30,7 @@ pub struct ChupriColors {
 	pub beak: ChupriBeakColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -40,6 +43,7 @@ impl Default for ChupriColors {
 			// Crest tint follows plumage; this field is only for shared hair menus.
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
 			clothing: Vec::new(),
 		}
 	}
@@ -126,8 +130,11 @@ impl CharacterRecipe for ChupriConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::CRANE, |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			ClothingHost::CRANE,
+			self.colors.clothing_material,
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

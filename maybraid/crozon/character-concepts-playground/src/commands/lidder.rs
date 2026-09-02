@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
-use crozon_character_items::ClothingMesh;
+use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::species::{
 	common::{EyeMesh, HairMesh},
 	lidder::{LidderBeakColor, LidderBeakMesh, LidderConfig, LidderEyeColor, LidderPlumageColor},
@@ -31,6 +31,10 @@ pub struct PreviewArgs {
 	/// Clothing layers to remap to the body rig. Repeat the flag for multiple layers.
 	#[arg(long, value_enum)]
 	pub clothing: Vec<ClothingMesh>,
+
+	/// Surface recipe applied to every worn clothing layer.
+	#[arg(long, value_enum, default_value_t = ClothingMaterial::Cloth)]
+	pub clothing_material: ClothingMaterial,
 
 	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
 	pub animation: ConceptAnimation,

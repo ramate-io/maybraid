@@ -71,6 +71,7 @@ impl From<&BrokkerConfig> for BrokkerMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
 				),
 			)
 			.with_camera_focus(BODY_FOCUS),
@@ -91,6 +92,7 @@ impl From<&BrokkerMenu> for BrokkerConfig {
 				snout: menu.head_features.value.snout_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
@@ -178,7 +180,9 @@ impl BrokkerMenu {
 			CharacterField::BrokkerHead => self.head.value.head.camera_focus,
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial
+			| CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

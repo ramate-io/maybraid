@@ -2836,6 +2836,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "crozon-character-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "crozon-character-ui-menus"
 version = "0.0.1"
 dependencies = [
@@ -2878,6 +2885,7 @@ dependencies = [
  "clap",
  "crozon-character-items",
  "crozon-character-motion",
+ "crozon-character-shaders",
  "crozon-rigs",
  "lod",
  "material-ref",

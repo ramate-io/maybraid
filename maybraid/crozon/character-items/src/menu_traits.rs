@@ -6,7 +6,7 @@ use character_ui_menu::{
 	ThumbnailCamera,
 };
 
-use crate::{ClothingMesh, ItemColor};
+use crate::{ClothingMaterial, ClothingMesh, ItemColor};
 
 const CLOTHING_THUMBNAIL_CAMERA: ThumbnailCamera =
 	ThumbnailCamera::new(Vec3::new(0.0, 0.75, 2.5), Vec3::new(0.0, 0.65, 0.0));
@@ -34,6 +34,7 @@ macro_rules! impl_menu_identity {
 }
 
 impl_menu_identity!(ClothingMesh);
+impl_menu_identity!(ClothingMaterial);
 impl_menu_identity!(ItemColor);
 
 impl AssetOption for ClothingMesh {

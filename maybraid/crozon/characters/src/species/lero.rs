@@ -11,7 +11,9 @@ pub mod pose;
 
 use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 
-use crozon_character_items::{ClothingColor, ClothingHost, ClothingMesh, ItemColor};
+use crozon_character_items::{
+	ClothingColor, ClothingHost, ClothingMaterial, ClothingMesh, ItemColor,
+};
 
 pub use assets::{LeroHeadMesh, LeroMouthMesh};
 pub use palette::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor};
@@ -25,6 +27,7 @@ pub struct LeroColors {
 	pub spine: LeroSpineColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
+	pub clothing_material: ClothingMaterial,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -38,6 +41,7 @@ impl Default for LeroColors {
 			spine: LeroSpineColor::Pearl,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
+			clothing_material: ClothingMaterial::Cloth,
 			clothing: Vec::new(),
 		}
 	}
@@ -127,8 +131,11 @@ impl CharacterRecipe for LeroConfig {
 	}
 
 	fn clothing_layers(&self) -> Vec<ClothingLayer> {
-		crate::clothing_layers(self.clothing.iter().copied(), ClothingHost::LERON, |mesh| {
-			self.colors.clothing_color(mesh)
-		})
+		crate::clothing_layers(
+			self.clothing.iter().copied(),
+			ClothingHost::LERON,
+			self.colors.clothing_material,
+			|mesh| self.colors.clothing_color(mesh),
+		)
 	}
 }

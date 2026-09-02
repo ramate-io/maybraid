@@ -16,6 +16,7 @@ character-ui-menu = { workspace = true }
 clap = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-character-motion = { workspace = true }
+crozon-character-shaders = { workspace = true }
 crozon-rigs = { workspace = true }
 lod = { workspace = true }
 material-ref = { workspace = true }

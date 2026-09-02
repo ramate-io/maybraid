@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
-use crozon_character_items::ClothingMesh;
+use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
 		common::{EyeMesh, HairMesh, MouthMesh, NoseMesh},
@@ -52,6 +52,10 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum)]
 	pub clothing: Vec<ClothingMesh>,
 
+	/// Surface recipe applied to every worn clothing layer.
+	#[arg(long, value_enum, default_value_t = ClothingMaterial::Cloth)]
+	pub clothing_material: ClothingMaterial,
+
 	/// Procedural body animation used to inspect sockets and skinning under motion.
 	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
 	pub animation: ConceptAnimation,
@@ -99,7 +103,12 @@ impl PreviewArgs {
 				mouth: self.mouth,
 				hair: self.hair,
 				clothing: self.clothing,
-				colors: Default::default(),
+				colors: {
+					let mut colors =
+						crozon_characters::species::tuberwaber::TuberwaberColors::default();
+					colors.clothing_material = self.clothing_material;
+					colors
+				},
 				sliders,
 			},
 			self.animation,

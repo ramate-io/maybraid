@@ -1,6 +1,6 @@
 //! CharacterComponents / Clothed composition tests.
 
-use crozon_character_items::ClothingMesh;
+use crozon_character_items::{ClothingMaterial, ClothingMesh};
 use crozon_characters::{
 	species::{
 		braidman::{Braidman, BraidmanConfig},
@@ -84,6 +84,25 @@ fn clothed_braidman_adds_clothing_layer() {
 	assert_eq!(clothed.rig_nodes_for_level(LodSceneLevel::High).len(), 2);
 }
 
+#[test]
+fn clothing_layer_uses_named_shader_recipe() {
+	let mut config = BraidmanConfig::default_preview();
+	config.clothing.push(ClothingMesh::Tunic);
+	config.colors.clothing_material = ClothingMaterial::Glitter;
+	let part = config
+		.clothed()
+		.part_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.into_iter()
+		.find(|part| part.slot == CharacterPartSlot::Clothing)
+		.expect("clothing part");
+	assert_eq!(part.material.name, material_ref::MaterialId::named("clothing_glitter"));
+	assert_eq!(
+		part.material.palette.first().copied(),
+		Some(config.colors.clothing_color(ClothingMesh::Tunic).color())
+	);
+}
+
 fn clothing_scene_path(config: &impl CharacterRecipe) -> String {
 	config
 		.clothed()
@@ -165,10 +184,7 @@ fn robe_on_standard_braidman_uses_humanoid_fit() {
 	let mut config = BraidmanConfig::default_preview();
 	config.body = BodyMesh::Standard;
 	config.clothing.push(ClothingMesh::Robe);
-	assert_eq!(
-		clothing_scene_path(&config),
-		"characters/clothes/body/humanoid_full_body/robe.glb"
-	);
+	assert_eq!(clothing_scene_path(&config), "characters/clothes/body/humanoid_full_body/robe.glb");
 }
 
 #[test]

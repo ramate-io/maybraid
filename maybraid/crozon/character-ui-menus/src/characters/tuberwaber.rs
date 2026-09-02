@@ -241,6 +241,7 @@ impl From<&TuberwaberConfig> for TuberwaberMenu {
 					config.clothing.clone(),
 					config.colors.clothing_default,
 					config.colors.clothing.clone(),
+					config.colors.clothing_material,
 				),
 			)
 			.with_camera_focus(BODY_FOCUS),
@@ -271,6 +272,7 @@ impl From<&TuberwaberMenu> for TuberwaberConfig {
 				horns: menu.head_features.value.horn_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
+				clothing_material: menu.clothing.value.material.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 			sliders: {
@@ -416,7 +418,9 @@ impl TuberwaberMenu {
 			CharacterField::Nose => self.head_features.value.nose.camera_focus,
 			CharacterField::Mouth => self.head_features.value.mouth.camera_focus,
 			CharacterField::Hair | CharacterField::HornColor => Some(CROWN_FOCUS),
-			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
+			CharacterField::Clothing(_)
+			| CharacterField::ClothingMaterial
+			| CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

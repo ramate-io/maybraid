@@ -6,12 +6,15 @@
 
 use character_ui_menu::{
 	AssetChoice, AssetSingleSelect, CameraFocus, ItemRow, MenuComponent, MenuNode, MultiSelect,
-	PreviewColor, SwatchChoice, SwatchSingleSelect,
+	PreviewColor, SingleSelect, SwatchChoice, SwatchSingleSelect,
 };
-use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+use crozon_character_items::{ClothingColor, ClothingMaterial, ClothingMesh, ItemColor};
 use crozon_characters::ConceptAnimation;
 
-use crate::event::{AssetValue, CharacterField, MenuEvent, SwatchValue};
+use crate::{
+	cycle_value,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
+};
 
 /// Hair style and color; species only differ in default camera framing.
 #[derive(Clone, Debug, PartialEq)]
@@ -55,6 +58,7 @@ pub struct ClothingMenu {
 	pub layers: MultiSelect<ClothingMesh>,
 	pub default_color: SwatchSingleSelect<ItemColor>,
 	pub item_colors: Vec<ClothingColor>,
+	pub material: SingleSelect<ClothingMaterial>,
 }
 
 impl ClothingMenu {
@@ -62,11 +66,13 @@ impl ClothingMenu {
 		layers: Vec<ClothingMesh>,
 		default_color: ItemColor,
 		overrides: Vec<ClothingColor>,
+		material: ClothingMaterial,
 	) -> Self {
 		Self {
 			layers: MultiSelect::new(layers),
 			default_color: SwatchSingleSelect::new(default_color),
 			item_colors: overrides,
+			material: SingleSelect::new(material),
 		}
 	}
 
@@ -76,6 +82,32 @@ impl ClothingMenu {
 
 	pub fn set_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
 		ClothingColor::set(&mut self.item_colors, clothing, color);
+	}
+}
+
+/// Clothing toggle / color / material events shared by every species menu.
+pub(crate) fn apply_clothing_event(menu: &mut ClothingMenu, event: MenuEvent) -> bool {
+	match event {
+		MenuEvent::ToggleClothing(clothing) => {
+			menu.layers.toggle(clothing);
+			true
+		}
+		MenuEvent::SetSwatch(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
+			menu.set_color(clothing, color);
+			true
+		}
+		MenuEvent::SetAsset(
+			CharacterField::ClothingMaterial,
+			AssetValue::ClothingMaterial(material),
+		) => {
+			menu.material.value = material;
+			true
+		}
+		MenuEvent::Cycle(CharacterField::ClothingMaterial, delta) => {
+			menu.material.value = cycle_value(menu.material.value, delta);
+			true
+		}
+		_ => false,
 	}
 }
 
@@ -107,7 +139,20 @@ impl MenuComponent<MenuEvent> for ClothingMenu {
 				}
 			})
 			.collect();
-		MenuNode::ItemMultiSelect { label: "Clothing", rows }
+		MenuNode::fragment([
+			MenuNode::section_select(
+				"Material",
+				self.material.value,
+				|value| {
+					MenuEvent::SetAsset(
+						CharacterField::ClothingMaterial,
+						AssetValue::ClothingMaterial(value),
+					)
+				},
+				MenuNode::fragment([]),
+			),
+			MenuNode::ItemMultiSelect { label: "Clothing", rows },
+		])
 	}
 }
 
