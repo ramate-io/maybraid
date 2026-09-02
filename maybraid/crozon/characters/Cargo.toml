@@ -22,6 +22,7 @@ lod = { workspace = true }
 material-ref = { workspace = true }
 rigs = { workspace = true }
 scene-ref = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }

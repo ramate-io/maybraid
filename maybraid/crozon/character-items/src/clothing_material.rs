@@ -1,11 +1,13 @@
 //! Clothing surface recipes resolved by Crozon’s [`material_ref`] lib.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::clothing::ClothingMesh;
 
 /// Named clothing looks. Palette[0] is the user color; the recipe is the shader.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum ClothingMaterial {
 	SpaceSuit,
 	Tattered,
@@ -68,7 +70,7 @@ impl ClothingMaterial {
 }
 
 /// Per-layer surface override; falls back to the default recipe.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClothingMaterialChoice {
 	pub clothing: ClothingMesh,
 	pub material: ClothingMaterial,

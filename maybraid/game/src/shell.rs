@@ -5,8 +5,8 @@ use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_world::WorldGameplayEnabled;
 use menu_components::MENU_CLEAR;
 use menu_screens::{
-	InGameScreen, MenuScreen, despawn_menu_screens, request_show_create_character,
-	request_show_home, request_show_in_game,
+	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
+	InGameScreen, MenuScreen,
 };
 
 use crate::flow::{GameFlow, WorldPause};
@@ -26,7 +26,7 @@ pub(crate) fn enter_home(mut commands: Commands) {
 }
 
 pub(crate) fn enter_characters(mut commands: Commands) {
-	request_show_create_character(&mut commands);
+	request_show_gallery(&mut commands);
 }
 
 pub(crate) fn enter_world(mut commands: Commands, screens: Query<Entity, With<MenuScreen>>) {
@@ -50,13 +50,12 @@ pub(crate) fn apply_shell_look(
 	mut gameplay: ResMut<WorldGameplayEnabled>,
 ) {
 	let flow = *flow.get();
-	let world_3d = flow != GameFlow::Home;
 	clear.0 = if flow == GameFlow::Home { MENU_CLEAR } else { WORLD_SKY };
 	for mut camera in &mut world_cameras {
-		camera.is_active = world_3d;
+		camera.is_active = true;
 	}
 	for mut camera in &mut ui_cameras {
-		camera.is_active = !world_3d;
+		camera.is_active = false;
 	}
 	gameplay.0 =
 		flow == GameFlow::World && pause.is_some_and(|pause| *pause.get() == WorldPause::Playing);

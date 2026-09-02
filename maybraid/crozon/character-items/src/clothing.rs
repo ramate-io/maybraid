@@ -1,6 +1,7 @@
 //! Clothing item catalog, per-host fit paths, and per-item color selection.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::palette::ItemColor;
 
@@ -100,7 +101,8 @@ impl ClothingKind {
 }
 
 /// Shared clothing catalog; layers compose across species.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum ClothingMesh {
 	TankTop,
 	Tunic,
@@ -219,7 +221,7 @@ impl ClothingMesh {
 }
 
 /// One clothing layer's color override.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClothingColor {
 	pub clothing: ClothingMesh,
 	pub color: ItemColor,

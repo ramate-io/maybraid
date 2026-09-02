@@ -2887,6 +2887,20 @@ dependencies = [
  "bevy_math",
  "character-ui-menu",
  "clap",
+ "serde",
+]
+
+[[package]]
+name = "crozon-character-model-user"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-character-items",
+ "crozon-character-persist",
+ "crozon-characters",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2900,6 +2914,17 @@ dependencies = [
  "lod",
  "malo-animations",
  "rigs",
+]
+
+[[package]]
+name = "crozon-character-persist"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2972,6 +2997,19 @@ dependencies = [
  "material-ref",
  "rigs",
  "scene-ref",
+ "serde",
+]
+
+[[package]]
+name = "crozon-inventory-user"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-character-items",
+ "crozon-character-persist",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -4521,6 +4559,7 @@ name = "maybraid"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "crozon-character-persist",
  "crozon-character-playground",
  "maybraid-character-controller",
  "maybraid-input",
@@ -4639,9 +4678,13 @@ dependencies = [
  "character-ui-menu",
  "clap",
  "crozon-character-items",
+ "crozon-character-model-user",
+ "crozon-character-persist",
  "crozon-character-playground",
  "crozon-character-ui-menus",
  "crozon-characters",
+ "crozon-inventory-user",
+ "firearms-components",
  "game-commands",
  "lod",
  "maybraid-character-ui-menu-renderer",
@@ -4657,6 +4700,8 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "crozon-character-items",
+ "crozon-character-model-user",
+ "crozon-character-persist",
  "game-commands",
  "maybraid-menu-controller",
  "menu-components",
@@ -6660,6 +6705,19 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "tempfile"
+version = "3.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16"
+dependencies = [
+ "fastrand",
+ "getrandom 0.3.3",
+ "once_cell",
+ "rustix 1.1.2",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]

@@ -17,11 +17,12 @@ use crate::{
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::{MygrHeadMesh, MygrMouthMesh};
 pub use palette::{MygrEyeColor, MygrSkinColor};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MygrColors {
 	pub skin: MygrSkinColor,
 	pub eyes: MygrEyeColor,
@@ -77,7 +78,7 @@ impl MygrColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MygrConfig {
 	pub eye: EyeMesh,
 	pub hair: HairMesh,

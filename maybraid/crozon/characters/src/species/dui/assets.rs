@@ -1,6 +1,7 @@
 //! Dui asset catalog.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::{assets::AssetPath, species::common::assets::MOUTH_STANDARD};
 
@@ -8,7 +9,8 @@ const HEAD_BARRED_BOWL: AssetPath = AssetPath::new("characters/heads/barred_bowl
 const EYE_THORN: AssetPath = AssetPath::new("characters/horns/single_thorn_left.glb");
 const NOSE_TBAR: AssetPath = AssetPath::new("characters/noses/tbar_nose.glb");
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum DuiHeadMesh {
 	#[default]
 	BarredBowl,
@@ -26,7 +28,8 @@ impl DuiHeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum DuiEyeMesh {
 	#[default]
 	Thorn,
@@ -44,7 +47,8 @@ impl DuiEyeMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum DuiNoseMesh {
 	#[default]
 	None,
@@ -69,7 +73,8 @@ impl DuiNoseMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum DuiMouthMesh {
 	#[default]
 	SmallCommon,

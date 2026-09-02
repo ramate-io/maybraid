@@ -15,43 +15,48 @@ pub mod spin_reveal;
 pub mod theme;
 
 pub use controls::{
-	ActiveOverlayKey, ActiveShortText, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll,
-	HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey,
-	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
 	apply_hud_menu_nav, color_from_hex, menu_display_name, navigate_hud_menus, on_hud_scroll,
 	restore_short_text_editing, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
-	spawn_block_label, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile,
-	spawn_group_label, spawn_header_line, spawn_hud_text, spawn_labeled_row, spawn_panel_title,
-	spawn_scroll_pane, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_text_button, spawn_tile_grid, sync_hud_scrollbars,
-	sync_overlay_header_cursors,
+	spawn_block_label, spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized,
+	spawn_grid_catalog_tile, spawn_group_label, spawn_header_line, spawn_hud_action,
+	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane,
+	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_text_button, spawn_tile_grid, sync_hud_cursors, sync_hud_scrollbars, ActiveOverlayKey,
+	ActiveShortText, CursorRow, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll,
+	HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
+	SlotRank,
 };
-pub use icons::{AnimatedIcon, Icon, SpinningIcon, blink_animated_icons, spin_icons};
+pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
-	BRAND_NAME, BrandModeCorner, BrandModeLine, BrandModeTitle, TextMenuDescription, TextMenuHint,
-	TextMenuHintLabel, set_brand_mode_title, set_description_for_menu, set_hint_for_menu,
+	set_brand_mode_title, set_description_for_menu, set_hint_for_menu, BrandModeCorner,
+	BrandModeLine, BrandModeTitle, TextMenuDescription, TextMenuHint, TextMenuHintLabel,
+	BRAND_NAME,
 };
 pub use loading::{
-	LoadingBarFill, LoadingExplainer, LoadingPanel, LoadingStack, set_loading_explainer,
-	set_loading_progress, sync_loading_bar_fill,
+	set_loading_explainer, set_loading_progress, sync_loading_bar_fill, LoadingBarFill,
+	LoadingExplainer, LoadingPanel, LoadingStack,
 };
 pub use single_select::{
-	ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus, TextColumnAlign, TextColumnAnchor,
-	TextCursorColumn, TextCursorMenu, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader,
-	TextMenuInputLock, TextMenuItem, TextMenuItemLabel, apply_text_menu_nav,
-	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
-	emit_menu_focus, navigate_text_menus, republish_menu_activate, select_text_menu_item_on_over,
-	sync_text_cursor_icons, sync_text_menu_item_colors,
+	apply_text_menu_nav, consume_screen_back, emit_menu_activate_on_click,
+	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus,
+	emit_screen_back_on_click, emit_screen_edit_on_click, navigate_text_menus,
+	republish_menu_activate, screen_back_scene, screen_edit_scene, select_text_menu_item_on_over,
+	sync_text_cursor_icons, sync_text_menu_item_colors, ButtonWithSubtext, KeyboardMenuNav,
+	MenuActivate, MenuFocus, ScreenBack, ScreenBackPressed, ScreenEdit, ScreenEditPressed,
+	TextColumnAlign, TextColumnAnchor, TextCursorColumn, TextCursorMenu, TextCursorRow,
+	TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem,
+	TextMenuItemLabel,
 };
 pub use spin_reveal::{
-	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
 	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
+	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
 };
 pub use theme::{
-	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE,
-	LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_HOVER,
+	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP,
+	TEXT_LIGHT_BLUE, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
 
 use bevy::prelude::*;
@@ -72,12 +77,16 @@ impl Plugin for MenuComponentsPlugin {
 			.init_resource::<ActiveOverlayKey>()
 			.init_resource::<ActiveShortText>()
 			.init_resource::<ShortTextModal>()
+			.add_message::<ScreenBackPressed>()
+			.add_message::<ScreenEditPressed>()
 			.configure_sets(Update, TextMenuSystems::InputLock.before(TextMenuSystems::Navigate))
 			.add_observer(select_text_menu_item_on_over)
 			.add_observer(select_hud_item_on_over)
 			.add_observer(apply_text_menu_nav)
 			.add_observer(apply_hud_menu_nav)
 			.add_observer(on_hud_scroll)
+			.add_observer(emit_screen_back_on_click)
+			.add_observer(emit_screen_edit_on_click)
 			.add_observer(controls::emit_short_text_toggle_on_click)
 			.add_observer(controls::emit_short_text_toggle_on_nav)
 			.add_observer(controls::emit_short_text_submit_on_click)
@@ -91,7 +100,7 @@ impl Plugin for MenuComponentsPlugin {
 					sync_loading_bar_fill,
 					send_hud_scroll_events,
 					sync_hud_scrollbars,
-					sync_overlay_header_cursors,
+					sync_hud_cursors,
 					controls::restore_short_text_editing,
 					controls::sync_short_text_display,
 					controls::sync_short_text_cursors,

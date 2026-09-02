@@ -5,8 +5,8 @@ use crate::loading_demo::LoadingDemo;
 use bevy::prelude::*;
 use clap::Subcommand;
 use menu_screens::{
-	request_show_create_character, request_show_home, request_show_in_game_with_mode,
-	request_show_loading,
+	request_show_create_character, request_show_gallery, request_show_home,
+	request_show_in_game_with_mode, request_show_loading,
 };
 
 #[derive(Clone, Subcommand)]
@@ -20,6 +20,8 @@ pub enum Show {
 	Character,
 	/// Starter clothing spin-and-reveal, then the humanoid create-a-character HUD.
 	CreateCharacter,
+	/// Saved-character gallery (new or open).
+	Gallery,
 	/// Spawn the in-game pause menu (actions plus Maybraid - mode).
 	InGame {
 		/// Label after Maybraid in the upper-left title.
@@ -38,6 +40,7 @@ impl Show {
 			}
 			Show::Character => request_show_character(commands),
 			Show::CreateCharacter => request_show_create_character(commands),
+			Show::Gallery => request_show_gallery(commands),
 			Show::InGame { mode } => request_show_in_game_with_mode(commands, mode),
 		}
 	}

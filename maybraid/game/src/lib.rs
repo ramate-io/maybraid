@@ -7,17 +7,16 @@ pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
-use maybraid_input::{MenuNav, MenuNavPad};
+use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
-use menu_components::{ActiveOverlayKey, MENU_CLEAR};
+use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
-	CharacterMenuState, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
-	request_show_character,
+	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
 };
 use menu_screens::{
-	CreateCharacterPlugin, CreateCharacterReady, GameMode, HomeMenuChoice, HomeScreenPlugin,
-	InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen, request_show_create_character,
+	cancel_pending_create, request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode,
+	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -44,18 +43,25 @@ impl Plugin for GamePlugin {
 				HomeScreenPlugin,
 				InGameScreenPlugin,
 				CreateCharacterPlugin,
+				CharacterSessionPlugin,
 				CharacterScreenPlugin,
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
 			))
 			.add_systems(Startup, spawn_menu_ui_camera)
-			.add_systems(OnEnter(GameFlow::Home), (enter_home, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::Home),
+				(enter_home, apply_shell_look, attach_preview_camera),
+			)
 			.add_systems(
 				OnEnter(GameFlow::Characters),
 				(enter_characters, apply_shell_look, attach_preview_camera),
 			)
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
-			.add_systems(OnEnter(GameFlow::World), (enter_world, apply_shell_look))
+			.add_systems(
+				OnEnter(GameFlow::World),
+				(enter_world, apply_shell_look, detach_preview_camera),
+			)
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
@@ -65,8 +71,7 @@ impl Plugin for GamePlugin {
 				(
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
-					open_create_character_hud.run_if(in_state(GameFlow::Characters)),
-					character_back_to_home.run_if(in_state(GameFlow::Characters)),
+					character_back.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
 						.after(CharacterControlSystems)
 						.run_if(in_state(GameFlow::World)),
@@ -120,28 +125,32 @@ fn toggle_world_pause(
 	}
 }
 
-fn open_create_character_hud(
-	mut ready: MessageReader<CreateCharacterReady>,
-	mut menu_state: ResMut<CharacterMenuState>,
-	mut commands: Commands,
-) {
-	let Some(ready) = ready.read().last() else {
-		return;
-	};
-	*menu_state = CharacterMenuState::for_create(ready.items.clone());
-	request_show_character(&mut commands);
-}
-
-fn character_back_to_home(
+fn character_back(
 	mut flow: ResMut<NextState<GameFlow>>,
+	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
-	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
+	mut backs: MessageReader<ScreenBackPressed>,
+	character: Query<(), With<CharacterScreen>>,
+	spin: Query<(), With<SpinRevealScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if screens.is_empty() || overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
+	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
 		return;
 	}
-	flow.set(GameFlow::Home);
+	if !character.is_empty() {
+		// Back discards unsaved HUD edits. Persist only happens from Save.
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !spin.is_empty() {
+		cancel_pending_create(&mut commands);
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !gallery.is_empty() {
+		flow.set(GameFlow::Home);
+	}
 }
 
 #[cfg(test)]

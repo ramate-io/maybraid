@@ -1,15 +1,16 @@
 //! Asset tile: optional thumbnail plus a yellow label.
 
 use bevy::prelude::*;
-use bevy::text::{Justify, LineBreak, TextBounds};
+use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 
 use crate::theme::{
-	PANEL_CHIP_GAP, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT, PANEL_TILE_MIN_WIDTH, TEXT_YELLOW,
+	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT,
+	PANEL_TILE_MIN_WIDTH, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 	TEXT_YELLOW_HOVER,
 };
 
-use super::HudFonts;
 use super::display::menu_display_name;
+use super::HudFonts;
 
 const TILE_LABEL_MAX_CHARS: usize = 16;
 
@@ -32,8 +33,10 @@ pub fn spawn_asset_tile(
 	label: &str,
 	selected: bool,
 	thumbnail: Option<Handle<Image>>,
+	muted: bool,
 	extra: impl Bundle,
 ) {
+	let face = tile_face(selected, muted);
 	parent
 		.spawn((
 			Button,
@@ -49,7 +52,7 @@ pub fn spawn_asset_tile(
 				border: UiRect::all(Val::Px(if selected { 2.0 } else { 0.0 })),
 				..default()
 			},
-			BorderColor::all(if selected { TEXT_YELLOW } else { Color::NONE }),
+			BorderColor::all(if selected { face } else { Color::NONE }),
 			BackgroundColor(Color::NONE),
 		))
 		.with_children(|button| {
@@ -64,7 +67,7 @@ pub fn spawn_asset_tile(
 			button.spawn((
 				Text::new(tile_label(&menu_display_name(label))),
 				fonts.item(PANEL_ITEM_FONT_SIZE),
-				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
+				TextColor(face),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 				TextBounds::new(bounds, bounds),
 				Pickable::IGNORE,
@@ -72,70 +75,150 @@ pub fn spawn_asset_tile(
 		});
 }
 
-/// Pickable catalog cell. Selected cells show the Maybraid son instead of a
-/// yellow border.
+/// 1-based rank in a typed inventory slot. Derived from bag selection order.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SlotRank(pub u8);
+
+/// Pickable catalog cell. Clothing selection uses the Maybraid son; weapons
+/// selection uses the 1-based queue rank. `detail` is a compact stat line.
 pub fn spawn_grid_catalog_tile(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	label: &str,
+	detail: &str,
 	selected: bool,
+	rank: Option<u8>,
 	thumbnail: Option<Handle<Image>>,
+	muted: bool,
 	extra: impl Bundle,
 ) {
+	let face = tile_face(selected, muted);
+	let mark = if muted { TEXT_YELLOW_FAINT } else { TEXT_YELLOW };
+	let mut tile = parent.spawn((
+		Button,
+		extra,
+		Node {
+			min_width: Val::Px(PANEL_TILE_MIN_WIDTH),
+			min_height: Val::Px(PANEL_TILE_MIN_HEIGHT),
+			padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+			flex_direction: FlexDirection::Column,
+			justify_content: JustifyContent::Center,
+			align_items: AlignItems::Center,
+			row_gap: Val::Px(PANEL_CHIP_GAP),
+			..default()
+		},
+		BackgroundColor(Color::NONE),
+	));
+	if let Some(rank) = rank {
+		tile.insert(SlotRank(rank));
+	}
+	tile.with_children(|button| {
+		button
+			.spawn((
+				Node {
+					width: Val::Px(54.0),
+					height: Val::Px(54.0),
+					justify_content: JustifyContent::Center,
+					align_items: AlignItems::Center,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|slot| {
+				if let Some(thumbnail) = thumbnail {
+					slot.spawn((
+						ImageNode::new(thumbnail),
+						Node { width: Val::Px(54.0), height: Val::Px(54.0), ..default() },
+						Pickable::IGNORE,
+					));
+				}
+				if let Some(rank) = rank {
+					slot.spawn((
+						Text::new(rank.to_string()),
+						fonts.item(PANEL_ITEM_FONT_SIZE),
+						TextColor(mark),
+						Pickable::IGNORE,
+					));
+				} else if selected {
+					crate::icons::Icon::maybraid(22.0, mark).spawn(
+						slot,
+						fonts.logo.clone(),
+						Visibility::Inherited,
+					);
+				}
+			});
+		let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
+		button.spawn((
+			Text::new(label),
+			fonts.item(PANEL_ITEM_FONT_SIZE),
+			TextColor(face),
+			TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+			TextBounds::new(bounds, bounds * 1.6),
+			Pickable::IGNORE,
+		));
+		if !detail.is_empty() {
+			spawn_detail_line(button, fonts, detail, bounds);
+		}
+	});
+}
+
+fn spawn_detail_line(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	detail: &str,
+	bounds: f32,
+) {
+	let mut parts = detail.split(" · ");
+	let Some(first) = parts.next() else {
+		return;
+	};
 	parent
 		.spawn((
-			Button,
-			extra,
-			Node {
-				min_width: Val::Px(PANEL_TILE_MIN_WIDTH),
-				min_height: Val::Px(PANEL_TILE_MIN_HEIGHT),
-				padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
-				flex_direction: FlexDirection::Column,
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				row_gap: Val::Px(PANEL_CHIP_GAP),
-				..default()
-			},
-			BackgroundColor(Color::NONE),
+			Text::new(first),
+			fonts.item(PANEL_GROUP_FONT_SIZE),
+			TextColor(detail_chip_color(first)),
+			TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+			TextBounds::new(bounds, bounds),
+			LineHeight::RelativeToFont(1.0),
+			Pickable::IGNORE,
 		))
-		.with_children(|button| {
-			button
-				.spawn((
-					Node {
-						width: Val::Px(54.0),
-						height: Val::Px(54.0),
-						justify_content: JustifyContent::Center,
-						align_items: AlignItems::Center,
-						..default()
-					},
-					Pickable::IGNORE,
-				))
-				.with_children(|slot| {
-					if let Some(thumbnail) = thumbnail {
-						slot.spawn((
-							ImageNode::new(thumbnail),
-							Node { width: Val::Px(54.0), height: Val::Px(54.0), ..default() },
-							Pickable::IGNORE,
-						));
-					}
-					if selected {
-						crate::icons::Icon::maybraid(22.0, TEXT_YELLOW).spawn(
-							slot,
-							fonts.logo.clone(),
-							Visibility::Inherited,
-						);
-					}
-				});
-			let bounds = (PANEL_TILE_MIN_WIDTH - 12.0).max(12.0);
-			button.spawn((
-				Text::new(label),
-				fonts.item(PANEL_ITEM_FONT_SIZE),
-				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
-				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
-				TextBounds::new(bounds, bounds * 1.6),
-				Pickable::IGNORE,
-			));
+		.with_children(|text| {
+			for part in parts {
+				text.spawn((
+					TextSpan::new(" · "),
+					fonts.item(PANEL_GROUP_FONT_SIZE),
+					TextColor(TEXT_YELLOW_FAINT),
+					LineHeight::RelativeToFont(1.0),
+				));
+				text.spawn((
+					TextSpan::new(part),
+					fonts.item(PANEL_GROUP_FONT_SIZE),
+					TextColor(detail_chip_color(part)),
+					LineHeight::RelativeToFont(1.0),
+				));
+			}
 		});
+}
+
+fn detail_chip_color(part: &str) -> Color {
+	let trimmed = part.trim();
+	if trimmed.starts_with('+') {
+		TEXT_LIME
+	} else if trimmed.starts_with('-') {
+		TEXT_SALMON
+	} else {
+		TEXT_YELLOW_FAINT
+	}
+}
+
+fn tile_face(selected: bool, muted: bool) -> Color {
+	if muted {
+		TEXT_YELLOW_FAINT
+	} else if selected {
+		TEXT_YELLOW_HOVER
+	} else {
+		TEXT_YELLOW
+	}
 }
 
 pub fn spawn_tile_grid(

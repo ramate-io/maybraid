@@ -4,7 +4,7 @@
 //! the triple picks one word from each list so the same item always has the same
 //! name (`Celestial Red Tide Joggers`).
 
-use crate::{ClothingMaterial, ClothingMesh, ItemColor};
+use crate::{ClothingMaterial, ClothingMesh, FirearmMesh, ItemColor};
 
 /// Material adjective, then color adjective, then clothing noun.
 pub fn hashed_item_name(
@@ -21,7 +21,16 @@ pub fn hashed_item_name(
 	)
 }
 
-fn mix(seed: u64, label: &str) -> u64 {
+const FIREARM_PREFIXES: &[&str] =
+	&["Field", "Issue", "Scarred", "Service", "Worn", "Match", "Patrol", "Cache"];
+
+/// Prefix plus firearm noun, stable for a mesh.
+pub fn hashed_firearm_name(mesh: FirearmMesh) -> String {
+	let hash = mix(0xA11A_4A45_F1A4_0001, mesh.label());
+	format!("{} {}", pick(FIREARM_PREFIXES, hash), pick(mesh.nouns(), hash >> 17))
+}
+
+pub(crate) fn mix(seed: u64, label: &str) -> u64 {
 	let mut hash = seed ^ 0x9E37_79B9_7F4A_7C15;
 	for byte in label.as_bytes() {
 		hash = hash.wrapping_mul(0x0100_0000_01B3).wrapping_add(*byte as u64);
@@ -126,6 +135,11 @@ mod tests {
 		}
 		for color in ItemColor::VALUES {
 			assert!(!color.adjectives().is_empty(), "{}", color.label());
+		}
+		for mesh in FirearmMesh::VALUES {
+			assert!(!mesh.nouns().is_empty(), "{}", mesh.label());
+			let name = hashed_firearm_name(*mesh);
+			assert!(name.contains(' '), "{name}");
 		}
 	}
 }

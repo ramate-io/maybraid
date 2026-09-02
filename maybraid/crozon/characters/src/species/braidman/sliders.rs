@@ -7,11 +7,12 @@
 
 use bevy::prelude::*;
 use crozon_rigs::{BoneScale, RigPoseLayer};
+use serde::{Deserialize, Serialize};
 
 use crate::assembly::CharacterPartSlot;
 
 /// Body rig and feature mesh sliders for the concepts pass.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BraidmanSliders {
 	pub shoulder_width: f32,
 	pub hip_width: f32,

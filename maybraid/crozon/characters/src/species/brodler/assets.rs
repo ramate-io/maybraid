@@ -1,10 +1,12 @@
 //! Brodler asset catalog.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::species::common::{HORNS_HARROWED_CROWN, HORNS_LORKEN_CROWN};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum HornMesh {
 	#[default]
 	HarrowedCrown,

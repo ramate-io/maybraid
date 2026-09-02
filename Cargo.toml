@@ -48,6 +48,9 @@ members = [
   "maybraid/crozon/character-concepts-playground",
   "maybraid/crozon/character-world-movements-playground",
   "maybraid/crozon/character-items",
+  "maybraid/crozon/character-persist",
+  "maybraid/crozon/inventory-user",
+  "maybraid/crozon/character-model-user",
   "maybraid/crozon/character-shaders",
   "maybraid/crozon/character-ui-menu",
   "maybraid/crozon/character-ui-menus",
@@ -263,6 +266,9 @@ crozon-character-concepts-playground = { path = "maybraid/crozon/character-conce
 crozon-character-world-movements-playground = { path = "maybraid/crozon/character-world-movements-playground" }
 crozon-character-playground = { path = "maybraid/crozon/playground" }
 crozon-character-items = { path = "maybraid/crozon/character-items" }
+crozon-character-persist = { path = "maybraid/crozon/character-persist" }
+crozon-inventory-user = { path = "maybraid/crozon/inventory-user" }
+crozon-character-model-user = { path = "maybraid/crozon/character-model-user" }
 crozon-character-shaders = { path = "maybraid/crozon/character-shaders" }
 crozon-character-ui-menus = { path = "maybraid/crozon/character-ui-menus" }
 crozon-characters = { path = "maybraid/crozon/characters" }

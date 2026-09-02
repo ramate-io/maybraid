@@ -6,9 +6,9 @@ use crate::icons::AnimatedIcon;
 use crate::single_select::TextCursorSlot;
 use crate::theme::{PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE, PANEL_HEADER_FONT_SIZE};
 
-use super::HudFonts;
 use super::hud_menu::{HudMenu, HudMenuItem};
 use super::text::{spawn_cursor_slot_sized, spawn_header_line};
+use super::HudFonts;
 
 /// Marker on a header that opens an overlay select.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -24,15 +24,15 @@ pub struct ActiveOverlayKey(pub Option<&'static str>);
 
 /// Pickable header. `extra` is typically `OpenSelectKey`.
 ///
-/// `value` is the selected name when this header is a single catalog pick.
-/// The cursor starts hidden; [`sync_overlay_header_cursors`] shows it when
-/// the row is hovered or its overlay is open.
+/// The cursor starts hidden; [`sync_hud_cursors`] shows it when the row is
+/// hovered, focused, or its overlay is open.
 pub fn spawn_section_header(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	label: &'static str,
 	value: Option<&str>,
 	justify: JustifyContent,
+	color: Color,
 	extra: impl Bundle,
 ) {
 	parent
@@ -40,6 +40,7 @@ pub fn spawn_section_header(
 			Button,
 			OverlayHeader,
 			OverlayHeaderKey(label),
+			CursorRow,
 			extra,
 			Node {
 				width: Val::Percent(100.0),
@@ -54,24 +55,33 @@ pub fn spawn_section_header(
 		))
 		.with_children(|row| {
 			spawn_cursor_slot_sized(row, fonts, false, PANEL_HEADER_CURSOR_ICON_SIZE);
-			spawn_header_line(row, fonts, label, value, PANEL_HEADER_FONT_SIZE);
+			spawn_header_line(row, fonts, label, value, PANEL_HEADER_FONT_SIZE, color);
 		});
 }
 
-/// Wink the header mark while that row is focused or its overlay is open.
-pub fn sync_overlay_header_cursors(
+/// Marker on HUD rows that reserve a Maybraid select gutter.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct CursorRow;
+
+/// Wink the mark while a cursor row is hovered, focused, or its overlay is open.
+pub fn sync_hud_cursors(
 	active: Res<ActiveOverlayKey>,
-	headers: Query<(&OverlayHeaderKey, Option<&HudMenuItem>, &Children), With<OverlayHeader>>,
+	rows: Query<
+		(&Children, Option<&HudMenuItem>, Option<&OverlayHeaderKey>, Option<&Interaction>),
+		Or<(With<CursorRow>, With<OverlayHeader>)>,
+	>,
 	menus: Query<&HudMenu>,
 	slots: Query<(), With<TextCursorSlot>>,
 	children: Query<&Children>,
 	mut icons: Query<&mut Visibility, With<AnimatedIcon>>,
 ) {
-	for (key, item, header_children) in &headers {
+	for (row_children, item, key, interaction) in &rows {
 		let focused = item
 			.is_some_and(|item| menus.get(item.menu).is_ok_and(|menu| menu.selected == item.index));
-		let show = focused || active.0 == Some(key.0);
-		for child in header_children {
+		let overlay = key.is_some_and(|key| active.0 == Some(key.0));
+		let hovered = matches!(interaction, Some(Interaction::Hovered | Interaction::Pressed));
+		let show = focused || overlay || hovered;
+		for child in row_children {
 			if slots.get(*child).is_err() {
 				continue;
 			}

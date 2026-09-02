@@ -10,6 +10,7 @@
 //! the shown LOD band.
 
 pub mod anim;
+pub mod appearance;
 pub mod assembly;
 pub mod assets;
 pub mod components;
@@ -35,6 +36,7 @@ pub use anim::{
 	AnimMailbox, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
 	TwoFootedTuckedFlipParams,
 };
+pub use appearance::CharacterAppearance;
 pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{

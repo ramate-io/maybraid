@@ -68,6 +68,8 @@ pub enum SectionId {
 	HeadFeatures,
 	Hair,
 	Clothing,
+	Weapons,
+	Loadout,
 	Animation,
 }
 
@@ -80,6 +82,8 @@ impl SectionId {
 			Self::HeadFeatures => "Head & Features",
 			Self::Hair => "Hair",
 			Self::Clothing => "Clothing",
+			Self::Weapons => "Weapons",
+			Self::Loadout => "Loadout",
 			Self::Animation => "Animation",
 		}
 	}
@@ -378,4 +382,18 @@ pub enum MenuEvent {
 	ToggleClothing(ClothingMesh),
 	ToggleInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
+	Save,
+}
+
+impl MenuEvent {
+	/// Clothing wear / color / look. Allowed after appearance is locked.
+	pub fn edits_inventory(self) -> bool {
+		matches!(
+			self,
+			Self::ToggleInventory(_)
+				| Self::SetSwatch(CharacterField::Clothing(_), _)
+				| Self::SetAsset(CharacterField::ClothingMaterial(_), _)
+				| Self::Cycle(CharacterField::ClothingMaterial(_), _)
+		)
+	}
 }

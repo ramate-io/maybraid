@@ -1,16 +1,16 @@
-//! Maybraid home screen: bottom-left title plus destination labels.
+//! Maybraid home screen: top-left title plus destination labels.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn};
+use bevy::scene::prelude::{bsn, Scene};
 use maybraid_menu_controller::MenuController;
-use menu_components::info::description::{TextMenuDescription, set_description_for_menu};
+use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
-use menu_components::single_select::{MenuFocus, republish_menu_activate};
-use menu_components::{MENU_CLEAR, TextMenuPlugin};
+use menu_components::single_select::{republish_menu_activate, MenuFocus};
+use menu_components::TextMenuPlugin;
 
-use crate::MenuScreen;
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
+use crate::MenuScreen;
 
 /// Queue a home-screen spawn (despawns any existing home UI first).
 #[derive(Component, Debug, Clone, Copy)]
@@ -66,21 +66,19 @@ impl HomeMenuChoice {
 
 impl HomeScreen {
 	pub fn scene() -> impl Scene + 'static {
-		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(
-				TextCursorColumn::new(
-					"Maybraid",
-					HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
-				)
-				.scene(),
-			),
-			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovery.description())),
-		];
+		let children: Vec<Box<dyn Scene>> = vec![Box::new(
+			TextCursorColumn::new(
+				"Maybraid",
+				HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
+			)
+			.with_description(HomeMenuChoice::Discovery.description())
+			.scene(),
+		)];
 		bsn! {
 			HomeScreen
 			MenuScreen
 			MenuController
-			BackgroundColor(MENU_CLEAR)
+			BackgroundColor(Color::NONE)
 			Node {
 				width: percent(100),
 				height: percent(100),

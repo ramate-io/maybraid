@@ -1,26 +1,40 @@
-//! Create-a-character flow: three random garments, then the body editor.
+//! Create-a-character flow: starter garments and firearms, then the body editor.
 
 use bevy::prelude::*;
-use crozon_character_items::{
-	InventoryItem, ItemRng, STARTER_CLOTHING_COUNT, random_starter_clothing,
-};
+use crozon_character_items::{random_starter_loadout, InventoryItem, ItemRng};
+use crozon_character_persist::CharacterId;
 
 use crate::spin_reveal::{
-	SpinRevealFinished, SpinRevealScreenPlugin, SpinRevealSystems, request_show_spin_reveal,
+	request_show_spin_reveal, SpinRevealFinished, SpinRevealScreenPlugin, SpinRevealSystems,
 };
 
 /// Queue the create-a-character flow (starter reveal, then the body HUD).
 #[derive(Component, Debug, Clone, Copy)]
-pub struct RequestShowCreateCharacter;
+pub struct RequestShowCreateCharacter {
+	pub id: CharacterId,
+}
 
 /// Starter inventory is ready; the host should open the create-mode character HUD.
 #[derive(Message, Clone, Debug)]
 pub struct CreateCharacterReady {
+	pub id: CharacterId,
 	pub items: Vec<InventoryItem>,
 }
 
+#[derive(Resource, Clone, Copy)]
+struct PendingCreate(CharacterId);
+
 pub fn request_show_create_character(commands: &mut Commands) {
-	commands.spawn(RequestShowCreateCharacter);
+	request_show_create_character_id(commands, CharacterId::new());
+}
+
+pub fn request_show_create_character_id(commands: &mut Commands, id: CharacterId) {
+	commands.spawn(RequestShowCreateCharacter { id });
+}
+
+/// Drop an in-flight starter reveal so Back from spin-reveal does not create.
+pub fn cancel_pending_create(commands: &mut Commands) {
+	commands.remove_resource::<PendingCreate>();
 }
 
 pub struct CreateCharacterPlugin;
@@ -42,23 +56,30 @@ impl Plugin for CreateCharacterPlugin {
 
 fn start_create_character(
 	mut commands: Commands,
-	requests: Query<Entity, With<RequestShowCreateCharacter>>,
+	requests: Query<(Entity, &RequestShowCreateCharacter)>,
 ) {
 	if requests.is_empty() {
 		return;
 	}
-	for entity in &requests {
+	let mut id = CharacterId::new();
+	for (entity, request) in &requests {
+		id = request.id;
 		commands.entity(entity).despawn();
 	}
-	let items = random_starter_clothing(&mut ItemRng::from_entropy(), STARTER_CLOTHING_COUNT);
+	commands.insert_resource(PendingCreate(id));
+	let items = random_starter_loadout(&mut ItemRng::from_entropy());
 	request_show_spin_reveal(&mut commands, items);
 }
 
 fn forward_create_character_ready(
 	mut finished: MessageReader<SpinRevealFinished>,
 	mut ready: MessageWriter<CreateCharacterReady>,
+	pending: Option<Res<PendingCreate>>,
 ) {
+	let Some(pending) = pending else {
+		return;
+	};
 	for event in finished.read() {
-		ready.write(CreateCharacterReady { items: event.items.clone() });
+		ready.write(CreateCharacterReady { id: pending.0, items: event.items.clone() });
 	}
 }

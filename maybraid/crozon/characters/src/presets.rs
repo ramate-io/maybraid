@@ -4,10 +4,12 @@
 //! command/UI fields apply their final overrides.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 // Shared vocabulary for every species in the concepts pass. Species modules may
 // later restrict which variants they expose, but the IDs stay stable for CLI/UI.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum GenderPreset {
 	#[default]
 	Neutral,
@@ -31,7 +33,8 @@ impl GenderPreset {
 
 // Applied after gender defaults in resolution order; neither preset narrows slider
 // ranges—they only seed or refine values the user can still override.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum BuildPreset {
 	#[default]
 	Average,

@@ -14,11 +14,12 @@ use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh};
 pub use palette::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DuiColors {
 	pub skin: DuiSkinColor,
 	pub eyes: DuiEyeColor,
@@ -77,7 +78,7 @@ impl DuiColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DuiConfig {
 	pub nose: DuiNoseMesh,
 	pub hair: HairMesh,
