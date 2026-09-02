@@ -1,4 +1,4 @@
-//! Cuboids from panel / floor / partition placement and stair tread IR.
+//! Cuboids from panel / floor / partition placement and sloped stair ramps.
 
 use avian3d::prelude::{Collider, Friction, RigidBody};
 use bevy::prelude::*;
@@ -17,8 +17,9 @@ use crate::BuildingFrictionConfig;
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct BuildingWalkCollider;
 
-const KIT_MIN: Vec3 = Vec3::new(0.0, -PANEL_Y_HALF, 0.0);
-const KIT_MAX: Vec3 = Vec3::new(1.0, PANEL_Y_HALF, 1.0);
+/// Panel GLBs: \(X \in [0, 1]\), \(Y \in [-0.2, 0.2]\), \(Z \in [-1, 0]\) (eave at \(Z = 0\)).
+const KIT_MIN: Vec3 = Vec3::new(0.0, -PANEL_Y_HALF, -1.0);
+const KIT_MAX: Vec3 = Vec3::new(1.0, PANEL_Y_HALF, 0.0);
 
 /// Stamp walk colliders as children of `parent` from High-LOD domain nodes.
 pub fn spawn_building_walk_colliders(
@@ -44,13 +45,8 @@ pub fn spawn_building_walk_colliders(
 		}
 	}
 	for node in building.stair_nodes_for_level(level).flatten() {
-		for (translation, rotation, size) in node.tread_cuboids() {
-			spawn_cuboid(
-				commands,
-				parent,
-				CuboidPose { translation, rotation, size },
-				friction,
-			);
+		for (translation, rotation, size) in node.walk_ramps() {
+			spawn_cuboid(commands, parent, CuboidPose { translation, rotation, size }, friction);
 		}
 	}
 }
@@ -101,9 +97,8 @@ fn oriented_kit_cuboid(placement: Placement, kit_min: Vec3, kit_max: Vec3) -> Cu
 
 fn panel_cuboid(node: &PanelNode) -> Option<CuboidPose> {
 	match node.geometry {
-		PanelGeometry::Rectangle(_) | PanelGeometry::RightTriangle(_) => {
-			Some(oriented_kit_cuboid(node.placement, KIT_MIN, KIT_MAX))
-		}
+		// Full-rectangle cuboids on right triangles ghost-block the empty half.
+		PanelGeometry::Rectangle(_) => Some(oriented_kit_cuboid(node.placement, KIT_MIN, KIT_MAX)),
 		_ => None,
 	}
 }
@@ -140,9 +135,9 @@ mod tests {
 	use richmond_building_components::placed::Placement;
 
 	#[test]
-	fn kit_cuboid_centers_a_unit_panel() -> anyhow::Result<()> {
+	fn kit_cuboid_centers_on_neg_z_panel_space() -> anyhow::Result<()> {
 		let pose = oriented_kit_cuboid(Placement::IDENTITY, KIT_MIN, KIT_MAX);
-		assert!((pose.translation - Vec3::new(0.5, 0.0, 0.5)).length() < 1e-4);
+		assert!((pose.translation - Vec3::new(0.5, 0.0, -0.5)).length() < 1e-4);
 		assert!((pose.size.x - 1.0).abs() < 1e-4);
 		assert!((pose.size.z - 1.0).abs() < 1e-4);
 		assert!((pose.size.y - PANEL_Y_HALF * 2.0).abs() < 1e-4);

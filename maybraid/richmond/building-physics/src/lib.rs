@@ -3,7 +3,7 @@
 //! LOD hosts stay on [`lod_avian::PhysicsInteractionLayer::Host`]. Walk geometry is
 //! spawned as child [`RigidBody::Static`] cuboids on
 //! [`lod_avian::PhysicsInteractionLayer::Fixed`] so movers can stand on floors and
-//! treads without treating Host volumes as contact.
+//! stair ramps without treating Host volumes as contact.
 
 mod colliders;
 
