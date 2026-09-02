@@ -1,9 +1,11 @@
 //! Rolled item attributes. Stats are integers so inventory stays [`Eq`].
 //!
 //! Generation is identity-hashed (same mesh / look / color → same stats) so
-//! old saves without a stats blob can recover a deterministic roll. Gameplay
-//! systems do not consume these yet; menus display them and
-//! [`CharacterSheet`] compiles worn clothing plus queued weapon weight.
+//! old saves without a stats blob can recover a deterministic roll. Menus
+//! display them and [`CharacterSheet`] compiles worn clothing plus queued
+//! weapon weight. Firearm-user bakes [`FirearmStats`] into a live weapon
+//! (`Weapon`, cadence, payload, recoil); clothing `health` / `damage` feed
+//! max HP and outgoing DPC.
 
 use serde::{Deserialize, Serialize};
 

@@ -22,6 +22,7 @@ crozon-characters = { workspace = true }
 firearm-intelligence = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
+damage = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
@@ -34,7 +35,6 @@ movement-realization = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 procedural-common = { workspace = true }
-projectiles = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-building-physics = { workspace = true }
 richmond-buildings = { workspace = true }

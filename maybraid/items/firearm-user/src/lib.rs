@@ -5,9 +5,11 @@ mod fire;
 mod hold;
 mod pose;
 mod reticle;
+mod weapon;
 
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
+use firearms::FirearmWeaponSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
@@ -18,6 +20,7 @@ pub use pose::{
 	stamp_holding_arms, HeldFirearm,
 };
 pub use reticle::{spawn_reticle, Reticle};
+pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT};
 
 /// Capsule/NPC using a firearm.
 ///
@@ -99,6 +102,7 @@ impl Plugin for FirearmUserPlugin {
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
 			)
-			.add_systems(PostUpdate, reticle::update_reticle.after(TransformSystems::Propagate));
+			.add_systems(PostUpdate, reticle::update_reticle.after(TransformSystems::Propagate))
+			.add_systems(PostUpdate, fire::apply_weapon_recoil.after(FirearmWeaponSystems::Fire));
 	}
 }

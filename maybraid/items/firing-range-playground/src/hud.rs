@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
 
-use crate::damage::{DamageTaken, Health};
+use crate::damage::{DamageApplied, Health};
 use crate::session::RangeSession;
 
 const BAR_WIDTH: f32 = 240.0;
@@ -334,8 +334,9 @@ pub(crate) fn sync_world_health_bars(
 
 pub(crate) fn ingest_damage_indicators(
 	time: Res<Time>,
-	mut hits: MessageReader<DamageTaken>,
+	mut hits: MessageReader<DamageApplied>,
 	players: Query<(), With<Player>>,
+	transforms: Query<&GlobalTransform>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	mut ticks: ResMut<DamageTicks>,
 ) {
@@ -347,7 +348,12 @@ pub(crate) fn ingest_damage_indicators(
 		if players.get(hit.target).is_err() {
 			continue;
 		}
-		assign_tick(&mut ticks.0, camera, hit.origin, now);
+		let origin = hit
+			.source
+			.and_then(|source| transforms.get(source).ok())
+			.map(GlobalTransform::translation)
+			.unwrap_or(hit.point);
+		assign_tick(&mut ticks.0, camera, origin, now);
 	}
 }
 

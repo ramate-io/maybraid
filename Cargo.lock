@@ -3047,6 +3047,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
+name = "damage"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "projectiles",
+]
+
+[[package]]
 name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3377,8 +3385,10 @@ version = "0.0.1"
 dependencies = [
  "avian3d",
  "bevy",
+ "crozon-character-items",
  "crozon-characters",
  "crozon-rigs",
+ "damage",
  "firearms",
  "lod-avian",
  "maybraid-character-controller",
@@ -3394,6 +3404,7 @@ dependencies = [
  "bevy",
  "bevy_hanabi",
  "clap",
+ "damage",
  "firearms-components",
  "lod",
  "lod-avian",
@@ -3421,6 +3432,7 @@ dependencies = [
  "clap",
  "crozon-character-items",
  "crozon-characters",
+ "damage",
  "firearm-intelligence",
  "firearm-user",
  "firearms",
@@ -3436,7 +3448,6 @@ dependencies = [
  "player",
  "player-camera",
  "procedural-common",
- "projectiles",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",

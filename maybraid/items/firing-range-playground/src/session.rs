@@ -7,7 +7,9 @@ use firearm_intelligence::{
 	FirearmIntelligence, FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
 	FirearmSpotting,
 };
-use firearm_user::{spawn_held_kit, FirearmUser, FirearmUserSettings};
+use firearm_user::{
+	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
+};
 use firearms::FirearmConcept;
 use movement_intelligence::{MovementIntelligence, MovementLocation, MovementObjective};
 use player::{
@@ -72,6 +74,7 @@ pub(crate) struct AppliedSession {
 pub(crate) struct CombatantKit {
 	pub appearance: BraidmanConfig,
 	pub firearm: firearms::FirearmKit,
+	pub live: LiveWeapon,
 }
 
 #[derive(Resource)]
@@ -134,7 +137,7 @@ pub(crate) fn spawn_generated_player(
 	commands.entity(player).insert((
 		Transform::from_translation(spawn.player),
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
-		Health::default(),
+		Health::from_max(loadout.sheet.health as f32),
 		kit_component(&loadout),
 	));
 }
@@ -157,7 +160,13 @@ pub(crate) fn spawn_generated_npc(
 		meshes,
 		materials,
 	);
-	install_npc_combat(commands, npc, translation, Some(kit_component(&loadout)));
+	install_npc_combat(
+		commands,
+		npc,
+		translation,
+		Some(kit_component(&loadout)),
+		Some(Health::from_max(loadout.sheet.health as f32)),
+	);
 }
 
 fn rebuild_free_for_all(
@@ -179,6 +188,7 @@ pub(crate) fn install_npc_combat(
 	npc: Entity,
 	at: Vec3,
 	kit: Option<CombatantKit>,
+	health: Option<Health>,
 ) {
 	let mut movement =
 		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, 0.4)));
@@ -197,7 +207,7 @@ pub(crate) fn install_npc_combat(
 		combat_movement,
 		combat,
 		FirearmSpotting::default(),
-		Health::default(),
+		health.unwrap_or_default(),
 	));
 	if let Some(kit) = kit {
 		entity.insert(kit);
@@ -205,7 +215,11 @@ pub(crate) fn install_npc_combat(
 }
 
 fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
-	CombatantKit { appearance: loadout.appearance.clone(), firearm: loadout.kit }
+	CombatantKit {
+		appearance: loadout.appearance.clone(),
+		firearm: loadout.kit,
+		live: live_weapon_from_stats(loadout.stats, loadout.sheet.damage),
+	}
 }
 
 fn npc_translation(spawn: &LesHallesSpawn, index: u16, count: u16) -> Vec3 {
@@ -236,7 +250,8 @@ pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 			settings.aim_yaw_limit = std::f32::consts::PI;
 		}
 		let firearm = kit.map(|kit| kit.firearm).unwrap_or_else(|| FirearmConcept::Bullpup.kit());
-		spawn_held_kit(&mut commands, body, settings, firearm);
+		let live = kit.map(|kit| kit.live).unwrap_or_default();
+		spawn_held_kit(&mut commands, body, settings, firearm, live);
 	}
 }
 

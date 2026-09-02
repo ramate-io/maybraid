@@ -7,11 +7,12 @@ use crozon_characters::{
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmKit,
-	FirearmMembers, FirearmRoot, ProjectileSource, Weapon, WeaponTrigger,
+	FirearmMembers, FirearmRoot, ProjectileSource, WeaponTrigger,
 };
 use player::{PlayerLook, PlayerUse};
 
 use crate::hold::HoldingArms;
+use crate::weapon::LiveWeapon;
 use crate::{FirearmUser, FirearmUserSettings};
 
 #[derive(Component)]
@@ -43,7 +44,7 @@ pub fn spawn_held_firearm_with(
 	user: Entity,
 	settings: FirearmUserSettings,
 ) -> Entity {
-	spawn_held_kit(commands, user, settings, FirearmConcept::Bullpup.kit())
+	spawn_held_kit(commands, user, settings, FirearmConcept::Bullpup.kit(), LiveWeapon::default())
 }
 
 pub fn spawn_held_kit(
@@ -51,6 +52,7 @@ pub fn spawn_held_kit(
 	user: Entity,
 	settings: FirearmUserSettings,
 	kit: FirearmKit,
+	live: LiveWeapon,
 ) -> Entity {
 	let bounds = firearm_bounds(&kit);
 	let scale = held_scale_from_bounds(bounds, settings.held_length);
@@ -59,7 +61,10 @@ pub fn spawn_held_kit(
 	for entity in entities {
 		commands.entity(entity).insert((
 			Name::new(format!("held-{}", kit.body.label())),
-			Weapon::bolt(),
+			live.weapon,
+			live.payload,
+			live.fire,
+			live.recoil,
 			FireOnTrigger,
 			WeaponTrigger(false),
 			ProjectileSource(user),

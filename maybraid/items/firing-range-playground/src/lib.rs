@@ -37,7 +37,6 @@ use player::{
 	PlayerPlugin,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
-use projectiles::tick_flights;
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
@@ -71,7 +70,6 @@ impl Plugin for FiringRangePlugin {
 		.init_resource::<RangeSession>()
 		.init_resource::<AppliedSession>()
 		.insert_resource(LoadoutRng(ItemRng::from_entropy()))
-		.add_message::<damage::DamageTaken>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
 			Startup,
@@ -115,9 +113,9 @@ impl Plugin for FiringRangePlugin {
 		)
 		.add_systems(
 			PostUpdate,
-			(damage::apply_projectile_damage, hud::ingest_damage_indicators, damage::despawn_dead)
+			(hud::ingest_damage_indicators, damage::despawn_dead)
 				.chain()
-				.after(tick_flights),
+				.after(::damage::DamageSystems::Apply),
 		)
 		.add_systems(
 			PostUpdate,
@@ -125,7 +123,10 @@ impl Plugin for FiringRangePlugin {
 				.after(FirearmIntelligenceSystems::Fire)
 				.before(FirearmWeaponSystems::Fire),
 		)
-		.add_systems(PostUpdate, engagement::record_player_shot.after(FirearmWeaponSystems::Fire));
+		.add_systems(
+			PostUpdate,
+			engagement::record_player_shot.after(::damage::DamageSystems::Collect),
+		);
 	}
 }
 
@@ -186,7 +187,7 @@ pub(crate) fn spawn_npc_at(
 		meshes,
 		materials,
 	);
-	session::install_npc_combat(commands, npc, spawn.npc, None);
+	session::install_npc_combat(commands, npc, spawn.npc, None, None);
 }
 
 #[allow(clippy::too_many_arguments)]

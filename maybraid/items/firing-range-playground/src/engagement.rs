@@ -2,9 +2,8 @@
 
 use bevy::prelude::*;
 use firearm_user::FirearmUser;
-use firearms::WeaponTrigger;
+use firearms::{WeaponFired, WeaponTrigger};
 use player::{Npc, Player};
-use projectiles::{Flight, ProjectileSource};
 
 #[derive(Resource, Default)]
 pub(crate) struct NpcEngagement {
@@ -21,13 +20,13 @@ impl NpcEngagement {
 	}
 }
 
-/// Observe actual spawned projectiles, rather than raw trigger input.
+/// Observe actual shots, rather than raw trigger input.
 pub(crate) fn record_player_shot(
 	players: Query<Entity, With<Player>>,
-	shots: Query<&ProjectileSource, (With<Flight>, Added<ProjectileSource>)>,
+	mut fired: MessageReader<WeaponFired>,
 	mut engagement: ResMut<NpcEngagement>,
 ) {
-	if shots.iter().any(|source| players.contains(source.0)) {
+	if fired.read().any(|event| players.contains(event.shooter)) {
 		engagement.live = true;
 	}
 }

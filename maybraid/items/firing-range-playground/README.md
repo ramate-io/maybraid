@@ -19,19 +19,22 @@ NPC does not glue to a cover crack. Firearm combat aims
 the muzzle, and holds the trigger after the first on-target acquire;
 `trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
-Each character starts with 100 health and takes 25 damage per bolt contact.
-Health is shown on a persistent top HUD and as a bar above each capsule; the
-player also gets directional hit ticks around screen center. At 0 health the
+Each character starts with 100 health and takes 25 damage per bolt contact
+in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
+penetration, and cadence (plus clothing HP / outgoing damage) into the live
+weapon. Health is shown on a persistent top HUD and as a bar above each
+capsule; the player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
-The NPC spots and aims during a ceasefire, but does not fire until an actual
-player projectile spawns. Player death (or switching mode) resets that ceasefire.
+The NPC spots and aims during a ceasefire, but does not fire until the player
+takes a shot. Player death (or switching mode) resets that ceasefire.
 
 `free-for-all` is a generated-loadout benchmark: one rolled player (starter
 clothing + primary firearm from
 [`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
 NPCs, all of whom list every other combatant as a spotting candidate. Combat
-still waits for the player's first shot. `duel` restores the 1v1 bullpup pad
-fight.
+still waits for the player's first shot. Rolled guns keep their catalog
+projectile, cadence, and DPC. `duel` restores the 1v1 bullpup pad fight
+(100 HP / 25 DPC).
 
 ```bash
 cargo run -p firing-range-playground

@@ -1,8 +1,9 @@
 //! Roll a generated clothing + firearm identity for a firing-range combatant.
 
 use crozon_character_items::{
-	random_starter_loadout, FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmMesh, FirearmSpec,
-	FirearmStock, FirearmTriggerBox, Inventory, InventoryItem, ItemRng,
+	random_starter_loadout, CharacterSheet, FirearmBarrel, FirearmGrip, FirearmKitSpec,
+	FirearmMesh, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, Inventory,
+	InventoryItem, ItemRng,
 };
 use crozon_characters::species::braidman::BraidmanConfig;
 use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh};
@@ -12,17 +13,24 @@ use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBox
 pub(crate) struct CombatantLoadout {
 	pub appearance: BraidmanConfig,
 	pub kit: FirearmKit,
+	pub stats: FirearmStats,
+	pub sheet: CharacterSheet,
 }
 
 pub(crate) fn roll_combatant(rng: &mut ItemRng) -> CombatantLoadout {
 	let inventory = Inventory::with_starter_outfit(random_starter_loadout(rng));
+	let (kit, stats) = match inventory.primary_weapon() {
+		Some(InventoryItem::Firearm { spec, stats }) => (kit_from_spec(*spec), *stats),
+		_ => (
+			FirearmKit::body(BodyMesh::Bullpup),
+			FirearmStats::generate(&FirearmSpec::from_mesh(FirearmMesh::Bullpup)),
+		),
+	};
 	CombatantLoadout {
 		appearance: appearance_from_inventory(&inventory),
-		kit: inventory
-			.primary_weapon()
-			.and_then(InventoryItem::firearm_spec)
-			.map(kit_from_spec)
-			.unwrap_or_else(|| FirearmKit::body(BodyMesh::Bullpup)),
+		kit,
+		stats,
+		sheet: CharacterSheet::from_inventory(&inventory),
 	}
 }
 
@@ -103,6 +111,8 @@ mod tests {
 	fn starter_loadout_wears_clothes_and_queues_a_gun() {
 		let loadout = roll_combatant(&mut ItemRng::from_seed(11));
 		assert!(!loadout.appearance.clothing.is_empty());
+		assert!(loadout.stats.damage > 0);
+		assert!(loadout.sheet.health >= 1);
 	}
 
 	#[test]
