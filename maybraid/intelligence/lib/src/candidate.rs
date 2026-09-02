@@ -10,6 +10,8 @@ pub struct MovementCandidateHints {
 	/// 0..=1 clearance of an eye-height ray toward the objective location.
 	pub sightline: f32,
 	pub min_clearance: f32,
+	/// 0..=1 fraction of the mover's tolerated fall used by this path.
+	pub fall_risk: f32,
 }
 
 impl MovementCandidateHints {
@@ -47,8 +49,18 @@ mod tests {
 			hide_weight: 10.0,
 			sightline_weight: 12.0,
 		};
-		let peek = MovementCandidateHints { hide: 1.0, sightline: 1.0, min_clearance: 1.0 };
-		let open = MovementCandidateHints { hide: 0.0, sightline: 1.0, min_clearance: 1.0 };
+		let peek = MovementCandidateHints {
+			hide: 1.0,
+			sightline: 1.0,
+			min_clearance: 1.0,
+			fall_risk: 0.0,
+		};
+		let open = MovementCandidateHints {
+			hide: 0.0,
+			sightline: 1.0,
+			min_clearance: 1.0,
+			fall_risk: 0.0,
+		};
 		assert!(peek.covering_score(objective) < open.covering_score(objective));
 		Ok(())
 	}

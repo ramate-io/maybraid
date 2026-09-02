@@ -54,6 +54,7 @@ pub(crate) fn refresh_npc_vantage(
 		.last_point
 		.map(|last| {
 			Vec2::new(last.x, last.z).distance(Vec2::new(point.x, point.z)) >= MOVE_THRESHOLD
+				|| (last.y - point.y).abs() >= MOVE_THRESHOLD
 		})
 		.unwrap_or(true);
 	if !moved {

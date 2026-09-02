@@ -17,6 +17,12 @@ struct RankedStandpoint {
 	hints: AvianPathHints,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct FallProfile {
+	max_drop: f32,
+	risk: f32,
+}
+
 /// Avian [`SpatialQuery`] over [`PhysicsInteractionLayer::Fixed`].
 #[derive(SystemParam)]
 pub struct AvianMovementSurface<'w, 's> {
@@ -48,7 +54,7 @@ impl AvianMovementSurface<'_, '_> {
 			if paths.len() >= budget.max_candidates {
 				break;
 			}
-			let Some(waypoints) = self.probe_walk(
+			let Some((waypoints, fall)) = self.probe_walk(
 				from.point,
 				sample.location.point,
 				ability,
@@ -66,7 +72,10 @@ impl AvianMovementSurface<'_, '_> {
 				.collect();
 			points.push(arrival);
 			let cost = path_length(from.point, &waypoints);
-			paths.push(AvianColliderPath { points, cost, hints: sample.hints });
+			let mut hints = sample.hints;
+			hints.max_drop = fall.max_drop;
+			hints.fall_risk = fall.risk;
+			paths.push(AvianColliderPath { points, cost, hints });
 		}
 		paths
 	}
@@ -202,14 +211,17 @@ impl AvianMovementSurface<'_, '_> {
 		ability: &A,
 		max_steps: usize,
 		filter: &SpatialQueryFilter,
-	) -> Option<Vec<Vec3>> {
+	) -> Option<(Vec<Vec3>, FallProfile)> {
 		if self.segment_clear(
 			ability.hip_point(from),
 			ability.hip_point(to),
 			ability.agent_radius(),
 			filter,
 		) {
-			return Some(vec![to]);
+			let direct = vec![to];
+			if let Some(fall) = self.fall_profile(from, &direct, ability, filter) {
+				return Some((direct, fall));
+			}
 		}
 		if max_steps < 2 {
 			return None;
@@ -217,7 +229,8 @@ impl AvianMovementSurface<'_, '_> {
 		let delta = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
 		let len = delta.length();
 		if len < 1e-3 {
-			return Some(vec![to]);
+			let direct = vec![to];
+			return self.fall_profile(from, &direct, ability, filter).map(|fall| (direct, fall));
 		}
 		let dir = delta / len;
 		let perp = Vec3::new(-dir.z, 0.0, dir.x);
@@ -240,11 +253,40 @@ impl AvianMovementSurface<'_, '_> {
 					ability.agent_radius(),
 					filter,
 				) {
-					return Some(vec![via, to]);
+					let detour = vec![via, to];
+					if let Some(fall) = self.fall_profile(from, &detour, ability, filter) {
+						return Some((detour, fall));
+					}
 				}
 			}
 		}
 		None
+	}
+
+	fn fall_profile<A: movement_intelligence::MovementBody>(
+		&self,
+		from: Vec3,
+		waypoints: &[Vec3],
+		ability: &A,
+		filter: &SpatialQueryFilter,
+	) -> Option<FallProfile> {
+		let max_fall = ability.max_fall().max(0.0);
+		let probe_lift = ability.max_step().max(0.05) + 0.08;
+		let probe_distance = probe_lift + max_fall + 0.05;
+		let spacing = (ability.agent_radius() * 0.75).clamp(0.2, 0.5);
+		let mut max_drop = 0.0_f32;
+		for point in path_samples(from, waypoints, spacing) {
+			let feet_y = point.y - ability.feet_below_origin();
+			let origin = Vec3::new(point.x, feet_y + probe_lift, point.z);
+			let hit = self.spatial.cast_ray(origin, Dir3::NEG_Y, probe_distance, true, filter)?;
+			let drop = (hit.distance - probe_lift).max(0.0);
+			if drop > max_fall + 0.04 {
+				return None;
+			}
+			max_drop = max_drop.max(drop);
+		}
+		let risk = normalized_fall_risk(max_drop, max_fall);
+		Some(FallProfile { max_drop, risk })
 	}
 
 	fn segment_clear(
@@ -279,7 +321,7 @@ impl AvianMovementSurface<'_, '_> {
 		let hide = self.occlusion(ability.hip_point(target), ability.hip_point(sample), filter);
 		let sightline =
 			1.0 - self.occlusion(ability.eye_point(sample), ability.eye_point(target), filter);
-		AvianPathHints { hide, sightline, min_clearance: 1.0 }
+		AvianPathHints { hide, sightline, min_clearance: 1.0, ..Default::default() }
 	}
 
 	fn occlusion(&self, start: Vec3, end: Vec3, filter: &SpatialQueryFilter) -> f32 {
@@ -308,6 +350,33 @@ fn path_length(start: Vec3, waypoints: &[Vec3]) -> f32 {
 	total
 }
 
+fn path_samples(start: Vec3, waypoints: &[Vec3], spacing: f32) -> Vec<Vec3> {
+	let mut samples = Vec::new();
+	let mut previous = start;
+	let spacing = spacing.max(0.05);
+	for end in waypoints {
+		let length = previous.xz().distance(end.xz());
+		let count = (length / spacing).ceil().max(1.0) as usize;
+		for i in 1..=count {
+			samples.push(previous.lerp(*end, i as f32 / count as f32));
+		}
+		previous = *end;
+	}
+	samples
+}
+
+fn normalized_fall_risk(drop: f32, tolerance: f32) -> f32 {
+	if tolerance <= 0.04 {
+		if drop > 0.04 {
+			1.0
+		} else {
+			0.0
+		}
+	} else {
+		(drop / tolerance).clamp(0.0, 1.0)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -317,5 +386,22 @@ mod tests {
 		let len = path_length(Vec3::ZERO, &[Vec3::new(3.0, 9.0, 4.0)]);
 		assert!((len - 5.0).abs() < 1e-4, "{len}");
 		Ok(())
+	}
+
+	#[test]
+	fn path_samples_cover_each_segment_and_endpoint() -> anyhow::Result<()> {
+		let points =
+			path_samples(Vec3::ZERO, &[Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 1.0)], 0.4);
+		assert!(points.len() >= 6, "{points:?}");
+		assert_eq!(points.last().copied(), Some(Vec3::new(1.0, 0.0, 1.0)));
+		assert!(points.iter().any(|p| (*p - Vec3::X).length() < 1e-4));
+		Ok(())
+	}
+
+	#[test]
+	fn fall_risk_is_fraction_of_tolerance() {
+		assert!((normalized_fall_risk(0.6, 1.2) - 0.5).abs() < 1e-4);
+		assert_eq!(normalized_fall_risk(2.0, 1.2), 1.0);
+		assert_eq!(normalized_fall_risk(0.0, 0.0), 0.0);
 	}
 }

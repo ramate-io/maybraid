@@ -29,7 +29,7 @@ pub use user::{
 	MovementDriveResult, MovementIntelligence, MovementIntelligenceSettings, ReplanMovement,
 };
 
-/// Plan, then write [`player::MoveWish`], before capsule accel.
+/// Plan, then write [`player::MoveWish`], before realization unstick and capsule accel.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MovementIntelligenceSystems {
 	Replan,

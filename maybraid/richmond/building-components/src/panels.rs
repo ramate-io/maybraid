@@ -29,7 +29,10 @@ mod triangle;
 pub use geometry::{
 	fitted_tile_count, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle, DEFAULT_TILE_WIDTH,
 };
-pub use kit_space::{to_centered_rect_placement, with_wall_standup_pitch};
+pub use kit_space::{
+	rectangle_kit_hull, right_triangle_kit_hull, tessellated_triangle_kit_hull,
+	to_centered_rect_placement, with_wall_standup_pitch, PANEL_KIT_MAX, PANEL_KIT_MIN,
+};
 pub use lod::{
 	panel_scene_ref_for_level, update_panel_host_levels, PanelLodBand, PanelLodProbe,
 	PANEL_HIGH_FACTOR, PANEL_LOW_FACTOR, PANEL_MEDIUM_FACTOR, PANEL_ULTRA_LOW_RECTANGLE,

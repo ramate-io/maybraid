@@ -3369,13 +3369,21 @@ dependencies = [
  "firearm-user",
  "firearms",
  "game-commands",
+ "lod",
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
  "movement-intelligence",
  "movement-intelligence-avian",
+ "movement-intelligence-richmond",
+ "movement-realization",
  "player",
  "player-camera",
+ "procedural-common",
+ "richmond-building-components",
+ "richmond-building-physics",
+ "richmond-buildings",
+ "richmond-developments",
 ]
 
 [[package]]
@@ -4682,6 +4690,30 @@ dependencies = [
  "bevy",
  "lod-avian",
  "movement-intelligence",
+]
+
+[[package]]
+name = "movement-intelligence-richmond"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "richmond-building-components",
+ "richmond-buildings",
+]
+
+[[package]]
+name = "movement-realization"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "movement-intelligence",
+ "player",
 ]
 
 [[package]]
@@ -6050,6 +6082,19 @@ dependencies = [
  "lod",
  "procedural-common",
  "scene-ref",
+]
+
+[[package]]
+name = "richmond-building-physics"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "lod-avian",
+ "richmond-building-components",
 ]
 
 [[package]]

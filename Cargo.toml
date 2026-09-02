@@ -6,6 +6,7 @@ members = [
 
   # maybraid game crates, typically following rfcs  
   "maybraid/richmond/building-components",
+  "maybraid/richmond/building-physics",
   "maybraid/richmond/buildings",
   "maybraid/richmond/buildings-playground",
   "maybraid/richmond/developments",
@@ -70,6 +71,7 @@ members = [
   "maybraid/input",
   "maybraid/player",
   "maybraid/player-camera",
+  "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/items/firearms-components",
   "maybraid/items/firearms",
@@ -79,6 +81,7 @@ members = [
 
   "maybraid/intelligence/lib",
   "maybraid/intelligence/avian",
+  "maybraid/intelligence/richmond",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -227,6 +230,7 @@ jersey-terrain-stamps = { path = "maybraid/durham/jersey" }
 marazion-watersheds = { path = "maybraid/durham/marazion" }
 
 richmond-building-components = { path = "maybraid/richmond/building-components" }
+richmond-building-physics = { path = "maybraid/richmond/building-physics" }
 richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
 richmond-developments = { path = "maybraid/richmond/developments" }
@@ -287,12 +291,14 @@ maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
 player = { path = "maybraid/player" }
 player-camera = { path = "maybraid/player-camera" }
+movement-realization = { path = "maybraid/movement-realization" }
 projectiles = { path = "maybraid/projectiles" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
 firearm-user = { path = "maybraid/items/firearm-user" }
 movement-intelligence = { path = "maybraid/intelligence/lib" }
 movement-intelligence-avian = { path = "maybraid/intelligence/avian" }
+movement-intelligence-richmond = { path = "maybraid/intelligence/richmond" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 

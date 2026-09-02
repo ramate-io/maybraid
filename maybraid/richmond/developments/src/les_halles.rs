@@ -13,13 +13,15 @@ use richmond_buildings::{
 	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesCommercialUsage,
 	LesHallesFloorPlan, LesHallesLivableUsage, LesHallesParameterized, LesHallesUsagePlan,
 	MixedUseLesHallesMonotower, MixedUseLesHallesStorey, Openings, PitchedRoof, PitchedRoofParams,
-	RectRingFloorSlab, RoofHalf, StairwellKind, WellAabb, WellSide, TREAD_FILL_DEFAULT,
+	RectRingFloorSlab, RoofHalf, StairwellKind, WellAabb, WellSide,
 };
 
 /// [`fit_windows_on_run`] emits nothing below this density.
 const WINDOW_DENSITY_GATE: f32 = 0.08;
 /// Floor used when the monotower sample falls under [`WINDOW_DENSITY_GATE`].
 const MIN_WINDOW_DENSITY: f32 = 0.35;
+/// Tread fill so wall-hugging flights stay wider than a 0.8 m capsule.
+const WALK_TREAD_FILL: f32 = 0.85;
 /// Eave drip past the outer facade (meters).
 const ROOF_DRIP_M: f32 = 0.8;
 /// Same salt as [`MixedUseLesHallesMonotower`] floor noise.
@@ -166,7 +168,7 @@ fn stairwells_for(tower: &MixedUseLesHallesMonotower) -> Vec<ConnectingStairwell
 				Vec3::from(shaft.max),
 				side,
 				side,
-				TREAD_FILL_DEFAULT,
+				WALK_TREAD_FILL,
 			);
 			out.push(
 				ConnectingStairwell::from_well_kind(
