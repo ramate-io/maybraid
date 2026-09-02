@@ -3,6 +3,7 @@
 mod buildings_lod;
 pub mod commands;
 mod damage;
+mod hud;
 mod les_halles;
 mod range;
 mod ui;
@@ -67,10 +68,18 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(FirearmIntelligencePlugin)
 		.add_plugins(MovementRealizationPlugin)
 		.init_resource::<LesHallesSpawn>()
+		.init_resource::<hud::DamageTicks>()
+		.add_message::<damage::DamageTaken>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
 			Startup,
-			(spawn_follow_camera_system, setup_lighting, range::setup_range, spawn_reticle_system)
+			(
+				spawn_follow_camera_system,
+				setup_lighting,
+				range::setup_range,
+				spawn_reticle_system,
+				hud::spawn_combat_hud,
+			)
 				.chain(),
 		)
 		.add_systems(
@@ -93,9 +102,17 @@ impl Plugin for FiringRangePlugin {
 				les_halles::draw_circulation_gizmos,
 				apply_parent_confines.after(LodRefreshSystems::Cull),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+				hud::sync_health_hud,
+				hud::sync_world_health_bars,
+				hud::update_damage_indicators,
 			),
 		)
-		.add_systems(PostUpdate, damage::apply_projectile_damage.after(tick_flights));
+		.add_systems(
+			PostUpdate,
+			(damage::apply_projectile_damage, hud::ingest_damage_indicators, damage::despawn_dead)
+				.chain()
+				.after(tick_flights),
+		);
 	}
 }
 
@@ -142,7 +159,9 @@ fn spawn_npc_system(
 	));
 }
 
-fn spawn_held_system(mut commands: Commands, bodies: Query<Entity, Or<(With<Player>, With<Npc>)>>) {
+type CombatBodies<'w, 's> = Query<'w, 's, Entity, Or<(With<Player>, With<Npc>)>>;
+
+fn spawn_held_system(mut commands: Commands, bodies: CombatBodies) {
 	for body in &bodies {
 		spawn_held_firearm(&mut commands, body);
 	}
