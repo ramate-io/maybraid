@@ -164,8 +164,10 @@ impl TextMenuHeader {
 /// Where a shrink-wrapped text column sits on the screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TextColumnAnchor {
-	/// Home-style: inset from the bottom-left.
+	/// Home and gallery: inset from the top-left.
 	#[default]
+	TopLeft,
+	/// Inset from the bottom-left (above a description strip).
 	BottomLeft,
 	/// Inset from the bottom-right.
 	BottomRight,
@@ -210,6 +212,15 @@ impl TextColumnAnchor {
 	pub fn node(self, align: TextColumnAlign) -> Node {
 		let align_items = align.items();
 		match self {
+			Self::TopLeft => Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(COLUMN_INSET),
+				top: Val::Px(COLUMN_INSET),
+				flex_direction: FlexDirection::Column,
+				align_items,
+				row_gap: Val::Px(ITEM_ROW_GAP),
+				..default()
+			},
 			Self::BottomLeft => Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(COLUMN_INSET),
@@ -254,7 +265,7 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextMenuColu
 		Self {
 			header: header.into(),
 			items: items.into_iter().map(|(label, action)| (label.into(), action)).collect(),
-			anchor: TextColumnAnchor::BottomLeft,
+			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
 		}
 	}
@@ -522,8 +533,9 @@ fn text_menu_for_item<'a>(
 
 #[cfg(test)]
 mod tests {
-	use super::{TextColumnAlign, TextMenu};
-	use bevy::prelude::{AlignItems, JustifyContent};
+	use super::{TextColumnAlign, TextColumnAnchor, TextMenu};
+	use crate::theme::COLUMN_INSET;
+	use bevy::prelude::{AlignItems, JustifyContent, Val};
 	use bevy::text::Justify;
 
 	#[test]
@@ -548,5 +560,13 @@ mod tests {
 	fn with_selected_clamps() {
 		assert_eq!(TextMenu::with_selected(3, 5).selected, 2);
 		assert_eq!(TextMenu::with_selected(0, 2).selected, 0);
+	}
+
+	#[test]
+	fn top_left_pins_header_to_the_window_corner() {
+		let node = TextColumnAnchor::TopLeft.node(TextColumnAlign::Start);
+		assert_eq!(node.left, Val::Px(COLUMN_INSET));
+		assert_eq!(node.top, Val::Px(COLUMN_INSET));
+		assert_eq!(node.bottom, Val::Auto);
 	}
 }

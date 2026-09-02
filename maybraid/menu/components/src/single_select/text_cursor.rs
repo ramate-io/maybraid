@@ -10,6 +10,7 @@ use super::text_menu::{
 	TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem, TextMenuItemLabel,
 };
 use crate::controls::section::CursorRow;
+use crate::info::description::TextMenuDescription;
 use crate::theme::{
 	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
 	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
@@ -50,6 +51,7 @@ pub struct TextCursorColumn<E> {
 	pub anchor: TextColumnAnchor,
 	pub align: TextColumnAlign,
 	pub selected: usize,
+	pub description: Option<String>,
 }
 
 impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorColumn<E> {
@@ -63,9 +65,10 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 				.into_iter()
 				.map(|(label, action)| TextCursorRow::new(label, action))
 				.collect(),
-			anchor: TextColumnAnchor::BottomLeft,
+			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
 			selected: 0,
+			description: None,
 		}
 	}
 
@@ -77,9 +80,10 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 				.into_iter()
 				.map(|(label, action)| TextCursorRow::new(label, action))
 				.collect(),
-			anchor: TextColumnAnchor::BottomLeft,
+			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
 			selected: 0,
+			description: None,
 		}
 	}
 
@@ -90,9 +94,10 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		Self {
 			header: Some(header.into()),
 			items: items.into_iter().collect(),
-			anchor: TextColumnAnchor::BottomLeft,
+			anchor: TextColumnAnchor::TopLeft,
 			align: TextColumnAlign::Start,
 			selected: 0,
+			description: None,
 		}
 	}
 
@@ -111,11 +116,19 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		self
 	}
 
+	pub fn with_description(mut self, description: impl Into<String>) -> Self {
+		self.description = Some(description.into());
+		self
+	}
+
 	pub fn scene(self) -> impl Scene + 'static {
 		let item_count = self.items.len();
 		let selected = if item_count == 0 { 0 } else { self.selected.min(item_count - 1) };
-		let mut children: Vec<Box<dyn Scene>> =
-			Vec::with_capacity(item_count + usize::from(self.header.is_some()));
+		let mut children: Vec<Box<dyn Scene>> = Vec::with_capacity(
+			item_count
+				+ usize::from(self.header.is_some())
+				+ usize::from(self.description.is_some()),
+		);
 		if let Some(header) = self.header {
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
@@ -126,6 +139,9 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 				self.align,
 				selected,
 			)));
+		}
+		if let Some(description) = self.description {
+			children.push(Box::new(TextMenuDescription::under_column(description)));
 		}
 		let node = self.anchor.node(self.align);
 		bsn! {

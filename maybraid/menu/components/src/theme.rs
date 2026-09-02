@@ -62,7 +62,7 @@ pub const ICON_BLINK_ALPHA_MIN: f32 = 0.18;
 pub const ICON_BLINK_ALPHA_MAX: f32 = 0.92;
 
 /// Inset from the bottom of the window for the description pane.
-pub const DESCRIPTION_BOTTOM: f32 = 24.0;
+pub const DESCRIPTION_BOTTOM: f32 = 48.0;
 
 /// Reserved height of the description band. Copy is centered inside it so
 /// one- and two-line strings share the same vertical slot at the bottom of
@@ -74,7 +74,7 @@ pub const DESCRIPTION_BAND_HEIGHT: f32 = 80.0;
 pub const DESCRIPTION_PANE_LEFT_PERCENT: f32 = 40.0;
 
 /// Hint strip sits above the description so wrapped copy does not collide.
-pub const HINT_BOTTOM: f32 = 76.0;
+pub const HINT_BOTTOM: f32 = 100.0;
 
 /// Extra space under a header before the first option.
 pub const HEADER_MARGIN_BOTTOM: f32 = 16.0;
@@ -94,8 +94,14 @@ pub const BRAND_MODE_FONT_SIZE: f32 = 36.0;
 /// Menu column sits above the description strip.
 pub const COLUMN_BOTTOM: f32 = 88.0;
 
-/// Corner action sits just above the window edge.
-pub const CORNER_BOTTOM: f32 = 12.0;
+/// Corner action (Back / Edit / Save) inset from the window bottom.
+pub const CORNER_BOTTOM: f32 = 40.0;
+
+/// Gap between the last menu row and explainer copy stacked under the column.
+pub const DESCRIPTION_UNDER_COLUMN_GAP: f32 = 24.0;
+
+/// Wrap width for explainer copy under a top-left menu.
+pub const DESCRIPTION_UNDER_COLUMN_MAX_WIDTH: f32 = 440.0;
 
 /// Loading-page Maybraid mark.
 pub const LOADING_ICON_SIZE: f32 = 192.0;

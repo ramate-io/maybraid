@@ -1,4 +1,4 @@
-//! Maybraid home screen: bottom-left title plus destination labels.
+//! Maybraid home screen: top-left title plus destination labels.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
@@ -66,16 +66,14 @@ impl HomeMenuChoice {
 
 impl HomeScreen {
 	pub fn scene() -> impl Scene + 'static {
-		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(
-				TextCursorColumn::new(
-					"Maybraid",
-					HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
-				)
-				.scene(),
-			),
-			Box::new(TextMenuDescription::scene(HomeMenuChoice::Discovery.description())),
-		];
+		let children: Vec<Box<dyn Scene>> = vec![Box::new(
+			TextCursorColumn::new(
+				"Maybraid",
+				HomeMenuChoice::ALL.into_iter().map(|choice| (choice.label(), choice)),
+			)
+			.with_description(HomeMenuChoice::Discovery.description())
+			.scene(),
+		)];
 		bsn! {
 			HomeScreen
 			MenuScreen

@@ -1,4 +1,4 @@
-//! Description copy in the remainder of the screen, to the right of the menu.
+//! Description copy stacked with a menu, or in the remainder to the right.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -6,7 +6,8 @@ use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::theme::{
 	BARLOW_REGULAR, COLUMN_INSET, DESCRIPTION_BAND_HEIGHT, DESCRIPTION_BOTTOM,
-	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, TEXT_YELLOW_FAINT,
+	DESCRIPTION_FONT_SIZE, DESCRIPTION_PANE_LEFT_PERCENT, DESCRIPTION_UNDER_COLUMN_GAP,
+	DESCRIPTION_UNDER_COLUMN_MAX_WIDTH, TEXT_YELLOW_FAINT,
 };
 
 /// Marker on the description [`Text`]. Screens write the string.
@@ -14,6 +15,7 @@ use crate::theme::{
 pub struct TextMenuDescription;
 
 impl TextMenuDescription {
+	/// Right-hand pane: copy sits at the bottom of the remainder.
 	pub fn scene(initial: impl Into<String>) -> impl Scene + 'static {
 		let initial = initial.into();
 		bsn! {
@@ -47,6 +49,30 @@ impl TextMenuDescription {
 					TextLayout::new(Justify::Center, LineBreak::WordBoundary)
 					Pickable::IGNORE
 				)]
+			)]
+		}
+	}
+
+	/// Wrap under a shrink-wrapped column (home explainer).
+	pub fn under_column(initial: impl Into<String>) -> impl Scene + 'static {
+		let initial = initial.into();
+		let margin = UiRect { top: Val::Px(DESCRIPTION_UNDER_COLUMN_GAP), ..default() };
+		bsn! {
+			Node {
+				margin: margin,
+				max_width: px(DESCRIPTION_UNDER_COLUMN_MAX_WIDTH),
+			}
+			Pickable::IGNORE
+			Children [(
+				TextMenuDescription
+				template_value(Text::new(initial))
+				TextFont {
+					font: FontSourceTemplate::Handle(BARLOW_REGULAR),
+					font_size: px(DESCRIPTION_FONT_SIZE),
+				}
+				TextColor(TEXT_YELLOW_FAINT)
+				TextLayout::new(Justify::Left, LineBreak::WordBoundary)
+				Pickable::IGNORE
 			)]
 		}
 	}
