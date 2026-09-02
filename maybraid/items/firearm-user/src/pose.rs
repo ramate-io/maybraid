@@ -7,7 +7,7 @@ use crozon_characters::{
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
-	FirearmRoot, Weapon, WeaponTrigger,
+	FirearmRoot, ProjectileSource, Weapon, WeaponTrigger,
 };
 use player::{PlayerLook, PlayerUse};
 
@@ -47,6 +47,7 @@ pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
 			Weapon::bolt(),
 			FireOnTrigger,
 			WeaponTrigger(false),
+			ProjectileSource(user),
 			HeldFirearm { scale },
 		));
 		root = entity;

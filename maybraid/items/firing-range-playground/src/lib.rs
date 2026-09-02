@@ -2,6 +2,7 @@
 
 mod buildings_lod;
 pub mod commands;
+mod damage;
 mod les_halles;
 mod range;
 mod ui;
@@ -38,6 +39,7 @@ use player::{
 	PlayerVisual,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
+use projectiles::tick_flights;
 use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
@@ -92,7 +94,8 @@ impl Plugin for FiringRangePlugin {
 				apply_parent_confines.after(LodRefreshSystems::Cull),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
-		);
+		)
+		.add_systems(PostUpdate, damage::apply_projectile_damage.after(tick_flights));
 	}
 }
 
@@ -110,6 +113,7 @@ fn spawn_player_system(
 	commands.entity(player).insert((
 		Transform::from_translation(spawn.player),
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
+		damage::Health::default(),
 	));
 }
 
@@ -134,6 +138,7 @@ fn spawn_npc_system(
 		FirearmMovementIntelligence::new(FirearmMovementObjective::default()),
 		FirearmIntelligence::new(FirearmObjective::default()),
 		FirearmSpotting::default(),
+		damage::Health::default(),
 	));
 }
 

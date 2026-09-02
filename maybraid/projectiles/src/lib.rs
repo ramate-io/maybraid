@@ -99,10 +99,16 @@ impl Flight {
 	}
 }
 
+/// Entity responsible for spawning a projectile.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectileSource(pub Entity);
+
 /// First air→solid hit this step. Impacts listen; flights do not spawn VFX.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct ProjectileContact {
 	pub projectile: Entity,
+	pub source: Option<Entity>,
+	pub target: Entity,
 	pub point: Vec3,
 	pub normal: Vec3,
 }
@@ -162,8 +168,13 @@ fn capsule_along_y(direction: Vec3, muzzle: Vec3, length: f32, radius: f32) -> T
 	Transform { translation: center, rotation, scale: Vec3::ONE }
 }
 
-fn penetration_filter(exclude: Entity) -> SpatialQueryFilter {
-	SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed).with_excluded_entities([exclude])
+fn penetration_filter(projectile: Entity, source: Option<Entity>) -> SpatialQueryFilter {
+	let excluded = [Some(projectile), source].into_iter().flatten();
+	SpatialQueryFilter::from_mask([
+		PhysicsInteractionLayer::Fixed,
+		PhysicsInteractionLayer::Animated,
+	])
+	.with_excluded_entities(excluded)
 }
 
 fn overlapping(
@@ -241,7 +252,7 @@ fn first_contact(
 	end: Vec3,
 	rotation: Quat,
 	filter: &SpatialQueryFilter,
-) -> Option<(Vec3, Vec3)> {
+) -> Option<(Entity, Vec3, Vec3)> {
 	if overlapping(spatial, collider, start, rotation, filter) {
 		return None;
 	}
@@ -256,10 +267,11 @@ fn first_contact(
 	if hit.distance >= ds - 1e-4 {
 		return None;
 	}
-	Some((hit.point1, hit.normal1.normalize_or(Vec3::Y)))
+	Some((hit.entity, hit.point1, hit.normal1.normalize_or(Vec3::Y)))
 }
 
 /// Spawn a sensor capsule along `direction` from `muzzle`.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_flight(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
@@ -274,27 +286,29 @@ pub fn spawn_flight(
 	max_age: f32,
 	color: Color,
 	gravity: f32,
-) {
+) -> Entity {
 	let transform = capsule_along_y(direction, muzzle, length, radius);
 	let origin = transform.translation;
 	let collider = Collider::capsule(radius, length);
-	commands.spawn((
-		Name::new("projectile"),
-		transform,
-		Visibility::default(),
-		Mesh3d(meshes.add(Capsule3d::new(radius, length))),
-		MeshMaterial3d(materials.add(glow_material(color))),
-		RigidBody::Dynamic,
-		MassPropertiesBundle::from_shape(&collider, 1.0),
-		collider,
-		Sensor,
-		PhysicsInteractionLayer::projectile_layers(),
-		LockedAxes::ROTATION_LOCKED,
-		LinearVelocity(direction * speed),
-		GravityScale(gravity),
-		Restitution::ZERO,
-		Flight::spawn(origin, max_range, max_through, max_age),
-	));
+	commands
+		.spawn((
+			Name::new("projectile"),
+			transform,
+			Visibility::default(),
+			Mesh3d(meshes.add(Capsule3d::new(radius, length))),
+			MeshMaterial3d(materials.add(glow_material(color))),
+			RigidBody::Dynamic,
+			MassPropertiesBundle::from_shape(&collider, 1.0),
+			collider,
+			Sensor,
+			PhysicsInteractionLayer::projectile_layers(),
+			LockedAxes::ROTATION_LOCKED,
+			LinearVelocity(direction * speed),
+			GravityScale(gravity),
+			Restitution::ZERO,
+			Flight::spawn(origin, max_range, max_through, max_age),
+		))
+		.id()
 }
 
 pub fn tick_flights(
@@ -303,20 +317,21 @@ pub fn tick_flights(
 	costs: Query<&PenetrationCost>,
 	mut contacts: MessageWriter<ProjectileContact>,
 	mut commands: Commands,
-	mut flights: Query<(Entity, &mut Flight, &Transform, &Collider)>,
+	mut flights: Query<(Entity, &mut Flight, &Transform, &Collider, Option<&ProjectileSource>)>,
 ) {
 	let dt = time.delta_secs();
-	for (entity, mut flight, transform, collider) in &mut flights {
+	for (entity, mut flight, transform, collider, source) in &mut flights {
 		let pos = transform.translation;
 		let rotation = transform.rotation;
-		let filter = penetration_filter(entity);
+		let source = source.map(|source| source.0);
+		let filter = penetration_filter(entity, source);
 		let ds = pos.distance(flight.last);
 		flight.age += dt;
 		flight.path += ds;
-		if let Some((point, normal)) =
+		if let Some((target, point, normal)) =
 			first_contact(&spatial, collider, flight.last, pos, rotation, &filter)
 		{
-			contacts.write(ProjectileContact { projectile: entity, point, normal });
+			contacts.write(ProjectileContact { projectile: entity, source, target, point, normal });
 		}
 		flight.through +=
 			through_on_step(&spatial, collider, flight.last, pos, rotation, &filter, &costs);

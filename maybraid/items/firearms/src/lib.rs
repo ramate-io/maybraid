@@ -12,7 +12,7 @@ pub mod plugin;
 pub mod pose;
 pub mod projectiles;
 
-pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost};
+pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost, ProjectileSource};
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
 	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,

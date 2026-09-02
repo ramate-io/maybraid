@@ -11,6 +11,9 @@ Firearm movement writes [`VantageOn`](../../intelligence/movement/lib/src/object
 / flee into [`movement-intelligence`](../../intelligence/movement/lib); firearm
 combat aims [`PlayerLook`](../../player/src/identity.rs) and fires only when the
 propagated barrel is aligned and the obstruction policy permits it.
+Projectile sweeps include both fixed geometry and animated character capsules.
+Each character starts with 100 health, takes 25 damage per bolt contact, and
+reports its remaining health in the command status bar.
 
 ```bash
 cargo run -p firing-range-playground

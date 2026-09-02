@@ -3,7 +3,8 @@
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
 
 use ::projectiles::{
-	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectilesPlugin,
+	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
+	ProjectilesPlugin,
 };
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
@@ -102,6 +103,20 @@ pub enum FirearmWeaponSystems {
 	Fire,
 }
 
+type ArmedWeaponQuery<'w, 's> = Query<
+	'w,
+	's,
+	(
+		Entity,
+		&'static FirearmMembers,
+		&'static mut Weapon,
+		Has<FireOnTrigger>,
+		Option<&'static WeaponTrigger>,
+		Option<&'static ProjectileSource>,
+	),
+	With<FirearmRoot>,
+>;
+
 pub struct FirearmWeaponsPlugin;
 
 impl Plugin for FirearmWeaponsPlugin {
@@ -198,16 +213,14 @@ fn apply_laser_pose(transform: &mut Transform, spec: LaserSpec, age: f32) {
 	transform.scale = scale;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn fire_weapons(
 	mut commands: Commands,
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
-	mut weapons: Query<
-		(Entity, &FirearmMembers, &mut Weapon, Has<FireOnTrigger>, Option<&WeaponTrigger>),
-		With<FirearmRoot>,
-	>,
+	mut weapons: ArmedWeaponQuery,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
@@ -216,7 +229,7 @@ pub fn fire_weapons(
 		return;
 	}
 	let dt = time.delta_secs();
-	for (_root, members, mut weapon, manual, trigger) in &mut weapons {
+	for (_root, members, mut weapon, manual, trigger, source) in &mut weapons {
 		if manual && !trigger.is_some_and(|trigger| trigger.0) {
 			if matches!(weapon.load, ProjectileLoad::Bolt(_) | ProjectileLoad::Bullet(_)) {
 				weapon.cooldown -= dt;
@@ -241,7 +254,7 @@ pub fn fire_weapons(
 				}
 				weapon.cooldown = weapon.interval;
 				let (muzzle, dir) = muzzle_world(global);
-				spawn_flight(
+				let projectile = spawn_flight(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
@@ -256,6 +269,9 @@ pub fn fire_weapons(
 					spec.color,
 					0.0,
 				);
+				if let Some(source) = source {
+					commands.entity(projectile).insert(*source);
+				}
 			}
 			ProjectileLoad::Bullet(spec) => {
 				weapon.cooldown -= dt;
@@ -264,7 +280,7 @@ pub fn fire_weapons(
 				}
 				weapon.cooldown = weapon.interval;
 				let (muzzle, dir) = muzzle_world(global);
-				spawn_flight(
+				let projectile = spawn_flight(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
@@ -279,6 +295,9 @@ pub fn fire_weapons(
 					spec.color,
 					1.0,
 				);
+				if let Some(source) = source {
+					commands.entity(projectile).insert(*source);
+				}
 			}
 		}
 	}

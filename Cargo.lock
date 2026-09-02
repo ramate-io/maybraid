@@ -3396,6 +3396,7 @@ dependencies = [
  "player",
  "player-camera",
  "procedural-common",
+ "projectiles",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",
