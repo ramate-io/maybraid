@@ -12,6 +12,8 @@ use lod_avian::PhysicsInteractionLayer;
 
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
 
+use crate::impact::{setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects};
+
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
 pub const BARREL_REST_LENGTH: f32 = 1.0;
 
@@ -59,7 +61,7 @@ impl Default for BoltSpec {
 		Self {
 			length: 0.55,
 			radius: 0.055,
-			speed: 42.0,
+			speed: 180.0,
 			max_range: 36.0,
 			max_age: 2.0,
 			penetration: 0.85,
@@ -197,12 +199,18 @@ impl Plugin for FirearmWeaponsPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
-		app.init_resource::<WeaponsArmed>().init_resource::<TriggerFire>().add_systems(
-			PostUpdate,
-			(fire_weapons, tick_lasers, tick_flights)
-				.after(TransformSystems::Propagate)
-				.after(FirearmHostSystems::Pose),
-		);
+		if !app.is_plugin_added::<bevy_hanabi::HanabiPlugin>() {
+			app.add_plugins(bevy_hanabi::HanabiPlugin);
+		}
+		app.init_resource::<WeaponsArmed>()
+			.init_resource::<TriggerFire>()
+			.add_systems(Startup, setup_impact_effects)
+			.add_systems(
+				PostUpdate,
+				(fire_weapons, tick_lasers, tick_flights, tick_impact_bursts)
+					.after(TransformSystems::Propagate)
+					.after(FirearmHostSystems::Pose),
+			);
 	}
 }
 
@@ -530,6 +538,7 @@ pub fn tick_flights(
 	time: Res<Time>,
 	spatial: SpatialQuery,
 	costs: Query<&PenetrationCost>,
+	effects: Option<Res<ImpactEffects>>,
 	mut commands: Commands,
 	mut flights: Query<(Entity, &mut Flight, &Transform, &Collider)>,
 ) {
@@ -541,6 +550,13 @@ pub fn tick_flights(
 		let ds = pos.distance(flight.last);
 		flight.age += dt;
 		flight.path += ds;
+		if let Some((point, normal)) =
+			first_contact(&spatial, collider, flight.last, pos, rotation, &filter)
+		{
+			if let Some(effects) = effects.as_ref() {
+				spawn_impact(&mut commands, effects, point, normal);
+			}
+		}
 		flight.through +=
 			through_on_step(&spatial, collider, flight.last, pos, rotation, &filter, &costs);
 		flight.last = pos;
@@ -548,6 +564,32 @@ pub fn tick_flights(
 			commands.entity(entity).try_despawn();
 		}
 	}
+}
+
+/// First Fixed face this step, if the bolt was still in air at `start`.
+fn first_contact(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	start: Vec3,
+	end: Vec3,
+	rotation: Quat,
+	filter: &SpatialQueryFilter,
+) -> Option<(Vec3, Vec3)> {
+	if overlapping(spatial, collider, start, rotation, filter) {
+		return None;
+	}
+	let delta = end - start;
+	let ds = delta.length();
+	if ds <= 1e-5 {
+		return None;
+	}
+	let dir = Dir3::new(delta).ok()?;
+	let config = ShapeCastConfig::from_max_distance(ds);
+	let hit = spatial.cast_shape(collider, start, rotation, dir, &config, filter)?;
+	if hit.distance >= ds - 1e-4 {
+		return None;
+	}
+	Some((hit.point1, hit.normal1.normalize_or(Vec3::Y)))
 }
 
 #[cfg(test)]

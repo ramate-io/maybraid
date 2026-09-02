@@ -179,6 +179,7 @@ chrono = { version = "0.4.41" }
 reqwest = { version = "0.12", features = ["json"] }
 base64 = "0.22"
 bevy = { version = "0.19.0" }
+bevy_hanabi = { version = "0.19", default-features = false, features = ["3d"] }
 js-sys = "0.3"
 log = "0.4"
 console_log = "1"

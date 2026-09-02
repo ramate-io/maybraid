@@ -5,6 +5,7 @@
 //! [`FirearmConcept`] is a named preset of that kit.
 
 pub mod concepts;
+pub mod impact;
 pub mod kit;
 pub mod parts;
 pub mod plugin;
