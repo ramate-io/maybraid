@@ -82,9 +82,10 @@ members = [
   "maybraid/items/playground",
   "maybraid/items/firing-range-playground",
 
-  "maybraid/intelligence/lib",
-  "maybraid/intelligence/avian",
-  "maybraid/intelligence/richmond",
+  "maybraid/intelligence/movement/lib",
+  "maybraid/intelligence/movement/avian",
+  "maybraid/intelligence/movement/richmond",
+  "maybraid/intelligence/combat/firearm",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -302,9 +303,10 @@ projectiles = { path = "maybraid/projectiles" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
 firearm-user = { path = "maybraid/items/firearm-user" }
-movement-intelligence = { path = "maybraid/intelligence/lib" }
-movement-intelligence-avian = { path = "maybraid/intelligence/avian" }
-movement-intelligence-richmond = { path = "maybraid/intelligence/richmond" }
+movement-intelligence = { path = "maybraid/intelligence/movement/lib" }
+movement-intelligence-avian = { path = "maybraid/intelligence/movement/avian" }
+movement-intelligence-richmond = { path = "maybraid/intelligence/movement/richmond" }
+firearm-intelligence = { path = "maybraid/intelligence/combat/firearm" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 

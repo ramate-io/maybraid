@@ -7,7 +7,7 @@ use crozon_characters::{
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
-	FirearmRoot, Weapon, WeaponTrigger,
+	FirearmRoot, ProjectileSource, Weapon, WeaponTrigger,
 };
 use player::{PlayerLook, PlayerUse};
 
@@ -35,9 +35,16 @@ pub(crate) fn held_scale_from_bounds(bounds: Aabb3d, held_length: f32) -> f32 {
 }
 
 pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
+	spawn_held_firearm_with(commands, user, FirearmUserSettings::default())
+}
+
+pub fn spawn_held_firearm_with(
+	commands: &mut Commands,
+	user: Entity,
+	settings: FirearmUserSettings,
+) -> Entity {
 	let kit = FirearmConcept::Bullpup.kit();
 	let bounds = firearm_bounds(&kit);
-	let settings = FirearmUserSettings::default();
 	let scale = held_scale_from_bounds(bounds, settings.held_length);
 	let entities = spawn_firearm_components(commands, &kit, Transform::IDENTITY, bounds);
 	let mut root = Entity::PLACEHOLDER;
@@ -47,6 +54,7 @@ pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
 			Weapon::bolt(),
 			FireOnTrigger,
 			WeaponTrigger(false),
+			ProjectileSource(user),
 			HeldFirearm { scale },
 		));
 		root = entity;
@@ -106,6 +114,8 @@ pub(crate) fn gun_aim_rotation_for(
 	aim_yaw_limit: f32,
 ) -> Quat {
 	let yaw = if track_look { yaw_xz(look) } else { clamped_aim_yaw(facing, look, aim_yaw_limit) };
+	// PlayerLook's positive pitch raises the camera's -Z view. The firearm's
+	// bore is +Z, so it needs the opposite local X rotation to rise with it.
 	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch)
 }
 
@@ -248,6 +258,22 @@ mod tests {
 		let look = Vec3::X;
 		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true, settings().aim_yaw_limit);
 		assert!((q * Vec3::Z - look).length() < 1e-4, "bore {}", q * Vec3::Z);
+	}
+
+	#[test]
+	fn positive_player_pitch_sends_bore_up() {
+		let q = gun_aim_rotation_for(Vec3::NEG_Z, Vec3::NEG_Z, 0.25, true, std::f32::consts::PI);
+		let bore = q * Vec3::Z;
+		assert!(bore.y > 0.2, "{bore}");
+		assert!(bore.z < -0.9, "{bore}");
+	}
+
+	#[test]
+	fn negative_player_pitch_sends_bore_down() {
+		let q = gun_aim_rotation_for(Vec3::NEG_Z, Vec3::NEG_Z, -0.25, true, std::f32::consts::PI);
+		let bore = q * Vec3::Z;
+		assert!(bore.y < -0.2, "{bore}");
+		assert!(bore.z < -0.9, "{bore}");
 	}
 
 	#[test]
