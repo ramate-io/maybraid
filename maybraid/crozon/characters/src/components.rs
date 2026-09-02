@@ -16,6 +16,7 @@ use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
 use crozon_character_motion::motion_policy;
+use rigs::AssemblyRoot;
 
 use crate::scene_children::{maybe_component, scene_children};
 use crate::socket::{RigId, SkinRef};
@@ -211,6 +212,7 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 		(
 			bsn! {
 				template_value(host)
+				AssemblyRoot
 				CharacterRoot
 				Visibility::default()
 			},

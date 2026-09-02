@@ -15,6 +15,7 @@ crozon-rigs = { workspace = true }
 ground = { workspace = true }
 lod = { workspace = true }
 malo-animations = { workspace = true }
+rigs = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

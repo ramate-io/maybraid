@@ -20,6 +20,7 @@ use malo_animations::{
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
 use crate::markers::{AnimateBones, AnimateEffects};
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
+use rigs::PoseSkipRotation;
 
 const BLEND_DURATION: f32 = 0.15;
 
@@ -109,7 +110,7 @@ pub fn prepare_anim_mailbox(
 			};
 			commands
 				.entity(bone_entity)
-				.insert(AnimBone { name: name.clone(), rest: *bone_tf });
+				.insert((AnimBone { name: name.clone(), rest: *bone_tf }, PoseSkipRotation));
 		}
 
 		commands.entity(entity).insert(AnimMailbox::new(*transform));
@@ -165,11 +166,7 @@ pub fn apply_anim_mailbox(
 			Option<&mut QuadrupedV0Rig>,
 			Option<&mut ForelimbedV0Rig>,
 		),
-		(
-			With<AnimMailbox>,
-			Without<AnimBone>,
-			Or<(With<AnimateBones>, With<AnimateEffects>)>,
-		),
+		(With<AnimMailbox>, Without<AnimBone>, Or<(With<AnimateBones>, With<AnimateEffects>)>),
 	>,
 	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {
@@ -253,7 +250,6 @@ pub fn apply_anim_mailbox(
 		}
 	}
 }
-
 
 fn rest_pose(
 	bone_map: &BoneMap,

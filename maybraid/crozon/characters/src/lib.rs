@@ -65,6 +65,7 @@ pub use rig::{
 	NeedsDuplicateScenePrune, NeedsSkinRemap, NoMatchingArmature, PartRigRef, ResolvedPoseApplied,
 	RigBindScales, RigSkeletonKind,
 };
+pub use rigs::{AssemblyHost, AssemblyRoot, RigKey, RigPlugin, RigRoot, RigSystems};
 pub use skin::{
 	fulfill_skin_ref_roots, invalidate_changed_skin_ref_roots, prune_duplicate_part_scenes,
 	remap_part_skin_to_rig,
