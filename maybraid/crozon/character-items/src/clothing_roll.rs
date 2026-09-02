@@ -9,8 +9,12 @@ use crate::{names::mix, ClothingMaterial, ClothingMesh, ClothingStats, ItemColor
 
 const CLOTHING_SEED: u64 = 0x51A7_0001_C10A_0001;
 const COLOR_SD_GAIN: f32 = 0.4;
-const BUFF_MIN: i16 = 4;
-const BUFF_MAX: i16 = 16;
+/// Realized clothing deltas. Authored mesh/look means stay in small units
+/// and are scaled here so a garment's buffs can outweigh its weight tax.
+const BUFF_SCALE: f32 = 3.0;
+const BUFF_MIN: i16 = 12;
+const BUFF_MAX: i16 = 48;
+const BUFF_SD: f32 = 6.0 * BUFF_SCALE;
 
 /// Categorical weights for which buff axes light up.
 #[derive(Clone, Copy, Debug)]
@@ -297,8 +301,7 @@ fn realize(
 	let axes = sample_axes(rng, &priors.bins, count);
 	let mut assigned = Vec::with_capacity(3);
 	for axis in axes {
-		let dist = Dist::new(0.0, 6.0).apply(priors.axis_delta(axis));
-		assigned.push((axis, sample_buff(rng, dist)));
+		assigned.push((axis, sample_buff(rng, axis_dist(&priors, axis, 0.0, BUFF_SD))));
 	}
 	pair_negative_with_positive(rng, &mut priors, &mut assigned);
 
@@ -322,6 +325,12 @@ fn realize(
 		}
 	}
 	stats
+}
+
+fn axis_dist(priors: &ClothingPriors, axis: u8, base_mean: f32, base_sd: f32) -> Dist {
+	let mut delta = priors.axis_delta(axis);
+	delta.add_mean *= BUFF_SCALE;
+	Dist::new(base_mean, base_sd).apply(delta)
 }
 
 fn sample_axes(rng: &mut ItemRng, bins: &ClothingBins, count: usize) -> Vec<u8> {
@@ -365,7 +374,7 @@ fn pair_negative_with_positive(
 		let used = assigned[0].0;
 		*priors.bins.axis_mut(used) = 0.0;
 		let axis = sample_index(rng, &priors.bins.as_array()) as u8;
-		let dist = Dist::new(6.0, 4.0).apply(priors.axis_delta(axis));
+		let dist = axis_dist(priors, axis, 6.0 * BUFF_SCALE, 4.0 * BUFF_SCALE);
 		let plus = sample_buff(rng, dist).abs().max(BUFF_MIN);
 		assigned.push((axis, plus));
 	}
@@ -468,5 +477,29 @@ mod tests {
 			ItemColor::Natural,
 		);
 		assert_ne!(cloth, suit);
+	}
+
+	#[test]
+	fn realized_buffs_are_large_enough_to_matter() {
+		for mesh in ClothingMesh::VALUES {
+			for material in ClothingMaterial::VALUES {
+				let stats = generate_clothing_stats(*mesh, *material, ItemColor::Natural);
+				for value in [
+					stats.health,
+					stats.running,
+					stats.jump,
+					stats.agility,
+					stats.strength,
+					stats.damage,
+				] {
+					if value != 0 {
+						assert!(
+							(BUFF_MIN..=BUFF_MAX).contains(&value.abs()),
+							"{mesh:?} {material:?} {value} outside {BUFF_MIN}..={BUFF_MAX}"
+						);
+					}
+				}
+			}
+		}
 	}
 }

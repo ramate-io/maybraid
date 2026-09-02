@@ -74,7 +74,7 @@ impl FireMode {
 }
 
 /// Clothing buffs plus carried weight. Mesh, look, and color contribute
-/// priors; sampling picks one to three axes then Gaussian-realizes ±4–16.
+/// priors; sampling picks one to three axes then Gaussian-realizes ±12–48.
 /// A negative is never alone: a lone minus gains a paired plus. Weight
 /// always rolls in a mesh bulk band.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
