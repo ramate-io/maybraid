@@ -12,6 +12,7 @@ pub mod plugin;
 pub mod pose;
 pub mod projectiles;
 
+pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost};
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
 	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,
@@ -21,7 +22,6 @@ pub use firearms_components::{
 	SocketRefApplied, SocketRefRoot, RECEIVER_LANDMARKS,
 };
 pub use kit::FirearmKit;
-pub use maybraid_projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost};
 pub use parts::{BarrelMesh, BodyMesh, GripMesh, KitBone, StockMesh, TriggerBoxMesh};
 pub use plugin::FirearmHostsPlugin;
 pub use pose::{aim_plus_x, BoneFit, FirearmPose};

@@ -1,5 +1,5 @@
 [package]
-name = "maybraid-player"
+name = "player"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }

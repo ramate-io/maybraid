@@ -1,5 +1,5 @@
 [package]
-name = "maybraid-player-camera"
+name = "player-camera"
 version = { workspace = true }
 edition = { workspace = true }
 license  = { workspace = true }
@@ -14,7 +14,7 @@ bevy = { workspace = true }
 crozon-characters = { workspace = true }
 lod = { workspace = true }
 maybraid-character-controller = { workspace = true }
-maybraid-player = { workspace = true }
+player = { workspace = true }
 
 [lints]
 workspace = true

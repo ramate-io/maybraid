@@ -15,7 +15,7 @@ bevy = { workspace = true }
 bevy_hanabi = { workspace = true }
 clap = { workspace = true }
 firearms-components = { workspace = true }
-maybraid-projectiles = { workspace = true }
+projectiles = { workspace = true }
 lod-avian = { workspace = true }
 lod = { workspace = true }
 scene-ref = { workspace = true }

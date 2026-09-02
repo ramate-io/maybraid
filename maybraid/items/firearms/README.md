@@ -12,7 +12,7 @@ A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optio
 | Bullet | Same capsule | Gravity on; same budgets |
 | Laser | Beam along bone +Y | Grows from the muzzle, wraps after max time (no contact physics) |
 
-Muzzle is the barrel tail (`bone-local +Y` of rest length 1). Runtime rest (after the armature’s glTF +90° X) has bore along +Z and grip down; [`aim_plus_x`](src/pose.rs) yaws that onto world +X. Bolts and bullets live in [`maybraid-projectiles`](../../projectiles/); they sweep [`Fixed`](../../lod/avian/src/layers.rs) and charge [`Flight::through`](../../projectiles/src/lib.rs) with optional [`PenetrationCost`](../../projectiles/src/lib.rs). First contact emits [`ProjectileContact`](../../projectiles/src/lib.rs); this crate spawns a short Hanabi spark + smoke burst.
+Muzzle is the barrel tail (`bone-local +Y` of rest length 1). Runtime rest (after the armature’s glTF +90° X) has bore along +Z and grip down; [`aim_plus_x`](src/pose.rs) yaws that onto world +X. Bolts and bullets live in [`projectiles`](../../projectiles/); they sweep [`Fixed`](../../lod/avian/src/layers.rs) and charge [`Flight::through`](../../projectiles/src/lib.rs) with optional [`PenetrationCost`](../../projectiles/src/lib.rs). First contact emits [`ProjectileContact`](../../projectiles/src/lib.rs); this crate spawns a short Hanabi spark + smoke burst.
 
 Authoring (bone-space meshes, slots, armature tree): [`maybraid/art/items/guns/README.md`](../../art/items/guns/README.md).
 

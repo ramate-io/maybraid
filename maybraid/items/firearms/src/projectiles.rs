@@ -1,13 +1,13 @@
-//! Firearms spawn [`maybraid_projectiles`] from the receiver `barrel` bone.
+//! Firearms spawn [`::projectiles`] from the receiver `barrel` bone.
 //!
-//! Lasers are visuals parented to the barrel (not a [`maybraid_projectiles::Flight`]).
+//! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
 
+use ::projectiles::{
+	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectilesPlugin,
+};
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
-use maybraid_projectiles::{
-	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectilesPlugin,
-};
 
 use crate::impact::{setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects};
 

@@ -24,8 +24,8 @@ game-commands = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
-maybraid-player = { workspace = true }
-maybraid-player-camera = { workspace = true }
+player = { workspace = true }
+player-camera = { workspace = true }
 
 [lints]
 workspace = true

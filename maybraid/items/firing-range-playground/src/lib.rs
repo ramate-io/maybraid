@@ -14,11 +14,11 @@ use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
-use maybraid_player::{
+use player::{
 	needs_player_visual, spawn_player_visual, spawn_player_with_hidden_capsule, Player,
 	PlayerPlugin, PlayerVisual,
 };
-use maybraid_player_camera::{spawn_follow_camera, PlayerCameraPlugin};
+use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
 use std::f32::consts::FRAC_PI_2;
 
 pub struct FiringRangePlugin;

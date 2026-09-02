@@ -9,20 +9,14 @@ use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
 	FirearmRoot, Weapon, WeaponTrigger,
 };
-use maybraid_player::{PlayerLook, PlayerUse, PlayerVisual};
+use player::{PlayerLook, PlayerUse, PlayerVisual};
 
 use crate::hold::HoldingArms;
-use crate::FirearmUser;
-
-const HELD_LENGTH: f32 = 0.72;
-const STOCK_ALONG_RIGHT_CHEST: f32 = 0.82;
-const STOCK_FORWARD_OF_ARM_REACH: f32 = 0.3;
-pub(crate) const AIM_YAW_LIMIT: f32 = std::f32::consts::FRAC_PI_6 / 2.0;
+use crate::{FirearmUser, FirearmUserSettings};
 
 #[derive(Component)]
 pub struct HeldFirearm {
 	pub scale: f32,
-	pub user: Entity,
 }
 
 impl HeldFirearm {
@@ -36,14 +30,15 @@ pub(crate) fn authored_length(bounds: Aabb3d) -> f32 {
 	size.x.max(size.y).max(size.z).max(1e-3)
 }
 
-pub(crate) fn held_scale_from_bounds(bounds: Aabb3d) -> f32 {
-	(HELD_LENGTH / authored_length(bounds)).clamp(0.15, 1.0)
+pub(crate) fn held_scale_from_bounds(bounds: Aabb3d, held_length: f32) -> f32 {
+	(held_length / authored_length(bounds)).clamp(0.15, 1.0)
 }
 
 pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
 	let kit = FirearmConcept::Bullpup.kit();
 	let bounds = firearm_bounds(&kit);
-	let scale = held_scale_from_bounds(bounds);
+	let settings = FirearmUserSettings::default();
+	let scale = held_scale_from_bounds(bounds, settings.held_length);
 	let entities = spawn_firearm_components(commands, &kit, Transform::IDENTITY, bounds);
 	let mut root = Entity::PLACEHOLDER;
 	for entity in entities {
@@ -52,13 +47,13 @@ pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
 			Weapon::bolt(),
 			FireOnTrigger,
 			WeaponTrigger(false),
-			HeldFirearm { scale, user },
+			HeldFirearm { scale },
 		));
 		root = entity;
 	}
 	commands
 		.entity(user)
-		.insert((FirearmUser { held: root }, PlayerUse { driver: root }));
+		.insert((FirearmUser { held: root, settings }, PlayerUse { driver: root }));
 	root
 }
 
@@ -93,14 +88,20 @@ pub(crate) fn wrap_pi(angle: f32) -> f32 {
 	(angle + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
 }
 
-pub(crate) fn clamped_aim_yaw(facing: Vec3, look: Vec3) -> f32 {
+pub(crate) fn clamped_aim_yaw(facing: Vec3, look: Vec3, aim_yaw_limit: f32) -> f32 {
 	let face = yaw_xz(facing);
-	let delta = wrap_pi(yaw_xz(look) - face).clamp(-AIM_YAW_LIMIT, AIM_YAW_LIMIT);
+	let delta = wrap_pi(yaw_xz(look) - face).clamp(-aim_yaw_limit, aim_yaw_limit);
 	face + delta
 }
 
-pub(crate) fn gun_aim_rotation_for(facing: Vec3, look: Vec3, pitch: f32, track_look: bool) -> Quat {
-	let yaw = if track_look { yaw_xz(look) } else { clamped_aim_yaw(facing, look) };
+pub(crate) fn gun_aim_rotation_for(
+	facing: Vec3,
+	look: Vec3,
+	pitch: f32,
+	track_look: bool,
+	aim_yaw_limit: f32,
+) -> Quat {
+	let yaw = if track_look { yaw_xz(look) } else { clamped_aim_yaw(facing, look, aim_yaw_limit) };
 	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch)
 }
 
@@ -109,13 +110,14 @@ fn right_shoulder_anchor(
 	right_origin: Vec3,
 	facing: Vec3,
 	arm_length: f32,
+	settings: &FirearmUserSettings,
 ) -> Vec3 {
 	let mid = (left_origin + right_origin) * 0.5;
 	let right = (right_origin - left_origin).normalize_or(Vec3::X);
 	let forward = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::Z);
 	let half_width = left_origin.distance(right_origin) * 0.5;
-	mid + right * (half_width * STOCK_ALONG_RIGHT_CHEST)
-		+ forward * (arm_length * STOCK_FORWARD_OF_ARM_REACH)
+	mid + right * (half_width * settings.stock_along_right_chest)
+		+ forward * (arm_length * settings.stock_forward_of_arm_reach)
 }
 
 pub(crate) fn pose_held_firearm(
@@ -143,7 +145,13 @@ pub(crate) fn pose_held_firearm(
 		};
 		let facing = visual.rotation * Vec3::Z;
 		let look_dir = Quat::from_axis_angle(Vec3::Y, look.yaw) * -Vec3::Z;
-		let rotation = gun_aim_rotation_for(facing, look_dir, look.pitch, look.first_person);
+		let rotation = gun_aim_rotation_for(
+			facing,
+			look_dir,
+			look.pitch,
+			look.first_person,
+			user.settings.aim_yaw_limit,
+		);
 		let Ok((gun_members, held, previous_root, mut transform)) = guns.get_mut(user.held) else {
 			continue;
 		};
@@ -152,7 +160,8 @@ pub(crate) fn pose_held_firearm(
 		else {
 			continue;
 		};
-		let anchor = right_shoulder_anchor(left_origin, right_origin, facing, right_length);
+		let anchor =
+			right_shoulder_anchor(left_origin, right_origin, facing, right_length, &user.settings);
 		let translation = held.root_translation_for(anchor, rotation, stock_local);
 		*transform = Transform { translation, rotation, scale: Vec3::splat(held.scale) };
 	}
@@ -213,28 +222,33 @@ fn named_translation_from(
 mod tests {
 	use super::*;
 
+	fn settings() -> FirearmUserSettings {
+		FirearmUserSettings::default()
+	}
+
 	#[test]
 	fn facing_plus_x_sends_bore_plus_x() {
-		let q = gun_aim_rotation_for(Vec3::X, Vec3::X, 0.0, false);
+		let q = gun_aim_rotation_for(Vec3::X, Vec3::X, 0.0, false, settings().aim_yaw_limit);
 		assert!((q * Vec3::Z - Vec3::X).length() < 1e-4, "bore {}", q * Vec3::Z);
 	}
 
 	#[test]
 	fn look_beyond_limit_clamps() {
-		let yaw = clamped_aim_yaw(Vec3::Z, Vec3::X);
-		assert!((yaw - AIM_YAW_LIMIT).abs() < 1e-4, "{yaw}");
+		let limit = settings().aim_yaw_limit;
+		let yaw = clamped_aim_yaw(Vec3::Z, Vec3::X, limit);
+		assert!((yaw - limit).abs() < 1e-4, "{yaw}");
 	}
 
 	#[test]
 	fn first_person_gun_tracks_look_past_body_cone() {
 		let look = Vec3::X;
-		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true);
+		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true, settings().aim_yaw_limit);
 		assert!((q * Vec3::Z - look).length() < 1e-4, "bore {}", q * Vec3::Z);
 	}
 
 	#[test]
 	fn root_translation_pins_stock_socket() {
-		let held = HeldFirearm { scale: 0.25, user: Entity::PLACEHOLDER };
+		let held = HeldFirearm { scale: 0.25 };
 		let anchor = Vec3::new(0.3, 1.7, 0.2);
 		let rotation = Quat::from_euler(EulerRot::YXZ, 0.4, -0.2, 0.0);
 		let socket = Vec3::new(-0.1, 0.0, -0.5);
@@ -246,8 +260,9 @@ mod tests {
 	#[test]
 	fn held_scale_shrinks_meter_kit() {
 		let bounds = Aabb3d::from_min_max(Vec3::new(-0.5, -0.5, -2.2), Vec3::new(0.5, 1.4, 0.5));
-		let scale = held_scale_from_bounds(bounds);
+		let held_length = settings().held_length;
+		let scale = held_scale_from_bounds(bounds, held_length);
 		assert!(scale < 0.5, "{scale}");
-		assert!((scale * 2.7 - HELD_LENGTH).abs() < 0.05, "{scale}");
+		assert!((scale * 2.7 - held_length).abs() < 0.05, "{scale}");
 	}
 }

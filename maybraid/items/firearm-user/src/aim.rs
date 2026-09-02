@@ -3,12 +3,10 @@
 use bevy::prelude::*;
 use crozon_characters::BoneMap;
 use firearms::{FirearmMembers, FirearmRoot};
-use maybraid_player::{PlayerCameraAim, PlayerCameraPose, PlayerLook};
+use player::{PlayerCameraAim, PlayerCameraPose, PlayerLook};
 
 use crate::pose::HeldFirearm;
 use crate::FirearmUser;
-
-const SIGHT_CAMERA_BACK: f32 = 0.05;
 
 pub(crate) fn write_sight_aim(
 	mut users: Query<(&FirearmUser, &PlayerLook, &mut PlayerCameraAim)>,
@@ -26,12 +24,14 @@ pub(crate) fn write_sight_aim(
 			continue;
 		}
 		aim.focus = look.focus;
-		aim.pose = sight_camera_pose(user.held, &guns, &maps, &globals);
+		aim.pose =
+			sight_camera_pose(user.held, user.settings.sight_camera_back, &guns, &maps, &globals);
 	}
 }
 
 fn sight_camera_pose(
 	held: Entity,
+	sight_camera_back: f32,
 	guns: &Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
 		(With<HeldFirearm>, With<FirearmRoot>),
@@ -47,7 +47,7 @@ fn sight_camera_pose(
 	let (_, _, translation) = socket_current.to_scale_rotation_translation();
 	let bore = (current_root.rotation * Vec3::Z).normalize_or(Vec3::Z);
 	let look = bore.normalize_or(Vec3::Z);
-	let mut aimed = Transform::from_translation(translation - look * SIGHT_CAMERA_BACK);
+	let mut aimed = Transform::from_translation(translation - look * sight_camera_back);
 	aimed.look_to(look, Vec3::Y);
 	Some(PlayerCameraPose { translation: aimed.translation, rotation: aimed.rotation })
 }
@@ -75,12 +75,14 @@ fn member_landmark_global(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::FirearmUserSettings;
 
 	#[test]
 	fn sight_camera_sits_behind_socket() {
+		let back = FirearmUserSettings::default().sight_camera_back;
 		let bore = Vec3::X;
 		let socket = Vec3::new(1.0, 1.5, 0.0);
-		let camera = socket - bore * SIGHT_CAMERA_BACK;
-		assert!((camera.x - (1.0 - SIGHT_CAMERA_BACK)).abs() < 1e-4, "{camera}");
+		let camera = socket - bore * back;
+		assert!((camera.x - (1.0 - back)).abs() < 1e-4, "{camera}");
 	}
 }

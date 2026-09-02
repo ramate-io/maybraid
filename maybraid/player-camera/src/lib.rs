@@ -6,7 +6,8 @@ mod look;
 use bevy::prelude::*;
 use bevy::window::WindowFocused;
 use maybraid_character_controller::CharacterControlSystems;
-use maybraid_player::{PlayerPoseSystems, PlayerSystems};
+use player::{PlayerPoseSystems, PlayerSystems};
+use std::f32::consts::FRAC_PI_2;
 
 pub use follow::{sync_camera_fov, sync_first_person_head_visibility};
 pub use look::{CameraController, CameraPov};
@@ -19,6 +20,46 @@ pub enum PlayerCameraSystems {
 	Aim,
 	Follow,
 	Apply,
+}
+
+/// Per-camera follow / FOV / look-cone knobs. Runtime look state lives on [`CameraController`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct FollowCamera {
+	pub distance: f32,
+	pub height: f32,
+	pub look_height: f32,
+	pub shoulder_offset: f32,
+	pub eye_forward: f32,
+	pub focus_blend_speed: f32,
+	pub third_person_fov: f32,
+	pub first_person_fov: f32,
+	pub sight_fov: f32,
+	pub max_look_yaw: f32,
+	pub body_turn_rate: f32,
+	pub sensitivity: f32,
+	pub near: f32,
+	pub far: f32,
+}
+
+impl Default for FollowCamera {
+	fn default() -> Self {
+		Self {
+			distance: 3.6,
+			height: 1.1,
+			look_height: 0.65,
+			shoulder_offset: 0.7,
+			eye_forward: 0.04,
+			focus_blend_speed: 12.0,
+			third_person_fov: 45.0_f32.to_radians(),
+			first_person_fov: 75.0_f32.to_radians(),
+			sight_fov: 50.0_f32.to_radians(),
+			max_look_yaw: 15.0_f32.to_radians(),
+			body_turn_rate: 8.0,
+			sensitivity: 0.005,
+			near: 0.05,
+			far: 4000.0,
+		}
+	}
 }
 
 pub struct PlayerCameraPlugin;
@@ -62,27 +103,26 @@ impl Plugin for PlayerCameraPlugin {
 }
 
 pub fn spawn_follow_camera(commands: &mut Commands) {
-	use std::f32::consts::FRAC_PI_2;
+	let follow = FollowCamera::default();
 	let yaw = -FRAC_PI_2;
 	let pitch = -0.12;
 	commands.spawn((
 		Camera3d::default(),
 		lod::LodViewer,
-		Transform::from_translation(Vec3::new(-3.6, 1.8, 0.0)).looking_at(Vec3::Y * 0.65, Vec3::Y),
+		follow,
+		Transform::from_translation(Vec3::new(
+			-follow.distance,
+			follow.height + follow.look_height,
+			0.0,
+		))
+		.looking_at(Vec3::Y * follow.look_height, Vec3::Y),
 		Projection::Perspective(PerspectiveProjection {
-			fov: follow::THIRD_PERSON_FOV,
-			near: 0.05,
-			far: 4000.0,
+			fov: follow.third_person_fov,
+			near: follow.near,
+			far: follow.far,
 			..default()
 		}),
-		CameraController {
-			sensitivity: 0.005,
-			yaw,
-			pitch,
-			pov: CameraPov::ThirdPerson,
-			focus: 0.0,
-			focus_blend: 0.0,
-		},
+		CameraController { yaw, pitch, pov: CameraPov::ThirdPerson, focus: 0.0, focus_blend: 0.0 },
 	));
 }
 

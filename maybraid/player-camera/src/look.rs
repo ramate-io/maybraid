@@ -1,8 +1,9 @@
 //! Look intents, POV, body cone, and copy onto [`PlayerLook`].
 
+use crate::FollowCamera;
 use bevy::prelude::*;
 use maybraid_character_controller::CharacterIntent;
-use maybraid_player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
+use player::{CameraFollow, PlayerLook, PlayerVisual, PlayerYawOwner};
 use std::f32::consts::{FRAC_PI_2, PI};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -23,7 +24,6 @@ impl CameraPov {
 
 #[derive(Component)]
 pub struct CameraController {
-	pub sensitivity: f32,
 	pub yaw: f32,
 	pub pitch: f32,
 	pub pov: CameraPov,
@@ -31,22 +31,19 @@ pub struct CameraController {
 	pub focus_blend: f32,
 }
 
-const MAX_LOOK_YAW: f32 = 15.0_f32.to_radians();
-const BODY_TURN_RATE: f32 = 8.0;
-
 pub(crate) fn apply_look_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	mut intents: MessageReader<CharacterIntent>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
 ) {
 	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
 	let mut swap_pov = false;
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Look(value) => {
-				if let Ok(mut controller) = cameras.single_mut() {
-					controller.yaw -= value.x * controller.sensitivity;
-					controller.pitch -= value.y * controller.sensitivity;
+				if let Ok((mut controller, follow)) = cameras.single_mut() {
+					controller.yaw -= value.x * follow.sensitivity;
+					controller.pitch -= value.y * follow.sensitivity;
 					controller.pitch = controller.pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1);
 				}
 			}
@@ -55,7 +52,7 @@ pub(crate) fn apply_look_intents(
 			_ => {}
 		}
 	}
-	if let Ok(mut controller) = cameras.single_mut() {
+	if let Ok((mut controller, _)) = cameras.single_mut() {
 		controller.focus = focus.clamp(0.0, 1.0);
 		if swap_pov {
 			controller.pov.toggle();
@@ -109,11 +106,11 @@ fn set_yaw_owner(owners: &mut Query<&mut PlayerYawOwner>, entity: Entity, owner:
 
 pub(crate) fn turn_body_with_look(
 	time: Res<Time>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
 	mut visuals: Query<(Entity, &mut Transform), (With<PlayerVisual>, Without<Camera3d>)>,
 	owners: Query<&PlayerYawOwner>,
 ) {
-	let Ok(mut controller) = cameras.single_mut() else {
+	let Ok((mut controller, follow)) = cameras.single_mut() else {
 		return;
 	};
 	if controller.pov != CameraPov::FirstPerson {
@@ -127,14 +124,14 @@ pub(crate) fn turn_body_with_look(
 	}
 
 	let body = body_yaw(&visual);
-	let target = follow_body_yaw(controller.yaw, body, MAX_LOOK_YAW);
+	let target = follow_body_yaw(controller.yaw, body, follow.max_look_yaw);
 	let step = wrap_to_pi(target - body);
-	let max_step = BODY_TURN_RATE * time.delta_secs();
+	let max_step = follow.body_turn_rate * time.delta_secs();
 	let applied = step.abs().min(max_step).copysign(step);
 	if applied.abs() > 1e-5 {
 		set_body_yaw(&mut visual, body + applied);
 	}
-	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&visual), MAX_LOOK_YAW);
+	controller.yaw = clamp_look_yaw(controller.yaw, body_yaw(&visual), follow.max_look_yaw);
 }
 
 fn body_yaw(visual: &Transform) -> f32 {
@@ -185,17 +182,19 @@ mod tests {
 
 	#[test]
 	fn body_stays_put_inside_look_cone() {
-		let look = -FRAC_PI_2 + MAX_LOOK_YAW * 0.5;
+		let max = FollowCamera::default().max_look_yaw;
+		let look = -FRAC_PI_2 + max * 0.5;
 		let body = -FRAC_PI_2;
-		assert!((follow_body_yaw(look, body, MAX_LOOK_YAW) - body).abs() < 1e-5);
+		assert!((follow_body_yaw(look, body, max) - body).abs() < 1e-5);
 	}
 
 	#[test]
 	fn body_follows_when_look_exceeds_cone() {
-		let look = -FRAC_PI_2 + MAX_LOOK_YAW + 0.4;
+		let max = FollowCamera::default().max_look_yaw;
+		let look = -FRAC_PI_2 + max + 0.4;
 		let body = -FRAC_PI_2;
-		let target = follow_body_yaw(look, body, MAX_LOOK_YAW);
+		let target = follow_body_yaw(look, body, max);
 		assert!(target < look);
-		assert!((clamp_look_yaw(look, target, MAX_LOOK_YAW) - look).abs() < 1e-4);
+		assert!((clamp_look_yaw(look, target, max) - look).abs() < 1e-4);
 	}
 }
