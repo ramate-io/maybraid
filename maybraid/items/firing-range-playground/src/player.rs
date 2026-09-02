@@ -3,7 +3,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use crozon_characters::{BoneMap, CharacterMembers};
+use crozon_characters::{BoneMap, CharacterMembers, CharacterPartSlot, PartNode};
 use firearms::{FirearmMembers, FirearmRoot};
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
@@ -24,6 +24,8 @@ pub(crate) const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const CAMERA_SHOULDER_OFFSET: f32 = 0.7;
 const FIRST_PERSON_EYE_FORWARD: f32 = 0.04;
 const FOCUS_BLEND_SPEED: f32 = 12.0;
+/// Sit behind the sight so the camera is not inside the optic.
+const SIGHT_CAMERA_BACK: f32 = 0.05;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
@@ -300,20 +302,46 @@ pub(crate) fn follow_character_camera(
 	*camera_transform = pose.transform();
 }
 
-pub(crate) fn sync_pov_visibility(
+/// Hide face meshes in first person; leave body / neck / clothing / weapon.
+pub(crate) fn sync_first_person_head_visibility(
 	cameras: Query<&CameraController, With<Camera3d>>,
-	mut visuals: Query<&mut Visibility, With<PlayerVisual>>,
+	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	parts: Query<&PartNode>,
+	mut visibilities: Query<&mut Visibility>,
 ) {
 	let Ok(controller) = cameras.single() else {
 		return;
 	};
-	let Ok(mut visibility) = visuals.single_mut() else {
-		return;
-	};
-	*visibility = match controller.pov {
-		CameraPov::ThirdPerson => Visibility::Inherited,
-		CameraPov::FirstPerson => Visibility::Hidden,
-	};
+	let hide = controller.pov == CameraPov::FirstPerson;
+	let visibility = if hide { Visibility::Hidden } else { Visibility::Inherited };
+	for members in &visuals {
+		for member in members.iter() {
+			let Ok(part) = parts.get(member) else {
+				continue;
+			};
+			if !is_first_person_hidden_slot(part.slot) {
+				continue;
+			};
+			if let Ok(mut vis) = visibilities.get_mut(member) {
+				*vis = visibility;
+			}
+		}
+	}
+}
+
+fn is_first_person_hidden_slot(slot: CharacterPartSlot) -> bool {
+	matches!(
+		slot,
+		CharacterPartSlot::HeadMesh
+			| CharacterPartSlot::Nose
+			| CharacterPartSlot::Mouth
+			| CharacterPartSlot::EyeLeft
+			| CharacterPartSlot::EyeRight
+			| CharacterPartSlot::EarLeft
+			| CharacterPartSlot::EarRight
+			| CharacterPartSlot::Hair
+			| CharacterPartSlot::Horns
+	)
 }
 
 fn head_camera_translation(
@@ -340,8 +368,17 @@ fn sight_camera_pose(
 		member_landmark_global(members.iter(), maps, globals, "sight_camera_socket")?;
 	let socket_local = previous_root.affine().inverse() * previous_socket.affine();
 	let socket_current = current_root.compute_affine() * socket_local;
-	let (_, rotation, translation) = socket_current.to_scale_rotation_translation();
-	Some(CameraPose { translation, rotation })
+	let (_, _, translation) = socket_current.to_scale_rotation_translation();
+	let bore = (current_root.rotation * Vec3::Z).normalize_or(Vec3::Z);
+	let look = sight_look_direction(bore);
+	let mut aimed = Transform::from_translation(translation - look * SIGHT_CAMERA_BACK);
+	aimed.look_to(look, Vec3::Y);
+	Some(CameraPose { translation: aimed.translation, rotation: aimed.rotation })
+}
+
+/// Firearm rest bore is root +Z after the armature's glTF +90° X.
+fn sight_look_direction(bore: Vec3) -> Vec3 {
+	bore.normalize_or(Vec3::Z)
 }
 
 fn member_landmark_translation(
@@ -399,5 +436,27 @@ mod tests {
 		world.init_resource::<Time>();
 		world.run_system_once(follow_character_camera)?;
 		Ok(())
+	}
+
+	#[test]
+	fn first_person_hides_face_not_body() {
+		assert!(is_first_person_hidden_slot(CharacterPartSlot::HeadMesh));
+		assert!(is_first_person_hidden_slot(CharacterPartSlot::Nose));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::BodyMesh));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::NeckMesh));
+		assert!(!is_first_person_hidden_slot(CharacterPartSlot::Clothing));
+	}
+
+	#[test]
+	fn sight_camera_looks_along_bore_and_sits_behind_socket() {
+		let bore = Vec3::X;
+		let look = sight_look_direction(bore);
+		assert!(look.dot(bore) > 0.99, "{look:?}");
+		let socket = Vec3::new(1.0, 1.5, 0.0);
+		let camera = socket - look * SIGHT_CAMERA_BACK;
+		assert!((camera.x - (1.0 - SIGHT_CAMERA_BACK)).abs() < 1e-4, "{camera}");
+		let mut aimed = Transform::from_translation(camera);
+		aimed.look_to(look, Vec3::Y);
+		assert!((aimed.forward().dot(look) - 1.0).abs() < 1e-4, "{:?}", aimed.forward());
 	}
 }

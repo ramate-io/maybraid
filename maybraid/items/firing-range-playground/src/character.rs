@@ -18,7 +18,7 @@ use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_6, PI, TAU};
 
-use crate::camera::CameraController;
+use crate::camera::{CameraController, CameraPov};
 use crate::hold::HoldingArms;
 use crate::player::{CharacterController, Jumping, MoveWish, Player};
 
@@ -79,7 +79,9 @@ pub(crate) fn spawn_player_character(
 		bounds: &bounds,
 	};
 	let host = ComponentsOnly(clothed);
-	let facing = Quat::from_rotation_y(-FRAC_PI_2);
+	// Mesh +Z is character facing (see `face_player`). Point it downrange so first-person
+	// look starts inside the body cone instead of spinning the torso 180°.
+	let facing = Quat::from_rotation_y(FRAC_PI_2);
 	let visual = commands
 		.spawn_scene((
 			host.host(&lod_ref),
@@ -147,8 +149,10 @@ pub(crate) fn clamped_aim_yaw(facing: Vec3, look: Vec3) -> f32 {
 	face + delta
 }
 
-pub(crate) fn gun_aim_rotation(facing: Vec3, look: Vec3, pitch: f32) -> Quat {
-	Quat::from_rotation_y(clamped_aim_yaw(facing, look)) * Quat::from_rotation_x(-pitch)
+/// First person tracks look; third person keeps the gun inside the body cone.
+pub(crate) fn gun_aim_rotation_for(facing: Vec3, look: Vec3, pitch: f32, track_look: bool) -> Quat {
+	let yaw = if track_look { yaw_xz(look) } else { clamped_aim_yaw(facing, look) };
+	Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-pitch)
 }
 
 fn right_shoulder_anchor(
@@ -192,7 +196,8 @@ pub(crate) fn pose_held_firearm(
 	};
 	let facing = visual.rotation * Vec3::Z;
 	let look = Quat::from_axis_angle(Vec3::Y, camera.yaw) * -Vec3::Z;
-	let rotation = gun_aim_rotation(facing, look, camera.pitch);
+	let rotation =
+		gun_aim_rotation_for(facing, look, camera.pitch, camera.pov == CameraPov::FirstPerson);
 	for (gun_members, held, previous_root, mut transform) in &mut guns {
 		let Some(stock_local) =
 			firearm_landmark_local(gun_members, previous_root, &maps, &globals, "stock")
@@ -306,7 +311,7 @@ mod tests {
 
 	#[test]
 	fn facing_plus_x_sends_bore_plus_x() {
-		let q = gun_aim_rotation(Vec3::X, Vec3::X, 0.0);
+		let q = gun_aim_rotation_for(Vec3::X, Vec3::X, 0.0, false);
 		assert!((q * Vec3::Z - Vec3::X).length() < 1e-4, "bore {}", q * Vec3::Z);
 		assert!((q * Vec3::NEG_Y - Vec3::NEG_Y).length() < 1e-4, "grip {}", q * Vec3::NEG_Y);
 	}
@@ -328,10 +333,17 @@ mod tests {
 
 	#[test]
 	fn look_down_pitches_bore_down() {
-		let q = gun_aim_rotation(Vec3::Z, Vec3::Z, -0.4);
+		let q = gun_aim_rotation_for(Vec3::Z, Vec3::Z, -0.4, false);
 		let bore = q * Vec3::Z;
 		assert!(bore.y < 0.0, "bore {bore}");
 		assert!(bore.z > 0.0, "bore {bore}");
+	}
+
+	#[test]
+	fn first_person_gun_tracks_look_past_body_cone() {
+		let look = Vec3::X;
+		let q = gun_aim_rotation_for(Vec3::Z, look, 0.0, true);
+		assert!((q * Vec3::Z - look).length() < 1e-4, "bore {}", q * Vec3::Z);
 	}
 
 	#[test]

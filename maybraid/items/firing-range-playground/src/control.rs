@@ -7,7 +7,7 @@ use maybraid_character_controller::CharacterIntent;
 use maybraid_input::PadGameplayEnabled;
 use std::f32::consts::FRAC_PI_2;
 
-use crate::camera::CameraController;
+use crate::camera::{CameraController, CameraPov};
 use crate::character::PlayerVisual;
 use crate::player::{CharacterController, MoveWish, MovementAction, Player};
 
@@ -92,9 +92,13 @@ pub(crate) fn apply_intents(
 
 pub(crate) fn face_player(
 	time: Res<Time>,
+	cameras: Query<&CameraController, With<Camera3d>>,
 	wishes: Query<&MoveWish, With<Player>>,
 	mut visuals: Query<&mut Transform, With<PlayerVisual>>,
 ) {
+	if cameras.single().ok().is_some_and(|camera| camera.pov == CameraPov::FirstPerson) {
+		return;
+	}
 	let Ok(wish) = wishes.single() else {
 		return;
 	};
