@@ -21,7 +21,6 @@ pub use session::{
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
-use crozon_character_persist::SaveRoot;
 use crozon_character_playground::camera;
 use crozon_character_ui_menus::MenuEvent;
 use crozon_characters::CharacterHostsPlugin;
@@ -164,28 +163,12 @@ fn editor_back(
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
-	save_root: Res<SaveRoot>,
-	editing: Option<Res<EditingCharacter>>,
-	menu_state: Res<CharacterMenuState>,
-	mut console: ResMut<CommandConsoleOutput>,
 ) {
 	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
 		return;
 	}
 	if !character.is_empty() {
-		if !menu_state.0.is_create() {
-			if let Some(editing) = editing.as_ref() {
-				match save_editing_character(&save_root, editing.id, &menu_state.0) {
-					Ok(()) => {
-						console.0 = format!("saved {}", menu_state.0.saved_name());
-					}
-					Err(error) => {
-						console.0 = format!("save failed: {error}");
-						warn!("failed to save character {}: {error}", editing.id.to_hex());
-					}
-				}
-			}
-		}
+		// Leave without writing; [`save_editing_character`] is Save-only.
 		request_show_gallery(&mut commands);
 		return;
 	}

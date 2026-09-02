@@ -547,5 +547,7 @@ mod tests {
 		let mut dirty = saved.clone();
 		dirty.name = String::from("Mist");
 		assert_eq!(save_chrome(&dirty, Some(&baseline)), Some("Save Changes"));
+		assert!(baseline.is_dirty(&dirty));
+		assert!(!baseline.is_dirty(&saved));
 	}
 }

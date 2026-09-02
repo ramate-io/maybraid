@@ -6,15 +6,13 @@ mod shell;
 pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
-use crozon_character_persist::SaveRoot;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
-	save_editing_character, CharacterMenuState, CharacterPreviewPlugin, CharacterScreen,
-	CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter,
+	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode,
@@ -136,21 +134,12 @@ fn character_back(
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
-	save_root: Res<SaveRoot>,
-	editing: Option<Res<EditingCharacter>>,
-	menu_state: Res<CharacterMenuState>,
 ) {
 	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
 		return;
 	}
 	if !character.is_empty() {
-		if !menu_state.0.is_create() {
-			if let Some(editing) = editing.as_ref() {
-				if let Err(error) = save_editing_character(&save_root, editing.id, &menu_state.0) {
-					warn!("failed to save character {}: {error}", editing.id.to_hex());
-				}
-			}
-		}
+		// Back discards unsaved HUD edits. Persist only happens from Save.
 		request_show_gallery(&mut commands);
 		return;
 	}

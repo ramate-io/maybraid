@@ -92,6 +92,9 @@ fn spawn_session(
 	spawn_bag(commands, host, inventory);
 }
 
+/// Write appearance and inventory. Only the Save chrome calls this; Back
+/// returns to the gallery without writing, so name and clothing edits can be
+/// abandoned.
 pub fn save_editing_character(
 	root: &SaveRoot,
 	id: CharacterId,
