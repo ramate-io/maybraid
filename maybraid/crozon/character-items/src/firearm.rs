@@ -323,7 +323,12 @@ impl Default for FirearmScales {
 	}
 }
 
-/// Authored kit bones are 1m. Handheld rest is this fraction of authored.
+/// Handheld rest applied as bone length / thickness scales.
+///
+/// Length is a fraction of the 1 m authored bone. Thickness is a bind XZ
+/// multiplier: kit width is authored around `[-0.2, 0.2]`, not 1 m, so `1.0`
+/// keeps that width. Barrel / grip rest is ~5× the first gallery pass so
+/// millunit deviation still sits on a holdable average.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SlotRest {
 	pub length: f32,
@@ -332,8 +337,8 @@ pub struct SlotRest {
 
 impl SlotRest {
 	pub const BODY: Self = Self { length: 0.30, thickness: 0.16 };
-	pub const BARREL: Self = Self { length: 0.38, thickness: 0.07 };
-	pub const GRIP: Self = Self { length: 0.12, thickness: 0.09 };
+	pub const BARREL: Self = Self { length: 0.38, thickness: 0.35 };
+	pub const GRIP: Self = Self { length: 0.12, thickness: 0.45 };
 	pub const TRIGGER_BOX: Self = Self { length: 0.10, thickness: 0.09 };
 	pub const STOCK: Self = Self { length: 0.22, thickness: 0.11 };
 
@@ -534,6 +539,8 @@ mod tests {
 		assert!((fits[0].1 - SlotRest::BODY.length).abs() < 1e-5);
 		assert!((fits[1].1 - SlotRest::BARREL.length).abs() < 1e-5);
 		assert!(fits[0].1 < 0.5);
+		assert!((fits[1].2 - 0.35).abs() < 1e-5);
+		assert!((fits[2].2 - 0.45).abs() < 1e-5);
 	}
 
 	#[test]

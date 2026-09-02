@@ -16,7 +16,7 @@ use crate::FirearmUser;
 pub struct HoldingArms;
 
 /// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
-pub(crate) fn sync_hands_to_firearm(
+pub fn sync_hands_to_firearm(
 	users: Query<&FirearmUser>,
 	visuals: Query<
 		(&GlobalTransform, &CharacterMembers, &ChildOf),

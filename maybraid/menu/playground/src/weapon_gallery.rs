@@ -1,23 +1,32 @@
-//! Playground-only gallery of generated firearm kits.
+//! Playground-only gallery of generated firearm kits on Braidman operators.
 
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use camera_controls::look::CameraLookEnabled;
-use crozon_character_items::{random_gallery_firearms, ItemRng};
+use crozon_character_items::{random_gallery_firearms, FirearmSpec, ItemRng};
 use crozon_character_playground::CameraController;
+use crozon_characters::species::braidman::BraidmanConfig;
+use crozon_characters::{
+	character_bounds, CharacterMotionSystems, CharacterRecipe, ComponentsOnly,
+};
+use firearm_user::{
+	pose_held_firearm, stamp_holding_arms, sync_hands_to_firearm, FirearmUser, HeldFirearm,
+};
+use lod::gen::LodScene;
+use lod::lod_ref::LodRef;
 use maybraid_menu_controller::MenuController;
 use menu_components::{screen_back_scene, BrandModeLine};
 use menu_screens::{add_menu_input, take_menu_show_request, MenuScreen};
+use player::PlayerLook;
 
 use crate::preview::spawn_firearm;
 
 const GALLERY_COUNT: usize = 20;
 const GALLERY_COLS: usize = 5;
-const SPACING_X: f32 = 1.2;
-const SPACING_Z: f32 = 0.85;
-const GUN_Y: f32 = 0.45;
+const SPACING_X: f32 = 2.2;
+const SPACING_Z: f32 = 1.8;
 
 /// Queue a generated-weapon gallery spawn.
 #[derive(Component, Debug, Clone, Copy)]
@@ -27,8 +36,8 @@ pub struct RequestShowWeapons;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct WeaponGalleryScreen;
 
-/// Tag on spawned kit hosts so preview sync does not treat them as the
-/// character preview (and so they can be cleaned up with the screen).
+/// Tag on spawned operator / kit hosts so preview sync does not treat them as
+/// the character preview (and so they can be cleaned up with the screen).
 #[derive(Component, Debug, Clone, Copy)]
 struct WeaponGalleryItem;
 
@@ -43,7 +52,14 @@ impl Plugin for WeaponGalleryPlugin {
 		add_menu_input(app);
 		app.add_systems(
 			Update,
-			(apply_show_weapons, despawn_weapon_gallery_items, sync_weapon_gallery_look),
+			(
+				apply_show_weapons,
+				despawn_weapon_gallery_items,
+				sync_weapon_gallery_look,
+				stamp_holding_arms,
+				pose_held_firearm,
+				sync_hands_to_firearm.after(CharacterMotionSystems::Anim),
+			),
 		);
 	}
 }
@@ -62,25 +78,61 @@ fn apply_show_weapons(
 		commands.entity(entity).despawn();
 	}
 	commands.spawn_scene(weapon_gallery_scene());
-	spawn_gallery_guns(&mut commands);
+	spawn_gallery_operators(&mut commands);
 	if let Ok((mut transform, mut controller)) = cameras.single_mut() {
 		frame_weapon_gallery(&mut transform, &mut controller);
 	}
 }
 
-fn spawn_gallery_guns(commands: &mut Commands) {
+fn spawn_gallery_operators(commands: &mut Commands) {
 	let items = random_gallery_firearms(&mut ItemRng::from_entropy(), GALLERY_COUNT);
 	let rows = GALLERY_COUNT.div_ceil(GALLERY_COLS);
 	for (index, item) in items.into_iter().enumerate() {
 		let Some(spec) = item.firearm_spec() else {
 			continue;
 		};
-		let transform = Transform::from_translation(cell_translation(index, rows))
-			.with_rotation(Quat::from_rotation_y(FRAC_PI_2));
-		for entity in spawn_firearm(commands, spec, transform) {
-			commands.entity(entity).insert(WeaponGalleryItem);
-		}
+		spawn_operator(commands, spec, cell_translation(index, rows));
 	}
+}
+
+fn spawn_operator(commands: &mut Commands, spec: FirearmSpec, translation: Vec3) {
+	let mut gun = Entity::PLACEHOLDER;
+	for entity in spawn_firearm(commands, spec, Transform::IDENTITY) {
+		commands.entity(entity).insert((HeldFirearm { scale: 1.0 }, WeaponGalleryItem));
+		gun = entity;
+	}
+	let operator = commands
+		.spawn((
+			WeaponGalleryItem,
+			FirearmUser::holding(gun),
+			PlayerLook { yaw: FRAC_PI_2, ..default() },
+			Transform::from_translation(translation),
+			Visibility::default(),
+		))
+		.id();
+	let visual = spawn_operator_visual(commands);
+	commands.entity(visual).insert(ChildOf(operator));
+}
+
+fn spawn_operator_visual(commands: &mut Commands) -> Entity {
+	let clothed = BraidmanConfig::default_preview().clothed();
+	let bounds = character_bounds(&clothed);
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let host = ComponentsOnly(clothed);
+	commands
+		.spawn_scene((
+			host.host(&lod_ref),
+			bsn! {
+				template_value(Transform::from_rotation(Quat::from_rotation_y(FRAC_PI_2)))
+			},
+		))
+		.id()
 }
 
 fn cell_translation(index: usize, rows: usize) -> Vec3 {
@@ -88,12 +140,12 @@ fn cell_translation(index: usize, rows: usize) -> Vec3 {
 	let row = (index / GALLERY_COLS) as f32;
 	let cols = GALLERY_COLS as f32;
 	let rows = rows.max(1) as f32;
-	Vec3::new((col - (cols - 1.0) * 0.5) * SPACING_X, GUN_Y, (row - (rows - 1.0) * 0.5) * SPACING_Z)
+	Vec3::new((col - (cols - 1.0) * 0.5) * SPACING_X, 0.0, (row - (rows - 1.0) * 0.5) * SPACING_Z)
 }
 
 fn frame_weapon_gallery(transform: &mut Transform, controller: &mut CameraController) {
-	let look_at = Vec3::new(0.0, GUN_Y, 0.0);
-	*transform = Transform::from_xyz(0.0, 1.5, 5.2).looking_at(look_at, Vec3::Y);
+	let look_at = Vec3::new(0.0, 1.0, 0.0);
+	*transform = Transform::from_xyz(0.0, 2.2, 12.0).looking_at(look_at, Vec3::Y);
 	let rotation = transform.rotation;
 	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
 	let sin_yaw = 2.0 * (w * y + x * z);
@@ -151,6 +203,6 @@ mod tests {
 		let first = cell_translation(0, rows);
 		let last_col = cell_translation(GALLERY_COLS - 1, rows);
 		assert!((first.x + last_col.x).abs() < 1e-5);
-		assert!(first.y > 0.0);
+		assert!(first.y.abs() < 1e-5);
 	}
 }
