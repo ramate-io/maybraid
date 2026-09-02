@@ -13,7 +13,7 @@
 //! Begin admits by count ([`LodChunkFulfillBudget::begins_per_frame`]) and shared
 //! begin weight ([`LodChunkFulfillBudget::begin_weights_per_frame`], sum of
 //! primitive weights). Classified candidates are sorted by viewer XZ distance
-//! within each class / near-far list. The per-`T` candidate scan is capped
+//! within each class / near-far list. The shared candidate scan is capped
 //! ([`LodChunkFulfillBudget::begin_scan_per_frame`]) and skipped when the clock
 //! is empty. Active begin quota folds into Desired.
 //! Complete caps visibility swaps ([`LodChunkFulfillBudget::completes_per_frame`]).
@@ -37,22 +37,27 @@ use std::marker::PhantomData;
 use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 
+use crate::scene::refresh::LodSceneRefreshLevelsPlugin;
 use crate::scene::SemanticLodScene;
 
+use super::super::cull_regions::produce_lod_cull_for_region_erased;
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodRefreshSystems};
 use super::cull::{apply_lod_cull_requests, cull_lod_level_roots, drain_lod_cull, LodCullRequest};
 
-pub use begin::begin_chunk_lod_fulfill;
+pub use begin::{begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased};
 pub use complete::{bump_nested_streamed_progress, complete_chunk_lod_fulfill};
 pub use drain::drain_chunk_lod_fulfill;
-pub use resume::cancel_unstarted_cull_for_desired_pending_roots;
+pub use resume::{
+	cancel_unstarted_cull_for_desired_pending_roots,
+	cancel_unstarted_cull_for_desired_pending_roots_erased,
+};
 pub use schedule::reset_lod_chunk_budget;
 pub use types::{
-	FulfillClass, LodChunkAtomicOverrun, LodChunkBeginClock, LodChunkBudgetClock,
-	LodChunkDrainCursor, LodChunkDrainDiagnostics, LodChunkFulfillBudget, LodChunkFulfillment,
-	LodCullInFlight, LodLazyPending, LodLevelRootPending, LodLevelRootStreamed,
-	LodSceneHostStreamed,
+	FulfillClass, LodChunkAtomicOverrun, LodChunkBeginClock, LodChunkBeginScanCursor,
+	LodChunkBudgetClock, LodChunkDrainCursor, LodChunkDrainDiagnostics, LodChunkFulfillBudget,
+	LodChunkFulfillment, LodCullInFlight, LodLazyPending, LodLevelRootPending,
+	LodLevelRootStreamed, LodSceneHostStreamed,
 };
 
 /// Register incremental chunk fulfill systems for one [`SemanticLodScene`] host type.
@@ -94,13 +99,13 @@ pub enum LodChunkCullSystems {
 
 /// Substeps within [`LodRefreshSystems::Fulfill`] after budget reset.
 ///
-/// [`Self::Drain`] / [`Self::Complete`] are registered **once** (shared). Per-host-type
-/// plugins only add [`begin_chunk_lod_fulfill`] into [`Self::Begin`].
+/// Begin, drain, and complete are each registered once and dispatch semantic
+/// scene work through the host's type-erased producer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, SystemSet)]
 pub enum LodChunkFulfillSystems {
 	/// Cancel unstarted [`LodCullInFlight`] on desired pending roots.
 	Resume,
-	/// Per-`T` [`begin_chunk_lod_fulfill`].
+	/// Shared [`begin_chunk_lod_fulfill_erased`].
 	Begin,
 	/// Shared exclusive semantic spawn drain (`World::spawn_scene` + time budget).
 	Drain,
@@ -117,6 +122,7 @@ impl Plugin for LodChunkBudgetPlugin {
 		app.init_resource::<LodChunkFulfillBudget>()
 			.init_resource::<LodChunkBudgetClock>()
 			.init_resource::<LodChunkBeginClock>()
+			.init_resource::<LodChunkBeginScanCursor>()
 			.init_resource::<LodChunkDrainCursor>()
 			.init_resource::<LodChunkDrainDiagnostics>()
 			.add_message::<LodCullRequest>()
@@ -147,11 +153,15 @@ impl Plugin for LodChunkBudgetPlugin {
 				Update,
 				(
 					reset_lod_chunk_budget.in_set(LodRefreshSystems::Fulfill),
+					cancel_unstarted_cull_for_desired_pending_roots_erased
+						.in_set(LodChunkFulfillSystems::Resume),
+					begin_chunk_lod_fulfill_erased.in_set(LodChunkFulfillSystems::Begin),
 					drain_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Drain),
 					bump_nested_streamed_progress
 						.in_set(LodChunkFulfillSystems::Complete)
 						.before(complete_chunk_lod_fulfill),
 					complete_chunk_lod_fulfill.in_set(LodChunkFulfillSystems::Complete),
+					produce_lod_cull_for_region_erased.in_set(LodChunkCullSystems::Enqueue),
 					apply_lod_cull_requests.in_set(LodChunkCullSystems::Apply),
 					drain_lod_cull.in_set(LodChunkCullSystems::Drain),
 				),
@@ -171,14 +181,9 @@ where
 {
 	fn build(&self, app: &mut App) {
 		ensure_chunk_budget(app);
-		app.add_systems(
-			Update,
-			(
-				cancel_unstarted_cull_for_desired_pending_roots::<T>
-					.in_set(LodChunkFulfillSystems::Resume),
-				begin_chunk_lod_fulfill::<T>.in_set(LodChunkFulfillSystems::Begin),
-			),
-		);
+		if !app.is_plugin_added::<LodSceneRefreshLevelsPlugin<T>>() {
+			app.add_plugins(LodSceneRefreshLevelsPlugin::<T>::default());
+		}
 	}
 }
 

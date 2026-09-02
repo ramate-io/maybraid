@@ -46,9 +46,15 @@ impl StandardMaterialLib<'_> {
 }
 
 impl MaterialLib for StandardMaterialLib<'_> {
-	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
+	fn try_fulfill(
+		&mut self,
+		entity: Entity,
+		material_ref: &MaterialRef,
+		commands: &mut Commands,
+	) -> bool {
 		let handle = self.resolve(material_ref);
 		commands.entity(entity).insert(MeshMaterial3d(handle));
+		true
 	}
 }
 
@@ -58,9 +64,9 @@ pub struct StandardMaterialRefPlugin;
 impl Plugin for StandardMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<StandardMaterialRefCache>();
-		// A domain lib (Chico) already owns fulfill and falls through to
-		// [`StandardMaterialLib`]. A second [`MaterialRefPlugin`] would race
-		// the same [`MaterialRefRoot`]s and used to panic the Update schedule.
+		// A composed domain lib already owns fulfill (and should include
+		// [`StandardMaterialLib`] as its fallback). A second [`MaterialRefPlugin`]
+		// would race the same [`MaterialRefRoot`]s.
 		if material_ref_shared_installed(app) {
 			return;
 		}

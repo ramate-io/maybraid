@@ -9,7 +9,8 @@ pub fn ui_config() -> GameCommandUiConfig {
 		title: "Maybraid menu playground — / for commands — Y or F1 drawer".into(),
 		empty_console_text: "Console: `show home`, `show in-game`, `show character`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.10, 0.14, 0.82),
-		controls_hint: "arrows select — Enter choose — Y or F1 drawer — / cmd".into(),
+		controls_hint:
+			"stick/dpad or arrows — A/Enter choose — B/Esc back — Y or F1 drawer — / cmd".into(),
 	}
 }
 

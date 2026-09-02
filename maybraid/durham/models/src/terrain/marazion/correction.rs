@@ -17,17 +17,18 @@ use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::{CorrectionStage, HydroComplex};
 use procedural_common::Bounds2;
+use std::sync::Arc;
 
 /// Origin-grid hydrology complex: unions hydrology nodes from both pocket-water passes.
 #[derive(Debug, Clone, Component)]
 pub struct HydroComplexCell {
 	pub cell: Aabb3d,
-	pub complex: HydroComplex,
+	pub complex: Arc<HydroComplex>,
 }
 
 impl HydroComplexCell {
 	/// Indexed complex when it has hydrology members.
-	pub fn indexed(&self) -> Option<&HydroComplex> {
+	pub fn indexed(&self) -> Option<&Arc<HydroComplex>> {
 		(!self.complex.is_empty()).then_some(&self.complex)
 	}
 }
@@ -71,7 +72,11 @@ where
 				cell,
 				lod_ref,
 			) {
-			hydrology.extend(pass.hydro_nodes());
+			hydrology.extend(
+				pass.hydro_nodes()
+					.into_iter()
+					.filter(|node| node.correction_intersects(cell_bounds)),
+			);
 		}
 		for pass in
 			GeneratingSpatialIndex::<MarazionPocketWatersLowPass>::get_or_generate_region_values(
@@ -79,10 +84,14 @@ where
 				cell,
 				lod_ref,
 			) {
-			hydrology.extend(pass.hydro_nodes());
+			hydrology.extend(
+				pass.hydro_nodes()
+					.into_iter()
+					.filter(|node| node.correction_intersects(cell_bounds)),
+			);
 		}
 
-		let complex = HydroComplex::new(cell_bounds, seed).with_hydro(hydrology);
+		let complex = Arc::new(HydroComplex::new(cell_bounds, seed).with_hydro(hydrology));
 
 		Some((Self { cell, complex }, cell))
 	}
@@ -94,28 +103,28 @@ where
 #[derive(Debug, Clone, Component)]
 pub struct WatershedCarvingCell {
 	pub cell: Aabb3d,
-	pub complex: Option<HydroComplex>,
+	pub complex: Option<Arc<HydroComplex>>,
 }
 
 /// Rim correction (raise-only bank toward shelf_anchor + rim_lift).
 #[derive(Debug, Clone, Component)]
 pub struct WatershedRimmingCell {
 	pub cell: Aabb3d,
-	pub complex: Option<HydroComplex>,
+	pub complex: Option<Arc<HydroComplex>>,
 }
 
 /// Apron correction (fade from bank toward identity).
 #[derive(Debug, Clone, Component)]
 pub struct WatershedAproningCell {
 	pub cell: Aabb3d,
-	pub complex: Option<HydroComplex>,
+	pub complex: Option<Arc<HydroComplex>>,
 }
 
 fn complex_from_complex_cell<S>(
 	spatial_index: &mut S,
 	id: Id,
 	lod_ref: &LodRef,
-) -> Option<(Aabb3d, Option<HydroComplex>)>
+) -> Option<(Aabb3d, Option<Arc<HydroComplex>>)>
 where
 	S: GeneratingSpatialIndex<HydroComplexCell>
 		+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>

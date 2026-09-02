@@ -77,6 +77,8 @@ fn spawn_sky_dome(
 		unlit: true,
 		alpha_mode: AlphaMode::Blend,
 		cull_mode: None,
+		// Geometry shaders apply DistanceFog; this dome is a separate XZ wash.
+		fog_enabled: false,
 		..default()
 	});
 	commands.spawn((

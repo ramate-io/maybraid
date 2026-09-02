@@ -35,7 +35,7 @@ use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefAdmitBudget;
 
-use crate::stick_physics::{sync_vegetation_stick_colliders, StickPhysicsPlugin};
+use crate::stick_physics::{register_vegetation_stick_colliders, StickPhysicsPlugin};
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -67,7 +67,7 @@ macro_rules! avian_host {
 macro_rules! flattened_plant_host {
 	($app:expr, $ty:ty) => {{
 		avian_host!($app, FlattenedPlant<$ty>);
-		$app.add_systems(Update, sync_vegetation_stick_colliders::<FlattenedPlant<$ty>>);
+		register_vegetation_stick_colliders::<FlattenedPlant<$ty>>($app);
 	}};
 }
 

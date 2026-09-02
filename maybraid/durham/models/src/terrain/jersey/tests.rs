@@ -155,3 +155,12 @@ fn high_pass_cells_are_much_larger_than_low_pass() -> Result<()> {
 	assert!(high > low * 5.0, "high={high} low={low}");
 	Ok(())
 }
+
+#[test]
+fn from_world_seed_42_matches_default_family_seeds() {
+	let configs = JerseyStampConfigs::from_world_seed(42);
+	assert_eq!(configs.plateau.low_pass.seed, 42);
+	assert_eq!(configs.plateau.high_pass.seed, 1042);
+	assert_eq!(configs.valley.low_pass.seed, 47);
+	assert_eq!(configs.valley.high_pass.seed, 1047);
+}

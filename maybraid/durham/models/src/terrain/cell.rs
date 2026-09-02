@@ -242,11 +242,52 @@ pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
 	)
 }
 
+/// Origin-cell [`OriginalId`]s covering `region` for a materialized layout.
+///
+/// Fine-grid cells come only from [`TerrainCellLayout::fine_request_region`],
+/// not from the padded request AABB. Each [`TerrainCellLayout::outer_rings`]
+/// entry then tiles only its own expanded frame (not the remaining pad), so
+/// 2× cells do not fill the 4× ring and 160 m cells do not fill either ring.
+pub fn origin_cell_ids_for_layout(layout: &TerrainCellLayout, region: Aabb3d) -> Vec<OriginalId> {
+	let fine = layout.fine_request_region();
+	let mut ids: Vec<OriginalId> = cell_coords_for_region(fine, layout.cell_size)
+		.filter_map(|(ix, iz)| {
+			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
+			region.intersects(&bounds).then(|| OriginalId(Id::from_cell(bounds)))
+		})
+		.collect();
+
+	let mut covered = fine;
+	for outer in &layout.outer_rings {
+		if outer.rows <= 0 {
+			continue;
+		}
+		let g = outer.cell_size.max(1e-3);
+		let hole: std::collections::HashSet<(i32, i32)> =
+			cell_coords_for_region(covered, g).collect();
+		let expanded = expand_aabb_xz(covered, outer.rows as f32 * g);
+		let outer_ids = cell_coords_for_region(expanded, g).filter_map(|(ix, iz)| {
+			if hole.contains(&(ix, iz)) {
+				return None;
+			}
+			let bounds = cell_bounds(ix, iz, g, layout.vertical_half_extent);
+			if !region.intersects(&bounds) {
+				return None;
+			}
+			Some(OriginalId(Id::from_cell(bounds)))
+		});
+		ids.extend(outer_ids);
+		covered = expanded;
+	}
+
+	ids
+}
+
 /// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
 ///
 /// Emits fine-grid cells plus nested [`TerrainCellLayout::outer_rings`] macro
 /// cells that intersect `region` and do not overlap the previously covered
-/// footprint.
+/// footprint. See [`origin_cell_ids_for_layout`].
 pub fn original_ids_for_origin_cells<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
 where
 	S: GeneratingSpatialIndex<TerrainCellLayout>,
@@ -271,37 +312,55 @@ where
 	else {
 		return Vec::new();
 	};
-	let layout = layout.clone();
-	let mut ids: Vec<OriginalId> = cell_coords_for_region(region, layout.cell_size)
-		.map(|(ix, iz)| {
-			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
-			OriginalId(Id::from_cell(bounds))
-		})
-		.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
-		.collect();
+	origin_cell_ids_for_layout(&layout.clone(), region)
+}
 
-	let mut covered = layout.fine_request_region();
-	for outer in &layout.outer_rings {
-		if outer.rows <= 0 {
-			continue;
-		}
-		let g = outer.cell_size.max(1e-3);
-		let hole: std::collections::HashSet<(i32, i32)> =
-			cell_coords_for_region(covered, g).collect();
-		let expanded = expand_aabb_xz(covered, outer.rows as f32 * g);
-		let outer_ids = cell_coords_for_region(region, g).filter_map(|(ix, iz)| {
-			if hole.contains(&(ix, iz)) {
-				return None;
-			}
-			let bounds = cell_bounds(ix, iz, g, layout.vertical_half_extent);
-			if !region.intersects(&bounds) {
-				return None;
-			}
-			Some(OriginalId(Id::from_cell(bounds)))
-		});
-		ids.extend(outer_ids);
-		covered = expanded;
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn world_like_layout() -> TerrainCellLayout {
+		let mut layout = TerrainCellLayout::default();
+		layout.origin = IVec2::new(-16, -16);
+		layout.extents = UVec2::new(32, 32);
+		layout.outer_rings = vec![
+			OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: 2 },
+			OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: 1 },
+		];
+		layout
 	}
 
-	ids
+	fn edge_len(id: &OriginalId) -> f32 {
+		let bounds = id.0.origin_cell_bounds().expect("origin cell");
+		bounds.max.x - bounds.min.x
+	}
+
+	fn count_edge(ids: &[OriginalId], expected: f32) -> usize {
+		ids.iter().filter(|id| (edge_len(id) - expected).abs() < 1e-3).count()
+	}
+
+	#[test]
+	fn padded_request_does_not_paint_fine_cells_on_macro_rings() {
+		let layout = world_like_layout();
+		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
+		let fine = TERRAIN_CELL_SIZE;
+		assert_eq!(count_edge(&ids, fine), 32 * 32);
+		assert_eq!(count_edge(&ids, 2.0 * fine), 144);
+		assert_eq!(count_edge(&ids, 4.0 * fine), 44);
+		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+	}
+
+	#[test]
+	fn outer_ring_query_does_not_emit_fine_cells() {
+		let layout = world_like_layout();
+		let fine_region = layout.fine_request_region();
+		let pad = 4.0 * TERRAIN_CELL_SIZE;
+		let outer_query = Aabb3d::from_min_max(
+			Vec3::new(fine_region.max.x + pad * 0.25, fine_region.min.y, 0.0),
+			Vec3::new(fine_region.max.x + pad * 0.75, fine_region.max.y, pad),
+		);
+		let ids = origin_cell_ids_for_layout(&layout, outer_query);
+		assert_eq!(count_edge(&ids, TERRAIN_CELL_SIZE), 0);
+		assert!(!ids.is_empty());
+	}
 }

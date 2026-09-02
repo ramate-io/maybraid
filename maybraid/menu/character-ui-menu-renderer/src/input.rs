@@ -1,8 +1,10 @@
 //! Pointer and keyboard → [`MenuFocus`] / [`MenuActivate`] / overlay events.
 
 use bevy::prelude::*;
+use maybraid_input::{MenuNav, MenuNavImpulse};
 use menu_components::{
-	HudMenu, HudMenuItem, HudOverlayMenu, MenuActivate, MenuFocus, TextMenuInputLock,
+	HudMenu, HudMenuItem, HudOverlayMenu, KeyboardMenuNav, MenuActivate, MenuFocus,
+	TextMenuInputLock,
 };
 
 use crate::event::{OverlayClose, OverlayOpen};
@@ -67,6 +69,7 @@ pub fn emit_hud_focus<E: Copy + Send + Sync + 'static>(
 
 pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	overlay_menus: Query<(Entity, &HudMenu), With<HudOverlayMenu>>,
 	panel_menus: Query<(Entity, &HudMenu), Without<HudOverlayMenu>>,
@@ -79,7 +82,7 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 	)>,
 	mut commands: Commands,
 ) {
-	if lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
+	if !keyboard_nav.is_enabled() || lock.0 || !keyboard.just_pressed(KeyCode::Enter) {
 		return;
 	}
 	let Some((menu_entity, menu)) =
@@ -87,7 +90,44 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 	else {
 		return;
 	};
-	for (entity, item, button, open, close) in &items {
+	activate_selected_hud_item(menu_entity, menu, &items, &mut commands);
+}
+
+pub fn emit_hud_activate_on_nav<E: Copy + Send + Sync + 'static>(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	menus: Query<&HudMenu>,
+	items: Query<(
+		Entity,
+		&HudMenuItem,
+		Option<&MenuButton<E>>,
+		Option<&OpenSelectKey>,
+		Option<&CloseOverlaySelect>,
+	)>,
+	mut commands: Commands,
+) {
+	if lock.0 || impulse.event().nav != MenuNav::Select {
+		return;
+	}
+	let Ok(menu) = menus.get(impulse.entity) else {
+		return;
+	};
+	activate_selected_hud_item(impulse.entity, menu, &items, &mut commands);
+}
+
+fn activate_selected_hud_item<E: Copy + Send + Sync + 'static>(
+	menu_entity: Entity,
+	menu: &HudMenu,
+	items: &Query<(
+		Entity,
+		&HudMenuItem,
+		Option<&MenuButton<E>>,
+		Option<&OpenSelectKey>,
+		Option<&CloseOverlaySelect>,
+	)>,
+	commands: &mut Commands,
+) {
+	for (entity, item, button, open, close) in items.iter() {
 		if item.menu != menu_entity || item.index != menu.selected {
 			continue;
 		}
@@ -106,11 +146,27 @@ pub fn emit_hud_activate_on_enter<E: Copy + Send + Sync + 'static>(
 
 pub fn emit_overlay_close_on_escape(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	roots: Query<Entity, With<OverlaySelectRoot>>,
 	mut commands: Commands,
 ) {
-	if lock.0 || !keyboard.just_pressed(KeyCode::Escape) {
+	if !keyboard_nav.is_enabled() || lock.0 || !keyboard.just_pressed(KeyCode::Escape) {
+		return;
+	}
+	let Ok(root) = roots.single() else {
+		return;
+	};
+	commands.trigger(OverlayClose { entity: root });
+}
+
+pub fn emit_overlay_close_on_nav(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	roots: Query<Entity, With<OverlaySelectRoot>>,
+	mut commands: Commands,
+) {
+	if lock.0 || impulse.event().nav != MenuNav::Back {
 		return;
 	}
 	let Ok(root) = roots.single() else {

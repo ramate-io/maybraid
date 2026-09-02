@@ -28,7 +28,7 @@ use crate::camera::CameraController;
 use crate::commands::show::{ShowConfig, ShowRoot, ShowSubject};
 use crate::ground::GroundPlane;
 
-/// Default present ring multiplier (`1` → 1 km present / 2 km generate).
+/// Default present ring multiplier (`1` → 1 km grove present / 3 km generate).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
 
 /// Hopscotch default so neighboring 1600 m cells stay related.
@@ -368,8 +368,8 @@ impl ForestStreamLod<'_> {
 			self.generate_keep.region = None;
 			self.keep.region = None;
 			self.index.clear();
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			last_key.take();
 			return;
@@ -379,8 +379,8 @@ impl ForestStreamLod<'_> {
 		let key_changed = last_key.as_ref() != Some(&key);
 		if key_changed {
 			self.index.clear();
-			self.generate_queue.pending.clear();
-			self.present_queue.pending.clear();
+			self.generate_queue.clear();
+			self.present_queue.clear();
 			self.presenter.clear(commands);
 			*last_key = Some(key);
 		}
@@ -471,7 +471,7 @@ mod tests {
 	}
 
 	#[test]
-	fn default_stream_radii_are_one_and_two_kilometres() -> Result<()> {
+	fn default_stream_radii_are_one_and_three_kilometres() -> Result<()> {
 		let (present, generate) = stream_radii_m(DEFAULT_FOREST_STREAM_RADIUS);
 		assert!((present - GROVE_PRESENT_RADIUS_M).abs() < 1e-3);
 		assert!((generate - GROVE_GENERATE_RADIUS_M).abs() < 1e-3);

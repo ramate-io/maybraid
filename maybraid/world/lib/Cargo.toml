@@ -10,11 +10,18 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
+crozon-characters = { workspace = true }
+durham-terrain-models = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
+lod-avian = { workspace = true }
+material-ref = { workspace = true }
+maybraid-character-controller = { workspace = true }
+maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }
 chico-vegetation-on-terrain-playground = { workspace = true }
 

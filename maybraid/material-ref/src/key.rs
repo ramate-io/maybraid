@@ -8,7 +8,7 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::{Handle, Resource};
 use procedural_common::{NoiseParams, NoiseType};
 
-use crate::material_ref::{MaterialId, MaterialRef};
+use crate::material_ref::{MaterialId, MaterialRef, MATERIAL_RASTER_SAMPLES};
 
 /// Hashable / equality key for memoizing resolved material handles.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -16,6 +16,8 @@ pub struct MaterialRefKey {
 	pub name: MaterialId,
 	pub palette: Vec<[u32; 4]>,
 	pub noise: NoiseParamsKey,
+	pub rasters: Vec<[u32; MATERIAL_RASTER_SAMPLES]>,
+	pub scalars: Vec<u32>,
 }
 
 impl From<&MaterialRef> for MaterialRefKey {
@@ -24,6 +26,18 @@ impl From<&MaterialRef> for MaterialRefKey {
 			name: r.name.clone(),
 			palette: r.palette.iter().map(color_bits).collect(),
 			noise: NoiseParamsKey::from(&r.noise),
+			rasters: r
+				.rasters
+				.iter()
+				.map(|(_, samples)| {
+					let mut bits = [0u32; MATERIAL_RASTER_SAMPLES];
+					for (slot, value) in bits.iter_mut().zip(samples) {
+						*slot = value.to_bits();
+					}
+					bits
+				})
+				.collect(),
+			scalars: r.scalars.as_slice().iter().map(|value| value.to_bits()).collect(),
 		}
 	}
 }

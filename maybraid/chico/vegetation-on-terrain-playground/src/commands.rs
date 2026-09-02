@@ -135,7 +135,7 @@ pub enum PlaygroundCommand {
 			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
 		)]
 		noise: NoiseParams,
-		/// Present-ring multiplier (`1` = 1 km present / 2 km generate).
+		/// Present-ring multiplier (`1` = 1 km present / 3 km generate).
 		#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
 		stream_radius: u32,
 	},

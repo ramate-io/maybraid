@@ -6,8 +6,13 @@ mod loading_demo;
 mod preview;
 mod ui;
 
+pub use character::{
+	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
+	RequestShowCharacter,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use preview::CharacterPreviewPlugin;
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -18,13 +23,12 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
+use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
+use maybraid_menu_controller::MenuControllerPlugin;
 use menu_screens::{
 	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
 	LoadingScreenSystems,
 };
-
-use crate::character::{CharacterMenuState, CharacterScreen, CharacterScreenPlugin};
-use crate::preview::CharacterPreviewPlugin;
 
 pub struct MenuPlaygroundPlugin;
 
@@ -44,12 +48,14 @@ impl Plugin for MenuPlaygroundPlugin {
 			toggle_keys: Vec::new(),
 			..CameraLookConfig::default()
 		}))
+		.add_plugins(VirtualPadPlugin::new(VirtualPadConfig { debug_overlay: true, ..default() }))
 		.add_plugins((
 			HomeScreenPlugin,
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
+			MenuControllerPlugin,
 		))
 		.add_systems(
 			Startup,

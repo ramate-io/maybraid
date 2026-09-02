@@ -2,6 +2,7 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::{StaticSystemParam, SystemParam};
@@ -10,8 +11,8 @@ use bevy::prelude::*;
 
 use super::RegionPresenter;
 use crate::gen::{
-	expand_keep_xz, expire_pending_outside_keep, id_lives_in_keep, id_xz_distance2,
-	keep_region_changed, Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
+	entering_keep_regions, expand_keep_xz, id_lives_in_keep, id_xz_distance2, keep_region_changed,
+	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
 	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
@@ -49,7 +50,9 @@ impl<M: Send + Sync + 'static> LodPresentCullRegion<M> {
 	}
 }
 
-/// How many ids to handle per frame. Independent of generate / scene.
+/// How many ids each present drain may handle per frame.
+///
+/// Independent of generation and scene fulfillment.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LodPresentBudget {
 	pub ids_per_frame: u32,
@@ -61,7 +64,23 @@ impl Default for LodPresentBudget {
 	}
 }
 
-/// How many leaving present ids may recursive-despawn per frame.
+/// Independent wall-clock guard applied by each present drain.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LodPresentTimeBudget {
+	/// Per-drain wall time. Zero disables the time limit.
+	pub time_per_frame: Duration,
+	/// Warn when one non-interruptible region/ID quantum exceeds this duration.
+	/// Zero disables warnings.
+	pub max_atomic_cost: Duration,
+}
+
+impl Default for LodPresentTimeBudget {
+	fn default() -> Self {
+		Self { time_per_frame: Duration::from_millis(2), max_atomic_cost: Duration::from_millis(3) }
+	}
+}
+
+/// How many leaving present ids each cull drain may recursive-despawn per frame.
 ///
 /// Hide is uncapped (cheap `Visibility::Hidden`). Despawn is one grove id
 /// (all of its host entities) per slot — the parent hitch.
@@ -79,13 +98,86 @@ impl Default for LodPresentCullBudget {
 /// Pending present ids for type `T`.
 #[derive(Resource, Debug)]
 pub struct LodPresentQueue<T> {
-	pub pending: VecDeque<Id>,
+	pending: VecDeque<Id>,
+	pending_ids: HashSet<Id>,
+	scan_regions: VecDeque<Aabb3d>,
+	reset_scan: bool,
 	_marker: PhantomData<T>,
 }
 
 impl<T> Default for LodPresentQueue<T> {
 	fn default() -> Self {
-		Self { pending: VecDeque::new(), _marker: PhantomData }
+		Self {
+			pending: VecDeque::new(),
+			pending_ids: HashSet::new(),
+			scan_regions: VecDeque::new(),
+			reset_scan: true,
+			_marker: PhantomData,
+		}
+	}
+}
+
+impl<T> LodPresentQueue<T> {
+	pub fn is_empty(&self) -> bool {
+		self.pending.is_empty()
+	}
+
+	pub fn contains(&self, id: &Id) -> bool {
+		self.pending_ids.contains(id)
+	}
+
+	pub fn enqueue(&mut self, id: Id) -> bool {
+		self.enqueue_back(id)
+	}
+
+	pub fn clear(&mut self) {
+		self.pending.clear();
+		self.pending_ids.clear();
+		self.scan_regions.clear();
+		self.reset_scan = true;
+	}
+
+	fn enqueue_back(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_back(id);
+		true
+	}
+
+	fn enqueue_front(&mut self, id: Id) -> bool {
+		if !self.pending_ids.insert(id) {
+			return false;
+		}
+		self.pending.push_front(id);
+		true
+	}
+
+	fn pop_front(&mut self) -> Option<Id> {
+		let id = self.pending.pop_front()?;
+		self.pending_ids.remove(&id);
+		Some(id)
+	}
+
+	fn enqueue_scan(&mut self, region: Aabb3d) {
+		if !self.scan_regions.iter().any(|queued| regions_match(*queued, region)) {
+			self.scan_regions.push_back(region);
+		}
+	}
+
+	fn take_scan_reset(&mut self) -> bool {
+		std::mem::take(&mut self.reset_scan)
+	}
+
+	fn expire_outside_keep(&mut self, keep: Option<Aabb3d>, slack: f32) {
+		let Some(keep) = keep else {
+			return;
+		};
+		self.pending.retain(|id| id_lives_in_keep(*id, keep, slack));
+		self.pending_ids.clear();
+		self.pending_ids.extend(self.pending.iter().copied());
+		let live = expand_keep_xz(keep, slack);
+		self.scan_regions.retain(|region| regions_overlap_xz(*region, live));
 	}
 }
 
@@ -141,21 +233,25 @@ impl Plugin for LodPresentSetsPlugin {
 		if !app.is_plugin_added::<LodNodePlugin>() {
 			app.add_plugins(LodNodePlugin);
 		}
-		app.configure_sets(
-			Update,
-			(
-				LodPresentSystems::Produce,
-				LodPresentSystems::Drain,
-				LodPresentSystems::ProduceCull,
-				LodPresentSystems::Cull,
-			)
-				.chain()
-				.after(LodNodeSystems::Track),
-		);
+		app.init_resource::<LodPresentBudget>()
+			.init_resource::<LodPresentTimeBudget>()
+			.init_resource::<LodPresentCullBudget>()
+			.configure_sets(
+				Update,
+				(
+					LodPresentSystems::Produce,
+					LodPresentSystems::Drain,
+					LodPresentSystems::ProduceCull,
+					LodPresentSystems::Cull,
+				)
+					.chain()
+					.after(LodNodeSystems::Track),
+			);
 	}
 }
 
-/// Read pose-changed drivers, emit [`LodPresentRegion<M>`], record keep AABB.
+/// Read pose-changed drivers, emit newly entered [`LodPresentRegion<M>`]
+/// strips, and record the full keep AABB.
 pub fn produce_lod_present_regions<P, F, M>(
 	producer: Res<P>,
 	nodes: Query<
@@ -164,6 +260,7 @@ pub fn produce_lod_present_regions<P, F, M>(
 	>,
 	mut writer: MessageWriter<LodPresentRegion<M>>,
 	mut keep: ResMut<LodPresentKeepRegion<M>>,
+	mut previous: Local<Option<Aabb3d>>,
 ) where
 	P: Resource + LodRefreshRegions,
 	F: QueryFilter + 'static,
@@ -178,8 +275,12 @@ pub fn produce_lod_present_regions<P, F, M>(
 	else {
 		return;
 	};
+	let baseline = (*previous).or(keep.region);
 	keep.region = Some(region);
-	writer.write(LodPresentRegion::<M>::new(region));
+	for entered in entering_keep_regions(baseline, region) {
+		writer.write(LodPresentRegion::<M>::new(entered));
+	}
+	*previous = Some(region);
 }
 
 /// Enqueue tracked ids that need handle, then present a budgeted slice.
@@ -188,12 +289,13 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	index: Res<S>,
 	mut queue: ResMut<LodPresentQueue<T>>,
 	budget: Res<LodPresentBudget>,
+	time_budget: Res<LodPresentTimeBudget>,
 	mut regions: MessageReader<LodPresentRegion<M>>,
 	mut generated: MessageReader<LodGenerated<T>>,
 	keep: Res<LodPresentKeepRegion<M>>,
 	nodes: Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut last_keep: Local<Option<Aabb3d>>,
-	mut pending_ids: Local<HashSet<Id>>,
+	mut scan_initialized: Local<bool>,
 ) where
 	T: Send + Sync + 'static,
 	S: Resource + SpatialIndex<T>,
@@ -202,22 +304,57 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 	M: Send + Sync + 'static,
 	F: QueryFilter + 'static,
 {
+	let started = Instant::now();
 	let mut presenter = presenter.into_inner();
-	expire_pending_outside_keep(&mut queue.pending, keep.region, keep.slack_xz);
-	pending_ids.clear();
-	pending_ids.extend(queue.pending.iter().copied());
-
-	let mut scan: Vec<Aabb3d> = regions.read().map(|message| message.region).collect();
+	let scan_was_reset = queue.take_scan_reset();
+	if scan_was_reset {
+		*scan_initialized = false;
+	}
 	if keep_region_changed(*last_keep, keep.region) {
 		*last_keep = keep.region;
-		if let Some(keep_region) = keep.region {
-			if !scan.iter().any(|region| regions_match(*region, keep_region)) {
-				scan.push(keep_region);
-			}
+		queue.expire_outside_keep(keep.region, keep.slack_xz);
+	}
+
+	let mut received_region = false;
+	for message in regions.read() {
+		received_region = true;
+		queue.enqueue_scan(message.region);
+	}
+	if scan_was_reset {
+		if let Some(region) = keep.region {
+			queue.scan_regions.clear();
+			queue.enqueue_scan(region);
+			*scan_initialized = true;
+		} else if received_region {
+			*scan_initialized = true;
+		}
+	} else if received_region {
+		*scan_initialized = true;
+	} else if !*scan_initialized {
+		if let Some(region) = keep.region {
+			queue.enqueue_scan(region);
+			*scan_initialized = true;
 		}
 	}
-	let mut reorder_pending = !scan.is_empty();
-	for region in scan {
+
+	let mut reorder_pending = false;
+	for message in generated.read() {
+		if keep
+			.region
+			.is_some_and(|region| !id_lives_in_keep(message.id, region, keep.slack_xz))
+		{
+			continue;
+		}
+		if queue.enqueue_back(message.id) {
+			reorder_pending = true;
+		}
+	}
+
+	while !time_up(started, time_budget.time_per_frame) {
+		let Some(region) = queue.scan_regions.pop_front() else {
+			break;
+		};
+		let quantum = Instant::now();
 		for tracked in index.tracked_ids_for(region) {
 			let Some(version) = index.version(tracked.0) else {
 				continue;
@@ -233,24 +370,11 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 				) {
 				continue;
 			}
-			if pending_ids.insert(tracked.0) {
-				queue.pending.push_back(tracked.0);
+			if queue.enqueue_back(tracked.0) {
 				reorder_pending = true;
 			}
 		}
-	}
-
-	for message in generated.read() {
-		if keep
-			.region
-			.is_some_and(|region| !id_lives_in_keep(message.id, region, keep.slack_xz))
-		{
-			continue;
-		}
-		if pending_ids.insert(message.id) {
-			queue.pending.push_back(message.id);
-			reorder_pending = true;
-		}
+		warn_atomic_overrun("present region scan", quantum.elapsed(), time_budget.max_atomic_cost);
 	}
 
 	if queue.pending.is_empty() {
@@ -265,20 +389,26 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 
 	let origin = lod_ref.current_transform.translation;
 	if reorder_pending {
+		let quantum = Instant::now();
 		queue.pending.make_contiguous().sort_by(|a, b| {
 			id_xz_distance2(*a, origin)
 				.partial_cmp(&id_xz_distance2(*b, origin))
 				.unwrap_or(std::cmp::Ordering::Equal)
 		});
+		warn_atomic_overrun(
+			"present queue ordering",
+			quantum.elapsed(),
+			time_budget.max_atomic_cost,
+		);
 	}
 
-	let n = budget.ids_per_frame.max(1) as usize;
+	let n = budget.ids_per_frame as usize;
 	let mut handled = 0;
-	while handled < n {
-		let Some(id) = queue.pending.pop_front() else {
+	while handled < n && !time_up(started, time_budget.time_per_frame) {
+		let Some(id) = queue.pop_front() else {
 			break;
 		};
-		pending_ids.remove(&id);
+		handled += 1;
 		let Some(version) = index.version(id) else {
 			continue;
 		};
@@ -291,17 +421,34 @@ pub fn drain_lod_present<T, S, Pr, M, F>(
 		let Some(value) = index.get(id) else {
 			continue;
 		};
+		let quantum = Instant::now();
 		presenter.handle(id, version, value, lod_ref);
-		handled += 1;
+		warn_atomic_overrun("present ID", quantum.elapsed(), time_budget.max_atomic_cost);
 		// Grow-then-spawn presenters may consume a slot without stamping
 		// `presented_version`. Re-queue so the next slot can finish without a
 		// keep rescan.
 		let still_needs =
 			presenter.presented_version(id).is_none_or(|presented| presented < version);
-		if still_needs && pending_ids.insert(id) {
-			queue.pending.push_front(id);
+		if still_needs {
+			queue.enqueue_front(id);
 		}
 	}
+}
+
+fn time_up(started: Instant, budget: Duration) -> bool {
+	!budget.is_zero() && started.elapsed() >= budget
+}
+
+fn warn_atomic_overrun(stage: &'static str, elapsed: Duration, maximum: Duration) {
+	if maximum.is_zero() || elapsed <= maximum {
+		return;
+	}
+	warn!(
+		stage,
+		elapsed_us = elapsed.as_micros(),
+		max_us = maximum.as_micros(),
+		"LOD presentation quantum exceeded max_atomic_cost"
+	);
 }
 
 fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
@@ -309,6 +456,10 @@ fn regions_match(a: Aabb3d, b: Aabb3d) -> bool {
 		&& (a.max.x - b.max.x).abs() < 1e-3
 		&& (a.min.z - b.min.z).abs() < 1e-3
 		&& (a.max.z - b.max.z).abs() < 1e-3
+}
+
+fn regions_overlap_xz(a: Aabb3d, b: Aabb3d) -> bool {
+	a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.z <= b.max.z && a.max.z >= b.min.z
 }
 
 /// Emit optional [`LodPresentCullRegion<M>`] tiles via strategy `P`. Drain ignores them.
@@ -442,6 +593,7 @@ where
 	fn build(&self, app: &mut App) {
 		ensure_present_sets(app);
 		app.init_resource::<LodPresentBudget>()
+			.init_resource::<LodPresentTimeBudget>()
 			.init_resource::<LodPresentQueue<T>>()
 			.init_resource::<LodPresentKeepRegion<M>>()
 			.add_message::<LodPresentRegion<M>>()

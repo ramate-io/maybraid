@@ -139,35 +139,85 @@ macro_rules! band_from_layout {
 	};
 }
 
-impl Default for JerseyStampConfigs {
-	fn default() -> Self {
-		// Defaults come from each band's layout consts (`define_jersey_family!`).
+impl JerseyStampConfigs {
+	/// Per-family cut seeds derived from a world seed (default world seed is `42`).
+	pub fn from_world_seed(seed: u32) -> Self {
 		Self {
 			plateau: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 42, PlateauLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1042, PlateauHighPassControllerLayout),
+				low_pass: band_from_layout!(low_pass, seed, PlateauLowPassControllerLayout),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1000),
+					PlateauHighPassControllerLayout
+				),
 			},
 			massif: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 43, MassifLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1043, MassifHighPassControllerLayout),
+				low_pass: band_from_layout!(
+					low_pass,
+					seed.wrapping_add(1),
+					MassifLowPassControllerLayout
+				),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1001),
+					MassifHighPassControllerLayout
+				),
 			},
 			canyon: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 44, CanyonLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1044, CanyonHighPassControllerLayout),
+				low_pass: band_from_layout!(
+					low_pass,
+					seed.wrapping_add(2),
+					CanyonLowPassControllerLayout
+				),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1002),
+					CanyonHighPassControllerLayout
+				),
 			},
 			pocket_water: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 45, PocketWaterLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1045, PocketWaterHighPassControllerLayout),
+				low_pass: band_from_layout!(
+					low_pass,
+					seed.wrapping_add(3),
+					PocketWaterLowPassControllerLayout
+				),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1003),
+					PocketWaterHighPassControllerLayout
+				),
 			},
 			rolling: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 46, RollingLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1046, RollingHighPassControllerLayout),
+				low_pass: band_from_layout!(
+					low_pass,
+					seed.wrapping_add(4),
+					RollingLowPassControllerLayout
+				),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1004),
+					RollingHighPassControllerLayout
+				),
 			},
 			valley: DualBandFamilyConfig {
-				low_pass: band_from_layout!(low_pass, 47, ValleyLowPassControllerLayout),
-				high_pass: band_from_layout!(high_pass, 1047, ValleyHighPassControllerLayout),
+				low_pass: band_from_layout!(
+					low_pass,
+					seed.wrapping_add(5),
+					ValleyLowPassControllerLayout
+				),
+				high_pass: band_from_layout!(
+					high_pass,
+					seed.wrapping_add(1005),
+					ValleyHighPassControllerLayout
+				),
 			},
 		}
+	}
+}
+
+impl Default for JerseyStampConfigs {
+	fn default() -> Self {
+		Self::from_world_seed(42)
 	}
 }
 

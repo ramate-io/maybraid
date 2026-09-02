@@ -24,7 +24,7 @@ pub use loading::{
 	LoadingExplainerText, LoadingProgress, LoadingScreen, LoadingScreenPlugin,
 	LoadingScreenSystems, RequestShowLoading,
 };
-pub use show::take_menu_show_request;
+pub use show::{despawn_menu_screens, take_menu_show_request};
 
 /// Marker on every full-screen menu root so show-requests can replace each other.
 #[derive(Component, Debug, Default, Clone, Copy)]

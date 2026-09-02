@@ -14,7 +14,7 @@ keeps the tiled one-kind path for A/B.
 - Fine cells only (no macro rings). Chebyshev half-extent is live (`terrain-radius`).
 - Default `r = 2` → 4×4 cells (~640 m at `TERRAIN_CELL_SIZE`).
 - One grove type at a time, tiled by `grove-extent` × `tile-radius`.
-- `/forest` expands `terrain-radius` to cover the 2 km generate ring when needed.
+- `/forest` expands `terrain-radius` to cover the 3 km grove generate ring when needed. World coverage keeps the [#675](https://github.com/ramate-io/maybraid/pull/675) fine disk (16 cells, ~2.6 km); canopy bump-outs clone those cell mesh handles and do not expand generate.
 
 ## Run
 

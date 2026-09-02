@@ -59,7 +59,7 @@ dependencies = [
  "accesskit_consumer 0.37.0",
  "hashbrown 0.16.1",
  "objc2 0.5.2",
- "objc2-app-kit",
+ "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
 ]
 
@@ -2204,6 +2204,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-bumpout"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chico-vegetation-shaders",
+ "material-ref",
+ "procedural-common",
+ "terrain-chunk-ref",
+]
+
+[[package]]
+name = "chico-bumpout-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "camera-controls",
+ "chico-bumpout",
+ "clap",
+ "game-commands",
+ "lod-cascade",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "sdf",
+ "terrain-chunk-ref",
+]
+
+[[package]]
 name = "chico-forests"
 version = "0.0.1"
 dependencies = [
@@ -2351,10 +2380,12 @@ version = "0.0.1"
 dependencies = [
  "avian3d",
  "bevy",
+ "chico-bumpout",
  "chico-forests",
  "chico-groves",
  "chico-sbs-trees-playground",
  "chico-vegetation-components",
+ "chico-vegetation-shaders",
  "clap",
  "crozon-characters",
  "durham-terrain",
@@ -2363,9 +2394,13 @@ dependencies = [
  "ground-avian",
  "lod",
  "lod-avian",
+ "lod-cascade",
  "log",
+ "material-ref",
+ "maybraid-input",
  "procedural-common",
  "render-item",
+ "terrain-chunk-ref",
 ]
 
 [[package]]
@@ -2373,6 +2408,8 @@ name = "chico-vegetation-shaders"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "chico-vegetation-components",
+ "material-ref",
 ]
 
 [[package]]
@@ -4351,11 +4388,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-character-playground",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "maybraid-menu-controller",
+ "maybraid-world",
+ "menu-components",
+ "menu-playground",
+ "menu-screens",
+]
+
+[[package]]
+name = "maybraid-character-controller"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-input",
+]
+
+[[package]]
 name = "maybraid-character-ui-menu-renderer"
 version = "0.0.1"
 dependencies = [
  "bevy",
  "character-ui-menu",
+ "maybraid-input",
+ "menu-components",
+]
+
+[[package]]
+name = "maybraid-input"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+ "objc2-game-controller",
+]
+
+[[package]]
+name = "maybraid-menu-controller"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-input",
  "menu-components",
 ]
 
@@ -4370,12 +4453,19 @@ dependencies = [
 name = "maybraid-world"
 version = "0.0.1"
 dependencies = [
+ "avian3d",
  "bevy",
  "chico-vegetation-on-terrain-playground",
  "clap",
+ "crozon-characters",
+ "durham-terrain-models",
  "game-commands",
  "lod",
+ "lod-avian",
  "log",
+ "material-ref",
+ "maybraid-character-controller",
+ "maybraid-input",
  "maybraid-sky",
 ]
 
@@ -4384,6 +4474,7 @@ name = "maybraid-world-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "maybraid-input",
  "maybraid-world",
 ]
 
@@ -4407,6 +4498,7 @@ name = "menu-components"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "maybraid-input",
 ]
 
 [[package]]
@@ -4423,6 +4515,8 @@ dependencies = [
  "game-commands",
  "lod",
  "maybraid-character-ui-menu-renderer",
+ "maybraid-input",
+ "maybraid-menu-controller",
  "menu-components",
  "menu-screens",
 ]
@@ -4433,6 +4527,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "game-commands",
+ "maybraid-menu-controller",
  "menu-components",
 ]
 
@@ -4741,6 +4836,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-app-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c"
+dependencies = [
+ "bitflags 2.13.0",
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
+]
+
+[[package]]
 name = "objc2-audio-toolbox"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4894,6 +5000,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-game-controller"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1962c1882c5abcedb18e5f01acffeaad7b3cbd0a9d4cd8f5ca259ba8a64cb9a3"
+dependencies = [
+ "bitflags 2.13.0",
+ "block2 0.6.2",
+ "dispatch2",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-foundation 0.3.2",
+]
+
+[[package]]
 name = "objc2-io-kit"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4911,7 +5032,7 @@ checksum = "a1a1ae721c5e35be65f01a03b6d2ac13a54cb4fa70d8a5da293d7b0020261398"
 dependencies = [
  "block2 0.5.1",
  "objc2 0.5.2",
- "objc2-app-kit",
+ "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
 ]
 
@@ -5104,15 +5225,6 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ordered-float"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
@@ -5209,7 +5321,7 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "ordered-float 5.3.0",
+ "ordered-float",
  "rayon",
  "rstar",
  "simba",
@@ -5238,7 +5350,7 @@ dependencies = [
  "log",
  "num-derive",
  "num-traits",
- "ordered-float 5.3.0",
+ "ordered-float",
  "rayon",
  "rstar",
  "simba",
@@ -6341,6 +6453,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "terrain-chunk-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chunk",
+ "lod-cascade",
+ "render-item",
+]
+
+[[package]]
 name = "terrain-playground"
 version = "0.0.1"
 dependencies = [
@@ -7114,7 +7237,7 @@ dependencies = [
  "objc2-metal 0.3.2",
  "objc2-quartz-core 0.3.2",
  "once_cell",
- "ordered-float 4.6.0",
+ "ordered-float",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
@@ -7655,7 +7778,7 @@ dependencies = [
  "memmap2",
  "ndk",
  "objc2 0.5.2",
- "objc2-app-kit",
+ "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
  "objc2-ui-kit",
  "orbclient",

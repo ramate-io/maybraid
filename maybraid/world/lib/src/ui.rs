@@ -7,8 +7,9 @@ pub fn ui_config() -> GameCommandUiConfig {
 			.into(),
 		empty_console_text: "Console: `mode free`, `set-character`, `stats mesh`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
-		controls_hint: "WASD move — mouse look — Space jump — mode free|character — stats fps"
-			.into(),
+		controls_hint:
+			"L-stick move — R-stick look — L3 sprint — R3 POV — A jump — LT focus — RT use — RT+X power — / commands"
+				.into(),
 	}
 }
 
@@ -21,5 +22,5 @@ pub(crate) fn sync_command_status_text(
 	}
 	*seeded = true;
 	status.0 =
-		"world  character  forest hopscotch  present 2 km  generate 3 km  sky 350–1200 m".into();
+		"world  character  forest hopscotch  grove 1 km  bump-outs 1–5 km  sky 350–1200 m".into();
 }

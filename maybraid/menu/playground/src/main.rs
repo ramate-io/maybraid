@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
+use maybraid_input::PadHidPlugins;
 use menu_playground::commands::Show;
 use menu_playground::{MenuPlaygroundPlugin, PendingStartupCommand, PlaygroundCommand};
 
@@ -27,9 +28,10 @@ fn main() {
 					}),
 					..default()
 				})
-				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
+				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() })
+				.with_pad_hid(),
 		)
-		.insert_resource(ClearColor(Color::srgb(0.08, 0.10, 0.14)))
+		.insert_resource(ClearColor(menu_components::MENU_CLEAR))
 		.insert_resource(PendingStartupCommand(startup))
 		.add_plugins(MenuPlaygroundPlugin)
 		.run();

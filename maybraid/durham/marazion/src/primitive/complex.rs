@@ -4,12 +4,13 @@
 //! per-node [`crate::primitive::backfill::HydroBackfill`]).
 //! [`HydroComplex`] is a bag of nodes to blend — no graph / connectivity.
 
-use crate::primitive::fill::{WaterFill, WaterSurface};
+use crate::primitive::fill::WaterFill;
 use crate::primitive::hydro::{FootprintIndex, HydroPrimitive};
 use crate::primitive::node::HydroNode;
 use crate::primitive::parameters::ComplexParams;
 use bevy_math::{Vec2, Vec3};
 use procedural_common::Bounds2;
+use std::sync::Arc;
 
 /// Stamp products derived from a [`HydroComplex`] (fills).
 #[derive(Debug, Clone)]
@@ -17,7 +18,7 @@ pub struct CompiledWatershed {
 	pub bounds: Bounds2,
 	pub seed: u32,
 	/// Indexed complex used for elevation / fill sampling.
-	pub complex: HydroComplex,
+	pub complex: Arc<HydroComplex>,
 	pub fills: Vec<WaterFill>,
 }
 
@@ -180,12 +181,17 @@ impl HydroComplex {
 
 	/// Build a [`WaterFill`] that delegates SDF / \(W\) to this complex.
 	pub fn water_fill(&self) -> WaterFill {
-		WaterFill { surface: WaterSurface::Hydro { complex: self.clone() } }
+		WaterFill::from_hydro(Arc::new(self.clone()))
 	}
 
 	pub fn compile(&self) -> CompiledWatershed {
-		let fills = if self.is_empty() { Vec::new() } else { vec![self.water_fill()] };
-		CompiledWatershed { bounds: self.bounds, seed: self.seed, complex: self.clone(), fills }
+		let complex = Arc::new(self.clone());
+		let fills = if complex.is_empty() {
+			Vec::new()
+		} else {
+			vec![WaterFill::from_hydro(Arc::clone(&complex))]
+		};
+		CompiledWatershed { bounds: self.bounds, seed: self.seed, complex, fills }
 	}
 }
 

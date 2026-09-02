@@ -12,12 +12,13 @@ use bevy::text::{Justify, LineBreak, LineHeight, TextSpan};
 use bevy::window::{Ime, PrimaryWindow};
 
 use crate::icons::AnimatedIcon;
-use crate::single_select::{TextCursorSlot, TextMenuInputLock};
+use crate::single_select::{KeyboardMenuNav, TextCursorSlot, TextMenuInputLock};
 use crate::theme::{
 	HEADER_FONT_SIZE, PANEL_CHIP_GAP, PANEL_CURSOR_ICON_GAP, PANEL_HEADER_CURSOR_ICON_SIZE,
 	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_ROW_GAP, PANEL_VALUE_FONT_SIZE,
 	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
+use maybraid_input::{MenuNav, MenuNavImpulse};
 
 use super::button::spawn_text_button;
 use super::display::menu_display_name;
@@ -274,8 +275,10 @@ pub fn emit_short_text_toggle_on_click(
 	open_short_text_modal(click.entity, key.0, &mut field, &mut active, &mut modal, &mut commands);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn emit_short_text_toggle_on_enter(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	keyboard_nav: Res<KeyboardMenuNav>,
 	lock: Res<TextMenuInputLock>,
 	overlay_menus: Query<Entity, With<super::hud_menu::HudOverlayMenu>>,
 	menus: Query<&HudMenu>,
@@ -285,14 +288,48 @@ pub fn emit_short_text_toggle_on_enter(
 	mut modal: ResMut<ShortTextModal>,
 	mut commands: Commands,
 ) {
-	if modal.is_open()
+	if !keyboard_nav.is_enabled()
+		|| modal.is_open()
 		|| !keyboard.just_pressed(KeyCode::Enter)
 		|| lock.0
 		|| !overlay_menus.is_empty()
 	{
 		return;
 	}
-	for (entity, item, key) in &items {
+	open_selected_short_text(&menus, &items, &mut fields, &mut active, &mut modal, &mut commands);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn emit_short_text_toggle_on_nav(
+	impulse: On<MenuNavImpulse>,
+	lock: Res<TextMenuInputLock>,
+	overlay_menus: Query<(), With<super::hud_menu::HudOverlayMenu>>,
+	menus: Query<&HudMenu>,
+	items: Query<(Entity, &HudMenuItem, &ShortTextKey)>,
+	mut fields: Query<&mut ShortTextField>,
+	mut active: ResMut<ActiveShortText>,
+	mut modal: ResMut<ShortTextModal>,
+	mut commands: Commands,
+) {
+	if lock.0
+		|| modal.is_open()
+		|| impulse.event().nav != MenuNav::Select
+		|| overlay_menus.contains(impulse.entity)
+	{
+		return;
+	}
+	open_selected_short_text(&menus, &items, &mut fields, &mut active, &mut modal, &mut commands);
+}
+
+fn open_selected_short_text(
+	menus: &Query<&HudMenu>,
+	items: &Query<(Entity, &HudMenuItem, &ShortTextKey)>,
+	fields: &mut Query<&mut ShortTextField>,
+	active: &mut ActiveShortText,
+	modal: &mut ShortTextModal,
+	commands: &mut Commands,
+) {
+	for (entity, item, key) in items.iter() {
 		let Ok(menu) = menus.get(item.menu) else {
 			continue;
 		};
@@ -302,7 +339,7 @@ pub fn emit_short_text_toggle_on_enter(
 		let Ok(mut field) = fields.get_mut(entity) else {
 			continue;
 		};
-		open_short_text_modal(entity, key.0, &mut field, &mut active, &mut modal, &mut commands);
+		open_short_text_modal(entity, key.0, &mut field, active, modal, commands);
 		return;
 	}
 }

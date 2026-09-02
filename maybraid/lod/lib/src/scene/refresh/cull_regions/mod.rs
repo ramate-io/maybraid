@@ -3,7 +3,7 @@
 //! Parallel to refresh regions/levels, but:
 //! - producers may emit every frame (camera still)
 //! - a [`LodCullRegionCursor`] round-robins annulus tiles (e.g. [`OpenLattice`])
-//! - fill is one untyped host-hit query; enqueue is per-`T` from the cache
+//! - fill is one untyped host-hit query; enqueue dispatches through erased producers
 
 mod cache;
 mod cursor;
@@ -17,7 +17,9 @@ pub use cache::{
 	LodSceneCullProduceFillPlugin,
 };
 pub use cursor::LodCullRegionCursor;
-pub use enqueue::{produce_lod_cull_for_region, LodSceneRegionCullPlugin};
+pub use enqueue::{
+	produce_lod_cull_for_region, produce_lod_cull_for_region_erased, LodSceneRegionCullPlugin,
+};
 pub use markers::{
 	sync_cullable_roots_marker, sync_nested_refresh_allowed, LodCullMarkerPlugin,
 	LodHostHasCullableRoots, LodNestedRefreshAllowed, LodNestedRefreshBlocked,

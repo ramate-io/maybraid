@@ -2,10 +2,11 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
+use maybraid_menu_controller::MenuController;
 use menu_components::info::description::{set_description_for_menu, TextMenuDescription};
 use menu_components::single_select::text_cursor::TextCursorColumn;
 use menu_components::single_select::{republish_menu_activate, MenuFocus};
-use menu_components::TextMenuPlugin;
+use menu_components::{TextMenuPlugin, MENU_CLEAR};
 
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
@@ -78,6 +79,8 @@ impl HomeScreen {
 		bsn! {
 			HomeScreen
 			MenuScreen
+			MenuController
+			BackgroundColor(MENU_CLEAR)
 			Node {
 				width: percent(100),
 				height: percent(100),

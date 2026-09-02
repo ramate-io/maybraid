@@ -17,7 +17,7 @@ use crate::scene::host::{
 };
 use crate::scene::level::LodSceneLevel;
 use crate::scene::region_index::LodSceneHostIndex;
-use crate::scene::SemanticLodScene;
+use crate::scene::{LodSceneCulls, SceneChunk, SemanticLodScene};
 
 use super::super::viewer::LodViewer;
 use super::super::{ensure_refresh_core, LodLevelProduceSystems};
@@ -31,22 +31,75 @@ pub struct LodSceneRefreshLevel {
 
 type ProduceLevelFn =
 	for<'a> fn(&World, Entity, &[crate::lod_ref::LodRef<'a>]) -> Option<LodSceneLevel>;
+type ProduceOneLevelFn =
+	for<'a> fn(&World, Entity, &crate::lod_ref::LodRef<'a>) -> Option<LodSceneLevel>;
+type ProduceCullsFn =
+	for<'a> fn(&World, Entity, &crate::lod_ref::LodRef<'a>, LodSceneLevel) -> Option<LodSceneCulls>;
+type ProduceChunkFn =
+	for<'a> fn(&World, Entity, &crate::lod_ref::LodRef<'a>, LodSceneLevel) -> Option<SceneChunk>;
 
 /// Type-erased level callback stamped when a semantic host component is added.
 ///
 /// The shared producer uses this to visit each spatial hit once, independent of
 /// the number of registered host types.
 #[derive(Component, Clone, Copy)]
-pub struct LodLevelProducer(ProduceLevelFn);
+pub struct LodLevelProducer {
+	level_from_all: ProduceLevelFn,
+	level: ProduceOneLevelFn,
+	culls: ProduceCullsFn,
+	chunk: ProduceChunkFn,
+}
 
 impl LodLevelProducer {
 	fn for_scene<T>() -> Self
 	where
 		T: Component + SemanticLodScene + 'static,
 	{
-		Self(|world, entity, refs| {
-			world.get::<T>(entity).map(|scene| scene.scene_lod_level_from_levels(refs))
-		})
+		Self {
+			level_from_all: |world, entity, refs| {
+				world.get::<T>(entity).map(|scene| scene.scene_lod_level_from_levels(refs))
+			},
+			level: |world, entity, lod_ref| {
+				world.get::<T>(entity).map(|scene| scene.scene_lod_level(lod_ref))
+			},
+			culls: |world, entity, lod_ref, current| {
+				world.get::<T>(entity).map(|scene| scene.scene_lod_culls(lod_ref, current))
+			},
+			chunk: |world, entity, lod_ref, level| {
+				world
+					.get::<T>(entity)
+					.map(|scene| scene.scene_chunks_with_level(lod_ref, level))
+			},
+		}
+	}
+
+	pub(crate) fn level_for(
+		self,
+		world: &World,
+		entity: Entity,
+		lod_ref: &crate::lod_ref::LodRef,
+	) -> Option<LodSceneLevel> {
+		(self.level)(world, entity, lod_ref)
+	}
+
+	pub(crate) fn culls_for(
+		self,
+		world: &World,
+		entity: Entity,
+		lod_ref: &crate::lod_ref::LodRef,
+		current: LodSceneLevel,
+	) -> Option<LodSceneCulls> {
+		(self.culls)(world, entity, lod_ref, current)
+	}
+
+	pub(crate) fn chunk_for(
+		self,
+		world: &World,
+		entity: Entity,
+		lod_ref: &crate::lod_ref::LodRef,
+		level: LodSceneLevel,
+	) -> Option<SceneChunk> {
+		(self.chunk)(world, entity, lod_ref, level)
 	}
 }
 
@@ -198,7 +251,7 @@ pub fn produce_lod_refresh_levels_erased(world: &mut World) {
 			let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
 				continue;
 			};
-			let Some(level) = (producer.0)(world, entity, &refs) else {
+			let Some(level) = (producer.level_from_all)(world, entity, &refs) else {
 				continue;
 			};
 			world.write_message(LodSceneRefreshLevel { entity, level });

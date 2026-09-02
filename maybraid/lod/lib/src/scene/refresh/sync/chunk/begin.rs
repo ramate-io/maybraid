@@ -1,4 +1,4 @@
-//! Per-`T` job begin with shared Presence / Desired admission.
+//! Type-erased job begin with shared Presence / Desired admission.
 //!
 //! A **capped** host scan builds candidate lists; admission walks those lists in
 //! class order after sorting each list by viewer XZ distance (near first). The
@@ -10,6 +10,7 @@
 //! shared begin weight for **prefilled** primitives only
 //! ([`LodChunkFulfillBudget::begin_prefill_weights_per_job`]); lazy tails drain later.
 
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 
@@ -25,11 +26,12 @@ use crate::scene::SemanticLodScene;
 use super::super::super::viewer::LodViewer;
 use super::schedule::{admit_begin, begin_scan_limit, charge_begin_weight, LevelBand};
 use super::types::{
-	FulfillClass, LodChunkBeginClock, LodChunkFulfillBudget, LodChunkFulfillment, LodCullInFlight,
-	LodLevelRootPending, LodLevelRootStreamed,
+	FulfillClass, LodChunkBeginClock, LodChunkBeginScanCursor, LodChunkFulfillBudget,
+	LodChunkFulfillment, LodCullInFlight, LodLevelRootPending, LodLevelRootStreamed,
 };
 use super::util::has_present_root;
 use crate::scene::chunk::materialize_front;
+use crate::scene::LodLevelProducer;
 
 #[derive(Clone, Copy)]
 struct BeginCandidate {
@@ -264,6 +266,300 @@ pub fn begin_chunk_lod_fulfill<T: Component + SemanticLodScene>(
 			&budget,
 			&mut host_sets,
 		);
+	}
+}
+
+/// Start pending roots once for all semantic host types.
+///
+/// Scene-specific work is dispatched through [`LodLevelProducer`], while
+/// candidate scanning, distance ordering, and admission consume one shared
+/// cursor and budget.
+pub fn begin_chunk_lod_fulfill_erased(world: &mut World) {
+	let Some((viewer_entity, pose, viewer_bounds)) = single_viewer(world) else {
+		return;
+	};
+	let driver_bounds = viewer_bounds.unwrap_or_else(|| point_bounds(pose.current.translation));
+	let lod_ref = pose.as_lod_ref(viewer_entity, &driver_bounds);
+	let viewer_xz = pose.current.translation;
+
+	{
+		let mut clock = world.resource_mut::<LodChunkBeginClock>();
+		roll_active_into_desired(&mut clock);
+	}
+	let budget = *world.resource::<LodChunkFulfillBudget>();
+	let scan_limit = begin_scan_limit(&budget, world.resource::<LodChunkBeginClock>());
+	if scan_limit == 0 {
+		return;
+	}
+
+	let hosts: Vec<_> = {
+		let mut query = world
+			.query_filtered::<(Entity, &LodLevelSpawnRequest), (With<LodSceneHost>, With<LodLevelProducer>)>(
+			);
+		query.iter(world).map(|(entity, request)| (entity, *request)).collect()
+	};
+	if hosts.is_empty() {
+		world.resource_mut::<LodChunkBeginScanCursor>().0 = 0;
+		return;
+	}
+
+	let start = (world.resource::<LodChunkBeginScanCursor>().0 as usize) % hosts.len();
+	let count = (scan_limit as usize).min(hosts.len());
+	world.resource_mut::<LodChunkBeginScanCursor>().0 = ((start + count) % hosts.len()) as u32;
+
+	let mut presence_near = Vec::new();
+	let mut presence_far = Vec::new();
+	let mut desired_near = Vec::new();
+	let mut desired_far = Vec::new();
+	for offset in 0..count {
+		let (host, request) = hosts[(start + offset) % hosts.len()];
+		match classify_begin_candidate_world(world, host, request) {
+			BeginClassification::Candidate(candidate) => push_begin_candidate(
+				with_host_xz_distance_world(candidate, viewer_xz, world),
+				&mut presence_near,
+				&mut presence_far,
+				&mut desired_near,
+				&mut desired_far,
+			),
+			BeginClassification::RemoveRequest => {
+				world.entity_mut(host).remove::<LodLevelSpawnRequest>();
+			}
+			BeginClassification::Skip => {}
+		}
+	}
+
+	sort_begin_near_first(&mut presence_near);
+	sort_begin_near_first(&mut presence_far);
+	sort_begin_near_first(&mut desired_near);
+	sort_begin_near_first(&mut desired_far);
+
+	let presence_first =
+		matches!(world.resource::<LodChunkBeginClock>().first_class, FulfillClass::Presence);
+	if presence_first {
+		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &lod_ref, &budget);
+		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &lod_ref, &budget);
+		{
+			let mut clock = world.resource_mut::<LodChunkBeginClock>();
+			roll_presence_into_desired(&mut clock);
+		}
+		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &lod_ref, &budget);
+		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &lod_ref, &budget);
+	} else {
+		admit_candidates_world(world, &desired_near, FulfillClass::Desired, &lod_ref, &budget);
+		admit_candidates_world(world, &desired_far, FulfillClass::Desired, &lod_ref, &budget);
+		{
+			let mut clock = world.resource_mut::<LodChunkBeginClock>();
+			roll_desired_into_presence(&mut clock);
+		}
+		admit_candidates_world(world, &presence_near, FulfillClass::Presence, &lod_ref, &budget);
+		admit_candidates_world(world, &presence_far, FulfillClass::Presence, &lod_ref, &budget);
+	}
+}
+
+fn single_viewer(world: &mut World) -> Option<(Entity, LodNodePose, Option<Aabb3d>)> {
+	let mut query = world.query_filtered::<
+		(Entity, &LodNodePose, Option<&LodNodeBounds>),
+		(With<LodNode>, With<LodViewer>),
+	>();
+	let mut iter = query.iter(world);
+	let (entity, pose, bounds) = iter.next()?;
+	let result = (entity, *pose, bounds.map(|bounds| bounds.0));
+	if iter.next().is_some() {
+		return None;
+	}
+	Some(result)
+}
+
+enum BeginClassification {
+	Candidate(BeginCandidate),
+	RemoveRequest,
+	Skip,
+}
+
+fn classify_begin_candidate_world(
+	world: &World,
+	host: Entity,
+	request: LodLevelSpawnRequest,
+) -> BeginClassification {
+	let Some(desired) = world.get::<LodSceneLevel>(host).copied() else {
+		return BeginClassification::Skip;
+	};
+	if request.level != desired {
+		return BeginClassification::RemoveRequest;
+	}
+	let Some(roots_entity) = level_roots_entity_world(world, host) else {
+		return BeginClassification::RemoveRequest;
+	};
+	let root_children: Vec<_> = world
+		.get::<Children>(roots_entity)
+		.map(|children| children.iter().collect())
+		.unwrap_or_default();
+	let has_any_level_root = root_children.iter().any(|root| {
+		world.get::<LodLevelRoot>(*root).is_some() && world.get::<LodCullInFlight>(*root).is_none()
+	});
+	if !nested_host_parent_allows_refresh_world(world, host) && has_any_level_root {
+		return BeginClassification::RemoveRequest;
+	}
+	if root_children.iter().any(|root| {
+		world.get::<LodLevelRoot>(*root).is_some_and(|key| key.0 == request.level)
+			&& world.get::<LodCullInFlight>(*root).is_none()
+	}) {
+		return BeginClassification::RemoveRequest;
+	}
+	let cold = !has_any_level_root;
+	BeginClassification::Candidate(BeginCandidate {
+		host,
+		roots_entity,
+		level: request.level,
+		cold,
+		parent_desired: parent_host_desired_or_high_world(world, host),
+		dist_xz: f32::MAX,
+	})
+}
+
+fn level_roots_entity_world(world: &World, host: Entity) -> Option<Entity> {
+	world
+		.get::<Children>(host)?
+		.iter()
+		.find(|child| world.get::<LodLevelRoots>(*child).is_some())
+}
+
+fn nested_host_parent_allows_refresh_world(world: &World, entity: Entity) -> bool {
+	let Some(parent) = world.get::<ChildOf>(entity) else {
+		return true;
+	};
+	let mut current = parent.parent();
+	let mut enclosing_root = None;
+	loop {
+		if enclosing_root.is_none() {
+			enclosing_root = world.get::<LodLevelRoot>(current).map(|root| root.0);
+		}
+		if world.get::<LodSceneHost>(current).is_some() {
+			return world.get::<LodSceneLevel>(current).is_none_or(|desired| {
+				enclosing_root.is_none_or(|root_level| {
+					root_level == *desired
+						|| host_shows_level_root_world(world, current, root_level)
+				})
+			});
+		}
+		let Some(parent) = world.get::<ChildOf>(current) else {
+			return true;
+		};
+		current = parent.parent();
+	}
+}
+
+fn host_shows_level_root_world(world: &World, host: Entity, level: LodSceneLevel) -> bool {
+	let Some(roots_entity) = level_roots_entity_world(world, host) else {
+		return false;
+	};
+	world.get::<Children>(roots_entity).is_some_and(|children| {
+		children.iter().any(|root| {
+			world.get::<LodLevelRoot>(root).is_some_and(|key| key.0 == level)
+				&& world
+					.get::<Visibility>(root)
+					.is_some_and(|visibility| !matches!(*visibility, Visibility::Hidden))
+		})
+	})
+}
+
+fn parent_host_desired_or_high_world(world: &World, host: Entity) -> LodSceneLevel {
+	let Some(parent) = world.get::<ChildOf>(host) else {
+		return LodSceneLevel::High;
+	};
+	let mut current = parent.parent();
+	loop {
+		if world.get::<LodSceneHost>(current).is_some() {
+			return world.get::<LodSceneLevel>(current).copied().unwrap_or(LodSceneLevel::High);
+		}
+		let Some(parent) = world.get::<ChildOf>(current) else {
+			return LodSceneLevel::High;
+		};
+		current = parent.parent();
+	}
+}
+
+fn with_host_xz_distance_world(
+	mut candidate: BeginCandidate,
+	origin: Vec3,
+	world: &World,
+) -> BeginCandidate {
+	if let Some(transform) = world.get::<Transform>(candidate.host) {
+		candidate.dist_xz =
+			host_xz_distance2(origin, transform, world.get::<LodHostBounds>(candidate.host));
+	}
+	candidate
+}
+
+fn admit_candidates_world(
+	world: &mut World,
+	candidates: &[BeginCandidate],
+	class: FulfillClass,
+	lod_ref: &LodRef,
+	budget: &LodChunkFulfillBudget,
+) {
+	for candidate in candidates {
+		let Some(producer) = world.get::<LodLevelProducer>(candidate.host).copied() else {
+			continue;
+		};
+		let Some(actual) = producer.level_for(world, candidate.host, lod_ref) else {
+			continue;
+		};
+		if actual != candidate.level {
+			world
+				.entity_mut(candidate.host)
+				.insert((actual, LodLevelSpawnRequest { level: actual }));
+			continue;
+		}
+		let admitted = {
+			let mut clock = world.resource_mut::<LodChunkBeginClock>();
+			admit_begin(&mut clock, class)
+		};
+		if !admitted {
+			break;
+		}
+		let Some(chunk) = producer.chunk_for(world, candidate.host, lod_ref, candidate.level)
+		else {
+			continue;
+		};
+		let expected = chunk.total_primitives();
+		let mut queue = chunk.into_fulfill_queue();
+		let prefill = world
+			.resource::<LodChunkBeginClock>()
+			.weight_remaining
+			.min(budget.begin_prefill_weights_per_job);
+		let begin_weight = materialize_front(&mut queue, prefill);
+		{
+			let mut clock = world.resource_mut::<LodChunkBeginClock>();
+			charge_begin_weight(&mut clock, begin_weight.max(1));
+		}
+
+		let initial_visibility =
+			if candidate.cold { Visibility::Inherited } else { Visibility::Hidden };
+		let root_entity = world
+			.spawn((
+				LodLevelRoot(candidate.level),
+				LodLevelRootPending,
+				Transform::default(),
+				initial_visibility,
+			))
+			.id();
+		let fulfillment = LodChunkFulfillment {
+			queue,
+			expected,
+			spawned: 0,
+			cold: candidate.cold,
+			host: candidate.host,
+			parent_desired: candidate.parent_desired,
+			nested_streamed: 0,
+			nested_required: None,
+		};
+		if fulfillment.is_content_complete() {
+			world.entity_mut(root_entity).insert(LodLevelRootStreamed);
+		}
+		world.entity_mut(root_entity).insert(fulfillment);
+		world.entity_mut(candidate.roots_entity).add_child(root_entity);
+		world.entity_mut(candidate.host).remove::<LodLevelSpawnRequest>();
 	}
 }
 

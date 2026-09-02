@@ -4,8 +4,9 @@ use std::marker::PhantomData;
 
 use crate::event::CharacterMenuEvent;
 use crate::input::{
-	emit_hud_activate_on_click, emit_hud_activate_on_enter, emit_hud_focus,
-	emit_overlay_close_on_click, emit_overlay_close_on_escape, emit_overlay_open_on_click,
+	emit_hud_activate_on_click, emit_hud_activate_on_enter, emit_hud_activate_on_nav,
+	emit_hud_focus, emit_overlay_close_on_click, emit_overlay_close_on_escape,
+	emit_overlay_close_on_nav, emit_overlay_open_on_click,
 };
 
 /// Keyboard / observer input, then host UI rebuild.
@@ -46,8 +47,10 @@ where
 		)
 		.add_message::<CharacterMenuEvent<E>>()
 		.add_observer(emit_hud_activate_on_click::<E>)
+		.add_observer(emit_hud_activate_on_nav::<E>)
 		.add_observer(emit_overlay_open_on_click)
 		.add_observer(emit_overlay_close_on_click)
+		.add_observer(emit_overlay_close_on_nav)
 		.add_systems(
 			Update,
 			(emit_hud_focus::<E>, emit_hud_activate_on_enter::<E>, emit_overlay_close_on_escape)
