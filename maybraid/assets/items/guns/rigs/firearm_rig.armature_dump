@@ -10,3 +10,5 @@ trigger_box
 trigger_arm
   trigger_ledge
     trigger_point
+sight_arm
+  sight_camera_socket

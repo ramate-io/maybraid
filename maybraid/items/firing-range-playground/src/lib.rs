@@ -56,6 +56,8 @@ impl Plugin for FiringRangePlugin {
 						.before(PlayerControlSystems),
 					control::face_player.after(PlayerControlSystems),
 					character::pose_held_firearm.after(control::face_player),
+					player::follow_character_camera.after(character::pose_held_firearm),
+					player::sync_pov_visibility.after(player::follow_character_camera),
 					character::drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),

@@ -17,7 +17,7 @@ fn main() {
 		println!("Startup command from argv (same as in-game / text).");
 	} else {
 		println!(
-			"Firing range — WASD move, mouse/stick look, Space/A jump, click/RT fire. / pause."
+			"Firing range — WASD move, mouse/stick look, R3 POV, RMB/LT focus, click/RT fire."
 		);
 	}
 

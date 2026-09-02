@@ -26,6 +26,9 @@ pub(crate) fn apply_intents(
 ) {
 	if text_focus.0 {
 		for _ in intents.read() {}
+		for mut camera in &mut cameras {
+			camera.focus = 0.0;
+		}
 		for mut wish in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
@@ -36,6 +39,8 @@ pub(crate) fn apply_intents(
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
 	let mut fire = mouse.pressed(MouseButton::Left);
+	let mut focus = f32::from(mouse.pressed(MouseButton::Right));
+	let mut swap_pov = false;
 	for intent in intents.read() {
 		match *intent {
 			CharacterIntent::Move(value) => move_stick = value,
@@ -47,8 +52,16 @@ pub(crate) fn apply_intents(
 				}
 			}
 			CharacterIntent::Jump => jump = true,
+			CharacterIntent::Focus(value) => focus = focus.max(value),
 			CharacterIntent::UseItem(_) => fire = true,
+			CharacterIntent::SwapPov => swap_pov = true,
 			_ => {}
+		}
+	}
+	if let Ok(mut controller) = cameras.single_mut() {
+		controller.focus = focus.clamp(0.0, 1.0);
+		if swap_pov {
+			controller.pov.toggle();
 		}
 	}
 	trigger.0 = fire;

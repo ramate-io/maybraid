@@ -138,14 +138,23 @@ impl LodScene for PartNode {
 	}
 }
 
-/// Kit and hand bones on [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
-pub const RECEIVER_LANDMARKS: &[&str] =
-	&["body", "barrel", "grip", "stock", "trigger_box", "grip_point", "trigger_point"];
+/// Kit, hand, and camera bones on [`guns::FIREARM_RIG`](crate::assets::guns::FIREARM_RIG).
+pub const RECEIVER_LANDMARKS: &[&str] = &[
+	"body",
+	"barrel",
+	"grip",
+	"stock",
+	"trigger_box",
+	"grip_point",
+	"trigger_point",
+	"sight_camera_socket",
+];
 
 /// Authoring IR for a firearm receiver armature — also the fine-phase host.
 ///
 /// Kit parts socket onto `body` / `barrel` / `trigger_box` / `grip` / `stock`.
-/// Hands bind to `grip_point` / `trigger_point`, not to kit meshes.
+/// Hands bind to `grip_point` / `trigger_point`; first-person focus uses
+/// `sight_camera_socket`. None of these landmarks sockets kit meshes.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct RigNode {
 	pub label: &'static str,

@@ -5,7 +5,7 @@ use firearms::WeaponsArmed;
 
 pub(crate) fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
-		title: "Firing range - / cmd - WASD move - mouse look - Space jump - click / RT fire"
+		title: "Firing range - WASD move - mouse look - R3 POV - RMB / LT focus - click / RT fire"
 			.into(),
 		empty_console_text: "Console: `pause`, `resume`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),

@@ -3,10 +3,13 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use crozon_characters::{BoneMap, CharacterMembers};
+use firearms::{FirearmMembers, FirearmRoot};
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
-use crate::camera::CameraController;
+use crate::camera::{CameraController, CameraPov};
+use crate::character::{HeldFirearm, PlayerVisual};
 
 pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
 pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
@@ -19,6 +22,8 @@ pub(crate) const CAMERA_HEIGHT: f32 = 1.1;
 pub(crate) const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 /// Shift the look target right so the character composes left of the reticle.
 const CAMERA_SHOULDER_OFFSET: f32 = 0.7;
+const FIRST_PERSON_EYE_FORWARD: f32 = 0.04;
+const FOCUS_BLEND_SPEED: f32 = 12.0;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
@@ -74,12 +79,7 @@ impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_message::<MovementAction>().add_systems(
 			Update,
-			(
-				update_grounded,
-				apply_character_movement,
-				apply_movement_damping,
-				follow_character_camera,
-			)
+			(update_grounded, apply_character_movement, apply_movement_damping)
 				.chain()
 				.in_set(PlayerControlSystems),
 		);
@@ -227,14 +227,41 @@ fn apply_movement_damping(
 	}
 }
 
-fn follow_character_camera(
+#[derive(Debug, Clone, Copy)]
+struct CameraPose {
+	translation: Vec3,
+	rotation: Quat,
+}
+
+impl CameraPose {
+	fn interpolate(self, other: Self, amount: f32) -> Self {
+		Self {
+			translation: self.translation.lerp(other.translation, amount),
+			rotation: self.rotation.slerp(other.rotation, amount),
+		}
+	}
+
+	fn transform(self) -> Transform {
+		Transform::from_translation(self.translation).with_rotation(self.rotation)
+	}
+}
+
+pub(crate) fn follow_character_camera(
+	time: Res<Time>,
 	players: Query<&Transform, (With<CameraFollow>, Without<Camera3d>)>,
-	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
+	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	guns: Query<
+		(&FirearmMembers, &Transform, &GlobalTransform),
+		(With<HeldFirearm>, With<FirearmRoot>, Without<Camera3d>),
+	>,
+	maps: Query<&BoneMap>,
+	globals: Query<&GlobalTransform, Without<Camera3d>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok(player) = players.single() else {
 		return;
 	};
-	let Ok((mut camera_transform, controller)) = cameras.single_mut() else {
+	let Ok((mut camera_transform, mut controller)) = cameras.single_mut() else {
 		return;
 	};
 
@@ -244,6 +271,133 @@ fn follow_character_camera(
 	let offset = rotation * Vec3::new(0.0, 0.0, CAMERA_DISTANCE) + Vec3::Y * CAMERA_HEIGHT;
 	let target =
 		player.translation + Vec3::Y * CAMERA_LOOK_HEIGHT + yaw * Vec3::X * CAMERA_SHOULDER_OFFSET;
-	camera_transform.translation = target + offset;
-	camera_transform.look_at(target, Vec3::Y);
+	let mut third_person = Transform::from_translation(target + offset);
+	third_person.look_at(target, Vec3::Y);
+	let third_person =
+		CameraPose { translation: third_person.translation, rotation: third_person.rotation };
+
+	let head_translation = head_camera_translation(&visuals, &maps, &globals)
+		.unwrap_or(player.translation + Vec3::Y * (CAMERA_HEIGHT + CAMERA_LOOK_HEIGHT));
+	let head = CameraPose {
+		translation: head_translation + rotation * -Vec3::Z * FIRST_PERSON_EYE_FORWARD,
+		rotation,
+	};
+	let sight = sight_camera_pose(&guns, &maps, &globals);
+	let focus_target = if controller.pov == CameraPov::FirstPerson && sight.is_some() {
+		controller.focus
+	} else {
+		0.0
+	};
+	let blend_step = 1.0 - (-FOCUS_BLEND_SPEED * time.delta_secs()).exp();
+	controller.focus_blend += (focus_target - controller.focus_blend) * blend_step;
+
+	let pose = match controller.pov {
+		CameraPov::ThirdPerson => third_person,
+		CameraPov::FirstPerson => {
+			sight.map_or(head, |sight| head.interpolate(sight, controller.focus_blend))
+		}
+	};
+	*camera_transform = pose.transform();
+}
+
+pub(crate) fn sync_pov_visibility(
+	cameras: Query<&CameraController, With<Camera3d>>,
+	mut visuals: Query<&mut Visibility, With<PlayerVisual>>,
+) {
+	let Ok(controller) = cameras.single() else {
+		return;
+	};
+	let Ok(mut visibility) = visuals.single_mut() else {
+		return;
+	};
+	*visibility = match controller.pov {
+		CameraPov::ThirdPerson => Visibility::Inherited,
+		CameraPov::FirstPerson => Visibility::Hidden,
+	};
+}
+
+fn head_camera_translation(
+	visuals: &Query<&CharacterMembers, With<PlayerVisual>>,
+	maps: &Query<&BoneMap>,
+	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+) -> Option<Vec3> {
+	let members = visuals.single().ok()?;
+	let left = member_landmark_translation(members.iter(), maps, globals, "eye_socket.L")?;
+	let right = member_landmark_translation(members.iter(), maps, globals, "eye_socket.R")?;
+	Some((left + right) * 0.5)
+}
+
+fn sight_camera_pose(
+	guns: &Query<
+		(&FirearmMembers, &Transform, &GlobalTransform),
+		(With<HeldFirearm>, With<FirearmRoot>, Without<Camera3d>),
+	>,
+	maps: &Query<&BoneMap>,
+	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+) -> Option<CameraPose> {
+	let (members, current_root, previous_root) = guns.single().ok()?;
+	let previous_socket =
+		member_landmark_global(members.iter(), maps, globals, "sight_camera_socket")?;
+	let socket_local = previous_root.affine().inverse() * previous_socket.affine();
+	let socket_current = current_root.compute_affine() * socket_local;
+	let (_, rotation, translation) = socket_current.to_scale_rotation_translation();
+	Some(CameraPose { translation, rotation })
+}
+
+fn member_landmark_translation(
+	members: impl Iterator<Item = Entity>,
+	maps: &Query<&BoneMap>,
+	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+	name: &str,
+) -> Option<Vec3> {
+	member_landmark_global(members, maps, globals, name).map(|global| global.translation())
+}
+
+fn member_landmark_global(
+	members: impl Iterator<Item = Entity>,
+	maps: &Query<&BoneMap>,
+	globals: &Query<&GlobalTransform, Without<Camera3d>>,
+	name: &str,
+) -> Option<GlobalTransform> {
+	for member in members {
+		let Ok(map) = maps.get(member) else {
+			continue;
+		};
+		let Some(&entity) = map.by_name.get(name) else {
+			continue;
+		};
+		if let Ok(global) = globals.get(entity) {
+			return Some(*global);
+		}
+	}
+	None
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+
+	use crate::player::{follow_character_camera, CameraPose};
+
+	use super::*;
+
+	#[test]
+	fn camera_pose_interpolates_position_and_rotation() {
+		let head = CameraPose { translation: Vec3::ZERO, rotation: Quat::IDENTITY };
+		let sight = CameraPose {
+			translation: Vec3::new(2.0, 0.0, 0.0),
+			rotation: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+		};
+		let middle = head.interpolate(sight, 0.5);
+		assert!((middle.translation - Vec3::X).length() < 1e-5);
+		assert!((middle.rotation * -Vec3::Z).x < -0.6);
+	}
+
+	#[test]
+	fn camera_queries_are_disjoint() -> Result<(), bevy::ecs::system::RunSystemError> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.run_system_once(follow_character_camera)?;
+		Ok(())
+	}
 }
