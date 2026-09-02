@@ -28,7 +28,11 @@ impl RichmondAvianMovementSurface<'_, '_> {
 	}
 
 	fn link_on_actor(&self, p: Vec3) -> Option<&CirculationStairwell> {
-		self.links.iter().find(|link| link.contains_actor(p))
+		self.links.iter().find(|link| {
+			let low = link.mouth.y.min(link.landing.y) + 0.08;
+			let high = link.mouth.y.max(link.landing.y) - 0.08;
+			link.contains_actor(p) && p.y > low && p.y < high
+		})
 	}
 
 	fn step_link(
@@ -105,7 +109,8 @@ where
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		}
 
-		let on_stairs = self.link_on_actor(from.point);
+		let from_walk = from.point - Vec3::Y * ability.feet_below_origin();
+		let on_stairs = self.link_on_actor(from_walk);
 		let chain = match (on_stairs, self.climb_chain(from_id, to_id, from.point)) {
 			(Some(link), _) if link_serves(link, from_id, to_id) => vec![link],
 			(_, Some(c)) if !c.is_empty() => c,
@@ -117,10 +122,11 @@ where
 		let going_up = to_id > from_id;
 		let first = chain[0];
 		let approach = if going_up { first.mouth } else { first.landing };
-		let approach_loc = lift_location(approach, ability, 1.4);
-		let already_at_mouth = approach_loc.contains_xz(from.point) || on_stairs.is_some();
+		let approach_radius = (ability.agent_radius() * 0.75).clamp(0.25, 0.45);
+		let approach_loc = lift_location(approach, ability, approach_radius);
+		let already_at_mouth = approach_loc.contains(from.point);
 
-		let prefixes = if already_at_mouth {
+		let prefixes = if already_at_mouth || on_stairs.is_some() {
 			vec![(Vec::new(), 0.0, MovementCandidateHints::default())]
 		} else {
 			mouth_prefixes(&self.avian, from, exclude, ability, approach_loc, budget)
@@ -129,18 +135,27 @@ where
 		let mut climb_steps = Vec::new();
 		let mut climb_cost = 0.0;
 		let mut cursor = from.point;
+		// Prefixes finish at the mouth/landing. Select from the actor's feet only
+		// when already between storeys; otherwise begin the stair chain at that
+		// approach so a nearby side point cannot skip the lineup waypoint.
+		let mut cursor_walk = if on_stairs.is_some() { from_walk } else { approach };
+		let climb_arrival = (ability.agent_radius() * 0.55).clamp(0.18, 0.3);
 		for link in &chain {
-			for p in link.oriented_polyline(going_up, cursor) {
-				let loc = lift_location(p, ability, ability.agent_radius() * 1.15);
+			for p in link.oriented_polyline(going_up, cursor_walk) {
+				let loc = lift_location(p, ability, climb_arrival);
 				climb_cost += loc.xz_distance(cursor);
 				climb_steps.push(MovementStep::MoveTo(loc));
 				cursor = loc.point;
+				cursor_walk = p;
 			}
 		}
 
 		let upper_from = MovementLocation::new(cursor, ability.agent_radius());
-		let upper_budget =
-			CandidateBudget { max_candidates: 1, max_steps: budget.max_steps, horizon: budget.horizon };
+		let upper_budget = CandidateBudget {
+			max_candidates: 1,
+			max_steps: budget.max_steps,
+			horizon: budget.horizon,
+		};
 		let mut upper =
 			self.avian.collider_paths(upper_from, exclude, ability, objective, upper_budget);
 		if upper.is_empty() {
@@ -187,8 +202,13 @@ fn mouth_prefixes<A: MovementSheet>(
 		max_steps: budget.max_steps,
 		horizon: budget.horizon,
 	};
-	let paths =
-		avian.collider_paths(from, exclude, ability, MovementObjective::Reach(approach), mouth_budget);
+	let paths = avian.collider_paths(
+		from,
+		exclude,
+		ability,
+		MovementObjective::Reach(approach),
+		mouth_budget,
+	);
 	if paths.is_empty() {
 		return vec![(
 			vec![MovementStep::MoveTo(approach)],

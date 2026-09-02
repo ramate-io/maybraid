@@ -59,12 +59,7 @@ impl CirculationStairwell {
 		if self.polyline.is_empty() {
 			return vec![self.landing];
 		}
-		let mut start = 0usize;
-		for (i, p) in self.polyline.iter().enumerate() {
-			if p.y <= from.y + 0.4 {
-				start = i;
-			}
-		}
+		let start = nearest_point_index(&self.polyline, from);
 		self.polyline[start..].to_vec()
 	}
 
@@ -77,15 +72,19 @@ impl CirculationStairwell {
 			if pts.is_empty() {
 				return vec![self.mouth];
 			}
-			let mut start = 0usize;
-			for (i, p) in pts.iter().enumerate() {
-				if p.y >= from.y - 0.4 {
-					start = i;
-				}
-			}
+			let start = nearest_point_index(&pts, from);
 			pts[start..].to_vec()
 		}
 	}
+}
+
+fn nearest_point_index(points: &[Vec3], from: Vec3) -> usize {
+	points
+		.iter()
+		.enumerate()
+		.min_by(|(_, a), (_, b)| a.distance_squared(from).total_cmp(&b.distance_squared(from)))
+		.map(|(i, _)| i)
+		.unwrap_or(0)
 }
 
 /// Stamp a storey host from a mixed-use Les Halles floor.
@@ -123,11 +122,27 @@ pub fn circulation_from_stairwell(
 	let mouth_local = well.side_mid(well.walk_on, well.bottom_y()) + outward * 1.35;
 	let landing_local = well.side_mid(well.walk_off, well.top_y()) - off * 1.1;
 	let mut polyline = vec![mouth_local];
+	let mut tread_points = Vec::new();
+	let mut lineup = None;
 	for node in stairwell.stairs() {
-		for (center, _, size) in node.tread_cuboids() {
-			polyline.push(Vec3::new(center.x, center.y + size.y * 0.5, center.z));
+		for (center, rotation, size) in node.tread_cuboids() {
+			let top = center + rotation * Vec3::Y * (size.y * 0.5);
+			if lineup.is_none() {
+				let travel = (rotation * Vec3::X).with_y(0.0).normalize_or_zero();
+				let trailing = top - travel * (size.x * 0.5);
+				let mut entry = trailing - travel * 0.45;
+				entry.y = well.bottom_y();
+				lineup = Some(entry);
+			}
+			tread_points.push(top);
 		}
 	}
+	if let Some(lineup) = lineup {
+		// Approach the first flight centerline before climbing. This makes the
+		// route turn on the run-in slab instead of cutting across the ramp side.
+		polyline.push(lineup);
+	}
+	polyline.extend(tread_points);
 	polyline.push(landing_local);
 	CirculationStairwell {
 		from_storey,
@@ -190,6 +205,16 @@ mod tests {
 		let last = link.polyline.last().copied().unwrap_or_default();
 		assert!(last.y > first.y + 1.0, "{} vs {}", last.y, first.y);
 		assert!(link.landing.y > link.mouth.y);
+		let lineup = link.polyline[1];
+		let first_tread = link.polyline[2];
+		let first_node = stairwell.stairs().first().expect("first flight");
+		let travel = (first_node.placement.rotation() * Vec3::X).with_y(0.0).normalize();
+		let entry_direction = (first_tread - lineup).with_y(0.0).normalize();
+		assert!(
+			entry_direction.dot(travel) > 0.99,
+			"entry should align with first flight: {entry_direction} vs {travel}"
+		);
+		assert!((lineup.y - well.bottom_y()).abs() < 1e-4);
 		Ok(())
 	}
 

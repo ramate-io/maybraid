@@ -80,11 +80,12 @@ fn straight_ramp(
 ) -> (Vec3, Quat, Vec3) {
 	let going = g.going_per_tread();
 	let tops = g.effective_tread_tops();
-	let y0 = tops.first().copied().unwrap_or(g.rise_per_tread());
 	let y1 = tops.last().copied().unwrap_or(g.height);
 	let x0 = -0.5 * going;
 	let x1 = g.length - 0.5 * going;
-	ramp_from_local_run(placement, Vec3::new(x0, y0, 0.0), Vec3::new(x1, y1, 0.0), g.width)
+	// Meet the supporting floor at the first tread's trailing edge. Connecting
+	// the tread tops directly leaves a vertical first-riser collision face.
+	ramp_from_local_run(placement, Vec3::new(x0, 0.0, 0.0), Vec3::new(x1, y1, 0.0), g.width)
 }
 
 fn spiral_ramps(treads: &[(Vec3, Quat, Vec3)]) -> Vec<(Vec3, Quat, Vec3)> {
@@ -209,6 +210,24 @@ mod tests {
 		let up = rot * Vec3::Y;
 		assert!(up.y > 0.5, "ramp normal should point mostly up, got {up}");
 		assert!(center.y > 0.2 && center.y < 1.6, "ramp mid height {}", center.y);
+		Ok(())
+	}
+
+	#[test]
+	fn straight_ramp_low_top_edge_meets_the_floor() -> anyhow::Result<()> {
+		let geometry = StairGeometry::straight_run(1.8, 3.6, 0.8, 0.36);
+		let StairGeometry::Straight(stair) = &geometry else {
+			anyhow::bail!("expected straight stair");
+		};
+		let going = stair.going_per_tread();
+		let node = StairNode::rough_stone(geometry, Placement::new(Vec3::ZERO, 0.0));
+		let (center, rotation, size) = node.walk_ramps()[0];
+		let low_top = center + rotation * Vec3::new(-size.x * 0.5, size.y * 0.5, 0.0);
+		assert!(low_top.y.abs() < 1e-4, "low ramp edge should meet floor: {low_top}");
+		assert!(
+			(low_top.x + going * 0.5).abs() < 1e-4,
+			"low ramp edge should meet first tread trailing edge: {low_top}"
+		);
 		Ok(())
 	}
 }
