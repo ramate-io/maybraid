@@ -71,6 +71,7 @@ members = [
   "maybraid/input",
   "maybraid/player",
   "maybraid/player-camera",
+  "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/items/firearms-components",
   "maybraid/items/firearms",
@@ -290,6 +291,7 @@ maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
 player = { path = "maybraid/player" }
 player-camera = { path = "maybraid/player-camera" }
+movement-realization = { path = "maybraid/movement-realization" }
 projectiles = { path = "maybraid/projectiles" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }

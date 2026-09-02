@@ -28,6 +28,7 @@ maybraid-input = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }
 movement-intelligence-richmond = { workspace = true }
+movement-realization = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
 procedural-common = { workspace = true }

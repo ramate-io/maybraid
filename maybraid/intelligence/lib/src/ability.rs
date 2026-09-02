@@ -36,6 +36,7 @@ impl Default for VantageStandoffs {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementAbility {
 	pub max_step: f32,
+	/// Vertical jump budget (meters). Realization reads this; the planner does not.
 	pub max_jump: f32,
 	pub can_use_doors: bool,
 	pub can_use_stairs: bool,
@@ -71,6 +72,10 @@ impl Default for MovementAbility {
 pub trait MovementBody {
 	fn agent_radius(&self) -> f32;
 	fn max_step(&self) -> f32;
+	/// Vertical jump budget (meters). Realization uses this to decide whether to hop.
+	fn max_jump(&self) -> f32 {
+		0.0
+	}
 	fn feet_below_origin(&self) -> f32;
 	fn eye_height(&self) -> f32;
 	fn hip_height(&self) -> f32;
@@ -106,6 +111,10 @@ impl MovementBody for MovementAbility {
 
 	fn max_step(&self) -> f32 {
 		self.max_step
+	}
+
+	fn max_jump(&self) -> f32 {
+		self.max_jump
 	}
 
 	fn feet_below_origin(&self) -> f32 {

@@ -11,7 +11,6 @@ use richmond_building_physics::{spawn_building_walk_colliders, BUILDING_FRICTION
 use richmond_buildings::{Confines, Fit, Openings};
 use richmond_developments::MixedUseLesHallesDevelopment;
 
-
 /// Footprint large enough for a monotower (`≥ 28 m`) and two storeys (`height ≥ 10 m`).
 const TOWER_EXTENT: Vec3 = Vec3::new(36.0, 10.0, 36.0);
 const TOWER_SEED: i32 = 1337;
@@ -66,7 +65,9 @@ fn spawn_development(
 		let bounds = building_bounds(floor);
 		for entity in spawn_building_components(commands, floor, transform, bounds) {
 			spawn_building_walk_colliders(commands, entity, floor, BUILDING_FRICTION);
-			commands.entity(entity).insert(circulation_from_storey(id as u32, floor, transform));
+			commands
+				.entity(entity)
+				.insert(circulation_from_storey(id as u32, floor, transform));
 		}
 	}
 
@@ -75,26 +76,30 @@ fn spawn_development(
 	if n_floors >= 2 {
 		let last_well_i = n_floors - 2;
 		for floor_i in 0..=last_well_i {
-		let n_shafts =
-			dev.tower.floors.get(floor_i).map(|f| f.floor_plan().shaft_bounds.len()).unwrap_or(0);
-		for _ in 0..n_shafts {
-			let Some(stairwell) = dev.stairwells.get(stair_k) else {
-				break;
-			};
-			let bounds = building_bounds(stairwell);
-			let from_id = floor_i as u32;
-			let to_id = from_id + 1;
-			let link = circulation_from_stairwell(from_id, to_id, stairwell, transform);
-			if !placed_near_stair {
-				spawn = spawn_from_link(&link);
-				placed_near_stair = true;
+			let n_shafts = dev
+				.tower
+				.floors
+				.get(floor_i)
+				.map(|f| f.floor_plan().shaft_bounds.len())
+				.unwrap_or(0);
+			for _ in 0..n_shafts {
+				let Some(stairwell) = dev.stairwells.get(stair_k) else {
+					break;
+				};
+				let bounds = building_bounds(stairwell);
+				let from_id = floor_i as u32;
+				let to_id = from_id + 1;
+				let link = circulation_from_stairwell(from_id, to_id, stairwell, transform);
+				if !placed_near_stair {
+					spawn = spawn_from_link(&link);
+					placed_near_stair = true;
+				}
+				for entity in spawn_building_components(commands, stairwell, transform, bounds) {
+					spawn_building_walk_colliders(commands, entity, stairwell, BUILDING_FRICTION);
+					commands.entity(entity).insert(link.clone());
+				}
+				stair_k += 1;
 			}
-			for entity in spawn_building_components(commands, stairwell, transform, bounds) {
-				spawn_building_walk_colliders(commands, entity, stairwell, BUILDING_FRICTION);
-				commands.entity(entity).insert(link.clone());
-			}
-			stair_k += 1;
-		}
 		}
 	}
 

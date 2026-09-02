@@ -1,7 +1,7 @@
 //! Firing range: pad + Les Halles stack → player + firearm-user plugins.
 
-pub mod commands;
 mod buildings_lod;
+pub mod commands;
 mod les_halles;
 mod range;
 mod ui;
@@ -27,6 +27,7 @@ use movement_intelligence::{
 	MovementIntelligenceSystems, ReplanMovement,
 };
 use movement_intelligence_richmond::RichmondAvianMovementSurface;
+use movement_realization::MovementRealizationPlugin;
 use player::{
 	needs_npc_visual, needs_player_visual, spawn_npc_visual, spawn_npc_with_hidden_capsule,
 	spawn_player_visual, spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerPlugin,
@@ -46,54 +47,48 @@ impl Plugin for FiringRangePlugin {
 		app.insert_resource(MovementIntelligenceLimits {
 			max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 80.0 },
 		})
-			.add_plugins(FirearmHostsPlugin)
-			.add_plugins(FirearmWeaponsPlugin)
-			.add_plugins(CharacterHostsPlugin)
-			.add_plugins(CharacterControllerPlugin)
-			.add_plugins(PlayerPlugin)
-			.add_plugins(PlayerCameraPlugin)
-			.add_plugins(FirearmUserPlugin)
-			.add_plugins(FiringRangeBuildingsLodPlugin)
-			.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
-			.add_plugins(BuildingWalkColliderPlugin)
-			.add_plugins(
-				MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default(),
+		.add_plugins(FirearmHostsPlugin)
+		.add_plugins(FirearmWeaponsPlugin)
+		.add_plugins(CharacterHostsPlugin)
+		.add_plugins(CharacterControllerPlugin)
+		.add_plugins(PlayerPlugin)
+		.add_plugins(PlayerCameraPlugin)
+		.add_plugins(FirearmUserPlugin)
+		.add_plugins(FiringRangeBuildingsLodPlugin)
+		.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
+		.add_plugins(BuildingWalkColliderPlugin)
+		.add_plugins(MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default())
+		.add_plugins(MovementRealizationPlugin)
+		.init_resource::<vantage::NpcVantageRefresh>()
+		.init_resource::<LesHallesSpawn>()
+		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		.add_systems(
+			Startup,
+			(spawn_follow_camera_system, setup_lighting, range::setup_range, spawn_reticle_system)
+				.chain(),
+		)
+		.add_systems(
+			PostStartup,
+			(
+				les_halles::setup_les_halles,
+				spawn_player_system,
+				spawn_npc_system,
+				spawn_held_system,
 			)
-			.init_resource::<vantage::NpcVantageRefresh>()
-			.init_resource::<LesHallesSpawn>()
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
-			.add_systems(
-				Startup,
-				(
-					spawn_follow_camera_system,
-					setup_lighting,
-					range::setup_range,
-					spawn_reticle_system,
-				)
-					.chain(),
-			)
-			.add_systems(
-				PostStartup,
-				(
-					les_halles::setup_les_halles,
-					spawn_player_system,
-					spawn_npc_system,
-					spawn_held_system,
-				)
-					.chain(),
-			)
-			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
-			.add_systems(
-				Update,
-				(
-					spawn_player_character,
-					spawn_npc_character,
-					vantage::refresh_npc_vantage.before(MovementIntelligenceSystems::Replan),
-					les_halles::draw_circulation_gizmos,
-					apply_parent_confines.after(LodRefreshSystems::Cull),
-					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				),
-			);
+				.chain(),
+		)
+		.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+		.add_systems(
+			Update,
+			(
+				spawn_player_character,
+				spawn_npc_character,
+				vantage::refresh_npc_vantage.before(MovementIntelligenceSystems::Replan),
+				les_halles::draw_circulation_gizmos,
+				apply_parent_confines.after(LodRefreshSystems::Cull),
+				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+			),
+		);
 	}
 }
 

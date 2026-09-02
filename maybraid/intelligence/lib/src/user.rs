@@ -102,7 +102,11 @@ where
 pub enum MovementDriveResult {
 	Wish(Vec3),
 	Hold,
-	Stuck { wish: Vec3 },
+	/// Planner is not approaching the current step. Drive still writes `wish`;
+	/// local unstick belongs to the motor (strafe / jump / backup), not an immediate replan.
+	Stuck {
+		wish: Vec3,
+	},
 }
 
 impl<I, A> MovementIntelligence<I, A>
@@ -194,6 +198,21 @@ mod tests {
 		brain.adopt_plan(vec![MovementStep::MoveTo(MovementLocation::new(Vec3::ZERO, 1.0))]);
 		assert_eq!(brain.drive(0.016, Vec3::new(0.2, 0.0, 0.1)), MovementDriveResult::Hold);
 		assert!(brain.at_plan_end());
+		Ok(())
+	}
+
+	#[test]
+	fn drive_reports_stuck_when_distance_does_not_fall() -> anyhow::Result<()> {
+		let mut brain = MovementIntelligence::new(vantage());
+		brain.settings.stuck_timeout = 0.08;
+		brain.adopt_plan(vec![MovementStep::MoveTo(MovementLocation::new(Vec3::X * 8.0, 0.4))]);
+		let mut saw_stuck = false;
+		for _ in 0..20 {
+			if matches!(brain.drive(0.016, Vec3::ZERO), MovementDriveResult::Stuck { .. }) {
+				saw_stuck = true;
+			}
+		}
+		assert!(saw_stuck);
 		Ok(())
 	}
 }

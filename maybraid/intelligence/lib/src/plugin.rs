@@ -79,21 +79,19 @@ pub fn replan_movement<S, I, A>(
 
 pub fn drive_movement<I, A>(
 	time: Res<Time>,
-	mut movers: Query<(Entity, &Transform, &mut MovementIntelligence<I, A>, &mut MoveWish)>,
-	mut commands: Commands,
+	mut movers: Query<(&Transform, &mut MovementIntelligence<I, A>, &mut MoveWish)>,
 ) where
 	I: MovementDrive + Send + Sync + 'static,
 	A: Send + Sync + 'static,
 {
 	let dt = time.delta_secs();
-	for (entity, transform, mut brain, mut wish) in &mut movers {
+	for (transform, mut brain, mut wish) in &mut movers {
 		match brain.drive(dt, transform.translation) {
-			MovementDriveResult::Wish(dir) => wish.0 = dir,
-			MovementDriveResult::Hold => wish.0 = Vec3::ZERO,
-			MovementDriveResult::Stuck { wish: dir } => {
+			MovementDriveResult::Wish(dir) | MovementDriveResult::Stuck { wish: dir } => {
+				// Motor unstick may override this wish later this frame.
 				wish.0 = dir;
-				commands.entity(entity).insert(ReplanMovement);
 			}
+			MovementDriveResult::Hold => wish.0 = Vec3::ZERO,
 		}
 	}
 }
