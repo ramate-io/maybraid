@@ -8,38 +8,17 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-	names::mix, ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
+	names::mix, ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor,
 	ItemRng,
 };
 
 const CLOTHING_SEED: u64 = 0x51A7_0001_C10A_0001;
-const FIREARM_SEED: u64 = 0xF1A4_A11A_0002_C0DE;
 
 const BASE_HEALTH: i16 = 100;
 const BASE_RUNNING: i16 = 100;
 const BASE_JUMP: i16 = 100;
 const BASE_AGILITY: i16 = 100;
 const BASE_STRENGTH: i16 = 100;
-
-const BOLT_SPEED_MIN: u32 = 120;
-const BOLT_SPEED_MAX: u32 = 500;
-const LASER_SPEED_MIN: u32 = 60;
-const LASER_SPEED_MAX: u32 = 120;
-
-const BOLT_PEN_MIN: u32 = 600;
-const BOLT_PEN_MAX: u32 = 1200;
-const BULLET_PEN_MIN: u32 = 250;
-const BULLET_PEN_MAX: u32 = 700;
-const RANGE_PEN_FLOOR: u32 = 250;
-const RANGE_PEN_CEILING: u32 = 1200;
-
-const RPM_MIN: u32 = 400;
-const RPM_LOW_MAX: u32 = 700;
-const RPM_MOD_MAX: u32 = 1100;
-const RPM_MAX: u32 = 1500;
-
-const LASER_DPC_CENTER: i16 = 22;
-const LASER_DPC_SPREAD: u16 = 6;
 
 /// Projectile family on a firearm. Mirrors the `firearms` crate conceptually
 /// without taking a dependency.
@@ -178,9 +157,12 @@ pub struct FirearmStats {
 }
 
 impl FirearmStats {
-	pub fn generate(mesh: FirearmMesh) -> Self {
-		let seed = mix(FIREARM_SEED, mesh.label());
-		generate_firearm(&mut ItemRng::from_seed(seed), mesh)
+	pub fn generate(spec: &FirearmSpec) -> Self {
+		crate::generate_firearm_stats(spec)
+	}
+
+	pub fn generate_for_mesh(mesh: crate::FirearmMesh) -> Self {
+		Self::generate(&FirearmSpec::from_mesh(mesh))
 	}
 
 	pub fn catalog_detail(self) -> String {
@@ -215,9 +197,16 @@ impl FirearmStats {
 		rows
 	}
 
-	/// Inclusive DPC band implied by fire mode, recoil, and recharge.
+	/// Inclusive DPC clamp for the realized projectile / fire mode.
 	pub fn damage_band(self) -> Option<(u16, u16)> {
-		damage_band(self.projectile, self.fire, self.recoil)
+		Some(match (self.projectile, self.fire) {
+			(ProjectileKind::Laser, _) => (8, 40),
+			(_, Some(FireMode::FullAuto { .. })) => (8, 80),
+			(_, Some(FireMode::Burst { .. })) => (12, 90),
+			(_, Some(FireMode::SemiAuto)) => (16, 100),
+			(_, Some(FireMode::Gated { .. })) => (24, 140),
+			_ => (8, 140),
+		})
 	}
 }
 
@@ -415,202 +404,10 @@ fn clothing_weight_range(mesh: ClothingMesh) -> (u32, u32) {
 	}
 }
 
-fn generate_firearm(rng: &mut ItemRng, mesh: FirearmMesh) -> FirearmStats {
-	let projectile = pick_projectile(rng, mesh);
-	let (speed, penetration, range, fire, recoil, damage) = match projectile {
-		ProjectileKind::Laser => {
-			let speed = rng.in_range(LASER_SPEED_MIN, LASER_SPEED_MAX) as u16;
-			let range = laser_range(speed);
-			let damage = roll_dpc(rng, LASER_DPC_CENTER, LASER_DPC_SPREAD, 0, 0, 0);
-			(speed, 0, range, None, 0, damage)
-		}
-		ProjectileKind::Bolt | ProjectileKind::Bullet => {
-			let speed = rng.in_range(BOLT_SPEED_MIN, BOLT_SPEED_MAX) as u16;
-			let (pen_min, pen_max) = if projectile == ProjectileKind::Bolt {
-				(BOLT_PEN_MIN, BOLT_PEN_MAX)
-			} else {
-				(BULLET_PEN_MIN, BULLET_PEN_MAX)
-			};
-			let penetration = rng.in_range(pen_min, pen_max) as u16;
-			let range = ballistic_range(penetration, speed);
-			let fire = pick_fire_mode(rng, mesh);
-			let recoil = rng.in_range(0, 8) as u8;
-			let damage = ballistic_dpc(rng, fire, recoil);
-			(speed, penetration, range, Some(fire), recoil, damage)
-		}
-	};
-	let weight = firearm_weight(rng, mesh, fire);
-	FirearmStats { projectile, speed, penetration, range, fire, recoil, damage, weight }
-}
-
-fn pick_projectile(rng: &mut ItemRng, mesh: FirearmMesh) -> ProjectileKind {
-	let weights: &[(ProjectileKind, u32)] = match mesh {
-		FirearmMesh::Bullpup => {
-			&[(ProjectileKind::Bolt, 50), (ProjectileKind::Bullet, 40), (ProjectileKind::Laser, 10)]
-		}
-		FirearmMesh::Silopup => {
-			&[(ProjectileKind::Bolt, 30), (ProjectileKind::Bullet, 60), (ProjectileKind::Laser, 10)]
-		}
-		FirearmMesh::Reltor => {
-			&[(ProjectileKind::Bolt, 40), (ProjectileKind::Bullet, 50), (ProjectileKind::Laser, 10)]
-		}
-		FirearmMesh::Samsonist => {
-			&[(ProjectileKind::Bolt, 55), (ProjectileKind::Bullet, 35), (ProjectileKind::Laser, 10)]
-		}
-		FirearmMesh::Snailer => {
-			&[(ProjectileKind::Bolt, 15), (ProjectileKind::Bullet, 15), (ProjectileKind::Laser, 70)]
-		}
-	};
-	pick_weighted(rng, weights)
-}
-
-fn pick_fire_mode(rng: &mut ItemRng, mesh: FirearmMesh) -> FireMode {
-	let weights: &[(u8, u32)] = match mesh {
-		FirearmMesh::Bullpup => &[(0, 50), (1, 25), (2, 20), (3, 5)],
-		FirearmMesh::Silopup => &[(0, 40), (1, 20), (2, 35), (3, 5)],
-		FirearmMesh::Reltor => &[(0, 35), (1, 30), (2, 25), (3, 10)],
-		FirearmMesh::Samsonist => &[(0, 15), (1, 20), (2, 25), (3, 40)],
-		FirearmMesh::Snailer => &[(0, 20), (1, 20), (2, 20), (3, 40)],
-	};
-	match pick_weighted(rng, weights) {
-		0 => FireMode::FullAuto { rpm: roll_full_auto_rpm(rng) },
-		1 => {
-			let rounds = [3u8, 4, 5][rng.gen_index(3)];
-			FireMode::Burst { rounds, rpm: rng.in_range(RPM_MIN, RPM_MAX) as u16 }
-		}
-		2 => FireMode::SemiAuto,
-		_ => FireMode::Gated { recharge_tenths: rng.in_range(8, 35) as u8 },
-	}
-}
-
-fn roll_full_auto_rpm(rng: &mut ItemRng) -> u16 {
-	match rng.in_range(0, 2) {
-		0 => rng.in_range(RPM_MIN, RPM_LOW_MAX) as u16,
-		1 => rng.in_range(RPM_LOW_MAX + 1, RPM_MOD_MAX) as u16,
-		_ => rng.in_range(RPM_MOD_MAX + 1, RPM_MAX) as u16,
-	}
-}
-
-fn ballistic_dpc(rng: &mut ItemRng, fire: FireMode, recoil: u8) -> u16 {
-	match fire {
-		FireMode::FullAuto { rpm } => {
-			let (center, spread, recoil_per) = full_auto_dpc_params(rpm);
-			roll_dpc(rng, center, spread, recoil, recoil_per, 0)
-		}
-		FireMode::Burst { rounds, .. } => {
-			let (center, spread) = match rounds {
-				3 => (30, 6),
-				4 => (24, 3),
-				_ => (20, 3),
-			};
-			roll_dpc(rng, center, spread, recoil, 1, 0)
-		}
-		FireMode::SemiAuto => roll_dpc(rng, 35, 5, recoil, 2, 0),
-		FireMode::Gated { recharge_tenths } => {
-			roll_dpc(rng, 60, 15, recoil, 2, i16::from(recharge_tenths))
-		}
-	}
-}
-
-fn full_auto_dpc_params(rpm: u16) -> (i16, u16, i16) {
-	if rpm <= RPM_LOW_MAX as u16 {
-		(30, 4, 1)
-	} else if rpm <= RPM_MOD_MAX as u16 {
-		(24, 2, 1)
-	} else {
-		(18, 2, 1)
-	}
-}
-
-fn roll_dpc(
-	rng: &mut ItemRng,
-	center: i16,
-	spread: u16,
-	recoil: u8,
-	recoil_per: i16,
-	extra: i16,
-) -> u16 {
-	let delta = rng.in_range_i16(-(spread as i16), spread as i16);
-	let value = i32::from(center)
-		+ i32::from(delta)
-		+ i32::from(recoil) * i32::from(recoil_per)
-		+ i32::from(extra);
-	value.clamp(1, 240) as u16
-}
-
-fn damage_band(
-	projectile: ProjectileKind,
-	fire: Option<FireMode>,
-	recoil: u8,
-) -> Option<(u16, u16)> {
-	let (center, spread, recoil_per, extra) = match (projectile, fire) {
-		(ProjectileKind::Laser, _) => (LASER_DPC_CENTER, LASER_DPC_SPREAD, 0, 0),
-		(_, Some(FireMode::FullAuto { rpm })) => {
-			let (center, spread, recoil_per) = full_auto_dpc_params(rpm);
-			(center, spread, recoil_per, 0)
-		}
-		(_, Some(FireMode::Burst { rounds, .. })) => {
-			let (center, spread) = match rounds {
-				3 => (30, 6),
-				4 => (24, 3),
-				_ => (20, 3),
-			};
-			(center, spread, 1, 0)
-		}
-		(_, Some(FireMode::SemiAuto)) => (35, 5, 2, 0),
-		(_, Some(FireMode::Gated { recharge_tenths })) => (60, 15, 2, i16::from(recharge_tenths)),
-		_ => return None,
-	};
-	let bonus = i32::from(recoil) * i32::from(recoil_per) + i32::from(extra);
-	let min = (i32::from(center) - i32::from(spread) + bonus).clamp(1, 240) as u16;
-	let max = (i32::from(center) + i32::from(spread) + bonus).clamp(1, 240) as u16;
-	Some((min, max))
-}
-
-fn ballistic_range(penetration: u16, speed: u16) -> u16 {
-	let pen_span = RANGE_PEN_CEILING - RANGE_PEN_FLOOR;
-	let pen_t = f32::from(penetration.saturating_sub(RANGE_PEN_FLOOR as u16)) / pen_span as f32;
-	let speed_t = f32::from(speed.saturating_sub(BOLT_SPEED_MIN as u16))
-		/ (BOLT_SPEED_MAX - BOLT_SPEED_MIN) as f32;
-	let t = (0.75 * pen_t + 0.25 * speed_t).clamp(0.0, 1.0);
-	(50.0 + t * 950.0).round().clamp(50.0, 1000.0) as u16
-}
-
-fn laser_range(speed: u16) -> u16 {
-	let t = f32::from(speed.saturating_sub(LASER_SPEED_MIN as u16))
-		/ (LASER_SPEED_MAX - LASER_SPEED_MIN) as f32;
-	(90.0 + t * 10.0).round().clamp(80.0, 100.0) as u16
-}
-
-fn firearm_weight(rng: &mut ItemRng, mesh: FirearmMesh, fire: Option<FireMode>) -> u16 {
-	let (min, max) = match mesh {
-		FirearmMesh::Snailer => (6, 16),
-		FirearmMesh::Bullpup | FirearmMesh::Silopup => (8, 18),
-		FirearmMesh::Reltor => (10, 22),
-		FirearmMesh::Samsonist => (14, 28),
-	};
-	let mut weight = rng.in_range(min, max);
-	if matches!(fire, Some(FireMode::Gated { .. })) {
-		weight = weight.saturating_add(rng.in_range(2, 6));
-	}
-	weight as u16
-}
-
-fn pick_weighted<T: Copy>(rng: &mut ItemRng, weights: &[(T, u32)]) -> T {
-	let total: u32 = weights.iter().map(|(_, weight)| *weight).sum();
-	let mut pick = rng.in_range(0, total.saturating_sub(1));
-	for (value, weight) in weights {
-		if pick < *weight {
-			return *value;
-		}
-		pick -= *weight;
-	}
-	weights[0].0
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::FirearmMesh;
 
 	#[test]
 	fn clothing_identity_is_stable_and_has_weight() {
@@ -653,7 +450,7 @@ mod tests {
 	#[test]
 	fn firearm_dpc_stays_in_formula_band() {
 		for mesh in FirearmMesh::VALUES {
-			let stats = FirearmStats::generate(*mesh);
+			let stats = FirearmStats::generate(&FirearmSpec::from_mesh(*mesh));
 			let (min, max) = stats.damage_band().expect("band");
 			assert!(
 				(min..=max).contains(&stats.damage),
@@ -665,24 +462,18 @@ mod tests {
 				ProjectileKind::Laser => {
 					assert!(stats.fire.is_none());
 					assert_eq!(stats.penetration, 0);
-					assert!(
-						(LASER_SPEED_MIN as u16..=LASER_SPEED_MAX as u16).contains(&stats.speed)
-					);
-					assert!(stats.range <= 100);
+					assert!((60..=120).contains(&stats.speed));
+					assert!((80..=100).contains(&stats.range));
 				}
 				ProjectileKind::Bolt => {
 					assert!(stats.fire.is_some());
-					assert!(
-						(BOLT_PEN_MIN as u16..=BOLT_PEN_MAX as u16).contains(&stats.penetration)
-					);
-					assert!((BOLT_SPEED_MIN as u16..=BOLT_SPEED_MAX as u16).contains(&stats.speed));
+					assert!((600..=1200).contains(&stats.penetration));
+					assert!((120..=500).contains(&stats.speed));
 					assert!((50..=1000).contains(&stats.range));
 				}
 				ProjectileKind::Bullet => {
 					assert!(stats.fire.is_some());
-					assert!((BULLET_PEN_MIN as u16..=BULLET_PEN_MAX as u16)
-						.contains(&stats.penetration));
-					assert!(stats.penetration < BOLT_PEN_MAX as u16);
+					assert!((250..=700).contains(&stats.penetration));
 					assert!((50..=1000).contains(&stats.range));
 				}
 			}

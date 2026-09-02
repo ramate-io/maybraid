@@ -2,7 +2,7 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use crozon_character_items::ClothingMaterial;
+use crozon_character_items::{ClothingMaterial, FirearmMaterial};
 use crozon_character_shaders::ClothingShaderMaterial;
 use material_ref::{
 	material_ref_plugin_installed, MaterialId, MaterialLib, MaterialRef, MaterialRefCache,
@@ -47,7 +47,10 @@ impl MaterialLib for ClothingMaterialLib<'_> {
 		commands: &mut Commands,
 	) -> bool {
 		match &material_ref.name {
-			MaterialId::Name(name) if ClothingMaterial::is_clothing_recipe(name) => {
+			MaterialId::Name(name)
+				if ClothingMaterial::is_clothing_recipe(name)
+					|| FirearmMaterial::is_firearm_recipe(name) =>
+			{
 				let handle = self.resolve_clothing(material_ref);
 				commands
 					.entity(entity)

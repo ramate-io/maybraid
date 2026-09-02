@@ -6,7 +6,10 @@ use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
-use crozon_character_items::{ClothingHost, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
+use crozon_character_items::{
+	ClothingHost, ClothingMesh, FirearmBarrel, FirearmGrip, FirearmSpec, FirearmTriggerBox,
+	InventoryItem, ItemColor,
+};
 use crozon_character_persist::SaveRoot;
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::{
@@ -16,12 +19,14 @@ use crozon_character_ui_menus::{
 use crozon_characters::{
 	add_character_components_host, character_bounds, AnimRef, AnimRefRoot, BoneMap,
 	CharacterComponents, CharacterHostSystems, CharacterMembers, CharacterRecipe, CharacterRig,
-	CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, PartNode,
+	CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, MaterialRef, PartNode,
 };
 use firearms_components::assets::guns;
 use firearms_components::{
-	add_firearm_components_host, firearm_bounds, spawn_firearm_components, FirearmComponents,
-	FirearmComponentsPlugin, Layers as FirearmLayers, PartNode as FirearmPartNode, RigNode,
+	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,
+	BoneScale, FirearmComponents, FirearmComponentsPlugin, FirearmHostSystems, FirearmMembers,
+	FirearmRoot, Layers as FirearmLayers, PartNode as FirearmPartNode, ResolvedRigPose, RigNode,
+	RigPoseLayer, RigRoot,
 };
 use lod::gen::LodScene;
 use lod::gen::LodSceneLevel;
@@ -76,6 +81,7 @@ impl Plugin for CharacterPreviewPlugin {
 						.after(sync_preview)
 						.after(CharacterHostSystems::Membership)
 						.before(crozon_characters::CharacterMotionSystems::Anim),
+					apply_firearm_preview_pose.after(FirearmHostSystems::Membership),
 					queue_preview_camera_focus,
 				),
 			)
@@ -226,8 +232,8 @@ fn menu_for_saved(
 }
 
 fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
-	if let Some(mesh) = item.firearm_mesh() {
-		spawn_firearm(commands, mesh);
+	if let Some(spec) = item.firearm_spec() {
+		spawn_firearm(commands, spec);
 		return;
 	}
 	let Some(mesh) = item.mesh() else {
@@ -245,8 +251,8 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 	);
 }
 
-fn spawn_firearm(commands: &mut Commands, mesh: FirearmMesh) {
-	let preview = FirearmPreview { mesh };
+fn spawn_firearm(commands: &mut Commands, spec: FirearmSpec) {
+	let preview = FirearmPreview { spec };
 	for entity in
 		spawn_firearm_components(commands, &preview, Transform::IDENTITY, firearm_bounds(&preview))
 	{
@@ -254,10 +260,32 @@ fn spawn_firearm(commands: &mut Commands, mesh: FirearmMesh) {
 	}
 }
 
-/// Assembled catalog kit, same slots as [`firearms::FirearmConcept::kit`].
+/// Assembled catalog kit from inventory identity.
 #[derive(Clone, Default, PartialEq)]
 struct FirearmPreview {
-	mesh: FirearmMesh,
+	spec: FirearmSpec,
+}
+
+impl FirearmPreview {
+	fn material(&self) -> MaterialRef {
+		MaterialRef::named(self.spec.material.recipe_id()).with_palette([self.spec.color.color()])
+	}
+
+	fn pose(&self) -> ResolvedRigPose {
+		let mut layer = RigPoseLayer::new("kit");
+		for (name, scale) in [
+			("body", self.spec.scales.body),
+			("barrel", self.spec.scales.barrel),
+			("grip", self.spec.scales.grip),
+			("trigger_box", self.spec.scales.trigger_box),
+			("stock", self.spec.scales.stock),
+		] {
+			layer = layer
+				.with_scale(BoneScale::length(name, scale.length()))
+				.with_scale(BoneScale::thickness(name, scale.thickness()));
+		}
+		ResolvedRigPose::new().with_layer(layer)
+	}
 }
 
 impl FirearmComponents for FirearmPreview {
@@ -269,46 +297,81 @@ impl FirearmComponents for FirearmPreview {
 	}
 
 	fn body_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		let path = match self.mesh {
-			FirearmMesh::Bullpup => guns::BULLPUP_BODY,
-			FirearmMesh::Silopup => guns::SILOPUP_BODY,
-			FirearmMesh::Reltor => guns::RELTOR_BODY,
-			FirearmMesh::Samsonist => guns::SAMSONIST_BODY,
-			FirearmMesh::Snailer => guns::SNAILER_BODY,
-		};
+		let material = self.material();
+		let body = self.spec.kit.body;
 		FirearmLayers::from_labeled(
 			"body",
-			vec![FirearmPartNode::body(self.mesh.label(), path.as_str())],
+			vec![FirearmPartNode::body(body.label(), body.body_path()).with_material(material)],
 		)
 	}
 
 	fn barrel_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		match self.mesh {
-			FirearmMesh::Bullpup => FirearmLayers::from_labeled(
+		let material = self.material();
+		match self.spec.kit.barrel {
+			FirearmBarrel::None => FirearmLayers::new(),
+			FirearmBarrel::Bullpup => FirearmLayers::from_labeled(
 				"barrel",
-				vec![FirearmPartNode::barrel("bullpup", guns::BULLPUP_BARREL.as_str())],
+				vec![FirearmPartNode::barrel("bullpup", guns::BULLPUP_BARREL.as_str())
+					.with_material(material)],
 			),
-			_ => FirearmLayers::new(),
+			FirearmBarrel::Laznard => FirearmLayers::from_labeled(
+				"barrel",
+				vec![FirearmPartNode::barrel("laznard", guns::LAZNARD_BARREL.as_str())
+					.with_material(material)],
+			),
 		}
 	}
 
 	fn trigger_box_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		match self.mesh {
-			FirearmMesh::Reltor => FirearmLayers::from_labeled(
+		let material = self.material();
+		match self.spec.kit.trigger_box {
+			FirearmTriggerBox::None => FirearmLayers::new(),
+			FirearmTriggerBox::Keelripe => FirearmLayers::from_labeled(
 				"trigger_box",
-				vec![FirearmPartNode::trigger_box("reltor", guns::RELTOR_BOX.as_str())],
+				vec![FirearmPartNode::trigger_box("keelripe", guns::KEELRIPE_BOX.as_str())
+					.with_material(material)],
 			),
-			_ => FirearmLayers::new(),
+			FirearmTriggerBox::Paddle => FirearmLayers::from_labeled(
+				"trigger_box",
+				vec![FirearmPartNode::trigger_box("paddle", guns::PADDLE_BOX.as_str())
+					.with_material(material)],
+			),
+			FirearmTriggerBox::Reltor => FirearmLayers::from_labeled(
+				"trigger_box",
+				vec![FirearmPartNode::trigger_box("reltor", guns::RELTOR_BOX.as_str())
+					.with_material(material)],
+			),
 		}
 	}
 
 	fn grip_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		match self.mesh {
-			FirearmMesh::Bullpup => FirearmLayers::from_labeled(
+		match self.spec.kit.grip {
+			FirearmGrip::None => FirearmLayers::new(),
+			FirearmGrip::BumpHandle => FirearmLayers::from_labeled(
 				"grip",
-				vec![FirearmPartNode::grip("bump-handle", guns::BUMP_HANDLE.as_str())],
+				vec![FirearmPartNode::grip("bump-handle", guns::BUMP_HANDLE.as_str())
+					.with_material(self.material())],
 			),
-			_ => FirearmLayers::new(),
+		}
+	}
+}
+
+fn apply_firearm_preview_pose(
+	hosts: Query<
+		(&firearms_components::ComponentsOnly<FirearmPreview>, Option<&FirearmMembers>),
+		With<FirearmRoot>,
+	>,
+	mut poses: Query<&mut ActiveRigPose, With<RigRoot>>,
+) {
+	for (preview, members) in &hosts {
+		let Some(members) = members else {
+			continue;
+		};
+		let resolved = preview.pose();
+		for member in members.iter() {
+			if let Ok(mut active) = poses.get_mut(member) {
+				active.pose = resolved.clone();
+			}
 		}
 	}
 }

@@ -3392,6 +3392,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "lod",
+ "material-ref",
  "rigs",
  "scene-ref",
 ]

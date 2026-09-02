@@ -2,14 +2,16 @@
 
 use bevy::prelude::*;
 use crozon_character_items::{
-	ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmStats, Inventory,
-	InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
+	BoltMaterial, ClothingMaterial, ClothingMesh, ClothingStats, FirearmBarrel, FirearmGrip,
+	FirearmKitSpec, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSpec, FirearmStats,
+	FirearmStock, FirearmTriggerBox, Inventory, InventoryItem, InventorySlot, ItemColor,
+	WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
 /// Capsule/session using an inventory bag.
 ///
@@ -83,8 +85,43 @@ enum InventoryItemFile {
 	Firearm {
 		mesh: FirearmMesh,
 		#[serde(default)]
+		kit: Option<FirearmKitFile>,
+		#[serde(default)]
+		scales: Option<FirearmScales>,
+		#[serde(default)]
+		material: Option<FirearmMaterial>,
+		#[serde(default)]
+		color: Option<ItemColor>,
+		#[serde(default)]
+		bolt: Option<BoltMaterial>,
+		#[serde(default)]
 		stats: Option<FirearmStats>,
 	},
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct FirearmKitFile {
+	barrel: FirearmBarrel,
+	grip: FirearmGrip,
+	trigger_box: FirearmTriggerBox,
+	stock: FirearmStock,
+}
+
+impl FirearmKitFile {
+	fn from_spec(kit: FirearmKitSpec) -> Self {
+		Self { barrel: kit.barrel, grip: kit.grip, trigger_box: kit.trigger_box, stock: kit.stock }
+	}
+
+	fn into_spec(self, body: FirearmMesh) -> FirearmKitSpec {
+		FirearmKitSpec {
+			body,
+			barrel: self.barrel,
+			grip: self.grip,
+			trigger_box: self.trigger_box,
+			stock: self.stock,
+		}
+	}
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,9 +140,15 @@ impl InventoryItemFile {
 				color: material.color,
 				stats: Some(*stats),
 			},
-			InventoryItem::Firearm { mesh, stats } => {
-				Self::Firearm { mesh: *mesh, stats: Some(*stats) }
-			}
+			InventoryItem::Firearm { spec, stats } => Self::Firearm {
+				mesh: spec.kit.body,
+				kit: Some(FirearmKitFile::from_spec(spec.kit)),
+				scales: Some(spec.scales),
+				material: Some(spec.material),
+				color: Some(spec.color),
+				bolt: Some(spec.bolt),
+				stats: Some(*stats),
+			},
 		}
 	}
 
@@ -116,10 +159,19 @@ impl InventoryItemFile {
 				material: crozon_character_items::MaterialRefParams::new(material, color),
 				stats: stats.unwrap_or_else(|| ClothingStats::generate(mesh, material, color)),
 			},
-			Self::Firearm { mesh, stats } => InventoryItem::Firearm {
-				mesh,
-				stats: stats.unwrap_or_else(|| FirearmStats::generate(mesh)),
-			},
+			Self::Firearm { mesh, kit, scales, material, color, bolt, stats } => {
+				let spec = FirearmSpec {
+					kit: kit.map(|kit| kit.into_spec(mesh)).unwrap_or_else(|| mesh.concept_kit()),
+					scales: scales.unwrap_or(FirearmScales::UNIT),
+					material: material.unwrap_or(FirearmMaterial::BrushedMetal),
+					color: color.unwrap_or(ItemColor::Natural),
+					bolt: bolt.unwrap_or(BoltMaterial::PlainLaser),
+				};
+				InventoryItem::Firearm {
+					spec,
+					stats: stats.unwrap_or_else(|| FirearmStats::generate(&spec)),
+				}
+			}
 		}
 	}
 }
