@@ -139,6 +139,17 @@ fn fitted_coat_on_standard_braidman_uses_humanoid_fit() {
 }
 
 #[test]
+fn robe_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::Robe);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/robe.glb"
+	);
+}
+
+#[test]
 fn right_features_use_scene_ref_instance_reflect() {
 	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
 	assert_right_features_reflected(&braidman.part_nodes_for_level(LodSceneLevel::High).flatten());

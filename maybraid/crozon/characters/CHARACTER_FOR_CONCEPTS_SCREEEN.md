@@ -993,10 +993,8 @@ Gender and build presets below adjust the same body rig sliders as percent offse
     - **Long Dress:** `LongDress` `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/body/long_dress.glb).
     - **Short Dress:** `ShortDress` `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/body/short_dress.glb).
     - **Fitted Coat:** `FittedCoat` `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/body/fitted_coat.glb).
-    - **Quarter Coat:** `QuarterCoat` `Mesh` in [`assets/clothes/quarter_coat.glb`](../../assets/characters/clothes/body/quarter_coat.glb).
     - **Robe Coat:** `RobeCoat` `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/body/robe_coat.glb).
-    - **Short-sleeved Robe Coat:** `ShortSleevedRobeCoat` `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/body/short_sleeved_robe_coat.glb).
-    - **Tailored Coat:** `TailoredCoat` `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/body/tailored_coat.glb).
+    - **Robe:** `Robe` `Mesh` in [`assets/clothes/robe.glb`](../../assets/characters/clothes/body/robe.glb).
 - **Animations:** walk, run, two-footed jump, tucked flip (humanoid-compatible; see [`crozon/animations`](../animations/)).
 - **Genders:** (percent offsets on body rig sliders after species baseline)
     - **Male:**

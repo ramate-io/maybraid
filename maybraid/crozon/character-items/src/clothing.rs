@@ -9,11 +9,8 @@ const CLOTHING_TUNIC: &str = "characters/clothes/body/tunic.glb";
 const CLOTHING_LONG_DRESS: &str = "characters/clothes/body/long_dress.glb";
 const CLOTHING_SHORT_DRESS: &str = "characters/clothes/body/short_dress.glb";
 const CLOTHING_FITTED_COAT: &str = "characters/clothes/body/fitted_coat.glb";
-const CLOTHING_QUARTER_COAT: &str = "characters/clothes/body/quarter_coat.glb";
 const CLOTHING_ROBE_COAT: &str = "characters/clothes/body/robe_coat.glb";
-const CLOTHING_SHORT_SLEEVED_ROBE_COAT: &str =
-	"characters/clothes/body/short_sleeved_robe_coat.glb";
-const CLOTHING_TAILORED_COAT: &str = "characters/clothes/body/tailored_coat.glb";
+const CLOTHING_ROBE: &str = "characters/clothes/body/robe.glb";
 const CLOTHING_HOOD: &str = "characters/clothes/head/hood.glb";
 const CLOTHING_PANTS: &str = "characters/clothes/body/pants.glb";
 const CLOTHING_KNEE_HIGH_BOOTS: &str = "characters/clothes/body/knee_high_boots.glb";
@@ -92,10 +89,8 @@ pub enum ClothingMesh {
 	LongDress,
 	ShortDress,
 	FittedCoat,
-	QuarterCoat,
 	RobeCoat,
-	ShortSleevedRobeCoat,
-	TailoredCoat,
+	Robe,
 	Hood,
 	Pants,
 	KneeHighBoots,
@@ -111,10 +106,8 @@ impl ClothingMesh {
 		Self::LongDress,
 		Self::ShortDress,
 		Self::FittedCoat,
-		Self::QuarterCoat,
 		Self::RobeCoat,
-		Self::ShortSleevedRobeCoat,
-		Self::TailoredCoat,
+		Self::Robe,
 		Self::Hood,
 		Self::Pants,
 		Self::KneeHighBoots,
@@ -130,10 +123,8 @@ impl ClothingMesh {
 			Self::LongDress => "long-dress",
 			Self::ShortDress => "short-dress",
 			Self::FittedCoat => "fitted-coat",
-			Self::QuarterCoat => "quarter-coat",
 			Self::RobeCoat => "robe-coat",
-			Self::ShortSleevedRobeCoat => "short-sleeved-robe-coat",
-			Self::TailoredCoat => "tailored-coat",
+			Self::Robe => "robe",
 			Self::Hood => "hood",
 			Self::Pants => "pants",
 			Self::KneeHighBoots => "knee-high-boots",
@@ -150,10 +141,8 @@ impl ClothingMesh {
 			Self::LongDress => "long_dress",
 			Self::ShortDress => "short_dress",
 			Self::FittedCoat => "fitted_coat",
-			Self::QuarterCoat => "quarter_coat",
 			Self::RobeCoat => "robe_coat",
-			Self::ShortSleevedRobeCoat => "short_sleeved_robe_coat",
-			Self::TailoredCoat => "tailored_coat",
+			Self::Robe => "robe",
 			Self::Hood => "hood",
 			Self::Pants => "pants",
 			Self::KneeHighBoots => "knee_high_boots",
@@ -172,7 +161,7 @@ impl ClothingMesh {
 
 	/// Garments with per-host fitted GLBs under `clothes/{slot}/{host}/`.
 	pub const fn uses_host_fit(self) -> bool {
-		matches!(self, Self::TankTop | Self::FittedCoat)
+		matches!(self, Self::TankTop | Self::FittedCoat | Self::Robe)
 	}
 
 	/// Unfitted catalog path relative to the `maybraid/assets` root.
@@ -183,10 +172,8 @@ impl ClothingMesh {
 			Self::LongDress => CLOTHING_LONG_DRESS,
 			Self::ShortDress => CLOTHING_SHORT_DRESS,
 			Self::FittedCoat => CLOTHING_FITTED_COAT,
-			Self::QuarterCoat => CLOTHING_QUARTER_COAT,
 			Self::RobeCoat => CLOTHING_ROBE_COAT,
-			Self::ShortSleevedRobeCoat => CLOTHING_SHORT_SLEEVED_ROBE_COAT,
-			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
+			Self::Robe => CLOTHING_ROBE,
 			Self::Hood => CLOTHING_HOOD,
 			Self::Pants => CLOTHING_PANTS,
 			Self::KneeHighBoots => CLOTHING_KNEE_HIGH_BOOTS,
@@ -264,6 +251,14 @@ mod tests {
 	#[test]
 	fn tunic_without_host_fits_stays_canonical() {
 		assert_eq!(ClothingMesh::Tunic.path_on(ClothingHost::IGEO), ClothingMesh::Tunic.path());
+	}
+
+	#[test]
+	fn robe_fits_igeo_body() {
+		assert_eq!(
+			ClothingMesh::Robe.path_on(ClothingHost::IGEO),
+			"characters/clothes/body/igeo_biped_full_body/robe.glb"
+		);
 	}
 
 	#[test]
