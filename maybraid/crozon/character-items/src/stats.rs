@@ -285,15 +285,36 @@ impl CharacterSheet {
 		self.weight = self.weight.saturating_add(stats.weight);
 	}
 
-	/// Preview locomotion factor as a percent. `100` at zero weight; not
-	/// applied to movement this pass.
-	pub fn pace(self) -> u16 {
-		(10_000 / (100 + u32::from(self.weight))).min(100) as u16
+	/// Strength used as carrying capacity. Floor at `1` so a dumped-stat
+	/// sheet still has a defined pace instead of dividing by zero.
+	fn carrying_strength(self) -> u32 {
+		u32::try_from(self.strength.max(1)).unwrap_or(1)
 	}
 
-	/// `68% = 10000 / (100 + 46)` so the loadout can show how pace is derived.
+	/// Weight after strength offsets the load. At [`BASE_STRENGTH`] this
+	/// equals carried weight; above that, load feels lighter.
+	fn felt_weight(self) -> u32 {
+		let base = u32::try_from(BASE_STRENGTH).unwrap_or(1);
+		u32::from(self.weight).saturating_mul(base) / self.carrying_strength()
+	}
+
+	/// Preview locomotion factor as a percent. `100` at zero weight; not
+	/// applied to movement this pass. Strength scales down the weight term
+	/// (`felt = weight * 100 / strength`), so a stronger character keeps more
+	/// of the unladen pace under the same load.
+	pub fn pace(self) -> u16 {
+		(10_000 / (100 + self.felt_weight())).min(100) as u16
+	}
+
+	/// `68% = 10000 / (100 + 46*100/100)` so the loadout can show how pace
+	/// is derived: strength in the denominator shrinks felt weight.
 	pub fn pace_equation(self) -> String {
-		format!("{}% = 10000 / (100 + {})", self.pace(), self.weight)
+		format!(
+			"{}% = 10000 / (100 + {}*100/{})",
+			self.pace(),
+			self.weight,
+			self.carrying_strength()
+		)
 	}
 
 	pub fn stat_rows(self) -> Vec<(String, String)> {
@@ -441,8 +462,23 @@ mod tests {
 		assert!(sheet.pace() <= 100);
 		assert_eq!(
 			sheet.pace_equation(),
-			format!("{}% = 10000 / (100 + {})", sheet.pace(), sheet.weight)
+			format!(
+				"{}% = 10000 / (100 + {}*100/{})",
+				sheet.pace(),
+				sheet.weight,
+				sheet.strength.max(1)
+			)
 		);
+	}
+
+	#[test]
+	fn strength_reduces_weight_drag_on_pace() {
+		let load = CharacterSheet { weight: 40, ..CharacterSheet::BASE };
+		let strong = CharacterSheet { strength: 150, weight: 40, ..CharacterSheet::BASE };
+		let weak = CharacterSheet { strength: 80, weight: 40, ..CharacterSheet::BASE };
+		assert_eq!(load.pace(), (10_000 / (100 + 40)) as u16);
+		assert!(strong.pace() > load.pace());
+		assert!(load.pace() > weak.pace());
 	}
 
 	#[test]
