@@ -137,9 +137,11 @@ fn character_back(
 		return;
 	}
 	if !character.is_empty() {
-		if let Some(editing) = editing.as_ref() {
-			if let Err(error) = save_editing_character(&save_root, editing.id, &menu_state.0) {
-				warn!("failed to save character {}: {error}", editing.id.to_hex());
+		if !menu_state.0.is_create() {
+			if let Some(editing) = editing.as_ref() {
+				if let Err(error) = save_editing_character(&save_root, editing.id, &menu_state.0) {
+					warn!("failed to save character {}: {error}", editing.id.to_hex());
+				}
 			}
 		}
 		request_show_gallery(&mut commands);

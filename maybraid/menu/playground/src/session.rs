@@ -6,13 +6,15 @@ use crozon_character_model_user::{
 	spawn_model, CharacterModel, CharacterModelUser, CharacterModelUserPlugin,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
-use crozon_character_ui_menus::CharacterMenu;
+use crozon_character_ui_menus::{CharacterMenu, MenuEvent};
 use crozon_inventory_user::{spawn_bag, InventoryUser, InventoryUserPlugin};
+use menu_components::MenuActivate;
 use menu_screens::{
-	request_show_create_character_id, CreateCharacterReady, GalleryChoice, GalleryScreenPlugin,
+	request_show_create_character_id, request_show_gallery, CreateCharacterReady, GalleryChoice,
+	GalleryScreenPlugin,
 };
 
-use crate::character::{request_show_character, CharacterMenuState};
+use crate::character::{request_show_character, CharacterMenuState, CharacterScreen};
 
 /// Host entity for the character currently being created or edited.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -38,6 +40,7 @@ impl Plugin for CharacterSessionPlugin {
 			app.add_plugins(GalleryScreenPlugin);
 		}
 		app.insert_resource(SaveRoot::workspace())
+			.add_observer(on_save_character)
 			.add_systems(Update, (open_gallery_choice, open_create_character_hud));
 	}
 }
@@ -150,4 +153,29 @@ fn open_create_character_hud(
 	);
 	*menu_state = CharacterMenuState::for_create(ready.items.clone());
 	request_show_character(&mut commands);
+}
+
+fn on_save_character(
+	activate: On<MenuActivate<MenuEvent>>,
+	screens: Query<Entity, With<CharacterScreen>>,
+	menu_state: Res<CharacterMenuState>,
+	save_root: Res<SaveRoot>,
+	editing: Option<Res<EditingCharacter>>,
+	mut commands: Commands,
+) {
+	if screens.is_empty() || activate.event().choice != MenuEvent::Save {
+		return;
+	}
+	if !menu_state.0.is_create() {
+		return;
+	}
+	let Some(editing) = editing else {
+		warn!("save character: no editing id");
+		return;
+	};
+	if let Err(error) = save_editing_character(&save_root, editing.id, &menu_state.0) {
+		warn!("failed to save character {}: {error}", editing.id.to_hex());
+		return;
+	}
+	request_show_gallery(&mut commands);
 }

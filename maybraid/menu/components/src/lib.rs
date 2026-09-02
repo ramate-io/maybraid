@@ -18,13 +18,13 @@ pub use controls::{
 	apply_hud_menu_nav, color_from_hex, menu_display_name, navigate_hud_menus, on_hud_scroll,
 	restore_short_text_editing, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
 	spawn_block_label, spawn_cursor_slot, spawn_cursor_slot_sized, spawn_grid_catalog_tile,
-	spawn_group_label, spawn_header_line, spawn_hud_text, spawn_labeled_row, spawn_panel_title,
-	spawn_scroll_pane, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_text_button, spawn_tile_grid, sync_hud_scrollbars,
-	sync_overlay_header_cursors, ActiveOverlayKey, ActiveShortText, HudFonts, HudMenu, HudMenuItem,
-	HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader,
-	OverlayHeaderKey, ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal,
-	ShortTextToggle, ShortTextValue,
+	spawn_group_label, spawn_header_line, spawn_hud_action, spawn_hud_text, spawn_labeled_row,
+	spawn_panel_title, spawn_scroll_pane, spawn_section_header, spawn_short_text_button,
+	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button, spawn_tile_grid,
+	sync_hud_scrollbars, sync_overlay_header_cursors, ActiveOverlayKey, ActiveShortText, HudFonts,
+	HudMenu, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb, HudScrollTrack,
+	HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange, ShortTextField,
+	ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{

@@ -6,10 +6,10 @@ use character_ui_menu::{
 	SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	HudFonts, HudMenu, HudMenuItem, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, ShortTextField,
-	ShortTextKey, TEXT_YELLOW, spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label,
-	spawn_hud_text, spawn_labeled_row, spawn_section_header, spawn_short_text_button,
-	spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
+	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action, spawn_hud_text,
+	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
+	spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem, ShortTextField,
+	ShortTextKey, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
 };
 
 use crate::justify::MenuJustify;
@@ -192,6 +192,15 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			}
 			MenuNode::ShortText { label, value, max_len } => {
 				self.short_text(parent, context, label, value, *max_len);
+			}
+			MenuNode::Action { label, event } => {
+				spawn_hud_action(
+					parent,
+					context.fonts,
+					label,
+					self.justify.content(),
+					(MenuButton(*event), context.stamp_hud_item()),
+				);
 			}
 		}
 	}

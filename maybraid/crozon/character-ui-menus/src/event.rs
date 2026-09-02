@@ -378,4 +378,18 @@ pub enum MenuEvent {
 	ToggleClothing(ClothingMesh),
 	ToggleInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
+	Save,
+}
+
+impl MenuEvent {
+	/// Clothing wear / color / look. Allowed after appearance is locked.
+	pub fn edits_inventory(self) -> bool {
+		matches!(
+			self,
+			Self::ToggleInventory(_)
+				| Self::SetSwatch(CharacterField::Clothing(_), _)
+				| Self::SetAsset(CharacterField::ClothingMaterial(_), _)
+				| Self::Cycle(CharacterField::ClothingMaterial(_), _)
+		)
+	}
 }

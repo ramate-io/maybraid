@@ -203,6 +203,8 @@ pub enum MenuNode<E> {
 	/// One-line text field. Toggle and typed changes are renderer events;
 	/// the IR only carries the current value.
 	ShortText { label: &'static str, value: String, max_len: usize },
+	/// Full-width action (e.g. Save Character). Fires `event` on activate.
+	Action { label: &'static str, event: E },
 }
 
 impl<E> MenuNode<E> {
@@ -328,6 +330,11 @@ impl<E> MenuNode<E> {
 			value = value.chars().take(max_len).collect();
 		}
 		Self::ShortText { label, value, max_len }
+	}
+
+	/// Full-width labeled action that fires `event` when activated.
+	pub fn action(label: &'static str, event: E) -> Self {
+		Self::Action { label, event }
 	}
 }
 

@@ -168,14 +168,16 @@ fn editor_back(
 		return;
 	}
 	if !character.is_empty() {
-		if let Some(editing) = editing.as_ref() {
-			match save_editing_character(&save_root, editing.id, &menu_state.0) {
-				Ok(()) => {
-					console.0 = format!("saved {}", menu_state.0.saved_name());
-				}
-				Err(error) => {
-					console.0 = format!("save failed: {error}");
-					warn!("failed to save character {}: {error}", editing.id.to_hex());
+		if !menu_state.0.is_create() {
+			if let Some(editing) = editing.as_ref() {
+				match save_editing_character(&save_root, editing.id, &menu_state.0) {
+					Ok(()) => {
+						console.0 = format!("saved {}", menu_state.0.saved_name());
+					}
+					Err(error) => {
+						console.0 = format!("save failed: {error}");
+						warn!("failed to save character {}: {error}", editing.id.to_hex());
+					}
 				}
 			}
 		}

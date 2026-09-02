@@ -493,6 +493,56 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 }
 
 #[test]
+fn create_menu_has_a_save_action() -> anyhow::Result<()> {
+	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+
+	let items = vec![InventoryItem::clothing(
+		ClothingMesh::TankTop,
+		ClothingMaterial::Cloth,
+		ItemColor::Natural,
+	)];
+	let menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let MenuNode::Action { label, event } = nodes.last().expect("save action") else {
+		anyhow::bail!("expected Save Character action at the end of create");
+	};
+	assert_eq!(*label, "Save Character");
+	assert_eq!(*event, MenuEvent::Save);
+	assert!(menu.is_create());
+	Ok(())
+}
+
+#[test]
+fn saved_menu_locks_body_and_keeps_inventory() -> anyhow::Result<()> {
+	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+
+	let items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+	];
+	let mut created = CharacterMenu::for_create(items);
+	created.name = String::from("Misty");
+	let appearance = created.appearance();
+	let inventory = created.inventory.clone().expect("inventory");
+	let mut menu = CharacterMenu::for_saved(created.saved_name(), &appearance, inventory);
+	assert!(menu.appearance_locked());
+	assert!(!menu.is_create());
+	let nodes = menu.menu_nodes();
+	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::SectionSelect { .. })));
+	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::Action { .. })));
+	assert!(nodes
+		.iter()
+		.any(|node| matches!(node, MenuNode::Section { label: "Clothing", .. })));
+	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brodler)));
+	assert_eq!(menu.species.value, ConceptSpecies::Braidman);
+	assert!(!menu.apply(MenuEvent::Cycle(crate::event::CharacterField::Gender, 1)));
+	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
+	assert!(!menu.inventory.as_ref().expect("inventory").is_worn(0));
+	assert!(!menu.apply(MenuEvent::Save));
+	Ok(())
+}
+
+#[test]
 fn saved_menu_strips_clothing_from_appearance() -> anyhow::Result<()> {
 	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
 	use crozon_characters::CharacterAppearance;

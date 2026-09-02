@@ -225,6 +225,8 @@ pub const CHARACTER_NAME_MAX_LEN: usize = 16;
 pub struct CharacterMenu {
 	pub name: String,
 	pub inventory: Option<crozon_character_items::Inventory>,
+	/// Saved characters keep appearance; only inventory (and name) stay editable.
+	pub appearance_locked: bool,
 	pub species: SingleSelect<ConceptSpecies>,
 	pub braidman: BraidmanMenu,
 	pub brenal: BrenalMenu,
@@ -260,6 +262,7 @@ impl CharacterMenu {
 	pub fn for_create(items: Vec<InventoryItem>) -> Self {
 		let mut menu = Self::default();
 		menu.inventory = Some(Inventory::with_starter_outfit(items));
+		menu.appearance_locked = false;
 		menu.sync_inventory_clothing();
 		menu
 	}
@@ -291,6 +294,7 @@ impl CharacterMenu {
 		};
 		menu.name = name;
 		menu.inventory = Some(inventory);
+		menu.appearance_locked = true;
 		menu.sync_inventory_clothing();
 		menu
 	}
@@ -321,7 +325,11 @@ impl CharacterMenu {
 	}
 
 	pub fn is_create(&self) -> bool {
-		self.inventory.is_some()
+		self.inventory.is_some() && !self.appearance_locked
+	}
+
+	pub fn appearance_locked(&self) -> bool {
+		self.appearance_locked
 	}
 
 	fn sync_inventory_clothing(&mut self) {
@@ -343,6 +351,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Braidman),
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brenal: BrenalMenu::default(),
@@ -379,6 +388,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Brenal),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::from(config).with_animation(animation),
@@ -415,6 +425,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Caole),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -451,6 +462,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Epiphant),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -487,6 +499,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Hars),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -523,6 +536,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Yilter),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -559,6 +573,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Sonyak),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -595,6 +610,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Croconot),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -631,6 +647,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Claber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -667,6 +684,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Brodler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -703,6 +721,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Mygr),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -739,6 +758,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Dui),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -775,6 +795,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Lidder),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -811,6 +832,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Chupri),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -847,6 +869,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Brokker),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -883,6 +906,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Tipple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -919,6 +943,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Topple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -955,6 +980,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Kispar),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -991,6 +1017,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Tapp),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1027,6 +1054,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Kaller),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1063,6 +1091,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Kappler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1099,6 +1128,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Wumbus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1135,6 +1165,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Lero),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1171,6 +1202,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Spibmom),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1207,6 +1239,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Grener),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1243,6 +1276,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Thumplus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1279,6 +1313,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Mistler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1315,6 +1350,7 @@ impl CharacterMenu {
 		Self {
 			name: String::new(),
 			inventory: None,
+			appearance_locked: false,
 			species: SingleSelect::new(ConceptSpecies::Tuberwaber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1345,6 +1381,24 @@ impl CharacterMenu {
 			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::from(config).with_animation(animation),
 		}
+	}
+
+	fn clothing_node(&self) -> MenuNode<MenuEvent> {
+		let clothing = match self.species.value {
+			ConceptSpecies::Braidman => Some(&self.braidman.clothing),
+			ConceptSpecies::Brodler => Some(&self.brodler.clothing),
+			ConceptSpecies::Mygr => Some(&self.mygr.clothing),
+			ConceptSpecies::Dui => Some(&self.dui.clothing),
+			ConceptSpecies::Wumbus => Some(&self.wumbus.clothing),
+			ConceptSpecies::Lero => Some(&self.lero.clothing),
+			ConceptSpecies::Spibmom => Some(&self.spibmom.clothing),
+			ConceptSpecies::Tuberwaber => Some(&self.tuberwaber.clothing),
+			_ => None,
+		};
+		let Some(clothing) = clothing else {
+			return MenuNode::fragment([]);
+		};
+		MenuNode::section(clothing.label, clothing.value.menu_node())
 	}
 
 	/// Lowers the currently selected species menu; the other species' state is
@@ -1529,7 +1583,11 @@ impl CharacterMenu {
 
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
+			MenuEvent::Save => return self.is_create(),
 			MenuEvent::SetSpecies(species) => {
+				if self.appearance_locked() {
+					return false;
+				}
 				if self.inventory.is_some() && !species.is_humanoid() {
 					return false;
 				}
@@ -1552,6 +1610,7 @@ impl CharacterMenu {
 			}
 			MenuEvent::ToggleClothing(_) if self.inventory.is_some() => return false,
 			MenuEvent::ToggleSection(_) => return false,
+			_ if self.appearance_locked() && !event.edits_inventory() => return false,
 			_ => {}
 		}
 		match self.species.value {
@@ -1633,7 +1692,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -1716,7 +1775,7 @@ impl CharacterMenu {
 	fn apply_brenal(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brenal;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -1789,7 +1848,7 @@ impl CharacterMenu {
 	fn apply_caole(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.caole;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -1849,7 +1908,7 @@ impl CharacterMenu {
 	fn apply_epiphant(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.epiphant;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -1913,7 +1972,7 @@ impl CharacterMenu {
 	fn apply_hars(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.hars;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -1973,7 +2032,7 @@ impl CharacterMenu {
 	fn apply_ylter(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.ylter;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -2029,7 +2088,7 @@ impl CharacterMenu {
 	fn apply_sonyak(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.sonyak;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -2089,7 +2148,7 @@ impl CharacterMenu {
 	fn apply_croconot(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.croconot;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -2162,7 +2221,7 @@ impl CharacterMenu {
 	fn apply_claber(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.claber;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -2238,7 +2297,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::BrodlerHead, AssetValue::BrodlerHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2319,7 +2378,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::MygrHead, AssetValue::MygrHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2382,7 +2441,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::DuiNose, delta) => {
 				menu.head_features.value.nose.value =
 					cycle_value(menu.head_features.value.nose.value, delta);
@@ -2446,7 +2505,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::LidderHead, AssetValue::LidderHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2509,7 +2568,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::ChupriHead, AssetValue::ChupriHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2572,7 +2631,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::BrokkerHead, AssetValue::BrokkerHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2631,7 +2690,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::TippleHead, AssetValue::TippleHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2694,7 +2753,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::ToppleHead, AssetValue::ToppleHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2757,7 +2816,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::KisparHead, AssetValue::KisparHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2820,7 +2879,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::TappHead, AssetValue::TappHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2883,7 +2942,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::KallerHead, AssetValue::KallerHead(value)) => {
 					menu.head.value.head.value = value;
@@ -2946,7 +3005,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::KapplerHead, AssetValue::KapplerHead(value)) => {
 					menu.head.value.head.value = value;
@@ -3009,7 +3068,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::WumbusHorns, delta) => {
 				menu.head.value.horns.value = cycle_value(menu.head.value.horns.value, delta);
 				true
@@ -3088,7 +3147,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::LeroHead, AssetValue::LeroHead(value)) => {
 					menu.head.value.head.value = value;
@@ -3155,7 +3214,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::SpibmomHead, AssetValue::SpibmomHead(value)) => {
 					menu.head.value.head.value = value;
@@ -3227,7 +3286,7 @@ impl CharacterMenu {
 	fn apply_grener(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.grener;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::Animation, AssetValue::Animation(value)) => {
 					menu.animation.value.clip.value = value;
@@ -3250,7 +3309,7 @@ impl CharacterMenu {
 	fn apply_thumplus(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.thumplus;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::Animation, AssetValue::Animation(value)) => {
 					menu.animation.value.clip.value = value;
@@ -3273,7 +3332,7 @@ impl CharacterMenu {
 	fn apply_mistler(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.mistler;
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::Animation, AssetValue::Animation(value)) => {
 					menu.animation.value.clip.value = value;
@@ -3299,7 +3358,7 @@ impl CharacterMenu {
 			return true;
 		}
 		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) | MenuEvent::Save => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -3385,6 +3444,12 @@ impl CharacterMenu {
 
 impl MenuComponent<MenuEvent> for CharacterMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		if self.appearance_locked() {
+			return MenuNode::fragment([
+				MenuNode::short_text("Name", self.name.clone(), CHARACTER_NAME_MAX_LEN),
+				self.clothing_node(),
+			]);
+		}
 		let species_groups: &[(&str, &[ConceptSpecies])] = if self.inventory.is_some() {
 			&[("Humanoids", ConceptSpecies::HUMANOIDS)]
 		} else {
@@ -3444,6 +3509,11 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 				species_groups,
 				self.species_node(),
 			),
+			if self.is_create() {
+				MenuNode::action("Save Character", MenuEvent::Save)
+			} else {
+				MenuNode::fragment([])
+			},
 		])
 	}
 }

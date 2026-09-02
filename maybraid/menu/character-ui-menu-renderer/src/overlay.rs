@@ -4,11 +4,11 @@
 use bevy::prelude::*;
 use character_ui_menu::{MenuNode, SelectGroup};
 
-use crate::MenuJustify;
 use crate::sink::{MaybraidMenuSink, MenuSink, MenuThumbnailContext, RenderContext};
 use crate::widgets::CloseOverlaySelect;
+use crate::MenuJustify;
 use menu_components::{
-	HudFonts, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP, spawn_header_line, spawn_text_button,
+	spawn_header_line, spawn_text_button, HudFonts, PANEL_HEADER_FONT_SIZE, PANEL_ROW_GAP,
 };
 
 /// Catalog nodes that can show a selected name on a header.
@@ -56,7 +56,7 @@ pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
-		MenuNode::ShortText { .. } => false,
+		MenuNode::ShortText { .. } | MenuNode::Action { .. } => false,
 		_ => false,
 	}
 }
@@ -100,6 +100,7 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 			Some(node)
 		}
 		MenuNode::ShortText { .. }
+		| MenuNode::Action { .. }
 		| MenuNode::LabeledCycle { .. }
 		| MenuNode::LabeledSlider { .. }
 		| MenuNode::LabeledSwatch { .. }
@@ -257,13 +258,11 @@ mod tests {
 		};
 		assert!(!is_picker_only(&section));
 		assert!(!overlay_closes_on_pick(&section));
-		assert!(
-			primary_select(match &section {
-				MenuNode::Section { children, .. } => children,
-				_ => unreachable!(),
-			})
-			.is_some()
-		);
+		assert!(primary_select(match &section {
+			MenuNode::Section { children, .. } => children,
+			_ => unreachable!(),
+		})
+		.is_some());
 	}
 
 	#[test]

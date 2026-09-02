@@ -16,7 +16,7 @@ pub mod swatch;
 pub mod text;
 pub mod tile;
 
-pub use button::spawn_text_button;
+pub use button::{spawn_hud_action, spawn_text_button};
 pub use display::menu_display_name;
 pub use fonts::HudFonts;
 pub use hud_menu::{

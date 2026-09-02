@@ -11,9 +11,9 @@ use character_ui_menu::{
 };
 
 use crate::widgets::{
-	ACTIVE, INACTIVE, MENU_VERTICAL_GAP, MUTED, ToggleSectionKey, color_from_hex,
-	compact_control_row, inline_chip_row, labeled_row, render_asset_button, render_button,
-	select_tile_node, swatch_node, text, tile_text,
+	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
+	render_button, select_tile_node, swatch_node, text, tile_text, ToggleSectionKey, ACTIVE,
+	INACTIVE, MENU_VERTICAL_GAP, MUTED,
 };
 
 /// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
@@ -159,6 +159,9 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 				inline_label_row(parent, label, |row| {
 					text(row, value, 11.0, VALUE_COLOR);
 				});
+			}
+			MenuNode::Action { label, event } => {
+				render_button(parent, label, *event, false);
 			}
 		}
 	}
