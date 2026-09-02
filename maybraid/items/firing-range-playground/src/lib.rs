@@ -21,7 +21,9 @@ use firearm_intelligence::{
 	FirearmIntelligence, FirearmIntelligencePlugin, FirearmIntelligenceSystems,
 	FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective, FirearmSpotting,
 };
-use firearm_user::{spawn_held_firearm, spawn_reticle, FirearmUserPlugin};
+use firearm_user::{
+	spawn_held_firearm_with, spawn_reticle, FirearmUser, FirearmUserPlugin, FirearmUserSettings,
+};
 use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use les_halles::LesHallesSpawn;
@@ -69,6 +71,7 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(MovementRealizationPlugin)
 		.init_resource::<LesHallesSpawn>()
 		.init_resource::<hud::DamageTicks>()
+		.init_resource::<damage::NpcRespawn>()
 		.add_message::<damage::DamageTaken>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
@@ -84,13 +87,7 @@ impl Plugin for FiringRangePlugin {
 		)
 		.add_systems(
 			PostStartup,
-			(
-				les_halles::setup_les_halles,
-				spawn_player_system,
-				spawn_npc_system,
-				spawn_held_system,
-			)
-				.chain(),
+			(les_halles::setup_les_halles, spawn_player_system, spawn_npc_system).chain(),
 		)
 		.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
 		.add_systems(
@@ -98,6 +95,8 @@ impl Plugin for FiringRangePlugin {
 			(
 				spawn_player_character,
 				spawn_npc_character,
+				spawn_held_system,
+				respawn_npc_system,
 				vantage::assign_player_combat_targets.before(FirearmIntelligenceSystems::Spotting),
 				les_halles::draw_circulation_gizmos,
 				apply_parent_confines.after(LodRefreshSystems::Cull),
@@ -150,21 +149,51 @@ fn spawn_npc_system(
 	let mut movement =
 		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(spawn.npc, 0.4)));
 	movement.ability.candidate_budget.horizon = 80.0;
+	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
+	combat.settings.accuracy = 0.88;
+	combat.settings.trigger_happiness = 0.6;
 	commands.entity(npc).insert((
 		movement,
 		FirearmMovementIntelligence::new(FirearmMovementObjective::default()),
-		FirearmIntelligence::new(FirearmObjective::default()),
+		combat,
 		FirearmSpotting::default(),
 		damage::Health::default(),
 	));
 }
 
-type CombatBodies<'w, 's> = Query<'w, 's, Entity, Or<(With<Player>, With<Npc>)>>;
+type UnarmedBodies<'w, 's> =
+	Query<'w, 's, (Entity, Has<Npc>), (Or<(With<Player>, With<Npc>)>, Without<FirearmUser>)>;
 
-fn spawn_held_system(mut commands: Commands, bodies: CombatBodies) {
-	for body in &bodies {
-		spawn_held_firearm(&mut commands, body);
+fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
+	for (body, is_npc) in &bodies {
+		let mut settings = FirearmUserSettings::default();
+		if is_npc {
+			settings.aim_yaw_limit = std::f32::consts::PI;
+		}
+		spawn_held_firearm_with(&mut commands, body, settings);
 	}
+}
+
+fn respawn_npc_system(
+	time: Res<Time>,
+	spawn: Res<LesHallesSpawn>,
+	npcs: Query<(), With<Npc>>,
+	mut respawn: ResMut<damage::NpcRespawn>,
+	commands: Commands,
+	meshes: ResMut<Assets<Mesh>>,
+	materials: ResMut<Assets<StandardMaterial>>,
+) {
+	if !npcs.is_empty() {
+		return;
+	}
+	let Some(at) = respawn.at else {
+		return;
+	};
+	if time.elapsed_secs() < at {
+		return;
+	}
+	respawn.at = None;
+	spawn_npc_system(commands, spawn, meshes, materials);
 }
 
 fn spawn_reticle_system(

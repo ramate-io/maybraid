@@ -13,7 +13,7 @@ use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
 
 pub use hold::HoldingArms;
-pub use pose::{spawn_held_firearm, HeldFirearm};
+pub use pose::{spawn_held_firearm, spawn_held_firearm_with, HeldFirearm};
 pub use reticle::{spawn_reticle, Reticle};
 
 /// Capsule/NPC using a firearm.

@@ -8,14 +8,15 @@ the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target
 visible observations feed both firearm objective lists until spotting memory
 expires.
 Firearm movement writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
-/ flee into [`movement-intelligence`](../../intelligence/movement/lib); firearm
-combat aims [`PlayerLook`](../../player/src/identity.rs) and fires only when the
-propagated barrel is aligned and the obstruction policy permits it.
+/ flee into [`movement-intelligence`](../../intelligence/movement/lib). Firearm
+combat aims [`PlayerLook`](../../player/src/identity.rs) from the posed muzzle so
+a right-shoulder hold does not walk shots past the target, and fires when the
+propagated barrel is aligned onto the capsule.
 Projectile sweeps include both fixed geometry and animated character capsules.
 Each character starts with 100 health and takes 25 damage per bolt contact.
 Health is shown on a persistent top HUD and as a bar above each capsule; the
 player also gets directional hit ticks around screen center. At 0 health the
-combatant and held firearm despawn.
+combatant and held firearm despawn; the NPC returns after two seconds.
 
 ```bash
 cargo run -p firing-range-playground

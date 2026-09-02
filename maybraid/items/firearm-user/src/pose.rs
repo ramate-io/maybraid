@@ -35,9 +35,16 @@ pub(crate) fn held_scale_from_bounds(bounds: Aabb3d, held_length: f32) -> f32 {
 }
 
 pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
+	spawn_held_firearm_with(commands, user, FirearmUserSettings::default())
+}
+
+pub fn spawn_held_firearm_with(
+	commands: &mut Commands,
+	user: Entity,
+	settings: FirearmUserSettings,
+) -> Entity {
 	let kit = FirearmConcept::Bullpup.kit();
 	let bounds = firearm_bounds(&kit);
-	let settings = FirearmUserSettings::default();
 	let scale = held_scale_from_bounds(bounds, settings.held_length);
 	let entities = spawn_firearm_components(commands, &kit, Transform::IDENTITY, bounds);
 	let mut root = Entity::PLACEHOLDER;

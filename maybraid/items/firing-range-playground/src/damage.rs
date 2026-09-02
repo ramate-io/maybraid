@@ -1,9 +1,16 @@
 use bevy::prelude::*;
 use firearm_user::FirearmUser;
+use player::Npc;
 use projectiles::ProjectileContact;
 
 pub(crate) const MAX_HEALTH: f32 = 100.0;
 pub(crate) const PROJECTILE_DAMAGE: f32 = 25.0;
+pub(crate) const NPC_RESPAWN_SECS: f32 = 2.0;
+
+#[derive(Resource, Default)]
+pub(crate) struct NpcRespawn {
+	pub at: Option<f32>,
+}
 
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Health {
@@ -69,12 +76,17 @@ pub(crate) fn apply_projectile_damage(
 }
 
 pub(crate) fn despawn_dead(
+	time: Res<Time>,
+	mut respawn: ResMut<NpcRespawn>,
 	mut commands: Commands,
-	combatants: Query<(Entity, &Health, Option<&FirearmUser>)>,
+	combatants: Query<(Entity, &Health, Option<&FirearmUser>, Has<Npc>)>,
 ) {
-	for (entity, health, user) in &combatants {
+	for (entity, health, user, is_npc) in &combatants {
 		if !health.is_dead() {
 			continue;
+		}
+		if is_npc {
+			respawn.at = Some(time.elapsed_secs() + NPC_RESPAWN_SECS);
 		}
 		if let Some(user) = user {
 			commands.entity(user.held).try_despawn();
