@@ -1,7 +1,9 @@
 use character_ui_menu::{
 	CameraFocus, LabelOption, ListValues, MenuComponent, MenuNode, SingleSelect,
 };
+use crozon_character_items::{Inventory, InventoryItem};
 use crozon_characters::{
+	ConceptAnimation,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -12,7 +14,6 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	ConceptAnimation,
 };
 
 use crate::{
@@ -48,6 +49,7 @@ use crate::{
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
+	shared::clothing_menu_from_inventory,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -156,6 +158,31 @@ impl ListValues for ConceptSpecies {
 	}
 }
 
+impl ConceptSpecies {
+	pub const HUMANOIDS: &'static [Self] = &[
+		Self::Braidman,
+		Self::Brodler,
+		Self::Mygr,
+		Self::Dui,
+		Self::Wumbus,
+		Self::Lero,
+		Self::Spibmom,
+		Self::Tuberwaber,
+	];
+
+	pub const fn is_humanoid(self) -> bool {
+		matches!(
+			self,
+			Self::Braidman
+				| Self::Brodler
+				| Self::Mygr | Self::Dui
+				| Self::Wumbus
+				| Self::Lero | Self::Spibmom
+				| Self::Tuberwaber
+		)
+	}
+}
+
 impl LabelOption for ConceptSpecies {
 	fn label(&self) -> &'static str {
 		match *self {
@@ -197,6 +224,7 @@ pub const CHARACTER_NAME_MAX_LEN: usize = 16;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CharacterMenu {
 	pub name: String,
+	pub inventory: Option<crozon_character_items::Inventory>,
 	pub species: SingleSelect<ConceptSpecies>,
 	pub braidman: BraidmanMenu,
 	pub brenal: BrenalMenu,
@@ -229,9 +257,36 @@ pub struct CharacterMenu {
 }
 
 impl CharacterMenu {
+	pub fn for_create(items: Vec<InventoryItem>) -> Self {
+		let mut menu = Self::default();
+		menu.inventory = Some(Inventory::with_all_worn(items));
+		menu.sync_inventory_clothing();
+		menu
+	}
+
+	pub fn is_create(&self) -> bool {
+		self.inventory.is_some()
+	}
+
+	fn sync_inventory_clothing(&mut self) {
+		let Some(inventory) = self.inventory.clone() else {
+			return;
+		};
+		let clothing = clothing_menu_from_inventory(&inventory);
+		self.braidman.clothing.value = clothing.clone();
+		self.brodler.clothing.value = clothing.clone();
+		self.mygr.clothing.value = clothing.clone();
+		self.dui.clothing.value = clothing.clone();
+		self.wumbus.clothing.value = clothing.clone();
+		self.lero.clothing.value = clothing.clone();
+		self.spibmom.clothing.value = clothing.clone();
+		self.tuberwaber.clothing.value = clothing;
+	}
+
 	pub fn from_braidman(config: &BraidmanConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Braidman),
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brenal: BrenalMenu::default(),
@@ -267,6 +322,7 @@ impl CharacterMenu {
 	pub fn from_brenal(config: &BrenalConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Brenal),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::from(config).with_animation(animation),
@@ -302,6 +358,7 @@ impl CharacterMenu {
 	pub fn from_caole(config: &CaoleConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Caole),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -337,6 +394,7 @@ impl CharacterMenu {
 	pub fn from_epiphant(config: &EpiphantConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Epiphant),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -372,6 +430,7 @@ impl CharacterMenu {
 	pub fn from_hars(config: &HarsConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Hars),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -407,6 +466,7 @@ impl CharacterMenu {
 	pub fn from_ylter(config: &YilterConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Yilter),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -442,6 +502,7 @@ impl CharacterMenu {
 	pub fn from_sonyak(config: &SonyakConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Sonyak),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -477,6 +538,7 @@ impl CharacterMenu {
 	pub fn from_croconot(config: &CroconotConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Croconot),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -512,6 +574,7 @@ impl CharacterMenu {
 	pub fn from_claber(config: &ClaberConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Claber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -547,6 +610,7 @@ impl CharacterMenu {
 	pub fn from_brodler(config: &BrodlerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Brodler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -582,6 +646,7 @@ impl CharacterMenu {
 	pub fn from_mygr(config: &MygrConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Mygr),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -617,6 +682,7 @@ impl CharacterMenu {
 	pub fn from_dui(config: &DuiConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Dui),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -652,6 +718,7 @@ impl CharacterMenu {
 	pub fn from_lidder(config: &LidderConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Lidder),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -687,6 +754,7 @@ impl CharacterMenu {
 	pub fn from_chupri(config: &ChupriConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Chupri),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -722,6 +790,7 @@ impl CharacterMenu {
 	pub fn from_brokker(config: &BrokkerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Brokker),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -757,6 +826,7 @@ impl CharacterMenu {
 	pub fn from_tipple(config: &TippleConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Tipple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -792,6 +862,7 @@ impl CharacterMenu {
 	pub fn from_topple(config: &ToppleConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Topple),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -827,6 +898,7 @@ impl CharacterMenu {
 	pub fn from_kispar(config: &KisparConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Kispar),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -862,6 +934,7 @@ impl CharacterMenu {
 	pub fn from_tapp(config: &TappConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Tapp),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -897,6 +970,7 @@ impl CharacterMenu {
 	pub fn from_kaller(config: &KallerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Kaller),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -932,6 +1006,7 @@ impl CharacterMenu {
 	pub fn from_kappler(config: &KapplerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Kappler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -967,6 +1042,7 @@ impl CharacterMenu {
 	pub fn from_wumbus(config: &WumbusConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Wumbus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1002,6 +1078,7 @@ impl CharacterMenu {
 	pub fn from_lero(config: &LeroConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Lero),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1037,6 +1114,7 @@ impl CharacterMenu {
 	pub fn from_spibmom(config: &SpibmomConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Spibmom),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1072,6 +1150,7 @@ impl CharacterMenu {
 	pub fn from_grener(config: &GrenerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Grener),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1107,6 +1186,7 @@ impl CharacterMenu {
 	pub fn from_thumplus(config: &ThumplusConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Thumplus),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1142,6 +1222,7 @@ impl CharacterMenu {
 	pub fn from_mistler(config: &MistlerConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Mistler),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1177,6 +1258,7 @@ impl CharacterMenu {
 	pub fn from_tuberwaber(config: &TuberwaberConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			name: String::new(),
+			inventory: None,
 			species: SingleSelect::new(ConceptSpecies::Tuberwaber),
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
@@ -1392,12 +1474,27 @@ impl CharacterMenu {
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
 			MenuEvent::SetSpecies(species) => {
+				if self.inventory.is_some() && !species.is_humanoid() {
+					return false;
+				}
 				if self.species.value == species {
 					return false;
 				}
 				self.species.value = species;
+				self.sync_inventory_clothing();
 				return true;
 			}
+			MenuEvent::ToggleInventory(index) => {
+				let Some(inventory) = self.inventory.as_mut() else {
+					return false;
+				};
+				if !inventory.toggle_worn(index) {
+					return false;
+				}
+				self.sync_inventory_clothing();
+				return true;
+			}
+			MenuEvent::ToggleClothing(_) if self.inventory.is_some() => return false,
 			MenuEvent::ToggleSection(_) => return false,
 			_ => {}
 		}
@@ -1434,6 +1531,9 @@ impl CharacterMenu {
 	}
 
 	pub fn camera_focus_for_event(&self, event: MenuEvent) -> Option<CameraFocus> {
+		if matches!(event, MenuEvent::ToggleInventory(_)) {
+			return Some(crate::BODY_FOCUS);
+		}
 		let field = match event {
 			MenuEvent::SetAsset(field, _) | MenuEvent::Cycle(field, _) => Some(field),
 			MenuEvent::ToggleClothing(clothing) => Some(CharacterField::Clothing(clothing)),
@@ -1551,7 +1651,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleInventory(_) => {
+				false
+			}
 		}
 	}
 
@@ -1621,9 +1723,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1680,9 +1783,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1743,9 +1847,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1802,9 +1907,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1857,9 +1963,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1916,9 +2023,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -1988,9 +2096,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2060,9 +2169,10 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
-				false
-			}
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2141,7 +2251,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2202,7 +2314,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2264,7 +2378,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2325,7 +2441,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2386,7 +2504,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2443,7 +2563,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2504,7 +2626,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2565,7 +2689,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2626,7 +2752,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2687,7 +2815,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2748,7 +2878,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2809,7 +2941,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2886,7 +3020,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -2951,7 +3087,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -3024,7 +3162,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+			MenuEvent::Cycle(_, _)
+			| MenuEvent::SliderDelta(_, _)
+			| MenuEvent::ToggleInventory(_) => false,
 		}
 	}
 
@@ -3039,7 +3179,7 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::ToggleClothing(_) | MenuEvent::ToggleInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::GrenerBodyColor, SwatchValue::GrenerBody(color)) => {
 					menu.body.value.body.value = color;
@@ -3062,7 +3202,7 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::ToggleClothing(_) | MenuEvent::ToggleInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::ThumplusBodyColor, SwatchValue::ThumplusBody(color)) => {
 					menu.body.value.body.value = color;
@@ -3085,7 +3225,7 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::ToggleClothing(_) | MenuEvent::ToggleInventory(_) => false,
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::MistlerBodyColor, SwatchValue::MistlerBody(color)) => {
 					menu.body.value.body.value = color;
@@ -3180,69 +3320,72 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleInventory(_) => {
+				false
+			}
 		}
 	}
 }
 
 impl MenuComponent<MenuEvent> for CharacterMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		let species_groups: &[(&str, &[ConceptSpecies])] = if self.inventory.is_some() {
+			&[("Humanoids", ConceptSpecies::HUMANOIDS)]
+		} else {
+			&[
+				(
+					"Humanoids",
+					&[
+						ConceptSpecies::Braidman,
+						ConceptSpecies::Brodler,
+						ConceptSpecies::Mygr,
+						ConceptSpecies::Dui,
+						ConceptSpecies::Wumbus,
+						ConceptSpecies::Lero,
+						ConceptSpecies::Spibmom,
+						ConceptSpecies::Tuberwaber,
+					],
+				),
+				(
+					"Quadrupeds",
+					&[
+						ConceptSpecies::Brenal,
+						ConceptSpecies::Caole,
+						ConceptSpecies::Epiphant,
+						ConceptSpecies::Hars,
+						ConceptSpecies::Yilter,
+						ConceptSpecies::Sonyak,
+						ConceptSpecies::Claber,
+						ConceptSpecies::Croconot,
+					],
+				),
+				(
+					"Birds",
+					&[
+						ConceptSpecies::Lidder,
+						ConceptSpecies::Chupri,
+						ConceptSpecies::Brokker,
+						ConceptSpecies::Tipple,
+						ConceptSpecies::Topple,
+						ConceptSpecies::Kispar,
+						ConceptSpecies::Tapp,
+						ConceptSpecies::Kaller,
+						ConceptSpecies::Kappler,
+					],
+				),
+				(
+					"Aquatic",
+					&[ConceptSpecies::Grener, ConceptSpecies::Thumplus, ConceptSpecies::Mistler],
+				),
+			]
+		};
 		MenuNode::fragment([
 			MenuNode::short_text("Name", self.name.clone(), CHARACTER_NAME_MAX_LEN),
 			MenuNode::section_select_grouped(
 				"Species",
 				self.species.value,
 				MenuEvent::SetSpecies,
-				&[
-					(
-						"Humanoids",
-						&[
-							ConceptSpecies::Braidman,
-							ConceptSpecies::Brodler,
-							ConceptSpecies::Mygr,
-							ConceptSpecies::Dui,
-							ConceptSpecies::Wumbus,
-							ConceptSpecies::Lero,
-							ConceptSpecies::Spibmom,
-							ConceptSpecies::Tuberwaber,
-						],
-					),
-					(
-						"Quadrupeds",
-						&[
-							ConceptSpecies::Brenal,
-							ConceptSpecies::Caole,
-							ConceptSpecies::Epiphant,
-							ConceptSpecies::Hars,
-							ConceptSpecies::Yilter,
-							ConceptSpecies::Sonyak,
-							ConceptSpecies::Claber,
-							ConceptSpecies::Croconot,
-						],
-					),
-					(
-						"Birds",
-						&[
-							ConceptSpecies::Lidder,
-							ConceptSpecies::Chupri,
-							ConceptSpecies::Brokker,
-							ConceptSpecies::Tipple,
-							ConceptSpecies::Topple,
-							ConceptSpecies::Kispar,
-							ConceptSpecies::Tapp,
-							ConceptSpecies::Kaller,
-							ConceptSpecies::Kappler,
-						],
-					),
-					(
-						"Aquatic",
-						&[
-							ConceptSpecies::Grener,
-							ConceptSpecies::Thumplus,
-							ConceptSpecies::Mistler,
-						],
-					),
-				],
+				species_groups,
 				self.species_node(),
 			),
 		])

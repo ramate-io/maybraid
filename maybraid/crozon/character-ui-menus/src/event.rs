@@ -1,10 +1,11 @@
 use crozon_character_items::{ClothingMaterial, ClothingMesh, ItemColor};
 use crozon_characters::{
+	ConceptAnimation,
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalMouthMesh},
 		brodler::{
-			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
+			BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor, assets::HornMesh,
 		},
 		brokker::{BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
@@ -57,7 +58,6 @@ use crozon_characters::{
 		},
 		ylter::{YilterBodyMesh, YilterMouthMesh},
 	},
-	ConceptAnimation,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -376,5 +376,6 @@ pub enum MenuEvent {
 	SetAsset(CharacterField, AssetValue),
 	SliderDelta(CharacterField, f32),
 	ToggleClothing(ClothingMesh),
+	ToggleInventory(usize),
 	SetSwatch(CharacterField, SwatchValue),
 }

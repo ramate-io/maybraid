@@ -14,8 +14,8 @@ pub mod traits;
 
 pub use camera_focus::{CameraFocus, FocusRig};
 pub use node::{
-	normalize, AssetChoice, ItemRow, MenuComponent, MenuNode, PreviewColor, SelectChoice,
-	SelectGroup, SwatchChoice,
+	AssetChoice, GridCatalogChoice, ItemRow, MenuComponent, MenuNode, PreviewColor, SelectChoice,
+	SelectGroup, SwatchChoice, normalize,
 };
 pub use primitives::{
 	AssetSingleSelect, IdentifiedAsset, MultiSelect, Section, SingleSelect, Slider,

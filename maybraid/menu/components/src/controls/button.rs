@@ -5,8 +5,8 @@ use bevy::text::Justify;
 
 use crate::theme::{PANEL_VALUE_FONT_SIZE, TEXT_YELLOW};
 
-use super::text::spawn_hud_text;
 use super::HudFonts;
+use super::text::spawn_hud_text;
 
 /// Pickable label with no chip background. `extra` is typically `MenuButton<E>`.
 pub fn spawn_text_button(

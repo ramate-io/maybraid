@@ -26,8 +26,8 @@ use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
 use menu_screens::{
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems,
+	CreateCharacterPlugin, CreateCharacterReady, HomeMenuChoice, HomeScreenPlugin,
+	InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -53,6 +53,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			HomeScreenPlugin,
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
+			CreateCharacterPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
 			MenuControllerPlugin,
@@ -68,6 +69,7 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_home_choice,
 				echo_in_game_choice,
 				echo_character_menu,
+				open_create_character_hud,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -121,4 +123,16 @@ fn echo_character_menu(
 			}
 		}
 	}
+}
+
+fn open_create_character_hud(
+	mut ready: MessageReader<CreateCharacterReady>,
+	mut menu_state: ResMut<CharacterMenuState>,
+	mut commands: Commands,
+) {
+	let Some(ready) = ready.read().last() else {
+		return;
+	};
+	*menu_state = CharacterMenuState::for_create(ready.items.clone());
+	request_show_character(&mut commands);
 }

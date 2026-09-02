@@ -5,11 +5,13 @@
 //! implements [`MenuComponent`] to lower itself into [`MenuNode`]s.
 
 use character_ui_menu::{
-	AssetChoice, AssetSingleSelect, CameraFocus, ItemRow, MenuComponent, MenuNode, MultiSelect,
-	PreviewColor, SelectGroup, SingleSelect, SwatchChoice, SwatchSingleSelect,
+	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
+	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, SwatchChoice,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{
-	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
+	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, Inventory,
+	InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_characters::ConceptAnimation;
 
@@ -62,6 +64,9 @@ pub struct ClothingMenu {
 	pub item_colors: Vec<ClothingColor>,
 	pub material: SingleSelect<ClothingMaterial>,
 	pub item_materials: Vec<ClothingMaterialChoice>,
+	/// When set, the clothing section is an owned-item [`MenuNode::GridCatalog`]
+	/// instead of the full mesh catalog.
+	pub owned: Option<Vec<InventoryItem>>,
 }
 
 impl ClothingMenu {
@@ -78,6 +83,7 @@ impl ClothingMenu {
 			item_colors: overrides,
 			material: SingleSelect::new(material),
 			item_materials: material_overrides,
+			owned: None,
 		}
 	}
 
@@ -126,6 +132,9 @@ pub(crate) fn apply_clothing_event(menu: &mut ClothingMenu, event: MenuEvent) ->
 
 impl MenuComponent<MenuEvent> for ClothingMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		if let Some(owned) = &self.owned {
+			return inventory_catalog(self, owned);
+		}
 		let rows = ClothingMesh::VALUES
 			.iter()
 			.map(|&clothing| {
@@ -170,6 +179,51 @@ impl MenuComponent<MenuEvent> for ClothingMenu {
 			.collect();
 		MenuNode::ItemMultiSelect { label: "Clothing", rows }
 	}
+}
+
+fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<MenuEvent> {
+	MenuNode::grid_catalog(
+		"Clothing",
+		WORN_CLOTHING_LIMIT,
+		owned.iter().enumerate().filter_map(|(index, item)| {
+			let mesh = item.mesh()?;
+			let asset = mesh.asset();
+			Some(GridCatalogChoice {
+				label: item.label(),
+				path: asset.path,
+				thumbnail_camera: asset.thumbnail_camera,
+				preview: PreviewColor::of(item.material().color),
+				selected: menu.layers.contains(mesh),
+				event: MenuEvent::ToggleInventory(index),
+			})
+		}),
+	)
+}
+
+pub(crate) fn clothing_menu_from_inventory(inventory: &Inventory) -> ClothingMenu {
+	let worn: Vec<ClothingMesh> = inventory.worn_items().filter_map(InventoryItem::mesh).collect();
+	let item_colors: Vec<ClothingColor> = inventory
+		.worn_items()
+		.filter_map(|item| {
+			item.mesh()
+				.map(|clothing| ClothingColor { clothing, color: item.material().color })
+		})
+		.collect();
+	let item_materials: Vec<ClothingMaterialChoice> = inventory
+		.worn_items()
+		.filter_map(|item| {
+			item.mesh()
+				.map(|clothing| ClothingMaterialChoice { clothing, material: item.material().id })
+		})
+		.collect();
+	let default_color =
+		inventory.items.first().map(|item| item.material().color).unwrap_or_default();
+	let default_material =
+		inventory.items.first().map(|item| item.material().id).unwrap_or_default();
+	let mut menu =
+		ClothingMenu::new(worn, default_color, item_colors, default_material, item_materials);
+	menu.owned = Some(inventory.items.clone());
+	menu
 }
 
 /// Animation clip picker.

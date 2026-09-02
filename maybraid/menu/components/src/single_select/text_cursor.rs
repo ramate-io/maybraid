@@ -1,7 +1,7 @@
 //! Text menu whose active row shows an animated mark in a reserved gutter.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::scene::prelude::{Scene, bsn, template_value};
 use bevy::text::FontSourceTemplate;
 
 use crate::icons::maybraid::AnimatedIcon;

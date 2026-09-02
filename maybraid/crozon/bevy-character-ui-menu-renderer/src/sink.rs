@@ -6,14 +6,14 @@
 
 use bevy::prelude::*;
 use character_ui_menu::{
-	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SelectChoice,
-	SwatchChoice, ThumbnailRequest,
+	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
+	SectionOpen, SelectChoice, SwatchChoice, ThumbnailRequest,
 };
 
 use crate::widgets::{
-	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
-	render_button, select_tile_node, swatch_node, text, tile_text, ToggleSectionKey, ACTIVE,
-	INACTIVE, MENU_VERTICAL_GAP, MUTED,
+	ACTIVE, INACTIVE, MENU_VERTICAL_GAP, MUTED, ToggleSectionKey, color_from_hex,
+	compact_control_row, inline_chip_row, labeled_row, render_asset_button, render_button,
+	select_tile_node, swatch_node, text, tile_text,
 };
 
 /// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
@@ -151,6 +151,10 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 					self.item_row(row, parent, context);
 				}
 			}
+			MenuNode::GridCatalog { label, choices, .. } => {
+				block_label(parent, label);
+				self.grid_catalog(choices, parent, context);
+			}
 			MenuNode::ShortText { label, value, .. } => {
 				inline_label_row(parent, label, |row| {
 					text(row, value, 11.0, VALUE_COLOR);
@@ -209,6 +213,39 @@ impl BevyMenuSink {
 					});
 				if open {
 					self.render_nodes(children, section, context);
+				}
+			});
+	}
+
+	fn grid_catalog<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		choices: &[GridCatalogChoice<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					column_gap: Val::Px(8.0),
+					row_gap: Val::Px(MENU_VERTICAL_GAP),
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|grid| {
+				for choice in choices {
+					let thumbnail =
+						grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
+					render_asset_button(
+						grid,
+						choice.label,
+						choice.event,
+						choice.selected,
+						thumbnail,
+					);
 				}
 			});
 	}
@@ -314,20 +351,31 @@ fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 	preview: Color,
 	context: &mut RenderContext<'_, C>,
 ) -> Option<Handle<Image>> {
-	if context.asset_thumbnails != AssetThumbnailDisplay::None && !choice.path.is_empty() {
-		context.prewarm.push(ThumbnailRequest::new(
-			choice.path,
-			color_key(preview),
-			choice.thumbnail_camera,
-		));
+	thumbnail_image(choice.label, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn grid_catalog_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+	choice: &GridCatalogChoice<E>,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	thumbnail_image(choice.label, choice.path, choice.thumbnail_camera, preview, context)
+}
+
+fn thumbnail_image<C: MenuThumbnailContext>(
+	label: &'static str,
+	path: &'static str,
+	camera: character_ui_menu::ThumbnailCamera,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	if context.asset_thumbnails != AssetThumbnailDisplay::None && !path.is_empty() {
+		context.prewarm.push(ThumbnailRequest::new(path, color_key(preview), camera));
 	}
 	match context.asset_thumbnails {
-		AssetThumbnailDisplay::Inline => context.thumbnails.image_for_asset(
-			choice.label,
-			choice.path,
-			preview,
-			choice.thumbnail_camera,
-		),
+		AssetThumbnailDisplay::Inline => {
+			context.thumbnails.image_for_asset(label, path, preview, camera)
+		}
 		_ => None,
 	}
 }
