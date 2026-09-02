@@ -15,11 +15,11 @@ pub mod palette;
 
 mod menu_traits;
 
-pub use clothing::{ClothingColor, ClothingHost, ClothingMesh, ClothingSlot};
+pub use clothing::{ClothingColor, ClothingHost, ClothingKind, ClothingMesh, ClothingSlot};
 pub use clothing_material::{ClothingMaterial, ClothingMaterialChoice};
 pub use inventory::{
-	Buff, Inventory, InventoryItem, Item, ItemRng, MaterialRefParams, STARTER_CLOTHING_COUNT,
-	WORN_CLOTHING_LIMIT, random_clothing_item, random_starter_clothing,
+	random_clothing_item, random_starter_clothing, Buff, Inventory, InventoryItem, Item, ItemRng,
+	MaterialRefParams, STARTER_CLOTHING_COUNT, WORN_CLOTHING_LIMIT,
 };
 pub use names::hashed_item_name;
 pub use palette::ItemColor;

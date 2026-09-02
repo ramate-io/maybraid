@@ -4,7 +4,7 @@
 //! is the bag those layers are chosen from. Stats/buffs are stubbed until the
 //! in-game inventory panel lands.
 
-use crate::{ClothingMaterial, ClothingMesh, ItemColor, hashed_item_name};
+use crate::{hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh, ItemColor};
 
 /// How many garments character creation rolls before the body editor.
 pub const STARTER_CLOTHING_COUNT: usize = 3;
@@ -120,9 +120,28 @@ pub struct Inventory {
 }
 
 impl Inventory {
-	/// Every item starts worn (up to the wear cap). Used for starter rolls.
+	/// Every item starts worn (up to the wear cap).
 	pub fn with_all_worn(items: Vec<InventoryItem>) -> Self {
 		let worn: Vec<usize> = (0..items.len().min(WORN_CLOTHING_LIMIT)).collect();
+		Self { items, worn }
+	}
+
+	/// Create-mode bag: own the whole roll, wear the first lower and first upper
+	/// so the editor opens fully clothed. The extra “any” item stays in the bag.
+	pub fn with_starter_outfit(items: Vec<InventoryItem>) -> Self {
+		let mut worn = Vec::new();
+		if let Some(index) = items
+			.iter()
+			.position(|item| item.mesh().is_some_and(|mesh| mesh.kind() == ClothingKind::Lower))
+		{
+			worn.push(index);
+		}
+		if let Some(index) = items
+			.iter()
+			.position(|item| item.mesh().is_some_and(|mesh| mesh.kind() == ClothingKind::Upper))
+		{
+			worn.push(index);
+		}
 		Self { items, worn }
 	}
 
@@ -196,22 +215,33 @@ impl ItemRng {
 /// One random clothing item (mesh, look, color). Buffs stay empty.
 pub fn random_clothing_item(rng: &mut ItemRng) -> InventoryItem {
 	let mesh = *rng.choose(ClothingMesh::VALUES).unwrap_or(&ClothingMesh::TankTop);
+	random_item_for_mesh(rng, mesh)
+}
+
+fn random_item_for_mesh(rng: &mut ItemRng, mesh: ClothingMesh) -> InventoryItem {
 	let material = *rng.choose(ClothingMaterial::VALUES).unwrap_or(&ClothingMaterial::Cloth);
 	let color = *rng.choose(ItemColor::VALUES).unwrap_or(&ItemColor::Natural);
 	InventoryItem::clothing(mesh, material, color)
 }
 
-/// `count` clothing items with unique meshes when the catalog is large enough.
+/// Starter roll: one lower, one upper, then unique “any” fills to `count`.
+///
+/// Wear is not a restriction — [`Inventory::with_starter_outfit`] equips the
+/// lower and upper so the body editor opens clothed.
 pub fn random_starter_clothing(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
-	let mut remaining: Vec<ClothingMesh> = ClothingMesh::VALUES.to_vec();
-	let take = count.min(remaining.len());
-	let mut items = Vec::with_capacity(take);
-	for _ in 0..take {
+	let lower = *rng.choose(ClothingKind::STARTER_LOWERS).unwrap_or(&ClothingMesh::Pants);
+	let upper = *rng.choose(ClothingKind::STARTER_UPPERS).unwrap_or(&ClothingMesh::TankTop);
+	let mut items = vec![random_item_for_mesh(rng, lower), random_item_for_mesh(rng, upper)];
+	let mut remaining: Vec<ClothingMesh> = ClothingMesh::VALUES
+		.iter()
+		.copied()
+		.filter(|mesh| *mesh != lower && *mesh != upper)
+		.collect();
+	let extra = count.saturating_sub(items.len()).min(remaining.len());
+	for _ in 0..extra {
 		let index = rng.gen_index(remaining.len());
 		let mesh = remaining.swap_remove(index);
-		let material = *rng.choose(ClothingMaterial::VALUES).unwrap_or(&ClothingMaterial::Cloth);
-		let color = *rng.choose(ItemColor::VALUES).unwrap_or(&ItemColor::Natural);
-		items.push(InventoryItem::clothing(mesh, material, color));
+		items.push(random_item_for_mesh(rng, mesh));
 	}
 	items
 }
@@ -219,6 +249,7 @@ pub fn random_starter_clothing(rng: &mut ItemRng, count: usize) -> Vec<Inventory
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{ClothingKind, ClothingMaterial, ClothingMesh, ItemColor};
 
 	#[test]
 	fn starter_rolls_are_unique_meshes() {
@@ -229,6 +260,26 @@ mod tests {
 		meshes.dedup();
 		assert_eq!(meshes.len(), STARTER_CLOTHING_COUNT);
 		assert!(items.iter().all(|item| item.buffs().is_empty()));
+		assert_eq!(items[0].mesh().map(ClothingMesh::kind), Some(ClothingKind::Lower));
+		assert_eq!(items[1].mesh().map(ClothingMesh::kind), Some(ClothingKind::Upper));
+		assert!(ClothingKind::STARTER_LOWERS.contains(&items[0].mesh().unwrap()));
+		assert!(ClothingKind::STARTER_UPPERS.contains(&items[1].mesh().unwrap()));
+	}
+
+	#[test]
+	fn starter_outfit_wears_lower_and_upper() {
+		let items = vec![
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			),
+			InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+			InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Cloth, ItemColor::Cool),
+		];
+		let inventory = Inventory::with_starter_outfit(items);
+		assert_eq!(inventory.worn, vec![0, 1]);
+		assert!(!inventory.is_worn(2));
 	}
 
 	#[test]

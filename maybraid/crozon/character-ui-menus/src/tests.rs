@@ -5,9 +5,9 @@ use crozon_characters::species::{
 };
 
 use crate::{
-	MenuEvent,
 	character::{CharacterMenu, ConceptSpecies},
 	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
+	MenuEvent,
 };
 
 #[test]
@@ -469,11 +469,11 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 		ClothingMaterial, ClothingMesh, InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
 	};
 
-	let items: Vec<_> = ClothingMesh::VALUES
-		.iter()
-		.take(3)
-		.map(|mesh| InventoryItem::clothing(*mesh, ClothingMaterial::Hawaiian, ItemColor::Red))
-		.collect();
+	let items: Vec<_> = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Hawaiian, ItemColor::Red),
+	];
 	let expected_name = items[0].name();
 	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.braidman.clothing.value.menu_nodes();
@@ -482,7 +482,9 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 	};
 	assert_eq!(*max_selected, WORN_CLOTHING_LIMIT);
 	assert_eq!(choices.len(), 3);
-	assert!(choices.iter().all(|choice| choice.selected));
+	assert!(choices[0].selected);
+	assert!(choices[1].selected);
+	assert!(!choices[2].selected);
 	assert_eq!(choices[0].label, expected_name);
 	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
 	assert!(!menu.inventory.as_ref().expect("create inventory").is_worn(0));

@@ -80,6 +80,25 @@ impl ClothingHost {
 	}
 }
 
+/// Catalog role. Wear rules stay open; generation and preview framing use this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ClothingKind {
+	Lower,
+	Upper,
+	Full,
+	Footwear,
+}
+
+impl ClothingKind {
+	/// Meshes the starter roll may pick for a lower.
+	pub const STARTER_LOWERS: &'static [ClothingMesh] =
+		&[ClothingMesh::HaremPants, ClothingMesh::Pants];
+
+	/// Meshes the starter roll may pick for an upper.
+	pub const STARTER_UPPERS: &'static [ClothingMesh] =
+		&[ClothingMesh::TankTop, ClothingMesh::Tunic];
+}
+
 /// Shared clothing catalog; layers compose across species.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClothingMesh {
@@ -149,6 +168,17 @@ impl ClothingMesh {
 
 	pub const fn slot(self) -> ClothingSlot {
 		ClothingSlot::Body
+	}
+
+	pub const fn kind(self) -> ClothingKind {
+		match self {
+			Self::Pants | Self::HaremPants | Self::HaremPantsLowerWrap => ClothingKind::Lower,
+			Self::TankTop | Self::Tunic | Self::HaremPantsUpper | Self::FittedCoat => {
+				ClothingKind::Upper
+			}
+			Self::KneeHighBoots => ClothingKind::Footwear,
+			Self::LongDress | Self::ShortDress | Self::RobeCoat | Self::Robe => ClothingKind::Full,
+		}
 	}
 
 	/// Body garments with per-host fitted GLBs under `clothes/body/{host}/`.
@@ -292,5 +322,15 @@ mod tests {
 			ClothingMesh::TankTop.path_on(ClothingHost::Canonical),
 			ClothingMesh::TankTop.path()
 		);
+	}
+
+	#[test]
+	fn starter_pools_match_kinds() {
+		for mesh in ClothingKind::STARTER_LOWERS {
+			assert_eq!(mesh.kind(), ClothingKind::Lower);
+		}
+		for mesh in ClothingKind::STARTER_UPPERS {
+			assert_eq!(mesh.kind(), ClothingKind::Upper);
+		}
 	}
 }

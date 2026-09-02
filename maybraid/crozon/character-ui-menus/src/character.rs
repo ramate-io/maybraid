@@ -3,7 +3,6 @@ use character_ui_menu::{
 };
 use crozon_character_items::{Inventory, InventoryItem};
 use crozon_characters::{
-	ConceptAnimation,
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
 		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
@@ -14,6 +13,7 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
+	ConceptAnimation,
 };
 
 use crate::{
@@ -259,7 +259,7 @@ pub struct CharacterMenu {
 impl CharacterMenu {
 	pub fn for_create(items: Vec<InventoryItem>) -> Self {
 		let mut menu = Self::default();
-		menu.inventory = Some(Inventory::with_all_worn(items));
+		menu.inventory = Some(Inventory::with_starter_outfit(items));
 		menu.sync_inventory_clothing();
 		menu
 	}

@@ -16,6 +16,12 @@ pub const SPIN_REVEAL_SECS: f32 = 1.4;
 /// Inner size of the picture / camera slot.
 pub const SPIN_REVEAL_SLOT_SIZE: f32 = 280.0;
 
+/// Centered clothing-roll tile.
+pub const SPIN_REVEAL_TILE_WIDTH: f32 = 260.0;
+
+/// See [`SPIN_REVEAL_TILE_WIDTH`].
+pub const SPIN_REVEAL_TILE_HEIGHT: f32 = 340.0;
+
 /// What the slot shows after the spin.
 #[derive(Clone, Debug)]
 pub enum SpinRevealPayload {

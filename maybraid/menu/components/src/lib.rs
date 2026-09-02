@@ -36,16 +36,16 @@ pub use loading::{
 	set_loading_progress, sync_loading_bar_fill,
 };
 pub use single_select::{
-	KeyboardMenuNav, MenuActivate, MenuFocus, TextColumnAlign, TextColumnAnchor, TextCursorColumn,
-	TextCursorMenu, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader, TextMenuInputLock,
-	TextMenuItem, TextMenuItemLabel, apply_text_menu_nav, emit_menu_activate_on_click,
-	emit_menu_activate_on_enter, emit_menu_activate_on_nav, emit_menu_focus, navigate_text_menus,
-	republish_menu_activate, select_text_menu_item_on_over, sync_text_cursor_icons,
-	sync_text_menu_item_colors,
+	ButtonWithSubtext, KeyboardMenuNav, MenuActivate, MenuFocus, TextColumnAlign, TextColumnAnchor,
+	TextCursorColumn, TextCursorMenu, TextCursorSlot, TextMenu, TextMenuColumn, TextMenuHeader,
+	TextMenuInputLock, TextMenuItem, TextMenuItemLabel, apply_text_menu_nav,
+	emit_menu_activate_on_click, emit_menu_activate_on_enter, emit_menu_activate_on_nav,
+	emit_menu_focus, navigate_text_menus, republish_menu_activate, select_text_menu_item_on_over,
+	sync_text_cursor_icons, sync_text_menu_item_colors,
 };
 pub use spin_reveal::{
-	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SpinRevealCover, SpinRevealFace, SpinRevealPayload,
-	SpinRevealSlot, SpinRevealViewport,
+	SPIN_REVEAL_SECS, SPIN_REVEAL_SLOT_SIZE, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH,
+	SpinRevealCover, SpinRevealFace, SpinRevealPayload, SpinRevealSlot, SpinRevealViewport,
 };
 pub use theme::{
 	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, HEADER_FONT_SIZE, ITEM_FONT_SIZE,

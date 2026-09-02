@@ -1,18 +1,19 @@
 //! Spin-and-reveal screen for starter clothing.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 use crozon_character_items::InventoryItem;
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
-	SpinningIcon, TEXT_YELLOW, TextCursorColumn, TextMenuPlugin, republish_menu_activate,
+	republish_menu_activate, ButtonWithSubtext, SpinningIcon, TextMenuPlugin, BARLOW_SEMIBOLD,
+	LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
+	SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH, TEXT_YELLOW,
 };
 
-use crate::MenuScreen;
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
+use crate::MenuScreen;
 
 /// Queue a spin-and-reveal spawn. Pair with [`SpinRevealItems`].
 #[derive(Component, Debug, Clone, Copy)]
@@ -139,17 +140,33 @@ fn rebuild_spin_reveal(
 	}
 	let index = phase.index.min(items.0.len().saturating_sub(1));
 	let revealed = !phase.spinning;
-	let last = index + 1 >= items.0.len();
-	let action = if revealed && last { "Continue" } else { "Next" };
+	let total = items.0.len();
+	let action = action_copy(revealed, index + 1 >= total, index, total);
 	commands.insert_resource(SpinRevealCurrent { item: items.0[index].clone(), revealed });
 	commands.spawn_scene(spin_scene(&items.0[index], revealed, action));
 	phase.dirty = false;
 }
 
-fn spin_scene(item: &InventoryItem, revealed: bool, action: &'static str) -> impl Scene + 'static {
+fn action_copy(revealed: bool, last: bool, index: usize, total: usize) -> (String, String) {
+	if revealed && last {
+		("Continue".into(), "Edit Character".into())
+	} else {
+		("Next".into(), format!("Clothing Item ({}/{})", index + 1, total))
+	}
+}
+
+fn spin_scene(
+	item: &InventoryItem,
+	revealed: bool,
+	action: (String, String),
+) -> impl Scene + 'static {
 	let name = item.name();
-	let mut children: Vec<Box<dyn Scene>> = vec![Box::new(bottom_chrome(name, action, revealed))];
-	if !revealed {
+	let (label, subtext) = action;
+	let mut children: Vec<Box<dyn Scene>> =
+		vec![Box::new(ButtonWithSubtext::new(label, subtext, SpinRevealChoice::Advance).scene())];
+	if revealed {
+		children.push(Box::new(name_below_preview(name)));
+	} else {
 		children.push(Box::new(centered_spinner()));
 	}
 	let background = if revealed { Color::NONE } else { MENU_CLEAR };
@@ -184,24 +201,21 @@ fn centered_spinner() -> impl Scene + 'static {
 	}
 }
 
-fn bottom_chrome(name: String, action: &'static str, revealed: bool) -> impl Scene + 'static {
-	let mut children: Vec<Box<dyn Scene>> = Vec::new();
-	if revealed {
-		children.push(Box::new(caption_line(name, PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW)));
-	}
-	children
-		.push(Box::new(TextCursorColumn::untitled([(action, SpinRevealChoice::Advance)]).scene()));
+fn name_below_preview(name: String) -> impl Scene + 'static {
+	let caption: Vec<Box<dyn Scene>> =
+		vec![Box::new(caption_line(name, PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW))];
+	let margin = UiRect { top: Val::Px(SPIN_REVEAL_TILE_HEIGHT / 2.0 + 16.0), ..default() };
 	bsn! {
 		Node {
 			position_type: PositionType::Absolute,
-			bottom: px(48),
+			top: percent(50),
 			width: percent(100),
+			margin: margin,
 			flex_direction: FlexDirection::Column,
 			align_items: AlignItems::Center,
-			row_gap: px(16),
 		}
 		Pickable::IGNORE
-		Children [ {children} ]
+		Children [ {caption} ]
 	}
 }
 
@@ -214,6 +228,9 @@ fn caption_line(text: String, size: f32, color: Color) -> impl Scene + 'static {
 		}
 		TextColor(color)
 		TextLayout::new(Justify::Center, LineBreak::WordBoundary)
+		Node {
+			width: px(SPIN_REVEAL_TILE_WIDTH),
+		}
 		Pickable::IGNORE
 	}
 }
@@ -253,6 +270,6 @@ fn finish_spin_reveal(
 
 impl SpinRevealScreen {
 	pub fn scene(item: &InventoryItem, revealed: bool) -> impl Scene + 'static {
-		spin_scene(item, revealed, "Next")
+		spin_scene(item, revealed, action_copy(revealed, true, 0, 1))
 	}
 }

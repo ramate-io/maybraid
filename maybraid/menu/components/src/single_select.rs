@@ -3,7 +3,9 @@
 pub mod text_cursor;
 pub mod text_menu;
 
-pub use text_cursor::{TextCursorColumn, TextCursorMenu, TextCursorSlot, sync_text_cursor_icons};
+pub use text_cursor::{
+	ButtonWithSubtext, TextCursorColumn, TextCursorMenu, TextCursorSlot, sync_text_cursor_icons,
+};
 pub use text_menu::{
 	KeyboardMenuNav, MenuActivate, MenuFocus, TextColumnAlign, TextColumnAnchor, TextMenu,
 	TextMenuColumn, TextMenuHeader, TextMenuInputLock, TextMenuItem, TextMenuItemLabel,

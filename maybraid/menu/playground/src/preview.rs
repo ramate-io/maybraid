@@ -5,17 +5,18 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use character_ui_menu::{CameraFocus, FocusRig};
+use crozon_character_items::{ClothingHost, ClothingMesh, InventoryItem, ItemColor};
 use crozon_character_playground::CameraController;
-use crozon_character_items::InventoryItem;
 use crozon_character_ui_menus::{
-	CharacterField, CharacterMenu, ConceptSpecies, MenuEvent, BODY_FOCUS,
+	spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies, MenuEvent, BODY_FOCUS,
 };
 use crozon_characters::{
-	character_bounds, AnimRef, AnimRefRoot, BoneMap, CharacterComponents, CharacterHostSystems,
-	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, ComponentsOnly,
+	add_character_components_host, character_bounds, AnimRef, AnimRefRoot, BoneMap,
+	CharacterComponents, CharacterHostSystems, CharacterMembers, CharacterRecipe, CharacterRig,
+	CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, PartNode,
 };
-use crozon_characters::species::braidman::BraidmanConfig;
 use lod::gen::LodScene;
+use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
 use menu_screens::{SpinRevealCurrent, SpinRevealScreen, SpinRevealSystems};
@@ -40,6 +41,7 @@ pub struct CharacterPreviewPlugin;
 
 impl Plugin for CharacterPreviewPlugin {
 	fn build(&self, app: &mut App) {
+		add_character_components_host::<ClothingPreview>(app);
 		app.init_resource::<PreviewSyncState>()
 			.init_resource::<PendingCameraFocus>()
 			.insert_resource(GlobalAmbientLight {
@@ -118,7 +120,7 @@ fn sync_preview(
 			}
 			spawn_from_item(&mut commands, &spin.item);
 			pending.resolved = None;
-			pending.focus = Some(BODY_FOCUS);
+			pending.focus = spin.item.mesh().map(|mesh| spin_reveal_focus(mesh.kind()));
 			return;
 		}
 	}
@@ -136,11 +138,37 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 		return;
 	};
 	let material = item.material();
-	let mut config = BraidmanConfig::default_preview();
-	config.clothing = vec![mesh];
-	config.colors.set_clothing_color(mesh, material.color);
-	config.colors.set_clothing_material(mesh, material.id);
-	spawn_clothed(commands, &config.clothed());
+	spawn_clothed(
+		commands,
+		&ClothingPreview {
+			layer: ClothingLayer::new(mesh, material.color, ClothingHost::HUMANOID)
+				.with_material(material.id),
+		},
+	);
+}
+
+/// Unskinned garment in bind pose. Camera framing is per clothing kind.
+#[derive(Clone, PartialEq)]
+struct ClothingPreview {
+	layer: ClothingLayer,
+}
+
+impl Default for ClothingPreview {
+	fn default() -> Self {
+		Self {
+			layer: ClothingLayer::new(
+				ClothingMesh::TankTop,
+				ItemColor::Natural,
+				ClothingHost::HUMANOID,
+			),
+		}
+	}
+}
+
+impl CharacterComponents for ClothingPreview {
+	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
+		Layers::from_labeled("clothing", vec![self.layer.preview_part_node()])
+	}
 }
 
 fn spawn_from_menu(commands: &mut Commands, menu: &CharacterMenu) {
@@ -203,10 +231,14 @@ where
 fn stamp_preview_animation(
 	mut commands: Commands,
 	menu_state: Res<CharacterMenuState>,
+	spin_screens: Query<Entity, With<SpinRevealScreen>>,
 	roots: Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
+	if !spin_screens.is_empty() {
+		return;
+	}
 	let desired = AnimRef::from(menu_state.0.animation());
 	for members in &roots {
 		for member in members.iter() {

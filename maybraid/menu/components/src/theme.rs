@@ -85,11 +85,17 @@ pub const ITEM_ROW_GAP: f32 = 6.0;
 /// Inset from the left of the window.
 pub const COLUMN_INSET: f32 = 48.0;
 
+/// Tight inset for a corner action (spin-reveal Next — no description strip).
+pub const CORNER_INSET: f32 = 16.0;
+
 /// Upper-corner brand / mode line (`Maybraid - Discovery`).
 pub const BRAND_MODE_FONT_SIZE: f32 = 36.0;
 
 /// Menu column sits above the description strip.
 pub const COLUMN_BOTTOM: f32 = 88.0;
+
+/// Corner action sits just above the window edge.
+pub const CORNER_BOTTOM: f32 = 12.0;
 
 /// Loading-page Maybraid mark.
 pub const LOADING_ICON_SIZE: f32 = 192.0;
