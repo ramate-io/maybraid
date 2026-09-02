@@ -7,6 +7,8 @@ use crate::candidate::MovementCandidate;
 use crate::objective::MovementObjective;
 use crate::step::{MovementDrive, MovementStep};
 
+const FAILED_PLAN_RETRY_SECONDS: f32 = 0.6;
+
 /// Per-user scoring knobs. Budget and standoffs live on [`MovementAbility`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementIntelligenceSettings {
@@ -47,6 +49,7 @@ where
 	pub cursor: usize,
 	pub stuck_seconds: f32,
 	pub last_goal_distance: f32,
+	pub failed_plan_retry_seconds: Option<f32>,
 }
 
 impl MovementIntelligence {
@@ -59,6 +62,7 @@ impl MovementIntelligence {
 			cursor: 0,
 			stuck_seconds: 0.0,
 			last_goal_distance: f32::MAX,
+			failed_plan_retry_seconds: None,
 		}
 	}
 }
@@ -84,6 +88,13 @@ where
 		self.cursor = 0;
 		self.stuck_seconds = 0.0;
 		self.last_goal_distance = f32::MAX;
+		self.failed_plan_retry_seconds = None;
+	}
+
+	/// Keep an active route when a refresh finds nothing, then retry if that
+	/// route runs out instead of silently stopping.
+	pub fn note_replan_failed(&mut self) {
+		self.failed_plan_retry_seconds = Some(0.0);
 	}
 
 	pub fn at_plan_end(&self) -> bool {
@@ -111,6 +122,8 @@ where
 pub enum MovementDriveResult {
 	Wish(Vec3),
 	Hold,
+	/// A previous planning attempt failed and should be tried again.
+	Retry,
 	/// Planner is not approaching the current step. Drive still writes `wish`;
 	/// local unstick belongs to the motor (strafe / jump / backup), not an immediate replan.
 	Stuck {
@@ -126,6 +139,13 @@ where
 	pub fn drive(&mut self, dt: f32, position: Vec3) -> MovementDriveResult {
 		loop {
 			if self.at_plan_end() {
+				if let Some(elapsed) = &mut self.failed_plan_retry_seconds {
+					*elapsed += dt;
+					if *elapsed >= FAILED_PLAN_RETRY_SECONDS {
+						*elapsed = 0.0;
+						return MovementDriveResult::Retry;
+					}
+				}
 				return MovementDriveResult::Hold;
 			}
 			let Some(target) = self.plan.get(self.cursor).and_then(I::drive_target) else {
@@ -232,6 +252,20 @@ mod tests {
 			}
 		}
 		assert!(saw_stuck);
+		Ok(())
+	}
+
+	#[test]
+	fn failed_refresh_keeps_active_plan_and_retries_after_it_ends() -> anyhow::Result<()> {
+		let mut brain = MovementIntelligence::new(vantage());
+		brain.adopt_plan(vec![MovementStep::MoveTo(MovementLocation::new(Vec3::X * 2.0, 0.2))]);
+		brain.note_replan_failed();
+
+		assert_eq!(brain.plan.len(), 1);
+		assert!(matches!(brain.drive(0.016, Vec3::ZERO), MovementDriveResult::Wish(_)));
+
+		brain.cursor = brain.plan.len();
+		assert_eq!(brain.drive(FAILED_PLAN_RETRY_SECONDS, Vec3::ZERO), MovementDriveResult::Retry);
 		Ok(())
 	}
 }
