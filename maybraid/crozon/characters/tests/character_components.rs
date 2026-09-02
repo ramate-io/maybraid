@@ -139,6 +139,28 @@ fn fitted_coat_on_standard_braidman_uses_humanoid_fit() {
 }
 
 #[test]
+fn long_dress_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::LongDress);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/long_dress.glb"
+	);
+}
+
+#[test]
+fn short_dress_on_standard_braidman_uses_humanoid_fit() {
+	let mut config = BraidmanConfig::default_preview();
+	config.body = BodyMesh::Standard;
+	config.clothing.push(ClothingMesh::ShortDress);
+	assert_eq!(
+		clothing_scene_path(&config),
+		"characters/clothes/body/humanoid_full_body/short_dress.glb"
+	);
+}
+
+#[test]
 fn robe_on_standard_braidman_uses_humanoid_fit() {
 	let mut config = BraidmanConfig::default_preview();
 	config.body = BodyMesh::Standard;

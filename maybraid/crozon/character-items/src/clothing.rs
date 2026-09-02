@@ -159,9 +159,10 @@ impl ClothingMesh {
 		}
 	}
 
-	/// Garments with per-host fitted GLBs under `clothes/{slot}/{host}/`.
+	/// Body garments with per-host fitted GLBs under `clothes/body/{host}/`.
+	/// The hood stays on the unfitted head catalog path.
 	pub const fn uses_host_fit(self) -> bool {
-		matches!(self, Self::TankTop | Self::FittedCoat | Self::Robe)
+		matches!(self.slot(), ClothingSlot::Body)
 	}
 
 	/// Unfitted catalog path relative to the `maybraid/assets` root.
@@ -249,8 +250,27 @@ mod tests {
 	}
 
 	#[test]
-	fn tunic_without_host_fits_stays_canonical() {
-		assert_eq!(ClothingMesh::Tunic.path_on(ClothingHost::IGEO), ClothingMesh::Tunic.path());
+	fn tunic_fits_igeo_body() {
+		assert_eq!(
+			ClothingMesh::Tunic.path_on(ClothingHost::IGEO),
+			"characters/clothes/body/igeo_biped_full_body/tunic.glb"
+		);
+	}
+
+	#[test]
+	fn long_dress_fits_igeo_body() {
+		assert_eq!(
+			ClothingMesh::LongDress.path_on(ClothingHost::IGEO),
+			"characters/clothes/body/igeo_biped_full_body/long_dress.glb"
+		);
+	}
+
+	#[test]
+	fn short_dress_fits_igeo_body() {
+		assert_eq!(
+			ClothingMesh::ShortDress.path_on(ClothingHost::IGEO),
+			"characters/clothes/body/igeo_biped_full_body/short_dress.glb"
+		);
 	}
 
 	#[test]
@@ -259,6 +279,25 @@ mod tests {
 			ClothingMesh::Robe.path_on(ClothingHost::IGEO),
 			"characters/clothes/body/igeo_biped_full_body/robe.glb"
 		);
+	}
+
+	#[test]
+	fn every_body_garment_uses_host_fit() {
+		for clothing in ClothingMesh::VALUES {
+			if clothing.slot() == ClothingSlot::Body {
+				assert!(clothing.uses_host_fit(), "{}", clothing.label());
+				assert_eq!(
+					clothing.path_on(ClothingHost::IGEO),
+					format!(
+						"characters/clothes/body/igeo_biped_full_body/{}.glb",
+						clothing.file_stem()
+					)
+				);
+			} else {
+				assert!(!clothing.uses_host_fit(), "{}", clothing.label());
+				assert_eq!(clothing.path_on(ClothingHost::IGEO), clothing.path());
+			}
+		}
 	}
 
 	#[test]
