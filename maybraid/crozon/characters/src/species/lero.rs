@@ -14,11 +14,12 @@ use crate::{species::common::HairMesh, CharacterRecipe, ClothingLayer};
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::{LeroHeadMesh, LeroMouthMesh};
 pub use palette::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LeroColors {
 	pub skin: LeroSkinColor,
 	pub eyes: LeroEyeColor,
@@ -80,7 +81,7 @@ impl LeroColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LeroConfig {
 	pub mouth: LeroMouthMesh,
 	pub hair: HairMesh,

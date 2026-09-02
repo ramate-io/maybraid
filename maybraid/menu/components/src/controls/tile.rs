@@ -8,8 +8,8 @@ use crate::theme::{
 	TEXT_YELLOW_HOVER,
 };
 
-use super::HudFonts;
 use super::display::menu_display_name;
+use super::HudFonts;
 
 const TILE_LABEL_MAX_CHARS: usize = 16;
 

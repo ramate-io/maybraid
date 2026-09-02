@@ -4,9 +4,11 @@
 //! chromatic than Braidman's brown-leaning earth tones.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 /// Shared Tuberwaber swatch set for body and head features.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum TuberwaberColor {
 	#[default]
 	MistBlue,

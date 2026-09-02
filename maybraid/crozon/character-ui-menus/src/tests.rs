@@ -491,3 +491,28 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Hars)));
 	Ok(())
 }
+
+#[test]
+fn saved_menu_strips_clothing_from_appearance() -> anyhow::Result<()> {
+	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
+	use crozon_characters::CharacterAppearance;
+
+	let items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
+	];
+	let mut menu = CharacterMenu::for_create(items);
+	menu.name = String::from("Misty");
+	let appearance = menu.appearance();
+	let CharacterAppearance::Braidman(config) = &appearance else {
+		anyhow::bail!("expected braidman");
+	};
+	assert!(config.clothing.is_empty());
+	assert!(config.colors.clothing.is_empty());
+	let inventory = menu.inventory.clone().expect("inventory");
+	let restored = CharacterMenu::for_saved(menu.saved_name(), &appearance, inventory);
+	assert_eq!(restored.name, "Misty");
+	assert_eq!(restored.appearance(), appearance);
+	assert_eq!(restored.inventory.as_ref().expect("inventory").worn.len(), 2);
+	Ok(())
+}

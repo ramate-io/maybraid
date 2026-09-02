@@ -5,8 +5,8 @@ use crozon_character_playground::CameraController as PreviewCameraController;
 use maybraid_world::WorldGameplayEnabled;
 use menu_components::MENU_CLEAR;
 use menu_screens::{
-	InGameScreen, MenuScreen, despawn_menu_screens, request_show_create_character,
-	request_show_home, request_show_in_game,
+	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
+	InGameScreen, MenuScreen,
 };
 
 use crate::flow::{GameFlow, WorldPause};
@@ -26,7 +26,7 @@ pub(crate) fn enter_home(mut commands: Commands) {
 }
 
 pub(crate) fn enter_characters(mut commands: Commands) {
-	request_show_create_character(&mut commands);
+	request_show_gallery(&mut commands);
 }
 
 pub(crate) fn enter_world(mut commands: Commands, screens: Query<Entity, With<MenuScreen>>) {

@@ -1,7 +1,7 @@
 //! Hint strip: animated mark plus faint copy.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::{Scene, bsn, template_value};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
 
 use crate::icons::maybraid::AnimatedIcon;

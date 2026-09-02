@@ -19,9 +19,10 @@ use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, Mou
 use crozon_character_items::{
 	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 use sliders::BraidmanSliders;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BraidmanColors {
 	pub body: ItemColor,
 	pub head: ItemColor,
@@ -97,7 +98,7 @@ impl BraidmanColors {
 }
 
 /// Minimal unresolved Braidman state used by commands and, later, UI fields.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BraidmanConfig {
 	// Preset IDs are shared enums today; species-owned tables will live in `presets`.
 	pub gender: GenderPreset,

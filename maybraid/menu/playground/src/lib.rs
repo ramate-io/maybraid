@@ -4,6 +4,7 @@ pub mod character;
 pub mod commands;
 mod loading_demo;
 mod preview;
+mod session;
 mod ui;
 
 pub use character::{
@@ -13,9 +14,13 @@ pub use character::{
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::CharacterPreviewPlugin;
+pub use session::{
+	save_editing_character, CharacterSession, CharacterSessionPlugin, EditingCharacter,
+};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
+use crozon_character_persist::SaveRoot;
 use crozon_character_playground::camera;
 use crozon_character_ui_menus::MenuEvent;
 use crozon_characters::CharacterHostsPlugin;
@@ -23,12 +28,13 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::VirtualPadPlugin;
+use maybraid_input::{MenuNav, MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
+use menu_components::ActiveOverlayKey;
 use menu_screens::{
-	CreateCharacterPlugin, CreateCharacterReady, HomeMenuChoice, HomeScreenPlugin,
-	InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems,
-	SpinRevealScreen,
+	request_show_gallery, request_show_home, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
+	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
+	LoadingScreenSystems, SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -55,6 +61,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			InGameScreenPlugin,
 			LoadingScreenPlugin,
 			CreateCharacterPlugin,
+			CharacterSessionPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
 			MenuControllerPlugin,
@@ -70,7 +77,8 @@ impl Plugin for MenuPlaygroundPlugin {
 				echo_home_choice,
 				echo_in_game_choice,
 				echo_character_menu,
-				open_create_character_hud,
+				echo_gallery_choice,
+				editor_back,
 				loading_demo::run_loading_demo.before(LoadingScreenSystems::Apply),
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 			),
@@ -96,9 +104,13 @@ fn character_screen_closed(
 fn echo_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut console: ResMut<CommandConsoleOutput>,
+	mut commands: Commands,
 ) {
 	for choice in choices.read() {
 		console.0 = format!("home: {}", choice.label());
+		if *choice == HomeMenuChoice::Characters {
+			request_show_gallery(&mut commands);
+		}
 	}
 }
 
@@ -128,14 +140,53 @@ fn echo_character_menu(
 	}
 }
 
-fn open_create_character_hud(
-	mut ready: MessageReader<CreateCharacterReady>,
-	mut menu_state: ResMut<CharacterMenuState>,
-	mut commands: Commands,
+fn echo_gallery_choice(
+	mut choices: MessageReader<GalleryChoice>,
+	mut console: ResMut<CommandConsoleOutput>,
 ) {
-	let Some(ready) = ready.read().last() else {
+	for choice in choices.read() {
+		console.0 = match choice {
+			GalleryChoice::New => String::from("gallery: new character"),
+			GalleryChoice::Open(id) => format!("gallery: {}", id.to_hex()),
+		};
+	}
+}
+
+fn editor_back(
+	mut commands: Commands,
+	nav: Res<MenuNavPad>,
+	overlay: Res<ActiveOverlayKey>,
+	character: Query<(), With<CharacterScreen>>,
+	spin: Query<(), With<SpinRevealScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
+	save_root: Res<SaveRoot>,
+	editing: Option<Res<EditingCharacter>>,
+	menu_state: Res<CharacterMenuState>,
+	mut console: ResMut<CommandConsoleOutput>,
+) {
+	if !nav.just_pressed(MenuNav::Back) || overlay.0.is_some() {
 		return;
-	};
-	*menu_state = CharacterMenuState::for_create(ready.items.clone());
-	request_show_character(&mut commands);
+	}
+	if !character.is_empty() {
+		if let Some(editing) = editing.as_ref() {
+			match save_editing_character(&save_root, editing.id, &menu_state.0) {
+				Ok(()) => {
+					console.0 = format!("saved {}", menu_state.0.saved_name());
+				}
+				Err(error) => {
+					console.0 = format!("save failed: {error}");
+					warn!("failed to save character {}: {error}", editing.id.to_hex());
+				}
+			}
+		}
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !spin.is_empty() {
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !gallery.is_empty() {
+		request_show_home(&mut commands);
+	}
 }

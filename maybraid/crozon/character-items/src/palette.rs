@@ -1,10 +1,12 @@
 //! Shared item color palette.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 /// General-purpose color palette for items (and species that adopt it, such
 /// as Braidman skin/hair and every species' hair color).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum ItemColor {
 	#[default]
 	Natural,

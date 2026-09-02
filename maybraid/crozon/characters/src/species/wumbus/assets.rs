@@ -1,13 +1,15 @@
 //! Wumbus asset catalog.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::{
 	assets::AssetPath,
 	species::common::assets::{HEAD_ORTHO_BEAR, HORNS_HARROWED_CROWN, MOUTH_CANINE_SNOUT},
 };
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum WumbusHeadMesh {
 	#[default]
 	OrthoBear,
@@ -25,7 +27,8 @@ impl WumbusHeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum WumbusMouthMesh {
 	#[default]
 	CanineSnout,
@@ -43,7 +46,8 @@ impl WumbusMouthMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum WumbusHornMesh {
 	#[default]
 	None,

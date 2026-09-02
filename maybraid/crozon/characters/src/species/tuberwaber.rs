@@ -21,12 +21,13 @@ use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
 use crozon_character_items::{
 	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 use sliders::TuberwaberSliders;
 
 pub use assets::{TuberwaberBodyMesh, TuberwaberHeadMesh};
 pub use palette::TuberwaberColor;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TuberwaberColors {
 	pub body: TuberwaberColor,
 	pub head: TuberwaberColor,
@@ -101,7 +102,7 @@ impl TuberwaberColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TuberwaberConfig {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,

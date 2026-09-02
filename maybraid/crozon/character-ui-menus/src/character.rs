@@ -13,7 +13,7 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	ConceptAnimation,
+	CharacterAppearance, ConceptAnimation,
 };
 
 use crate::{
@@ -262,6 +262,62 @@ impl CharacterMenu {
 		menu.inventory = Some(Inventory::with_starter_outfit(items));
 		menu.sync_inventory_clothing();
 		menu
+	}
+
+	pub fn for_saved(name: String, appearance: &CharacterAppearance, inventory: Inventory) -> Self {
+		let mut menu = match appearance {
+			CharacterAppearance::Braidman(config) => {
+				Self::from_braidman(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Brodler(config) => {
+				Self::from_brodler(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Mygr(config) => {
+				Self::from_mygr(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Dui(config) => Self::from_dui(config, ConceptAnimation::default()),
+			CharacterAppearance::Wumbus(config) => {
+				Self::from_wumbus(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Lero(config) => {
+				Self::from_lero(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Spibmom(config) => {
+				Self::from_spibmom(config, ConceptAnimation::default())
+			}
+			CharacterAppearance::Tuberwaber(config) => {
+				Self::from_tuberwaber(config, ConceptAnimation::default())
+			}
+		};
+		menu.name = name;
+		menu.inventory = Some(inventory);
+		menu.sync_inventory_clothing();
+		menu
+	}
+
+	pub fn appearance(&self) -> CharacterAppearance {
+		let mut appearance = match self.species.value {
+			ConceptSpecies::Braidman => CharacterAppearance::Braidman(self.braidman_config()),
+			ConceptSpecies::Brodler => CharacterAppearance::Brodler(self.brodler_config()),
+			ConceptSpecies::Mygr => CharacterAppearance::Mygr(self.mygr_config()),
+			ConceptSpecies::Dui => CharacterAppearance::Dui(self.dui_config()),
+			ConceptSpecies::Wumbus => CharacterAppearance::Wumbus(self.wumbus_config()),
+			ConceptSpecies::Lero => CharacterAppearance::Lero(self.lero_config()),
+			ConceptSpecies::Spibmom => CharacterAppearance::Spibmom(self.spibmom_config()),
+			ConceptSpecies::Tuberwaber => CharacterAppearance::Tuberwaber(self.tuberwaber_config()),
+			_ => CharacterAppearance::Braidman(self.braidman_config()),
+		};
+		appearance.strip_clothing();
+		appearance
+	}
+
+	pub fn saved_name(&self) -> String {
+		let name = self.name.trim();
+		if name.is_empty() {
+			String::from("Unnamed")
+		} else {
+			name.to_string()
+		}
 	}
 
 	pub fn is_create(&self) -> bool {

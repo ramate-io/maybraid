@@ -1,6 +1,7 @@
 //! Tuberwaber asset catalog: tuberwaber body + head on the humanoid biped stack.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::assets::AssetPath;
 
@@ -9,7 +10,8 @@ pub use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
 const BODY_TUBERWABER: AssetPath = AssetPath::new("characters/bodies/biped/tuberwaber_body.glb");
 const HEAD_TUBERWABER: AssetPath = AssetPath::new("characters/heads/tuberwaber_head.glb");
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum TuberwaberBodyMesh {
 	#[default]
 	Tuberwaber,
@@ -31,7 +33,8 @@ impl TuberwaberBodyMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum TuberwaberHeadMesh {
 	#[default]
 	Tuberwaber,

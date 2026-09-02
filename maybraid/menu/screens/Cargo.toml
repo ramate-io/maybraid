@@ -12,6 +12,8 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 crozon-character-items = { workspace = true }
+crozon-character-model-user = { workspace = true }
+crozon-character-persist = { workspace = true }
 game-commands = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 menu-components = { workspace = true }

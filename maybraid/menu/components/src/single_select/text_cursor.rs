@@ -22,10 +22,29 @@ pub struct TextCursorMenu;
 #[derive(Component, Debug, Default, Clone, Copy)]
 pub struct TextCursorSlot;
 
+/// One labeled action, optionally with a caption under the title.
+pub struct TextCursorRow<E> {
+	pub label: String,
+	pub subtext: Option<String>,
+	pub action: E,
+}
+
+impl<E> TextCursorRow<E> {
+	pub fn new(label: impl Into<String>, action: E) -> Self {
+		Self { label: label.into(), subtext: None, action }
+	}
+
+	pub fn with_subtext(mut self, subtext: impl Into<String>) -> Self {
+		let subtext = subtext.into();
+		self.subtext = (!subtext.is_empty()).then_some(subtext);
+		self
+	}
+}
+
 /// Header plus labeled actions, with an animated mark beside the active row.
 pub struct TextCursorColumn<E> {
 	pub header: Option<String>,
-	pub items: Vec<(String, E)>,
+	pub items: Vec<TextCursorRow<E>>,
 	pub anchor: TextColumnAnchor,
 	pub align: TextColumnAlign,
 }
@@ -37,7 +56,10 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 	) -> Self {
 		Self {
 			header: Some(header.into()),
-			items: items.into_iter().map(|(label, action)| (label.into(), action)).collect(),
+			items: items
+				.into_iter()
+				.map(|(label, action)| TextCursorRow::new(label, action))
+				.collect(),
 			anchor: TextColumnAnchor::BottomLeft,
 			align: TextColumnAlign::Start,
 		}
@@ -47,7 +69,22 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 	pub fn untitled(items: impl IntoIterator<Item = (impl Into<String>, E)>) -> Self {
 		Self {
 			header: None,
-			items: items.into_iter().map(|(label, action)| (label.into(), action)).collect(),
+			items: items
+				.into_iter()
+				.map(|(label, action)| TextCursorRow::new(label, action))
+				.collect(),
+			anchor: TextColumnAnchor::BottomLeft,
+			align: TextColumnAlign::Start,
+		}
+	}
+
+	pub fn rows(
+		header: impl Into<String>,
+		items: impl IntoIterator<Item = TextCursorRow<E>>,
+	) -> Self {
+		Self {
+			header: Some(header.into()),
+			items: items.into_iter().collect(),
 			anchor: TextColumnAnchor::BottomLeft,
 			align: TextColumnAlign::Start,
 		}
@@ -70,13 +107,8 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> TextCursorCo
 		if let Some(header) = self.header {
 			children.push(Box::new(TextMenuHeader::new(header).scene()));
 		}
-		for (index, (label, action)) in self.items.into_iter().enumerate() {
-			children.push(Box::new(cursor_item_scene(
-				TextMenuItem::yellow(index),
-				label,
-				action,
-				self.align,
-			)));
+		for (index, row) in self.items.into_iter().enumerate() {
+			children.push(Box::new(cursor_row_scene(TextMenuItem::yellow(index), row, self.align)));
 		}
 		let node = self.anchor.node(self.align);
 		bsn! {
@@ -131,6 +163,29 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 			template_value(node)
 			Children [ {children} ]
 		}
+	}
+}
+
+fn cursor_row_scene<E>(
+	item: TextMenuItem,
+	row: TextCursorRow<E>,
+	align: TextColumnAlign,
+) -> impl Scene + 'static
+where
+	E: Component + Copy + Default + Unpin + Send + Sync + 'static,
+{
+	let mut children: Vec<Box<dyn Scene>> =
+		vec![Box::new(cursor_item_scene(item, row.label, row.action, align))];
+	if let Some(subtext) = row.subtext {
+		children.push(Box::new(subtext_caption_scene(subtext)));
+	}
+	bsn! {
+		Node {
+			flex_direction: FlexDirection::Column,
+			align_items: AlignItems::Start,
+		}
+		Pickable::IGNORE
+		Children [ {children} ]
 	}
 }
 

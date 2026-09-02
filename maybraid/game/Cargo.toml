@@ -23,6 +23,7 @@ maybraid-world = { workspace = true }
 menu-components = { workspace = true }
 menu-playground = { workspace = true }
 menu-screens = { workspace = true }
+crozon-character-persist = { workspace = true }
 
 [lints]
 workspace = true

@@ -1,8 +1,10 @@
 //! Mygr color palettes.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum MygrSkinColor {
 	#[default]
 	Ginger,
@@ -47,7 +49,8 @@ impl MygrSkinColor {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum MygrEyeColor {
 	#[default]
 	Green,

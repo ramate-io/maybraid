@@ -18,11 +18,13 @@ use clap::ValueEnum;
 use crozon_character_items::{
 	ClothingColor, ClothingHost, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, ItemColor,
 };
+use serde::{Deserialize, Serialize};
 
 pub use assets::HornMesh;
 pub use palette::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor};
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum BrodlerHeadMesh {
 	#[default]
 	Gaunt,
@@ -48,7 +50,7 @@ impl BrodlerHeadMesh {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BrodlerColors {
 	pub skin: BrodlerSkinColor,
 	pub eyes: BrodlerEyeColor,
@@ -107,7 +109,7 @@ impl BrodlerColors {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BrodlerConfig {
 	pub head: BrodlerHeadMesh,
 	pub horns: HornMesh,

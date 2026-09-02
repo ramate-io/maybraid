@@ -1,13 +1,15 @@
 //! Spibmom asset catalog.
 
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 
 use crate::{assets::AssetPath, species::common::assets::HEAD_STANDARD};
 
 const HORNS_FINBONE_CROWN: AssetPath = AssetPath::new("characters/horns/finbone_crown.glb");
 const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.glb");
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum SpibmomHeadMesh {
 	#[default]
 	Meerkat,
@@ -25,7 +27,8 @@ impl SpibmomHeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum SpibmomMouthMesh {
 	#[default]
 	Trunkish,
@@ -43,7 +46,8 @@ impl SpibmomMouthMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
 pub enum SpibmomCrownMesh {
 	#[default]
 	Finbone,

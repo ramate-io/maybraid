@@ -1,0 +1,180 @@
+//! Character id and on-disk save directories.
+//!
+//! Default root is `<repo>/.maybraid/saves`, derived from this crate's
+//! `CARGO_MANIFEST_DIR`. Character appearance and inventory files live in
+//! sibling folders keyed by the same [`CharacterId`].
+
+use bevy::prelude::*;
+use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize, Serializer};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const CHARACTERS_DIR: &str = "characters";
+const INVENTORIES_DIR: &str = "inventories";
+
+static ID_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Join key for a saved character and every User that hangs off it.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CharacterId(pub u128);
+
+impl CharacterId {
+	pub fn new() -> Self {
+		let nanos = SystemTime::now()
+			.duration_since(UNIX_EPOCH)
+			.map(|elapsed| elapsed.as_nanos() as u64)
+			.unwrap_or(0x9E37_79B9_7F4A_7C15);
+		let mix = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+		let a = nanos.wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ mix.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+		let b = nanos.rotate_left(17) ^ mix.wrapping_mul(0x94D0_49BB_1331_11EB);
+		Self(((a as u128) << 64) | b as u128)
+	}
+
+	pub fn to_hex(self) -> String {
+		format!("{:032x}", self.0)
+	}
+
+	pub fn from_hex(value: &str) -> Option<Self> {
+		if value.len() != 32 {
+			return None;
+		}
+		u128::from_str_radix(value, 16).ok().map(Self)
+	}
+}
+
+impl Default for CharacterId {
+	fn default() -> Self {
+		Self(0)
+	}
+}
+
+impl Serialize for CharacterId {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.serialize_str(&self.to_hex())
+	}
+}
+
+impl<'de> Deserialize<'de> for CharacterId {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		let value = String::deserialize(deserializer)?;
+		Self::from_hex(&value).ok_or_else(|| DeError::custom("invalid character id"))
+	}
+}
+
+/// Root of `characters/` and `inventories/`.
+#[derive(Resource, Clone, Debug)]
+pub struct SaveRoot {
+	pub path: PathBuf,
+}
+
+impl SaveRoot {
+	pub fn at(path: impl Into<PathBuf>) -> Self {
+		Self { path: path.into() }
+	}
+
+	/// Repo `.maybraid/saves`, from this crate's manifest directory.
+	pub fn workspace() -> Self {
+		Self { path: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.maybraid/saves") }
+	}
+
+	pub fn characters_dir(&self) -> PathBuf {
+		self.path.join(CHARACTERS_DIR)
+	}
+
+	pub fn inventories_dir(&self) -> PathBuf {
+		self.path.join(INVENTORIES_DIR)
+	}
+
+	pub fn character_path(&self, id: CharacterId) -> PathBuf {
+		self.characters_dir().join(format!("{}.json", id.to_hex()))
+	}
+
+	pub fn inventory_path(&self, id: CharacterId) -> PathBuf {
+		self.inventories_dir().join(format!("{}.json", id.to_hex()))
+	}
+
+	pub fn ensure_dirs(&self) -> io::Result<()> {
+		fs::create_dir_all(self.characters_dir())?;
+		fs::create_dir_all(self.inventories_dir())?;
+		Ok(())
+	}
+
+	pub fn list_ids(&self) -> io::Result<Vec<CharacterId>> {
+		let mut ids = Vec::new();
+		let dir = self.characters_dir();
+		let entries = match fs::read_dir(&dir) {
+			Ok(entries) => entries,
+			Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(ids),
+			Err(error) => return Err(error),
+		};
+		for entry in entries {
+			let entry = entry?;
+			let path = entry.path();
+			if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+				continue;
+			}
+			let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+				continue;
+			};
+			if let Some(id) = CharacterId::from_hex(stem) {
+				ids.push(id);
+			}
+		}
+		ids.sort_by_key(|id| id.0);
+		Ok(ids)
+	}
+
+	/// Removes both the appearance and inventory files when present.
+	pub fn delete(&self, id: CharacterId) -> io::Result<()> {
+		remove_if_exists(&self.character_path(id))?;
+		remove_if_exists(&self.inventory_path(id))?;
+		Ok(())
+	}
+}
+
+fn remove_if_exists(path: &Path) -> io::Result<()> {
+	match fs::remove_file(path) {
+		Ok(()) => Ok(()),
+		Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+		Err(error) => Err(error),
+	}
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PersistError {
+	#[error(transparent)]
+	Io(#[from] io::Error),
+	#[error(transparent)]
+	Json(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn hex_round_trips() {
+		let id = CharacterId(0x0123_4567_89AB_CDEF_FEDC_BA98_7654_3210);
+		assert_eq!(id.to_hex().len(), 32);
+		assert_eq!(CharacterId::from_hex(&id.to_hex()), Some(id));
+		assert_eq!(CharacterId::from_hex("short"), None);
+	}
+
+	#[test]
+	fn list_and_delete_use_character_files() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs().expect("dirs");
+		let id = CharacterId(1);
+		fs::write(root.character_path(id), "{}").expect("write");
+		fs::write(root.inventory_path(id), "{}").expect("write");
+		assert_eq!(root.list_ids().expect("list"), vec![id]);
+		root.delete(id).expect("delete");
+		assert!(root.list_ids().expect("list").is_empty());
+		assert!(!root.character_path(id).exists());
+		assert!(!root.inventory_path(id).exists());
+	}
+}

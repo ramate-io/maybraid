@@ -54,6 +54,7 @@ impl PlaygroundCommand {
 					Show::Loading => "loading".to_string(),
 					Show::Character => "character".to_string(),
 					Show::CreateCharacter => "create-character".to_string(),
+					Show::Gallery => "gallery".to_string(),
 					Show::InGame { mode } => format!("in-game ({mode})"),
 				};
 				show.react(commands);

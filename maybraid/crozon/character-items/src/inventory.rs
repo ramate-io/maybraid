@@ -4,6 +4,8 @@
 //! is the bag those layers are chosen from. Stats/buffs are stubbed until the
 //! in-game inventory panel lands.
 
+use bevy::prelude::*;
+
 use crate::{hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh, ItemColor};
 
 /// How many garments character creation rolls before the body editor.
@@ -113,7 +115,7 @@ impl InventoryItem {
 
 /// Owned items plus which of them are worn. Worn indices are unique and stay
 /// within [`WORN_CLOTHING_LIMIT`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inventory {
 	pub items: Vec<InventoryItem>,
 	pub worn: Vec<usize>,

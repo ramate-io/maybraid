@@ -6,18 +6,19 @@ mod shell;
 pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
+use crozon_character_persist::SaveRoot;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::{MenuNav, MenuNavPad};
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
 use menu_components::{ActiveOverlayKey, MENU_CLEAR};
 use menu_playground::{
-	CharacterMenuState, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
-	request_show_character,
+	save_editing_character, CharacterMenuState, CharacterPreviewPlugin, CharacterScreen,
+	CharacterScreenPlugin, CharacterSessionPlugin, EditingCharacter,
 };
 use menu_screens::{
-	CreateCharacterPlugin, CreateCharacterReady, GameMode, HomeMenuChoice, HomeScreenPlugin,
-	InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen, request_show_create_character,
+	request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode, HomeMenuChoice,
+	HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
@@ -44,6 +45,7 @@ impl Plugin for GamePlugin {
 				HomeScreenPlugin,
 				InGameScreenPlugin,
 				CreateCharacterPlugin,
+				CharacterSessionPlugin,
 				CharacterScreenPlugin,
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
@@ -65,8 +67,7 @@ impl Plugin for GamePlugin {
 				(
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
-					open_create_character_hud.run_if(in_state(GameFlow::Characters)),
-					character_back_to_home.run_if(in_state(GameFlow::Characters)),
+					character_back.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
 						.after(CharacterControlSystems)
 						.run_if(in_state(GameFlow::World)),
@@ -120,28 +121,37 @@ fn toggle_world_pause(
 	}
 }
 
-fn open_create_character_hud(
-	mut ready: MessageReader<CreateCharacterReady>,
-	mut menu_state: ResMut<CharacterMenuState>,
-	mut commands: Commands,
-) {
-	let Some(ready) = ready.read().last() else {
-		return;
-	};
-	*menu_state = CharacterMenuState::for_create(ready.items.clone());
-	request_show_character(&mut commands);
-}
-
-fn character_back_to_home(
+fn character_back(
 	mut flow: ResMut<NextState<GameFlow>>,
+	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
-	screens: Query<(), Or<(With<CharacterScreen>, With<SpinRevealScreen>)>>,
+	character: Query<(), With<CharacterScreen>>,
+	spin: Query<(), With<SpinRevealScreen>>,
+	gallery: Query<(), With<GalleryScreen>>,
+	save_root: Res<SaveRoot>,
+	editing: Option<Res<EditingCharacter>>,
+	menu_state: Res<CharacterMenuState>,
 ) {
-	if screens.is_empty() || overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
+	if overlay.0.is_some() || !nav.just_pressed(MenuNav::Back) {
 		return;
 	}
-	flow.set(GameFlow::Home);
+	if !character.is_empty() {
+		if let Some(editing) = editing.as_ref() {
+			if let Err(error) = save_editing_character(&save_root, editing.id, &menu_state.0) {
+				warn!("failed to save character {}: {error}", editing.id.to_hex());
+			}
+		}
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !spin.is_empty() {
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if !gallery.is_empty() {
+		flow.set(GameFlow::Home);
+	}
 }
 
 #[cfg(test)]
