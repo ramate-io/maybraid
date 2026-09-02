@@ -3410,6 +3410,8 @@ dependencies = [
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
+ "movement-intelligence",
+ "movement-intelligence-avian",
  "player",
  "player-camera",
 ]
@@ -4704,6 +4706,26 @@ checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
 dependencies = [
  "adler2",
  "simd-adler32",
+]
+
+[[package]]
+name = "movement-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "player",
+]
+
+[[package]]
+name = "movement-intelligence-avian"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "lod-avian",
+ "movement-intelligence",
 ]
 
 [[package]]
