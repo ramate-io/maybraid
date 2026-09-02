@@ -546,6 +546,7 @@ fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
 		use crozon_character_items::Inventory;
 		Inventory::with_starter_outfit(items.clone()).character_sheet()
 	};
+	let weapon_name = items[1].name();
 	let menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
 	let loadout = nodes.iter().find_map(|node| match node {
@@ -555,15 +556,20 @@ fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
 	let Some(children) = loadout else {
 		anyhow::bail!("expected a top-level Loadout section");
 	};
-	let health = children.iter().find_map(|node| match node {
-		MenuNode::LabeledValue { label, value } if label == "Health" => Some(value.as_str()),
-		_ => None,
-	});
+	let Some(MenuNode::StatGrid { cards }) = children.first() else {
+		anyhow::bail!("expected Loadout to lower to a StatGrid");
+	};
+	assert_eq!(cards[0].title, "Total Stats");
+	assert_eq!(cards[1].title, "Base Stats");
+	assert_eq!(cards[2].title, "Buffs");
+	let health = cards[0]
+		.rows
+		.iter()
+		.find(|row| row.label == "Health")
+		.map(|row| row.value.as_str());
 	assert_eq!(health, Some(sheet.health.to_string()).as_deref());
-	assert!(children.iter().any(|node| matches!(
-		node,
-		MenuNode::LabeledValue { label, .. } if label == "Primary"
-	)));
+	assert_eq!(cards.len(), 4);
+	assert_eq!(cards[3].title, weapon_name);
 	assert!(menu.overlay_editable("Loadout"));
 	Ok(())
 }

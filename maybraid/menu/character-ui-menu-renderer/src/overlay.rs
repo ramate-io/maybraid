@@ -56,9 +56,10 @@ pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
-		MenuNode::ShortText { .. } | MenuNode::Action { .. } | MenuNode::LabeledValue { .. } => {
-			false
-		}
+		MenuNode::ShortText { .. }
+		| MenuNode::Action { .. }
+		| MenuNode::LabeledValue { .. }
+		| MenuNode::StatGrid { .. } => false,
 		_ => false,
 	}
 }
@@ -104,6 +105,7 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 		MenuNode::ShortText { .. }
 		| MenuNode::Action { .. }
 		| MenuNode::LabeledValue { .. }
+		| MenuNode::StatGrid { .. }
 		| MenuNode::LabeledCycle { .. }
 		| MenuNode::LabeledSlider { .. }
 		| MenuNode::LabeledSwatch { .. }
@@ -139,12 +141,22 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 			}
 		}
 		MenuNode::LabeledValue { value, .. } => value.clone(),
+		MenuNode::StatGrid { cards } => stat_grid_preview(cards),
 		_ => String::new(),
 	}
 }
 
 pub(crate) fn labeled_values_preview<E>(children: &[MenuNode<E>]) -> String {
-	let rows: Vec<_> = flatten_nodes(children)
+	let flat = flatten_nodes(children);
+	if let Some(preview) = flat.iter().find_map(|node| match node {
+		MenuNode::StatGrid { cards } => Some(stat_grid_preview(cards)),
+		_ => None,
+	}) {
+		if !preview.is_empty() {
+			return preview;
+		}
+	}
+	let rows: Vec<_> = flat
 		.into_iter()
 		.filter_map(|node| match node {
 			MenuNode::LabeledValue { label, value } => Some((label.as_str(), value.as_str())),
@@ -157,6 +169,21 @@ pub(crate) fn labeled_values_preview<E>(children: &[MenuNode<E>]) -> String {
 		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),
 		(Some(health), None) => format!("{health} HP"),
 		_ => rows.first().map(|(_, value)| (*value).to_string()).unwrap_or_default(),
+	}
+}
+
+fn stat_grid_preview(cards: &[character_ui_menu::StatCard]) -> String {
+	let total = cards.iter().find(|card| card.title == "Total Stats");
+	let health = total.and_then(|card| {
+		card.rows.iter().find(|row| row.label == "Health").map(|row| row.value.as_str())
+	});
+	let weight = total.and_then(|card| {
+		card.rows.iter().find(|row| row.label == "Weight").map(|row| row.value.as_str())
+	});
+	match (health, weight) {
+		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),
+		(Some(health), None) => format!("{health} HP"),
+		_ => cards.first().map(|card| card.title.clone()).unwrap_or_default(),
 	}
 }
 

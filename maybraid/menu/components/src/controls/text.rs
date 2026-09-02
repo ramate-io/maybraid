@@ -85,6 +85,24 @@ pub fn spawn_hud_text(
 	));
 }
 
+/// Numeric / signed values that must keep their original spelling (`+8`, `DPC`).
+pub fn spawn_hud_plain(
+	parent: &mut ChildSpawnerCommands,
+	font: TextFont,
+	value: &str,
+	color: Color,
+	justify: Justify,
+) {
+	parent.spawn((
+		Text::new(value),
+		font,
+		TextColor(color),
+		TextLayout::new(justify, bevy::text::LineBreak::WordBoundary),
+		LineHeight::RelativeToFont(1.0),
+		Pickable::IGNORE,
+	));
+}
+
 /// Reserved gutter; the blinking mark is hidden unless `visible`.
 pub fn spawn_cursor_slot(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, visible: bool) {
 	spawn_cursor_slot_sized(parent, fonts, visible, PANEL_CURSOR_ICON_SIZE);

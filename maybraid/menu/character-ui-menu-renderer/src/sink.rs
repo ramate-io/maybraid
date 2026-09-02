@@ -3,14 +3,15 @@
 use bevy::prelude::*;
 use character_ui_menu::{
 	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
-	SwatchChoice, ThumbnailRequest,
+	StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action, spawn_hud_text,
-	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem, ShortTextField,
-	ShortTextKey, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action,
+	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
+	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
+	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_GROUP_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIME, TEXT_SALMON,
+	TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
@@ -244,16 +245,9 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 				);
 			}
 			MenuNode::LabeledValue { label, value } => {
-				self.labeled_control(parent, context, label, |row, context| {
-					spawn_hud_text(
-						row,
-						context.fonts.item(PANEL_ITEM_FONT_SIZE),
-						value,
-						context.face_color(),
-						bevy::text::Justify::Left,
-					);
-				});
+				self.stat_line(parent, context, label, value, StatTone::from_text(value));
 			}
+			MenuNode::StatGrid { cards } => self.stat_grid(cards, parent, context),
 		}
 	}
 }
@@ -316,6 +310,89 @@ impl MaybraidMenuSink {
 				bevy::text::Justify::Left,
 			);
 			controls(row, context);
+		});
+	}
+
+	fn stat_grid<C>(
+		&self,
+		cards: &[StatCard],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		spawn_tile_grid(parent, self.justify.content(), |grid| {
+			for card in cards {
+				self.stat_card(grid, context, card);
+			}
+		});
+	}
+
+	fn stat_card<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		card: &StatCard,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(31.0),
+					min_width: Val::Px(168.0),
+					flex_direction: FlexDirection::Column,
+					row_gap: Val::Px(PANEL_ROW_GAP),
+					align_items: AlignItems::FlexStart,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|column| {
+				spawn_hud_text(
+					column,
+					context.fonts.item(PANEL_LABEL_FONT_SIZE),
+					&card.title,
+					TEXT_YELLOW,
+					bevy::text::Justify::Left,
+				);
+				for row in &card.rows {
+					self.stat_line(column, context, &row.label, &row.value, row.tone);
+				}
+			});
+	}
+
+	fn stat_line<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &str,
+		value: &str,
+		tone: StatTone,
+	) {
+		spawn_labeled_row(parent, self.justify.content(), |row| {
+			if !label.is_empty() && label != "—" {
+				spawn_hud_text(
+					row,
+					context.fonts.item(PANEL_GROUP_FONT_SIZE),
+					label,
+					TEXT_YELLOW_FAINT,
+					bevy::text::Justify::Left,
+				);
+			}
+			if !value.is_empty() {
+				spawn_hud_plain(
+					row,
+					context.fonts.item(PANEL_ITEM_FONT_SIZE),
+					value,
+					stat_tone_color(tone),
+					bevy::text::Justify::Left,
+				);
+			} else if label == "—" {
+				spawn_hud_plain(
+					row,
+					context.fonts.item(PANEL_ITEM_FONT_SIZE),
+					"—",
+					TEXT_YELLOW_FAINT,
+					bevy::text::Justify::Left,
+				);
+			}
 		});
 	}
 
@@ -557,4 +634,12 @@ fn color_key(color: Color) -> [u8; 4] {
 		(srgba.blue * 255.0) as u8,
 		(srgba.alpha * 255.0) as u8,
 	]
+}
+
+fn stat_tone_color(tone: StatTone) -> Color {
+	match tone {
+		StatTone::Plus => TEXT_LIME,
+		StatTone::Minus => TEXT_SALMON,
+		StatTone::Neutral => TEXT_YELLOW_FAINT,
+	}
 }

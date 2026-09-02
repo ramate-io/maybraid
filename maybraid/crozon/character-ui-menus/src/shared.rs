@@ -6,12 +6,12 @@
 
 use character_ui_menu::{
 	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
-	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, SwatchChoice,
-	SwatchSingleSelect,
+	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, StatCard,
+	StatLine, SwatchChoice, SwatchSingleSelect,
 };
 use crozon_character_items::{
-	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, Inventory,
-	InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
+	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
+	Inventory, InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_characters::ConceptAnimation;
 
@@ -260,22 +260,47 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 }
 
 pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
-	let sheet = inventory.character_sheet();
-	let mut children: Vec<MenuNode<MenuEvent>> = sheet
-		.stat_rows()
-		.into_iter()
-		.map(|(label, value)| MenuNode::labeled_value(label, value))
-		.collect();
-	if let Some(weapon) = inventory.primary_weapon() {
-		children.push(MenuNode::labeled_value("Primary", weapon.name()));
-		children.extend(
-			weapon
+	let total = inventory.character_sheet();
+	let buffs = CharacterSheet::modifiers_from_inventory(inventory);
+	let mut cards = vec![
+		StatCard {
+			title: String::from("Total Stats"),
+			rows: total
 				.stat_rows()
 				.into_iter()
-				.map(|(label, value)| MenuNode::labeled_value(label, value)),
-		);
+				.map(|(label, value)| StatLine::from_display(label, value))
+				.collect(),
+		},
+		StatCard {
+			title: String::from("Base Stats"),
+			rows: CharacterSheet::base_stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		},
+		StatCard {
+			title: String::from("Buffs"),
+			rows: buffs
+				.buff_stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::from_display(label, value))
+				.collect(),
+		},
+	];
+	for &index in &inventory.weapons {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		cards.push(StatCard {
+			title: item.name(),
+			rows: item
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		});
 	}
-	MenuNode::section("Loadout", MenuNode::fragment(children))
+	MenuNode::section("Loadout", MenuNode::stat_grid(cards))
 }
 
 /// Animation clip picker.

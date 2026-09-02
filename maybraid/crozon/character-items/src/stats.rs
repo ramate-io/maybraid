@@ -100,7 +100,8 @@ impl FireMode {
 }
 
 /// Clothing buffs plus carried weight. Most axes stay 0; one to three roll
-/// in 4–16. Weight always rolls and is biased by mesh bulk.
+/// in ±4–16 (mixed signs when two or more land). Weight always rolls and is
+/// biased by mesh bulk.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ClothingStats {
@@ -247,6 +248,15 @@ impl CharacterSheet {
 
 	pub fn from_inventory(inventory: &Inventory) -> Self {
 		let mut sheet = Self::BASE;
+		let modifiers = Self::modifiers_from_inventory(inventory);
+		sheet.add_sheet(modifiers);
+		sheet
+	}
+
+	/// Worn clothing deltas plus queued-weapon weight. Baseline is zero.
+	pub fn modifiers_from_inventory(inventory: &Inventory) -> Self {
+		let mut sheet =
+			Self { health: 0, running: 0, jump: 0, agility: 0, strength: 0, damage: 0, weight: 0 };
 		for item in inventory.worn_items() {
 			if let Some(stats) = item.clothing_stats() {
 				sheet.add_clothing(stats);
@@ -258,6 +268,27 @@ impl CharacterSheet {
 			}
 		}
 		sheet
+	}
+
+	fn add_sheet(&mut self, other: Self) {
+		self.health = self.health.saturating_add(other.health);
+		self.running = self.running.saturating_add(other.running);
+		self.jump = self.jump.saturating_add(other.jump);
+		self.agility = self.agility.saturating_add(other.agility);
+		self.strength = self.strength.saturating_add(other.strength);
+		self.damage = self.damage.saturating_add(other.damage);
+		self.weight = self.weight.saturating_add(other.weight);
+	}
+
+	pub fn attribute_deltas(self) -> [(&'static str, i16); 6] {
+		[
+			("Health", self.health),
+			("Running", self.running),
+			("Jump", self.jump),
+			("Agility", self.agility),
+			("Strength", self.strength),
+			("Damage", self.damage),
+		]
 	}
 
 	fn add_clothing(&mut self, stats: ClothingStats) {
@@ -283,10 +314,47 @@ impl CharacterSheet {
 			(String::from("Jump"), self.jump.to_string()),
 			(String::from("Agility"), self.agility.to_string()),
 			(String::from("Strength"), self.strength.to_string()),
-			(String::from("Damage"), format!("{:+}", self.damage)),
+			(String::from("Damage"), signed_or_zero(self.damage)),
 			(String::from("Weight"), self.weight.to_string()),
 			(String::from("Pace"), format!("{}%", self.pace())),
 		]
+	}
+
+	pub fn base_stat_rows() -> Vec<(String, String)> {
+		vec![
+			(String::from("Health"), BASE_HEALTH.to_string()),
+			(String::from("Running"), BASE_RUNNING.to_string()),
+			(String::from("Jump"), BASE_JUMP.to_string()),
+			(String::from("Agility"), BASE_AGILITY.to_string()),
+			(String::from("Strength"), BASE_STRENGTH.to_string()),
+			(String::from("Damage"), String::from("0")),
+			(String::from("Weight"), String::from("0")),
+		]
+	}
+
+	/// Non-zero clothing deltas, signed, plus carried weight.
+	pub fn buff_stat_rows(self) -> Vec<(String, String)> {
+		let mut rows = Vec::new();
+		for (label, value) in self.attribute_deltas() {
+			if value != 0 {
+				rows.push((String::from(label), format!("{value:+}")));
+			}
+		}
+		if self.weight > 0 {
+			rows.push((String::from("Weight"), self.weight.to_string()));
+		}
+		if rows.is_empty() {
+			rows.push((String::from("—"), String::new()));
+		}
+		rows
+	}
+}
+
+fn signed_or_zero(value: i16) -> String {
+	if value == 0 {
+		String::from("0")
+	} else {
+		format!("{value:+}")
 	}
 }
 
@@ -299,9 +367,23 @@ fn generate_clothing(rng: &mut ItemRng, mesh: ClothingMesh) -> ClothingStats {
 		axes.swap(i, j);
 	}
 	let count = rng.in_range(1, 3) as usize;
-	let mut stats = ClothingStats { weight, ..ClothingStats::default() };
+	let mut assigned = Vec::with_capacity(count);
 	for axis in axes.into_iter().take(count) {
-		let value = rng.in_range(4, 16) as i16;
+		let magnitude = rng.in_range(4, 16) as i16;
+		let value = if rng.in_range(0, 1) == 0 { -magnitude } else { magnitude };
+		assigned.push((axis, value));
+	}
+	if assigned.len() >= 2 {
+		let all_plus = assigned.iter().all(|(_, value)| *value > 0);
+		let all_minus = assigned.iter().all(|(_, value)| *value < 0);
+		if all_plus || all_minus {
+			if let Some((_, value)) = assigned.last_mut() {
+				*value = -*value;
+			}
+		}
+	}
+	let mut stats = ClothingStats { weight, ..ClothingStats::default() };
+	for (axis, value) in assigned {
 		match axis {
 			0 => stats.health = value,
 			1 => stats.running = value,
@@ -618,5 +700,48 @@ mod tests {
 		assert_eq!(sheet.health, BASE_HEALTH + clothing_stats.health);
 		assert_eq!(sheet.weight, clothing_stats.weight + gun_stats.weight);
 		assert!(sheet.pace() <= 100);
+	}
+
+	#[test]
+	fn clothing_rolls_include_pluses_and_minuses() {
+		let mut saw_plus = false;
+		let mut saw_minus = false;
+		for mesh in ClothingMesh::VALUES {
+			for material in ClothingMaterial::VALUES {
+				let stats = ClothingStats::generate(*mesh, *material, ItemColor::Natural);
+				for value in [
+					stats.health,
+					stats.running,
+					stats.jump,
+					stats.agility,
+					stats.strength,
+					stats.damage,
+				] {
+					saw_plus |= value > 0;
+					saw_minus |= value < 0;
+				}
+				let deltas: Vec<i16> = [
+					stats.health,
+					stats.running,
+					stats.jump,
+					stats.agility,
+					stats.strength,
+					stats.damage,
+				]
+				.into_iter()
+				.filter(|value| *value != 0)
+				.collect();
+				if deltas.len() >= 2 {
+					assert!(
+						deltas.iter().any(|value| *value > 0)
+							&& deltas.iter().any(|value| *value < 0),
+						"{:?} {:?}",
+						mesh,
+						deltas
+					);
+				}
+			}
+		}
+		assert!(saw_plus && saw_minus);
 	}
 }

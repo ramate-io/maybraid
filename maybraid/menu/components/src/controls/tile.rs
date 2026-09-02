@@ -1,11 +1,12 @@
 //! Asset tile: optional thumbnail plus a yellow label.
 
 use bevy::prelude::*;
-use bevy::text::{Justify, LineBreak, TextBounds};
+use bevy::text::{Justify, LineBreak, LineHeight, TextBounds, TextSpan};
 
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT,
-	PANEL_TILE_MIN_WIDTH, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
+	PANEL_TILE_MIN_WIDTH, TEXT_LIME, TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	TEXT_YELLOW_HOVER,
 };
 
 use super::display::menu_display_name;
@@ -156,16 +157,58 @@ pub fn spawn_grid_catalog_tile(
 			Pickable::IGNORE,
 		));
 		if !detail.is_empty() {
-			button.spawn((
-				Text::new(detail),
-				fonts.item(PANEL_GROUP_FONT_SIZE),
-				TextColor(TEXT_YELLOW_FAINT),
-				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
-				TextBounds::new(bounds, bounds),
-				Pickable::IGNORE,
-			));
+			spawn_detail_line(button, fonts, detail, bounds);
 		}
 	});
+}
+
+fn spawn_detail_line(
+	parent: &mut ChildSpawnerCommands,
+	fonts: &HudFonts,
+	detail: &str,
+	bounds: f32,
+) {
+	let mut parts = detail.split(" · ");
+	let Some(first) = parts.next() else {
+		return;
+	};
+	parent
+		.spawn((
+			Text::new(first),
+			fonts.item(PANEL_GROUP_FONT_SIZE),
+			TextColor(detail_chip_color(first)),
+			TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+			TextBounds::new(bounds, bounds),
+			LineHeight::RelativeToFont(1.0),
+			Pickable::IGNORE,
+		))
+		.with_children(|text| {
+			for part in parts {
+				text.spawn((
+					TextSpan::new(" · "),
+					fonts.item(PANEL_GROUP_FONT_SIZE),
+					TextColor(TEXT_YELLOW_FAINT),
+					LineHeight::RelativeToFont(1.0),
+				));
+				text.spawn((
+					TextSpan::new(part),
+					fonts.item(PANEL_GROUP_FONT_SIZE),
+					TextColor(detail_chip_color(part)),
+					LineHeight::RelativeToFont(1.0),
+				));
+			}
+		});
+}
+
+fn detail_chip_color(part: &str) -> Color {
+	let trimmed = part.trim();
+	if trimmed.starts_with('+') {
+		TEXT_LIME
+	} else if trimmed.starts_with('-') {
+		TEXT_SALMON
+	} else {
+		TEXT_YELLOW_FAINT
+	}
 }
 
 fn tile_face(selected: bool, muted: bool) -> Color {

@@ -19,12 +19,13 @@ pub use controls::{
 	restore_short_text_editing, select_hud_item_on_over, send_hud_scroll_events, spawn_asset_tile,
 	spawn_block_label, spawn_corner_action, spawn_cursor_slot, spawn_cursor_slot_sized,
 	spawn_grid_catalog_tile, spawn_group_label, spawn_header_line, spawn_hud_action,
-	spawn_hud_text, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane, spawn_section_header,
-	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_text_button,
-	spawn_tile_grid, sync_hud_cursors, sync_hud_scrollbars, ActiveOverlayKey, ActiveShortText,
-	CursorRow, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb,
-	HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue, SlotRank,
+	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_panel_title, spawn_scroll_pane,
+	spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row,
+	spawn_text_button, spawn_tile_grid, sync_hud_cursors, sync_hud_scrollbars, ActiveOverlayKey,
+	ActiveShortText, CursorRow, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll,
+	HudScrollThumb, HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey,
+	ShortTextChange, ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
+	SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{
@@ -53,9 +54,9 @@ pub use spin_reveal::{
 };
 pub use theme::{
 	BARLOW_BLACK, BARLOW_REGULAR, BARLOW_SEMIBOLD, DESCRIPTION_PANE_LEFT_PERCENT, HEADER_FONT_SIZE,
-	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_HEADER_FONT_SIZE,
-	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW, TEXT_YELLOW_FAINT,
-	TEXT_YELLOW_HOVER,
+	ITEM_FONT_SIZE, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_GROUP_FONT_SIZE,
+	PANEL_HEADER_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIME,
+	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
 
 use bevy::prelude::*;
