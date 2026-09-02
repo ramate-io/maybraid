@@ -7,8 +7,9 @@ use crozon_character_items::{InventoryItem, InventorySlot};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
 	republish_menu_activate, screen_back_scene, ButtonWithSubtext, SpinningIcon, TextMenuPlugin,
-	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
-	SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH, TEXT_YELLOW,
+	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, PANEL_LABEL_FONT_SIZE,
+	SPIN_REVEAL_SECS, SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 
 use crate::input::add_menu_input;
@@ -177,7 +178,7 @@ fn spin_scene(
 		Box::new(screen_back_scene()),
 	];
 	if revealed {
-		children.push(Box::new(name_below_preview(name)));
+		children.push(Box::new(name_below_preview(name, item.catalog_detail())));
 	} else {
 		children.push(Box::new(centered_spinner()));
 	}
@@ -213,9 +214,12 @@ fn centered_spinner() -> impl Scene + 'static {
 	}
 }
 
-fn name_below_preview(name: String) -> impl Scene + 'static {
-	let caption: Vec<Box<dyn Scene>> =
+fn name_below_preview(name: String, detail: String) -> impl Scene + 'static {
+	let mut caption: Vec<Box<dyn Scene>> =
 		vec![Box::new(caption_line(name, PANEL_BLOCK_FONT_SIZE, TEXT_YELLOW))];
+	if !detail.is_empty() {
+		caption.push(Box::new(caption_line(detail, PANEL_LABEL_FONT_SIZE, TEXT_YELLOW_FAINT)));
+	}
 	let margin = UiRect { top: Val::Px(SPIN_REVEAL_TILE_HEIGHT / 2.0 + 16.0), ..default() };
 	bsn! {
 		Node {

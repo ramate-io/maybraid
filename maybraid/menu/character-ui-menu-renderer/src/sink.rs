@@ -14,7 +14,7 @@ use menu_components::{
 };
 
 use crate::justify::MenuJustify;
-use crate::overlay::{overlay_summary_value, primary_select};
+use crate::overlay::{labeled_values_preview, overlay_summary_value, primary_select};
 use crate::widgets::{MenuButton, OpenSelectKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
@@ -70,7 +70,7 @@ impl<T> RenderContext<'_, T> {
 	}
 
 	pub fn header_color(&self, label: &str) -> Color {
-		if self.lock_appearance && label != "Clothing" {
+		if self.lock_appearance && !matches!(label, "Clothing" | "Weapons" | "Loadout") {
 			TEXT_YELLOW_FAINT
 		} else {
 			TEXT_YELLOW
@@ -243,6 +243,17 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					(MenuButton(*event), context.stamp_hud_item()),
 				);
 			}
+			MenuNode::LabeledValue { label, value } => {
+				self.labeled_control(parent, context, label, |row, context| {
+					spawn_hud_text(
+						row,
+						context.fonts.item(PANEL_ITEM_FONT_SIZE),
+						value,
+						context.face_color(),
+						bevy::text::Justify::Left,
+					);
+				});
+			}
 		}
 	}
 }
@@ -319,8 +330,10 @@ impl MaybraidMenuSink {
 			self.render_nodes(children, parent, context);
 			return;
 		}
-		let value = primary_select(children).map(overlay_summary_value);
-		self.header(parent, context, label, value);
+		let value = primary_select(children)
+			.map(overlay_summary_value)
+			.unwrap_or_else(|| labeled_values_preview(children));
+		self.header(parent, context, label, (!value.is_empty()).then_some(value));
 	}
 
 	fn choice_tile<E: Copy + Send + Sync + 'static, C>(
@@ -360,6 +373,7 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 		label: &str,
+		detail: &str,
 		selected: bool,
 		rank: Option<u8>,
 		thumbnail: Option<Handle<Image>>,
@@ -370,6 +384,7 @@ impl MaybraidMenuSink {
 				parent,
 				context.fonts,
 				label,
+				detail,
 				selected,
 				rank,
 				thumbnail,
@@ -381,6 +396,7 @@ impl MaybraidMenuSink {
 				parent,
 				context.fonts,
 				label,
+				detail,
 				selected,
 				rank,
 				thumbnail,
@@ -428,6 +444,7 @@ impl MaybraidMenuSink {
 					grid,
 					context,
 					&choice.label,
+					&choice.detail,
 					choice.selected,
 					choice.rank,
 					thumbnail,

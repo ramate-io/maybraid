@@ -166,6 +166,8 @@ pub struct ItemRow<E> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct GridCatalogChoice<E> {
 	pub label: String,
+	/// Compact stat line under the name (weight, DPC, fire mode).
+	pub detail: String,
 	pub path: &'static str,
 	pub thumbnail_camera: ThumbnailCamera,
 	pub preview: PreviewColor,
@@ -208,6 +210,8 @@ pub enum MenuNode<E> {
 	ShortText { label: &'static str, value: String, max_len: usize },
 	/// Full-width action (e.g. Save Character). Fires `event` on activate.
 	Action { label: &'static str, event: E },
+	/// Read-only labeled value (compiled loadout rows, item stats).
+	LabeledValue { label: String, value: String },
 }
 
 impl<E> MenuNode<E> {
@@ -338,6 +342,11 @@ impl<E> MenuNode<E> {
 	/// Full-width labeled action that fires `event` when activated.
 	pub fn action(label: &'static str, event: E) -> Self {
 		Self::Action { label, event }
+	}
+
+	/// Read-only name / value pair.
+	pub fn labeled_value(label: impl Into<String>, value: impl Into<String>) -> Self {
+		Self::LabeledValue { label: label.into(), value: value.into() }
 	}
 }
 

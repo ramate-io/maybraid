@@ -56,7 +56,9 @@ pub fn is_picker_only<E>(node: &MenuNode<E>) -> bool {
 			let flat = flatten_nodes(children);
 			flat.len() == 1 && is_select_node(flat[0]) && is_picker_only(flat[0])
 		}
-		MenuNode::ShortText { .. } | MenuNode::Action { .. } => false,
+		MenuNode::ShortText { .. } | MenuNode::Action { .. } | MenuNode::LabeledValue { .. } => {
+			false
+		}
 		_ => false,
 	}
 }
@@ -101,6 +103,7 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 		}
 		MenuNode::ShortText { .. }
 		| MenuNode::Action { .. }
+		| MenuNode::LabeledValue { .. }
 		| MenuNode::LabeledCycle { .. }
 		| MenuNode::LabeledSlider { .. }
 		| MenuNode::LabeledSwatch { .. }
@@ -112,9 +115,9 @@ fn find_in_node<'a, E>(node: &'a MenuNode<E>, key: &str) -> Option<&'a MenuNode<
 
 pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 	match node {
-		MenuNode::Section { children, .. } => {
-			primary_select(children).map(overlay_summary_value).unwrap_or_default()
-		}
+		MenuNode::Section { children, .. } => primary_select(children)
+			.map(overlay_summary_value)
+			.unwrap_or_else(|| labeled_values_preview(children)),
 		MenuNode::SectionSelect { groups, .. } => {
 			selected_select_label(groups).unwrap_or("—").to_string()
 		}
@@ -135,7 +138,25 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 				format!("{count} worn")
 			}
 		}
+		MenuNode::LabeledValue { value, .. } => value.clone(),
 		_ => String::new(),
+	}
+}
+
+pub(crate) fn labeled_values_preview<E>(children: &[MenuNode<E>]) -> String {
+	let rows: Vec<_> = flatten_nodes(children)
+		.into_iter()
+		.filter_map(|node| match node {
+			MenuNode::LabeledValue { label, value } => Some((label.as_str(), value.as_str())),
+			_ => None,
+		})
+		.collect();
+	let health = rows.iter().find(|(label, _)| *label == "Health").map(|(_, value)| *value);
+	let weight = rows.iter().find(|(label, _)| *label == "Weight").map(|(_, value)| *value);
+	match (health, weight) {
+		(Some(health), Some(weight)) => format!("{health} HP · {weight} wt"),
+		(Some(health), None) => format!("{health} HP"),
+		_ => rows.first().map(|(_, value)| (*value).to_string()).unwrap_or_default(),
 	}
 }
 

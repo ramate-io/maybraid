@@ -486,6 +486,7 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 	assert!(choices[1].selected);
 	assert!(!choices[2].selected);
 	assert_eq!(choices[0].label, expected_name);
+	assert!(!choices[0].detail.is_empty());
 	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
 	assert!(!menu.inventory.as_ref().expect("create inventory").is_worn(0));
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Hars)));
@@ -521,12 +522,49 @@ fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
 	assert_eq!(choices[1].rank, Some(2));
 	assert!(choices[0].selected);
 	assert_eq!(choices[0].label, expected_name);
+	assert!(!choices[0].detail.is_empty());
 	assert!(menu.overlay_editable("Weapons"));
 	assert!(menu.apply(MenuEvent::ToggleInventory(3)));
 	let inventory = menu.inventory.as_ref().expect("create inventory");
 	assert_eq!(inventory.weapons, vec![4]);
 	assert_eq!(inventory.clothing, vec![0, 1]);
 	assert_eq!(inventory.rank(4), Some(1));
+	Ok(())
+}
+
+#[test]
+fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
+	use crozon_character_items::{
+		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
+	};
+
+	let items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::firearm(FirearmMesh::Bullpup),
+	];
+	let sheet = {
+		use crozon_character_items::Inventory;
+		Inventory::with_starter_outfit(items.clone()).character_sheet()
+	};
+	let menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let loadout = nodes.iter().find_map(|node| match node {
+		MenuNode::Section { label: "Loadout", children } => Some(children),
+		_ => None,
+	});
+	let Some(children) = loadout else {
+		anyhow::bail!("expected a top-level Loadout section");
+	};
+	let health = children.iter().find_map(|node| match node {
+		MenuNode::LabeledValue { label, value } if label == "Health" => Some(value.as_str()),
+		_ => None,
+	});
+	assert_eq!(health, Some(sheet.health.to_string()).as_deref());
+	assert!(children.iter().any(|node| matches!(
+		node,
+		MenuNode::LabeledValue { label, .. } if label == "Primary"
+	)));
+	assert!(menu.overlay_editable("Loadout"));
 	Ok(())
 }
 
@@ -577,6 +615,7 @@ fn saved_menu_locks_body_and_keeps_inventory() -> anyhow::Result<()> {
 	assert!(!menu.overlay_editable("Body"));
 	assert!(menu.overlay_editable("Clothing"));
 	assert!(menu.overlay_editable("Weapons"));
+	assert!(menu.overlay_editable("Loadout"));
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brodler)));
 	assert_eq!(menu.species.value, ConceptSpecies::Braidman);
 	assert!(!menu.apply(MenuEvent::Cycle(crate::event::CharacterField::Gender, 1)));

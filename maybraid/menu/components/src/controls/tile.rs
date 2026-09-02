@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy::text::{Justify, LineBreak, TextBounds};
 
 use crate::theme::{
-	PANEL_CHIP_GAP, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT, PANEL_TILE_MIN_WIDTH, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
+	PANEL_CHIP_GAP, PANEL_GROUP_FONT_SIZE, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT,
+	PANEL_TILE_MIN_WIDTH, TEXT_YELLOW, TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
 
 use super::display::menu_display_name;
@@ -79,11 +79,12 @@ pub fn spawn_asset_tile(
 pub struct SlotRank(pub u8);
 
 /// Pickable catalog cell. Clothing selection uses the Maybraid son; weapons
-/// selection uses the 1-based queue rank.
+/// selection uses the 1-based queue rank. `detail` is a compact stat line.
 pub fn spawn_grid_catalog_tile(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	label: &str,
+	detail: &str,
 	selected: bool,
 	rank: Option<u8>,
 	thumbnail: Option<Handle<Image>>,
@@ -154,6 +155,16 @@ pub fn spawn_grid_catalog_tile(
 			TextBounds::new(bounds, bounds * 1.6),
 			Pickable::IGNORE,
 		));
+		if !detail.is_empty() {
+			button.spawn((
+				Text::new(detail),
+				fonts.item(PANEL_GROUP_FONT_SIZE),
+				TextColor(TEXT_YELLOW_FAINT),
+				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+				TextBounds::new(bounds, bounds),
+				Pickable::IGNORE,
+			));
+		}
 	});
 }
 

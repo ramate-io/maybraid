@@ -49,7 +49,7 @@ use crate::{
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
-	shared::{clothing_menu_from_inventory, weapons_catalog},
+	shared::{clothing_menu_from_inventory, loadout_section, weapons_catalog},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -335,7 +335,7 @@ impl CharacterMenu {
 	/// Overlay interiors for body catalogs stay visible when locked; clothing
 	/// and weapons stay editable.
 	pub fn overlay_editable(&self, key: &str) -> bool {
-		!self.appearance_locked() || key == "Clothing" || key == "Weapons"
+		!self.appearance_locked() || key == "Clothing" || key == "Weapons" || key == "Loadout"
 	}
 
 	fn sync_inventory_clothing(&mut self) {
@@ -3494,6 +3494,7 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 		];
 		if let Some(inventory) = &self.inventory {
 			nodes.push(MenuNode::section("Weapons", weapons_catalog(inventory)));
+			nodes.push(loadout_section(inventory));
 		}
 		MenuNode::fragment(nodes)
 	}
@@ -3872,6 +3873,7 @@ pub struct SectionOpenState {
 	pub hair_open: bool,
 	pub clothing_open: bool,
 	pub weapons_open: bool,
+	pub loadout_open: bool,
 	pub animation_open: bool,
 }
 
@@ -3885,6 +3887,7 @@ impl SectionOpenState {
 			SectionId::Hair => self.hair_open,
 			SectionId::Clothing => self.clothing_open,
 			SectionId::Weapons => self.weapons_open,
+			SectionId::Loadout => self.loadout_open,
 			SectionId::Animation => self.animation_open,
 		}
 	}
@@ -3898,6 +3901,7 @@ impl SectionOpenState {
 			SectionId::Hair => self.hair_open = !self.hair_open,
 			SectionId::Clothing => self.clothing_open = !self.clothing_open,
 			SectionId::Weapons => self.weapons_open = !self.weapons_open,
+			SectionId::Loadout => self.loadout_open = !self.loadout_open,
 			SectionId::Animation => self.animation_open = !self.animation_open,
 		}
 	}
@@ -3913,6 +3917,7 @@ impl Default for SectionOpenState {
 			hair_open: false,
 			clothing_open: true,
 			weapons_open: true,
+			loadout_open: true,
 			animation_open: false,
 		}
 	}

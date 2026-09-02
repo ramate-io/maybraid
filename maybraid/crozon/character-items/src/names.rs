@@ -30,7 +30,7 @@ pub fn hashed_firearm_name(mesh: FirearmMesh) -> String {
 	format!("{} {}", pick(FIREARM_PREFIXES, hash), pick(mesh.nouns(), hash >> 17))
 }
 
-fn mix(seed: u64, label: &str) -> u64 {
+pub(crate) fn mix(seed: u64, label: &str) -> u64 {
 	let mut hash = seed ^ 0x9E37_79B9_7F4A_7C15;
 	for byte in label.as_bytes() {
 		hash = hash.wrapping_mul(0x0100_0000_01B3).wrapping_add(*byte as u64);

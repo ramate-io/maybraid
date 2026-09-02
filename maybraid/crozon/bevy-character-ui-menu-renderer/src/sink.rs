@@ -163,6 +163,11 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 			MenuNode::Action { label, event } => {
 				render_button(parent, label, *event, false);
 			}
+			MenuNode::LabeledValue { label, value } => {
+				inline_label_row(parent, label, |row| {
+					text(row, value, 11.0, VALUE_COLOR);
+				});
+			}
 		}
 	}
 }
@@ -242,13 +247,12 @@ impl BevyMenuSink {
 				for choice in choices {
 					let thumbnail =
 						grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
-					render_asset_button(
-						grid,
-						&choice.label,
-						choice.event,
-						choice.selected,
-						thumbnail,
-					);
+					let label = if choice.detail.is_empty() {
+						choice.label.clone()
+					} else {
+						format!("{}\n{}", choice.label, choice.detail)
+					};
+					render_asset_button(grid, &label, choice.event, choice.selected, thumbnail);
 				}
 			});
 	}

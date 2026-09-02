@@ -190,6 +190,7 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 			let asset = mesh.asset();
 			Some(GridCatalogChoice {
 				label: item.name(),
+				detail: item.catalog_detail(),
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::of(item.material()?.color),
@@ -246,6 +247,7 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 			let rank = inventory.rank(index);
 			Some(GridCatalogChoice {
 				label: item.name(),
+				detail: item.catalog_detail(),
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
 				preview: PreviewColor::WHITE,
@@ -255,6 +257,25 @@ pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
 			})
 		}),
 	)
+}
+
+pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	let sheet = inventory.character_sheet();
+	let mut children: Vec<MenuNode<MenuEvent>> = sheet
+		.stat_rows()
+		.into_iter()
+		.map(|(label, value)| MenuNode::labeled_value(label, value))
+		.collect();
+	if let Some(weapon) = inventory.primary_weapon() {
+		children.push(MenuNode::labeled_value("Primary", weapon.name()));
+		children.extend(
+			weapon
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| MenuNode::labeled_value(label, value)),
+		);
+	}
+	MenuNode::section("Loadout", MenuNode::fragment(children))
 }
 
 /// Animation clip picker.

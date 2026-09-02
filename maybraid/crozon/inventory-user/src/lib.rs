@@ -2,14 +2,14 @@
 
 use bevy::prelude::*;
 use crozon_character_items::{
-	ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, InventorySlot,
-	ItemColor, WORN_CLOTHING_LIMIT,
+	ClothingMaterial, ClothingMesh, ClothingStats, FirearmMesh, FirearmStats, Inventory,
+	InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
 
 /// Capsule/session using an inventory bag.
 ///
@@ -73,8 +73,18 @@ struct InventoryFileV1 {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum InventoryItemFile {
-	Clothing { mesh: ClothingMesh, material: ClothingMaterial, color: ItemColor },
-	Firearm { mesh: FirearmMesh },
+	Clothing {
+		mesh: ClothingMesh,
+		material: ClothingMaterial,
+		color: ItemColor,
+		#[serde(default)]
+		stats: Option<ClothingStats>,
+	},
+	Firearm {
+		mesh: FirearmMesh,
+		#[serde(default)]
+		stats: Option<FirearmStats>,
+	},
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,19 +97,29 @@ struct ClothingItemFile {
 impl InventoryItemFile {
 	fn from_item(item: &InventoryItem) -> Self {
 		match item {
-			InventoryItem::Clothing { mesh, material, .. } => {
-				Self::Clothing { mesh: *mesh, material: material.id, color: material.color }
+			InventoryItem::Clothing { mesh, material, stats } => Self::Clothing {
+				mesh: *mesh,
+				material: material.id,
+				color: material.color,
+				stats: Some(*stats),
+			},
+			InventoryItem::Firearm { mesh, stats } => {
+				Self::Firearm { mesh: *mesh, stats: Some(*stats) }
 			}
-			InventoryItem::Firearm { mesh, .. } => Self::Firearm { mesh: *mesh },
 		}
 	}
 
 	fn into_item(self) -> InventoryItem {
 		match self {
-			Self::Clothing { mesh, material, color } => {
-				InventoryItem::clothing(mesh, material, color)
-			}
-			Self::Firearm { mesh } => InventoryItem::firearm(mesh),
+			Self::Clothing { mesh, material, color, stats } => InventoryItem::Clothing {
+				mesh,
+				material: crozon_character_items::MaterialRefParams::new(material, color),
+				stats: stats.unwrap_or_else(|| ClothingStats::generate(mesh, material, color)),
+			},
+			Self::Firearm { mesh, stats } => InventoryItem::Firearm {
+				mesh,
+				stats: stats.unwrap_or_else(|| FirearmStats::generate(mesh)),
+			},
 		}
 	}
 }
@@ -206,7 +226,11 @@ mod tests {
 		let loaded = load(&root, id).expect("load");
 		assert_eq!(loaded, inventory);
 		assert_eq!(loaded.weapons.len(), 2);
-		assert!(loaded.items.iter().all(|item| item.buffs().is_empty()));
+		assert!(loaded.items[0].clothing_stats().is_some_and(|stats| stats.weight > 0));
+		assert!(loaded
+			.items
+			.iter()
+			.any(|item| item.firearm_stats().is_some_and(|stats| stats.damage > 0)));
 	}
 
 	#[test]
@@ -243,6 +267,39 @@ mod tests {
 		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
 		assert!(json.contains("\"kind\": \"firearm\""));
 		assert_eq!(load(&root, id).expect("load"), inventory);
+		assert!(json.contains("\"stats\""));
+	}
+
+	#[test]
+	fn v2_file_without_stats_rolls_from_identity() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs().expect("dirs");
+		let id = CharacterId(11);
+		let json = r#"{
+			"version": 2,
+			"id": "0000000000000000000000000000000b",
+			"items": [
+				{ "kind": "clothing", "mesh": "pants", "material": "cloth", "color": "natural" },
+				{ "kind": "firearm", "mesh": "bullpup" }
+			],
+			"clothing": [0],
+			"weapons": [1]
+		}"#;
+		fs::write(root.inventory_path(id), json).expect("write");
+		let loaded = load(&root, id).expect("load");
+		assert_eq!(loaded.items.len(), 2);
+		assert_eq!(
+			loaded.items[0],
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural
+			)
+		);
+		assert_eq!(loaded.items[1], InventoryItem::firearm(FirearmMesh::Bullpup));
+		assert_eq!(loaded.clothing, vec![0]);
+		assert_eq!(loaded.weapons, vec![1]);
 	}
 
 	#[test]

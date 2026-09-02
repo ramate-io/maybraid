@@ -13,6 +13,7 @@ pub mod firearm;
 pub mod inventory;
 pub mod names;
 pub mod palette;
+pub mod stats;
 
 mod menu_traits;
 
@@ -21,8 +22,9 @@ pub use clothing_material::{ClothingMaterial, ClothingMaterialChoice};
 pub use firearm::FirearmMesh;
 pub use inventory::{
 	random_clothing_item, random_starter_clothing, random_starter_firearms, random_starter_loadout,
-	Buff, Inventory, InventoryItem, InventorySlot, ItemRng, MaterialRefParams,
-	STARTER_CLOTHING_COUNT, STARTER_WEAPON_COUNT, WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
+	Inventory, InventoryItem, InventorySlot, ItemRng, MaterialRefParams, STARTER_CLOTHING_COUNT,
+	STARTER_WEAPON_COUNT, WEAPON_QUEUE_LIMIT, WORN_CLOTHING_LIMIT,
 };
 pub use names::{hashed_firearm_name, hashed_item_name};
 pub use palette::ItemColor;
+pub use stats::{CharacterSheet, ClothingStats, FireMode, FirearmStats, ProjectileKind};

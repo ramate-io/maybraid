@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use crate::{
 	hashed_firearm_name, hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh,
-	FirearmMesh, ItemColor,
+	ClothingStats, FirearmMesh, FirearmStats, ItemColor,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -59,15 +59,11 @@ impl MaterialRefParams {
 	}
 }
 
-/// Gameplay modifier on an item. Empty until a stats pass lands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Buff {}
-
 /// One owned instance in a character inventory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
-	Clothing { mesh: ClothingMesh, material: MaterialRefParams, buffs: Vec<Buff> },
-	Firearm { mesh: FirearmMesh, buffs: Vec<Buff> },
+	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
+	Firearm { mesh: FirearmMesh, stats: FirearmStats },
 }
 
 impl InventoryItem {
@@ -75,12 +71,12 @@ impl InventoryItem {
 		Self::Clothing {
 			mesh,
 			material: MaterialRefParams::new(material, color),
-			buffs: Vec::new(),
+			stats: ClothingStats::generate(mesh, material, color),
 		}
 	}
 
 	pub fn firearm(mesh: FirearmMesh) -> Self {
-		Self::Firearm { mesh, buffs: Vec::new() }
+		Self::Firearm { mesh, stats: FirearmStats::generate(mesh) }
 	}
 
 	pub const fn slot(&self) -> InventorySlot {
@@ -111,9 +107,31 @@ impl InventoryItem {
 		}
 	}
 
-	pub fn buffs(&self) -> &[Buff] {
+	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
 		match self {
-			Self::Clothing { buffs, .. } | Self::Firearm { buffs, .. } => buffs,
+			Self::Clothing { stats, .. } => Some(*stats),
+			Self::Firearm { .. } => None,
+		}
+	}
+
+	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
+		match self {
+			Self::Firearm { stats, .. } => Some(*stats),
+			Self::Clothing { .. } => None,
+		}
+	}
+
+	pub fn catalog_detail(&self) -> String {
+		match self {
+			Self::Clothing { stats, .. } => stats.catalog_detail(),
+			Self::Firearm { stats, .. } => stats.catalog_detail(),
+		}
+	}
+
+	pub fn stat_rows(&self) -> Vec<(String, String)> {
+		match self {
+			Self::Clothing { stats, .. } => stats.stat_rows(),
+			Self::Firearm { stats, .. } => stats.stat_rows(),
 		}
 	}
 
@@ -252,6 +270,10 @@ impl Inventory {
 	pub fn toggle_worn(&mut self, index: usize) -> bool {
 		self.toggle(index)
 	}
+
+	pub fn character_sheet(&self) -> crate::CharacterSheet {
+		crate::CharacterSheet::from_inventory(self)
+	}
 }
 
 /// Tiny xorshift64* so this crate does not take on `rand`.
@@ -287,6 +309,22 @@ impl ItemRng {
 		(self.next_u64() as usize) % len
 	}
 
+	/// Inclusive range. `max < min` returns `min`.
+	pub fn in_range(&mut self, min: u32, max: u32) -> u32 {
+		if max <= min {
+			return min;
+		}
+		min + (self.next_u64() % (u64::from(max) - u64::from(min) + 1)) as u32
+	}
+
+	pub fn in_range_i16(&mut self, min: i16, max: i16) -> i16 {
+		if max <= min {
+			return min;
+		}
+		let span = (i32::from(max) - i32::from(min) + 1) as u32;
+		min.saturating_add(self.in_range(0, span - 1) as i16)
+	}
+
 	pub fn choose<'a, T>(&mut self, values: &'a [T]) -> Option<&'a T> {
 		if values.is_empty() {
 			return None;
@@ -295,7 +333,7 @@ impl ItemRng {
 	}
 }
 
-/// One random clothing item (mesh, look, color). Buffs stay empty.
+/// One random clothing item (mesh, look, color). Stats roll from identity.
 pub fn random_clothing_item(rng: &mut ItemRng) -> InventoryItem {
 	let mesh = *rng.choose(ClothingMesh::VALUES).unwrap_or(&ClothingMesh::TankTop);
 	random_item_for_mesh(rng, mesh)
@@ -359,7 +397,9 @@ mod tests {
 		meshes.sort_by_key(|mesh| mesh.label());
 		meshes.dedup();
 		assert_eq!(meshes.len(), STARTER_CLOTHING_COUNT);
-		assert!(items.iter().all(|item| item.buffs().is_empty()));
+		assert!(items
+			.iter()
+			.all(|item| item.clothing_stats().is_some_and(|stats| stats.weight > 0)));
 		assert_eq!(items[0].mesh().map(ClothingMesh::kind), Some(ClothingKind::Lower));
 		assert_eq!(items[1].mesh().map(ClothingMesh::kind), Some(ClothingKind::Upper));
 		assert!(ClothingKind::STARTER_LOWERS.contains(&items[0].mesh().unwrap()));

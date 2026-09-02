@@ -359,6 +359,7 @@ fn section_id_for_label(label: &'static str) -> Option<SectionId> {
 		"Hair" => Some(SectionId::Hair),
 		"Clothing" => Some(SectionId::Clothing),
 		"Weapons" => Some(SectionId::Weapons),
+		"Loadout" => Some(SectionId::Loadout),
 		"Animation" => Some(SectionId::Animation),
 		_ => None,
 	}
