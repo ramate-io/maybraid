@@ -10,6 +10,10 @@ pub struct AvianPathHints {
 	pub hide: f32,
 	pub sightline: f32,
 	pub min_clearance: f32,
+	/// Largest detected floor drop below the path's starting feet height.
+	pub max_drop: f32,
+	/// `max_drop` normalized by the mover's tolerated fall.
+	pub fall_risk: f32,
 }
 
 impl AvianPathHints {
@@ -18,6 +22,7 @@ impl AvianPathHints {
 			hide: self.hide,
 			sightline: self.sightline,
 			min_clearance: self.min_clearance,
+			fall_risk: self.fall_risk,
 		}
 	}
 }

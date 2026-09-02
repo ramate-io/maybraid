@@ -71,7 +71,7 @@ pub fn replan_movement<S, I, A>(
 		if let Some(candidate) = brain.pick_best_candidate(candidates) {
 			brain.adopt_plan(candidate.steps);
 		} else {
-			brain.adopt_plan(Vec::new());
+			brain.note_replan_failed();
 		}
 		commands.entity(entity).remove::<ReplanMovement>();
 	}
@@ -88,10 +88,19 @@ pub fn drive_movement<I, A>(
 	let dt = time.delta_secs();
 	for (entity, transform, mut brain, mut wish) in &mut movers {
 		match brain.drive(dt, transform.translation) {
-			MovementDriveResult::Wish(dir) => wish.0 = dir,
-			MovementDriveResult::Hold => wish.0 = Vec3::ZERO,
+			MovementDriveResult::Wish(dir) => {
+				// Motor unstick may override this wish later this frame.
+				wish.0 = dir;
+			}
 			MovementDriveResult::Stuck { wish: dir } => {
 				wish.0 = dir;
+				if dir.length_squared() < 1e-6 {
+					commands.entity(entity).insert(ReplanMovement);
+				}
+			}
+			MovementDriveResult::Hold => wish.0 = Vec3::ZERO,
+			MovementDriveResult::Retry => {
+				wish.0 = Vec3::ZERO;
 				commands.entity(entity).insert(ReplanMovement);
 			}
 		}

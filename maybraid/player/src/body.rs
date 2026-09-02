@@ -18,6 +18,11 @@ const GROUND_SNAP_SPEED: f32 = 1.5;
 #[derive(Component, Default)]
 pub struct MoveWish(pub Vec3);
 
+/// One-shot jump request for non-player capsules. Consumed in Body when grounded.
+#[derive(Component, Debug, Clone, Copy, Default)]
+#[component(storage = "SparseSet")]
+pub struct JumpWish;
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlayerControlSystems;
 
@@ -115,7 +120,9 @@ pub(crate) fn update_grounded(
 		let landed = jumping.as_ref().is_some_and(|jump| jump.left_ground);
 		if is_grounded {
 			commands.entity(entity).insert(Grounded);
-			if landed {
+			// Clear a hop that never left the ground (snap / short impulse) so the
+			// jump clip does not stick while the capsule is already walking.
+			if landed || (jumping.is_some() && velocity.y <= 0.05) {
 				commands.entity(entity).remove::<Jumping>();
 			}
 		} else {
@@ -185,6 +192,23 @@ pub(crate) fn apply_wish_movement(
 		let dir = dir.normalize();
 		velocity.x += dir.x * accel.0 * dt;
 		velocity.z += dir.z * accel.0 * dt;
+	}
+}
+
+/// Consume [`JumpWish`] on grounded NPC capsules. Players jump via [`MovementAction`].
+pub(crate) fn apply_wish_jump(
+	mut commands: Commands,
+	mut controllers: Query<
+		(Entity, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
+		(With<CharacterController>, With<JumpWish>, Without<Player>),
+	>,
+) {
+	for (entity, jump, mut velocity, grounded) in &mut controllers {
+		commands.entity(entity).remove::<JumpWish>();
+		if grounded {
+			velocity.y = jump.0;
+			commands.entity(entity).insert(Jumping { left_ground: false });
+		}
 	}
 }
 

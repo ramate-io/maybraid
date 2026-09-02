@@ -36,8 +36,12 @@ impl Default for VantageStandoffs {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementAbility {
 	pub max_step: f32,
+	/// Vertical jump budget (meters). Realization reads this; the planner does not.
 	pub max_jump: f32,
+	/// Largest unsupported drop this mover will deliberately enter.
+	pub max_fall: f32,
 	pub can_use_doors: bool,
+	pub can_use_stairs: bool,
 	pub agent_radius: f32,
 	/// Height of the feet below the capsule origin (center).
 	pub feet_below_origin: f32,
@@ -53,7 +57,9 @@ impl Default for MovementAbility {
 		Self {
 			max_step: 0.4,
 			max_jump: 1.0,
+			max_fall: 1.2,
 			can_use_doors: false,
+			can_use_stairs: true,
 			agent_radius: 0.4,
 			feet_below_origin: 0.9,
 			eye_height: 1.45,
@@ -69,9 +75,20 @@ impl Default for MovementAbility {
 pub trait MovementBody {
 	fn agent_radius(&self) -> f32;
 	fn max_step(&self) -> f32;
+	/// Vertical jump budget (meters). Realization uses this to decide whether to hop.
+	fn max_jump(&self) -> f32 {
+		0.0
+	}
+	/// Largest unsupported drop this mover will deliberately enter.
+	fn max_fall(&self) -> f32 {
+		1.0
+	}
 	fn feet_below_origin(&self) -> f32;
 	fn eye_height(&self) -> f32;
 	fn hip_height(&self) -> f32;
+	fn can_use_stairs(&self) -> bool {
+		true
+	}
 
 	fn hip_point(&self, origin: Vec3) -> Vec3 {
 		Vec3::new(origin.x, origin.y - self.feet_below_origin() + self.hip_height(), origin.z)
@@ -103,6 +120,14 @@ impl MovementBody for MovementAbility {
 		self.max_step
 	}
 
+	fn max_jump(&self) -> f32 {
+		self.max_jump
+	}
+
+	fn max_fall(&self) -> f32 {
+		self.max_fall
+	}
+
 	fn feet_below_origin(&self) -> f32 {
 		self.feet_below_origin
 	}
@@ -113,6 +138,10 @@ impl MovementBody for MovementAbility {
 
 	fn hip_height(&self) -> f32 {
 		self.hip_height
+	}
+
+	fn can_use_stairs(&self) -> bool {
+		self.can_use_stairs
 	}
 }
 
