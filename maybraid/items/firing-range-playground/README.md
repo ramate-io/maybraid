@@ -20,6 +20,8 @@ Each character starts with 100 health and takes 25 damage per bolt contact.
 Health is shown on a persistent top HUD and as a bar above each capsule; the
 player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
+The NPC spots and aims during a ceasefire, but does not fire until an actual
+player projectile spawns. Respawning either combatant resets that ceasefire.
 
 ```bash
 cargo run -p firing-range-playground

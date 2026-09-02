@@ -306,13 +306,13 @@ fn look_angles(to: Vec3, accuracy: f32, entity: Entity, elapsed: f32) -> (f32, f
 	let shake = jitter(entity, elapsed) * cone;
 	let yaw = (-to.x).atan2(-to.z) + shake.x;
 	let xz = Vec2::new(to.x, to.z).length();
-	let pitch = -to.y.atan2(xz.max(1e-4)) + shake.y;
+	let pitch = to.y.atan2(xz.max(1e-4)) + shake.y;
 	(yaw, pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1))
 }
 
 #[cfg(test)]
 fn look_dir(yaw: f32, pitch: f32) -> Vec3 {
-	Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_rotation_x(-pitch) * -Vec3::Z
+	Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_rotation_x(pitch) * -Vec3::Z
 }
 
 fn jitter(entity: Entity, elapsed: f32) -> Vec2 {

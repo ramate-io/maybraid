@@ -3,6 +3,7 @@
 mod buildings_lod;
 pub mod commands;
 mod damage;
+mod engagement;
 mod hud;
 mod les_halles;
 mod range;
@@ -24,7 +25,7 @@ use firearm_intelligence::{
 use firearm_user::{
 	spawn_held_firearm_with, spawn_reticle, FirearmUser, FirearmUserPlugin, FirearmUserSettings,
 };
-use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
+use firearms::{FirearmHostsPlugin, FirearmWeaponSystems, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
@@ -72,6 +73,7 @@ impl Plugin for FiringRangePlugin {
 		.init_resource::<LesHallesSpawn>()
 		.init_resource::<hud::DamageTicks>()
 		.init_resource::<damage::CombatRespawn>()
+		.init_resource::<engagement::NpcEngagement>()
 		.add_message::<damage::DamageTaken>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
@@ -111,7 +113,14 @@ impl Plugin for FiringRangePlugin {
 			(damage::apply_projectile_damage, hud::ingest_damage_indicators, damage::despawn_dead)
 				.chain()
 				.after(tick_flights),
-		);
+		)
+		.add_systems(
+			PostUpdate,
+			engagement::gate_npc_fire
+				.after(FirearmIntelligenceSystems::Fire)
+				.before(FirearmWeaponSystems::Fire),
+		)
+		.add_systems(PostUpdate, engagement::record_player_shot.after(FirearmWeaponSystems::Fire));
 	}
 }
 

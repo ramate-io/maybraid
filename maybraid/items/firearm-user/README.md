@@ -12,7 +12,7 @@ player. Pad fire and the world reticle stay on the followed [`Player`](../../pla
 Writes player handoff slots ([`PlayerUse`](../../player/src/identity.rs),
 [`PlayerCameraAim`](../../player/src/identity.rs),
 [`WeaponTrigger`](../firearms/src/projectiles.rs)) and poses the kit + arm IK.
-`PlayerLook` follows the camera's −Z convention; the pose preserves its pitch
-sign when rotating the firearm's +Z bore around the shoulder-pinned stock.
+`PlayerLook` follows the camera's −Z convention; the pose reverses the local X
+rotation when applying that pitch to the firearm's +Z bore.
 
 Does not own the capsule, follow camera, or projectile flight.
