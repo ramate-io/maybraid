@@ -260,3 +260,38 @@ fn two_corner_shafts_both_cut_south_floor_band() {
 	assert!(!cut.floor_covers_xz(3.0, -2.25), "SE shaft footprint must not retain gallery floor");
 	assert!(cut.floor_covers_xz(0.0, -2.25), "mid-south gallery between shafts should keep floor");
 }
+
+#[test]
+fn horizontal_floor_kits_use_neg_z_panel_space() {
+	use richmond_building_components::scene_children::pose;
+	let r = RectRingFloorParams::default().floor(RectRingFloorSlab::Solid).build();
+	let mut floors = 0usize;
+	for node in r.panel_nodes_for_level(LodSceneLevel::High).flatten() {
+		if !matches!(node.geometry, PanelGeometry::Rectangle(_)) {
+			continue;
+		}
+		let up = node.placement.rotation() * Vec3::Y;
+		if up.y.abs() < 0.8 {
+			continue;
+		}
+		floors += 1;
+		let t = pose(node.placement);
+		let a0 = t * Vec3::ZERO;
+		let a1 = t * Vec3::X;
+		let b0 = t * Vec3::new(0.0, 0.0, -1.0);
+		let b1 = t * Vec3::new(1.0, 0.0, -1.0);
+		let ys = [a0.y, a1.y, b0.y, b1.y];
+		let y_span = ys.into_iter().fold(f32::NEG_INFINITY, f32::max)
+			- ys.into_iter().fold(f32::INFINITY, f32::min);
+		assert!(
+			y_span < 0.05,
+			"floor kit corners should be coplanar in Y, span={y_span} pitch={}",
+			node.placement.pitch
+		);
+		let dx = (a1 - a0).length();
+		let dz = (b0 - a0).length();
+		assert!(dx > 0.5 && dz > 0.5, "floor kit should span the band, dx={dx} dz={dz}");
+		assert!((b1 - a0).length() > dx.max(dz), "far corner should sit opposite a0");
+	}
+	assert!(floors >= 4, "ring floor should emit at least four horizontal slabs, got {floors}");
+}

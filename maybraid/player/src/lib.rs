@@ -11,7 +11,8 @@ use crozon_characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
-	CharacterController, Grounded, Jumping, MoveWish, MovementAction, PlayerControlSystems,
+	CharacterController, Grounded, JumpWish, Jumping, MoveWish, MovementAction,
+	PlayerControlSystems,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
@@ -63,6 +64,7 @@ impl Plugin for PlayerPlugin {
 					body::update_grounded,
 					body::apply_character_movement,
 					body::apply_wish_movement,
+					body::apply_wish_jump,
 					body::apply_movement_damping,
 				)
 					.chain()

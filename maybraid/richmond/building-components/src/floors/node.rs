@@ -25,6 +25,7 @@ use crate::partitions::geometry::LinearLod;
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
+use bevy_math::{Quat, Vec3};
 
 /// Authoring IR for a floor slab feature.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
@@ -52,6 +53,25 @@ impl FloorNode {
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
 		self.confines = confines;
 		self
+	}
+
+	/// Walk prisms for tessellated right-triangle floor kits (local hull + pose).
+	pub fn triangle_walk_hulls(&self) -> Vec<(Vec3, Quat, Vec<Vec3>)> {
+		self.geometry
+			.placed_kits_for_style(self.style, self.placement)
+			.into_iter()
+			.filter_map(|piece| match piece.geom {
+				FloorKit::RightTriangle { mirror } => {
+					let p = piece.placement;
+					Some((
+						p.translation,
+						p.rotation(),
+						crate::panels::right_triangle_kit_hull(p.scale, mirror),
+					))
+				}
+				_ => None,
+			})
+			.collect()
 	}
 }
 

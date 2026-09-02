@@ -21,6 +21,7 @@ crozon-character-persist = { workspace = true }
 crozon-character-ui-menus = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-inventory-user = { workspace = true }
+firearms-components = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 maybraid-character-ui-menu-renderer = { workspace = true }

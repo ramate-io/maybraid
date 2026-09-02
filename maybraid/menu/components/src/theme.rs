@@ -28,8 +28,17 @@ pub const TEXT_YELLOW: Color = Color::srgb(1.0, 0.86, 0.22);
 /// Hover / keyboard-focus yellow (slightly darker).
 pub const TEXT_YELLOW_HOVER: Color = Color::srgb(0.82, 0.68, 0.12);
 
-/// Description strip: same yellow, lower alpha.
+/// Description strip: same yellow, lower alpha. Read-only stats use this too.
 pub const TEXT_YELLOW_FAINT: Color = Color::srgba(1.0, 0.86, 0.22, 0.42);
+
+/// Positive modifier (`+6`).
+pub const TEXT_LIME: Color = Color::srgb(0.55, 0.92, 0.38);
+
+/// Negative modifier (`-4`).
+pub const TEXT_SALMON: Color = Color::srgb(0.95, 0.45, 0.42);
+
+/// Derived formula (pace equation).
+pub const TEXT_LIGHT_BLUE: Color = Color::srgb(0.62, 0.86, 1.0);
 
 /// Description line under the menu column.
 pub const DESCRIPTION_FONT_SIZE: f32 = 22.0;

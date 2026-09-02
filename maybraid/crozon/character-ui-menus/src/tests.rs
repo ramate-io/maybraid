@@ -486,9 +486,105 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 	assert!(choices[1].selected);
 	assert!(!choices[2].selected);
 	assert_eq!(choices[0].label, expected_name);
+	assert!(!choices[0].detail.is_empty());
 	assert!(menu.apply(MenuEvent::ToggleInventory(0)));
 	assert!(!menu.inventory.as_ref().expect("create inventory").is_worn(0));
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Hars)));
+	Ok(())
+}
+
+#[test]
+fn create_menu_weapons_is_ranked_grid_catalog() -> anyhow::Result<()> {
+	use crozon_character_items::{
+		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor, WEAPON_QUEUE_LIMIT,
+	};
+
+	let items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Hawaiian, ItemColor::Red),
+		InventoryItem::firearm(FirearmMesh::Bullpup),
+		InventoryItem::firearm(FirearmMesh::Reltor),
+	];
+	let expected_name = items[3].name();
+	let mut menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let weapons = nodes.iter().find_map(|node| match node {
+		MenuNode::Section { label: "Weapons", children } => children.first(),
+		_ => None,
+	});
+	let Some(MenuNode::GridCatalog { max_selected, choices, .. }) = weapons else {
+		anyhow::bail!("expected a top-level Weapons GridCatalog");
+	};
+	assert_eq!(*max_selected, WEAPON_QUEUE_LIMIT);
+	assert_eq!(choices.len(), 2);
+	assert_eq!(choices[0].rank, Some(1));
+	assert_eq!(choices[1].rank, Some(2));
+	assert!(choices[0].selected);
+	assert_eq!(choices[0].label, expected_name);
+	assert!(!choices[0].detail.is_empty());
+	assert!(menu.overlay_editable("Weapons"));
+	assert!(menu.apply(MenuEvent::ToggleInventory(3)));
+	let inventory = menu.inventory.as_ref().expect("create inventory");
+	assert_eq!(inventory.weapons, vec![4]);
+	assert_eq!(inventory.clothing, vec![0, 1]);
+	assert_eq!(inventory.rank(4), Some(1));
+	Ok(())
+}
+
+#[test]
+fn create_menu_loadout_compiles_character_sheet() -> anyhow::Result<()> {
+	use crozon_character_items::{
+		ClothingMaterial, ClothingMesh, FirearmMesh, InventoryItem, ItemColor,
+	};
+
+	let items = vec![
+		InventoryItem::clothing(ClothingMesh::Pants, ClothingMaterial::Cloth, ItemColor::Natural),
+		InventoryItem::firearm(FirearmMesh::Bullpup),
+	];
+	let sheet = {
+		use crozon_character_items::Inventory;
+		Inventory::with_starter_outfit(items.clone()).character_sheet()
+	};
+	let weapon_name = items[1].name();
+	let menu = CharacterMenu::for_create(items);
+	let nodes = menu.menu_nodes();
+	let loadout = nodes.iter().find_map(|node| match node {
+		MenuNode::Section { label: "Loadout", children } => Some(children),
+		_ => None,
+	});
+	let Some(children) = loadout else {
+		anyhow::bail!("expected a top-level Loadout section");
+	};
+	let Some(MenuNode::StatGrid { cards }) = children.first() else {
+		anyhow::bail!("expected Loadout to lower to a StatGrid");
+	};
+	assert_eq!(cards[0].title, "Total Stats");
+	assert_eq!(cards[1].title, "Base Stats");
+	assert_eq!(cards[2].title, "Buffs");
+	let health = cards[0]
+		.rows
+		.iter()
+		.find(|row| row.label == "Health")
+		.map(|row| row.value.as_str());
+	assert_eq!(health, Some(sheet.health.to_string()).as_deref());
+	assert!(cards[0].rows.iter().any(|row| row.label == "Damage Bonus"));
+	assert!(cards[0].rows.iter().any(|row| row.label == "Added Weight"));
+	assert!(cards[1].rows.iter().any(|row| row.label == "Damage Bonus"));
+	assert!(cards[1].rows.iter().any(|row| row.label == "Added Weight"));
+	let pace = cards[0]
+		.rows
+		.iter()
+		.find(|row| row.label == "Pace")
+		.map(|row| row.value.as_str());
+	assert_eq!(pace, Some(sheet.pace_equation()).as_deref());
+	assert_eq!(
+		cards[0].rows.iter().find(|row| row.label == "Pace").map(|row| row.tone),
+		Some(character_ui_menu::StatTone::Formula)
+	);
+	assert_eq!(cards.len(), 4);
+	assert_eq!(cards[3].title, weapon_name);
+	assert!(menu.overlay_editable("Loadout"));
 	Ok(())
 }
 
@@ -538,6 +634,8 @@ fn saved_menu_locks_body_and_keeps_inventory() -> anyhow::Result<()> {
 	assert!(!menu.overlay_editable("Species"));
 	assert!(!menu.overlay_editable("Body"));
 	assert!(menu.overlay_editable("Clothing"));
+	assert!(menu.overlay_editable("Weapons"));
+	assert!(menu.overlay_editable("Loadout"));
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brodler)));
 	assert_eq!(menu.species.value, ConceptSpecies::Braidman);
 	assert!(!menu.apply(MenuEvent::Cycle(crate::event::CharacterField::Gender, 1)));
@@ -568,6 +666,6 @@ fn saved_menu_strips_clothing_from_appearance() -> anyhow::Result<()> {
 	let restored = CharacterMenu::for_saved(menu.saved_name(), &appearance, inventory);
 	assert_eq!(restored.name, "Misty");
 	assert_eq!(restored.appearance(), appearance);
-	assert_eq!(restored.inventory.as_ref().expect("inventory").worn.len(), 2);
+	assert_eq!(restored.inventory.as_ref().expect("inventory").worn().len(), 2);
 	Ok(())
 }

@@ -3,18 +3,19 @@
 use bevy::prelude::*;
 use character_ui_menu::{
 	AssetChoice, AssetThumbnailDisplay, GridCatalogChoice, ItemRow, MenuNode, PreviewColor,
-	SwatchChoice, ThumbnailRequest,
+	StatCard, StatTone, SwatchChoice, ThumbnailRequest,
 };
 use menu_components::{
-	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action, spawn_hud_text,
-	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
-	spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem, ShortTextField,
-	ShortTextKey, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
-	TEXT_YELLOW_FAINT,
+	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action,
+	spawn_hud_plain, spawn_hud_text, spawn_labeled_row, spawn_section_header,
+	spawn_short_text_button, spawn_stepper, spawn_swatch, spawn_swatch_row, spawn_tile_grid,
+	HudFonts, HudMenu, HudMenuItem, ShortTextField, ShortTextKey, PANEL_BLOCK_FONT_SIZE,
+	PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_LIGHT_BLUE, TEXT_LIME,
+	TEXT_SALMON, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
-use crate::overlay::{overlay_summary_value, primary_select};
+use crate::overlay::{labeled_values_preview, overlay_summary_value, primary_select};
 use crate::widgets::{MenuButton, OpenSelectKey};
 
 /// Renderer-owned thumbnail bridge. The host adapts this to its cache.
@@ -70,7 +71,7 @@ impl<T> RenderContext<'_, T> {
 	}
 
 	pub fn header_color(&self, label: &str) -> Color {
-		if self.lock_appearance && label != "Clothing" {
+		if self.lock_appearance && !matches!(label, "Clothing" | "Weapons" | "Loadout") {
 			TEXT_YELLOW_FAINT
 		} else {
 			TEXT_YELLOW
@@ -243,6 +244,10 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					(MenuButton(*event), context.stamp_hud_item()),
 				);
 			}
+			MenuNode::LabeledValue { label, value } => {
+				self.stat_line(parent, context, label, value, StatTone::from_text(value));
+			}
+			MenuNode::StatGrid { cards } => self.stat_grid(cards, parent, context),
 		}
 	}
 }
@@ -308,6 +313,104 @@ impl MaybraidMenuSink {
 		});
 	}
 
+	fn stat_grid<C>(
+		&self,
+		cards: &[StatCard],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					flex_wrap: FlexWrap::Wrap,
+					column_gap: Val::Px(16.0),
+					row_gap: Val::Px(36.0),
+					align_items: AlignItems::FlexStart,
+					justify_content: self.justify.content(),
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|grid| {
+				for card in cards {
+					self.stat_card(grid, context, card);
+				}
+			});
+	}
+
+	fn stat_card<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		card: &StatCard,
+	) {
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(31.0),
+					min_width: Val::Px(168.0),
+					flex_direction: FlexDirection::Column,
+					row_gap: Val::Px(18.0),
+					padding: UiRect::vertical(Val::Px(8.0)),
+					align_items: AlignItems::FlexStart,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|column| {
+				spawn_hud_text(
+					column,
+					context.fonts.header(PANEL_BLOCK_FONT_SIZE),
+					&card.title,
+					TEXT_YELLOW,
+					bevy::text::Justify::Left,
+				);
+				for row in &card.rows {
+					self.stat_line(column, context, &row.label, &row.value, row.tone);
+				}
+			});
+	}
+
+	fn stat_line<C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &str,
+		value: &str,
+		tone: StatTone,
+	) {
+		spawn_labeled_row(parent, self.justify.content(), |row| {
+			if !label.is_empty() && label != "—" {
+				spawn_hud_text(
+					row,
+					context.fonts.item(PANEL_LABEL_FONT_SIZE),
+					label,
+					TEXT_YELLOW,
+					bevy::text::Justify::Left,
+				);
+			}
+			if !value.is_empty() {
+				spawn_hud_plain(
+					row,
+					context.fonts.item(PANEL_ITEM_FONT_SIZE),
+					value,
+					stat_tone_color(tone),
+					bevy::text::Justify::Left,
+				);
+			} else if label == "—" {
+				spawn_hud_plain(
+					row,
+					context.fonts.item(PANEL_ITEM_FONT_SIZE),
+					"—",
+					TEXT_YELLOW_FAINT,
+					bevy::text::Justify::Left,
+				);
+			}
+		});
+	}
+
 	fn section<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		&self,
 		label: &'static str,
@@ -319,8 +422,10 @@ impl MaybraidMenuSink {
 			self.render_nodes(children, parent, context);
 			return;
 		}
-		let value = primary_select(children).map(overlay_summary_value);
-		self.header(parent, context, label, value);
+		let value = primary_select(children)
+			.map(overlay_summary_value)
+			.unwrap_or_else(|| labeled_values_preview(children));
+		self.header(parent, context, label, (!value.is_empty()).then_some(value));
 	}
 
 	fn choice_tile<E: Copy + Send + Sync + 'static, C>(
@@ -360,7 +465,9 @@ impl MaybraidMenuSink {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 		label: &str,
+		detail: &str,
 		selected: bool,
+		rank: Option<u8>,
 		thumbnail: Option<Handle<Image>>,
 		event: E,
 	) {
@@ -369,7 +476,9 @@ impl MaybraidMenuSink {
 				parent,
 				context.fonts,
 				label,
+				detail,
 				selected,
+				rank,
 				thumbnail,
 				false,
 				(MenuButton(event), context.stamp_hud_item()),
@@ -379,7 +488,9 @@ impl MaybraidMenuSink {
 				parent,
 				context.fonts,
 				label,
+				detail,
 				selected,
+				rank,
 				thumbnail,
 				true,
 				Pickable::IGNORE,
@@ -425,7 +536,9 @@ impl MaybraidMenuSink {
 					grid,
 					context,
 					&choice.label,
+					&choice.detail,
 					choice.selected,
+					choice.rank,
 					thumbnail,
 					choice.event,
 				);
@@ -536,4 +649,13 @@ fn color_key(color: Color) -> [u8; 4] {
 		(srgba.blue * 255.0) as u8,
 		(srgba.alpha * 255.0) as u8,
 	]
+}
+
+fn stat_tone_color(tone: StatTone) -> Color {
+	match tone {
+		StatTone::Plus => TEXT_LIME,
+		StatTone::Minus => TEXT_SALMON,
+		StatTone::Formula => TEXT_LIGHT_BLUE,
+		StatTone::Neutral => TEXT_YELLOW_FAINT,
+	}
 }

@@ -6,12 +6,12 @@
 
 use character_ui_menu::{
 	AssetChoice, AssetOption, AssetSingleSelect, CameraFocus, GridCatalogChoice, ItemRow,
-	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, SwatchChoice,
-	SwatchSingleSelect,
+	MenuComponent, MenuNode, MultiSelect, PreviewColor, SelectGroup, SingleSelect, StatCard,
+	StatLine, SwatchChoice, SwatchSingleSelect,
 };
 use crozon_character_items::{
-	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, Inventory,
-	InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
+	CharacterSheet, ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh,
+	Inventory, InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_characters::ConceptAnimation;
 
@@ -190,10 +190,12 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 			let asset = mesh.asset();
 			Some(GridCatalogChoice {
 				label: item.name(),
+				detail: item.catalog_detail(),
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
-				preview: PreviewColor::of(item.material().color),
+				preview: PreviewColor::of(item.material()?.color),
 				selected: menu.layers.contains(mesh),
+				rank: None,
 				event: MenuEvent::ToggleInventory(index),
 			})
 		}),
@@ -206,24 +208,105 @@ pub(crate) fn clothing_menu_from_inventory(inventory: &Inventory) -> ClothingMen
 		.worn_items()
 		.filter_map(|item| {
 			item.mesh()
-				.map(|clothing| ClothingColor { clothing, color: item.material().color })
+				.zip(item.material())
+				.map(|(clothing, material)| ClothingColor { clothing, color: material.color })
 		})
 		.collect();
-	let item_materials: Vec<ClothingMaterialChoice> = inventory
-		.worn_items()
-		.filter_map(|item| {
-			item.mesh()
-				.map(|clothing| ClothingMaterialChoice { clothing, material: item.material().id })
-		})
-		.collect();
-	let default_color =
-		inventory.items.first().map(|item| item.material().color).unwrap_or_default();
-	let default_material =
-		inventory.items.first().map(|item| item.material().id).unwrap_or_default();
+	let item_materials: Vec<ClothingMaterialChoice> =
+		inventory
+			.worn_items()
+			.filter_map(|item| {
+				item.mesh().zip(item.material()).map(|(clothing, material)| {
+					ClothingMaterialChoice { clothing, material: material.id }
+				})
+			})
+			.collect();
+	let default_color = inventory
+		.items
+		.iter()
+		.find_map(|item| item.material().map(|material| material.color))
+		.unwrap_or_default();
+	let default_material = inventory
+		.items
+		.iter()
+		.find_map(|item| item.material().map(|material| material.id))
+		.unwrap_or_default();
 	let mut menu =
 		ClothingMenu::new(worn, default_color, item_colors, default_material, item_materials);
 	menu.owned = Some(inventory.items.clone());
 	menu
+}
+
+pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	MenuNode::grid_catalog(
+		InventorySlot::Weapons.label(),
+		InventorySlot::Weapons.capacity(),
+		inventory.items.iter().enumerate().filter_map(|(index, item)| {
+			let mesh = item.firearm_mesh()?;
+			let asset = mesh.asset();
+			let rank = inventory.rank(index);
+			Some(GridCatalogChoice {
+				label: item.name(),
+				detail: item.catalog_detail(),
+				path: asset.path,
+				thumbnail_camera: asset.thumbnail_camera,
+				preview: PreviewColor::WHITE,
+				selected: rank.is_some(),
+				rank,
+				event: MenuEvent::ToggleInventory(index),
+			})
+		}),
+	)
+}
+
+pub(crate) fn loadout_section(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	let total = inventory.character_sheet();
+	let buffs = CharacterSheet::modifiers_from_inventory(inventory);
+	let mut cards = vec![
+		StatCard {
+			title: String::from("Total Stats"),
+			rows: total
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| {
+					if label == "Pace" {
+						StatLine::formula(label, value)
+					} else {
+						StatLine::from_display(label, value)
+					}
+				})
+				.collect(),
+		},
+		StatCard {
+			title: String::from("Base Stats"),
+			rows: CharacterSheet::base_stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		},
+		StatCard {
+			title: String::from("Buffs"),
+			rows: buffs
+				.buff_stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::from_display(label, value))
+				.collect(),
+		},
+	];
+	for &index in &inventory.weapons {
+		let Some(item) = inventory.items.get(index) else {
+			continue;
+		};
+		cards.push(StatCard {
+			title: item.name(),
+			rows: item
+				.stat_rows()
+				.into_iter()
+				.map(|(label, value)| StatLine::unsigned(label, value))
+				.collect(),
+		});
+	}
+	MenuNode::section("Loadout", MenuNode::stat_grid(cards))
 }
 
 /// Animation clip picker.

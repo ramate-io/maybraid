@@ -1,42 +1,47 @@
 //! Owned items a character can wear or carry.
 //!
-//! Worn clothing is still assembled as [`crate::clothing`] layers. This module
-//! is the bag those layers are chosen from. Stats/buffs are stubbed until the
-//! in-game inventory panel lands.
+//! The bag is a flat [`InventoryItem`] list. Each item belongs to one
+//! [`InventorySlot`]; that slot holds an ordered unique selection of bag
+//! indices (clothing wear order, weapons switch queue).
 
 use bevy::prelude::*;
 
-use crate::{hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh, ItemColor};
+use crate::{
+	hashed_firearm_name, hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh,
+	ClothingStats, FirearmMesh, FirearmStats, ItemColor,
+};
 
 /// How many garments character creation rolls before the body editor.
 pub const STARTER_CLOTHING_COUNT: usize = 3;
 
-/// Hard cap on simultaneously worn clothing items (create-a-character and later
-/// the in-game panel). Starter rolls fit under this.
+/// How many firearms character creation rolls into the bag.
+pub const STARTER_WEAPON_COUNT: usize = 2;
+
+/// Hard cap on simultaneously worn clothing items.
 pub const WORN_CLOTHING_LIMIT: usize = 6;
 
-/// Catalog identity of an owned item. Clothing is the only kind today.
+/// Hard cap on the active weapon queue. Index 0 is the primary.
+pub const WEAPON_QUEUE_LIMIT: usize = 3;
+
+/// Bag partition. Slots are typed; items are not stored in separate vecs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Item {
-	Clothing(ClothingMesh),
+pub enum InventorySlot {
+	Clothing,
+	Weapons,
 }
 
-impl Item {
-	pub const fn clothing(self) -> Option<ClothingMesh> {
+impl InventorySlot {
+	pub const fn capacity(self) -> usize {
 		match self {
-			Self::Clothing(mesh) => Some(mesh),
+			Self::Clothing => WORN_CLOTHING_LIMIT,
+			Self::Weapons => WEAPON_QUEUE_LIMIT,
 		}
 	}
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Clothing(mesh) => mesh.label(),
-		}
-	}
-
-	pub const fn path(self) -> &'static str {
-		match self {
-			Self::Clothing(mesh) => mesh.path(),
+			Self::Clothing => "Clothing",
+			Self::Weapons => "Weapons",
 		}
 	}
 }
@@ -54,122 +59,220 @@ impl MaterialRefParams {
 	}
 }
 
-/// Gameplay modifier on an item. Empty until a stats pass lands.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Buff {}
-
-/// One slot in a character inventory.
+/// One owned instance in a character inventory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
-	Clothing { item: Item, material: MaterialRefParams, buffs: Vec<Buff> },
+	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
+	Firearm { mesh: FirearmMesh, stats: FirearmStats },
 }
 
 impl InventoryItem {
 	pub fn clothing(mesh: ClothingMesh, material: ClothingMaterial, color: ItemColor) -> Self {
 		Self::Clothing {
-			item: Item::Clothing(mesh),
+			mesh,
 			material: MaterialRefParams::new(material, color),
-			buffs: Vec::new(),
+			stats: ClothingStats::generate(mesh, material, color),
 		}
 	}
 
-	pub const fn item(&self) -> Item {
+	pub fn firearm(mesh: FirearmMesh) -> Self {
+		Self::Firearm { mesh, stats: FirearmStats::generate(mesh) }
+	}
+
+	pub const fn slot(&self) -> InventorySlot {
 		match self {
-			Self::Clothing { item, .. } => *item,
+			Self::Clothing { .. } => InventorySlot::Clothing,
+			Self::Firearm { .. } => InventorySlot::Weapons,
 		}
 	}
 
 	pub const fn mesh(&self) -> Option<ClothingMesh> {
-		self.item().clothing()
-	}
-
-	pub const fn material(&self) -> MaterialRefParams {
 		match self {
-			Self::Clothing { material, .. } => *material,
+			Self::Clothing { mesh, .. } => Some(*mesh),
+			Self::Firearm { .. } => None,
 		}
 	}
 
-	pub fn buffs(&self) -> &[Buff] {
+	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
-			Self::Clothing { buffs, .. } => buffs,
+			Self::Firearm { mesh, .. } => Some(*mesh),
+			Self::Clothing { .. } => None,
+		}
+	}
+
+	pub const fn material(&self) -> Option<MaterialRefParams> {
+		match self {
+			Self::Clothing { material, .. } => Some(*material),
+			Self::Firearm { .. } => None,
+		}
+	}
+
+	pub const fn clothing_stats(&self) -> Option<ClothingStats> {
+		match self {
+			Self::Clothing { stats, .. } => Some(*stats),
+			Self::Firearm { .. } => None,
+		}
+	}
+
+	pub const fn firearm_stats(&self) -> Option<FirearmStats> {
+		match self {
+			Self::Firearm { stats, .. } => Some(*stats),
+			Self::Clothing { .. } => None,
+		}
+	}
+
+	pub fn catalog_detail(&self) -> String {
+		match self {
+			Self::Clothing { stats, .. } => stats.catalog_detail(),
+			Self::Firearm { stats, .. } => stats.catalog_detail(),
+		}
+	}
+
+	pub fn stat_rows(&self) -> Vec<(String, String)> {
+		match self {
+			Self::Clothing { stats, .. } => stats.stat_rows(),
+			Self::Firearm { stats, .. } => stats.stat_rows(),
 		}
 	}
 
 	pub const fn label(&self) -> &'static str {
-		self.item().label()
+		match self {
+			Self::Clothing { mesh, .. } => mesh.label(),
+			Self::Firearm { mesh, .. } => mesh.label(),
+		}
 	}
 
-	/// Hash-picked display name from look, color, and mesh word lists.
 	pub fn name(&self) -> String {
 		match self {
-			Self::Clothing { item: Item::Clothing(mesh), material, .. } => {
+			Self::Clothing { mesh, material, .. } => {
 				hashed_item_name(*mesh, material.id, material.color)
 			}
+			Self::Firearm { mesh, .. } => hashed_firearm_name(*mesh),
 		}
 	}
 
 	pub const fn path(&self) -> &'static str {
-		self.item().path()
+		match self {
+			Self::Clothing { mesh, .. } => mesh.path(),
+			Self::Firearm { mesh, .. } => mesh.path(),
+		}
 	}
 }
 
-/// Owned items plus which of them are worn. Worn indices are unique and stay
-/// within [`WORN_CLOTHING_LIMIT`].
+/// Owned items plus per-slot selections. Clothing is wear order; weapons are
+/// the switch queue (first selected is primary).
 #[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Inventory {
 	pub items: Vec<InventoryItem>,
-	pub worn: Vec<usize>,
+	pub clothing: Vec<usize>,
+	pub weapons: Vec<usize>,
 }
 
 impl Inventory {
-	/// Every item starts worn (up to the wear cap).
+	/// Every clothing item starts worn (up to the wear cap). Weapons stay unequipped.
 	pub fn with_all_worn(items: Vec<InventoryItem>) -> Self {
-		let worn: Vec<usize> = (0..items.len().min(WORN_CLOTHING_LIMIT)).collect();
-		Self { items, worn }
+		let clothing: Vec<usize> = items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.slot() == InventorySlot::Clothing)
+			.map(|(index, _)| index)
+			.take(InventorySlot::Clothing.capacity())
+			.collect();
+		Self { items, clothing, weapons: Vec::new() }
 	}
 
-	/// Create-mode bag: own the whole roll, wear the first lower and first upper
-	/// so the editor opens fully clothed. The extra “any” item stays in the bag.
+	/// Create-mode bag: wear the first lower and first upper; queue every
+	/// rolled firearm (up to the weapon cap). Extra clothing stays in the bag.
 	pub fn with_starter_outfit(items: Vec<InventoryItem>) -> Self {
-		let mut worn = Vec::new();
+		let mut clothing = Vec::new();
 		if let Some(index) = items
 			.iter()
 			.position(|item| item.mesh().is_some_and(|mesh| mesh.kind() == ClothingKind::Lower))
 		{
-			worn.push(index);
+			clothing.push(index);
 		}
 		if let Some(index) = items
 			.iter()
 			.position(|item| item.mesh().is_some_and(|mesh| mesh.kind() == ClothingKind::Upper))
 		{
-			worn.push(index);
+			clothing.push(index);
 		}
-		Self { items, worn }
+		let weapons: Vec<usize> = items
+			.iter()
+			.enumerate()
+			.filter(|(_, item)| item.slot() == InventorySlot::Weapons)
+			.map(|(index, _)| index)
+			.take(InventorySlot::Weapons.capacity())
+			.collect();
+		Self { items, clothing, weapons }
+	}
+
+	pub fn selected(&self, slot: InventorySlot) -> &[usize] {
+		match slot {
+			InventorySlot::Clothing => &self.clothing,
+			InventorySlot::Weapons => &self.weapons,
+		}
+	}
+
+	fn selected_mut(&mut self, slot: InventorySlot) -> &mut Vec<usize> {
+		match slot {
+			InventorySlot::Clothing => &mut self.clothing,
+			InventorySlot::Weapons => &mut self.weapons,
+		}
+	}
+
+	/// Clothing wear list (compat with the old `worn` field).
+	pub fn worn(&self) -> &[usize] {
+		&self.clothing
 	}
 
 	pub fn worn_items(&self) -> impl Iterator<Item = &InventoryItem> {
-		self.worn.iter().filter_map(|&index| self.items.get(index))
+		self.clothing.iter().filter_map(|&index| self.items.get(index))
 	}
 
 	pub fn is_worn(&self, index: usize) -> bool {
-		self.worn.contains(&index)
+		self.clothing.contains(&index)
 	}
 
-	/// Wear or unwear `index`. Wearing when already at the cap is a no-op.
-	/// Returns whether the worn set changed.
-	pub fn toggle_worn(&mut self, index: usize) -> bool {
-		if index >= self.items.len() {
+	/// 1-based rank in the item's slot, if selected.
+	pub fn rank(&self, index: usize) -> Option<u8> {
+		let item = self.items.get(index)?;
+		self.selected(item.slot())
+			.iter()
+			.position(|&selected| selected == index)
+			.map(|position| (position + 1) as u8)
+	}
+
+	pub fn primary_weapon(&self) -> Option<&InventoryItem> {
+		self.weapons.first().and_then(|&index| self.items.get(index))
+	}
+
+	/// Wear / queue or remove `index` in its slot. At capacity, selecting a
+	/// new item is a no-op. Returns whether the slot changed.
+	pub fn toggle(&mut self, index: usize) -> bool {
+		let Some(item) = self.items.get(index) else {
 			return false;
-		}
-		if let Some(slot) = self.worn.iter().position(|&worn| worn == index) {
-			self.worn.remove(slot);
+		};
+		let slot = item.slot();
+		let selected = self.selected_mut(slot);
+		if let Some(position) = selected.iter().position(|&selected| selected == index) {
+			selected.remove(position);
 			return true;
 		}
-		if self.worn.len() >= WORN_CLOTHING_LIMIT {
+		if selected.len() >= slot.capacity() {
 			return false;
 		}
-		self.worn.push(index);
+		selected.push(index);
 		true
+	}
+
+	/// Clothing-only name for [`Self::toggle`].
+	pub fn toggle_worn(&mut self, index: usize) -> bool {
+		self.toggle(index)
+	}
+
+	pub fn character_sheet(&self) -> crate::CharacterSheet {
+		crate::CharacterSheet::from_inventory(self)
 	}
 }
 
@@ -206,6 +309,22 @@ impl ItemRng {
 		(self.next_u64() as usize) % len
 	}
 
+	/// Inclusive range. `max < min` returns `min`.
+	pub fn in_range(&mut self, min: u32, max: u32) -> u32 {
+		if max <= min {
+			return min;
+		}
+		min + (self.next_u64() % (u64::from(max) - u64::from(min) + 1)) as u32
+	}
+
+	pub fn in_range_i16(&mut self, min: i16, max: i16) -> i16 {
+		if max <= min {
+			return min;
+		}
+		let span = (i32::from(max) - i32::from(min) + 1) as u32;
+		min.saturating_add(self.in_range(0, span - 1) as i16)
+	}
+
 	pub fn choose<'a, T>(&mut self, values: &'a [T]) -> Option<&'a T> {
 		if values.is_empty() {
 			return None;
@@ -214,7 +333,7 @@ impl ItemRng {
 	}
 }
 
-/// One random clothing item (mesh, look, color). Buffs stay empty.
+/// One random clothing item (mesh, look, color). Stats roll from identity.
 pub fn random_clothing_item(rng: &mut ItemRng) -> InventoryItem {
 	let mesh = *rng.choose(ClothingMesh::VALUES).unwrap_or(&ClothingMesh::TankTop);
 	random_item_for_mesh(rng, mesh)
@@ -227,9 +346,6 @@ fn random_item_for_mesh(rng: &mut ItemRng, mesh: ClothingMesh) -> InventoryItem 
 }
 
 /// Starter roll: one lower, one upper, then unique “any” fills to `count`.
-///
-/// Wear is not a restriction — [`Inventory::with_starter_outfit`] equips the
-/// lower and upper so the body editor opens clothed.
 pub fn random_starter_clothing(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
 	let lower = *rng.choose(ClothingKind::STARTER_LOWERS).unwrap_or(&ClothingMesh::Pants);
 	let upper = *rng.choose(ClothingKind::STARTER_UPPERS).unwrap_or(&ClothingMesh::TankTop);
@@ -248,6 +364,26 @@ pub fn random_starter_clothing(rng: &mut ItemRng, count: usize) -> Vec<Inventory
 	items
 }
 
+/// Unique firearms for the starter bag.
+pub fn random_starter_firearms(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
+	let mut remaining: Vec<FirearmMesh> = FirearmMesh::VALUES.to_vec();
+	let mut items = Vec::new();
+	let take = count.min(remaining.len());
+	for _ in 0..take {
+		let index = rng.gen_index(remaining.len());
+		let mesh = remaining.swap_remove(index);
+		items.push(InventoryItem::firearm(mesh));
+	}
+	items
+}
+
+/// Clothing starter plus two unique firearms.
+pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
+	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
+	items.extend(random_starter_firearms(rng, STARTER_WEAPON_COUNT));
+	items
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -261,7 +397,9 @@ mod tests {
 		meshes.sort_by_key(|mesh| mesh.label());
 		meshes.dedup();
 		assert_eq!(meshes.len(), STARTER_CLOTHING_COUNT);
-		assert!(items.iter().all(|item| item.buffs().is_empty()));
+		assert!(items
+			.iter()
+			.all(|item| item.clothing_stats().is_some_and(|stats| stats.weight > 0)));
 		assert_eq!(items[0].mesh().map(ClothingMesh::kind), Some(ClothingKind::Lower));
 		assert_eq!(items[1].mesh().map(ClothingMesh::kind), Some(ClothingKind::Upper));
 		assert!(ClothingKind::STARTER_LOWERS.contains(&items[0].mesh().unwrap()));
@@ -269,7 +407,7 @@ mod tests {
 	}
 
 	#[test]
-	fn starter_outfit_wears_lower_and_upper() {
+	fn starter_outfit_wears_lower_and_upper_and_queues_guns() {
 		let items = vec![
 			InventoryItem::clothing(
 				ClothingMesh::Pants,
@@ -278,10 +416,19 @@ mod tests {
 			),
 			InventoryItem::clothing(ClothingMesh::TankTop, ClothingMaterial::Cloth, ItemColor::Red),
 			InventoryItem::clothing(ClothingMesh::Robe, ClothingMaterial::Cloth, ItemColor::Cool),
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::firearm(FirearmMesh::Reltor),
 		];
 		let inventory = Inventory::with_starter_outfit(items);
-		assert_eq!(inventory.worn, vec![0, 1]);
+		assert_eq!(inventory.clothing, vec![0, 1]);
+		assert_eq!(inventory.weapons, vec![3, 4]);
 		assert!(!inventory.is_worn(2));
+		assert_eq!(inventory.rank(3), Some(1));
+		assert_eq!(inventory.rank(4), Some(2));
+		assert_eq!(
+			inventory.primary_weapon().and_then(InventoryItem::firearm_mesh),
+			Some(FirearmMesh::Bullpup)
+		);
 	}
 
 	#[test]
@@ -292,17 +439,43 @@ mod tests {
 			.map(|mesh| InventoryItem::clothing(*mesh, ClothingMaterial::Cloth, ItemColor::Natural))
 			.collect();
 		let mut inventory = Inventory::with_all_worn(items);
-		assert_eq!(inventory.worn.len(), WORN_CLOTHING_LIMIT);
+		assert_eq!(inventory.clothing.len(), WORN_CLOTHING_LIMIT);
 		assert!(!inventory.toggle_worn(WORN_CLOTHING_LIMIT));
 		assert!(inventory.toggle_worn(0));
-		assert_eq!(inventory.worn.len(), WORN_CLOTHING_LIMIT - 1);
+		assert_eq!(inventory.clothing.len(), WORN_CLOTHING_LIMIT - 1);
 		assert!(inventory.toggle_worn(WORN_CLOTHING_LIMIT));
 	}
 
 	#[test]
+	fn weapon_queue_caps_at_three_and_compacts_rank() {
+		let items: Vec<_> =
+			FirearmMesh::VALUES.iter().map(|mesh| InventoryItem::firearm(*mesh)).collect();
+		let mut inventory = Inventory { items, clothing: Vec::new(), weapons: vec![0, 1, 2] };
+		assert!(!inventory.toggle(3));
+		assert!(inventory.toggle(1));
+		assert_eq!(inventory.weapons, vec![0, 2]);
+		assert_eq!(inventory.rank(0), Some(1));
+		assert_eq!(inventory.rank(2), Some(2));
+		assert!(inventory.toggle(3));
+		assert_eq!(inventory.weapons, vec![0, 2, 3]);
+	}
+
+	#[test]
+	fn starter_loadout_has_clothes_and_two_guns() {
+		let items = random_starter_loadout(&mut ItemRng::from_seed(42));
+		assert_eq!(items.len(), STARTER_CLOTHING_COUNT + STARTER_WEAPON_COUNT);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Clothing).count(), 3);
+		assert_eq!(items.iter().filter(|item| item.slot() == InventorySlot::Weapons).count(), 2);
+		let mut guns: Vec<_> = items.iter().filter_map(InventoryItem::firearm_mesh).collect();
+		guns.sort_by_key(|mesh| mesh.label());
+		guns.dedup();
+		assert_eq!(guns.len(), 2);
+	}
+
+	#[test]
 	fn seeded_rng_is_deterministic() {
-		let a = random_starter_clothing(&mut ItemRng::from_seed(42), 3);
-		let b = random_starter_clothing(&mut ItemRng::from_seed(42), 3);
+		let a = random_starter_loadout(&mut ItemRng::from_seed(42));
+		let b = random_starter_loadout(&mut ItemRng::from_seed(42));
 		assert_eq!(a, b);
 		assert_ne!(a[0].name(), a[0].label());
 	}

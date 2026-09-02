@@ -49,7 +49,7 @@ use crate::{
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
-	shared::clothing_menu_from_inventory,
+	shared::{clothing_menu_from_inventory, loadout_section, weapons_catalog},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,9 +332,10 @@ impl CharacterMenu {
 		self.appearance_locked
 	}
 
-	/// Overlay interiors for body catalogs stay visible when locked; only clothing stays editable.
+	/// Overlay interiors for body catalogs stay visible when locked; clothing
+	/// and weapons stay editable.
 	pub fn overlay_editable(&self, key: &str) -> bool {
-		!self.appearance_locked() || key == "Clothing"
+		!self.appearance_locked() || key == "Clothing" || key == "Weapons" || key == "Loadout"
 	}
 
 	fn sync_inventory_clothing(&mut self) {
@@ -1589,7 +1590,7 @@ impl CharacterMenu {
 				let Some(inventory) = self.inventory.as_mut() else {
 					return false;
 				};
-				if !inventory.toggle_worn(index) {
+				if !inventory.toggle(index) {
 					return false;
 				}
 				self.sync_inventory_clothing();
@@ -3481,7 +3482,7 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 				),
 			]
 		};
-		MenuNode::fragment([
+		let mut nodes = vec![
 			MenuNode::short_text("Name", self.name.clone(), CHARACTER_NAME_MAX_LEN),
 			MenuNode::section_select_grouped(
 				"Species",
@@ -3490,7 +3491,12 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 				species_groups,
 				self.species_node(),
 			),
-		])
+		];
+		if let Some(inventory) = &self.inventory {
+			nodes.push(MenuNode::section("Weapons", weapons_catalog(inventory)));
+			nodes.push(loadout_section(inventory));
+		}
+		MenuNode::fragment(nodes)
 	}
 }
 
@@ -3866,6 +3872,8 @@ pub struct SectionOpenState {
 	pub head_features_open: bool,
 	pub hair_open: bool,
 	pub clothing_open: bool,
+	pub weapons_open: bool,
+	pub loadout_open: bool,
 	pub animation_open: bool,
 }
 
@@ -3878,6 +3886,8 @@ impl SectionOpenState {
 			SectionId::HeadFeatures => self.head_features_open,
 			SectionId::Hair => self.hair_open,
 			SectionId::Clothing => self.clothing_open,
+			SectionId::Weapons => self.weapons_open,
+			SectionId::Loadout => self.loadout_open,
 			SectionId::Animation => self.animation_open,
 		}
 	}
@@ -3890,6 +3900,8 @@ impl SectionOpenState {
 			SectionId::HeadFeatures => self.head_features_open = !self.head_features_open,
 			SectionId::Hair => self.hair_open = !self.hair_open,
 			SectionId::Clothing => self.clothing_open = !self.clothing_open,
+			SectionId::Weapons => self.weapons_open = !self.weapons_open,
+			SectionId::Loadout => self.loadout_open = !self.loadout_open,
 			SectionId::Animation => self.animation_open = !self.animation_open,
 		}
 	}
@@ -3904,6 +3916,8 @@ impl Default for SectionOpenState {
 			head_features_open: false,
 			hair_open: false,
 			clothing_open: true,
+			weapons_open: true,
+			loadout_open: true,
 			animation_open: false,
 		}
 	}

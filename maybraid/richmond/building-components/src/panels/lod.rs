@@ -1,8 +1,7 @@
 //! Panel mesh-resolution LOD (distance / extent banding).
 //!
-//! Reuses roof High / Medium / Low distance factors (panels previously hosted under
-//! [`crate::roofs::lod::RoofLodProbe`]). Unlike roofs and partitions, **UltraLow is a
-//! distinct [`LodSceneLevel`]**: every style drops to the shared flat low-res kit.
+//! Unlike roofs, panel High / Medium hold for tens of meters so walking a storey
+//! does not thrash kit resolution. UltraLow remains a distinct flat low-res kit.
 
 use bevy::prelude::{Component, Query, Transform, With};
 use bevy::scene::prelude::Scene;
@@ -21,12 +20,20 @@ use crate::lod_band::{
 	DistanceLodBand,
 };
 use crate::placed::Placement;
-use crate::roofs::lod::{ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR};
 
-/// Same thresholds as [`crate::roofs::lod`] (panels shared that probe historically).
-pub const PANEL_HIGH_FACTOR: f32 = ROOF_HIGH_FACTOR;
-pub const PANEL_MEDIUM_FACTOR: f32 = ROOF_MEDIUM_FACTOR;
-pub const PANEL_LOW_FACTOR: f32 = ROOF_LOW_FACTOR;
+/// `distance / max_extent` out to this → High (also see [`PANEL_HIGH_METERS`]).
+pub const PANEL_HIGH_FACTOR: f32 = 20.0;
+/// Out to this → Medium.
+pub const PANEL_MEDIUM_FACTOR: f32 = 80.0;
+/// Out to this → Low; else UltraLow.
+pub const PANEL_LOW_FACTOR: f32 = 250.0;
+
+/// Keep High while the viewer is this close, even on small tiles.
+pub const PANEL_HIGH_METERS: f32 = 20.0;
+/// Keep Medium out to this range so High/Mid does not thrash.
+pub const PANEL_MEDIUM_METERS: f32 = 80.0;
+/// Keep Low out to this range.
+pub const PANEL_LOW_METERS: f32 = 250.0;
 
 /// Shared UltraLow rectangle kit for every [`crate::panels::PanelStyle`].
 pub const PANEL_ULTRA_LOW_RECTANGLE: AssetPath = flat::RECTANGLE_LOW;
@@ -96,8 +103,17 @@ impl PanelLodProbe {
 	}
 
 	pub fn band_for(&self, viewer: &Transform) -> PanelLodBand {
-		let factor = viewer.translation.distance(self.center) / self.extent.max(1e-4);
-		PanelLodBand::from_distance_factor(factor)
+		let dist = viewer.translation.distance(self.center);
+		let factor = dist / self.extent.max(1e-4);
+		if dist <= PANEL_HIGH_METERS || factor <= PANEL_HIGH_FACTOR {
+			PanelLodBand::High
+		} else if dist <= PANEL_MEDIUM_METERS || factor <= PANEL_MEDIUM_FACTOR {
+			PanelLodBand::Medium
+		} else if dist <= PANEL_LOW_METERS || factor <= PANEL_LOW_FACTOR {
+			PanelLodBand::Low
+		} else {
+			PanelLodBand::UltraLow
+		}
 	}
 
 	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
@@ -178,6 +194,24 @@ mod tests {
 		);
 		assert_eq!(PANEL_ULTRA_LOW_RECTANGLE, flat::RECTANGLE_LOW);
 		assert_eq!(PANEL_ULTRA_LOW_RIGHT_TRIANGLE, flat::RIGHT_TRIANGLE_LOW);
+		Ok(())
+	}
+
+	#[test]
+	fn high_holds_to_twenty_meters_even_on_small_tiles() -> anyhow::Result<()> {
+		let probe = PanelLodProbe { center: Vec3::ZERO, extent: 0.4 };
+		assert_eq!(
+			probe.band_for(&Transform::from_xyz(0.0, 0.0, PANEL_HIGH_METERS)),
+			PanelLodBand::High
+		);
+		assert_eq!(
+			probe.band_for(&Transform::from_xyz(0.0, 0.0, PANEL_HIGH_METERS + 1.0)),
+			PanelLodBand::Medium
+		);
+		assert_eq!(
+			probe.band_for(&Transform::from_xyz(0.0, 0.0, PANEL_MEDIUM_METERS)),
+			PanelLodBand::Medium
+		);
 		Ok(())
 	}
 }

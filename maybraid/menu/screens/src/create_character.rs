@@ -1,9 +1,7 @@
-//! Create-a-character flow: three random garments, then the body editor.
+//! Create-a-character flow: starter garments and firearms, then the body editor.
 
 use bevy::prelude::*;
-use crozon_character_items::{
-	random_starter_clothing, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
-};
+use crozon_character_items::{random_starter_loadout, InventoryItem, ItemRng};
 use crozon_character_persist::CharacterId;
 
 use crate::spin_reveal::{
@@ -69,7 +67,7 @@ fn start_create_character(
 		commands.entity(entity).despawn();
 	}
 	commands.insert_resource(PendingCreate(id));
-	let items = random_starter_clothing(&mut ItemRng::from_entropy(), STARTER_CLOTHING_COUNT);
+	let items = random_starter_loadout(&mut ItemRng::from_entropy());
 	request_show_spin_reveal(&mut commands, items);
 }
 
