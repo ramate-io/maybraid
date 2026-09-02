@@ -1,14 +1,29 @@
 # Firing range
 
 Braidman on a flat range, plus a standing NPC braidman down-left of the pad
-body. Both hold a bullpup through [`firearm-user`](../firearm-user/); only the
-followed player fires and drives the reticle. The NPC uses
-[`movement-intelligence`](../../intelligence/lib) with an Avian collider
-surface: the playground writes [`VantageOn`](../../intelligence/lib/src/objective.rs)
-the player and requests a replan when the player has moved.
-
-The playground registers player, camera, firearm-user, weapons, and movement
-intelligence plugins; the pad, cover crates, and vantage refresh stay here.
+body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
+followed player fires from the pad. The NPC installs
+[`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
+the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
+visible observations feed firearm combat until spotting memory expires.
+The NPC traces `vision` capsule samples per frame (default 9) and spends
+`focus` of that budget on the highest-ranked target.
+Look tracks the live capsule; fire needs that sightline to stay fresh.
+Firearm movement hunts those candidates even without a current sightline, then
+writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
+into [`movement-intelligence`](../../intelligence/movement/lib) at an ~8 m
+standoff (no close-range flee). Lost sightlines raise sightline weight so the
+NPC does not glue to a cover crack. Firearm combat aims
+[`PlayerLook`](../../player/src/identity.rs) from the stock (shoulder pivot), not
+the muzzle, and holds the trigger after the first on-target acquire;
+`trigger_happiness` is only the delay before that first pull.
+Projectile sweeps include both fixed geometry and animated character capsules.
+Each character starts with 100 health and takes 25 damage per bolt contact.
+Health is shown on a persistent top HUD and as a bar above each capsule; the
+player also gets directional hit ticks around screen center. At 0 health the
+combatant and held firearm despawn; player and NPC both return after two seconds.
+The NPC spots and aims during a ceasefire, but does not fire until an actual
+player projectile spawns. Respawning either combatant resets that ceasefire.
 
 ```bash
 cargo run -p firing-range-playground

@@ -20,25 +20,19 @@ const HAIRPIN_DOT_LIMIT: f32 = -0.25;
 const PROGRESS_SLOP: f32 = 0.08;
 
 /// Per-user scoring knobs. Budget and standoffs live on [`MovementAbility`].
+/// Hide / sightline policy is carried on [`MovementObjective::VantageOn`] by the
+/// higher-order writer.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementIntelligenceSettings {
 	pub stuck_timeout: f32,
 	pub weight_surface: f32,
-	pub weight_hide: f32,
-	pub weight_sightline: f32,
 	/// Cost of using the mover's full tolerated fall, in surface-cost units.
 	pub weight_fall: f32,
 }
 
 impl Default for MovementIntelligenceSettings {
 	fn default() -> Self {
-		Self {
-			stuck_timeout: 1.6,
-			weight_surface: 1.0,
-			weight_hide: 1.0,
-			weight_sightline: 1.0,
-			weight_fall: 6.0,
-		}
+		Self { stuck_timeout: 1.6, weight_surface: 1.0, weight_fall: 6.0 }
 	}
 }
 
@@ -86,13 +80,11 @@ where
 	I: Send + Sync + 'static,
 	A: Send + Sync + 'static,
 {
-	/// Lower is better. Folds surface cost with objective hide / sightline, scaled by settings.
+	/// Lower is better. Folds surface cost with objective hide / sightline.
 	pub fn score_candidate(&self, candidate: &MovementCandidate<I>) -> f32 {
 		let surface = self.settings.weight_surface * candidate.surface_cost;
-		let hide = self.settings.weight_hide * self.objective.hide_weight() * candidate.hints.hide;
-		let sight = self.settings.weight_sightline
-			* self.objective.sightline_weight()
-			* candidate.hints.sightline;
+		let hide = self.objective.hide_weight() * candidate.hints.hide;
+		let sight = self.objective.sightline_weight() * candidate.hints.sightline;
 		let fall = self.settings.weight_fall * candidate.hints.fall_risk;
 		surface + fall - hide - sight
 	}

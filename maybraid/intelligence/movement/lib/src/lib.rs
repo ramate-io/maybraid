@@ -2,8 +2,9 @@
 //!
 //! Install [`MovementIntelligence`] on a capsule and register
 //! [`MovementIntelligencePlugin`] with a [`MovementIntelligenceSurface`]
-//! [`bevy::ecs::system::SystemParam`]. The brain writes [`player::MoveWish`];
-//! it does not own physics or lock onto other entities.
+//! [`bevy::ecs::system::SystemParam`]. The brain fields [`MovementObjective`]
+//! and writes [`player::MoveWish`]; it does not own physics, combat policy, or
+//! entity lock-on.
 
 mod ability;
 mod candidate;
