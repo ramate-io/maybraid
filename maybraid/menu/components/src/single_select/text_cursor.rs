@@ -9,10 +9,12 @@ use crate::icons::maybraid::AnimatedIcon;
 use super::text_menu::{
 	TextColumnAlign, TextColumnAnchor, TextMenu, TextMenuHeader, TextMenuItem, TextMenuItemLabel,
 };
+use crate::controls::section::CursorRow;
 use crate::theme::{
-	BARLOW_SEMIBOLD, CURSOR_ICON_GAP, CURSOR_ICON_SIZE, DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE,
-	TEXT_YELLOW, TEXT_YELLOW_FAINT,
+	BARLOW_SEMIBOLD, CORNER_BOTTOM, CORNER_INSET, CURSOR_ICON_GAP, CURSOR_ICON_SIZE,
+	DESCRIPTION_FONT_SIZE, ITEM_FONT_SIZE, TEXT_YELLOW, TEXT_YELLOW_FAINT,
 };
+use maybraid_input::{MenuNav, MenuNavPad};
 
 /// Marker on a text-cursor column. Shares [`TextMenu`] selection with the plain column.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -164,6 +166,62 @@ impl<E: Component + Copy + Default + Unpin + Send + Sync + 'static> ButtonWithSu
 			Children [ {children} ]
 		}
 	}
+}
+
+/// Lower-left screen chrome. Click (and host `B` / Escape) leave the screen.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct ScreenBack;
+
+/// One-shot leave request from [`ScreenBack`].
+#[derive(Message, Debug, Default, Clone, Copy)]
+pub struct ScreenBackPressed;
+
+/// Bottom-left Back control. Not part of the screen's [`TextMenu`] so Enter
+/// on the main list cannot fire it.
+pub fn screen_back_scene() -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![
+		Box::new(cursor_slot_scene(Visibility::Hidden, TextColumnAlign::Start)),
+		Box::new(cursor_label_scene(String::from("Back"), TextColumnAlign::Start)),
+	];
+	bsn! {
+		Button
+		ScreenBack
+		CursorRow
+		Node {
+			position_type: PositionType::Absolute,
+			left: px(CORNER_INSET),
+			bottom: px(CORNER_BOTTOM),
+			flex_direction: FlexDirection::Row,
+			align_items: AlignItems::Center,
+			column_gap: px(CURSOR_ICON_GAP),
+			padding: UiRect::axes(px(0.0), px(2.0)),
+		}
+		BackgroundColor(Color::NONE)
+		Children [ {children} ]
+	}
+}
+
+pub fn emit_screen_back_on_click(
+	click: On<Pointer<Click>>,
+	backs: Query<(), With<ScreenBack>>,
+	mut pressed: MessageWriter<ScreenBackPressed>,
+) {
+	if backs.contains(click.entity) {
+		pressed.write(ScreenBackPressed);
+	}
+}
+
+/// Click on [`ScreenBack`], or pad/keyboard B, while no overlay is open.
+pub fn consume_screen_back(
+	nav: &MenuNavPad,
+	overlay_open: bool,
+	backs: &mut MessageReader<ScreenBackPressed>,
+) -> bool {
+	let clicked = backs.read().next().is_some();
+	if overlay_open {
+		return false;
+	}
+	clicked || nav.just_pressed(MenuNav::Back)
 }
 
 fn cursor_row_scene<E>(

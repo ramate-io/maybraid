@@ -16,7 +16,7 @@ pub mod swatch;
 pub mod text;
 pub mod tile;
 
-pub use button::{spawn_hud_action, spawn_text_button};
+pub use button::{spawn_corner_action, spawn_hud_action, spawn_text_button};
 pub use display::menu_display_name;
 pub use fonts::HudFonts;
 pub use hud_menu::{
@@ -29,7 +29,7 @@ pub use scroll::{
 	HudScrollThumb, HudScrollTrack, HudScrollViewport,
 };
 pub use section::{
-	spawn_section_header, sync_overlay_header_cursors, ActiveOverlayKey, OverlayHeader,
+	spawn_section_header, sync_hud_cursors, ActiveOverlayKey, CursorRow, OverlayHeader,
 	OverlayHeaderKey,
 };
 pub use short_text::{

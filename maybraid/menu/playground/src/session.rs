@@ -14,7 +14,9 @@ use menu_screens::{
 	GalleryScreenPlugin,
 };
 
-use crate::character::{request_show_character, CharacterMenuState, CharacterScreen};
+use crate::character::{
+	request_show_character, CharacterEditBaseline, CharacterMenuState, CharacterScreen,
+};
 
 /// Host entity for the character currently being created or edited.
 #[derive(Component, Debug, Default, Clone, Copy)]
@@ -100,6 +102,7 @@ fn open_gallery_choice(
 		GalleryChoice::New => {
 			let id = CharacterId::new();
 			commands.insert_resource(EditingCharacter { id });
+			commands.remove_resource::<CharacterEditBaseline>();
 			request_show_create_character_id(&mut commands, id);
 		}
 		GalleryChoice::Open(id) => {
@@ -127,6 +130,7 @@ fn open_gallery_choice(
 				inventory.clone(),
 			);
 			menu_state.0 = CharacterMenu::for_saved(model.name, &model.appearance, inventory);
+			commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
 			request_show_character(&mut commands);
 		}
 	}
@@ -143,6 +147,7 @@ fn open_create_character_hud(
 	};
 	let inventory = Inventory::with_starter_outfit(ready.items.clone());
 	commands.insert_resource(EditingCharacter { id: ready.id });
+	commands.remove_resource::<CharacterEditBaseline>();
 	spawn_session(
 		&mut commands,
 		&sessions,
@@ -161,12 +166,10 @@ fn on_save_character(
 	menu_state: Res<CharacterMenuState>,
 	save_root: Res<SaveRoot>,
 	editing: Option<Res<EditingCharacter>>,
+	baseline: Option<ResMut<CharacterEditBaseline>>,
 	mut commands: Commands,
 ) {
 	if screens.is_empty() || activate.event().choice != MenuEvent::Save {
-		return;
-	}
-	if !menu_state.0.is_create() {
 		return;
 	}
 	let Some(editing) = editing else {
@@ -177,5 +180,14 @@ fn on_save_character(
 		warn!("failed to save character {}: {error}", editing.id.to_hex());
 		return;
 	}
-	request_show_gallery(&mut commands);
+	if menu_state.0.is_create() {
+		commands.remove_resource::<CharacterEditBaseline>();
+		request_show_gallery(&mut commands);
+		return;
+	}
+	if let Some(mut baseline) = baseline {
+		*baseline = CharacterEditBaseline::capture(&menu_state.0);
+	} else {
+		commands.insert_resource(CharacterEditBaseline::capture(&menu_state.0));
+	}
 }

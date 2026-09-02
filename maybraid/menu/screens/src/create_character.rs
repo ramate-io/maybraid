@@ -34,6 +34,11 @@ pub fn request_show_create_character_id(commands: &mut Commands, id: CharacterId
 	commands.spawn(RequestShowCreateCharacter { id });
 }
 
+/// Drop an in-flight starter reveal so Back from spin-reveal does not create.
+pub fn cancel_pending_create(commands: &mut Commands) {
+	commands.remove_resource::<PendingCreate>();
+}
+
 pub struct CreateCharacterPlugin;
 
 impl Plugin for CreateCharacterPlugin {

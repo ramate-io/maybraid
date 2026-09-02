@@ -6,8 +6,9 @@ use crozon_character_model_user::{list_summaries, CharacterSummary};
 use crozon_character_persist::{CharacterId, SaveRoot};
 use maybraid_menu_controller::MenuController;
 use menu_components::single_select::republish_menu_activate;
-use menu_components::single_select::text_cursor::TextCursorRow;
-use menu_components::{TextCursorColumn, TextMenuPlugin, MENU_CLEAR};
+use menu_components::{
+	screen_back_scene, TextCursorColumn, TextCursorRow, TextMenuPlugin, MENU_CLEAR,
+};
 
 use crate::input::add_menu_input;
 use crate::show::take_menu_show_request;
@@ -62,8 +63,10 @@ fn gallery_scene(summaries: &[CharacterSummary]) -> impl Scene + 'static {
 		TextCursorRow::new(summary.name.clone(), GalleryChoice::Open(summary.id))
 			.with_subtext(summary.species_title)
 	}));
-	let children: Vec<Box<dyn Scene>> =
-		vec![Box::new(TextCursorColumn::rows("Characters", rows).scene())];
+	let children: Vec<Box<dyn Scene>> = vec![
+		Box::new(TextCursorColumn::rows("Characters", rows).scene()),
+		Box::new(screen_back_scene()),
+	];
 	bsn! {
 		GalleryScreen
 		MenuScreen

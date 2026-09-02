@@ -493,7 +493,7 @@ fn create_menu_clothing_is_grid_catalog() -> anyhow::Result<()> {
 }
 
 #[test]
-fn create_menu_has_a_save_action() -> anyhow::Result<()> {
+fn create_menu_omits_save_from_the_editor_tree() -> anyhow::Result<()> {
 	use crozon_character_items::{ClothingMaterial, ClothingMesh, InventoryItem, ItemColor};
 
 	let items = vec![InventoryItem::clothing(
@@ -501,14 +501,11 @@ fn create_menu_has_a_save_action() -> anyhow::Result<()> {
 		ClothingMaterial::Cloth,
 		ItemColor::Natural,
 	)];
-	let menu = CharacterMenu::for_create(items);
+	let mut menu = CharacterMenu::for_create(items);
 	let nodes = menu.menu_nodes();
-	let MenuNode::Action { label, event } = nodes.last().expect("save action") else {
-		anyhow::bail!("expected Save Character action at the end of create");
-	};
-	assert_eq!(*label, "Save Character");
-	assert_eq!(*event, MenuEvent::Save);
+	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::Action { .. })));
 	assert!(menu.is_create());
+	assert!(menu.apply(MenuEvent::Save));
 	Ok(())
 }
 
@@ -528,11 +525,19 @@ fn saved_menu_locks_body_and_keeps_inventory() -> anyhow::Result<()> {
 	assert!(menu.appearance_locked());
 	assert!(!menu.is_create());
 	let nodes = menu.menu_nodes();
-	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::SectionSelect { .. })));
-	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::Action { .. })));
-	assert!(nodes
+	let MenuNode::SectionSelect { children, .. } = &nodes[1] else {
+		anyhow::bail!("expected species SectionSelect so body attributes stay visible");
+	};
+	assert!(children
+		.iter()
+		.any(|node| matches!(node, MenuNode::Section { label: "Body", .. })));
+	assert!(children
 		.iter()
 		.any(|node| matches!(node, MenuNode::Section { label: "Clothing", .. })));
+	assert!(nodes.iter().all(|node| !matches!(node, MenuNode::Action { .. })));
+	assert!(!menu.overlay_editable("Species"));
+	assert!(!menu.overlay_editable("Body"));
+	assert!(menu.overlay_editable("Clothing"));
 	assert!(!menu.apply(MenuEvent::SetSpecies(ConceptSpecies::Brodler)));
 	assert_eq!(menu.species.value, ConceptSpecies::Braidman);
 	assert!(!menu.apply(MenuEvent::Cycle(crate::event::CharacterField::Gender, 1)));

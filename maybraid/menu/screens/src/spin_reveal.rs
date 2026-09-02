@@ -6,8 +6,8 @@ use bevy::text::{FontSourceTemplate, LineBreak};
 use crozon_character_items::InventoryItem;
 use maybraid_menu_controller::MenuController;
 use menu_components::{
-	republish_menu_activate, ButtonWithSubtext, SpinningIcon, TextMenuPlugin, BARLOW_SEMIBOLD,
-	LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
+	republish_menu_activate, screen_back_scene, ButtonWithSubtext, SpinningIcon, TextMenuPlugin,
+	BARLOW_SEMIBOLD, LOADING_ICON_SIZE, MENU_CLEAR, PANEL_BLOCK_FONT_SIZE, SPIN_REVEAL_SECS,
 	SPIN_REVEAL_TILE_HEIGHT, SPIN_REVEAL_TILE_WIDTH, TEXT_YELLOW,
 };
 
@@ -162,8 +162,10 @@ fn spin_scene(
 ) -> impl Scene + 'static {
 	let name = item.name();
 	let (label, subtext) = action;
-	let mut children: Vec<Box<dyn Scene>> =
-		vec![Box::new(ButtonWithSubtext::new(label, subtext, SpinRevealChoice::Advance).scene())];
+	let mut children: Vec<Box<dyn Scene>> = vec![
+		Box::new(ButtonWithSubtext::new(label, subtext, SpinRevealChoice::Advance).scene()),
+		Box::new(screen_back_scene()),
+	];
 	if revealed {
 		children.push(Box::new(name_below_preview(name)));
 	} else {

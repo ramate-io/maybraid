@@ -9,7 +9,8 @@ use menu_components::{
 	spawn_asset_tile, spawn_grid_catalog_tile, spawn_group_label, spawn_hud_action, spawn_hud_text,
 	spawn_labeled_row, spawn_section_header, spawn_short_text_button, spawn_stepper, spawn_swatch,
 	spawn_swatch_row, spawn_tile_grid, HudFonts, HudMenu, HudMenuItem, ShortTextField,
-	ShortTextKey, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	ShortTextKey, PANEL_ITEM_FONT_SIZE, PANEL_LABEL_FONT_SIZE, PANEL_ROW_GAP, TEXT_YELLOW,
+	TEXT_YELLOW_FAINT,
 };
 
 use crate::justify::MenuJustify;
@@ -51,6 +52,10 @@ pub struct RenderContext<'a, T> {
 	pub prewarm: &'a mut Vec<ThumbnailRequest>,
 	pub hud_menu: Entity,
 	pub hud_item_count: usize,
+	/// When false, catalogs still paint current values but omit activate extras.
+	pub interactive: bool,
+	/// Saved-character HUD: appearance headers use a dampened yellow.
+	pub lock_appearance: bool,
 }
 
 impl<T> RenderContext<'_, T> {
@@ -62,6 +67,22 @@ impl<T> RenderContext<'_, T> {
 
 	pub fn hud_menu(&self, previous: Option<HudMenu>) -> HudMenu {
 		HudMenu::retain(self.hud_item_count, previous)
+	}
+
+	pub fn header_color(&self, label: &str) -> Color {
+		if self.lock_appearance && label != "Clothing" {
+			TEXT_YELLOW_FAINT
+		} else {
+			TEXT_YELLOW
+		}
+	}
+
+	pub fn face_color(&self) -> Color {
+		if self.interactive {
+			TEXT_YELLOW
+		} else {
+			TEXT_YELLOW_FAINT
+		}
 	}
 }
 
@@ -125,28 +146,48 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 			}
 			MenuNode::LabeledCycle { label, value, minus, plus } => {
 				self.labeled_control(parent, context, label, |row, context| {
-					spawn_stepper(
-						row,
-						context.fonts,
-						"<",
-						">",
-						value,
-						(MenuButton(*minus), context.stamp_hud_item()),
-						(MenuButton(*plus), context.stamp_hud_item()),
-					);
+					if context.interactive {
+						spawn_stepper(
+							row,
+							context.fonts,
+							"<",
+							">",
+							value,
+							(MenuButton(*minus), context.stamp_hud_item()),
+							(MenuButton(*plus), context.stamp_hud_item()),
+						);
+					} else {
+						spawn_hud_text(
+							row,
+							context.fonts.item(PANEL_ITEM_FONT_SIZE),
+							value,
+							context.face_color(),
+							bevy::text::Justify::Left,
+						);
+					}
 				});
 			}
 			MenuNode::LabeledSlider { label, value, decrease, increase } => {
 				self.labeled_control(parent, context, label, |row, context| {
-					spawn_stepper(
-						row,
-						context.fonts,
-						"−",
-						"+",
-						&format!("{value:.2}"),
-						(MenuButton(*decrease), context.stamp_hud_item()),
-						(MenuButton(*increase), context.stamp_hud_item()),
-					);
+					if context.interactive {
+						spawn_stepper(
+							row,
+							context.fonts,
+							"−",
+							"+",
+							&format!("{value:.2}"),
+							(MenuButton(*decrease), context.stamp_hud_item()),
+							(MenuButton(*increase), context.stamp_hud_item()),
+						);
+					} else {
+						spawn_hud_text(
+							row,
+							context.fonts.item(PANEL_ITEM_FONT_SIZE),
+							&format!("{value:.2}"),
+							context.face_color(),
+							bevy::text::Justify::Left,
+						);
+					}
 				});
 			}
 			MenuNode::LabeledSwatch { label, choices } => {
@@ -160,13 +201,13 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for MaybraidMenuSink {
 					spawn_tile_grid(parent, self.justify.content(), |grid| {
 						for choice in choices {
 							let thumbnail = asset_thumbnail(choice, preview, context);
-							spawn_asset_tile(
+							self.choice_tile(
 								grid,
-								context.fonts,
+								context,
 								choice.label,
 								choice.selected,
 								thumbnail,
-								(MenuButton(choice.event), context.stamp_hud_item()),
+								choice.event,
 							);
 						}
 					});
@@ -243,6 +284,7 @@ impl MaybraidMenuSink {
 			label,
 			value.as_deref(),
 			self.justify.content(),
+			context.header_color(label),
 			(OpenSelectKey(label), context.stamp_hud_item()),
 		);
 	}
@@ -259,7 +301,7 @@ impl MaybraidMenuSink {
 				row,
 				context.fonts.item(PANEL_LABEL_FONT_SIZE),
 				label,
-				TEXT_YELLOW,
+				context.face_color(),
 				bevy::text::Justify::Left,
 			);
 			controls(row, context);
@@ -281,6 +323,70 @@ impl MaybraidMenuSink {
 		self.header(parent, context, label, value);
 	}
 
+	fn choice_tile<E: Copy + Send + Sync + 'static, C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &str,
+		selected: bool,
+		thumbnail: Option<Handle<Image>>,
+		event: E,
+	) {
+		if context.interactive {
+			spawn_asset_tile(
+				parent,
+				context.fonts,
+				label,
+				selected,
+				thumbnail,
+				false,
+				(MenuButton(event), context.stamp_hud_item()),
+			);
+		} else {
+			spawn_asset_tile(
+				parent,
+				context.fonts,
+				label,
+				selected,
+				thumbnail,
+				true,
+				Pickable::IGNORE,
+			);
+		}
+	}
+
+	fn catalog_tile<E: Copy + Send + Sync + 'static, C>(
+		&self,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+		label: &str,
+		selected: bool,
+		thumbnail: Option<Handle<Image>>,
+		event: E,
+	) {
+		if context.interactive {
+			spawn_grid_catalog_tile(
+				parent,
+				context.fonts,
+				label,
+				selected,
+				thumbnail,
+				false,
+				(MenuButton(event), context.stamp_hud_item()),
+			);
+		} else {
+			spawn_grid_catalog_tile(
+				parent,
+				context.fonts,
+				label,
+				selected,
+				thumbnail,
+				true,
+				Pickable::IGNORE,
+			);
+		}
+	}
+
 	fn select_grid<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
 		&self,
 		groups: &[character_ui_menu::SelectGroup<E>],
@@ -293,13 +399,13 @@ impl MaybraidMenuSink {
 			}
 			spawn_tile_grid(parent, self.justify.content(), |grid| {
 				for choice in &group.choices {
-					spawn_asset_tile(
+					self.choice_tile(
 						grid,
-						context.fonts,
+						context,
 						choice.label,
 						choice.selected,
 						None,
-						(MenuButton(choice.event), context.stamp_hud_item()),
+						choice.event,
 					);
 				}
 			});
@@ -315,13 +421,13 @@ impl MaybraidMenuSink {
 		spawn_tile_grid(parent, self.justify.content(), |grid| {
 			for choice in choices {
 				let thumbnail = grid_catalog_thumbnail(choice, bevy_color(choice.preview), context);
-				spawn_grid_catalog_tile(
+				self.catalog_tile(
 					grid,
-					context.fonts,
+					context,
 					&choice.label,
 					choice.selected,
 					thumbnail,
-					(MenuButton(choice.event), context.stamp_hud_item()),
+					choice.event,
 				);
 			}
 		});
@@ -349,13 +455,13 @@ impl MaybraidMenuSink {
 				Pickable::IGNORE,
 			))
 			.with_children(|item| {
-				spawn_asset_tile(
+				self.choice_tile(
 					item,
-					context.fonts,
+					context,
 					row.asset.label,
 					row.asset.selected,
 					thumbnail,
-					(MenuButton(row.asset.event), context.stamp_hud_item()),
+					row.asset.event,
 				);
 				self.swatch_row(item, context, &row.colors);
 			});
@@ -369,12 +475,16 @@ impl MaybraidMenuSink {
 	) {
 		spawn_swatch_row(parent, self.justify.content(), |row| {
 			for choice in choices {
-				spawn_swatch(
-					row,
-					choice.color_hex,
-					choice.selected,
-					(MenuButton(choice.event), context.stamp_hud_item()),
-				);
+				if context.interactive {
+					spawn_swatch(
+						row,
+						choice.color_hex,
+						choice.selected,
+						(MenuButton(choice.event), context.stamp_hud_item()),
+					);
+				} else {
+					spawn_swatch(row, choice.color_hex, choice.selected, Pickable::IGNORE);
+				}
 			}
 		});
 	}

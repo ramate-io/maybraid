@@ -28,13 +28,13 @@ use game_commands::command::{CommandConsoleOutput, GameCommandPlugin};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::LodViewer;
 use maybraid_character_ui_menu_renderer::CharacterMenuEvent;
-use maybraid_input::{MenuNav, MenuNavPad, VirtualPadPlugin};
+use maybraid_input::{MenuNavPad, VirtualPadPlugin};
 use maybraid_menu_controller::MenuControllerPlugin;
-use menu_components::ActiveOverlayKey;
+use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed};
 use menu_screens::{
-	request_show_gallery, request_show_home, CreateCharacterPlugin, GalleryChoice, GalleryScreen,
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingScreenPlugin,
-	LoadingScreenSystems, SpinRevealScreen,
+	cancel_pending_create, request_show_gallery, request_show_home, CreateCharacterPlugin,
+	GalleryChoice, GalleryScreen, HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice,
+	InGameScreenPlugin, LoadingScreenPlugin, LoadingScreenSystems, SpinRevealScreen,
 };
 
 pub struct MenuPlaygroundPlugin;
@@ -156,6 +156,7 @@ fn editor_back(
 	mut commands: Commands,
 	nav: Res<MenuNavPad>,
 	overlay: Res<ActiveOverlayKey>,
+	mut backs: MessageReader<ScreenBackPressed>,
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
@@ -164,7 +165,7 @@ fn editor_back(
 	menu_state: Res<CharacterMenuState>,
 	mut console: ResMut<CommandConsoleOutput>,
 ) {
-	if !nav.just_pressed(MenuNav::Back) || overlay.0.is_some() {
+	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
 		return;
 	}
 	if !character.is_empty() {
@@ -185,6 +186,7 @@ fn editor_back(
 		return;
 	}
 	if !spin.is_empty() {
+		cancel_pending_create(&mut commands);
 		request_show_gallery(&mut commands);
 		return;
 	}

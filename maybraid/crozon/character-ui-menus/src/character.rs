@@ -332,6 +332,11 @@ impl CharacterMenu {
 		self.appearance_locked
 	}
 
+	/// Overlay interiors for body catalogs stay visible when locked; only clothing stays editable.
+	pub fn overlay_editable(&self, key: &str) -> bool {
+		!self.appearance_locked() || key == "Clothing"
+	}
+
 	fn sync_inventory_clothing(&mut self) {
 		let Some(inventory) = self.inventory.clone() else {
 			return;
@@ -1381,24 +1386,6 @@ impl CharacterMenu {
 			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::from(config).with_animation(animation),
 		}
-	}
-
-	fn clothing_node(&self) -> MenuNode<MenuEvent> {
-		let clothing = match self.species.value {
-			ConceptSpecies::Braidman => Some(&self.braidman.clothing),
-			ConceptSpecies::Brodler => Some(&self.brodler.clothing),
-			ConceptSpecies::Mygr => Some(&self.mygr.clothing),
-			ConceptSpecies::Dui => Some(&self.dui.clothing),
-			ConceptSpecies::Wumbus => Some(&self.wumbus.clothing),
-			ConceptSpecies::Lero => Some(&self.lero.clothing),
-			ConceptSpecies::Spibmom => Some(&self.spibmom.clothing),
-			ConceptSpecies::Tuberwaber => Some(&self.tuberwaber.clothing),
-			_ => None,
-		};
-		let Some(clothing) = clothing else {
-			return MenuNode::fragment([]);
-		};
-		MenuNode::section(clothing.label, clothing.value.menu_node())
 	}
 
 	/// Lowers the currently selected species menu; the other species' state is
@@ -3444,12 +3431,6 @@ impl CharacterMenu {
 
 impl MenuComponent<MenuEvent> for CharacterMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
-		if self.appearance_locked() {
-			return MenuNode::fragment([
-				MenuNode::short_text("Name", self.name.clone(), CHARACTER_NAME_MAX_LEN),
-				self.clothing_node(),
-			]);
-		}
 		let species_groups: &[(&str, &[ConceptSpecies])] = if self.inventory.is_some() {
 			&[("Humanoids", ConceptSpecies::HUMANOIDS)]
 		} else {
@@ -3509,11 +3490,6 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 				species_groups,
 				self.species_node(),
 			),
-			if self.is_create() {
-				MenuNode::action("Save Character", MenuEvent::Save)
-			} else {
-				MenuNode::fragment([])
-			},
 		])
 	}
 }

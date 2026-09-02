@@ -16,8 +16,8 @@ pub mod show;
 pub mod spin_reveal;
 
 pub use create_character::{
-	request_show_create_character, request_show_create_character_id, CreateCharacterPlugin,
-	CreateCharacterReady, RequestShowCreateCharacter,
+	cancel_pending_create, request_show_create_character, request_show_create_character_id,
+	CreateCharacterPlugin, CreateCharacterReady, RequestShowCreateCharacter,
 };
 pub use gallery::{
 	request_show_gallery, GalleryChoice, GalleryScreen, GalleryScreenPlugin, RequestShowGallery,

@@ -15,7 +15,7 @@ use super::HudFonts;
 
 /// Largest panel title: section chrome and overlay picker headers.
 pub fn spawn_panel_title(parent: &mut ChildSpawnerCommands, fonts: &HudFonts, label: &str) {
-	spawn_header_line(parent, fonts, label, None, PANEL_HEADER_FONT_SIZE);
+	spawn_header_line(parent, fonts, label, None, PANEL_HEADER_FONT_SIZE, TEXT_YELLOW);
 }
 
 /// Header title plus an optional trailing value in one text run.
@@ -29,12 +29,13 @@ pub fn spawn_header_line(
 	title: &str,
 	value: Option<&str>,
 	title_size: f32,
+	title_color: Color,
 ) {
 	parent
 		.spawn((
 			Text::new(menu_display_name(title)),
 			fonts.header(title_size),
-			TextColor(TEXT_YELLOW),
+			TextColor(title_color),
 			TextLayout::new(Justify::Left, LineBreak::NoWrap),
 			LineHeight::RelativeToFont(1.0),
 			Pickable::IGNORE,

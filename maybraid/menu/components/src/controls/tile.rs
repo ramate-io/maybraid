@@ -5,7 +5,7 @@ use bevy::text::{Justify, LineBreak, TextBounds};
 
 use crate::theme::{
 	PANEL_CHIP_GAP, PANEL_ITEM_FONT_SIZE, PANEL_TILE_MIN_HEIGHT, PANEL_TILE_MIN_WIDTH, TEXT_YELLOW,
-	TEXT_YELLOW_HOVER,
+	TEXT_YELLOW_FAINT, TEXT_YELLOW_HOVER,
 };
 
 use super::display::menu_display_name;
@@ -32,8 +32,10 @@ pub fn spawn_asset_tile(
 	label: &str,
 	selected: bool,
 	thumbnail: Option<Handle<Image>>,
+	muted: bool,
 	extra: impl Bundle,
 ) {
+	let face = tile_face(selected, muted);
 	parent
 		.spawn((
 			Button,
@@ -49,7 +51,7 @@ pub fn spawn_asset_tile(
 				border: UiRect::all(Val::Px(if selected { 2.0 } else { 0.0 })),
 				..default()
 			},
-			BorderColor::all(if selected { TEXT_YELLOW } else { Color::NONE }),
+			BorderColor::all(if selected { face } else { Color::NONE }),
 			BackgroundColor(Color::NONE),
 		))
 		.with_children(|button| {
@@ -64,7 +66,7 @@ pub fn spawn_asset_tile(
 			button.spawn((
 				Text::new(tile_label(&menu_display_name(label))),
 				fonts.item(PANEL_ITEM_FONT_SIZE),
-				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
+				TextColor(face),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 				TextBounds::new(bounds, bounds),
 				Pickable::IGNORE,
@@ -80,8 +82,11 @@ pub fn spawn_grid_catalog_tile(
 	label: &str,
 	selected: bool,
 	thumbnail: Option<Handle<Image>>,
+	muted: bool,
 	extra: impl Bundle,
 ) {
+	let face = tile_face(selected, muted);
+	let mark = if muted { TEXT_YELLOW_FAINT } else { TEXT_YELLOW };
 	parent
 		.spawn((
 			Button,
@@ -119,7 +124,7 @@ pub fn spawn_grid_catalog_tile(
 						));
 					}
 					if selected {
-						crate::icons::Icon::maybraid(22.0, TEXT_YELLOW).spawn(
+						crate::icons::Icon::maybraid(22.0, mark).spawn(
 							slot,
 							fonts.logo.clone(),
 							Visibility::Inherited,
@@ -130,12 +135,22 @@ pub fn spawn_grid_catalog_tile(
 			button.spawn((
 				Text::new(label),
 				fonts.item(PANEL_ITEM_FONT_SIZE),
-				TextColor(if selected { TEXT_YELLOW_HOVER } else { TEXT_YELLOW }),
+				TextColor(face),
 				TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 				TextBounds::new(bounds, bounds * 1.6),
 				Pickable::IGNORE,
 			));
 		});
+}
+
+fn tile_face(selected: bool, muted: bool) -> Color {
+	if muted {
+		TEXT_YELLOW_FAINT
+	} else if selected {
+		TEXT_YELLOW_HOVER
+	} else {
+		TEXT_YELLOW
+	}
 }
 
 pub fn spawn_tile_grid(

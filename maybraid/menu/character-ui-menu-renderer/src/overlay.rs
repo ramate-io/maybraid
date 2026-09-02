@@ -148,6 +148,7 @@ pub fn spawn_overlay_shell(
 	parent: &mut ChildSpawnerCommands,
 	fonts: &HudFonts,
 	title: &str,
+	title_color: Color,
 ) -> Entity {
 	let mut viewport = Entity::PLACEHOLDER;
 	parent
@@ -204,7 +205,14 @@ pub fn spawn_overlay_shell(
 						Pickable::IGNORE,
 					))
 					.with_children(|header| {
-						spawn_header_line(header, fonts, title, None, PANEL_HEADER_FONT_SIZE);
+						spawn_header_line(
+							header,
+							fonts,
+							title,
+							None,
+							PANEL_HEADER_FONT_SIZE,
+							title_color,
+						);
 						spawn_text_button(header, fonts, "back", CloseOverlaySelect);
 					});
 				viewport = menu_components::spawn_scroll_pane(

@@ -48,7 +48,7 @@ pub fn produce_keyboard(
 	if keyboard.pressed(KeyCode::Space) {
 		pad.hold_digital(PadButton::A);
 	}
-	if keyboard.pressed(KeyCode::Escape) {
+	if keyboard.pressed(KeyCode::Escape) || keyboard.pressed(KeyCode::KeyB) {
 		pad.hold_digital(PadButton::B);
 	}
 	if keyboard.pressed(KeyCode::Enter) {
