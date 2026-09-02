@@ -162,7 +162,7 @@ pub struct ItemRow<E> {
 }
 
 /// One cell in a [`MenuNode::GridCatalog`]. Selection is marked by the host
-/// (Maybraid son), not by exclusive single-select.
+/// (Maybraid son for clothing, 1-based rank for weapons).
 #[derive(Clone, Debug, PartialEq)]
 pub struct GridCatalogChoice<E> {
 	pub label: String,
@@ -170,6 +170,9 @@ pub struct GridCatalogChoice<E> {
 	pub thumbnail_camera: ThumbnailCamera,
 	pub preview: PreviewColor,
 	pub selected: bool,
+	/// 1-based slot rank when this item is queued (weapons). Clothing leaves
+	/// this `None` and uses the Maybraid son for selection.
+	pub rank: Option<u8>,
 	pub event: E,
 }
 

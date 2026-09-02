@@ -68,6 +68,7 @@ pub enum SectionId {
 	HeadFeatures,
 	Hair,
 	Clothing,
+	Weapons,
 	Animation,
 }
 
@@ -80,6 +81,7 @@ impl SectionId {
 			Self::HeadFeatures => "Head & Features",
 			Self::Hair => "Hair",
 			Self::Clothing => "Clothing",
+			Self::Weapons => "Weapons",
 			Self::Animation => "Animation",
 		}
 	}

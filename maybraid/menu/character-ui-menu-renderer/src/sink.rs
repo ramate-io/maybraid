@@ -361,6 +361,7 @@ impl MaybraidMenuSink {
 		context: &mut RenderContext<'_, C>,
 		label: &str,
 		selected: bool,
+		rank: Option<u8>,
 		thumbnail: Option<Handle<Image>>,
 		event: E,
 	) {
@@ -370,6 +371,7 @@ impl MaybraidMenuSink {
 				context.fonts,
 				label,
 				selected,
+				rank,
 				thumbnail,
 				false,
 				(MenuButton(event), context.stamp_hud_item()),
@@ -380,6 +382,7 @@ impl MaybraidMenuSink {
 				context.fonts,
 				label,
 				selected,
+				rank,
 				thumbnail,
 				true,
 				Pickable::IGNORE,
@@ -426,6 +429,7 @@ impl MaybraidMenuSink {
 					context,
 					&choice.label,
 					choice.selected,
+					choice.rank,
 					thumbnail,
 					choice.event,
 				);

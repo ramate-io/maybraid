@@ -24,7 +24,7 @@ pub use controls::{
 	spawn_tile_grid, sync_hud_cursors, sync_hud_scrollbars, ActiveOverlayKey, ActiveShortText,
 	CursorRow, HudFonts, HudMenu, HudMenuItem, HudOverlayMenu, HudScroll, HudScrollThumb,
 	HudScrollTrack, HudScrollViewport, OverlayHeader, OverlayHeaderKey, ShortTextChange,
-	ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue,
+	ShortTextField, ShortTextKey, ShortTextModal, ShortTextToggle, ShortTextValue, SlotRank,
 };
 pub use icons::{blink_animated_icons, spin_icons, AnimatedIcon, Icon, SpinningIcon};
 pub use info::{

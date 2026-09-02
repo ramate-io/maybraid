@@ -2,13 +2,14 @@
 
 use bevy::prelude::*;
 use crozon_character_items::{
-	ClothingMaterial, ClothingMesh, Inventory, InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
+	ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, InventorySlot,
+	ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
 /// Capsule/session using an inventory bag.
 ///
@@ -54,8 +55,26 @@ impl Plugin for InventoryUserPlugin {
 struct InventoryFile {
 	version: u32,
 	id: CharacterId,
+	items: Vec<InventoryItemFile>,
+	#[serde(default)]
+	clothing: Vec<usize>,
+	#[serde(default)]
+	weapons: Vec<usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct InventoryFileV1 {
+	version: u32,
+	id: CharacterId,
 	items: Vec<ClothingItemFile>,
 	worn: Vec<usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum InventoryItemFile {
+	Clothing { mesh: ClothingMesh, material: ClothingMaterial, color: ItemColor },
+	Firearm { mesh: FirearmMesh },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -65,18 +84,54 @@ struct ClothingItemFile {
 	color: ItemColor,
 }
 
-impl ClothingItemFile {
-	fn from_item(item: &InventoryItem) -> Option<Self> {
-		Some(Self {
-			mesh: item.mesh()?,
-			material: item.material().id,
-			color: item.material().color,
-		})
+impl InventoryItemFile {
+	fn from_item(item: &InventoryItem) -> Self {
+		match item {
+			InventoryItem::Clothing { mesh, material, .. } => {
+				Self::Clothing { mesh: *mesh, material: material.id, color: material.color }
+			}
+			InventoryItem::Firearm { mesh, .. } => Self::Firearm { mesh: *mesh },
+		}
 	}
 
 	fn into_item(self) -> InventoryItem {
+		match self {
+			Self::Clothing { mesh, material, color } => {
+				InventoryItem::clothing(mesh, material, color)
+			}
+			Self::Firearm { mesh } => InventoryItem::firearm(mesh),
+		}
+	}
+}
+
+impl ClothingItemFile {
+	fn into_item(self) -> InventoryItem {
 		InventoryItem::clothing(self.mesh, self.material, self.color)
 	}
+}
+
+fn sanitize_selection(
+	items: &[InventoryItem],
+	indices: impl IntoIterator<Item = usize>,
+	slot: InventorySlot,
+) -> Vec<usize> {
+	let mut selected = Vec::new();
+	for index in indices {
+		if index >= items.len() {
+			continue;
+		}
+		if items[index].slot() != slot {
+			continue;
+		}
+		if selected.contains(&index) {
+			continue;
+		}
+		selected.push(index);
+		if selected.len() >= slot.capacity() {
+			break;
+		}
+	}
+	selected
 }
 
 /// Write `inventories/{id}.json`. Missing parent dirs are created.
@@ -85,8 +140,17 @@ pub fn save(root: &SaveRoot, id: CharacterId, inventory: &Inventory) -> Result<(
 	let file = InventoryFile {
 		version: VERSION,
 		id,
-		items: inventory.items.iter().filter_map(ClothingItemFile::from_item).collect(),
-		worn: inventory.worn.clone(),
+		items: inventory.items.iter().map(InventoryItemFile::from_item).collect(),
+		clothing: sanitize_selection(
+			&inventory.items,
+			inventory.clothing.iter().copied(),
+			InventorySlot::Clothing,
+		),
+		weapons: sanitize_selection(
+			&inventory.items,
+			inventory.weapons.iter().copied(),
+			InventorySlot::Weapons,
+		),
 	};
 	let json = serde_json::to_string_pretty(&file)?;
 	fs::write(root.inventory_path(id), json)?;
@@ -103,16 +167,21 @@ pub fn load(root: &SaveRoot, id: CharacterId) -> Result<Inventory, PersistError>
 		}
 		Err(error) => return Err(error.into()),
 	};
-	let file: InventoryFile = serde_json::from_str(&json)?;
+	let value: serde_json::Value = serde_json::from_str(&json)?;
+	let version = value.get("version").and_then(|version| version.as_u64()).unwrap_or(1);
+	if version >= 2 {
+		let file: InventoryFile = serde_json::from_value(value)?;
+		let items: Vec<InventoryItem> =
+			file.items.into_iter().map(InventoryItemFile::into_item).collect();
+		let clothing = sanitize_selection(&items, file.clothing, InventorySlot::Clothing);
+		let weapons = sanitize_selection(&items, file.weapons, InventorySlot::Weapons);
+		return Ok(Inventory { items, clothing, weapons });
+	}
+	let file: InventoryFileV1 = serde_json::from_value(value)?;
 	let items: Vec<InventoryItem> =
 		file.items.into_iter().map(ClothingItemFile::into_item).collect();
-	let worn: Vec<usize> = file
-		.worn
-		.into_iter()
-		.filter(|&index| index < items.len())
-		.take(WORN_CLOTHING_LIMIT)
-		.collect();
-	Ok(Inventory { items, worn })
+	let clothing = sanitize_selection(&items, file.worn, InventorySlot::Clothing);
+	Ok(Inventory { items, clothing, weapons: Vec::new() })
 }
 
 pub fn spawn_bag(commands: &mut Commands, host: Entity, inventory: Inventory) -> Entity {
@@ -124,18 +193,19 @@ pub fn spawn_bag(commands: &mut Commands, host: Entity, inventory: Inventory) ->
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crozon_character_items::{random_starter_clothing, ClothingMesh, ItemRng};
+	use crozon_character_items::{random_starter_loadout, ClothingMesh, ItemRng};
 
 	#[test]
 	fn starter_outfit_round_trips() {
 		let dir = tempfile::tempdir().expect("tempdir");
 		let root = SaveRoot::at(dir.path());
 		let id = CharacterId(7);
-		let items = random_starter_clothing(&mut ItemRng::from_seed(3), 3);
+		let items = random_starter_loadout(&mut ItemRng::from_seed(3));
 		let inventory = Inventory::with_starter_outfit(items);
 		save(&root, id, &inventory).expect("save");
 		let loaded = load(&root, id).expect("load");
 		assert_eq!(loaded, inventory);
+		assert_eq!(loaded.weapons.len(), 2);
 		assert!(loaded.items.iter().all(|item| item.buffs().is_empty()));
 	}
 
@@ -152,5 +222,49 @@ mod tests {
 		assert_eq!(ClothingMesh::TankTop.label(), "tank-top");
 		let json = serde_json::to_string(&ClothingMesh::TankTop).expect("json");
 		assert_eq!(json, "\"tank-top\"");
+	}
+
+	#[test]
+	fn mixed_bag_round_trips_firearms() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(9);
+		let items = vec![
+			InventoryItem::clothing(
+				ClothingMesh::Pants,
+				ClothingMaterial::Cloth,
+				ItemColor::Natural,
+			),
+			InventoryItem::firearm(FirearmMesh::Bullpup),
+			InventoryItem::firearm(FirearmMesh::Reltor),
+		];
+		let inventory = Inventory { items, clothing: vec![0], weapons: vec![1, 2] };
+		save(&root, id, &inventory).expect("save");
+		let json = fs::read_to_string(root.inventory_path(id)).expect("read");
+		assert!(json.contains("\"kind\": \"firearm\""));
+		assert_eq!(load(&root, id).expect("load"), inventory);
+	}
+
+	#[test]
+	fn v1_clothing_file_still_loads() {
+		let dir = tempfile::tempdir().expect("tempdir");
+		let root = SaveRoot::at(dir.path());
+		root.ensure_dirs().expect("dirs");
+		let id = CharacterId(4);
+		let json = r#"{
+			"version": 1,
+			"id": "00000000000000000000000000000004",
+			"items": [
+				{ "mesh": "pants", "material": "cloth", "color": "natural" },
+				{ "mesh": "tank-top", "material": "cloth", "color": "red" }
+			],
+			"worn": [0, 1, 1, 99]
+		}"#;
+		fs::write(root.inventory_path(id), json).expect("write");
+		let loaded = load(&root, id).expect("load");
+		assert_eq!(loaded.items.len(), 2);
+		assert_eq!(loaded.clothing, vec![0, 1]);
+		assert!(loaded.weapons.is_empty());
+		assert_eq!(loaded.items[0].mesh(), Some(ClothingMesh::Pants));
 	}
 }

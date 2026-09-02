@@ -1,9 +1,9 @@
-//! Spin-and-reveal screen for starter clothing.
+//! Spin-and-reveal screen for starter clothing and weapons.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy::text::{FontSourceTemplate, LineBreak};
-use crozon_character_items::InventoryItem;
+use crozon_character_items::{InventoryItem, InventorySlot};
 use maybraid_menu_controller::MenuController;
 use menu_components::{
 	republish_menu_activate, screen_back_scene, ButtonWithSubtext, SpinningIcon, TextMenuPlugin,
@@ -141,17 +141,27 @@ fn rebuild_spin_reveal(
 	let index = phase.index.min(items.0.len().saturating_sub(1));
 	let revealed = !phase.spinning;
 	let total = items.0.len();
-	let action = action_copy(revealed, index + 1 >= total, index, total);
+	let action = action_copy(&items.0[index], revealed, index + 1 >= total, index, total);
 	commands.insert_resource(SpinRevealCurrent { item: items.0[index].clone(), revealed });
 	commands.spawn_scene(spin_scene(&items.0[index], revealed, action));
 	phase.dirty = false;
 }
 
-fn action_copy(revealed: bool, last: bool, index: usize, total: usize) -> (String, String) {
+fn action_copy(
+	item: &InventoryItem,
+	revealed: bool,
+	last: bool,
+	index: usize,
+	total: usize,
+) -> (String, String) {
 	if revealed && last {
 		("Continue".into(), "Edit Character".into())
 	} else {
-		("Next".into(), format!("Clothing Item ({}/{})", index + 1, total))
+		let kind = match item.slot() {
+			InventorySlot::Clothing => "Clothing Item",
+			InventorySlot::Weapons => "Weapon",
+		};
+		("Next".into(), format!("{kind} ({}/{})", index + 1, total))
 	}
 }
 
@@ -272,6 +282,6 @@ fn finish_spin_reveal(
 
 impl SpinRevealScreen {
 	pub fn scene(item: &InventoryItem, revealed: bool) -> impl Scene + 'static {
-		spin_scene(item, revealed, action_copy(revealed, true, 0, 1))
+		spin_scene(item, revealed, action_copy(item, revealed, true, 0, 1))
 	}
 }

@@ -11,7 +11,7 @@ use character_ui_menu::{
 };
 use crozon_character_items::{
 	ClothingColor, ClothingMaterial, ClothingMaterialChoice, ClothingMesh, Inventory,
-	InventoryItem, ItemColor, WORN_CLOTHING_LIMIT,
+	InventoryItem, InventorySlot, ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_characters::ConceptAnimation;
 
@@ -192,8 +192,9 @@ fn inventory_catalog(menu: &ClothingMenu, owned: &[InventoryItem]) -> MenuNode<M
 				label: item.name(),
 				path: asset.path,
 				thumbnail_camera: asset.thumbnail_camera,
-				preview: PreviewColor::of(item.material().color),
+				preview: PreviewColor::of(item.material()?.color),
 				selected: menu.layers.contains(mesh),
+				rank: None,
 				event: MenuEvent::ToggleInventory(index),
 			})
 		}),
@@ -206,24 +207,54 @@ pub(crate) fn clothing_menu_from_inventory(inventory: &Inventory) -> ClothingMen
 		.worn_items()
 		.filter_map(|item| {
 			item.mesh()
-				.map(|clothing| ClothingColor { clothing, color: item.material().color })
+				.zip(item.material())
+				.map(|(clothing, material)| ClothingColor { clothing, color: material.color })
 		})
 		.collect();
-	let item_materials: Vec<ClothingMaterialChoice> = inventory
-		.worn_items()
-		.filter_map(|item| {
-			item.mesh()
-				.map(|clothing| ClothingMaterialChoice { clothing, material: item.material().id })
-		})
-		.collect();
-	let default_color =
-		inventory.items.first().map(|item| item.material().color).unwrap_or_default();
-	let default_material =
-		inventory.items.first().map(|item| item.material().id).unwrap_or_default();
+	let item_materials: Vec<ClothingMaterialChoice> =
+		inventory
+			.worn_items()
+			.filter_map(|item| {
+				item.mesh().zip(item.material()).map(|(clothing, material)| {
+					ClothingMaterialChoice { clothing, material: material.id }
+				})
+			})
+			.collect();
+	let default_color = inventory
+		.items
+		.iter()
+		.find_map(|item| item.material().map(|material| material.color))
+		.unwrap_or_default();
+	let default_material = inventory
+		.items
+		.iter()
+		.find_map(|item| item.material().map(|material| material.id))
+		.unwrap_or_default();
 	let mut menu =
 		ClothingMenu::new(worn, default_color, item_colors, default_material, item_materials);
 	menu.owned = Some(inventory.items.clone());
 	menu
+}
+
+pub(crate) fn weapons_catalog(inventory: &Inventory) -> MenuNode<MenuEvent> {
+	MenuNode::grid_catalog(
+		InventorySlot::Weapons.label(),
+		InventorySlot::Weapons.capacity(),
+		inventory.items.iter().enumerate().filter_map(|(index, item)| {
+			let mesh = item.firearm_mesh()?;
+			let asset = mesh.asset();
+			let rank = inventory.rank(index);
+			Some(GridCatalogChoice {
+				label: item.name(),
+				path: asset.path,
+				thumbnail_camera: asset.thumbnail_camera,
+				preview: PreviewColor::WHITE,
+				selected: rank.is_some(),
+				rank,
+				event: MenuEvent::ToggleInventory(index),
+			})
+		}),
+	)
 }
 
 /// Animation clip picker.

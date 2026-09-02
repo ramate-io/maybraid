@@ -127,9 +127,13 @@ pub fn overlay_summary_value<E>(node: &MenuNode<E>) -> String {
 			let worn = rows.iter().filter(|row| row.asset.selected).count();
 			format!("{worn} worn")
 		}
-		MenuNode::GridCatalog { choices, .. } => {
-			let worn = choices.iter().filter(|choice| choice.selected).count();
-			format!("{worn} worn")
+		MenuNode::GridCatalog { label, choices, .. } => {
+			let count = choices.iter().filter(|choice| choice.selected).count();
+			if *label == "Weapons" {
+				format!("{count} queued")
+			} else {
+				format!("{count} worn")
+			}
 		}
 		_ => String::new(),
 	}

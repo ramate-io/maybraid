@@ -129,7 +129,8 @@ fn sync_preview(
 			}
 			spawn_from_item(&mut commands, &spin.item);
 			pending.resolved = None;
-			pending.focus = spin.item.mesh().map(|mesh| spin_reveal_focus(mesh.kind()));
+			pending.focus =
+				spin.item.mesh().map(|mesh| spin_reveal_focus(mesh.kind())).or(Some(BODY_FOCUS));
 			return;
 		}
 	}
@@ -214,7 +215,9 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 	let Some(mesh) = item.mesh() else {
 		return;
 	};
-	let material = item.material();
+	let Some(material) = item.material() else {
+		return;
+	};
 	spawn_clothed(
 		commands,
 		&ClothingPreview {
