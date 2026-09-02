@@ -49,6 +49,10 @@ pub struct SpottedTarget {
 	/// Capsule origin at the observation time.
 	pub position: Vec3,
 	pub capsule: TargetCapsule,
+	/// A point on the capsule that was actually clear when spotted.
+	pub visible: Vec3,
+	/// Head sample if that ray was clear; used when the shooter prefers headshots.
+	pub visible_head: Option<Vec3>,
 	pub movement_vector: Vec3,
 	/// [`Time::elapsed_secs`] when this observation was made.
 	pub spotted_at: f32,
@@ -56,9 +60,15 @@ pub struct SpottedTarget {
 
 impl SpottedTarget {
 	pub fn aim_point(self, headshots: f32) -> Vec3 {
-		self.capsule
-			.center_mass(self.position)
-			.lerp(self.capsule.head(self.position), headshots.clamp(0.0, 1.0))
+		if headshots > 0.5 {
+			self.visible_head.unwrap_or(self.visible)
+		} else {
+			self.visible
+		}
+	}
+
+	pub fn is_fresh(self, now: f32, window: f32) -> bool {
+		now - self.spotted_at <= window.max(0.0)
 	}
 }
 
@@ -125,10 +135,13 @@ mod tests {
 	use super::*;
 
 	fn spotted(entity: Entity, position: Vec3) -> SpottedTarget {
+		let capsule = TargetCapsule::new(0.4, 0.9);
 		SpottedTarget {
 			entity,
 			position,
-			capsule: TargetCapsule::new(0.4, 0.9),
+			capsule,
+			visible: capsule.center_mass(position),
+			visible_head: Some(capsule.head(position)),
 			movement_vector: Vec3::ZERO,
 			spotted_at: 0.0,
 		}
@@ -163,10 +176,18 @@ mod tests {
 	}
 
 	#[test]
-	fn aim_point_blends_center_mass_and_head() -> anyhow::Result<()> {
+	fn aim_point_uses_visible_sliver_not_occluded_center() {
+		let mut target = spotted(Entity::from_bits(1), Vec3::ZERO);
+		target.visible = Vec3::X * 0.3;
+		target.visible_head = None;
+		assert_eq!(target.aim_point(0.0), Vec3::X * 0.3);
+		assert_eq!(target.aim_point(1.0), Vec3::X * 0.3);
+	}
+
+	#[test]
+	fn fresh_window_rejects_stale_observations() {
 		let target = spotted(Entity::from_bits(1), Vec3::ZERO);
-		assert_eq!(target.aim_point(0.0), Vec3::ZERO);
-		assert!(target.aim_point(1.0).y > 0.0);
-		Ok(())
+		assert!(target.is_fresh(0.1, 0.2));
+		assert!(!target.is_fresh(1.0, 0.2));
 	}
 }

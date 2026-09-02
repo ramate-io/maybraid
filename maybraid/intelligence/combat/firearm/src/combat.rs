@@ -10,6 +10,7 @@ use movement_intelligence::{MovementBody, MovementIntelligence};
 use player::{PlayerLook, PlayerYawOwner};
 use std::f32::consts::FRAC_PI_2;
 
+use crate::los::clear_segment;
 use crate::target::{pick_target, FirearmObjective, SpottedTarget};
 
 /// How a firearm combatant aims and stays on a target.
@@ -17,16 +18,21 @@ use crate::target::{pick_target, FirearmObjective, SpottedTarget};
 pub struct FirearmIntelligenceSettings {
 	/// 0..=1. 1 is a tight aim cone and a high fire threshold.
 	pub accuracy: f32,
-	/// 0..=1. Blend from center-mass toward the head.
+	/// Prefer the remembered visible head sample when the shooter is going for one.
 	pub headshots: f32,
 	/// 0..=1. Stick to the current target versus the nearest.
 	pub focus: f32,
-	/// 0..=1. Frequency of trigger opportunities once sufficiently aimed.
+	/// 0..=1. How quickly they pull the trigger once the bore is on target.
+	/// The weapon interval is the rate of fire after that; this is not a second
+	/// cadence. 0 never fires. 1 fires as soon as aligned.
 	pub trigger_happiness: f32,
 	/// 0..=1. Willingness to fire through an obstructed line of fire.
 	pub wall_firing: f32,
-	/// Seconds a last-known observation remains actionable.
+	/// Seconds a last-known observation remains actionable for look and hunt.
 	pub target_spotting_memory: f32,
+	/// Seconds since the last clear sightline required to actually fire.
+	/// Look may track a remembered pose; fire needs a current hole to shoot through.
+	pub fire_spotting_freshness: f32,
 }
 
 impl Default for FirearmIntelligenceSettings {
@@ -38,6 +44,7 @@ impl Default for FirearmIntelligenceSettings {
 			trigger_happiness: 0.45,
 			wall_firing: 0.0,
 			target_spotting_memory: 2.5,
+			fire_spotting_freshness: 0.2,
 		}
 	}
 }
@@ -51,6 +58,7 @@ pub struct FirearmIntelligence {
 	aiming_head: bool,
 	next_aim_choice_at: f32,
 	next_trigger_at: f32,
+	on_target: bool,
 }
 
 impl FirearmIntelligence {
@@ -62,7 +70,14 @@ impl FirearmIntelligence {
 			aiming_head: false,
 			next_aim_choice_at: 0.0,
 			next_trigger_at: 0.0,
+			on_target: false,
 		}
+	}
+
+	pub fn has_fresh_sight(&self, entity: Entity, now: f32) -> bool {
+		self.objective.0.iter().any(|target| {
+			target.entity == entity && target.is_fresh(now, self.settings.fire_spotting_freshness)
+		})
 	}
 }
 
@@ -144,8 +159,8 @@ pub(crate) fn orient_firearm_combatants(
 	}
 }
 
-/// Pulse the held trigger only when the actual propagated firearm bore is
-/// aligned and the current obstruction policy allows the shot.
+/// Hold the trigger when the posed bore is on a freshly spotted point and the
+/// obstruction policy allows the shot.
 pub(crate) fn fire_at_spotted_targets(
 	spatial: SpatialQuery,
 	time: Res<Time>,
@@ -160,41 +175,48 @@ pub(crate) fn fire_at_spotted_targets(
 	for (entity, mut brain, user) in &mut combatants {
 		let target = engaged_target(&brain).copied();
 		let Some(target) = target else {
+			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		};
 		let Some(global) = barrel_global(user.held, &guns, &maps, &globals) else {
+			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		};
 		let (muzzle, bore) = muzzle_world(global);
+		if !target.is_fresh(now, brain.settings.fire_spotting_freshness) {
+			brain.on_target = false;
+			set_trigger(user, false, &mut triggers);
+			continue;
+		}
 		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
 		let aim_at = target.aim_point(headshots);
 		let delta = aim_at - muzzle;
 		let distance = delta.length();
 		if distance <= 1e-4 {
+			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		}
 		let desired = delta / distance;
 		let aligned = bore.dot(desired)
 			>= fire_alignment(brain.settings.accuracy, distance, target.capsule.radius);
-		let Ok(shot) = Dir3::new(bore) else {
-			set_trigger(user, false, &mut triggers);
-			continue;
-		};
-		let blocked = spatial
-			.cast_ray(muzzle, shot, distance, true, &filter)
-			.is_some_and(|hit| hit.distance < distance - 0.05);
+		let blocked = !clear_segment(muzzle, aim_at, &spatial, &filter);
 		let obstruction_allowed =
 			!blocked || willing_to_fire_through_wall(entity, now, brain.settings.wall_firing);
 		let happiness = brain.settings.trigger_happiness.clamp(0.0, 1.0);
-		let ready = happiness > 0.0 && now >= brain.next_trigger_at;
-		let fire = aligned && obstruction_allowed && ready;
-		set_trigger(user, fire, &mut triggers);
-		if fire {
-			brain.next_trigger_at = now + trigger_interval(happiness);
+		let can = aligned && obstruction_allowed && happiness > 0.0;
+		if !can {
+			brain.on_target = false;
+			set_trigger(user, false, &mut triggers);
+			continue;
 		}
+		if !brain.on_target {
+			brain.on_target = true;
+			brain.next_trigger_at = now + acquire_delay(happiness);
+		}
+		set_trigger(user, now >= brain.next_trigger_at, &mut triggers);
 	}
 }
 
@@ -230,8 +252,8 @@ fn set_trigger(user: &FirearmUser, fire: bool, triggers: &mut Query<&mut WeaponT
 	}
 }
 
-fn trigger_interval(happiness: f32) -> f32 {
-	1.8_f32.lerp(0.18, happiness.clamp(0.0, 1.0))
+fn acquire_delay(happiness: f32) -> f32 {
+	0.45 * (1.0 - happiness.clamp(0.0, 1.0))
 }
 
 /// Cosine of the allowed bore error. Tightens with range so a passing shot can
@@ -291,8 +313,9 @@ mod tests {
 	}
 
 	#[test]
-	fn trigger_happiness_shortens_the_interval() {
-		assert!(trigger_interval(1.0) < trigger_interval(0.0));
+	fn trigger_happiness_shortens_acquire_delay() {
+		assert!(acquire_delay(1.0) < acquire_delay(0.0));
+		assert!(acquire_delay(1.0) < 1e-4);
 	}
 
 	#[test]
@@ -317,5 +340,23 @@ mod tests {
 	fn zero_wall_firing_rejects_obstructions() {
 		assert!(!willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 0.0));
 		assert!(willing_to_fire_through_wall(Entity::from_bits(1), 0.0, 1.0));
+	}
+
+	#[test]
+	fn fresh_sight_requires_a_recent_combat_observation() {
+		let mut brain = FirearmIntelligence::new(FirearmObjective::default());
+		let entity = Entity::from_bits(1);
+		assert!(!brain.has_fresh_sight(entity, 1.0));
+		brain.objective.0.push(SpottedTarget {
+			entity,
+			position: Vec3::ZERO,
+			capsule: crate::target::TargetCapsule::new(0.4, 0.9),
+			visible: Vec3::ZERO,
+			visible_head: None,
+			movement_vector: Vec3::ZERO,
+			spotted_at: 0.9,
+		});
+		assert!(brain.has_fresh_sight(entity, 1.0));
+		assert!(!brain.has_fresh_sight(entity, 1.5));
 	}
 }

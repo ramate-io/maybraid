@@ -5,6 +5,7 @@ use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, ReplanMovement,
 };
 
+use crate::combat::FirearmIntelligence;
 use crate::target::{pick_target, FirearmMovementObjective};
 
 const REFRESH_DISTANCE: f32 = 0.6;
@@ -44,6 +45,10 @@ impl FirearmMovementIntelligence {
 	}
 
 	pub fn compose(&self, from: Vec3, target: Vec3) -> MovementObjective {
+		self.compose_sight(from, target, true)
+	}
+
+	pub fn compose_sight(&self, from: Vec3, target: Vec3, freshly_seen: bool) -> MovementObjective {
 		let dist = Vec2::new(from.x, from.z).distance(Vec2::new(target.x, target.z));
 		let (flee_at, flee_radius) = self.settings.flee;
 		if flee_at > 0.0 && dist < flee_at {
@@ -56,6 +61,8 @@ impl FirearmMovementIntelligence {
 		let radius = standoff.max(0.4);
 		let hide = self.settings.vantage.0 * self.settings.cover.max(0.0) * strength.max(0.0);
 		let sightline = self.settings.vantage.1 * strength.max(0.0);
+		let (hide, sightline) =
+			if freshly_seen { (hide, sightline) } else { (hide * 0.35, sightline * 2.2) };
 		MovementObjective::VantageOn {
 			location: MovementLocation::new(target, radius),
 			hide_weight: hide,
@@ -65,15 +72,18 @@ impl FirearmMovementIntelligence {
 }
 
 pub(crate) fn write_firearm_movement_objectives(
+	time: Res<Time>,
 	mut combatants: Query<(
 		Entity,
 		&Transform,
+		&FirearmIntelligence,
 		&mut FirearmMovementIntelligence,
 		&mut MovementIntelligence,
 	)>,
 	mut commands: Commands,
 ) {
-	for (entity, transform, mut brain, mut movement) in &mut combatants {
+	let now = time.elapsed_secs();
+	for (entity, transform, combat, mut brain, mut movement) in &mut combatants {
 		let Some(target) =
 			pick_target(transform.translation, &brain.objective.0, None, 0.0).copied()
 		else {
@@ -89,7 +99,11 @@ pub(crate) fn write_firearm_movement_objectives(
 			continue;
 		};
 		brain.driving = true;
-		let next = brain.compose(transform.translation, target.position);
+		let next = brain.compose_sight(
+			transform.translation,
+			target.position,
+			combat.has_fresh_sight(target.entity, now),
+		);
 		if !should_replan(movement.objective, next) {
 			continue;
 		}
@@ -167,5 +181,15 @@ mod tests {
 		};
 		assert!(!should_replan(a, near));
 		assert!(should_replan(a, far));
+	}
+
+	#[test]
+	fn lost_sightline_boosts_search_over_cover() {
+		let brain = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+		let seen = brain.compose_sight(Vec3::ZERO, Vec3::X * 6.0, true);
+		let hunt = brain.compose_sight(Vec3::ZERO, Vec3::X * 6.0, false);
+		assert!(hunt.sightline_weight() > seen.sightline_weight());
+		assert!(hunt.hide_weight() < seen.hide_weight());
+		assert!(should_replan(seen, hunt));
 	}
 }

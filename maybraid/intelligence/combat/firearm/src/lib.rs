@@ -7,6 +7,7 @@
 //! [`movement_intelligence::ReplanMovement`].
 
 mod combat;
+mod los;
 mod movement;
 mod plugin;
 mod spotting;

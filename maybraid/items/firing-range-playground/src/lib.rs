@@ -71,7 +71,7 @@ impl Plugin for FiringRangePlugin {
 		.add_plugins(MovementRealizationPlugin)
 		.init_resource::<LesHallesSpawn>()
 		.init_resource::<hud::DamageTicks>()
-		.init_resource::<damage::NpcRespawn>()
+		.init_resource::<damage::CombatRespawn>()
 		.add_message::<damage::DamageTaken>()
 		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 		.add_systems(
@@ -96,7 +96,7 @@ impl Plugin for FiringRangePlugin {
 				spawn_player_character,
 				spawn_npc_character,
 				spawn_held_system,
-				respawn_npc_system,
+				respawn_combatants,
 				vantage::assign_player_combat_targets.before(FirearmIntelligenceSystems::Spotting),
 				les_halles::draw_circulation_gizmos,
 				apply_parent_confines.after(LodRefreshSystems::Cull),
@@ -125,12 +125,7 @@ fn spawn_player_system(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	let player = spawn_player_with_hidden_capsule(&mut commands, &mut meshes, &mut materials);
-	commands.entity(player).insert((
-		Transform::from_translation(spawn.player),
-		PlayerLook { yaw: spawn.look_yaw, ..default() },
-		damage::Health::default(),
-	));
+	spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
 }
 
 fn spawn_npc_system(
@@ -139,22 +134,48 @@ fn spawn_npc_system(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+	spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
+}
+
+fn spawn_player_at(
+	commands: &mut Commands,
+	spawn: &LesHallesSpawn,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let player = spawn_player_with_hidden_capsule(commands, meshes, materials);
+	commands.entity(player).insert((
+		Transform::from_translation(spawn.player),
+		PlayerLook { yaw: spawn.look_yaw, ..default() },
+		damage::Health::default(),
+	));
+}
+
+fn spawn_npc_at(
+	commands: &mut Commands,
+	spawn: &LesHallesSpawn,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
 	let npc = spawn_npc_with_hidden_capsule(
-		&mut commands,
+		commands,
 		spawn.npc,
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
-		&mut meshes,
-		&mut materials,
+		meshes,
+		materials,
 	);
 	let mut movement =
 		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(spawn.npc, 0.4)));
 	movement.ability.candidate_budget.horizon = 80.0;
 	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
 	combat.settings.accuracy = 0.88;
-	combat.settings.trigger_happiness = 0.6;
+	combat.settings.trigger_happiness = 0.9;
+	let mut combat_movement = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+	combat_movement.settings.range = (8.0, 1.0);
+	combat_movement.settings.cover = 0.5;
 	commands.entity(npc).insert((
 		movement,
-		FirearmMovementIntelligence::new(FirearmMovementObjective::default()),
+		combat_movement,
 		combat,
 		FirearmSpotting::default(),
 		damage::Health::default(),
@@ -174,26 +195,26 @@ fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 	}
 }
 
-fn respawn_npc_system(
+#[allow(clippy::too_many_arguments)]
+fn respawn_combatants(
 	time: Res<Time>,
 	spawn: Res<LesHallesSpawn>,
+	players: Query<(), With<Player>>,
 	npcs: Query<(), With<Npc>>,
-	mut respawn: ResMut<damage::NpcRespawn>,
-	commands: Commands,
-	meshes: ResMut<Assets<Mesh>>,
-	materials: ResMut<Assets<StandardMaterial>>,
+	mut respawn: ResMut<damage::CombatRespawn>,
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	if !npcs.is_empty() {
-		return;
+	let now = time.elapsed_secs();
+	if players.is_empty() && respawn.player_at.is_some_and(|at| now >= at) {
+		respawn.player_at = None;
+		spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
 	}
-	let Some(at) = respawn.at else {
-		return;
-	};
-	if time.elapsed_secs() < at {
-		return;
+	if npcs.is_empty() && respawn.npc_at.is_some_and(|at| now >= at) {
+		respawn.npc_at = None;
+		spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
 	}
-	respawn.at = None;
-	spawn_npc_system(commands, spawn, meshes, materials);
 }
 
 fn spawn_reticle_system(

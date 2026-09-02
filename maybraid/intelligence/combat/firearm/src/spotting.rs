@@ -6,8 +6,11 @@ use lod_avian::PhysicsInteractionLayer;
 use movement_intelligence::{MovementBody, MovementIntelligence};
 
 use crate::combat::FirearmIntelligence;
+use crate::los::clear_segment;
 use crate::movement::FirearmMovementIntelligence;
-use crate::target::{retain_recent, upsert_observation, FirearmSpotting, SpottedTarget};
+use crate::target::{
+	retain_recent, upsert_observation, FirearmSpotting, SpottedTarget, TargetCapsule,
+};
 
 pub(crate) fn spot_firearm_targets(
 	spatial: SpatialQuery,
@@ -26,6 +29,7 @@ pub(crate) fn spot_firearm_targets(
 	for (transform, movement, spotting, mut combat, mut combat_movement) in &mut spotters {
 		let memory = combat.settings.target_spotting_memory.max(0.0);
 		retain_recent(&mut combat.objective.0, now, memory);
+		combat_movement.objective.0.clear();
 
 		let observer = movement.ability.eye_point(transform.translation);
 		for candidate in &spotting.candidates {
@@ -33,55 +37,82 @@ pub(crate) fn spot_firearm_targets(
 				continue;
 			};
 			let position = target.translation;
-			if !can_see_capsule(observer, position, candidate.capsule, &spatial, &filter) {
+			let (visible, visible_head) =
+				visible_points(observer, position, candidate.capsule, &spatial, &filter);
+			let observation = SpottedTarget {
+				entity: candidate.entity,
+				position,
+				capsule: candidate.capsule,
+				visible: visible.unwrap_or_else(|| candidate.capsule.center_mass(position)),
+				visible_head,
+				movement_vector: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
+				spotted_at: now,
+			};
+			upsert_observation(&mut combat_movement.objective.0, observation);
+			let Some(visible) = visible else {
 				continue;
-			}
+			};
 			upsert_observation(
 				&mut combat.objective.0,
-				SpottedTarget {
-					entity: candidate.entity,
-					position,
-					capsule: candidate.capsule,
-					movement_vector: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
-					spotted_at: now,
-				},
+				SpottedTarget { visible, visible_head, ..observation },
 			);
 		}
-		combat_movement.objective.0.clone_from(&combat.objective.0);
 	}
 }
 
-fn can_see_capsule(
+fn visible_points(
 	observer: Vec3,
 	position: Vec3,
-	capsule: crate::TargetCapsule,
+	capsule: TargetCapsule,
 	spatial: &SpatialQuery,
 	filter: &SpatialQueryFilter,
-) -> bool {
-	[
-		capsule.center_mass(position),
-		capsule.head(position),
-		position - Vec3::Y * (capsule.half_height * 0.5),
-	]
-	.into_iter()
-	.any(|point| clear_segment(observer, point, spatial, filter))
+) -> (Option<Vec3>, Option<Vec3>) {
+	let samples = capsule_samples(observer, position, capsule);
+	let mut body = None;
+	let mut head = None;
+	for (index, point) in samples.into_iter().enumerate() {
+		if !clear_segment(observer, point, spatial, filter) {
+			continue;
+		}
+		if index == 1 {
+			head = Some(point);
+		} else {
+			body = body.or(Some(point));
+		}
+	}
+	(body.or(head), head)
 }
 
-pub(crate) fn clear_segment(
-	start: Vec3,
-	end: Vec3,
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-) -> bool {
-	let delta = end - start;
-	let distance = delta.length();
-	if distance <= 1e-4 {
-		return true;
+fn capsule_samples(observer: Vec3, position: Vec3, capsule: TargetCapsule) -> [Vec3; 9] {
+	let toward =
+		Vec3::new(position.x - observer.x, 0.0, position.z - observer.z).normalize_or(Vec3::Z);
+	let right = Vec3::new(toward.z, 0.0, -toward.x) * (capsule.radius * 0.8);
+	let center = capsule.center_mass(position);
+	let head = capsule.head(position);
+	let hips = position - Vec3::Y * (capsule.half_height * 0.45);
+	[
+		center,
+		head,
+		hips,
+		center + right,
+		center - right,
+		head + right,
+		head - right,
+		hips + right,
+		hips - right,
+	]
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn capsule_samples_cover_center_head_and_sides() {
+		let samples = capsule_samples(Vec3::Z * 5.0, Vec3::ZERO, TargetCapsule::new(0.4, 0.9));
+		assert_eq!(samples[0], Vec3::ZERO);
+		assert!(samples[1].y > 0.0);
+		assert!(samples[3].x.abs() > 0.2);
+		assert_eq!(samples[3].x, -samples[4].x);
 	}
-	let Ok(direction) = Dir3::new(delta) else {
-		return true;
-	};
-	spatial
-		.cast_ray(start, direction, distance, true, filter)
-		.is_none_or(|hit| hit.distance >= distance - 0.05)
 }

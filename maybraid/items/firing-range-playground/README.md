@@ -5,18 +5,20 @@ body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
 followed player fires from the pad. The NPC installs
 [`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
 the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
-visible observations feed both firearm objective lists until spotting memory
-expires.
-Firearm movement writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
-/ flee into [`movement-intelligence`](../../intelligence/movement/lib). Firearm
-combat aims [`PlayerLook`](../../player/src/identity.rs) from the posed muzzle so
-a right-shoulder hold does not walk shots past the target, and fires when the
-propagated barrel is aligned onto the capsule.
+visible observations feed firearm combat until spotting memory expires.
+Look tracks the last visible point; fire needs that sightline to stay fresh.
+Firearm movement hunts those candidates even without a current sightline, then
+writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs) / flee
+into [`movement-intelligence`](../../intelligence/movement/lib) at an ~8 m
+standoff. Lost sightlines raise sightline weight so the NPC does not glue to a
+cover crack. Firearm combat aims [`PlayerLook`](../../player/src/identity.rs)
+from the posed muzzle and holds the trigger while the barrel is on a freshly
+spotted point; `trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
 Each character starts with 100 health and takes 25 damage per bolt contact.
 Health is shown on a persistent top HUD and as a bar above each capsule; the
 player also gets directional hit ticks around screen center. At 0 health the
-combatant and held firearm despawn; the NPC returns after two seconds.
+combatant and held firearm despawn; player and NPC both return after two seconds.
 
 ```bash
 cargo run -p firing-range-playground

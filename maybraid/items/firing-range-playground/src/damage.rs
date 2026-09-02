@@ -1,15 +1,16 @@
 use bevy::prelude::*;
 use firearm_user::FirearmUser;
-use player::Npc;
+use player::{Npc, Player};
 use projectiles::ProjectileContact;
 
 pub(crate) const MAX_HEALTH: f32 = 100.0;
 pub(crate) const PROJECTILE_DAMAGE: f32 = 25.0;
-pub(crate) const NPC_RESPAWN_SECS: f32 = 2.0;
+pub(crate) const RESPAWN_SECS: f32 = 2.0;
 
 #[derive(Resource, Default)]
-pub(crate) struct NpcRespawn {
-	pub at: Option<f32>,
+pub(crate) struct CombatRespawn {
+	pub player_at: Option<f32>,
+	pub npc_at: Option<f32>,
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
@@ -75,18 +76,25 @@ pub(crate) fn apply_projectile_damage(
 	}
 }
 
+type DeadCombatants<'w, 's> =
+	Query<'w, 's, (Entity, &'static Health, Option<&'static FirearmUser>, Has<Player>, Has<Npc>)>;
+
 pub(crate) fn despawn_dead(
 	time: Res<Time>,
-	mut respawn: ResMut<NpcRespawn>,
+	mut respawn: ResMut<CombatRespawn>,
 	mut commands: Commands,
-	combatants: Query<(Entity, &Health, Option<&FirearmUser>, Has<Npc>)>,
+	combatants: DeadCombatants,
 ) {
-	for (entity, health, user, is_npc) in &combatants {
+	let now = time.elapsed_secs();
+	for (entity, health, user, is_player, is_npc) in &combatants {
 		if !health.is_dead() {
 			continue;
 		}
+		if is_player {
+			respawn.player_at = Some(now + RESPAWN_SECS);
+		}
 		if is_npc {
-			respawn.at = Some(time.elapsed_secs() + NPC_RESPAWN_SECS);
+			respawn.npc_at = Some(now + RESPAWN_SECS);
 		}
 		if let Some(user) = user {
 			commands.entity(user.held).try_despawn();
