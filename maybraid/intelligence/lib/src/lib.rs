@@ -17,13 +17,13 @@ mod user;
 use bevy::prelude::*;
 use player::PlayerSystems;
 
-pub use ability::{MovementAbility, MovementBody};
+pub use ability::{Covering, MovementAbility, MovementBody, VantageStandoffs};
 pub use candidate::{MovementCandidate, MovementCandidateHints};
 pub use location::MovementLocation;
 pub use objective::MovementObjective;
 pub use plugin::MovementIntelligencePlugin;
 pub use step::{MovementDrive, MovementStep};
-pub use surface::{CandidateBudget, MovementIntelligenceSurface};
+pub use surface::{CandidateBudget, MovementIntelligenceLimits, MovementIntelligenceSurface};
 pub use user::{MovementIntelligence, MovementIntelligenceSettings, ReplanMovement};
 
 /// Plan, then write [`player::MoveWish`], before capsule accel.

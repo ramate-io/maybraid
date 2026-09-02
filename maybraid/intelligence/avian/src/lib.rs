@@ -27,7 +27,11 @@ impl From<AvianColliderPath> for Vec<MovementStep> {
 impl<I, A> MovementIntelligenceSurface<I, A> for AvianMovementSurface<'_, '_>
 where
 	MovementCandidate<I>: From<AvianColliderPath>,
-	A: movement_intelligence::MovementBody + Send + Sync + 'static,
+	A: movement_intelligence::MovementBody
+		+ movement_intelligence::Covering
+		+ Send
+		+ Sync
+		+ 'static,
 {
 	fn recommend_candidates(
 		&mut self,

@@ -6,12 +6,10 @@ use crate::ability::MovementAbility;
 use crate::candidate::MovementCandidate;
 use crate::objective::MovementObjective;
 use crate::step::MovementStep;
-use crate::surface::CandidateBudget;
 
-/// Per-user heuristic and probe knobs.
+/// Per-user scoring knobs. Budget and standoffs live on [`MovementAbility`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MovementIntelligenceSettings {
-	pub candidate_budget: CandidateBudget,
 	pub stuck_timeout: f32,
 	pub weight_surface: f32,
 	pub weight_hide: f32,
@@ -20,13 +18,7 @@ pub struct MovementIntelligenceSettings {
 
 impl Default for MovementIntelligenceSettings {
 	fn default() -> Self {
-		Self {
-			candidate_budget: CandidateBudget::default(),
-			stuck_timeout: 1.6,
-			weight_surface: 1.0,
-			weight_hide: 1.0,
-			weight_sightline: 1.0,
-		}
+		Self { stuck_timeout: 1.6, weight_surface: 1.0, weight_hide: 1.0, weight_sightline: 1.0 }
 	}
 }
 

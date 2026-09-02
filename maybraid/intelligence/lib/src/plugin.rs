@@ -6,11 +6,11 @@ use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::prelude::*;
 use player::MoveWish;
 
-use crate::ability::MovementBody;
+use crate::ability::{Covering, MovementBody};
 use crate::configure_movement_intelligence_sets;
 use crate::location::MovementLocation;
 use crate::step::MovementDrive;
-use crate::surface::MovementIntelligenceSurface;
+use crate::surface::{MovementIntelligenceLimits, MovementIntelligenceSurface};
 use crate::user::{MovementIntelligence, ReplanMovement};
 use crate::MovementIntelligenceSystems;
 
@@ -36,33 +36,35 @@ where
 	S: SystemParam + 'static,
 	for<'w, 's> S::Item<'w, 's>: MovementIntelligenceSurface<I, A>,
 	I: MovementDrive + Clone + Send + Sync + 'static,
-	A: MovementBody + Send + Sync + 'static,
+	A: MovementBody + Covering + Send + Sync + 'static,
 {
 	fn build(&self, app: &mut App) {
 		configure_movement_intelligence_sets(app);
-		app.add_systems(
-			Update,
-			replan_movement::<S, I, A>.in_set(MovementIntelligenceSystems::Replan),
-		)
-		.add_systems(Update, drive_movement::<I, A>.in_set(MovementIntelligenceSystems::Drive));
+		app.init_resource::<MovementIntelligenceLimits>()
+			.add_systems(
+				Update,
+				replan_movement::<S, I, A>.in_set(MovementIntelligenceSystems::Replan),
+			)
+			.add_systems(Update, drive_movement::<I, A>.in_set(MovementIntelligenceSystems::Drive));
 	}
 }
 
 pub fn replan_movement<S, I, A>(
 	surface: StaticSystemParam<S>,
+	limits: Res<MovementIntelligenceLimits>,
 	mut movers: Query<(Entity, &Transform, &mut MovementIntelligence<I, A>), With<ReplanMovement>>,
 	mut commands: Commands,
 ) where
 	S: SystemParam + 'static,
 	for<'w, 's> S::Item<'w, 's>: MovementIntelligenceSurface<I, A>,
 	I: Send + Sync + 'static,
-	A: MovementBody + Send + Sync + 'static,
+	A: MovementBody + Covering + Send + Sync + 'static,
 {
 	let mut surface = surface.into_inner();
 	for (entity, transform, mut brain) in &mut movers {
 		let from = MovementLocation::new(transform.translation, brain.ability.agent_radius());
 		let exclude = [entity];
-		let budget = brain.settings.candidate_budget;
+		let budget = brain.ability.candidate_budget().clamp_to(limits.max_budget);
 		let objective = brain.objective;
 		let candidates =
 			surface.recommend_candidates(from, &exclude, &brain.ability, objective, budget);

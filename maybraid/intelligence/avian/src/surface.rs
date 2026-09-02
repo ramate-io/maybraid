@@ -4,7 +4,9 @@ use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
-use movement_intelligence::{CandidateBudget, MovementBody, MovementLocation, MovementObjective};
+use movement_intelligence::{
+	CandidateBudget, Covering, MovementBody, MovementLocation, MovementObjective,
+};
 use std::f32::consts::TAU;
 
 use crate::path::{AvianColliderPath, AvianPathHints};
@@ -16,7 +18,7 @@ pub struct AvianMovementSurface<'w, 's> {
 }
 
 impl AvianMovementSurface<'_, '_> {
-	pub fn collider_paths<A: MovementBody>(
+	pub fn collider_paths<A: MovementBody + Covering>(
 		&self,
 		from: MovementLocation,
 		exclude: &[Entity],
@@ -56,7 +58,7 @@ impl AvianMovementSurface<'_, '_> {
 			.with_excluded_entities(exclude.iter().copied())
 	}
 
-	fn sample_endpoints<A: MovementBody>(
+	fn sample_endpoints<A: MovementBody + Covering>(
 		from: MovementLocation,
 		ability: &A,
 		objective: MovementObjective,
@@ -87,7 +89,7 @@ impl AvianMovementSurface<'_, '_> {
 				Self::flee_samples(from.point, location, y, arrival, budget)
 			}
 			MovementObjective::VantageOn { .. } => {
-				Self::vantage_samples(location.point, y, arrival, budget)
+				Self::vantage_samples(ability, location.point, y, arrival, budget)
 			}
 		}
 	}
@@ -122,19 +124,20 @@ impl AvianMovementSurface<'_, '_> {
 		samples
 	}
 
-	fn vantage_samples(
+	fn vantage_samples<A: Covering>(
+		ability: &A,
 		center: Vec3,
 		y: f32,
 		arrival: f32,
 		budget: CandidateBudget,
 	) -> Vec<MovementLocation> {
-		let rings = [3.5_f32, 6.5, 10.0];
+		let rings = ability.vantage_standoffs();
 		let mut samples = Vec::new();
 		for radius in rings {
-			if radius > budget.horizon {
+			if *radius > budget.horizon {
 				continue;
 			}
-			samples.extend(ring(center, y, radius, 8, arrival));
+			samples.extend(ring(center, y, *radius, 8, arrival));
 		}
 		if samples.is_empty() {
 			samples.extend(ring(center, y, budget.horizon.min(8.0).max(2.0), 8, arrival));
