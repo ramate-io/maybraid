@@ -28,8 +28,8 @@ To expose a new clothing mesh in both species:
      path; a body host does not rewrite it.
    - Clothing color and surface recipe are independent of the mesh. Species
      menus share `ClothingMenu`: color swatches per worn layer, and a Material
-     tile row (`space-suit`, `tattered`, `hawaiian`, `cloth`, `wizards-veins`,
-     `glitter`) that writes `ClothingMaterial` onto the config. Assembly stamps
+     tile row (`space-suit`, `tattered`, `hawaiian`, `cloth`, `scales`,
+     `wizards-veins`, `glitter`) that writes `ClothingMaterial` onto the config. Assembly stamps
      `MaterialRef::named(recipe_id).with_palette([color])`; Crozon’s MaterialLib
      fulfills those names as clothing shaders.
 3. `ListValues` and `AssetOption` for `ClothingMesh` in `crozon_characters` pick up the

@@ -58,6 +58,9 @@ fn clothing_from_ref(material_ref: &MaterialRef) -> ClothingShaderMaterial {
 		MaterialId::Name(name) if name == ClothingMaterial::Hawaiian.recipe_id() => {
 			ClothingShaderKind::Hawaiian
 		}
+		MaterialId::Name(name) if name == ClothingMaterial::Scales.recipe_id() => {
+			ClothingShaderKind::Scales
+		}
 		MaterialId::Name(name) if name == ClothingMaterial::WizardsVeins.recipe_id() => {
 			ClothingShaderKind::WizardsVeins
 		}

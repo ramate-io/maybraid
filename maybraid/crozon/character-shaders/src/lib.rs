@@ -6,7 +6,7 @@ mod clothing_material;
 
 pub use clothing_material::{
 	ClothingShaderKind, ClothingShaderMaterial, ClothingShaderMaterialPlugin, KIND_CLOTH,
-	KIND_GLITTER, KIND_HAWAIIAN, KIND_SPACE_SUIT, KIND_TATTERED, KIND_WIZARDS_VEINS,
+	KIND_GLITTER, KIND_HAWAIIAN, KIND_SCALES, KIND_SPACE_SUIT, KIND_TATTERED, KIND_WIZARDS_VEINS,
 };
 
 /// Registers clothing materials used by Crozon [`material_ref::MaterialLib`]s.

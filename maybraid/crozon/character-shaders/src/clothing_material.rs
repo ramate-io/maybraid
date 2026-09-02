@@ -18,6 +18,7 @@ pub const KIND_TATTERED: u32 = 2;
 pub const KIND_HAWAIIAN: u32 = 3;
 pub const KIND_WIZARDS_VEINS: u32 = 4;
 pub const KIND_GLITTER: u32 = 5;
+pub const KIND_SCALES: u32 = 6;
 
 /// Registers embedded **`clothing_material.wgsl`** and [`MaterialPlugin`].
 pub struct ClothingShaderMaterialPlugin;
@@ -38,6 +39,7 @@ pub enum ClothingShaderKind {
 	Hawaiian,
 	WizardsVeins,
 	Glitter,
+	Scales,
 }
 
 impl ClothingShaderKind {
@@ -49,6 +51,7 @@ impl ClothingShaderKind {
 			Self::Hawaiian => KIND_HAWAIIAN,
 			Self::WizardsVeins => KIND_WIZARDS_VEINS,
 			Self::Glitter => KIND_GLITTER,
+			Self::Scales => KIND_SCALES,
 		}
 	}
 }
@@ -90,7 +93,11 @@ impl Material for ClothingShaderMaterial {
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
-		AlphaMode::Opaque
+		if self.params.kind == KIND_TATTERED {
+			AlphaMode::Mask(0.15)
+		} else {
+			AlphaMode::Opaque
+		}
 	}
 
 	fn reads_view_transmission_texture(&self) -> bool {

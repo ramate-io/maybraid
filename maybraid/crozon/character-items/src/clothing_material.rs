@@ -10,6 +10,7 @@ pub enum ClothingMaterial {
 	Hawaiian,
 	#[default]
 	Cloth,
+	Scales,
 	WizardsVeins,
 	Glitter,
 }
@@ -20,6 +21,7 @@ impl ClothingMaterial {
 		Self::Tattered,
 		Self::Hawaiian,
 		Self::Cloth,
+		Self::Scales,
 		Self::WizardsVeins,
 		Self::Glitter,
 	];
@@ -30,6 +32,7 @@ impl ClothingMaterial {
 			Self::Tattered => "tattered",
 			Self::Hawaiian => "hawaiian",
 			Self::Cloth => "cloth",
+			Self::Scales => "scales",
 			Self::WizardsVeins => "wizards-veins",
 			Self::Glitter => "glitter",
 		}
@@ -42,6 +45,7 @@ impl ClothingMaterial {
 			Self::Tattered => "clothing_tattered",
 			Self::Hawaiian => "clothing_hawaiian",
 			Self::Cloth => "clothing_cloth",
+			Self::Scales => "clothing_scales",
 			Self::WizardsVeins => "clothing_wizards_veins",
 			Self::Glitter => "clothing_glitter",
 		}
@@ -54,6 +58,7 @@ impl ClothingMaterial {
 				| "clothing_tattered"
 				| "clothing_hawaiian"
 				| "clothing_cloth"
+				| "clothing_scales"
 				| "clothing_wizards_veins"
 				| "clothing_glitter"
 		)

@@ -2,7 +2,7 @@
 // Crozon clothing: palette tint, look kind, tiny hem sway.
 //
 // Kind: 0 cloth, 1 space suit, 2 tattered, 3 hawaiian,
-//       4 wizard veins, 5 glitter.
+//       4 wizard veins, 5 glitter, 6 scales.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -33,6 +33,7 @@ const KIND_TATTERED: u32 = 2u;
 const KIND_HAWAIIAN: u32 = 3u;
 const KIND_WIZARDS_VEINS: u32 = 4u;
 const KIND_GLITTER: u32 = 5u;
+const KIND_SCALES: u32 = 6u;
 
 struct ClothingVertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -196,12 +197,29 @@ fn look_coord(mesh: ClothingVertexOutput) -> vec2<f32> {
 #endif
 }
 
+/// Basket weave: warp and weft ridges with fiber noise along each thread.
+fn cloth_threads(uv: vec2<f32>) -> vec3<f32> {
+    let count = 168.0;
+    let warp_id = floor(uv.x * count);
+    let weft_id = floor(uv.y * count);
+    let warp_f = fract(uv.x * count);
+    let weft_f = fract(uv.y * count);
+    let warp_ridge = pow(1.0 - abs(warp_f * 2.0 - 1.0), 0.45);
+    let weft_ridge = pow(1.0 - abs(weft_f * 2.0 - 1.0), 0.45);
+    let warp_on_top = step(0.5, fract((warp_id + weft_id) * 0.5));
+    let ridge = mix(weft_ridge, warp_ridge, warp_on_top);
+    let along = mix(uv.x, uv.y, warp_on_top);
+    let fiber = value_noise_3d(vec3<f32>(along * 420.0, ridge * 18.0, warp_id * 0.13 + weft_id * 0.07));
+    let slub = 0.82 + 0.28 * value_noise_3d(vec3<f32>(uv * 48.0, 3.1));
+    return vec3<f32>(ridge, fiber, slub);
+}
+
 fn cloth_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let weave = 0.5
-        + 0.5 * sin(uv.x * 82.0) * sin(uv.y * 82.0);
-    let thread = value_noise_3d(vec3<f32>(uv * 28.0, 0.4));
-    let tint = mix(base * 0.88, base * 1.08, weave * 0.55 + thread * 0.45);
-    return vec4<f32>(tint, 0.72);
+    let t = cloth_threads(uv);
+    let groove = mix(0.52, 1.16, t.x);
+    let fiber = mix(0.88, 1.08, t.y);
+    let tint = base * groove * fiber * t.z;
+    return vec4<f32>(tint, mix(0.82, 0.58, t.x));
 }
 
 fn space_suit_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
@@ -216,13 +234,21 @@ fn space_suit_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(tint, 0.18);
 }
 
+/// Worn cloth: same thread pattern, stained, with discarded holes.
 fn tattered_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
-    let wear = fbm(vec3<f32>(uv * 9.0, local_pos.y * 3.0));
-    let stain = value_noise_3d(vec3<f32>(uv * 4.2, 2.7));
-    let fray = smoothstep(0.62, 0.92, wear);
-    let dirt = mix(base, base * vec3<f32>(0.28, 0.22, 0.16), stain * 0.7);
+    let cloth = cloth_look(base, uv);
+    let wear = fbm(vec3<f32>(uv * 5.2, local_pos.y * 2.2));
+    let ragged = value_noise_3d(vec3<f32>(uv * 22.0, 4.4));
+    let stain = value_noise_3d(vec3<f32>(uv * 3.6, 2.7));
+    let hole = step(0.76, wear) * step(0.42, ragged);
+    let fray_speck = step(0.70, wear) * step(0.93, hash21(floor(uv * 190.0)));
+    if (hole + fray_speck > 0.5) {
+        discard;
+    }
+    let dirt = mix(cloth.xyz, cloth.xyz * vec3<f32>(0.28, 0.22, 0.16), stain * 0.65);
+    let fray = smoothstep(0.58, 0.78, wear);
     let tint = mix(dirt, dirt * 0.55, fray);
-    return vec4<f32>(tint, 0.88);
+    return vec4<f32>(tint, mix(cloth.w, 0.92, fray));
 }
 
 fn hawaiian_look(base: vec3<f32>, uv: vec2<f32>) -> vec4<f32> {
@@ -265,6 +291,27 @@ fn glitter_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
     return vec4<f32>(tint, 0.28);
 }
 
+/// Offset-row ovals with a bright rim and darker overlap, like overlapping plates.
+fn scales_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
+    let p = uv * vec2<f32>(16.0, 20.0);
+    let row = floor(p.y);
+    let odd = step(0.5, fract(row * 0.5));
+    var q = p;
+    q.x += odd * 0.5;
+    let cell = floor(q);
+    let f = fract(q) - vec2<f32>(0.5);
+    let d = length(f * vec2<f32>(1.05, 1.35));
+    let rim = smoothstep(0.36, 0.48, d);
+    let gap = smoothstep(0.48, 0.54, d);
+    let jitter = hash21(cell);
+    let shade = 0.78 + 0.22 * jitter;
+    let highlight = pow(saturate(0.55 - d), 1.6) * (0.35 + 0.45 * saturate(n.y));
+    let plate = mix(base * 0.55, base * 1.12, 1.0 - rim) * shade;
+    let edge = mix(vec3<f32>(0.08, 0.07, 0.06), plate, 1.0 - gap);
+    let tint = edge + vec3<f32>(1.0, 0.95, 0.82) * highlight;
+    return vec4<f32>(tint, mix(0.22, 0.55, rim));
+}
+
 @fragment
 fn fragment(
     @builtin(front_facing) is_front: bool,
@@ -302,6 +349,10 @@ fn fragment(
         case KIND_GLITTER: {
             look = glitter_look(base, uv, mesh.world_normal);
             metallic = 0.55;
+        }
+        case KIND_SCALES: {
+            look = scales_look(base, uv, mesh.world_normal);
+            metallic = 0.42;
         }
         default: {
             look = cloth_look(base, uv);
