@@ -2,15 +2,15 @@
 
 use bevy::prelude::*;
 
-const WATCH_SECONDS: f32 = 0.4;
+const WATCH_SECONDS: f32 = 0.55;
 const STRAFE_SECONDS: f32 = 0.35;
-const JUMP_SECONDS: f32 = 0.55;
-const BACKUP_SECONDS: f32 = 0.4;
-const COOLDOWN_SECONDS: f32 = 0.3;
+const JUMP_SECONDS: f32 = 0.45;
+const BACKUP_SECONDS: f32 = 0.35;
+const COOLDOWN_SECONDS: f32 = 0.9;
 const STUCK_SPEED: f32 = 0.18;
-const PROGRESS_SPEED: f32 = 0.4;
-const PROGRESS_Y_SPEED: f32 = 0.28;
-const PROGRESS_MOVE: f32 = 0.2;
+const PROGRESS_SPEED: f32 = 0.28;
+const PROGRESS_Y_SPEED: f32 = 0.22;
+const PROGRESS_MOVE: f32 = 0.18;
 const WISH_EPS: f32 = 0.05;
 
 /// Per-capsule realization state. Idle until a live wish is not becoming motion.
@@ -71,9 +71,15 @@ impl MovementRealization {
 			self.phase = RealizationPhase::Idle;
 			return RealizationCommand::default();
 		}
-		let recovering_air =
-			matches!(self.phase, RealizationPhase::Jump { .. } | RealizationPhase::Cooldown { .. });
-		if !recovering_air && self.made_progress(&sample) {
+		let in_jump = matches!(self.phase, RealizationPhase::Jump { .. });
+		let in_cooldown = matches!(self.phase, RealizationPhase::Cooldown { .. });
+		if matches!(self.phase, RealizationPhase::Strafe { .. } | RealizationPhase::Backup { .. })
+			&& !is_jammed(&sample)
+		{
+			self.phase = RealizationPhase::Idle;
+			return RealizationCommand::default();
+		}
+		if !in_jump && !in_cooldown && self.made_progress(&sample) {
 			self.phase = RealizationPhase::Idle;
 			return RealizationCommand::default();
 		}
@@ -126,6 +132,10 @@ impl MovementRealization {
 				let seconds = seconds + sample.dt;
 				let landed = launched && sample.grounded && !sample.jumping && seconds > 0.12;
 				if seconds >= JUMP_SECONDS || landed {
+					if !is_jammed(&sample) {
+						self.phase = RealizationPhase::Idle;
+						return RealizationCommand { jump, ..Default::default() };
+					}
 					self.phase = RealizationPhase::Backup { seconds: 0.0, at: sample.position };
 					return RealizationCommand { jump, ..Default::default() };
 				}
@@ -135,10 +145,11 @@ impl MovementRealization {
 			RealizationPhase::Backup { seconds, at } => {
 				let seconds = seconds + sample.dt;
 				if seconds >= BACKUP_SECONDS {
+					let still_jammed = is_jammed(&sample);
 					self.phase = RealizationPhase::Cooldown { seconds: 0.0 };
 					return RealizationCommand {
 						wish_override: Some(backup_dir(sample.wish)),
-						replan: true,
+						replan: still_jammed,
 						..Default::default()
 					};
 				}
@@ -285,6 +296,30 @@ mod tests {
 	}
 
 	#[test]
+	fn motion_during_strafe_drops_unstick() -> anyhow::Result<()> {
+		let mut motor = MovementRealization::default();
+		for _ in 0..40 {
+			motor.tick(jammed_at(Vec3::ZERO));
+			if matches!(motor.phase, RealizationPhase::Strafe { .. }) {
+				break;
+			}
+		}
+		assert!(matches!(motor.phase, RealizationPhase::Strafe { .. }), "{:?}", motor.phase);
+		let walking = RealizationSample {
+			dt: 0.05,
+			position: Vec3::new(0.3, 0.0, 0.0),
+			velocity: Vec3::new(1.2, 0.0, 0.0),
+			wish: Vec3::X,
+			grounded: true,
+			jumping: false,
+			max_jump: 1.0,
+		};
+		motor.tick(walking);
+		assert_eq!(motor.phase, RealizationPhase::Idle);
+		Ok(())
+	}
+
+	#[test]
 	fn zero_max_jump_skips_hop() -> anyhow::Result<()> {
 		let mut motor = MovementRealization::default();
 		let sample = RealizationSample { max_jump: 0.0, ..jammed_at(Vec3::ZERO) };
@@ -296,5 +331,31 @@ mod tests {
 			}
 		}
 		panic!("expected backup without jump, phase={:?}", motor.phase);
+	}
+
+	#[test]
+	fn backup_skips_replan_once_moving() -> anyhow::Result<()> {
+		let mut motor = MovementRealization::default();
+		let jammed = RealizationSample { max_jump: 0.0, ..jammed_at(Vec3::ZERO) };
+		for _ in 0..40 {
+			motor.tick(jammed);
+			if matches!(motor.phase, RealizationPhase::Backup { .. }) {
+				break;
+			}
+		}
+		assert!(matches!(motor.phase, RealizationPhase::Backup { .. }), "{:?}", motor.phase);
+		let walking = RealizationSample {
+			dt: 0.05,
+			position: Vec3::new(-0.4, 0.0, 0.0),
+			velocity: Vec3::new(-1.0, 0.0, 0.0),
+			wish: Vec3::X,
+			grounded: true,
+			jumping: false,
+			max_jump: 0.0,
+		};
+		let cmd = motor.tick(walking);
+		assert!(!cmd.replan);
+		assert_eq!(motor.phase, RealizationPhase::Idle);
+		Ok(())
 	}
 }

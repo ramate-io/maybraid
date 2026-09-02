@@ -120,7 +120,9 @@ pub(crate) fn update_grounded(
 		let landed = jumping.as_ref().is_some_and(|jump| jump.left_ground);
 		if is_grounded {
 			commands.entity(entity).insert(Grounded);
-			if landed {
+			// Clear a hop that never left the ground (snap / short impulse) so the
+			// jump clip does not stick while the capsule is already walking.
+			if landed || (jumping.is_some() && velocity.y <= 0.05) {
 				commands.entity(entity).remove::<Jumping>();
 			}
 		} else {
