@@ -178,6 +178,7 @@ fn spawn_npc_at(
 	movement.ability.candidate_budget.horizon = 80.0;
 	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
 	combat.settings.accuracy = 0.88;
+	combat.settings.vision = 9;
 	combat.settings.trigger_happiness = 0.9;
 	let mut combat_movement = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
 	combat_movement.settings.range = (8.0, 1.0);

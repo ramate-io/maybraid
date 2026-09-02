@@ -20,7 +20,10 @@ pub struct FirearmIntelligenceSettings {
 	pub accuracy: f32,
 	/// Prefer the remembered visible head sample when the shooter is going for one.
 	pub headshots: f32,
-	/// 0..=1. Stick to the current target versus the nearest.
+	/// Sightline rays traced each frame, shared across ranked candidates.
+	pub vision: u16,
+	/// 0..=1. Stick to the current target versus the nearest. Also spends more
+	/// of [`Self::vision`] on the highest-ranked target.
 	pub focus: f32,
 	/// 0..=1. How quickly they pull the trigger once the bore is on target.
 	/// The weapon interval is the rate of fire after that; this is not a second
@@ -40,6 +43,7 @@ impl Default for FirearmIntelligenceSettings {
 		Self {
 			accuracy: 0.75,
 			headshots: 0.15,
+			vision: 9,
 			focus: 0.6,
 			trigger_happiness: 0.45,
 			wall_firing: 0.0,

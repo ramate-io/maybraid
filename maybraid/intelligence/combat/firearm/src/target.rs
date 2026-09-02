@@ -117,6 +117,82 @@ pub fn pick_target(
 	}
 }
 
+/// Rank live candidates for spotting. Closer is more important. `focus` adds
+/// `focus` × 8 m of stickiness to `engaged`, matching [`pick_target`].
+pub fn rank_candidates(
+	from: Vec3,
+	candidates: &[(Entity, Vec3)],
+	engaged: Option<Entity>,
+	focus: f32,
+) -> Vec<usize> {
+	let stick = focus.clamp(0.0, 1.0) * 8.0;
+	let mut order: Vec<(usize, f32)> = candidates
+		.iter()
+		.enumerate()
+		.map(|(index, (entity, position))| {
+			let dist = Vec2::new(from.x, from.z).distance(Vec2::new(position.x, position.z));
+			let score = if engaged == Some(*entity) { stick - dist } else { -dist };
+			(index, score)
+		})
+		.collect();
+	order.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+	order.into_iter().map(|(index, _)| index).collect()
+}
+
+/// Split `vision` rays across `n` ranked targets. `focus` 0 shares evenly.
+/// `focus` 1 spends the whole budget on the first-ranked target.
+pub fn allocate_vision(vision: u16, n: usize, focus: f32) -> Vec<u16> {
+	if n == 0 {
+		return Vec::new();
+	}
+	let vision = vision as usize;
+	let focus = focus.clamp(0.0, 1.0);
+	let decay = 1.0 - focus;
+	let mut weights = Vec::with_capacity(n);
+	for i in 0..n {
+		let weight = if i == 0 { 1.0 } else { decay.powi(i as i32) };
+		weights.push(weight.max(0.0));
+	}
+	let sum: f32 = weights.iter().sum::<f32>().max(1e-6);
+	let mut rays = vec![0u16; n];
+	let mut used = 0usize;
+	let mut remainder: Vec<(usize, f32)> = Vec::with_capacity(n);
+	for (i, weight) in weights.iter().enumerate() {
+		let exact = vision as f32 * weight / sum;
+		let whole = exact.floor() as usize;
+		rays[i] = whole as u16;
+		used = used.saturating_add(whole);
+		remainder.push((i, exact - whole as f32));
+	}
+	remainder.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+	let mut leftover = vision.saturating_sub(used);
+	for (i, _) in remainder {
+		if leftover == 0 {
+			break;
+		}
+		rays[i] = rays[i].saturating_add(1);
+		leftover -= 1;
+	}
+	rays
+}
+
+/// Cap each target at `max_per` unique sample points and give unused rays to
+/// the next-ranked target that still has room.
+pub fn cascade_vision(rays: &mut [u16], max_per: u16) {
+	let max_per = max_per.max(1);
+	let mut extra = 0u32;
+	for slot in rays.iter_mut() {
+		let granted = (*slot as u32) + extra;
+		if granted > max_per as u32 {
+			*slot = max_per;
+			extra = granted - max_per as u32;
+		} else {
+			*slot = granted as u16;
+			extra = 0;
+		}
+	}
+}
+
 pub(crate) fn upsert_observation(targets: &mut Vec<SpottedTarget>, observation: SpottedTarget) {
 	if let Some(target) = targets.iter_mut().find(|target| target.entity == observation.entity) {
 		*target = observation;
@@ -226,5 +302,43 @@ mod tests {
 		let target = spotted(Entity::from_bits(1), Vec3::ZERO);
 		assert!(target.is_fresh(0.1, 0.2));
 		assert!(!target.is_fresh(1.0, 0.2));
+	}
+
+	#[test]
+	fn rank_candidates_prefers_nearest_when_unfocused() {
+		let a = Entity::from_bits(1);
+		let b = Entity::from_bits(2);
+		let candidates = [(a, Vec3::X * 6.0), (b, Vec3::X * 2.0)];
+		assert_eq!(rank_candidates(Vec3::ZERO, &candidates, Some(a), 0.0), vec![1, 0]);
+	}
+
+	#[test]
+	fn rank_candidates_keeps_engaged_when_focused() {
+		let a = Entity::from_bits(1);
+		let b = Entity::from_bits(2);
+		let candidates = [(a, Vec3::X * 6.0), (b, Vec3::X * 2.0)];
+		assert_eq!(rank_candidates(Vec3::ZERO, &candidates, Some(a), 1.0), vec![0, 1]);
+	}
+
+	#[test]
+	fn allocate_vision_shares_evenly_when_unfocused() {
+		assert_eq!(allocate_vision(9, 3, 0.0), vec![3, 3, 3]);
+	}
+
+	#[test]
+	fn allocate_vision_spends_all_on_first_when_focused() {
+		assert_eq!(allocate_vision(9, 3, 1.0), vec![9, 0, 0]);
+	}
+
+	#[test]
+	fn allocate_vision_gives_remainders_to_higher_ranks() {
+		assert_eq!(allocate_vision(10, 3, 0.0), vec![4, 3, 3]);
+	}
+
+	#[test]
+	fn cascade_vision_moves_overflow_down_the_rank_list() {
+		let mut rays = vec![12, 0, 0];
+		cascade_vision(&mut rays, 9);
+		assert_eq!(rays, vec![9, 3, 0]);
 	}
 }

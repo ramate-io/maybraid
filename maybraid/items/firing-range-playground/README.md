@@ -6,6 +6,8 @@ followed player fires from the pad. The NPC installs
 [`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
 the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs);
 visible observations feed firearm combat until spotting memory expires.
+The NPC traces `vision` capsule samples per frame (default 9) and spends
+`focus` of that budget on the highest-ranked target.
 Look tracks the live capsule; fire needs that sightline to stay fresh.
 Firearm movement hunts those candidates even without a current sightline, then
 writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)

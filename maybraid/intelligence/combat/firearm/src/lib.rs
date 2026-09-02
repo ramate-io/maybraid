@@ -17,6 +17,6 @@ pub use combat::{FirearmIntelligence, FirearmIntelligenceSettings};
 pub use movement::{FirearmMovementIntelligence, FirearmMovementIntelligenceSettings};
 pub use plugin::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 pub use target::{
-	pick_target, CombatTarget, FirearmMovementObjective, FirearmObjective, FirearmSpotting,
-	SpottedTarget, TargetCapsule,
+	allocate_vision, cascade_vision, pick_target, rank_candidates, CombatTarget,
+	FirearmMovementObjective, FirearmObjective, FirearmSpotting, SpottedTarget, TargetCapsule,
 };
