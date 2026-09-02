@@ -52,8 +52,8 @@ pub use hosts::CharacterHostsPlugin;
 pub use layer::{Layer, Layers};
 pub use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 pub use member::{
-	attach_part_node, find_member_rig, find_part_member, stamp_character_members, CharacterMembers,
-	CharacterRoot, MemberOf,
+	attach_part_node, find_member_rig, find_part_member, hide_socketed_parts,
+	stamp_character_members, CharacterMembers, CharacterRoot, MemberOf,
 };
 pub use nodes::{PartNode, RigNode};
 pub use plugin::{add_character_components_host, CharacterComponentsPlugin, CharacterHostSystems};

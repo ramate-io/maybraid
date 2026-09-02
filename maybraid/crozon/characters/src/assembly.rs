@@ -22,3 +22,19 @@ pub enum CharacterPartSlot {
 	Spine,
 	Tail,
 }
+
+impl CharacterPartSlot {
+	/// Face, hair, and horns clip a first-person camera; body / neck / clothing do not.
+	pub fn hides_in_first_person(self) -> bool {
+		matches!(
+			self,
+			Self::HeadMesh
+				| Self::Nose | Self::Mouth
+				| Self::EyeLeft
+				| Self::EyeRight
+				| Self::EarLeft
+				| Self::EarRight
+				| Self::Hair | Self::Horns
+		)
+	}
+}

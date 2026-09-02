@@ -68,6 +68,28 @@ pub fn find_part_member(
 	fallback
 }
 
+/// Hide or restore socketed part hosts whose slot matches `hide`.
+pub fn hide_socketed_parts(
+	members: &CharacterMembers,
+	parts: &Query<&PartNode>,
+	visibilities: &mut Query<&mut Visibility>,
+	hide: impl Fn(CharacterPartSlot) -> bool,
+	hidden: bool,
+) {
+	let visibility = if hidden { Visibility::Hidden } else { Visibility::Inherited };
+	for member in members.iter() {
+		let Ok(part) = parts.get(member) else {
+			continue;
+		};
+		if !hide(part.slot) {
+			continue;
+		}
+		if let Ok(mut vis) = visibilities.get_mut(member) {
+			*vis = visibility;
+		}
+	}
+}
+
 /// Spawn `part` as a nested LodScene host parented to `root`.
 ///
 /// [`stamp_character_members`] records [`MemberOf`]; socket fulfill then reparents

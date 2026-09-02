@@ -6,25 +6,34 @@ use bevy::prelude::*;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 
-use crate::character::HeldFirearm;
+use player::CameraFollow;
 
-const AIM_DISTANCE: f32 = 100.0;
-const SURFACE_LIFT: f32 = 0.015;
-const ANGULAR_SIZE: f32 = 0.004;
+use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
-#[derive(Component)]
-pub(crate) struct Reticle;
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Reticle {
+	pub aim_distance: f32,
+	pub surface_lift: f32,
+	pub angular_size: f32,
+}
 
-pub(crate) fn spawn_reticle(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+impl Default for Reticle {
+	fn default() -> Self {
+		Self { aim_distance: 100.0, surface_lift: 0.015, angular_size: 0.004 }
+	}
+}
+
+pub fn spawn_reticle(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
 ) {
 	let color = Color::srgb(0.45, 1.0, 0.95);
 	let glow = color.to_linear();
 	commands.spawn((
 		Name::new("reticle"),
-		Reticle,
+		Reticle::default(),
 		Mesh3d(meshes.add(Sphere::new(1.0))),
 		MeshMaterial3d(materials.add(StandardMaterial {
 			base_color: color,
@@ -39,45 +48,50 @@ pub(crate) fn spawn_reticle(
 	));
 }
 
-/// Cast from the barrel and place the marker just in front of the first surface.
 pub(crate) fn update_reticle(
 	spatial: SpatialQuery,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
+	users: Query<&FirearmUser, With<CameraFollow>>,
 	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform, Without<Camera3d>>,
-	mut reticles: Query<(&mut Transform, &mut Visibility), With<Reticle>>,
+	mut reticles: Query<(&Reticle, &mut Transform, &mut Visibility)>,
 ) {
 	let Ok(camera) = cameras.single() else {
 		return;
 	};
-	let Some((origin, direction)) = barrel_ray(&guns, &maps, &globals) else {
+	let Some(user) = users.iter().next() else {
 		return;
 	};
-	let Ok((mut transform, mut visibility)) = reticles.single_mut() else {
+	let Some((origin, direction)) = barrel_ray(user.held, &guns, &maps, &globals) else {
+		return;
+	};
+	let Ok((reticle, mut transform, mut visibility)) = reticles.single_mut() else {
 		return;
 	};
 
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
-	let (target, normal) =
-		if let Some(hit) = spatial.cast_ray(origin, direction, AIM_DISTANCE, true, &filter) {
-			(origin + *direction * hit.distance, hit.normal)
-		} else {
-			(origin + *direction * AIM_DISTANCE, -*direction)
-		};
-	let target = target + normal * SURFACE_LIFT;
+	let (target, normal) = if let Some(hit) =
+		spatial.cast_ray(origin, direction, reticle.aim_distance, true, &filter)
+	{
+		(origin + *direction * hit.distance, hit.normal)
+	} else {
+		(origin + *direction * reticle.aim_distance, -*direction)
+	};
+	let target = target + normal * reticle.surface_lift;
 	let distance = camera.translation().distance(target);
 	*transform = Transform::from_translation(target)
-		.with_scale(Vec3::splat((distance * ANGULAR_SIZE).clamp(0.025, 0.3)));
+		.with_scale(Vec3::splat((distance * reticle.angular_size).clamp(0.025, 0.3)));
 	*visibility = Visibility::Visible;
 }
 
 fn barrel_ray(
+	held: Entity,
 	guns: &Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: &Query<&BoneMap, With<RigRoot>>,
 	globals: &Query<&GlobalTransform, Without<Camera3d>>,
 ) -> Option<(Vec3, Dir3)> {
-	let members = guns.single().ok()?;
+	let members = guns.get(held).ok()?;
 	for member in members.iter() {
 		let Ok(map) = maps.get(member) else {
 			continue;

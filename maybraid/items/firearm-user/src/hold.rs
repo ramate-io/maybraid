@@ -1,35 +1,27 @@
 //! After walk/run, aim both arms at the held firearm's hand landmarks.
 
 use bevy::prelude::*;
-use crozon_characters::{AnimBone, AnimMailbox, BoneMap, CharacterMembers};
+use crozon_characters::{AnimBone, AnimMailbox, BoneMap, CharacterMembers, CharacterRoot};
 use crozon_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
 use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use crozon_rigs::{Name, Side};
 use firearms::{FirearmMembers, FirearmRoot};
 
-use crate::character::{HeldFirearm, PlayerVisual};
+use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 /// Body-rig marker: after locomotion, apply the firearm hold.
 #[derive(Component, Clone, Copy, Default)]
-pub(crate) struct HoldingArms;
-
-const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
-/// Right elbow wings outward (body −X) and down at roughly 45°.
-const RIGHT_POLE: Vec3 = Vec3::new(-1.0, -1.0, -0.1);
-/// Left elbow: out (+X), tucked down (−Y), and a little forward (+Z).
-/// TwoBoneAim puts a bent elbow along this pole.
-const LEFT_POLE: Vec3 = Vec3::new(0.65, -0.55, 0.5);
-/// Imported humanoid articulation needs negative swing to draw its right shoulder rearward.
-const FIRING_TORSO_YAW: f32 = -0.84;
-/// Support hand wraps the grip kit socket, not the distal `grip_point` at the handle bottom.
-const GRIP_SOCKET: &str = "grip";
-/// Lengthen the support arm so the hand actually arrives on the socket.
-const LEFT_REACH_STRETCH: f32 = 1.15;
+pub struct HoldingArms;
 
 /// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
 pub(crate) fn sync_hands_to_firearm(
-	visuals: Query<(&GlobalTransform, &CharacterMembers), (With<PlayerVisual>, Without<AnimBone>)>,
+	users: Query<&FirearmUser>,
+	visuals: Query<
+		(&GlobalTransform, &CharacterMembers, &ChildOf),
+		(With<CharacterRoot>, Without<AnimBone>),
+	>,
 	guns: Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
 		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
@@ -37,54 +29,64 @@ pub(crate) fn sync_hands_to_firearm(
 	gun_maps: Query<&BoneMap, Without<HoldingArms>>,
 	globals: Query<&GlobalTransform>,
 	mut rigs: Query<(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox), With<HoldingArms>>,
-	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
-	let Ok((visual, members)) = visuals.single() else {
-		return;
-	};
-	let body_rot = visual.rotation();
-	let trigger = gun_landmark(&guns, &gun_maps, &globals, "trigger_point");
-	let grip = gun_landmark(&guns, &gun_maps, &globals, GRIP_SOCKET);
-	let (Some(trigger), Some(grip)) = (trigger, grip) else {
-		return;
-	};
-
-	for member in members.iter() {
-		let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+	for (visual, members, child_of) in &visuals {
+		let Ok(user) = users.get(child_of.parent()) else {
 			continue;
 		};
-		if mailbox.output.is_empty() {
+		let body_rot = visual.rotation();
+		let settings = user.settings;
+		let trigger = gun_landmark(user.held, &guns, &gun_maps, &globals, "trigger_point");
+		let grip = gun_landmark(user.held, &guns, &gun_maps, &globals, settings.grip_socket);
+		let (Some(trigger), Some(grip)) = (trigger, grip) else {
 			continue;
+		};
+
+		for member in members.iter() {
+			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+				continue;
+			};
+			if mailbox.output.is_empty() {
+				continue;
+			}
+			rig.pose = mailbox.output.clone();
+			pose_firing_torso(&mut rig, settings.firing_torso_yaw);
+			reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
+			reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
+			let right = arm_reach(
+				&rig,
+				Side::Right,
+				target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
+				settings.right_pole,
+				1.0,
+			);
+			let left = arm_reach(
+				&rig,
+				Side::Left,
+				target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
+				settings.left_pole,
+				settings.left_reach_stretch,
+			);
+			if let Some(right) = right {
+				pose_arm(&mut rig, Side::Right, right, 1.0, settings.humerus_roll);
+			}
+			if let Some(left) = left {
+				pose_arm(
+					&mut rig,
+					Side::Left,
+					left,
+					settings.left_reach_stretch,
+					settings.humerus_roll,
+				);
+			}
+			write_hold_bones(&rig, map, &mut bones);
 		}
-		rig.pose = mailbox.output.clone();
-		pose_firing_torso(&mut rig);
-		reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
-		reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
-		let right = arm_reach(
-			&rig,
-			Side::Right,
-			target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
-			RIGHT_POLE,
-			1.0,
-		);
-		let left = arm_reach(
-			&rig,
-			Side::Left,
-			target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
-			LEFT_POLE,
-			LEFT_REACH_STRETCH,
-		);
-		if let Some(right) = right {
-			pose_arm(&mut rig, Side::Right, right, 1.0);
-		}
-		if let Some(left) = left {
-			pose_arm(&mut rig, Side::Left, left, LEFT_REACH_STRETCH);
-		}
-		write_hold_bones(&rig, map, &mut bones);
 	}
 }
 
 fn gun_landmark(
+	held: Entity,
 	guns: &Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
 		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
@@ -93,7 +95,7 @@ fn gun_landmark(
 	globals: &Query<&GlobalTransform>,
 	name: &str,
 ) -> Option<Vec3> {
-	let (members, current_root, previous_root) = guns.single().ok()?;
+	let (members, current_root, previous_root) = guns.get(held).ok()?;
 	let previous_landmark = named_translation(members.iter(), maps, globals, name)?;
 	let landmark_local = previous_root.affine().inverse().transform_point3(previous_landmark);
 	Some(current_root.compute_affine().transform_point3(landmark_local))
@@ -147,8 +149,14 @@ fn arm_reach(
 	})
 }
 
-fn pose_arm(rig: &mut HumanoidV0Rig, side: Side, reach: TwoBoneAim, stretch: f32) {
-	let roll = best_humerus_roll(rig, side, reach, HUMERUS_ROLL * side.sign());
+fn pose_arm(
+	rig: &mut HumanoidV0Rig,
+	side: Side,
+	reach: TwoBoneAim,
+	stretch: f32,
+	humerus_roll: f32,
+) {
+	let roll = best_humerus_roll(rig, side, reach, humerus_roll * side.sign());
 	let mut arm = rig.arm_pose(side);
 	arm.humerus = rig.humerus_along_with_roll(side, reach.upper_along, roll);
 	arm.humerus.transform.translation *= stretch;
@@ -159,12 +167,12 @@ fn pose_arm(rig: &mut HumanoidV0Rig, side: Side, reach: TwoBoneAim, stretch: f32
 	rig.pose_arm(arm);
 }
 
-fn pose_firing_torso(rig: &mut HumanoidV0Rig) {
+fn pose_firing_torso(rig: &mut HumanoidV0Rig, firing_torso_yaw: f32) {
 	let mut spine = rig.spine_pose();
 	// Keep the hips nearly square and blade the shoulder girdle from the chest.
-	spine.lumbar = rig.articulate_on_rig(spine.lumbar, FIRING_TORSO_YAW * 0.05, 0.0);
-	spine.midback = rig.articulate_on_rig(spine.midback, FIRING_TORSO_YAW * 0.20, 0.0);
-	spine.upper_back = rig.articulate_on_rig(spine.upper_back, FIRING_TORSO_YAW * 0.75, 0.0);
+	spine.lumbar = rig.articulate_on_rig(spine.lumbar, firing_torso_yaw * 0.05, 0.0);
+	spine.midback = rig.articulate_on_rig(spine.midback, firing_torso_yaw * 0.20, 0.0);
+	spine.upper_back = rig.articulate_on_rig(spine.upper_back, firing_torso_yaw * 0.75, 0.0);
 	rig.pose_spine(spine);
 }
 
@@ -202,7 +210,7 @@ fn lower_arm_direction(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim, roll:
 fn reset_arm_to_rest(
 	rig: &mut HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 	side: Side,
 ) {
 	let mut arm = rig.arm(side);
@@ -224,7 +232,7 @@ fn reset_arm_to_rest(
 fn write_hold_bones(
 	rig: &HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
 	let spine = rig.spine();
 	for name in
@@ -245,7 +253,7 @@ fn write_hold_bones(
 fn write_bone(
 	rig: &HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 	name: &str,
 ) {
 	let Some(&entity) = map.by_name.get(name) else {
@@ -263,7 +271,12 @@ fn write_bone(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::FirearmUserSettings;
 	use bevy::ecs::system::RunSystemOnce;
+
+	fn settings() -> FirearmUserSettings {
+		FirearmUserSettings::default()
+	}
 
 	#[test]
 	fn sync_hands_queries_are_disjoint() -> Result<(), bevy::ecs::system::RunSystemError> {
@@ -274,10 +287,11 @@ mod tests {
 
 	#[test]
 	fn roll_search_points_forearm_toward_target() -> Result<(), &'static str> {
+		let s = settings();
 		let rig = HumanoidV0Rig::imported();
-		let reach = TwoBoneAim::reach(Vec3::new(0.15, 0.0, 0.8), RIGHT_POLE, 0.5, 0.5)
+		let reach = TwoBoneAim::reach(Vec3::new(0.15, 0.0, 0.8), s.right_pole, 0.5, 0.5)
 			.ok_or("missing reach")?;
-		let roll = best_humerus_roll(&rig, Side::Right, reach, -HUMERUS_ROLL);
+		let roll = best_humerus_roll(&rig, Side::Right, reach, -s.humerus_roll);
 		let lower = lower_arm_direction(&rig, Side::Right, reach, roll);
 		assert!(lower.dot(reach.lower_along) > 0.95, "{lower:?} vs {reach:?}");
 		Ok(())
@@ -285,8 +299,8 @@ mod tests {
 
 	#[test]
 	fn right_elbow_pole_wings_out_and_down() -> Result<(), &'static str> {
-		let reach =
-			TwoBoneAim::reach(Vec3::Z * 0.7, RIGHT_POLE, 0.5, 0.5).ok_or("missing reach")?;
+		let reach = TwoBoneAim::reach(Vec3::Z * 0.7, settings().right_pole, 0.5, 0.5)
+			.ok_or("missing reach")?;
 		assert!(reach.upper_along.x < 0.0, "{reach:?}");
 		assert!(reach.upper_along.y < 0.0, "{reach:?}");
 		assert!((reach.upper_along.x.abs() - reach.upper_along.y.abs()).abs() < 1e-4, "{reach:?}");
@@ -295,17 +309,23 @@ mod tests {
 
 	#[test]
 	fn support_hand_targets_grip_socket() {
-		assert_eq!(GRIP_SOCKET, "grip");
-		assert_ne!(GRIP_SOCKET, "grip_point");
+		let socket = settings().grip_socket;
+		assert_eq!(socket, "grip");
+		assert_ne!(socket, "grip_point");
 	}
 
 	#[test]
 	fn support_arm_stretch_reaches_past_equal_segments() -> Result<(), &'static str> {
+		let s = settings();
 		let far = Vec3::Z * 1.1;
-		let short = TwoBoneAim::reach(far, LEFT_POLE, 0.5, 0.5).ok_or("missing short reach")?;
-		let stretched =
-			TwoBoneAim::reach(far, LEFT_POLE, 0.5 * LEFT_REACH_STRETCH, 0.5 * LEFT_REACH_STRETCH)
-				.ok_or("missing stretched reach")?;
+		let short = TwoBoneAim::reach(far, s.left_pole, 0.5, 0.5).ok_or("missing short reach")?;
+		let stretched = TwoBoneAim::reach(
+			far,
+			s.left_pole,
+			0.5 * s.left_reach_stretch,
+			0.5 * s.left_reach_stretch,
+		)
+		.ok_or("missing stretched reach")?;
 		assert!(stretched.flex > short.flex, "short {short:?} stretched {stretched:?}");
 		Ok(())
 	}
@@ -314,7 +334,8 @@ mod tests {
 	fn left_humerus_swings_forward_to_a_close_grip() -> Result<(), &'static str> {
 		// Grip sits in front of the left shoulder, inside rest length.
 		let target = Vec3::new(0.2, -0.15, 0.55);
-		let reach = TwoBoneAim::reach(target, LEFT_POLE, 0.5, 0.5).ok_or("missing reach")?;
+		let reach =
+			TwoBoneAim::reach(target, settings().left_pole, 0.5, 0.5).ok_or("missing reach")?;
 		assert!(
 			reach.upper_along.z > 0.12,
 			"humerus should still come forward, got {:?}",
@@ -336,10 +357,11 @@ mod tests {
 
 	#[test]
 	fn pose_arm_aims_humerus_length_along_reach() -> Result<(), &'static str> {
+		let s = settings();
 		let mut rig = HumanoidV0Rig::imported();
-		let reach = TwoBoneAim::reach(Vec3::new(0.2, -0.15, 0.55), LEFT_POLE, 0.5, 0.5)
+		let reach = TwoBoneAim::reach(Vec3::new(0.2, -0.15, 0.55), s.left_pole, 0.5, 0.5)
 			.ok_or("missing reach")?;
-		pose_arm(&mut rig, Side::Left, reach, 1.0);
+		pose_arm(&mut rig, Side::Left, reach, 1.0, s.humerus_roll);
 		let humerus = rig.arm_pose(Side::Left).humerus;
 		let along = (humerus.transform.rotation * BONE_LENGTH_AXIS).normalize_or(Vec3::Y);
 		assert!(
@@ -366,7 +388,7 @@ mod tests {
 	#[test]
 	fn firing_torso_turns_right_shoulder_back() -> Result<(), &'static str> {
 		let mut rig = HumanoidV0Rig::imported();
-		pose_firing_torso(&mut rig);
+		pose_firing_torso(&mut rig, settings().firing_torso_yaw);
 		let spine = rig.spine_pose();
 		assert!(spine.lumbar.swing < 0.0);
 		assert!(spine.midback.swing.abs() > spine.lumbar.swing.abs());

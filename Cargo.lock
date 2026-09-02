@@ -3319,6 +3319,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "firearm-user"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "crozon-characters",
+ "crozon-rigs",
+ "firearms",
+ "lod-avian",
+ "maybraid-character-controller",
+ "player",
+ "player-camera",
+]
+
+[[package]]
 name = "firearms"
 version = "0.0.1"
 dependencies = [
@@ -3329,6 +3344,7 @@ dependencies = [
  "firearms-components",
  "lod",
  "lod-avian",
+ "projectiles",
  "scene-ref",
 ]
 
@@ -3350,13 +3366,14 @@ dependencies = [
  "bevy",
  "clap",
  "crozon-characters",
- "crozon-rigs",
+ "firearm-user",
  "firearms",
  "game-commands",
- "lod",
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
+ "player",
+ "player-camera",
 ]
 
 [[package]]
@@ -5551,6 +5568,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "player"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "crozon-characters",
+ "lod",
+ "lod-avian",
+ "maybraid-character-controller",
+]
+
+[[package]]
+name = "player-camera"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-characters",
+ "lod",
+ "maybraid-character-controller",
+ "player",
+]
+
+[[package]]
 name = "plotters"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5716,6 +5756,15 @@ checksum = "4488a4a36b9a4ba6b9334a32a39971f77c1436ec82c38707bce707699cc3bbcb"
 dependencies = [
  "quote",
  "syn",
+]
+
+[[package]]
+name = "projectiles"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "lod-avian",
 ]
 
 [[package]]
