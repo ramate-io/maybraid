@@ -8,15 +8,18 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
-use crozon_characters::{species::braidman::BraidmanConfig, CharacterHostsPlugin, CharacterRecipe};
+use crozon_characters::{
+	species::braidman::BraidmanConfig, CharacterHostsPlugin, CharacterRecipe, CharacterRoot,
+};
 use firearm_user::{spawn_held_firearm, spawn_reticle, FirearmUserPlugin};
 use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
 use player::{
-	needs_player_visual, spawn_player_visual, spawn_player_with_hidden_capsule, Player,
-	PlayerPlugin, PlayerVisual,
+	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc_visual,
+	spawn_npc_with_hidden_capsule, spawn_player_visual, spawn_player_with_hidden_capsule, Npc,
+	Player, PlayerLook, PlayerPlugin, PlayerVisual,
 };
 use player_camera::{spawn_follow_camera, PlayerCameraPlugin};
 use std::f32::consts::FRAC_PI_2;
@@ -40,6 +43,7 @@ impl Plugin for FiringRangePlugin {
 					setup_lighting,
 					range::setup_range,
 					spawn_player_system,
+					spawn_npc_system,
 					spawn_held_system,
 					spawn_reticle_system,
 				)
@@ -50,6 +54,7 @@ impl Plugin for FiringRangePlugin {
 				Update,
 				(
 					spawn_player_character,
+					spawn_npc_character,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -68,11 +73,24 @@ fn spawn_player_system(
 	spawn_player_with_hidden_capsule(&mut commands, &mut meshes, &mut materials);
 }
 
-fn spawn_held_system(mut commands: Commands, players: Query<Entity, With<Player>>) {
-	let Ok(player) = players.single() else {
-		return;
-	};
-	spawn_held_firearm(&mut commands, player);
+fn spawn_npc_system(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+	spawn_npc_with_hidden_capsule(
+		&mut commands,
+		Vec3::new(0.0, capsule_spawn_height(), 2.5),
+		PlayerLook { yaw: -FRAC_PI_2, ..default() },
+		&mut meshes,
+		&mut materials,
+	);
+}
+
+fn spawn_held_system(mut commands: Commands, bodies: Query<Entity, Or<(With<Player>, With<Npc>)>>) {
+	for body in &bodies {
+		spawn_held_firearm(&mut commands, body);
+	}
 }
 
 fn spawn_reticle_system(
@@ -81,6 +99,18 @@ fn spawn_reticle_system(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
 	spawn_reticle(&mut commands, &mut meshes, &mut materials);
+}
+
+fn spawn_npc_character(
+	mut commands: Commands,
+	npcs: Query<Entity, With<Npc>>,
+	visuals: Query<&ChildOf, With<CharacterRoot>>,
+) {
+	let Some(npc) = needs_npc_visual(npcs, visuals) else {
+		return;
+	};
+	let clothed = CharacterRecipe::clothed(&BraidmanConfig::default_preview());
+	spawn_npc_visual(&mut commands, npc, clothed, Quat::from_rotation_y(FRAC_PI_2));
 }
 
 fn spawn_player_character(

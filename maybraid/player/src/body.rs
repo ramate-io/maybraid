@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
-use crate::identity::PlayerLook;
+use crate::identity::{Player, PlayerLook};
 
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
 pub(crate) const MOVE_DAMPING: f32 = 0.92;
@@ -140,7 +140,7 @@ pub(crate) fn apply_character_movement(
 			&mut LinearVelocity,
 			Has<Grounded>,
 		),
-		With<CharacterController>,
+		(With<CharacterController>, With<Player>),
 	>,
 ) {
 	let dt = time.delta_secs();

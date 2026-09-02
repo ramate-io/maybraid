@@ -4,11 +4,11 @@ use bevy::prelude::*;
 use maybraid_character_controller::CharacterIntent;
 
 use crate::body::{CharacterController, MoveWish, MovementAction};
-use crate::identity::PlayerLook;
+use crate::identity::{Player, PlayerLook};
 
 pub(crate) fn apply_move_intents(
 	mut intents: MessageReader<CharacterIntent>,
-	mut wishes: Query<(&mut MoveWish, &PlayerLook), With<CharacterController>>,
+	mut wishes: Query<(&mut MoveWish, &PlayerLook), (With<CharacterController>, With<Player>)>,
 	mut movement: MessageWriter<MovementAction>,
 ) {
 	let mut move_stick = Vec2::ZERO;

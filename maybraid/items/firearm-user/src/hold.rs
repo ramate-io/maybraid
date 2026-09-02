@@ -1,13 +1,12 @@
 //! After walk/run, aim both arms at the held firearm's hand landmarks.
 
 use bevy::prelude::*;
-use crozon_characters::{AnimBone, AnimMailbox, BoneMap, CharacterMembers};
+use crozon_characters::{AnimBone, AnimMailbox, BoneMap, CharacterMembers, CharacterRoot};
 use crozon_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
 use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use crozon_rigs::{Name, Side};
 use firearms::{FirearmMembers, FirearmRoot};
-use player::PlayerVisual;
 
 use crate::pose::HeldFirearm;
 use crate::FirearmUser;
@@ -21,7 +20,7 @@ pub(crate) fn sync_hands_to_firearm(
 	users: Query<&FirearmUser>,
 	visuals: Query<
 		(&GlobalTransform, &CharacterMembers, &ChildOf),
-		(With<PlayerVisual>, Without<AnimBone>),
+		(With<CharacterRoot>, Without<AnimBone>),
 	>,
 	guns: Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
@@ -30,7 +29,7 @@ pub(crate) fn sync_hands_to_firearm(
 	gun_maps: Query<&BoneMap, Without<HoldingArms>>,
 	globals: Query<&GlobalTransform>,
 	mut rigs: Query<(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox), With<HoldingArms>>,
-	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
 	for (visual, members, child_of) in &visuals {
 		let Ok(user) = users.get(child_of.parent()) else {
@@ -211,7 +210,7 @@ fn lower_arm_direction(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim, roll:
 fn reset_arm_to_rest(
 	rig: &mut HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 	side: Side,
 ) {
 	let mut arm = rig.arm(side);
@@ -233,7 +232,7 @@ fn reset_arm_to_rest(
 fn write_hold_bones(
 	rig: &HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
 	let spine = rig.spine();
 	for name in
@@ -254,7 +253,7 @@ fn write_hold_bones(
 fn write_bone(
 	rig: &HumanoidV0Rig,
 	map: &BoneMap,
-	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
+	bones: &mut Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 	name: &str,
 ) {
 	let Some(&entity) = map.by_name.get(name) else {

@@ -3,7 +3,10 @@
 Capsule body, character visual, and **handoff slots** for camera and pose.
 
 This crate does not know about firearms or melee. Item-user crates write the
-slots; `player-camera` and overlay systems read them.
+slots; `player-camera` and overlay systems read them. [`Npc`](src/identity.rs)
+reuses the capsule, [`PlayerLook`](src/identity.rs), and locomotion clips
+without pad input, `CameraFollow`, or `PlayerVisual` (so first-person face hide
+stays on the followed body).
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

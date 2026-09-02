@@ -1,6 +1,11 @@
 # Firing range
 
-Braidman on a flat range. The playground registers player, camera, firearm-user, and weapons plugins; the pad and range geometry stay here.
+Braidman on a flat range, plus a standing NPC braidman to the camera-right of
+the pad body. Both hold a bullpup through [`firearm-user`](../firearm-user/);
+only the followed player fires and drives the reticle.
+
+The playground registers player, camera, firearm-user, and weapons plugins; the
+pad and range geometry stay here.
 
 ```bash
 cargo run -p firing-range-playground

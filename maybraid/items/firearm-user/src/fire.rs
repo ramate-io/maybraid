@@ -4,12 +4,14 @@ use bevy::prelude::*;
 use firearms::WeaponTrigger;
 use maybraid_character_controller::CharacterIntent;
 
+use player::Player;
+
 use crate::FirearmUser;
 
 pub(crate) fn apply_fire_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	mut intents: MessageReader<CharacterIntent>,
-	users: Query<&FirearmUser>,
+	users: Query<&FirearmUser, With<Player>>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
 	let mut fire = mouse.pressed(MouseButton::Left);

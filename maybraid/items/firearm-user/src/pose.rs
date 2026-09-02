@@ -3,13 +3,13 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use crozon_characters::{
-	BoneMap, CharacterMembers, CharacterRig, CharacterRigRole, RigSkeletonKind,
+	BoneMap, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, RigSkeletonKind,
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
 	FirearmRoot, Weapon, WeaponTrigger,
 };
-use player::{PlayerLook, PlayerUse, PlayerVisual};
+use player::{PlayerLook, PlayerUse};
 
 use crate::hold::HoldingArms;
 use crate::{FirearmUser, FirearmUserSettings};
@@ -59,10 +59,14 @@ pub fn spawn_held_firearm(commands: &mut Commands, user: Entity) -> Entity {
 
 pub(crate) fn stamp_holding_arms(
 	mut commands: Commands,
-	visuals: Query<&CharacterMembers, With<PlayerVisual>>,
+	users: Query<(), With<FirearmUser>>,
+	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
 	rigs: Query<(Entity, &CharacterRig), Without<HoldingArms>>,
 ) {
-	for members in &visuals {
+	for (members, child_of) in &visuals {
+		if users.get(child_of.parent()).is_err() {
+			continue;
+		}
 		for member in members.iter() {
 			let Ok((entity, rig)) = rigs.get(member) else {
 				continue;
@@ -124,13 +128,13 @@ pub(crate) fn pose_held_firearm(
 	users: Query<(&FirearmUser, &PlayerLook)>,
 	visuals: Query<
 		(&Transform, &CharacterMembers, &ChildOf),
-		(With<PlayerVisual>, Without<HeldFirearm>, Without<crozon_characters::AnimBone>),
+		(With<CharacterRoot>, Without<HeldFirearm>, Without<crozon_characters::AnimBone>),
 	>,
 	maps: Query<&BoneMap, Without<HeldFirearm>>,
 	globals: Query<&GlobalTransform, Without<HeldFirearm>>,
 	mut guns: Query<
 		(&FirearmMembers, &HeldFirearm, &GlobalTransform, &mut Transform),
-		(With<FirearmRoot>, Without<PlayerVisual>),
+		(With<FirearmRoot>, Without<CharacterRoot>),
 	>,
 ) {
 	for (visual, members, child_of) in &visuals {

@@ -14,13 +14,14 @@ pub use body::{
 	CharacterController, Grounded, Jumping, MoveWish, MovementAction, PlayerControlSystems,
 };
 pub use identity::{
-	CameraFollow, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook, PlayerUse,
-	PlayerVisual, PlayerYawOwner,
+	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
+	PlayerUse, PlayerVisual, PlayerYawOwner,
 };
 pub use locomotion::drive_player_locomotion;
 pub use spawn::{
-	needs_player_visual, spawn_player, spawn_player_visual, spawn_player_with_hidden_capsule,
-	CAPSULE_LENGTH, CAPSULE_RADIUS,
+	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc, spawn_npc_visual,
+	spawn_npc_with_hidden_capsule, spawn_player, spawn_player_visual,
+	spawn_player_with_hidden_capsule, CAPSULE_LENGTH, CAPSULE_RADIUS,
 };
 
 /// Capsule physics and move/jump intents.

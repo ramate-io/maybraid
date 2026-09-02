@@ -5,6 +5,10 @@ use bevy::prelude::*;
 #[derive(Component)]
 pub struct Player;
 
+/// Capsule agent that is not the followed player. Shares look / pose slots, not pad or camera.
+#[derive(Component)]
+pub struct Npc;
+
 #[derive(Component)]
 pub struct CameraFollow;
 

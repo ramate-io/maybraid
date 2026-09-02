@@ -6,6 +6,8 @@ use bevy::prelude::*;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 
+use player::CameraFollow;
+
 use crate::pose::HeldFirearm;
 use crate::FirearmUser;
 
@@ -49,7 +51,7 @@ pub fn spawn_reticle(
 pub(crate) fn update_reticle(
 	spatial: SpatialQuery,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
-	users: Query<&FirearmUser>,
+	users: Query<&FirearmUser, With<CameraFollow>>,
 	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform, Without<Camera3d>>,
