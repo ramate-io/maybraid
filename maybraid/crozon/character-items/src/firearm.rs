@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{BoltMaterial, FirearmMaterial, ItemColor, ItemRng};
 
-pub const LENGTH_MILLI_MIN: u16 = 500;
-pub const LENGTH_MILLI_MAX: u16 = 1500;
+pub const LENGTH_MILLI_MIN: u16 = 200;
+pub const LENGTH_MILLI_MAX: u16 = 2000;
 pub const THICKNESS_MILLI_MIN: u16 = 800;
 pub const THICKNESS_MILLI_MAX: u16 = 1200;
 pub const SCALE_MILLI_UNIT: u16 = 1000;
@@ -337,7 +337,7 @@ pub struct SlotRest {
 
 impl SlotRest {
 	pub const BODY: Self = Self { length: 0.30, thickness: 0.16 };
-	pub const BARREL: Self = Self { length: 0.38, thickness: 0.35 };
+	pub const BARREL: Self = Self { length: 0.5, thickness: 0.35 };
 	pub const GRIP: Self = Self { length: 0.12, thickness: 0.45 };
 	pub const TRIGGER_BOX: Self = Self { length: 0.10, thickness: 0.09 };
 	pub const STOCK: Self = Self { length: 0.22, thickness: 0.11 };
