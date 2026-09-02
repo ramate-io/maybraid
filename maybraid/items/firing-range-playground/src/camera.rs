@@ -33,7 +33,7 @@ pub struct CameraController {
 }
 
 /// Free look relative to the body before the torso has to follow.
-const MAX_LOOK_YAW: f32 = 60.0_f32.to_radians();
+const MAX_LOOK_YAW: f32 = 15.0_f32.to_radians();
 const BODY_TURN_RATE: f32 = 8.0;
 /// Bevy default; keep the third-person orbit cinematic.
 const THIRD_PERSON_FOV: f32 = 45.0_f32.to_radians();
