@@ -38,6 +38,8 @@ pub struct MovementAbility {
 	pub max_step: f32,
 	/// Vertical jump budget (meters). Realization reads this; the planner does not.
 	pub max_jump: f32,
+	/// Largest unsupported drop this mover will deliberately enter.
+	pub max_fall: f32,
 	pub can_use_doors: bool,
 	pub can_use_stairs: bool,
 	pub agent_radius: f32,
@@ -55,6 +57,7 @@ impl Default for MovementAbility {
 		Self {
 			max_step: 0.4,
 			max_jump: 1.0,
+			max_fall: 1.2,
 			can_use_doors: false,
 			can_use_stairs: true,
 			agent_radius: 0.4,
@@ -75,6 +78,10 @@ pub trait MovementBody {
 	/// Vertical jump budget (meters). Realization uses this to decide whether to hop.
 	fn max_jump(&self) -> f32 {
 		0.0
+	}
+	/// Largest unsupported drop this mover will deliberately enter.
+	fn max_fall(&self) -> f32 {
+		1.0
 	}
 	fn feet_below_origin(&self) -> f32;
 	fn eye_height(&self) -> f32;
@@ -115,6 +122,10 @@ impl MovementBody for MovementAbility {
 
 	fn max_jump(&self) -> f32 {
 		self.max_jump
+	}
+
+	fn max_fall(&self) -> f32 {
+		self.max_fall
 	}
 
 	fn feet_below_origin(&self) -> f32 {

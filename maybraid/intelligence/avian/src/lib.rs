@@ -57,14 +57,25 @@ mod tests {
 		let path = AvianColliderPath {
 			points: vec![MovementLocation::new(Vec3::new(2.0, 0.0, 0.0), 0.5)],
 			cost: 2.0,
-			hints: AvianPathHints { hide: 1.0, sightline: 0.5, min_clearance: 0.4 },
+			hints: AvianPathHints {
+				hide: 1.0,
+				sightline: 0.5,
+				min_clearance: 0.4,
+				max_drop: 0.6,
+				fall_risk: 0.5,
+			},
 		};
 		let candidate = MovementCandidate::<MovementStep>::from(path);
 		assert_eq!(candidate.steps.len(), 1);
 		assert_eq!(candidate.surface_cost, 2.0);
 		assert_eq!(
 			candidate.hints,
-			MovementCandidateHints { hide: 1.0, sightline: 0.5, min_clearance: 0.4 }
+			MovementCandidateHints {
+				hide: 1.0,
+				sightline: 0.5,
+				min_clearance: 0.4,
+				fall_risk: 0.5,
+			}
 		);
 		Ok(())
 	}

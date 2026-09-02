@@ -10,6 +10,10 @@ use movement_intelligence_avian::{AvianColliderPath, AvianMovementSurface, Avian
 
 use crate::circulation::{CirculationStairwell, CirculationStorey};
 
+const STOREY_DROP_SLOP: f32 = 0.55;
+const STOREY_RECIRCULATION_BASE_COST: f32 = 24.0;
+const STOREY_RECIRCULATION_VERTICAL_COST: f32 = 2.0;
+
 /// Avian fine probes plus Richmond storey / stairwell IR.
 #[derive(SystemParam)]
 pub struct RichmondAvianMovementSurface<'w, 's> {
@@ -25,6 +29,10 @@ impl RichmondAvianMovementSurface<'_, '_> {
 			.filter(|storey| storey.contains(p))
 			.min_by(|a, b| (p.y - a.floor_y).abs().total_cmp(&(p.y - b.floor_y).abs()))
 			.map(|storey| storey.id)
+	}
+
+	fn storey(&self, id: u32) -> Option<&CirculationStorey> {
+		self.storeys.iter().find(|storey| storey.id == id)
 	}
 
 	fn link_on_actor(&self, p: Vec3) -> Option<&CirculationStairwell> {
@@ -105,7 +113,19 @@ where
 		let Some(to_id) = self.storey_at(goal) else {
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		};
-		if !ability.can_use_stairs() || from_id == to_id {
+		if from_id == to_id {
+			let floor_y = self.storey(from_id).map(|storey| storey.floor_y).unwrap_or(from.point.y);
+			return self
+				.avian
+				.collider_paths(from, exclude, ability, objective, budget)
+				.into_iter()
+				.map(|mut path| {
+					penalize_storey_drop(&mut path, from.point, ability, floor_y);
+					path.into_movement_candidate()
+				})
+				.collect();
+		}
+		if !ability.can_use_stairs() {
 			return self.avian.recommend_candidates(from, exclude, ability, objective, budget);
 		}
 
@@ -129,7 +149,8 @@ where
 		let prefixes = if already_at_mouth || on_stairs.is_some() {
 			vec![(Vec::new(), 0.0, MovementCandidateHints::default())]
 		} else {
-			mouth_prefixes(&self.avian, from, exclude, ability, approach_loc, budget)
+			let floor_y = self.storey(from_id).map(|storey| storey.floor_y).unwrap_or(from_walk.y);
+			mouth_prefixes(&self.avian, from, exclude, ability, approach_loc, budget, floor_y)
 		};
 
 		let mut climb_steps = Vec::new();
@@ -152,12 +173,17 @@ where
 
 		let upper_from = MovementLocation::new(cursor, ability.agent_radius());
 		let upper_budget = CandidateBudget {
-			max_candidates: 1,
+			max_candidates: budget.max_candidates.max(1).min(4),
 			max_steps: budget.max_steps,
 			horizon: budget.horizon,
 		};
 		let mut upper =
 			self.avian.collider_paths(upper_from, exclude, ability, objective, upper_budget);
+		let upper_floor_y =
+			self.storey(to_id).map(|storey| storey.floor_y).unwrap_or(cursor_walk.y);
+		for path in &mut upper {
+			penalize_storey_drop(path, upper_from.point, ability, upper_floor_y);
+		}
 		if upper.is_empty() {
 			let dest = objective
 				.location()
@@ -171,14 +197,21 @@ where
 		}
 
 		let mut out = Vec::new();
-		for (mut steps, cost, hints) in prefixes {
-			if out.len() >= budget.max_candidates {
-				break;
+		for (prefix_steps, prefix_cost, prefix_hints) in prefixes {
+			for tail in &upper {
+				if out.len() >= budget.max_candidates {
+					break;
+				}
+				let mut steps = prefix_steps.clone();
+				steps.extend(climb_steps.iter().copied());
+				steps.extend(tail.clone().into_steps());
+				let hints = merge_hints(prefix_hints, tail.hints.as_candidate_hints());
+				out.push(MovementCandidate::new(
+					steps,
+					prefix_cost + climb_cost + tail.cost,
+					hints,
+				));
 			}
-			steps.extend(climb_steps.iter().copied());
-			let tail = &upper[0];
-			steps.extend(tail.clone().into_steps());
-			out.push(MovementCandidate::new(steps, cost + climb_cost + tail.cost, hints));
 		}
 		out
 	}
@@ -196,6 +229,7 @@ fn mouth_prefixes<A: MovementSheet>(
 	ability: &A,
 	approach: MovementLocation,
 	budget: CandidateBudget,
+	storey_floor_y: f32,
 ) -> Vec<(Vec<MovementStep>, f32, MovementCandidateHints)> {
 	let mouth_budget = CandidateBudget {
 		max_candidates: budget.max_candidates.max(1).min(4),
@@ -218,7 +252,8 @@ fn mouth_prefixes<A: MovementSheet>(
 	}
 	paths
 		.into_iter()
-		.map(|path| {
+		.map(|mut path| {
+			penalize_storey_drop(&mut path, from.point, ability, storey_floor_y);
 			let cost = path.cost;
 			let hints = path.hints.as_candidate_hints();
 			(path.into_steps(), cost, hints)
@@ -226,6 +261,83 @@ fn mouth_prefixes<A: MovementSheet>(
 		.collect()
 }
 
+fn penalize_storey_drop<A: MovementBody>(
+	path: &mut AvianColliderPath,
+	from: Vec3,
+	ability: &A,
+	storey_floor_y: f32,
+) {
+	let starting_feet_y = from.y - ability.feet_below_origin();
+	let support_y = starting_feet_y - path.hints.max_drop;
+	let storey_drop = storey_floor_y - support_y;
+	if storey_drop > STOREY_DROP_SLOP {
+		path.cost +=
+			STOREY_RECIRCULATION_BASE_COST + storey_drop * STOREY_RECIRCULATION_VERTICAL_COST;
+	}
+}
+
+fn merge_hints(a: MovementCandidateHints, b: MovementCandidateHints) -> MovementCandidateHints {
+	MovementCandidateHints {
+		hide: b.hide.max(a.hide),
+		sightline: b.sightline.max(a.sightline),
+		min_clearance: if a.min_clearance <= 0.0 {
+			b.min_clearance
+		} else if b.min_clearance <= 0.0 {
+			a.min_clearance
+		} else {
+			a.min_clearance.min(b.min_clearance)
+		},
+		fall_risk: a.fall_risk.max(b.fall_risk),
+	}
+}
+
 fn lift_location<A: MovementBody>(walk: Vec3, ability: &A, radius: f32) -> MovementLocation {
 	MovementLocation::new(Vec3::new(walk.x, walk.y + ability.feet_below_origin(), walk.z), radius)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use movement_intelligence::MovementAbility;
+
+	#[test]
+	fn dropping_below_storey_adds_recirculation_cost() {
+		let ability = MovementAbility { max_fall: 8.0, ..Default::default() };
+		let from = Vec3::new(0.0, ability.feet_below_origin, 0.0);
+		let mut path = AvianColliderPath {
+			points: Vec::new(),
+			cost: 3.0,
+			hints: AvianPathHints {
+				max_drop: 3.0,
+				fall_risk: 3.0 / ability.max_fall,
+				..Default::default()
+			},
+		};
+		penalize_storey_drop(&mut path, from, &ability, 0.0);
+		assert!(path.cost > STOREY_RECIRCULATION_BASE_COST);
+	}
+
+	#[test]
+	fn small_same_storey_drop_keeps_geometric_cost() {
+		let ability = MovementAbility::default();
+		let from = Vec3::new(0.0, ability.feet_below_origin, 0.0);
+		let mut path = AvianColliderPath {
+			points: Vec::new(),
+			cost: 3.0,
+			hints: AvianPathHints { max_drop: 0.25, ..Default::default() },
+		};
+		penalize_storey_drop(&mut path, from, &ability, 0.0);
+		assert!((path.cost - 3.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn composed_path_keeps_worst_fall_risk() {
+		let prefix =
+			MovementCandidateHints { fall_risk: 0.2, min_clearance: 0.8, ..Default::default() };
+		let tail =
+			MovementCandidateHints { fall_risk: 0.7, min_clearance: 0.5, ..Default::default() };
+		let merged = merge_hints(prefix, tail);
+		assert!((merged.fall_risk - 0.7).abs() < 1e-4);
+		assert!((merged.min_clearance - 0.5).abs() < 1e-4);
+	}
 }

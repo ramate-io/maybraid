@@ -14,11 +14,19 @@ pub struct MovementIntelligenceSettings {
 	pub weight_surface: f32,
 	pub weight_hide: f32,
 	pub weight_sightline: f32,
+	/// Cost of using the mover's full tolerated fall, in surface-cost units.
+	pub weight_fall: f32,
 }
 
 impl Default for MovementIntelligenceSettings {
 	fn default() -> Self {
-		Self { stuck_timeout: 1.6, weight_surface: 1.0, weight_hide: 1.0, weight_sightline: 1.0 }
+		Self {
+			stuck_timeout: 1.6,
+			weight_surface: 1.0,
+			weight_hide: 1.0,
+			weight_sightline: 1.0,
+			weight_fall: 6.0,
+		}
 	}
 }
 
@@ -67,7 +75,8 @@ where
 		let sight = self.settings.weight_sightline
 			* self.objective.sightline_weight()
 			* candidate.hints.sightline;
-		surface - hide - sight
+		let fall = self.settings.weight_fall * candidate.hints.fall_risk;
+		surface + fall - hide - sight
 	}
 
 	pub fn adopt_plan(&mut self, steps: Vec<I>) {
@@ -170,7 +179,7 @@ mod tests {
 		MovementCandidate::new(
 			vec![MovementStep::MoveTo(MovementLocation::new(Vec3::X, 0.5))],
 			surface_cost,
-			MovementCandidateHints { hide, sightline, min_clearance: 1.0 },
+			MovementCandidateHints { hide, sightline, min_clearance: 1.0, fall_risk: 0.0 },
 		)
 	}
 
@@ -182,6 +191,16 @@ mod tests {
 		let open = brain.score_candidate(&candidate(0.0, 1.0, 10.0));
 		assert!(peek < cover, "{peek} vs cover {cover}");
 		assert!(peek < open, "{peek} vs open {open}");
+		Ok(())
+	}
+
+	#[test]
+	fn score_prefers_a_short_detour_to_a_tolerated_fall() -> anyhow::Result<()> {
+		let brain = MovementIntelligence::new(vantage());
+		let mut risky = candidate(0.0, 0.0, 5.0);
+		risky.hints.fall_risk = 0.5;
+		let safe = candidate(0.0, 0.0, 7.0);
+		assert!(brain.score_candidate(&safe) < brain.score_candidate(&risky));
 		Ok(())
 	}
 

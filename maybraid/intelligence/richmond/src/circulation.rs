@@ -118,9 +118,7 @@ pub fn circulation_from_stairwell(
 ) -> CirculationStairwell {
 	let well = stairwell.well();
 	let outward = xz_to_vec3(well.walk_on.into_xz());
-	let off = xz_to_vec3(well.walk_off.into_xz());
 	let mouth_local = well.side_mid(well.walk_on, well.bottom_y()) + outward * 1.35;
-	let landing_local = well.side_mid(well.walk_off, well.top_y()) - off * 1.1;
 	let mut polyline = vec![mouth_local];
 	let mut tread_points = Vec::new();
 	let mut lineup = None;
@@ -143,6 +141,28 @@ pub fn circulation_from_stairwell(
 		polyline.push(lineup);
 	}
 	polyline.extend(tread_points);
+	let landing_local = stairwell
+		.last_tread_end()
+		.map(|end| {
+			let leading = end.leading_mid();
+			let travel = end.travel.normalize_or_zero();
+			let outward = well.walk_off.into_xz();
+			let face = well.side_mid(well.walk_off, well.top_y()).xz();
+			let toward_face = travel.dot(outward);
+			let exit = if toward_face > 0.1 {
+				let to_face = ((face - leading).dot(outward) / toward_face).max(0.0);
+				leading + travel * (to_face + 0.65)
+			} else {
+				// Spiral/tangent fallback: leave at the tread's lateral position,
+				// never pull toward the conceptual center of the walk-off face.
+				leading + outward * ((face - leading).dot(outward).max(0.0) + 0.65)
+			};
+			Vec3::new(exit.x, well.top_y(), exit.y)
+		})
+		.unwrap_or_else(|| {
+			let off = xz_to_vec3(well.walk_off.into_xz());
+			well.side_mid(well.walk_off, well.top_y()) + off * 0.65
+		});
 	polyline.push(landing_local);
 	CirculationStairwell {
 		from_storey,
@@ -215,6 +235,21 @@ mod tests {
 			"entry should align with first flight: {entry_direction} vs {travel}"
 		);
 		assert!((lineup.y - well.bottom_y()).abs() < 1e-4);
+		let last_tread = link.polyline[link.polyline.len() - 2];
+		let exit = *link.polyline.last().expect("stair exit");
+		let last_node = stairwell.stairs().last().expect("last flight");
+		let exit_travel = (last_node.placement.rotation() * Vec3::X).with_y(0.0).normalize();
+		let exit_direction = (exit - last_tread).with_y(0.0).normalize();
+		assert!(
+			exit_direction.dot(exit_travel) > 0.99,
+			"exit should continue straight from last flight: {exit_direction} vs {exit_travel}"
+		);
+		let outward = well.walk_off.into_xz();
+		let face = well.side_mid(well.walk_off, well.top_y()).xz();
+		assert!(
+			(exit.xz() - face).dot(outward) > 0.6,
+			"exit should finish outside the well on the next floor: exit={exit}, face={face}"
+		);
 		Ok(())
 	}
 
