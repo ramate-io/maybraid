@@ -5,9 +5,10 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// Named firearm bodies currently in `items/guns/`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum FirearmMesh {
+	#[default]
 	Bullpup,
 	Silopup,
 	Reltor,

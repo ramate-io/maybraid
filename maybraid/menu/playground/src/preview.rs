@@ -6,16 +6,22 @@ use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
 use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
-use crozon_character_items::{ClothingHost, ClothingMesh, InventoryItem, ItemColor};
+use crozon_character_items::{ClothingHost, ClothingMesh, FirearmMesh, InventoryItem, ItemColor};
 use crozon_character_persist::SaveRoot;
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::{
-	spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies, MenuEvent, BODY_FOCUS,
+	spin_reveal_firearm_focus, spin_reveal_focus, CharacterField, CharacterMenu, ConceptSpecies,
+	MenuEvent, BODY_FOCUS,
 };
 use crozon_characters::{
 	add_character_components_host, character_bounds, AnimRef, AnimRefRoot, BoneMap,
 	CharacterComponents, CharacterHostSystems, CharacterMembers, CharacterRecipe, CharacterRig,
 	CharacterRigRole, ClothingLayer, ComponentsOnly, Layers, PartNode,
+};
+use firearms_components::assets::guns;
+use firearms_components::{
+	add_firearm_components_host, firearm_bounds, spawn_firearm_components, FirearmComponents,
+	FirearmComponentsPlugin, Layers as FirearmLayers, PartNode as FirearmPartNode, RigNode,
 };
 use lod::gen::LodScene;
 use lod::gen::LodSceneLevel;
@@ -50,6 +56,10 @@ pub struct CharacterPreviewPlugin;
 impl Plugin for CharacterPreviewPlugin {
 	fn build(&self, app: &mut App) {
 		add_character_components_host::<ClothingPreview>(app);
+		if !app.is_plugin_added::<FirearmComponentsPlugin>() {
+			app.add_plugins(FirearmComponentsPlugin);
+		}
+		add_firearm_components_host::<FirearmPreview>(app);
 		app.init_resource::<PreviewSyncState>()
 			.init_resource::<PendingCameraFocus>()
 			.insert_resource(GlobalAmbientLight {
@@ -129,8 +139,12 @@ fn sync_preview(
 			}
 			spawn_from_item(&mut commands, &spin.item);
 			pending.resolved = None;
-			pending.focus =
-				spin.item.mesh().map(|mesh| spin_reveal_focus(mesh.kind())).or(Some(BODY_FOCUS));
+			pending.focus = match spin.item.firearm_mesh() {
+				Some(_) => Some(spin_reveal_firearm_focus()),
+				None => {
+					spin.item.mesh().map(|mesh| spin_reveal_focus(mesh.kind())).or(Some(BODY_FOCUS))
+				}
+			};
 			return;
 		}
 	}
@@ -212,6 +226,10 @@ fn menu_for_saved(
 }
 
 fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
+	if let Some(mesh) = item.firearm_mesh() {
+		spawn_firearm(commands, mesh);
+		return;
+	}
 	let Some(mesh) = item.mesh() else {
 		return;
 	};
@@ -225,6 +243,74 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 				.with_material(material.id),
 		},
 	);
+}
+
+fn spawn_firearm(commands: &mut Commands, mesh: FirearmMesh) {
+	let preview = FirearmPreview { mesh };
+	for entity in
+		spawn_firearm_components(commands, &preview, Transform::IDENTITY, firearm_bounds(&preview))
+	{
+		commands.entity(entity).insert(CharacterPreviewRoot);
+	}
+}
+
+/// Assembled catalog kit, same slots as [`firearms::FirearmConcept::kit`].
+#[derive(Clone, Default, PartialEq)]
+struct FirearmPreview {
+	mesh: FirearmMesh,
+}
+
+impl FirearmComponents for FirearmPreview {
+	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<RigNode> {
+		FirearmLayers::from_labeled(
+			"receiver",
+			vec![RigNode::receiver("firearm-rig", guns::FIREARM_RIG.as_str())],
+		)
+	}
+
+	fn body_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
+		let path = match self.mesh {
+			FirearmMesh::Bullpup => guns::BULLPUP_BODY,
+			FirearmMesh::Silopup => guns::SILOPUP_BODY,
+			FirearmMesh::Reltor => guns::RELTOR_BODY,
+			FirearmMesh::Samsonist => guns::SAMSONIST_BODY,
+			FirearmMesh::Snailer => guns::SNAILER_BODY,
+		};
+		FirearmLayers::from_labeled(
+			"body",
+			vec![FirearmPartNode::body(self.mesh.label(), path.as_str())],
+		)
+	}
+
+	fn barrel_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
+		match self.mesh {
+			FirearmMesh::Bullpup => FirearmLayers::from_labeled(
+				"barrel",
+				vec![FirearmPartNode::barrel("bullpup", guns::BULLPUP_BARREL.as_str())],
+			),
+			_ => FirearmLayers::new(),
+		}
+	}
+
+	fn trigger_box_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
+		match self.mesh {
+			FirearmMesh::Reltor => FirearmLayers::from_labeled(
+				"trigger_box",
+				vec![FirearmPartNode::trigger_box("reltor", guns::RELTOR_BOX.as_str())],
+			),
+			_ => FirearmLayers::new(),
+		}
+	}
+
+	fn grip_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
+		match self.mesh {
+			FirearmMesh::Bullpup => FirearmLayers::from_labeled(
+				"grip",
+				vec![FirearmPartNode::grip("bump-handle", guns::BUMP_HANDLE.as_str())],
+			),
+			_ => FirearmLayers::new(),
+		}
+	}
 }
 
 /// Unskinned garment in bind pose. Camera framing is per clothing kind.

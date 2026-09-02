@@ -21,6 +21,11 @@ pub fn spin_reveal_focus(kind: ClothingKind) -> CameraFocus {
 	CameraFocus::new(FocusRig::Body, "root", camera, look)
 }
 
+/// World-space framing for an assembled firearm kit at the origin.
+pub fn spin_reveal_firearm_focus() -> CameraFocus {
+	CameraFocus::new(FocusRig::Body, "root", Vec3::new(1.6, 0.4, 2.2), Vec3::ZERO)
+}
+
 pub const HEAD_ROOT_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Head, "root", Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.05, 0.0));
 

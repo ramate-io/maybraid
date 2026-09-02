@@ -4676,6 +4676,7 @@ dependencies = [
  "crozon-character-ui-menus",
  "crozon-characters",
  "crozon-inventory-user",
+ "firearms-components",
  "game-commands",
  "lod",
  "maybraid-character-ui-menu-renderer",
