@@ -6,19 +6,20 @@ use bevy::prelude::*;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, FirearmRoot, RigRoot};
 use lod_avian::PhysicsInteractionLayer;
 
-use crate::character::HeldFirearm;
+use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 const AIM_DISTANCE: f32 = 100.0;
 const SURFACE_LIFT: f32 = 0.015;
 const ANGULAR_SIZE: f32 = 0.004;
 
 #[derive(Component)]
-pub(crate) struct Reticle;
+pub struct Reticle;
 
-pub(crate) fn spawn_reticle(
-	mut commands: Commands,
-	mut meshes: ResMut<Assets<Mesh>>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+pub fn spawn_reticle(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
 ) {
 	let color = Color::srgb(0.45, 1.0, 0.95);
 	let glow = color.to_linear();
@@ -39,10 +40,10 @@ pub(crate) fn spawn_reticle(
 	));
 }
 
-/// Cast from the barrel and place the marker just in front of the first surface.
 pub(crate) fn update_reticle(
 	spatial: SpatialQuery,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
+	users: Query<&FirearmUser>,
 	guns: Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform, Without<Camera3d>>,
@@ -51,7 +52,10 @@ pub(crate) fn update_reticle(
 	let Ok(camera) = cameras.single() else {
 		return;
 	};
-	let Some((origin, direction)) = barrel_ray(&guns, &maps, &globals) else {
+	let Some(user) = users.iter().next() else {
+		return;
+	};
+	let Some((origin, direction)) = barrel_ray(user.held, &guns, &maps, &globals) else {
 		return;
 	};
 	let Ok((mut transform, mut visibility)) = reticles.single_mut() else {
@@ -73,11 +77,12 @@ pub(crate) fn update_reticle(
 }
 
 fn barrel_ray(
+	held: Entity,
 	guns: &Query<&FirearmMembers, (With<HeldFirearm>, With<FirearmRoot>)>,
 	maps: &Query<&BoneMap, With<RigRoot>>,
 	globals: &Query<&GlobalTransform, Without<Camera3d>>,
 ) -> Option<(Vec3, Dir3)> {
-	let members = guns.single().ok()?;
+	let members = guns.get(held).ok()?;
 	for member in members.iter() {
 		let Ok(map) = maps.get(member) else {
 			continue;

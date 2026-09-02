@@ -3310,6 +3310,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "firearm-user"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "crozon-characters",
+ "crozon-rigs",
+ "firearms",
+ "lod-avian",
+ "maybraid-character-controller",
+ "maybraid-player",
+ "maybraid-player-camera",
+]
+
+[[package]]
 name = "firearms"
 version = "0.0.1"
 dependencies = [
@@ -3320,6 +3335,7 @@ dependencies = [
  "firearms-components",
  "lod",
  "lod-avian",
+ "maybraid-projectiles",
  "scene-ref",
 ]
 
@@ -3341,13 +3357,14 @@ dependencies = [
  "bevy",
  "clap",
  "crozon-characters",
- "crozon-rigs",
+ "firearm-user",
  "firearms",
  "game-commands",
- "lod",
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",
+ "maybraid-player",
+ "maybraid-player-camera",
 ]
 
 [[package]]
@@ -4533,6 +4550,38 @@ dependencies = [
  "bevy",
  "maybraid-input",
  "menu-components",
+]
+
+[[package]]
+name = "maybraid-player"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "crozon-characters",
+ "lod",
+ "lod-avian",
+ "maybraid-character-controller",
+]
+
+[[package]]
+name = "maybraid-player-camera"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "crozon-characters",
+ "lod",
+ "maybraid-character-controller",
+ "maybraid-player",
+]
+
+[[package]]
+name = "maybraid-projectiles"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "lod-avian",
 ]
 
 [[package]]

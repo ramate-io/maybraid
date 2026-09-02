@@ -67,8 +67,12 @@ members = [
   "maybraid/world/playground",
   "maybraid/game",
   "maybraid/input",
+  "maybraid/player",
+  "maybraid/player-camera",
+  "maybraid/projectiles",
   "maybraid/items/firearms-components",
   "maybraid/items/firearms",
+  "maybraid/items/firearm-user",
   "maybraid/items/playground",
   "maybraid/items/firing-range-playground",
   "maybraid/chico/sdf",
@@ -276,8 +280,12 @@ maybraid-sky = { path = "maybraid/sky/lib" }
 maybraid-world = { path = "maybraid/world/lib" }
 maybraid = { path = "maybraid/game" }
 maybraid-input = { path = "maybraid/input" }
+maybraid-player = { path = "maybraid/player" }
+maybraid-player-camera = { path = "maybraid/player-camera" }
+maybraid-projectiles = { path = "maybraid/projectiles" }
 firearms-components = { path = "maybraid/items/firearms-components" }
 firearms = { path = "maybraid/items/firearms" }
+firearm-user = { path = "maybraid/items/firearm-user" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 

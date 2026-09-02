@@ -7,12 +7,14 @@ use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 use crozon_rigs::{Name, Side};
 use firearms::{FirearmMembers, FirearmRoot};
+use maybraid_player::PlayerVisual;
 
-use crate::character::{HeldFirearm, PlayerVisual};
+use crate::pose::HeldFirearm;
+use crate::FirearmUser;
 
 /// Body-rig marker: after locomotion, apply the firearm hold.
 #[derive(Component, Clone, Copy, Default)]
-pub(crate) struct HoldingArms;
+pub struct HoldingArms;
 
 const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
 /// Right elbow wings outward (body −X) and down at roughly 45°.
@@ -29,7 +31,11 @@ const LEFT_REACH_STRETCH: f32 = 1.15;
 
 /// Point the trigger hand at `trigger_point` and the support hand at the grip socket.
 pub(crate) fn sync_hands_to_firearm(
-	visuals: Query<(&GlobalTransform, &CharacterMembers), (With<PlayerVisual>, Without<AnimBone>)>,
+	users: Query<&FirearmUser>,
+	visuals: Query<
+		(&GlobalTransform, &CharacterMembers, &ChildOf),
+		(With<PlayerVisual>, Without<AnimBone>),
+	>,
 	guns: Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
 		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
@@ -39,52 +45,55 @@ pub(crate) fn sync_hands_to_firearm(
 	mut rigs: Query<(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox), With<HoldingArms>>,
 	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<PlayerVisual>)>,
 ) {
-	let Ok((visual, members)) = visuals.single() else {
-		return;
-	};
-	let body_rot = visual.rotation();
-	let trigger = gun_landmark(&guns, &gun_maps, &globals, "trigger_point");
-	let grip = gun_landmark(&guns, &gun_maps, &globals, GRIP_SOCKET);
-	let (Some(trigger), Some(grip)) = (trigger, grip) else {
-		return;
-	};
-
-	for member in members.iter() {
-		let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+	for (visual, members, child_of) in &visuals {
+		let Ok(user) = users.get(child_of.parent()) else {
 			continue;
 		};
-		if mailbox.output.is_empty() {
+		let body_rot = visual.rotation();
+		let trigger = gun_landmark(user.held, &guns, &gun_maps, &globals, "trigger_point");
+		let grip = gun_landmark(user.held, &guns, &gun_maps, &globals, GRIP_SOCKET);
+		let (Some(trigger), Some(grip)) = (trigger, grip) else {
 			continue;
+		};
+
+		for member in members.iter() {
+			let Ok((mut rig, map, mailbox)) = rigs.get_mut(member) else {
+				continue;
+			};
+			if mailbox.output.is_empty() {
+				continue;
+			}
+			rig.pose = mailbox.output.clone();
+			pose_firing_torso(&mut rig);
+			reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
+			reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
+			let right = arm_reach(
+				&rig,
+				Side::Right,
+				target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
+				RIGHT_POLE,
+				1.0,
+			);
+			let left = arm_reach(
+				&rig,
+				Side::Left,
+				target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
+				LEFT_POLE,
+				LEFT_REACH_STRETCH,
+			);
+			if let Some(right) = right {
+				pose_arm(&mut rig, Side::Right, right, 1.0);
+			}
+			if let Some(left) = left {
+				pose_arm(&mut rig, Side::Left, left, LEFT_REACH_STRETCH);
+			}
+			write_hold_bones(&rig, map, &mut bones);
 		}
-		rig.pose = mailbox.output.clone();
-		pose_firing_torso(&mut rig);
-		reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
-		reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
-		let right = arm_reach(
-			&rig,
-			Side::Right,
-			target_from(body_rot, bone_world(map, &globals, "humerus.R"), trigger),
-			RIGHT_POLE,
-			1.0,
-		);
-		let left = arm_reach(
-			&rig,
-			Side::Left,
-			target_from(body_rot, bone_world(map, &globals, "humerus.L"), grip),
-			LEFT_POLE,
-			LEFT_REACH_STRETCH,
-		);
-		if let Some(right) = right {
-			pose_arm(&mut rig, Side::Right, right, 1.0);
-		}
-		if let Some(left) = left {
-			pose_arm(&mut rig, Side::Left, left, LEFT_REACH_STRETCH);
-		}
-		write_hold_bones(&rig, map, &mut bones);
 	}
 }
 
 fn gun_landmark(
+	held: Entity,
 	guns: &Query<
 		(&FirearmMembers, &Transform, &GlobalTransform),
 		(With<HeldFirearm>, With<FirearmRoot>, Without<AnimBone>),
@@ -93,7 +102,7 @@ fn gun_landmark(
 	globals: &Query<&GlobalTransform>,
 	name: &str,
 ) -> Option<Vec3> {
-	let (members, current_root, previous_root) = guns.single().ok()?;
+	let (members, current_root, previous_root) = guns.get(held).ok()?;
 	let previous_landmark = named_translation(members.iter(), maps, globals, name)?;
 	let landmark_local = previous_root.affine().inverse().transform_point3(previous_landmark);
 	Some(current_root.compute_affine().transform_point3(landmark_local))

@@ -1,7 +1,7 @@
 [package]
-name = "firearms"
+name = "firearm-user"
 version = { workspace = true }
-edition  = { workspace = true }
+edition = { workspace = true }
 license  = { workspace = true }
 authors = { workspace = true }
 repository = { workspace = true }
@@ -12,13 +12,13 @@ rust-version = { workspace = true }
 [dependencies]
 avian3d = { workspace = true }
 bevy = { workspace = true }
-bevy_hanabi = { workspace = true }
-clap = { workspace = true }
-firearms-components = { workspace = true }
-maybraid-projectiles = { workspace = true }
+crozon-characters = { workspace = true }
+crozon-rigs = { workspace = true }
+firearms = { workspace = true }
 lod-avian = { workspace = true }
-lod = { workspace = true }
-scene-ref = { workspace = true }
+maybraid-character-controller = { workspace = true }
+maybraid-player = { workspace = true }
+maybraid-player-camera = { workspace = true }
 
 [lints]
 workspace = true

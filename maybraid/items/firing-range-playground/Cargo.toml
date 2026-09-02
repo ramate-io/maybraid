@@ -2,7 +2,7 @@
 name = "firing-range-playground"
 version = { workspace = true }
 edition = { workspace = true }
-license = { workspace = true }
+license  = { workspace = true }
 authors = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -18,13 +18,14 @@ avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 crozon-characters = { workspace = true }
-crozon-rigs = { workspace = true }
+firearm-user = { workspace = true }
 firearms = { workspace = true }
 game-commands = { workspace = true }
-lod = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
+maybraid-player = { workspace = true }
+maybraid-player-camera = { workspace = true }
 
 [lints]
 workspace = true
