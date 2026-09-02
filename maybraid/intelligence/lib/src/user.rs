@@ -119,13 +119,13 @@ where
 				self.cursor += 1;
 				continue;
 			};
-			if target.contains_xz(position) {
+			if target.contains(position) {
 				self.cursor += 1;
 				self.stuck_seconds = 0.0;
 				self.last_goal_distance = f32::MAX;
 				continue;
 			}
-			let dist = target.xz_distance(position);
+			let dist = target.approach_distance(position);
 			let wish = target.xz_wish_from(position);
 			if dist + 0.08 < self.last_goal_distance {
 				self.last_goal_distance = dist;

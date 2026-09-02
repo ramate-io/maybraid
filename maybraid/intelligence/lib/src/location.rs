@@ -25,6 +25,22 @@ impl MovementLocation {
 		self.xz_distance(other) <= self.radius
 	}
 
+	/// XZ disk plus a vertical band so storey changes are not “arrived” from below.
+	pub fn contains(self, other: Vec3) -> bool {
+		self.contains_xz(other) && (other.y - self.point.y).abs() <= self.vertical_slop()
+	}
+
+	pub fn vertical_slop(self) -> f32 {
+		(self.radius + 0.45).max(0.7)
+	}
+
+	/// Horizontal plus vertical distance used for stuck detection.
+	pub fn approach_distance(self, other: Vec3) -> f32 {
+		let xz = self.xz_distance(other);
+		let dy = (other.y - self.point.y).abs();
+		xz.max(dy)
+	}
+
 	pub fn with_y(self, y: f32) -> Self {
 		Self { point: Vec3::new(self.point.x, y, self.point.z), radius: self.radius }
 	}
@@ -62,6 +78,14 @@ mod tests {
 		let loc = MovementLocation::new(Vec3::new(1.0, 8.0, 0.0), 0.5);
 		assert!(loc.contains_xz(Vec3::new(1.2, 0.0, 0.1)));
 		assert!(!loc.contains_xz(Vec3::new(2.0, 8.0, 0.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn contains_rejects_another_storey() -> anyhow::Result<()> {
+		let loc = MovementLocation::new(Vec3::new(1.0, 4.0, 0.0), 0.5);
+		assert!(loc.contains(Vec3::new(1.1, 4.2, 0.0)));
+		assert!(!loc.contains(Vec3::new(1.1, 0.5, 0.0)));
 		Ok(())
 	}
 

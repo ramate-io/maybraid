@@ -2,6 +2,7 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Component;
+use bevy_math::{Quat, Vec3};
 use bevy::scene::prelude::Scene;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
@@ -43,6 +44,23 @@ impl StairNode {
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
 		self.confines = confines;
 		self
+	}
+
+	/// Oriented cuboids for each walkable tread (center, rotation, full size).
+	pub fn tread_cuboids(&self) -> Vec<(Vec3, Quat, Vec3)> {
+		self.geometry
+			.placed_kits(self.placement)
+			.into_iter()
+			.map(|piece| {
+				let p = piece.placement;
+				let size = Vec3::new(
+					(2.0 * p.scale.x).abs().max(0.05),
+					(2.0 * p.scale.y).abs().max(0.05),
+					(2.0 * p.scale.z).abs().max(0.05),
+				);
+				(p.translation, p.rotation(), size)
+			})
+			.collect()
 	}
 }
 

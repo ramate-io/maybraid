@@ -21,13 +21,20 @@ crozon-characters = { workspace = true }
 firearm-user = { workspace = true }
 firearms = { workspace = true }
 game-commands = { workspace = true }
+lod = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }
+movement-intelligence-richmond = { workspace = true }
 player = { workspace = true }
 player-camera = { workspace = true }
+procedural-common = { workspace = true }
+richmond-building-components = { workspace = true }
+richmond-building-physics = { workspace = true }
+richmond-buildings = { workspace = true }
+richmond-developments = { workspace = true }
 
 [lints]
 workspace = true
