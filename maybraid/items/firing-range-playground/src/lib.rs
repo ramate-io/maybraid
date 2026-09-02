@@ -3,6 +3,7 @@
 pub mod commands;
 mod range;
 mod ui;
+mod vantage;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
@@ -16,6 +17,10 @@ use firearms::{FirearmHostsPlugin, FirearmWeaponsPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadSystems};
+use movement_intelligence::{
+	MovementIntelligence, MovementIntelligencePlugin, MovementIntelligenceSystems, ReplanMovement,
+};
+use movement_intelligence_avian::AvianMovementSurface;
 use player::{
 	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc_visual,
 	spawn_npc_with_hidden_capsule, spawn_player_visual, spawn_player_with_hidden_capsule, Npc,
@@ -35,6 +40,8 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
+			.add_plugins(MovementIntelligencePlugin::<AvianMovementSurface<'_, '_>>::default())
+			.init_resource::<vantage::NpcVantageRefresh>()
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_systems(
 				Startup,
@@ -55,6 +62,7 @@ impl Plugin for FiringRangePlugin {
 				(
 					spawn_player_character,
 					spawn_npc_character,
+					vantage::refresh_npc_vantage.before(MovementIntelligenceSystems::Replan),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -78,13 +86,21 @@ fn spawn_npc_system(
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	spawn_npc_with_hidden_capsule(
+	let npc = spawn_npc_with_hidden_capsule(
 		&mut commands,
-		Vec3::new(0.0, capsule_spawn_height(), 2.5),
+		Vec3::new(-6.5, capsule_spawn_height(), -8.0),
 		PlayerLook { yaw: -FRAC_PI_2, ..default() },
 		&mut meshes,
 		&mut materials,
 	);
+	commands.entity(npc).insert((
+		MovementIntelligence::new(vantage::vantage_on_player(Vec3::new(
+			0.0,
+			capsule_spawn_height(),
+			0.0,
+		))),
+		ReplanMovement,
+	));
 }
 
 fn spawn_held_system(mut commands: Commands, bodies: Query<Entity, Or<(With<Player>, With<Npc>)>>) {
