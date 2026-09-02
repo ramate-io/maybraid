@@ -6,7 +6,7 @@
 use crate::{
 	names::mix, BoltMaterial, FireMode, FirearmBarrel, FirearmGrip, FirearmMaterial, FirearmMesh,
 	FirearmScales, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, ItemColor, ItemRng,
-	ProjectileKind, SlotScale,
+	ProjectileKind, SlotLook, SlotScale,
 };
 
 const FIREARM_SEED: u64 = 0xF1A4_A11A_0002_C0DE;
@@ -128,14 +128,32 @@ pub trait FirearmBuff {
 impl FirearmBuff for FirearmSpec {
 	fn contribute(&self, priors: &mut FirearmPriors) {
 		self.kit.body.contribute(priors);
+		self.looks.body.contribute(priors);
 		self.kit.barrel.contribute(priors);
+		if !matches!(self.kit.barrel, FirearmBarrel::None) {
+			self.looks.barrel.contribute(priors);
+		}
 		self.kit.grip.contribute(priors);
+		if !matches!(self.kit.grip, FirearmGrip::None) {
+			self.looks.grip.contribute(priors);
+		}
 		self.kit.trigger_box.contribute(priors);
+		if !matches!(self.kit.trigger_box, FirearmTriggerBox::None) {
+			self.looks.trigger_box.contribute(priors);
+		}
 		self.kit.stock.contribute(priors);
+		if !matches!(self.kit.stock, FirearmStock::None) {
+			self.looks.stock.contribute(priors);
+		}
 		self.scales.contribute(priors);
+		self.bolt.contribute(priors);
+	}
+}
+
+impl FirearmBuff for SlotLook {
+	fn contribute(&self, priors: &mut FirearmPriors) {
 		self.material.contribute(priors);
 		self.color.contribute(priors);
-		self.bolt.contribute(priors);
 	}
 }
 

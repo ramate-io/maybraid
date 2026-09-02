@@ -408,6 +408,17 @@ pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
 	items
 }
 
+/// Generated firearms for a visual gallery. Bodies may repeat after the catalog
+/// is exhausted so the grid can be larger than the body list.
+pub fn random_gallery_firearms(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
+	(0..count)
+		.map(|_| {
+			let body = *rng.choose(FirearmMesh::VALUES).unwrap_or(&FirearmMesh::Bullpup);
+			InventoryItem::from_firearm_spec(FirearmSpec::roll(rng, body))
+		})
+		.collect()
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -502,5 +513,12 @@ mod tests {
 		let b = random_starter_loadout(&mut ItemRng::from_seed(42));
 		assert_eq!(a, b);
 		assert_ne!(a[0].name(), a[0].label());
+	}
+
+	#[test]
+	fn gallery_can_exceed_the_body_catalog() {
+		let items = random_gallery_firearms(&mut ItemRng::from_seed(1), 20);
+		assert_eq!(items.len(), 20);
+		assert!(items.iter().all(|item| item.firearm_spec().is_some()));
 	}
 }

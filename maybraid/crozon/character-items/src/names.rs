@@ -26,8 +26,8 @@ pub fn hashed_firearm_name(spec: FirearmSpec) -> String {
 	let hash = mix(0xA11A_4A45_F1A4_0001, &spec.identity_label());
 	format!(
 		"{} {} {}",
-		pick(spec.material.adjectives(), hash),
-		pick(spec.color.adjectives(), hash >> 17),
+		pick(spec.looks.body.material.adjectives(), hash),
+		pick(spec.looks.body.color.adjectives(), hash >> 17),
 		pick(spec.kit.body.nouns(), hash >> 33),
 	)
 }

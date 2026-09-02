@@ -8,7 +8,7 @@ use bevy::window::PrimaryWindow;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_items::{
 	ClothingHost, ClothingMesh, FirearmBarrel, FirearmGrip, FirearmSpec, FirearmTriggerBox,
-	InventoryItem, ItemColor,
+	InventoryItem, ItemColor, SlotLook,
 };
 use crozon_character_persist::SaveRoot;
 use crozon_character_playground::CameraController;
@@ -39,6 +39,7 @@ use menu_screens::{
 
 use crate::character::{CharacterMenuState, CharacterScreen};
 use crate::session::ActiveCharacter;
+use crate::weapon_gallery::{RequestShowWeapons, WeaponGalleryScreen};
 
 #[derive(Component)]
 struct CharacterPreviewRoot;
@@ -111,6 +112,8 @@ fn sync_preview(
 	spin_screens: Query<Entity, With<SpinRevealScreen>>,
 	home: Query<Entity, With<HomeScreen>>,
 	gallery: Query<Entity, With<GalleryScreen>>,
+	weapons: Query<Entity, With<WeaponGalleryScreen>>,
+	weapon_requests: Query<Entity, With<RequestShowWeapons>>,
 	menu_state: Res<CharacterMenuState>,
 	spin: Option<Res<SpinRevealCurrent>>,
 	active: Option<Res<ActiveCharacter>>,
@@ -119,6 +122,11 @@ fn sync_preview(
 	mut pending: ResMut<PendingCameraFocus>,
 	roots: Query<Entity, With<CharacterPreviewRoot>>,
 ) {
+	if !weapons.is_empty() || !weapon_requests.is_empty() {
+		clear_preview(&mut commands, &mut sync, &mut pending, &roots);
+		return;
+	}
+
 	if !screens.is_empty() {
 		respawn_from_menu(
 			&mut commands,
@@ -231,9 +239,20 @@ fn menu_for_saved(
 	Some(CharacterMenu::for_saved(model.name, &model.appearance, inventory))
 }
 
+pub(crate) fn spawn_firearm(
+	commands: &mut Commands,
+	spec: FirearmSpec,
+	transform: Transform,
+) -> Vec<Entity> {
+	let preview = FirearmPreview { spec };
+	spawn_firearm_components(commands, &preview, transform, firearm_bounds(&preview))
+}
+
 fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 	if let Some(spec) = item.firearm_spec() {
-		spawn_firearm(commands, spec);
+		for entity in spawn_firearm(commands, spec, Transform::IDENTITY) {
+			commands.entity(entity).insert(CharacterPreviewRoot);
+		}
 		return;
 	}
 	let Some(mesh) = item.mesh() else {
@@ -251,15 +270,6 @@ fn spawn_from_item(commands: &mut Commands, item: &InventoryItem) {
 	);
 }
 
-fn spawn_firearm(commands: &mut Commands, spec: FirearmSpec) {
-	let preview = FirearmPreview { spec };
-	for entity in
-		spawn_firearm_components(commands, &preview, Transform::IDENTITY, firearm_bounds(&preview))
-	{
-		commands.entity(entity).insert(CharacterPreviewRoot);
-	}
-}
-
 /// Assembled catalog kit from inventory identity.
 #[derive(Clone, Default, PartialEq)]
 struct FirearmPreview {
@@ -267,22 +277,16 @@ struct FirearmPreview {
 }
 
 impl FirearmPreview {
-	fn material(&self) -> MaterialRef {
-		MaterialRef::named(self.spec.material.recipe_id()).with_palette([self.spec.color.color()])
+	fn look_material(look: SlotLook) -> MaterialRef {
+		MaterialRef::named(look.material.recipe_id()).with_palette([look.color.color()])
 	}
 
 	fn pose(&self) -> ResolvedRigPose {
 		let mut layer = RigPoseLayer::new("kit");
-		for (name, scale) in [
-			("body", self.spec.scales.body),
-			("barrel", self.spec.scales.barrel),
-			("grip", self.spec.scales.grip),
-			("trigger_box", self.spec.scales.trigger_box),
-			("stock", self.spec.scales.stock),
-		] {
+		for (name, length, thickness) in self.spec.scales.bone_fits() {
 			layer = layer
-				.with_scale(BoneScale::length(name, scale.length()))
-				.with_scale(BoneScale::thickness(name, scale.thickness()));
+				.with_scale(BoneScale::length(name, length))
+				.with_scale(BoneScale::thickness(name, thickness));
 		}
 		ResolvedRigPose::new().with_layer(layer)
 	}
@@ -297,7 +301,7 @@ impl FirearmComponents for FirearmPreview {
 	}
 
 	fn body_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		let material = self.material();
+		let material = Self::look_material(self.spec.looks.body);
 		let body = self.spec.kit.body;
 		FirearmLayers::from_labeled(
 			"body",
@@ -306,7 +310,7 @@ impl FirearmComponents for FirearmPreview {
 	}
 
 	fn barrel_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		let material = self.material();
+		let material = Self::look_material(self.spec.looks.barrel);
 		match self.spec.kit.barrel {
 			FirearmBarrel::None => FirearmLayers::new(),
 			FirearmBarrel::Bullpup => FirearmLayers::from_labeled(
@@ -323,7 +327,7 @@ impl FirearmComponents for FirearmPreview {
 	}
 
 	fn trigger_box_nodes_for_level(&self, _level: LodSceneLevel) -> FirearmLayers<FirearmPartNode> {
-		let material = self.material();
+		let material = Self::look_material(self.spec.looks.trigger_box);
 		match self.spec.kit.trigger_box {
 			FirearmTriggerBox::None => FirearmLayers::new(),
 			FirearmTriggerBox::Keelripe => FirearmLayers::from_labeled(
@@ -350,7 +354,7 @@ impl FirearmComponents for FirearmPreview {
 			FirearmGrip::BumpHandle => FirearmLayers::from_labeled(
 				"grip",
 				vec![FirearmPartNode::grip("bump-handle", guns::BUMP_HANDLE.as_str())
-					.with_material(self.material())],
+					.with_material(Self::look_material(self.spec.looks.grip))],
 			),
 		}
 	}
@@ -515,10 +519,14 @@ fn apply_preview_camera_focus(
 	windows: Query<&Window, With<PrimaryWindow>>,
 	home: Query<(), With<HomeScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
+	weapons: Query<(), With<WeaponGalleryScreen>>,
 	roots: Query<&CharacterMembers, With<CharacterPreviewRoot>>,
 	rigs: Query<(Entity, &CharacterRig, &BoneMap, &GlobalTransform)>,
 	transforms: Query<&GlobalTransform>,
 ) {
+	if !weapons.is_empty() {
+		return;
+	}
 	let Some(focus) = pending.focus else {
 		return;
 	};

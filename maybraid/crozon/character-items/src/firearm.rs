@@ -323,14 +323,123 @@ impl Default for FirearmScales {
 	}
 }
 
+/// Authored kit bones are 1m. Handheld rest is this fraction of authored.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SlotRest {
+	pub length: f32,
+	pub thickness: f32,
+}
+
+impl SlotRest {
+	pub const BODY: Self = Self { length: 0.30, thickness: 0.16 };
+	pub const BARREL: Self = Self { length: 0.38, thickness: 0.07 };
+	pub const GRIP: Self = Self { length: 0.12, thickness: 0.09 };
+	pub const TRIGGER_BOX: Self = Self { length: 0.10, thickness: 0.09 };
+	pub const STOCK: Self = Self { length: 0.22, thickness: 0.11 };
+
+	pub const fn applied(self, scale: SlotScale) -> (f32, f32) {
+		(self.length * scale.length(), self.thickness * scale.thickness())
+	}
+}
+
+impl SlotScale {
+	pub const fn applied_length(self, rest: SlotRest) -> f32 {
+		rest.length * self.length()
+	}
+
+	pub const fn applied_thickness(self, rest: SlotRest) -> f32 {
+		rest.thickness * self.thickness()
+	}
+}
+
+impl FirearmScales {
+	/// Length / thickness to stamp on kit bones (rest × rolled multiplier).
+	pub fn bone_fits(self) -> [(&'static str, f32, f32); 5] {
+		let body = SlotRest::BODY.applied(self.body);
+		let barrel = SlotRest::BARREL.applied(self.barrel);
+		let grip = SlotRest::GRIP.applied(self.grip);
+		let trigger = SlotRest::TRIGGER_BOX.applied(self.trigger_box);
+		let stock = SlotRest::STOCK.applied(self.stock);
+		[
+			("body", body.0, body.1),
+			("barrel", barrel.0, barrel.1),
+			("grip", grip.0, grip.1),
+			("trigger_box", trigger.0, trigger.1),
+			("stock", stock.0, stock.1),
+		]
+	}
+}
+
+/// One kit slot's surface recipe and palette color.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct SlotLook {
+	pub material: FirearmMaterial,
+	pub color: ItemColor,
+}
+
+impl SlotLook {
+	pub const fn new(material: FirearmMaterial, color: ItemColor) -> Self {
+		Self { material, color }
+	}
+
+	pub fn roll(rng: &mut ItemRng) -> Self {
+		Self {
+			material: *rng
+				.choose(FirearmMaterial::VALUES)
+				.unwrap_or(&FirearmMaterial::BrushedMetal),
+			color: *rng.choose(ItemColor::VALUES).unwrap_or(&ItemColor::Natural),
+		}
+	}
+}
+
+impl Default for SlotLook {
+	fn default() -> Self {
+		Self::new(FirearmMaterial::BrushedMetal, ItemColor::Natural)
+	}
+}
+
+/// Per-slot looks in Body → Barrel → Grip → Trigger box → Stock order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct FirearmLooks {
+	pub body: SlotLook,
+	pub barrel: SlotLook,
+	pub grip: SlotLook,
+	pub trigger_box: SlotLook,
+	pub stock: SlotLook,
+}
+
+impl FirearmLooks {
+	pub const fn uniform(material: FirearmMaterial, color: ItemColor) -> Self {
+		let look = SlotLook::new(material, color);
+		Self { body: look, barrel: look, grip: look, trigger_box: look, stock: look }
+	}
+
+	pub fn roll(rng: &mut ItemRng) -> Self {
+		Self {
+			body: SlotLook::roll(rng),
+			barrel: SlotLook::roll(rng),
+			grip: SlotLook::roll(rng),
+			trigger_box: SlotLook::roll(rng),
+			stock: SlotLook::roll(rng),
+		}
+	}
+}
+
+impl Default for FirearmLooks {
+	fn default() -> Self {
+		Self::uniform(FirearmMaterial::BrushedMetal, ItemColor::Natural)
+	}
+}
+
 /// Full firearm identity used to hash stats and rebuild the kit at spawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FirearmSpec {
 	pub kit: FirearmKitSpec,
 	pub scales: FirearmScales,
-	pub material: FirearmMaterial,
-	pub color: ItemColor,
+	pub looks: FirearmLooks,
 	pub bolt: BoltMaterial,
 }
 
@@ -340,8 +449,7 @@ impl FirearmSpec {
 		Self {
 			kit: mesh.concept_kit(),
 			scales: FirearmScales::UNIT,
-			material: FirearmMaterial::BrushedMetal,
-			color: ItemColor::Natural,
+			looks: FirearmLooks::uniform(FirearmMaterial::BrushedMetal, ItemColor::Natural),
 			bolt: BoltMaterial::PlainLaser,
 		}
 	}
@@ -358,24 +466,24 @@ impl FirearmSpec {
 				stock: FirearmStock::None,
 			},
 			scales: FirearmScales::roll(rng),
-			material: *rng
-				.choose(FirearmMaterial::VALUES)
-				.unwrap_or(&FirearmMaterial::BrushedMetal),
-			color: *rng.choose(ItemColor::VALUES).unwrap_or(&ItemColor::Natural),
+			looks: FirearmLooks::roll(rng),
 			bolt: *rng.choose(BoltMaterial::VALUES).unwrap_or(&BoltMaterial::PlainLaser),
 		}
 	}
 
 	pub fn identity_label(self) -> String {
 		format!(
-			"body={} barrel={} grip={} trigger-box={} stock={} mat={} color={} bolt={} scales={}:{}/{}:{}/{}:{}/{}:{}/{}:{}",
+			"body={} barrel={} grip={} trigger-box={} stock={} looks={}/{}/{}/{}/{} bolt={} scales={}:{}/{}:{}/{}:{}/{}:{}/{}:{}",
 			self.kit.body.label(),
 			self.kit.barrel.label(),
 			self.kit.grip.label(),
 			self.kit.trigger_box.label(),
 			self.kit.stock.label(),
-			self.material.label(),
-			self.color.label(),
+			look_label(self.looks.body),
+			look_label(self.looks.barrel),
+			look_label(self.looks.grip),
+			look_label(self.looks.trigger_box),
+			look_label(self.looks.stock),
 			self.bolt.label(),
 			self.scales.body.length_milli,
 			self.scales.body.thickness_milli,
@@ -389,6 +497,10 @@ impl FirearmSpec {
 			self.scales.stock.thickness_milli,
 		)
 	}
+}
+
+fn look_label(look: SlotLook) -> String {
+	format!("{}:{}", look.material.label(), look.color.label())
 }
 
 impl Default for FirearmSpec {
@@ -414,5 +526,30 @@ mod tests {
 		let kit = FirearmMesh::Bullpup.concept_kit();
 		assert_eq!(kit.barrel, FirearmBarrel::Bullpup);
 		assert_eq!(kit.grip, FirearmGrip::BumpHandle);
+	}
+
+	#[test]
+	fn unit_scale_is_handheld_rest_not_one_meter() {
+		let fits = FirearmScales::UNIT.bone_fits();
+		assert!((fits[0].1 - SlotRest::BODY.length).abs() < 1e-5);
+		assert!((fits[1].1 - SlotRest::BARREL.length).abs() < 1e-5);
+		assert!(fits[0].1 < 0.5);
+	}
+
+	#[test]
+	fn millunit_multiplies_handheld_rest() {
+		let scale = SlotScale { length_milli: 1500, thickness_milli: 800 };
+		let (length, thickness) = SlotRest::BODY.applied(scale);
+		assert!((length - SlotRest::BODY.length * 1.5).abs() < 1e-5);
+		assert!((thickness - SlotRest::BODY.thickness * 0.8).abs() < 1e-5);
+	}
+
+	#[test]
+	fn rolled_looks_are_independent_per_slot() {
+		let items = crate::random_gallery_firearms(&mut ItemRng::from_seed(99), 40);
+		assert!(items.iter().any(|item| {
+			let looks = item.firearm_spec().unwrap().looks;
+			looks.body != looks.barrel || looks.body != looks.grip
+		}));
 	}
 }

@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 use crozon_character_items::{
 	BoltMaterial, ClothingMaterial, ClothingMesh, ClothingStats, FirearmBarrel, FirearmGrip,
-	FirearmKitSpec, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSpec, FirearmStats,
-	FirearmStock, FirearmTriggerBox, Inventory, InventoryItem, InventorySlot, ItemColor,
-	WORN_CLOTHING_LIMIT,
+	FirearmKitSpec, FirearmLooks, FirearmMaterial, FirearmMesh, FirearmScales, FirearmSpec,
+	FirearmStats, FirearmStock, FirearmTriggerBox, Inventory, InventoryItem, InventorySlot,
+	ItemColor, WORN_CLOTHING_LIMIT,
 };
 use crozon_character_persist::{CharacterId, PersistError, SaveRoot};
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,8 @@ enum InventoryItemFile {
 		#[serde(default)]
 		scales: Option<FirearmScales>,
 		#[serde(default)]
+		looks: Option<FirearmLooks>,
+		#[serde(default)]
 		material: Option<FirearmMaterial>,
 		#[serde(default)]
 		color: Option<ItemColor>,
@@ -144,8 +146,9 @@ impl InventoryItemFile {
 				mesh: spec.kit.body,
 				kit: Some(FirearmKitFile::from_spec(spec.kit)),
 				scales: Some(spec.scales),
-				material: Some(spec.material),
-				color: Some(spec.color),
+				looks: Some(spec.looks),
+				material: Some(spec.looks.body.material),
+				color: Some(spec.looks.body.color),
 				bolt: Some(spec.bolt),
 				stats: Some(*stats),
 			},
@@ -159,12 +162,16 @@ impl InventoryItemFile {
 				material: crozon_character_items::MaterialRefParams::new(material, color),
 				stats: stats.unwrap_or_else(|| ClothingStats::generate(mesh, material, color)),
 			},
-			Self::Firearm { mesh, kit, scales, material, color, bolt, stats } => {
+			Self::Firearm { mesh, kit, scales, looks, material, color, bolt, stats } => {
 				let spec = FirearmSpec {
 					kit: kit.map(|kit| kit.into_spec(mesh)).unwrap_or_else(|| mesh.concept_kit()),
 					scales: scales.unwrap_or(FirearmScales::UNIT),
-					material: material.unwrap_or(FirearmMaterial::BrushedMetal),
-					color: color.unwrap_or(ItemColor::Natural),
+					looks: looks.unwrap_or_else(|| {
+						FirearmLooks::uniform(
+							material.unwrap_or(FirearmMaterial::BrushedMetal),
+							color.unwrap_or(ItemColor::Natural),
+						)
+					}),
 					bolt: bolt.unwrap_or(BoltMaterial::PlainLaser),
 				};
 				InventoryItem::Firearm {
