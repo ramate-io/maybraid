@@ -17,9 +17,9 @@ pub(crate) struct HoldingArms;
 const HUMERUS_ROLL: f32 = std::f32::consts::FRAC_PI_2;
 /// Right elbow wings outward (body −X) and down at roughly 45°.
 const RIGHT_POLE: Vec3 = Vec3::new(-1.0, -1.0, -0.1);
-/// Left elbow wings out (body +X) and a little forward. TwoBoneAim puts a bent
-/// elbow along this pole; a downward pole therefore hangs the humerus on the ribs.
-const LEFT_POLE: Vec3 = Vec3::new(1.0, -0.25, 1.0);
+/// Left elbow: out (+X), tucked down (−Y), and a little forward (+Z).
+/// TwoBoneAim puts a bent elbow along this pole.
+const LEFT_POLE: Vec3 = Vec3::new(0.65, -0.55, 0.5);
 /// Imported humanoid articulation needs negative swing to draw its right shoulder rearward.
 const FIRING_TORSO_YAW: f32 = -0.84;
 /// Support hand wraps the grip kit socket, not the distal `grip_point` at the handle bottom.
@@ -312,23 +312,23 @@ mod tests {
 
 	#[test]
 	fn left_humerus_swings_forward_to_a_close_grip() -> Result<(), &'static str> {
-		// Grip sits in front of the left shoulder, inside rest length — the case
-		// where a downward pole parks the humerus on the ribs.
+		// Grip sits in front of the left shoulder, inside rest length.
 		let target = Vec3::new(0.2, -0.15, 0.55);
 		let reach = TwoBoneAim::reach(target, LEFT_POLE, 0.5, 0.5).ok_or("missing reach")?;
 		assert!(
-			reach.upper_along.z > 0.25,
-			"humerus should swing forward, got {:?}",
+			reach.upper_along.z > 0.12,
+			"humerus should still come forward, got {:?}",
 			reach.upper_along
 		);
 		assert!(
-			reach.upper_along.x > 0.3,
-			"left elbow should wing out (+X), got {:?}",
+			reach.upper_along.x > 0.15,
+			"left elbow should wing out a bit (+X), got {:?}",
 			reach.upper_along
 		);
+		assert!(reach.upper_along.y < -0.25, "elbow should tuck down, got {:?}", reach.upper_along);
 		assert!(
-			reach.upper_along.y > -0.4,
-			"humerus should not hang down the ribs, got {:?}",
+			reach.upper_along.y > -0.7,
+			"tuck should not hang the humerus on the ribs, got {:?}",
 			reach.upper_along
 		);
 		Ok(())
