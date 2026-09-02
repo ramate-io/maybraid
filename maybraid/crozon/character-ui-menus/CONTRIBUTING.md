@@ -31,7 +31,8 @@ To expose a new clothing mesh in both species:
      `tattered`, `hawaiian`, `cloth`, `scales`, `wizards-veins`, `glitter`) per
      worn layer. Unset layers fall back to `clothing_material` / `clothing_default`.
      Assembly stamps `MaterialRef::named(recipe_id).with_palette([color])`; Crozon’s
-     MaterialLib fulfills those names as clothing shaders.
+     MaterialLib claims those names and packs palette / noise / scalars / rasters
+     onto the clothing shader uniform.
 3. `ListValues` and `AssetOption` for `ClothingMesh` in `crozon_characters` pick up the
    new variant automatically, so the UI, CLI (`--clothing`), and preview assembly work
    without further changes in this crate.

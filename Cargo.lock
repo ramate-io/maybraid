@@ -2877,6 +2877,7 @@ name = "crozon-character-shaders"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "material-ref",
 ]
 
 [[package]]

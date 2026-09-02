@@ -19,7 +19,10 @@
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
 struct ClothingMaterialUniform {
-    base_color: vec4<f32>,
+    colors: array<vec4<f32>, 8>,
+    noise: vec4<f32>,
+    scalars: array<vec4<f32>, 8>,
+    rasters: array<array<vec4<f32>, 3>, 8>,
     kind: u32,
     _pad: vec3<u32>,
 }
@@ -322,7 +325,7 @@ fn fragment(
 ) -> @location(0) vec4<f32> {
     var pbr_input: PbrInput = pbr_input_new();
     let uv = look_coord(mesh);
-    let base = material.base_color.xyz;
+    let base = material.colors[0].xyz;
     var look = vec4<f32>(base, 0.75);
     var metallic = 0.0;
     var emissive = vec3<f32>(0.0);
