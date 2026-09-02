@@ -13,9 +13,11 @@ new garment.
 
 To expose a new clothing mesh in both species:
 
-1. Export the canonical `.glb` under `maybraid/assets/characters/clothes/body/` (or
-   `clothes/head/` for hoods and other head wraps). Menu thumbnails always use this
-   catalog path.
+1. The blend-export pre-commit hook writes the canonical `.glb` under
+   `maybraid/assets/characters/clothes/body/` (or `clothes/head/` for hoods).
+   Menu thumbnails always use this catalog path. Body garments also have host-fit
+   GLBs at `clothes/body/{body_stem}/{file_stem}.glb` from
+   `scripts/clothes-fit/fit.sh`; blend-export must not overwrite those.
 2. In `maybraid/crozon/character-items/src/clothing.rs`:
    - Add a `CLOTHING_*` path constant for the file.
    - Add a variant to `ClothingMesh`.

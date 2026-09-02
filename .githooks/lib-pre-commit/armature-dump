@@ -12,6 +12,10 @@ DUMP_SCRIPT="$REPO_ROOT/scripts/armature-dump/main.py"
 ART_PREFIX="maybraid/art/"
 ASSETS_PREFIX="maybraid/assets/"
 
+# Clothing blends link the humanoid rig; runtime meshes are host-fit GLBs from
+# `scripts/clothes-fit`, not a 1:1 armature dump. Skip them so dumps are not
+# written next to `assets/characters/clothes/body/{host}/`.
+
 echo "Running pre-commit hook: Dumping armature hierarchies from .blend files..."
 
 if ! command -v blender &> /dev/null; then
@@ -39,6 +43,13 @@ fi
 blend_to_armature_dump() {
     local blend_file="$1"
     echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.armature_dump/'
+}
+
+is_clothing_blend() {
+    case "$1" in
+        maybraid/art/characters/clothes/*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # Remove the mirrored armature dump for a deleted .blend and stage the deletion.
@@ -122,6 +133,13 @@ while IFS= read -r blend_file || [ -n "$blend_file" ]; do
     if [ ! -f "$blend_file" ]; then
         remove_dump_for_blend "$blend_file"
         echo "⏭️  Skipping deleted ${blend_file} (${CURRENT}/${TOTAL_FILES})"
+        continue
+    fi
+
+    if is_clothing_blend "$blend_file"; then
+        remove_dump_for_blend "$blend_file"
+        SKIPPED=$((SKIPPED + 1))
+        echo "⏭️  Skipping clothing ${blend_file} (${CURRENT}/${TOTAL_FILES})"
         continue
     fi
 
