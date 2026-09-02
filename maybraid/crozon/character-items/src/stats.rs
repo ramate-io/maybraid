@@ -7,12 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-	names::mix, ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor,
-	ItemRng,
-};
-
-const CLOTHING_SEED: u64 = 0x51A7_0001_C10A_0001;
+use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor};
 
 const BASE_HEALTH: i16 = 100;
 const BASE_RUNNING: i16 = 100;
@@ -78,10 +73,10 @@ impl FireMode {
 	}
 }
 
-/// Clothing buffs plus carried weight. Most axes stay 0; one to three roll
-/// in ±4–16 (mixed signs when two or more land). A negative is never alone:
-/// a lone minus gains a paired plus on another axis. Weight always rolls and
-/// is biased by mesh bulk.
+/// Clothing buffs plus carried weight. Mesh, look, and color contribute
+/// priors; sampling picks one to three axes then Gaussian-realizes ±4–16.
+/// A negative is never alone: a lone minus gains a paired plus. Weight
+/// always rolls in a mesh bulk band.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ClothingStats {
@@ -96,8 +91,7 @@ pub struct ClothingStats {
 
 impl ClothingStats {
 	pub fn generate(mesh: ClothingMesh, material: ClothingMaterial, color: ItemColor) -> Self {
-		let seed = mix(mix(mix(CLOTHING_SEED, mesh.label()), material.label()), color.label());
-		generate_clothing(&mut ItemRng::from_seed(seed), mesh)
+		crate::generate_clothing_stats(mesh, material, color)
 	}
 
 	pub fn catalog_detail(self) -> String {
@@ -350,63 +344,6 @@ fn signed_or_zero(value: i16) -> String {
 		String::from("0")
 	} else {
 		format!("{value:+}")
-	}
-}
-
-fn generate_clothing(rng: &mut ItemRng, mesh: ClothingMesh) -> ClothingStats {
-	let (weight_min, weight_max) = clothing_weight_range(mesh);
-	let weight = rng.in_range(weight_min, weight_max) as u16;
-	let mut axes = [0u8, 1, 2, 3, 4, 5];
-	for i in (1..axes.len()).rev() {
-		let j = rng.gen_index(i + 1);
-		axes.swap(i, j);
-	}
-	let count = rng.in_range(1, 3) as usize;
-	let mut assigned = Vec::with_capacity(count);
-	for axis in axes.into_iter().take(count) {
-		let magnitude = rng.in_range(4, 16) as i16;
-		let value = if rng.in_range(0, 1) == 0 { -magnitude } else { magnitude };
-		assigned.push((axis, value));
-	}
-	if assigned.len() >= 2 {
-		let all_plus = assigned.iter().all(|(_, value)| *value > 0);
-		let all_minus = assigned.iter().all(|(_, value)| *value < 0);
-		if all_plus || all_minus {
-			if let Some((_, value)) = assigned.last_mut() {
-				*value = -*value;
-			}
-		}
-	} else if assigned.first().is_some_and(|(_, value)| *value < 0) {
-		let used = assigned[0].0;
-		let axis = axes.into_iter().find(|axis| *axis != used).unwrap_or(0);
-		let magnitude = rng.in_range(4, 16) as i16;
-		assigned.push((axis, magnitude));
-	}
-	let mut stats = ClothingStats { weight, ..ClothingStats::default() };
-	for (axis, value) in assigned {
-		match axis {
-			0 => stats.health = value,
-			1 => stats.running = value,
-			2 => stats.jump = value,
-			3 => stats.agility = value,
-			4 => stats.strength = value,
-			_ => stats.damage = value,
-		}
-	}
-	stats
-}
-
-fn clothing_weight_range(mesh: ClothingMesh) -> (u32, u32) {
-	match mesh {
-		ClothingMesh::TankTop
-		| ClothingMesh::HaremPantsUpper
-		| ClothingMesh::HaremPantsLowerWrap => (2, 8),
-		ClothingMesh::Tunic
-		| ClothingMesh::Pants
-		| ClothingMesh::HaremPants
-		| ClothingMesh::ShortDress => (6, 14),
-		ClothingMesh::FittedCoat | ClothingMesh::KneeHighBoots => (10, 18),
-		ClothingMesh::LongDress | ClothingMesh::Robe | ClothingMesh::RobeCoat => (14, 24),
 	}
 }
 

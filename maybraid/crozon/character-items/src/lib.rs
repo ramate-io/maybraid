@@ -9,6 +9,7 @@
 
 pub mod clothing;
 pub mod clothing_material;
+pub mod clothing_roll;
 pub mod firearm;
 pub mod firearm_material;
 pub mod firearm_roll;
@@ -21,6 +22,7 @@ mod menu_traits;
 
 pub use clothing::{ClothingColor, ClothingHost, ClothingKind, ClothingMesh, ClothingSlot};
 pub use clothing_material::{ClothingMaterial, ClothingMaterialChoice};
+pub use clothing_roll::{generate_clothing_stats, ClothingBuff, ClothingPriors};
 pub use firearm::{
 	FirearmBarrel, FirearmGrip, FirearmKitSpec, FirearmLooks, FirearmMesh, FirearmScales,
 	FirearmSpec, FirearmStock, FirearmTriggerBox, SlotLook, SlotRest, SlotScale, LENGTH_MILLI_MAX,

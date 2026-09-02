@@ -33,26 +33,26 @@ impl Dist {
 		Self { mean, sd }
 	}
 
-	fn apply(self, delta: DistDelta) -> Self {
+	pub(crate) fn apply(self, delta: DistDelta) -> Self {
 		Self { mean: self.mean + delta.add_mean, sd: (self.sd * delta.mul_sd).max(0.01) }
 	}
 }
 
 /// Additive mean and multiplicative deviation contributed before sampling.
 #[derive(Clone, Copy, Debug)]
-struct DistDelta {
-	add_mean: f32,
-	mul_sd: f32,
+pub(crate) struct DistDelta {
+	pub add_mean: f32,
+	pub mul_sd: f32,
 }
 
 impl DistDelta {
-	const IDENTITY: Self = Self { add_mean: 0.0, mul_sd: 1.0 };
+	pub(crate) const IDENTITY: Self = Self { add_mean: 0.0, mul_sd: 1.0 };
 
-	fn add_mean(&mut self, delta: f32) {
+	pub(crate) fn add_mean(&mut self, delta: f32) {
 		self.add_mean += delta;
 	}
 
-	fn mul_sd(&mut self, factor: f32) {
+	pub(crate) fn mul_sd(&mut self, factor: f32) {
 		self.mul_sd *= factor;
 	}
 }
