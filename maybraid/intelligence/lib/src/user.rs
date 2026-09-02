@@ -14,9 +14,10 @@ const MAX_TRANSIT_CORRIDOR: f32 = 0.9;
 const TRANSIT_CORRIDOR_PADDING: f32 = 0.45;
 const TRANSIT_MOVING_AWAY_SLOP: f32 = 0.06;
 const DUPLICATE_TARGET_SLOP: f32 = 0.05;
-const TRANSIT_LOOKAHEAD_MULTIPLIER: f32 = 1.75;
+const TRANSIT_LOOKAHEAD_MULTIPLIER: f32 = 0.65;
 const MAX_OUTGOING_LEAD_FRACTION: f32 = 0.5;
 const HAIRPIN_DOT_LIMIT: f32 = -0.25;
+const PROGRESS_SLOP: f32 = 0.08;
 
 /// Per-user scoring knobs. Budget and standoffs live on [`MovementAbility`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -146,6 +147,22 @@ pub enum MovementDriveResult {
 	},
 }
 
+fn xz_wish(from: Vec3, toward_xz: Vec2) -> Vec3 {
+	Vec3::new(toward_xz.x - from.x, 0.0, toward_xz.y - from.z).normalize_or_zero()
+}
+
+fn project_xz(start: Vec3, end: Vec3, position: Vec3) -> (f32, Vec2, f32) {
+	let start_xz = start.xz();
+	let span = end.xz() - start_xz;
+	let length_sq = span.length_squared();
+	if length_sq <= 1e-8 {
+		return (0.0, start_xz, start_xz.distance(position.xz()));
+	}
+	let t = (position.xz() - start_xz).dot(span) / length_sq;
+	let closest = start_xz + span * t.clamp(0.0, 1.0);
+	(t, closest, closest.distance(position.xz()))
+}
+
 fn transit_wish(
 	target: MovementLocation,
 	next: Option<MovementLocation>,
@@ -158,25 +175,27 @@ fn transit_wish(
 		return direct;
 	};
 	let incoming = target.point.xz() - segment_start.xz();
+	let incoming_length = incoming.length();
 	let outgoing = next.point.xz() - target.point.xz();
-	if incoming.length_squared() <= 1e-6 || outgoing.length_squared() <= 1e-6 {
+	if incoming_length <= 1e-4 || outgoing.length_squared() <= 1e-6 {
 		return direct;
 	}
-	let incoming_dir = incoming.normalize();
+	let (t, closest, lateral) = project_xz(segment_start, target.point, position);
+	if lateral > corridor {
+		return xz_wish(position, closest);
+	}
+	let incoming_dir = incoming / incoming_length;
 	let outgoing_dir = outgoing.normalize();
 	if incoming_dir.dot(outgoing_dir) < HAIRPIN_DOT_LIMIT {
 		return direct;
 	}
 	let lookahead = corridor * TRANSIT_LOOKAHEAD_MULTIPLIER;
-	let distance = target.xz_distance(position);
-	if distance >= lookahead {
+	let remaining = (1.0 - t.clamp(0.0, 1.0)) * incoming_length;
+	if remaining >= lookahead {
 		return direct;
 	}
-	let turn_fraction = 1.0 - distance / lookahead.max(1e-4);
-	let lead_distance =
-		(corridor * turn_fraction).min(outgoing.length() * MAX_OUTGOING_LEAD_FRACTION);
-	let aim = target.point.xz() + outgoing_dir * lead_distance;
-	Vec3::new(aim.x - position.x, 0.0, aim.y - position.z).normalize_or_zero()
+	let lead_distance = (lookahead - remaining).min(outgoing.length() * MAX_OUTGOING_LEAD_FRACTION);
+	xz_wish(position, target.point.xz() + outgoing_dir * lead_distance)
 }
 
 impl<I, A> MovementIntelligence<I, A>
@@ -214,14 +233,19 @@ where
 			let target_distance = target.xz_distance(position);
 			let within_vertical = (position.y - target.point.y).abs() <= target.vertical_slop();
 			let within_pass_region = target_distance <= pass_corridor && within_vertical;
-			let passed_transit =
-				has_later_target && target.crossed_xz_from(segment_start, position, pass_corridor);
+			let passed_outgoing = has_later_target
+				&& next_target.is_some_and(|next| {
+					target.following_xz_toward(next.point, position, pass_corridor)
+				});
 			let passed_closest = has_later_target
 				&& within_pass_region
 				&& target_distance > self.transit_closest_distance + TRANSIT_MOVING_AWAY_SLOP;
-			let duplicate_transit =
-				has_later_target && target.point.distance(segment_start) <= DUPLICATE_TARGET_SLOP;
-			if target.contains(position) || passed_transit || passed_closest || duplicate_transit {
+			let duplicate_transit = has_later_target
+				&& (target.point.distance(segment_start) <= DUPLICATE_TARGET_SLOP
+					|| next_target.is_some_and(|next| {
+						next.point.distance(target.point) <= DUPLICATE_TARGET_SLOP
+					}));
+			if target.contains(position) || passed_outgoing || passed_closest || duplicate_transit {
 				self.cursor += 1;
 				self.transit_segment_start = Some(target.point);
 				self.transit_closest_distance = f32::MAX;
@@ -234,7 +258,7 @@ where
 			}
 			let dist = target.approach_distance(position);
 			let wish = transit_wish(target, next_target, segment_start, position, pass_corridor);
-			if dist + 0.08 < self.last_goal_distance {
+			if dist + PROGRESS_SLOP < self.last_goal_distance {
 				self.last_goal_distance = dist;
 				self.stuck_seconds = 0.0;
 			} else {
@@ -344,28 +368,29 @@ mod tests {
 	}
 
 	#[test]
-	fn drive_advances_crossed_transit_waypoint_inside_corridor() -> anyhow::Result<()> {
+	fn drive_advances_once_following_the_outgoing_segment() -> anyhow::Result<()> {
 		let mut brain = MovementIntelligence::new(vantage());
 		brain.adopt_plan(vec![
 			MovementStep::MoveTo(MovementLocation::new(Vec3::X, 0.1)),
 			MovementStep::MoveTo(MovementLocation::new(Vec3::new(1.0, 0.0, 2.0), 0.1)),
 		]);
 		assert!(matches!(brain.drive(0.016, Vec3::ZERO), MovementDriveResult::Wish(_)));
-		let position = Vec3::new(1.2, 0.0, 0.2);
+		let position = Vec3::new(1.1, 0.0, 0.4);
 		assert!(matches!(brain.drive(0.016, position), MovementDriveResult::Wish(_)));
 		assert_eq!(brain.cursor, 1);
 		Ok(())
 	}
 
 	#[test]
-	fn drive_keeps_transit_waypoint_when_crossing_outside_corridor() -> anyhow::Result<()> {
+	fn drive_keeps_transit_waypoint_when_past_the_plane_off_the_outgoing_leg() -> anyhow::Result<()>
+	{
 		let mut brain = MovementIntelligence::new(vantage());
 		brain.adopt_plan(vec![
 			MovementStep::MoveTo(MovementLocation::new(Vec3::X, 0.1)),
 			MovementStep::MoveTo(MovementLocation::new(Vec3::new(1.0, 0.0, 2.0), 0.1)),
 		]);
 		brain.drive(0.016, Vec3::ZERO);
-		brain.drive(0.016, Vec3::new(1.2, 0.0, 0.8));
+		brain.drive(0.016, Vec3::new(1.2, 0.0, -0.5));
 		assert_eq!(brain.cursor, 0);
 		Ok(())
 	}
@@ -401,9 +426,9 @@ mod tests {
 			MovementStep::MoveTo(MovementLocation::new(Vec3::new(1.0, 0.0, 2.0), 0.1)),
 		]);
 		brain.drive(0.016, Vec3::ZERO);
-		brain.drive(0.016, Vec3::new(0.8, 0.0, 0.3));
+		brain.drive(0.016, Vec3::new(0.9, 0.0, -0.3));
 		assert_eq!(brain.cursor, 0);
-		brain.drive(0.016, Vec3::new(0.75, 0.0, 0.45));
+		brain.drive(0.016, Vec3::new(0.82, 0.0, -0.45));
 		assert_eq!(brain.cursor, 1);
 		Ok(())
 	}
@@ -431,7 +456,7 @@ mod tests {
 			MovementStep::MoveTo(MovementLocation::new(Vec3::new(1.0, 0.0, 2.0), 0.1)),
 		]);
 		brain.drive(0.016, Vec3::ZERO);
-		let MovementDriveResult::Wish(wish) = brain.drive(0.016, Vec3::X * 0.5) else {
+		let MovementDriveResult::Wish(wish) = brain.drive(0.016, Vec3::X * 0.85) else {
 			anyhow::bail!("expected movement wish");
 		};
 		assert!(wish.x > 0.0 && wish.z > 0.0, "{wish}");
@@ -443,9 +468,19 @@ mod tests {
 	fn transit_wish_does_not_cut_a_hairpin_or_final_target() -> anyhow::Result<()> {
 		let target = MovementLocation::new(Vec3::X, 0.1);
 		let hairpin = MovementLocation::new(Vec3::ZERO, 0.1);
-		let position = Vec3::X * 0.5;
+		let position = Vec3::X * 0.85;
 		assert_eq!(transit_wish(target, Some(hairpin), Vec3::ZERO, position, 0.55), Vec3::X);
 		assert_eq!(transit_wish(target, None, Vec3::ZERO, position, 0.55), Vec3::X);
+		Ok(())
+	}
+
+	#[test]
+	fn transit_wish_pulls_back_onto_the_incoming_segment() -> anyhow::Result<()> {
+		let target = MovementLocation::new(Vec3::X, 0.1);
+		let next = MovementLocation::new(Vec3::new(1.0, 0.0, 2.0), 0.1);
+		let wish = transit_wish(target, Some(next), Vec3::ZERO, Vec3::new(0.5, 0.0, 1.2), 0.55);
+		assert!(wish.z < 0.0, "{wish}");
+		assert!((wish.length() - 1.0).abs() < 1e-4, "{wish}");
 		Ok(())
 	}
 }

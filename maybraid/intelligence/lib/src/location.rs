@@ -47,6 +47,23 @@ impl MovementLocation {
 		crossed_plane && lateral_distance <= corridor.max(0.0)
 	}
 
+	/// Whether `other` has started along the segment from this point toward `next`
+	/// and remains inside a bounded lateral corridor.
+	pub fn following_xz_toward(self, next: Vec3, other: Vec3, corridor: f32) -> bool {
+		if (other.y - self.point.y).abs() > self.vertical_slop() {
+			return false;
+		}
+		let outgoing = next.xz() - self.point.xz();
+		let length = outgoing.length();
+		if length <= 1e-4 {
+			return false;
+		}
+		let offset = other.xz() - self.point.xz();
+		let t = offset.dot(outgoing) / (length * length);
+		let lateral_distance = offset.perp_dot(outgoing).abs() / length;
+		t > 0.02 && t <= 1.0 && lateral_distance <= corridor.max(0.0)
+	}
+
 	pub fn vertical_slop(self) -> f32 {
 		(self.radius + 0.45).max(0.7)
 	}
@@ -122,6 +139,17 @@ mod tests {
 		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(1.2, 0.0, 0.8), 0.4));
 		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(0.8, 0.0, 0.0), 0.4));
 		assert!(!loc.crossed_xz_from(Vec3::ZERO, Vec3::new(1.2, 2.0, 0.0), 0.4));
+		Ok(())
+	}
+
+	#[test]
+	fn following_xz_requires_the_outgoing_segment_and_corridor() -> anyhow::Result<()> {
+		let loc = MovementLocation::new(Vec3::X, 0.1);
+		let next = Vec3::new(1.0, 0.0, 2.0);
+		assert!(loc.following_xz_toward(next, Vec3::new(1.1, 0.0, 0.4), 0.4));
+		assert!(!loc.following_xz_toward(next, Vec3::new(1.2, 0.0, -0.4), 0.4));
+		assert!(!loc.following_xz_toward(next, Vec3::new(1.6, 0.0, 0.4), 0.4));
+		assert!(!loc.following_xz_toward(next, Vec3::new(1.1, 2.0, 0.4), 0.4));
 		Ok(())
 	}
 
