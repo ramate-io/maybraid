@@ -110,6 +110,11 @@ impl Flight {
 	}
 }
 
+/// Keep an exhausted flight alive through `PostUpdate` so contact consumers can
+/// still read components such as the weapon's damage payload.
+#[derive(Component, Debug, Clone, Copy)]
+struct ExpiredFlight;
+
 /// Entity responsible for spawning a projectile.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectileSource(pub Entity);
@@ -132,7 +137,8 @@ impl Plugin for ProjectilesPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		app.add_message::<ProjectileContact>()
-			.add_systems(PostUpdate, tick_flights.after(TransformSystems::Propagate));
+			.add_systems(PostUpdate, tick_flights.after(TransformSystems::Propagate))
+			.add_systems(Last, despawn_expired_flights);
 	}
 }
 
@@ -403,8 +409,14 @@ pub fn tick_flights(
 		});
 		flight.last = pos;
 		if budget_exhausted || allowed < ds - 1e-5 || flight.exhausted() {
-			commands.entity(entity).try_despawn();
+			commands.entity(entity).insert(ExpiredFlight);
 		}
+	}
+}
+
+fn despawn_expired_flights(mut commands: Commands, expired: Query<Entity, With<ExpiredFlight>>) {
+	for entity in &expired {
+		commands.entity(entity).try_despawn();
 	}
 }
 
@@ -412,6 +424,16 @@ pub fn tick_flights(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+
+	#[derive(Resource, Default)]
+	struct ExpiredObserved(bool);
+
+	fn observe_expired_flight(
+		expired: Query<(), With<ExpiredFlight>>,
+		mut observed: ResMut<ExpiredObserved>,
+	) {
+		observed.0 = !expired.is_empty();
+	}
 
 	#[test]
 	fn through_length_air_and_solid() {
@@ -480,6 +502,21 @@ mod tests {
 		flight.path = 0.0;
 		flight.age = 1.95;
 		assert!((allowed_step_distance(&flight, 5.0, 0.1) - 2.5).abs() < 1e-5);
+	}
+
+	#[test]
+	fn expired_flight_survives_post_update_consumers() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<ExpiredObserved>()
+			.add_systems(PostUpdate, observe_expired_flight)
+			.add_systems(Last, despawn_expired_flights);
+		let projectile = app.world_mut().spawn(ExpiredFlight).id();
+
+		app.update();
+
+		assert!(app.world().resource::<ExpiredObserved>().0);
+		assert!(app.world().get_entity(projectile).is_err());
 	}
 
 	#[test]
