@@ -9,7 +9,7 @@ use super::{pose::CaolePose, sliders::CaoleSliders, CaoleColors, CaoleConfig};
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
@@ -57,6 +57,10 @@ impl Default for Caole {
 }
 
 impl CharacterComponents for Caole {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::QUADRUPED
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		let pose = CaolePose {
 			body: self.body,

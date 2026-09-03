@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use firearm_user::FirearmUser;
-use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, Npc, Player};
+use player::{LocomotionCapsule, Npc, Player};
 
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
 pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
@@ -9,10 +9,11 @@ pub(crate) use ::damage::{DEFAULT_MAX_HEALTH as MAX_HEALTH, DamageApplied, Heads
 
 /// Top half of the upper capsule hemisphere.
 pub(crate) fn headshot_band() -> HeadshotBand {
-	HeadshotBand {
-		min_local_y: CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.5,
-		multiplier: HEADSHOT_MULTIPLIER,
-	}
+	headshot_band_for(LocomotionCapsule::HUMANOID)
+}
+
+pub(crate) fn headshot_band_for(hull: LocomotionCapsule) -> HeadshotBand {
+	HeadshotBand { min_local_y: hull.headshot_min_local_y(), multiplier: HEADSHOT_MULTIPLIER }
 }
 
 #[derive(Resource, Default)]
@@ -64,7 +65,8 @@ mod tests {
 	#[test]
 	fn headshot_band_is_the_upper_half_of_the_top_hemisphere() {
 		let band = headshot_band();
-		assert!((band.min_local_y - (CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.5)).abs() < 1e-5);
+		let hull = LocomotionCapsule::HUMANOID;
+		assert!((band.min_local_y - hull.headshot_min_local_y()).abs() < 1e-5);
 		assert!((band.multiplier - HEADSHOT_MULTIPLIER).abs() < 1e-5);
 	}
 }

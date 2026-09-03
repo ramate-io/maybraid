@@ -2,25 +2,25 @@
 
 use bevy::prelude::*;
 use firearm_intelligence::{CombatTarget, FirearmSpotting, TargetCapsule};
-use player::{Npc, Player};
+use player::{LocomotionCapsule, Npc, Player};
 
-type CombatantEntities<'w, 's> = Query<'w, 's, Entity, Or<(With<Player>, With<Npc>)>>;
+type CombatantEntities<'w, 's> =
+	Query<'w, 's, (Entity, &'static LocomotionCapsule), Or<(With<Player>, With<Npc>)>>;
 
 pub(crate) fn assign_combat_targets(
 	combatants: CombatantEntities,
 	mut spotters: Query<(Entity, &mut FirearmSpotting)>,
 ) {
-	let capsule = TargetCapsule::new(
-		player::CAPSULE_RADIUS,
-		player::CAPSULE_LENGTH * 0.5 + player::CAPSULE_RADIUS,
-	);
-	let everyone: Vec<Entity> = combatants.iter().collect();
+	let everyone: Vec<(Entity, TargetCapsule)> = combatants
+		.iter()
+		.map(|(entity, hull)| (entity, TargetCapsule::new(hull.radius, hull.half_height())))
+		.collect();
 	for (spotter, mut spotting) in &mut spotters {
 		let next: Vec<_> = everyone
 			.iter()
 			.copied()
-			.filter(|entity| *entity != spotter)
-			.map(|entity| CombatTarget::new(entity, capsule))
+			.filter(|(entity, _)| *entity != spotter)
+			.map(|(entity, capsule)| CombatTarget::new(entity, capsule))
 			.collect();
 		if spotting.candidates != next {
 			spotting.candidates = next;

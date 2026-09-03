@@ -11,7 +11,7 @@ use super::{
 };
 use crate::{
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, BODY_WHALE},
@@ -40,6 +40,10 @@ impl Default for Thumplus {
 }
 
 impl CharacterComponents for Thumplus {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::HUMANOID.scaled(THUMPLUS_OVERALL_SCALE)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![humanoid::forelimbed_body_rig(ThumplusPose.resolve())
 			.with_normalization(AssetNormalization::centroid(THUMPLUS_OVERALL_SCALE))])

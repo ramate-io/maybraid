@@ -13,7 +13,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	species::common::{nodes as humanoid, EyeMesh, HairMesh},
@@ -50,6 +50,10 @@ impl Default for Chupri {
 }
 
 impl CharacterComponents for Chupri {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::HUMANOID.scaled(CHUPRI_OVERALL_SCALE)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		Layers::from_free(vec![
 			humanoid::humanoid_body_rig(ChupriPose.resolve())

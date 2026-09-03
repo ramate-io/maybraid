@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
-use crozon_characters::{species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot};
+use crozon_characters::{
+	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
+};
 use firearm_intelligence::{
 	FirearmIntelligence, FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
 	FirearmSpotting,
@@ -18,7 +20,7 @@ use player::{
 };
 use std::f32::consts::FRAC_PI_2;
 
-use crate::damage::{CombatRespawn, Health, headshot_band};
+use crate::damage::{headshot_band_for, CombatRespawn, Health};
 use crate::engagement::NpcEngagement;
 use crate::les_halles::LesHallesSpawn;
 use crate::loadout::{roll_combatant, CombatantLoadout};
@@ -166,12 +168,13 @@ pub(crate) fn spawn_generated_player(
 	materials: &mut Assets<StandardMaterial>,
 ) {
 	let loadout = roll_combatant(rng);
+	let hull = hull_from_appearance(&loadout.appearance);
 	let player = spawn_player_with_hidden_capsule(commands, meshes, materials);
 	commands.entity(player).insert((
 		Transform::from_translation(spawn.player),
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
 		Health::from_max(loadout.sheet.health as f32),
-		headshot_band(),
+		headshot_band_for(hull),
 		kit_component(&loadout),
 	));
 }
@@ -224,8 +227,11 @@ pub(crate) fn install_npc_combat(
 	kit: Option<CombatantKit>,
 	health: Option<Health>,
 ) {
+	let hull = hull_from_kit(kit.as_ref());
 	let mut movement =
-		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, 0.4)));
+		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, hull.radius)));
+	movement.ability.agent_radius = hull.radius;
+	movement.ability.feet_below_origin = hull.half_height();
 	movement.ability.candidate_budget.horizon = 80.0;
 	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
 	combat.settings.accuracy = 0.88;
@@ -242,11 +248,19 @@ pub(crate) fn install_npc_combat(
 		combat,
 		FirearmSpotting::default(),
 		health.unwrap_or_default(),
-		headshot_band(),
+		headshot_band_for(hull),
 	));
 	if let Some(kit) = kit {
 		entity.insert(kit);
 	}
+}
+
+fn hull_from_appearance(appearance: &BraidmanConfig) -> LocomotionCapsule {
+	appearance.locomotion_capsule()
+}
+
+fn hull_from_kit(kit: Option<&CombatantKit>) -> LocomotionCapsule {
+	kit.map(|kit| hull_from_appearance(&kit.appearance)).unwrap_or_default()
 }
 
 fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
@@ -325,7 +339,9 @@ pub(crate) fn spawn_npc_character(
 			.map(|kit| kit.appearance.clone())
 			.unwrap_or_else(BraidmanConfig::default_preview);
 		let clothed = CharacterRecipe::clothed(&appearance);
+		let hull = appearance.locomotion_capsule();
 		spawn_npc_visual(&mut commands, npc, clothed, Quat::from_rotation_y(FRAC_PI_2));
+		commands.entity(npc).insert(headshot_band_for(hull));
 	}
 }
 
@@ -342,7 +358,9 @@ pub(crate) fn spawn_player_character(
 			.map(|kit| kit.appearance.clone())
 			.unwrap_or_else(BraidmanConfig::default_preview);
 		let clothed = CharacterRecipe::clothed(&appearance);
+		let hull = appearance.locomotion_capsule();
 		spawn_player_visual(&mut commands, player, clothed, Quat::from_rotation_y(FRAC_PI_2));
+		commands.entity(player).insert(headshot_band_for(hull));
 	}
 }
 

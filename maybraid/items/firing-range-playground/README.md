@@ -19,7 +19,9 @@ NPC does not glue to a cover crack. Firearm combat aims
 the muzzle, and holds the trigger after the first on-target acquire;
 `trigger_happiness` is only the delay before that first pull.
 Projectile sweeps include both fixed geometry and animated character capsules.
-Each character starts with 100 health and takes 25 damage per bolt contact
+Collider size comes from the character recipe
+[`LocomotionCapsule`](../../crozon/characters/src/components.rs) (Braidman is
+the 0.4 / 1.0 humanoid hull). Each character starts with 100 health and takes 25 damage per bolt contact
 in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
 penetration, and cadence (plus clothing HP / outgoing damage) into the live
 weapon. Health is shown on a persistent top HUD and as a bar above each

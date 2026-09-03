@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use game_commands::GameCommandDrawerVisible;
-use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
+use player::{LocomotionCapsule, Npc, Player};
 
 use crate::damage::{DamageApplied, HeadshotBand, Health};
 use crate::session::{CombatantKit, RangeSession};
@@ -15,7 +15,7 @@ const INDICATOR_COUNT: usize = 8;
 const INDICATOR_RADIUS: f32 = 148.0;
 const INDICATOR_LIFE: f32 = 1.4;
 const INDICATOR_GROUP: f32 = 0.5;
-const HEAD_LIFT: f32 = CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS + 0.38;
+const HEAD_LIFT_PAD: f32 = 0.38;
 const GUN_CARD_WIDTH: f32 = 248.0;
 const DRAWER_CLEARANCE: f32 = 290.0;
 const POPUP_LIFE: f32 = 0.9;
@@ -405,7 +405,7 @@ type WorldBarFills<'w, 's> = Query<
 
 pub(crate) fn sync_world_health_bars(
 	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-	npcs: Query<(&GlobalTransform, &Health), With<Npc>>,
+	npcs: Query<(&GlobalTransform, &Health, Option<&LocomotionCapsule>), With<Npc>>,
 	mut anchors: Query<(Entity, &WorldHealthAnchor, &mut Node, &mut Visibility)>,
 	children: Query<&Children>,
 	mut fills: WorldBarFills,
@@ -415,11 +415,12 @@ pub(crate) fn sync_world_health_bars(
 		return;
 	};
 	for (anchor_entity, anchor, mut node, mut visibility) in &mut anchors {
-		let Ok((transform, health)) = npcs.get(anchor.target) else {
+		let Ok((transform, health, hull)) = npcs.get(anchor.target) else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
-		let head = transform.translation() + Vec3::Y * HEAD_LIFT;
+		let lift = hull.copied().unwrap_or_default().half_height() + HEAD_LIFT_PAD;
+		let head = transform.translation() + Vec3::Y * lift;
 		if let Ok(screen) = camera.world_to_viewport(camera_transform, head) {
 			node.left = Val::Px(screen.x - WORLD_BAR_WIDTH * 0.5);
 			node.top = Val::Px(screen.y - 22.0);
@@ -753,13 +754,14 @@ mod tests {
 	fn upper_half_of_the_top_hemisphere_is_a_headshot() {
 		let target = GlobalTransform::from_translation(Vec3::new(4.0, 1.0, -2.0));
 		let band = crate::damage::headshot_band();
-		let junction = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5, -2.0);
-		let cut = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.5, -2.0);
-		let crown = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.75, -2.0);
+		let capsule = LocomotionCapsule::HUMANOID;
+		let junction = Vec3::new(4.0, 1.0 + capsule.length * 0.5, -2.0);
+		let cut = Vec3::new(4.0, 1.0 + capsule.headshot_min_local_y(), -2.0);
+		let crown = Vec3::new(4.0, 1.0 + capsule.length * 0.5 + capsule.radius * 0.75, -2.0);
 		assert!(!band.contains(&target, junction));
 		assert!(band.contains(&target, cut));
 		assert!(band.contains(&target, crown));
 		assert!(!band.contains(&target, Vec3::new(4.0, 1.0, -2.0)));
-		assert!(!band.contains(&target, Vec3::new(4.0, 1.0 - CAPSULE_LENGTH * 0.5, -2.0)));
+		assert!(!band.contains(&target, Vec3::new(4.0, 1.0 - capsule.length * 0.5, -2.0)));
 	}
 }

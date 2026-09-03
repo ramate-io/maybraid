@@ -11,8 +11,8 @@ use crozon_characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
-	CharacterController, Grounded, JumpWish, Jumping, MoveWish, MovementAction,
-	PlayerControlSystems,
+	apply_locomotion_capsule, CharacterController, Grounded, JumpWish, Jumping, MoveWish,
+	MovementAction, PlayerControlSystems,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
@@ -21,8 +21,9 @@ pub use identity::{
 pub use locomotion::drive_player_locomotion;
 pub use spawn::{
 	capsule_spawn_height, needs_npc_visual, needs_player_visual, spawn_npc, spawn_npc_visual,
-	spawn_npc_with_hidden_capsule, spawn_player, spawn_player_visual,
-	spawn_player_with_hidden_capsule, CAPSULE_LENGTH, CAPSULE_RADIUS,
+	spawn_npc_with_hidden_capsule, spawn_npc_with_hull, spawn_player, spawn_player_visual,
+	spawn_player_with_hidden_capsule, spawn_player_with_hull, LocomotionCapsule, CAPSULE_LENGTH,
+	CAPSULE_RADIUS,
 };
 
 /// Capsule physics and move/jump intents.
