@@ -1,7 +1,8 @@
 //! Union-first building-pad primitives + broadphase helpers.
 //!
-//! Skirt ease lives on [`PadParams`]. Terrain flatten / ease / grade blend lives
-//! on [`crate::pad::node::PadNode`]; complexes gather intersecting nodes.
+//! Skirt ease lives on [`PadParams`]. Terrain blend lives on
+//! [`crate::pad::node::PadNode`]: flatten interiors stay exact; overlapping
+//! grades and skirts mix by occupancy (hydro shore / softmax analog).
 
 pub mod complex;
 pub mod elevation;
@@ -41,13 +42,13 @@ impl PadParams {
 	/// Connecting grade: core wide enough to hit a ~5 m terrain sample pitch,
 	/// short ease so overlapping skirts do not fill the whole cell.
 	pub fn path() -> Self {
-		Self { berm: 2.0, ease: 12.0, round: 0.0 }
+		Self { berm: 2.0, ease: 16.0, round: 0.0 }
 	}
 
 	/// Shepherds house / hut terrace. Berm covers a sample pitch past the walls
 	/// so the floor sits on flatten, not the interpolated ease.
 	pub fn shepherds() -> Self {
-		Self { berm: 6.0, ease: 12.0, round: PAD_ROUND }
+		Self { berm: 6.0, ease: 16.0, round: PAD_ROUND }
 	}
 }
 
@@ -322,5 +323,28 @@ mod tests {
 		assert!((pad.modify_elevation(0.0, corner.x, corner.y) - 12.0).abs() < 1e-3);
 		let past_wall = half.x + 2.0;
 		assert_eq!(pad.classification_at(past_wall, 0.0), Some(PadStage::Flatten));
+	}
+
+	#[test]
+	fn overlapping_grades_occupancy_blend_instead_of_jumping() {
+		let params = PadParams { berm: 0.0, ease: 8.0, round: 0.0 };
+		let low = PadNode::graded_reach(Vec2::ZERO, Vec2::new(40.0, 0.0), 6.0, 10.0, 10.0, params);
+		let high = PadNode::graded_reach(
+			Vec2::new(0.0, 8.0),
+			Vec2::new(40.0, 8.0),
+			6.0,
+			30.0,
+			30.0,
+			params,
+		);
+		let complex = PadComplex::from_nodes(vec![low, high]);
+		let a = complex.modify_elevation(0.0, 20.0, 3.0);
+		let b = complex.modify_elevation(0.0, 20.0, 5.0);
+		assert!(
+			(a - b).abs() < 12.0,
+			"adjacent samples on overlapping grades should not needle: {a} vs {b}"
+		);
+		let mid = complex.modify_elevation(0.0, 20.0, 4.0);
+		assert!(mid > 12.0 && mid < 28.0, "overlap should mix the two grades, got {mid}");
 	}
 }

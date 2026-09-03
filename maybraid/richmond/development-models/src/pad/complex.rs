@@ -7,7 +7,7 @@ use procedural_common::Bounds2;
 use super::node::{PadNode, PadStage};
 use super::{nodes_from_graded_polyline, PadParams};
 
-/// Bag of pad nodes blended by flatten-over-grade-over-ease priority (HydroComplex analog).
+/// Bag of pad nodes blended by occupancy softmax, with flatten terraces exact.
 ///
 /// [`Self::bounds`] is the union of each node's yawed support AABB (flatten +
 /// ease), not the development cell. Early-out is a conservative OBB AABB;
