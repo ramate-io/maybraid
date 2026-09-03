@@ -6,12 +6,13 @@ use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::SeededHash;
 
 use crate::cell::{
-	cell_selected, BUILDING_INSET, DEVELOPMENT_CELL_SIZE, MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT,
-	MIN_FOOTPRINT,
+	available_footprint, cell_selected, discrete_confines_yaw, inscribe_yawed_extents,
+	MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT,
 };
 use crate::config::DevelopmentConfig;
 use crate::finish::DevelopmentFinish;
 use crate::pad::flatten_pad;
+use richmond_buildings::{Confines, Openings};
 
 /// Fill kind for one development cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +38,8 @@ pub struct DevelopmentCell {
 	pub confines_height: f32,
 	/// Sampled plan footprint, inset from the cell so the slab sits on the pad.
 	pub confines_extent_xz: Vec2,
+	/// Discrete yaw (radians) applied at host spawn about the cell center.
+	pub confines_yaw: f32,
 	/// Wall / roof shader look, valid when [`Self::kind`] is Les Halles.
 	pub finish: Option<DevelopmentFinish>,
 }
@@ -49,6 +52,7 @@ impl DevelopmentCell {
 			pad: None,
 			confines_height: 0.0,
 			confines_extent_xz: Vec2::ZERO,
+			confines_yaw: 0.0,
 			finish: None,
 		}
 	}
@@ -61,7 +65,10 @@ impl DevelopmentCell {
 		self.pad.as_ref().map(|p| &p.modulation)
 	}
 
-	/// Confines AABB sitting on the pad (world space).
+	/// Unrotated confines AABB sitting on the pad (world space).
+	///
+	/// Les Halles authors against this axis-aligned box. [`Self::confines_yaw`] is
+	/// stored on [`Confines::roll`] and applied at host spawn about the cell center.
 	pub fn confines_bounds(&self) -> Option<Aabb3d> {
 		let pad = self.pad.as_ref()?;
 		if self.kind != DevelopmentKind::LesHalles {
@@ -80,9 +87,15 @@ impl DevelopmentCell {
 		))
 	}
 
+	/// Fitted confines: unrotated AABB plus discrete yaw on [`Confines::roll`].
+	pub fn confines(&self) -> Option<Confines> {
+		Some(Confines::new(self.confines_bounds()?, self.confines_yaw, Openings::new()))
+	}
+
 	pub fn filled(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
 		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
-		let max_foot = (DEVELOPMENT_CELL_SIZE - 2.0 * BUILDING_INSET).max(MIN_FOOTPRINT);
+		let max_foot = available_footprint();
+		let yaw = discrete_confines_yaw(hash.unit(37));
 		let extent_x = MIN_FOOTPRINT + (max_foot - MIN_FOOTPRINT) * hash.unit(11);
 		let extent_z = MIN_FOOTPRINT + (max_foot - MIN_FOOTPRINT) * hash.unit(13);
 		let confines_height =
@@ -95,7 +108,8 @@ impl DevelopmentCell {
 				modulation: flatten_pad(cell, pad_height),
 			}),
 			confines_height,
-			confines_extent_xz: Vec2::new(extent_x, extent_z),
+			confines_extent_xz: inscribe_yawed_extents(extent_x, extent_z, yaw, max_foot),
+			confines_yaw: yaw,
 			finish: Some(DevelopmentFinish::pick(hash)),
 		}
 	}
@@ -114,8 +128,10 @@ mod tests {
 	use bevy::math::bounding::Aabb3d;
 	use bevy::math::Vec3;
 	use material_ref::MaterialId;
+	use std::f32::consts::TAU;
 
 	use super::*;
+	use crate::cell::{available_footprint, yawed_plan_aabb_extent, CONFINES_YAW_STEPS};
 
 	#[test]
 	fn filled_cell_picks_urban_finish() {
@@ -130,5 +146,31 @@ mod tests {
 			&finish.roof.name,
 			MaterialId::Name(n) if n == "iron" || n == "terracotta" || n == "hay"
 		));
+	}
+
+	#[test]
+	fn filled_cell_samples_discrete_yaw() {
+		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let step = TAU / CONFINES_YAW_STEPS as f32;
+		let mut seen = std::collections::BTreeSet::new();
+		for seed in 0..48u32 {
+			let config = DevelopmentConfig { seed, ..DevelopmentConfig::default() };
+			let filled = DevelopmentCell::filled(cell, 12.0, &config);
+			let k = (filled.confines_yaw / step).round();
+			assert!((filled.confines_yaw - k * step).abs() < 1e-4);
+			let k_i = (k as i32).rem_euclid(CONFINES_YAW_STEPS as i32);
+			seen.insert(k_i);
+			let pad = available_footprint();
+			let occupied = yawed_plan_aabb_extent(
+				filled.confines_extent_xz.x,
+				filled.confines_extent_xz.y,
+				filled.confines_yaw,
+			);
+			assert!(occupied.x <= pad + 1e-3, "yawed AABB x {} exceeds pad {}", occupied.x, pad);
+			assert!(occupied.y <= pad + 1e-3, "yawed AABB z {} exceeds pad {}", occupied.y, pad);
+			let confines = filled.confines().expect("filled cell has confines");
+			assert!((confines.roll - filled.confines_yaw).abs() < 1e-6);
+		}
+		assert!(seen.len() >= 4, "expected several discrete headings, got {seen:?}");
 	}
 }

@@ -1,8 +1,10 @@
 //! 100 m development lattice and occupancy.
 
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::{Quat, Vec2, Vec3};
+use bevy::transform::components::Transform;
 use lod::gen::{Id, OriginalId};
+use std::f32::consts::TAU;
 
 /// Square development-cell edge length (metres).
 pub const DEVELOPMENT_CELL_SIZE: f32 = 100.0;
@@ -28,6 +30,47 @@ pub const MIN_FOOTPRINT: f32 = 36.0;
 /// Confines height range sampled at selection (2–7 storeys at 3–5 m).
 pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
 pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
+
+/// Discrete yaw steps \(k \cdot \pi/4\) for \(k \in 0\ldots7\).
+pub const CONFINES_YAW_STEPS: u32 = 8;
+
+/// Plan-square size available inside the pad (cell minus both building insets).
+pub fn available_footprint() -> f32 {
+	(DEVELOPMENT_CELL_SIZE - 2.0 * BUILDING_INSET).max(MIN_FOOTPRINT)
+}
+
+/// Map a unit sample in \([0, 1]\) onto [`CONFINES_YAW_STEPS`] headings.
+pub fn discrete_confines_yaw(unit: f32) -> f32 {
+	let steps = CONFINES_YAW_STEPS;
+	let k = ((unit.clamp(0.0, 1.0) * steps as f32) as u32).min(steps - 1);
+	(k as f32) * TAU / steps as f32
+}
+
+/// World-XZ AABB of a `width` × `depth` rectangle yawed about \(+Y\).
+pub fn yawed_plan_aabb_extent(width: f32, depth: f32, yaw: f32) -> Vec2 {
+	let (sin, cos) = yaw.sin_cos();
+	let abs_c = cos.abs();
+	let abs_s = sin.abs();
+	Vec2::new(width * abs_c + depth * abs_s, width * abs_s + depth * abs_c)
+}
+
+/// Uniformly shrink `(width, depth)` so the yawed rectangle's AABB fits in a square pad.
+pub fn inscribe_yawed_extents(width: f32, depth: f32, yaw: f32, pad: f32) -> Vec2 {
+	let occupied = yawed_plan_aabb_extent(width, depth, yaw);
+	let scale = (pad / occupied.x.max(1e-6)).min(pad / occupied.y.max(1e-6)).min(1.0);
+	Vec2::new(width * scale, depth * scale)
+}
+
+/// Rotate about \(+Y\) through `center_xz` without orbiting the world origin.
+///
+/// Geometry is authored at world positions on the cell. Bevy applies
+/// \(R p + T\), so \(T = c - R c\) keeps the cell center fixed:
+/// \(R(p - c) + c\).
+pub fn yaw_about_xz(center_xz: Vec2, yaw: f32) -> Transform {
+	let center = Vec3::new(center_xz.x, 0.0, center_xz.y);
+	let rotation = Quat::from_rotation_y(yaw);
+	Transform { translation: center - rotation * center, rotation, scale: Vec3::ONE }
+}
 
 /// Axis-aligned 100 m development tile.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -154,6 +197,7 @@ fn lattice_unit(seed: u32, ix: i32, iz: i32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::f32::consts::TAU;
 
 	#[test]
 	fn overlapping_origin_is_one_cell() {
@@ -174,5 +218,53 @@ mod tests {
 		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
 		assert!(cell_selected(cell, 1, 1.0, 300.0));
 		assert!(!cell_selected(cell, 1, 0.0, 300.0));
+	}
+
+	#[test]
+	fn discrete_yaw_is_k_pi_over_four() {
+		let step = TAU / CONFINES_YAW_STEPS as f32;
+		for i in 0..CONFINES_YAW_STEPS {
+			let yaw = discrete_confines_yaw(i as f32 / CONFINES_YAW_STEPS as f32);
+			assert!((yaw - i as f32 * step).abs() < 1e-5);
+		}
+		assert!((discrete_confines_yaw(1.0) - (CONFINES_YAW_STEPS - 1) as f32 * step).abs() < 1e-5);
+	}
+
+	#[test]
+	fn axis_aligned_inscribe_keeps_size_that_already_fits() {
+		let pad = available_footprint();
+		let kept = inscribe_yawed_extents(50.0, 40.0, 0.0, pad);
+		assert!((kept.x - 50.0).abs() < 1e-5);
+		assert!((kept.y - 40.0).abs() < 1e-5);
+		let swapped = inscribe_yawed_extents(72.0, 36.0, std::f32::consts::FRAC_PI_2, pad);
+		assert!((swapped.x - 72.0).abs() < 1e-4);
+		assert!((swapped.y - 36.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn forty_five_degree_square_shrinks_onto_the_pad() {
+		let pad = available_footprint();
+		let inscribed = inscribe_yawed_extents(pad, pad, std::f32::consts::FRAC_PI_4, pad);
+		let expected = pad / std::f32::consts::SQRT_2;
+		assert!((inscribed.x - expected).abs() < 1e-3);
+		assert!((inscribed.y - expected).abs() < 1e-3);
+		let occupied =
+			yawed_plan_aabb_extent(inscribed.x, inscribed.y, std::f32::consts::FRAC_PI_4);
+		assert!(occupied.x <= pad + 1e-3);
+		assert!(occupied.y <= pad + 1e-3);
+	}
+
+	#[test]
+	fn yaw_about_xz_keeps_the_center_fixed() {
+		let center_xz = Vec2::new(250.0, -100.0);
+		let yaw = std::f32::consts::FRAC_PI_4;
+		let transform = yaw_about_xz(center_xz, yaw);
+		let center = Vec3::new(center_xz.x, 4.0, center_xz.y);
+		let stayed = transform.transform_point(center);
+		assert!((stayed - center).length() < 1e-4);
+		let offset = Vec3::new(center_xz.x + 10.0, 4.0, center_xz.y);
+		let rotated = transform.transform_point(offset);
+		let expected = center + Quat::from_rotation_y(yaw) * (offset - center);
+		assert!((rotated - expected).length() < 1e-4);
 	}
 }
