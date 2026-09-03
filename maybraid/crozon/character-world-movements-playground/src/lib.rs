@@ -22,7 +22,7 @@ use character::{
 	StampedeMember,
 };
 use commands::{RequestModeCharacter, RequestModeFree};
-use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
+use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems, LocomotionCapsule};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
@@ -161,7 +161,7 @@ fn apply_mode_commands(
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
 	mut herd: Query<
-		(&StampedeMember, &mut Transform, &mut LinearVelocity),
+		(&StampedeMember, &LocomotionCapsule, &mut Transform, &mut LinearVelocity),
 		(Without<Player>, Without<Camera3d>),
 	>,
 	mut cameras: Query<
@@ -213,7 +213,7 @@ fn generate_cells(
 	>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
 	mut herd: Query<
-		(&StampedeMember, &mut Transform, &mut LinearVelocity),
+		(&StampedeMember, &LocomotionCapsule, &mut Transform, &mut LinearVelocity),
 		(Without<Player>, Without<Camera3d>),
 	>,
 ) {

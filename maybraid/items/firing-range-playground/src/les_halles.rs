@@ -21,6 +21,14 @@ pub struct LesHallesSpawn {
 	pub player: Vec3,
 	pub npc: Vec3,
 	pub look_yaw: f32,
+	/// Capsule-center Y on storey 0 and 1. Equal when the stack has one floor.
+	pub floor_y: [f32; 2],
+}
+
+impl LesHallesSpawn {
+	pub fn has_upper(self) -> bool {
+		(self.floor_y[1] - self.floor_y[0]).abs() > 1.0
+	}
 }
 
 impl Default for LesHallesSpawn {
@@ -30,6 +38,7 @@ impl Default for LesHallesSpawn {
 			player: Vec3::new(0.0, h, 0.0),
 			npc: Vec3::new(-6.5, h, -8.0),
 			look_yaw: -std::f32::consts::FRAC_PI_2,
+			floor_y: [h, h],
 		}
 	}
 }
@@ -61,14 +70,20 @@ fn spawn_development(
 ) {
 	let mut spawn = LesHallesSpawn::default();
 	let n_floors = dev.tower.floors.len();
+	let mut walk_y = [0.0f32; 2];
 	for (id, floor) in dev.tower.floors.iter().enumerate() {
 		let bounds = building_bounds(floor);
+		let storey = circulation_from_storey(id as u32, floor, transform);
+		if id < 2 {
+			walk_y[id] = storey.floor_y;
+		}
 		for entity in spawn_building_components(commands, floor, transform, bounds) {
 			spawn_building_walk_colliders(commands, entity, floor, BUILDING_FRICTION);
-			commands
-				.entity(entity)
-				.insert(circulation_from_storey(id as u32, floor, transform));
+			commands.entity(entity).insert(storey.clone());
 		}
+	}
+	if n_floors < 2 {
+		walk_y[1] = walk_y[0];
 	}
 
 	let mut stair_k = 0usize;
@@ -91,7 +106,7 @@ fn spawn_development(
 				let to_id = from_id + 1;
 				let link = circulation_from_stairwell(from_id, to_id, stairwell, transform);
 				if !placed_near_stair {
-					spawn = spawn_from_link(&link);
+					spawn = spawn_from_link(&link, walk_y);
 					placed_near_stair = true;
 				}
 				for entity in spawn_building_components(commands, stairwell, transform, bounds) {
@@ -112,11 +127,16 @@ fn spawn_development(
 		bevy::log::warn!(
 			"Les Halles stack has {n_floors} storey(s); NPC multi-level follow needs at least two"
 		);
+		if n_floors >= 2 {
+			let h = player::capsule_spawn_height();
+			let lift = h - walk_y[0];
+			spawn.floor_y = [h, walk_y[1] + lift];
+		}
 	}
 	commands.insert_resource(spawn);
 }
 
-fn spawn_from_link(link: &CirculationStairwell) -> LesHallesSpawn {
+fn spawn_from_link(link: &CirculationStairwell, walk_y: [f32; 2]) -> LesHallesSpawn {
 	let h = player::capsule_spawn_height();
 	let mouth = Vec3::new(link.mouth.x, h.max(link.mouth.y + 0.15), link.mouth.z);
 	let away = {
@@ -131,10 +151,14 @@ fn spawn_from_link(link: &CirculationStairwell) -> LesHallesSpawn {
 	let player = mouth - away * 2.4;
 	let npc = mouth - away * 4.2 + Vec3::new(-away.z, 0.0, away.x) * 1.6;
 	let look_yaw = (-away.z).atan2(-away.x);
+	let ground_y = h;
+	let lift = ground_y - walk_y[0];
+	let upper_y = if (walk_y[1] - walk_y[0]).abs() > 0.5 { walk_y[1] + lift } else { ground_y };
 	LesHallesSpawn {
-		player: Vec3::new(player.x, h, player.z),
-		npc: Vec3::new(npc.x, h, npc.z),
+		player: Vec3::new(player.x, ground_y, player.z),
+		npc: Vec3::new(npc.x, ground_y, npc.z),
 		look_yaw,
+		floor_y: [ground_y, upper_y],
 	}
 }
 

@@ -4,6 +4,7 @@
 //! barrel / trigger-box / grip / stock, socketed onto the matching bones.
 //! [`FirearmConcept`] is a named preset of that kit.
 
+pub mod cadence;
 pub mod concepts;
 pub mod impact;
 pub mod kit;
@@ -13,6 +14,7 @@ pub mod pose;
 pub mod projectiles;
 
 pub use ::projectiles::{BoltSpec, BulletSpec, Flight, PenetrationCost, ProjectileSource};
+pub use cadence::{Cadence, FireControl, WeaponFired, WeaponRecoil};
 pub use concepts::FirearmConcept;
 pub use firearms_components::{
 	add_firearm_components_host, firearm_bounds, spawn_firearm_components, ActiveRigPose,

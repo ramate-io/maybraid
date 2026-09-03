@@ -29,7 +29,9 @@ pub use firearm::{
 	LENGTH_MILLI_MIN, SCALE_MILLI_UNIT, THICKNESS_MILLI_MAX, THICKNESS_MILLI_MIN,
 };
 pub use firearm_material::{BoltMaterial, FirearmMaterial};
-pub use firearm_roll::{generate_firearm_stats, Dist, FirearmBuff, FirearmPriors};
+pub use firearm_roll::{
+	generate_firearm_stats, realize_firearm_stats, Dist, FirearmBuff, FirearmPriors,
+};
 pub use inventory::{
 	random_clothing_item, random_gallery_firearms, random_starter_clothing,
 	random_starter_firearms, random_starter_loadout, Inventory, InventoryItem, InventorySlot,

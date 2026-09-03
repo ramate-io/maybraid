@@ -1,15 +1,20 @@
 //! Firearms spawn [`::projectiles`] from the receiver `barrel` bone.
 //!
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
+//! They grow to the first bore hit and despawn when the trigger is released.
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
 	ProjectilesPlugin,
 };
+use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use damage::{DamageSystems, Hit, HitPayload};
 use firearms_components::{BoneMap, FirearmHostSystems, FirearmMembers, FirearmRoot, RigRoot};
+use lod_avian::PhysicsInteractionLayer;
 
+use crate::cadence::{trigger_allows_fire, FireControl, WeaponFired, WeaponRecoil};
 use crate::impact::{setup_impact_effects, spawn_impact, tick_impact_bursts, ImpactEffects};
 
 /// Authored rest length of the `barrel` bone (head → tail) in bone-local units.
@@ -113,6 +118,9 @@ type ArmedWeaponQuery<'w, 's> = Query<
 		Has<FireOnTrigger>,
 		Option<&'static WeaponTrigger>,
 		Option<&'static ProjectileSource>,
+		Option<&'static mut FireControl>,
+		Option<&'static HitPayload>,
+		Option<&'static WeaponRecoil>,
 	),
 	With<FirearmRoot>,
 >;
@@ -124,16 +132,23 @@ impl Plugin for FirearmWeaponsPlugin {
 		if !app.is_plugin_added::<ProjectilesPlugin>() {
 			app.add_plugins(ProjectilesPlugin);
 		}
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
 		if !app.is_plugin_added::<bevy_hanabi::HanabiPlugin>() {
 			app.add_plugins(bevy_hanabi::HanabiPlugin);
 		}
 		app.init_resource::<WeaponsArmed>()
+			.add_message::<WeaponFired>()
 			.add_systems(Startup, setup_impact_effects)
 			.add_systems(
 				PostUpdate,
 				(
 					fire_weapons.in_set(FirearmWeaponSystems::Fire),
-					tick_lasers,
+					tick_lasers.after(FirearmWeaponSystems::Fire),
+					tick_laser_hits
+						.in_set(DamageSystems::Collect)
+						.after(FirearmWeaponSystems::Fire),
 					spawn_impacts_from_contacts,
 					tick_impact_bursts,
 				)
@@ -184,33 +199,61 @@ fn spawn_laser(
 	materials: &mut Assets<StandardMaterial>,
 	barrel: Entity,
 	spec: LaserSpec,
+	source: Option<ProjectileSource>,
 ) -> Entity {
-	let (translation, scale) = laser_local(spec, 0.0);
-	commands
-		.spawn((
-			Name::new("laser"),
-			Transform { translation, rotation: Quat::IDENTITY, scale },
-			Visibility::default(),
-			Mesh3d(meshes.add(Mesh::from(Cylinder::new(1.0, 1.0)))),
-			MeshMaterial3d(materials.add(glow_material(spec.color))),
-			ChildOf(barrel),
-			LaserBeam { spec, age: 0.0 },
-		))
-		.id()
+	let (translation, scale) = laser_local(spec, 0.0, spec.max_length);
+	let mut entity = commands.spawn((
+		Name::new("laser"),
+		Transform { translation, rotation: Quat::IDENTITY, scale },
+		Visibility::default(),
+		Mesh3d(meshes.add(Mesh::from(Cylinder::new(1.0, 1.0)))),
+		MeshMaterial3d(materials.add(glow_material(spec.color))),
+		ChildOf(barrel),
+		LaserBeam { spec, age: 0.0 },
+	));
+	if let Some(source) = source {
+		entity.insert(source);
+	}
+	entity.id()
 }
 
-fn laser_local(spec: LaserSpec, age: f32) -> (Vec3, Vec3) {
-	let t = (age / spec.max_time).clamp(0.0, 1.0);
-	let len = (spec.max_length * t).max(0.02);
+fn laser_local(spec: LaserSpec, age: f32, range: f32) -> (Vec3, Vec3) {
+	let t = if spec.max_time > 1e-8 { (age / spec.max_time).clamp(0.0, 1.0) } else { 1.0 };
+	let len = (spec.max_length * t).min(range).max(0.02);
 	let translation = Vec3::Y * (BARREL_REST_LENGTH + len * 0.5);
 	let scale = Vec3::new(spec.radius, len, spec.radius);
 	(translation, scale)
 }
 
-fn apply_laser_pose(transform: &mut Transform, spec: LaserSpec, age: f32) {
-	let (translation, scale) = laser_local(spec, age);
+fn apply_laser_pose(transform: &mut Transform, spec: LaserSpec, age: f32, range: f32) {
+	let (translation, scale) = laser_local(spec, age, range);
 	transform.translation = translation;
 	transform.scale = scale;
+}
+
+fn laser_bore_hit(
+	spatial: &SpatialQuery,
+	muzzle: Vec3,
+	dir: Vec3,
+	max_length: f32,
+	source: Option<Entity>,
+) -> Option<(Entity, f32)> {
+	let direction = Dir3::new(dir).ok()?;
+	if max_length <= 1e-4 {
+		return None;
+	}
+	let mut filter = SpatialQueryFilter::from_mask([
+		PhysicsInteractionLayer::Fixed,
+		PhysicsInteractionLayer::Animated,
+	]);
+	if let Some(source) = source {
+		filter = filter.with_excluded_entities([source]);
+	}
+	let hit = spatial.cast_ray(muzzle, direction, max_length, true, &filter)?;
+	if source == Some(hit.entity) {
+		return None;
+	}
+	Some((hit.entity, hit.distance))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -224,100 +267,280 @@ pub fn fire_weapons(
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
 	lasers: Query<&LaserBeam>,
+	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
 		return;
 	}
 	let dt = time.delta_secs();
-	for (_root, members, mut weapon, manual, trigger, source) in &mut weapons {
-		if manual && !trigger.is_some_and(|trigger| trigger.0) {
-			if matches!(weapon.load, ProjectileLoad::Bolt(_) | ProjectileLoad::Bullet(_)) {
-				weapon.cooldown -= dt;
-			}
-			continue;
-		}
+	for (_root, members, mut weapon, manual, trigger, source, mut control, payload, recoil) in
+		&mut weapons
+	{
+		let held = trigger.is_some_and(|trigger| trigger.0);
+		let allowed = trigger_allows_fire(control.as_deref_mut(), manual, held);
 		let Some((barrel, global)) = barrel_global(members, &maps, &globals) else {
 			continue;
 		};
 		match weapon.load {
 			ProjectileLoad::Laser(spec) => {
 				let live = weapon.laser.filter(|entity| lasers.get(*entity).is_ok());
+				if manual && !held {
+					if let Some(entity) = live {
+						commands.entity(entity).try_despawn();
+					}
+					weapon.laser = None;
+					continue;
+				}
 				if live.is_none() {
-					weapon.laser =
-						Some(spawn_laser(&mut commands, &mut meshes, &mut materials, barrel, spec));
+					weapon.laser = Some(spawn_laser(
+						&mut commands,
+						&mut meshes,
+						&mut materials,
+						barrel,
+						spec,
+						source.copied(),
+					));
+				} else {
+					weapon.laser = live;
 				}
 			}
 			ProjectileLoad::Bolt(spec) => {
-				weapon.cooldown -= dt;
-				if weapon.cooldown > 0.0 {
+				if !allowed {
+					weapon.cooldown -= dt;
 					continue;
 				}
-				weapon.cooldown = weapon.interval;
-				let (muzzle, dir) = muzzle_world(global);
-				let projectile = spawn_flight(
+				if !try_fire_ballistic(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
-					muzzle,
-					dir,
-					spec.length,
-					spec.radius,
-					spec.speed,
-					spec.max_range,
-					spec.penetration,
-					spec.max_age,
-					spec.color,
+					&mut weapon,
+					global,
+					spec,
 					0.0,
-				);
-				if let Some(source) = source {
-					commands.entity(projectile).insert(*source);
+					dt,
+					source,
+					payload,
+					recoil,
+					control.as_deref_mut(),
+					&mut fired,
+				) {
+					continue;
 				}
 			}
 			ProjectileLoad::Bullet(spec) => {
-				weapon.cooldown -= dt;
-				if weapon.cooldown > 0.0 {
+				if !allowed {
+					weapon.cooldown -= dt;
 					continue;
 				}
-				weapon.cooldown = weapon.interval;
-				let (muzzle, dir) = muzzle_world(global);
-				let projectile = spawn_flight(
+				if !try_fire_ballistic(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
-					muzzle,
-					dir,
-					spec.length,
-					spec.radius,
-					spec.speed,
-					spec.max_range,
-					spec.penetration,
-					spec.max_age,
-					spec.color,
+					&mut weapon,
+					global,
+					spec,
 					1.0,
-				);
-				if let Some(source) = source {
-					commands.entity(projectile).insert(*source);
+					dt,
+					source,
+					payload,
+					recoil,
+					control.as_deref_mut(),
+					&mut fired,
+				) {
+					continue;
 				}
 			}
 		}
 	}
 }
 
-pub fn tick_lasers(
+#[allow(clippy::too_many_arguments)]
+fn try_fire_ballistic(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	weapon: &mut Weapon,
+	global: &GlobalTransform,
+	spec: impl IntoBallistic,
+	gravity: f32,
+	dt: f32,
+	source: Option<&ProjectileSource>,
+	payload: Option<&HitPayload>,
+	recoil: Option<&WeaponRecoil>,
+	control: Option<&mut FireControl>,
+	fired: &mut MessageWriter<WeaponFired>,
+) -> bool {
+	weapon.cooldown -= dt;
+	if weapon.cooldown > 0.0 {
+		return false;
+	}
+	weapon.cooldown = weapon.interval;
+	let (length, radius, speed, max_range, penetration, max_age, color) = spec.ballistic();
+	let (muzzle, dir) = muzzle_world(global);
+	let projectile = spawn_flight(
+		commands,
+		meshes,
+		materials,
+		muzzle,
+		dir,
+		length,
+		radius,
+		speed,
+		max_range,
+		penetration,
+		max_age,
+		color,
+		gravity,
+	);
+	if let Some(payload) = payload {
+		commands.entity(projectile).insert(*payload);
+	}
+	if let Some(source) = source {
+		commands.entity(projectile).insert(*source);
+	}
+	if let Some(control) = control {
+		control.note_shot();
+	}
+	let kick = recoil.map(|recoil| recoil.0).unwrap_or(0.0);
+	if let Some(source) = source {
+		fired.write(WeaponFired { shooter: source.0, recoil: kick });
+	}
+	true
+}
+
+trait IntoBallistic {
+	fn ballistic(self) -> (f32, f32, f32, f32, f32, f32, Color);
+}
+
+impl IntoBallistic for BoltSpec {
+	fn ballistic(self) -> (f32, f32, f32, f32, f32, f32, Color) {
+		(
+			self.length,
+			self.radius,
+			self.speed,
+			self.max_range,
+			self.penetration,
+			self.max_age,
+			self.color,
+		)
+	}
+}
+
+impl IntoBallistic for BulletSpec {
+	fn ballistic(self) -> (f32, f32, f32, f32, f32, f32, Color) {
+		(
+			self.length,
+			self.radius,
+			self.speed,
+			self.max_range,
+			self.penetration,
+			self.max_age,
+			self.color,
+		)
+	}
+}
+
+type LaserWeaponQuery<'w, 's> = Query<
+	'w,
+	's,
+	(
+		&'static FirearmMembers,
+		&'static mut Weapon,
+		Has<FireOnTrigger>,
+		Option<&'static WeaponTrigger>,
+		Option<&'static ProjectileSource>,
+		Option<&'static HitPayload>,
+	),
+	With<FirearmRoot>,
+>;
+
+/// Floor so a catalog laser with interval 0 does not apply damage every frame.
+const LASER_HIT_INTERVAL: f32 = 0.15;
+
+#[allow(clippy::too_many_arguments)]
+fn tick_laser_hits(
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
-	mut lasers: Query<(&mut LaserBeam, &mut Transform)>,
+	spatial: SpatialQuery,
+	mut weapons: LaserWeaponQuery,
+	maps: Query<&BoneMap, With<RigRoot>>,
+	globals: Query<&GlobalTransform>,
+	mut hits: MessageWriter<Hit>,
+	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
 		return;
 	}
 	let dt = time.delta_secs();
-	for (mut beam, mut transform) in &mut lasers {
-		beam.age += dt;
-		if beam.age >= beam.spec.max_time {
-			beam.age = 0.0;
+	for (members, mut weapon, manual, trigger, source, payload) in &mut weapons {
+		let ProjectileLoad::Laser(spec) = weapon.load else {
+			continue;
+		};
+		let Some(payload) = payload else {
+			continue;
+		};
+		let held = trigger.is_some_and(|trigger| trigger.0);
+		if manual && !held {
+			continue;
 		}
-		apply_laser_pose(&mut transform, beam.spec, beam.age);
+		if weapon.laser.is_none() {
+			continue;
+		}
+		weapon.cooldown -= dt;
+		if weapon.cooldown > 0.0 {
+			continue;
+		}
+		weapon.cooldown = weapon.interval.max(LASER_HIT_INTERVAL);
+		if let Some(source) = source {
+			fired.write(WeaponFired { shooter: source.0, recoil: 0.0 });
+		}
+		let Some((_, global)) = barrel_global(members, &maps, &globals) else {
+			continue;
+		};
+		let (muzzle, dir) = muzzle_world(global);
+		let Some((target, distance)) =
+			laser_bore_hit(&spatial, muzzle, dir, spec.max_length, source.map(|source| source.0))
+		else {
+			continue;
+		};
+		hits.write(Hit {
+			target,
+			source: source.map(|source| source.0),
+			amount: payload.amount,
+			point: muzzle + dir * distance,
+		});
+	}
+}
+
+pub fn tick_lasers(
+	time: Res<Time>,
+	armed: Res<WeaponsArmed>,
+	spatial: SpatialQuery,
+	globals: Query<&GlobalTransform>,
+	mut lasers: Query<(&mut LaserBeam, &mut Transform, &ChildOf, Option<&ProjectileSource>)>,
+) {
+	if !armed.0 {
+		return;
+	}
+	let dt = time.delta_secs();
+	for (mut beam, mut transform, child_of, source) in &mut lasers {
+		beam.age = (beam.age + dt).min(beam.spec.max_time);
+		let range = globals
+			.get(child_of.parent())
+			.ok()
+			.and_then(|global| {
+				let (muzzle, dir) = muzzle_world(global);
+				laser_bore_hit(
+					&spatial,
+					muzzle,
+					dir,
+					beam.spec.max_length,
+					source.map(|source| source.0),
+				)
+				.map(|(_, distance)| distance)
+			})
+			.unwrap_or(beam.spec.max_length);
+		apply_laser_pose(&mut transform, beam.spec, beam.age, range);
 	}
 }
 
@@ -354,11 +577,19 @@ mod tests {
 	fn laser_grows_from_barrel_tail() {
 		let spec =
 			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
-		let (t0, s0) = laser_local(spec, 0.0);
-		let (t1, s1) = laser_local(spec, 1.0);
+		let (t0, s0) = laser_local(spec, 0.0, spec.max_length);
+		let (t1, s1) = laser_local(spec, 1.0, spec.max_length);
 		assert!(s0.y < s1.y);
 		assert!((s1.y - 10.0).abs() < 1.0e-4);
 		assert!(t1.y > t0.y);
+	}
+
+	#[test]
+	fn laser_local_stops_at_range() {
+		let spec =
+			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
+		let (_t, scale) = laser_local(spec, 1.0, 4.0);
+		assert!((scale.y - 4.0).abs() < 1e-4);
 	}
 
 	#[test]

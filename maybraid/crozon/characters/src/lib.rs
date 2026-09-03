@@ -4,7 +4,9 @@
 //! [`lod::LodScene`] hosts ([`ComponentsOnly`], [`RigNode`], [`PartNode`]), with
 //! sockets and skinning as deferred refs parallel to [`scene_ref::SceneRef`].
 //! Live pose, animation, and paint are ECS mutation (`MemberOf` + `*Ref` +
-//! `Changed`), not LOD refresh. Per-frame clips and terrain pitch live in
+//! `Changed`), not LOD refresh. Recipes also expose a rest-pose
+//! [`LocomotionCapsule`](crate::LocomotionCapsule) for locomotion colliders;
+//! physics crates stamp Avian from that hull. Per-frame clips and terrain pitch live in
 //! [`crozon_character_motion`]; this crate stamps **initial** host markers from
 //! [`lod::LodScene::host`] / spawn. Motion sync keeps those markers aligned with
 //! the shown LOD band.
@@ -41,7 +43,7 @@ pub use assembly::CharacterPartSlot;
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use components::{
 	character_bounds, clothing_layers, CharacterComponents, CharacterRecipe, Clothed,
-	ClothingLayer, ComponentsOnly,
+	ClothingLayer, ComponentsOnly, LocomotionCapsule,
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{

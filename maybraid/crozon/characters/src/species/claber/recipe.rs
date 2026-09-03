@@ -14,7 +14,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
@@ -60,6 +60,11 @@ impl Default for Claber {
 }
 
 impl CharacterComponents for Claber {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		// ~2× croconot midback span on a still-low limb length.
+		LocomotionCapsule::QUADRUPED.scaled(1.6)
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		let pose =
 			ClaberPose { gender: self.gender, build: self.build, sliders: self.sliders.clamped() };

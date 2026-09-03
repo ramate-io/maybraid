@@ -1,11 +1,15 @@
-//! Rolled item attributes. Stats are integers so inventory stays [`Eq`].
+//! Rolled item attributes. Clothing stays integer so inventory is [`Eq`].
+//! Firearm recoil is an [`f32`]; [`Eq`]/[`Hash`] use its bit pattern.
 //!
 //! Generation is identity-hashed (same mesh / look / color → same stats) so
-//! old saves without a stats blob can recover a deterministic roll. Gameplay
-//! systems do not consume these yet; menus display them and
-//! [`CharacterSheet`] compiles worn clothing plus queued weapon weight.
+//! old saves without a stats blob can recover a deterministic roll. Menus
+//! display them and [`CharacterSheet`] compiles worn clothing plus queued
+//! weapon weight. Firearm-user bakes [`FirearmStats`] into a live weapon
+//! (`Weapon`, cadence, payload, recoil); clothing `health` / `damage` feed
+//! max HP and outgoing DPC.
 
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, Inventory, InventoryItem, ItemColor};
 
@@ -137,8 +141,8 @@ impl ClothingStats {
 }
 
 /// Firearm combat stats. Penetration is millunits (`600` = 0.60). Recoil is
-/// a small integer. Recharge is tenths of a second.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// catalog strength (typically `0.25..=8`). Recharge is tenths of a second.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FirearmStats {
 	pub projectile: ProjectileKind,
@@ -146,14 +150,47 @@ pub struct FirearmStats {
 	pub penetration: u16,
 	pub range: u16,
 	pub fire: Option<FireMode>,
-	pub recoil: u8,
+	pub recoil: f32,
 	pub damage: u16,
 	pub weight: u16,
+}
+
+impl PartialEq for FirearmStats {
+	fn eq(&self, other: &Self) -> bool {
+		self.projectile == other.projectile
+			&& self.speed == other.speed
+			&& self.penetration == other.penetration
+			&& self.range == other.range
+			&& self.fire == other.fire
+			&& self.recoil.to_bits() == other.recoil.to_bits()
+			&& self.damage == other.damage
+			&& self.weight == other.weight
+	}
+}
+
+impl Eq for FirearmStats {}
+
+impl Hash for FirearmStats {
+	fn hash<H: Hasher>(&self, state: &mut H) {
+		self.projectile.hash(state);
+		self.speed.hash(state);
+		self.penetration.hash(state);
+		self.range.hash(state);
+		self.fire.hash(state);
+		self.recoil.to_bits().hash(state);
+		self.damage.hash(state);
+		self.weight.hash(state);
+	}
 }
 
 impl FirearmStats {
 	pub fn generate(spec: &FirearmSpec) -> Self {
 		crate::generate_firearm_stats(spec)
+	}
+
+	/// Sample stats from `rng` instead of hashing [`FirearmSpec`] identity.
+	pub fn realize(rng: &mut crate::ItemRng, spec: &FirearmSpec) -> Self {
+		crate::realize_firearm_stats(rng, spec)
 	}
 
 	pub fn generate_for_mesh(mesh: crate::FirearmMesh) -> Self {
@@ -185,7 +222,7 @@ impl FirearmStats {
 			rows.push((String::from("Fire"), fire.label()));
 		}
 		if self.projectile.is_ballistic() {
-			rows.push((String::from("Recoil"), self.recoil.to_string()));
+			rows.push((String::from("Recoil"), format!("{:.2}", self.recoil)));
 		}
 		rows.push((String::from("DPC"), self.damage.to_string()));
 		rows.push((String::from("Weight"), self.weight.to_string()));

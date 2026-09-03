@@ -2,7 +2,11 @@
 
 Capsule body, character visual, and **handoff slots** for camera and pose.
 
-This crate does not know about firearms or melee. Item-user crates write the
+The collider size comes from the character recipe's
+[`LocomotionCapsule`](../crozon/characters/src/components.rs), not from this
+crate. Spawn uses the humanoid default until a visual is attached; attaching a
+recipe reapplies that hull (`Collider`, `ShapeCaster`, component). This crate
+does not know about firearms or melee. Item-user crates write the
 slots; `player-camera` and overlay systems read them. [`Npc`](src/identity.rs)
 reuses the capsule, [`PlayerLook`](src/identity.rs), and locomotion clips
 without pad input, `CameraFollow`, or `PlayerVisual` (so first-person face hide

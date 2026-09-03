@@ -1,78 +1,31 @@
 use bevy::prelude::*;
 use firearm_user::FirearmUser;
-use player::{Npc, Player};
-use projectiles::ProjectileContact;
+use player::{LocomotionCapsule, Npc, Player};
 
-pub(crate) const MAX_HEALTH: f32 = 100.0;
-pub(crate) const PROJECTILE_DAMAGE: f32 = 25.0;
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
+pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
+
+pub(crate) use ::damage::{DEFAULT_MAX_HEALTH as MAX_HEALTH, DamageApplied, HeadshotBand, Health};
+
+/// Top half of the upper capsule hemisphere.
+pub(crate) fn headshot_band() -> HeadshotBand {
+	headshot_band_for(LocomotionCapsule::HUMANOID)
+}
+
+pub(crate) fn headshot_band_for(hull: LocomotionCapsule) -> HeadshotBand {
+	HeadshotBand { min_local_y: hull.headshot_min_local_y(), multiplier: HEADSHOT_MULTIPLIER }
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct CombatRespawn {
 	pub player_at: Option<f32>,
-	pub npc_at: Option<f32>,
+	pub npc_at: Vec<f32>,
 }
 
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-pub(crate) struct Health {
-	pub current: f32,
-	pub max: f32,
-}
-
-impl Default for Health {
-	fn default() -> Self {
-		Self { current: MAX_HEALTH, max: MAX_HEALTH }
-	}
-}
-
-impl Health {
-	pub fn apply_damage(&mut self, damage: f32) {
-		self.current = (self.current - damage.max(0.0)).max(0.0);
-	}
-
-	pub fn is_dead(self) -> bool {
-		self.current <= 0.0
-	}
-
-	pub fn fraction(self) -> f32 {
-		if self.max <= 0.0 {
-			0.0
-		} else {
-			(self.current / self.max).clamp(0.0, 1.0)
-		}
-	}
-}
-
-/// Applied hit. `origin` is the attacker position, or the contact point if unknown.
-#[derive(Message, Clone, Copy, Debug)]
-pub(crate) struct DamageTaken {
-	pub target: Entity,
-	pub origin: Vec3,
-}
-
-pub(crate) fn apply_projectile_damage(
-	mut contacts: MessageReader<ProjectileContact>,
-	mut health: Query<&mut Health>,
-	transforms: Query<&GlobalTransform>,
-	mut hits: MessageWriter<DamageTaken>,
-) {
-	for contact in contacts.read() {
-		if contact.source == Some(contact.target) {
-			continue;
-		}
-		let Ok(mut target) = health.get_mut(contact.target) else {
-			continue;
-		};
-		if target.is_dead() {
-			continue;
-		}
-		target.apply_damage(PROJECTILE_DAMAGE);
-		let origin = contact
-			.source
-			.and_then(|source| transforms.get(source).ok())
-			.map(GlobalTransform::translation)
-			.unwrap_or(contact.point);
-		hits.write(DamageTaken { target: contact.target, origin });
+impl CombatRespawn {
+	pub fn clear(&mut self) {
+		self.player_at = None;
+		self.npc_at.clear();
 	}
 }
 
@@ -82,6 +35,7 @@ type DeadCombatants<'w, 's> =
 pub(crate) fn despawn_dead(
 	time: Res<Time>,
 	mut respawn: ResMut<CombatRespawn>,
+	mut engagement: ResMut<crate::engagement::NpcEngagement>,
 	mut commands: Commands,
 	combatants: DeadCombatants,
 ) {
@@ -92,9 +46,10 @@ pub(crate) fn despawn_dead(
 		}
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
+			engagement.reset();
 		}
 		if is_npc {
-			respawn.npc_at = Some(now + RESPAWN_SECS);
+			respawn.npc_at.push(now + RESPAWN_SECS);
 		}
 		if let Some(user) = user {
 			commands.entity(user.held).try_despawn();
@@ -108,22 +63,10 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn damage_clamps_at_zero() {
-		let mut health = Health::default();
-		health.apply_damage(25.0);
-		assert_eq!(health.current, 75.0);
-		health.apply_damage(100.0);
-		assert_eq!(health.current, 0.0);
-		assert!(health.is_dead());
-	}
-
-	#[test]
-	fn fraction_tracks_remaining() {
-		let mut health = Health::default();
-		assert_eq!(health.fraction(), 1.0);
-		health.apply_damage(50.0);
-		assert!((health.fraction() - 0.5).abs() < 1e-5);
-		health.apply_damage(50.0);
-		assert_eq!(health.fraction(), 0.0);
+	fn headshot_band_is_the_upper_half_of_the_top_hemisphere() {
+		let band = headshot_band();
+		let hull = LocomotionCapsule::HUMANOID;
+		assert!((band.min_local_y - hull.headshot_min_local_y()).abs() < 1e-5);
+		assert!((band.multiplier - HEADSHOT_MULTIPLIER).abs() < 1e-5);
 	}
 }

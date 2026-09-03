@@ -1,9 +1,11 @@
 //! Always-on combat HUD: health bars, world-space counters, directional hit ticks.
 
 use bevy::prelude::*;
-use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
+use game_commands::GameCommandDrawerVisible;
+use player::{LocomotionCapsule, Npc, Player};
 
-use crate::damage::{DamageTaken, Health};
+use crate::damage::{DamageApplied, HeadshotBand, Health};
+use crate::session::{CombatantKit, RangeSession};
 
 const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
@@ -13,7 +15,14 @@ const INDICATOR_COUNT: usize = 8;
 const INDICATOR_RADIUS: f32 = 148.0;
 const INDICATOR_LIFE: f32 = 1.4;
 const INDICATOR_GROUP: f32 = 0.5;
-const HEAD_LIFT: f32 = CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS + 0.38;
+const HEAD_LIFT_PAD: f32 = 0.38;
+const GUN_CARD_WIDTH: f32 = 248.0;
+const DRAWER_CLEARANCE: f32 = 290.0;
+const POPUP_LIFE: f32 = 0.9;
+const POPUP_RISE: f32 = 48.0;
+const HIT_POINTS: u8 = 1;
+const HEAD_POINTS: u8 = 2;
+const DOWN_POINTS: u8 = 5;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CombatantHud {
@@ -28,11 +37,35 @@ pub(crate) struct HudBarFill;
 pub(crate) struct HudBarLabel;
 
 #[derive(Component)]
-pub(crate) struct WorldHealthAnchor;
+pub(crate) struct CombatHudRoot;
+
+#[derive(Component)]
+pub(crate) struct GunStatsPanel;
+
+#[derive(Component)]
+pub(crate) struct GunStatsText;
+
+#[derive(Component)]
+pub(crate) struct WorldHudFill;
+
+#[derive(Component)]
+pub(crate) struct WorldHudLabel;
+
+#[derive(Component)]
+pub(crate) struct WorldHealthAnchor {
+	target: Entity,
+}
 
 #[derive(Component)]
 pub(crate) struct DamageTick {
 	slot: usize,
+}
+
+#[derive(Component)]
+pub(crate) struct CombatPopup {
+	world: Vec3,
+	born: f32,
+	points: u8,
 }
 
 #[derive(Clone, Copy)]
@@ -48,6 +81,7 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 	commands
 		.spawn((
 			Name::new("combat-hud"),
+			CombatHudRoot,
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),
@@ -74,7 +108,6 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 				spawn_screen_bar(row, CombatantHud::Player, "YOU");
 				spawn_screen_bar(row, CombatantHud::Npc, "NPC");
 			});
-			spawn_world_bar(root, CombatantHud::Npc);
 			root.spawn((
 				Node {
 					position_type: PositionType::Absolute,
@@ -108,6 +141,35 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 					));
 				}
 			});
+			spawn_gun_stats_card(root);
+		});
+}
+
+fn spawn_gun_stats_card(parent: &mut ChildSpawnerCommands) {
+	parent
+		.spawn((
+			Name::new("gun-stats"),
+			GunStatsPanel,
+			Node {
+				position_type: PositionType::Absolute,
+				right: Val::Px(16.0),
+				bottom: Val::Px(16.0),
+				min_width: Val::Px(GUN_CARD_WIDTH),
+				flex_direction: FlexDirection::Column,
+				padding: UiRect::all(Val::Px(10.0)),
+				border_radius: BorderRadius::all(Val::Px(4.0)),
+				..default()
+			},
+			BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.72)),
+			Pickable::IGNORE,
+		))
+		.with_children(|card| {
+			card.spawn((
+				GunStatsText,
+				Text::new(""),
+				TextFont { font_size: FontSize::Px(13.0), ..default() },
+				TextColor(Color::srgb(0.92, 0.95, 0.98)),
+			));
 		});
 }
 
@@ -159,11 +221,10 @@ fn spawn_screen_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud, title
 		});
 }
 
-fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
-	parent
-		.spawn((
-			kind,
-			WorldHealthAnchor,
+fn spawn_world_bar(parent: Entity, target: Entity, commands: &mut Commands) {
+	commands.entity(parent).with_children(|root| {
+		root.spawn((
+			WorldHealthAnchor { target },
 			Node {
 				position_type: PositionType::Absolute,
 				left: Val::Px(0.0),
@@ -180,8 +241,7 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 		))
 		.with_children(|anchor| {
 			anchor.spawn((
-				kind,
-				HudBarLabel,
+				WorldHudLabel,
 				Text::new(""),
 				TextFont { font_size: FontSize::Px(12.0), ..default() },
 				TextColor(Color::srgb(1.0, 1.0, 1.0)),
@@ -198,8 +258,7 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 				))
 				.with_children(|track| {
 					track.spawn((
-						kind,
-						HudBarFill,
+						WorldHudFill,
 						Node {
 							width: Val::Percent(100.0),
 							height: Val::Percent(100.0),
@@ -210,57 +269,192 @@ fn spawn_world_bar(parent: &mut ChildSpawnerCommands, kind: CombatantHud) {
 					));
 				});
 		});
+	});
+}
+
+pub(crate) fn ensure_world_health_bars(
+	mut commands: Commands,
+	hud: Query<Entity, With<CombatHudRoot>>,
+	npcs: Query<Entity, With<Npc>>,
+	anchors: Query<(Entity, &WorldHealthAnchor)>,
+) {
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let live: Vec<Entity> = npcs.iter().collect();
+	let existing: Vec<(Entity, Entity)> =
+		anchors.iter().map(|(entity, anchor)| (entity, anchor.target)).collect();
+	for (entity, target) in &existing {
+		if !live.contains(target) {
+			commands.entity(*entity).try_despawn();
+		}
+	}
+	for npc in live {
+		if existing.iter().any(|(_, target)| *target == npc) {
+			continue;
+		}
+		spawn_world_bar(hud, npc, &mut commands);
+	}
 }
 
 pub(crate) fn sync_health_hud(
+	session: Res<RangeSession>,
 	players: Query<&Health, With<Player>>,
 	npcs: Query<&Health, With<Npc>>,
 	mut fills: Query<(&CombatantHud, &mut Node, &mut BackgroundColor), With<HudBarFill>>,
 	mut labels: Query<(&CombatantHud, &mut Text), With<HudBarLabel>>,
 ) {
 	let player = players.single().ok().copied();
+	let alive = npcs.iter().count();
+	let total = session.npc_count.max(1);
 	let npc = npcs.single().ok().copied();
+	let field_fraction = (alive as f32 / total as f32).clamp(0.0, 1.0);
 	for (kind, mut node, mut color) in &mut fills {
-		let health = readout(*kind, player, npc);
-		node.width = Val::Percent(health.map(Health::fraction).unwrap_or(0.0) * 100.0);
-		color.0 = bar_color(health.map(Health::fraction).unwrap_or(0.0));
+		let fraction = match *kind {
+			CombatantHud::Player => player.map(Health::fraction).unwrap_or(0.0),
+			CombatantHud::Npc if session.is_free_for_all() => field_fraction,
+			CombatantHud::Npc => npc.map(Health::fraction).unwrap_or(0.0),
+		};
+		node.width = Val::Percent(fraction * 100.0);
+		color.0 = bar_color(fraction);
 	}
 	for (kind, mut text) in &mut labels {
-		text.0 = label_text(*kind, readout(*kind, player, npc));
+		text.0 = match *kind {
+			CombatantHud::Player => label_text(CombatantHud::Player, player),
+			CombatantHud::Npc if session.is_free_for_all() => {
+				format!("FIELD  {alive}/{total}")
+			}
+			CombatantHud::Npc => label_text(CombatantHud::Npc, npc),
+		};
 	}
 }
 
+pub(crate) fn sync_gun_stats(
+	drawer: Res<GameCommandDrawerVisible>,
+	players: Query<Option<&CombatantKit>, With<Player>>,
+	mut panels: Query<(&mut Node, &mut Visibility), With<GunStatsPanel>>,
+	mut labels: Query<&mut Text, With<GunStatsText>>,
+) {
+	let Ok((mut node, mut visibility)) = panels.single_mut() else {
+		return;
+	};
+	let Ok(mut text) = labels.single_mut() else {
+		return;
+	};
+	node.bottom = if drawer.0 { Val::Px(DRAWER_CLEARANCE) } else { Val::Px(16.0) };
+	let Ok(kit) = players.single() else {
+		*visibility = Visibility::Hidden;
+		return;
+	};
+	*visibility = Visibility::Visible;
+	text.0 = gun_card_text(kit);
+}
+
+fn gun_card_text(kit: Option<&CombatantKit>) -> String {
+	match kit {
+		Some(kit) => format_gun_card(
+			kit.firearm.body.label(),
+			&kit.stats.catalog_detail(),
+			&live_stat_rows(kit),
+		),
+		None => format_gun_card("bullpup", "Bolt · 25 DPC", &duel_stat_rows()),
+	}
+}
+
+fn live_stat_rows(kit: &CombatantKit) -> Vec<(String, String)> {
+	let live = kit.live.payload.amount;
+	let catalog = f32::from(kit.stats.damage);
+	kit.stats
+		.stat_rows()
+		.into_iter()
+		.map(|(label, value)| {
+			if label == "DPC" && (live - catalog).abs() >= 0.5 {
+				(label, format!("{live:.0} ({catalog:.0})"))
+			} else {
+				(label, value)
+			}
+		})
+		.collect()
+}
+
+fn duel_stat_rows() -> Vec<(String, String)> {
+	vec![
+		(String::from("Projectile"), String::from("Bolt")),
+		(String::from("Speed"), String::from("180/s")),
+		(String::from("Penetration"), String::from("0.85")),
+		(String::from("Range"), String::from("36 m")),
+		(String::from("Fire"), String::from("Auto")),
+		(String::from("DPC"), String::from("25")),
+	]
+}
+
+fn format_gun_card(title: &str, detail: &str, rows: &[(String, String)]) -> String {
+	let mut lines = vec![title.to_ascii_uppercase(), String::from(detail), String::new()];
+	for (label, value) in rows {
+		lines.push(format!("{label:<13}{value}"));
+	}
+	lines.join("\n")
+}
+
+type WorldBarFills<'w, 's> = Query<
+	'w,
+	's,
+	(&'static mut Node, &'static mut BackgroundColor),
+	(With<WorldHudFill>, Without<WorldHealthAnchor>),
+>;
+
 pub(crate) fn sync_world_health_bars(
 	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-	npcs: Query<&GlobalTransform, With<Npc>>,
-	mut anchors: Query<(&mut Node, &mut Visibility), With<WorldHealthAnchor>>,
+	npcs: Query<(&GlobalTransform, &Health, Option<&LocomotionCapsule>), With<Npc>>,
+	mut anchors: Query<(Entity, &WorldHealthAnchor, &mut Node, &mut Visibility)>,
+	children: Query<&Children>,
+	mut fills: WorldBarFills,
+	mut labels: Query<&mut Text, With<WorldHudLabel>>,
 ) {
 	let Ok((camera, camera_transform)) = cameras.single() else {
 		return;
 	};
-	let Some(npc) = npcs.single().ok().copied() else {
-		for (_, mut visibility) in &mut anchors {
+	for (anchor_entity, anchor, mut node, mut visibility) in &mut anchors {
+		let Ok((transform, health, hull)) = npcs.get(anchor.target) else {
 			*visibility = Visibility::Hidden;
-		}
-		return;
-	};
-	let head = npc.translation() + Vec3::Y * HEAD_LIFT;
-	let screen = camera.world_to_viewport(camera_transform, head).ok();
-	for (mut node, mut visibility) in &mut anchors {
-		if let Some(screen) = screen {
+			continue;
+		};
+		let lift = hull.copied().unwrap_or_default().half_height() + HEAD_LIFT_PAD;
+		let head = transform.translation() + Vec3::Y * lift;
+		if let Ok(screen) = camera.world_to_viewport(camera_transform, head) {
 			node.left = Val::Px(screen.x - WORLD_BAR_WIDTH * 0.5);
 			node.top = Val::Px(screen.y - 22.0);
 			*visibility = Visibility::Visible;
 		} else {
 			*visibility = Visibility::Hidden;
+			continue;
+		}
+		let Ok(kids) = children.get(anchor_entity) else {
+			continue;
+		};
+		for child in kids {
+			if let Ok(mut text) = labels.get_mut(*child) {
+				text.0 = format!("{:.0}", health.current);
+			}
+			let Ok(grand) = children.get(*child) else {
+				continue;
+			};
+			for grandchild in grand {
+				let Ok((mut fill, mut color)) = fills.get_mut(*grandchild) else {
+					continue;
+				};
+				fill.width = Val::Percent(health.fraction() * 100.0);
+				color.0 = bar_color(health.fraction());
+			}
 		}
 	}
 }
 
 pub(crate) fn ingest_damage_indicators(
 	time: Res<Time>,
-	mut hits: MessageReader<DamageTaken>,
+	mut hits: MessageReader<DamageApplied>,
 	players: Query<(), With<Player>>,
+	transforms: Query<&GlobalTransform>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	mut ticks: ResMut<DamageTicks>,
 ) {
@@ -272,7 +466,12 @@ pub(crate) fn ingest_damage_indicators(
 		if players.get(hit.target).is_err() {
 			continue;
 		}
-		assign_tick(&mut ticks.0, camera, hit.origin, now);
+		let origin = hit
+			.source
+			.and_then(|source| transforms.get(source).ok())
+			.map(GlobalTransform::translation)
+			.unwrap_or(hit.point);
+		assign_tick(&mut ticks.0, camera, origin, now);
 	}
 }
 
@@ -317,11 +516,107 @@ pub(crate) fn update_damage_indicators(
 	}
 }
 
-fn readout(kind: CombatantHud, player: Option<Health>, npc: Option<Health>) -> Option<Health> {
-	match kind {
-		CombatantHud::Player => player,
-		CombatantHud::Npc => npc,
+pub(crate) fn ingest_combat_popups(
+	time: Res<Time>,
+	mut hits: MessageReader<DamageApplied>,
+	players: Query<Entity, With<Player>>,
+	targets: Query<(&GlobalTransform, Option<&HeadshotBand>)>,
+	hud: Query<Entity, With<CombatHudRoot>>,
+	mut commands: Commands,
+) {
+	let Ok(player) = players.single() else {
+		return;
+	};
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let now = time.elapsed_secs();
+	for hit in hits.read() {
+		if hit.source != Some(player) {
+			continue;
+		}
+		let points = targets
+			.get(hit.target)
+			.ok()
+			.filter(|(transform, band)| {
+				band.is_some_and(|band| band.contains(transform, hit.point))
+			})
+			.map_or(HIT_POINTS, |_| HEAD_POINTS);
+		spawn_combat_popup(&mut commands, hud, hit.point, now, points);
+		if hit.remaining <= 0.0 {
+			spawn_combat_popup(&mut commands, hud, hit.point + Vec3::Y * 0.16, now, DOWN_POINTS);
+		}
 	}
+}
+
+fn spawn_combat_popup(commands: &mut Commands, hud: Entity, world: Vec3, born: f32, points: u8) {
+	let (fill, size) = popup_style(points);
+	commands.entity(hud).with_children(|root| {
+		root.spawn((
+			Name::new("combat-popup"),
+			CombatPopup { world, born, points },
+			Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(0.0),
+				top: Val::Px(0.0),
+				..default()
+			},
+			Text::new(popup_label(points)),
+			TextFont { font_size: FontSize::Px(size), ..default() },
+			TextColor(fill),
+			Pickable::IGNORE,
+		));
+	});
+}
+
+pub(crate) fn update_combat_popups(
+	time: Res<Time>,
+	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+	mut popups: Query<(Entity, &CombatPopup, &mut Node, &mut TextColor, &mut Visibility)>,
+	mut commands: Commands,
+) {
+	let now = time.elapsed_secs();
+	let Ok((camera, camera_transform)) = cameras.single() else {
+		for (_, _, _, _, mut visibility) in &mut popups {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	for (entity, popup, mut node, mut color, mut visibility) in &mut popups {
+		let age = now - popup.born;
+		if age >= POPUP_LIFE {
+			commands.entity(entity).try_despawn();
+			continue;
+		}
+		let Ok(screen) = camera.world_to_viewport(camera_transform, popup.world) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		let rise = age / POPUP_LIFE * POPUP_RISE;
+		node.left = Val::Px(screen.x - 16.0);
+		node.top = Val::Px(screen.y - 18.0 - rise);
+		let alpha = popup_alpha(age);
+		color.0 = popup_style(popup.points).0.with_alpha(alpha);
+		*visibility = Visibility::Visible;
+	}
+}
+
+fn popup_label(points: u8) -> String {
+	format!("+{points}")
+}
+
+fn popup_style(points: u8) -> (Color, f32) {
+	if points >= DOWN_POINTS {
+		(Color::srgb(1.0, 0.82, 0.28), 28.0)
+	} else if points >= HEAD_POINTS {
+		(Color::srgb(0.42, 0.86, 1.0), 24.0)
+	} else {
+		(Color::srgb(0.92, 0.98, 1.0), 22.0)
+	}
+}
+
+fn popup_alpha(age: f32) -> f32 {
+	(1.0 - age / POPUP_LIFE).clamp(0.0, 1.0)
 }
 
 fn label_text(kind: CombatantHud, health: Option<Health>) -> String {
@@ -432,5 +727,41 @@ mod tests {
 		let offset = indicator_offset(yaw, 100.0);
 		assert!(offset.x > 90.0, "{offset:?}");
 		assert!(offset.y.abs() < 8.0, "{offset:?}");
+	}
+
+	#[test]
+	fn duel_card_lists_the_default_bolt() {
+		let text = gun_card_text(None);
+		assert!(text.starts_with("BULLPUP"), "{text}");
+		assert!(text.contains("Bolt · 25 DPC"), "{text}");
+		assert!(text.contains("180/s"), "{text}");
+		assert!(text.contains("36 m"), "{text}");
+	}
+
+	#[test]
+	fn hit_is_one_head_is_two_and_down_is_five() {
+		assert_eq!(HIT_POINTS, 1);
+		assert_eq!(HEAD_POINTS, 2);
+		assert_eq!(DOWN_POINTS, 5);
+		assert_eq!(popup_label(HIT_POINTS), "+1");
+		assert_eq!(popup_label(HEAD_POINTS), "+2");
+		assert_eq!(popup_label(DOWN_POINTS), "+5");
+		let head = popup_style(HEAD_POINTS).0.to_srgba();
+		assert!(head.blue > head.red && head.blue > head.green * 0.9);
+	}
+
+	#[test]
+	fn upper_half_of_the_top_hemisphere_is_a_headshot() {
+		let target = GlobalTransform::from_translation(Vec3::new(4.0, 1.0, -2.0));
+		let band = crate::damage::headshot_band();
+		let capsule = LocomotionCapsule::HUMANOID;
+		let junction = Vec3::new(4.0, 1.0 + capsule.length * 0.5, -2.0);
+		let cut = Vec3::new(4.0, 1.0 + capsule.headshot_min_local_y(), -2.0);
+		let crown = Vec3::new(4.0, 1.0 + capsule.length * 0.5 + capsule.radius * 0.75, -2.0);
+		assert!(!band.contains(&target, junction));
+		assert!(band.contains(&target, cut));
+		assert!(band.contains(&target, crown));
+		assert!(!band.contains(&target, Vec3::new(4.0, 1.0, -2.0)));
+		assert!(!band.contains(&target, Vec3::new(4.0, 1.0 - capsule.length * 0.5, -2.0)));
 	}
 }
