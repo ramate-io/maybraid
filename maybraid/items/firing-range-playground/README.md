@@ -29,7 +29,8 @@ capsule; the followed player's gun stats sit in the bottom-right card. The
 world reticle flashes when the followed player lands a hit, and `+1` / `+2` /
 `+5` float at the impact point for a body hit, a headshot (upper half of the
 top capsule hemisphere, 1.25× HP, light blue), or a down. Connected pads rumble
-on the followed player's fire and on that same hit-confirm. The
+on the followed player's fire and hit-confirm (faster / harder shots scale the
+pulse; lasers stay a low constant tick). The
 player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until the player
