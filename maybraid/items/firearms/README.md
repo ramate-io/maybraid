@@ -10,7 +10,7 @@ A [`FirearmKit`](src/kit.rs) is a required [`BodyMesh`](src/parts.rs) plus optio
 |------|--------|--------|
 | Bolt | Capsule (length, radius, speed) | No gravity; despawn when path, through-solid, or age is exhausted |
 | Bullet | Same capsule | Gravity on; same budgets |
-| Laser | Beam along bone +Y | Grows from the muzzle, wraps after max time. A ray along the bore writes [`Hit`](../../damage/src/lib.rs) about every 0.15 s |
+| Laser | Beam along bone +Y | Grows from the muzzle to the first bore hit (or max length). Retracts to the muzzle when the trigger is released. A ray along the bore writes [`Hit`](../../damage/src/lib.rs) about every 0.15 s |
 
 Muzzle is the barrel tail (`bone-local +Y` of rest length 1). Runtime rest (after the armature’s glTF +90° X) has bore along +Z and grip down; [`aim_plus_x`](src/pose.rs) yaws that onto world +X. Bolts and bullets live in [`projectiles`](../../projectiles/); they sweep [`Fixed`](../../lod/avian/src/layers.rs) and charge [`Flight::through`](../../projectiles/src/lib.rs) with optional [`PenetrationCost`](../../projectiles/src/lib.rs). First contact emits [`ProjectileContact`](../../projectiles/src/lib.rs); this crate stamps [`HitPayload`](../../damage/src/lib.rs) onto ballistic flights at spawn and spawns a short Hanabi spark + smoke burst. Bolts without a payload deal no damage.
 

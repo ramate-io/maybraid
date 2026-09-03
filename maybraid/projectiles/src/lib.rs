@@ -208,6 +208,24 @@ fn overlapping(
 	!spatial.shape_intersections(collider, at, rotation, filter).is_empty()
 }
 
+fn overlap_hit(
+	spatial: &SpatialQuery,
+	collider: &Collider,
+	at: Vec3,
+	rotation: Quat,
+	along: Vec3,
+	filter: &SpatialQueryFilter,
+) -> Option<(Entity, Vec3, Vec3)> {
+	let entity = *spatial.shape_intersections(collider, at, rotation, filter).first()?;
+	Some(contact_from_overlap(entity, at, along))
+}
+
+/// Point + facing for a shapecast that already sits inside `target`.
+fn contact_from_overlap(target: Entity, point: Vec3, along: Vec3) -> (Entity, Vec3, Vec3) {
+	let normal = Dir3::new(-along).map(|dir| *dir).unwrap_or(Vec3::Y);
+	(target, point, normal)
+}
+
 fn first_hit_cost(
 	spatial: &SpatialQuery,
 	collider: &Collider,
@@ -273,11 +291,15 @@ fn first_contact(
 	end: Vec3,
 	rotation: Quat,
 	filter: &SpatialQueryFilter,
+	allow_embedded: bool,
 ) -> Option<(Entity, Vec3, Vec3)> {
-	if overlapping(spatial, collider, start, rotation, filter) {
-		return None;
-	}
 	let delta = end - start;
+	if overlapping(spatial, collider, start, rotation, filter) {
+		if !allow_embedded {
+			return None;
+		}
+		return overlap_hit(spatial, collider, start, rotation, delta, filter);
+	}
 	let ds = delta.length();
 	if ds <= 1e-5 {
 		return None;
@@ -292,6 +314,9 @@ fn first_contact(
 }
 
 /// Spawn a sensor capsule along `direction` from `muzzle`.
+///
+/// [`Flight::last`] starts at the muzzle so the first sweep can enter a body
+/// the capsule center already occupies.
 #[allow(clippy::too_many_arguments)]
 pub fn spawn_flight(
 	commands: &mut Commands,
@@ -309,7 +334,6 @@ pub fn spawn_flight(
 	gravity: f32,
 ) -> Entity {
 	let transform = capsule_along_y(direction, muzzle, length, radius);
-	let origin = transform.translation;
 	let collider = Collider::capsule(radius, length);
 	commands
 		.spawn((
@@ -327,7 +351,7 @@ pub fn spawn_flight(
 			LinearVelocity(direction * speed),
 			GravityScale(gravity),
 			Restitution::ZERO,
-			Flight::spawn(origin, max_range, max_through, max_age),
+			Flight::spawn(muzzle, max_range, max_through, max_age),
 		))
 		.id()
 }
@@ -347,13 +371,14 @@ pub fn tick_flights(
 		let source = source.map(|source| source.0);
 		let filter = penetration_filter(entity, source);
 		let ds = pos.distance(flight.last);
+		let allow_embedded = flight.path <= 1e-8;
 		flight.age += dt;
 		flight.path += ds;
 		let mut contacted = false;
-		visit_sweep_segments(flight.last, pos, MAX_SWEEP_METERS, |start, end| {
-			if !contacted {
+		if ds <= 1e-5 {
+			if allow_embedded {
 				if let Some((target, point, normal)) =
-					first_contact(&spatial, collider, start, end, rotation, &filter)
+					overlap_hit(&spatial, collider, pos, rotation, Vec3::Y, &filter)
 				{
 					contacts.write(ProjectileContact {
 						projectile: entity,
@@ -362,12 +387,34 @@ pub fn tick_flights(
 						point,
 						normal,
 					});
-					contacted = true;
 				}
 			}
-			flight.through +=
-				through_on_step(&spatial, collider, start, end, rotation, &filter, &costs);
-		});
+		} else {
+			visit_sweep_segments(flight.last, pos, MAX_SWEEP_METERS, |start, end| {
+				if !contacted {
+					if let Some((target, point, normal)) = first_contact(
+						&spatial,
+						collider,
+						start,
+						end,
+						rotation,
+						&filter,
+						allow_embedded,
+					) {
+						contacts.write(ProjectileContact {
+							projectile: entity,
+							source,
+							target,
+							point,
+							normal,
+						});
+						contacted = true;
+					}
+				}
+				flight.through +=
+					through_on_step(&spatial, collider, start, end, rotation, &filter, &costs);
+			});
+		}
 		flight.last = pos;
 		if flight.exhausted() {
 			commands.entity(entity).try_despawn();
@@ -426,5 +473,14 @@ mod tests {
 		let mut n = 0;
 		visit_sweep_segments(Vec3::ZERO, Vec3::Z * 0.5, MAX_SWEEP_METERS, |_, _| n += 1);
 		assert_eq!(n, 1);
+	}
+
+	#[test]
+	fn overlap_contact_faces_back_along_flight() {
+		let (target, point, normal) =
+			contact_from_overlap(Entity::from_bits(7), Vec3::new(1.0, 2.0, 3.0), Vec3::X);
+		assert_eq!(target, Entity::from_bits(7));
+		assert_eq!(point, Vec3::new(1.0, 2.0, 3.0));
+		assert!((normal + Vec3::X).length() < 1e-5);
 	}
 }
