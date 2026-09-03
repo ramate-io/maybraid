@@ -179,6 +179,7 @@ pub(crate) fn spawn_player_at(
 		Transform::from_translation(spawn.player),
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
 		damage::Health::default(),
+		damage::headshot_band(),
 	));
 }
 
@@ -211,7 +212,11 @@ pub(crate) fn spawn_dummy_at(
 		meshes,
 		materials,
 	);
-	commands.entity(dummy).insert((damage::Health::default(), session::TestDummy));
+	commands.entity(dummy).insert((
+		damage::Health::default(),
+		damage::headshot_band(),
+		session::TestDummy,
+	));
 }
 
 #[allow(clippy::too_many_arguments)]

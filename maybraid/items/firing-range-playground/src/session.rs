@@ -18,7 +18,7 @@ use player::{
 };
 use std::f32::consts::FRAC_PI_2;
 
-use crate::damage::{CombatRespawn, Health};
+use crate::damage::{CombatRespawn, Health, headshot_band};
 use crate::engagement::NpcEngagement;
 use crate::les_halles::LesHallesSpawn;
 use crate::loadout::{roll_combatant, CombatantLoadout};
@@ -171,6 +171,7 @@ pub(crate) fn spawn_generated_player(
 		Transform::from_translation(spawn.player),
 		PlayerLook { yaw: spawn.look_yaw, ..default() },
 		Health::from_max(loadout.sheet.health as f32),
+		headshot_band(),
 		kit_component(&loadout),
 	));
 }
@@ -241,6 +242,7 @@ pub(crate) fn install_npc_combat(
 		combat,
 		FirearmSpotting::default(),
 		health.unwrap_or_default(),
+		headshot_band(),
 	));
 	if let Some(kit) = kit {
 		entity.insert(kit);

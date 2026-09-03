@@ -58,6 +58,24 @@ impl Health {
 	}
 }
 
+/// Local-Y band that scales incoming [`Hit`]s. Missing means no headshot bonus.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HeadshotBand {
+	pub min_local_y: f32,
+	pub multiplier: f32,
+}
+
+impl HeadshotBand {
+	pub fn contains(self, target: &GlobalTransform, point: Vec3) -> bool {
+		let local = target.affine().inverse().transform_point3(point);
+		local.y >= self.min_local_y
+	}
+
+	pub fn scale(self, target: &GlobalTransform, point: Vec3, amount: f32) -> f32 {
+		if self.contains(target, point) { amount * self.multiplier } else { amount }
+	}
+}
+
 /// Amount copied onto a projectile (or read off a laser) at fire time.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct HitPayload {
@@ -149,5 +167,15 @@ mod tests {
 		let health = Health::from_max(0.0);
 		assert_eq!(health.max, 1.0);
 		assert_eq!(health.current, 1.0);
+	}
+
+	#[test]
+	fn headshot_band_scales_only_above_the_cut() {
+		let band = HeadshotBand { min_local_y: 0.7, multiplier: 1.25 };
+		let target = GlobalTransform::from_translation(Vec3::new(2.0, 1.0, 0.0));
+		assert!(band.contains(&target, Vec3::new(2.0, 1.75, 0.0)));
+		assert!(!band.contains(&target, Vec3::new(2.0, 1.5, 0.0)));
+		assert!((band.scale(&target, Vec3::new(2.0, 1.75, 0.0), 25.0) - 31.25).abs() < 1e-4);
+		assert!((band.scale(&target, Vec3::new(2.0, 1.5, 0.0), 25.0) - 25.0).abs() < 1e-4);
 	}
 }

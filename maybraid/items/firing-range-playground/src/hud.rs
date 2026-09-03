@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use game_commands::GameCommandDrawerVisible;
 use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
 
-use crate::damage::{DamageApplied, Health};
+use crate::damage::{DamageApplied, HeadshotBand, Health};
 use crate::session::{CombatantKit, RangeSession};
 
 const BAR_WIDTH: f32 = 240.0;
@@ -519,7 +519,7 @@ pub(crate) fn ingest_combat_popups(
 	time: Res<Time>,
 	mut hits: MessageReader<DamageApplied>,
 	players: Query<Entity, With<Player>>,
-	targets: Query<&GlobalTransform>,
+	targets: Query<(&GlobalTransform, Option<&HeadshotBand>)>,
 	hud: Query<Entity, With<CombatHudRoot>>,
 	mut commands: Commands,
 ) {
@@ -537,7 +537,9 @@ pub(crate) fn ingest_combat_popups(
 		let points = targets
 			.get(hit.target)
 			.ok()
-			.filter(|transform| is_headshot(transform, hit.point))
+			.filter(|(transform, band)| {
+				band.is_some_and(|band| band.contains(transform, hit.point))
+			})
 			.map_or(HIT_POINTS, |_| HEAD_POINTS);
 		spawn_combat_popup(&mut commands, hud, hit.point, now, points);
 		if hit.remaining <= 0.0 {
@@ -610,12 +612,6 @@ fn popup_style(points: u8) -> (Color, f32) {
 	} else {
 		(Color::srgb(0.92, 0.98, 1.0), 22.0)
 	}
-}
-
-/// Upper spherical cap of the character capsule.
-fn is_headshot(target: &GlobalTransform, point: Vec3) -> bool {
-	let local = target.affine().inverse().transform_point3(point);
-	local.y >= CAPSULE_LENGTH * 0.5
 }
 
 fn popup_alpha(age: f32) -> f32 {
@@ -754,10 +750,16 @@ mod tests {
 	}
 
 	#[test]
-	fn upper_hemisphere_is_a_headshot() {
+	fn upper_half_of_the_top_hemisphere_is_a_headshot() {
 		let target = GlobalTransform::from_translation(Vec3::new(4.0, 1.0, -2.0));
-		assert!(is_headshot(&target, Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + 0.2, -2.0)));
-		assert!(!is_headshot(&target, Vec3::new(4.0, 1.0, -2.0)));
-		assert!(!is_headshot(&target, Vec3::new(4.0, 1.0 - CAPSULE_LENGTH * 0.5, -2.0)));
+		let band = crate::damage::headshot_band();
+		let junction = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5, -2.0);
+		let cut = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.5, -2.0);
+		let crown = Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS * 0.75, -2.0);
+		assert!(!band.contains(&target, junction));
+		assert!(band.contains(&target, cut));
+		assert!(band.contains(&target, crown));
+		assert!(!band.contains(&target, Vec3::new(4.0, 1.0, -2.0)));
+		assert!(!band.contains(&target, Vec3::new(4.0, 1.0 - CAPSULE_LENGTH * 0.5, -2.0)));
 	}
 }

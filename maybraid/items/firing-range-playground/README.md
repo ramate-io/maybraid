@@ -25,8 +25,8 @@ penetration, and cadence (plus clothing HP / outgoing damage) into the live
 weapon. Health is shown on a persistent top HUD and as a bar above each
 capsule; the followed player's gun stats sit in the bottom-right card. The
 world reticle flashes when the followed player lands a hit, and `+1` / `+2` /
-`+5` float at the impact point for a body hit, a headshot (upper capsule
-hemisphere, light blue), or a down. The
+`+5` float at the impact point for a body hit, a headshot (upper half of the
+top capsule hemisphere, 1.25× HP, light blue), or a down. The
 player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until the player
