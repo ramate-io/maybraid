@@ -1,4 +1,4 @@
-//! Les Halles developments on Durham terrain, with pad flattening.
+//! Les Halles and Shepherds Village developments on Durham terrain.
 
 pub mod camera;
 pub mod commands;
@@ -26,14 +26,15 @@ use durham_terrain_models::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use hosts::{spawn_les_halles_hosts, DevelopmentHostRoot};
+use hosts::{spawn_les_halles_hosts, spawn_shepherds_village_hosts, DevelopmentHostRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
 	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex,
 	LesHallesDevelopment, LesHallesStoreView, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, TerrainWithPads,
+	RichmondDevelopmentModelsPlugin, ShepherdsVillageDevelopment, ShepherdsVillageStoreView,
+	TerrainWithPads,
 };
 use std::f32::consts::PI;
 
@@ -304,11 +305,17 @@ fn generate_developments(
 		region,
 		&lod_ref,
 	);
+	let shepherds = GeneratingSpatialIndex::<ShepherdsVillageDevelopment>::get_or_generate_region(
+		&mut development_index,
+		region,
+		&lod_ref,
+	);
 	info!(
-		"generated development_cells={} padded={} les_halles={}",
+		"generated development_cells={} padded={} les_halles={} shepherds_villages={}",
 		cells.len(),
 		padded.len(),
-		les_halles.len()
+		les_halles.len(),
+		shepherds.len()
 	);
 
 	pending_dev.0 = false;
@@ -390,7 +397,19 @@ fn spawn_hosts(
 		};
 		n += spawn_les_halles_hosts(&mut commands, dev);
 	}
-	info!("spawned {n} Les Halles host roots");
+	let shepherds_view = ShepherdsVillageStoreView::new(&store);
+	let mut shepherds_n = 0usize;
+	for tracked in
+		SpatialIndex::<ShepherdsVillageDevelopment>::tracked_ids_for(&shepherds_view, region)
+	{
+		let Some(dev) =
+			SpatialIndex::<ShepherdsVillageDevelopment>::get(&shepherds_view, tracked.0)
+		else {
+			continue;
+		};
+		shepherds_n += spawn_shepherds_village_hosts(&mut commands, dev);
+	}
+	info!("spawned {n} Les Halles host roots and {shepherds_n} Shepherds building host roots");
 	dirty.0 = false;
 }
 

@@ -10,7 +10,7 @@ use super::PadParams;
 /// Bag of pad nodes blended by flatten-over-ease priority (HydroComplex analog).
 ///
 /// [`Self::bounds`] is the union of each node's yawed support AABB (flatten +
-/// ease), not the 100 m development cell. Early-out is a conservative OBB AABB;
+/// ease), not the development cell. Early-out is a conservative OBB AABB;
 /// classification still uses the yawed footprint SDF.
 #[derive(Debug, Clone)]
 pub struct PadComplex {

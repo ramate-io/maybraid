@@ -17,7 +17,7 @@ pub struct LesHallesDevelopment {
 }
 
 impl LesHallesDevelopment {
-	/// Host pose: yaw about \(+Y\) through the 100 m cell center.
+	/// Host pose: yaw about \(+Y\) through the development-cell center.
 	pub fn host_transform(&self) -> Transform {
 		let min = bevy::math::Vec3::from(self.cell.min);
 		let max = bevy::math::Vec3::from(self.cell.max);

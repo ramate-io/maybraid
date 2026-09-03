@@ -12,6 +12,7 @@ use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
 use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
+use crate::shepherds::ShepherdsVillageDevelopment;
 
 #[derive(Debug, Clone)]
 pub(crate) struct StoredEntry<T> {
@@ -27,6 +28,7 @@ pub struct DevelopmentEntryStore {
 	pub(crate) cells: HashMap<Id, StoredEntry<DevelopmentCell>>,
 	pub(crate) padded: HashMap<Id, StoredEntry<TerrainWithPads>>,
 	pub(crate) les_halles: HashMap<Id, StoredEntry<LesHallesDevelopment>>,
+	pub(crate) shepherds_villages: HashMap<Id, StoredEntry<ShepherdsVillageDevelopment>>,
 }
 
 impl DevelopmentEntryStore {
@@ -65,6 +67,10 @@ impl DevelopmentEntryStore {
 
 	pub fn padded(&self, id: Id) -> Option<&TerrainWithPads> {
 		self.padded.get(&id).map(|e| &e.value)
+	}
+
+	pub fn shepherds_village(&self, id: Id) -> Option<&ShepherdsVillageDevelopment> {
+		self.shepherds_villages.get(&id).map(|e| &e.value)
 	}
 }
 
@@ -138,6 +144,7 @@ macro_rules! impl_spatial {
 impl_spatial!(DevelopmentCell, cells);
 impl_spatial!(TerrainWithPads, padded);
 impl_spatial!(LesHallesDevelopment, les_halles);
+impl_spatial!(ShepherdsVillageDevelopment, shepherds_villages);
 
 /// Read-only view over padded terrain for presentation.
 pub struct PaddedStoreView<'a> {
@@ -228,5 +235,57 @@ impl SpatialIndex<LesHallesDevelopment> for LesHallesStoreView<'_> {
 
 	fn insert(&mut self, _id: Id, _t: LesHallesDevelopment, _bounds: Aabb3d, _lod_ref: &LodRef) {
 		panic!("LesHallesStoreView is read-only");
+	}
+}
+
+/// Read-only view over fitted Shepherds Village developments.
+pub struct ShepherdsVillageStoreView<'a> {
+	store: &'a DevelopmentEntryStore,
+}
+
+impl<'a> ShepherdsVillageStoreView<'a> {
+	pub fn new(store: &'a DevelopmentEntryStore) -> Self {
+		Self { store }
+	}
+}
+
+impl SpatialIndex<ShepherdsVillageDevelopment> for ShepherdsVillageStoreView<'_> {
+	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
+		self.store
+			.shepherds_villages
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds))
+			.map(|(id, _)| TrackedId(*id))
+			.collect()
+	}
+
+	fn storage_status(&self, id: Id) -> StorageStatus {
+		if self.store.shepherds_villages.contains_key(&id) {
+			StorageStatus::TrackedWithin
+		} else {
+			StorageStatus::NotTracked
+		}
+	}
+
+	fn get(&self, id: Id) -> Option<&ShepherdsVillageDevelopment> {
+		self.store.shepherds_villages.get(&id).map(|e| &e.value)
+	}
+
+	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+		self.store.shepherds_villages.get(&id).map(|e| e.bounds)
+	}
+
+	fn version(&self, id: Id) -> Option<Version> {
+		self.store.shepherds_villages.get(&id).map(|e| e.version)
+	}
+
+	fn insert(
+		&mut self,
+		_id: Id,
+		_t: ShepherdsVillageDevelopment,
+		_bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) {
+		panic!("ShepherdsVillageStoreView is read-only");
 	}
 }

@@ -3,6 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use procedural_common::SeededHash;
+use richmond_developments::ShepherdsVillage;
 
 use crate::cell::{
 	available_footprint, cell_selected, inscribe_yawed_extents, sample_confines_yaw,
@@ -18,6 +19,7 @@ use richmond_buildings::{Confines, Openings};
 pub enum DevelopmentKind {
 	Empty,
 	LesHalles,
+	ShepherdsVillage,
 }
 
 /// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
@@ -27,17 +29,18 @@ pub struct DevelopmentPad {
 	pub complex: PadComplex,
 }
 
-/// One 100 m tile after selection.
+/// One development tile after selection.
 #[derive(Debug, Clone)]
 pub struct DevelopmentCell {
 	pub cell: Aabb3d,
 	pub kind: DevelopmentKind,
-	pub pad: Option<DevelopmentPad>,
+	pub pads: Vec<DevelopmentPad>,
+	pub village: Option<ShepherdsVillage>,
 	/// Sampled confines height (storey stack), valid when [`Self::kind`] is Les Halles.
 	pub confines_height: f32,
 	/// Sampled plan footprint, inset from the cell so the slab sits on the pad.
 	pub confines_extent_xz: Vec2,
-	/// Discrete yaw (radians) applied at host spawn about the cell center.
+	/// Continuous yaw (radians) applied at host spawn about the cell center.
 	pub confines_yaw: f32,
 	/// Wall / roof shader look, valid when [`Self::kind`] is Les Halles.
 	pub finish: Option<DevelopmentFinish>,
@@ -48,7 +51,8 @@ impl DevelopmentCell {
 		Self {
 			cell,
 			kind: DevelopmentKind::Empty,
-			pad: None,
+			pads: Vec::new(),
+			village: None,
 			confines_height: 0.0,
 			confines_extent_xz: Vec2::ZERO,
 			confines_yaw: 0.0,
@@ -57,11 +61,23 @@ impl DevelopmentCell {
 	}
 
 	pub fn is_filled(&self) -> bool {
-		self.kind == DevelopmentKind::LesHalles && self.pad.is_some()
+		self.kind != DevelopmentKind::Empty
 	}
 
 	pub fn pad_complex(&self) -> Option<&PadComplex> {
-		self.pad.as_ref().map(|p| &p.complex)
+		self.pads.first().map(|p| &p.complex)
+	}
+
+	pub fn pad_complexes(&self) -> impl Iterator<Item = &PadComplex> {
+		self.pads.iter().map(|p| &p.complex)
+	}
+
+	pub fn is_les_halles(&self) -> bool {
+		self.kind == DevelopmentKind::LesHalles
+	}
+
+	pub fn is_shepherds_village(&self) -> bool {
+		self.kind == DevelopmentKind::ShepherdsVillage
 	}
 
 	/// Unrotated confines AABB sitting on the pad (world space).
@@ -70,7 +86,7 @@ impl DevelopmentCell {
 	/// recorded on [`Confines::roll`] and applied at host spawn about the cell center.
 	/// Label wireframes fill the AABB with identity local yaw so they inherit that pose.
 	pub fn confines_bounds(&self) -> Option<Aabb3d> {
-		let pad = self.pad.as_ref()?;
+		let pad = self.pads.first()?;
 		if self.kind != DevelopmentKind::LesHalles {
 			return None;
 		}
@@ -104,7 +120,7 @@ impl DevelopmentCell {
 		Self {
 			cell,
 			kind: DevelopmentKind::LesHalles,
-			pad: Some(DevelopmentPad {
+			pads: vec![DevelopmentPad {
 				height: pad_height,
 				complex: PadComplex::building_skirt(
 					cell_center_xz(cell),
@@ -113,17 +129,50 @@ impl DevelopmentCell {
 					pad_height,
 					PadParams::default(),
 				),
-			}),
+			}],
+			village: None,
 			confines_height,
 			confines_extent_xz,
 			confines_yaw: yaw,
 			finish: Some(DevelopmentFinish::pick(hash)),
 		}
 	}
+
+	pub fn shepherds_village(
+		cell: Aabb3d,
+		village: ShepherdsVillage,
+		pads: Vec<DevelopmentPad>,
+	) -> Self {
+		Self {
+			cell,
+			kind: DevelopmentKind::ShepherdsVillage,
+			pads,
+			village: Some(village),
+			confines_height: 0.0,
+			confines_extent_xz: Vec2::ZERO,
+			confines_yaw: 0.0,
+			finish: None,
+		}
+	}
 }
 
-pub fn should_fill(cell: Aabb3d, config: &DevelopmentConfig) -> bool {
-	cell_selected(cell, config.occupancy_seed(), config.likelihood, config.spatial_correlation)
+pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind {
+	if !cell_selected(cell, config.occupancy_seed(), config.likelihood, config.spatial_correlation)
+	{
+		return DevelopmentKind::Empty;
+	}
+	let les_halles = config.les_halles_weight.max(0.0);
+	let shepherds = config.shepherds_village_weight.max(0.0);
+	let total = les_halles + shepherds;
+	if total <= f32::EPSILON {
+		return DevelopmentKind::Empty;
+	}
+	let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
+	if hash.unit(44) * total < les_halles {
+		DevelopmentKind::LesHalles
+	} else {
+		DevelopmentKind::ShepherdsVillage
+	}
 }
 
 fn cell_salt(cell: Aabb3d) -> u32 {
@@ -132,17 +181,15 @@ fn cell_salt(cell: Aabb3d) -> u32 {
 
 #[cfg(test)]
 mod tests {
-	use bevy::math::bounding::Aabb3d;
-	use bevy::math::Vec3;
 	use material_ref::MaterialId;
 	use std::f32::consts::TAU;
 
 	use super::*;
-	use crate::cell::{available_footprint, yawed_plan_aabb_extent};
+	use crate::cell::{available_footprint, yawed_plan_aabb_extent, DevelopmentExtent};
 
 	#[test]
 	fn filled_cell_picks_urban_finish() {
-		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
 		let filled = DevelopmentCell::filled(cell, 12.0, &DevelopmentConfig::default());
 		let finish = filled.finish.expect("filled cells pick a finish");
 		assert!(matches!(
@@ -157,7 +204,7 @@ mod tests {
 
 	#[test]
 	fn filled_cell_samples_continuous_yaw() {
-		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
 		let eighth = TAU / 8.0;
 		let mut off_grid = false;
 		for seed in 0..48u32 {
@@ -184,11 +231,29 @@ mod tests {
 
 	#[test]
 	fn filled_cell_pad_flattens_the_building_center() {
-		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
 		let filled = DevelopmentCell::filled(cell, 12.0, &DevelopmentConfig::default());
 		let pad = filled.pad_complex().expect("filled cell has a pad");
 		let c = cell_center_xz(cell);
 		assert!((pad.modify_elevation(3.0, c.x, c.y) - 12.0).abs() < 1e-3);
 		assert!((pad.modify_elevation(3.0, 400.0, 400.0) - 3.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn selected_kinds_respect_zero_weights() {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		let les_halles = DevelopmentConfig {
+			likelihood: 1.0,
+			les_halles_weight: 1.0,
+			shepherds_village_weight: 0.0,
+			..DevelopmentConfig::default()
+		};
+		assert_eq!(select_kind(cell, &les_halles), DevelopmentKind::LesHalles);
+		let shepherds = DevelopmentConfig {
+			les_halles_weight: 0.0,
+			shepherds_village_weight: 1.0,
+			..les_halles
+		};
+		assert_eq!(select_kind(cell, &shepherds), DevelopmentKind::ShepherdsVillage);
 	}
 }

@@ -1,4 +1,4 @@
-//! Avian LOD refresh for Les Halles hosts (panels, partitions, storeys, …).
+//! Avian LOD refresh for Richmond development hosts.
 
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -13,6 +13,7 @@ use richmond_building_components::{
 	PartitionNode, RoofNode, StairNode,
 };
 use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use richmond_developments::{ShepherdsHouse, ShepherdsHut};
 use std::sync::Arc;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
@@ -37,7 +38,7 @@ macro_rules! avian_host {
 	}};
 }
 
-/// Full refresh stack for structural + fine-phase Les Halles hosts.
+/// Full refresh stack for structural + fine-phase development hosts.
 #[derive(Default)]
 pub struct DevelopmentsBuildingsLodPlugin;
 
@@ -96,5 +97,7 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, ComponentsOnly<Arc<MixedUseLesHallesStorey>>);
 		avian_host!(app, ComponentsOnly<ConnectingStairwell>);
 		avian_host!(app, ComponentsOnly<PitchedRoof>);
+		avian_host!(app, ComponentsOnly<Arc<ShepherdsHouse>>);
+		avian_host!(app, ComponentsOnly<Arc<ShepherdsHut>>);
 	}
 }
