@@ -55,6 +55,7 @@ impl PlaygroundCommand {
 					Show::Character => "character".to_string(),
 					Show::CreateCharacter => "create-character".to_string(),
 					Show::Gallery => "gallery".to_string(),
+					Show::Weapons => "weapons".to_string(),
 					Show::InGame { mode } => format!("in-game ({mode})"),
 				};
 				show.react(commands);
@@ -103,6 +104,12 @@ mod tests {
 	fn parse_line_show_create_character() {
 		let cmd = PlaygroundCommand::parse_line("show create-character").expect("parse");
 		assert!(matches!(cmd, PlaygroundCommand::Show(Show::CreateCharacter)));
+	}
+
+	#[test]
+	fn parse_line_show_weapons() {
+		let cmd = PlaygroundCommand::parse_line("show weapons").expect("parse");
+		assert!(matches!(cmd, PlaygroundCommand::Show(Show::Weapons)));
 	}
 
 	#[test]

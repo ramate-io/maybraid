@@ -4,7 +4,7 @@
 //! the triple picks one word from each list so the same item always has the same
 //! name (`Celestial Red Tide Joggers`).
 
-use crate::{ClothingMaterial, ClothingMesh, FirearmMesh, ItemColor};
+use crate::{ClothingMaterial, ClothingMesh, FirearmSpec, ItemColor};
 
 /// Material adjective, then color adjective, then clothing noun.
 pub fn hashed_item_name(
@@ -21,13 +21,15 @@ pub fn hashed_item_name(
 	)
 }
 
-const FIREARM_PREFIXES: &[&str] =
-	&["Field", "Issue", "Scarred", "Service", "Worn", "Match", "Patrol", "Cache"];
-
-/// Prefix plus firearm noun, stable for a mesh.
-pub fn hashed_firearm_name(mesh: FirearmMesh) -> String {
-	let hash = mix(0xA11A_4A45_F1A4_0001, mesh.label());
-	format!("{} {}", pick(FIREARM_PREFIXES, hash), pick(mesh.nouns(), hash >> 17))
+/// Material adjective, color adjective, then firearm noun.
+pub fn hashed_firearm_name(spec: FirearmSpec) -> String {
+	let hash = mix(0xA11A_4A45_F1A4_0001, &spec.identity_label());
+	format!(
+		"{} {} {}",
+		pick(spec.looks.body.material.adjectives(), hash),
+		pick(spec.looks.body.color.adjectives(), hash >> 17),
+		pick(spec.kit.body.nouns(), hash >> 33),
+	)
 }
 
 pub(crate) fn mix(seed: u64, label: &str) -> u64 {
@@ -103,6 +105,7 @@ impl ItemColor {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{FirearmMaterial, FirearmMesh};
 
 	#[test]
 	fn name_is_stable_for_a_triple() {
@@ -138,8 +141,11 @@ mod tests {
 		}
 		for mesh in FirearmMesh::VALUES {
 			assert!(!mesh.nouns().is_empty(), "{}", mesh.label());
-			let name = hashed_firearm_name(*mesh);
+			let name = hashed_firearm_name(FirearmSpec::from_mesh(*mesh));
 			assert!(name.contains(' '), "{name}");
+		}
+		for material in FirearmMaterial::VALUES {
+			assert!(!material.adjectives().is_empty(), "{}", material.label());
 		}
 	}
 }

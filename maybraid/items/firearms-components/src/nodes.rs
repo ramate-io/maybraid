@@ -6,6 +6,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 use scene_ref::SceneRef;
 
 use crate::scene_children::maybe_component;
@@ -51,11 +52,18 @@ pub struct PartNode {
 	pub label: &'static str,
 	pub scene: SceneRef,
 	pub socket: Option<SocketRef>,
+	pub material: MaterialRef,
 }
 
 impl Default for PartNode {
 	fn default() -> Self {
-		Self { slot: FirearmPartSlot::Body, label: "", scene: SceneRef::default(), socket: None }
+		Self {
+			slot: FirearmPartSlot::Body,
+			label: "",
+			scene: SceneRef::default(),
+			socket: None,
+			material: MaterialRef::default(),
+		}
 	}
 }
 
@@ -66,6 +74,7 @@ impl PartNode {
 			label,
 			scene: SceneRef::glb(path),
 			socket: slot.socket_bone().map(SocketRef::bone),
+			material: MaterialRef::default(),
 		}
 	}
 
@@ -95,6 +104,11 @@ impl PartNode {
 
 	pub fn socketed(mut self, socket: SocketRef) -> Self {
 		self.socket = Some(socket);
+		self
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = material;
 		self
 	}
 }
@@ -127,11 +141,14 @@ impl LodScene for PartNode {
 		let _ = lod_ref;
 		let node = self.clone();
 		let socket = node.socket.map(SocketRefRoot);
+		let material = MaterialRefRoot(node.material.clone());
 		(
 			bsn! {
 				template_value(node)
 				Transform::IDENTITY
 				AssemblyHost
+				template_value(material)
+				PropagateToDescendants
 			},
 			maybe_component(socket),
 		)
