@@ -80,7 +80,7 @@ impl FireControl {
 	}
 }
 
-/// Kick applied to the shooter's look after a shot.
+/// Look/camera kick strength in radians after a shot. Zero skips the pattern.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 pub struct WeaponRecoil(pub f32);
 

@@ -268,7 +268,8 @@ fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
 		appearance: loadout.appearance.clone(),
 		spec: loadout.spec,
 		firearm: loadout.kit,
-		live: live_weapon_from_stats(loadout.stats, loadout.sheet.damage),
+		live: live_weapon_from_stats(loadout.stats, loadout.sheet.damage)
+			.with_weapon_identity(&loadout.spec),
 		stats: loadout.stats,
 	}
 }

@@ -12,7 +12,7 @@ use firearms::{
 use player::{PlayerLook, PlayerUse};
 
 use crate::hold::HoldingArms;
-use crate::weapon::LiveWeapon;
+use crate::weapon::{LiveWeapon, RecoilPattern};
 use crate::{FirearmUser, FirearmUserSettings};
 
 #[derive(Component)]
@@ -68,6 +68,7 @@ where
 			live.payload,
 			live.fire,
 			live.recoil,
+			RecoilPattern::from_seed(live.recoil_seed),
 			FireOnTrigger,
 			WeaponTrigger(false),
 			ProjectileSource(user),

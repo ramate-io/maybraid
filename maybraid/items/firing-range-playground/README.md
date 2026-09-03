@@ -23,12 +23,14 @@ Collider size comes from the character recipe
 [`LocomotionCapsule`](../../crozon/characters/src/components.rs) (Braidman is
 the 0.4 / 1.0 humanoid hull). Each character starts with 100 health and takes 25 damage per bolt contact
 in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
-penetration, and cadence (plus clothing HP / outgoing damage) into the live
-weapon. Health is shown on a persistent top HUD and as a bar above each
+penetration, cadence, and recoil (plus clothing HP / outgoing damage) into the
+live weapon. Health is shown on a persistent top HUD and as a bar above each
 capsule; the followed player's gun stats sit in the bottom-right card. The
 world reticle flashes when the followed player lands a hit, and `+1` / `+2` /
 `+5` float at the impact point for a body hit, a headshot (upper half of the
-top capsule hemisphere, 1.25× HP, light blue), or a down. Connected pads rumble
+top capsule hemisphere, 1.25× HP, light blue), or a down. Catalog recoil noisily
+kicks the follow camera (and NPC look) in a range scaled by the rolled recoil
+value; lasers do not kick. Connected pads rumble
 on the followed player's fire and hit-confirm (faster / harder shots scale the
 pulse; lasers stay a low constant tick). The
 player also gets directional hit ticks around screen center. At 0 health the

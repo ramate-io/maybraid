@@ -1,13 +1,18 @@
 //! Catalog [`FirearmStats`] → live [`Weapon`] / cadence / payload.
 
-use crozon_character_items::{FireMode, FirearmStats, ProjectileKind};
+use bevy::prelude::*;
+use crozon_character_items::{FireMode, FirearmMesh, FirearmSpec, FirearmStats, ProjectileKind};
 use damage::{HitPayload, DEFAULT_HIT};
 use firearms::{
 	BoltSpec, BulletSpec, FireControl, LaserSpec, ProjectileLoad, Weapon, WeaponRecoil,
 };
+use std::hash::{Hash, Hasher};
 
-/// Look-up pitch (radians) per catalog recoil unit. Positive pitch is look up.
+/// Kick range (radians) per catalog recoil unit. Positive pitch is look up.
 pub const RECOIL_PITCH_PER_UNIT: f32 = 0.02;
+
+/// Catalog recoil for the default 25 DPC bolt (duel / unspec'd spawn).
+const DEFAULT_CATALOG_RECOIL: u8 = 4;
 
 /// Components stamped on a held [`firearms::FirearmRoot`] at spawn.
 #[derive(Clone, Copy, Debug)]
@@ -16,6 +21,9 @@ pub struct LiveWeapon {
 	pub payload: HitPayload,
 	pub fire: FireControl,
 	pub recoil: WeaponRecoil,
+	/// Stable noise seed for [`RecoilPattern`]. Hashed from catalog stats, or
+	/// from [`FirearmSpec`] via [`Self::with_weapon_identity`].
+	pub recoil_seed: u64,
 }
 
 impl Default for LiveWeapon {
@@ -24,9 +32,37 @@ impl Default for LiveWeapon {
 			weapon: Weapon::bolt(),
 			payload: HitPayload { amount: DEFAULT_HIT },
 			fire: FireControl::auto(),
-			recoil: WeaponRecoil(0.0),
+			recoil: WeaponRecoil(f32::from(DEFAULT_CATALOG_RECOIL) * RECOIL_PITCH_PER_UNIT),
+			recoil_seed: weapon_noise_seed(&FirearmSpec::from_mesh(FirearmMesh::Bullpup)),
 		}
 	}
+}
+
+impl LiveWeapon {
+	/// Replace the recoil noise seed with a hash of `weapon` (typically [`FirearmSpec`]).
+	pub fn with_weapon_identity<T: Hash>(mut self, weapon: &T) -> Self {
+		self.recoil_seed = weapon_noise_seed(weapon);
+		self
+	}
+}
+
+/// Per-weapon strength-based kick sequence. `shot` advances on each recoiling fire.
+#[derive(Component, Clone, Copy, Debug)]
+pub(crate) struct RecoilPattern {
+	pub seed: u64,
+	pub shot: u32,
+}
+
+impl RecoilPattern {
+	pub fn from_seed(seed: u64) -> Self {
+		Self { seed, shot: 0 }
+	}
+}
+
+pub(crate) fn weapon_noise_seed<T: Hash>(weapon: &T) -> u64 {
+	let mut hasher = std::collections::hash_map::DefaultHasher::new();
+	weapon.hash(&mut hasher);
+	hasher.finish()
 }
 
 /// Bake integer catalog stats plus the wearer's outgoing DPC bonus.
@@ -39,6 +75,7 @@ pub fn live_weapon_from_stats(stats: FirearmStats, outgoing_damage_bonus: i16) -
 		payload: HitPayload { amount },
 		fire,
 		recoil: WeaponRecoil(f32::from(stats.recoil) * RECOIL_PITCH_PER_UNIT),
+		recoil_seed: weapon_noise_seed(&stats),
 	}
 }
 
@@ -99,6 +136,7 @@ fn load_from_stats(stats: FirearmStats) -> ProjectileLoad {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crozon_character_items::{FirearmMesh, FirearmSpec};
 	use firearms::Cadence;
 
 	fn bolt_auto() -> FirearmStats {
@@ -178,8 +216,27 @@ mod tests {
 	}
 
 	#[test]
-	fn recoil_becomes_look_pitch() {
+	fn recoil_becomes_kick_strength() {
 		let live = live_weapon_from_stats(bolt_auto(), 0);
 		assert!((live.recoil.0 - 0.08).abs() < 1e-5);
+	}
+
+	#[test]
+	fn different_weapons_hash_to_different_seeds() {
+		let mut other = bolt_auto();
+		other.recoil = 7;
+		assert_ne!(
+			live_weapon_from_stats(bolt_auto(), 0).recoil_seed,
+			live_weapon_from_stats(other, 0).recoil_seed
+		);
+	}
+
+	#[test]
+	fn spec_identity_overrides_stats_seed() {
+		let spec = FirearmSpec::from_mesh(FirearmMesh::Snailer);
+		let from_stats = live_weapon_from_stats(bolt_auto(), 0);
+		let from_spec = from_stats.with_weapon_identity(&spec);
+		assert_ne!(from_stats.recoil_seed, from_spec.recoil_seed);
+		assert_eq!(from_spec.recoil_seed, weapon_noise_seed(&spec));
 	}
 }
