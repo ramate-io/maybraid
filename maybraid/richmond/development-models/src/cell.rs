@@ -1,4 +1,4 @@
-//! 100 m development lattice and occupancy.
+//! 200 m development lattice and occupancy.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Quat, Vec2, Vec3};
@@ -7,7 +7,10 @@ use lod::gen::{Id, OriginalId};
 use std::f32::consts::TAU;
 
 /// Square development-cell edge length (metres).
-pub const DEVELOPMENT_CELL_SIZE: f32 = 100.0;
+pub const DEVELOPMENT_CELL_SIZE: f32 = 200.0;
+
+/// Les Halles keeps its original urban envelope inside the larger shared cell.
+pub const LES_HALLES_MAX_FOOTPRINT: f32 = 72.0;
 
 /// Vertical span used only for origin-cell identity (XZ tiling).
 const CELL_Y: f32 = 1.0;
@@ -37,9 +40,9 @@ pub const MIN_FOOTPRINT: f32 = 36.0;
 pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
 pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
 
-/// Plan-square size available inside the pad (cell minus both building insets).
+/// Plan-square size available to the Les Halles typology.
 pub fn available_footprint() -> f32 {
-	(DEVELOPMENT_CELL_SIZE - 2.0 * BUILDING_INSET).max(MIN_FOOTPRINT)
+	LES_HALLES_MAX_FOOTPRINT.max(MIN_FOOTPRINT)
 }
 
 /// Map a unit sample in \([0, 1]\) onto a heading in \([0, \tau]\).
@@ -73,7 +76,7 @@ pub fn yaw_about_xz(center_xz: Vec2, yaw: f32) -> Transform {
 	Transform { translation: center - rotation * center, rotation, scale: Vec3::ONE }
 }
 
-/// Axis-aligned 100 m development tile.
+/// Axis-aligned development tile.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DevelopmentExtent {
 	min: Vec3,
@@ -206,6 +209,14 @@ mod tests {
 		let cells = DevelopmentExtent::cells_overlapping(region);
 		assert_eq!(cells.len(), 1);
 		assert_eq!(cells[0], DevelopmentExtent::from_cell_index(0, 0));
+	}
+
+	#[test]
+	fn shared_development_lattice_is_two_hundred_metres() {
+		let cell = DevelopmentExtent::from_cell_index(2, -1).aabb();
+		assert!((cell.max.x - cell.min.x - 200.0).abs() < 1e-4);
+		assert!((cell.max.z - cell.min.z - 200.0).abs() < 1e-4);
+		assert!((available_footprint() - LES_HALLES_MAX_FOOTPRINT).abs() < 1e-4);
 	}
 
 	#[test]

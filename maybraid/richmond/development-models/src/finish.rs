@@ -27,6 +27,41 @@ impl DevelopmentFinish {
 			roof: recipe_material(roof_recipe, hash, 31),
 		}
 	}
+
+	/// Brighter timber or darker masonry beneath a hay/thatch roof.
+	pub fn pick_shepherds(hash: SeededHash, wooden: bool) -> Self {
+		let wall = if wooden {
+			custom_recipe_material(
+				RECIPE_WOOD,
+				hash,
+				41,
+				[(0.58, 0.39, 0.20), (0.76, 0.58, 0.32)],
+				[(0.34, 0.20, 0.10), (0.50, 0.31, 0.15)],
+				[0.0, 0.68, 0.22],
+				0.62,
+			)
+		} else {
+			custom_recipe_material(
+				RECIPE_STUCCO,
+				hash,
+				41,
+				[(0.22, 0.24, 0.22), (0.38, 0.36, 0.30)],
+				[(0.14, 0.16, 0.15), (0.48, 0.44, 0.34)],
+				[0.0, 0.46, 0.38],
+				0.34,
+			)
+		};
+		let roof = custom_recipe_material(
+			RECIPE_HAY,
+			hash,
+			47,
+			[(0.82, 0.68, 0.32), (0.50, 0.38, 0.16)],
+			[(0.92, 0.80, 0.44), (0.34, 0.24, 0.10)],
+			[0.0, 0.78, 0.24],
+			0.76,
+		);
+		Self { wall, roof }
+	}
 }
 
 struct RecipeLook {
@@ -74,17 +109,37 @@ fn recipe_look(name: &str) -> RecipeLook {
 
 fn recipe_material(name: &'static str, hash: SeededHash, salt: u32) -> MaterialRef {
 	let look = recipe_look(name);
+	custom_recipe_material(
+		name,
+		hash,
+		salt,
+		look.palette,
+		look.accent,
+		look.scalars,
+		look.frequency,
+	)
+}
+
+fn custom_recipe_material(
+	name: &'static str,
+	hash: SeededHash,
+	salt: u32,
+	palette: [(f32, f32, f32); 2],
+	accent: [(f32, f32, f32); 2],
+	scalars: [f32; 3],
+	frequency: f32,
+) -> MaterialRef {
 	let pick = hash.unit(salt);
 	let mix = hash.unit(salt.wrapping_add(3));
-	let base = lerp_rgb(look.palette[0], look.palette[1], pick);
-	let accent = lerp_rgb(look.accent[0], look.accent[1], mix);
+	let base = lerp_rgb(palette[0], palette[1], pick);
+	let accent = lerp_rgb(accent[0], accent[1], mix);
 	let seed = (hash.unit(salt.wrapping_add(7)) * 10_000.0) as i32;
 	MaterialRef::named(name)
 		.with_palette([srgb(base), srgb(accent)])
-		.with_scalars(look.scalars)
+		.with_scalars(scalars)
 		.with_noise(NoiseParams {
 			seed,
-			frequency: look.frequency,
+			frequency,
 			amplitude: 1.0,
 			octaves: 3,
 			..NoiseParams::default()
@@ -128,5 +183,15 @@ mod tests {
 		let a = DevelopmentFinish::pick(SeededHash::new(7));
 		let b = DevelopmentFinish::pick(SeededHash::new(7));
 		assert_eq!(a, b);
+	}
+
+	#[test]
+	fn shepherds_finish_is_wood_or_dark_masonry_with_hay() {
+		let wood = DevelopmentFinish::pick_shepherds(SeededHash::new(11), true);
+		let stone = DevelopmentFinish::pick_shepherds(SeededHash::new(11), false);
+		assert!(matches!(&wood.wall.name, MaterialId::Name(n) if n == RECIPE_WOOD));
+		assert!(matches!(&stone.wall.name, MaterialId::Name(n) if n == RECIPE_STUCCO));
+		assert!(matches!(&wood.roof.name, MaterialId::Name(n) if n == RECIPE_HAY));
+		assert_ne!(wood.wall.palette, stone.wall.palette);
 	}
 }

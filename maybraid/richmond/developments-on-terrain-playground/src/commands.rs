@@ -11,7 +11,7 @@ pub type Script = CommandScript<PlaygroundCommand>;
 #[command(
 	name = "richmond-developments-on-terrain",
 	version,
-	about = "Les Halles developments on Durham terrain (in-game after `/` or process argv)",
+	about = "Richmond developments on Durham terrain (in-game after `/` or process argv)",
 	rename_all = "kebab-case",
 	disable_help_subcommand = true
 )]
@@ -22,7 +22,7 @@ pub enum PlaygroundCommand {
 	Seed {
 		value: u32,
 	},
-	/// Fill likelihood for Les Halles cells (`0…1`).
+	/// Fill likelihood for development cells (`0…1`).
 	Likelihood {
 		value: f32,
 	},

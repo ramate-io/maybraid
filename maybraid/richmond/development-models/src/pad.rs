@@ -18,6 +18,7 @@ pub use node::{PadNode, PadStage};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use procedural_common::Bounds2;
+use richmond_developments::{BuildingFootprint, PlacedBuilding};
 
 use crate::cell::{PAD_BERM, PAD_EDGE_EASE, PAD_ROUND};
 
@@ -65,6 +66,39 @@ pub fn cell_bounds2(cell: Aabb3d) -> Bounds2 {
 /// Cell-centered XZ sample used as the building / pad origin.
 pub fn cell_center_xz(cell: Aabb3d) -> Vec2 {
 	Vec2::new((cell.min.x + cell.max.x) * 0.5, (cell.min.z + cell.max.z) * 0.5)
+}
+
+pub trait PlacedBuildingPad {
+	/// Build one exact pad node per authored footprint piece, transformed by the
+	/// same center and yaw used to present the building.
+	fn pad_complex(&self, params: PadParams) -> PadComplex;
+}
+
+impl<T: BuildingFootprint> PlacedBuildingPad for PlacedBuilding<T> {
+	fn pad_complex(&self, params: PadParams) -> PadComplex {
+		let center = self.center_xz;
+		let yaw = self.yaw;
+		let (sin, cos) = yaw.sin_cos();
+		let nodes = self
+			.building
+			.footprint_rects()
+			.into_iter()
+			.map(|rect| {
+				let rect_center = (rect.min + rect.max) * 0.5;
+				let local = rect_center - center;
+				let rotated_center = center
+					+ Vec2::new(cos * local.x + sin * local.y, -sin * local.x + cos * local.y);
+				PadNode::rectangular_flatten(
+					rotated_center,
+					(rect.max - rect.min) * 0.5,
+					yaw,
+					self.ground_height,
+					params,
+				)
+			})
+			.collect();
+		PadComplex::from_nodes(nodes)
+	}
 }
 
 #[cfg(test)]

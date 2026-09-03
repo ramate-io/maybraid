@@ -6,14 +6,16 @@ use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Spatial
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use richmond_buildings::Fit;
+use richmond_developments::PlacedBuilding;
 
 use crate::cell::DevelopmentExtent;
-use crate::development::{should_fill, DevelopmentCell};
+use crate::development::{select_kind, DevelopmentCell, DevelopmentKind};
 use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
 use crate::index::DevelopmentIndex;
 use crate::les_halles::LesHallesDevelopment;
-use crate::pad::cell_bounds2;
 use crate::padded::TerrainWithPads;
+use crate::shepherds::ShepherdsVillageDevelopment;
+use crate::village::build_shepherds_village;
 
 impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 	fn original_ids_for(
@@ -30,26 +32,37 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 	) -> Option<(Self, Aabb3d)> {
 		let extent = DevelopmentExtent::from_id(id)?;
 		let cell = extent.aabb();
-		let bounds2 = cell_bounds2(cell);
 		let layout = spatial_index.layout().clone();
 		let config = spatial_index.config().clone();
 
-		if terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, bounds2) {
-			return Some((Self::empty(cell), cell));
-		}
-
-		if !should_fill(cell, &config) {
-			return Some((Self::empty(cell), cell));
-		}
-
-		let center = extent.center();
-		let Some(height) =
-			composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
-		else {
-			return Some((Self::empty(cell), cell));
+		let development = match select_kind(cell, &config) {
+			DevelopmentKind::Empty => Self::empty(cell),
+			DevelopmentKind::LesHalles => {
+				let center = extent.center();
+				let Some(height) =
+					composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
+				else {
+					return Some((Self::empty(cell), cell));
+				};
+				let filled = Self::with_les_halles(cell, height, &config);
+				let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
+					terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
+				});
+				if overlaps_hydro {
+					Self::empty(cell)
+				} else {
+					filled
+				}
+			}
+			DevelopmentKind::ShepherdsVillage => {
+				match build_shepherds_village(spatial_index.terrain_store(), &layout, cell, &config)
+				{
+					Some((village, pads)) => Self::with_shepherds_village(cell, village, pads),
+					None => Self::empty(cell),
+				}
+			}
 		};
-
-		Some((Self::filled(cell, height, &config), cell))
+		Some((development, cell))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
@@ -85,7 +98,7 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 			let Some(dev) = SpatialIndex::<DevelopmentCell>::get(spatial_index, extent.id()) else {
 				continue;
 			};
-			if let Some(complex) = dev.pad_complex() {
+			for complex in dev.pad_complexes() {
 				pads.push(complex.clone());
 			}
 		}
@@ -113,12 +126,17 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for LesHallesDevelopment {
 	) -> Option<(Self, Aabb3d)> {
 		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
 		let seed = spatial_index.config().seed as i32;
-		let (confines, cell_aabb, finish, yaw) = {
+		let (confines, cell_aabb, finish, footprint, yaw, ground_height) = {
 			let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
-			if !cell.is_filled() {
-				return None;
-			}
-			(cell.confines()?, cell.cell, cell.finish.clone()?, cell.confines_yaw)
+			let content = cell.les_halles()?;
+			(
+				cell.confines()?,
+				cell.cell,
+				content.finish.clone(),
+				content.confines_extent_xz,
+				content.confines_yaw,
+				content.pad.height,
+			)
 		};
 		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let (development, _) =
@@ -127,11 +145,39 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for LesHallesDevelopment {
 		Some((
 			Self {
 				cell: cell_aabb,
-				confines_yaw: yaw,
-				development: development.with_finish(finish.wall, finish.roof),
+				building: PlacedBuilding {
+					center_xz: crate::pad::cell_center_xz(cell_aabb),
+					yaw,
+					footprint,
+					ground_height,
+					building: development.with_finish(finish.wall, finish.roof),
+				},
 			},
 			cell_aabb,
 		))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	}
+}
+
+impl<'w> GenerationScheme<DevelopmentIndex<'w>> for ShepherdsVillageDevelopment {
+	fn original_ids_for(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		region: Aabb3d,
+	) -> Vec<OriginalId> {
+		spatial_index.store.filled_original_ids(region)
+	}
+
+	fn build_with_id(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		id: Id,
+		lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
+		let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
+		let content = cell.shepherds_village()?;
+		Some((Self { village: content.village.clone() }, cell.cell))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {

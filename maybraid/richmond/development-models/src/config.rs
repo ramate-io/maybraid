@@ -13,6 +13,10 @@ pub struct DevelopmentConfig {
 	/// Occupancy correlation length (world units).
 	pub spatial_correlation: f32,
 	pub cell_size: f32,
+	/// Relative kind weight after a cell passes occupancy.
+	pub les_halles_weight: f32,
+	/// Relative kind weight after a cell passes occupancy.
+	pub shepherds_village_weight: f32,
 }
 
 impl Default for DevelopmentConfig {
@@ -22,6 +26,8 @@ impl Default for DevelopmentConfig {
 			likelihood: DEFAULT_LIKELIHOOD,
 			spatial_correlation: DEFAULT_SPATIAL_CORRELATION,
 			cell_size: DEVELOPMENT_CELL_SIZE,
+			les_halles_weight: 1.0,
+			shepherds_village_weight: 1.0,
 		}
 	}
 }

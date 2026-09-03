@@ -14,7 +14,7 @@ use crate::config::DevelopmentConfig;
 use crate::index::DevelopmentEntryStore;
 use crate::presentation::PaddedTerrainPresenterState;
 
-/// Registers SceneRef, urban MaterialRef, placeholder wireframes, and Les Halles LOD.
+/// Registers SceneRef, urban MaterialRef, placeholder wireframes, and building LOD.
 #[derive(Default)]
 pub struct RichmondDevelopmentModelsPlugin;
 
