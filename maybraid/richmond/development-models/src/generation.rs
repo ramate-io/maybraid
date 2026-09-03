@@ -113,19 +113,25 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for LesHallesDevelopment {
 	) -> Option<(Self, Aabb3d)> {
 		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
 		let seed = spatial_index.config().seed as i32;
-		let (confines_aabb, cell_aabb) = {
+		let (confines_aabb, cell_aabb, finish) = {
 			let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 			if !cell.is_filled() {
 				return None;
 			}
-			(cell.confines_bounds()?, cell.cell)
+			(cell.confines_bounds()?, cell.cell, cell.finish.clone()?)
 		};
 		let confines = Confines::new(confines_aabb, 0.0, Openings::new());
 		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let (development, _) =
 			richmond_developments::MixedUseLesHallesDevelopment::fit_to_confines(&confines, noise)
 				.ok()?;
-		Some((Self { cell: cell_aabb, development }, cell_aabb))
+		Some((
+			Self {
+				cell: cell_aabb,
+				development: development.with_finish(finish.wall, finish.roof),
+			},
+			cell_aabb,
+		))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {

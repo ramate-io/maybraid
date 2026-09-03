@@ -10,6 +10,7 @@ use crate::cell::{
 	MIN_FOOTPRINT,
 };
 use crate::config::DevelopmentConfig;
+use crate::finish::DevelopmentFinish;
 use crate::pad::flatten_pad;
 
 /// Fill kind for one development cell.
@@ -36,6 +37,8 @@ pub struct DevelopmentCell {
 	pub confines_height: f32,
 	/// Sampled plan footprint, inset from the cell so the slab sits on the pad.
 	pub confines_extent_xz: Vec2,
+	/// Wall / roof shader look, valid when [`Self::kind`] is Les Halles.
+	pub finish: Option<DevelopmentFinish>,
 }
 
 impl DevelopmentCell {
@@ -46,6 +49,7 @@ impl DevelopmentCell {
 			pad: None,
 			confines_height: 0.0,
 			confines_extent_xz: Vec2::ZERO,
+			finish: None,
 		}
 	}
 
@@ -92,6 +96,7 @@ impl DevelopmentCell {
 			}),
 			confines_height,
 			confines_extent_xz: Vec2::new(extent_x, extent_z),
+			finish: Some(DevelopmentFinish::pick(hash)),
 		}
 	}
 }
@@ -102,4 +107,28 @@ pub fn should_fill(cell: Aabb3d, config: &DevelopmentConfig) -> bool {
 
 fn cell_salt(cell: Aabb3d) -> u32 {
 	cell.min.x.to_bits().wrapping_mul(73856093) ^ cell.min.z.to_bits().wrapping_mul(19349663)
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::math::Vec3;
+	use material_ref::MaterialId;
+
+	use super::*;
+
+	#[test]
+	fn filled_cell_picks_urban_finish() {
+		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let filled = DevelopmentCell::filled(cell, 12.0, &DevelopmentConfig::default());
+		let finish = filled.finish.expect("filled cells pick a finish");
+		assert!(matches!(
+			&finish.wall.name,
+			MaterialId::Name(n) if n == "stucco" || n == "wood"
+		));
+		assert!(matches!(
+			&finish.roof.name,
+			MaterialId::Name(n) if n == "iron" || n == "terracotta" || n == "hay"
+		));
+	}
 }

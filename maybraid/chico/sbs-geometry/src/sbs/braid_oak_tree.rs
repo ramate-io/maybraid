@@ -15,7 +15,9 @@ use crate::anchors::braid_oak::{
 	BRAID_PROJECTION_MIN_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT,
 	BRAID_STALK_BASE_RADIUS_FRACTION, BRAID_STALK_HEIGHT_FRACTION,
 };
-use crate::anchors::storybook_tree::{DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_TREE_HEIGHT};
+use crate::anchors::storybook_tree::{
+	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_TREE_HEIGHT,
+};
 use crate::anchors::{Anchors, AnchorsToChain};
 use crate::sbs::scale::{stalk_radius_scaled_range, stalk_scaled_range};
 use crate::sbs::storybook_tree::{

@@ -17,12 +17,15 @@ durham-terrain-models = { workspace = true }
 jersey-terrain-stamps = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+lod-lazy-refs = { workspace = true }
 marazion-watersheds = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
 richmond-building-components = { workspace = true }
+richmond-building-shaders = { workspace = true }
 richmond-buildings = { workspace = true }
 richmond-developments = { workspace = true }
+material-ref = { workspace = true }
 scene-ref = { workspace = true }
 
 [dev-dependencies]

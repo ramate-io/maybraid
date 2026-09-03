@@ -1,14 +1,15 @@
 //! Richmond development models: 100 m lattice, pads, padded terrain, Les Halles.
 //!
 //! Selection / pad / host generation on top of composed Durham [`Terrain`].
-//! The crate plugin also installs SceneRef, placeholder wireframes, and the
-//! Les Halles avian LOD stack so playgrounds present [`TerrainWithPads`] and
-//! building GLBs without assembling those plugins themselves.
+//! The crate plugin also installs SceneRef, urban surface MaterialRef, placeholder
+//! wireframes, and the Les Halles avian LOD stack so playgrounds present
+//! [`TerrainWithPads`] and building GLBs without assembling those plugins themselves.
 
 pub mod buildings_lod;
 pub mod cell;
 pub mod config;
 pub mod development;
+pub mod finish;
 pub mod generation;
 pub mod hydro;
 pub mod index;
@@ -28,6 +29,7 @@ pub use cell::{
 };
 pub use config::DevelopmentConfig;
 pub use development::{DevelopmentCell, DevelopmentKind, DevelopmentPad};
+pub use finish::DevelopmentFinish;
 pub use hydro::{composed_height_at, hydro_overlaps_xz, terrain_hydro_overlaps};
 pub use index::{DevelopmentEntryStore, DevelopmentIndex, LesHallesStoreView, PaddedStoreView};
 pub use les_halles::LesHallesDevelopment;

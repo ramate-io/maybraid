@@ -379,7 +379,8 @@ mod tests {
 
 	#[test]
 	fn rachis_tips_hang_below_a_straight_emission() -> Result<()> {
-		let shape = FrondCrownShape { frond_count: 10, spine_segments: 8, seed: 3, ..Default::default() };
+		let shape =
+			FrondCrownShape { frond_count: 10, spine_segments: 8, seed: 3, ..Default::default() };
 		for run in shape.frond_runs_at(Vec3::ZERO) {
 			let first = run.first().expect("segment");
 			let last = run.last().expect("segment");

@@ -18,6 +18,7 @@ mod tests;
 
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
@@ -151,6 +152,7 @@ pub struct PitchedRoof {
 	openings: Openings,
 	/// Contact geometry for those openings.
 	mapped: MappedOpenings,
+	surface_material: Option<MaterialRef>,
 }
 
 impl PitchedRoof {
@@ -183,7 +185,17 @@ impl PitchedRoof {
 			),
 			params.halves[1].resolve(style, joint_policy, pitch_clips[1].clone(), gable_clips),
 		];
-		Self { params, joint_policy, halves, openings, mapped }
+		Self { params, joint_policy, halves, openings, mapped, surface_material: None }
+	}
+
+	/// Stamp a roof shader look onto every emitted panel (kit style unchanged).
+	pub fn with_surface_material(mut self, material: MaterialRef) -> Self {
+		self.surface_material = Some(material);
+		self
+	}
+
+	pub fn surface_material(&self) -> Option<&MaterialRef> {
+		self.surface_material.as_ref()
 	}
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
@@ -257,6 +269,9 @@ impl BuildingComponents for PitchedRoof {
 			for gable in &half.gables {
 				out.extend(gable.as_complex().panel_nodes_for_level(level));
 			}
+		}
+		if let Some(material) = &self.surface_material {
+			out = out.with_material(material.clone());
 		}
 		out
 	}

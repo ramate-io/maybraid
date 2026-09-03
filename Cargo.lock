@@ -6142,6 +6142,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "procedural-common",
  "scene-ref",
 ]
@@ -6160,6 +6161,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "richmond-building-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
 name = "richmond-buildings"
 version = "0.0.1"
 dependencies = [
@@ -6167,6 +6176,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "procedural-common",
  "richmond-building-components",
 ]
@@ -6202,10 +6212,13 @@ dependencies = [
  "jersey-terrain-stamps",
  "lod",
  "lod-avian",
+ "lod-lazy-refs",
  "marazion-watersheds",
+ "material-ref",
  "procedural-common",
  "render-item",
  "richmond-building-components",
+ "richmond-building-shaders",
  "richmond-buildings",
  "richmond-developments",
  "scene-ref",
@@ -6217,6 +6230,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "material-ref",
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",

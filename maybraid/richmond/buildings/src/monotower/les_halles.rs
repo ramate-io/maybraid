@@ -8,6 +8,7 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
@@ -28,8 +29,16 @@ const SALT_FLOOR: f32 = 11.0;
 /// One storey in a [`MixedUseLesHallesMonotower`]: shared shell + painted usage.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MixedUseLesHallesStorey {
-	Commercial { floor_plan: LesHallesFloorPlan, usage: LesHallesCommercialUsage },
-	Livable { floor_plan: LesHallesFloorPlan, usage: LesHallesLivableUsage },
+	Commercial {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesCommercialUsage,
+		wall_material: Option<MaterialRef>,
+	},
+	Livable {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesLivableUsage,
+		wall_material: Option<MaterialRef>,
+	},
 }
 
 impl MixedUseLesHallesStorey {
@@ -41,6 +50,24 @@ impl MixedUseLesHallesStorey {
 
 	pub fn is_commercial(&self) -> bool {
 		matches!(self, Self::Commercial { .. })
+	}
+
+	pub fn wall_material(&self) -> Option<&MaterialRef> {
+		match self {
+			Self::Commercial { wall_material, .. } | Self::Livable { wall_material, .. } => {
+				wall_material.as_ref()
+			}
+		}
+	}
+
+	/// Stamp a wall shader look onto every emitted panel (kit style unchanged).
+	pub fn with_wall_material(mut self, material: MaterialRef) -> Self {
+		match &mut self {
+			Self::Commercial { wall_material, .. } | Self::Livable { wall_material, .. } => {
+				*wall_material = Some(material);
+			}
+		}
+		self
 	}
 }
 
@@ -54,6 +81,9 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 			Self::Livable { usage, .. } => {
 				out.extend(usage.panel_nodes_for_level(level));
 			}
+		}
+		if let Some(material) = self.wall_material() {
+			out = out.with_material(material.clone());
 		}
 		out
 	}
@@ -140,10 +170,10 @@ impl Fit for MixedUseLesHallesMonotower {
 			let floor_noise = floor_noise(noise, i);
 			let storey = if i < n_commercial {
 				let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
-				MixedUseLesHallesStorey::Commercial { floor_plan, usage }
+				MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
 			} else {
 				let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
-				MixedUseLesHallesStorey::Livable { floor_plan, usage }
+				MixedUseLesHallesStorey::Livable { floor_plan, usage, wall_material: None }
 			};
 			floors.push(storey);
 		}
