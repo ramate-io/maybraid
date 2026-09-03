@@ -6191,6 +6191,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "richmond-development-models"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "durham-terrain",
+ "durham-terrain-models",
+ "jersey-terrain-stamps",
+ "lod",
+ "lod-avian",
+ "marazion-watersheds",
+ "procedural-common",
+ "render-item",
+ "richmond-building-components",
+ "richmond-buildings",
+ "richmond-developments",
+ "scene-ref",
+]
+
+[[package]]
 name = "richmond-developments"
 version = "0.0.1"
 dependencies = [
@@ -6199,6 +6220,24 @@ dependencies = [
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
+]
+
+[[package]]
+name = "richmond-developments-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "log",
+ "render-item",
+ "richmond-building-components",
+ "richmond-buildings",
+ "richmond-development-models",
+ "richmond-developments",
 ]
 
 [[package]]
