@@ -25,6 +25,15 @@ use crate::loadout::{roll_combatant, CombatantLoadout};
 
 pub(crate) const DEFAULT_FFA_NPCS: u16 = 6;
 
+/// Outside the 36 m Les Halles stack, on the pad. Grows with count so neighbors stay apart.
+const FFA_RING_MIN: f32 = 24.0;
+const FFA_RING_MAX: f32 = 36.0;
+const FFA_NEIGHBOR: f32 = 14.0;
+const FFA_PLAYER_CLEARANCE: f32 = 10.0;
+/// Inside the tower footprint, on the upper storey gallery.
+const FFA_UPPER_RING_MIN: f32 = 10.0;
+const FFA_UPPER_RING_MAX: f32 = 15.0;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum RangeMode {
 	#[default]
@@ -225,15 +234,32 @@ fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
 }
 
 fn npc_translation(spawn: &LesHallesSpawn, index: u16, count: u16) -> Vec3 {
-	let count = count.max(1) as f32;
-	let t = if count <= 1.0 { 0.5 } else { index as f32 / (count - 1.0) };
-	let yaw = spawn.look_yaw + (t - 0.5) * 2.4;
-	let radius = 9.0;
-	Vec3::new(
-		spawn.player.x + yaw.sin() * radius,
-		spawn.player.y,
-		spawn.player.z - yaw.cos() * radius,
-	)
+	let count = count.max(1);
+	let split = spawn.has_upper() && count >= 2;
+	let on_upper = split && index % 2 == 1;
+	let (slot, slots, radius, y) = if on_upper {
+		let slots = count / 2;
+		let radius = (FFA_NEIGHBOR * slots as f32 / std::f32::consts::TAU)
+			.max(FFA_UPPER_RING_MIN)
+			.min(FFA_UPPER_RING_MAX);
+		(index / 2, slots, radius, spawn.floor_y[1])
+	} else {
+		let slots = if split { (count + 1) / 2 } else { count };
+		let slot = if split { index / 2 } else { index };
+		let radius = (FFA_NEIGHBOR * slots as f32 / std::f32::consts::TAU)
+			.max(FFA_RING_MIN)
+			.min(FFA_RING_MAX);
+		(slot, slots, radius, spawn.floor_y[0])
+	};
+	let theta = spawn.look_yaw + std::f32::consts::TAU * (slot as f32 + 0.5) / slots.max(1) as f32;
+	let mut pos = Vec3::new(theta.sin() * radius, y, -theta.cos() * radius);
+	let planar = Vec2::new(pos.x - spawn.player.x, pos.z - spawn.player.z);
+	if planar.length() < FFA_PLAYER_CLEARANCE {
+		let dir = planar.normalize_or(Vec2::new(theta.sin(), -theta.cos()));
+		pos.x = spawn.player.x + dir.x * FFA_PLAYER_CLEARANCE;
+		pos.z = spawn.player.z + dir.y * FFA_PLAYER_CLEARANCE;
+	}
+	pos
 }
 
 fn despawn_combatants(commands: &mut Commands, combatants: Combatants) {
@@ -302,7 +328,54 @@ mod tests {
 		let b = npc_translation(&spawn, 5, 6);
 		assert!((a.y - spawn.player.y).abs() < 1e-4);
 		assert!((b.y - spawn.player.y).abs() < 1e-4);
-		assert!(a.distance(spawn.player) > 7.0);
-		assert!(a.distance(b) > 1.0);
+		assert!(a.distance(spawn.player) > 18.0);
+		assert!(a.distance(b) > 12.0);
+	}
+
+	#[test]
+	fn npc_ring_keeps_neighbors_apart() {
+		let spawn = LesHallesSpawn::default();
+		let poses: Vec<Vec3> = (0..6).map(|index| npc_translation(&spawn, index, 6)).collect();
+		for i in 0..poses.len() {
+			for j in (i + 1)..poses.len() {
+				assert!(
+					poses[i].distance(poses[j]) > 12.0,
+					"npcs {i} and {j} are too close: {}",
+					poses[i].distance(poses[j])
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn npc_ring_clears_an_offset_player() {
+		let mut spawn = LesHallesSpawn::default();
+		spawn.player.x = 16.0;
+		spawn.player.z = 4.0;
+		for index in 0..8 {
+			let at = npc_translation(&spawn, index, 8);
+			let xz = Vec2::new(at.x - spawn.player.x, at.z - spawn.player.z).length();
+			assert!(xz >= FFA_PLAYER_CLEARANCE - 1e-3);
+		}
+	}
+
+	#[test]
+	fn npc_ring_uses_both_storeys() {
+		let mut spawn = LesHallesSpawn::default();
+		spawn.floor_y = [spawn.player.y, spawn.player.y + 5.0];
+		let poses: Vec<Vec3> = (0..6).map(|index| npc_translation(&spawn, index, 6)).collect();
+		let ground = poses.iter().filter(|p| (p.y - spawn.floor_y[0]).abs() < 1e-3).count();
+		let upper = poses.iter().filter(|p| (p.y - spawn.floor_y[1]).abs() < 1e-3).count();
+		assert_eq!(ground, 3);
+		assert_eq!(upper, 3);
+		for (i, p) in poses.iter().enumerate() {
+			if i % 2 == 1 {
+				let xz = Vec2::new(p.x, p.z).length();
+				assert!(xz < 18.0, "upper npc {i} should sit on the deck, xz={xz}");
+			} else {
+				let xz = Vec2::new(p.x, p.z).length();
+				assert!(xz > 18.0, "ground npc {i} should sit on the pad, xz={xz}");
+			}
+		}
 	}
 }

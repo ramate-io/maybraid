@@ -1,8 +1,7 @@
 //! Firearms spawn [`::projectiles`] from the receiver `barrel` bone.
 //!
 //! Lasers are visuals parented to the barrel (not a [`::projectiles::Flight`]).
-//! They grow to the first bore hit, then retract to the muzzle when the trigger
-//! is released.
+//! They grow to the first bore hit and despawn when the trigger is released.
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
@@ -101,7 +100,6 @@ impl Weapon {
 pub struct LaserBeam {
 	pub spec: LaserSpec,
 	pub age: f32,
-	pub retracting: bool,
 }
 
 /// Avian flights + fire / despawn / laser grow. Hosts still add [`crate::FirearmHostsPlugin`].
@@ -211,7 +209,7 @@ fn spawn_laser(
 		Mesh3d(meshes.add(Mesh::from(Cylinder::new(1.0, 1.0)))),
 		MeshMaterial3d(materials.add(glow_material(spec.color))),
 		ChildOf(barrel),
-		LaserBeam { spec, age: 0.0, retracting: false },
+		LaserBeam { spec, age: 0.0 },
 	));
 	if let Some(source) = source {
 		entity.insert(source);
@@ -268,7 +266,7 @@ pub fn fire_weapons(
 	mut weapons: ArmedWeaponQuery,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
-	mut lasers: Query<&mut LaserBeam>,
+	lasers: Query<&LaserBeam>,
 	mut fired: MessageWriter<WeaponFired>,
 ) {
 	if !armed.0 {
@@ -286,20 +284,14 @@ pub fn fire_weapons(
 		match weapon.load {
 			ProjectileLoad::Laser(spec) => {
 				let live = weapon.laser.filter(|entity| lasers.get(*entity).is_ok());
-				weapon.laser = live;
 				if manual && !held {
 					if let Some(entity) = live {
-						if let Ok(mut beam) = lasers.get_mut(entity) {
-							beam.retracting = true;
-						}
+						commands.entity(entity).try_despawn();
 					}
+					weapon.laser = None;
 					continue;
 				}
-				if let Some(entity) = live {
-					if let Ok(mut beam) = lasers.get_mut(entity) {
-						beam.retracting = false;
-					}
-				} else {
+				if live.is_none() {
 					weapon.laser = Some(spawn_laser(
 						&mut commands,
 						&mut meshes,
@@ -308,6 +300,8 @@ pub fn fire_weapons(
 						spec,
 						source.copied(),
 					));
+				} else {
+					weapon.laser = live;
 				}
 			}
 			ProjectileLoad::Bolt(spec) => {
@@ -522,30 +516,15 @@ pub fn tick_lasers(
 	time: Res<Time>,
 	armed: Res<WeaponsArmed>,
 	spatial: SpatialQuery,
-	mut commands: Commands,
 	globals: Query<&GlobalTransform>,
-	mut lasers: Query<(
-		Entity,
-		&mut LaserBeam,
-		&mut Transform,
-		&ChildOf,
-		Option<&ProjectileSource>,
-	)>,
+	mut lasers: Query<(&mut LaserBeam, &mut Transform, &ChildOf, Option<&ProjectileSource>)>,
 ) {
 	if !armed.0 {
 		return;
 	}
 	let dt = time.delta_secs();
-	for (entity, mut beam, mut transform, child_of, source) in &mut lasers {
-		if beam.retracting {
-			beam.age -= dt;
-			if beam.age <= 0.0 {
-				commands.entity(entity).try_despawn();
-				continue;
-			}
-		} else {
-			beam.age = (beam.age + dt).min(beam.spec.max_time);
-		}
+	for (mut beam, mut transform, child_of, source) in &mut lasers {
+		beam.age = (beam.age + dt).min(beam.spec.max_time);
 		let range = globals
 			.get(child_of.parent())
 			.ok()
@@ -611,16 +590,6 @@ mod tests {
 			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
 		let (_t, scale) = laser_local(spec, 1.0, 4.0);
 		assert!((scale.y - 4.0).abs() < 1e-4);
-	}
-
-	#[test]
-	fn laser_local_retracts_with_age() {
-		let spec =
-			LaserSpec { max_length: 10.0, max_time: 1.0, radius: 0.1, ..LaserSpec::default() };
-		let (_t_full, s_full) = laser_local(spec, 1.0, spec.max_length);
-		let (_t_half, s_half) = laser_local(spec, 0.5, spec.max_length);
-		assert!(s_half.y < s_full.y);
-		assert!((s_half.y - 5.0).abs() < 1e-4);
 	}
 
 	#[test]

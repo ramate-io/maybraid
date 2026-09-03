@@ -1,4 +1,5 @@
-//! Query-only bolts and bullets: shapecast through Fixed, emit first contact.
+//! Query-only bolts and bullets: shapecast through Fixed / Animated and emit
+//! each distinct contact along the flight.
 
 use avian3d::prelude::*;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -68,7 +69,7 @@ impl Default for PenetrationCost {
 }
 
 /// Path / time / through-solid budgets for a bolt or bullet.
-#[derive(Component, Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone)]
 pub struct Flight {
 	pub origin: Vec3,
 	pub last: Vec3,
@@ -78,6 +79,7 @@ pub struct Flight {
 	pub max_range: f32,
 	pub max_through: f32,
 	pub max_age: f32,
+	contacted: Vec<Entity>,
 }
 
 impl Flight {
@@ -91,11 +93,20 @@ impl Flight {
 			max_range,
 			max_through,
 			max_age,
+			contacted: Vec::new(),
 		}
 	}
 
-	pub fn exhausted(self) -> bool {
-		self.path > self.max_range || self.through > self.max_through || self.age > self.max_age
+	pub fn exhausted(&self) -> bool {
+		self.path >= self.max_range || self.through > self.max_through || self.age >= self.max_age
+	}
+
+	fn note_contact(&mut self, target: Entity) -> bool {
+		if self.contacted.contains(&target) {
+			return false;
+		}
+		self.contacted.push(target);
+		true
 	}
 }
 
@@ -103,7 +114,7 @@ impl Flight {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectileSource(pub Entity);
 
-/// First air→solid hit this step. Impacts listen; flights do not spawn VFX.
+/// One distinct collider crossed by a flight. Impacts listen; flights do not spawn VFX.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct ProjectileContact {
 	pub projectile: Entity,
@@ -144,9 +155,9 @@ pub fn through_length(
 			_ => 0.0,
 		},
 		(false, true) => clamp(ds - forward_hit.unwrap_or(0.0)),
-		(true, false) => match (forward_hit, backward_hit) {
-			(Some(exit), _) => clamp(exit),
-			(_, Some(air)) => clamp(ds - air),
+		(true, false) => match (backward_hit, forward_hit) {
+			(Some(air), _) => clamp(ds - air),
+			(None, Some(exit)) => clamp(exit),
 			(None, None) => ds,
 		},
 	}
@@ -198,119 +209,103 @@ fn penetration_filter(projectile: Entity, source: Option<Entity>) -> SpatialQuer
 	.with_excluded_entities(excluded)
 }
 
-fn overlapping(
-	spatial: &SpatialQuery,
-	collider: &Collider,
-	at: Vec3,
-	rotation: Quat,
-	filter: &SpatialQueryFilter,
-) -> bool {
-	!spatial.shape_intersections(collider, at, rotation, filter).is_empty()
-}
-
-fn overlap_hit(
-	spatial: &SpatialQuery,
-	collider: &Collider,
-	at: Vec3,
-	rotation: Quat,
-	along: Vec3,
-	filter: &SpatialQueryFilter,
-) -> Option<(Entity, Vec3, Vec3)> {
-	let entity = *spatial.shape_intersections(collider, at, rotation, filter).first()?;
-	Some(contact_from_overlap(entity, at, along))
-}
-
-/// Point + facing for a shapecast that already sits inside `target`.
-fn contact_from_overlap(target: Entity, point: Vec3, along: Vec3) -> (Entity, Vec3, Vec3) {
-	let normal = Dir3::new(-along).map(|dir| *dir).unwrap_or(Vec3::Y);
-	(target, point, normal)
-}
-
-fn first_hit_cost(
-	spatial: &SpatialQuery,
-	collider: &Collider,
-	at: Vec3,
-	rotation: Quat,
-	filter: &SpatialQueryFilter,
-	costs: &Query<&PenetrationCost>,
-) -> f32 {
-	spatial
-		.shape_intersections(collider, at, rotation, filter)
-		.into_iter()
-		.find_map(|entity| costs.get(entity).ok().map(|cost| cost.0))
-		.unwrap_or(1.0)
-}
-
-fn sweep_hit(
-	spatial: &SpatialQuery,
-	collider: &Collider,
-	origin: Vec3,
-	rotation: Quat,
-	direction: Dir3,
-	ds: f32,
-	filter: &SpatialQueryFilter,
-) -> Option<f32> {
-	let config = ShapeCastConfig::from_max_distance(ds);
-	let hit = spatial.cast_shape(collider, origin, rotation, direction, &config, filter)?;
-	(hit.distance < ds - 1e-4).then_some(hit.distance)
-}
-
-fn through_on_step(
+fn contacts_on_step(
 	spatial: &SpatialQuery,
 	collider: &Collider,
 	start: Vec3,
 	end: Vec3,
 	rotation: Quat,
 	filter: &SpatialQueryFilter,
-	costs: &Query<&PenetrationCost>,
-) -> f32 {
+) -> Vec<ShapeHitData> {
 	let delta = end - start;
 	let ds = delta.length();
 	if ds <= 1e-5 {
-		return 0.0;
+		return Vec::new();
 	}
 	let Ok(dir) = Dir3::new(delta) else {
-		return 0.0;
+		return Vec::new();
 	};
-	let Ok(back) = Dir3::new(-delta) else {
-		return 0.0;
-	};
-	let start_inside = overlapping(spatial, collider, start, rotation, filter);
-	let end_inside = overlapping(spatial, collider, end, rotation, filter);
-	let forward = sweep_hit(spatial, collider, start, rotation, dir, ds, filter);
-	let backward = sweep_hit(spatial, collider, end, rotation, back, ds, filter);
-	let sample_at = if end_inside { end } else { start };
-	let cost = first_hit_cost(spatial, collider, sample_at, rotation, filter, costs);
-	through_length(ds, start_inside, end_inside, forward, backward) * cost
+	let config = ShapeCastConfig::from_max_distance(ds);
+	let mut hits = Vec::new();
+	spatial.shape_hits_callback(collider, start, rotation, dir, &config, filter, |hit| {
+		hits.push(hit);
+		true
+	});
+	// Avian's all-hit query does not guarantee traversal order.
+	hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+	hits
 }
 
-fn first_contact(
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PenetrationSpan {
+	enter: f32,
+	exit: f32,
+	cost: f32,
+}
+
+fn penetration_spans(
 	spatial: &SpatialQuery,
 	collider: &Collider,
 	start: Vec3,
 	end: Vec3,
 	rotation: Quat,
 	filter: &SpatialQueryFilter,
-	allow_embedded: bool,
-) -> Option<(Entity, Vec3, Vec3)> {
-	let delta = end - start;
-	if overlapping(spatial, collider, start, rotation, filter) {
-		if !allow_embedded {
-			return None;
-		}
-		return overlap_hit(spatial, collider, start, rotation, delta, filter);
-	}
-	let ds = delta.length();
+	costs: &Query<&PenetrationCost>,
+	forward: &[ShapeHitData],
+) -> Vec<PenetrationSpan> {
+	let ds = start.distance(end);
 	if ds <= 1e-5 {
-		return None;
+		return Vec::new();
 	}
-	let dir = Dir3::new(delta).ok()?;
-	let config = ShapeCastConfig::from_max_distance(ds);
-	let hit = spatial.cast_shape(collider, start, rotation, dir, &config, filter)?;
-	if hit.distance >= ds - 1e-4 {
-		return None;
+	let starts = spatial.shape_intersections(collider, start, rotation, filter);
+	let ends = spatial.shape_intersections(collider, end, rotation, filter);
+	let backward = contacts_on_step(spatial, collider, end, start, rotation, filter);
+	let mut entities = Vec::new();
+	for entity in starts
+		.iter()
+		.chain(&ends)
+		.chain(forward.iter().map(|hit| &hit.entity))
+		.chain(backward.iter().map(|hit| &hit.entity))
+	{
+		if !entities.contains(entity) {
+			entities.push(*entity);
+		}
 	}
-	Some((hit.entity, hit.point1, hit.normal1.normalize_or(Vec3::Y)))
+	entities
+		.into_iter()
+		.filter_map(|entity| {
+			let enter = if starts.contains(&entity) {
+				0.0
+			} else {
+				forward.iter().find(|hit| hit.entity == entity)?.distance.clamp(0.0, ds)
+			};
+			let exit = if ends.contains(&entity) {
+				ds
+			} else {
+				let air = backward.iter().find(|hit| hit.entity == entity)?.distance;
+				(ds - air).clamp(0.0, ds)
+			};
+			(exit > enter + 1e-5).then_some(PenetrationSpan {
+				enter,
+				exit,
+				cost: costs.get(entity).map_or(1.0, |cost| cost.0),
+			})
+		})
+		.collect()
+}
+
+fn penetration_at(spans: &[PenetrationSpan], distance: f32) -> f32 {
+	spans
+		.iter()
+		.map(|span| (distance.min(span.exit) - span.enter).max(0.0) * span.cost)
+		.sum()
+}
+
+fn allowed_step_distance(flight: &Flight, ds: f32, dt: f32) -> f32 {
+	let range = (flight.max_range - flight.path).max(0.0);
+	let age_fraction =
+		if dt <= 1e-8 { 1.0 } else { ((flight.max_age - flight.age) / dt).clamp(0.0, 1.0) };
+	ds.min(range).min(ds * age_fraction)
 }
 
 /// Spawn a sensor capsule along `direction` from `muzzle`.
@@ -370,53 +365,44 @@ pub fn tick_flights(
 		let rotation = transform.rotation;
 		let source = source.map(|source| source.0);
 		let filter = penetration_filter(entity, source);
-		let ds = pos.distance(flight.last);
-		let allow_embedded = flight.path <= 1e-8;
-		flight.age += dt;
-		flight.path += ds;
-		let mut contacted = false;
-		if ds <= 1e-5 {
-			if allow_embedded {
-				if let Some((target, point, normal)) =
-					overlap_hit(&spatial, collider, pos, rotation, Vec3::Y, &filter)
-				{
+		let delta = pos - flight.last;
+		let ds = delta.length();
+		let allowed = allowed_step_distance(&flight, ds, dt);
+		let end = if ds <= 1e-5 { flight.last } else { flight.last + delta / ds * allowed };
+		flight.age = (flight.age + dt).min(flight.max_age);
+		flight.path += allowed;
+		let mut budget_exhausted = false;
+		visit_sweep_segments(flight.last, end, MAX_SWEEP_METERS, |start, end| {
+			if budget_exhausted {
+				return;
+			}
+			let segment = end - start;
+			let segment_length = segment.length();
+			let direction = segment / segment_length.max(1e-8);
+			let hits = contacts_on_step(&spatial, collider, start, end, rotation, &filter);
+			let spans =
+				penetration_spans(&spatial, collider, start, end, rotation, &filter, &costs, &hits);
+			for hit in hits {
+				let to_hit = hit.distance.clamp(0.0, segment_length);
+				let through_before = penetration_at(&spans, to_hit);
+				if flight.through + through_before > flight.max_through {
+					break;
+				}
+				if flight.note_contact(hit.entity) {
 					contacts.write(ProjectileContact {
 						projectile: entity,
 						source,
-						target,
-						point,
-						normal,
+						target: hit.entity,
+						point: hit.point1,
+						normal: hit.normal1.normalize_or(-direction),
 					});
 				}
 			}
-		} else {
-			visit_sweep_segments(flight.last, pos, MAX_SWEEP_METERS, |start, end| {
-				if !contacted {
-					if let Some((target, point, normal)) = first_contact(
-						&spatial,
-						collider,
-						start,
-						end,
-						rotation,
-						&filter,
-						allow_embedded,
-					) {
-						contacts.write(ProjectileContact {
-							projectile: entity,
-							source,
-							target,
-							point,
-							normal,
-						});
-						contacted = true;
-					}
-				}
-				flight.through +=
-					through_on_step(&spatial, collider, start, end, rotation, &filter, &costs);
-			});
-		}
+			flight.through += penetration_at(&spans, segment_length);
+			budget_exhausted = flight.through > flight.max_through;
+		});
 		flight.last = pos;
-		if flight.exhausted() {
+		if budget_exhausted || allowed < ds - 1e-5 || flight.exhausted() {
 			commands.entity(entity).try_despawn();
 		}
 	}
@@ -425,6 +411,7 @@ pub fn tick_flights(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
 
 	#[test]
 	fn through_length_air_and_solid() {
@@ -476,11 +463,98 @@ mod tests {
 	}
 
 	#[test]
-	fn overlap_contact_faces_back_along_flight() {
-		let (target, point, normal) =
-			contact_from_overlap(Entity::from_bits(7), Vec3::new(1.0, 2.0, 3.0), Vec3::X);
-		assert_eq!(target, Entity::from_bits(7));
-		assert_eq!(point, Vec3::new(1.0, 2.0, 3.0));
-		assert!((normal + Vec3::X).length() < 1e-5);
+	fn flight_reports_each_entity_once() {
+		let mut flight = Flight::spawn(Vec3::ZERO, 10.0, 1.0, 2.0);
+		let a = Entity::from_bits(7);
+		let b = Entity::from_bits(8);
+		assert!(flight.note_contact(a));
+		assert!(!flight.note_contact(a));
+		assert!(flight.note_contact(b));
+	}
+
+	#[test]
+	fn step_is_clamped_to_range_and_age() {
+		let mut flight = Flight::spawn(Vec3::ZERO, 10.0, 1.0, 2.0);
+		flight.path = 8.0;
+		assert!((allowed_step_distance(&flight, 5.0, 0.1) - 2.0).abs() < 1e-5);
+		flight.path = 0.0;
+		flight.age = 1.95;
+		assert!((allowed_step_distance(&flight, 5.0, 0.1) - 2.5).abs() < 1e-5);
+	}
+
+	#[test]
+	fn penetration_sums_only_solid_spans() {
+		let spans = [
+			PenetrationSpan { enter: 0.2, exit: 0.5, cost: 2.0 },
+			PenetrationSpan { enter: 0.8, exit: 1.0, cost: 1.0 },
+		];
+		assert!((penetration_at(&spans, 0.1) - 0.0).abs() < 1e-5);
+		assert!((penetration_at(&spans, 0.6) - 0.6).abs() < 1e-5);
+		assert!((penetration_at(&spans, 0.9) - 0.7).abs() < 1e-5);
+		assert!((penetration_at(&spans, 1.2) - 0.8).abs() < 1e-5);
+	}
+
+	#[test]
+	fn sweep_returns_multiple_ordered_contacts() {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.finish();
+		let near = app
+			.world_mut()
+			.spawn((
+				RigidBody::Static,
+				Collider::cuboid(0.2, 1.0, 1.0),
+				Transform::from_xyz(2.0, 0.0, 0.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		let far = app
+			.world_mut()
+			.spawn((
+				RigidBody::Static,
+				Collider::cuboid(0.2, 1.0, 1.0),
+				Transform::from_xyz(4.0, 0.0, 0.0),
+				PhysicsInteractionLayer::fixed_layers(),
+			))
+			.id();
+		app.update();
+
+		let hits = app
+			.world_mut()
+			.run_system_once(move |spatial: SpatialQuery| {
+				contacts_on_step(
+					&spatial,
+					&Collider::sphere(0.05),
+					Vec3::ZERO,
+					Vec3::X * 6.0,
+					Quat::IDENTITY,
+					&PhysicsInteractionLayer::Fixed.query_filter(),
+				)
+			})
+			.expect("spatial query system should run");
+		assert_eq!(hits.iter().map(|hit| hit.entity).collect::<Vec<_>>(), [near, far]);
+		assert!(hits[0].distance < hits[1].distance);
+
+		let overlap_hits = app
+			.world_mut()
+			.run_system_once(move |spatial: SpatialQuery| {
+				contacts_on_step(
+					&spatial,
+					&Collider::sphere(0.05),
+					Vec3::X * 2.0,
+					Vec3::X * 6.0,
+					Quat::IDENTITY,
+					&PhysicsInteractionLayer::Fixed.query_filter(),
+				)
+			})
+			.expect("spatial query system should run");
+		assert_eq!(overlap_hits.iter().map(|hit| hit.entity).collect::<Vec<_>>(), [near, far]);
+		assert!(overlap_hits[0].distance <= 1e-5);
 	}
 }

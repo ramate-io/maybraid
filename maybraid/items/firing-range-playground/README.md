@@ -34,7 +34,8 @@ takes a shot. Player death (or switching mode) resets that ceasefire.
 `free-for-all` is a generated-loadout benchmark: one rolled player (starter
 clothing + primary firearm from
 [`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
-NPCs, all of whom list every other combatant as a spotting candidate. Combat
+NPCs spread around the pad and on the upper storey, all of whom list every other
+combatant as a spotting candidate. Combat
 still waits for the player's first shot. Rolled guns keep their catalog
 projectile, cadence, and DPC. `duel` restores the 1v1 bullpup pad fight
 (100 HP / 25 DPC).
