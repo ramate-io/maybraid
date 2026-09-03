@@ -85,8 +85,8 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 			let Some(dev) = SpatialIndex::<DevelopmentCell>::get(spatial_index, extent.id()) else {
 				continue;
 			};
-			if let Some(modulation) = dev.pad_modulation() {
-				pads.push(modulation.clone());
+			if let Some(complex) = dev.pad_complex() {
+				pads.push(complex.clone());
 			}
 		}
 
