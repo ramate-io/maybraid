@@ -1,7 +1,9 @@
 //! After walk/run, aim both arms at the held firearm's hand landmarks.
 
 use bevy::prelude::*;
-use crozon_characters::{AnimBone, AnimMailbox, BoneMap, CharacterMembers, CharacterRoot};
+use crozon_characters::{
+	AnimBone, AnimMailbox, AnimateBones, BoneMap, CharacterMembers, CharacterRoot, SuspendAnimation,
+};
 use crozon_rigs::articulation::{TwoBoneAim, BONE_LENGTH_AXIS};
 use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
@@ -28,7 +30,10 @@ pub fn sync_hands_to_firearm(
 	>,
 	gun_maps: Query<&BoneMap, Without<HoldingArms>>,
 	globals: Query<&GlobalTransform>,
-	mut rigs: Query<(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox), With<HoldingArms>>,
+	mut rigs: Query<
+		(&mut HumanoidV0Rig, &BoneMap, &AnimMailbox),
+		(With<HoldingArms>, With<AnimateBones>, Without<SuspendAnimation>),
+	>,
 	mut bones: Query<(&AnimBone, &mut Transform), (Without<AnimMailbox>, Without<CharacterRoot>)>,
 ) {
 	for (visual, members, child_of) in &visuals {
@@ -50,7 +55,7 @@ pub fn sync_hands_to_firearm(
 			if mailbox.output.is_empty() {
 				continue;
 			}
-			rig.pose = mailbox.output.clone();
+			rig.pose.clone_from(&mailbox.output);
 			pose_firing_torso(&mut rig, settings.firing_torso_yaw);
 			reset_arm_to_rest(&mut rig, map, &bones, Side::Right);
 			reset_arm_to_rest(&mut rig, map, &bones, Side::Left);
@@ -156,7 +161,7 @@ fn pose_arm(
 	stretch: f32,
 	humerus_roll: f32,
 ) {
-	let roll = best_humerus_roll(rig, side, reach, humerus_roll * side.sign());
+	let roll = humerus_roll_for_reach(rig, side, reach, humerus_roll * side.sign());
 	let mut arm = rig.arm_pose(side);
 	arm.humerus = rig.humerus_along_with_roll(side, reach.upper_along, roll);
 	arm.humerus.transform.translation *= stretch;
@@ -176,35 +181,37 @@ fn pose_firing_torso(rig: &mut HumanoidV0Rig, firing_torso_yaw: f32) {
 	rig.pose_spine(spine);
 }
 
-/// Pick the long-axis roll whose elbow flex points the forearm at the target.
-///
-/// This tiny one-dimensional IK solve handles the mirrored forearm hinge axes
-/// without baking another left/right sign rule into the playground.
-fn best_humerus_roll(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim, fallback: f32) -> f32 {
-	const STEPS: usize = 96;
-	let mut best = fallback;
-	let mut best_dot = -1.0;
-	for step in 0..STEPS {
-		let roll = -std::f32::consts::PI + std::f32::consts::TAU * step as f32 / STEPS as f32;
-		let dot = lower_arm_direction(rig, side, reach, roll).dot(reach.lower_along);
-		if dot > best_dot {
-			best_dot = dot;
-			best = roll;
-		}
-	}
-	best
+/// Solve the long-axis roll that rotates the authored forearm hinge into the
+/// elbow plane selected by [`TwoBoneAim`].
+fn humerus_roll_for_reach(
+	rig: &HumanoidV0Rig,
+	side: Side,
+	reach: TwoBoneAim,
+	fallback: f32,
+) -> f32 {
+	let arm = rig.arm_pose(side);
+	let humerus = rig.humerus_along_with_roll(side, reach.upper_along, 0.0);
+	let forearm = rig.articulate_on_rig(arm.forearm, 0.0, reach.flex);
+	let humerus_world = rig.parent_world_rotation(&humerus.name) * humerus.transform.rotation;
+	let zero_roll_lower = forearm.transform.rotation * BONE_LENGTH_AXIS;
+	let desired_lower = humerus_world.inverse() * reach.lower_along;
+	signed_angle_about_axis(zero_roll_lower, desired_lower, BONE_LENGTH_AXIS).unwrap_or(fallback)
 }
 
+#[cfg(test)]
 fn lower_arm_direction(rig: &HumanoidV0Rig, side: Side, reach: TwoBoneAim, roll: f32) -> Vec3 {
-	let mut trial = rig.clone();
-	let mut arm = trial.arm_pose(side);
-	arm.humerus = trial.humerus_along_with_roll(side, reach.upper_along, roll);
-	trial.pose_arm(arm);
-	let mut arm = trial.arm_pose(side);
-	arm.forearm = trial.articulate_on_rig(arm.forearm, 0.0, reach.flex);
-	trial.pose_arm(arm.clone());
-	let parent = trial.parent_world_rotation(&arm.forearm.name);
-	(parent * arm.forearm.transform.rotation * BONE_LENGTH_AXIS).normalize_or(Vec3::Z)
+	let arm = rig.arm_pose(side);
+	let humerus = rig.humerus_along_with_roll(side, reach.upper_along, roll);
+	let forearm = rig.articulate_on_rig(arm.forearm, 0.0, reach.flex);
+	let forearm_parent = rig.parent_world_rotation(&humerus.name) * humerus.transform.rotation;
+	(forearm_parent * forearm.transform.rotation * BONE_LENGTH_AXIS).normalize_or(Vec3::Z)
+}
+
+fn signed_angle_about_axis(from: Vec3, to: Vec3, axis: Vec3) -> Option<f32> {
+	let axis = axis.try_normalize()?;
+	let from = (from - axis * from.dot(axis)).try_normalize()?;
+	let to = (to - axis * to.dot(axis)).try_normalize()?;
+	Some(axis.dot(from.cross(to)).atan2(from.dot(to)))
 }
 
 fn reset_arm_to_rest(
@@ -286,15 +293,36 @@ mod tests {
 	}
 
 	#[test]
-	fn roll_search_points_forearm_toward_target() -> Result<(), &'static str> {
+	fn analytical_roll_points_forearm_toward_target() -> Result<(), &'static str> {
 		let s = settings();
 		let rig = HumanoidV0Rig::imported();
 		let reach = TwoBoneAim::reach(Vec3::new(0.15, 0.0, 0.8), s.right_pole, 0.5, 0.5)
 			.ok_or("missing reach")?;
-		let roll = best_humerus_roll(&rig, Side::Right, reach, -s.humerus_roll);
+		let roll = humerus_roll_for_reach(&rig, Side::Right, reach, -s.humerus_roll);
 		let lower = lower_arm_direction(&rig, Side::Right, reach, roll);
-		assert!(lower.dot(reach.lower_along) > 0.95, "{lower:?} vs {reach:?}");
+		assert!(lower.dot(reach.lower_along) > 0.999, "{lower:?} vs {reach:?}");
 		Ok(())
+	}
+
+	#[test]
+	fn analytical_roll_handles_both_mirrored_arms() -> Result<(), &'static str> {
+		let s = settings();
+		let rig = HumanoidV0Rig::imported();
+		for (side, target, pole, fallback) in [
+			(Side::Left, Vec3::new(0.2, -0.15, 0.55), s.left_pole, s.humerus_roll),
+			(Side::Right, Vec3::new(-0.2, -0.1, 0.7), s.right_pole, -s.humerus_roll),
+		] {
+			let reach = TwoBoneAim::reach(target, pole, 0.5, 0.5).ok_or("missing reach")?;
+			let roll = humerus_roll_for_reach(&rig, side, reach, fallback);
+			let lower = lower_arm_direction(&rig, side, reach, roll);
+			assert!(lower.dot(reach.lower_along) > 0.999, "{side:?}: {lower:?} vs {reach:?}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn signed_roll_uses_fallback_for_a_straight_hinge() {
+		assert!(signed_angle_about_axis(Vec3::Y, Vec3::Y, Vec3::Y).is_none());
 	}
 
 	#[test]

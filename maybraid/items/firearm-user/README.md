@@ -8,6 +8,9 @@ index on the gun. Hold / aim knobs live on [`FirearmUserSettings`](src/lib.rs)
 Pose and arm IK key off the user's [`CharacterRoot`](../../crozon/characters/src/member.rs)
 child, so an [`Npc`](../../player/src/identity.rs) holds the same way as the
 player. Pad fire and the world reticle stay on the followed [`Player`](../../player/src/identity.rs).
+The two-bone reach resolves humerus roll with a closed-form signed angle rather
+than sampling trial poses. Hold posing runs only for actively animated,
+non-suspended body rigs, so culled LODs and ragdolls pay no arm-IK cost.
 
 Writes player handoff slots ([`PlayerUse`](../../player/src/identity.rs),
 [`PlayerCameraAim`](../../player/src/identity.rs),
