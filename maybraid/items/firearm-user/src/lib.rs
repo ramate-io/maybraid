@@ -123,6 +123,7 @@ impl Plugin for FirearmUserPlugin {
 					.after(DamageSystems::Apply)
 					.before(PadRumbleSystems::FanOut),
 			)
-			.add_systems(PostUpdate, fire::apply_weapon_recoil.after(FirearmWeaponSystems::Fire));
+			.add_systems(PostUpdate, fire::queue_weapon_recoil.after(FirearmWeaponSystems::Fire))
+			.add_systems(Update, fire::advance_weapon_recoil.in_set(PlayerCameraSystems::Body));
 	}
 }

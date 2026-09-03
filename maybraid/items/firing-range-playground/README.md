@@ -29,8 +29,8 @@ capsule; the followed player's gun stats sit in the bottom-right card. The
 world reticle flashes when the followed player lands a hit, and `+1` / `+2` /
 `+5` float at the impact point for a body hit, a headshot (upper half of the
 top capsule hemisphere, 1.25× HP, light blue), or a down. Catalog recoil noisily
-kicks the follow camera (and NPC look) in a range scaled by the rolled recoil
-value; lasers do not kick. Connected pads rumble
+kicks the follow camera (and NPC look) along a short lerp to the hashed offset
+(scaled by the rolled recoil value); lasers do not kick. Connected pads rumble
 on the followed player's fire and hit-confirm (faster / harder shots scale the
 pulse; lasers stay a low constant tick). The
 player also gets directional hit ticks around screen center. At 0 health the

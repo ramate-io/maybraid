@@ -10,6 +10,10 @@ use std::f32::consts::FRAC_PI_2;
 use crate::weapon::RecoilPattern;
 use crate::FirearmUser;
 
+/// Seconds to lerp from the current aim to the kicked aim. A new shot retargets
+/// the remaining path over a fresh window.
+pub(crate) const RECOIL_LERP_SECS: f32 = 0.08;
+
 pub(crate) fn apply_fire_intents(
 	mouse: Res<ButtonInput<MouseButton>>,
 	mut intents: MessageReader<CharacterIntent>,
@@ -29,44 +33,83 @@ pub(crate) fn apply_fire_intents(
 	}
 }
 
-pub(crate) fn apply_weapon_recoil(
+pub(crate) fn queue_weapon_recoil(
 	mut fired: MessageReader<WeaponFired>,
 	users: Query<&FirearmUser>,
 	mut patterns: Query<&mut RecoilPattern>,
-	followed: Query<(), With<CameraFollow>>,
-	mut cameras: Query<&mut CameraController, With<Camera3d>>,
-	mut looks: Query<&mut PlayerLook>,
 ) {
 	for event in fired.read() {
 		if event.recoil <= 0.0 {
 			continue;
 		}
-		let kick = next_recoil_kick(event, &users, &mut patterns);
-		if followed.contains(event.shooter) {
-			if let Ok(mut camera) = cameras.single_mut() {
-				camera.yaw += kick.x;
-				camera.pitch = clamp_aim_pitch(camera.pitch + kick.y);
-			}
-		}
-		if let Ok(mut look) = looks.get_mut(event.shooter) {
-			look.yaw += kick.x;
-			look.pitch = clamp_aim_pitch(look.pitch + kick.y);
-		}
+		let Ok(user) = users.get(event.shooter) else {
+			continue;
+		};
+		let Ok(mut pattern) = patterns.get_mut(user.held) else {
+			continue;
+		};
+		pattern.shot = pattern.shot.wrapping_add(1);
+		let kick = recoil_kick(pattern.seed, pattern.shot, event.recoil);
+		pattern.remaining += kick;
+		pattern.time_left = RECOIL_LERP_SECS;
 	}
 }
 
-fn next_recoil_kick(
-	event: &WeaponFired,
-	users: &Query<&FirearmUser>,
-	patterns: &mut Query<&mut RecoilPattern>,
-) -> Vec2 {
-	if let Ok(user) = users.get(event.shooter) {
-		if let Ok(mut pattern) = patterns.get_mut(user.held) {
-			pattern.shot = pattern.shot.wrapping_add(1);
-			return recoil_kick(pattern.seed, pattern.shot, event.recoil);
+pub(crate) fn advance_weapon_recoil(
+	time: Res<Time>,
+	users: Query<(Entity, &FirearmUser)>,
+	mut patterns: Query<&mut RecoilPattern>,
+	followed: Query<(), With<CameraFollow>>,
+	mut cameras: Query<&mut CameraController, With<Camera3d>>,
+	mut looks: Query<&mut PlayerLook>,
+) {
+	let dt = time.delta_secs();
+	for (shooter, user) in &users {
+		let Ok(mut pattern) = patterns.get_mut(user.held) else {
+			continue;
+		};
+		let (step, remaining, time_left) = recoil_travel(pattern.remaining, pattern.time_left, dt);
+		pattern.remaining = remaining;
+		pattern.time_left = time_left;
+		if step.length_squared() < 1e-12 {
+			continue;
+		}
+		apply_recoil_step(shooter, step, &followed, &mut cameras, &mut looks);
+	}
+}
+
+fn apply_recoil_step(
+	shooter: Entity,
+	step: Vec2,
+	followed: &Query<(), With<CameraFollow>>,
+	cameras: &mut Query<&mut CameraController, With<Camera3d>>,
+	looks: &mut Query<&mut PlayerLook>,
+) {
+	if followed.contains(shooter) {
+		if let Ok(mut camera) = cameras.single_mut() {
+			camera.yaw += step.x;
+			camera.pitch = clamp_aim_pitch(camera.pitch + step.y);
 		}
 	}
-	recoil_kick(event.shooter.to_bits(), 1, event.recoil)
+	if let Ok(mut look) = looks.get_mut(shooter) {
+		look.yaw += step.x;
+		look.pitch = clamp_aim_pitch(look.pitch + step.y);
+	}
+}
+
+/// Linear step along `remaining` so the kick lands in `time_left` seconds.
+pub(crate) fn recoil_travel(remaining: Vec2, time_left: f32, dt: f32) -> (Vec2, Vec2, f32) {
+	if remaining.length_squared() < 1e-12 {
+		return (Vec2::ZERO, Vec2::ZERO, 0.0);
+	}
+	if dt <= 0.0 {
+		return (Vec2::ZERO, remaining, time_left.max(0.0));
+	}
+	if time_left <= dt {
+		return (remaining, Vec2::ZERO, 0.0);
+	}
+	let step = remaining * (dt / time_left);
+	(step, remaining - step, time_left - dt)
 }
 
 /// Strength-based pattern: yaw in `[-strength, strength]`, pitch in `[0, strength]`
@@ -100,6 +143,7 @@ fn clamp_aim_pitch(pitch: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::time::TimeUpdateStrategy;
 	use player_camera::CameraPov;
 
 	const STRENGTH: f32 = 0.08;
@@ -139,11 +183,37 @@ mod tests {
 		assert_ne!(a, b);
 	}
 
-	fn recoil_app(seed: u64) -> (App, Entity, Entity) {
+	#[test]
+	fn travel_is_linear_in_time() {
+		let remaining = Vec2::new(0.1, 0.2);
+		let (first, mid, mid_t) =
+			recoil_travel(remaining, RECOIL_LERP_SECS, RECOIL_LERP_SECS * 0.5);
+		assert!((first - remaining * 0.5).length() < 1e-5);
+		assert!((mid_t - RECOIL_LERP_SECS * 0.5).abs() < 1e-5);
+		let (second, leftover, time_left) = recoil_travel(mid, mid_t, RECOIL_LERP_SECS);
+		assert!((first + second - remaining).length() < 1e-5);
+		assert!(leftover.length() < 1e-5);
+		assert_eq!(time_left, 0.0);
+	}
+
+	#[test]
+	fn travel_completes_when_dt_covers_the_window() {
+		let remaining = Vec2::new(-0.04, 0.08);
+		let (step, leftover, time_left) =
+			recoil_travel(remaining, RECOIL_LERP_SECS, RECOIL_LERP_SECS);
+		assert_eq!(step, remaining);
+		assert_eq!(leftover, Vec2::ZERO);
+		assert_eq!(time_left, 0.0);
+	}
+
+	fn recoil_app(seed: u64, dt: f32) -> (App, Entity, Entity) {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
+			.insert_resource(TimeUpdateStrategy::ManualDuration(
+				std::time::Duration::from_secs_f32(dt),
+			))
 			.add_message::<WeaponFired>()
-			.add_systems(Update, apply_weapon_recoil);
+			.add_systems(Update, (queue_weapon_recoil, advance_weapon_recoil).chain());
 		let camera = app
 			.world_mut()
 			.spawn((
@@ -162,6 +232,7 @@ mod tests {
 			.world_mut()
 			.spawn((CameraFollow, FirearmUser::holding(gun), PlayerLook::default()))
 			.id();
+		app.update();
 		(app, shooter, camera)
 	}
 
@@ -172,9 +243,16 @@ mod tests {
 	}
 
 	#[test]
-	fn followed_shot_kicks_camera_and_look() {
-		let (mut app, shooter, camera) = recoil_app(42);
+	fn followed_shot_lerps_camera_and_look() {
+		let (mut app, shooter, camera) = recoil_app(42, RECOIL_LERP_SECS * 0.5);
 		app.world_mut().write_message(WeaponFired { shooter, recoil: STRENGTH });
+		app.update();
+		let expected = recoil_kick(42, 1, STRENGTH) * 0.5;
+		let (yaw, pitch, look) = angles(&app, camera, shooter);
+		assert!((yaw - expected.x).abs() < 1e-5);
+		assert!((pitch - expected.y).abs() < 1e-5);
+		assert!((look.yaw - expected.x).abs() < 1e-5);
+		assert!((look.pitch - expected.y).abs() < 1e-5);
 		app.update();
 		let expected = recoil_kick(42, 1, STRENGTH);
 		let (yaw, pitch, look) = angles(&app, camera, shooter);
@@ -186,7 +264,7 @@ mod tests {
 
 	#[test]
 	fn zero_recoil_does_not_kick() {
-		let (mut app, shooter, camera) = recoil_app(42);
+		let (mut app, shooter, camera) = recoil_app(42, RECOIL_LERP_SECS);
 		app.world_mut().write_message(WeaponFired { shooter, recoil: 0.0 });
 		app.update();
 		let (yaw, pitch, look) = angles(&app, camera, shooter);
@@ -198,7 +276,7 @@ mod tests {
 
 	#[test]
 	fn npc_shot_does_not_kick_the_follow_camera() {
-		let (mut app, player, camera) = recoil_app(42);
+		let (mut app, player, camera) = recoil_app(42, RECOIL_LERP_SECS);
 		let npc_gun = app.world_mut().spawn(RecoilPattern::from_seed(99)).id();
 		let npc = app
 			.world_mut()

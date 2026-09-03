@@ -47,15 +47,18 @@ impl LiveWeapon {
 }
 
 /// Per-weapon strength-based kick sequence. `shot` advances on each recoiling fire.
+/// `remaining` is the untraveled yaw/pitch path; `time_left` is the lerp window.
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct RecoilPattern {
 	pub seed: u64,
 	pub shot: u32,
+	pub remaining: Vec2,
+	pub time_left: f32,
 }
 
 impl RecoilPattern {
 	pub fn from_seed(seed: u64) -> Self {
-		Self { seed, shot: 0 }
+		Self { seed, shot: 0, remaining: Vec2::ZERO, time_left: 0.0 }
 	}
 }
 

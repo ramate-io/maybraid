@@ -19,7 +19,8 @@ rotation when applying that pitch to the firearm's +Z bore.
 [`Weapon`](../firearms/src/projectiles.rs), payload, cadence, and recoil
 strength. Each shot noisily kicks yaw and pitch inside a range scaled by that
 strength; the direction is hashed from the weapon identity and shot index so
-the same gun repeats the same pattern. Followed-player kicks land on
+the same gun repeats the same pattern. Each kick lerps along that path over
+80 ms instead of snapping. Followed-player kicks land on
 [`CameraController`](../../player-camera/src/look.rs) (so they survive the next
 look sync) as well as [`PlayerLook`](../../player/src/identity.rs). NPCs only
 get the look kick. Lasers emit recoil `0` and do not kick. Default spawn is a
