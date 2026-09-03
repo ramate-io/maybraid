@@ -3,12 +3,14 @@
 
 mod apply;
 mod from_projectiles;
+mod lifecycle;
 
 use bevy::prelude::*;
 use projectiles::tick_flights;
 
 pub use apply::apply_hits;
 pub use from_projectiles::contacts_to_hits;
+pub use lifecycle::{mark_downed, tick_queued_despawns, DespawnAfter, Downed};
 
 /// Default DPC used when a bolt is spawned without catalog stats.
 pub const DEFAULT_HIT: f32 = 25.0;
@@ -20,6 +22,7 @@ pub const DEFAULT_MAX_HEALTH: f32 = 100.0;
 pub enum DamageSystems {
 	Collect,
 	Apply,
+	Down,
 }
 
 /// Current / max hit points. Missing means the entity cannot be hurt this way.
@@ -72,7 +75,11 @@ impl HeadshotBand {
 	}
 
 	pub fn scale(self, target: &GlobalTransform, point: Vec3, amount: f32) -> f32 {
-		if self.contains(target, point) { amount * self.multiplier } else { amount }
+		if self.contains(target, point) {
+			amount * self.multiplier
+		} else {
+			amount
+		}
 	}
 }
 
@@ -112,6 +119,7 @@ pub struct DamageApplied {
 pub struct Died {
 	pub entity: Entity,
 	pub source: Option<Entity>,
+	pub point: Vec3,
 }
 
 pub struct DamagePlugin;
@@ -126,6 +134,7 @@ impl Plugin for DamagePlugin {
 				(
 					DamageSystems::Collect.after(tick_flights),
 					DamageSystems::Apply.after(DamageSystems::Collect),
+					DamageSystems::Down.after(DamageSystems::Apply),
 				),
 			)
 			.add_systems(
@@ -134,7 +143,9 @@ impl Plugin for DamagePlugin {
 					contacts_to_hits.in_set(DamageSystems::Collect),
 					apply_hits.in_set(DamageSystems::Apply),
 				),
-			);
+			)
+			.add_systems(PostUpdate, mark_downed.in_set(DamageSystems::Down))
+			.add_systems(Last, tick_queued_despawns);
 	}
 }
 

@@ -5,7 +5,7 @@
 
 use ::projectiles::{
 	spawn_flight, tick_flights, BoltSpec, BulletSpec, ProjectileContact, ProjectileSource,
-	ProjectilesPlugin,
+	ProjectileVisualCache, ProjectilesPlugin,
 };
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::ecs::query::Has;
@@ -263,6 +263,7 @@ pub fn fire_weapons(
 	armed: Res<WeaponsArmed>,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut projectile_visuals: ResMut<ProjectileVisualCache>,
 	mut weapons: ArmedWeaponQuery,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
@@ -313,6 +314,7 @@ pub fn fire_weapons(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
+					&mut projectile_visuals,
 					&mut weapon,
 					global,
 					spec,
@@ -336,6 +338,7 @@ pub fn fire_weapons(
 					&mut commands,
 					&mut meshes,
 					&mut materials,
+					&mut projectile_visuals,
 					&mut weapon,
 					global,
 					spec,
@@ -359,6 +362,7 @@ fn try_fire_ballistic(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
+	projectile_visuals: &mut ProjectileVisualCache,
 	weapon: &mut Weapon,
 	global: &GlobalTransform,
 	spec: impl IntoBallistic,
@@ -381,6 +385,7 @@ fn try_fire_ballistic(
 		commands,
 		meshes,
 		materials,
+		projectile_visuals,
 		muzzle,
 		dir,
 		length,

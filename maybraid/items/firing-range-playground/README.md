@@ -36,7 +36,9 @@ bore inside the short alignment grace to keep firing. Connected pads rumble
 on the followed player's fire and hit-confirm (faster / harder shots scale the
 pulse; lasers stay a low constant tick). The
 player also gets directional hit ticks around screen center. At 0 health the
-combatant and held firearm despawn; player and NPC both return after two seconds.
+gameplay capsule and held firearm retire after the character visual becomes a
+persistent procedural ragdoll; player and NPC both return after two seconds.
+Smoothed FPS and frame time are logged to the terminal every two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until the player
 takes a shot. Player death (or switching mode) resets that ceasefire.
 
@@ -48,7 +50,11 @@ combatant as a spotting candidate. Combat
 still waits for the player's first shot. Rolled guns keep gallery looks
 (material and palette per slot) and sample projectile / cadence from the
 session RNG rather than reseeding from spec identity, so a run is not locked
-to one color or to lasers. `duel` restores the 1v1 bullpup pad fight
+to one color or to lasers. As an application-level performance policy, the
+playground samples spotting and movement decisions at 8 Hz, checks fire control
+at roughly 30 Hz, uses bounded movement-search budgets, and immediately retires
+downed AI. It keeps the reusable intelligence plugins cadence-neutral. `duel`
+restores the 1v1 bullpup pad fight
 (100 HP / 25 DPC). `test-dummy` (`dummy`) spawns the player with that same
 bullpup and a stationary unarmed braidman at the NPC pad pose — no combat AI,
 no return fire — so projectile contacts can be checked in isolation.

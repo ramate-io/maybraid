@@ -18,7 +18,7 @@ use malo_animations::{
 };
 
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
-use crate::markers::{AnimateBones, AnimateEffects};
+use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 use rigs::PoseSkipRotation;
 
@@ -117,12 +117,12 @@ pub fn prepare_anim_mailbox(
 	}
 }
 
-/// Advance clip / blend time for every body mailbox (cheap; runs far from camera too).
+/// Advance clip / blend time for body mailboxes still owned by animation.
 pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	mut hosts: Query<
 		(&AnimRefRoot, &mut AnimMailbox, &CharacterRig, &BoneMap),
-		(With<AnimMailbox>, Without<AnimBone>),
+		(With<AnimMailbox>, Without<AnimBone>, Without<SuspendAnimation>),
 	>,
 	bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {
@@ -166,7 +166,12 @@ pub fn apply_anim_mailbox(
 			Option<&mut QuadrupedV0Rig>,
 			Option<&mut ForelimbedV0Rig>,
 		),
-		(With<AnimMailbox>, Without<AnimBone>, Or<(With<AnimateBones>, With<AnimateEffects>)>),
+		(
+			With<AnimMailbox>,
+			Without<AnimBone>,
+			Without<SuspendAnimation>,
+			Or<(With<AnimateBones>, With<AnimateEffects>)>,
+		),
 	>,
 	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {

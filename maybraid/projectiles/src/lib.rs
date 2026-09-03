@@ -1,6 +1,8 @@
 //! Query-only bolts and bullets: shapecast through Fixed / Animated and emit
 //! each distinct contact along the flight.
 
+use std::collections::HashMap;
+
 use avian3d::prelude::*;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -136,9 +138,51 @@ impl Plugin for ProjectilesPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
-		app.add_message::<ProjectileContact>()
+		app.init_resource::<ProjectileVisualCache>()
+			.add_message::<ProjectileContact>()
 			.add_systems(PostUpdate, tick_flights.after(TransformSystems::Propagate))
 			.add_systems(Last, despawn_expired_flights);
+	}
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+struct ProjectileVisualKey([u32; 6]);
+
+impl ProjectileVisualKey {
+	fn new(length: f32, radius: f32, color: Color) -> Self {
+		let color = color.to_linear();
+		Self([
+			length.to_bits(),
+			radius.to_bits(),
+			color.red.to_bits(),
+			color.green.to_bits(),
+			color.blue.to_bits(),
+			color.alpha.to_bits(),
+		])
+	}
+}
+
+/// Shared render assets for identical ballistic specifications.
+#[derive(Resource, Default)]
+pub struct ProjectileVisualCache(
+	HashMap<ProjectileVisualKey, (Handle<Mesh>, Handle<StandardMaterial>)>,
+);
+
+impl ProjectileVisualCache {
+	fn get_or_insert(
+		&mut self,
+		length: f32,
+		radius: f32,
+		color: Color,
+		meshes: &mut Assets<Mesh>,
+		materials: &mut Assets<StandardMaterial>,
+	) -> (Handle<Mesh>, Handle<StandardMaterial>) {
+		self.0
+			.entry(ProjectileVisualKey::new(length, radius, color))
+			.or_insert_with(|| {
+				(meshes.add(Capsule3d::new(radius, length)), materials.add(glow_material(color)))
+			})
+			.clone()
 	}
 }
 
@@ -264,6 +308,9 @@ fn penetration_spans(
 		return Vec::new();
 	}
 	let starts = spatial.shape_intersections(collider, start, rotation, filter);
+	if starts.is_empty() && forward.is_empty() {
+		return Vec::new();
+	}
 	let ends = spatial.shape_intersections(collider, end, rotation, filter);
 	let backward = contacts_on_step(spatial, collider, end, start, rotation, filter);
 	let mut entities = Vec::new();
@@ -323,6 +370,7 @@ pub fn spawn_flight(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
+	visuals: &mut ProjectileVisualCache,
 	muzzle: Vec3,
 	direction: Vec3,
 	length: f32,
@@ -336,13 +384,14 @@ pub fn spawn_flight(
 ) -> Entity {
 	let transform = capsule_along_y(direction, muzzle, length, radius);
 	let collider = Collider::capsule(radius, length);
+	let (mesh, material) = visuals.get_or_insert(length, radius, color, meshes, materials);
 	commands
 		.spawn((
 			Name::new("projectile"),
 			transform,
 			Visibility::default(),
-			Mesh3d(meshes.add(Capsule3d::new(radius, length))),
-			MeshMaterial3d(materials.add(glow_material(color))),
+			Mesh3d(mesh),
+			MeshMaterial3d(material),
 			RigidBody::Dynamic,
 			MassPropertiesBundle::from_shape(&collider, 1.0),
 			collider,

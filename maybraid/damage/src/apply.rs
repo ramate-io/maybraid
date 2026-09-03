@@ -32,7 +32,7 @@ pub fn apply_hits(
 			point: hit.point,
 		});
 		if target.is_dead() {
-			died.write(Died { entity: hit.target, source: hit.source });
+			died.write(Died { entity: hit.target, source: hit.source, point: hit.point });
 		}
 	}
 }

@@ -2941,6 +2941,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crozon-character-ragdoll"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "crozon-character-motion",
+ "crozon-characters",
+ "crozon-rigs",
+ "damage",
+ "lod-avian",
+ "player",
+ "rigs",
+]
+
+[[package]]
 name = "crozon-character-shaders"
 version = "0.0.1"
 dependencies = [
@@ -3432,6 +3448,7 @@ dependencies = [
  "bevy",
  "clap",
  "crozon-character-items",
+ "crozon-character-ragdoll",
  "crozon-characters",
  "damage",
  "firearm-intelligence",

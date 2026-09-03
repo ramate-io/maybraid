@@ -25,7 +25,9 @@ pub use elevation::apply_terrain_pitch;
 pub use mailbox::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimMailbox,
 };
-pub use markers::{AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendTerrainPitch};
+pub use markers::{
+	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,
+};
 pub use pitch::TerrainPitch;
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
 pub use policy::{motion_policy, MotionPolicy};
