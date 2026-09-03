@@ -21,6 +21,7 @@ const DRAWER_CLEARANCE: f32 = 290.0;
 const POPUP_LIFE: f32 = 0.9;
 const POPUP_RISE: f32 = 48.0;
 const HIT_POINTS: u8 = 1;
+const HEAD_POINTS: u8 = 2;
 const DOWN_POINTS: u8 = 5;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -518,6 +519,7 @@ pub(crate) fn ingest_combat_popups(
 	time: Res<Time>,
 	mut hits: MessageReader<DamageApplied>,
 	players: Query<Entity, With<Player>>,
+	targets: Query<&GlobalTransform>,
 	hud: Query<Entity, With<CombatHudRoot>>,
 	mut commands: Commands,
 ) {
@@ -532,7 +534,12 @@ pub(crate) fn ingest_combat_popups(
 		if hit.source != Some(player) {
 			continue;
 		}
-		spawn_combat_popup(&mut commands, hud, hit.point, now, HIT_POINTS);
+		let points = targets
+			.get(hit.target)
+			.ok()
+			.filter(|transform| is_headshot(transform, hit.point))
+			.map_or(HIT_POINTS, |_| HEAD_POINTS);
+		spawn_combat_popup(&mut commands, hud, hit.point, now, points);
 		if hit.remaining <= 0.0 {
 			spawn_combat_popup(&mut commands, hud, hit.point + Vec3::Y * 0.16, now, DOWN_POINTS);
 		}
@@ -598,9 +605,17 @@ fn popup_label(points: u8) -> String {
 fn popup_style(points: u8) -> (Color, f32) {
 	if points >= DOWN_POINTS {
 		(Color::srgb(1.0, 0.82, 0.28), 28.0)
+	} else if points >= HEAD_POINTS {
+		(Color::srgb(0.42, 0.86, 1.0), 24.0)
 	} else {
 		(Color::srgb(0.92, 0.98, 1.0), 22.0)
 	}
+}
+
+/// Upper spherical cap of the character capsule.
+fn is_headshot(target: &GlobalTransform, point: Vec3) -> bool {
+	let local = target.affine().inverse().transform_point3(point);
+	local.y >= CAPSULE_LENGTH * 0.5
 }
 
 fn popup_alpha(age: f32) -> f32 {
@@ -727,10 +742,22 @@ mod tests {
 	}
 
 	#[test]
-	fn hit_is_one_and_down_is_five() {
+	fn hit_is_one_head_is_two_and_down_is_five() {
 		assert_eq!(HIT_POINTS, 1);
+		assert_eq!(HEAD_POINTS, 2);
 		assert_eq!(DOWN_POINTS, 5);
 		assert_eq!(popup_label(HIT_POINTS), "+1");
+		assert_eq!(popup_label(HEAD_POINTS), "+2");
 		assert_eq!(popup_label(DOWN_POINTS), "+5");
+		let head = popup_style(HEAD_POINTS).0.to_srgba();
+		assert!(head.blue > head.red && head.blue > head.green * 0.9);
+	}
+
+	#[test]
+	fn upper_hemisphere_is_a_headshot() {
+		let target = GlobalTransform::from_translation(Vec3::new(4.0, 1.0, -2.0));
+		assert!(is_headshot(&target, Vec3::new(4.0, 1.0 + CAPSULE_LENGTH * 0.5 + 0.2, -2.0)));
+		assert!(!is_headshot(&target, Vec3::new(4.0, 1.0, -2.0)));
+		assert!(!is_headshot(&target, Vec3::new(4.0, 1.0 - CAPSULE_LENGTH * 0.5, -2.0)));
 	}
 }
