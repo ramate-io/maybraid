@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use richmond_building_components::{building_bounds, spawn_building_components};
 use richmond_development_models::LesHallesDevelopment;
-use richmond_developments::MixedUseLesHallesHost;
+use std::sync::Arc;
 
 #[derive(Component)]
 pub struct DevelopmentHostRoot;
@@ -13,28 +13,21 @@ pub fn spawn_les_halles_hosts(
 	development: &LesHallesDevelopment,
 ) -> usize {
 	let mut n = 0usize;
-	for host in development.development.hosts() {
-		n += match host {
-			MixedUseLesHallesHost::Storey(storey) => {
-				let bounds = building_bounds(&storey);
-				let entities =
-					spawn_building_components(commands, &storey, Transform::IDENTITY, bounds);
-				tag_hosts(commands, entities)
-			}
-			MixedUseLesHallesHost::Stairwell(stairwell) => {
-				let bounds = building_bounds(&stairwell);
-				let entities =
-					spawn_building_components(commands, &stairwell, Transform::IDENTITY, bounds);
-				tag_hosts(commands, entities)
-			}
-			MixedUseLesHallesHost::Roof(roof) => {
-				let bounds = building_bounds(&roof);
-				let entities =
-					spawn_building_components(commands, &roof, Transform::IDENTITY, bounds);
-				tag_hosts(commands, entities)
-			}
-		};
+	let dev = &development.development;
+	for floor in &dev.tower.floors {
+		let storey = Arc::new(floor.clone());
+		let bounds = building_bounds(storey.as_ref());
+		let entities = spawn_building_components(commands, &storey, Transform::IDENTITY, bounds);
+		n += tag_hosts(commands, entities);
 	}
+	for stairwell in &dev.stairwells {
+		let bounds = building_bounds(stairwell);
+		let entities = spawn_building_components(commands, stairwell, Transform::IDENTITY, bounds);
+		n += tag_hosts(commands, entities);
+	}
+	let bounds = building_bounds(&dev.roof);
+	let entities = spawn_building_components(commands, &dev.roof, Transform::IDENTITY, bounds);
+	n += tag_hosts(commands, entities);
 	n
 }
 

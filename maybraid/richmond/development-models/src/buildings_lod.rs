@@ -13,6 +13,7 @@ use richmond_building_components::{
 	PartitionNode, RoofNode, StairNode,
 };
 use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use std::sync::Arc;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
 #[derive(Debug, Clone, Copy, Default)]
@@ -29,10 +30,10 @@ pub struct BuildingsCull;
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-					AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
-					AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
-					AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
-				));
+						AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
+						AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
+						AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+					));
 	}};
 }
 
@@ -92,7 +93,7 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, JointNode);
 		avian_host!(app, FurnitureNode);
 		avian_host!(app, LabelNode);
-		avian_host!(app, ComponentsOnly<MixedUseLesHallesStorey>);
+		avian_host!(app, ComponentsOnly<Arc<MixedUseLesHallesStorey>>);
 		avian_host!(app, ComponentsOnly<ConnectingStairwell>);
 		avian_host!(app, ComponentsOnly<PitchedRoof>);
 	}
