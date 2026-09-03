@@ -31,19 +31,14 @@ pub const MIN_FOOTPRINT: f32 = 36.0;
 pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
 pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
 
-/// Discrete yaw steps \(k \cdot \pi/4\) for \(k \in 0\ldots7\).
-pub const CONFINES_YAW_STEPS: u32 = 8;
-
 /// Plan-square size available inside the pad (cell minus both building insets).
 pub fn available_footprint() -> f32 {
 	(DEVELOPMENT_CELL_SIZE - 2.0 * BUILDING_INSET).max(MIN_FOOTPRINT)
 }
 
-/// Map a unit sample in \([0, 1]\) onto [`CONFINES_YAW_STEPS`] headings.
-pub fn discrete_confines_yaw(unit: f32) -> f32 {
-	let steps = CONFINES_YAW_STEPS;
-	let k = ((unit.clamp(0.0, 1.0) * steps as f32) as u32).min(steps - 1);
-	(k as f32) * TAU / steps as f32
+/// Map a unit sample in \([0, 1]\) onto a heading in \([0, \tau]\).
+pub fn sample_confines_yaw(unit: f32) -> f32 {
+	unit.clamp(0.0, 1.0) * TAU
 }
 
 /// World-XZ AABB of a `width` × `depth` rectangle yawed about \(+Y\).
@@ -221,13 +216,10 @@ mod tests {
 	}
 
 	#[test]
-	fn discrete_yaw_is_k_pi_over_four() {
-		let step = TAU / CONFINES_YAW_STEPS as f32;
-		for i in 0..CONFINES_YAW_STEPS {
-			let yaw = discrete_confines_yaw(i as f32 / CONFINES_YAW_STEPS as f32);
-			assert!((yaw - i as f32 * step).abs() < 1e-5);
-		}
-		assert!((discrete_confines_yaw(1.0) - (CONFINES_YAW_STEPS - 1) as f32 * step).abs() < 1e-5);
+	fn sample_confines_yaw_covers_the_circle() {
+		assert!((sample_confines_yaw(0.0) - 0.0).abs() < 1e-6);
+		assert!((sample_confines_yaw(0.5) - std::f32::consts::PI).abs() < 1e-5);
+		assert!((sample_confines_yaw(1.0) - TAU).abs() < 1e-5);
 	}
 
 	#[test]

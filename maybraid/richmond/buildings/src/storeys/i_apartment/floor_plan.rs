@@ -458,10 +458,10 @@ fn primary_union_aabb2(rects: &[IFloorPlanRect]) -> Option<Aabb2d> {
 	Some(Aabb2d { min, max })
 }
 
-fn label_filling_aabb(style: LabelStyle, text: &str, aabb: &Aabb3d, yaw: f32) -> LabelNode {
+fn label_filling_aabb(style: LabelStyle, text: &str, aabb: &Aabb3d, _yaw: f32) -> LabelNode {
 	let center = Vec3::from(aabb.center());
 	let extents = Vec3::from(aabb.max - aabb.min).max(Vec3::splat(1e-4));
-	LabelNode::rectangle(style, text, center, extents, yaw)
+	LabelNode::rectangle(style, text, center, extents, 0.0)
 }
 
 fn openings_intersecting_xz(openings: &Openings, region: Aabb2d) -> Openings {

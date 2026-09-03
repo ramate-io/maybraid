@@ -6,7 +6,7 @@ use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::SeededHash;
 
 use crate::cell::{
-	available_footprint, cell_selected, discrete_confines_yaw, inscribe_yawed_extents,
+	available_footprint, cell_selected, inscribe_yawed_extents, sample_confines_yaw,
 	MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT,
 };
 use crate::config::DevelopmentConfig;
@@ -68,7 +68,8 @@ impl DevelopmentCell {
 	/// Unrotated confines AABB sitting on the pad (world space).
 	///
 	/// Les Halles authors against this axis-aligned box. [`Self::confines_yaw`] is
-	/// stored on [`Confines::roll`] and applied at host spawn about the cell center.
+	/// recorded on [`Confines::roll`] and applied at host spawn about the cell center.
+	/// Label wireframes fill the AABB with identity local yaw so they inherit that pose.
 	pub fn confines_bounds(&self) -> Option<Aabb3d> {
 		let pad = self.pad.as_ref()?;
 		if self.kind != DevelopmentKind::LesHalles {
@@ -95,7 +96,7 @@ impl DevelopmentCell {
 	pub fn filled(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
 		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
 		let max_foot = available_footprint();
-		let yaw = discrete_confines_yaw(hash.unit(37));
+		let yaw = sample_confines_yaw(hash.unit(37));
 		let extent_x = MIN_FOOTPRINT + (max_foot - MIN_FOOTPRINT) * hash.unit(11);
 		let extent_z = MIN_FOOTPRINT + (max_foot - MIN_FOOTPRINT) * hash.unit(13);
 		let confines_height =
@@ -131,7 +132,7 @@ mod tests {
 	use std::f32::consts::TAU;
 
 	use super::*;
-	use crate::cell::{available_footprint, yawed_plan_aabb_extent, CONFINES_YAW_STEPS};
+	use crate::cell::{available_footprint, yawed_plan_aabb_extent};
 
 	#[test]
 	fn filled_cell_picks_urban_finish() {
@@ -149,17 +150,18 @@ mod tests {
 	}
 
 	#[test]
-	fn filled_cell_samples_discrete_yaw() {
+	fn filled_cell_samples_continuous_yaw() {
 		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
-		let step = TAU / CONFINES_YAW_STEPS as f32;
-		let mut seen = std::collections::BTreeSet::new();
+		let eighth = TAU / 8.0;
+		let mut off_grid = false;
 		for seed in 0..48u32 {
 			let config = DevelopmentConfig { seed, ..DevelopmentConfig::default() };
 			let filled = DevelopmentCell::filled(cell, 12.0, &config);
-			let k = (filled.confines_yaw / step).round();
-			assert!((filled.confines_yaw - k * step).abs() < 1e-4);
-			let k_i = (k as i32).rem_euclid(CONFINES_YAW_STEPS as i32);
-			seen.insert(k_i);
+			assert!(filled.confines_yaw >= 0.0 && filled.confines_yaw <= TAU + 1e-5);
+			let phase = filled.confines_yaw.rem_euclid(eighth);
+			if phase > 0.05 && phase < eighth - 0.05 {
+				off_grid = true;
+			}
 			let pad = available_footprint();
 			let occupied = yawed_plan_aabb_extent(
 				filled.confines_extent_xz.x,
@@ -171,6 +173,6 @@ mod tests {
 			let confines = filled.confines().expect("filled cell has confines");
 			assert!((confines.roll - filled.confines_yaw).abs() < 1e-6);
 		}
-		assert!(seen.len() >= 4, "expected several discrete headings, got {seen:?}");
+		assert!(off_grid, "expected at least one heading off the old π/4 lattice");
 	}
 }

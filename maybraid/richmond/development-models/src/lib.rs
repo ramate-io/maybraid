@@ -24,8 +24,8 @@ pub use buildings_lod::{
 	BuildingsSpotlight, DevelopmentsBuildingsLodPlugin,
 };
 pub use cell::{
-	cell_selected, yaw_about_xz, DevelopmentExtent, BUILDING_INSET, CONFINES_YAW_STEPS,
-	DEFAULT_LIKELIHOOD, DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, PAD_EDGE_EASE,
+	cell_selected, yaw_about_xz, DevelopmentExtent, BUILDING_INSET, DEFAULT_LIKELIHOOD,
+	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, PAD_EDGE_EASE,
 };
 pub use config::DevelopmentConfig;
 pub use development::{DevelopmentCell, DevelopmentKind, DevelopmentPad};
