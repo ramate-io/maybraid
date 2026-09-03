@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 pub const RECOIL_PITCH_PER_UNIT: f32 = 0.02;
 
 /// Catalog recoil for the default 25 DPC bolt (duel / unspec'd spawn).
-const DEFAULT_CATALOG_RECOIL: u8 = 4;
+const DEFAULT_CATALOG_RECOIL: f32 = 1.75;
 
 /// Components stamped on a held [`firearms::FirearmRoot`] at spawn.
 #[derive(Clone, Copy, Debug)]
@@ -32,7 +32,7 @@ impl Default for LiveWeapon {
 			weapon: Weapon::bolt(),
 			payload: HitPayload { amount: DEFAULT_HIT },
 			fire: FireControl::auto(),
-			recoil: WeaponRecoil(f32::from(DEFAULT_CATALOG_RECOIL) * RECOIL_PITCH_PER_UNIT),
+			recoil: WeaponRecoil(DEFAULT_CATALOG_RECOIL * RECOIL_PITCH_PER_UNIT),
 			recoil_seed: weapon_noise_seed(&FirearmSpec::from_mesh(FirearmMesh::Bullpup)),
 		}
 	}
@@ -77,7 +77,7 @@ pub fn live_weapon_from_stats(stats: FirearmStats, outgoing_damage_bonus: i16) -
 		weapon: Weapon::new(load, interval),
 		payload: HitPayload { amount },
 		fire,
-		recoil: WeaponRecoil(f32::from(stats.recoil) * RECOIL_PITCH_PER_UNIT),
+		recoil: WeaponRecoil(stats.recoil * RECOIL_PITCH_PER_UNIT),
 		recoil_seed: weapon_noise_seed(&stats),
 	}
 }
@@ -149,7 +149,7 @@ mod tests {
 			penetration: 600,
 			range: 40,
 			fire: Some(FireMode::FullAuto { rpm: 600 }),
-			recoil: 4,
+			recoil: 4.0,
 			damage: 25,
 			weight: 10,
 		}
@@ -206,7 +206,7 @@ mod tests {
 			penetration: 0,
 			range: 80,
 			fire: None,
-			recoil: 0,
+			recoil: 0.0,
 			damage: 18,
 			weight: 8,
 		};
@@ -227,7 +227,7 @@ mod tests {
 	#[test]
 	fn different_weapons_hash_to_different_seeds() {
 		let mut other = bolt_auto();
-		other.recoil = 7;
+		other.recoil = 7.0;
 		assert_ne!(
 			live_weapon_from_stats(bolt_auto(), 0).recoil_seed,
 			live_weapon_from_stats(other, 0).recoil_seed

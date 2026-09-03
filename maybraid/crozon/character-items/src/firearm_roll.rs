@@ -20,6 +20,9 @@ const DPC_PER_THICK_TENTH: f32 = 0.8;
 const WEIGHT_PER_THICK_TENTH: f32 = 0.35;
 const WEIGHT_PER_LENGTH_TENTH: f32 = 0.25;
 const COLOR_SD_GAIN: f32 = 0.4;
+const RECOIL_MEAN: f32 = 1.75;
+const RECOIL_MEAN_BLUE: f32 = -0.25;
+const RECOIL_MEAN_GRIP: f32 = -0.25;
 
 /// Mean and standard deviation for one continuous axis.
 #[derive(Clone, Copy, Debug)]
@@ -248,7 +251,7 @@ impl FirearmBuff for FirearmGrip {
 			Self::BumpHandle => {
 				priors.bins.auto += 0.3;
 				priors.bins.burst += 0.2;
-				priors.recoil.add_mean(-0.8);
+				priors.recoil.add_mean(RECOIL_MEAN_GRIP);
 				priors.recoil.mul_sd(0.9);
 				priors.rpm.add_mean(20.0);
 			}
@@ -365,6 +368,9 @@ impl FirearmBuff for ItemColor {
 		priors.burst_rpm.mul_sd(channel_sd(g));
 		priors.speed.mul_sd(channel_sd(g));
 		priors.range.mul_sd(channel_sd(b));
+		if matches!(self, Self::Blue) {
+			priors.recoil.add_mean(RECOIL_MEAN_BLUE);
+		}
 	}
 }
 
@@ -442,7 +448,7 @@ fn realize_laser(rng: &mut ItemRng, priors: FirearmPriors) -> FirearmStats {
 		penetration: 0,
 		range: sample_u16(rng, range, 80, 100),
 		fire: None,
-		recoil: 0,
+		recoil: 0.0,
 		damage: sample_u16(rng, dpc, 8, 40),
 		weight: sample_u16(rng, weight, 4, 40),
 	}
@@ -458,7 +464,7 @@ fn realize_ballistic(
 	let speed = Dist::new(280.0, 70.0).apply(priors.speed);
 	let pen = Dist::new(pen_mean, 0.12).apply(priors.pen);
 	let range = Dist::new(400.0, 120.0).apply(priors.range);
-	let mut recoil = Dist::new(3.0, 1.8).apply(priors.recoil);
+	let mut recoil = Dist::new(RECOIL_MEAN, 1.8).apply(priors.recoil);
 	let weight = Dist::new(14.0, 4.0).apply(priors.weight);
 
 	let (fire, dpc_base, recoil_extra) = match kind {
@@ -475,7 +481,7 @@ fn realize_ballistic(
 			(Some(FireMode::Burst { rounds, rpm }), Dist::new(34.0, 5.0).apply(priors.dpc), 0.0)
 		}
 		FireKind::Semi => {
-			recoil = Dist::new(3.5, 1.5).apply(priors.recoil);
+			recoil = Dist::new(RECOIL_MEAN, 1.5).apply(priors.recoil);
 			(Some(FireMode::SemiAuto), Dist::new(40.0, 6.0).apply(priors.dpc), 0.0)
 		}
 		FireKind::Gated => {
@@ -504,7 +510,7 @@ fn realize_ballistic(
 		penetration: (sample_f32(rng, pen, pen_min, pen_max) * 1000.0).round() as u16,
 		range: sample_u16(rng, range, 50, 1000),
 		fire,
-		recoil: sample_f32(rng, recoil, 0.0, 8.0).round() as u8,
+		recoil: sample_f32(rng, recoil, 0.0, 8.0),
 		damage: sample_u16(rng, dpc_base, dpc_min as u16, dpc_max as u16),
 		weight: sample_u16(rng, weight, 4, 40),
 	}
@@ -554,6 +560,28 @@ mod tests {
 	}
 
 	#[test]
+	fn blue_lowers_recoil_mean() {
+		let mut natural = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
+		let mut blue = natural;
+		natural.looks.body.color = ItemColor::Natural;
+		blue.looks.body.color = ItemColor::Blue;
+		let mut natural_priors = FirearmPriors::new();
+		let mut blue_priors = FirearmPriors::new();
+		natural.contribute(&mut natural_priors);
+		blue.contribute(&mut blue_priors);
+		assert!((natural_priors.recoil.add_mean - blue_priors.recoil.add_mean - 0.25).abs() < 1e-4);
+	}
+
+	#[test]
+	fn grip_lowers_recoil_mean() {
+		let mut none = FirearmPriors::new();
+		let mut grip = FirearmPriors::new();
+		FirearmGrip::None.contribute(&mut none);
+		FirearmGrip::BumpHandle.contribute(&mut grip);
+		assert!((none.recoil.add_mean - grip.recoil.add_mean - 0.25).abs() < 1e-4);
+	}
+
+	#[test]
 	fn fizzing_laser_adds_damage_and_drops_pen_on_ballistic() {
 		let mut plain = FirearmSpec::from_mesh(FirearmMesh::Bullpup);
 		plain.bolt = BoltMaterial::PlainLaser;
@@ -577,6 +605,7 @@ mod tests {
 				ProjectileKind::Laser => {
 					assert!(stats.fire.is_none());
 					assert_eq!(stats.penetration, 0);
+					assert_eq!(stats.recoil, 0.0);
 					assert!((60..=120).contains(&stats.speed));
 					assert!((80..=100).contains(&stats.range));
 					assert!((8..=40).contains(&stats.damage));
@@ -586,11 +615,13 @@ mod tests {
 					assert!((600..=1200).contains(&stats.penetration));
 					assert!((120..=500).contains(&stats.speed));
 					assert!((50..=1000).contains(&stats.range));
+					assert!((0.0..=8.0).contains(&stats.recoil));
 				}
 				ProjectileKind::Bullet => {
 					assert!(stats.fire.is_some());
 					assert!((250..=700).contains(&stats.penetration));
 					assert!((50..=1000).contains(&stats.range));
+					assert!((0.0..=8.0).contains(&stats.recoil));
 				}
 			}
 		}
