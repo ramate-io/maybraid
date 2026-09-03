@@ -1,6 +1,8 @@
 use bevy::prelude::*;
+use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmSpotting};
 use firearm_user::FirearmUser;
-use player::{LocomotionCapsule, Npc, Player};
+use movement_intelligence::{MovementIntelligence, ReplanMovement};
+use player::{LocomotionCapsule, MoveWish, Npc, Player};
 
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
 pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
@@ -44,7 +46,15 @@ pub(crate) fn queue_downed_respawns(
 	combatants: DownedCombatants,
 ) {
 	let now = time.elapsed_secs();
-	for (_entity, user, is_player, is_npc) in &combatants {
+	for (entity, user, is_player, is_npc) in &combatants {
+		commands.entity(entity).remove::<(
+			FirearmIntelligence,
+			FirearmMovementIntelligence,
+			FirearmSpotting,
+			MovementIntelligence,
+			ReplanMovement,
+			MoveWish,
+		)>();
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
 			engagement.reset();
@@ -68,5 +78,33 @@ mod tests {
 		let hull = LocomotionCapsule::HUMANOID;
 		assert!((band.min_local_y - hull.headshot_min_local_y()).abs() < 1e-5);
 		assert!((band.multiplier - HEADSHOT_MULTIPLIER).abs() < 1e-5);
+	}
+
+	#[test]
+	fn downing_retires_playground_intelligence_immediately() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<CombatRespawn>()
+			.init_resource::<crate::engagement::NpcEngagement>()
+			.add_systems(Update, queue_downed_respawns);
+		let entity = app
+			.world_mut()
+			.spawn((
+				Npc,
+				::damage::Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+				FirearmSpotting::default(),
+				MovementIntelligence::new(movement_intelligence::MovementObjective::Reach(
+					movement_intelligence::MovementLocation::new(Vec3::ZERO, 0.4),
+				)),
+				MoveWish::default(),
+			))
+			.id();
+
+		app.update();
+
+		assert!(app.world().get::<FirearmSpotting>(entity).is_none());
+		assert!(app.world().get::<MovementIntelligence>(entity).is_none());
+		assert!(app.world().get::<MoveWish>(entity).is_none());
+		assert_eq!(app.world().resource::<CombatRespawn>().npc_at.len(), 1);
 	}
 }

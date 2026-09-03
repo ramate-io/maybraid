@@ -1,5 +1,7 @@
 //! Firing range: pad + Les Halles stack → player + firearm-user plugins.
 
+use std::time::Duration;
+
 mod buildings_lod;
 pub mod commands;
 mod damage;
@@ -18,9 +20,10 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
+use bevy::time::common_conditions::on_timer;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
 use crozon_character_items::ItemRng;
-use crozon_character_ragdoll::CharacterRagdollPlugin;
+use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
 use crozon_characters::CharacterHostsPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
@@ -54,7 +57,12 @@ pub struct FiringRangePlugin;
 impl Plugin for FiringRangePlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(MovementIntelligenceLimits {
-			max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 80.0 },
+			max_budget: CandidateBudget { max_candidates: 12, max_steps: 3, horizon: 32.0 },
+		})
+		.insert_resource(CharacterRagdollSettings {
+			corpse_lifetime_secs: 5.0,
+			max_simulation_secs: 1.0,
+			..default()
 		})
 		.add_plugins(FirearmHostsPlugin);
 		add_firearm_components_host::<spec_kit::RolledFirearm>(app);
@@ -74,6 +82,18 @@ impl Plugin for FiringRangePlugin {
 			)
 			.add_plugins(FirearmIntelligencePlugin)
 			.add_plugins(MovementRealizationPlugin)
+			.configure_sets(
+				Update,
+				FirearmIntelligenceSystems::Spotting.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				Update,
+				FirearmIntelligenceSystems::Movement.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				PostUpdate,
+				FirearmIntelligenceSystems::Fire.run_if(on_timer(Duration::from_millis(33))),
+			)
 			.init_resource::<LesHallesSpawn>()
 			.init_resource::<hud::DamageTicks>()
 			.init_resource::<damage::CombatRespawn>()
@@ -112,7 +132,9 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_npc_character,
 					session::spawn_held_system,
 					respawn_combatants,
-					vantage::assign_combat_targets.before(FirearmIntelligenceSystems::Spotting),
+					vantage::assign_combat_targets
+						.run_if(on_timer(Duration::from_millis(125)))
+						.before(FirearmIntelligenceSystems::Spotting),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

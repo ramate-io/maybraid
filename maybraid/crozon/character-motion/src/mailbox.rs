@@ -117,12 +117,12 @@ pub fn prepare_anim_mailbox(
 	}
 }
 
-/// Advance clip / blend time for every body mailbox (cheap; runs far from camera too).
+/// Advance clip / blend time for body mailboxes still owned by animation.
 pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	mut hosts: Query<
 		(&AnimRefRoot, &mut AnimMailbox, &CharacterRig, &BoneMap),
-		(With<AnimMailbox>, Without<AnimBone>),
+		(With<AnimMailbox>, Without<AnimBone>, Without<SuspendAnimation>),
 	>,
 	bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {

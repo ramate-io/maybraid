@@ -20,6 +20,7 @@ use player::{
 };
 
 const PARTICLE_SKIN: f32 = 0.01;
+const MIN_COLLISION_MOTION_SQUARED: f32 = 1e-6;
 
 const HUMANOID_BONES: &[&str] = &[
 	"root",
@@ -93,11 +94,19 @@ pub struct CharacterRagdollSettings {
 	pub corpse_lifetime_secs: f32,
 	pub handoff_wait_secs: f32,
 	pub solver_iterations: usize,
+	pub simulation_hz: f32,
+	pub max_simulation_secs: f32,
 }
 
 impl Default for CharacterRagdollSettings {
 	fn default() -> Self {
-		Self { corpse_lifetime_secs: 15.0, handoff_wait_secs: 0.5, solver_iterations: 6 }
+		Self {
+			corpse_lifetime_secs: 15.0,
+			handoff_wait_secs: 0.5,
+			solver_iterations: 2,
+			simulation_hz: 30.0,
+			max_simulation_secs: 1.5,
+		}
 	}
 }
 
@@ -122,7 +131,41 @@ struct RagdollParticle {
 	parent: Option<usize>,
 	primary_child: Option<usize>,
 	inverse_mass: f32,
-	radius: f32,
+	collider: Option<RagdollColliderKind>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RagdollColliderKind {
+	Core,
+	Head,
+	Limb,
+}
+
+#[derive(Resource)]
+struct RagdollColliders {
+	core: Collider,
+	head: Collider,
+	limb: Collider,
+}
+
+impl Default for RagdollColliders {
+	fn default() -> Self {
+		Self {
+			core: Collider::sphere(0.13),
+			head: Collider::sphere(0.11),
+			limb: Collider::sphere(0.07),
+		}
+	}
+}
+
+impl RagdollColliders {
+	fn get(&self, kind: RagdollColliderKind) -> &Collider {
+		match kind {
+			RagdollColliderKind::Core => &self.core,
+			RagdollColliderKind::Head => &self.head,
+			RagdollColliderKind::Limb => &self.limb,
+		}
+	}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -143,7 +186,9 @@ pub struct RagdollState {
 	corpse_initial_translation: Vec3,
 	age: f32,
 	still_for: f32,
+	step_accumulator: f32,
 	sleeping: bool,
+	pose_dirty: bool,
 }
 
 /// Body-side acknowledgement that its retained visual entered corpse ownership.
@@ -186,6 +231,7 @@ impl Plugin for CharacterRagdollPlugin {
 			app.add_plugins(damage::DamagePlugin);
 		}
 		app.init_resource::<CharacterRagdollSettings>()
+			.init_resource::<RagdollColliders>()
 			.add_message::<RagdollImpulse>()
 			.configure_sets(
 				PostUpdate,
@@ -198,9 +244,11 @@ impl Plugin for CharacterRagdollPlugin {
 			)
 			.configure_sets(
 				Update,
-				CharacterRagdollSystems::Initialize.before(CharacterMotionSystems::Anim),
+				(
+					CharacterRagdollSystems::Initialize.before(CharacterRagdollSystems::Simulate),
+					CharacterRagdollSystems::Simulate.before(CharacterMotionSystems::Anim),
+				),
 			)
-			.configure_sets(FixedUpdate, CharacterRagdollSystems::Simulate)
 			.add_systems(
 				PostUpdate,
 				(begin_corpse_handoffs, finish_corpse_handoffs)
@@ -208,7 +256,7 @@ impl Plugin for CharacterRagdollPlugin {
 					.in_set(CharacterRagdollSystems::Handoff),
 			)
 			.add_systems(Update, initialize_ragdolls.in_set(CharacterRagdollSystems::Initialize))
-			.add_systems(FixedUpdate, simulate_ragdolls.in_set(CharacterRagdollSystems::Simulate))
+			.add_systems(Update, simulate_ragdolls.in_set(CharacterRagdollSystems::Simulate))
 			.add_systems(PostUpdate, marshal_ragdolls.in_set(CharacterRagdollSystems::Marshal));
 	}
 }
@@ -372,7 +420,7 @@ fn build_state(
 			parent,
 			primary_child: None,
 			inverse_mass: inverse_mass(name),
-			radius: particle_radius(name),
+			collider: particle_collider(name),
 		});
 	}
 
@@ -400,7 +448,9 @@ fn build_state(
 		corpse_initial_translation,
 		age: 0.0,
 		still_for: 0.0,
+		step_accumulator: 0.0,
 		sleeping: false,
+		pose_dirty: true,
 	})
 }
 
@@ -468,17 +518,16 @@ fn inverse_mass(name: &str) -> f32 {
 	}
 }
 
-fn particle_radius(name: &str) -> f32 {
-	if name.contains("root")
-		|| name.contains("back")
-		|| name.contains("spine")
-		|| name.contains("lumbar")
-	{
-		0.13
-	} else if name.contains("neck") || name.contains("head") {
-		0.11
-	} else {
-		0.07
+fn particle_collider(name: &str) -> Option<RagdollColliderKind> {
+	match name {
+		"root" | "back_ridge" | "upper_mid_spine" | "upper_spine" | "upper_back" => {
+			Some(RagdollColliderKind::Core)
+		}
+		"upper_neck" | "head_socket" => Some(RagdollColliderKind::Head),
+		"forearm.L" | "forearm.R" | "lower_arm.L" | "lower_arm.R" | "shin.L" | "shin.R"
+		| "anterior_shin.L" | "anterior_shin.R" | "posterior_shin.L" | "posterior_shin.R"
+		| "tail_socket" => Some(RagdollColliderKind::Limb),
+		_ => None,
 	}
 }
 
@@ -493,23 +542,30 @@ fn simulate_ragdolls(
 	spatial: SpatialQuery,
 	time: Res<Time>,
 	settings: Res<CharacterRagdollSettings>,
+	colliders: Res<RagdollColliders>,
 	mut impulses: MessageReader<RagdollImpulse>,
 	mut ragdolls: Query<&mut RagdollState>,
 ) {
 	let pending: Vec<RagdollImpulse> = impulses.read().copied().collect();
-	let dt = time.delta_secs().min(0.05);
-	if dt <= 0.0 {
+	let step = settings.simulation_hz.max(1.0).recip();
+	let frame_dt = time.delta_secs().min(step);
+	if frame_dt <= 0.0 {
 		return;
 	}
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
 	for mut ragdoll in &mut ragdolls {
 		let corpse = ragdoll.corpse;
 		for impulse in pending.iter().filter(|impulse| impulse.corpse == corpse) {
-			apply_impulse(&mut ragdoll, *impulse, dt);
+			apply_impulse(&mut ragdoll, *impulse, step);
 		}
 		if ragdoll.sleeping {
 			continue;
 		}
+		ragdoll.step_accumulator += frame_dt;
+		if ragdoll.step_accumulator + f32::EPSILON < step {
+			continue;
+		}
+		ragdoll.step_accumulator = 0.0;
 		let gravity_scale = match ragdoll.skeleton {
 			RigSkeletonKind::Forelimbed => 0.35,
 			_ => 1.0,
@@ -521,7 +577,7 @@ fn simulate_ragdolls(
 		for particle in &mut ragdoll.particles {
 			let velocity = (particle.position - particle.previous_position) * damping;
 			particle.previous_position = particle.position;
-			particle.position += velocity + Vec3::NEG_Y * 9.81 * gravity_scale * dt * dt;
+			particle.position += velocity + Vec3::NEG_Y * 9.81 * gravity_scale * step * step;
 		}
 		for _ in 0..settings.solver_iterations {
 			for index in 0..ragdoll.constraints.len() {
@@ -530,20 +586,25 @@ fn simulate_ragdolls(
 			}
 		}
 		for particle in &mut ragdoll.particles {
-			collide_particle(&spatial, &filter, particle);
+			let Some(collider) = particle.collider.map(|kind| colliders.get(kind)) else {
+				continue;
+			};
+			collide_particle(&spatial, &filter, collider, particle);
 		}
-		ragdoll.age += dt;
+		ragdoll.age += step;
+		ragdoll.pose_dirty = true;
 		let max_speed = ragdoll
 			.particles
 			.iter()
-			.map(|particle| particle.position.distance(particle.previous_position) / dt)
+			.map(|particle| particle.position.distance(particle.previous_position) / step)
 			.fold(0.0, f32::max);
 		if max_speed < 0.04 {
-			ragdoll.still_for += dt;
+			ragdoll.still_for += step;
 		} else {
 			ragdoll.still_for = 0.0;
 		}
-		ragdoll.sleeping = ragdoll.age > 0.5 && ragdoll.still_for > 0.75;
+		ragdoll.sleeping = ragdoll.age >= settings.max_simulation_secs.max(step)
+			|| (ragdoll.age > 0.35 && ragdoll.still_for > 0.35);
 	}
 }
 
@@ -554,6 +615,7 @@ fn apply_impulse(state: &mut RagdollState, impulse: RagdollImpulse, dt: f32) {
 	}
 	state.sleeping = false;
 	state.still_for = 0.0;
+	state.pose_dirty = true;
 }
 
 fn solve_distance(particles: &mut [RagdollParticle], constraint: DistanceConstraint) {
@@ -586,16 +648,19 @@ fn two_mut<T>(values: &mut [T], a: usize, b: usize) -> (&mut T, &mut T) {
 fn collide_particle(
 	spatial: &SpatialQuery,
 	filter: &SpatialQueryFilter,
+	shape: &Collider,
 	particle: &mut RagdollParticle,
 ) {
 	let delta = particle.position - particle.previous_position;
+	if delta.length_squared() < MIN_COLLISION_MOTION_SQUARED {
+		return;
+	}
 	let Ok(direction) = Dir3::new(delta) else {
 		return;
 	};
-	let shape = Collider::sphere(particle.radius);
 	let config = ShapeCastConfig::from_max_distance(delta.length());
 	let Some(hit) = spatial.cast_shape(
-		&shape,
+		shape,
 		particle.previous_position,
 		Quat::IDENTITY,
 		direction,
@@ -610,11 +675,14 @@ fn collide_particle(
 }
 
 fn marshal_ragdolls(
-	hosts: Query<(&crozon_character_motion::BoneMap, &RagdollState)>,
+	mut hosts: Query<(&crozon_character_motion::BoneMap, &mut RagdollState)>,
 	mut transforms: Query<&mut Transform>,
 ) {
-	for (bone_map, state) in &hosts {
-		let rotations = desired_world_rotations(state);
+	for (bone_map, mut state) in &mut hosts {
+		if !state.pose_dirty {
+			continue;
+		}
+		let rotations = desired_world_rotations(&state);
 		let corpse_displacement = particle_center(&state.particles) - state.initial_center;
 		if let Ok(mut corpse) = transforms.get_mut(state.corpse) {
 			corpse.translation = state.corpse_initial_translation + corpse_displacement;
@@ -640,6 +708,7 @@ fn marshal_ragdolls(
 			transform.rotation = parent_rotation.inverse() * rotations[index];
 			transform.scale = particle.rest_local.scale;
 		}
+		state.pose_dirty = false;
 	}
 }
 
@@ -701,7 +770,7 @@ mod tests {
 			parent: None,
 			primary_child: None,
 			inverse_mass: 1.0,
-			radius: 0.1,
+			collider: None,
 		}
 	}
 
@@ -717,6 +786,19 @@ mod tests {
 		assert!(!profile_bones(RigSkeletonKind::Humanoid).is_empty());
 		assert!(!profile_bones(RigSkeletonKind::Quadruped).is_empty());
 		assert!(!profile_bones(RigSkeletonKind::Forelimbed).is_empty());
+	}
+
+	#[test]
+	fn profiles_use_only_a_small_collision_proxy_set() {
+		for skeleton in
+			[RigSkeletonKind::Humanoid, RigSkeletonKind::Quadruped, RigSkeletonKind::Forelimbed]
+		{
+			let colliders = profile_bones(skeleton)
+				.iter()
+				.filter(|name| particle_collider(name).is_some())
+				.count();
+			assert!((5..=8).contains(&colliders), "{skeleton:?} has {colliders} colliders");
+		}
 	}
 
 	#[test]

@@ -13,7 +13,9 @@ use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
 use firearms::FirearmConcept;
-use movement_intelligence::{MovementIntelligence, MovementLocation, MovementObjective};
+use movement_intelligence::{
+	MovementIntelligence, MovementLocation, MovementObjective, VantageStandoffs,
+};
 use player::{
 	spawn_npc_visual, spawn_npc_with_hidden_capsule, spawn_player_visual,
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerVisual,
@@ -232,12 +234,15 @@ pub(crate) fn install_npc_combat(
 		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, hull.radius)));
 	movement.ability.agent_radius = hull.radius;
 	movement.ability.feet_below_origin = hull.half_height();
-	movement.ability.candidate_budget.horizon = 80.0;
+	movement.ability.candidate_budget.max_candidates = 8;
+	movement.ability.candidate_budget.horizon = 30.0;
+	movement.ability.vantage_standoffs = VantageStandoffs::from_radii(&[6.0, 10.0]);
+	movement.ability.vantage_azimuths = 4;
 	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
 	combat.settings.accuracy = 0.88;
 	combat.settings.motion_tracking = 0.55;
 	combat.settings.counter_recoil = 0.75;
-	combat.settings.vision = 9;
+	combat.settings.vision = 4;
 	combat.settings.trigger_happiness = 0.9;
 	let mut combat_movement = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
 	combat_movement.settings.range = (8.0, 1.0);
