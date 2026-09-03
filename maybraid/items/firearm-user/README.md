@@ -17,6 +17,7 @@ rotation when applying that pitch to the firearm's +Z bore.
 [`live_weapon_from_stats`](src/weapon.rs) bakes catalog
 [`FirearmStats`](../../crozon/character-items/src/stats.rs) into the held
 [`Weapon`](../firearms/src/projectiles.rs), payload, cadence, and look recoil.
-Default spawn is a 25 DPC bolt.
+Default spawn is a 25 DPC bolt. The world reticle flashes when the followed
+player's shot applies damage.
 
 Does not own the capsule, follow camera, or projectile flight.

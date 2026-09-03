@@ -107,6 +107,7 @@ impl Plugin for FiringRangePlugin {
 				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				hud::ensure_world_health_bars,
 				hud::sync_health_hud,
+				hud::sync_gun_stats,
 				hud::sync_world_health_bars,
 				hud::update_damage_indicators,
 			),

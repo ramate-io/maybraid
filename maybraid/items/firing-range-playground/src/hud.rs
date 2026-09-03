@@ -1,10 +1,11 @@
 //! Always-on combat HUD: health bars, world-space counters, directional hit ticks.
 
 use bevy::prelude::*;
+use game_commands::GameCommandDrawerVisible;
 use player::{Npc, Player, CAPSULE_LENGTH, CAPSULE_RADIUS};
 
 use crate::damage::{DamageApplied, Health};
-use crate::session::RangeSession;
+use crate::session::{CombatantKit, RangeSession};
 
 const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
@@ -15,6 +16,8 @@ const INDICATOR_RADIUS: f32 = 148.0;
 const INDICATOR_LIFE: f32 = 1.4;
 const INDICATOR_GROUP: f32 = 0.5;
 const HEAD_LIFT: f32 = CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS + 0.38;
+const GUN_CARD_WIDTH: f32 = 248.0;
+const DRAWER_CLEARANCE: f32 = 290.0;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CombatantHud {
@@ -30,6 +33,12 @@ pub(crate) struct HudBarLabel;
 
 #[derive(Component)]
 pub(crate) struct CombatHudRoot;
+
+#[derive(Component)]
+pub(crate) struct GunStatsPanel;
+
+#[derive(Component)]
+pub(crate) struct GunStatsText;
 
 #[derive(Component)]
 pub(crate) struct WorldHudFill;
@@ -120,6 +129,35 @@ pub(crate) fn spawn_combat_hud(mut commands: Commands) {
 					));
 				}
 			});
+			spawn_gun_stats_card(root);
+		});
+}
+
+fn spawn_gun_stats_card(parent: &mut ChildSpawnerCommands) {
+	parent
+		.spawn((
+			Name::new("gun-stats"),
+			GunStatsPanel,
+			Node {
+				position_type: PositionType::Absolute,
+				right: Val::Px(16.0),
+				bottom: Val::Px(16.0),
+				min_width: Val::Px(GUN_CARD_WIDTH),
+				flex_direction: FlexDirection::Column,
+				padding: UiRect::all(Val::Px(10.0)),
+				border_radius: BorderRadius::all(Val::Px(4.0)),
+				..default()
+			},
+			BackgroundColor(Color::srgba(0.04, 0.05, 0.07, 0.72)),
+			Pickable::IGNORE,
+		))
+		.with_children(|card| {
+			card.spawn((
+				GunStatsText,
+				Text::new(""),
+				TextFont { font_size: FontSize::Px(13.0), ..default() },
+				TextColor(Color::srgb(0.92, 0.95, 0.98)),
+			));
 		});
 }
 
@@ -277,6 +315,73 @@ pub(crate) fn sync_health_hud(
 			CombatantHud::Npc => label_text(CombatantHud::Npc, npc),
 		};
 	}
+}
+
+pub(crate) fn sync_gun_stats(
+	drawer: Res<GameCommandDrawerVisible>,
+	players: Query<Option<&CombatantKit>, With<Player>>,
+	mut panels: Query<(&mut Node, &mut Visibility), With<GunStatsPanel>>,
+	mut labels: Query<&mut Text, With<GunStatsText>>,
+) {
+	let Ok((mut node, mut visibility)) = panels.single_mut() else {
+		return;
+	};
+	let Ok(mut text) = labels.single_mut() else {
+		return;
+	};
+	node.bottom = if drawer.0 { Val::Px(DRAWER_CLEARANCE) } else { Val::Px(16.0) };
+	let Ok(kit) = players.single() else {
+		*visibility = Visibility::Hidden;
+		return;
+	};
+	*visibility = Visibility::Visible;
+	text.0 = gun_card_text(kit);
+}
+
+fn gun_card_text(kit: Option<&CombatantKit>) -> String {
+	match kit {
+		Some(kit) => format_gun_card(
+			kit.firearm.body.label(),
+			&kit.stats.catalog_detail(),
+			&live_stat_rows(kit),
+		),
+		None => format_gun_card("bullpup", "Bolt · 25 DPC", &duel_stat_rows()),
+	}
+}
+
+fn live_stat_rows(kit: &CombatantKit) -> Vec<(String, String)> {
+	let live = kit.live.payload.amount;
+	let catalog = f32::from(kit.stats.damage);
+	kit.stats
+		.stat_rows()
+		.into_iter()
+		.map(|(label, value)| {
+			if label == "DPC" && (live - catalog).abs() >= 0.5 {
+				(label, format!("{live:.0} ({catalog:.0})"))
+			} else {
+				(label, value)
+			}
+		})
+		.collect()
+}
+
+fn duel_stat_rows() -> Vec<(String, String)> {
+	vec![
+		(String::from("Projectile"), String::from("Bolt")),
+		(String::from("Speed"), String::from("180/s")),
+		(String::from("Penetration"), String::from("0.85")),
+		(String::from("Range"), String::from("36 m")),
+		(String::from("Fire"), String::from("Auto")),
+		(String::from("DPC"), String::from("25")),
+	]
+}
+
+fn format_gun_card(title: &str, detail: &str, rows: &[(String, String)]) -> String {
+	let mut lines = vec![title.to_ascii_uppercase(), String::from(detail), String::new()];
+	for (label, value) in rows {
+		lines.push(format!("{label:<13}{value}"));
+	}
+	lines.join("\n")
 }
 
 type WorldBarFills<'w, 's> = Query<
@@ -506,5 +611,14 @@ mod tests {
 		let offset = indicator_offset(yaw, 100.0);
 		assert!(offset.x > 90.0, "{offset:?}");
 		assert!(offset.y.abs() < 8.0, "{offset:?}");
+	}
+
+	#[test]
+	fn duel_card_lists_the_default_bolt() {
+		let text = gun_card_text(None);
+		assert!(text.starts_with("BULLPUP"), "{text}");
+		assert!(text.contains("Bolt · 25 DPC"), "{text}");
+		assert!(text.contains("180/s"), "{text}");
+		assert!(text.contains("36 m"), "{text}");
 	}
 }

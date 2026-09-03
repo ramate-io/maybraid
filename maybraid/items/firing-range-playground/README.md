@@ -23,7 +23,9 @@ Each character starts with 100 health and takes 25 damage per bolt contact
 in `duel`. `free-for-all` bakes the rolled firearm's DPC, speed, range,
 penetration, and cadence (plus clothing HP / outgoing damage) into the live
 weapon. Health is shown on a persistent top HUD and as a bar above each
-capsule; the player also gets directional hit ticks around screen center. At 0 health the
+capsule; the followed player's gun stats sit in the bottom-right card. The
+world reticle flashes when the followed player lands a hit. The
+player also gets directional hit ticks around screen center. At 0 health the
 combatant and held firearm despawn; player and NPC both return after two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until the player
 takes a shot. Player death (or switching mode) resets that ceasefire.

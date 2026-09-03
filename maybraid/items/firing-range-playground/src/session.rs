@@ -1,7 +1,7 @@
 //! Duel vs free-for-all session. FFA rebuilds the field from generated loadouts.
 
 use bevy::prelude::*;
-use crozon_character_items::ItemRng;
+use crozon_character_items::{FirearmStats, ItemRng};
 use crozon_characters::{species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot};
 use firearm_intelligence::{
 	FirearmIntelligence, FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
@@ -75,6 +75,7 @@ pub(crate) struct CombatantKit {
 	pub appearance: BraidmanConfig,
 	pub firearm: firearms::FirearmKit,
 	pub live: LiveWeapon,
+	pub stats: FirearmStats,
 }
 
 #[derive(Resource)]
@@ -219,6 +220,7 @@ fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
 		appearance: loadout.appearance.clone(),
 		firearm: loadout.kit,
 		live: live_weapon_from_stats(loadout.stats, loadout.sheet.damage),
+		stats: loadout.stats,
 	}
 }
 

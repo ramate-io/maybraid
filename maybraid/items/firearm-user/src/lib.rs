@@ -9,6 +9,7 @@ mod weapon;
 
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
+use damage::DamageSystems;
 use firearms::FirearmWeaponSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
@@ -90,6 +91,9 @@ pub struct FirearmUserPlugin;
 
 impl Plugin for FirearmUserPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
 		app.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
 			.add_systems(
 				Update,
@@ -102,7 +106,13 @@ impl Plugin for FirearmUserPlugin {
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
 			)
-			.add_systems(PostUpdate, reticle::update_reticle.after(TransformSystems::Propagate))
+			.add_systems(
+				PostUpdate,
+				(reticle::ingest_hit_markers, reticle::update_reticle)
+					.chain()
+					.after(TransformSystems::Propagate)
+					.after(DamageSystems::Apply),
+			)
 			.add_systems(PostUpdate, fire::apply_weapon_recoil.after(FirearmWeaponSystems::Fire));
 	}
 }

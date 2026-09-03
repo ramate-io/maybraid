@@ -168,6 +168,27 @@ fn capsule_along_y(direction: Vec3, muzzle: Vec3, length: f32, radius: f32) -> T
 	Transform { translation: center, rotation, scale: Vec3::ONE }
 }
 
+/// Longest shapecast segment. Faster bolts split `last → pos` so thin colliders
+/// are not skipped in one huge `cast_shape`.
+pub const MAX_SWEEP_METERS: f32 = 2.0;
+const MAX_SWEEP_STEPS: u32 = 24;
+
+fn visit_sweep_segments(start: Vec3, end: Vec3, max_len: f32, mut visit: impl FnMut(Vec3, Vec3)) {
+	let delta = end - start;
+	let total = delta.length();
+	if total <= 1e-5 {
+		return;
+	}
+	let dir = delta / total;
+	let steps = ((total / max_len).ceil() as u32).clamp(1, MAX_SWEEP_STEPS);
+	let step = total / steps as f32;
+	for index in 0..steps {
+		let a = start + dir * (step * index as f32);
+		let b = start + dir * (step * (index + 1) as f32);
+		visit(a, b);
+	}
+}
+
 fn penetration_filter(projectile: Entity, source: Option<Entity>) -> SpatialQueryFilter {
 	let excluded = [Some(projectile), source].into_iter().flatten();
 	SpatialQueryFilter::from_mask([
@@ -328,13 +349,25 @@ pub fn tick_flights(
 		let ds = pos.distance(flight.last);
 		flight.age += dt;
 		flight.path += ds;
-		if let Some((target, point, normal)) =
-			first_contact(&spatial, collider, flight.last, pos, rotation, &filter)
-		{
-			contacts.write(ProjectileContact { projectile: entity, source, target, point, normal });
-		}
-		flight.through +=
-			through_on_step(&spatial, collider, flight.last, pos, rotation, &filter, &costs);
+		let mut contacted = false;
+		visit_sweep_segments(flight.last, pos, MAX_SWEEP_METERS, |start, end| {
+			if !contacted {
+				if let Some((target, point, normal)) =
+					first_contact(&spatial, collider, start, end, rotation, &filter)
+				{
+					contacts.write(ProjectileContact {
+						projectile: entity,
+						source,
+						target,
+						point,
+						normal,
+					});
+					contacted = true;
+				}
+			}
+			flight.through +=
+				through_on_step(&spatial, collider, start, end, rotation, &filter, &costs);
+		});
 		flight.last = pos;
 		if flight.exhausted() {
 			commands.entity(entity).try_despawn();
@@ -372,5 +405,26 @@ mod tests {
 		flight.through = 0.0;
 		flight.age = 2.1;
 		assert!(flight.exhausted());
+	}
+
+	#[test]
+	fn long_step_splits_into_two_meter_segments() {
+		let start = Vec3::ZERO;
+		let end = Vec3::X * 8.0;
+		let mut segments = Vec::new();
+		visit_sweep_segments(start, end, MAX_SWEEP_METERS, |a, b| segments.push((a, b)));
+		assert_eq!(segments.len(), 4);
+		assert!((segments[0].0 - start).length() < 1e-5);
+		assert!((segments[3].1 - end).length() < 1e-4);
+		for (a, b) in &segments {
+			assert!((a.distance(*b) - 2.0).abs() < 1e-4, "{a} {b}");
+		}
+	}
+
+	#[test]
+	fn short_step_stays_one_segment() {
+		let mut n = 0;
+		visit_sweep_segments(Vec3::ZERO, Vec3::Z * 0.5, MAX_SWEEP_METERS, |_, _| n += 1);
+		assert_eq!(n, 1);
 	}
 }
