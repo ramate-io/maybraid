@@ -19,6 +19,14 @@ pub trait ElevationModulation: Send + Sync + Debug {
 		z: f32,
 		index: usize,
 	) -> f32;
+
+	/// Deterministic CpuShot identity fragment.
+	///
+	/// Override when [`Debug`] includes `HashMap` buckets or other unstable
+	/// order — those would miss the disk mesh cache every process.
+	fn mesh_identity(&self) -> String {
+		format!("{self:?}")
+	}
 }
 
 /// SDF representation of noise-based terrain:
@@ -33,10 +41,12 @@ pub struct TerrainSdf {
 
 impl Debug for TerrainSdf {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let modulations: Vec<String> =
+			self.elevation_modulations.iter().map(|m| m.mesh_identity()).collect();
 		f.debug_struct("TerrainSdf")
 			.field("noise_params", self.noise.params())
 			.field("height_scale", &self.height_scale)
-			.field("modulation_count", &self.elevation_modulations.len())
+			.field("modulations", &modulations)
 			.field("bounds", &self.bounds)
 			.finish()
 	}

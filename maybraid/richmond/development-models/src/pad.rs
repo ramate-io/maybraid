@@ -70,19 +70,12 @@ pub fn cell_center_xz(cell: Aabb3d) -> Vec2 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::cell::{BUILDING_INSET, PAD_BERM, PAD_EDGE_EASE};
-	use procedural_common::Bounds2;
+	use crate::cell::{yaw_about_xz, BUILDING_INSET, PAD_BERM, PAD_EDGE_EASE};
+	use bevy::math::Vec3;
 	use std::f32::consts::FRAC_PI_4;
 
 	fn skirt(half: Vec2, yaw: f32, height: f32) -> PadComplex {
-		PadComplex::building_skirt(
-			Bounds2::from_xz(-80.0, -80.0, 80.0, 80.0),
-			Vec2::ZERO,
-			half,
-			yaw,
-			height,
-			PadParams::default(),
-		)
+		PadComplex::building_skirt(Vec2::ZERO, half, yaw, height, PadParams::default())
 	}
 
 	#[test]
@@ -123,10 +116,10 @@ mod tests {
 		let pad = skirt(half, FRAC_PI_4, 30.0);
 		let (s, c) = FRAC_PI_4.sin_cos();
 		let local_x = 10.0;
-		let p = Vec2::new(c * local_x, s * local_x);
+		let p = Vec2::new(c * local_x, -s * local_x);
 		assert_eq!(pad.classification_at(p.x, p.y), Some(PadStage::Flatten));
 		assert!((pad.modify_elevation(1.0, p.x, p.y) - 30.0).abs() < 1e-3);
-		let away = Vec2::new(-s * 40.0, c * 40.0);
+		let away = Vec2::new(s * 40.0, c * 40.0);
 		let h = pad.modify_elevation(7.0, away.x, away.y);
 		assert!((h - 7.0).abs() < 1e-3, "lateral far field {h}");
 	}
@@ -147,8 +140,43 @@ mod tests {
 			22.0,
 			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
 		);
-		let complex =
-			PadComplex::from_nodes(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), vec![outer, inner]);
+		let complex = PadComplex::from_nodes(vec![outer, inner]);
 		assert!((complex.modify_elevation(0.0, 0.0, 0.0) - 22.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn yawed_flatten_is_not_the_unrotated_aabb() {
+		let half = Vec2::new(18.0, 8.0);
+		let pad = PadComplex::building_skirt(
+			Vec2::ZERO,
+			half,
+			FRAC_PI_4,
+			30.0,
+			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
+		);
+		// Inside the unrotated 36×16 AABB, but outside the yawed 36×16 OBB.
+		assert_ne!(pad.classification_at(half.x - 0.5, 0.0), Some(PadStage::Flatten));
+		let span = pad.bounds.max - pad.bounds.min;
+		assert!(span.x < 50.0 && span.y < 50.0, "pad support must not be a cell terrace: {span:?}");
+	}
+
+	#[test]
+	fn pad_contains_spawned_building_corner() {
+		let center = Vec2::new(250.0, -100.0);
+		let half = Vec2::new(18.0, 8.0);
+		let yaw = FRAC_PI_4;
+		let pad = PadComplex::building_skirt(
+			center,
+			half,
+			yaw,
+			12.0,
+			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
+		);
+		let corner = yaw_about_xz(center, yaw).transform_point(Vec3::new(
+			center.x + half.x - 0.5,
+			0.0,
+			center.y + half.y - 0.5,
+		));
+		assert_eq!(pad.classification_at(corner.x, corner.z), Some(PadStage::Flatten));
 	}
 }

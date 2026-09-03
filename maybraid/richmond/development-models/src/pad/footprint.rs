@@ -16,7 +16,7 @@ pub enum PadFootprint {
 pub struct PadRect {
 	pub center: Vec2,
 	pub half_extents: Vec2,
-	/// Radians about \(+Y\); local \(+x\) from world \(+x\).
+	/// Radians about \(+Y\), same sense as [`crate::cell::yaw_about_xz`].
 	pub yaw: f32,
 	pub round: f32,
 }
@@ -36,11 +36,14 @@ impl PadFootprint {
 }
 
 impl PadRect {
-	/// World point → local frame (inverse yaw about the center).
+	/// World point → building-local frame (inverse of [`crate::cell::yaw_about_xz`]).
+	///
+	/// Bevy `Quat::from_rotation_y` maps local \((x,z)\) to
+	/// \((x\cos\theta + z\sin\theta,\; -x\sin\theta + z\cos\theta)\).
 	pub fn local(&self, p: Vec2) -> Vec2 {
 		let (s, c) = self.yaw.sin_cos();
 		let d = p - self.center;
-		Vec2::new(c * d.x + s * d.y, -s * d.x + c * d.y)
+		Vec2::new(c * d.x - s * d.y, s * d.x + c * d.y)
 	}
 
 	/// Rounded-box SDF in the yawed frame (IQ `sdRoundedBox`).
@@ -89,9 +92,9 @@ mod tests {
 			yaw: FRAC_PI_2,
 			round: 0.0,
 		};
-		// Local +x is world +z after +π/2 yaw.
-		assert!(r.sdf(Vec2::new(0.0, 9.0)) < 0.0);
-		assert!(r.sdf(Vec2::new(0.0, 11.0)) > 0.0);
+		// Local +x is world −z after +π/2 yaw (`Quat::from_rotation_y`).
+		assert!(r.sdf(Vec2::new(0.0, -9.0)) < 0.0);
+		assert!(r.sdf(Vec2::new(0.0, -11.0)) > 0.0);
 		assert!(r.sdf(Vec2::new(5.0, 0.0)) > 0.0);
 	}
 }

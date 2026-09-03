@@ -10,7 +10,7 @@ use crate::cell::{
 };
 use crate::config::DevelopmentConfig;
 use crate::finish::DevelopmentFinish;
-use crate::pad::{cell_bounds2, cell_center_xz, PadComplex, PadParams};
+use crate::pad::{cell_center_xz, PadComplex, PadParams};
 use richmond_buildings::{Confines, Openings};
 
 /// Fill kind for one development cell.
@@ -107,7 +107,6 @@ impl DevelopmentCell {
 			pad: Some(DevelopmentPad {
 				height: pad_height,
 				complex: PadComplex::building_skirt(
-					cell_bounds2(cell),
 					cell_center_xz(cell),
 					confines_extent_xz * 0.5,
 					yaw,

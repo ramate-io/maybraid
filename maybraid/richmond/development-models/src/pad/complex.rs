@@ -8,6 +8,10 @@ use super::node::{PadNode, PadStage};
 use super::PadParams;
 
 /// Bag of pad nodes blended by flatten-over-ease priority (HydroComplex analog).
+///
+/// [`Self::bounds`] is the union of each node's yawed support AABB (flatten +
+/// ease), not the 100 m development cell. Early-out is a conservative OBB AABB;
+/// classification still uses the yawed footprint SDF.
 #[derive(Debug, Clone)]
 pub struct PadComplex {
 	pub bounds: Bounds2,
@@ -21,26 +25,30 @@ impl PadComplex {
 
 	pub fn with_pads(mut self, pads: Vec<PadNode>) -> Self {
 		self.pads = pads;
+		self.bounds = union_pad_bounds(&self.pads);
 		self
 	}
 
-	pub fn from_nodes(bounds: Bounds2, pads: Vec<PadNode>) -> Self {
-		Self::new(bounds).with_pads(pads)
+	pub fn from_nodes(pads: Vec<PadNode>) -> Self {
+		let bounds = union_pad_bounds(&pads);
+		Self { bounds, pads }
 	}
 
-	/// One rectangular flatten terrace for a yawed building in `bounds`.
+	/// One rectangular flatten terrace for a yawed building plan.
 	pub fn building_skirt(
-		bounds: Bounds2,
 		center: Vec2,
 		building_half_extents: Vec2,
 		yaw: f32,
 		height: f32,
 		params: PadParams,
 	) -> Self {
-		Self::from_nodes(
-			bounds,
-			vec![PadNode::rectangular_flatten(center, building_half_extents, yaw, height, params)],
-		)
+		Self::from_nodes(vec![PadNode::rectangular_flatten(
+			center,
+			building_half_extents,
+			yaw,
+			height,
+			params,
+		)])
 	}
 
 	pub fn is_empty(&self) -> bool {
@@ -84,4 +92,18 @@ impl ElevationModulation for PadComplex {
 	) -> f32 {
 		PadComplex::modify_elevation(self, elevation, x, z)
 	}
+}
+
+fn union_pad_bounds(pads: &[PadNode]) -> Bounds2 {
+	let mut min = Vec2::splat(f32::INFINITY);
+	let mut max = Vec2::splat(f32::NEG_INFINITY);
+	for node in pads {
+		let b = node.correction_index_bounds();
+		min = min.min(b.min);
+		max = max.max(b.max);
+	}
+	if !min.is_finite() {
+		return Bounds2::from_xz(0.0, 0.0, 0.0, 0.0);
+	}
+	Bounds2 { min, max }
 }
