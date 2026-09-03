@@ -5,7 +5,7 @@ use durham_terrain_models::origin_cell_ids_for_layout;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
-use richmond_buildings::{Confines, Fit, Openings};
+use richmond_buildings::Fit;
 
 use crate::cell::DevelopmentExtent;
 use crate::development::{should_fill, DevelopmentCell};
@@ -113,14 +113,13 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for LesHallesDevelopment {
 	) -> Option<(Self, Aabb3d)> {
 		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
 		let seed = spatial_index.config().seed as i32;
-		let (confines_aabb, cell_aabb, finish) = {
+		let (confines, cell_aabb, finish, yaw) = {
 			let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 			if !cell.is_filled() {
 				return None;
 			}
-			(cell.confines_bounds()?, cell.cell, cell.finish.clone()?)
+			(cell.confines()?, cell.cell, cell.finish.clone()?, cell.confines_yaw)
 		};
-		let confines = Confines::new(confines_aabb, 0.0, Openings::new());
 		let noise = NoiseParams { seed, ..NoiseParams::default() };
 		let (development, _) =
 			richmond_developments::MixedUseLesHallesDevelopment::fit_to_confines(&confines, noise)
@@ -128,6 +127,7 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for LesHallesDevelopment {
 		Some((
 			Self {
 				cell: cell_aabb,
+				confines_yaw: yaw,
 				development: development.with_finish(finish.wall, finish.roof),
 			},
 			cell_aabb,
