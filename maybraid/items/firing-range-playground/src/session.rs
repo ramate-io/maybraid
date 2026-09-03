@@ -235,6 +235,7 @@ pub(crate) fn install_npc_combat(
 	movement.ability.candidate_budget.horizon = 80.0;
 	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
 	combat.settings.accuracy = 0.88;
+	combat.settings.motion_tracking = 0.55;
 	combat.settings.counter_recoil = 0.75;
 	combat.settings.vision = 9;
 	combat.settings.trigger_happiness = 0.9;

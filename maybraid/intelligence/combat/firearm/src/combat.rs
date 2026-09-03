@@ -20,6 +20,8 @@ pub struct FirearmIntelligenceSettings {
 	pub accuracy: f32,
 	/// Maximum angular travel toward the desired target, in radians per second.
 	pub tracking_rate: f32,
+	/// 0..=1. Higher skill reduces how far aim trails a moving target.
+	pub motion_tracking: f32,
 	/// 0..=1. Higher skill reacts sooner and clears recoil error faster.
 	pub counter_recoil: f32,
 	/// Seconds an acquired trigger may stay held while recoil takes the bore off target.
@@ -49,6 +51,7 @@ impl Default for FirearmIntelligenceSettings {
 		Self {
 			accuracy: 0.75,
 			tracking_rate: 6.0,
+			motion_tracking: 0.6,
 			counter_recoil: 0.6,
 			alignment_grace: 0.08,
 			headshots: 0.15,
@@ -143,7 +146,10 @@ pub(crate) fn aim_at_firearm_targets(
 				brain.engaged = Some(target.entity);
 				let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
 				let current = bodies.get(target.entity).ok().map(|transform| transform.translation);
-				let to = live_aim_point(target, headshots, current) - from;
+				let aim_at = live_aim_point(target, headshots, current);
+				let perceived =
+					perceive_motion(aim_at, target.movement_vector, brain.settings.motion_tracking);
+				let to = perceived - from;
 				let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
 				Vec2::new(yaw, pitch)
 			});
@@ -269,8 +275,16 @@ pub(crate) fn fire_at_spotted_targets(
 		let (muzzle, bore) = muzzle_world(global);
 		let fresh = target.is_fresh(now, brain.settings.fire_spotting_freshness);
 		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
-		let aim_at = target.aim_point(headshots);
-		let center = target.capsule.center_mass(target.position);
+		let aim_at = perceive_motion(
+			target.aim_point(headshots),
+			target.movement_vector,
+			brain.settings.motion_tracking,
+		);
+		let center = perceive_motion(
+			target.capsule.center_mass(target.position),
+			target.movement_vector,
+			brain.settings.motion_tracking,
+		);
 		let delta = center - muzzle;
 		let distance = delta.length();
 		if !fresh || distance <= 1e-4 {
@@ -382,6 +396,15 @@ fn clamp_aim_pitch(pitch: f32) -> f32 {
 	pitch.clamp(-FRAC_PI_2 + 0.1, FRAC_PI_2 - 0.1)
 }
 
+fn motion_tracking_delay(skill: f32) -> f32 {
+	let skill = skill.clamp(0.0, 1.0);
+	0.3 + (0.03 - 0.3) * skill
+}
+
+fn perceive_motion(position: Vec3, velocity: Vec3, skill: f32) -> Vec3 {
+	position - velocity * motion_tracking_delay(skill)
+}
+
 fn counter_recoil_delay(skill: f32) -> f32 {
 	let skill = skill.clamp(0.0, 1.0);
 	0.15 + (0.025 - 0.15) * skill
@@ -482,6 +505,19 @@ mod tests {
 		let mut look = PlayerLook::default();
 		realize_aim(&mut brain, &mut look, Some(Vec2::new(1.0, 0.0)), 0.1, 0.1);
 		assert!((look.yaw - 0.1).abs() < 1e-5);
+	}
+
+	#[test]
+	fn motion_tracking_skill_reduces_perception_delay() {
+		assert!((motion_tracking_delay(0.0) - 0.3).abs() < 1e-5);
+		assert!((motion_tracking_delay(1.0) - 0.03).abs() < 1e-5);
+
+		let position = Vec3::new(2.0, 0.0, 0.0);
+		let velocity = Vec3::new(4.0, 0.0, 0.0);
+		let poor = perceive_motion(position, velocity, 0.0);
+		let skilled = perceive_motion(position, velocity, 1.0);
+		assert!(poor.x < skilled.x);
+		assert!(skilled.x < position.x);
 	}
 
 	#[test]
