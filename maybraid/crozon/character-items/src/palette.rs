@@ -61,17 +61,22 @@ impl ItemColor {
 		}
 	}
 
-	pub fn color(self) -> bevy::prelude::Color {
+	pub const fn rgb(self) -> [f32; 3] {
 		match self {
-			Self::Natural => bevy::prelude::Color::srgb(0.72, 0.54, 0.42),
-			Self::Warm => bevy::prelude::Color::srgb(0.86, 0.58, 0.38),
-			Self::Cool => bevy::prelude::Color::srgb(0.46, 0.60, 0.72),
-			Self::Dark => bevy::prelude::Color::srgb(0.18, 0.16, 0.15),
-			Self::Light => bevy::prelude::Color::srgb(0.88, 0.80, 0.68),
-			Self::Red => bevy::prelude::Color::srgb(0.72, 0.18, 0.16),
-			Self::Blue => bevy::prelude::Color::srgb(0.18, 0.30, 0.76),
-			Self::Green => bevy::prelude::Color::srgb(0.22, 0.52, 0.28),
-			Self::Gold => bevy::prelude::Color::srgb(0.88, 0.68, 0.22),
+			Self::Natural => [0.72, 0.54, 0.42],
+			Self::Warm => [0.86, 0.58, 0.38],
+			Self::Cool => [0.46, 0.60, 0.72],
+			Self::Dark => [0.18, 0.16, 0.15],
+			Self::Light => [0.88, 0.80, 0.68],
+			Self::Red => [0.72, 0.18, 0.16],
+			Self::Blue => [0.18, 0.30, 0.76],
+			Self::Green => [0.22, 0.52, 0.28],
+			Self::Gold => [0.88, 0.68, 0.22],
 		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		let [r, g, b] = self.rgb();
+		bevy::prelude::Color::srgb(r, g, b)
 	}
 }

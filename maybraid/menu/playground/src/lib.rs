@@ -6,6 +6,7 @@ mod loading_demo;
 mod preview;
 mod session;
 mod ui;
+mod weapon_gallery;
 
 pub use character::{
 	request_show_character, CharacterMenuState, CharacterScreen, CharacterScreenPlugin,
@@ -18,6 +19,7 @@ pub use session::{
 	save_editing_character, ActiveCharacter, CharacterSession, CharacterSessionPlugin,
 	EditingCharacter,
 };
+pub use weapon_gallery::{request_show_weapons, WeaponGalleryPlugin, WeaponGalleryScreen};
 
 use bevy::prelude::*;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
@@ -64,6 +66,7 @@ impl Plugin for MenuPlaygroundPlugin {
 			CharacterSessionPlugin,
 			CharacterScreenPlugin,
 			CharacterPreviewPlugin,
+			WeaponGalleryPlugin,
 			MenuControllerPlugin,
 		))
 		.add_systems(
@@ -163,6 +166,7 @@ fn editor_back(
 	character: Query<(), With<CharacterScreen>>,
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
+	weapons: Query<(), With<WeaponGalleryScreen>>,
 ) {
 	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
 		return;
@@ -178,6 +182,10 @@ fn editor_back(
 		return;
 	}
 	if !gallery.is_empty() {
+		request_show_home(&mut commands);
+		return;
+	}
+	if !weapons.is_empty() {
 		request_show_home(&mut commands);
 	}
 }

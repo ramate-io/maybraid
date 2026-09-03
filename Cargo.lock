@@ -3407,6 +3407,7 @@ version = "0.0.1"
 dependencies = [
  "bevy",
  "lod",
+ "material-ref",
  "rigs",
  "scene-ref",
 ]
@@ -4701,6 +4702,7 @@ dependencies = [
  "crozon-character-ui-menus",
  "crozon-characters",
  "crozon-inventory-user",
+ "firearm-user",
  "firearms-components",
  "game-commands",
  "lod",
@@ -4709,6 +4711,7 @@ dependencies = [
  "maybraid-menu-controller",
  "menu-components",
  "menu-screens",
+ "player",
 ]
 
 [[package]]

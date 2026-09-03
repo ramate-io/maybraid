@@ -2,7 +2,7 @@
 // Crozon clothing: palette tint, look kind, tiny hem sway.
 //
 // Kind: 0 cloth, 1 space suit, 2 tattered, 3 hawaiian,
-//       4 wizard veins, 5 glitter, 6 scales.
+//       4 wizard veins, 5 glitter, 6 scales, 7 lava veins, 8 brushed metal.
 //---------------------------------------------------------
 
 #import bevy_pbr::{
@@ -24,7 +24,8 @@ struct ClothingMaterialUniform {
     scalars: array<vec4<f32>, 8>,
     rasters: array<array<vec4<f32>, 3>, 8>,
     kind: u32,
-    _pad: vec3<u32>,
+    flags: u32,
+    _pad: vec2<u32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
@@ -37,6 +38,9 @@ const KIND_HAWAIIAN: u32 = 3u;
 const KIND_WIZARDS_VEINS: u32 = 4u;
 const KIND_GLITTER: u32 = 5u;
 const KIND_SCALES: u32 = 6u;
+const KIND_LAVA_VEINS: u32 = 7u;
+const KIND_BRUSHED_METAL: u32 = 8u;
+const FLAG_NO_SWAY: u32 = 1u;
 
 struct ClothingVertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -170,7 +174,9 @@ fn vertex(vertex_no_morph: Vertex) -> ClothingVertexOutput {
         world_from_local,
         vec4<f32>(vertex.position, 1.0),
     );
-    out.world_position += vec4<f32>(clothing_sway(vertex.position, out.world_normal), 0.0);
+    if (material.flags & FLAG_NO_SWAY) == 0u {
+        out.world_position += vec4<f32>(clothing_sway(vertex.position, out.world_normal), 0.0);
+    }
     out.position = position_world_to_clip(out.world_position.xyz);
 
 #ifdef VERTEX_UVS_A
@@ -298,6 +304,27 @@ fn glitter_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
 }
 
 /// Offset-row ovals with a bright rim and darker overlap, like overlapping plates.
+fn lava_veins_look(base: vec3<f32>, uv: vec2<f32>, local_pos: vec3<f32>) -> vec4<f32> {
+    let n1 = fbm(vec3<f32>(uv * 5.5, local_pos.y * 2.0 + globals.time * 0.18));
+    let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
+    let vein = pow(saturate(ridge * 1.18), 6.0);
+    let pulse = 0.55 + 0.45 * sin(globals.time * 1.8 + n1 * 14.0);
+    let glow = mix(vec3<f32>(0.95, 0.22, 0.05), vec3<f32>(1.0, 0.72, 0.18), pulse);
+    let crust = base * (0.16 + 0.18 * value_noise_3d(vec3<f32>(uv * 10.0, 0.4)));
+    let tint = mix(crust, glow, vein);
+    return vec4<f32>(tint, 0.42);
+}
+
+fn brushed_metal_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
+    let grain = uv.x * 54.0 + uv.y * 2.4;
+    let stroke = pow(abs(sin(grain * 3.14159)), 0.32);
+    let along = value_noise_3d(vec3<f32>(uv.x * 90.0, uv.y * 5.0, 1.4));
+    let groove = mix(0.42, 1.12, stroke * (0.6 + 0.4 * along));
+    let spec = pow(saturate(n.y * 0.45 + 0.55), 10.0);
+    let tint = base * groove + vec3<f32>(0.12, 0.12, 0.11) * spec;
+    return vec4<f32>(tint, mix(0.18, 0.38, stroke));
+}
+
 fn scales_look(base: vec3<f32>, uv: vec2<f32>, n: vec3<f32>) -> vec4<f32> {
     let p = uv * vec2<f32>(16.0, 20.0);
     let row = floor(p.y);
@@ -363,6 +390,19 @@ fn fragment(
         case KIND_SCALES: {
             look = scales_look(base, uv, mesh.world_normal);
             metallic = 0.42;
+        }
+        case KIND_LAVA_VEINS: {
+            look = lava_veins_look(base, uv, mesh.local_pos);
+            metallic = 0.12;
+            let n1 = fbm(vec3<f32>(uv * 5.5, mesh.local_pos.y * 2.0 + globals.time * 0.18));
+            let ridge = 1.0 - abs(n1 * 2.0 - 1.0);
+            let vein = pow(saturate(ridge * 1.18), 6.0);
+            let pulse = 0.55 + 0.45 * sin(globals.time * 1.8 + n1 * 14.0);
+            emissive = mix(vec3<f32>(0.85, 0.12, 0.02), vec3<f32>(1.0, 0.55, 0.08), pulse) * vein;
+        }
+        case KIND_BRUSHED_METAL: {
+            look = brushed_metal_look(base, uv, mesh.world_normal);
+            metallic = 0.88;
         }
         default: {
             look = cloth_look(base, uv);

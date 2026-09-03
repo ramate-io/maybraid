@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use crate::{
 	hashed_firearm_name, hashed_item_name, ClothingKind, ClothingMaterial, ClothingMesh,
-	ClothingStats, FirearmMesh, FirearmStats, ItemColor,
+	ClothingStats, FirearmMesh, FirearmSpec, FirearmStats, ItemColor,
 };
 
 /// How many garments character creation rolls before the body editor.
@@ -63,7 +63,7 @@ impl MaterialRefParams {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InventoryItem {
 	Clothing { mesh: ClothingMesh, material: MaterialRefParams, stats: ClothingStats },
-	Firearm { mesh: FirearmMesh, stats: FirearmStats },
+	Firearm { spec: FirearmSpec, stats: FirearmStats },
 }
 
 impl InventoryItem {
@@ -76,7 +76,11 @@ impl InventoryItem {
 	}
 
 	pub fn firearm(mesh: FirearmMesh) -> Self {
-		Self::Firearm { mesh, stats: FirearmStats::generate(mesh) }
+		Self::from_firearm_spec(FirearmSpec::from_mesh(mesh))
+	}
+
+	pub fn from_firearm_spec(spec: FirearmSpec) -> Self {
+		Self::Firearm { spec, stats: FirearmStats::generate(&spec) }
 	}
 
 	pub const fn slot(&self) -> InventorySlot {
@@ -95,7 +99,14 @@ impl InventoryItem {
 
 	pub const fn firearm_mesh(&self) -> Option<FirearmMesh> {
 		match self {
-			Self::Firearm { mesh, .. } => Some(*mesh),
+			Self::Firearm { spec, .. } => Some(spec.kit.body),
+			Self::Clothing { .. } => None,
+		}
+	}
+
+	pub const fn firearm_spec(&self) -> Option<FirearmSpec> {
+		match self {
+			Self::Firearm { spec, .. } => Some(*spec),
 			Self::Clothing { .. } => None,
 		}
 	}
@@ -138,7 +149,7 @@ impl InventoryItem {
 	pub const fn label(&self) -> &'static str {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.label(),
-			Self::Firearm { mesh, .. } => mesh.label(),
+			Self::Firearm { spec, .. } => spec.kit.body.label(),
 		}
 	}
 
@@ -147,14 +158,14 @@ impl InventoryItem {
 			Self::Clothing { mesh, material, .. } => {
 				hashed_item_name(*mesh, material.id, material.color)
 			}
-			Self::Firearm { mesh, .. } => hashed_firearm_name(*mesh),
+			Self::Firearm { spec, .. } => hashed_firearm_name(*spec),
 		}
 	}
 
 	pub const fn path(&self) -> &'static str {
 		match self {
 			Self::Clothing { mesh, .. } => mesh.path(),
-			Self::Firearm { mesh, .. } => mesh.path(),
+			Self::Firearm { spec, .. } => spec.kit.body.path(),
 		}
 	}
 }
@@ -325,6 +336,19 @@ impl ItemRng {
 		min.saturating_add(self.in_range(0, span - 1) as i16)
 	}
 
+	/// Uniform in `[0, 1)`.
+	pub fn unit(&mut self) -> f32 {
+		(self.next_u64() >> 11) as f32 / ((1u64 << 53) as f32)
+	}
+
+	/// Box–Muller sample of \(\mathcal{N}(\mu, \sigma)\).
+	pub fn sample_normal(&mut self, mean: f32, sd: f32) -> f32 {
+		let u1 = self.unit().max(1e-7);
+		let u2 = self.unit();
+		let z = (-2.0 * u1.ln()).sqrt() * (std::f32::consts::TAU * u2).cos();
+		mean + sd * z
+	}
+
 	pub fn choose<'a, T>(&mut self, values: &'a [T]) -> Option<&'a T> {
 		if values.is_empty() {
 			return None;
@@ -372,7 +396,7 @@ pub fn random_starter_firearms(rng: &mut ItemRng, count: usize) -> Vec<Inventory
 	for _ in 0..take {
 		let index = rng.gen_index(remaining.len());
 		let mesh = remaining.swap_remove(index);
-		items.push(InventoryItem::firearm(mesh));
+		items.push(InventoryItem::from_firearm_spec(FirearmSpec::roll(rng, mesh)));
 	}
 	items
 }
@@ -382,6 +406,17 @@ pub fn random_starter_loadout(rng: &mut ItemRng) -> Vec<InventoryItem> {
 	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
 	items.extend(random_starter_firearms(rng, STARTER_WEAPON_COUNT));
 	items
+}
+
+/// Generated firearms for a visual gallery. Bodies may repeat after the catalog
+/// is exhausted so the grid can be larger than the body list.
+pub fn random_gallery_firearms(rng: &mut ItemRng, count: usize) -> Vec<InventoryItem> {
+	(0..count)
+		.map(|_| {
+			let body = *rng.choose(FirearmMesh::VALUES).unwrap_or(&FirearmMesh::Bullpup);
+			InventoryItem::from_firearm_spec(FirearmSpec::roll(rng, body))
+		})
+		.collect()
 }
 
 #[cfg(test)]
@@ -478,5 +513,12 @@ mod tests {
 		let b = random_starter_loadout(&mut ItemRng::from_seed(42));
 		assert_eq!(a, b);
 		assert_ne!(a[0].name(), a[0].label());
+	}
+
+	#[test]
+	fn gallery_can_exceed_the_body_catalog() {
+		let items = random_gallery_firearms(&mut ItemRng::from_seed(1), 20);
+		assert_eq!(items.len(), 20);
+		assert!(items.iter().all(|item| item.firearm_spec().is_some()));
 	}
 }

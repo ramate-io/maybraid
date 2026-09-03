@@ -21,6 +21,7 @@ crozon-character-persist = { workspace = true }
 crozon-character-ui-menus = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-inventory-user = { workspace = true }
+firearm-user = { workspace = true }
 firearms-components = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
@@ -29,6 +30,7 @@ maybraid-input = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 menu-components = { workspace = true }
 menu-screens = { workspace = true }
+player = { workspace = true }
 
 [lints]
 workspace = true

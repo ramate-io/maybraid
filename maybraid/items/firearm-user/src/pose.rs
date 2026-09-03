@@ -65,7 +65,7 @@ pub fn spawn_held_firearm_with(
 	root
 }
 
-pub(crate) fn stamp_holding_arms(
+pub fn stamp_holding_arms(
 	mut commands: Commands,
 	users: Query<(), With<FirearmUser>>,
 	visuals: Query<(&CharacterMembers, &ChildOf), With<CharacterRoot>>,
@@ -134,7 +134,7 @@ fn right_shoulder_anchor(
 		+ forward * (arm_length * settings.stock_forward_of_arm_reach)
 }
 
-pub(crate) fn pose_held_firearm(
+pub fn pose_held_firearm(
 	users: Query<(&FirearmUser, &PlayerLook)>,
 	visuals: Query<
 		(&Transform, &CharacterMembers, &ChildOf),

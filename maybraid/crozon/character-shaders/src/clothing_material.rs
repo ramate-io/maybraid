@@ -23,6 +23,11 @@ pub const KIND_HAWAIIAN: u32 = 3;
 pub const KIND_WIZARDS_VEINS: u32 = 4;
 pub const KIND_GLITTER: u32 = 5;
 pub const KIND_SCALES: u32 = 6;
+pub const KIND_LAVA_VEINS: u32 = 7;
+pub const KIND_BRUSHED_METAL: u32 = 8;
+
+/// Skip clothing hem sway (firearm recipes).
+pub const FLAG_NO_SWAY: u32 = 1;
 
 const SCALAR_VEC4S: usize = MATERIAL_SCALAR_FLOATS / 4;
 const DEFAULT_CLOTH_COLOR: Vec4 = Vec4::new(0.46, 0.60, 0.72, 1.0);
@@ -47,6 +52,8 @@ pub enum ClothingShaderKind {
 	WizardsVeins,
 	Glitter,
 	Scales,
+	LavaVeins,
+	BrushedMetal,
 }
 
 impl ClothingShaderKind {
@@ -59,6 +66,8 @@ impl ClothingShaderKind {
 			Self::WizardsVeins => KIND_WIZARDS_VEINS,
 			Self::Glitter => KIND_GLITTER,
 			Self::Scales => KIND_SCALES,
+			Self::LavaVeins => KIND_LAVA_VEINS,
+			Self::BrushedMetal => KIND_BRUSHED_METAL,
 		}
 	}
 
@@ -67,9 +76,11 @@ impl ClothingShaderKind {
 			"clothing_space_suit" => Self::SpaceSuit,
 			"clothing_tattered" => Self::Tattered,
 			"clothing_hawaiian" => Self::Hawaiian,
-			"clothing_scales" => Self::Scales,
-			"clothing_wizards_veins" => Self::WizardsVeins,
-			"clothing_glitter" => Self::Glitter,
+			"clothing_scales" | "firearm_scales" => Self::Scales,
+			"clothing_wizards_veins" | "firearm_wizards_veins" => Self::WizardsVeins,
+			"clothing_glitter" | "firearm_glitter" => Self::Glitter,
+			"firearm_lava_veins" => Self::LavaVeins,
+			"firearm_brushed_metal" => Self::BrushedMetal,
 			_ => Self::Cloth,
 		}
 	}
@@ -87,7 +98,8 @@ pub struct ClothingMaterialUniform {
 	pub scalars: [Vec4; SCALAR_VEC4S],
 	pub rasters: [[Vec4; MATERIAL_RASTER_WIDTH]; MATERIAL_RASTER_CHANNELS],
 	pub kind: u32,
-	pub _pad: UVec3,
+	pub flags: u32,
+	pub _pad: UVec2,
 }
 
 impl ClothingMaterialUniform {
@@ -95,6 +107,10 @@ impl ClothingMaterialUniform {
 		let kind = match &material_ref.name {
 			MaterialId::Name(name) => ClothingShaderKind::from_recipe_name(name),
 			MaterialId::Default => ClothingShaderKind::Cloth,
+		};
+		let flags = match &material_ref.name {
+			MaterialId::Name(name) if name.starts_with("firearm_") => FLAG_NO_SWAY,
+			_ => 0,
 		};
 
 		let mut colors = [Vec4::ZERO; MATERIAL_PALETTE_SLOTS];
@@ -141,7 +157,8 @@ impl ClothingMaterialUniform {
 			scalars,
 			rasters,
 			kind: kind.as_u32(),
-			_pad: UVec3::ZERO,
+			flags,
+			_pad: UVec2::ZERO,
 		}
 	}
 }
