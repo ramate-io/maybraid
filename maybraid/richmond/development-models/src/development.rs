@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use procedural_common::SeededHash;
-use richmond_developments::ShepherdsVillage;
+use richmond_developments::{ShepherdsCommune, ShepherdsVillage};
 
 use crate::cell::{
 	available_footprint, cell_selected, inscribe_yawed_extents, sample_confines_yaw,
@@ -20,6 +20,7 @@ pub enum DevelopmentKind {
 	Empty,
 	LesHalles,
 	ShepherdsVillage,
+	ShepherdsCommune,
 }
 
 /// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
@@ -46,12 +47,20 @@ pub struct ShepherdsVillageCell {
 	pub village: ShepherdsVillage,
 }
 
+/// Data owned only by a selected Shepherds Commune cell.
+#[derive(Debug, Clone)]
+pub struct ShepherdsCommuneCell {
+	pub pads: Vec<DevelopmentPad>,
+	pub commune: ShepherdsCommune,
+}
+
 /// Mutually exclusive content generated for one development tile.
 #[derive(Debug, Clone)]
 pub enum DevelopmentContent {
 	Empty,
 	LesHalles(LesHallesCell),
 	ShepherdsVillage(ShepherdsVillageCell),
+	ShepherdsCommune(ShepherdsCommuneCell),
 }
 
 /// One development tile after selection.
@@ -71,6 +80,7 @@ impl DevelopmentCell {
 			DevelopmentContent::Empty => DevelopmentKind::Empty,
 			DevelopmentContent::LesHalles(_) => DevelopmentKind::LesHalles,
 			DevelopmentContent::ShepherdsVillage(_) => DevelopmentKind::ShepherdsVillage,
+			DevelopmentContent::ShepherdsCommune(_) => DevelopmentKind::ShepherdsCommune,
 		}
 	}
 
@@ -87,6 +97,7 @@ impl DevelopmentCell {
 			DevelopmentContent::Empty => &[],
 			DevelopmentContent::LesHalles(content) => std::slice::from_ref(&content.pad),
 			DevelopmentContent::ShepherdsVillage(content) => &content.pads,
+			DevelopmentContent::ShepherdsCommune(content) => &content.pads,
 		};
 		pads.iter()
 	}
@@ -105,6 +116,13 @@ impl DevelopmentCell {
 	pub fn shepherds_village(&self) -> Option<&ShepherdsVillageCell> {
 		match &self.content {
 			DevelopmentContent::ShepherdsVillage(content) => Some(content),
+			_ => None,
+		}
+	}
+
+	pub fn shepherds_commune(&self) -> Option<&ShepherdsCommuneCell> {
+		match &self.content {
+			DevelopmentContent::ShepherdsCommune(content) => Some(content),
 			_ => None,
 		}
 	}
@@ -178,6 +196,17 @@ impl DevelopmentCell {
 			content: DevelopmentContent::ShepherdsVillage(ShepherdsVillageCell { pads, village }),
 		}
 	}
+
+	pub fn with_shepherds_commune(
+		cell: Aabb3d,
+		commune: ShepherdsCommune,
+		pads: Vec<DevelopmentPad>,
+	) -> Self {
+		Self {
+			cell,
+			content: DevelopmentContent::ShepherdsCommune(ShepherdsCommuneCell { pads, commune }),
+		}
+	}
 }
 
 pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind {
@@ -187,15 +216,19 @@ pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind 
 	}
 	let les_halles = config.les_halles_weight.max(0.0);
 	let shepherds = config.shepherds_village_weight.max(0.0);
-	let total = les_halles + shepherds;
+	let commune = config.shepherds_commune_weight.max(0.0);
+	let total = les_halles + shepherds + commune;
 	if total <= f32::EPSILON {
 		return DevelopmentKind::Empty;
 	}
 	let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
-	if hash.unit(44) * total < les_halles {
+	let pick = hash.unit(44) * total;
+	if pick < les_halles {
 		DevelopmentKind::LesHalles
-	} else {
+	} else if pick < les_halles + shepherds {
 		DevelopmentKind::ShepherdsVillage
+	} else {
+		DevelopmentKind::ShepherdsCommune
 	}
 }
 
@@ -271,14 +304,23 @@ mod tests {
 			likelihood: 1.0,
 			les_halles_weight: 1.0,
 			shepherds_village_weight: 0.0,
+			shepherds_commune_weight: 0.0,
 			..DevelopmentConfig::default()
 		};
 		assert_eq!(select_kind(cell, &les_halles), DevelopmentKind::LesHalles);
 		let shepherds = DevelopmentConfig {
 			les_halles_weight: 0.0,
 			shepherds_village_weight: 1.0,
+			shepherds_commune_weight: 0.0,
 			..les_halles
 		};
 		assert_eq!(select_kind(cell, &shepherds), DevelopmentKind::ShepherdsVillage);
+		let commune = DevelopmentConfig {
+			les_halles_weight: 0.0,
+			shepherds_village_weight: 0.0,
+			shepherds_commune_weight: 1.0,
+			..les_halles
+		};
+		assert_eq!(select_kind(cell, &commune), DevelopmentKind::ShepherdsCommune);
 	}
 }

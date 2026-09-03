@@ -4,7 +4,7 @@ use bevy::math::Vec2;
 use procedural_common::Bounds2;
 
 use super::elevation::PadElevation;
-use super::footprint::{PadFootprint, PadRect};
+use super::footprint::{PadFootprint, PadReach, PadRect};
 use super::{PadParams, PadPrimitive};
 
 /// One authored pad, discovered by footprint AABB ⊕ ease extent.
@@ -64,7 +64,37 @@ impl PadNode {
 	}
 
 	pub fn flatten_height(&self) -> f32 {
-		self.primitive.elevation.height()
+		self.primitive.elevation.representative_height()
+	}
+
+	pub fn height_at(&self, p: Vec2) -> f32 {
+		self.primitive.height_at(p)
+	}
+
+	/// Graded capsule between two pad sites (hydro thalweg analog).
+	pub fn graded_reach(
+		a: Vec2,
+		b: Vec2,
+		half_width: f32,
+		height_a: f32,
+		height_b: f32,
+		params: PadParams,
+	) -> Self {
+		let berm = params.berm.max(0.0);
+		let ease = params.ease.max(0.0);
+		Self::new(
+			PadPrimitive {
+				footprint: PadFootprint::Reach(PadReach {
+					a,
+					b,
+					half_width: (half_width + berm).max(1e-3),
+				}),
+				elevation: PadElevation::Grade { height_a, height_b },
+				influence_pad: ease,
+			},
+			params,
+			ease,
+		)
 	}
 
 	pub fn correction_index_bounds(&self) -> Bounds2 {
@@ -86,12 +116,15 @@ impl PadNode {
 		p.x >= b.min.x && p.x <= b.max.x && p.y >= b.min.y && p.y <= b.max.y
 	}
 
-	/// Flatten inside the berm-expanded rect; ease in the outer skirt; else none.
+	/// Flatten or grade inside the support; ease in the outer skirt; else none.
 	pub fn classification(&self, p: Vec2) -> Option<PadStage> {
 		let d = self.phi(p);
 		let ease = self.params.ease.max(0.0);
 		if d <= 0.0 {
-			Some(PadStage::Flatten)
+			Some(match self.primitive.elevation {
+				PadElevation::Flatten { .. } => PadStage::Flatten,
+				PadElevation::Grade { .. } => PadStage::Grade,
+			})
 		} else if d < ease {
 			Some(PadStage::Ease)
 		} else {
@@ -99,23 +132,20 @@ impl PadNode {
 		}
 	}
 
-	pub fn flatten_candidate(&self) -> f32 {
-		self.flatten_height()
-	}
-
-	/// Smoothstep from flatten height at \(\phi = 0\) to incoming elevation at the ease outer.
+	/// Smoothstep from authored height at \(\phi = 0\) to incoming elevation at the ease outer.
 	pub fn ease_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
 		let ease = self.params.ease.max(1e-3);
 		let u = (d / ease).clamp(0.0, 1.0);
 		let fade = u * u * (3.0 - 2.0 * u);
-		let h = self.flatten_candidate();
+		let h = self.height_at(p);
 		elevation * fade + h * (1.0 - fade)
 	}
 
-	/// Flatten wins over ease; tightest containing flatten / closest ease when several overlap.
+	/// Flatten terraces win over graded paths, which win over ease skirts.
 	pub fn elevation_blend(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
 		let mut flatten: Option<(&Self, f32)> = None;
+		let mut grade: Option<(&Self, f32)> = None;
 		let mut ease: Option<(&Self, f32)> = None;
 		for node in nodes {
 			let phi = node.phi(p);
@@ -124,6 +154,11 @@ impl PadNode {
 					// Tightest containing terrace (largest φ ≤ 0), not the deepest SDF.
 					if flatten.is_none_or(|(_, d)| phi > d) {
 						flatten = Some((node, phi));
+					}
+				}
+				Some(PadStage::Grade) => {
+					if grade.is_none_or(|(_, d)| phi > d) {
+						grade = Some((node, phi));
 					}
 				}
 				Some(PadStage::Ease) => {
@@ -135,7 +170,10 @@ impl PadNode {
 			}
 		}
 		if let Some((node, _)) = flatten {
-			return node.flatten_candidate();
+			return node.height_at(p);
+		}
+		if let Some((node, _)) = grade {
+			return node.height_at(p);
 		}
 		if let Some((node, _)) = ease {
 			return node.ease_candidate(elevation, p);
@@ -144,9 +182,10 @@ impl PadNode {
 	}
 }
 
-/// Hard bands for one pad (flatten terrace vs ease skirt).
+/// Hard bands for one pad (terrace vs connecting grade vs ease skirt).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PadStage {
 	Flatten,
+	Grade,
 	Ease,
 }

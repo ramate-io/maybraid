@@ -12,7 +12,7 @@ use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
 use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
-use crate::shepherds::ShepherdsVillageDevelopment;
+use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StoredEntry<T> {
@@ -29,6 +29,7 @@ pub struct DevelopmentEntryStore {
 	pub(crate) padded: HashMap<Id, StoredEntry<TerrainWithPads>>,
 	pub(crate) les_halles: HashMap<Id, StoredEntry<LesHallesDevelopment>>,
 	pub(crate) shepherds_villages: HashMap<Id, StoredEntry<ShepherdsVillageDevelopment>>,
+	pub(crate) shepherds_communes: HashMap<Id, StoredEntry<ShepherdsCommuneDevelopment>>,
 }
 
 impl DevelopmentEntryStore {
@@ -71,6 +72,10 @@ impl DevelopmentEntryStore {
 
 	pub fn shepherds_village(&self, id: Id) -> Option<&ShepherdsVillageDevelopment> {
 		self.shepherds_villages.get(&id).map(|e| &e.value)
+	}
+
+	pub fn shepherds_commune(&self, id: Id) -> Option<&ShepherdsCommuneDevelopment> {
+		self.shepherds_communes.get(&id).map(|e| &e.value)
 	}
 }
 
@@ -190,3 +195,4 @@ impl_spatial!(DevelopmentCell, cells, DevelopmentCellStoreView);
 impl_spatial!(TerrainWithPads, padded, PaddedStoreView);
 impl_spatial!(LesHallesDevelopment, les_halles, LesHallesStoreView);
 impl_spatial!(ShepherdsVillageDevelopment, shepherds_villages, ShepherdsVillageStoreView);
+impl_spatial!(ShepherdsCommuneDevelopment, shepherds_communes, ShepherdsCommuneStoreView);

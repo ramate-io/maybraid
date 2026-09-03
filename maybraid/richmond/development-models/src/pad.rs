@@ -1,9 +1,7 @@
 //! Union-first building-pad primitives + broadphase helpers.
 //!
-//! Skirt ease lives on [`PadParams`]. Terrain flatten / ease blend lives on
-//! [`crate::pad::node::PadNode`]; complexes gather intersecting nodes.
-//!
-//! Rectangular flatten only for now; grading elevation comes later.
+//! Skirt ease lives on [`PadParams`]. Terrain flatten / ease / grade blend lives
+//! on [`crate::pad::node::PadNode`]; complexes gather intersecting nodes.
 
 pub mod complex;
 pub mod elevation;
@@ -12,7 +10,7 @@ pub mod node;
 
 pub use complex::PadComplex;
 pub use elevation::PadElevation;
-pub use footprint::{PadFootprint, PadRect};
+pub use footprint::{PadFootprint, PadReach, PadRect};
 pub use node::{PadNode, PadStage};
 
 use bevy::math::bounding::Aabb3d;
@@ -22,7 +20,7 @@ use richmond_developments::{BuildingFootprint, PlacedBuilding};
 
 use crate::cell::{PAD_BERM, PAD_EDGE_EASE, PAD_ROUND};
 
-/// Ease / berm parameters for one pad node (grading knobs later).
+/// Ease / berm parameters for one pad node.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PadParams {
 	/// Extra flatten outside the building footprint (metres).
@@ -36,6 +34,20 @@ pub struct PadParams {
 impl Default for PadParams {
 	fn default() -> Self {
 		Self { berm: PAD_BERM, ease: PAD_EDGE_EASE, round: PAD_ROUND }
+	}
+}
+
+impl PadParams {
+	/// Connecting grade: core wide enough to hit a ~5 m terrain sample pitch,
+	/// short ease so overlapping skirts do not fill the whole cell.
+	pub fn path() -> Self {
+		Self { berm: 2.0, ease: 12.0, round: 0.0 }
+	}
+
+	/// Shepherds house / hut terrace. Berm covers a sample pitch past the walls
+	/// so the floor sits on flatten, not the interpolated ease.
+	pub fn shepherds() -> Self {
+		Self { berm: 6.0, ease: 12.0, round: PAD_ROUND }
 	}
 }
 
@@ -55,6 +67,16 @@ impl PadPrimitive {
 
 	pub fn phi(&self, p: Vec2) -> f32 {
 		self.footprint.sdf(p)
+	}
+
+	pub fn height_at(&self, p: Vec2) -> f32 {
+		match self.elevation {
+			PadElevation::Flatten { height } => height,
+			PadElevation::Grade { height_a, height_b } => {
+				let z = self.footprint.reach_progress(p).unwrap_or(0.5);
+				height_a + (height_b - height_a) * z
+			}
+		}
 	}
 }
 
@@ -99,6 +121,30 @@ impl<T: BuildingFootprint> PlacedBuildingPad for PlacedBuilding<T> {
 			.collect();
 		PadComplex::from_nodes(nodes)
 	}
+}
+
+/// One graded reach node per polyline segment (hydro `nodes_from_polyline` analog).
+pub fn nodes_from_graded_polyline(
+	path: &[Vec2],
+	levels: &[f32],
+	half_width: f32,
+	params: PadParams,
+) -> Vec<PadNode> {
+	let n = path.len().min(levels.len());
+	if n < 2 {
+		return Vec::new();
+	}
+	let hw = half_width.max(1e-3);
+	let mut out = Vec::with_capacity(n - 1);
+	for i in 0..n - 1 {
+		let a = path[i];
+		let b = path[i + 1];
+		if a.distance(b) <= 1e-4 {
+			continue;
+		}
+		out.push(PadNode::graded_reach(a, b, hw, levels[i], levels[i + 1], params));
+	}
+	out
 }
 
 #[cfg(test)]
@@ -212,5 +258,69 @@ mod tests {
 			center.y + half.y - 0.5,
 		));
 		assert_eq!(pad.classification_at(corner.x, corner.z), Some(PadStage::Flatten));
+	}
+
+	#[test]
+	fn graded_reach_lerps_between_pad_heights() {
+		let pad = PadComplex::graded_polyline(
+			&[Vec2::ZERO, Vec2::new(40.0, 0.0)],
+			&[10.0, 20.0],
+			4.0,
+			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
+		);
+		assert_eq!(pad.classification_at(20.0, 0.0), Some(PadStage::Grade));
+		assert!((pad.modify_elevation(0.0, 20.0, 0.0) - 15.0).abs() < 1e-3);
+		assert!((pad.modify_elevation(0.0, 0.0, 0.0) - 10.0).abs() < 1e-3);
+		assert!((pad.modify_elevation(0.0, 40.0, 0.0) - 20.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn flatten_terrace_wins_over_connecting_grade() {
+		let grade = PadNode::graded_reach(
+			Vec2::new(-20.0, 0.0),
+			Vec2::new(20.0, 0.0),
+			6.0,
+			8.0,
+			8.0,
+			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
+		);
+		let terrace = PadNode::rectangular_flatten(
+			Vec2::ZERO,
+			Vec2::new(4.0, 4.0),
+			0.0,
+			22.0,
+			PadParams { berm: 0.0, ease: 2.0, round: 0.0 },
+		);
+		let complex = PadComplex::from_nodes(vec![grade, terrace]);
+		assert!((complex.modify_elevation(0.0, 0.0, 0.0) - 22.0).abs() < 1e-3);
+		assert!((complex.modify_elevation(0.0, 12.0, 0.0) - 8.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn unioned_pads_keep_flatten_over_neighbor_ease() {
+		let params = PadParams { berm: 0.0, ease: 8.0, round: 0.0 };
+		let terrace = PadNode::rectangular_flatten(Vec2::ZERO, Vec2::splat(4.0), 0.0, 20.0, params);
+		let neighbor =
+			PadNode::rectangular_flatten(Vec2::new(10.0, 0.0), Vec2::splat(4.0), 0.0, 4.0, params);
+		let first = PadComplex::from_nodes(vec![terrace]);
+		let second = PadComplex::from_nodes(vec![neighbor]);
+		let after_first = first.modify_elevation(0.0, 0.0, 0.0);
+		assert!((after_first - 20.0).abs() < 1e-3);
+		let sequential = second.modify_elevation(after_first, 0.0, 0.0);
+		assert!(sequential < 19.0, "later ease skirt would pull the terrace down: {sequential}");
+		let unioned = PadComplex::union_all([first, second]);
+		assert!((unioned.modify_elevation(0.0, 0.0, 0.0) - 20.0).abs() < 1e-3);
+		assert_eq!(unioned.classification_at(0.0, 0.0), Some(PadStage::Flatten));
+	}
+
+	#[test]
+	fn shepherds_berm_keeps_hut_corner_on_flatten() {
+		let half = Vec2::new(2.0, 2.0);
+		let pad = PadComplex::building_skirt(Vec2::ZERO, half, 0.0, 12.0, PadParams::shepherds());
+		let corner = Vec2::new(half.x - 0.1, half.y - 0.1);
+		assert_eq!(pad.classification_at(corner.x, corner.y), Some(PadStage::Flatten));
+		assert!((pad.modify_elevation(0.0, corner.x, corner.y) - 12.0).abs() < 1e-3);
+		let past_wall = half.x + 2.0;
+		assert_eq!(pad.classification_at(past_wall, 0.0), Some(PadStage::Flatten));
 	}
 }

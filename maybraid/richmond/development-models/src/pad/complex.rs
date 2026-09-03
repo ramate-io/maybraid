@@ -5,9 +5,9 @@ use durham_terrain_models::terrain::{ElevationModulation, TerrainSdf};
 use procedural_common::Bounds2;
 
 use super::node::{PadNode, PadStage};
-use super::PadParams;
+use super::{nodes_from_graded_polyline, PadParams};
 
-/// Bag of pad nodes blended by flatten-over-ease priority (HydroComplex analog).
+/// Bag of pad nodes blended by flatten-over-grade-over-ease priority (HydroComplex analog).
 ///
 /// [`Self::bounds`] is the union of each node's yawed support AABB (flatten +
 /// ease), not the development cell. Early-out is a conservative OBB AABB;
@@ -34,6 +34,13 @@ impl PadComplex {
 		Self { bounds, pads }
 	}
 
+	/// Flatten / grade / ease must blend in one pass. Sequential complexes let a
+	/// later ease skirt undo an earlier terrace and smear overlapping path
+	/// skirts into a general lift.
+	pub fn union_all(complexes: impl IntoIterator<Item = Self>) -> Self {
+		Self::from_nodes(complexes.into_iter().flat_map(|c| c.pads).collect())
+	}
+
 	/// One rectangular flatten terrace for a yawed building plan.
 	pub fn building_skirt(
 		center: Vec2,
@@ -49,6 +56,16 @@ impl PadComplex {
 			height,
 			params,
 		)])
+	}
+
+	/// One graded reach node per polyline segment, analog of hydro `nodes_from_polyline`.
+	pub fn graded_polyline(
+		path: &[Vec2],
+		levels: &[f32],
+		half_width: f32,
+		params: PadParams,
+	) -> Self {
+		Self::from_nodes(nodes_from_graded_polyline(path, levels, half_width, params))
 	}
 
 	pub fn is_empty(&self) -> bool {

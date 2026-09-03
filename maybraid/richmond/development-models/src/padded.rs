@@ -33,8 +33,9 @@ pub struct TerrainWithPads {
 impl TerrainWithPads {
 	pub fn compose(terrain: &Terrain, pads: &[PadComplex]) -> Self {
 		let mut sdf: TerrainSdf = terrain.sdf.terrain.clone();
-		for pad in pads {
-			sdf.add_elevation_modulation(Box::new(pad.clone()) as Box<dyn ElevationModulation>);
+		let merged = PadComplex::union_all(pads.iter().cloned());
+		if !merged.is_empty() {
+			sdf.add_elevation_modulation(Box::new(merged) as Box<dyn ElevationModulation>);
 		}
 		Self {
 			cell: terrain.cell,

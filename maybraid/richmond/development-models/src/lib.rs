@@ -1,4 +1,4 @@
-//! Richmond development models: 200 m lattice, pads, Les Halles, and Shepherds Village.
+//! Richmond development models: 200 m lattice, pads, Les Halles, Shepherds Village, and Shepherds Commune.
 //!
 //! Selection / pad / host generation on top of composed Durham [`Terrain`].
 //! The crate plugin also installs SceneRef, urban surface MaterialRef, placeholder
@@ -7,7 +7,9 @@
 
 pub mod buildings_lod;
 pub mod cell;
+pub mod commune;
 pub mod config;
+pub mod connectivity;
 pub mod development;
 pub mod finish;
 pub mod generation;
@@ -21,6 +23,7 @@ pub mod plugin;
 pub mod presentation;
 pub mod scatter;
 pub mod shepherds;
+mod shepherds_fit;
 pub mod village;
 
 pub use buildings_lod::{
@@ -35,19 +38,22 @@ pub use cell::{
 pub use config::DevelopmentConfig;
 pub use development::{
 	select_kind, DevelopmentCell, DevelopmentContent, DevelopmentKind, DevelopmentPad,
-	LesHallesCell, ShepherdsVillageCell,
+	LesHallesCell, ShepherdsCommuneCell, ShepherdsVillageCell,
 };
 pub use finish::DevelopmentFinish;
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use hydro::{composed_height_at, hydro_overlaps_xz, terrain_hydro_overlaps};
 pub use index::{
 	DevelopmentCellStoreView, DevelopmentEntryStore, DevelopmentIndex, LesHallesStoreView,
-	PaddedStoreView, ShepherdsVillageStoreView,
+	PaddedStoreView, ShepherdsCommuneStoreView, ShepherdsVillageStoreView,
 };
 pub use les_halles::LesHallesDevelopment;
-pub use pad::{cell_bounds2, PadComplex, PadNode, PadParams, PadPrimitive, PlacedBuildingPad};
+pub use pad::{
+	cell_bounds2, nodes_from_graded_polyline, PadComplex, PadNode, PadParams, PadPrimitive,
+	PlacedBuildingPad,
+};
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use plugin::{register_richmond_development_models_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
-pub use shepherds::ShepherdsVillageDevelopment;
+pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};

@@ -1,56 +1,16 @@
 //! Deterministic 4×4 jittered Shepherds Village placement.
 
-use std::sync::Arc;
-
 use bevy::math::bounding::Aabb3d;
-use bevy::math::Vec3;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
-use richmond_building_components::panels::PanelStyle;
-use richmond_buildings::{Confines, Fit, Openings};
-use richmond_developments::{
-	ShepherdsBuilding, ShepherdsFinish, ShepherdsHouse, ShepherdsHut, ShepherdsVillage,
-	ShepherdsVillageBuilding, HOUSE_MAX_FOOTPRINT, HOUSE_MIN_FOOTPRINT, HUT_HEIGHT,
-	HUT_MAX_FOOTPRINT, HUT_MIN_FOOTPRINT,
-};
+use richmond_developments::ShepherdsVillage;
 
 use crate::config::DevelopmentConfig;
 use crate::development::{cell_salt, DevelopmentPad};
-use crate::finish::DevelopmentFinish;
 use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
-use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
-
-#[derive(Debug, Clone, Copy)]
-enum ShepherdsBuildingKind {
-	House,
-	Hut,
-}
-
-fn shepherds_recipe() -> ScatterRecipe<ShepherdsBuildingKind> {
-	ScatterRecipe {
-		grid_side: 4,
-		min_count: 6,
-		max_count: 10,
-		cell_inset: 32.0,
-		jitter: 6.0,
-		clearance: 3.0,
-		choices: vec![
-			ScatterChoice {
-				kind: ShepherdsBuildingKind::House,
-				weight: 1.0,
-				min_footprint: HOUSE_MIN_FOOTPRINT,
-				max_footprint: HOUSE_MAX_FOOTPRINT,
-			},
-			ScatterChoice {
-				kind: ShepherdsBuildingKind::Hut,
-				weight: 1.0,
-				min_footprint: HUT_MIN_FOOTPRINT,
-				max_footprint: HUT_MAX_FOOTPRINT,
-			},
-		],
-	}
-}
+use crate::scatter::bounds_intersect;
+use crate::shepherds_fit::{fit_shepherds_building, shepherds_recipe, ShepherdsBuildingKind};
 
 pub fn build_shepherds_village(
 	store: &TerrainEntryStore,
@@ -72,69 +32,48 @@ pub fn build_shepherds_village(
 		let hash = SeededHash::new(
 			root.seed.wrapping_add((candidate.slot as u32 + 1).wrapping_mul(0x9E37_79B9)),
 		);
-		let is_house = matches!(candidate.kind, ShepherdsBuildingKind::House);
-		let footprint = candidate.footprint;
-		let yaw = candidate.yaw;
-		let center = candidate.center;
 		let occupied_bounds = recipe.collision_bounds(&candidate);
 		if occupied.iter().any(|b| bounds_intersect(*b, occupied_bounds)) {
 			continue;
 		}
 
-		let coarse_pad =
-			PadComplex::building_skirt(center, footprint * 0.5, yaw, 0.0, PadParams::default());
+		let coarse_pad = PadComplex::building_skirt(
+			candidate.center,
+			candidate.footprint * 0.5,
+			candidate.yaw,
+			0.0,
+			PadParams::shepherds(),
+		);
 		if terrain_hydro_overlaps(store, layout, cell, coarse_pad.bounds) {
 			continue;
 		}
-		let Some(height) = composed_height_at(store, layout, center.x, center.y) else {
+		let Some(height) =
+			composed_height_at(store, layout, candidate.center.x, candidate.center.y)
+		else {
 			continue;
 		};
 
-		let authored_height = if is_house { 2.0 * 3.0 } else { HUT_HEIGHT };
-		let confines = Confines::new(
-			Aabb3d::from_min_max(
-				Vec3::new(center.x - footprint.x * 0.5, height, center.y - footprint.y * 0.5),
-				Vec3::new(
-					center.x + footprint.x * 0.5,
-					height + authored_height,
-					center.y + footprint.y * 0.5,
-				),
-			),
-			yaw,
-			Openings::new(),
-		);
+		let kind = if matches!(candidate.kind, ShepherdsBuildingKind::House) {
+			ShepherdsBuildingKind::House
+		} else {
+			ShepherdsBuildingKind::Hut
+		};
 		let noise = NoiseParams {
 			seed: config.seed as i32 ^ candidate.slot as i32 * 7919,
 			..NoiseParams::default()
 		};
-		let building = if is_house {
-			let Ok((house, _)) = ShepherdsHouse::fit_to_confines(&confines, noise) else {
-				continue;
-			};
-			let wooden = house.wall_style == PanelStyle::RibAndPlank;
-			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
-			ShepherdsBuilding::House(Arc::new(
-				house.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
-			))
-		} else {
-			let Ok((hut, _)) = ShepherdsHut::fit_to_confines(&confines, noise) else {
-				continue;
-			};
-			let wooden = hut.wall_style == PanelStyle::RibAndPlank;
-			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
-			ShepherdsBuilding::Hut(Arc::new(
-				hut.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
-			))
+		let Some(placed) = fit_shepherds_building(
+			kind,
+			candidate.center,
+			candidate.yaw,
+			candidate.footprint,
+			height,
+			hash,
+			noise,
+		) else {
+			continue;
 		};
-
-		let placed = ShepherdsVillageBuilding {
-			center_xz: center,
-			yaw,
-			footprint,
-			ground_height: height,
-			building,
-		};
-		let complex = placed.pad_complex(PadParams::default());
+		let complex = placed.pad_complex(PadParams::shepherds());
 		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
 			continue;
 		}
@@ -153,8 +92,12 @@ pub fn build_shepherds_village(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy::math::Vec2;
+	use bevy::math::{Vec2, Vec3};
 	use richmond_buildings::Fit;
+	use richmond_developments::{ShepherdsBuilding, ShepherdsHut, ShepherdsVillageBuilding};
+	use std::sync::Arc;
+
+	use crate::shepherds_fit::shepherds_recipe;
 
 	#[test]
 	fn jittered_centers_stay_inside_the_cell_inset() {
@@ -188,13 +131,13 @@ mod tests {
 	fn exact_pad_follows_the_spawned_hut() {
 		let center = Vec2::new(80.0, 120.0);
 		let yaw = std::f32::consts::FRAC_PI_4;
-		let confines = Confines::new(
+		let confines = richmond_buildings::Confines::new(
 			Aabb3d::from_min_max(
 				Vec3::new(center.x - 3.0, 10.0, center.y - 4.0),
 				Vec3::new(center.x + 3.0, 16.0, center.y + 4.0),
 			),
 			yaw,
-			Openings::new(),
+			richmond_buildings::Openings::new(),
 		);
 		let hut = ShepherdsHut::fit_to_confines(&confines, NoiseParams::default()).expect("hut").0;
 		let placed = ShepherdsVillageBuilding {
@@ -204,7 +147,7 @@ mod tests {
 			ground_height: 10.0,
 			building: ShepherdsBuilding::Hut(Arc::new(hut)),
 		};
-		let pad = placed.pad_complex(PadParams::default());
+		let pad = placed.pad_complex(PadParams::shepherds());
 		let local = Vec2::new(2.5, 3.5);
 		let (s, c) = yaw.sin_cos();
 		let spawned = center + Vec2::new(c * local.x + s * local.y, -s * local.x + c * local.y);

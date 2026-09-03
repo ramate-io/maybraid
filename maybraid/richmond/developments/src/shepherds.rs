@@ -360,6 +360,31 @@ impl ShepherdsVillage {
 	}
 }
 
+/// Graded path connecting two commune pads.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShepherdsCommuneCorridor {
+	pub path: Vec<Vec2>,
+	pub levels: Vec<f32>,
+}
+
+/// Shepherds Village laid out along a connectivity graph.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShepherdsCommune {
+	pub bounds: Aabb3d,
+	pub buildings: Vec<ShepherdsVillageBuilding>,
+	pub corridors: Vec<ShepherdsCommuneCorridor>,
+}
+
+impl ShepherdsCommune {
+	pub fn new(
+		bounds: Aabb3d,
+		buildings: Vec<ShepherdsVillageBuilding>,
+		corridors: Vec<ShepherdsCommuneCorridor>,
+	) -> Self {
+		Self { bounds, buildings, corridors }
+	}
+}
+
 macro_rules! house_layers {
 	($self:expr, $level:expr, $method:ident) => {{
 		let mut out = Layers::new();
