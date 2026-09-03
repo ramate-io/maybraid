@@ -1,4 +1,4 @@
-//! Ground-floor arcade: open gallery ring with midspan breezeways, no stall fill.
+//! Ground-floor arcade: open gallery ring with midspan breezeways, no inner walls.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -80,6 +80,7 @@ mod tests {
 		assert!(storey.floor_plan.openings.iter().any(|(id, o)| {
 			id.as_str().contains("outer_breezeway") && matches!(o.label, OpeningLabel::Passage)
 		}));
+		assert_eq!(storey.floor_plan.gallery.wall_count(), 4);
 		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
 		assert!(storey.usage.is_empty());
 	}

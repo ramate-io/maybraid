@@ -18,7 +18,8 @@
 //! ([`LesHallesFullStorey`]) fills gallery strips with stalls; livable
 //! ([`LesHallesLivableFullStorey`]) fills them with lengthwise
 //! [`crate::RectangularLivableArea`] bays; the ground arcade
-//! ([`LesHallesArcadeStorey`]) leaves the gallery open with midspan breezeways.
+//! ([`LesHallesArcadeStorey`]) leaves the gallery open with midspan breezeways
+//! and no inner courtyard walls.
 
 pub mod arcade_storey;
 pub mod floor_plan;
