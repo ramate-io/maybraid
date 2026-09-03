@@ -42,7 +42,9 @@ impl StartFlairUp {
 							inner.incoming_ray,
 						)
 						.with_ray_degrees_of_freedom(dof * 0.35)
-						.with_radius_range(at_stalk(stalk_height, 0.11)..at_stalk(stalk_height, 0.12))
+						.with_radius_range(
+							at_stalk(stalk_height, 0.11)..at_stalk(stalk_height, 0.12),
+						)
 						.with_length(at_stalk(stalk_height, 1.0)..at_stalk(stalk_height, 4.0))
 						.with_bias_blend(0.7)
 						.single_child(),

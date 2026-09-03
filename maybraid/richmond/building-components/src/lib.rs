@@ -71,6 +71,7 @@ use bevy::scene::{ResolveContext, ResolvedScene, Scene};
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::{lod_host_scene_pending, SceneChunk};
+use std::sync::Arc;
 
 /// Domain IR exposed by a building (or building part) for structural composition.
 ///
@@ -122,6 +123,48 @@ pub trait BuildingComponents {
 }
 
 impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		(**self).panel_nodes_for_level(level)
+	}
+
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
+		(**self).partition_nodes_for_level(level)
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
+		(**self).floor_nodes_for_level(level)
+	}
+
+	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Layers<RoofNode> {
+		(**self).roof_nodes_for_level(level)
+	}
+
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
+		(**self).stair_nodes_for_level(level)
+	}
+
+	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Layers<DoorNode> {
+		(**self).door_nodes_for_level(level)
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		(**self).joint_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		(**self).furniture_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		(**self).label_nodes_for_level(level)
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		(**self).structural_lod()
+	}
+}
+
+impl<T: BuildingComponents + ?Sized> BuildingComponents for Arc<T> {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		(**self).panel_nodes_for_level(level)
 	}

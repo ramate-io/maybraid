@@ -7,6 +7,7 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
 use richmond_buildings::{
@@ -55,6 +56,23 @@ impl MixedUseLesHallesDevelopment {
 		}
 		out.push(MixedUseLesHallesHost::Roof(self.roof.clone()));
 		out
+	}
+
+	/// Stamp one wall look and one roof look onto every Les Halles host.
+	pub fn with_finish(mut self, wall: MaterialRef, roof: MaterialRef) -> Self {
+		self.tower.floors = self
+			.tower
+			.floors
+			.into_iter()
+			.map(|floor| floor.with_wall_material(wall.clone()))
+			.collect();
+		self.stairwells = self
+			.stairwells
+			.into_iter()
+			.map(|stairwell| stairwell.with_surface_material(wall.clone()))
+			.collect();
+		self.roof = self.roof.with_surface_material(roof);
+		self
 	}
 }
 
@@ -116,10 +134,10 @@ fn finish_tower(
 		let floor_noise = floor_noise(noise, i);
 		tower.floors[i] = if commercial {
 			let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Commercial { floor_plan, usage }
+			MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
 		} else {
 			let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Livable { floor_plan, usage }
+			MixedUseLesHallesStorey::Livable { floor_plan, usage, wall_material: None }
 		};
 	}
 	Ok(())
@@ -365,5 +383,23 @@ mod tests {
 			"wall z {wall:?} vs outer {}",
 			plan.outer.y
 		);
+	}
+
+	#[test]
+	fn with_finish_stamps_wall_and_roof_refs() {
+		use material_ref::MaterialId;
+		let wall = MaterialRef::named("stucco");
+		let roof = MaterialRef::named("iron");
+		let painted = fit_dev(11).with_finish(wall.clone(), roof.clone());
+		assert!(painted.tower.floors.iter().all(|f| {
+			matches!(f.wall_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+		}));
+		assert!(painted.stairwells.iter().all(|s| {
+			matches!(s.surface_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+		}));
+		assert!(matches!(
+			painted.roof.surface_material().map(|m| &m.name),
+			Some(MaterialId::Name(n)) if n == "iron"
+		));
 	}
 }

@@ -106,10 +106,7 @@ mod tests {
 			let q = align_frond_direction(dir);
 			assert!((q * Vec3::X - dir).length() < 1e-4, "az {i}: +X missed emission");
 			let droop = q * Vec3::NEG_Y;
-			assert!(
-				droop.y < -0.7,
-				"az {i}: droop rolled sideways/out: {droop:?}"
-			);
+			assert!(droop.y < -0.7, "az {i}: droop rolled sideways/out: {droop:?}");
 		}
 	}
 

@@ -6145,6 +6145,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "procedural-common",
  "scene-ref",
 ]
@@ -6163,6 +6164,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "richmond-building-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "material-ref",
+]
+
+[[package]]
 name = "richmond-buildings"
 version = "0.0.1"
 dependencies = [
@@ -6170,6 +6179,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "material-ref",
  "procedural-common",
  "richmond-building-components",
 ]
@@ -6194,14 +6204,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "richmond-development-models"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "durham-terrain",
+ "durham-terrain-models",
+ "jersey-terrain-stamps",
+ "lod",
+ "lod-avian",
+ "lod-lazy-refs",
+ "marazion-watersheds",
+ "material-ref",
+ "procedural-common",
+ "render-item",
+ "richmond-building-components",
+ "richmond-building-shaders",
+ "richmond-buildings",
+ "richmond-developments",
+ "scene-ref",
+]
+
+[[package]]
 name = "richmond-developments"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "material-ref",
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
+]
+
+[[package]]
+name = "richmond-developments-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "log",
+ "render-item",
+ "richmond-building-components",
+ "richmond-buildings",
+ "richmond-development-models",
+ "richmond-developments",
 ]
 
 [[package]]
