@@ -5,9 +5,10 @@ Persistent procedural corpses for Crozon character visuals.
 `CharacterRagdollPlugin` converts a damage [`Downed`](../../damage/src/lifecycle.rs)
 body into two lifetimes:
 
-1. The gameplay capsule is retired after its `CharacterRoot` visual is detached.
-2. The detached visual becomes a `Corpse`, simulates for a short time, sleeps,
-   and expires through `DespawnAfter`.
+1. The `CharacterRoot` visual becomes a `Corpse` while remaining in its existing
+   hierarchy, and initializes a ragdoll when its body rig is ready.
+2. The body loses gameplay and physics ownership, then the complete retained
+   hierarchy expires through `DespawnAfter`.
 
 The solver does not turn rendered bones into physics bodies. It captures named
 bones into world-space particles, applies inherited velocity, impact, gravity,

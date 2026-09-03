@@ -36,7 +36,9 @@ bore inside the short alignment grace to keep firing. Connected pads rumble
 on the followed player's fire and hit-confirm (faster / harder shots scale the
 pulse; lasers stay a low constant tick). The
 player also gets directional hit ticks around screen center. At 0 health the
-combatant and held firearm despawn; player and NPC both return after two seconds.
+gameplay capsule and held firearm retire after the character visual becomes a
+persistent procedural ragdoll; player and NPC both return after two seconds.
+Smoothed FPS and frame time are logged to the terminal every two seconds.
 The NPC spots and aims during a ceasefire, but does not fire until the player
 takes a shot. Player death (or switching mode) resets that ceasefire.
 

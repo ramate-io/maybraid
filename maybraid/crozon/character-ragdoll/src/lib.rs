@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use avian3d::prelude::{
-	Collider, LinearVelocity, PhysicsPlugins, PhysicsSchedulePlugin, ShapeCastConfig, SpatialQuery,
-	SpatialQueryFilter,
+	Collider, ColliderDisabled, LinearVelocity, PhysicsPlugins, PhysicsSchedulePlugin,
+	RigidBodyDisabled, ShapeCastConfig, SpatialQuery, SpatialQueryFilter,
 };
 use bevy::math::Affine3A;
 use bevy::prelude::*;
@@ -15,7 +15,9 @@ use crozon_character_motion::{
 use crozon_characters::CharacterRoot;
 use damage::{DamageSystems, DespawnAfter, Downed};
 use lod_avian::PhysicsInteractionLayer;
-use player::{PlayerVisual, PlayerYawOwner};
+use player::{
+	CameraFollow, CharacterController, Npc, Player, PlayerCameraAim, PlayerVisual, PlayerYawOwner,
+};
 
 const PARTICLE_SKIN: f32 = 0.01;
 
@@ -144,6 +146,13 @@ pub struct RagdollState {
 	sleeping: bool,
 }
 
+/// Body-side acknowledgement that its retained visual entered corpse ownership.
+#[derive(Component, Clone, Copy, Debug)]
+struct CorpseHandoff {
+	visual: Entity,
+	started_at: f32,
+}
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CharacterRagdollSystems {
 	Handoff,
@@ -159,6 +168,13 @@ type PendingRigHosts<'w, 's> = Query<
 	's,
 	(Entity, &'static CharacterRig, &'static crozon_character_motion::BoneMap),
 	(Without<RagdollState>, Without<AnimBone>),
+>;
+
+type DownedBodies<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static Downed, Option<&'static LinearVelocity>),
+	(Without<DespawnAfter>, Without<CorpseHandoff>),
 >;
 
 impl Plugin for CharacterRagdollPlugin {
@@ -187,7 +203,9 @@ impl Plugin for CharacterRagdollPlugin {
 			.configure_sets(FixedUpdate, CharacterRagdollSystems::Simulate)
 			.add_systems(
 				PostUpdate,
-				handoff_downed_visuals.in_set(CharacterRagdollSystems::Handoff),
+				(begin_corpse_handoffs, finish_corpse_handoffs)
+					.chain()
+					.in_set(CharacterRagdollSystems::Handoff),
 			)
 			.add_systems(Update, initialize_ragdolls.in_set(CharacterRagdollSystems::Initialize))
 			.add_systems(FixedUpdate, simulate_ragdolls.in_set(CharacterRagdollSystems::Simulate))
@@ -195,36 +213,60 @@ impl Plugin for CharacterRagdollPlugin {
 	}
 }
 
-fn handoff_downed_visuals(
+fn begin_corpse_handoffs(
 	time: Res<Time>,
-	settings: Res<CharacterRagdollSettings>,
 	mut commands: Commands,
-	downed: Query<(Entity, &Downed, Option<&LinearVelocity>), Without<DespawnAfter>>,
-	visuals: Query<(Entity, &ChildOf, &GlobalTransform), With<CharacterRoot>>,
+	downed: DownedBodies,
+	visuals: Query<(Entity, &ChildOf), With<CharacterRoot>>,
 ) {
 	let now = time.elapsed_secs();
 	for (body, downed, velocity) in &downed {
-		let mut handed_off = false;
-		for (visual, child_of, global) in &visuals {
+		for (visual, child_of) in &visuals {
 			if child_of.parent() != body {
 				continue;
 			}
+			commands.entity(visual).insert(Corpse {
+				source: downed.source,
+				point: downed.point,
+				inherited_velocity: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
+			});
+			commands.entity(body).try_insert(CorpseHandoff { visual, started_at: now });
+			break;
+		}
+	}
+}
+
+fn finish_corpse_handoffs(
+	time: Res<Time>,
+	settings: Res<CharacterRagdollSettings>,
+	mut commands: Commands,
+	handoffs: Query<(Entity, &CorpseHandoff), Without<DespawnAfter>>,
+	visuals: Query<(Option<&ChildOf>, Option<&Corpse>)>,
+	ragdolls: Query<&RagdollState>,
+) {
+	let now = time.elapsed_secs();
+	for (body, handoff) in &handoffs {
+		let Ok((child_of, corpse)) = visuals.get(handoff.visual) else {
+			continue;
+		};
+		let retained = child_of.is_some_and(|child_of| child_of.parent() == body);
+		if !retained || corpse.is_none() {
+			continue;
+		}
+		let ragdoll_ready = ragdolls.iter().any(|ragdoll| ragdoll.corpse == handoff.visual);
+		let timed_out = now - handoff.started_at >= settings.handoff_wait_secs.max(0.0);
+		if ragdoll_ready || timed_out {
 			commands
-				.entity(visual)
-				.remove::<(ChildOf, PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>()
-				.insert((
-					global.compute_transform(),
-					Corpse {
-						source: downed.source,
-						point: downed.point,
-						inherited_velocity: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
-					},
+				.entity(handoff.visual)
+				.remove::<(PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>();
+			commands
+				.entity(body)
+				.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
+				.try_insert((
+					RigidBodyDisabled,
+					ColliderDisabled,
 					DespawnAfter::seconds(settings.corpse_lifetime_secs),
 				));
-			handed_off = true;
-		}
-		if handed_off || now - downed.at >= settings.handoff_wait_secs.max(0.0) {
-			commands.entity(body).try_insert(DespawnAfter::seconds(0.0));
 		}
 	}
 }
@@ -696,12 +738,24 @@ mod tests {
 	}
 
 	#[test]
-	fn handoff_detaches_and_deactivates_the_existing_visual() -> anyhow::Result<()> {
+	fn handoff_keeps_visual_attached_until_corpse_expiry() -> anyhow::Result<()> {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
-			.init_resource::<CharacterRagdollSettings>()
-			.add_systems(Update, handoff_downed_visuals);
-		let body = app.world_mut().spawn(Downed { source: None, point: Vec3::ZERO, at: 0.0 }).id();
+			.insert_resource(CharacterRagdollSettings { handoff_wait_secs: 0.0, ..default() })
+			.add_systems(
+				Update,
+				(begin_corpse_handoffs, finish_corpse_handoffs, damage::tick_queued_despawns)
+					.chain(),
+			);
+		let body = app
+			.world_mut()
+			.spawn((
+				Downed { source: None, point: Vec3::ZERO, at: 0.0 },
+				Npc,
+				avian3d::prelude::RigidBody::Dynamic,
+				Collider::sphere(0.4),
+			))
+			.id();
 		let visual = app
 			.world_mut()
 			.spawn((
@@ -715,12 +769,22 @@ mod tests {
 			))
 			.id();
 
-		app.update();
+		for _ in 0..2 {
+			app.update();
+		}
 
 		let world = app.world();
+		assert!(world.entities().contains(body));
+		assert!(world.entities().contains(visual));
 		assert!(world.get::<DespawnAfter>(body).is_some());
+		assert!(world.get::<Npc>(body).is_none());
+		assert!(world.get::<RigidBodyDisabled>(body).is_some());
+		assert!(world.get::<ColliderDisabled>(body).is_some());
+		assert!(world.get::<avian3d::prelude::RigidBody>(body).is_some());
+		assert!(world.get::<Collider>(body).is_some());
+		assert!(world.get::<DespawnAfter>(visual).is_none());
 		assert!(world.get::<Corpse>(visual).is_some());
-		assert!(world.get::<ChildOf>(visual).is_none());
+		assert!(world.get::<ChildOf>(visual).is_some_and(|child_of| child_of.parent() == body));
 		assert!(world.get::<PlayerVisual>(visual).is_none());
 		assert!(world.get::<ApplyTerrainPitch>(visual).is_none());
 		Ok(())

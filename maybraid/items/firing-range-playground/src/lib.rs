@@ -3,6 +3,7 @@
 mod buildings_lod;
 pub mod commands;
 mod damage;
+mod diagnostics;
 mod engagement;
 mod hud;
 mod les_halles;
@@ -21,6 +22,7 @@ use buildings_lod::FiringRangeBuildingsLodPlugin;
 use crozon_character_items::ItemRng;
 use crozon_character_ragdoll::CharacterRagdollPlugin;
 use crozon_characters::CharacterHostsPlugin;
+use diagnostics::FiringRangeDiagnosticsPlugin;
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::{spawn_reticle, FirearmUserPlugin};
 use firearms::{
@@ -63,6 +65,7 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
 			.add_plugins(CharacterRagdollPlugin)
+			.add_plugins(FiringRangeDiagnosticsPlugin)
 			.add_plugins(FiringRangeBuildingsLodPlugin)
 			.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
 			.add_plugins(BuildingWalkColliderPlugin)
