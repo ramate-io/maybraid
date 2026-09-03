@@ -18,6 +18,16 @@ fn default_constructs_outer_and_inner_walls() {
 }
 
 #[test]
+fn omitting_inner_walls_keeps_outer_loop_and_slabs() {
+	let r = RectRingFloorParams::default()
+		.inner_walls(false)
+		.floor(RectRingFloorSlab::Solid)
+		.build();
+	assert_eq!(r.wall_count(), 4);
+	assert!(r.has_floor());
+}
+
+#[test]
 fn inner_courtyard_smaller_than_outer() {
 	let r = RectRingFloorParams::default().build();
 	assert!(r.params().inner.x < r.params().outer.x);

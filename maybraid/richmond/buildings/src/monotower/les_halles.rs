@@ -8,6 +8,7 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
@@ -17,10 +18,12 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::openings::{OpeningLabel, Openings};
-use crate::storeys::les_halles::parameterized::{footprint_extents, MIN_MONOTOWER_STOREY_HEIGHT};
+use crate::storeys::les_halles::parameterized::{
+	footprint_extents, MAX_MONOTOWER_STOREY_HEIGHT, MIN_MONOTOWER_STOREY_HEIGHT,
+};
 use crate::storeys::les_halles::{
-	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage, LesHallesParameterized,
-	LesHallesUsagePlan,
+	LesHallesArcadeUsage, LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage,
+	LesHallesOpeningProgram, LesHallesParameterized, LesHallesUsagePlan,
 };
 
 const SALT_FLOOR: f32 = 11.0;
@@ -28,19 +31,58 @@ const SALT_FLOOR: f32 = 11.0;
 /// One storey in a [`MixedUseLesHallesMonotower`]: shared shell + painted usage.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MixedUseLesHallesStorey {
-	Commercial { floor_plan: LesHallesFloorPlan, usage: LesHallesCommercialUsage },
-	Livable { floor_plan: LesHallesFloorPlan, usage: LesHallesLivableUsage },
+	Arcade {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesArcadeUsage,
+		wall_material: Option<MaterialRef>,
+	},
+	Commercial {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesCommercialUsage,
+		wall_material: Option<MaterialRef>,
+	},
+	Livable {
+		floor_plan: LesHallesFloorPlan,
+		usage: LesHallesLivableUsage,
+		wall_material: Option<MaterialRef>,
+	},
 }
 
 impl MixedUseLesHallesStorey {
 	pub fn floor_plan(&self) -> &LesHallesFloorPlan {
 		match self {
-			Self::Commercial { floor_plan, .. } | Self::Livable { floor_plan, .. } => floor_plan,
+			Self::Arcade { floor_plan, .. }
+			| Self::Commercial { floor_plan, .. }
+			| Self::Livable { floor_plan, .. } => floor_plan,
 		}
+	}
+
+	pub fn is_arcade(&self) -> bool {
+		matches!(self, Self::Arcade { .. })
 	}
 
 	pub fn is_commercial(&self) -> bool {
 		matches!(self, Self::Commercial { .. })
+	}
+
+	pub fn wall_material(&self) -> Option<&MaterialRef> {
+		match self {
+			Self::Arcade { wall_material, .. }
+			| Self::Commercial { wall_material, .. }
+			| Self::Livable { wall_material, .. } => wall_material.as_ref(),
+		}
+	}
+
+	/// Stamp a wall shader look onto every emitted panel (kit style unchanged).
+	pub fn with_wall_material(mut self, material: MaterialRef) -> Self {
+		match &mut self {
+			Self::Arcade { wall_material, .. }
+			| Self::Commercial { wall_material, .. }
+			| Self::Livable { wall_material, .. } => {
+				*wall_material = Some(material);
+			}
+		}
+		self
 	}
 }
 
@@ -48,12 +90,16 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = self.floor_plan().panel_nodes_for_level(level);
 		match self {
+			Self::Arcade { .. } => {}
 			Self::Commercial { usage, .. } => {
 				out.extend(usage.panel_nodes_for_level(level));
 			}
 			Self::Livable { usage, .. } => {
 				out.extend(usage.panel_nodes_for_level(level));
 			}
+		}
+		if let Some(material) = self.wall_material() {
+			out = out.with_material(material.clone());
 		}
 		out
 	}
@@ -69,7 +115,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		match self {
 			Self::Livable { usage, .. } => usage.furniture_nodes_for_level(level),
-			Self::Commercial { .. } => Layers::new(),
+			Self::Arcade { .. } | Self::Commercial { .. } => Layers::new(),
 		}
 	}
 
@@ -77,6 +123,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 		match self {
 			Self::Commercial { usage, .. } => usage.label_nodes_for_level(level),
 			Self::Livable { usage, .. } => usage.label_nodes_for_level(level),
+			Self::Arcade { .. } => Layers::new(),
 		}
 	}
 }
@@ -86,7 +133,7 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 pub struct MixedUseLesHallesMonotower {
 	pub parameterized: LesHallesParameterized,
 	pub storey_height: f32,
-	/// Count of commercial storeys from the ground (`floors[0..n_commercial]`).
+	/// Count of commercial storeys above the ground arcade (`floors[1..1+n_commercial]`).
 	pub n_commercial: usize,
 	/// Active shaft placement slots (`0…3`), frozen for the tower.
 	pub shaft_slots: Vec<usize>,
@@ -105,9 +152,10 @@ impl Fit for MixedUseLesHallesMonotower {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let (_, _, total_h) = footprint_extents(confines)?;
+		let n_storeys = LesHallesParameterized::sample_monotower_storey_count(confines, noise);
+		let max_h_for_n = (total_h / n_storeys as f32).max(MIN_MONOTOWER_STOREY_HEIGHT);
 		let storey_height = LesHallesParameterized::sample_monotower_storey_height(confines, noise)
-			.clamp(MIN_MONOTOWER_STOREY_HEIGHT, total_h.max(MIN_MONOTOWER_STOREY_HEIGHT));
-		let n_storeys = ((total_h / storey_height).floor() as usize).max(1);
+			.clamp(MIN_MONOTOWER_STOREY_HEIGHT, max_h_for_n.min(MAX_MONOTOWER_STOREY_HEIGHT));
 		let used_h = n_storeys as f32 * storey_height;
 		if used_h + 1e-3 < MIN_MONOTOWER_STOREY_HEIGHT {
 			return Err(FitError::TooSmall { reason: "height" });
@@ -119,8 +167,12 @@ impl Fit for MixedUseLesHallesMonotower {
 		let params = LesHallesParameterized::sample_monotower(&shell_confines, noise)?;
 
 		let shaft_slots = resolve_shaft_slots(&params, confines, noise);
-		let n_commercial =
-			LesHallesParameterized::sample_monotower_commercial_count(confines, noise, n_storeys);
+		let upper_n = n_storeys.saturating_sub(1);
+		let n_commercial = if upper_n == 0 {
+			0
+		} else {
+			LesHallesParameterized::sample_monotower_commercial_count(confines, noise, upper_n)
+		};
 
 		let mut floors = Vec::with_capacity(n_storeys);
 		for i in 0..n_storeys {
@@ -135,15 +187,27 @@ impl Fit for MixedUseLesHallesMonotower {
 				openings.insert(id.clone(), opening.clone());
 			}
 			let storey_confines = slice_confines(confines, fy0, storey_height, openings);
-			let (floor_plan, regions) =
-				LesHallesFloorPlan::from_parameterized(params.clone(), &storey_confines)?;
+			let program = if i == 0 {
+				LesHallesOpeningProgram::GroundArcade
+			} else {
+				LesHallesOpeningProgram::CommercialGallery
+			};
+			let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with(
+				params.clone(),
+				&storey_confines,
+				crate::shells::rect_ring_floor::RectRingFloorSlab::None,
+				program,
+			)?;
 			let floor_noise = floor_noise(noise, i);
-			let storey = if i < n_commercial {
+			let storey = if i == 0 {
+				let (usage, _) = LesHallesArcadeUsage::paint(regions, floor_noise)?;
+				MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
+			} else if i <= n_commercial {
 				let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
-				MixedUseLesHallesStorey::Commercial { floor_plan, usage }
+				MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
 			} else {
 				let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
-				MixedUseLesHallesStorey::Livable { floor_plan, usage }
+				MixedUseLesHallesStorey::Livable { floor_plan, usage, wall_material: None }
 			};
 			floors.push(storey);
 		}
@@ -284,26 +348,33 @@ mod tests {
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
 
+	use crate::storeys::les_halles::{MAX_MONOTOWER_STOREYS, MIN_MONOTOWER_STOREYS};
+
 	fn large_tower_bounds() -> Aabb3d {
 		// ~72×54 footprint, ~16 m tall → several 3–5 m storeys.
 		Aabb3d::from_min_max(Vec3::new(-36.0, 0.0, -27.0), Vec3::new(36.0, 16.0, 27.0))
 	}
 
 	#[test]
-	fn mixed_use_stacks_commercial_then_livable() {
+	fn mixed_use_stacks_arcade_then_commercial_then_livable() {
 		let confines = Confines::from_bounds(large_tower_bounds());
 		let noise = NoiseParams { seed: 42, ..NoiseParams::default() };
 		let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
-		assert!(tower.floor_count() >= 2);
-		assert!(tower.n_commercial >= 1);
-		assert!(tower.n_commercial < tower.floor_count());
+		assert!(tower.floor_count() >= MIN_MONOTOWER_STOREYS);
+		assert!(tower.floor_count() <= MAX_MONOTOWER_STOREYS);
+		assert!(tower.floors[0].is_arcade());
 		assert!(!tower.shaft_slots.is_empty());
 		assert!(tower.shaft_slots.len() <= 4);
 		for (i, floor) in tower.floors.iter().enumerate() {
-			if i < tower.n_commercial {
+			if i == 0 {
+				assert!(floor.is_arcade(), "floor 0 should be arcade");
+			} else if i <= tower.n_commercial {
 				assert!(floor.is_commercial(), "floor {i} should be commercial");
 			} else {
-				assert!(!floor.is_commercial(), "floor {i} should be livable");
+				assert!(
+					!floor.is_commercial() && !floor.is_arcade(),
+					"floor {i} should be livable"
+				);
 			}
 			assert!(
 				(floor.floor_plan().parameterized.gallery_width
@@ -312,6 +383,11 @@ mod tests {
 				"shared shell gallery depth"
 			);
 		}
+		assert!(tower.floors[0]
+			.floor_plan()
+			.openings
+			.iter()
+			.any(|(id, _)| { id.as_str().contains("outer_breezeway") }));
 	}
 
 	#[test]
@@ -348,6 +424,24 @@ mod tests {
 				"expected inbound slot {slot} in {:?}",
 				tower.shaft_slots
 			);
+		}
+	}
+
+	#[test]
+	fn tall_confines_stay_within_two_to_seven_storeys() {
+		let confines = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(-36.0, 0.0, -27.0),
+			Vec3::new(36.0, 35.0, 27.0),
+		));
+		for seed in [1, 7, 42, 99, 1337] {
+			let noise = NoiseParams { seed, ..NoiseParams::default() };
+			let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(&confines, noise).unwrap();
+			assert!(
+				(MIN_MONOTOWER_STOREYS..=MAX_MONOTOWER_STOREYS).contains(&tower.floor_count()),
+				"seed {seed} floors={}",
+				tower.floor_count()
+			);
+			assert!(tower.floors[0].is_arcade());
 		}
 	}
 }

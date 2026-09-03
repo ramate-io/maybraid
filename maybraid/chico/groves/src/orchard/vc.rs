@@ -1,14 +1,10 @@
 use super::WOODY_LOD;
 use std::sync::Arc;
 
-#[cfg(test)]
-use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_sbs_trees::{QuantizedPlant, StorybookTree, StorybookTreeParams};
 use chico_vegetation_components::{Placement, VegetationComponents};
 use clap::Args;
-#[cfg(test)]
-use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use lod::SceneChunk;
 use material_ref::MaterialRef;

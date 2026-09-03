@@ -181,6 +181,18 @@ impl<T> Layers<T> {
 		}
 	}
 
+	/// Map every node, preserving free vs labeled provenance.
+	pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> Layers<U> {
+		Layers {
+			free: self.free.into_iter().map(&mut f).collect(),
+			labeled: self
+				.labeled
+				.into_iter()
+				.map(|(layer, nodes)| (layer, nodes.into_iter().map(&mut f).collect()))
+				.collect(),
+		}
+	}
+
 	/// Flatten free then labeled (labels sorted by name) into one list.
 	pub fn flatten(self) -> Vec<T> {
 		let mut out = self.free;
@@ -240,5 +252,13 @@ mod tests {
 		out.extend_under("internal_walls", child);
 		assert!(out.free.is_empty());
 		assert_eq!(out.labeled.get(&Layer::new("internal_walls")).unwrap(), &vec![1, 2]);
+	}
+
+	#[test]
+	fn map_preserves_labels() {
+		let layers = Layers::new().with_free([1]).with_labeled("envelope", [2, 3]);
+		let mapped = layers.map(|n| n * 10);
+		assert_eq!(mapped.free, vec![10]);
+		assert_eq!(mapped.labeled.get(&Layer::new("envelope")).unwrap(), &vec![20, 30]);
 	}
 }

@@ -87,6 +87,9 @@ pub const MIN_MONOTOWER_COURTYARD: f32 = 8.0;
 /// Storey height range for Les Halles monotowers (meters).
 pub const MIN_MONOTOWER_STOREY_HEIGHT: f32 = 3.0;
 pub const MAX_MONOTOWER_STOREY_HEIGHT: f32 = 5.0;
+/// Mixed-use stack: arcade plus upper commercial / livable floors.
+pub const MIN_MONOTOWER_STOREYS: usize = 2;
+pub const MAX_MONOTOWER_STOREYS: usize = 7;
 
 /// Salt lanes for spatial sampling at the confines center.
 const SALT_COURTYARD: f32 = 1.0;
@@ -98,6 +101,7 @@ const SALT_STOREY_HEIGHT: f32 = 5.0;
 const SALT_COMMERCIAL_COUNT: f32 = 6.0;
 const SALT_SHAFT_COUNT: f32 = 7.0;
 const SALT_SHAFT_PICK: f32 = 7.5;
+const SALT_STOREY_COUNT: f32 = 8.0;
 
 impl LesHallesParameterized {
 	/// Sample knobs at the confines center. Rejects footprints that cannot host
@@ -349,6 +353,21 @@ impl LesHallesParameterized {
 			c.z,
 			SALT_STOREY_HEIGHT,
 		)
+	}
+
+	/// How many storeys to author in `[MIN_MONOTOWER_STOREYS, MAX_MONOTOWER_STOREYS]`,
+	/// clipped to what `confines` height can host at [`MIN_MONOTOWER_STOREY_HEIGHT`].
+	pub fn sample_monotower_storey_count(confines: &Confines, noise: NoiseParams) -> usize {
+		let total_h = footprint_extents(confines).map(|(_, _, h)| h).unwrap_or(0.0);
+		let max_n = ((total_h / MIN_MONOTOWER_STOREY_HEIGHT).floor() as usize)
+			.clamp(1, MAX_MONOTOWER_STOREYS);
+		let min_n = MIN_MONOTOWER_STOREYS.min(max_n).max(1);
+		if min_n == max_n {
+			return min_n;
+		}
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		min_n + cfg.sample_range_usize_4d(0, max_n - min_n + 1, c.x, c.y, c.z, SALT_STOREY_COUNT)
 	}
 
 	/// Number of commercial storeys from the ground up (`1…n_storeys`, or `1…n-1`
@@ -616,5 +635,30 @@ mod tests {
 			"gallery {:.2} > livable soft max",
 			params.gallery_width
 		);
+	}
+
+	#[test]
+	fn storey_count_spans_two_to_seven_on_tall_host() {
+		let short = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
+			bevy_math::Vec3::new(36.0, 10.0, 27.0),
+		));
+		let tall = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-36.0, 0.0, -27.0),
+			bevy_math::Vec3::new(36.0, 35.0, 27.0),
+		));
+		let mut tall_seen = std::collections::BTreeSet::new();
+		for seed in 0..32 {
+			let noise = NoiseParams { seed, ..NoiseParams::default() };
+			let n_short = LesHallesParameterized::sample_monotower_storey_count(&short, noise);
+			assert!((2..=3).contains(&n_short), "10 m host seed {seed} n={n_short}");
+			let n_tall = LesHallesParameterized::sample_monotower_storey_count(&tall, noise);
+			assert!(
+				(MIN_MONOTOWER_STOREYS..=MAX_MONOTOWER_STOREYS).contains(&n_tall),
+				"35 m host seed {seed} n={n_tall}"
+			);
+			tall_seen.insert(n_tall);
+		}
+		assert!(tall_seen.len() >= 3, "tall host should vary storey count, got {tall_seen:?}");
 	}
 }

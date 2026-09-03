@@ -73,12 +73,12 @@ pub use paneling::{
 	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece,
 	ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
 	FittedRectangularStrip, OrientedRect, PanelComplex, PanelComplexJointPolicy,
-	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
-	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip, RectangularStripNode,
-	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube, TubeCorners,
-	TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS,
-	MIN_SEGMENTS,
+	PanelComplexValidation, PanelMesh, PanelPillar, PanelPillarLine, PanelPoint, PanelPointId,
+	PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset,
+	Rectangle, RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip,
+	RectangularStripNode, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube,
+	TubeCorners, TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS,
+	DEFAULT_SEGMENTS, MIN_SEGMENTS,
 };
 pub use placer::{
 	enclosure_soft_goal_met, init_host, pack_kinds, pick_kind, propose_from_spec,
@@ -104,8 +104,9 @@ pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };
 pub use storeys::les_halles::{
-	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesFullStorey, LesHallesLivableFullStorey,
-	LesHallesLivableUsage, LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement,
+	LesHallesArcadeStorey, LesHallesArcadeUsage, LesHallesCommercialUsage, LesHallesFloorPlan,
+	LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesLivableUsage,
+	LesHallesOpeningProgram, LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement,
 	LesHallesStallDoor, LesHallesUsagePlan, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{

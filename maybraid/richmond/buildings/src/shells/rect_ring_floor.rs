@@ -1,10 +1,12 @@
 //! Rectangular ring storey shell: outer + inner wall loops + frame slabs.
 //!
 //! Outer walls walk CCW and inner walls walk CW so both face the gallery between
-//! them. There is no separate omit-interval API — author courtyard breaks and
-//! broad wall omissions with [`Openings`] (wide `Passage` / `Aperture` AABBs on
-//! the hit outer or inner side). Openings fit to authored AABB positions on the
-//! hit side / frame band — not centered approximations.
+//! them. Set [`RectRingFloorParams::inner_walls`] to `false` to skip the inner
+//! loop entirely (open ring / arcade). There is no separate omit-interval API —
+//! author courtyard breaks and broad wall omissions with [`Openings`] (wide
+//! `Passage` / `Aperture` AABBs on the hit outer or inner side). Openings fit to
+//! authored AABB positions on the hit side / frame band — not centered
+//! approximations.
 //!
 //! **Walls:** each connectable opening maps to **exactly one** outer or inner
 //! side (largest projected along-span wins, then nearest mid — so a corner
@@ -69,6 +71,9 @@ pub struct RectRingFloorParams {
 	pub openings: Openings,
 	pub floor: RectRingFloorSlab,
 	pub ceiling: RectRingFloorSlab,
+	/// When `false`, skip the inner courtyard wall loop. Outer walls and frame
+	/// slabs still use [`Self::inner`] as the gallery’s inner plan line.
+	pub inner_walls: bool,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
 }
@@ -83,6 +88,7 @@ impl Default for RectRingFloorParams {
 			openings: Openings::new(),
 			floor: RectRingFloorSlab::None,
 			ceiling: RectRingFloorSlab::None,
+			inner_walls: true,
 			style: PanelStyle::RoughStonework,
 			joint_thickness: DEFAULT_PANEL_THICKNESS,
 		}
@@ -111,6 +117,11 @@ impl RectRingFloorParams {
 
 	pub fn openings(mut self, openings: Openings) -> Self {
 		self.openings = openings;
+		self
+	}
+
+	pub fn inner_walls(mut self, inner_walls: bool) -> Self {
+		self.inner_walls = inner_walls;
 		self
 	}
 

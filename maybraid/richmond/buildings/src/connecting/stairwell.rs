@@ -20,6 +20,7 @@ pub use tread::TreadEnd;
 pub use well::{WellAabb, WellSide};
 
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
@@ -62,6 +63,7 @@ pub struct ConnectingStairwell {
 	upper_landing: Option<QuadPanel>,
 	mid_landings: Vec<QuadPanel>,
 	stairs: Vec<StairNode>,
+	surface_material: Option<MaterialRef>,
 }
 
 impl ConnectingStairwell {
@@ -94,6 +96,7 @@ impl ConnectingStairwell {
 			mid_landings: mids,
 			stairs,
 			well,
+			surface_material: None,
 		}
 	}
 
@@ -145,6 +148,16 @@ impl ConnectingStairwell {
 			.map(|slab| slab.with_joint_policy(joint_policy))
 			.collect();
 		self
+	}
+
+	/// Stamp a wall shader look onto stairwell panels (kit style unchanged).
+	pub fn with_surface_material(mut self, material: MaterialRef) -> Self {
+		self.surface_material = Some(material);
+		self
+	}
+
+	pub fn surface_material(&self) -> Option<&MaterialRef> {
+		self.surface_material.as_ref()
 	}
 
 	fn rebuild(&mut self) {
@@ -201,6 +214,9 @@ impl BuildingComponents for ConnectingStairwell {
 		}
 		if let Some(landing) = &self.upper_landing {
 			out.extend(landing.panel_nodes_for_level(level));
+		}
+		if let Some(material) = &self.surface_material {
+			out = out.with_material(material.clone());
 		}
 		out
 	}

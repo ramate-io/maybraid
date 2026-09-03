@@ -7,13 +7,15 @@
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
 use richmond_buildings::{
-	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesCommercialUsage,
-	LesHallesFloorPlan, LesHallesLivableUsage, LesHallesParameterized, LesHallesUsagePlan,
-	MixedUseLesHallesMonotower, MixedUseLesHallesStorey, Openings, PitchedRoof, PitchedRoofParams,
-	RectRingFloorSlab, RoofHalf, StairwellKind, WellAabb, WellSide,
+	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesArcadeUsage,
+	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage, LesHallesOpeningProgram,
+	LesHallesParameterized, LesHallesUsagePlan, MixedUseLesHallesMonotower,
+	MixedUseLesHallesStorey, Openings, Overhang, PitchedRoof, PitchedRoofParams, RectRingFloorSlab,
+	RoofHalf, StairwellKind, WellAabb, WellSide,
 };
 
 /// [`fit_windows_on_run`] emits nothing below this density.
@@ -22,10 +24,15 @@ const WINDOW_DENSITY_GATE: f32 = 0.08;
 const MIN_WINDOW_DENSITY: f32 = 0.35;
 /// Tread fill so wall-hugging flights stay wider than a 0.8 m capsule.
 const WALK_TREAD_FILL: f32 = 0.85;
-/// Eave drip past the outer facade (meters).
-const ROOF_DRIP_M: f32 = 0.8;
+/// Eave drip past the outer facade (meters), sampled per development.
+const MIN_ROOF_DRIP_M: f32 = 0.35;
+const MAX_ROOF_DRIP_M: f32 = 2.4;
+/// Short-span ratio band used when the sampled drip is expressed as [`Overhang::Ratio`].
+const MIN_ROOF_DRIP_RATIO: f32 = 0.015;
+const MAX_ROOF_DRIP_RATIO: f32 = 0.07;
 /// Same salt as [`MixedUseLesHallesMonotower`] floor noise.
 const SALT_FLOOR: f32 = 11.0;
+const SALT_ROOF_DRIP: f32 = 19.0;
 
 /// Sibling LOD host emitted by [`MixedUseLesHallesDevelopment`].
 #[derive(Debug, Clone, PartialEq)]
@@ -56,6 +63,23 @@ impl MixedUseLesHallesDevelopment {
 		out.push(MixedUseLesHallesHost::Roof(self.roof.clone()));
 		out
 	}
+
+	/// Stamp one wall look and one roof look onto every Les Halles host.
+	pub fn with_finish(mut self, wall: MaterialRef, roof: MaterialRef) -> Self {
+		self.tower.floors = self
+			.tower
+			.floors
+			.into_iter()
+			.map(|floor| floor.with_wall_material(wall.clone()))
+			.collect();
+		self.stairwells = self
+			.stairwells
+			.into_iter()
+			.map(|stairwell| stairwell.with_surface_material(wall.clone()))
+			.collect();
+		self.roof = self.roof.with_surface_material(roof);
+		self
+	}
 }
 
 impl Fit for MixedUseLesHallesDevelopment {
@@ -69,7 +93,7 @@ impl Fit for MixedUseLesHallesDevelopment {
 		}
 		finish_tower(&mut tower, noise)?;
 		let stairwells = stairwells_for(&tower);
-		let roof = roof_for(&tower);
+		let roof = roof_for(&tower, noise);
 		Ok((
 			Self { tower, stairwells, roof },
 			FillableRegions { within: Vec::new(), atop: Vec::new() },
@@ -105,21 +129,31 @@ fn finish_tower(
 	let slots = tower.shaft_slots.clone();
 	let params = tower.parameterized.clone();
 	for i in start..tower.floors.len() {
+		let arcade = tower.floors[i].is_arcade();
 		let commercial = tower.floors[i].is_commercial();
 		let confines = storey_confines(tower.floors[i].floor_plan(), &params, &slots);
 		let ceiling = if i == last_i { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None };
-		let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with_ceiling(
+		let program = if arcade {
+			LesHallesOpeningProgram::GroundArcade
+		} else {
+			LesHallesOpeningProgram::CommercialGallery
+		};
+		let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with(
 			params.clone(),
 			&confines,
 			ceiling,
+			program,
 		)?;
 		let floor_noise = floor_noise(noise, i);
-		tower.floors[i] = if commercial {
+		tower.floors[i] = if arcade {
+			let (usage, _) = LesHallesArcadeUsage::paint(regions, floor_noise)?;
+			MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
+		} else if commercial {
 			let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Commercial { floor_plan, usage }
+			MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
 		} else {
 			let (usage, _) = LesHallesLivableUsage::paint(regions, floor_noise)?;
-			MixedUseLesHallesStorey::Livable { floor_plan, usage }
+			MixedUseLesHallesStorey::Livable { floor_plan, usage, wall_material: None }
 		};
 	}
 	Ok(())
@@ -183,7 +217,7 @@ fn stairwells_for(tower: &MixedUseLesHallesMonotower) -> Vec<ConnectingStairwell
 	out
 }
 
-fn roof_for(tower: &MixedUseLesHallesMonotower) -> PitchedRoof {
+fn roof_for(tower: &MixedUseLesHallesMonotower, noise: NoiseParams) -> PitchedRoof {
 	let plan = tower
 		.floors
 		.last()
@@ -192,9 +226,24 @@ fn roof_for(tower: &MixedUseLesHallesMonotower) -> PitchedRoof {
 	let eave_y = plan.center_xz.y + plan.storey_height;
 	let rise = (plan.outer.x.min(plan.outer.y) * 0.12).clamp(3.0, 8.0);
 	let ridge_inset = (plan.outer.x * 0.08).clamp(1.5, 6.0);
-	let params = hip_over_outer(plan.outer, eave_y + rise, eave_y, ridge_inset, ROOF_DRIP_M);
+	let drip = sample_roof_drip(plan.outer, noise, plan.center_xz);
+	let params = hip_over_outer(plan.outer, eave_y + rise, eave_y, ridge_inset, drip);
 	let delta = Vec3::new(plan.center_xz.x, 0.0, plan.center_xz.z);
 	PitchedRoof::new(offset_roof_params(params, delta))
+}
+
+fn sample_roof_drip(outer: Vec2, noise: NoiseParams, center_xz: Vec3) -> f32 {
+	let cfg = NoiseConfig::new(noise);
+	let short = outer.x.min(outer.y);
+	let ratio = cfg.sample_range_f32_4d(
+		MIN_ROOF_DRIP_RATIO,
+		MAX_ROOF_DRIP_RATIO,
+		center_xz.x,
+		center_xz.y,
+		center_xz.z,
+		SALT_ROOF_DRIP,
+	);
+	Overhang::Ratio(ratio).resolve(short).clamp(MIN_ROOF_DRIP_M, MAX_ROOF_DRIP_M)
 }
 
 /// Hip whose wall plates sit on `outer` and eaves drip past that footprint.
@@ -308,15 +357,32 @@ mod tests {
 	#[test]
 	fn shell_has_outer_apertures() {
 		let dev = fit_dev(1337);
+		let ground = &dev.tower.floors[0];
+		assert!(ground.is_arcade());
+		assert!(ground.floor_plan().openings.iter().any(|(id, o)| {
+			id.as_str().contains("outer_breezeway") && matches!(o.label, OpeningLabel::Passage)
+		}));
 		assert!(
-			dev.tower.floors.iter().all(|f| {
+			dev.tower.floors.iter().skip(1).all(|f| {
 				f.floor_plan().openings.iter().any(|(id, o)| {
 					id.as_str().contains("outer_aperture")
 						&& matches!(o.label, OpeningLabel::Aperture)
 				})
 			}),
-			"expected outer apertures on every storey"
+			"expected outer apertures on upper storeys"
 		);
+	}
+
+	#[test]
+	fn arcade_shafts_feed_stairwells_to_upper_floors() {
+		let dev = fit_dev(42);
+		assert!(dev.tower.floor_count() >= 2);
+		assert!(dev.tower.floors[0].is_arcade());
+		let ground_shafts = dev.tower.floors[0].floor_plan().shaft_bounds.len();
+		assert!(ground_shafts >= 1);
+		assert!(dev.stairwells.len() >= ground_shafts);
+		let ground_y0 = dev.tower.floors[0].floor_plan().center_xz.y;
+		assert!(dev.stairwells.iter().any(|s| (s.well().min().y - ground_y0).abs() < 1e-2));
 	}
 
 	#[test]
@@ -355,15 +421,51 @@ mod tests {
 		let eave = dev.roof.params().halves[0].eave_line.0;
 		let wall = dev.roof.params().halves[0].wall_line.0;
 		assert!((eave.y - eave_y).abs() < 1e-3, "eave y {eave:?} vs {eave_y}");
+		let wall_z = (wall.z - plan.center_xz.z).abs();
+		let eave_z = (eave.z - plan.center_xz.z).abs();
+		let drip = eave_z - plan.outer.y * 0.5;
 		assert!(
-			((eave.z - plan.center_xz.z).abs() - (plan.outer.y * 0.5 + ROOF_DRIP_M)).abs() < 1e-3,
-			"eave z {eave:?} vs outer {} + drip",
-			plan.outer.y
-		);
-		assert!(
-			((wall.z - plan.center_xz.z).abs() - plan.outer.y * 0.5).abs() < 1e-3,
+			(wall_z - plan.outer.y * 0.5).abs() < 1e-3,
 			"wall z {wall:?} vs outer {}",
 			plan.outer.y
 		);
+		assert!(
+			drip >= MIN_ROOF_DRIP_M - 1e-3 && drip <= MAX_ROOF_DRIP_M + 1e-3,
+			"drip {drip} outside [{MIN_ROOF_DRIP_M}, {MAX_ROOF_DRIP_M}]"
+		);
+		assert!(eave_z > wall_z + 1e-3, "eaves should drip past wall plates");
+	}
+
+	#[test]
+	fn roof_drip_varies_with_noise() {
+		let a = fit_dev(3);
+		let b = fit_dev(99);
+		let drip = |dev: &MixedUseLesHallesDevelopment| {
+			let plan = dev.tower.floors.last().unwrap().floor_plan();
+			let eave = dev.roof.params().halves[0].eave_line.0;
+			(eave.z - plan.center_xz.z).abs() - plan.outer.y * 0.5
+		};
+		assert!(
+			(drip(&a) - drip(&b)).abs() > 1e-4,
+			"expected sampled eaves to differ across seeds"
+		);
+	}
+
+	#[test]
+	fn with_finish_stamps_wall_and_roof_refs() {
+		use material_ref::MaterialId;
+		let wall = MaterialRef::named("stucco");
+		let roof = MaterialRef::named("iron");
+		let painted = fit_dev(11).with_finish(wall.clone(), roof.clone());
+		assert!(painted.tower.floors.iter().all(|f| {
+			matches!(f.wall_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+		}));
+		assert!(painted.stairwells.iter().all(|s| {
+			matches!(s.surface_material().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+		}));
+		assert!(matches!(
+			painted.roof.surface_material().map(|m| &m.name),
+			Some(MaterialId::Name(n)) if n == "iron"
+		));
 	}
 }

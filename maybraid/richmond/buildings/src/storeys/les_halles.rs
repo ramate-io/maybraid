@@ -17,21 +17,28 @@
 //! Full\* variants share the same floor plan: commercial
 //! ([`LesHallesFullStorey`]) fills gallery strips with stalls; livable
 //! ([`LesHallesLivableFullStorey`]) fills them with lengthwise
-//! [`crate::RectangularLivableArea`] bays.
+//! [`crate::RectangularLivableArea`] bays; the ground arcade
+//! ([`LesHallesArcadeStorey`]) leaves the gallery open with midspan breezeways
+//! and no inner courtyard walls.
 
+pub mod arcade_storey;
 pub mod floor_plan;
 pub mod full_storey;
 pub mod livable_full_storey;
 pub mod parameterized;
 pub mod usage_plan;
 
-pub use floor_plan::LesHallesFloorPlan;
+pub use arcade_storey::LesHallesArcadeStorey;
+pub use floor_plan::{LesHallesFloorPlan, LesHallesOpeningProgram};
 pub use full_storey::LesHallesFullStorey;
 pub use livable_full_storey::LesHallesLivableFullStorey;
 pub use parameterized::{
 	LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor,
+	MAX_MONOTOWER_STOREYS, MIN_MONOTOWER_STOREYS,
 };
-pub use usage_plan::{LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan};
+pub use usage_plan::{
+	LesHallesArcadeUsage, LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan,
+};
 
 /// Scope prefix for [`crate::OpeningId::scoped`] openings authored by this typology.
 pub const SCOPE: &str = "les_halles";

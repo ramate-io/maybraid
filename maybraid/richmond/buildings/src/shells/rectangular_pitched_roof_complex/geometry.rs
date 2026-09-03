@@ -70,15 +70,6 @@ pub(super) struct VolumeCandidate {
 	pub end_free: [bool; 2],
 }
 
-impl Overhang {
-	pub(super) fn resolve(self, short_span: f32) -> f32 {
-		match self {
-			Self::Fixed(v) => v.max(0.0),
-			Self::Ratio(r) => (r.max(0.0) * short_span).max(0.0),
-		}
-	}
-}
-
 impl VolumeCandidate {
 	pub fn from_aabb(aabb: Aabb3d, side_overhang: Overhang) -> Self {
 		let min = Vec3::from(aabb.min);

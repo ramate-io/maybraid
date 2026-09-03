@@ -18,6 +18,7 @@ use crate::openings::{
 };
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
+use crate::paneling::pillar::PanelPillarLine;
 use crate::paneling::rectangle::Rectangle;
 use crate::shells::ortho::{OrthoSide, PlanRect, EPS};
 use crate::shells::rect_ring_floor::{
@@ -38,6 +39,26 @@ const INNER_DOOR_END_CLEARANCE: f32 = 0.45;
 const CORNER_CLEAR_MAX_FRAC: f32 = 0.45;
 /// Minimum along-width for shaft clears (corner F2C and mid-side face clears).
 const MIN_SHAFT_CLEAR: f32 = 1.2;
+/// Pedestrian arcade cut through a façade panel (meters).
+const MIN_BREEZEWAY_WIDTH: f32 = 2.8;
+const MAX_BREEZEWAY_WIDTH: f32 = 5.5;
+const BREEZEWAY_RUN_FRAC: f32 = 0.22;
+const BREEZEWAY_SIDE_MARGIN: f32 = 0.6;
+/// Square pier on the arcade courtyard line (meters).
+const ARCADE_PILLAR_WIDTH: f32 = 0.6;
+/// Target center-to-center spacing along an arcade colonnade run (meters).
+const ARCADE_PILLAR_SPACING: f32 = 4.5;
+
+/// How a Les Halles ring authors façade / inner-wall openings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum LesHallesOpeningProgram {
+	/// Stall doors on the gallery inner wall; packed apertures on the outer façade.
+	#[default]
+	CommercialGallery,
+	/// Floor-to-ceiling breezeway at the midspan of each outer free panel, leftover
+	/// façade windows, and no gallery inner walls (open to the courtyard).
+	GroundArcade,
+}
 
 /// Axis-aligned plan rectangle from a center + full XZ size (`size.y` = Z extent).
 #[derive(Debug, Clone, Copy)]
@@ -63,6 +84,24 @@ fn along_half(side: OrthoSide, size: Vec2) -> f32 {
 	match side {
 		OrthoSide::North | OrthoSide::South => size.x * 0.5,
 		OrthoSide::East | OrthoSide::West => size.y * 0.5,
+	}
+}
+
+/// World-space base point on the gallery-inner rectangle for an along-mid offset.
+fn along_world_on_inner(side: OrthoSide, along: f32, center_xz: Vec3, gallery_inner: Vec2) -> Vec3 {
+	match side {
+		OrthoSide::South => {
+			Vec3::new(center_xz.x + along, center_xz.y, center_xz.z - gallery_inner.y * 0.5)
+		}
+		OrthoSide::North => {
+			Vec3::new(center_xz.x + along, center_xz.y, center_xz.z + gallery_inner.y * 0.5)
+		}
+		OrthoSide::East => {
+			Vec3::new(center_xz.x + gallery_inner.x * 0.5, center_xz.y, center_xz.z + along)
+		}
+		OrthoSide::West => {
+			Vec3::new(center_xz.x - gallery_inner.x * 0.5, center_xz.y, center_xz.z + along)
+		}
 	}
 }
 
@@ -114,12 +153,14 @@ pub struct LesHallesFloorPlan {
 	pub shaft_slots: Vec<usize>,
 	/// Inbound shaft [`OpeningId`]s remapped onto each active shaft (parallel).
 	pub shaft_inbound: Vec<Vec<OpeningId>>,
-	/// Walled gallery ring (outer + inner walls, floor, optional ceiling).
+	/// Gallery ring (outer walls, floor, optional ceiling; inner walls omitted on arcade).
 	pub gallery: RectRingFloor,
 	/// Floor-only balcony annulus pieces (no walls).
 	pub balcony_floors: Vec<FittedRectangle>,
 	/// Radial walls across the gallery at each shaft (mid-side faces or corner run ends).
 	pub shaft_walls: Vec<Rectangle>,
+	/// Courtyard colonnade on the ground arcade (`GroundArcade` only).
+	pub arcade_pillars: Vec<PanelPillarLine>,
 }
 
 impl LesHallesFloorPlan {
@@ -148,6 +189,21 @@ impl LesHallesFloorPlan {
 		params: LesHallesParameterized,
 		confines: &Confines,
 		ceiling: RectRingFloorSlab,
+	) -> Result<(Self, FillableRegions), FitError> {
+		Self::from_parameterized_with(
+			params,
+			confines,
+			ceiling,
+			LesHallesOpeningProgram::CommercialGallery,
+		)
+	}
+
+	/// Structure from sampled parameters, ceiling slab, and façade opening program.
+	pub fn from_parameterized_with(
+		params: LesHallesParameterized,
+		confines: &Confines,
+		ceiling: RectRingFloorSlab,
+		program: LesHallesOpeningProgram,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let (extent_x, extent_z, height) = footprint_extents(confines)?;
 		let ring = params.ring_width();
@@ -207,10 +263,18 @@ impl LesHallesFloorPlan {
 			height,
 			&shaft_bounds,
 			&shaft_slots,
+			program,
 		));
 
-		let gallery =
-			Self::build_gallery(center_xz, outer, gallery_inner, height, ceiling, &openings);
+		let gallery = Self::build_gallery(
+			center_xz,
+			outer,
+			gallery_inner,
+			height,
+			ceiling,
+			&openings,
+			program != LesHallesOpeningProgram::GroundArcade,
+		);
 		// Drop unmapped Passage/Aperture and sync truncated AABBs from the gallery
 		// so commercial strips never see boarded or oversized voids.
 		sync_connectable_openings_from_mapped(&mut openings, &gallery);
@@ -232,6 +296,20 @@ impl LesHallesFloorPlan {
 			}
 		};
 
+		let arcade_pillars = if program == LesHallesOpeningProgram::GroundArcade {
+			Self::build_arcade_pillars(
+				center_xz,
+				gallery_inner,
+				height,
+				&shaft_bounds,
+				&shaft_slots,
+				params.shaft_placement,
+				params.corner_clear_len(),
+			)
+		} else {
+			Vec::new()
+		};
+
 		let plan = Self {
 			parameterized: params,
 			center_xz,
@@ -248,6 +326,7 @@ impl LesHallesFloorPlan {
 			gallery,
 			balcony_floors,
 			shaft_walls,
+			arcade_pillars,
 		};
 
 		let regions = plan.fillable_regions();
@@ -597,11 +676,109 @@ impl LesHallesFloorPlan {
 
 	/// Gallery facade + balcony-facing openings, plus shaft voids / clears.
 	///
-	/// - **Outer walls:** apertures packed from the window catalog on free runs.
-	/// - **Inner walls:** stall doors packed per straight section, plus
-	///   floor-to-ceiling shaft clears (corner clears: [`clamped_corner_clear`] of
-	///   [`LesHallesParameterized::corner_clear_len`]).
+	/// - **[`LesHallesOpeningProgram::CommercialGallery`]:** outer apertures packed
+	///   from the window catalog; inner stall doors per straight section.
+	/// - **[`LesHallesOpeningProgram::GroundArcade`]:** a floor-to-ceiling breezeway
+	///   at the midspan of each outer free panel and windows on leftover façade.
+	///   Inner gallery walls are omitted on the shell, so no inner passages or
+	///   shaft clears are authored.
+	/// - Shaft clears (corner / mid-side) apply to commercial / livable storeys.
 	fn generated_openings(
+		params: &LesHallesParameterized,
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_inner: Vec2,
+		height: f32,
+		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
+		program: LesHallesOpeningProgram,
+	) -> Openings {
+		let mut openings = match program {
+			LesHallesOpeningProgram::CommercialGallery => Self::generated_gallery_leaf_openings(
+				params,
+				center_xz,
+				outer,
+				gallery_inner,
+				height,
+				shaft_bounds,
+				shaft_slots,
+			),
+			LesHallesOpeningProgram::GroundArcade => Self::generated_arcade_leaf_openings(
+				params,
+				center_xz,
+				outer,
+				gallery_inner,
+				height,
+				shaft_bounds,
+				shaft_slots,
+			),
+		};
+
+		for (i, shaft) in shaft_bounds.iter().enumerate() {
+			let slot = shaft_slots.get(i).copied().unwrap_or(i);
+			openings.insert(
+				OpeningId::scoped(SCOPE, "shaft", slot.to_string()),
+				Opening::new(*shaft, OpeningLabel::Shaft),
+			);
+		}
+
+		// Floor-to-ceiling clears on the gallery inner wall (active shafts only).
+		// Arcade omits that wall, so these would never map.
+		if program != LesHallesOpeningProgram::GroundArcade {
+			match params.shaft_placement {
+				LesHallesShaftPlacement::Corners => {
+					Self::insert_corner_shaft_clears(
+						&mut openings,
+						center_xz,
+						gallery_inner,
+						height,
+						params.corner_clear_len(),
+						shaft_slots,
+					);
+				}
+				LesHallesShaftPlacement::MidSides => {
+					for (i, shaft) in shaft_bounds.iter().enumerate() {
+						let slot = shaft_slots.get(i).copied().unwrap_or(i);
+						let smin = Vec3::from(shaft.min);
+						let smax = Vec3::from(shaft.max);
+						for (side, along) in
+							Self::shaft_inner_sides(center_xz, gallery_inner, *shaft)
+						{
+							let clear_w = match side {
+								OrthoSide::North | OrthoSide::South => {
+									(smax.x - smin.x).max(MIN_SHAFT_CLEAR)
+								}
+								OrthoSide::East | OrthoSide::West => {
+									(smax.z - smin.z).max(MIN_SHAFT_CLEAR)
+								}
+							};
+							let mut clear = RectRingFloor::side_passage_opening(
+								side,
+								center_xz,
+								gallery_inner,
+								clear_w,
+								height,
+							);
+							clear.bounds = offset_opening_along_side(clear.bounds, side, along);
+							openings.insert(
+								OpeningId::scoped(
+									SCOPE,
+									"shaft_clear",
+									format!("{slot}_{}", side_slot(side)),
+								),
+								clear,
+							);
+						}
+					}
+				}
+			}
+		}
+
+		openings
+	}
+
+	/// Stall doors + packed outer apertures (commercial / livable storeys).
+	fn generated_gallery_leaf_openings(
 		params: &LesHallesParameterized,
 		center_xz: Vec3,
 		outer: Vec2,
@@ -619,24 +796,17 @@ impl LesHallesFloorPlan {
 		let outer_sections =
 			Self::outer_free_sections(center_xz, outer, shaft_bounds, params.shaft_placement);
 		for (si, section) in outer_sections.iter().enumerate() {
-			let run = (section.along1 - section.along0).max(0.0);
-			let placed = params.fit_windows_on_run(run);
-			for (wi, win) in placed.iter().enumerate() {
-				let along_mid = section.along0 + win.along + win.width * 0.5;
-				let mut opening = RectRingFloor::side_aperture_opening(
-					section.side,
-					center_xz,
-					outer,
-					win.width,
-					win_h,
-					sill,
-				);
-				opening.bounds = offset_opening_along_side(opening.bounds, section.side, along_mid);
-				openings.insert(
-					OpeningId::scoped(SCOPE, "outer_aperture", format!("{si}_{wi}")),
-					opening,
-				);
-			}
+			Self::insert_outer_windows_on_run(
+				&mut openings,
+				params,
+				section,
+				center_xz,
+				outer,
+				win_h,
+				sill,
+				si,
+				"",
+			);
 		}
 
 		// Inner stall doors on each straight section between shaft clears.
@@ -712,62 +882,114 @@ impl LesHallesFloorPlan {
 			}
 		}
 
-		for (i, shaft) in shaft_bounds.iter().enumerate() {
-			let slot = shaft_slots.get(i).copied().unwrap_or(i);
-			openings.insert(
-				OpeningId::scoped(SCOPE, "shaft", slot.to_string()),
-				Opening::new(*shaft, OpeningLabel::Shaft),
-			);
-		}
+		openings
+	}
 
-		// Floor-to-ceiling clears on the gallery inner wall (active shafts only).
-		match params.shaft_placement {
-			LesHallesShaftPlacement::Corners => {
-				Self::insert_corner_shaft_clears(
-					&mut openings,
+	/// Midspan breezeways through each outer free panel, plus leftover windows.
+	fn generated_arcade_leaf_openings(
+		params: &LesHallesParameterized,
+		center_xz: Vec3,
+		outer: Vec2,
+		_gallery_inner: Vec2,
+		height: f32,
+		shaft_bounds: &[Aabb3d],
+		_shaft_slots: &[usize],
+	) -> Openings {
+		let mut openings = Openings::new();
+		let win_h = (height * 0.42).clamp(1.0, height.max(1.0));
+		let sill = (height * 0.28).clamp(0.7, height * 0.45);
+
+		let outer_sections =
+			Self::outer_free_sections(center_xz, outer, shaft_bounds, params.shaft_placement);
+
+		for (si, section) in outer_sections.iter().enumerate() {
+			let run = (section.along1 - section.along0).max(0.0);
+			if let Some((width, along_mid)) = arcade_breezeway_on_run(run, section.along0) {
+				let mut outer_cut = RectRingFloor::side_passage_opening(
+					section.side,
 					center_xz,
-					gallery_inner,
+					outer,
+					width,
 					height,
-					params.corner_clear_len(),
-					shaft_slots,
 				);
-			}
-			LesHallesShaftPlacement::MidSides => {
-				for (i, shaft) in shaft_bounds.iter().enumerate() {
-					let slot = shaft_slots.get(i).copied().unwrap_or(i);
-					let smin = Vec3::from(shaft.min);
-					let smax = Vec3::from(shaft.max);
-					for (side, along) in Self::shaft_inner_sides(center_xz, gallery_inner, *shaft) {
-						let clear_w = match side {
-							OrthoSide::North | OrthoSide::South => {
-								(smax.x - smin.x).max(MIN_SHAFT_CLEAR)
-							}
-							OrthoSide::East | OrthoSide::West => {
-								(smax.z - smin.z).max(MIN_SHAFT_CLEAR)
-							}
-						};
-						let mut clear = RectRingFloor::side_passage_opening(
-							side,
-							center_xz,
-							gallery_inner,
-							clear_w,
-							height,
-						);
-						clear.bounds = offset_opening_along_side(clear.bounds, side, along);
-						openings.insert(
-							OpeningId::scoped(
-								SCOPE,
-								"shaft_clear",
-								format!("{slot}_{}", side_slot(side)),
-							),
-							clear,
-						);
-					}
-				}
+				outer_cut.bounds =
+					offset_opening_along_side(outer_cut.bounds, section.side, along_mid);
+				openings
+					.insert(OpeningId::scoped(SCOPE, "outer_breezeway", si.to_string()), outer_cut);
+
+				let lo = along_mid - width * 0.5;
+				let hi = along_mid + width * 0.5;
+				Self::insert_outer_windows_on_run(
+					&mut openings,
+					params,
+					&AlongSection { side: section.side, along0: section.along0, along1: lo },
+					center_xz,
+					outer,
+					win_h,
+					sill,
+					si,
+					"l",
+				);
+				Self::insert_outer_windows_on_run(
+					&mut openings,
+					params,
+					&AlongSection { side: section.side, along0: hi, along1: section.along1 },
+					center_xz,
+					outer,
+					win_h,
+					sill,
+					si,
+					"r",
+				);
+			} else {
+				Self::insert_outer_windows_on_run(
+					&mut openings,
+					params,
+					section,
+					center_xz,
+					outer,
+					win_h,
+					sill,
+					si,
+					"",
+				);
 			}
 		}
 
 		openings
+	}
+
+	fn insert_outer_windows_on_run(
+		openings: &mut Openings,
+		params: &LesHallesParameterized,
+		section: &AlongSection,
+		center_xz: Vec3,
+		outer: Vec2,
+		win_h: f32,
+		sill: f32,
+		si: usize,
+		tag: &str,
+	) {
+		let run = (section.along1 - section.along0).max(0.0);
+		if run < 0.8 {
+			return;
+		}
+		let placed = params.fit_windows_on_run(run);
+		for (wi, win) in placed.iter().enumerate() {
+			let along_mid = section.along0 + win.along + win.width * 0.5;
+			let mut opening = RectRingFloor::side_aperture_opening(
+				section.side,
+				center_xz,
+				outer,
+				win.width,
+				win_h,
+				sill,
+			);
+			opening.bounds = offset_opening_along_side(opening.bounds, section.side, along_mid);
+			let slot =
+				if tag.is_empty() { format!("{si}_{wi}") } else { format!("{si}_{tag}_{wi}") };
+			openings.insert(OpeningId::scoped(SCOPE, "outer_aperture", slot), opening);
+		}
 	}
 
 	/// Large F2C clears at the abutting ends of active corner shafts.
@@ -1054,6 +1276,49 @@ impl LesHallesFloorPlan {
 		walls
 	}
 
+	/// Colonnade along free inner-gallery runs (replaces the omitted courtyard wall).
+	fn build_arcade_pillars(
+		center_xz: Vec3,
+		gallery_inner: Vec2,
+		height: f32,
+		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
+		placement: LesHallesShaftPlacement,
+		corner_clear_len: f32,
+	) -> Vec<PanelPillarLine> {
+		let sections = Self::inner_straight_sections(
+			center_xz,
+			gallery_inner,
+			shaft_bounds,
+			shaft_slots,
+			placement,
+			corner_clear_len,
+		);
+		let mut lines = Vec::new();
+		for section in &sections {
+			let start =
+				along_world_on_inner(section.side, section.along0, center_xz, gallery_inner);
+			let end = along_world_on_inner(section.side, section.along1, center_xz, gallery_inner);
+			let line = PanelPillarLine::along_rough_stone(
+				start,
+				end,
+				height,
+				ARCADE_PILLAR_WIDTH,
+				ARCADE_PILLAR_SPACING,
+			);
+			if !line.is_empty() {
+				lines.push(line);
+			}
+		}
+		let sep = ARCADE_PILLAR_WIDTH * 0.85;
+		let merged = PanelPillarLine::new(lines.into_iter().flat_map(|l| l.pillars)).dedup_xz(sep);
+		if merged.is_empty() {
+			Vec::new()
+		} else {
+			vec![merged]
+		}
+	}
+
 	fn build_gallery(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -1061,11 +1326,13 @@ impl LesHallesFloorPlan {
 		storey_height: f32,
 		ceiling: RectRingFloorSlab,
 		openings: &Openings,
+		inner_walls: bool,
 	) -> RectRingFloor {
 		RectRingFloor::new(
 			RectRingFloorParams::new(center_xz, outer, gallery_inner, storey_height)
 				.floor(RectRingFloorSlab::Solid)
 				.ceiling(ceiling)
+				.inner_walls(inner_walls)
 				.openings(openings.clone()),
 		)
 	}
@@ -1124,6 +1391,9 @@ impl BuildingComponents for LesHallesFloorPlan {
 		}
 		for wall in &self.shaft_walls {
 			out.extend(wall.panel_nodes_for_level(level));
+		}
+		for line in &self.arcade_pillars {
+			out.extend(line.panel_nodes_for_level(level));
 		}
 		out
 	}
@@ -1408,6 +1678,19 @@ fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aab
 	Aabb3d::from_min_max(min, max)
 }
 
+fn arcade_breezeway_on_run(run: f32, along0: f32) -> Option<(f32, f32)> {
+	if run < MIN_BREEZEWAY_WIDTH + 2.0 * BREEZEWAY_SIDE_MARGIN {
+		return None;
+	}
+	let width = (run * BREEZEWAY_RUN_FRAC)
+		.clamp(MIN_BREEZEWAY_WIDTH, MAX_BREEZEWAY_WIDTH)
+		.min(run - 2.0 * BREEZEWAY_SIDE_MARGIN);
+	if width < MIN_BREEZEWAY_WIDTH {
+		return None;
+	}
+	Some((width, along0 + run * 0.5))
+}
+
 fn radial_wall(origin: Vec3, edge: Vec3, height: f32, thickness: f32) -> Rectangle {
 	Rectangle::rough_stone(origin, edge, height, thickness, 0.0)
 }
@@ -1555,6 +1838,42 @@ mod tests {
 			.expect("outer aperture");
 		assert!(plan.gallery.mapped_opening(&outer_id).is_some());
 		assert!(!plan.shaft_walls.is_empty());
+	}
+
+	#[test]
+	fn arcade_program_cuts_midspan_breezeways() {
+		let base = nominal_confines();
+		let params = LesHallesParameterized::sample(&base, NoiseParams::default()).unwrap();
+		let confines = confines_with_all_shafts(&params);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized_with(
+			params,
+			&confines,
+			RectRingFloorSlab::None,
+			LesHallesOpeningProgram::GroundArcade,
+		)
+		.unwrap();
+		assert!(plan.openings.iter().any(|(id, o)| {
+			id.as_str().contains("outer_breezeway") && matches!(o.label, OpeningLabel::Passage)
+		}));
+		assert!(plan.openings.iter().all(|(id, _)| !id.as_str().contains("inner_breezeway")));
+		assert!(plan.openings.iter().all(|(id, _)| !id.as_str().contains("inner_door")));
+		assert!(plan.openings.iter().any(|(id, o)| {
+			id.as_str().contains("outer_aperture") && matches!(o.label, OpeningLabel::Aperture)
+		}));
+		assert_eq!(plan.gallery.wall_count(), 4, "arcade omits the inner courtyard wall loop");
+		assert!(
+			plan.arcade_pillars.iter().any(|l| !l.is_empty()),
+			"arcade colonnade should stand on the courtyard line"
+		);
+		for (id, opening) in plan.openings.iter() {
+			if matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
+				assert!(
+					plan.gallery.mapped_opening(id).is_some(),
+					"unmapped arcade connectable {}",
+					id.as_str()
+				);
+			}
+		}
 	}
 
 	#[test]

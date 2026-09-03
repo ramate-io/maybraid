@@ -14,6 +14,7 @@ bevy_math = { workspace = true }
 procedural-common = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-buildings = { workspace = true }
+material-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
