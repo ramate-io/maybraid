@@ -29,10 +29,10 @@ pub struct BuildingsCull;
 macro_rules! avian_host {
 	($app:expr, $ty:ty) => {{
 		$app.add_plugins((
-				AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
-				AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
-				AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
-			));
+						AvianLodSceneRefreshPlugin::<$ty, BuildingsBullseye, With<Camera>>::without_full_scan_cull(),
+						AvianLodSceneRefreshPlugin::<$ty, BuildingsSpotlight, With<Camera>>::without_full_scan_cull(),
+						AvianLodSceneCullPlugin::<$ty, BuildingsCull, With<Camera>>::default(),
+					));
 	}};
 }
 

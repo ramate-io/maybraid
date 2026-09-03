@@ -3357,6 +3357,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "firearm-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "crozon-characters",
+ "firearm-user",
+ "firearms",
+ "lod-avian",
+ "movement-intelligence",
+ "player",
+]
+
+[[package]]
 name = "firearm-user"
 version = "0.0.1"
 dependencies = [
@@ -3405,6 +3420,7 @@ dependencies = [
  "bevy",
  "clap",
  "crozon-characters",
+ "firearm-intelligence",
  "firearm-user",
  "firearms",
  "game-commands",
@@ -3419,6 +3435,7 @@ dependencies = [
  "player",
  "player-camera",
  "procedural-common",
+ "projectiles",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",
