@@ -121,7 +121,10 @@ impl PadNode {
 
 	/// Flatten or grade inside the support; ease in the outer skirt; else none.
 	pub fn classification(&self, p: Vec2) -> Option<PadStage> {
-		let d = self.phi(p);
+		self.classification_at_distance(self.phi(p))
+	}
+
+	pub(crate) fn classification_at_distance(&self, d: f32) -> Option<PadStage> {
 		let ease = self.params.ease.max(0.0);
 		if d <= 0.0 {
 			Some(match self.primitive.elevation {
@@ -146,7 +149,10 @@ impl PadNode {
 	/// Flatten stays 1 for all \(\phi \le 0\) so floors are exact. Grade starts
 	/// fading `PAD_BOUNDARY_HALF` inside the capsule so path shoulders are not a wall.
 	pub fn occupancy(&self, p: Vec2) -> f32 {
-		let d = self.phi(p);
+		self.occupancy_at_distance(self.phi(p))
+	}
+
+	fn occupancy_at_distance(&self, d: f32) -> f32 {
 		let ease = self.params.ease.max(0.0);
 		let mu = PAD_BOUNDARY_HALF.min(ease);
 		let inner = match self.primitive.elevation {
@@ -168,19 +174,24 @@ impl PadNode {
 	/// Winner-take-all between disagreeing capsules puts a 10–30 m step on one
 	/// sample. CpuShot then tessellates that jump into needles. Normalized
 	/// occupancy weights keep the surface Lipschitz across path overlaps.
-	pub fn elevation_blend(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
+	pub fn elevation_blend<'a>(
+		nodes: impl Iterator<Item = &'a Self>,
+		elevation: f32,
+		p: Vec2,
+	) -> f32 {
 		let mut flatten: Option<(&Self, f32)> = None;
 		let mut num: f32 = 0.0;
 		let mut den: f32 = 0.0;
 		let mut cover: f32 = 0.0;
 		for node in nodes {
 			let phi = node.phi(p);
-			if matches!(node.classification(p), Some(PadStage::Flatten))
+			if phi <= 0.0
+				&& matches!(node.primitive.elevation, PadElevation::Flatten { .. })
 				&& flatten.is_none_or(|(_, d)| phi > d)
 			{
 				flatten = Some((node, phi));
 			}
-			let w = node.occupancy(p);
+			let w = node.occupancy_at_distance(phi);
 			if w > 1e-6 {
 				num += w * node.height_at(p);
 				den += w;

@@ -15,8 +15,7 @@ use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
 use commands::{
-	CommunePathDebug, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
-	RequestTerrainRadius,
+	RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed, RequestTerrainRadius,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
@@ -117,7 +116,6 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			.init_resource::<DevelopmentsGeneratePending>()
 			.init_resource::<TerrainPresentPending>()
 			.init_resource::<HostsDirty>()
-			.init_resource::<CommunePathDebug>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(
 				Update,
@@ -130,7 +128,6 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 					present_cells.after(generate_developments),
 					spawn_hosts.after(present_cells),
 					apply_mesh_stats.after(present_cells),
-					draw_commune_paths,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -433,41 +430,6 @@ fn spawn_hosts(
 		"spawned {n} Les Halles host roots, {shepherds_n} Shepherds Village host roots, and {commune_n} Shepherds Commune host roots"
 	);
 	dirty.0 = false;
-}
-
-fn draw_commune_paths(
-	mut gizmos: Gizmos,
-	store: Res<DevelopmentEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	debug: Res<CommunePathDebug>,
-) {
-	if !debug.0 {
-		return;
-	}
-	let line_color = Color::srgb(0.05, 0.95, 0.95);
-	let node_color = Color::srgb(1.0, 0.25, 0.05);
-	for cell in store.filled_cells_overlapping(layout.request_region()) {
-		let Some(content) = cell.shepherds_commune() else {
-			continue;
-		};
-		for corridor in &content.commune.corridors {
-			let n = corridor.path.len().min(corridor.levels.len());
-			for i in 0..n.saturating_sub(1) {
-				let a = corridor.path[i];
-				let b = corridor.path[i + 1];
-				let pa = Vec3::new(a.x, corridor.levels[i] + 1.5, a.y);
-				let pb = Vec3::new(b.x, corridor.levels[i + 1] + 1.5, b.y);
-				gizmos.line(pa, pb, line_color);
-			}
-			if n > 0 {
-				for i in [0, n - 1] {
-					let p = corridor.path[i];
-					let base = Vec3::new(p.x, corridor.levels[i], p.y);
-					gizmos.line(base, base + Vec3::Y * 5.0, node_color);
-				}
-			}
-		}
-	}
 }
 
 fn apply_mesh_stats(

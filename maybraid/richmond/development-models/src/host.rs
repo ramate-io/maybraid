@@ -69,15 +69,15 @@ impl DevelopmentHosts for ShepherdsVillageDevelopment {
 
 impl DevelopmentHosts for ShepherdsCommuneDevelopment {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		shepherd_building_hosts(&self.commune.buildings)
+		shepherd_building_hosts(self.commune.buildings())
 	}
 }
 
-fn shepherd_building_hosts(
-	buildings: &[richmond_developments::ShepherdsVillageBuilding],
+fn shepherd_building_hosts<'a>(
+	buildings: impl IntoIterator<Item = &'a richmond_developments::ShepherdsVillageBuilding>,
 ) -> Vec<DevelopmentHost> {
 	buildings
-		.iter()
+		.into_iter()
 		.map(|placed| {
 			let transform = yaw_about_xz(placed.center_xz, placed.yaw);
 			match &placed.building {

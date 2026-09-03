@@ -4,6 +4,7 @@ use bevy::math::Vec2;
 use durham_terrain_models::terrain::{ElevationModulation, TerrainSdf};
 use procedural_common::Bounds2;
 
+use super::index::PadFootprintIndex;
 use super::node::{PadNode, PadStage};
 use super::{nodes_from_graded_polyline, PadParams};
 
@@ -16,22 +17,25 @@ use super::{nodes_from_graded_polyline, PadParams};
 pub struct PadComplex {
 	pub bounds: Bounds2,
 	pub pads: Vec<PadNode>,
+	index: PadFootprintIndex,
 }
 
 impl PadComplex {
 	pub fn new(bounds: Bounds2) -> Self {
-		Self { bounds, pads: Vec::new() }
+		Self { bounds, pads: Vec::new(), index: PadFootprintIndex::build(bounds, &[]) }
 	}
 
 	pub fn with_pads(mut self, pads: Vec<PadNode>) -> Self {
 		self.pads = pads;
 		self.bounds = union_pad_bounds(&self.pads);
+		self.index = PadFootprintIndex::build(self.bounds, &self.pads);
 		self
 	}
 
 	pub fn from_nodes(pads: Vec<PadNode>) -> Self {
 		let bounds = union_pad_bounds(&pads);
-		Self { bounds, pads }
+		let index = PadFootprintIndex::build(bounds, &pads);
+		Self { bounds, pads, index }
 	}
 
 	/// Flatten / grade / ease must blend in one pass. Sequential complexes let a
@@ -72,8 +76,12 @@ impl PadComplex {
 		self.pads.is_empty()
 	}
 
-	pub fn nodes_intersecting(&self, p: Vec2) -> Vec<&PadNode> {
-		self.pads.iter().filter(|node| node.contains_index_point(p)).collect()
+	pub fn nodes_intersecting(&self, p: Vec2) -> impl Iterator<Item = &PadNode> {
+		self.index
+			.candidates(p)
+			.iter()
+			.filter_map(|&id| self.pads.get(id))
+			.filter(move |node| node.contains_index_point(p))
 	}
 
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
@@ -82,7 +90,7 @@ impl PadComplex {
 			return elevation;
 		}
 		let nodes = self.nodes_intersecting(p);
-		PadNode::elevation_blend(&nodes, elevation, p)
+		PadNode::elevation_blend(nodes, elevation, p)
 	}
 
 	pub fn classification_at(&self, x: f32, z: f32) -> Option<PadStage> {
@@ -94,7 +102,7 @@ impl PadComplex {
 				best = Some((node, phi));
 			}
 		}
-		best.and_then(|(n, _)| n.classification(p))
+		best.and_then(|(node, phi)| node.classification_at_distance(phi))
 	}
 }
 

@@ -80,7 +80,8 @@ pub fn composed_height_upper_on_rect(
 	yaw: f32,
 ) -> Option<f32> {
 	let (sin, cos) = yaw.sin_cos();
-	let mut heights = Vec::with_capacity(SITE_SAMPLE_SIDE * SITE_SAMPLE_SIDE);
+	let mut heights = [0.0; SITE_SAMPLE_SIDE * SITE_SAMPLE_SIDE];
+	let mut count = 0;
 	for iz in 0..SITE_SAMPLE_SIDE {
 		for ix in 0..SITE_SAMPLE_SIDE {
 			let u = ix as f32 / (SITE_SAMPLE_SIDE - 1) as f32;
@@ -93,20 +94,21 @@ pub fn composed_height_upper_on_rect(
 					-sin * local.x + cos * local.y,
 				);
 			if let Some(h) = composed_height_at(store, layout, p.x, p.y) {
-				heights.push(h);
+				heights[count] = h;
+				count += 1;
 			}
 		}
 	}
-	upper_quantile(&mut heights, SITE_HEIGHT_QUANTILE)
+	upper_quantile(&mut heights[..count], SITE_HEIGHT_QUANTILE)
 }
 
 fn upper_quantile(values: &mut [f32], quantile: f32) -> Option<f32> {
 	if values.is_empty() {
 		return None;
 	}
-	values.sort_by(f32::total_cmp);
 	let index = ((values.len() - 1) as f32 * quantile.clamp(0.0, 1.0)).ceil() as usize;
-	values.get(index).copied()
+	let (_, value, _) = values.select_nth_unstable_by(index, f32::total_cmp);
+	Some(*value)
 }
 
 #[cfg(test)]

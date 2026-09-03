@@ -33,9 +33,9 @@ impl ConnectivityGraph {
 			return None;
 		}
 		let mut is_key = vec![false; n];
-		for i in 0..n {
+		for (i, key) in is_key.iter_mut().enumerate() {
 			let out = graph.children.get(i).map(|c| c.len()).unwrap_or(0);
-			is_key[i] = i == 0 || out != 1;
+			*key = i == 0 || out != 1;
 		}
 		let mut key_graph_idx = Vec::new();
 		for (i, key) in is_key.iter().enumerate() {
@@ -45,6 +45,10 @@ impl ConnectivityGraph {
 		}
 		if key_graph_idx.len() < 2 {
 			return None;
+		}
+		let mut key_for_graph_node = vec![usize::MAX; n];
+		for (key, &graph_node) in key_graph_idx.iter().enumerate() {
+			key_for_graph_node[graph_node] = key;
 		}
 
 		let mut corridors = Vec::new();
@@ -65,12 +69,14 @@ impl ConnectivityGraph {
 					continue;
 				}
 				let mut path: Vec<Vec2> = path_idx.iter().map(|&k| graph.nodes[k]).collect();
-				let Some(from_key) = key_graph_idx.iter().position(|&k| k == from) else {
+				let from_key = key_for_graph_node[from];
+				if from_key == usize::MAX {
 					continue;
-				};
-				let Some(to_key) = key_graph_idx.iter().position(|&k| k == cur) else {
+				}
+				let to_key = key_for_graph_node[cur];
+				if to_key == usize::MAX {
 					continue;
-				};
+				}
 				collapse_degenerate_vertices(&mut path, DEGENERATE_VERTEX_EPS);
 				if path.len() < 2 {
 					continue;

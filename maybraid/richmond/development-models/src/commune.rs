@@ -4,7 +4,10 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, NoiseParams, SeededHash};
-use richmond_developments::{ShepherdsCommune, ShepherdsCommuneCorridor};
+use richmond_developments::{
+	DevelopmentEdge, ShepherdsCommune, ShepherdsCommuneCorridor, ShepherdsCommuneSite,
+	ShepherdsVillageBuilding,
+};
 
 use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
@@ -105,12 +108,13 @@ pub fn build_shepherds_commune(
 	}
 	let mut key_height = conn.assign_graded_heights(&natural_height, MAX_PATH_GRADE);
 	raise_toward_peak(&mut key_height, MAX_COMMUNE_RELIEF);
+	let ConnectivityGraph { keypoints, corridors } = conn;
 
 	let recipe = shepherds_recipe();
 	let mut pads = Vec::new();
 	let mut kept_corridors = Vec::new();
-	let mut kept_links = Vec::new();
-	for corridor in &conn.corridors {
+	let mut connected = vec![false; keypoints.len()];
+	for corridor in corridors {
 		let Some(ha) = key_height[corridor.from_key] else {
 			continue;
 		};
@@ -133,20 +137,27 @@ pub fn build_shepherds_commune(
 		}
 		let height = 0.5 * (ha + hb);
 		pads.push(DevelopmentPad { height, complex });
-		kept_corridors.push(ShepherdsCommuneCorridor { path: corridor.path.clone(), levels });
-		kept_links.push((corridor.from_key, corridor.to_key));
+		kept_corridors.push(DevelopmentEdge::new(
+			corridor.from_key,
+			corridor.to_key,
+			ShepherdsCommuneCorridor { path: corridor.path, levels },
+		));
+		connected[corridor.from_key] = true;
+		connected[corridor.to_key] = true;
 	}
 	if kept_corridors.is_empty() {
 		return None;
 	}
 
-	let mut buildings = Vec::new();
+	let mut buildings: Vec<Option<ShepherdsVillageBuilding>> =
+		(0..keypoints.len()).map(|_| None).collect();
+	let mut building_count = 0;
 	let mut occupied = Vec::<Bounds2>::new();
-	for (i, center) in conn.keypoints.iter().copied().enumerate() {
+	for (i, center) in keypoints.iter().copied().enumerate() {
 		let Some(height) = key_height[i] else {
 			continue;
 		};
-		if kept_links.iter().all(|&(a, b)| a != i && b != i) {
+		if !connected[i] {
 			continue;
 		}
 		let site = sites[i];
@@ -180,15 +191,26 @@ pub fn build_shepherds_commune(
 		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
 			continue;
 		}
-		buildings.push(placed);
+		buildings[i] = Some(placed);
+		building_count += 1;
 		pads.push(DevelopmentPad { height, complex });
 		occupied.push(occupied_bounds);
 	}
 
-	if buildings.len() < MIN_BUILDINGS {
+	if building_count < MIN_BUILDINGS {
 		return None;
 	}
-	Some((ShepherdsCommune::new(cell, buildings, kept_corridors), pads))
+	let nodes = keypoints
+		.into_iter()
+		.zip(key_height)
+		.zip(buildings)
+		.map(|((position, elevation), building)| ShepherdsCommuneSite {
+			position,
+			elevation,
+			building,
+		})
+		.collect();
+	Some((ShepherdsCommune::new(cell, nodes, kept_corridors), pads))
 }
 
 fn raise_toward_peak(heights: &mut [Option<f32>], max_relief: f32) {

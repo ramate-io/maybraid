@@ -107,11 +107,11 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 				continue;
 			};
 			for complex in dev.pad_complexes() {
-				pads.push(complex.clone());
+				pads.push(complex);
 			}
 		}
 
-		let padded = TerrainWithPads::compose(&terrain, &pads);
+		let padded = TerrainWithPads::compose(&terrain, pads);
 		Some((padded, bounds))
 	}
 

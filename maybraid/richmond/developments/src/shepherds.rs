@@ -24,6 +24,7 @@ use richmond_buildings::{
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 };
 
+use crate::connected::ConnectedDevelopment;
 use crate::placed::{BuildingFootprint, PlacedBuilding};
 
 pub const HOUSE_MIN_FOOTPRINT: f32 = 12.0;
@@ -367,21 +368,24 @@ pub struct ShepherdsCommuneCorridor {
 	pub levels: Vec<f32>,
 }
 
-/// Shepherds Village laid out along a connectivity graph.
+/// One site in a Shepherds Commune connectivity graph.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ShepherdsCommune {
-	pub bounds: Aabb3d,
-	pub buildings: Vec<ShepherdsVillageBuilding>,
-	pub corridors: Vec<ShepherdsCommuneCorridor>,
+pub struct ShepherdsCommuneSite {
+	pub position: Vec2,
+	pub elevation: Option<f32>,
+	pub building: Option<ShepherdsVillageBuilding>,
 }
 
-impl ShepherdsCommune {
-	pub fn new(
-		bounds: Aabb3d,
-		buildings: Vec<ShepherdsVillageBuilding>,
-		corridors: Vec<ShepherdsCommuneCorridor>,
-	) -> Self {
-		Self { bounds, buildings, corridors }
+/// Shepherds Village laid out as a reusable connected development.
+pub type ShepherdsCommune = ConnectedDevelopment<ShepherdsCommuneSite, ShepherdsCommuneCorridor>;
+
+impl ConnectedDevelopment<ShepherdsCommuneSite, ShepherdsCommuneCorridor> {
+	pub fn buildings(&self) -> impl Iterator<Item = &ShepherdsVillageBuilding> {
+		self.nodes.iter().filter_map(|site| site.building.as_ref())
+	}
+
+	pub fn corridors(&self) -> impl Iterator<Item = &ShepherdsCommuneCorridor> {
+		self.edges.iter().map(|edge| &edge.payload)
 	}
 }
 

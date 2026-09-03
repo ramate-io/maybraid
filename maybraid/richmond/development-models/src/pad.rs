@@ -7,6 +7,7 @@
 pub mod complex;
 pub mod elevation;
 pub mod footprint;
+mod index;
 pub mod node;
 
 pub use complex::PadComplex;
