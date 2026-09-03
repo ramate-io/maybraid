@@ -65,6 +65,8 @@ fn yaw_pitch_from_rotation(rotation: Quat) -> (f32, f32) {
 	(yaw, pitch)
 }
 
+/// macOS screenshot (⌘⇧3 / ⌘⇧4) steals modifier key-ups. Clear them on focus
+/// change so Shift does not stay held and drop the fly camera through the floor.
 pub fn release_modifiers_on_focus_change(
 	mut keyboard: ResMut<ButtonInput<KeyCode>>,
 	mut focus: MessageReader<WindowFocused>,
@@ -86,6 +88,10 @@ pub fn release_modifiers_on_focus_change(
 	}
 }
 
+fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
+	keyboard.pressed(KeyCode::SuperLeft) || keyboard.pressed(KeyCode::SuperRight)
+}
+
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
@@ -96,6 +102,12 @@ pub fn camera_controller(
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
+
+	// Screenshot selection drags the mouse; Command chords are not look/fly.
+	if command_held(&keyboard_input) {
+		mouse_motion.clear();
+		return;
+	}
 
 	let mut mouse_delta = Vec2::ZERO;
 	for event in mouse_motion.read() {

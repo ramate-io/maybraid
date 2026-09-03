@@ -40,7 +40,9 @@ impl TerrainWithPads {
 			sdf: Arc::new(ComposedTerrain::from_terrain(sdf)),
 			material: terrain.material.clone(),
 			res_2: terrain.res_2,
-			wall_faces: terrain.wall_faces,
+			// 100 m pad edges coincide with 160 m origin faces (e.g. x = 0). Adjacent
+			// CpuShot grids cannot share those cliffs; interior skirts close the crack.
+			wall_faces: WallFaces::ALL,
 			pad_count: pads.len(),
 		}
 	}
