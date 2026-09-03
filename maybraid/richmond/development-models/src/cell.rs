@@ -25,9 +25,9 @@ pub const BUILDING_INSET: f32 = 14.0;
 /// Minimum Les Halles footprint on each plan axis (metres).
 pub const MIN_FOOTPRINT: f32 = 36.0;
 
-/// Confines height range sampled at selection (storey stack).
+/// Confines height range sampled at selection (2–7 storeys at 3–5 m).
 pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
-pub const MAX_CONFINES_HEIGHT: f32 = 20.0;
+pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
 
 /// Axis-aligned 100 m development tile.
 #[derive(Debug, Clone, Copy, PartialEq)]

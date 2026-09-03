@@ -75,20 +75,22 @@ impl RectRingFloorParams {
 			],
 		);
 		// Inner loop: CW so gallery-facing normals point into the ring corridor.
-		push_cardinal_sides(
-			&mut edges,
-			height,
-			[
-				// South: SE→SW (CW), gallery −Z
-				(Vec3::new(ix1, y0, iz0), Vec3::new(ix0, y0, iz0), Vec2::new(0.0, -1.0)),
-				// East: NE→SE (CW), gallery +X
-				(Vec3::new(ix1, y0, iz1), Vec3::new(ix1, y0, iz0), Vec2::new(1.0, 0.0)),
-				// North: NW→NE (CW), gallery +Z
-				(Vec3::new(ix0, y0, iz1), Vec3::new(ix1, y0, iz1), Vec2::new(0.0, 1.0)),
-				// West: SW→NW (CW), gallery −X
-				(Vec3::new(ix0, y0, iz0), Vec3::new(ix0, y0, iz1), Vec2::new(-1.0, 0.0)),
-			],
-		);
+		if self.inner_walls {
+			push_cardinal_sides(
+				&mut edges,
+				height,
+				[
+					// South: SE→SW (CW), gallery −Z
+					(Vec3::new(ix1, y0, iz0), Vec3::new(ix0, y0, iz0), Vec2::new(0.0, -1.0)),
+					// East: NE→SE (CW), gallery +X
+					(Vec3::new(ix1, y0, iz1), Vec3::new(ix1, y0, iz0), Vec2::new(1.0, 0.0)),
+					// North: NW→NE (CW), gallery +Z
+					(Vec3::new(ix0, y0, iz1), Vec3::new(ix1, y0, iz1), Vec2::new(0.0, 1.0)),
+					// West: SW→NW (CW), gallery −X
+					(Vec3::new(ix0, y0, iz0), Vec3::new(ix0, y0, iz1), Vec2::new(-1.0, 0.0)),
+				],
+			);
+		}
 
 		// Frame bands: N/S take full outer width; E/W take the inner depth only.
 		let mut slab_rects = Vec::new();

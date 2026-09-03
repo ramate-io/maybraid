@@ -83,3 +83,22 @@ impl BuildingComponents for LesHallesCommercialUsage {
 		out
 	}
 }
+
+/// Ground arcade: gallery strips stay open (no stall / apartment fill).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct LesHallesArcadeUsage;
+
+impl LesHallesArcadeUsage {
+	pub fn is_empty(&self) -> bool {
+		true
+	}
+}
+
+impl LesHallesUsagePlan for LesHallesArcadeUsage {
+	fn paint(
+		regions: FillableRegions,
+		_noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		Ok((Self, regions))
+	}
+}
