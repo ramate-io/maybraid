@@ -47,6 +47,16 @@ impl Default for Overhang {
 	}
 }
 
+impl Overhang {
+	/// Metres of side-eave (or barge) projection for a massing whose short span is `short_span`.
+	pub fn resolve(self, short_span: f32) -> f32 {
+		match self {
+			Self::Fixed(v) => v.max(0.0),
+			Self::Ratio(r) => (r.max(0.0) * short_span).max(0.0),
+		}
+	}
+}
+
 /// Free-end treatment for massing boxes.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EndCap {

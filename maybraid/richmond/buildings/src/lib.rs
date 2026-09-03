@@ -73,12 +73,12 @@ pub use paneling::{
 	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece,
 	ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
 	FittedRectangularStrip, OrientedRect, PanelComplex, PanelComplexJointPolicy,
-	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
-	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip, RectangularStripNode,
-	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube, TubeCorners,
-	TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS,
-	MIN_SEGMENTS,
+	PanelComplexValidation, PanelMesh, PanelPillar, PanelPillarLine, PanelPoint, PanelPointId,
+	PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset,
+	Rectangle, RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip,
+	RectangularStripNode, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube,
+	TubeCorners, TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS,
+	DEFAULT_SEGMENTS, MIN_SEGMENTS,
 };
 pub use placer::{
 	enclosure_soft_goal_met, init_host, pack_kinds, pick_kind, propose_from_spec,

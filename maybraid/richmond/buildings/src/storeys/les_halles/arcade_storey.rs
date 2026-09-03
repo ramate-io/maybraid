@@ -81,6 +81,7 @@ mod tests {
 			id.as_str().contains("outer_breezeway") && matches!(o.label, OpeningLabel::Passage)
 		}));
 		assert_eq!(storey.floor_plan.gallery.wall_count(), 4);
+		assert!(storey.floor_plan.arcade_pillars.iter().any(|l| !l.is_empty()));
 		assert!(residual.within.iter().any(|r| r.kind == SpaceKind::ExternalSpace));
 		assert!(storey.usage.is_empty());
 	}

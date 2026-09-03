@@ -18,6 +18,7 @@ use crate::openings::{
 };
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
+use crate::paneling::pillar::PanelPillarLine;
 use crate::paneling::rectangle::Rectangle;
 use crate::shells::ortho::{OrthoSide, PlanRect, EPS};
 use crate::shells::rect_ring_floor::{
@@ -43,6 +44,10 @@ const MIN_BREEZEWAY_WIDTH: f32 = 2.8;
 const MAX_BREEZEWAY_WIDTH: f32 = 5.5;
 const BREEZEWAY_RUN_FRAC: f32 = 0.22;
 const BREEZEWAY_SIDE_MARGIN: f32 = 0.6;
+/// Square pier on the arcade courtyard line (meters).
+const ARCADE_PILLAR_WIDTH: f32 = 0.6;
+/// Target center-to-center spacing along an arcade colonnade run (meters).
+const ARCADE_PILLAR_SPACING: f32 = 4.5;
 
 /// How a Les Halles ring authors façade / inner-wall openings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -79,6 +84,24 @@ fn along_half(side: OrthoSide, size: Vec2) -> f32 {
 	match side {
 		OrthoSide::North | OrthoSide::South => size.x * 0.5,
 		OrthoSide::East | OrthoSide::West => size.y * 0.5,
+	}
+}
+
+/// World-space base point on the gallery-inner rectangle for an along-mid offset.
+fn along_world_on_inner(side: OrthoSide, along: f32, center_xz: Vec3, gallery_inner: Vec2) -> Vec3 {
+	match side {
+		OrthoSide::South => {
+			Vec3::new(center_xz.x + along, center_xz.y, center_xz.z - gallery_inner.y * 0.5)
+		}
+		OrthoSide::North => {
+			Vec3::new(center_xz.x + along, center_xz.y, center_xz.z + gallery_inner.y * 0.5)
+		}
+		OrthoSide::East => {
+			Vec3::new(center_xz.x + gallery_inner.x * 0.5, center_xz.y, center_xz.z + along)
+		}
+		OrthoSide::West => {
+			Vec3::new(center_xz.x - gallery_inner.x * 0.5, center_xz.y, center_xz.z + along)
+		}
 	}
 }
 
@@ -136,6 +159,8 @@ pub struct LesHallesFloorPlan {
 	pub balcony_floors: Vec<FittedRectangle>,
 	/// Radial walls across the gallery at each shaft (mid-side faces or corner run ends).
 	pub shaft_walls: Vec<Rectangle>,
+	/// Courtyard colonnade on the ground arcade (`GroundArcade` only).
+	pub arcade_pillars: Vec<PanelPillarLine>,
 }
 
 impl LesHallesFloorPlan {
@@ -271,6 +296,20 @@ impl LesHallesFloorPlan {
 			}
 		};
 
+		let arcade_pillars = if program == LesHallesOpeningProgram::GroundArcade {
+			Self::build_arcade_pillars(
+				center_xz,
+				gallery_inner,
+				height,
+				&shaft_bounds,
+				&shaft_slots,
+				params.shaft_placement,
+				params.corner_clear_len(),
+			)
+		} else {
+			Vec::new()
+		};
+
 		let plan = Self {
 			parameterized: params,
 			center_xz,
@@ -287,6 +326,7 @@ impl LesHallesFloorPlan {
 			gallery,
 			balcony_floors,
 			shaft_walls,
+			arcade_pillars,
 		};
 
 		let regions = plan.fillable_regions();
@@ -1236,6 +1276,49 @@ impl LesHallesFloorPlan {
 		walls
 	}
 
+	/// Colonnade along free inner-gallery runs (replaces the omitted courtyard wall).
+	fn build_arcade_pillars(
+		center_xz: Vec3,
+		gallery_inner: Vec2,
+		height: f32,
+		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
+		placement: LesHallesShaftPlacement,
+		corner_clear_len: f32,
+	) -> Vec<PanelPillarLine> {
+		let sections = Self::inner_straight_sections(
+			center_xz,
+			gallery_inner,
+			shaft_bounds,
+			shaft_slots,
+			placement,
+			corner_clear_len,
+		);
+		let mut lines = Vec::new();
+		for section in &sections {
+			let start =
+				along_world_on_inner(section.side, section.along0, center_xz, gallery_inner);
+			let end = along_world_on_inner(section.side, section.along1, center_xz, gallery_inner);
+			let line = PanelPillarLine::along_rough_stone(
+				start,
+				end,
+				height,
+				ARCADE_PILLAR_WIDTH,
+				ARCADE_PILLAR_SPACING,
+			);
+			if !line.is_empty() {
+				lines.push(line);
+			}
+		}
+		let sep = ARCADE_PILLAR_WIDTH * 0.85;
+		let merged = PanelPillarLine::new(lines.into_iter().flat_map(|l| l.pillars)).dedup_xz(sep);
+		if merged.is_empty() {
+			Vec::new()
+		} else {
+			vec![merged]
+		}
+	}
+
 	fn build_gallery(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -1308,6 +1391,9 @@ impl BuildingComponents for LesHallesFloorPlan {
 		}
 		for wall in &self.shaft_walls {
 			out.extend(wall.panel_nodes_for_level(level));
+		}
+		for line in &self.arcade_pillars {
+			out.extend(line.panel_nodes_for_level(level));
 		}
 		out
 	}
@@ -1775,6 +1861,10 @@ mod tests {
 			id.as_str().contains("outer_aperture") && matches!(o.label, OpeningLabel::Aperture)
 		}));
 		assert_eq!(plan.gallery.wall_count(), 4, "arcade omits the inner courtyard wall loop");
+		assert!(
+			plan.arcade_pillars.iter().any(|l| !l.is_empty()),
+			"arcade colonnade should stand on the courtyard line"
+		);
 		for (id, opening) in plan.openings.iter() {
 			if matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
 				assert!(

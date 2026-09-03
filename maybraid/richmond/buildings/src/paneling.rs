@@ -15,6 +15,7 @@ pub mod fitted_rectangular_strip;
 pub mod panel_complex;
 pub mod panel_plane;
 pub mod path_frame;
+pub mod pillar;
 pub mod quad_panel;
 pub mod quad_panel_complex;
 pub mod rect_crease;
@@ -43,6 +44,7 @@ pub use panel_complex::{
 	DEFAULT_PANEL_THICKNESS,
 };
 pub use path_frame::TubeFrame;
+pub use pillar::{PanelPillar, PanelPillarLine};
 pub use quad_panel::QuadPanel;
 pub use quad_panel_complex::QuadPanelComplex;
 pub use rect_fit::{

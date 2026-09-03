@@ -34,6 +34,7 @@ pub use full_storey::LesHallesFullStorey;
 pub use livable_full_storey::LesHallesLivableFullStorey;
 pub use parameterized::{
 	LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement, LesHallesStallDoor,
+	MAX_MONOTOWER_STOREYS, MIN_MONOTOWER_STOREYS,
 };
 pub use usage_plan::{
 	LesHallesArcadeUsage, LesHallesCommercialUsage, LesHallesLivableUsage, LesHallesUsagePlan,
