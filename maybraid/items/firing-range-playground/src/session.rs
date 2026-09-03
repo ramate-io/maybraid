@@ -1,7 +1,7 @@
 //! Duel vs free-for-all session. FFA rebuilds the field from generated loadouts.
 
 use bevy::prelude::*;
-use crozon_character_items::{FirearmStats, ItemRng};
+use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
 use crozon_characters::{species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot};
 use firearm_intelligence::{
 	FirearmIntelligence, FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
@@ -22,6 +22,7 @@ use crate::damage::{CombatRespawn, Health};
 use crate::engagement::NpcEngagement;
 use crate::les_halles::LesHallesSpawn;
 use crate::loadout::{roll_combatant, CombatantLoadout};
+use crate::spec_kit::RolledFirearm;
 
 pub(crate) const DEFAULT_FFA_NPCS: u16 = 6;
 
@@ -39,6 +40,7 @@ pub(crate) enum RangeMode {
 	#[default]
 	Duel,
 	FreeForAll,
+	TestDummy,
 }
 
 #[derive(Resource, Debug)]
@@ -69,8 +71,18 @@ impl RangeSession {
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
+	pub fn enter_test_dummy(&mut self) {
+		self.mode = RangeMode::TestDummy;
+		self.npc_count = 1;
+		self.epoch = self.epoch.wrapping_add(1);
+	}
+
 	pub fn is_free_for_all(&self) -> bool {
 		self.mode == RangeMode::FreeForAll
+	}
+
+	pub fn is_test_dummy(&self) -> bool {
+		self.mode == RangeMode::TestDummy
 	}
 }
 
@@ -79,9 +91,13 @@ pub(crate) struct AppliedSession {
 	pub epoch: u32,
 }
 
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub(crate) struct TestDummy;
+
 #[derive(Component, Clone, Debug)]
 pub(crate) struct CombatantKit {
 	pub appearance: BraidmanConfig,
+	pub spec: FirearmSpec,
 	pub firearm: firearms::FirearmKit,
 	pub live: LiveWeapon,
 	pub stats: FirearmStats,
@@ -96,7 +112,7 @@ type UnarmedBodies<'w, 's> = Query<
 	'w,
 	's,
 	(Entity, Has<Npc>, Option<&'static CombatantKit>),
-	(Or<(With<Player>, With<Npc>)>, Without<FirearmUser>),
+	(Or<(With<Player>, With<Npc>)>, Without<FirearmUser>, Without<TestDummy>),
 >;
 
 #[allow(clippy::too_many_arguments)]
@@ -119,19 +135,26 @@ pub(crate) fn apply_session(
 	engagement.reset();
 	respawn.clear();
 	despawn_combatants(&mut commands, combatants);
-	if session.mode == RangeMode::FreeForAll {
-		rng.0 = session.seed.map(ItemRng::from_seed).unwrap_or_else(ItemRng::from_entropy);
-		rebuild_free_for_all(
-			&mut commands,
-			&spawn,
-			&mut rng.0,
-			session.npc_count,
-			&mut meshes,
-			&mut materials,
-		);
-	} else {
-		crate::spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
-		crate::spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
+	match session.mode {
+		RangeMode::FreeForAll => {
+			rng.0 = session.seed.map(ItemRng::from_seed).unwrap_or_else(ItemRng::from_entropy);
+			rebuild_free_for_all(
+				&mut commands,
+				&spawn,
+				&mut rng.0,
+				session.npc_count,
+				&mut meshes,
+				&mut materials,
+			);
+		}
+		RangeMode::Duel => {
+			crate::spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
+			crate::spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
+		}
+		RangeMode::TestDummy => {
+			crate::spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
+			crate::spawn_dummy_at(&mut commands, &spawn, &mut meshes, &mut materials);
+		}
 	}
 }
 
@@ -227,6 +250,7 @@ pub(crate) fn install_npc_combat(
 fn kit_component(loadout: &CombatantLoadout) -> CombatantKit {
 	CombatantKit {
 		appearance: loadout.appearance.clone(),
+		spec: loadout.spec,
 		firearm: loadout.kit,
 		live: live_weapon_from_stats(loadout.stats, loadout.sheet.damage),
 		stats: loadout.stats,
@@ -277,9 +301,12 @@ pub(crate) fn spawn_held_system(mut commands: Commands, bodies: UnarmedBodies) {
 		if is_npc {
 			settings.aim_yaw_limit = std::f32::consts::PI;
 		}
-		let firearm = kit.map(|kit| kit.firearm).unwrap_or_else(|| FirearmConcept::Bullpup.kit());
 		let live = kit.map(|kit| kit.live).unwrap_or_default();
-		spawn_held_kit(&mut commands, body, settings, firearm, live);
+		if let Some(kit) = kit {
+			spawn_held_kit(&mut commands, body, settings, RolledFirearm::from_spec(kit.spec), live);
+		} else {
+			spawn_held_kit(&mut commands, body, settings, FirearmConcept::Bullpup.kit(), live);
+		}
 	}
 }
 
@@ -377,5 +404,14 @@ mod tests {
 				assert!(xz > 18.0, "ground npc {i} should sit on the pad, xz={xz}");
 			}
 		}
+	}
+
+	#[test]
+	fn test_dummy_mode_is_a_single_inert_target() {
+		let mut session = RangeSession::default();
+		session.enter_test_dummy();
+		assert!(session.is_test_dummy());
+		assert_eq!(session.npc_count, 1);
+		assert_ne!(session.mode, RangeMode::Duel);
 	}
 }

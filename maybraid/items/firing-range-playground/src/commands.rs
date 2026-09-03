@@ -29,6 +29,9 @@ pub enum PlaygroundCommand {
 	FreeForAll(FreeForAllArgs),
 	/// Restore the 1v1 pad fight (default clothing, bullpup).
 	Duel,
+	/// Stationary dummy with no gun. Fire at it to check projectile collisions.
+	#[command(visible_alias = "dummy")]
+	TestDummy,
 }
 
 #[derive(Clone, Args, Debug, Default, PartialEq, Eq)]
@@ -80,6 +83,12 @@ impl PlaygroundCommand {
 				});
 				*console = "duel".into();
 			}
+			Self::TestDummy => {
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<RangeSession>().enter_test_dummy();
+				});
+				*console = "test-dummy".into();
+			}
 		}
 	}
 }
@@ -121,6 +130,15 @@ mod tests {
 			command,
 			PlaygroundCommand::FreeForAll(FreeForAllArgs { npcs: 8, seed: Some(3) })
 		));
+		Ok(())
+	}
+
+	#[test]
+	fn parses_test_dummy() -> Result<(), String> {
+		let command = <PlaygroundCommand as GameCommand>::parse_line("test-dummy")?;
+		assert!(matches!(command, PlaygroundCommand::TestDummy));
+		let alias = <PlaygroundCommand as GameCommand>::parse_line("dummy")?;
+		assert!(matches!(alias, PlaygroundCommand::TestDummy));
 		Ok(())
 	}
 }

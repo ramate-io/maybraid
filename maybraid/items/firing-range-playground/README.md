@@ -32,17 +32,22 @@ The NPC spots and aims during a ceasefire, but does not fire until the player
 takes a shot. Player death (or switching mode) resets that ceasefire.
 
 `free-for-all` is a generated-loadout benchmark: one rolled player (starter
-clothing + primary firearm from
+clothing plus one gallery-style firearm from
 [`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
 NPCs spread around the pad and on the upper storey, all of whom list every other
 combatant as a spotting candidate. Combat
-still waits for the player's first shot. Rolled guns keep their catalog
-projectile, cadence, and DPC. `duel` restores the 1v1 bullpup pad fight
-(100 HP / 25 DPC).
+still waits for the player's first shot. Rolled guns keep gallery looks
+(material and palette per slot) and sample projectile / cadence from the
+session RNG rather than reseeding from spec identity, so a run is not locked
+to one color or to lasers. `duel` restores the 1v1 bullpup pad fight
+(100 HP / 25 DPC). `test-dummy` (`dummy`) spawns the player with that same
+bullpup and a stationary unarmed braidman at the NPC pad pose — no combat AI,
+no return fire — so projectile contacts can be checked in isolation.
 
 ```bash
 cargo run -p firing-range-playground
 cargo run -p firing-range-playground -- free-for-all --npcs 8
+cargo run -p firing-range-playground -- test-dummy
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `duel`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `duel` / `test-dummy`.

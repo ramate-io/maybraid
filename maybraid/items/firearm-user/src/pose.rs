@@ -6,8 +6,8 @@ use crozon_characters::{
 	BoneMap, CharacterMembers, CharacterRig, CharacterRigRole, CharacterRoot, RigSkeletonKind,
 };
 use firearms::{
-	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmKit,
-	FirearmMembers, FirearmRoot, ProjectileSource, WeaponTrigger,
+	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
+	FirearmRoot, ProjectileSource, WeaponTrigger,
 };
 use player::{PlayerLook, PlayerUse};
 
@@ -47,20 +47,23 @@ pub fn spawn_held_firearm_with(
 	spawn_held_kit(commands, user, settings, FirearmConcept::Bullpup.kit(), LiveWeapon::default())
 }
 
-pub fn spawn_held_kit(
+pub fn spawn_held_kit<T>(
 	commands: &mut Commands,
 	user: Entity,
 	settings: FirearmUserSettings,
-	kit: FirearmKit,
+	kit: T,
 	live: LiveWeapon,
-) -> Entity {
+) -> Entity
+where
+	T: firearms::FirearmComponents + Clone + Default + Send + Sync + 'static,
+{
 	let bounds = firearm_bounds(&kit);
 	let scale = held_scale_from_bounds(bounds, settings.held_length);
 	let entities = spawn_firearm_components(commands, &kit, Transform::IDENTITY, bounds);
 	let mut root = Entity::PLACEHOLDER;
 	for entity in entities {
 		commands.entity(entity).insert((
-			Name::new(format!("held-{}", kit.body.label())),
+			Name::new("held-firearm"),
 			live.weapon,
 			live.payload,
 			live.fire,

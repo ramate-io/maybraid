@@ -9,6 +9,7 @@ mod les_halles;
 mod loadout;
 mod range;
 mod session;
+mod spec_kit;
 mod ui;
 mod vantage;
 
@@ -21,7 +22,9 @@ use crozon_character_items::ItemRng;
 use crozon_characters::CharacterHostsPlugin;
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::{spawn_reticle, FirearmUserPlugin};
-use firearms::{FirearmHostsPlugin, FirearmWeaponSystems, FirearmWeaponsPlugin};
+use firearms::{
+	add_firearm_components_host, FirearmHostsPlugin, FirearmWeaponSystems, FirearmWeaponsPlugin,
+};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
@@ -50,85 +53,88 @@ impl Plugin for FiringRangePlugin {
 		app.insert_resource(MovementIntelligenceLimits {
 			max_budget: CandidateBudget { max_candidates: 32, max_steps: 4, horizon: 80.0 },
 		})
-		.add_plugins(FirearmHostsPlugin)
-		.add_plugins(FirearmWeaponsPlugin)
-		.add_plugins(CharacterHostsPlugin)
-		.add_plugins(CharacterControllerPlugin)
-		.add_plugins(PlayerPlugin)
-		.add_plugins(PlayerCameraPlugin)
-		.add_plugins(FirearmUserPlugin)
-		.add_plugins(FiringRangeBuildingsLodPlugin)
-		.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
-		.add_plugins(BuildingWalkColliderPlugin)
-		.add_plugins(MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default())
-		.add_plugins(FirearmIntelligencePlugin)
-		.add_plugins(MovementRealizationPlugin)
-		.init_resource::<LesHallesSpawn>()
-		.init_resource::<hud::DamageTicks>()
-		.init_resource::<damage::CombatRespawn>()
-		.init_resource::<engagement::NpcEngagement>()
-		.init_resource::<RangeSession>()
-		.init_resource::<AppliedSession>()
-		.insert_resource(LoadoutRng(ItemRng::from_entropy()))
-		.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
-		.add_systems(
-			Startup,
-			(
-				spawn_follow_camera_system,
-				setup_lighting,
-				range::setup_range,
-				spawn_reticle_system,
-				hud::spawn_combat_hud,
+		.add_plugins(FirearmHostsPlugin);
+		add_firearm_components_host::<spec_kit::RolledFirearm>(app);
+		app.add_plugins(FirearmWeaponsPlugin)
+			.add_plugins(CharacterHostsPlugin)
+			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(PlayerPlugin)
+			.add_plugins(PlayerCameraPlugin)
+			.add_plugins(FirearmUserPlugin)
+			.add_plugins(FiringRangeBuildingsLodPlugin)
+			.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
+			.add_plugins(BuildingWalkColliderPlugin)
+			.add_plugins(
+				MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default(),
 			)
-				.chain(),
-		)
-		.add_systems(
-			PostStartup,
-			(
-				les_halles::setup_les_halles,
-				session::apply_session,
-				spawn_player_system,
-				spawn_npc_system,
+			.add_plugins(FirearmIntelligencePlugin)
+			.add_plugins(MovementRealizationPlugin)
+			.init_resource::<LesHallesSpawn>()
+			.init_resource::<hud::DamageTicks>()
+			.init_resource::<damage::CombatRespawn>()
+			.init_resource::<engagement::NpcEngagement>()
+			.init_resource::<RangeSession>()
+			.init_resource::<AppliedSession>()
+			.insert_resource(LoadoutRng(ItemRng::from_entropy()))
+			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+			.add_systems(
+				Startup,
+				(
+					spawn_follow_camera_system,
+					setup_lighting,
+					range::setup_range,
+					spawn_reticle_system,
+					hud::spawn_combat_hud,
+				)
+					.chain(),
 			)
-				.chain(),
-		)
-		.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
-		.add_systems(
-			Update,
-			(
-				session::apply_session,
-				session::spawn_player_character,
-				session::spawn_npc_character,
-				session::spawn_held_system,
-				respawn_combatants,
-				vantage::assign_combat_targets.before(FirearmIntelligenceSystems::Spotting),
-				les_halles::draw_circulation_gizmos,
-				apply_parent_confines.after(LodRefreshSystems::Cull),
-				ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-				hud::ensure_world_health_bars,
-				hud::sync_health_hud,
-				hud::sync_gun_stats,
-				hud::sync_world_health_bars,
-				hud::update_combat_popups,
-				hud::update_damage_indicators,
-			),
-		)
-		.add_systems(
-			PostUpdate,
-			(hud::ingest_damage_indicators, hud::ingest_combat_popups, damage::despawn_dead)
-				.chain()
-				.after(::damage::DamageSystems::Apply),
-		)
-		.add_systems(
-			PostUpdate,
-			engagement::gate_npc_fire
-				.after(FirearmIntelligenceSystems::Fire)
-				.before(FirearmWeaponSystems::Fire),
-		)
-		.add_systems(
-			PostUpdate,
-			engagement::record_player_shot.after(::damage::DamageSystems::Collect),
-		);
+			.add_systems(
+				PostStartup,
+				(
+					les_halles::setup_les_halles,
+					session::apply_session,
+					spawn_player_system,
+					spawn_npc_system,
+				)
+					.chain(),
+			)
+			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+			.add_systems(
+				Update,
+				(
+					session::apply_session,
+					session::spawn_player_character,
+					session::spawn_npc_character,
+					session::spawn_held_system,
+					respawn_combatants,
+					vantage::assign_combat_targets.before(FirearmIntelligenceSystems::Spotting),
+					les_halles::draw_circulation_gizmos,
+					apply_parent_confines.after(LodRefreshSystems::Cull),
+					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+					hud::ensure_world_health_bars,
+					hud::sync_health_hud,
+					hud::sync_gun_stats,
+					hud::sync_world_health_bars,
+					hud::update_combat_popups,
+					hud::update_damage_indicators,
+				),
+			)
+			.add_systems(
+				PostUpdate,
+				(hud::ingest_damage_indicators, hud::ingest_combat_popups, damage::despawn_dead)
+					.chain()
+					.after(::damage::DamageSystems::Apply),
+			)
+			.add_systems(
+				PostUpdate,
+				engagement::gate_npc_fire
+					.after(FirearmIntelligenceSystems::Fire)
+					.before(FirearmWeaponSystems::Fire),
+			)
+			.add_systems(
+				PostUpdate,
+				engagement::record_player_shot.after(::damage::DamageSystems::Collect),
+			);
 	}
 }
 
@@ -192,6 +198,22 @@ pub(crate) fn spawn_npc_at(
 	session::install_npc_combat(commands, npc, spawn.npc, None, None);
 }
 
+pub(crate) fn spawn_dummy_at(
+	commands: &mut Commands,
+	spawn: &LesHallesSpawn,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let dummy = spawn_npc_with_hidden_capsule(
+		commands,
+		spawn.npc,
+		PlayerLook { yaw: spawn.look_yaw, ..default() },
+		meshes,
+		materials,
+	);
+	commands.entity(dummy).insert((damage::Health::default(), session::TestDummy));
+}
+
 #[allow(clippy::too_many_arguments)]
 fn respawn_combatants(
 	time: Res<Time>,
@@ -218,7 +240,7 @@ fn respawn_combatants(
 					&mut materials,
 				);
 			}
-			RangeMode::Duel => {
+			RangeMode::Duel | RangeMode::TestDummy => {
 				spawn_player_at(&mut commands, &spawn, &mut meshes, &mut materials);
 			}
 		}
@@ -251,6 +273,9 @@ fn respawn_combatants(
 			}
 			RangeMode::Duel => {
 				spawn_npc_at(&mut commands, &spawn, &mut meshes, &mut materials);
+			}
+			RangeMode::TestDummy => {
+				spawn_dummy_at(&mut commands, &spawn, &mut meshes, &mut materials);
 			}
 		}
 	}

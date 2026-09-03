@@ -26,6 +26,7 @@ damage = { workspace = true }
 game-commands = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 movement-intelligence = { workspace = true }

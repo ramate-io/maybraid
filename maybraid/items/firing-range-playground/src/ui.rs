@@ -12,9 +12,11 @@ pub(crate) fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Firing range - WASD move - mouse look - R3 POV - RMB / LT focus - click / RT fire"
 			.into(),
-		empty_console_text: "Console: `pause`, `resume`, `free-for-all`, `duel`, `help`".into(),
+		empty_console_text:
+			"Console: `pause`, `resume`, `free-for-all`, `duel`, `test-dummy`, `help`".into(),
 		root_background: Color::srgba(0.08, 0.09, 0.12, 0.86),
-		controls_hint: "help — pause — resume — free-for-all — duel — Enter — history".into(),
+		controls_hint: "help — pause — resume — free-for-all — duel — test-dummy — Enter — history"
+			.into(),
 	}
 }
 
@@ -34,10 +36,17 @@ pub(crate) fn sync_command_status_text(
 	} else {
 		npcs.single().ok().map_or_else(|| "--".into(), health_text)
 	};
-	let response = if engagement.is_live() { "engaged" } else { "waiting for player shot" };
+	let response = if session.is_test_dummy() {
+		"practice"
+	} else if engagement.is_live() {
+		"engaged"
+	} else {
+		"waiting for player shot"
+	};
 	let mode = match session.mode {
 		RangeMode::Duel => "duel",
 		RangeMode::FreeForAll => "ffa",
+		RangeMode::TestDummy => "dummy",
 	};
 	status.0 =
 		format!("{mode} | {fire} | {response} | health: player {player_health} · npc {npc_health}");

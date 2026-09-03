@@ -158,6 +158,11 @@ impl FirearmStats {
 		crate::generate_firearm_stats(spec)
 	}
 
+	/// Sample stats from `rng` instead of hashing [`FirearmSpec`] identity.
+	pub fn realize(rng: &mut crate::ItemRng, spec: &FirearmSpec) -> Self {
+		crate::realize_firearm_stats(rng, spec)
+	}
+
 	pub fn generate_for_mesh(mesh: crate::FirearmMesh) -> Self {
 		Self::generate(&FirearmSpec::from_mesh(mesh))
 	}

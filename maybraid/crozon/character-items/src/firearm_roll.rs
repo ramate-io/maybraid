@@ -394,6 +394,12 @@ pub fn generate_firearm_stats(spec: &FirearmSpec) -> FirearmStats {
 	realize(&mut ItemRng::from_seed(seed), spec)
 }
 
+/// Continue `rng` instead of reseeding from identity. Gallery / FFA rolls use
+/// this so projectile kind and cadence follow the session stream.
+pub fn realize_firearm_stats(rng: &mut ItemRng, spec: &FirearmSpec) -> FirearmStats {
+	realize(rng, spec)
+}
+
 fn realize(rng: &mut ItemRng, spec: &FirearmSpec) -> FirearmStats {
 	let mut priors = FirearmPriors::new();
 	spec.contribute(&mut priors);
@@ -588,5 +594,32 @@ mod tests {
 				}
 			}
 		}
+	}
+
+	#[test]
+	fn session_stream_rolls_are_not_all_laser_or_one_color() {
+		let mut rng = ItemRng::from_seed(1);
+		let mut lasers = 0usize;
+		let mut greens = 0usize;
+		let mut colors = std::collections::BTreeSet::new();
+		let mut kinds = std::collections::BTreeSet::new();
+		const N: usize = 80;
+		for _ in 0..N {
+			let body = *rng.choose(FirearmMesh::VALUES).unwrap();
+			let spec = FirearmSpec::roll(&mut rng, body);
+			let stats = realize_firearm_stats(&mut rng, &spec);
+			if spec.looks.body.color == ItemColor::Green {
+				greens += 1;
+			}
+			colors.insert(spec.looks.body.color.label());
+			kinds.insert(stats.projectile.label());
+			if stats.projectile == ProjectileKind::Laser {
+				lasers += 1;
+			}
+		}
+		assert!(colors.len() >= 5, "body colors {colors:?}");
+		assert!(kinds.len() >= 2, "projectiles {kinds:?}");
+		assert!(greens < N / 2, "green {greens}/{N}");
+		assert!(lasers < (N * 3) / 4, "lasers {lasers}/{N}");
 	}
 }

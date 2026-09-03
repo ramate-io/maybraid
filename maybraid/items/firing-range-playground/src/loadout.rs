@@ -1,9 +1,9 @@
 //! Roll a generated clothing + firearm identity for a firing-range combatant.
 
 use crozon_character_items::{
-	random_starter_loadout, CharacterSheet, FirearmBarrel, FirearmGrip, FirearmKitSpec,
-	FirearmMesh, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox, Inventory,
-	InventoryItem, ItemRng,
+	random_starter_clothing, realize_firearm_stats, CharacterSheet, FirearmBarrel, FirearmGrip,
+	FirearmKitSpec, FirearmMesh, FirearmSpec, FirearmStats, FirearmStock, FirearmTriggerBox,
+	Inventory, InventoryItem, ItemRng, STARTER_CLOTHING_COUNT,
 };
 use crozon_characters::species::braidman::BraidmanConfig;
 use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBoxMesh};
@@ -12,23 +12,23 @@ use firearms::{BarrelMesh, BodyMesh, FirearmKit, GripMesh, StockMesh, TriggerBox
 #[derive(Clone, Debug)]
 pub(crate) struct CombatantLoadout {
 	pub appearance: BraidmanConfig,
+	pub spec: FirearmSpec,
 	pub kit: FirearmKit,
 	pub stats: FirearmStats,
 	pub sheet: CharacterSheet,
 }
 
 pub(crate) fn roll_combatant(rng: &mut ItemRng) -> CombatantLoadout {
-	let inventory = Inventory::with_starter_outfit(random_starter_loadout(rng));
-	let (kit, stats) = match inventory.primary_weapon() {
-		Some(InventoryItem::Firearm { spec, stats }) => (kit_from_spec(*spec), *stats),
-		_ => (
-			FirearmKit::body(BodyMesh::Bullpup),
-			FirearmStats::generate(&FirearmSpec::from_mesh(FirearmMesh::Bullpup)),
-		),
-	};
+	let mut items = random_starter_clothing(rng, STARTER_CLOTHING_COUNT);
+	let body = *rng.choose(FirearmMesh::VALUES).unwrap_or(&FirearmMesh::Bullpup);
+	let spec = FirearmSpec::roll(rng, body);
+	let stats = realize_firearm_stats(rng, &spec);
+	items.push(InventoryItem::Firearm { spec, stats });
+	let inventory = Inventory::with_starter_outfit(items);
 	CombatantLoadout {
 		appearance: appearance_from_inventory(&inventory),
-		kit,
+		spec,
+		kit: kit_from_spec(spec),
 		stats,
 		sheet: CharacterSheet::from_inventory(&inventory),
 	}
@@ -106,6 +106,8 @@ fn stock_mesh(mesh: FirearmStock) -> StockMesh {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crozon_character_items::{ItemColor, ProjectileKind};
+	use std::collections::BTreeSet;
 
 	#[test]
 	fn starter_loadout_wears_clothes_and_queues_a_gun() {
@@ -128,5 +130,30 @@ mod tests {
 		let kit = kit_from_spec(FirearmSpec::from_mesh(FirearmMesh::Reltor));
 		assert_eq!(kit.body, BodyMesh::Reltor);
 		assert_eq!(kit.trigger_box, TriggerBoxMesh::Reltor);
+	}
+
+	#[test]
+	fn gallery_style_rolls_are_visually_and_ballistically_diverse() {
+		let mut rng = ItemRng::from_seed(7);
+		let mut colors = BTreeSet::new();
+		let mut kinds = BTreeSet::new();
+		let mut greens = 0usize;
+		let mut lasers = 0usize;
+		const N: usize = 24;
+		for _ in 0..N {
+			let loadout = roll_combatant(&mut rng);
+			colors.insert(loadout.spec.looks.body.color.label());
+			kinds.insert(loadout.stats.projectile.label());
+			if loadout.spec.looks.body.color == ItemColor::Green {
+				greens += 1;
+			}
+			if loadout.stats.projectile == ProjectileKind::Laser {
+				lasers += 1;
+			}
+		}
+		assert!(colors.len() >= 4, "body colors {colors:?}");
+		assert!(kinds.len() >= 2, "projectiles {kinds:?}");
+		assert!(greens < N / 2, "green {greens}/{N}");
+		assert!(lasers < (N * 3) / 4, "lasers {lasers}/{N}");
 	}
 }
