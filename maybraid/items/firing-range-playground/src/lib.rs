@@ -109,12 +109,13 @@ impl Plugin for FiringRangePlugin {
 				hud::sync_health_hud,
 				hud::sync_gun_stats,
 				hud::sync_world_health_bars,
+				hud::update_combat_popups,
 				hud::update_damage_indicators,
 			),
 		)
 		.add_systems(
 			PostUpdate,
-			(hud::ingest_damage_indicators, damage::despawn_dead)
+			(hud::ingest_damage_indicators, hud::ingest_combat_popups, damage::despawn_dead)
 				.chain()
 				.after(::damage::DamageSystems::Apply),
 		)

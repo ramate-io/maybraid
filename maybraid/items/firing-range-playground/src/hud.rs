@@ -18,6 +18,10 @@ const INDICATOR_GROUP: f32 = 0.5;
 const HEAD_LIFT: f32 = CAPSULE_LENGTH * 0.5 + CAPSULE_RADIUS + 0.38;
 const GUN_CARD_WIDTH: f32 = 248.0;
 const DRAWER_CLEARANCE: f32 = 290.0;
+const POPUP_LIFE: f32 = 0.9;
+const POPUP_RISE: f32 = 48.0;
+const HIT_POINTS: u8 = 1;
+const DOWN_POINTS: u8 = 5;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CombatantHud {
@@ -54,6 +58,13 @@ pub(crate) struct WorldHealthAnchor {
 #[derive(Component)]
 pub(crate) struct DamageTick {
 	slot: usize,
+}
+
+#[derive(Component)]
+pub(crate) struct CombatPopup {
+	world: Vec3,
+	born: f32,
+	points: u8,
 }
 
 #[derive(Clone, Copy)]
@@ -503,6 +514,99 @@ pub(crate) fn update_damage_indicators(
 	}
 }
 
+pub(crate) fn ingest_combat_popups(
+	time: Res<Time>,
+	mut hits: MessageReader<DamageApplied>,
+	players: Query<Entity, With<Player>>,
+	hud: Query<Entity, With<CombatHudRoot>>,
+	mut commands: Commands,
+) {
+	let Ok(player) = players.single() else {
+		return;
+	};
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let now = time.elapsed_secs();
+	for hit in hits.read() {
+		if hit.source != Some(player) {
+			continue;
+		}
+		spawn_combat_popup(&mut commands, hud, hit.point, now, HIT_POINTS);
+		if hit.remaining <= 0.0 {
+			spawn_combat_popup(&mut commands, hud, hit.point + Vec3::Y * 0.16, now, DOWN_POINTS);
+		}
+	}
+}
+
+fn spawn_combat_popup(commands: &mut Commands, hud: Entity, world: Vec3, born: f32, points: u8) {
+	let (fill, size) = popup_style(points);
+	commands.entity(hud).with_children(|root| {
+		root.spawn((
+			Name::new("combat-popup"),
+			CombatPopup { world, born, points },
+			Node {
+				position_type: PositionType::Absolute,
+				left: Val::Px(0.0),
+				top: Val::Px(0.0),
+				..default()
+			},
+			Text::new(popup_label(points)),
+			TextFont { font_size: FontSize::Px(size), ..default() },
+			TextColor(fill),
+			Pickable::IGNORE,
+		));
+	});
+}
+
+pub(crate) fn update_combat_popups(
+	time: Res<Time>,
+	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+	mut popups: Query<(Entity, &CombatPopup, &mut Node, &mut TextColor, &mut Visibility)>,
+	mut commands: Commands,
+) {
+	let now = time.elapsed_secs();
+	let Ok((camera, camera_transform)) = cameras.single() else {
+		for (_, _, _, _, mut visibility) in &mut popups {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	for (entity, popup, mut node, mut color, mut visibility) in &mut popups {
+		let age = now - popup.born;
+		if age >= POPUP_LIFE {
+			commands.entity(entity).try_despawn();
+			continue;
+		}
+		let Ok(screen) = camera.world_to_viewport(camera_transform, popup.world) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		let rise = age / POPUP_LIFE * POPUP_RISE;
+		node.left = Val::Px(screen.x - 16.0);
+		node.top = Val::Px(screen.y - 18.0 - rise);
+		let alpha = popup_alpha(age);
+		color.0 = popup_style(popup.points).0.with_alpha(alpha);
+		*visibility = Visibility::Visible;
+	}
+}
+
+fn popup_label(points: u8) -> String {
+	format!("+{points}")
+}
+
+fn popup_style(points: u8) -> (Color, f32) {
+	if points >= DOWN_POINTS {
+		(Color::srgb(1.0, 0.82, 0.28), 28.0)
+	} else {
+		(Color::srgb(0.92, 0.98, 1.0), 22.0)
+	}
+}
+
+fn popup_alpha(age: f32) -> f32 {
+	(1.0 - age / POPUP_LIFE).clamp(0.0, 1.0)
+}
+
 fn label_text(kind: CombatantHud, health: Option<Health>) -> String {
 	let name = match kind {
 		CombatantHud::Player => "YOU",
@@ -620,5 +724,13 @@ mod tests {
 		assert!(text.contains("Bolt · 25 DPC"), "{text}");
 		assert!(text.contains("180/s"), "{text}");
 		assert!(text.contains("36 m"), "{text}");
+	}
+
+	#[test]
+	fn hit_is_one_and_down_is_five() {
+		assert_eq!(HIT_POINTS, 1);
+		assert_eq!(DOWN_POINTS, 5);
+		assert_eq!(popup_label(HIT_POINTS), "+1");
+		assert_eq!(popup_label(DOWN_POINTS), "+5");
 	}
 }
