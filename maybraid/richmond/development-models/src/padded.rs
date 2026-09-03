@@ -11,12 +11,13 @@ use durham_terrain_models::{
 	cascade_chunk_for_cell, ComposedTerrain, Terrain, TerrainMeshBuilder, TerrainSdf,
 	TerrainTrimeshCollider,
 };
-use jersey_terrain_stamps::JerseyModulation;
 use lod::gen::{Id, LodScene};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 use std::sync::Arc;
+
+use crate::pad::PadComplex;
 
 /// Durham [`Terrain`] plus overlapping development pads.
 #[derive(Debug, Clone, Component)]
@@ -30,7 +31,7 @@ pub struct TerrainWithPads {
 }
 
 impl TerrainWithPads {
-	pub fn compose(terrain: &Terrain, pads: &[JerseyModulation]) -> Self {
+	pub fn compose(terrain: &Terrain, pads: &[PadComplex]) -> Self {
 		let mut sdf: TerrainSdf = terrain.sdf.terrain.clone();
 		for pad in pads {
 			sdf.add_elevation_modulation(Box::new(pad.clone()) as Box<dyn ElevationModulation>);
@@ -40,8 +41,8 @@ impl TerrainWithPads {
 			sdf: Arc::new(ComposedTerrain::from_terrain(sdf)),
 			material: terrain.material.clone(),
 			res_2: terrain.res_2,
-			// 100 m pad edges coincide with 160 m origin faces (e.g. x = 0). Adjacent
-			// CpuShot grids cannot share those cliffs; interior skirts close the crack.
+			// Building-skirt pads can still meet origin-cell faces on a large
+			// footprint; interior skirts close the CpuShot crack.
 			wall_faces: WallFaces::ALL,
 			pad_count: pads.len(),
 		}

@@ -25,7 +25,7 @@ pub use buildings_lod::{
 };
 pub use cell::{
 	cell_selected, yaw_about_xz, DevelopmentExtent, BUILDING_INSET, DEFAULT_LIKELIHOOD,
-	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, PAD_EDGE_EASE,
+	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, PAD_BERM, PAD_EDGE_EASE, PAD_ROUND,
 };
 pub use config::DevelopmentConfig;
 pub use development::{DevelopmentCell, DevelopmentKind, DevelopmentPad};
@@ -33,7 +33,7 @@ pub use finish::DevelopmentFinish;
 pub use hydro::{composed_height_at, hydro_overlaps_xz, terrain_hydro_overlaps};
 pub use index::{DevelopmentEntryStore, DevelopmentIndex, LesHallesStoreView, PaddedStoreView};
 pub use les_halles::LesHallesDevelopment;
-pub use pad::{cell_bounds2, flatten_pad};
+pub use pad::{cell_bounds2, PadComplex, PadNode, PadParams, PadPrimitive};
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use plugin::{register_richmond_development_models_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};

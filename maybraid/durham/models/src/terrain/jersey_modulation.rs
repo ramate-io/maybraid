@@ -46,6 +46,13 @@ impl ElevationModulation for ComposedElevationOp {
 	) -> f32 {
 		self.modify_elevation_xz(elevation, x, z)
 	}
+
+	fn mesh_identity(&self) -> String {
+		match self {
+			Self::Jersey(m) => format!("Jersey({m:?})"),
+			Self::Hydro(h) => format!("Hydro({})", ElevationModulation::mesh_identity(h.as_ref())),
+		}
+	}
 }
 
 impl ElevationModulation for HydroComplex {
@@ -58,5 +65,13 @@ impl ElevationModulation for HydroComplex {
 		_index: usize,
 	) -> f32 {
 		HydroComplex::modify_elevation(self, elevation, x, z)
+	}
+
+	fn mesh_identity(&self) -> String {
+		// Skip `index` (HashMap buckets) so CpuShot ids stay process-stable.
+		format!(
+			"HydroComplex {{ bounds: {:?}, seed: {}, hydrology: {:?} }}",
+			self.bounds, self.seed, self.hydrology
+		)
 	}
 }

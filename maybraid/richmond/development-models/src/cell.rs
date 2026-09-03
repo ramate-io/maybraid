@@ -18,10 +18,16 @@ pub const DEFAULT_LIKELIHOOD: f32 = 0.28;
 /// Occupancy lattice spacing (world units). Larger → bigger clusters.
 pub const DEFAULT_SPATIAL_CORRELATION: f32 = 300.0;
 
-/// Interior distance (metres) that stays fully flat before the cell-edge ease.
+/// Skirt ease (metres) from the flatten berm out to identity terrain.
 pub const PAD_EDGE_EASE: f32 = 10.0;
 
-/// Inset from the cell edge so the building sits on the planar pad, not the ease.
+/// Extra flatten (metres) outside the building footprint so walls sit on the pad, not the ease.
+pub const PAD_BERM: f32 = 4.0;
+
+/// Rounded-rect corner radius (metres) on the flatten footprint.
+pub const PAD_ROUND: f32 = 2.0;
+
+/// Inset from the cell edge so the building plus berm and ease stay on the tile.
 pub const BUILDING_INSET: f32 = 14.0;
 
 /// Minimum Les Halles footprint on each plan axis (metres).

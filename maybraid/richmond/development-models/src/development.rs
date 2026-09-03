@@ -2,7 +2,6 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
-use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::SeededHash;
 
 use crate::cell::{
@@ -11,7 +10,7 @@ use crate::cell::{
 };
 use crate::config::DevelopmentConfig;
 use crate::finish::DevelopmentFinish;
-use crate::pad::flatten_pad;
+use crate::pad::{cell_center_xz, PadComplex, PadParams};
 use richmond_buildings::{Confines, Openings};
 
 /// Fill kind for one development cell.
@@ -21,11 +20,11 @@ pub enum DevelopmentKind {
 	LesHalles,
 }
 
-/// Pad baked from a post-Marazion height sample.
+/// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
 #[derive(Debug, Clone)]
 pub struct DevelopmentPad {
 	pub height: f32,
-	pub modulation: JerseyModulation,
+	pub complex: PadComplex,
 }
 
 /// One 100 m tile after selection.
@@ -61,8 +60,8 @@ impl DevelopmentCell {
 		self.kind == DevelopmentKind::LesHalles && self.pad.is_some()
 	}
 
-	pub fn pad_modulation(&self) -> Option<&JerseyModulation> {
-		self.pad.as_ref().map(|p| &p.modulation)
+	pub fn pad_complex(&self) -> Option<&PadComplex> {
+		self.pad.as_ref().map(|p| &p.complex)
 	}
 
 	/// Unrotated confines AABB sitting on the pad (world space).
@@ -88,7 +87,7 @@ impl DevelopmentCell {
 		))
 	}
 
-	/// Fitted confines: unrotated AABB plus discrete yaw on [`Confines::roll`].
+	/// Fitted confines: unrotated AABB plus yaw on [`Confines::roll`].
 	pub fn confines(&self) -> Option<Confines> {
 		Some(Confines::new(self.confines_bounds()?, self.confines_yaw, Openings::new()))
 	}
@@ -101,15 +100,22 @@ impl DevelopmentCell {
 		let extent_z = MIN_FOOTPRINT + (max_foot - MIN_FOOTPRINT) * hash.unit(13);
 		let confines_height =
 			MIN_CONFINES_HEIGHT + (MAX_CONFINES_HEIGHT - MIN_CONFINES_HEIGHT) * hash.unit(17);
+		let confines_extent_xz = inscribe_yawed_extents(extent_x, extent_z, yaw, max_foot);
 		Self {
 			cell,
 			kind: DevelopmentKind::LesHalles,
 			pad: Some(DevelopmentPad {
 				height: pad_height,
-				modulation: flatten_pad(cell, pad_height),
+				complex: PadComplex::building_skirt(
+					cell_center_xz(cell),
+					confines_extent_xz * 0.5,
+					yaw,
+					pad_height,
+					PadParams::default(),
+				),
 			}),
 			confines_height,
-			confines_extent_xz: inscribe_yawed_extents(extent_x, extent_z, yaw, max_foot),
+			confines_extent_xz,
 			confines_yaw: yaw,
 			finish: Some(DevelopmentFinish::pick(hash)),
 		}
@@ -174,5 +180,15 @@ mod tests {
 			assert!((confines.roll - filled.confines_yaw).abs() < 1e-6);
 		}
 		assert!(off_grid, "expected at least one heading off the old π/4 lattice");
+	}
+
+	#[test]
+	fn filled_cell_pad_flattens_the_building_center() {
+		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		let filled = DevelopmentCell::filled(cell, 12.0, &DevelopmentConfig::default());
+		let pad = filled.pad_complex().expect("filled cell has a pad");
+		let c = cell_center_xz(cell);
+		assert!((pad.modify_elevation(3.0, c.x, c.y) - 12.0).abs() < 1e-3);
+		assert!((pad.modify_elevation(3.0, 400.0, 400.0) - 3.0).abs() < 1e-3);
 	}
 }
