@@ -5,7 +5,7 @@
 //! host. The top storey has a gallery ceiling and no stairwell; the penultimate
 //! well walks off on that last gallery.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -17,6 +17,8 @@ use richmond_buildings::{
 	MixedUseLesHallesStorey, Openings, Overhang, PitchedRoof, PitchedRoofParams, RectRingFloorSlab,
 	RoofHalf, StairwellKind, WellAabb, WellSide,
 };
+
+use crate::placed::BuildingFootprint;
 
 /// [`fit_windows_on_run`] emits nothing below this density.
 const WINDOW_DENSITY_GATE: f32 = 0.08;
@@ -79,6 +81,17 @@ impl MixedUseLesHallesDevelopment {
 			.collect();
 		self.roof = self.roof.with_surface_material(roof);
 		self
+	}
+}
+
+impl BuildingFootprint for MixedUseLesHallesDevelopment {
+	fn footprint_rects(&self) -> Vec<Aabb2d> {
+		let Some(plan) = self.tower.floors.first().map(MixedUseLesHallesStorey::floor_plan) else {
+			return Vec::new();
+		};
+		let center = Vec2::new(plan.center_xz.x, plan.center_xz.z);
+		let half = plan.outer * 0.5;
+		vec![Aabb2d::new(center, half)]
 	}
 }
 

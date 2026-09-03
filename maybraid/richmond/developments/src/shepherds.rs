@@ -5,6 +5,8 @@
 //! and one thatch roof. Each value is deliberately a complete
 //! [`BuildingComponents`] host so a village can spawn one LOD host per building.
 
+use std::sync::Arc;
+
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
@@ -21,6 +23,8 @@ use richmond_buildings::{
 	Openings, Overhang, RectFloor, RectFloorParams, RectFloorSide, RectFloorSlab,
 	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 };
+
+use crate::placed::{BuildingFootprint, PlacedBuilding};
 
 pub const HOUSE_MIN_FOOTPRINT: f32 = 12.0;
 pub const HOUSE_MAX_FOOTPRINT: f32 = 24.0;
@@ -69,6 +73,12 @@ impl ShepherdsHouse {
 			.first()
 			.map(|s| s.floor_plan.primary_rects.iter().map(|r| r.to_aabb2()).collect())
 			.unwrap_or_default()
+	}
+}
+
+impl BuildingFootprint for ShepherdsHouse {
+	fn footprint_rects(&self) -> Vec<Aabb2d> {
+		ShepherdsHouse::footprint_rects(self)
 	}
 }
 
@@ -231,6 +241,12 @@ impl ShepherdsHut {
 	}
 }
 
+impl BuildingFootprint for ShepherdsHut {
+	fn footprint_rects(&self) -> Vec<Aabb2d> {
+		ShepherdsHut::footprint_rects(self)
+	}
+}
+
 impl Fit for ShepherdsHut {
 	fn fit_to_confines(
 		confines: &Confines,
@@ -315,12 +331,12 @@ impl Fit for ShepherdsHut {
 /// One complete building in a village.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShepherdsBuilding {
-	House(ShepherdsHouse),
-	Hut(ShepherdsHut),
+	House(Arc<ShepherdsHouse>),
+	Hut(Arc<ShepherdsHut>),
 }
 
-impl ShepherdsBuilding {
-	pub fn footprint_rects(&self) -> Vec<Aabb2d> {
+impl BuildingFootprint for ShepherdsBuilding {
+	fn footprint_rects(&self) -> Vec<Aabb2d> {
 		match self {
 			Self::House(house) => house.footprint_rects(),
 			Self::Hut(hut) => hut.footprint_rects(),
@@ -328,14 +344,8 @@ impl ShepherdsBuilding {
 	}
 }
 
-/// Building plus its independent yaw about `center_xz`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ShepherdsVillageBuilding {
-	pub center_xz: Vec2,
-	pub yaw: f32,
-	pub footprint: Vec2,
-	pub building: ShepherdsBuilding,
-}
+/// Complete shepherd building plus its independent pose.
+pub type ShepherdsVillageBuilding = PlacedBuilding<ShepherdsBuilding>;
 
 /// A 200 m development-cell village.
 #[derive(Debug, Clone, PartialEq)]

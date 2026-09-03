@@ -26,7 +26,7 @@ use durham_terrain_models::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use hosts::{spawn_les_halles_hosts, spawn_shepherds_village_hosts, DevelopmentHostRoot};
+use hosts::{spawn_development_hosts, DevelopmentHostRoot};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -395,7 +395,7 @@ fn spawn_hosts(
 		let Some(dev) = SpatialIndex::<LesHallesDevelopment>::get(&view, tracked.0) else {
 			continue;
 		};
-		n += spawn_les_halles_hosts(&mut commands, dev);
+		n += spawn_development_hosts(&mut commands, dev);
 	}
 	let shepherds_view = ShepherdsVillageStoreView::new(&store);
 	let mut shepherds_n = 0usize;
@@ -407,7 +407,7 @@ fn spawn_hosts(
 		else {
 			continue;
 		};
-		shepherds_n += spawn_shepherds_village_hosts(&mut commands, dev);
+		shepherds_n += spawn_development_hosts(&mut commands, dev);
 	}
 	info!("spawned {n} Les Halles host roots and {shepherds_n} Shepherds building host roots");
 	dirty.0 = false;

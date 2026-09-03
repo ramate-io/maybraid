@@ -1,7 +1,9 @@
 //! Deterministic 4×4 jittered Shepherds Village placement.
 
+use std::sync::Arc;
+
 use bevy::math::bounding::Aabb3d;
-use bevy::math::{Vec2, Vec3};
+use bevy::math::Vec3;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use procedural_common::{Bounds2, NoiseParams, SeededHash};
 use richmond_building_components::panels::PanelStyle;
@@ -12,24 +14,42 @@ use richmond_developments::{
 	HUT_MAX_FOOTPRINT, HUT_MIN_FOOTPRINT,
 };
 
-use crate::cell::{sample_confines_yaw, yawed_plan_aabb_extent};
 use crate::config::DevelopmentConfig;
-use crate::development::DevelopmentPad;
+use crate::development::{cell_salt, DevelopmentPad};
 use crate::finish::DevelopmentFinish;
 use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
-use crate::pad::{PadComplex, PadNode, PadParams};
-
-const GRID_SIDE: usize = 4;
-const MIN_BUILDINGS: usize = 6;
-const MAX_BUILDINGS: usize = 10;
-const CELL_INSET: f32 = 32.0;
-const JITTER: f32 = 6.0;
-const BUILDING_CLEARANCE: f32 = 3.0;
+use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
+use crate::scatter::{bounds_intersect, ScatterChoice, ScatterRecipe};
 
 #[derive(Debug, Clone, Copy)]
-struct Candidate {
-	index: usize,
-	priority: f32,
+enum ShepherdsBuildingKind {
+	House,
+	Hut,
+}
+
+fn shepherds_recipe() -> ScatterRecipe<ShepherdsBuildingKind> {
+	ScatterRecipe {
+		grid_side: 4,
+		min_count: 6,
+		max_count: 10,
+		cell_inset: 32.0,
+		jitter: 6.0,
+		clearance: 3.0,
+		choices: vec![
+			ScatterChoice {
+				kind: ShepherdsBuildingKind::House,
+				weight: 1.0,
+				min_footprint: HOUSE_MIN_FOOTPRINT,
+				max_footprint: HOUSE_MAX_FOOTPRINT,
+			},
+			ScatterChoice {
+				kind: ShepherdsBuildingKind::Hut,
+				weight: 1.0,
+				min_footprint: HUT_MIN_FOOTPRINT,
+				max_footprint: HUT_MAX_FOOTPRINT,
+			},
+		],
+	}
 }
 
 pub fn build_shepherds_village(
@@ -39,38 +59,24 @@ pub fn build_shepherds_village(
 	config: &DevelopmentConfig,
 ) -> Option<(ShepherdsVillage, Vec<DevelopmentPad>)> {
 	let root = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
-	let target = MIN_BUILDINGS
-		+ (root.unit(101) * (MAX_BUILDINGS - MIN_BUILDINGS + 1) as f32).floor() as usize;
-	let mut candidates: Vec<Candidate> = (0..GRID_SIDE * GRID_SIDE)
-		.map(|index| Candidate { index, priority: root.unit(200 + index as u32) })
-		.collect();
-	candidates.sort_by(|a, b| a.priority.total_cmp(&b.priority));
+	let recipe = shepherds_recipe();
+	let plan = recipe.plan(cell, root);
 
-	let mut buildings = Vec::with_capacity(target);
-	let mut pads = Vec::with_capacity(target);
-	let mut occupied = Vec::<Bounds2>::with_capacity(target);
-	for candidate in candidates {
-		if buildings.len() >= target {
+	let mut buildings = Vec::with_capacity(plan.target_count);
+	let mut pads = Vec::with_capacity(plan.target_count);
+	let mut occupied = Vec::<Bounds2>::with_capacity(plan.target_count);
+	for candidate in plan.candidates {
+		if buildings.len() >= plan.target_count {
 			break;
 		}
 		let hash = SeededHash::new(
-			root.seed.wrapping_add((candidate.index as u32 + 1).wrapping_mul(0x9E37_79B9)),
+			root.seed.wrapping_add((candidate.slot as u32 + 1).wrapping_mul(0x9E37_79B9)),
 		);
-		let is_house = hash.unit(1) < 0.5;
-		let footprint = if is_house {
-			Vec2::new(
-				lerp(HOUSE_MIN_FOOTPRINT, HOUSE_MAX_FOOTPRINT, hash.unit(2)),
-				lerp(HOUSE_MIN_FOOTPRINT, HOUSE_MAX_FOOTPRINT, hash.unit(3)),
-			)
-		} else {
-			Vec2::new(
-				lerp(HUT_MIN_FOOTPRINT, HUT_MAX_FOOTPRINT, hash.unit(2)),
-				lerp(HUT_MIN_FOOTPRINT, HUT_MAX_FOOTPRINT, hash.unit(3)),
-			)
-		};
-		let yaw = sample_confines_yaw(hash.unit(4));
-		let center = candidate_center(cell, candidate.index, hash);
-		let occupied_bounds = rotated_envelope_bounds(center, footprint, yaw, BUILDING_CLEARANCE);
+		let is_house = matches!(candidate.kind, ShepherdsBuildingKind::House);
+		let footprint = candidate.footprint;
+		let yaw = candidate.yaw;
+		let center = candidate.center;
+		let occupied_bounds = recipe.collision_bounds(&candidate);
 		if occupied.iter().any(|b| bounds_intersect(*b, occupied_bounds)) {
 			continue;
 		}
@@ -98,7 +104,7 @@ pub fn build_shepherds_village(
 			Openings::new(),
 		);
 		let noise = NoiseParams {
-			seed: config.seed as i32 ^ candidate.index as i32 * 7919,
+			seed: config.seed as i32 ^ candidate.slot as i32 * 7919,
 			..NoiseParams::default()
 		};
 		let building = if is_house {
@@ -107,25 +113,32 @@ pub fn build_shepherds_village(
 			};
 			let wooden = house.wall_style == PanelStyle::RibAndPlank;
 			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
-			ShepherdsBuilding::House(
+			ShepherdsBuilding::House(Arc::new(
 				house.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
-			)
+			))
 		} else {
 			let Ok((hut, _)) = ShepherdsHut::fit_to_confines(&confines, noise) else {
 				continue;
 			};
 			let wooden = hut.wall_style == PanelStyle::RibAndPlank;
 			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
-			ShepherdsBuilding::Hut(
+			ShepherdsBuilding::Hut(Arc::new(
 				hut.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
-			)
+			))
 		};
 
-		let complex = exact_pad_for(&building, center, yaw, height);
+		let placed = ShepherdsVillageBuilding {
+			center_xz: center,
+			yaw,
+			footprint,
+			ground_height: height,
+			building,
+		};
+		let complex = placed.pad_complex(PadParams::default());
 		if terrain_hydro_overlaps(store, layout, cell, complex.bounds) {
 			continue;
 		}
-		buildings.push(ShepherdsVillageBuilding { center_xz: center, yaw, footprint, building });
+		buildings.push(placed);
 		pads.push(DevelopmentPad { height, complex });
 		occupied.push(occupied_bounds);
 	}
@@ -137,68 +150,18 @@ pub fn build_shepherds_village(
 	}
 }
 
-fn candidate_center(cell: Aabb3d, index: usize, hash: SeededHash) -> Vec2 {
-	let ix = index % GRID_SIDE;
-	let iz = index / GRID_SIDE;
-	let min = Vec2::new(cell.min.x + CELL_INSET, cell.min.z + CELL_INSET);
-	let max = Vec2::new(cell.max.x - CELL_INSET, cell.max.z - CELL_INSET);
-	let denom = (GRID_SIDE - 1) as f32;
-	let base =
-		Vec2::new(lerp(min.x, max.x, ix as f32 / denom), lerp(min.y, max.y, iz as f32 / denom));
-	let jitter =
-		Vec2::new(lerp(-JITTER, JITTER, hash.unit(5)), lerp(-JITTER, JITTER, hash.unit(6)));
-	(base + jitter).clamp(min, max)
-}
-
-fn rotated_envelope_bounds(center: Vec2, footprint: Vec2, yaw: f32, clearance: f32) -> Bounds2 {
-	let half = yawed_plan_aabb_extent(footprint.x, footprint.y, yaw) * 0.5 + Vec2::splat(clearance);
-	Bounds2 { min: center - half, max: center + half }
-}
-
-fn exact_pad_for(building: &ShepherdsBuilding, center: Vec2, yaw: f32, height: f32) -> PadComplex {
-	let (s, c) = yaw.sin_cos();
-	let nodes = building
-		.footprint_rects()
-		.into_iter()
-		.map(|rect| {
-			let rect_center = (rect.min + rect.max) * 0.5;
-			let local = rect_center - center;
-			let rotated_center =
-				center + Vec2::new(c * local.x + s * local.y, -s * local.x + c * local.y);
-			PadNode::rectangular_flatten(
-				rotated_center,
-				(rect.max - rect.min) * 0.5,
-				yaw,
-				height,
-				PadParams::default(),
-			)
-		})
-		.collect();
-	PadComplex::from_nodes(nodes)
-}
-
-fn bounds_intersect(a: Bounds2, b: Bounds2) -> bool {
-	a.min.x <= b.max.x && b.min.x <= a.max.x && a.min.y <= b.max.y && b.min.y <= a.max.y
-}
-
-fn cell_salt(cell: Aabb3d) -> u32 {
-	cell.min.x.to_bits().wrapping_mul(73856093) ^ cell.min.z.to_bits().wrapping_mul(19349663)
-}
-
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-	a + (b - a) * t.clamp(0.0, 1.0)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::math::Vec2;
 	use richmond_buildings::Fit;
 
 	#[test]
 	fn jittered_centers_stay_inside_the_cell_inset() {
 		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(200.0, 1.0, 200.0));
-		for i in 0..16 {
-			let center = candidate_center(cell, i, SeededHash::new(i as u32));
+		let plan = shepherds_recipe().plan(cell, SeededHash::new(0));
+		for candidate in plan.candidates {
+			let center = candidate.center;
 			assert!((32.0..=168.0).contains(&center.x));
 			assert!((32.0..=168.0).contains(&center.y));
 		}
@@ -207,13 +170,17 @@ mod tests {
 	#[test]
 	fn continuous_yaw_changes_the_collision_envelope() {
 		let center = Vec2::splat(100.0);
-		let aligned = rotated_envelope_bounds(center, Vec2::new(24.0, 12.0), 0.0, 0.0);
-		let yawed = rotated_envelope_bounds(
+		let recipe = shepherds_recipe();
+		let mut candidate = crate::scatter::ScatterCandidate {
+			slot: 0,
 			center,
-			Vec2::new(24.0, 12.0),
-			std::f32::consts::FRAC_PI_4,
-			0.0,
-		);
+			yaw: 0.0,
+			footprint: Vec2::new(24.0, 12.0),
+			kind: ShepherdsBuildingKind::House,
+		};
+		let aligned = recipe.collision_bounds(&candidate);
+		candidate.yaw = std::f32::consts::FRAC_PI_4;
+		let yawed = recipe.collision_bounds(&candidate);
 		assert_ne!(aligned.max - aligned.min, yawed.max - yawed.min);
 	}
 
@@ -230,8 +197,14 @@ mod tests {
 			Openings::new(),
 		);
 		let hut = ShepherdsHut::fit_to_confines(&confines, NoiseParams::default()).expect("hut").0;
-		let building = ShepherdsBuilding::Hut(hut);
-		let pad = exact_pad_for(&building, center, yaw, 10.0);
+		let placed = ShepherdsVillageBuilding {
+			center_xz: center,
+			yaw,
+			footprint: Vec2::new(6.0, 8.0),
+			ground_height: 10.0,
+			building: ShepherdsBuilding::Hut(Arc::new(hut)),
+		};
+		let pad = placed.pad_complex(PadParams::default());
 		let local = Vec2::new(2.5, 3.5);
 		let (s, c) = yaw.sin_cos();
 		let spawned = center + Vec2::new(c * local.x + s * local.y, -s * local.x + c * local.y);
