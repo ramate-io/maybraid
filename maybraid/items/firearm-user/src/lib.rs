@@ -25,6 +25,13 @@ pub use pose::{
 pub use reticle::{spawn_reticle, Reticle};
 pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT};
 
+/// Firearm-user schedule points other combat systems can order against.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FirearmUserSystems {
+	/// Travel the queued recoil path into look / camera.
+	Recoil,
+}
+
 /// Capsule/NPC using a firearm.
 ///
 /// This is a 1:1 Bevy relationship onto the kit (`held`). Inserting it stamps
@@ -124,6 +131,11 @@ impl Plugin for FirearmUserPlugin {
 					.before(PadRumbleSystems::FanOut),
 			)
 			.add_systems(PostUpdate, fire::queue_weapon_recoil.after(FirearmWeaponSystems::Fire))
-			.add_systems(Update, fire::advance_weapon_recoil.in_set(PlayerCameraSystems::Body));
+			.add_systems(
+				Update,
+				fire::advance_weapon_recoil
+					.in_set(PlayerCameraSystems::Body)
+					.in_set(FirearmUserSystems::Recoil),
+			);
 	}
 }

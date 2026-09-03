@@ -22,8 +22,10 @@ strength; the direction is hashed from the weapon identity and shot index so
 the same gun repeats the same pattern. Each kick lerps along that path over
 80 ms instead of snapping. Followed-player kicks land on
 [`CameraController`](../../player-camera/src/look.rs) (so they survive the next
-look sync) as well as [`PlayerLook`](../../player/src/identity.rs). NPCs only
-get the look kick. Lasers emit recoil `0` and do not kick. Default spawn is a
+look sync) as well as [`PlayerLook`](../../player/src/identity.rs). NPCs get
+the look kick; [`firearm-intelligence`](../../intelligence/combat/firearm/)
+observes and skill-recovers that displacement instead of overwriting it.
+Lasers emit recoil `0` and do not kick. Default spawn is a
 25 DPC bolt. The world reticle flashes when the followed player's shot applies
 damage. Connected pads rumble on that same fire and hit-confirm: faster
 projectiles are shorter, higher DPC (and headshots) are heavier. Lasers stay a
