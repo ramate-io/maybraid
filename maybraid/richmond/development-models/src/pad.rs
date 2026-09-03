@@ -50,6 +50,16 @@ impl PadParams {
 	pub fn shepherds() -> Self {
 		Self { berm: 6.0, ease: 16.0, round: PAD_ROUND }
 	}
+
+	/// Flatten half-extents: building plan plus berm.
+	pub fn flatten_half(self, building_half: Vec2) -> Vec2 {
+		building_half + Vec2::splat(self.berm.max(0.0))
+	}
+
+	/// Full modulation half-extents: flatten support plus the ease skirt.
+	pub fn influence_half(self, building_half: Vec2) -> Vec2 {
+		self.flatten_half(building_half) + Vec2::splat(self.ease.max(0.0))
+	}
 }
 
 /// One pad leaf: footprint + local elevation field.
@@ -308,7 +318,10 @@ mod tests {
 		let after_first = first.modify_elevation(0.0, 0.0, 0.0);
 		assert!((after_first - 20.0).abs() < 1e-3);
 		let sequential = second.modify_elevation(after_first, 0.0, 0.0);
-		assert!(sequential < 19.0, "later ease skirt would pull the terrace down: {sequential}");
+		assert!(
+			sequential + 1e-3 >= 19.0,
+			"ease must not cut a pit into the already-flattened terrace: {sequential}"
+		);
 		let unioned = PadComplex::union_all([first, second]);
 		assert!((unioned.modify_elevation(0.0, 0.0, 0.0) - 20.0).abs() < 1e-3);
 		assert_eq!(unioned.classification_at(0.0, 0.0), Some(PadStage::Flatten));
@@ -346,5 +359,23 @@ mod tests {
 		);
 		let mid = complex.modify_elevation(0.0, 20.0, 4.0);
 		assert!(mid > 12.0 && mid < 28.0, "overlap should mix the two grades, got {mid}");
+	}
+
+	#[test]
+	fn ease_skirt_does_not_cut_a_pit_into_higher_terrain() {
+		let pad = PadComplex::building_skirt(
+			Vec2::ZERO,
+			Vec2::new(4.0, 4.0),
+			0.0,
+			8.0,
+			PadParams { berm: 0.0, ease: 8.0, round: 0.0 },
+		);
+		let hillside = 24.0;
+		let h = pad.modify_elevation(hillside, 8.0, 0.0);
+		assert!(
+			h + 1e-3 >= hillside,
+			"ease must not drop below incoming terrain (pit wall): {h} < {hillside}"
+		);
+		assert!((pad.modify_elevation(hillside, 0.0, 0.0) - 8.0).abs() < 1e-3);
 	}
 }

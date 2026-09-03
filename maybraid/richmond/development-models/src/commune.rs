@@ -9,11 +9,12 @@ use richmond_developments::{ShepherdsCommune, ShepherdsCommuneCorridor};
 use crate::config::DevelopmentConfig;
 use crate::connectivity::{corridor_levels, ConnectivityGraph};
 use crate::development::{cell_salt, DevelopmentPad};
-use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
+use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::{bounds_intersect, ScatterCandidate};
 use crate::shepherds_fit::{
 	fit_shepherds_building, sample_shepherds_footprint, sample_shepherds_kind, shepherds_recipe,
+	ShepherdsBuildingKind,
 };
 
 const CELL_INSET: f32 = 32.0;
@@ -24,6 +25,16 @@ const MIN_PATH_LEN: f32 = 16.0;
 const MIN_BUILDINGS: usize = 2;
 /// Maximum tree-edge slope (rise/run) when BFS-assigning pad heights from the peak.
 const MAX_PATH_GRADE: f32 = 0.15;
+/// Keep one compact commune reasonably close to its highest site.
+const MAX_COMMUNE_RELIEF: f32 = 8.0;
+
+#[derive(Debug, Clone, Copy)]
+struct CommuneSite {
+	hash: SeededHash,
+	kind: ShepherdsBuildingKind,
+	footprint: Vec2,
+	yaw: f32,
+}
 
 pub fn build_shepherds_commune(
 	store: &TerrainEntryStore,
@@ -64,13 +75,36 @@ pub fn build_shepherds_commune(
 	);
 	let conn = ConnectivityGraph::from_hysteresis(&graph)?;
 
+	// Resolve the actual site plans before elevation assignment so the terrain
+	// sample covers each building's complete flatten + ease influence.
+	let sites: Vec<CommuneSite> = conn
+		.keypoints
+		.iter()
+		.enumerate()
+		.map(|(i, _)| {
+			let hash =
+				SeededHash::new(root.seed.wrapping_add((i as u32 + 1).wrapping_mul(0x9E37_79B9)));
+			let kind = sample_shepherds_kind(hash);
+			CommuneSite {
+				hash,
+				kind,
+				footprint: sample_shepherds_footprint(hash, kind),
+				yaw: conn.yaw_at(i),
+			}
+		})
+		.collect();
 	let mut natural_height = vec![None; conn.keypoints.len()];
-	for (i, p) in conn.keypoints.iter().enumerate() {
-		if let Some(h) = composed_height_at(store, layout, p.x, p.y) {
-			natural_height[i] = Some(h);
-		}
+	for (i, (p, site)) in conn.keypoints.iter().zip(&sites).enumerate() {
+		natural_height[i] = composed_height_upper_on_rect(
+			store,
+			layout,
+			*p,
+			PadParams::shepherds().influence_half(site.footprint * 0.5),
+			site.yaw,
+		);
 	}
-	let key_height = conn.assign_graded_heights(&natural_height, MAX_PATH_GRADE);
+	let mut key_height = conn.assign_graded_heights(&natural_height, MAX_PATH_GRADE);
+	raise_toward_peak(&mut key_height, MAX_COMMUNE_RELIEF);
 
 	let recipe = shepherds_recipe();
 	let mut pads = Vec::new();
@@ -115,11 +149,11 @@ pub fn build_shepherds_commune(
 		if kept_links.iter().all(|&(a, b)| a != i && b != i) {
 			continue;
 		}
-		let hash =
-			SeededHash::new(root.seed.wrapping_add((i as u32 + 1).wrapping_mul(0x9E37_79B9)));
-		let kind = sample_shepherds_kind(hash);
-		let footprint = sample_shepherds_footprint(hash, kind);
-		let yaw = conn.yaw_at(i);
+		let site = sites[i];
+		let hash = site.hash;
+		let kind = site.kind;
+		let footprint = site.footprint;
+		let yaw = site.yaw;
 		let candidate = ScatterCandidate { slot: i, center, yaw, footprint, kind };
 		let occupied_bounds = recipe.collision_bounds(&candidate);
 		if occupied.iter().any(|b| bounds_intersect(*b, occupied_bounds)) {
@@ -136,7 +170,7 @@ pub fn build_shepherds_commune(
 			continue;
 		}
 		let noise =
-			NoiseParams { seed: config.seed as i32 ^ i as i32 * 7919, ..NoiseParams::default() };
+			NoiseParams { seed: config.seed as i32 ^ (i as i32 * 7919), ..NoiseParams::default() };
 		let Some(placed) =
 			fit_shepherds_building(kind, center, yaw, footprint, height, hash, noise)
 		else {
@@ -155,6 +189,17 @@ pub fn build_shepherds_commune(
 		return None;
 	}
 	Some((ShepherdsCommune::new(cell, buildings, kept_corridors), pads))
+}
+
+fn raise_toward_peak(heights: &mut [Option<f32>], max_relief: f32) {
+	let peak = heights.iter().flatten().copied().max_by(f32::total_cmp);
+	let Some(peak) = peak else {
+		return;
+	};
+	let floor = peak - max_relief.max(0.0);
+	for height in heights.iter_mut().flatten() {
+		*height = height.max(floor);
+	}
 }
 
 fn sample_endpoint(hash: SeededHash, salt: u32, bounds: Bounds2) -> Vec2 {
@@ -220,6 +265,17 @@ mod tests {
 			PATH_HALF_WIDTH + PadParams::path().berm >= 8.0,
 			"path core should span more than one ~5 m terrain sample"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn commune_sites_stay_near_the_peak() -> anyhow::Result<()> {
+		let mut heights = vec![Some(100.0), Some(72.0), Some(95.0), None];
+		raise_toward_peak(&mut heights, 8.0);
+		anyhow::ensure!(heights[0] == Some(100.0));
+		anyhow::ensure!(heights[1] == Some(92.0));
+		anyhow::ensure!(heights[2] == Some(95.0));
+		anyhow::ensure!(heights[3].is_none());
 		Ok(())
 	}
 }

@@ -32,6 +32,11 @@ pub enum PlaygroundCommand {
 	},
 	/// Rebuild pads and developments without changing the seed.
 	Rebuild,
+	/// Show or hide commune connectivity corridors and assigned node elevations.
+	Paths {
+		#[arg(action = clap::ArgAction::Set)]
+		visible: bool,
+	},
 	/// LOD / mesh CPU proxies.
 	#[command(subcommand)]
 	Stats(Stats),
@@ -57,6 +62,15 @@ pub struct RequestRebuild;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestMeshStats;
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct CommunePathDebug(pub bool);
+
+impl Default for CommunePathDebug {
+	fn default() -> Self {
+		Self(true)
+	}
+}
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -86,6 +100,10 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Rebuild => {
 				commands.spawn(RequestRebuild);
 				*console = "rebuild: pending".into();
+			}
+			PlaygroundCommand::Paths { visible } => {
+				commands.insert_resource(CommunePathDebug(visible));
+				*console = format!("commune path debug: {visible}");
 			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
@@ -131,5 +149,15 @@ mod tests {
 		assert!(
 			matches!(cmd, PlaygroundCommand::Likelihood { value } if (value - 0.5).abs() < 1e-6)
 		);
+	}
+
+	#[test]
+	fn parse_path_debug() -> Result<(), String> {
+		let cmd = PlaygroundCommand::parse_line("paths true")?;
+		if matches!(cmd, PlaygroundCommand::Paths { visible: true }) {
+			Ok(())
+		} else {
+			Err("expected visible path debug".into())
+		}
 	}
 }

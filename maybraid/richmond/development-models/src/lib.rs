@@ -42,7 +42,9 @@ pub use development::{
 };
 pub use finish::DevelopmentFinish;
 pub use host::{DevelopmentHost, DevelopmentHosts};
-pub use hydro::{composed_height_at, hydro_overlaps_xz, terrain_hydro_overlaps};
+pub use hydro::{
+	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
+};
 pub use index::{
 	DevelopmentCellStoreView, DevelopmentEntryStore, DevelopmentIndex, LesHallesStoreView,
 	PaddedStoreView, ShepherdsCommuneStoreView, ShepherdsVillageStoreView,

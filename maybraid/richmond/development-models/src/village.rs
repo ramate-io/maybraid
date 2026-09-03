@@ -7,7 +7,7 @@ use richmond_developments::ShepherdsVillage;
 
 use crate::config::DevelopmentConfig;
 use crate::development::{cell_salt, DevelopmentPad};
-use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
+use crate::hydro::{composed_height_upper_on_rect, terrain_hydro_overlaps};
 use crate::pad::{PadComplex, PadParams, PlacedBuildingPad};
 use crate::scatter::bounds_intersect;
 use crate::shepherds_fit::{fit_shepherds_building, shepherds_recipe, ShepherdsBuildingKind};
@@ -47,9 +47,13 @@ pub fn build_shepherds_village(
 		if terrain_hydro_overlaps(store, layout, cell, coarse_pad.bounds) {
 			continue;
 		}
-		let Some(height) =
-			composed_height_at(store, layout, candidate.center.x, candidate.center.y)
-		else {
+		let Some(height) = composed_height_upper_on_rect(
+			store,
+			layout,
+			candidate.center,
+			PadParams::shepherds().influence_half(candidate.footprint * 0.5),
+			candidate.yaw,
+		) else {
 			continue;
 		};
 
@@ -59,7 +63,7 @@ pub fn build_shepherds_village(
 			ShepherdsBuildingKind::Hut
 		};
 		let noise = NoiseParams {
-			seed: config.seed as i32 ^ candidate.slot as i32 * 7919,
+			seed: config.seed as i32 ^ (candidate.slot as i32 * 7919),
 			..NoiseParams::default()
 		};
 		let Some(placed) = fit_shepherds_building(

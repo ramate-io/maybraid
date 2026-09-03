@@ -196,7 +196,9 @@ impl PadNode {
 			return elevation;
 		}
 		let pad = num / den;
-		elevation * (1.0 - cover) + pad * cover
+		let mixed = elevation * (1.0 - cover) + pad * cover;
+		// Raise-only outside flatten interiors: never cut a pit into higher ground.
+		mixed.max(elevation)
 	}
 }
 
