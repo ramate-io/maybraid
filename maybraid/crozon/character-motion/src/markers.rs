@@ -13,6 +13,10 @@ pub struct AnimateBones;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AnimateEffects;
 
+/// Stop clip output while another pose driver owns this rig.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SuspendAnimation;
+
 /// Run visual terrain pitch on this character root.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ApplyTerrainPitch;

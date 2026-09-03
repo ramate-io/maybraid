@@ -47,6 +47,7 @@ members = [
   "maybraid/rigs",
   "maybraid/crozon/animations",
   "maybraid/crozon/character-motion",
+  "maybraid/crozon/character-ragdoll",
   "maybraid/crozon/bevy-character-ui-menu-renderer",
   "maybraid/crozon/character-concepts-playground",
   "maybraid/crozon/character-world-movements-playground",
@@ -281,6 +282,7 @@ crozon-character-shaders = { path = "maybraid/crozon/character-shaders" }
 crozon-character-ui-menus = { path = "maybraid/crozon/character-ui-menus" }
 crozon-characters = { path = "maybraid/crozon/characters" }
 crozon-character-motion = { path = "maybraid/crozon/character-motion" }
+crozon-character-ragdoll = { path = "maybraid/crozon/character-ragdoll" }
 rigs = { path = "maybraid/rigs" }
 crozon-rigs = { path = "maybraid/crozon/rigs" }
 malo-animations = { path = "maybraid/crozon/animations" }

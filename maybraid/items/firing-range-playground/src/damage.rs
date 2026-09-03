@@ -5,7 +5,7 @@ use player::{LocomotionCapsule, Npc, Player};
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
 pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
 
-pub(crate) use ::damage::{DEFAULT_MAX_HEALTH as MAX_HEALTH, DamageApplied, HeadshotBand, Health};
+pub(crate) use ::damage::{DamageApplied, HeadshotBand, Health, DEFAULT_MAX_HEALTH as MAX_HEALTH};
 
 /// Top half of the upper capsule hemisphere.
 pub(crate) fn headshot_band() -> HeadshotBand {
@@ -29,21 +29,22 @@ impl CombatRespawn {
 	}
 }
 
-type DeadCombatants<'w, 's> =
-	Query<'w, 's, (Entity, &'static Health, Option<&'static FirearmUser>, Has<Player>, Has<Npc>)>;
+type DownedCombatants<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, Option<&'static FirearmUser>, Has<Player>, Has<Npc>),
+	Added<::damage::Downed>,
+>;
 
-pub(crate) fn despawn_dead(
+pub(crate) fn queue_downed_respawns(
 	time: Res<Time>,
 	mut respawn: ResMut<CombatRespawn>,
 	mut engagement: ResMut<crate::engagement::NpcEngagement>,
 	mut commands: Commands,
-	combatants: DeadCombatants,
+	combatants: DownedCombatants,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, health, user, is_player, is_npc) in &combatants {
-		if !health.is_dead() {
-			continue;
-		}
+	for (_entity, user, is_player, is_npc) in &combatants {
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
 			engagement.reset();
@@ -52,9 +53,8 @@ pub(crate) fn despawn_dead(
 			respawn.npc_at.push(now + RESPAWN_SECS);
 		}
 		if let Some(user) = user {
-			commands.entity(user.held).try_despawn();
+			commands.entity(user.held).try_insert(::damage::DespawnAfter::seconds(0.0));
 		}
-		commands.entity(entity).try_despawn();
 	}
 }
 

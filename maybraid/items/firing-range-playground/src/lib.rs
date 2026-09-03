@@ -19,6 +19,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use buildings_lod::FiringRangeBuildingsLodPlugin;
 use crozon_character_items::ItemRng;
+use crozon_character_ragdoll::CharacterRagdollPlugin;
 use crozon_characters::CharacterHostsPlugin;
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::{spawn_reticle, FirearmUserPlugin};
@@ -61,6 +62,7 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(PlayerPlugin)
 			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(FirearmUserPlugin)
+			.add_plugins(CharacterRagdollPlugin)
 			.add_plugins(FiringRangeBuildingsLodPlugin)
 			.add_plugins((FurnitureWireframePlugin, LabelWireframePlugin))
 			.add_plugins(BuildingWalkColliderPlugin)
@@ -121,9 +123,13 @@ impl Plugin for FiringRangePlugin {
 			)
 			.add_systems(
 				PostUpdate,
-				(hud::ingest_damage_indicators, hud::ingest_combat_popups, damage::despawn_dead)
+				(
+					hud::ingest_damage_indicators,
+					hud::ingest_combat_popups,
+					damage::queue_downed_respawns,
+				)
 					.chain()
-					.after(::damage::DamageSystems::Apply),
+					.after(::damage::DamageSystems::Down),
 			)
 			.add_systems(
 				PostUpdate,

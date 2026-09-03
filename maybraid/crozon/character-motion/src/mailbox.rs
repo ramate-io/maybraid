@@ -18,7 +18,7 @@ use malo_animations::{
 };
 
 use crate::clip::{AnimClip, AnimId, AnimRefRoot};
-use crate::markers::{AnimateBones, AnimateEffects};
+use crate::markers::{AnimateBones, AnimateEffects, SuspendAnimation};
 use crate::rig::{bone_map_ready, BoneMap, CharacterRig, CharacterRigRole, RigSkeletonKind};
 use rigs::PoseSkipRotation;
 
@@ -166,7 +166,12 @@ pub fn apply_anim_mailbox(
 			Option<&mut QuadrupedV0Rig>,
 			Option<&mut ForelimbedV0Rig>,
 		),
-		(With<AnimMailbox>, Without<AnimBone>, Or<(With<AnimateBones>, With<AnimateEffects>)>),
+		(
+			With<AnimMailbox>,
+			Without<AnimBone>,
+			Without<SuspendAnimation>,
+			Or<(With<AnimateBones>, With<AnimateEffects>)>,
+		),
 	>,
 	mut bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {

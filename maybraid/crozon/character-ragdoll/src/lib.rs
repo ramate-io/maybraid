@@ -1,0 +1,735 @@
+//! Persistent character corpses with a lightweight, world-space procedural ragdoll.
+
+use std::collections::HashMap;
+
+use avian3d::prelude::{
+	Collider, LinearVelocity, PhysicsPlugins, PhysicsSchedulePlugin, ShapeCastConfig, SpatialQuery,
+	SpatialQueryFilter,
+};
+use bevy::math::Affine3A;
+use bevy::prelude::*;
+use crozon_character_motion::{
+	AnimBone, ApplyTerrainPitch, CharacterMotionSystems, CharacterRig, CharacterRigRole,
+	RigSkeletonKind, SuspendAnimation,
+};
+use crozon_characters::CharacterRoot;
+use damage::{DamageSystems, DespawnAfter, Downed};
+use lod_avian::PhysicsInteractionLayer;
+use player::{PlayerVisual, PlayerYawOwner};
+
+const PARTICLE_SKIN: f32 = 0.01;
+
+const HUMANOID_BONES: &[&str] = &[
+	"root",
+	"lumbar",
+	"midback",
+	"upper_back",
+	"lower_neck",
+	"upper_neck",
+	"shoulder.L",
+	"humerus.L",
+	"forearm.L",
+	"shoulder.R",
+	"humerus.R",
+	"forearm.R",
+	"pelvis.L",
+	"femur.L",
+	"shin.L",
+	"pelvis.R",
+	"femur.R",
+	"shin.R",
+];
+
+const QUADRUPED_BONES: &[&str] = &[
+	"back_ridge",
+	"upper_back",
+	"lumbar",
+	"neck",
+	"head_socket",
+	"shoulder.L",
+	"anterior_thigh.L",
+	"anterior_shin.L",
+	"shoulder.R",
+	"anterior_thigh.R",
+	"anterior_shin.R",
+	"hip.L",
+	"posterior_thigh.L",
+	"posterior_shin.L",
+	"hip.R",
+	"posterior_thigh.R",
+	"posterior_shin.R",
+	"tailbone",
+];
+
+const FORELIMBED_BONES: &[&str] = &[
+	"upper_mid_spine",
+	"upper_spine",
+	"head_socket",
+	"lower_mid_spine",
+	"lower_spine",
+	"tailbone",
+	"tail_socket",
+	"back_ridge",
+	"shoulder.L",
+	"upper_arm.L",
+	"lower_arm.L",
+	"shoulder.R",
+	"upper_arm.R",
+	"lower_arm.R",
+];
+
+/// Detached character visual retained after its gameplay body is retired.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Corpse {
+	pub source: Option<Entity>,
+	pub point: Vec3,
+	pub inherited_velocity: Vec3,
+}
+
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct CharacterRagdollSettings {
+	pub corpse_lifetime_secs: f32,
+	pub handoff_wait_secs: f32,
+	pub solver_iterations: usize,
+}
+
+impl Default for CharacterRagdollSettings {
+	fn default() -> Self {
+		Self { corpse_lifetime_secs: 15.0, handoff_wait_secs: 0.5, solver_iterations: 6 }
+	}
+}
+
+/// Add velocity to an active corpse without exposing its solver representation.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct RagdollImpulse {
+	pub corpse: Entity,
+	pub point: Vec3,
+	pub impulse: Vec3,
+}
+
+#[derive(Clone, Debug)]
+struct RagdollParticle {
+	name: String,
+	position: Vec3,
+	previous_position: Vec3,
+	initial_position: Vec3,
+	rest_local: Transform,
+	rest_world_rotation: Quat,
+	parent_world_rotation: Quat,
+	parent_world_inverse: Affine3A,
+	parent: Option<usize>,
+	primary_child: Option<usize>,
+	inverse_mass: f32,
+	radius: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DistanceConstraint {
+	a: usize,
+	b: usize,
+	length: f32,
+}
+
+/// World-space articulated state; bone entities are resolved by name when rendered.
+#[derive(Component, Clone, Debug)]
+pub struct RagdollState {
+	corpse: Entity,
+	skeleton: RigSkeletonKind,
+	particles: Vec<RagdollParticle>,
+	constraints: Vec<DistanceConstraint>,
+	initial_center: Vec3,
+	corpse_initial_translation: Vec3,
+	age: f32,
+	still_for: f32,
+	sleeping: bool,
+}
+
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CharacterRagdollSystems {
+	Handoff,
+	Initialize,
+	Simulate,
+	Marshal,
+}
+
+pub struct CharacterRagdollPlugin;
+
+type PendingRigHosts<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static CharacterRig, &'static crozon_character_motion::BoneMap),
+	(Without<RagdollState>, Without<AnimBone>),
+>;
+
+impl Plugin for CharacterRagdollPlugin {
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
+			app.add_plugins(PhysicsPlugins::default());
+		}
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
+		app.init_resource::<CharacterRagdollSettings>()
+			.add_message::<RagdollImpulse>()
+			.configure_sets(
+				PostUpdate,
+				(
+					CharacterRagdollSystems::Marshal
+						.after(rigs::RigSystems::Pose)
+						.before(TransformSystems::Propagate),
+					CharacterRagdollSystems::Handoff.after(DamageSystems::Down),
+				),
+			)
+			.configure_sets(
+				Update,
+				CharacterRagdollSystems::Initialize.before(CharacterMotionSystems::Anim),
+			)
+			.configure_sets(FixedUpdate, CharacterRagdollSystems::Simulate)
+			.add_systems(
+				PostUpdate,
+				handoff_downed_visuals.in_set(CharacterRagdollSystems::Handoff),
+			)
+			.add_systems(Update, initialize_ragdolls.in_set(CharacterRagdollSystems::Initialize))
+			.add_systems(FixedUpdate, simulate_ragdolls.in_set(CharacterRagdollSystems::Simulate))
+			.add_systems(PostUpdate, marshal_ragdolls.in_set(CharacterRagdollSystems::Marshal));
+	}
+}
+
+fn handoff_downed_visuals(
+	time: Res<Time>,
+	settings: Res<CharacterRagdollSettings>,
+	mut commands: Commands,
+	downed: Query<(Entity, &Downed, Option<&LinearVelocity>), Without<DespawnAfter>>,
+	visuals: Query<(Entity, &ChildOf, &GlobalTransform), With<CharacterRoot>>,
+) {
+	let now = time.elapsed_secs();
+	for (body, downed, velocity) in &downed {
+		let mut handed_off = false;
+		for (visual, child_of, global) in &visuals {
+			if child_of.parent() != body {
+				continue;
+			}
+			commands
+				.entity(visual)
+				.remove::<(ChildOf, PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>()
+				.insert((
+					global.compute_transform(),
+					Corpse {
+						source: downed.source,
+						point: downed.point,
+						inherited_velocity: velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
+					},
+					DespawnAfter::seconds(settings.corpse_lifetime_secs),
+				));
+			handed_off = true;
+		}
+		if handed_off || now - downed.at >= settings.handoff_wait_secs.max(0.0) {
+			commands.entity(body).try_insert(DespawnAfter::seconds(0.0));
+		}
+	}
+}
+
+fn initialize_ragdolls(
+	fixed_time: Res<Time<Fixed>>,
+	mut commands: Commands,
+	hosts: PendingRigHosts,
+	corpses: Query<&Corpse>,
+	parents: Query<&ChildOf>,
+	transforms: Query<(&Transform, &GlobalTransform)>,
+) {
+	for (host, rig, bone_map) in &hosts {
+		if rig.role != CharacterRigRole::Body {
+			continue;
+		}
+		let Some((corpse_entity, corpse)) = ancestor_corpse(host, &parents, &corpses) else {
+			continue;
+		};
+		let Some(state) = build_state(
+			corpse_entity,
+			corpse,
+			rig.skeleton,
+			bone_map,
+			&parents,
+			&transforms,
+			fixed_time.delta_secs().max(1e-4),
+		) else {
+			continue;
+		};
+		commands.entity(host).insert((state, SuspendAnimation));
+	}
+}
+
+fn ancestor_corpse(
+	mut entity: Entity,
+	parents: &Query<&ChildOf>,
+	corpses: &Query<&Corpse>,
+) -> Option<(Entity, Corpse)> {
+	loop {
+		if let Ok(corpse) = corpses.get(entity) {
+			return Some((entity, *corpse));
+		}
+		entity = parents.get(entity).ok()?.parent();
+	}
+}
+
+fn profile_bones(skeleton: RigSkeletonKind) -> &'static [&'static str] {
+	match skeleton {
+		RigSkeletonKind::Humanoid => HUMANOID_BONES,
+		RigSkeletonKind::Quadruped => QUADRUPED_BONES,
+		RigSkeletonKind::Forelimbed => FORELIMBED_BONES,
+		RigSkeletonKind::Neck => &[],
+	}
+}
+
+fn build_state(
+	corpse_entity: Entity,
+	corpse: Corpse,
+	skeleton: RigSkeletonKind,
+	bone_map: &crozon_character_motion::BoneMap,
+	parents: &Query<&ChildOf>,
+	transforms: &Query<(&Transform, &GlobalTransform)>,
+	fixed_dt: f32,
+) -> Option<RagdollState> {
+	let mut resolved = Vec::new();
+	for &name in profile_bones(skeleton) {
+		let Some(&entity) = bone_map.by_name.get(name) else {
+			continue;
+		};
+		let Ok((local, global)) = transforms.get(entity) else {
+			continue;
+		};
+		let (_, world_rotation, position) = global.to_scale_rotation_translation();
+		resolved.push((name.to_owned(), entity, *local, position, world_rotation, global.affine()));
+	}
+	if resolved.len() < 2 {
+		return None;
+	}
+
+	let by_entity: HashMap<Entity, usize> = resolved
+		.iter()
+		.enumerate()
+		.map(|(index, (_, entity, ..))| (*entity, index))
+		.collect();
+	let mut particles = Vec::with_capacity(resolved.len());
+	for (name, entity, local, position, world_rotation, world_affine) in &resolved {
+		let parent = simulated_parent(*entity, &by_entity, parents);
+		let parent_world_rotation = *world_rotation * local.rotation.inverse();
+		let parent_world_inverse = (*world_affine * local.compute_affine().inverse()).inverse();
+		let away_from_hit = (*position - corpse.point).normalize_or_zero();
+		let impulse = away_from_hit * 1.6 + Vec3::Y * 0.45;
+		let velocity = corpse.inherited_velocity + impulse;
+		particles.push(RagdollParticle {
+			name: name.clone(),
+			position: *position,
+			previous_position: *position - velocity * fixed_dt,
+			initial_position: *position,
+			rest_local: *local,
+			rest_world_rotation: *world_rotation,
+			parent_world_rotation,
+			parent_world_inverse,
+			parent,
+			primary_child: None,
+			inverse_mass: inverse_mass(name),
+			radius: particle_radius(name),
+		});
+	}
+
+	let mut constraints = Vec::new();
+	for child in 0..particles.len() {
+		let Some(parent) = particles[child].parent else {
+			continue;
+		};
+		let length = particles[parent].position.distance(particles[child].position);
+		if length > 1e-4 {
+			constraints.push(DistanceConstraint { a: parent, b: child, length });
+		}
+	}
+	connect_roots(&particles, &mut constraints);
+	assign_primary_children(&mut particles, &constraints);
+	let initial_center = particle_center(&particles);
+	let corpse_initial_translation = transforms.get(corpse_entity).ok()?.0.translation;
+
+	Some(RagdollState {
+		corpse: corpse_entity,
+		skeleton,
+		particles,
+		constraints,
+		initial_center,
+		corpse_initial_translation,
+		age: 0.0,
+		still_for: 0.0,
+		sleeping: false,
+	})
+}
+
+fn simulated_parent(
+	entity: Entity,
+	by_entity: &HashMap<Entity, usize>,
+	parents: &Query<&ChildOf>,
+) -> Option<usize> {
+	let mut parent = parents.get(entity).ok().map(ChildOf::parent);
+	while let Some(entity) = parent {
+		if let Some(&index) = by_entity.get(&entity) {
+			return Some(index);
+		}
+		parent = parents.get(entity).ok().map(ChildOf::parent);
+	}
+	None
+}
+
+fn connect_roots(particles: &[RagdollParticle], constraints: &mut Vec<DistanceConstraint>) {
+	let roots: Vec<usize> = particles
+		.iter()
+		.enumerate()
+		.filter_map(|(index, particle)| particle.parent.is_none().then_some(index))
+		.collect();
+	let Some(&anchor) = roots.first() else {
+		return;
+	};
+	for &root in roots.iter().skip(1) {
+		let length = particles[anchor].position.distance(particles[root].position);
+		if length > 1e-4 {
+			constraints.push(DistanceConstraint { a: anchor, b: root, length });
+		}
+	}
+}
+
+fn assign_primary_children(particles: &mut [RagdollParticle], constraints: &[DistanceConstraint]) {
+	for constraint in constraints {
+		if particles[constraint.b].parent != Some(constraint.a) {
+			continue;
+		}
+		let replace = particles[constraint.a]
+			.primary_child
+			.map(|child| {
+				particles[constraint.a]
+					.initial_position
+					.distance(particles[child].initial_position)
+					< constraint.length
+			})
+			.unwrap_or(true);
+		if replace {
+			particles[constraint.a].primary_child = Some(constraint.b);
+		}
+	}
+}
+
+fn inverse_mass(name: &str) -> f32 {
+	if name.contains("root")
+		|| name.contains("back")
+		|| name.contains("spine")
+		|| name.contains("lumbar")
+	{
+		0.45
+	} else {
+		1.0
+	}
+}
+
+fn particle_radius(name: &str) -> f32 {
+	if name.contains("root")
+		|| name.contains("back")
+		|| name.contains("spine")
+		|| name.contains("lumbar")
+	{
+		0.13
+	} else if name.contains("neck") || name.contains("head") {
+		0.11
+	} else {
+		0.07
+	}
+}
+
+fn particle_center(particles: &[RagdollParticle]) -> Vec3 {
+	if particles.is_empty() {
+		return Vec3::ZERO;
+	}
+	particles.iter().map(|particle| particle.position).sum::<Vec3>() / particles.len() as f32
+}
+
+fn simulate_ragdolls(
+	spatial: SpatialQuery,
+	time: Res<Time>,
+	settings: Res<CharacterRagdollSettings>,
+	mut impulses: MessageReader<RagdollImpulse>,
+	mut ragdolls: Query<&mut RagdollState>,
+) {
+	let pending: Vec<RagdollImpulse> = impulses.read().copied().collect();
+	let dt = time.delta_secs().min(0.05);
+	if dt <= 0.0 {
+		return;
+	}
+	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
+	for mut ragdoll in &mut ragdolls {
+		let corpse = ragdoll.corpse;
+		for impulse in pending.iter().filter(|impulse| impulse.corpse == corpse) {
+			apply_impulse(&mut ragdoll, *impulse, dt);
+		}
+		if ragdoll.sleeping {
+			continue;
+		}
+		let gravity_scale = match ragdoll.skeleton {
+			RigSkeletonKind::Forelimbed => 0.35,
+			_ => 1.0,
+		};
+		let damping = match ragdoll.skeleton {
+			RigSkeletonKind::Forelimbed => 0.92,
+			_ => 0.985,
+		};
+		for particle in &mut ragdoll.particles {
+			let velocity = (particle.position - particle.previous_position) * damping;
+			particle.previous_position = particle.position;
+			particle.position += velocity + Vec3::NEG_Y * 9.81 * gravity_scale * dt * dt;
+		}
+		for _ in 0..settings.solver_iterations {
+			for index in 0..ragdoll.constraints.len() {
+				let constraint = ragdoll.constraints[index];
+				solve_distance(&mut ragdoll.particles, constraint);
+			}
+		}
+		for particle in &mut ragdoll.particles {
+			collide_particle(&spatial, &filter, particle);
+		}
+		ragdoll.age += dt;
+		let max_speed = ragdoll
+			.particles
+			.iter()
+			.map(|particle| particle.position.distance(particle.previous_position) / dt)
+			.fold(0.0, f32::max);
+		if max_speed < 0.04 {
+			ragdoll.still_for += dt;
+		} else {
+			ragdoll.still_for = 0.0;
+		}
+		ragdoll.sleeping = ragdoll.age > 0.5 && ragdoll.still_for > 0.75;
+	}
+}
+
+fn apply_impulse(state: &mut RagdollState, impulse: RagdollImpulse, dt: f32) {
+	for particle in &mut state.particles {
+		let weight = 1.0 / (1.0 + particle.position.distance(impulse.point) * 4.0);
+		particle.previous_position -= impulse.impulse * weight * dt;
+	}
+	state.sleeping = false;
+	state.still_for = 0.0;
+}
+
+fn solve_distance(particles: &mut [RagdollParticle], constraint: DistanceConstraint) {
+	let (a, b) = two_mut(particles, constraint.a, constraint.b);
+	let delta = b.position - a.position;
+	let distance = delta.length();
+	if distance <= 1e-5 {
+		return;
+	}
+	let total_mass = a.inverse_mass + b.inverse_mass;
+	if total_mass <= 1e-5 {
+		return;
+	}
+	let correction = delta * ((distance - constraint.length) / distance);
+	a.position += correction * (a.inverse_mass / total_mass);
+	b.position -= correction * (b.inverse_mass / total_mass);
+}
+
+fn two_mut<T>(values: &mut [T], a: usize, b: usize) -> (&mut T, &mut T) {
+	debug_assert_ne!(a, b);
+	if a < b {
+		let (left, right) = values.split_at_mut(b);
+		(&mut left[a], &mut right[0])
+	} else {
+		let (left, right) = values.split_at_mut(a);
+		(&mut right[0], &mut left[b])
+	}
+}
+
+fn collide_particle(
+	spatial: &SpatialQuery,
+	filter: &SpatialQueryFilter,
+	particle: &mut RagdollParticle,
+) {
+	let delta = particle.position - particle.previous_position;
+	let Ok(direction) = Dir3::new(delta) else {
+		return;
+	};
+	let shape = Collider::sphere(particle.radius);
+	let config = ShapeCastConfig::from_max_distance(delta.length());
+	let Some(hit) = spatial.cast_shape(
+		&shape,
+		particle.previous_position,
+		Quat::IDENTITY,
+		direction,
+		&config,
+		filter,
+	) else {
+		return;
+	};
+	let travel = (hit.distance - PARTICLE_SKIN).max(0.0);
+	particle.position = particle.previous_position + *direction * travel;
+	particle.previous_position = particle.position;
+}
+
+fn marshal_ragdolls(
+	hosts: Query<(&crozon_character_motion::BoneMap, &RagdollState)>,
+	mut transforms: Query<&mut Transform>,
+) {
+	for (bone_map, state) in &hosts {
+		let rotations = desired_world_rotations(state);
+		let corpse_displacement = particle_center(&state.particles) - state.initial_center;
+		if let Ok(mut corpse) = transforms.get_mut(state.corpse) {
+			corpse.translation = state.corpse_initial_translation + corpse_displacement;
+		}
+		for (index, particle) in state.particles.iter().enumerate() {
+			let Some(&entity) = bone_map.by_name.get(&particle.name) else {
+				continue;
+			};
+			let Ok(mut transform) = transforms.get_mut(entity) else {
+				continue;
+			};
+			let (parent_rotation, translation) = if let Some(parent) = particle.parent {
+				let parent_rotation = rotations[parent];
+				(parent_rotation, particle.rest_local.translation)
+			} else {
+				let displacement =
+					particle.position - particle.initial_position - corpse_displacement;
+				let translation = particle.rest_local.translation
+					+ particle.parent_world_inverse.transform_vector3(displacement);
+				(particle.parent_world_rotation, translation)
+			};
+			transform.translation = translation;
+			transform.rotation = parent_rotation.inverse() * rotations[index];
+			transform.scale = particle.rest_local.scale;
+		}
+	}
+}
+
+fn desired_world_rotations(state: &RagdollState) -> Vec<Quat> {
+	let mut rotations = vec![Quat::IDENTITY; state.particles.len()];
+	let mut resolved = vec![false; state.particles.len()];
+	for index in 0..state.particles.len() {
+		resolve_rotation(index, state, &mut rotations, &mut resolved);
+	}
+	rotations
+}
+
+fn resolve_rotation(
+	index: usize,
+	state: &RagdollState,
+	rotations: &mut [Quat],
+	resolved: &mut [bool],
+) -> Quat {
+	if resolved[index] {
+		return rotations[index];
+	}
+	let particle = &state.particles[index];
+	let rotation = if let Some(child) = particle.primary_child {
+		let rest = state.particles[child].initial_position - particle.initial_position;
+		let current = state.particles[child].position - particle.position;
+		if rest.length_squared() > 1e-8 && current.length_squared() > 1e-8 {
+			Quat::from_rotation_arc(rest.normalize(), current.normalize())
+				* particle.rest_world_rotation
+		} else {
+			particle.rest_world_rotation
+		}
+	} else if let Some(parent) = particle.parent {
+		let parent_rotation = resolve_rotation(parent, state, rotations, resolved);
+		let rest_relative =
+			state.particles[parent].rest_world_rotation.inverse() * particle.rest_world_rotation;
+		parent_rotation * rest_relative
+	} else {
+		particle.rest_world_rotation
+	};
+	rotations[index] = rotation.normalize();
+	resolved[index] = true;
+	rotations[index]
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn particle(position: Vec3) -> RagdollParticle {
+		RagdollParticle {
+			name: String::new(),
+			position,
+			previous_position: position,
+			initial_position: position,
+			rest_local: Transform::IDENTITY,
+			rest_world_rotation: Quat::IDENTITY,
+			parent_world_rotation: Quat::IDENTITY,
+			parent_world_inverse: Affine3A::IDENTITY,
+			parent: None,
+			primary_child: None,
+			inverse_mass: 1.0,
+			radius: 0.1,
+		}
+	}
+
+	#[test]
+	fn distance_solver_restores_segment_length() {
+		let mut particles = vec![particle(Vec3::ZERO), particle(Vec3::X * 2.0)];
+		solve_distance(&mut particles, DistanceConstraint { a: 0, b: 1, length: 1.0 });
+		assert!((particles[0].position.distance(particles[1].position) - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn every_body_skeleton_has_a_ragdoll_profile() {
+		assert!(!profile_bones(RigSkeletonKind::Humanoid).is_empty());
+		assert!(!profile_bones(RigSkeletonKind::Quadruped).is_empty());
+		assert!(!profile_bones(RigSkeletonKind::Forelimbed).is_empty());
+	}
+
+	#[test]
+	fn profile_names_exist_on_each_imported_rig() {
+		use crozon_rigs::rigs::{
+			forelimbed_v0::forelimbed_v0_bone_names, humanoid_v0::humanoid_v0_bone_names,
+			quadruped_v0::quadruped_v0_bone_names,
+		};
+
+		assert_profile_names(HUMANOID_BONES, humanoid_v0_bone_names());
+		assert_profile_names(QUADRUPED_BONES, quadruped_v0_bone_names());
+		assert_profile_names(FORELIMBED_BONES, forelimbed_v0_bone_names());
+	}
+
+	#[test]
+	fn particle_center_tracks_world_motion() {
+		let particles = vec![particle(Vec3::ZERO), particle(Vec3::X * 2.0)];
+		assert_eq!(particle_center(&particles), Vec3::X);
+	}
+
+	#[test]
+	fn handoff_detaches_and_deactivates_the_existing_visual() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins)
+			.init_resource::<CharacterRagdollSettings>()
+			.add_systems(Update, handoff_downed_visuals);
+		let body = app.world_mut().spawn(Downed { source: None, point: Vec3::ZERO, at: 0.0 }).id();
+		let visual = app
+			.world_mut()
+			.spawn((
+				CharacterRoot,
+				PlayerVisual,
+				PlayerYawOwner::Wish,
+				ApplyTerrainPitch,
+				Transform::IDENTITY,
+				GlobalTransform::IDENTITY,
+				ChildOf(body),
+			))
+			.id();
+
+		app.update();
+
+		let world = app.world();
+		assert!(world.get::<DespawnAfter>(body).is_some());
+		assert!(world.get::<Corpse>(visual).is_some());
+		assert!(world.get::<ChildOf>(visual).is_none());
+		assert!(world.get::<PlayerVisual>(visual).is_none());
+		assert!(world.get::<ApplyTerrainPitch>(visual).is_none());
+		Ok(())
+	}
+
+	fn assert_profile_names<'a>(profile: &[&str], defined: impl IntoIterator<Item = &'a str>) {
+		let defined: std::collections::HashSet<&str> = defined.into_iter().collect();
+		for name in profile {
+			assert!(defined.contains(name), "missing ragdoll bone {name}");
+		}
+	}
+}
