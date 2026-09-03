@@ -44,3 +44,11 @@ On macOS / iOS, chain `.with_pad_hid()` on `DefaultPlugins` so gilrs is not
 started. `VirtualPadPlugin` then polls Apple’s GameController framework into
 Bevy `Gamepad`. Xbox pads on macOS are claimed by that driver; IOKit (gilrs)
 can connect them without delivering reports. Linux and Windows keep gilrs.
+
+## Rumble
+
+Gameplay writes [`PadRumble`](src/rumble.rs); the plugin copies it onto every
+live `Gamepad` as Bevy `GamepadRumbleRequest`. There is no mouse / keyboard
+path. Linux and Windows play those requests through gilrs. On Apple,
+`hid/gamecontroller.rs` drives `GCDevice.haptics` / Core Haptics so the same
+pulse reaches a connected Xbox or DualShock.

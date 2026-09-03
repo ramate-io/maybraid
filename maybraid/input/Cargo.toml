@@ -14,16 +14,24 @@ bevy = { workspace = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSString"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSError", "NSString"] }
 objc2-game-controller = { version = "0.3", features = [
 	"GCController",
 	"GCDevice",
+	"GCDeviceHaptics",
 	"GCExtendedGamepad",
 	"GCGamepad",
 	"GCControllerAxisInput",
 	"GCControllerButtonInput",
 	"GCControllerDirectionPad",
 	"GCPhysicalInputProfile",
+] }
+objc2-core-haptics = { version = "0.3", default-features = false, features = [
+	"CHHapticEngine",
+	"CHHapticEvent",
+	"CHHapticParameter",
+	"CHHapticPattern",
+	"CHHapticPatternPlayer",
 ] }
 
 [dev-dependencies]

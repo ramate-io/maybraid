@@ -10,6 +10,7 @@ pub mod hid;
 pub mod history;
 pub mod pad;
 pub mod produce;
+pub mod rumble;
 pub mod surface;
 
 pub use analog::{Cardinal, Deadzone};
@@ -19,6 +20,7 @@ pub use gate::PadGameplayEnabled;
 pub use hid::{with_pad_hid, PadHidPlugins};
 pub use history::{PadEdge, PadHistory, PadSnapshot, Timed};
 pub use pad::VirtualPad;
+pub use rumble::{PadRumble, PadRumbleSystems};
 pub use surface::cursor::PadCursor;
 pub use surface::menu::{MenuNav, MenuNavImpulse, MenuNavPad};
 
@@ -44,6 +46,17 @@ impl VirtualPadPlugin {
 
 impl Plugin for VirtualPadPlugin {
 	fn build(&self, app: &mut App) {
+		app.configure_sets(
+			PostUpdate,
+			rumble::PadRumbleSystems::Play.after(rumble::PadRumbleSystems::FanOut),
+		);
+		#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+		{
+			app.configure_sets(
+				PostUpdate,
+				bevy::gilrs::RumbleSystems.after(rumble::PadRumbleSystems::FanOut),
+			);
+		}
 		hid::configure_backend(app);
 		app.insert_resource(self.config.clone())
 			.init_resource::<VirtualPad>()
@@ -51,6 +64,7 @@ impl Plugin for VirtualPadPlugin {
 			.init_resource::<PadGameplayEnabled>()
 			.init_resource::<MenuNavPad>()
 			.init_resource::<PadCursor>()
+			.add_message::<rumble::PadRumble>()
 			.configure_sets(
 				PreUpdate,
 				VirtualPadSystems::Produce.after(InputSystems).before(VirtualPadSystems::Derive),
@@ -67,6 +81,10 @@ impl Plugin for VirtualPadPlugin {
 			)
 				.chain()
 				.in_set(VirtualPadSystems::Derive),
+		);
+		app.add_systems(
+			PostUpdate,
+			rumble::fan_out_pad_rumble.in_set(rumble::PadRumbleSystems::FanOut),
 		);
 	}
 }

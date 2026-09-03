@@ -5,12 +5,14 @@ mod fire;
 mod hold;
 mod pose;
 mod reticle;
+mod rumble;
 mod weapon;
 
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
 use damage::DamageSystems;
 use firearms::FirearmWeaponSystems;
+use maybraid_input::PadRumbleSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
@@ -94,7 +96,8 @@ impl Plugin for FirearmUserPlugin {
 		if !app.is_plugin_added::<damage::DamagePlugin>() {
 			app.add_plugins(damage::DamagePlugin);
 		}
-		app.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
+		app.add_message::<maybraid_input::PadRumble>()
+			.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
 			.add_systems(
 				Update,
 				(pose::stamp_holding_arms, pose::pose_held_firearm).in_set(PlayerPoseSystems::Item),
@@ -112,6 +115,13 @@ impl Plugin for FirearmUserPlugin {
 					.chain()
 					.after(TransformSystems::Propagate)
 					.after(DamageSystems::Apply),
+			)
+			.add_systems(
+				PostUpdate,
+				rumble::pulse_combat_rumble
+					.after(FirearmWeaponSystems::Fire)
+					.after(DamageSystems::Apply)
+					.before(PadRumbleSystems::FanOut),
 			)
 			.add_systems(PostUpdate, fire::apply_weapon_recoil.after(FirearmWeaponSystems::Fire));
 	}
