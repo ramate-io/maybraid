@@ -11,10 +11,11 @@ use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
 use richmond_buildings::{
-	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesCommercialUsage,
-	LesHallesFloorPlan, LesHallesLivableUsage, LesHallesParameterized, LesHallesUsagePlan,
-	MixedUseLesHallesMonotower, MixedUseLesHallesStorey, Openings, PitchedRoof, PitchedRoofParams,
-	RectRingFloorSlab, RoofHalf, StairwellKind, WellAabb, WellSide,
+	Confines, ConnectingStairwell, FillableRegions, Fit, FitError, LesHallesArcadeUsage,
+	LesHallesCommercialUsage, LesHallesFloorPlan, LesHallesLivableUsage, LesHallesOpeningProgram,
+	LesHallesParameterized, LesHallesUsagePlan, MixedUseLesHallesMonotower,
+	MixedUseLesHallesStorey, Openings, PitchedRoof, PitchedRoofParams, RectRingFloorSlab, RoofHalf,
+	StairwellKind, WellAabb, WellSide,
 };
 
 /// [`fit_windows_on_run`] emits nothing below this density.
@@ -123,16 +124,26 @@ fn finish_tower(
 	let slots = tower.shaft_slots.clone();
 	let params = tower.parameterized.clone();
 	for i in start..tower.floors.len() {
+		let arcade = tower.floors[i].is_arcade();
 		let commercial = tower.floors[i].is_commercial();
 		let confines = storey_confines(tower.floors[i].floor_plan(), &params, &slots);
 		let ceiling = if i == last_i { RectRingFloorSlab::Solid } else { RectRingFloorSlab::None };
-		let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with_ceiling(
+		let program = if arcade {
+			LesHallesOpeningProgram::GroundArcade
+		} else {
+			LesHallesOpeningProgram::CommercialGallery
+		};
+		let (floor_plan, regions) = LesHallesFloorPlan::from_parameterized_with(
 			params.clone(),
 			&confines,
 			ceiling,
+			program,
 		)?;
 		let floor_noise = floor_noise(noise, i);
-		tower.floors[i] = if commercial {
+		tower.floors[i] = if arcade {
+			let (usage, _) = LesHallesArcadeUsage::paint(regions, floor_noise)?;
+			MixedUseLesHallesStorey::Arcade { floor_plan, usage, wall_material: None }
+		} else if commercial {
 			let (usage, _) = LesHallesCommercialUsage::paint(regions, floor_noise)?;
 			MixedUseLesHallesStorey::Commercial { floor_plan, usage, wall_material: None }
 		} else {
@@ -326,15 +337,32 @@ mod tests {
 	#[test]
 	fn shell_has_outer_apertures() {
 		let dev = fit_dev(1337);
+		let ground = &dev.tower.floors[0];
+		assert!(ground.is_arcade());
+		assert!(ground.floor_plan().openings.iter().any(|(id, o)| {
+			id.as_str().contains("outer_breezeway") && matches!(o.label, OpeningLabel::Passage)
+		}));
 		assert!(
-			dev.tower.floors.iter().all(|f| {
+			dev.tower.floors.iter().skip(1).all(|f| {
 				f.floor_plan().openings.iter().any(|(id, o)| {
 					id.as_str().contains("outer_aperture")
 						&& matches!(o.label, OpeningLabel::Aperture)
 				})
 			}),
-			"expected outer apertures on every storey"
+			"expected outer apertures on upper storeys"
 		);
+	}
+
+	#[test]
+	fn arcade_shafts_feed_stairwells_to_upper_floors() {
+		let dev = fit_dev(42);
+		assert!(dev.tower.floor_count() >= 2);
+		assert!(dev.tower.floors[0].is_arcade());
+		let ground_shafts = dev.tower.floors[0].floor_plan().shaft_bounds.len();
+		assert!(ground_shafts >= 1);
+		assert!(dev.stairwells.len() >= ground_shafts);
+		let ground_y0 = dev.tower.floors[0].floor_plan().center_xz.y;
+		assert!(dev.stairwells.iter().any(|s| (s.well().min().y - ground_y0).abs() < 1e-2));
 	}
 
 	#[test]
