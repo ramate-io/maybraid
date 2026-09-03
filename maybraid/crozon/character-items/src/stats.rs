@@ -141,7 +141,7 @@ impl ClothingStats {
 }
 
 /// Firearm combat stats. Penetration is millunits (`600` = 0.60). Recoil is
-/// catalog strength (typically `0..=8`). Recharge is tenths of a second.
+/// catalog strength (typically `0.25..=8`). Recharge is tenths of a second.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct FirearmStats {

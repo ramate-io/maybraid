@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 pub const RECOIL_PITCH_PER_UNIT: f32 = 0.02;
 
 /// Catalog recoil for the default 25 DPC bolt (duel / unspec'd spawn).
-const DEFAULT_CATALOG_RECOIL: f32 = 1.75;
+const DEFAULT_CATALOG_RECOIL: f32 = 1.9;
 
 /// Components stamped on a held [`firearms::FirearmRoot`] at spawn.
 #[derive(Clone, Copy, Debug)]

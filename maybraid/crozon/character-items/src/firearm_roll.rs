@@ -20,9 +20,13 @@ const DPC_PER_THICK_TENTH: f32 = 0.8;
 const WEIGHT_PER_THICK_TENTH: f32 = 0.35;
 const WEIGHT_PER_LENGTH_TENTH: f32 = 0.25;
 const COLOR_SD_GAIN: f32 = 0.4;
-const RECOIL_MEAN: f32 = 1.75;
+const RECOIL_MEAN: f32 = 1.9;
+const RECOIL_MIN: f32 = 0.25;
+const RECOIL_MAX: f32 = 8.0;
 const RECOIL_MEAN_BLUE: f32 = -0.25;
 const RECOIL_MEAN_GRIP: f32 = -0.25;
+const RECOIL_MEAN_FROM_DAMAGE: f32 = 0.05;
+const RECOIL_SD_FROM_DAMAGE: f32 = 1.025;
 
 /// Mean and standard deviation for one continuous axis.
 #[derive(Clone, Copy, Debug)]
@@ -58,6 +62,12 @@ impl DistDelta {
 	pub(crate) fn mul_sd(&mut self, factor: f32) {
 		self.mul_sd *= factor;
 	}
+}
+
+fn add_damage(priors: &mut FirearmPriors, dpc: f32) {
+	priors.dpc.add_mean(dpc);
+	priors.recoil.add_mean(RECOIL_MEAN_FROM_DAMAGE);
+	priors.recoil.mul_sd(RECOIL_SD_FROM_DAMAGE);
 }
 
 /// Categorical weights. Sampled with `weight / sum`.
@@ -191,7 +201,7 @@ impl FirearmBuff for FirearmMesh {
 				priors.bins.auto += 0.3;
 				priors.bins.semi += 0.2;
 				priors.rpm.mul_sd(1.15);
-				priors.dpc.add_mean(1.0);
+				add_damage(priors, 1.0);
 				priors.recoil.add_mean(0.5);
 				priors.weight.add_mean(2.0);
 			}
@@ -204,7 +214,7 @@ impl FirearmBuff for FirearmMesh {
 				priors.range.add_mean(120.0);
 				priors.speed.add_mean(40.0);
 				priors.rpm.add_mean(-80.0);
-				priors.dpc.add_mean(6.0);
+				add_damage(priors, 6.0);
 				priors.dpc.mul_sd(1.2);
 				priors.weight.add_mean(6.0);
 			}
@@ -213,7 +223,7 @@ impl FirearmBuff for FirearmMesh {
 				priors.bins.gated += 0.5;
 				priors.bins.auto -= 0.3;
 				priors.range.add_mean(4.0);
-				priors.dpc.add_mean(2.0);
+				add_damage(priors, 2.0);
 				priors.speed.add_mean(-20.0);
 				priors.weight.add_mean(-1.0);
 			}
@@ -235,7 +245,7 @@ impl FirearmBuff for FirearmBarrel {
 				priors.bins.gated += 0.3;
 				priors.range.add_mean(3.0);
 				priors.speed.add_mean(15.0);
-				priors.dpc.add_mean(2.0);
+				add_damage(priors, 2.0);
 			}
 		}
 	}
@@ -274,7 +284,7 @@ impl FirearmBuff for FirearmTriggerBox {
 			Self::Paddle => {
 				priors.bins.semi += 0.8;
 				priors.bins.gated += 0.2;
-				priors.dpc.add_mean(4.0);
+				add_damage(priors, 4.0);
 				priors.recoil.add_mean(0.6);
 			}
 			Self::Reltor => {
@@ -331,7 +341,7 @@ impl FirearmBuff for FirearmMaterial {
 			}
 			Self::LavaVeins => {
 				priors.bins.gated += 0.2;
-				priors.dpc.add_mean(8.0);
+				add_damage(priors, 8.0);
 				priors.dpc.mul_sd(1.15);
 				priors.recoil.add_mean(0.4);
 			}
@@ -341,7 +351,7 @@ impl FirearmBuff for FirearmMaterial {
 				priors.bins.auto -= 0.3;
 				priors.dpc.mul_sd(1.2);
 				priors.refresh.add_mean(-0.08);
-				priors.dpc.add_mean(3.0);
+				add_damage(priors, 3.0);
 			}
 			Self::BrushedMetal => {
 				priors.rpm.mul_sd(0.72);
@@ -387,7 +397,7 @@ impl FirearmBuff for BoltMaterial {
 			}
 			Self::FizzingLaser => {
 				priors.bins.laser += 0.7;
-				priors.dpc.add_mean(2.0);
+				add_damage(priors, 2.0);
 				priors.pen.add_mean(-0.05);
 			}
 		}
@@ -510,7 +520,7 @@ fn realize_ballistic(
 		penetration: (sample_f32(rng, pen, pen_min, pen_max) * 1000.0).round() as u16,
 		range: sample_u16(rng, range, 50, 1000),
 		fire,
-		recoil: sample_f32(rng, recoil, 0.0, 8.0),
+		recoil: sample_f32(rng, recoil, RECOIL_MIN, RECOIL_MAX),
 		damage: sample_u16(rng, dpc_base, dpc_min as u16, dpc_max as u16),
 		weight: sample_u16(rng, weight, 4, 40),
 	}
@@ -592,6 +602,8 @@ mod tests {
 		plain.contribute(&mut plain_priors);
 		fizz.contribute(&mut fizz_priors);
 		assert!((fizz_priors.dpc.add_mean - plain_priors.dpc.add_mean - 2.0).abs() < 1e-4);
+		assert!((fizz_priors.recoil.add_mean - plain_priors.recoil.add_mean - 0.05).abs() < 1e-4);
+		assert!((fizz_priors.recoil.mul_sd / plain_priors.recoil.mul_sd - 1.025).abs() < 1e-4);
 		assert!((fizz_priors.pen.add_mean - plain_priors.pen.add_mean + 0.05).abs() < 1e-4);
 		assert!((plain_priors.speed.add_mean - fizz_priors.speed.add_mean - 20.0).abs() < 1e-4);
 	}
@@ -615,13 +627,13 @@ mod tests {
 					assert!((600..=1200).contains(&stats.penetration));
 					assert!((120..=500).contains(&stats.speed));
 					assert!((50..=1000).contains(&stats.range));
-					assert!((0.0..=8.0).contains(&stats.recoil));
+					assert!((RECOIL_MIN..=RECOIL_MAX).contains(&stats.recoil));
 				}
 				ProjectileKind::Bullet => {
 					assert!(stats.fire.is_some());
 					assert!((250..=700).contains(&stats.penetration));
 					assert!((50..=1000).contains(&stats.range));
-					assert!((0.0..=8.0).contains(&stats.recoil));
+					assert!((RECOIL_MIN..=RECOIL_MAX).contains(&stats.recoil));
 				}
 			}
 		}

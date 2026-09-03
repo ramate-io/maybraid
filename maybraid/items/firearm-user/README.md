@@ -26,7 +26,7 @@ look sync) as well as [`PlayerLook`](../../player/src/identity.rs). NPCs get
 the look kick; [`firearm-intelligence`](../../intelligence/combat/firearm/)
 observes and skill-recovers that displacement instead of overwriting it.
 Lasers emit recoil `0` and do not kick. Default spawn is a
-25 DPC bolt (catalog recoil 1.75). The world reticle flashes when the followed player's shot applies
+25 DPC bolt (catalog recoil 1.9). The world reticle flashes when the followed player's shot applies
 damage. Connected pads rumble on that same fire and hit-confirm: faster
 projectiles are shorter, higher DPC (and headshots) are heavier. Lasers stay a
 low constant pulse while the beam is up. Mouse and keyboard do not rumble.
