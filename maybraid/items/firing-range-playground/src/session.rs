@@ -37,6 +37,10 @@ const FFA_PLAYER_CLEARANCE: f32 = 10.0;
 /// Inside the tower footprint, on the upper storey gallery.
 const FFA_UPPER_RING_MIN: f32 = 10.0;
 const FFA_UPPER_RING_MAX: f32 = 15.0;
+const COMBAT_SPOTTING_RANGE: f32 = 80.0;
+const COMBAT_SPOTTING_CANDIDATES: usize = 8;
+const COMBAT_SPOTTING_SAMPLES: usize = 8;
+const COMBAT_DISCOVERY_SECS: f32 = 0.125;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum RangeMode {
@@ -250,17 +254,17 @@ pub(crate) fn install_npc_combat(
 	let eye_offset = Vec3::Y * (movement.ability.eye_height - movement.ability.feet_below_origin);
 	let directive = SpotDirective {
 		layers: InterestLayers::CHARACTER,
-		range: movement.ability.candidate_budget.horizon,
+		range: COMBAT_SPOTTING_RANGE,
 		priority: 1,
-		desired_count: usize::from(combat.settings.vision.max(1)),
+		desired_count: COMBAT_SPOTTING_CANDIDATES,
 		freshness_secs: combat.settings.fire_spotting_freshness.max(0.125),
-		discovery_interval_secs: 0.25,
+		discovery_interval_secs: COMBAT_DISCOVERY_SECS,
 		respot_interval_secs: 0.125,
 		max_samples_per_subject: usize::from(combat.settings.vision.max(1)),
 	};
 	let spotting = SpottingUser::new(eye_offset, [directive]).with_settings(SpottingSettings::new(
-		movement.ability.candidate_budget.max_candidates,
-		usize::from(combat.settings.vision.max(1)),
+		COMBAT_SPOTTING_CANDIDATES,
+		COMBAT_SPOTTING_SAMPLES,
 		combat.settings.target_spotting_memory,
 	));
 	let mut entity = commands.entity(npc);
@@ -449,6 +453,17 @@ mod tests {
 				assert!(xz > 18.0, "ground npc {i} should sit on the pad, xz={xz}");
 			}
 		}
+	}
+
+	#[test]
+	fn combat_spotting_range_covers_same_storey_ffa_opponents() {
+		let spawn = LesHallesSpawn::default();
+		let ground_a = npc_translation(&spawn, 0, 6);
+		let ground_b = npc_translation(&spawn, 2, 6);
+		assert!(ground_a.distance(ground_b) > 30.0);
+		assert!(ground_a.distance(ground_b) < COMBAT_SPOTTING_RANGE);
+		assert!(COMBAT_DISCOVERY_SECS <= 0.125);
+		assert!(COMBAT_SPOTTING_SAMPLES >= COMBAT_SPOTTING_CANDIDATES);
 	}
 
 	#[test]

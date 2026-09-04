@@ -141,7 +141,8 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_npc_character,
 					session::spawn_held_system,
 					respawn_combatants,
-					vantage::sync_combat_spot_subjects.before(SpottingSystems::Observe),
+					(vantage::sync_combat_spot_subjects, vantage::sync_combat_rosters)
+						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

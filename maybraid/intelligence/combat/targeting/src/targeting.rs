@@ -185,6 +185,11 @@ impl CombatTargeting {
 		self.ranked.first()
 	}
 
+	/// Returns the highest-ranked target backed by usable contact memory.
+	pub fn best_contact(&self) -> Option<&CombatContact> {
+		self.ranked.iter().find_map(|target| self.memory.get(&target.entity))
+	}
+
 	/// Returns the highest current algebra result. Engagement continuity is
 	/// already represented as a factor during ranking.
 	pub fn current(&self) -> Option<&RankedTarget> {
@@ -338,6 +343,22 @@ mod tests {
 		targeting.rebalance(0.0);
 		let entities: Vec<Entity> = targeting.ranked.iter().map(|target| target.entity).collect();
 		assert_eq!(entities, vec![b, c, a]);
+		Ok(())
+	}
+
+	#[test]
+	fn best_contact_skips_higher_ranked_members_without_memory() -> anyhow::Result<()> {
+		let unknown = Entity::from_bits(1);
+		let known = Entity::from_bits(2);
+		let mut targeting = CombatTargeting::default();
+		targeting.include(unknown, TargetSource::ENEMYSHIP);
+		assert!(targeting
+			.set_factors(unknown, TargetFactors { opportunity: 10.0, ..Default::default() },));
+		targeting.upsert_contact(contact(known, 0.0));
+		targeting.rebalance(0.0);
+
+		assert_eq!(targeting.best().map(|target| target.entity), Some(unknown));
+		assert_eq!(targeting.best_contact().map(|contact| contact.subject), Some(known));
 		Ok(())
 	}
 

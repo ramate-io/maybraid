@@ -4,6 +4,18 @@ use bevy::prelude::*;
 
 use crate::{SpotDirective, SpottedContact};
 
+/// A semantic reason to explicitly consider one subject during discovery.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SpottingHint {
+	pub priority: i32,
+}
+
+impl SpottingHint {
+	pub const fn new(priority: i32) -> Self {
+		Self { priority }
+	}
+}
+
 /// Per-user caps and contact retention time.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpottingSettings {
@@ -30,6 +42,7 @@ pub struct SpottingUser {
 	/// Eye position relative to the user's local transform.
 	pub eye_offset: Vec3,
 	pub directives: Vec<SpotDirective>,
+	pub hints: BTreeMap<Entity, SpottingHint>,
 	pub contacts: BTreeMap<Entity, SpottedContact>,
 	pub settings: SpottingSettings,
 	/// Earliest elapsed time at which broadphase discovery may run again.
@@ -45,6 +58,14 @@ impl SpottingUser {
 	pub fn with_settings(mut self, settings: SpottingSettings) -> Self {
 		self.settings = settings;
 		self
+	}
+
+	pub fn hint(&mut self, subject: Entity, hint: SpottingHint) {
+		self.hints.insert(subject, hint);
+	}
+
+	pub fn remove_hint(&mut self, subject: Entity) {
+		self.hints.remove(&subject);
 	}
 
 	pub fn forget_stale(&mut self, now: f32) {
@@ -65,6 +86,7 @@ impl Default for SpottingUser {
 		Self {
 			eye_offset: Vec3::Y * 1.6,
 			directives: Vec::new(),
+			hints: BTreeMap::new(),
 			contacts: BTreeMap::new(),
 			settings: SpottingSettings::default(),
 			next_discovery_at: 0.0,

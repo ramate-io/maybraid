@@ -89,8 +89,7 @@ pub(crate) fn write_firearm_movement_objectives(
 ) {
 	let now = time.elapsed_secs();
 	for (entity, transform, combat, targeting, mut brain, mut movement) in &mut combatants {
-		let Some(target) = targeting.best().and_then(|ranked| targeting.contact(ranked.entity))
-		else {
+		let Some(target) = targeting.best_contact() else {
 			if brain.driving {
 				brain.driving = false;
 				movement.objective = MovementObjective::Reach(MovementLocation::new(

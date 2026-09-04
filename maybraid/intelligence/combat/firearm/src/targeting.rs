@@ -131,7 +131,7 @@ pub(crate) fn validate_firearm_aim_trajectories(
 	guns: Query<&FirearmMembers>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
-	subjects: Query<(&GlobalTransform, &SpotSubject), Without<FirearmIntelligence>>,
+	subjects: Query<(&GlobalTransform, &SpotSubject)>,
 ) {
 	let now = time.elapsed_secs();
 	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
@@ -140,6 +140,7 @@ pub(crate) fn validate_firearm_aim_trajectories(
 		let ranked: Vec<Entity> = targeting
 			.ranked
 			.iter()
+			.filter(|target| targeting.contact(target.entity).is_some())
 			.take(MAX_VALIDATED_TARGETS.min(vision))
 			.map(|target| target.entity)
 			.collect();

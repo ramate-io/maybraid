@@ -173,6 +173,42 @@ pub fn observe_spotting(
 				}
 			}
 
+			for (&subject_entity, hint) in &user.hints {
+				if subject_entity == spotter_entity {
+					continue;
+				}
+				let Ok((entity, subject, _)) = subjects.get(subject_entity) else {
+					continue;
+				};
+				let Ok(transform) = transforms.compute_global_transform(entity) else {
+					continue;
+				};
+				let distance = transform.translation().distance(observer);
+				let known = user.contacts.get(&subject_entity);
+				for &directive in &user.directives {
+					if directive.desired_count == 0 || !directive.matches(subject.layers, distance)
+					{
+						continue;
+					}
+					if known.is_some_and(|contact| {
+						contact.is_fresh(now, directive.freshness_secs) && !contact.is_due(now)
+					}) {
+						continue;
+					}
+					let mut candidate = ProbeCandidate::new(
+						subject_entity,
+						directive,
+						subject.salience,
+						distance,
+						known.is_some(),
+						subject.bounds.sample_count(),
+					);
+					candidate.rank.directive_priority =
+						candidate.rank.directive_priority.saturating_add(hint.priority);
+					merge_candidate(&mut candidates, candidate);
+				}
+			}
+
 			let next_interval = user
 				.directives
 				.iter()
@@ -290,6 +326,8 @@ pub fn observe_spotting(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use avian3d::prelude::PhysicsPlugins;
+	use spotting_intelligence::{InterestLayers, SpotBounds, SpottingHint, SpottingSettings};
 
 	#[test]
 	fn merge_uses_highest_priority_policy() -> anyhow::Result<()> {
@@ -312,6 +350,42 @@ mod tests {
 		assert_eq!(candidate.rank.max_samples, 2);
 		assert!(candidate.rank.known);
 		assert_eq!(candidate.respot_interval_secs, 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn explicit_hint_reaches_visibility_without_a_broadphase_collider() -> anyhow::Result<()> {
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			TransformPlugin,
+			PhysicsPlugins::default(),
+			bevy::asset::AssetPlugin::default(),
+			bevy::mesh::MeshPlugin,
+		));
+		app.add_plugins(crate::SpottingAvianPlugin);
+		app.finish();
+
+		let subject = app
+			.world_mut()
+			.spawn((
+				Transform::from_xyz(4.0, 0.9, 0.0),
+				SpotSubject::new(InterestLayers::CHARACTER, SpotBounds::capsule(0.4, 0.9)),
+			))
+			.id();
+		let mut user =
+			SpottingUser::new(Vec3::Y * 1.6, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.0));
+		user.hint(subject, SpottingHint::new(2));
+		let observer = app.world_mut().spawn((Transform::default(), user)).id();
+
+		app.update();
+
+		let user = app
+			.world()
+			.get::<SpottingUser>(observer)
+			.ok_or_else(|| anyhow::anyhow!("observer lost SpottingUser"))?;
+		assert!(user.contacts.contains_key(&subject));
 		Ok(())
 	}
 }

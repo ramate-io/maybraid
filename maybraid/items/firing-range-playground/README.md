@@ -49,13 +49,17 @@ takes a shot. Player death (or switching mode) resets that ceasefire.
 clothing plus one gallery-style firearm from
 [`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
 NPCs spread around the pad and on the upper storey. Each NPC discovers a
-bounded set of nearby character subjects instead of receiving an all-to-all
-candidate vector. Combat
+bounded set of character subjects inside an 80 m perception envelope. The live
+enemyship roster supplies explicit spotting hints, while Avian broadphase can
+still discover other matching subjects; both paths share the same visibility
+executor and eight-subject candidate budget. The perception envelope is
+independent of the shorter movement-planning horizon. Combat
 still waits for the player's first shot. Rolled guns keep gallery looks
 (material and palette per slot) and sample projectile / cadence from the
 session RNG rather than reseeding from spec identity, so a run is not locked
 to one color or to lasers. As an application-level performance policy, the
 playground samples discovery, respotting, and movement decisions at 8 Hz,
+with up to eight initial sight probes per pass,
 validates and checks fire control at roughly 30 Hz, uses bounded movement-search
 budgets, caches unchanged aim trajectories briefly, and immediately retires
 downed spotting/targeting users and subjects. It keeps the reusable intelligence

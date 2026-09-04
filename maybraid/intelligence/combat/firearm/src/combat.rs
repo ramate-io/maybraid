@@ -139,41 +139,35 @@ pub(crate) fn aim_at_firearm_targets(
 	) in &mut combatants
 	{
 		let from = aim_pivot(user.held, transform.translation, movement, &guns, &maps, &globals);
-		let desired = targeting
-			.current()
-			.and_then(|ranked| targeting.contact(ranked.entity))
-			.copied()
-			.map(|target| {
-				if targeting.engaged != Some(target.subject) || elapsed >= brain.next_aim_choice_at
-				{
-					brain.aiming_head = frac_noise(
-						entity.to_bits() as f32 * 0.013
-							+ target.subject.to_bits() as f32 * 0.019
-							+ elapsed.floor(),
-					) < brain.settings.headshots.clamp(0.0, 1.0);
-					brain.next_aim_choice_at = elapsed + 1.5;
-				}
-				targeting.engage(target.subject);
-				let current =
-					bodies.get(target.subject).ok().map(|transform| transform.translation);
-				let remembered = target.aim_point(brain.aiming_head);
-				let aim_at = current
-					.map_or(remembered, |position| remembered + (position - target.position));
-				let perceived =
-					firearm_targeting.select(target.subject, brain.aiming_head, false).map_or_else(
-						|| {
-							perceive_motion(
-								aim_at,
-								target.movement_vector,
-								brain.settings.motion_tracking,
-							)
-						},
-						|trajectory| trajectory.aim_point,
-					);
-				let to = perceived - from;
-				let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
-				Vec2::new(yaw, pitch)
-			});
+		let desired = targeting.best_contact().copied().map(|target| {
+			if targeting.engaged != Some(target.subject) || elapsed >= brain.next_aim_choice_at {
+				brain.aiming_head = frac_noise(
+					entity.to_bits() as f32 * 0.013
+						+ target.subject.to_bits() as f32 * 0.019
+						+ elapsed.floor(),
+				) < brain.settings.headshots.clamp(0.0, 1.0);
+				brain.next_aim_choice_at = elapsed + 1.5;
+			}
+			targeting.engage(target.subject);
+			let current = bodies.get(target.subject).ok().map(|transform| transform.translation);
+			let remembered = target.aim_point(brain.aiming_head);
+			let aim_at =
+				current.map_or(remembered, |position| remembered + (position - target.position));
+			let perceived =
+				firearm_targeting.select(target.subject, brain.aiming_head, false).map_or_else(
+					|| {
+						perceive_motion(
+							aim_at,
+							target.movement_vector,
+							brain.settings.motion_tracking,
+						)
+					},
+					|trajectory| trajectory.aim_point,
+				);
+			let to = perceived - from;
+			let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
+			Vec2::new(yaw, pitch)
+		});
 		if desired.is_none() {
 			targeting.clear_engagement();
 		}
