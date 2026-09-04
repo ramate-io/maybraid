@@ -100,7 +100,25 @@ impl Fit for MixedUseLesHallesDevelopment {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let (mut tower, _) = MixedUseLesHallesMonotower::fit_to_confines(confines, noise)?;
+		let (tower, _) = MixedUseLesHallesMonotower::fit_to_confines(confines, noise)?;
+		Self::assemble(tower, noise)
+	}
+}
+
+impl MixedUseLesHallesDevelopment {
+	/// Fit with a deep gallery so the ring can carry corner keeps.
+	pub fn fit_curtain(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		let (tower, _) = MixedUseLesHallesMonotower::fit_curtain(confines, noise)?;
+		Self::assemble(tower, noise)
+	}
+
+	fn assemble(
+		mut tower: MixedUseLesHallesMonotower,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
 		if tower.floors.is_empty() {
 			return Err(FitError::TooSmall { reason: "storeys" });
 		}

@@ -77,6 +77,7 @@ impl ConnectingShells {
 		let footprint = bevy_math::Vec2::new(8.0, 6.0);
 		let connect_id = OpeningId::new(CONNECT);
 		let trazaloid = Trazaloid::new(TrazaloidParams {
+			origin: Vec3::ZERO,
 			footprint,
 			ridge: bevy_math::Vec2::new(4.0, 3.0),
 			lower_height: 3.0,

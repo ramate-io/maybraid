@@ -1,4 +1,4 @@
-//! Les Halles, Shepherds Village, and Shepherds Commune on Durham terrain.
+//! Les Halles, Shepherds Village, Shepherds Commune, and Ring Fort on Durham terrain.
 
 pub mod camera;
 pub mod commands;
@@ -33,12 +33,15 @@ use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
 	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex,
 	LesHallesDevelopment, LesHallesStoreView, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, ShepherdsCommuneDevelopment, ShepherdsCommuneStoreView,
-	ShepherdsVillageDevelopment, ShepherdsVillageStoreView, TerrainWithPads,
+	RichmondDevelopmentModelsPlugin, RingFortDevelopment, RingFortStoreView,
+	ShepherdsCommuneDevelopment, ShepherdsCommuneStoreView, ShepherdsVillageDevelopment,
+	ShepherdsVillageStoreView, TerrainWithPads,
 };
 use std::f32::consts::PI;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
+/// Occupancy fill for the playground: high enough that Empty does not dominate.
+const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
 
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
@@ -111,7 +114,10 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(playground.clone())
 			.insert_resource(layout)
-			.insert_resource(DevelopmentConfig::from_world_seed(42))
+			.insert_resource(DevelopmentConfig {
+				likelihood: PLAYGROUND_LIKELIHOOD,
+				..DevelopmentConfig::from_world_seed(42)
+			})
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<DevelopmentsGeneratePending>()
 			.init_resource::<TerrainPresentPending>()
@@ -315,13 +321,19 @@ fn generate_developments(
 		region,
 		&lod_ref,
 	);
+	let ring_forts = GeneratingSpatialIndex::<RingFortDevelopment>::get_or_generate_region(
+		&mut development_index,
+		region,
+		&lod_ref,
+	);
 	info!(
-		"generated development_cells={} padded={} les_halles={} shepherds_villages={} shepherds_communes={}",
+		"generated development_cells={} padded={} les_halles={} shepherds_villages={} shepherds_communes={} ring_forts={}",
 		cells.len(),
 		padded.len(),
 		les_halles.len(),
 		shepherds.len(),
-		communes.len()
+		communes.len(),
+		ring_forts.len()
 	);
 
 	pending_dev.0 = false;
@@ -426,8 +438,16 @@ fn spawn_hosts(
 		};
 		commune_n += spawn_development_hosts(&mut commands, dev);
 	}
+	let ring_fort_view = RingFortStoreView::new(&store);
+	let mut ring_fort_n = 0usize;
+	for tracked in SpatialIndex::<RingFortDevelopment>::tracked_ids_for(&ring_fort_view, region) {
+		let Some(dev) = SpatialIndex::<RingFortDevelopment>::get(&ring_fort_view, tracked.0) else {
+			continue;
+		};
+		ring_fort_n += spawn_development_hosts(&mut commands, dev);
+	}
 	info!(
-		"spawned {n} Les Halles host roots, {shepherds_n} Shepherds Village host roots, and {commune_n} Shepherds Commune host roots"
+		"spawned {n} Les Halles host roots, {shepherds_n} Shepherds Village host roots, {commune_n} Shepherds Commune host roots, and {ring_fort_n} Ring Fort host roots"
 	);
 	dirty.0 = false;
 }

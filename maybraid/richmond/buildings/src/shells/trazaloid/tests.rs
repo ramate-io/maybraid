@@ -181,3 +181,59 @@ fn mapped_opening_matches_passage_plan() -> anyhow::Result<()> {
 	assert!(wbl.z > wbr.z);
 	Ok(())
 }
+
+#[test]
+fn origin_translates_plan_and_west_passage() -> anyhow::Result<()> {
+	let origin = Vec3::new(20.0, 5.0, -8.0);
+	let footprint = Vec2::new(8.0, 6.0);
+	let connect = OpeningId::new("west");
+	let t = TrazaloidParams::default()
+		.origin(origin)
+		.openings(Openings::new().with(
+			connect.clone(),
+			Trazaloid::side_passage_opening(TrazaloidSide::West, footprint, 1.2, 2.1),
+		))
+		.build();
+	let levels = t.plan_levels();
+	anyhow::ensure!((levels[0].0 - origin.y).abs() < 1e-5, "foot y {}", levels[0].0);
+	let west = t
+		.mapped_opening(&connect)
+		.ok_or_else(|| anyhow::anyhow!("west passage should still map after origin shift"))?;
+	let o = west.orientation.normalize();
+	anyhow::ensure!(o.x < -0.9, "orientation={o:?}");
+	let (bl, br, ..) = west.endpoint_corners();
+	let mid_x = 0.5 * (bl.x + br.x);
+	anyhow::ensure!(
+		(mid_x - (origin.x - footprint.x * 0.5)).abs() < 0.6,
+		"west door mid_x={mid_x}"
+	);
+	Ok(())
+}
+
+#[test]
+fn shaft_cuts_floor_when_origin_is_translated() -> anyhow::Result<()> {
+	let origin = Vec3::new(40.0, 12.0, -25.0);
+	let mut openings = Openings::new();
+	openings.insert(
+		"shaft",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(-1.0, -0.5, -1.0),
+				Vec3::new(1.0, 0.5, 1.0),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	let t = TrazaloidParams::default()
+		.origin(origin)
+		.ceiling(TrazaloidSlab::None)
+		.floor(TrazaloidSlab::Solid)
+		.openings(openings)
+		.build();
+	let floor = t.floor().ok_or_else(|| anyhow::anyhow!("translated floor missing"))?;
+	anyhow::ensure!(
+		matches!(floor.pieces()[0], ClippedStripPiece::Clipped(_)),
+		"shaft should cut the world-space floor slab"
+	);
+	Ok(())
+}

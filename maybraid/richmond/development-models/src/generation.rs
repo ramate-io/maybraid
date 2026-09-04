@@ -15,6 +15,7 @@ use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
 use crate::index::DevelopmentIndex;
 use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
+use crate::ring_fort::RingFortDevelopment;
 use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 use crate::village::build_shepherds_village;
 
@@ -67,6 +68,23 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 				{
 					Some((commune, pads)) => Self::with_shepherds_commune(cell, commune, pads),
 					None => Self::empty(cell),
+				}
+			}
+			DevelopmentKind::RingFort => {
+				let center = extent.center();
+				let Some(height) =
+					composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
+				else {
+					return Some((Self::empty(cell), cell));
+				};
+				let filled = Self::with_ring_fort(cell, height, &config);
+				let overlaps_hydro = filled.pad_complex().is_some_and(|pad| {
+					terrain_hydro_overlaps(spatial_index.terrain_store(), &layout, cell, pad.bounds)
+				});
+				if overlaps_hydro {
+					Self::empty(cell)
+				} else {
+					filled
 				}
 			}
 		};
@@ -209,6 +227,55 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for ShepherdsCommuneDevelopment 
 		let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 		let content = cell.shepherds_commune()?;
 		Some((Self { commune: content.commune.clone() }, cell.cell))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	}
+}
+
+impl<'w> GenerationScheme<DevelopmentIndex<'w>> for RingFortDevelopment {
+	fn original_ids_for(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		region: Aabb3d,
+	) -> Vec<OriginalId> {
+		spatial_index.store.filled_original_ids(region)
+	}
+
+	fn build_with_id(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		id: Id,
+		lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
+		let seed = spatial_index.config().seed as i32;
+		let (confines, cell_aabb, finish, footprint, yaw, ground_height) = {
+			let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
+			let content = cell.ring_fort()?;
+			(
+				cell.confines()?,
+				cell.cell,
+				content.finish.clone(),
+				content.confines_extent_xz,
+				content.confines_yaw,
+				content.pad.height,
+			)
+		};
+		let noise = NoiseParams { seed, ..NoiseParams::default() };
+		let (development, _) =
+			richmond_developments::RingFort::fit_to_confines(&confines, noise).ok()?;
+		Some((
+			Self {
+				cell: cell_aabb,
+				building: PlacedBuilding {
+					center_xz: crate::pad::cell_center_xz(cell_aabb),
+					yaw,
+					footprint,
+					ground_height,
+					building: development.with_finish(finish.wall, finish.roof),
+				},
+			},
+			cell_aabb,
+		))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {

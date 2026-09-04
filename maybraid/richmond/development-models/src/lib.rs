@@ -1,4 +1,5 @@
-//! Richmond development models: 200 m lattice, pads, Les Halles, Shepherds Village, and Shepherds Commune.
+//! Richmond development models: 300 m lattice, pads, Les Halles, Shepherds Village,
+//! Shepherds Commune, and Ring Fort.
 //!
 //! Selection / pad / host generation on top of composed Durham [`Terrain`].
 //! The crate plugin also installs SceneRef, urban surface MaterialRef, placeholder
@@ -21,6 +22,7 @@ pub mod pad;
 pub mod padded;
 pub mod plugin;
 pub mod presentation;
+pub mod ring_fort;
 pub mod scatter;
 pub mod shepherds;
 mod shepherds_fit;
@@ -33,12 +35,12 @@ pub use buildings_lod::{
 pub use cell::{
 	cell_selected, yaw_about_xz, DevelopmentExtent, BUILDING_INSET, DEFAULT_LIKELIHOOD,
 	DEFAULT_SPATIAL_CORRELATION, DEVELOPMENT_CELL_SIZE, LES_HALLES_MAX_FOOTPRINT, PAD_BERM,
-	PAD_EDGE_EASE, PAD_ROUND,
+	PAD_EDGE_EASE, PAD_ROUND, RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_FOOTPRINT,
 };
 pub use config::DevelopmentConfig;
 pub use development::{
 	select_kind, DevelopmentCell, DevelopmentContent, DevelopmentKind, DevelopmentPad,
-	LesHallesCell, ShepherdsCommuneCell, ShepherdsVillageCell,
+	LesHallesCell, RingFortCell, ShepherdsCommuneCell, ShepherdsVillageCell,
 };
 pub use finish::DevelopmentFinish;
 pub use host::{DevelopmentHost, DevelopmentHosts};
@@ -47,7 +49,7 @@ pub use hydro::{
 };
 pub use index::{
 	DevelopmentCellStoreView, DevelopmentEntryStore, DevelopmentIndex, LesHallesStoreView,
-	PaddedStoreView, ShepherdsCommuneStoreView, ShepherdsVillageStoreView,
+	PaddedStoreView, RingFortStoreView, ShepherdsCommuneStoreView, ShepherdsVillageStoreView,
 };
 pub use les_halles::LesHallesDevelopment;
 pub use pad::{
@@ -57,5 +59,6 @@ pub use pad::{
 pub use padded::{PresentedPaddedTerrainScene, TerrainWithPads};
 pub use plugin::{register_richmond_development_models_plugin, RichmondDevelopmentModelsPlugin};
 pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
+pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
 pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
