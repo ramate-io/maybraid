@@ -262,6 +262,14 @@ struct TerrainGenerationIndex {
 impl TerrainGenerationInput {
 	pub fn generate(self) -> TerrainGenerationResult {
 		let region = self.layout.request_region();
+		self.generate_region(region)
+	}
+
+	/// Generate only the origin cells intersecting `region`.
+	///
+	/// The input layout still defines the playable domain and all shared
+	/// procedural lattices; the requested region selects the streamed subset.
+	pub fn generate_region(self, region: Aabb3d) -> TerrainGenerationResult {
 		let transform = Transform::IDENTITY;
 		let lod_ref = LodRef {
 			entity: Entity::PLACEHOLDER,
@@ -505,6 +513,64 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 				entry.entity = Some(entity);
 			}
 		}
+	}
+
+	/// Merge a streamed generation batch without discarding previously
+	/// generated terrain cells.
+	pub fn apply_generation_region(&mut self, result: TerrainGenerationResult) {
+		let TerrainGenerationResult { mut store, .. } = result;
+
+		for (id, entry) in store.terrain.drain() {
+			if let Some(existing) = self.store.terrain.remove(&id) {
+				if let Some(entity) = existing.entity {
+					self.store.entity_to_id.remove(&entity);
+					self.commands.entity(entity).despawn();
+				}
+			}
+			let entity = self.spawn_cell_entity(id, entry.bounds);
+			let version = self.store.next_version();
+			self.store.entity_to_id.insert(entity, id);
+			self.store.terrain.insert(
+				id,
+				StoredEntry {
+					value: entry.value,
+					bounds: entry.bounds,
+					version,
+					entity: Some(entity),
+				},
+			);
+		}
+		for (id, entry) in store.water.drain() {
+			let version = self.store.next_version();
+			self.store.water.insert(
+				id,
+				StoredEntry { value: entry.value, bounds: entry.bounds, version, entity: None },
+			);
+		}
+		// Runtime height fallback only needs the universal base-noise entry.
+		for (id, mut entry) in store.base_noise.drain() {
+			entry.version = self.store.next_version();
+			self.store.base_noise.insert(id, entry);
+		}
+	}
+
+	/// Drop streamed semantic cells outside the live generation ring.
+	pub fn retain_generation_region(&mut self, region: Aabb3d) {
+		let stale_terrain: Vec<_> = self
+			.store
+			.terrain
+			.iter()
+			.filter_map(|(id, entry)| (!entry.bounds.intersects(&region)).then_some(*id))
+			.collect();
+		for id in stale_terrain {
+			if let Some(entry) = self.store.terrain.remove(&id) {
+				if let Some(entity) = entry.entity {
+					self.store.entity_to_id.remove(&entity);
+					self.commands.entity(entity).despawn();
+				}
+			}
+		}
+		self.store.water.retain(|_, entry| entry.bounds.intersects(&region));
 	}
 
 	pub fn set_layout(&mut self, layout: TerrainCellLayout) {

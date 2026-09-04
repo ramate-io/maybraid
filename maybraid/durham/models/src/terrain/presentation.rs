@@ -10,11 +10,13 @@ use crate::terrain::Terrain;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, template_value};
 use durham_terrain::shaders::DurhamTerrainShader;
 use lod::gen::{
 	GenerationScheme, Id, LodScene, OriginalId, RegionPresenter, SpatialIndex, StorageStatus,
 	TrackedId, Version,
 };
+use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
@@ -257,10 +259,20 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
+		let min = Vec3::from(value.cell.min);
+		let max = Vec3::from(value.cell.max);
+		let transform = Transform::from_translation((min + max) * 0.5);
+		let level = value.scene_lod_level(lod_ref);
 		let entity = self
 			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedTerrainScene(id))
+			.spawn_scene((
+				lod_host_scene_pending(level, value.scene_bounds()),
+				bsn! {
+					template_value(transform)
+					Visibility::default()
+				},
+			))
+			.insert((value.clone(), PresentedTerrainScene(id)))
 			.id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}

@@ -33,6 +33,8 @@ pub const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
+const FALL_RESPAWN_DEPTH: f32 = 40.0;
+const FALL_RESPAWN_DELAY_SECS: f32 = 0.75;
 /// Hold above base noise until composed height exists (`height_scale` is 500).
 const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
 
@@ -74,6 +76,25 @@ pub struct Player;
 /// True once composed terrain and a terrain collider are both ready at startup.
 #[derive(Resource, Debug, Clone, Copy, Default)]
 pub struct SpawnTerrainReady(pub bool);
+
+/// Whether the player rigid body may participate in physics.
+///
+/// Playgrounds default this on. The production shell keeps it off until the
+/// Discovery loading gate has settled.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct PlayerPhysicsEnabled(pub bool);
+
+impl Default for PlayerPhysicsEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+/// Delayed recovery for a player that falls below the streamed surface.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct PlayerRespawn {
+	queued_at: Option<f32>,
+}
 
 /// Gravity off until composed height + a terrain trimesh exist.
 #[derive(Component)]
@@ -144,6 +165,8 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
 			.init_resource::<SpawnTerrainReady>()
+			.init_resource::<PlayerPhysicsEnabled>()
+			.init_resource::<PlayerRespawn>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -153,6 +176,8 @@ impl Plugin for PlayerPlugin {
 					update_grounded,
 					apply_character_movement,
 					apply_movement_damping,
+					queue_fallen_player_respawn,
+					respawn_fallen_player,
 					follow_character_camera,
 				)
 					.chain()
@@ -186,6 +211,7 @@ fn spawn_player(
 			Transform::from_translation(spawn),
 			Visibility::default(),
 			RigidBody::Dynamic,
+			RigidBodyDisabled,
 			collider,
 			PhysicsInteractionLayer::animated_layers(),
 			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
@@ -224,7 +250,11 @@ pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
+	player_surface_point(center, elevation)
+}
+
+fn player_surface_point(position: Vec3, elevation: f32) -> Vec3 {
+	Vec3::new(position.x, elevation + capsule_half_height() + 0.5, position.z)
 }
 
 pub(crate) fn snap_player_to_composed_surface(
@@ -232,40 +262,58 @@ pub(crate) fn snap_player_to_composed_surface(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut ready: ResMut<SpawnTerrainReady>,
+	physics_enabled: Res<PlayerPhysicsEnabled>,
+	respawn: Res<PlayerRespawn>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
-	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,
+	mut players: Query<
+		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale),
+		With<Player>,
+	>,
 	terrain_roots: Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
 	children: Query<&Children>,
-	colliders: Query<(), With<Collider>>,
+	colliders: Query<(), (With<Collider>, Without<ColliderDisabled>)>,
 ) {
-	let Ok((mut transform, mut velocity, mut gravity)) = players.single_mut() else {
+	let Ok((player, mut transform, mut velocity, mut gravity)) = players.single_mut() else {
 		return;
 	};
-
-	let center = layout.region_center_xz();
-	let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) else {
+	if respawn.queued_at.is_some() {
 		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
+		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+		return;
+	}
+
+	let position = transform.translation;
+	let Some(elevation) = store.composed_height_at(&layout, position.x, position.z) else {
+		ready.0 = false;
+		gravity.0 = 0.0;
+		**velocity = Vec3::ZERO;
+		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
 		return;
 	};
 
-	let target = player_spawn_point(&layout, elevation);
+	let target = player_surface_point(position, elevation);
 	if awaiting.single().is_ok() {
 		transform.translation = target;
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(center, &terrain_roots, &children, &colliders) {
+	if terrain_collider_ready(position, &terrain_roots, &children, &colliders) {
 		ready.0 = true;
-		gravity.0 = PLAY_GRAVITY_SCALE;
-		if let Ok(entity) = awaiting.single() {
-			commands.entity(entity).remove::<AwaitingTerrainSurface>();
+		if physics_enabled.0 {
+			gravity.0 = PLAY_GRAVITY_SCALE;
+			commands.entity(player).remove::<(AwaitingTerrainSurface, RigidBodyDisabled)>();
+		} else {
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+			commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
 		}
 	} else {
 		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
+		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
 	}
 }
 
@@ -273,12 +321,73 @@ fn terrain_collider_ready(
 	spawn: Vec3,
 	roots: &Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
 	children: &Query<&Children>,
-	colliders: &Query<(), With<Collider>>,
+	colliders: &Query<(), (With<Collider>, Without<ColliderDisabled>)>,
 ) -> bool {
 	roots
 		.iter()
 		.filter(|(_, chunk)| chunk.column_contains_point(spawn))
 		.any(|(root, _)| children.iter_descendants(root).any(|child| colliders.contains(child)))
+}
+
+fn queue_fallen_player_respawn(
+	time: Res<Time>,
+	physics: Res<PlayerPhysicsEnabled>,
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	mut respawn: ResMut<PlayerRespawn>,
+	mut ready: ResMut<SpawnTerrainReady>,
+	mut commands: Commands,
+	mut player: Query<
+		(Entity, &Transform, &mut LinearVelocity, &mut GravityScale),
+		(With<Player>, Without<AwaitingTerrainSurface>),
+	>,
+) {
+	if !physics.0 || respawn.queued_at.is_some() {
+		return;
+	}
+	let Ok((entity, transform, mut velocity, mut gravity)) = player.single_mut() else {
+		return;
+	};
+	let at = transform.translation;
+	let surface = store
+		.composed_height_at(&layout, at.x, at.z)
+		.unwrap_or_else(|| holding_elevation(&base.0, at.x, at.z));
+	if at.y >= surface - FALL_RESPAWN_DEPTH {
+		return;
+	}
+	respawn.queued_at = Some(time.elapsed_secs() + FALL_RESPAWN_DELAY_SECS);
+	ready.0 = false;
+	gravity.0 = 0.0;
+	**velocity = Vec3::ZERO;
+	commands.entity(entity).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+}
+
+fn respawn_fallen_player(
+	time: Res<Time>,
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	mut respawn: ResMut<PlayerRespawn>,
+	mut player: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+) {
+	let Some(at) = respawn.queued_at else {
+		return;
+	};
+	if time.elapsed_secs() < at {
+		return;
+	}
+	let Ok((mut transform, mut velocity)) = player.single_mut() else {
+		respawn.queued_at = None;
+		return;
+	};
+	let center = layout.region_center_xz();
+	let elevation = store
+		.composed_height_at(&layout, center.x, center.z)
+		.unwrap_or_else(|| holding_elevation(&base.0, center.x, center.z));
+	transform.translation = player_surface_point(center, elevation);
+	**velocity = Vec3::ZERO;
+	respawn.queued_at = None;
 }
 
 /// Reposition the player after terrain layout regeneration.

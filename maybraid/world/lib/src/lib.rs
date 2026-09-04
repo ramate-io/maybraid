@@ -13,7 +13,9 @@ mod material_lib;
 mod ui;
 
 pub use camera::CameraPov;
-pub use chico_vegetation_on_terrain_playground::SpawnTerrainReady;
+pub use chico_vegetation_on_terrain_playground::{
+	PlayerPhysicsEnabled, SpawnTerrainReady, TerrainStreamingEnabled,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crozon_character_playground::CameraController as PreviewCameraController;
-use maybraid_world::WorldGameplayEnabled;
+use maybraid_world::{PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled};
 use menu_components::MENU_CLEAR;
 use menu_screens::{
 	despawn_menu_screens, request_show_gallery, request_show_home, request_show_in_game,
@@ -52,17 +52,26 @@ pub(crate) fn apply_shell_look(
 	mut world_cameras: Query<&mut Camera, (With<Camera3d>, Without<MenuUiCamera>)>,
 	mut ui_cameras: Query<&mut Camera, (With<MenuUiCamera>, Without<Camera3d>)>,
 	mut gameplay: ResMut<WorldGameplayEnabled>,
+	mut physics: ResMut<PlayerPhysicsEnabled>,
+	mut streaming: ResMut<TerrainStreamingEnabled>,
 ) {
 	let flow = *flow.get();
 	clear.0 = if flow == GameFlow::Home { MENU_CLEAR } else { WORLD_SKY };
 	for mut camera in &mut world_cameras {
 		camera.is_active = true;
 	}
+	let menu_visible =
+		matches!(flow, GameFlow::Home | GameFlow::Characters | GameFlow::LoadingWorld)
+			|| (flow == GameFlow::World
+				&& pause.as_ref().is_some_and(|pause| *pause.get() == WorldPause::Menu));
 	for mut camera in &mut ui_cameras {
-		camera.is_active = false;
+		camera.is_active = menu_visible;
 	}
-	gameplay.0 =
-		flow == GameFlow::World && pause.is_some_and(|pause| *pause.get() == WorldPause::Playing);
+	streaming.0 = matches!(flow, GameFlow::LoadingWorld | GameFlow::World);
+	let playing = flow == GameFlow::World
+		&& pause.as_ref().is_some_and(|pause| *pause.get() == WorldPause::Playing);
+	gameplay.0 = playing;
+	physics.0 = playing;
 }
 
 /// Temporary: vegetation assumes a unique `Camera3d`, so preview look is bolted

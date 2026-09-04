@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use avian3d::prelude::ColliderDisabled;
+use avian3d::prelude::{Collider, ColliderDisabled};
 use bevy::ecs::system::SystemParam;
 use bevy::log::info_span;
 use bevy::prelude::*;
@@ -17,11 +17,15 @@ use lod::gen::{
 };
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
-use lod::{LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin, LodViewer};
+use lod::{
+	LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin,
+	LodSceneRefreshRegionPlugin, LodViewer,
+};
+use lod_avian::AvianLodSceneRefreshPlugin;
 use procedural_common::NoiseParams;
 use richmond_development_models::{
 	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentHosts, DevelopmentIndex,
-	PaddedStoreView, PaddedTerrainPresenter, TerrainWithPads,
+	PaddedStoreView, PaddedTerrainPresenter, PresentedPaddedTerrainScene, TerrainWithPads,
 };
 use richmond_urbanization::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
@@ -87,6 +91,9 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 
 /// Generate + present-keep plugins for [`SelectedUrbanization`].
 pub fn register_urbanization_lod(app: &mut App) {
+	#[derive(Debug, Clone, Copy, Default)]
+	struct PaddedTerrainRefresh;
+
 	app.init_resource::<UrbanizationIndex>()
 		.init_resource::<UrbanizationPresenterState>()
 		.init_resource::<UrbanizationGenerateBullseye>()
@@ -107,6 +114,16 @@ pub fn register_urbanization_lod(app: &mut App) {
 			UrbanizationPresentBullseye,
 			With<LodViewer>,
 			UrbanizationLodChan,
+		>::default())
+		.add_plugins(LodSceneRefreshRegionPlugin::<
+			UrbanizationPresentBullseye,
+			With<LodViewer>,
+			PaddedTerrainRefresh,
+		>::default())
+		.add_plugins(AvianLodSceneRefreshPlugin::<
+			TerrainWithPads,
+			PaddedTerrainRefresh,
+			With<LodViewer>,
 		>::default());
 }
 
@@ -409,17 +426,18 @@ pub fn present_urbanization_padded_terrain(
 	store: Res<DevelopmentEntryStore>,
 	mut presenter: PaddedTerrainPresenter,
 	mut state: ResMut<UrbanizationPaddedTerrainState>,
+	viewers: Query<&Transform, With<LodViewer>>,
 ) {
 	state.wanted.clear();
 	let Some(region) = keep.region.filter(|_| config.urbanization.is_some()) else {
 		presenter.remove_stale(&state.wanted);
 		return;
 	};
-	let identity = Transform::IDENTITY;
+	let viewer = viewers.single().copied().unwrap_or(Transform::IDENTITY);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
+		previous_transform: &viewer,
+		current_transform: &viewer,
 		bounds: &region,
 	};
 	let view = PaddedStoreView::new(&store);
@@ -437,10 +455,19 @@ pub fn sync_raw_terrain_replacements(
 	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,
 	raw_roots: Query<(Entity, &PresentedTerrainScene)>,
+	padded_roots: Query<(Entity, &PresentedPaddedTerrainScene)>,
 	children: Query<&Children>,
+	colliders: Query<(), (With<Collider>, Without<ColliderDisabled>)>,
 ) {
+	let ready: HashSet<Id> = padded_roots
+		.iter()
+		.filter(|(root, _)| children.iter_descendants(*root).any(|child| colliders.contains(child)))
+		.map(|(_, presented)| presented.0)
+		.collect();
 	for (root, presented) in &raw_roots {
-		let replaced = state.wanted.contains(&presented.0);
+		// Keep the raw collider live until the replacement's async mesh has
+		// produced its collider. This makes the handoff atomic for characters.
+		let replaced = state.wanted.contains(&presented.0) && ready.contains(&presented.0);
 		commands.entity(root).insert(if replaced {
 			Visibility::Hidden
 		} else {

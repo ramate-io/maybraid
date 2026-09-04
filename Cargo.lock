@@ -6449,6 +6449,7 @@ dependencies = [
  "durham-terrain-models",
  "game-commands",
  "lod",
+ "lod-avian",
  "lod-cascade",
  "lod-first-load",
  "log",

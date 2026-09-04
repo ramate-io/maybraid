@@ -32,13 +32,14 @@ pub use groves::{
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
-	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
-	SpawnTerrainReady,
+	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled,
+	PlayerPlugin, PlayerRespawn, PlaygroundMode, SpawnTerrainReady,
 };
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::log::info_span;
+use bevy::math::bounding::Aabb3d;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -51,7 +52,7 @@ use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
-use chico_sbs_trees_playground::register_vegetation_view;
+use chico_sbs_trees_playground::{register_vegetation_view, VegetationBullseye, VegetationCull};
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
 	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
@@ -73,9 +74,14 @@ use game_commands::command::{
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::gen::RegionPresenter;
+use lod::gen::{LodGenerateKeepRegion, LodGenerateRegion, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
-use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
+use lod::{
+	LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin, LodPresentSystems,
+	LodRefreshRegions, LodRefreshRegionsStatus, LodSceneHost, LodViewer,
+};
+use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
 use lod_first_load::{FirstLoadActivity, FirstLoadPermit};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
@@ -84,6 +90,7 @@ use player::{
 	AwaitingTerrainSurface,
 };
 use render_item::mesh::handle::{EnforceCachingPlugin, EnforcedCaches};
+use std::collections::{HashSet, VecDeque};
 use std::f32::consts::PI;
 use terrain_chunk_ref::{TerrainChunkRefCache, TerrainChunkRefPlugin};
 
@@ -98,6 +105,9 @@ const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
 const WORLD_OUTER_2X_ROWS: i32 = 2;
 /// 4× macro ring past the 2× ring.
 const WORLD_OUTER_4X_ROWS: i32 = 1;
+const WORLD_TERRAIN_GENERATE_EDGE_M: f32 = 3_200.0;
+const WORLD_TERRAIN_PRESENT_EDGE_M: f32 = 2_400.0;
+const WORLD_TERRAIN_QUERY_HEIGHT_M: f32 = 20_000.0;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -163,6 +173,23 @@ fn terrain_cells_for_generate_m(generate_m: f32) -> i32 {
 #[derive(Resource)]
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
+/// Whether terrain and its dependent vegetation streams may advance.
+///
+/// Playgrounds default this on. The game shell turns it on when Discovery
+/// enters its loading state, so the home menu does not eagerly build the world.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct TerrainStreamingEnabled(pub bool);
+
+impl Default for TerrainStreamingEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+pub fn terrain_streaming_enabled(enabled: Res<TerrainStreamingEnabled>) -> bool {
+	enabled.0
+}
+
 #[derive(Resource, Clone)]
 pub struct PlaygroundConfig {
 	pub grove: commands::GroveKind,
@@ -214,7 +241,53 @@ struct TerrainGenerationTask {
 
 struct CompletedTerrainGeneration {
 	result: TerrainGenerationResult,
+	streamed: bool,
 	_permit: Option<FirstLoadPermit>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct TerrainLodChannel;
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct TerrainGenerateRing;
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct TerrainPresentRing;
+
+#[derive(Resource, Default)]
+struct TerrainGenerationRegions(VecDeque<Aabb3d>);
+
+fn terrain_ring_region(position: Vec3, edge: f32) -> Aabb3d {
+	let cell = TERRAIN_CELL_SIZE;
+	let center = Vec3::new(
+		(position.x / cell).floor().mul_add(cell, cell * 0.5),
+		0.0,
+		(position.z / cell).floor().mul_add(cell, cell * 0.5),
+	);
+	let half = Vec3::new(edge * 0.5, WORLD_TERRAIN_QUERY_HEIGHT_M * 0.5, edge * 0.5);
+	Aabb3d::from_min_max(center - half, center + half)
+}
+
+fn terrain_ring_status(lod_ref: &LodRef, edge: f32) -> LodRefreshRegionsStatus {
+	let current = terrain_ring_region(lod_ref.current_transform.translation, edge);
+	let previous = terrain_ring_region(lod_ref.previous_transform.translation, edge);
+	if current == previous {
+		LodRefreshRegionsStatus::Unchanged
+	} else {
+		LodRefreshRegionsStatus::Changed(current)
+	}
+}
+
+impl LodRefreshRegions for TerrainGenerateRing {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		terrain_ring_status(lod_ref, WORLD_TERRAIN_GENERATE_EDGE_M)
+	}
+}
+
+impl LodRefreshRegions for TerrainPresentRing {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		terrain_ring_status(lod_ref, WORLD_TERRAIN_PRESENT_EDGE_M)
+	}
 }
 
 #[derive(Resource)]
@@ -274,6 +347,20 @@ impl Plugin for VegetationOnTerrainPlugin {
 			);
 		}
 		register_vegetation_view(app);
+		app.add_plugins((
+			LodGenerateRegionPlugin::<
+				TerrainGenerateRing,
+				With<LodViewer>,
+				TerrainLodChannel,
+			>::default(),
+			LodPresentRegionPlugin::<
+				TerrainPresentRing,
+				With<LodViewer>,
+				TerrainLodChannel,
+			>::default(),
+			AvianLodSceneRefreshPlugin::<Terrain, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
+			AvianLodSceneCullPlugin::<Terrain, VegetationCull, With<Camera>>::default(),
+		));
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
@@ -295,11 +382,15 @@ impl Plugin for VegetationOnTerrainPlugin {
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
+			.init_resource::<TerrainStreamingEnabled>()
 			.insert_resource(playground.clone())
 			.insert_resource(layout_for(&playground))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.init_resource::<TerrainGenerationTask>()
+			.init_resource::<TerrainGenerationRegions>()
+			.insert_resource(TerrainGenerateRing)
+			.insert_resource(TerrainPresentRing)
 			.insert_resource(GrovesDirty(true))
 			.init_resource::<DurhamGroveTerrainCache>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
@@ -313,17 +404,23 @@ impl Plugin for VegetationOnTerrainPlugin {
 					release_modifiers_on_focus_change.before(camera_controller),
 					camera_controller,
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					generate_cells.after(apply_commands),
-					present_cells.after(generate_cells),
-					spawn_groves.after(present_cells),
+					initialize_terrain_lod_regions
+						.after(apply_commands)
+						.before(generate_cells)
+						.run_if(terrain_streaming_enabled),
+					generate_cells.after(apply_commands).run_if(terrain_streaming_enabled),
+					present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
+					spawn_groves.after(present_cells).run_if(terrain_streaming_enabled),
 					stream_durham_forest
 						.after(apply_commands)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					stream_canopy_bump_outs
 						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					apply_set_character.after(apply_commands),
 					apply_mode_commands.after(apply_set_character),
 					snap_player_to_composed_surface
@@ -347,16 +444,21 @@ impl Plugin for VegetationOnTerrainPlugin {
 				(
 					release_modifiers_on_focus_change.before(camera_controller),
 					camera_controller,
-					generate_cells,
-					present_cells.after(generate_cells),
-					spawn_groves.after(present_cells),
+					initialize_terrain_lod_regions
+						.before(generate_cells)
+						.run_if(terrain_streaming_enabled),
+					generate_cells.run_if(terrain_streaming_enabled),
+					present_cells.after(generate_cells).run_if(terrain_streaming_enabled),
+					spawn_groves.after(present_cells).run_if(terrain_streaming_enabled),
 					stream_durham_forest
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					stream_canopy_bump_outs
 						.after(stream_durham_forest)
 						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
+						.before(LodPresentSystems::Produce)
+						.run_if(terrain_streaming_enabled),
 					apply_set_character,
 					apply_mode_commands.after(apply_set_character),
 					snap_player_to_composed_surface
@@ -602,66 +704,123 @@ fn apply_mode_commands(
 	}
 }
 
+fn initialize_terrain_lod_regions(
+	config: Res<PlaygroundConfig>,
+	players: Query<&Transform, (With<Player>, Without<Camera3d>)>,
+	cameras: Query<&Transform, (With<Camera3d>, Without<Player>)>,
+	mut generate_keep: ResMut<LodGenerateKeepRegion<TerrainLodChannel>>,
+	mut present_keep: ResMut<LodPresentKeepRegion<TerrainLodChannel>>,
+	mut generate: MessageWriter<LodGenerateRegion<TerrainLodChannel>>,
+	mut present: MessageWriter<LodPresentRegion<TerrainLodChannel>>,
+) {
+	if config.coverage != TerrainCoverage::PlayableWorld
+		|| (generate_keep.region.is_some() && present_keep.region.is_some())
+	{
+		return;
+	}
+	let position = players
+		.single()
+		.map(|transform| transform.translation)
+		.or_else(|_| cameras.single().map(|transform| transform.translation))
+		.unwrap_or(Vec3::ZERO);
+	if generate_keep.region.is_none() {
+		let region = terrain_ring_region(position, WORLD_TERRAIN_GENERATE_EDGE_M);
+		generate_keep.region = Some(region);
+		generate.write(LodGenerateRegion::new(region));
+	}
+	if present_keep.region.is_none() {
+		let region = terrain_ring_region(position, WORLD_TERRAIN_PRESENT_EDGE_M);
+		present_keep.region = Some(region);
+		present.write(LodPresentRegion::new(region));
+	}
+}
+
 fn generate_cells(
-	mut commands: Commands,
 	mut index: AvianTerrainIndex,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut generation: ResMut<TerrainGenerationTask>,
+	mut regions: ResMut<TerrainGenerationRegions>,
+	mut generated_regions: MessageReader<LodGenerateRegion<TerrainLodChannel>>,
+	generate_keep: Res<LodGenerateKeepRegion<TerrainLodChannel>>,
 	activity: Option<Res<FirstLoadActivity>>,
 	mut world_base: ResMut<WorldBaseTerrain>,
+	config: Res<PlaygroundConfig>,
 	mode: Res<PlaygroundMode>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
-	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
+	for generated in generated_regions.read() {
+		if !regions.0.iter().any(|region| *region == generated.region) {
+			regions.0.push_back(generated.region);
+		}
+	}
+
 	if let Some(task) = generation.task.as_mut() {
 		let Some(completed) = (&mut *task).now_or_never() else {
 			return;
 		};
 		generation.task = None;
-		if dirty.0 {
-			// A command changed the generation inputs while this task ran.
-			return;
-		}
-		let terrain_cells = completed.result.terrain_cells;
-		let water_cells = completed.result.water_cells;
-		index.apply_generation(completed.result);
-		info!("generated terrain_cells={terrain_cells} water_cells={water_cells}");
+		if !dirty.0 {
+			let terrain_cells = completed.result.terrain_cells;
+			let water_cells = completed.result.water_cells;
+			if completed.streamed {
+				index.apply_generation_region(completed.result);
+				if let Some(region) = generate_keep.live_region() {
+					index.retain_generation_region(region);
+				}
+			} else {
+				index.apply_generation(completed.result);
+			}
+			info!("generated terrain_cells={terrain_cells} water_cells={water_cells}");
 
-		if let Some(base) = index.base_noise() {
-			world_base.0 = base.clone();
-		}
-		let layout = index.layout().clone();
-		if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-			let center = layout.region_center_xz();
-			if let Some(elevation) = index.composed_height_at(center.x, center.z) {
-				respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+			if let Some(base) = index.base_noise() {
+				world_base.0 = base.clone();
 			}
-			commands.entity(player).insert(AwaitingTerrainSurface);
-		}
-		if *mode == PlaygroundMode::Free {
-			if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-				let center = layout.region_center_xz();
-				let elevation = index
-					.composed_height_at(center.x, center.z)
-					.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
-				refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
+			let layout = index.layout().clone();
+			if !completed.streamed && *mode == PlaygroundMode::Free {
+				if let Ok((mut transform, mut controller)) = cameras.single_mut() {
+					let center = layout.region_center_xz();
+					let elevation = index
+						.composed_height_at(center.x, center.z)
+						.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
+					refocus_camera_on_elevation(
+						&layout,
+						elevation,
+						&mut transform,
+						&mut controller,
+					);
+				}
 			}
+			pending.0 = true;
 		}
-		pending.0 = true;
-		return;
 	}
 
-	if !dirty.0 {
-		return;
+	let streamed = config.coverage == TerrainCoverage::PlayableWorld;
+	if dirty.0 {
+		regions.0.clear();
+		if streamed {
+			index.clear();
+			if let Some(region) = generate_keep.region {
+				regions.0.push_back(region);
+			}
+		} else {
+			regions.0.push_back(index.layout().request_region());
+		}
+		dirty.0 = false;
 	}
+	let Some(region) = regions.0.pop_front() else {
+		return;
+	};
 	let input = index.generation_input();
 	let permit = activity.as_ref().map(|activity| activity.begin());
 	generation.task = Some(AsyncComputeTaskPool::get().spawn(async move {
 		let _span = info_span!("durham_terrain_generation").entered();
-		CompletedTerrainGeneration { result: input.generate(), _permit: permit }
+		CompletedTerrainGeneration {
+			result: input.generate_region(region),
+			streamed,
+			_permit: permit,
+		}
 	}));
-	dirty.0 = false;
 	pending.0 = true;
 }
 
@@ -670,28 +829,60 @@ fn present_cells(
 	mut water_presenter: WaterRegionPresenter,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
+	config: Res<PlaygroundConfig>,
 	mut pending: ResMut<TerrainPresentPending>,
 	generation: Res<TerrainGenerationTask>,
+	present_keep: Res<LodPresentKeepRegion<TerrainLodChannel>>,
+	mut present_regions: MessageReader<LodPresentRegion<TerrainLodChannel>>,
+	viewers: Query<&Transform, With<LodViewer>>,
 ) {
-	if !pending.0 || generation.task.is_some() {
+	let streamed = config.coverage == TerrainCoverage::PlayableWorld;
+	let region_changed = present_regions.read().next().is_some();
+	if !streamed {
+		if !pending.0 || generation.task.is_some() {
+			return;
+		}
+		terrain_presenter.clear_presented();
+		water_presenter.clear_presented();
+	} else if !pending.0 && !region_changed {
 		return;
 	}
-
-	terrain_presenter.clear_presented();
-	water_presenter.clear_presented();
-
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
+	if store.is_empty() {
+		return;
+	}
+	let region = if streamed {
+		let Some(region) = present_keep.region else {
+			return;
+		};
+		region
+	} else {
+		layout.request_region()
+	};
+	let viewer = viewers.single().copied().unwrap_or(Transform::IDENTITY);
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
+		previous_transform: &viewer,
+		current_transform: &viewer,
 		bounds: &region,
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	if streamed {
+		let wanted: HashSet<_> = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
+			.into_iter()
+			.map(|tracked| tracked.0)
+			.collect();
+		terrain_presenter.remove_stale(&wanted);
+	}
 	let water_view = WaterStoreView::new(&store, &layout);
 	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
+	if streamed {
+		let wanted: HashSet<_> = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
+			.into_iter()
+			.map(|tracked| tracked.0)
+			.collect();
+		water_presenter.remove_stale(&wanted);
+	}
 	pending.0 = false;
 }
 

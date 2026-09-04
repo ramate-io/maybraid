@@ -10,7 +10,10 @@ use lod_first_load::FirstLoadStatus;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_world::{SpawnTerrainReady, WorldGameplayEnabled, WorldPlugin};
+use maybraid_world::{
+	PlayerPhysicsEnabled, SpawnTerrainReady, TerrainStreamingEnabled, WorldGameplayEnabled,
+	WorldPlugin,
+};
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
 	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
@@ -38,6 +41,8 @@ impl Plugin for GamePlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(WorldPlugin::game())
 			.insert_resource(WorldGameplayEnabled(false))
+			.insert_resource(PlayerPhysicsEnabled(false))
+			.insert_resource(TerrainStreamingEnabled(false))
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()

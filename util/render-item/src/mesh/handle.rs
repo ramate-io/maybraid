@@ -37,6 +37,12 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshHandle<T> {
 		self.mesh_cache = mesh_cache;
 		self
 	}
+
+	fn cache_mesh_blocking(&self, mesh: &Mesh, cascade_chunk: &CascadeChunk) {
+		if let Some(mesh_cache) = &self.mesh_cache {
+			mesh_cache.save_mesh_blocking(&self.builder, mesh, cascade_chunk);
+		}
+	}
 }
 
 /// We need to implement the identified mesh trait for this to work with the caching and fetcher.
@@ -66,7 +72,7 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshBuilder for MeshHandle<T> {
 impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshCache for MeshHandle<T> {
 	fn cache_mesh(&self, mesh: &Mesh, cascade_chunk: &CascadeChunk) {
 		if let Some(mesh_cache) = &self.mesh_cache {
-			mesh_cache.save_mesh(&self.builder, mesh, cascade_chunk);
+			mesh_cache.save_mesh_blocking(&self.builder, mesh, cascade_chunk);
 		}
 	}
 
@@ -166,14 +172,18 @@ pub fn enforce_caching<
 pub struct MeshFulfillBudget<T> {
 	pub starts_per_frame: usize,
 	pub max_in_flight: usize,
+	pub max_queued: usize,
 	_marker: PhantomData<fn() -> T>,
 }
 
 impl<T> Default for MeshFulfillBudget<T> {
 	fn default() -> Self {
-		Self { starts_per_frame: 2, max_in_flight: 4, _marker: PhantomData }
+		Self { starts_per_frame: 2, max_in_flight: 4, max_queued: 64, _marker: PhantomData }
 	}
 }
+
+#[derive(Component)]
+struct MeshFulfillmentQueued;
 
 struct MeshFulfillWork<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> {
 	key: crate::mesh::cache::handle::map::ChunkMeshKey<T>,
@@ -220,16 +230,18 @@ fn enqueue_mesh_fulfillment<
 >(
 	mut commands: Commands,
 	activity: Option<Res<FirstLoadActivity>>,
+	budget: Res<MeshFulfillBudget<T>>,
 	mut queue: ResMut<MeshFulfillQueue<T>>,
 	query: Query<
 		(Entity, &MeshDispatch<MeshHandle<T>>, &CascadeChunk, &MeshMaterial3d<M>),
-		Added<MeshDispatch<MeshHandle<T>>>,
+		Without<MeshFulfillmentQueued>,
 	>,
 ) {
 	for (entity, dispatch, chunk, material) in &query {
 		let normalized = dispatch.fetcher.normalize_chunk(chunk);
 		if let Some(handle) = dispatch.fetcher.fetch_cached_mesh_handle(&normalized) {
 			spawn_mesh_child(&mut commands, entity, handle, material);
+			commands.entity(entity).insert(MeshFulfillmentQueued);
 			continue;
 		}
 
@@ -239,6 +251,10 @@ fn enqueue_mesh_fulfillment<
 		);
 		if let Some(waiters) = queue.waiters.get_mut(&key) {
 			waiters.push(entity);
+			commands.entity(entity).insert(MeshFulfillmentQueued);
+			continue;
+		}
+		if queue.queued.len() >= budget.max_queued {
 			continue;
 		}
 
@@ -249,12 +265,14 @@ fn enqueue_mesh_fulfillment<
 			chunk: normalized,
 			_permit: activity.as_ref().map(|activity| activity.begin()),
 		});
+		commands.entity(entity).insert(MeshFulfillmentQueued);
 	}
 }
 
 fn start_mesh_fulfillment<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static>(
 	budget: Res<MeshFulfillBudget<T>>,
 	mut queue: ResMut<MeshFulfillQueue<T>>,
+	entities: Query<()>,
 ) {
 	let available = budget.max_in_flight.saturating_sub(queue.in_flight.len());
 	let starts = available.min(budget.starts_per_frame);
@@ -263,19 +281,30 @@ fn start_mesh_fulfillment<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync 
 			break;
 		};
 		let key = work.key.clone();
+		let has_live_waiter = queue
+			.waiters
+			.get(&key)
+			.is_some_and(|waiters| waiters.iter().any(|entity| entities.contains(*entity)));
+		if !has_live_waiter {
+			queue.waiters.remove(&key);
+			continue;
+		}
 		let task = IoTaskPool::get().spawn(async move {
 			let mesh = if let Some(mesh) = work.fetcher.fetch_cached_mesh(&work.chunk) {
 				Some(mesh)
 			} else {
 				let fetcher = work.fetcher.clone();
 				let chunk = work.chunk.clone();
-				AsyncComputeTaskPool::get()
-					.spawn(async move {
-						fetcher.build_mesh(&chunk).inspect(|mesh| {
-							fetcher.cache_mesh(mesh, &chunk);
-						})
-					})
-					.await
+				let mesh = AsyncComputeTaskPool::get()
+					.spawn(async move { fetcher.build_mesh(&chunk) })
+					.await;
+				if let Some(mesh) = mesh.as_ref() {
+					// This future is already running on the bounded I/O queue.
+					// Save inline so every built mesh cannot create another
+					// unbounded detached task holding a cloned mesh.
+					work.fetcher.cache_mesh_blocking(mesh, &work.chunk);
+				}
+				mesh
 			};
 			MeshFulfillResult { work, mesh }
 		});

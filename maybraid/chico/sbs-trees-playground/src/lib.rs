@@ -21,7 +21,9 @@ pub use game_commands::command::PendingStartupCommand;
 pub use monster_grass_plain::PLAIN_GROVE_RADIUS;
 pub use render::{RenderConfig, RenderSubject};
 pub use vast::{VAST_GROVE_RADIUS, VAST_ORCHARD_RADIUS};
-pub use vegetation_lod::VegetationLodRefreshPlugin;
+pub use vegetation_lod::{
+	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,
+};
 
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;

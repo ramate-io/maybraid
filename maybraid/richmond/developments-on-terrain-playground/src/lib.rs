@@ -25,7 +25,9 @@ use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
 use chico_sbs_trees_playground::forest_stream::register_forest_lod;
-use chico_vegetation_on_terrain_playground::register_bump_out_lod;
+use chico_vegetation_on_terrain_playground::{
+	register_bump_out_lod, terrain_streaming_enabled, TerrainStreamingEnabled,
+};
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
@@ -192,6 +194,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(playground.clone())
 			.insert_resource(development_config)
+			.init_resource::<TerrainStreamingEnabled>()
 			.init_resource::<DevelopmentsGeneratePending>()
 			.init_resource::<TerrainPresentPending>()
 			.init_resource::<HostsDirty>()
@@ -236,7 +239,8 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 				sync_raw_terrain_replacements,
 			)
 				.chain()
-				.before(LodPresentSystems::Produce),
+				.before(LodPresentSystems::Produce)
+				.run_if(terrain_streaming_enabled),
 		);
 	}
 }
