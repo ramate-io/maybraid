@@ -15,6 +15,7 @@ mod slabs;
 #[cfg(test)]
 mod tests;
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::geometry::JointPost;
@@ -50,7 +51,9 @@ impl Default for TrazaloidSlab {
 /// Authored parameters / builder for a [`Trazaloid`] shell.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrazaloidParams {
-	/// Full width (X) / depth (Z) at the footprint (`y = 0`).
+	/// Footprint center; `y` is the base elevation. Openings are local to this origin.
+	pub origin: Vec3,
+	/// Full width (X) / depth (Z) at the footprint (`y = 0` in local space).
 	pub footprint: Vec2,
 	/// Full width (X) / depth (Z) at the ridge.
 	pub ridge: Vec2,
@@ -60,7 +63,7 @@ pub struct TrazaloidParams {
 	pub band_vertical_offset: f32,
 	/// Inward meters from the linear footprint→ridge silhouette at lower-top height.
 	pub waist_horizontal_offset: f32,
-	/// World-space void plan applied at construct time.
+	/// Local-space void plan applied at construct time (then translated by [`Self::origin`]).
 	///
 	/// **Walls:** `Passage` openings are assigned to the nearest lower-band side;
 	/// the largest face-aligned extent on each side wins and becomes a centered
@@ -85,6 +88,7 @@ impl Default for TrazaloidParams {
 	fn default() -> Self {
 		let footprint = Vec2::new(8.0, 6.0);
 		Self {
+			origin: Vec3::ZERO,
 			footprint,
 			ridge: Vec2::new(4.0, 3.0),
 			lower_height: 3.0,
@@ -104,6 +108,11 @@ impl Default for TrazaloidParams {
 impl TrazaloidParams {
 	pub fn new(footprint: Vec2, ridge: Vec2, lower_height: f32, upper_height: f32) -> Self {
 		Self { footprint, ridge, lower_height, upper_height, ..Self::default() }
+	}
+
+	pub fn origin(mut self, origin: Vec3) -> Self {
+		self.origin = origin;
+		self
 	}
 
 	pub fn band_vertical_offset(mut self, gap: f32) -> Self {
@@ -164,8 +173,26 @@ pub struct Trazaloid {
 	mapped: MappedOpenings,
 }
 
+fn offset_openings(openings: &Openings, delta: Vec3) -> Openings {
+	if delta == Vec3::ZERO {
+		return openings.clone();
+	}
+	let mut out = Openings::new();
+	for (id, opening) in openings.iter() {
+		let min = Vec3::from(opening.bounds.min) + delta;
+		let max = Vec3::from(opening.bounds.max) + delta;
+		out.insert(
+			id.clone(),
+			crate::openings::Opening::new(Aabb3d::from_min_max(min, max), opening.label.clone()),
+		);
+	}
+	out
+}
+
 impl Trazaloid {
 	pub fn new(params: TrazaloidParams) -> Self {
+		let mut params = params;
+		params.openings = offset_openings(&params.openings, params.origin);
 		let rects = params.resolve_rects();
 		let [foot, waist, upper_bot, ridge] = rects;
 		let style = params.style;

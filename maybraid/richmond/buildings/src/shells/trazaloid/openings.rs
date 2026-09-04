@@ -142,10 +142,10 @@ fn door_dims_from_bounds(
 fn best_side_for_bounds(bounds: &Aabb3d, foot: PlanRect) -> Option<TrazaloidSide> {
 	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
 	let candidates = [
-		(TrazaloidSide::North, Vec3::new(0.0, mid.y, foot.half_z)),
-		(TrazaloidSide::South, Vec3::new(0.0, mid.y, -foot.half_z)),
-		(TrazaloidSide::East, Vec3::new(foot.half_x, mid.y, 0.0)),
-		(TrazaloidSide::West, Vec3::new(-foot.half_x, mid.y, 0.0)),
+		(TrazaloidSide::North, Vec3::new(foot.cx, mid.y, foot.cz + foot.half_z)),
+		(TrazaloidSide::South, Vec3::new(foot.cx, mid.y, foot.cz - foot.half_z)),
+		(TrazaloidSide::East, Vec3::new(foot.cx + foot.half_x, mid.y, foot.cz)),
+		(TrazaloidSide::West, Vec3::new(foot.cx - foot.half_x, mid.y, foot.cz)),
 	];
 	candidates
 		.into_iter()

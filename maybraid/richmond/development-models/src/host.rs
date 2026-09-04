@@ -6,13 +6,17 @@ use bevy::prelude::{Commands, Entity, Transform};
 use richmond_building_components::{
 	building_bounds, spawn_building_components, BuildingComponents,
 };
-use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use richmond_buildings::{ArcTower, ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
 use richmond_developments::{
-	MixedUseLesHallesHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut,
+	MixedUseLesHallesHost, RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut,
+	TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
-use crate::{LesHallesDevelopment, ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
+use crate::{
+	LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
+	ShepherdsVillageDevelopment,
+};
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
@@ -21,6 +25,8 @@ pub enum DevelopmentHost {
 	LesHallesRoof(PitchedRoof, Transform),
 	ShepherdsHouse(Arc<ShepherdsHouse>, Transform),
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
+	RingFortCircularTower(Arc<ArcTower>, Transform),
+	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
 }
 
 impl DevelopmentHost {
@@ -31,6 +37,12 @@ impl DevelopmentHost {
 			Self::LesHallesRoof(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHouse(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHut(building, transform) => spawn(commands, building, *transform),
+			Self::RingFortCircularTower(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortTrazaloidTower(building, transform) => {
+				spawn(commands, building, *transform)
+			}
 		}
 	}
 }
@@ -70,6 +82,36 @@ impl DevelopmentHosts for ShepherdsVillageDevelopment {
 impl DevelopmentHosts for ShepherdsCommuneDevelopment {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
 		shepherd_building_hosts(self.commune.buildings())
+	}
+}
+
+impl DevelopmentHosts for RingFortDevelopment {
+	fn hosts(&self) -> Vec<DevelopmentHost> {
+		let transform = self.host_transform();
+		self.building
+			.building
+			.hosts()
+			.into_iter()
+			.map(|host| match host {
+				RingFortHost::Ring(host) => match *host {
+					MixedUseLesHallesHost::Storey(storey) => {
+						DevelopmentHost::LesHallesStorey(Arc::new(storey), transform)
+					}
+					MixedUseLesHallesHost::Stairwell(stairwell) => {
+						DevelopmentHost::LesHallesStairwell(stairwell, transform)
+					}
+					MixedUseLesHallesHost::Roof(roof) => {
+						DevelopmentHost::LesHallesRoof(roof, transform)
+					}
+				},
+				RingFortHost::Circular(tower) => {
+					DevelopmentHost::RingFortCircularTower(tower, transform)
+				}
+				RingFortHost::Trazaloid(tower) => {
+					DevelopmentHost::RingFortTrazaloidTower(tower, transform)
+				}
+			})
+			.collect()
 	}
 }
 

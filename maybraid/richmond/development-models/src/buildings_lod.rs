@@ -12,8 +12,8 @@ use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
 };
-use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
-use richmond_developments::{ShepherdsHouse, ShepherdsHut};
+use richmond_buildings::{ArcTower, ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use richmond_developments::{ShepherdsHouse, ShepherdsHut, TrazaloidTower};
 use std::sync::Arc;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
@@ -99,5 +99,7 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, ComponentsOnly<PitchedRoof>);
 		avian_host!(app, ComponentsOnly<Arc<ShepherdsHouse>>);
 		avian_host!(app, ComponentsOnly<Arc<ShepherdsHut>>);
+		avian_host!(app, ComponentsOnly<Arc<ArcTower>>);
+		avian_host!(app, ComponentsOnly<Arc<TrazaloidTower>>);
 	}
 }

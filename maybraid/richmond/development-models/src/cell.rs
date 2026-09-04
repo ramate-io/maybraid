@@ -12,6 +12,14 @@ pub const DEVELOPMENT_CELL_SIZE: f32 = 200.0;
 /// Les Halles keeps its original urban envelope inside the larger shared cell.
 pub const LES_HALLES_MAX_FOOTPRINT: f32 = 72.0;
 
+/// Ring fort courtyard + corner towers need a wider plan than a lone Les Halles.
+pub const RING_FORT_MAX_FOOTPRINT: f32 = 96.0;
+/// Minimum ring-fort plan so the courtyard still meets Les Halles gallery mins.
+pub const RING_FORT_MIN_FOOTPRINT: f32 = 56.0;
+/// Confines height for the courtyard ring only (2–4 storeys at 3 m).
+pub const RING_FORT_MIN_CONFINES_HEIGHT: f32 = 8.0;
+pub const RING_FORT_MAX_CONFINES_HEIGHT: f32 = 13.0;
+
 /// Vertical span used only for origin-cell identity (XZ tiling).
 const CELL_Y: f32 = 1.0;
 

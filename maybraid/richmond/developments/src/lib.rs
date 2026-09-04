@@ -2,16 +2,21 @@
 //!
 //! Analogous to `chico-groves`: a development fits confines and emits flattened
 //! hosts. Les Halles emits one urban stack; Shepherds Village scatters independent
-//! buildings; Shepherds Commune lays the same buildings along a connecting grade.
+//! buildings; Shepherds Commune lays the same buildings along a connecting grade;
+//! Ring Fort wraps a courtyard ring with corner towers.
 
 pub mod connected;
 pub mod les_halles;
 pub mod placed;
+pub mod ring_fort;
 pub mod shepherds;
 
 pub use connected::{ConnectedDevelopment, DevelopmentEdge};
 pub use les_halles::{courtyard_well_side, MixedUseLesHallesDevelopment, MixedUseLesHallesHost};
 pub use placed::{BuildingFootprint, PlacedBuilding};
+pub use ring_fort::{
+	RingFort, RingFortHost, RingFortJoin, RingFortSite, RingFortTower, TrazaloidTower,
+};
 pub use shepherds::{
 	ShepherdsBuilding, ShepherdsCommune, ShepherdsCommuneCorridor, ShepherdsCommuneSite,
 	ShepherdsFinish, ShepherdsHouse, ShepherdsHut, ShepherdsVillage, ShepherdsVillageBuilding,

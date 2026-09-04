@@ -19,6 +19,8 @@ pub struct DevelopmentConfig {
 	pub shepherds_village_weight: f32,
 	/// Relative kind weight after a cell passes occupancy.
 	pub shepherds_commune_weight: f32,
+	/// Relative kind weight after a cell passes occupancy.
+	pub ring_fort_weight: f32,
 }
 
 impl Default for DevelopmentConfig {
@@ -31,6 +33,7 @@ impl Default for DevelopmentConfig {
 			les_halles_weight: 1.0,
 			shepherds_village_weight: 1.0,
 			shepherds_commune_weight: 1.0,
+			ring_fort_weight: 1.0,
 		}
 	}
 }
