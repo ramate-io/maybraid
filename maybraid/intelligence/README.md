@@ -34,3 +34,8 @@ The layers form `(semantic broadphase + explicit hints) → visual contact memor
 - [`hiding-intelligence`](hiding) — writes `Reach` to a nearby low-vantage, low-occupancy pocket while the signal is hide.
 
 The layers form `(semantic broadphase + explicit hints) → visual contact memory → assailant rank + signal → hide | flee → movement objective`. Combat `CHARACTER` subjects and civilian subjects stay on distinct interest layers so firearm targeting does not discover bystanders.
+
+## Routing
+
+- [`routing-intelligence`](routing) — hierarchical long-range corridors. Band segment lengths are per-user policy. Coarse chords are probed for buildings and cliffs; finer bands search along the committed corridor. The current fine hop is written as `Reach` for movement intelligence.
+- [`routing-playground`](routing-playground) — Durham patch (vegetation-on-terrain camera / lighting, no groves). One NPC walks a long hop; gizmos show coarse → fine corridors. `cargo run -p routing-playground --release`.

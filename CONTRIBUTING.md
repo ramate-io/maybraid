@@ -238,6 +238,11 @@ Combat spotting looks for [`CHARACTER`](maybraid/intelligence/spotting/lib/src/l
 civilians use a distinct `CIVILIAN` interest layer so they occupy hide pockets
 without entering firearm target memory.
 
+Long-range walking is [`routing-intelligence`](maybraid/intelligence/routing).
+Band segment lengths belong to the mover. Routing commits a corridor, then
+writes a nearby [`Reach`](maybraid/intelligence/movement/lib/src/objective.rs);
+it does not replace local movement planning.
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.
