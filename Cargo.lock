@@ -4399,6 +4399,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "journeying-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "meandering-intelligence",
+ "poi-intelligence",
+]
+
+[[package]]
 name = "js-sys"
 version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4744,6 +4754,15 @@ dependencies = [
  "bevy",
  "maybraid-input",
  "maybraid-world",
+]
+
+[[package]]
+name = "meandering-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "poi-intelligence",
 ]
 
 [[package]]
@@ -5842,6 +5861,28 @@ dependencies = [
  "fdeflate",
  "flate2",
  "miniz_oxide",
+]
+
+[[package]]
+name = "poi-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "gimme-core",
+ "movement-intelligence",
+ "routing-intelligence",
+]
+
+[[package]]
+name = "poi-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "journeying-intelligence",
+ "meandering-intelligence",
+ "movement-intelligence",
+ "poi-intelligence",
 ]
 
 [[package]]
