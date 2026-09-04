@@ -6,7 +6,7 @@ use richmond_development_models::DevelopmentConfig;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Developments on terrain — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `seed 7`, `likelihood 0.4`, `terrain-radius 2`, `rebuild`, `stats mesh`, `help`"
+		empty_console_text: "Console: `seed 7`, `likelihood 0.9`, `terrain-radius 2`, `rebuild`, `stats mesh`, `help`"
 			.into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint: "help — seed <n> — likelihood <0-1> — terrain-radius <n> — rebuild — stats mesh"

@@ -1,4 +1,4 @@
-//! Richmond development models: 200 m lattice, pads, Les Halles, Shepherds Village,
+//! Richmond development models: 300 m lattice, pads, Les Halles, Shepherds Village,
 //! Shepherds Commune, and Ring Fort.
 //!
 //! Selection / pad / host generation on top of composed Durham [`Terrain`].

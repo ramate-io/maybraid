@@ -40,6 +40,8 @@ use richmond_development_models::{
 use std::f32::consts::PI;
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
+/// Occupancy fill for the playground: high enough that Empty does not dominate.
+const PLAYGROUND_LIKELIHOOD: f32 = 0.9;
 
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
@@ -112,7 +114,10 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(playground.clone())
 			.insert_resource(layout)
-			.insert_resource(DevelopmentConfig::from_world_seed(42))
+			.insert_resource(DevelopmentConfig {
+				likelihood: PLAYGROUND_LIKELIHOOD,
+				..DevelopmentConfig::from_world_seed(42)
+			})
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<DevelopmentsGeneratePending>()
 			.init_resource::<TerrainPresentPending>()

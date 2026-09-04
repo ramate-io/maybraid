@@ -348,7 +348,7 @@ impl BuildingFootprint for ShepherdsBuilding {
 /// Complete shepherd building plus its independent pose.
 pub type ShepherdsVillageBuilding = PlacedBuilding<ShepherdsBuilding>;
 
-/// A 200 m development-cell village.
+/// A 300 m development-cell village.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShepherdsVillage {
 	pub bounds: Aabb3d,

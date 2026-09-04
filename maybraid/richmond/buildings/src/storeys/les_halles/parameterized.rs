@@ -84,6 +84,18 @@ pub const MIN_MONOTOWER_STALL_RING_SHARE: f32 = 0.62;
 pub const MAX_MONOTOWER_STALL_RING_SHARE: f32 = 0.78;
 /// Hard courtyard floor for monotower (expects larger footprints than commercial).
 pub const MIN_MONOTOWER_COURTYARD: f32 = 8.0;
+/// Gallery depth so a corner keep can sit on the curtain wall, not hang off it.
+pub const MIN_CURTAIN_GALLERY_WIDTH: f32 = 16.0;
+/// Soft max gallery depth for ring-fort curtain walls.
+pub const MAX_CURTAIN_GALLERY_WIDTH: f32 = 40.0;
+/// Stall-ring share for curtain walls — gallery takes most of the rim.
+pub const MIN_CURTAIN_STALL_RING_SHARE: f32 = 0.78;
+pub const MAX_CURTAIN_STALL_RING_SHARE: f32 = 0.90;
+/// Courtyard still open, but the rim is the load-bearing mass.
+pub const MIN_CURTAIN_COURTYARD_FRACTION: f32 = 0.22;
+pub const MAX_CURTAIN_COURTYARD_FRACTION: f32 = 0.38;
+/// Clear courtyard floor for a curtain-wall ring.
+pub const MIN_CURTAIN_COURTYARD: f32 = 24.0;
 /// Storey height range for Les Halles monotowers (meters).
 pub const MIN_MONOTOWER_STOREY_HEIGHT: f32 = 3.0;
 pub const MAX_MONOTOWER_STOREY_HEIGHT: f32 = 5.0;
@@ -341,6 +353,80 @@ impl LesHallesParameterized {
 		})
 	}
 
+	/// Deep gallery ring for a courtyard curtain wall that can carry corner keeps.
+	pub fn sample_curtain(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let (extent_x, extent_z, height) = footprint_extents(confines)?;
+		let min_ring = MIN_CURTAIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
+		let min_outer = 2.0 * min_ring + MIN_CURTAIN_COURTYARD;
+		if extent_x < min_outer || extent_z < min_outer {
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+		if height < MIN_MONOTOWER_STOREY_HEIGHT {
+			return Err(FitError::TooSmall { reason: "height" });
+		}
+
+		let cfg = NoiseConfig::new(noise);
+		let c = monotower_noise_center(confines);
+		let extent_min = extent_x.min(extent_z);
+
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_CURTAIN_COURTYARD_FRACTION,
+			MAX_CURTAIN_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
+
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_CURTAIN_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_CURTAIN_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
+
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_CURTAIN_STALL_RING_SHARE,
+			MAX_CURTAIN_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) = split_ring_budget_curtain(ring_budget, stall_share)?;
+
+		let ring = gallery_width + balcony_width;
+		if extent_x < 2.0 * ring + MIN_CURTAIN_COURTYARD
+			|| extent_z < 2.0 * ring + MIN_CURTAIN_COURTYARD
+		{
+			return Err(FitError::TooSmall { reason: "footprint" });
+		}
+
+		let shaft_i = cfg.sample_range_usize_4d(0, 2, c.x, c.y, c.z, SALT_SHAFT);
+		let shaft_placement = if shaft_i == 0 {
+			LesHallesShaftPlacement::Corners
+		} else {
+			LesHallesShaftPlacement::MidSides
+		};
+
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side = cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let doors = generate_stall_doors(&cfg, c);
+		let windows = generate_windows(&cfg, c);
+
+		Ok(Self {
+			gallery_width,
+			balcony_width,
+			courtyard_fraction,
+			shaft_placement,
+			mid_shaft_side,
+			opening_density,
+			doors,
+			windows,
+		})
+	}
+
 	/// Sample a storey height in `[MIN_MONOTOWER_STOREY_HEIGHT, MAX_MONOTOWER_STOREY_HEIGHT]`.
 	pub fn sample_monotower_storey_height(confines: &Confines, noise: NoiseParams) -> f32 {
 		let cfg = NoiseConfig::new(noise);
@@ -471,6 +557,15 @@ fn split_ring_budget_monotower(ring_budget: f32, stall_share: f32) -> Result<(f3
 		stall_share,
 		MIN_MONOTOWER_GALLERY_WIDTH,
 		MAX_MONOTOWER_GALLERY_WIDTH.min(MAX_GALLERY_WIDTH),
+	)
+}
+
+fn split_ring_budget_curtain(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	split_ring_budget_with(
+		ring_budget,
+		stall_share,
+		MIN_CURTAIN_GALLERY_WIDTH,
+		MAX_CURTAIN_GALLERY_WIDTH,
 	)
 }
 
@@ -660,5 +755,26 @@ mod tests {
 			tall_seen.insert(n_tall);
 		}
 		assert!(tall_seen.len() >= 3, "tall host should vary storey count, got {tall_seen:?}");
+	}
+
+	#[test]
+	fn sample_curtain_deepens_the_gallery() {
+		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-80.0, 0.0, -80.0),
+			bevy_math::Vec3::new(80.0, 12.0, 80.0),
+		));
+		let params = LesHallesParameterized::sample_curtain(
+			&confines,
+			NoiseParams { seed: 7, ..NoiseParams::default() },
+		)
+		.unwrap();
+		assert!(
+			params.gallery_width + 1e-3 >= MIN_CURTAIN_GALLERY_WIDTH,
+			"curtain gallery {:.2}",
+			params.gallery_width
+		);
+		assert!(params.gallery_width <= MAX_CURTAIN_GALLERY_WIDTH + 1e-3);
+		let courtyard = 160.0 - 2.0 * params.ring_width();
+		assert!(courtyard + 1e-3 >= MIN_CURTAIN_COURTYARD, "courtyard {courtyard:.1}");
 	}
 }

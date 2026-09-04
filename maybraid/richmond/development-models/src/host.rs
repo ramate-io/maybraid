@@ -6,10 +6,12 @@ use bevy::prelude::{Commands, Entity, Transform};
 use richmond_building_components::{
 	building_bounds, spawn_building_components, BuildingComponents,
 };
-use richmond_buildings::{ArcTower, ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use richmond_buildings::{
+	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
+};
 use richmond_developments::{
-	MixedUseLesHallesHost, RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut,
-	TrazaloidTower,
+	CircularTower, MixedUseLesHallesHost, RingFortHost, ShepherdsBuilding, ShepherdsHouse,
+	ShepherdsHut, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
@@ -25,8 +27,9 @@ pub enum DevelopmentHost {
 	LesHallesRoof(PitchedRoof, Transform),
 	ShepherdsHouse(Arc<ShepherdsHouse>, Transform),
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
-	RingFortCircularTower(Arc<ArcTower>, Transform),
+	RingFortCircularTower(Arc<CircularTower>, Transform),
 	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
+	RingFortGalleryRoof(RectangularPitchedRoofComplex, Transform),
 }
 
 impl DevelopmentHost {
@@ -43,6 +46,7 @@ impl DevelopmentHost {
 			Self::RingFortTrazaloidTower(building, transform) => {
 				spawn(commands, building, *transform)
 			}
+			Self::RingFortGalleryRoof(building, transform) => spawn(commands, building, *transform),
 		}
 	}
 }
@@ -92,23 +96,27 @@ impl DevelopmentHosts for RingFortDevelopment {
 			.building
 			.hosts()
 			.into_iter()
-			.map(|host| match host {
+			.filter_map(|host| match host {
 				RingFortHost::Ring(host) => match *host {
 					MixedUseLesHallesHost::Storey(storey) => {
-						DevelopmentHost::LesHallesStorey(Arc::new(storey), transform)
+						Some(DevelopmentHost::LesHallesStorey(Arc::new(storey), transform))
 					}
 					MixedUseLesHallesHost::Stairwell(stairwell) => {
-						DevelopmentHost::LesHallesStairwell(stairwell, transform)
+						Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
 					}
-					MixedUseLesHallesHost::Roof(roof) => {
-						DevelopmentHost::LesHallesRoof(roof, transform)
-					}
+					MixedUseLesHallesHost::Roof(_) => None,
 				},
 				RingFortHost::Circular(tower) => {
-					DevelopmentHost::RingFortCircularTower(tower, transform)
+					Some(DevelopmentHost::RingFortCircularTower(tower, transform))
 				}
 				RingFortHost::Trazaloid(tower) => {
-					DevelopmentHost::RingFortTrazaloidTower(tower, transform)
+					Some(DevelopmentHost::RingFortTrazaloidTower(tower, transform))
+				}
+				RingFortHost::GalleryRoof(roof) => {
+					Some(DevelopmentHost::RingFortGalleryRoof(roof, transform))
+				}
+				RingFortHost::KeepStairwell(stairwell) => {
+					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
 				}
 			})
 			.collect()

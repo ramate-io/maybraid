@@ -17,6 +17,7 @@ mod tests;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
@@ -352,6 +353,13 @@ impl RectangularPitchedRoofComplex {
 
 	pub fn valleys(&self) -> &[ValleySegment] {
 		&self.valleys
+	}
+
+	/// Stamp a roof shader look onto every child pitch (kit style unchanged).
+	pub fn with_surface_material(mut self, material: MaterialRef) -> Self {
+		self.roofs =
+			self.roofs.into_iter().map(|roof| roof.with_surface_material(material.clone())).collect();
+		self
 	}
 }
 
