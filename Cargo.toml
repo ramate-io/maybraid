@@ -94,6 +94,9 @@ members = [
   "maybraid/intelligence/spotting/avian",
   "maybraid/intelligence/combat/targeting",
   "maybraid/intelligence/combat/firearm",
+  "maybraid/intelligence/evasion",
+  "maybraid/intelligence/fleeing",
+  "maybraid/intelligence/hiding",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
@@ -323,6 +326,9 @@ spotting-intelligence = { path = "maybraid/intelligence/spotting/lib" }
 spotting-intelligence-avian = { path = "maybraid/intelligence/spotting/avian" }
 combat-targeting = { path = "maybraid/intelligence/combat/targeting" }
 firearm-intelligence = { path = "maybraid/intelligence/combat/firearm" }
+evasion-intelligence = { path = "maybraid/intelligence/evasion" }
+fleeing-intelligence = { path = "maybraid/intelligence/fleeing" }
+hiding-intelligence = { path = "maybraid/intelligence/hiding" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }
 

@@ -54,7 +54,24 @@ enemyship roster supplies explicit spotting hints, while Avian broadphase can
 still discover other matching subjects; both paths share the same visibility
 executor and eight-subject candidate budget. The perception envelope is
 independent of the shorter movement-planning horizon. Combat
-still waits for the player's first shot. Rolled guns keep gallery looks
+still waits for the player's first shot.
+
+`assault-free-for-all` (`affa`) keeps that armed fight and adds unarmed
+civilians. Civilians install [`evasion-intelligence`](../../intelligence/evasion)
+for assailant memory, then [`fleeing-intelligence`](../../intelligence/fleeing)
+or [`hiding-intelligence`](../../intelligence/hiding) write movement from the
+exclusive hide | flee signal. They are not combat targets: civilian [`SpotSubject`](../../intelligence/spotting/lib/src/subject.rs)
+proxies use the `CIVILIAN` interest layer, so combat `CHARACTER` directives do
+not discover them. A shot is a
+`RECEIVED_FIRE` stimulus (last-known position plus decaying threat), not a
+fabricated sighting. Occupancy counts live character subjects and hide claims
+so civilians do not pile into the same pocket. In this mode, civilians who
+flee more than 48 m xz from the pad origin despawn and return on the spawn
+ring. Downed NPCs (armed or civilian) respawn after two seconds even while
+the corpse is still on the field. A pink HUD dot marks a fleeing civilian; a
+blue dot marks a hiding one.
+
+Rolled guns keep gallery looks
 (material and palette per slot) and sample projectile / cadence from the
 session RNG rather than reseeding from spec identity, so a run is not locked
 to one color or to lasers. As an application-level performance policy, the
@@ -72,7 +89,8 @@ no return fire — so projectile contacts can be checked in isolation.
 ```bash
 cargo run -p firing-range-playground
 cargo run -p firing-range-playground -- free-for-all --npcs 8
+cargo run -p firing-range-playground -- affa --combatants 4 --civilians 6
 cargo run -p firing-range-playground -- test-dummy
 ```
 
-WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `duel` / `test-dummy`.
+WASD / left stick move, mouse / right stick look, Space / A jump, click / RT fire. R3 toggles first person; right mouse / LT focuses from the head camera onto the firearm sight. `/` then `pause` / `resume` / `free-for-all` / `affa` / `duel` / `test-dummy`.

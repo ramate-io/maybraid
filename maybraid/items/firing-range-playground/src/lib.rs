@@ -26,12 +26,15 @@ use crozon_character_items::ItemRng;
 use crozon_character_ragdoll::{CharacterRagdollPlugin, CharacterRagdollSettings};
 use crozon_characters::CharacterHostsPlugin;
 use diagnostics::FiringRangeDiagnosticsPlugin;
+use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use firearm_user::{spawn_reticle, FirearmUserPlugin};
 use firearms::{
 	add_firearm_components_host, FirearmHostsPlugin, FirearmWeaponSystems, FirearmWeaponsPlugin,
 };
+use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
+use hiding_intelligence::{HidingPlugin, HidingSystems};
 use les_halles::LesHallesSpawn;
 use lod::LodRefreshSystems;
 use maybraid_character_controller::CharacterControllerPlugin;
@@ -50,7 +53,7 @@ use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
 use richmond_building_physics::BuildingWalkColliderPlugin;
-use session::{AppliedSession, LoadoutRng, RangeMode, RangeSession};
+use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 
 pub struct FiringRangePlugin;
@@ -82,6 +85,9 @@ impl Plugin for FiringRangePlugin {
 				MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default(),
 			)
 			.add_plugins(FirearmIntelligencePlugin)
+			.add_plugins(EvasionPlugin)
+			.add_plugins(FleeingPlugin)
+			.add_plugins(HidingPlugin)
 			.add_plugins(MovementRealizationPlugin)
 			.configure_sets(
 				Update,
@@ -94,6 +100,20 @@ impl Plugin for FiringRangePlugin {
 			.configure_sets(
 				Update,
 				FirearmIntelligenceSystems::Movement.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				Update,
+				(EvasionSystems::Ingest, EvasionSystems::Rank)
+					.chain()
+					.after(SpottingSystems::Observe)
+					.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				Update,
+				(FleeingSystems::Write, HidingSystems::Write)
+					.chain()
+					.after(EvasionSystems::Rank)
+					.run_if(on_timer(Duration::from_millis(125))),
 			)
 			.configure_sets(
 				PostUpdate,
@@ -140,8 +160,12 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_player_character,
 					session::spawn_npc_character,
 					session::spawn_held_system,
-					respawn_combatants,
-					(vantage::sync_combat_spot_subjects, vantage::sync_combat_rosters)
+					(damage::queue_flee_out_respawns, respawn_combatants).chain(),
+					(
+						vantage::sync_combat_spot_subjects,
+						vantage::sync_combat_rosters,
+						vantage::sync_evasion_rosters,
+					)
 						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
@@ -173,6 +197,10 @@ impl Plugin for FiringRangePlugin {
 			.add_systems(
 				PostUpdate,
 				engagement::record_player_shot.after(::damage::DamageSystems::Collect),
+			)
+			.add_systems(
+				PostUpdate,
+				vantage::note_civilian_received_fire.after(FirearmWeaponSystems::Fire),
 			);
 	}
 }
@@ -263,8 +291,9 @@ fn respawn_combatants(
 	time: Res<Time>,
 	spawn: Res<LesHallesSpawn>,
 	session: Res<RangeSession>,
-	players: Query<(), With<Player>>,
-	npcs: Query<(), With<Npc>>,
+	players: Query<(), (With<Player>, Without<::damage::Downed>)>,
+	combatants: Query<(), (With<Npc>, Without<Civilian>, Without<::damage::Downed>)>,
+	civilians: Query<(), (With<Civilian>, Without<::damage::Downed>)>,
 	mut respawn: ResMut<damage::CombatRespawn>,
 	mut rng: ResMut<LoadoutRng>,
 	mut commands: Commands,
@@ -275,7 +304,7 @@ fn respawn_combatants(
 	if players.is_empty() && respawn.player_at.is_some_and(|at| now >= at) {
 		respawn.player_at = None;
 		match session.mode {
-			RangeMode::FreeForAll => {
+			RangeMode::FreeForAll | RangeMode::AssaultFreeForAll => {
 				session::spawn_generated_player(
 					&mut commands,
 					&spawn,
@@ -298,18 +327,19 @@ fn respawn_combatants(
 			true
 		}
 	});
-	let live = npcs.iter().count();
+	let live = combatants.iter().count();
 	let want = session.npc_count as usize;
 	let n = due.min(want.saturating_sub(live));
+	let total = session.npc_count + session.civilian_count;
 	for index in 0..n {
 		let slot = (live + index) as u16;
 		match session.mode {
-			RangeMode::FreeForAll => {
+			RangeMode::FreeForAll | RangeMode::AssaultFreeForAll => {
 				session::spawn_generated_npc(
 					&mut commands,
 					&spawn,
 					slot,
-					session.npc_count,
+					if session.is_assault_free_for_all() { total } else { session.npc_count },
 					&mut rng.0,
 					&mut meshes,
 					&mut materials,
@@ -322,6 +352,30 @@ fn respawn_combatants(
 				spawn_dummy_at(&mut commands, &spawn, &mut meshes, &mut materials);
 			}
 		}
+	}
+
+	let mut civilian_due = 0usize;
+	respawn.civilian_at.retain(|at| {
+		if now >= *at {
+			civilian_due += 1;
+			false
+		} else {
+			true
+		}
+	});
+	let live_civilians = civilians.iter().count();
+	let want_civilians = session.civilian_count as usize;
+	let n_civilians = civilian_due.min(want_civilians.saturating_sub(live_civilians));
+	for index in 0..n_civilians {
+		let slot = session.npc_count + (live_civilians + index) as u16;
+		session::spawn_generated_civilian(
+			&mut commands,
+			&spawn,
+			slot,
+			total.max(1),
+			&mut meshes,
+			&mut materials,
+		);
 	}
 }
 

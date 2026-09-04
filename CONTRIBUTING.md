@@ -227,6 +227,17 @@ integration test that exercises `candidate source → visibility → contact →
 target rank → weapon trajectory`, including peer combatants that carry the same
 intelligence components as the observer.
 
+Civilian evasion follows the same knowledge split. [`EvasionIntelligenceUser`](maybraid/intelligence/evasion/src/user.rs)
+is assailant memory and exclusive hide | flee routing, not a movement mixer.
+[`fleeing-intelligence`](maybraid/intelligence/fleeing) and
+[`hiding-intelligence`](maybraid/intelligence/hiding) consume that signal and
+write [`MovementObjective`](maybraid/intelligence/movement/lib/src/objective.rs).
+A heard shot is `RECEIVED_FIRE`, never a fake sighting. Hide occupancy queries
+must identify other subjects by entity, not `Without<EvasionIntelligenceUser>`.
+Combat spotting looks for [`CHARACTER`](maybraid/intelligence/spotting/lib/src/layers.rs);
+civilians use a distinct `CIVILIAN` interest layer so they occupy hide pockets
+without entering firearm target memory.
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.

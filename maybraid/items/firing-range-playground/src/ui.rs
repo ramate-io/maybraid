@@ -24,17 +24,21 @@ pub(crate) fn sync_command_status_text(
 	armed: Res<WeaponsArmed>,
 	engagement: Res<NpcEngagement>,
 	session: Res<RangeSession>,
-	players: Query<&Health, With<Player>>,
-	npcs: Query<&Health, With<Npc>>,
+	players: Query<&Health, (With<Player>, Without<::damage::Downed>)>,
+	npcs: Query<&Health, (With<Npc>, Without<::damage::Downed>)>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	let fire = if armed.0 { "armed" } else { "paused" };
 	let player_health = players.single().ok().map_or_else(|| "--".into(), health_text);
 	let npc_n = npcs.iter().count();
-	let npc_health = if session.mode == RangeMode::FreeForAll {
-		format!("{npc_n}/{}", session.npc_count)
-	} else {
-		npcs.single().ok().map_or_else(|| "--".into(), health_text)
+	let npc_health = match session.mode {
+		RangeMode::FreeForAll => format!("{npc_n}/{}", session.npc_count),
+		RangeMode::AssaultFreeForAll => {
+			format!("{npc_n}/{}", session.npc_count + session.civilian_count)
+		}
+		RangeMode::Duel | RangeMode::TestDummy => {
+			npcs.single().ok().map_or_else(|| "--".into(), health_text)
+		}
 	};
 	let response = if session.is_test_dummy() {
 		"practice"
@@ -46,6 +50,7 @@ pub(crate) fn sync_command_status_text(
 	let mode = match session.mode {
 		RangeMode::Duel => "duel",
 		RangeMode::FreeForAll => "ffa",
+		RangeMode::AssaultFreeForAll => "affa",
 		RangeMode::TestDummy => "dummy",
 	};
 	status.0 =

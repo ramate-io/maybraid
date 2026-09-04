@@ -18,6 +18,9 @@ avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 combat-targeting = { workspace = true }
+evasion-intelligence = { workspace = true }
+fleeing-intelligence = { workspace = true }
+hiding-intelligence = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-character-ragdoll = { workspace = true }
 crozon-characters = { workspace = true }
