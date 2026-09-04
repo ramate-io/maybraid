@@ -24,7 +24,9 @@ const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
 const PREY: PoiKind = PoiKind::new("mob-brain/prey");
 const PREY_POI: PoiId = PoiId(10_000);
 const HUNT_ARRIVAL: f32 = 12.0;
-const HUNT_LOCK_SECS: f32 = 3.0;
+/// Committed focus on the herd after arrival. Copy this order of magnitude;
+/// waypoint hops use [`HUNT_JOURNEY_LINGER`].
+const HUNT_LOCK_SECS: f32 = 45.0;
 const HUNT_BROWSE_SECS: f32 = 8.0;
 const HUNT_JOURNEY_LINGER: f32 = 2.5;
 
@@ -581,11 +583,12 @@ mod tests {
 	}
 
 	#[test]
-	fn hunt_lock_linger_is_shorter_than_browse() {
+	fn hunt_focus_linger_is_a_committed_lock() {
 		let hunt = recipes().into_iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap();
 		assert!((hunt.journey_linger - HUNT_JOURNEY_LINGER).abs() < 1e-4);
 		assert!(hunt.journeys());
-		assert!(HUNT_LOCK_SECS < HUNT_BROWSE_SECS);
+		assert!((HUNT_LOCK_SECS - 45.0).abs() < 1e-4);
+		assert!(HUNT_JOURNEY_LINGER < HUNT_LOCK_SECS);
 	}
 
 	#[test]

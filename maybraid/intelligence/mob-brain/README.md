@@ -14,8 +14,9 @@ does not write during those tactics.
 
 Hunt antagonizes grazers; the herd antagonizes hunt. Occupy and watch stay
 wildlife so they do not join the chase. Hunt members forage and camp between
-chases: after a herd lock expires, the hunt host **browses** waypoints for a
-few seconds before writing the herd goal again.
+chases: after a herd lock (~45 s of focus) expires, the hunt host **browses**
+waypoints for a few seconds before writing the herd goal again. Callers that
+copy this should keep a similarly long lock; waypoint hops stay short.
 
 No `LodSceneHost`. Personalities live on the members.
 
@@ -26,7 +27,7 @@ No `LodSceneHost`. Personalities live on the members.
 | occupy | green orb, stays put | grazers + civilians on camp/forage |
 | watch | orange orb, stays put | brawlers on a gate cluster |
 | herd | slow blue orb (~1.7 m/s) | grazers; lock onto waypoints after each hop, flee when hunt closes |
-| hunt | red orb (~4 m/s) | predators + assassin; lock onto the herd, then browse forage / waypoints |
+| hunt | red orb (~4 m/s) | predators + assassin; ~45 s lock on the herd, then browse forage / waypoints |
 
 Sequence: magenta line = hunt traveling onto the herd. Magenta ring + HUD
 `lock` = member tethers sitting on that destination. Red dots = Combat
