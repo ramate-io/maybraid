@@ -35,6 +35,20 @@ The layers form `(semantic broadphase + explicit hints) → visual contact memor
 
 The layers form `(semantic broadphase + explicit hints) → visual contact memory → assailant rank + signal → hide | flee → movement objective`. Combat `CHARACTER` subjects and civilian subjects stay on distinct interest layers so firearm targeting does not discover bystanders.
 
+## Points of interest
+
+- [`poi-intelligence`](poi) — stable POI identity, Gimme-backed local scans, sparse
+  whole-map scans, source-owned retained knowledge, an external findings inbox, and
+  entity-bound goal completion messages.
+- [`meandering-intelligence`](meandering) — selects a learned POI in the immediate
+  radius and hands it to POI goal routing.
+- [`journeying-intelligence`](journeying) — probes distant tiles for learned POIs,
+  then routes to one when available.
+
+POI visit policy is explicit: exploration delays revisits, while cycling fills a
+fixed-size roster and advances a cursor through it. Discovery cadence, acquisition
+rate, retention, candidate budget, and memory capacity remain independent controls.
+
 ## Routing
 
 - [`routing-intelligence`](routing) — hierarchical long-range corridors. Band segment lengths are per-user policy. Coarse chords are probed for buildings and cliffs; finer bands search along the committed corridor. The current fine hop is written as `Reach` for movement intelligence.
