@@ -10,8 +10,8 @@ use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
 use richmond_developments::{
-	CircularTower, MixedUseLesHallesHost, RingFortHost, ShepherdsBuilding, ShepherdsHouse,
-	ShepherdsHut, TrazaloidTower,
+	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, RingFortHost,
+	ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
@@ -29,6 +29,8 @@ pub enum DevelopmentHost {
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
 	RingFortCircularTower(Arc<CircularTower>, Transform),
 	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
+	RingFortGalleryTerrace(GalleryTerrace, Transform),
+	RingFortGalleryColonnade(GalleryColonnade, Transform),
 	RingFortGalleryRoof(RectangularPitchedRoofComplex, Transform),
 }
 
@@ -44,6 +46,12 @@ impl DevelopmentHost {
 				spawn(commands, building, *transform)
 			}
 			Self::RingFortTrazaloidTower(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortGalleryTerrace(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortGalleryColonnade(building, transform) => {
 				spawn(commands, building, *transform)
 			}
 			Self::RingFortGalleryRoof(building, transform) => spawn(commands, building, *transform),
@@ -111,6 +119,15 @@ impl DevelopmentHosts for RingFortDevelopment {
 				}
 				RingFortHost::Trazaloid(tower) => {
 					Some(DevelopmentHost::RingFortTrazaloidTower(tower, transform))
+				}
+				RingFortHost::Terrace(terrace) => {
+					Some(DevelopmentHost::RingFortGalleryTerrace(terrace, transform))
+				}
+				RingFortHost::TerraceStairwell(stairwell) => {
+					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+				}
+				RingFortHost::GalleryColonnade(colonnade) => {
+					Some(DevelopmentHost::RingFortGalleryColonnade(colonnade, transform))
 				}
 				RingFortHost::GalleryRoof(roof) => {
 					Some(DevelopmentHost::RingFortGalleryRoof(roof, transform))

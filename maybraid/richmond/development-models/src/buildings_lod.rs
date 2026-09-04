@@ -15,7 +15,9 @@ use richmond_building_components::{
 use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
-use richmond_developments::{CircularTower, ShepherdsHouse, ShepherdsHut, TrazaloidTower};
+use richmond_developments::{
+	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, TrazaloidTower,
+};
 use std::sync::Arc;
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
@@ -103,6 +105,8 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, ComponentsOnly<Arc<ShepherdsHut>>);
 		avian_host!(app, ComponentsOnly<Arc<CircularTower>>);
 		avian_host!(app, ComponentsOnly<Arc<TrazaloidTower>>);
+		avian_host!(app, ComponentsOnly<GalleryTerrace>);
+		avian_host!(app, ComponentsOnly<GalleryColonnade>);
 		avian_host!(app, ComponentsOnly<RectangularPitchedRoofComplex>);
 	}
 }

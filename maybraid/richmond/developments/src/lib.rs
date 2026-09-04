@@ -18,7 +18,10 @@ pub use curtain_ring::CurtainRing;
 pub use keep::{CircularTower, Keep, RingFortKeep, TrazaloidTower};
 pub use les_halles::{courtyard_well_side, MixedUseLesHallesDevelopment, MixedUseLesHallesHost};
 pub use placed::{BuildingFootprint, PlacedBuilding};
-pub use ring_fort::{RingFort, RingFortHost, RingFortJoin, RingFortSite, RingFortTower};
+pub use ring_fort::{
+	GalleryColonnade, GalleryTerrace, RingFort, RingFortHost, RingFortJoin, RingFortSite,
+	RingFortTower,
+};
 pub use shepherds::{
 	ShepherdsBuilding, ShepherdsCommune, ShepherdsCommuneCorridor, ShepherdsCommuneSite,
 	ShepherdsFinish, ShepherdsHouse, ShepherdsHut, ShepherdsVillage, ShepherdsVillageBuilding,

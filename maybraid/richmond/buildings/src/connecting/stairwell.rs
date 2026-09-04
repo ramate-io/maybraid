@@ -600,6 +600,42 @@ mod tests {
 	}
 
 	#[test]
+	fn rectangular_turn_pad_meets_both_flights() {
+		let well = ConnectingStairwell::from_well_kind(
+			PanelStyle::RoughStonework,
+			WellAabb::from_plan(
+				Vec3::new(-1.2, 0.0, -1.2),
+				Vec3::new(1.2, 3.0, 1.2),
+				WellSide::NegZ,
+				WellSide::NegZ,
+				TREAD_FILL_DEFAULT,
+			),
+			StairwellKind::Rectangular,
+		);
+		let stairs = well.stairs();
+		assert!(stairs.len() >= 2, "need a turn");
+		for i in 0..stairs.len() - 1 {
+			let end = TreadEnd::from_straight(&stairs[i]);
+			let next = TreadEnd::from_straight(&stairs[i + 1]);
+			let origin = Vec2::new(
+				stairs[i + 1].placement.translation.x,
+				stairs[i + 1].placement.translation.z,
+			);
+			let first_trail = origin - next.travel * (0.5 * next.going);
+			let covered = well
+				.mid_landings()
+				.iter()
+				.any(|pad| covers(pad, end.leading_mid()) && covers(pad, first_trail));
+			assert!(
+				covered,
+				"landing {i} should fill the gap between flights (end {:?}, next start {:?})",
+				end.leading_mid(),
+				first_trail
+			);
+		}
+	}
+
+	#[test]
 	fn rectangular_last_leading_meets_the_end_pad() {
 		let well = ConnectingStairwell::from_well_kind(
 			PanelStyle::RoughStonework,

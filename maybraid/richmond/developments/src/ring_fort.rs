@@ -1,23 +1,28 @@
 //! Ring fort: a curtain-wall courtyard ring with circular or trazaloid corner keeps.
 //!
-//! The ring is 2–4 storeys (confines height). Each corner keep is 5–10 storeys
-//! and sits on the gallery mass, not off the outer corner. Topology is a star:
-//! the ring is the hub, and each keep joins it at a gallery corner.
+//! The ring is 2–4 storeys. A full-ring terrace deck is the ceiling: stairwells
+//! climb onto it, corner keeps sit on the gallery corners, and two colonnade
+//! lines between the keeps carry a hipped pitched roof. Topology is a star: the
+//! ring is the hub, and each keep joins it at a gallery corner.
 
 use std::sync::Arc;
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::panels::PanelStyle;
+use richmond_building_components::{BuildingComponents, JointNode, Layers, PanelNode};
 use richmond_buildings::{
-	Confines, EndCap, FillableRegions, Fit, FitError, LesHallesFloorPlan, Overhang,
-	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
+	Confines, ConnectingStairwell, EndCap, FillableRegions, Fit, FitError, FittedRectangle,
+	LesHallesFloorPlan, Opening, OpeningId, OpeningLabel, Openings, Overhang, PanelPillar,
+	PanelPillarLine, PanelPoint, RectRingFloor, RectRingFloorParams, RectRingFloorSlab,
+	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, StairwellKind, WellAabb,
 };
 
 use crate::connected::{ConnectedDevelopment, DevelopmentEdge};
-use crate::les_halles::MixedUseLesHallesHost;
+use crate::les_halles::{courtyard_well_side, MixedUseLesHallesHost};
 use crate::placed::BuildingFootprint;
 
 pub use crate::curtain_ring::CurtainRing;
@@ -30,14 +35,28 @@ pub type RingFortTower = RingFortKeep;
 const MIN_RING_PLAN: f32 = 80.0;
 const TOWER_STOREY_MIN: usize = 5;
 const TOWER_STOREY_MAX: usize = 10;
-const CIRCULAR_RADIUS_MIN: f32 = 6.0;
-const CIRCULAR_RADIUS_MAX: f32 = 12.0;
-const TRAZALOID_FOOT_MIN: f32 = 12.0;
-const TRAZALOID_FOOT_MAX: f32 = 20.0;
+const CIRCULAR_RADIUS_MIN: f32 = 11.0;
+const CIRCULAR_RADIUS_MAX: f32 = 16.0;
+const TRAZALOID_FOOT_MIN: f32 = 14.0;
+const TRAZALOID_FOOT_MAX: f32 = 22.0;
 
 const SALT_KIND: f32 = 53.0;
 const SALT_FLOORS: f32 = 59.0;
 const SALT_SIZE: f32 = 61.0;
+
+const PILLAR_INSET: f32 = 1.35;
+/// Clearance from a keep wall to the first colonnade pier (and hip end).
+const TOWER_CLEAR: f32 = 10.0;
+/// Pull both paired rows and their hip inside the courtyard's along-axis span.
+const COLONNADE_INNER_END_INSET: f32 = 4.0;
+const PILLAR_WIDTH: f32 = 0.7;
+const PILLAR_SPACING: f32 = 4.5;
+const PILLAR_HEIGHT: f32 = 3.0;
+const MIN_COLONNADE_RUN: f32 = 8.0;
+const ROOF_LINE_OVERHANG: f32 = 0.35;
+const TERRACE_TREAD_FILL: f32 = 0.85;
+const TERRACE_PARAPET: f32 = 0.55;
+const TERRACE_SLAB: f32 = 0.32;
 
 const CORNERS: [(f32, f32); 4] = [(1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)];
 
@@ -59,13 +78,91 @@ pub enum RingFortHost {
 	Circular(Arc<CircularTower>),
 	Trazaloid(Arc<TrazaloidTower>),
 	KeepStairwell(richmond_buildings::ConnectingStairwell),
+	Terrace(GalleryTerrace),
+	TerraceStairwell(richmond_buildings::ConnectingStairwell),
+	GalleryColonnade(GalleryColonnade),
 	GalleryRoof(RectangularPitchedRoofComplex),
+}
+
+/// Walkable ceiling deck on top of the curtain ring.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GalleryTerrace {
+	deck: RectRingFloor,
+	wall_material: Option<MaterialRef>,
+}
+
+impl GalleryTerrace {
+	pub fn deck(&self) -> &RectRingFloor {
+		&self.deck
+	}
+
+	pub fn with_wall_material(mut self, wall: MaterialRef) -> Self {
+		self.wall_material = Some(wall);
+		self
+	}
+}
+
+impl BuildingComponents for GalleryTerrace {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = self.deck.panel_nodes_for_level(level);
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
+		out
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		self.deck.joint_nodes_for_level(level)
+	}
+}
+
+/// Two colonnade lines on the ring terrace, between the corner keeps.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GalleryColonnade {
+	pillars: PanelPillarLine,
+	soffits: Vec<FittedRectangle>,
+	wall_material: Option<MaterialRef>,
+}
+
+impl GalleryColonnade {
+	pub fn pillars(&self) -> &PanelPillarLine {
+		&self.pillars
+	}
+
+	pub fn with_wall_material(mut self, wall: MaterialRef) -> Self {
+		self.wall_material = Some(wall);
+		self
+	}
+}
+
+impl BuildingComponents for GalleryColonnade {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = self.pillars.panel_nodes_for_level(level);
+		for soffit in &self.soffits {
+			out.extend(soffit.panel_nodes_for_level(level));
+		}
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
+		out
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		let mut out = self.pillars.joint_nodes_for_level(level);
+		for soffit in &self.soffits {
+			out.extend(soffit.joint_nodes_for_level(level));
+		}
+		out
+	}
 }
 
 /// Courtyard ring with four corner keeps.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RingFort {
 	pub connected: ConnectedDevelopment<RingFortSite, RingFortJoin>,
+	pub terrace: GalleryTerrace,
+	pub terrace_stairs: Vec<ConnectingStairwell>,
+	pub colonnade: GalleryColonnade,
 	pub roof: RectangularPitchedRoofComplex,
 }
 
@@ -109,6 +206,9 @@ impl RingFort {
 				}
 			}
 		}
+		out.push(RingFortHost::Terrace(self.terrace.clone()));
+		out.extend(self.terrace_stairs.iter().cloned().map(RingFortHost::TerraceStairwell));
+		out.push(RingFortHost::GalleryColonnade(self.colonnade.clone()));
 		out.push(RingFortHost::GalleryRoof(self.roof.clone()));
 		out
 	}
@@ -124,6 +224,14 @@ impl RingFort {
 				}
 			}
 		}
+		self.terrace = self.terrace.clone().with_wall_material(wall.clone());
+		self.terrace_stairs = self
+			.terrace_stairs
+			.iter()
+			.cloned()
+			.map(|stair| stair.with_surface_material(wall.clone()))
+			.collect();
+		self.colonnade = self.colonnade.clone().with_wall_material(wall);
 		self.roof = self.roof.clone().with_surface_material(roof);
 		self
 	}
@@ -154,8 +262,11 @@ impl Fit for RingFort {
 			return Err(FitError::TooSmall { reason: "ring_fort_ring" });
 		}
 
-		let (ring, _) = CurtainRing::fit(confines, noise)?;
-		let last = ring.last_plan().ok_or(FitError::TooSmall { reason: "ring_fort_storeys" })?;
+		let (mut ring, _) = CurtainRing::fit(confines, noise)?;
+		let last = ring
+			.last_plan()
+			.ok_or(FitError::TooSmall { reason: "ring_fort_storeys" })?
+			.clone();
 		let max_half = (ring.gallery_width() * 0.48).max(4.0);
 		let cfg = NoiseConfig::new(noise);
 		let center = confines.center();
@@ -168,7 +279,11 @@ impl Fit for RingFort {
 			let spec = sample_keep_spec(&cfg, center, i, max_half);
 			keeps.push(spec.build(origin, (sx, sz)));
 		}
-		let roof = gallery_roof(last, &keeps);
+		let (colonnade, roof) = gallery_colonnade_and_roof(&last, &keeps);
+		let shafts = terrace_shafts(&last);
+		open_last_storey_for_terrace(&mut ring);
+		let terrace = gallery_terrace(&last, &shafts);
+		let terrace_stairs = terrace_stairs(&last, &shafts);
 
 		let mut nodes = Vec::with_capacity(5);
 		nodes.push(RingFortSite::Ring(Box::new(ring)));
@@ -180,7 +295,13 @@ impl Fit for RingFort {
 		}
 
 		Ok((
-			Self { connected: ConnectedDevelopment::new(confines.bounds, nodes, edges), roof },
+			Self {
+				connected: ConnectedDevelopment::new(confines.bounds, nodes, edges),
+				terrace,
+				terrace_stairs,
+				colonnade,
+				roof,
+			},
 			FillableRegions { within: Vec::new(), atop: Vec::new() },
 		))
 	}
@@ -229,11 +350,11 @@ fn sample_keep_spec(cfg: &NoiseConfig, center: Vec3, index: usize, max_half: f32
 	}
 }
 
-/// Four gallery pitches from outer wall to courtyard, with keep footprints punched out.
-fn gallery_roof(
+/// Cloister: two paired pillar lines per gallery segment, hip roof sitting on them.
+fn gallery_colonnade_and_roof(
 	plan: &LesHallesFloorPlan,
 	keeps: &[RingFortKeep],
-) -> RectangularPitchedRoofComplex {
+) -> (GalleryColonnade, RectangularPitchedRoofComplex) {
 	let cx = plan.center_xz.x;
 	let cz = plan.center_xz.z;
 	let y0 = plan.center_xz.y + plan.storey_height;
@@ -243,30 +364,210 @@ fn gallery_roof(
 	let iz = plan.courtyard.y * 0.5;
 	let gx = (ox - ix).max(0.0);
 	let gz = (oz - iz).max(0.0);
-	let rise = (gx.min(gz) * 0.55).clamp(2.2, 4.5);
-	let y1 = y0 + rise;
+	let y1 = y0 + PILLAR_HEIGHT;
+	let rise = (gx.min(gz) * 0.45).clamp(2.0, 3.6);
+	let y2 = y1 + rise;
 
-	let mut volumes = Vec::new();
-	let mut push = |min_x: f32, max_x: f32, min_z: f32, max_z: f32| {
-		if max_x - min_x > 0.4 && max_z - min_z > 0.4 {
-			volumes.push(Aabb3d::from_min_max(
-				Vec3::new(min_x, y0, min_z),
-				Vec3::new(max_x, y1, max_z),
-			));
-		}
+	let keep = |sx: f32, sz: f32| {
+		let i = CORNERS.iter().position(|&c| c == (sx, sz)).unwrap_or(0);
+		&keeps[i]
 	};
-	push(cx - ox, cx + ox, cz + iz, cz + oz);
-	push(cx - ox, cx + ox, cz - oz, cz - iz);
-	push(cx - ox, cx - ix, cz - oz, cz + oz);
-	push(cx + ix, cx + ox, cz - oz, cz + oz);
+	let nw = keep(-1.0, 1.0);
+	let ne = keep(1.0, 1.0);
+	let se = keep(1.0, -1.0);
+	let sw = keep(-1.0, -1.0);
 
-	let holes: Vec<Aabb3d> = keeps.iter().flat_map(|keep| keep.roof_holes(y0, y1)).collect();
-	RectangularPitchedRoofComplexParams::new(volumes)
-		.with_plan_holes(holes)
+	let mut pillars = Vec::new();
+	let mut soffits = Vec::new();
+	let mut volumes = Vec::new();
+	let mut push_segment =
+		|along_x: bool, a: &RingFortKeep, b: &RingFortKeep, inner: f32, outer: f32| {
+			let along_center = if along_x { cx } else { cz };
+			let along_inner_half = if along_x { ix } else { iz };
+			let Some((start, end)) = run_between(a, b, along_x, along_center, along_inner_half)
+			else {
+				return;
+			};
+			let (inner, outer) = if inner < outer { (inner, outer) } else { (outer, inner) };
+			let inner_line = if along_x {
+				PanelPillarLine::along_rough_stone(
+					Vec3::new(start, y0, inner),
+					Vec3::new(end, y0, inner),
+					PILLAR_HEIGHT,
+					PILLAR_WIDTH,
+					PILLAR_SPACING,
+				)
+			} else {
+				PanelPillarLine::along_rough_stone(
+					Vec3::new(inner, y0, start),
+					Vec3::new(inner, y0, end),
+					PILLAR_HEIGHT,
+					PILLAR_WIDTH,
+					PILLAR_SPACING,
+				)
+			};
+			if inner_line.is_empty() {
+				return;
+			}
+			let outer_line: Vec<PanelPillar> = inner_line
+				.pillars
+				.iter()
+				.map(|p| {
+					let mut c = p.center;
+					if along_x {
+						c.z = outer;
+					} else {
+						c.x = outer;
+					}
+					PanelPillar::rough_stone(c, p.width, p.height)
+				})
+				.collect();
+			pillars.extend(inner_line.pillars);
+			pillars.extend(outer_line);
+			let t = TERRACE_SLAB;
+			if along_x {
+				soffits.push(FittedRectangle::new(
+					PanelStyle::RoughStonework,
+					PanelPoint::new(Vec3::new(start, y1, inner), t),
+					PanelPoint::new(Vec3::new(end, y1, inner), t),
+					PanelPoint::new(Vec3::new(start, y1, outer), t),
+					PanelPoint::new(Vec3::new(end, y1, outer), t),
+				));
+				volumes.push(Aabb3d::from_min_max(
+					Vec3::new(start, y1, inner - ROOF_LINE_OVERHANG),
+					Vec3::new(end, y2, outer + ROOF_LINE_OVERHANG),
+				));
+			} else {
+				soffits.push(FittedRectangle::new(
+					PanelStyle::RoughStonework,
+					PanelPoint::new(Vec3::new(inner, y1, start), t),
+					PanelPoint::new(Vec3::new(inner, y1, end), t),
+					PanelPoint::new(Vec3::new(outer, y1, start), t),
+					PanelPoint::new(Vec3::new(outer, y1, end), t),
+				));
+				volumes.push(Aabb3d::from_min_max(
+					Vec3::new(inner - ROOF_LINE_OVERHANG, y1, start),
+					Vec3::new(outer + ROOF_LINE_OVERHANG, y2, end),
+				));
+			}
+		};
+
+	push_segment(true, nw, ne, cz + iz + PILLAR_INSET, cz + oz - PILLAR_INSET);
+	push_segment(true, sw, se, cz - iz - PILLAR_INSET, cz - oz + PILLAR_INSET);
+	push_segment(false, sw, nw, cx - ix - PILLAR_INSET, cx - ox + PILLAR_INSET);
+	push_segment(false, se, ne, cx + ix + PILLAR_INSET, cx + ox - PILLAR_INSET);
+
+	let roof = RectangularPitchedRoofComplexParams::new(volumes)
 		.overhang(Overhang::Fixed(0.45))
 		.end_cap(EndCap::Hip)
 		.style(PanelStyle::ShepherdsThatch)
-		.build()
+		.build();
+	(
+		GalleryColonnade { pillars: PanelPillarLine::new(pillars), soffits, wall_material: None },
+		roof,
+	)
+}
+
+fn run_between(
+	a: &RingFortKeep,
+	b: &RingFortKeep,
+	along_x: bool,
+	inner_center: f32,
+	inner_half: f32,
+) -> Option<(f32, f32)> {
+	let coord = |k: &RingFortKeep| {
+		if along_x {
+			k.center_xz().x
+		} else {
+			k.center_xz().z
+		}
+	};
+	let (lo, hi) = if coord(a) <= coord(b) { (a, b) } else { (b, a) };
+	let tower_start = coord(lo) + lo.plan_half_extent() + TOWER_CLEAR;
+	let tower_end = coord(hi) - hi.plan_half_extent() - TOWER_CLEAR;
+	let inner_start = inner_center - inner_half + COLONNADE_INNER_END_INSET;
+	let inner_end = inner_center + inner_half - COLONNADE_INNER_END_INSET;
+	let start = tower_start.max(inner_start);
+	let end = tower_end.min(inner_end);
+	(end - start > MIN_COLONNADE_RUN).then_some((start, end))
+}
+
+/// Drop the last gallery ceiling so [`GalleryTerrace`] is the ring’s only eave slab.
+///
+/// Les Halles only ceilings the gallery band, not the balcony. Rebuilding that
+/// shell with extra mid-side shafts fights the façade openings, so the terrace
+/// owns the stair holes and the last storey just stops enclosing the deck.
+fn open_last_storey_for_terrace(ring: &mut CurtainRing) {
+	let Some(last) = ring.halles.tower.floors.last_mut() else {
+		return;
+	};
+	let plan = last.floor_plan_mut();
+	let mut params = plan.gallery.params().clone();
+	params.ceiling = RectRingFloorSlab::None;
+	plan.gallery = params.build();
+	plan.ceiling = RectRingFloorSlab::None;
+}
+
+/// Last-storey shafts, lifted onto the terrace so the climb continues the wells below.
+fn terrace_shafts(plan: &LesHallesFloorPlan) -> Vec<Aabb3d> {
+	let y0 = plan.center_xz.y;
+	let y1 = y0 + plan.storey_height;
+	plan.shaft_bounds
+		.iter()
+		.map(|shaft| {
+			let min = Vec3::from(shaft.min);
+			let max = Vec3::from(shaft.max);
+			Aabb3d::from_min_max(Vec3::new(min.x, y0, min.z), Vec3::new(max.x, y1, max.z))
+		})
+		.collect()
+}
+
+fn gallery_terrace(plan: &LesHallesFloorPlan, shafts: &[Aabb3d]) -> GalleryTerrace {
+	let eave = Vec3::new(plan.center_xz.x, plan.center_xz.y + plan.storey_height, plan.center_xz.z);
+	let mut openings = Openings::new();
+	for (i, shaft) in shafts.iter().enumerate() {
+		openings.insert(
+			OpeningId::new(format!("terrace_shaft_{i}")),
+			Opening::new(*shaft, OpeningLabel::Shaft),
+		);
+	}
+	GalleryTerrace {
+		deck: RectRingFloorParams::new(eave, plan.outer, plan.courtyard, TERRACE_PARAPET)
+			.floor(RectRingFloorSlab::Solid)
+			.ceiling(RectRingFloorSlab::None)
+			.inner_walls(false)
+			.openings(openings)
+			.style(PanelStyle::RoughStonework)
+			.joint_thickness(TERRACE_SLAB)
+			.build(),
+		wall_material: None,
+	}
+}
+
+fn terrace_stairs(plan: &LesHallesFloorPlan, shafts: &[Aabb3d]) -> Vec<ConnectingStairwell> {
+	let y0 = plan.center_xz.y;
+	let y1 = y0 + plan.storey_height;
+	shafts
+		.iter()
+		.map(|shaft| {
+			let min = Vec3::from(shaft.min);
+			let max = Vec3::from(shaft.max);
+			let side = courtyard_well_side(plan.center_xz, *shaft);
+			let well = WellAabb::from_plan(
+				Vec3::new(min.x, y0, min.z),
+				Vec3::new(max.x, y1, max.z),
+				side,
+				side,
+				TERRACE_TREAD_FILL,
+			);
+			ConnectingStairwell::from_well_kind(
+				PanelStyle::RoughStonework,
+				well,
+				StairwellKind::Rectangular,
+			)
+			.with_upper_landing(true)
+		})
+		.collect()
 }
 
 #[cfg(test)]
@@ -344,6 +645,9 @@ mod tests {
 			.iter()
 			.any(|h| { matches!(h, RingFortHost::Circular(_) | RingFortHost::Trazaloid(_)) }));
 		anyhow::ensure!(hosts.iter().any(|h| matches!(h, RingFortHost::KeepStairwell(_))));
+		anyhow::ensure!(hosts.iter().any(|h| matches!(h, RingFortHost::Terrace(_))));
+		anyhow::ensure!(hosts.iter().any(|h| matches!(h, RingFortHost::TerraceStairwell(_))));
+		anyhow::ensure!(hosts.iter().any(|h| matches!(h, RingFortHost::GalleryColonnade(_))));
 		anyhow::ensure!(hosts.iter().any(|h| matches!(h, RingFortHost::GalleryRoof(_))));
 		anyhow::ensure!(!hosts.iter().any(|h| matches!(
 			h,
@@ -360,15 +664,51 @@ mod tests {
 	}
 
 	#[test]
+	fn ring_ceiling_has_terrace_stairs() -> anyhow::Result<()> {
+		let fort = fit_fort(3)?;
+		let ring = fort.ring().ok_or_else(|| anyhow::anyhow!("missing courtyard ring"))?;
+		let last = ring.last_plan().ok_or_else(|| anyhow::anyhow!("ring has no storey"))?;
+		anyhow::ensure!(fort.terrace.deck().has_floor(), "colonnade needs a terrace deck");
+		anyhow::ensure!(
+			!last.gallery.has_ceiling(),
+			"last gallery ceiling should yield to the terrace deck"
+		);
+		let eave_y = last.center_xz.y + last.storey_height;
+		anyhow::ensure!(
+			(fort.terrace.deck().params().center_xz.y - eave_y).abs() < 1e-3,
+			"terrace should sit on the ring ceiling"
+		);
+		let balcony_z = last.center_xz.z + (last.gallery_inner.y + last.courtyard.y) * 0.25;
+		anyhow::ensure!(
+			fort.terrace.deck().floor_covers_xz(last.center_xz.x, balcony_z),
+			"terrace should cover the balcony, not only the gallery band"
+		);
+		anyhow::ensure!(!fort.terrace_stairs.is_empty(), "stairs should climb onto the terrace");
+		anyhow::ensure!(
+			fort.terrace_stairs.len() == last.shaft_bounds.len(),
+			"terrace stairs should continue the shafts below"
+		);
+		anyhow::ensure!(
+			fort.terrace_stairs.iter().all(|s| (s.well().max().y - eave_y).abs() < 0.05),
+			"terrace stairs should land on the ring ceiling"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn gallery_roof_covers_ring_not_courtyard_or_keeps() -> anyhow::Result<()> {
 		let fort = fit_fort(19)?;
 		let ring = fort.ring().ok_or_else(|| anyhow::anyhow!("missing courtyard ring"))?;
 		let last = ring.last_plan().ok_or_else(|| anyhow::anyhow!("ring has no storey"))?;
 		let volumes = &fort.roof.params().volumes;
 		anyhow::ensure!(
-			volumes.len() >= 4,
-			"expected gallery bars after keep holes, got {}",
+			volumes.len() == 4,
+			"expected 4 colonnade roof bars, got {}",
 			volumes.len()
+		);
+		anyhow::ensure!(
+			!fort.colonnade.pillars().is_empty(),
+			"colonnade should stand on the terrace"
 		);
 
 		let court = last.center_xz;
@@ -389,19 +729,55 @@ mod tests {
 
 		for keep in fort.keeps() {
 			let c = keep.center_xz();
-			let h = keep.plan_half_extent() * 0.5;
-			for p in [
-				c,
-				Vec3::new(c.x + h, 0.0, c.z),
-				Vec3::new(c.x - h, 0.0, c.z),
-				Vec3::new(c.x, 0.0, c.z + h),
-				Vec3::new(c.x, 0.0, c.z - h),
-			] {
+			let min_clear = keep.plan_half_extent() + TOWER_CLEAR;
+			for v in volumes {
+				let nearest_x = c.x.clamp(v.min.x, v.max.x);
+				let nearest_z = c.z.clamp(v.min.z, v.max.z);
+				let dx = c.x - nearest_x;
+				let dz = c.z - nearest_z;
+				let dist = (dx * dx + dz * dz).sqrt();
 				anyhow::ensure!(
-					!volumes.iter().any(|v| xz_covers(v, p, 0.05)),
-					"roof covers keep at {p:?}"
+					dist + 1e-3 >= min_clear,
+					"hip {dist:.1} too close to keep (need >= {min_clear:.1})"
 				);
 			}
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn colonnade_rows_and_hips_share_the_run() -> anyhow::Result<()> {
+		let fort = fit_fort(19)?;
+		let ring = fort.ring().ok_or_else(|| anyhow::anyhow!("missing courtyard ring"))?;
+		let last = ring.last_plan().ok_or_else(|| anyhow::anyhow!("ring has no storey"))?;
+		let pillars = &fort.colonnade.pillars().pillars;
+		anyhow::ensure!(!pillars.is_empty(), "expected colonnade piers");
+		anyhow::ensure!(
+			pillars.iter().all(|p| (p.height - PILLAR_HEIGHT).abs() < 1e-3),
+			"loose / short piers in the colonnade"
+		);
+		anyhow::ensure!(pillars.len() % 2 == 0, "inner/outer rows should pair");
+		let inner_n = pillars.len() / 2;
+		anyhow::ensure!(inner_n >= 8, "expected paired piers on all four sides");
+
+		for v in &fort.roof.params().volumes {
+			let along_x = (v.max.x - v.min.x) >= (v.max.z - v.min.z);
+			let (vmin, vmax) = if along_x { (v.min.x, v.max.x) } else { (v.min.z, v.max.z) };
+			let (center, half) = if along_x {
+				(last.center_xz.x, last.courtyard.x * 0.5)
+			} else {
+				(last.center_xz.z, last.courtyard.y * 0.5)
+			};
+			anyhow::ensure!(
+				vmin + 1e-3 >= center - half + COLONNADE_INNER_END_INSET
+					&& vmax <= center + half - COLONNADE_INNER_END_INSET + 1e-3,
+				"hip {vmin:.1}..{vmax:.1} should stay inside inner span"
+			);
+			let hits = pillars.iter().any(|p| {
+				let along = if along_x { p.center.x } else { p.center.z };
+				(along - vmin).abs() < PILLAR_WIDTH || (along - vmax).abs() < PILLAR_WIDTH
+			});
+			anyhow::ensure!(hits, "hip {vmin:.1}..{vmax:.1} should end on a pier");
 		}
 		Ok(())
 	}
@@ -427,6 +803,14 @@ mod tests {
 						)
 					}),
 				"gallery pitches should carry the roof look"
+			);
+			let colonnade_nodes =
+				painted.colonnade.panel_nodes_for_level(LodSceneLevel::High).flatten();
+			anyhow::ensure!(
+				colonnade_nodes.iter().any(|n| {
+					matches!(n.material.as_ref().map(|m| &m.name), Some(MaterialId::Name(n)) if n == "stucco")
+				}),
+				"colonnade pillars should carry the wall look"
 			);
 			for keep in painted.keeps() {
 				match keep {

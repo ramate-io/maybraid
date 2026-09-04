@@ -14,13 +14,10 @@ use richmond_buildings::{
 	WellSide,
 };
 
-use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 
 pub const TOWER_STOREY_HEIGHT: f32 = 3.2;
 const KEEP_TREAD_FILL: f32 = 0.55;
-/// Extra plan clearance so gallery hips do not leak into a keep.
-const ROOF_HOLE_PAD: f32 = 0.3;
 
 /// Shell plus the wells that climb it.
 #[derive(Debug, Clone, PartialEq)]
@@ -183,33 +180,6 @@ impl RingFortKeep {
 		match self {
 			Self::Circular(keep) => &keep.stairwells,
 			Self::Trazaloid(keep) => &keep.stairwells,
-		}
-	}
-
-	/// Plan holes for the gallery roof: one rectangle for a trazaloid keep,
-	/// four quadrant squares covering a circular keep.
-	pub fn roof_holes(&self, y0: f32, y1: f32) -> Vec<Aabb3d> {
-		let c = self.center_xz();
-		let half = self.plan_half_extent() + ROOF_HOLE_PAD;
-		match self {
-			Self::Trazaloid(_) => vec![Aabb3d::from_min_max(
-				Vec3::new(c.x - half, y0, c.z - half),
-				Vec3::new(c.x + half, y1, c.z + half),
-			)],
-			Self::Circular(_) => {
-				let xs = [c.x - half, c.x];
-				let zs = [c.z - half, c.z];
-				let mut holes = Vec::with_capacity(4);
-				for &x0 in &xs {
-					for &z0 in &zs {
-						holes.push(Aabb3d::from_min_max(
-							Vec3::new(x0, y0, z0),
-							Vec3::new(x0 + half, y1, z0 + half),
-						));
-					}
-				}
-				holes
-			}
 		}
 	}
 
@@ -496,16 +466,6 @@ mod tests {
 		);
 		anyhow::ensure!(intermediate.len() == 4, "intermediate floors keep a stair hole");
 		anyhow::ensure!(nodes.len() > ground.len(), "upper storeys should add holed floors");
-		Ok(())
-	}
-
-	#[test]
-	fn roof_holes_are_rect_or_four_squares() -> anyhow::Result<()> {
-		let origin = Vec3::new(10.0, 4.0, 8.0);
-		let circular = RingFortKeep::circular(origin, 7.0, 6);
-		anyhow::ensure!(circular.roof_holes(4.0, 8.0).len() == 4);
-		let trazaloid = RingFortKeep::trazaloid(origin, 14.0, 6, (-1.0, 1.0));
-		anyhow::ensure!(trazaloid.roof_holes(4.0, 8.0).len() == 1);
 		Ok(())
 	}
 }

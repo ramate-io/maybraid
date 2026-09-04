@@ -57,6 +57,14 @@ impl MixedUseLesHallesStorey {
 		}
 	}
 
+	pub fn floor_plan_mut(&mut self) -> &mut LesHallesFloorPlan {
+		match self {
+			Self::Arcade { floor_plan, .. }
+			| Self::Commercial { floor_plan, .. }
+			| Self::Livable { floor_plan, .. } => floor_plan,
+		}
+	}
+
 	pub fn is_arcade(&self) -> bool {
 		matches!(self, Self::Arcade { .. })
 	}
