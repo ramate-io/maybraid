@@ -18,6 +18,7 @@ pub use urbanization_stream::{
 	UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE, DEFAULT_URBANIZATION_STREAM_RADIUS,
 };
 
+use bevy::log::info_span;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{
@@ -430,21 +431,25 @@ fn generate_developments(
 		bounds: &region,
 	};
 
-	let cells = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let padded = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let developments = GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
+	let (cells, padded, developments) = {
+		let _span = info_span!("richmond_development_generation").entered();
+		let cells = GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate_region(
+			&mut development_index,
+			region,
+			&lod_ref,
+		);
+		let padded = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate_region(
+			&mut development_index,
+			region,
+			&lod_ref,
+		);
+		let developments = GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate_region(
+			&mut development_index,
+			region,
+			&lod_ref,
+		);
+		(cells, padded, developments)
+	};
 	info!(
 		"generated development_cells={} padded={} developments={}",
 		cells.len(),

@@ -34,6 +34,7 @@ members = [
   "maybraid/durham/marazion",
 
   "maybraid/lod/lib",
+  "maybraid/lod/first-load",
   "maybraid/lod/avian",
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
@@ -279,6 +280,7 @@ terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
 avian3d = "0.7"
 
 lod = { path = "maybraid/lod/lib" }
+lod-first-load = { path = "maybraid/lod/first-load" }
 lod-avian = { path = "maybraid/lod/avian" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }

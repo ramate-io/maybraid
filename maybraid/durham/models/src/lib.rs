@@ -18,11 +18,11 @@ pub use terrain::{
 	PocketWaterStampCell, PrePocketHighPassLayout, PrePocketLowPassLayout, PreWatershedTerrain,
 	PresentedTerrainScene, RollingHighPassControllerLayout, RollingLowPassControllerLayout,
 	RollingStampCell, Terrain, TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
-	TerrainFrictionConfig, TerrainMeshBuilder, TerrainMeshLodBand, TerrainPlugin,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
-	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
-	ValleyLowPassControllerLayout, ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
-	TERRAIN_FRICTION,
+	TerrainFrictionConfig, TerrainGenerationInput, TerrainGenerationResult, TerrainHeightSnapshot,
+	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPlugin, TerrainPresentationAssets,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
+	TerrainTrimeshCollider, ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
+	ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE, TERRAIN_FRICTION,
 };
 pub use water::{
 	register_water_plugin, ComposedWater, Water, WaterPlugin, WaterPresentationAssets,

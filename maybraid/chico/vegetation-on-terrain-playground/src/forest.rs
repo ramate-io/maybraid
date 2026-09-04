@@ -12,11 +12,11 @@ use chico_sbs_trees_playground::forest_stream::{
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
+use lod_first_load::FirstLoadActivity;
 
 use crate::camera::CameraController;
-use crate::groves::DurhamGroveSample;
-use crate::{PlaygroundConfig, WorldBaseTerrain};
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+use crate::groves::{DurhamGroveSample, DurhamGroveTerrainCache};
+use crate::PlaygroundConfig;
 
 const PATCH_CAMERA_SPEED: f32 = 40.0;
 
@@ -25,9 +25,8 @@ const PATCH_CAMERA_SPEED: f32 = 40.0;
 pub struct DurhamForestPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, ForestPresenterState>,
-	store: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
-	base: Res<'w, WorldBaseTerrain>,
+	terrain: Res<'w, DurhamGroveTerrainCache>,
+	activity: Option<Res<'w, FirstLoadActivity>>,
 }
 
 impl RegionPresenter<ChicoGrove, ForestIndex> for DurhamForestPresenter<'_, '_> {
@@ -36,9 +35,18 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DurhamForestPresenter<'_, '_> 
 	}
 
 	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
-		let world = DurhamGroveSample::new(&self.store, &self.layout, &self.base.0);
-		self.state
-			.present_with_world(&mut self.commands, id, version, grove, lod_ref, &world);
+		let Some(terrain) = self.terrain.terrain.clone() else {
+			return;
+		};
+		self.state.present_with_world(
+			&mut self.commands,
+			id,
+			version,
+			grove,
+			lod_ref,
+			|| DurhamGroveSample::from_terrain(terrain),
+			self.activity.as_deref(),
+		);
 	}
 
 	fn hide(&mut self, id: Id) {

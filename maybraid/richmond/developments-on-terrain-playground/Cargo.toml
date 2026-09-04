@@ -26,6 +26,7 @@ durham-terrain-models = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
+lod-first-load = { workspace = true }
 lod-cascade = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }

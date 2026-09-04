@@ -18,6 +18,7 @@ durham-terrain-models = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }
+lod-first-load = { workspace = true }
 lod-avian = { workspace = true }
 material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }

@@ -1,5 +1,6 @@
 //! [`GenerationScheme`] for development cells, padded terrain, and building hosts.
 
+use bevy::log::info_span;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
 use durham_terrain_models::origin_cell_ids_for_layout;
@@ -212,7 +213,10 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 		let terrain = spatial_index.terrain_store().terrain(id)?.clone();
 
 		ensure_development_cells_for_bounds(spatial_index, bounds, lod_ref);
-		let pads = spatial_index.store.merged_pad_complex(bounds);
+		let pads = {
+			let _span = info_span!("richmond_pad_merge").entered();
+			spatial_index.store.merged_pad_complex(bounds)
+		};
 		let padded = TerrainWithPads::compose(&terrain, [&pads]);
 		Some((padded, bounds))
 	}

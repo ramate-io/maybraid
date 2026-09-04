@@ -6,23 +6,25 @@ mod shell;
 pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
+use lod_first_load::FirstLoadStatus;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
+use maybraid_world::{SpawnTerrainReady, WorldGameplayEnabled, WorldPlugin};
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
 	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode,
-	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, SpinRevealScreen,
+	HomeMenuChoice, HomeScreenPlugin, InGameMenuChoice, InGameScreenPlugin, LoadingExplainerText,
+	LoadingProgress, LoadingScreenPlugin, SpinRevealScreen,
 };
 use std::path::{Path, PathBuf};
 
 use crate::shell::{
 	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
-	enter_world, enter_world_menu, exit_world_menu, spawn_menu_ui_camera,
+	enter_loading, enter_world, enter_world_menu, exit_world_menu, spawn_menu_ui_camera,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -47,6 +49,7 @@ impl Plugin for GamePlugin {
 				CharacterScreenPlugin,
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
+				LoadingScreenPlugin,
 			))
 			.add_systems(Startup, spawn_menu_ui_camera)
 			.add_systems(
@@ -59,6 +62,10 @@ impl Plugin for GamePlugin {
 			)
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
 			.add_systems(
+				OnEnter(GameFlow::LoadingWorld),
+				(enter_loading, apply_shell_look, detach_preview_camera),
+			)
+			.add_systems(
 				OnEnter(GameFlow::World),
 				(enter_world, apply_shell_look, detach_preview_camera),
 			)
@@ -70,6 +77,7 @@ impl Plugin for GamePlugin {
 				Update,
 				(
 					route_home_choice.run_if(in_state(GameFlow::Home)),
+					update_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					character_back.run_if(in_state(GameFlow::Characters)),
 					toggle_world_pause
@@ -84,6 +92,8 @@ fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
+	status: Res<FirstLoadStatus>,
+	terrain: Res<SpawnTerrainReady>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -91,10 +101,39 @@ fn route_home_choice(
 	match HomeRoute::from_choice(choice) {
 		HomeRoute::World { label } => {
 			mode.label = String::from(label);
-			flow.set(GameFlow::World);
+			flow.set(if status.settled && terrain.0 {
+				GameFlow::World
+			} else {
+				GameFlow::LoadingWorld
+			});
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
 		HomeRoute::Unimplemented => {}
+	}
+}
+
+fn update_world_loading(
+	status: Res<FirstLoadStatus>,
+	terrain: Res<SpawnTerrainReady>,
+	mut progress: MessageWriter<LoadingProgress>,
+	mut explainer: MessageWriter<LoadingExplainerText>,
+	mut flow: ResMut<NextState<GameFlow>>,
+) {
+	progress.write(LoadingProgress(if terrain.0 {
+		status.progress
+	} else {
+		status.progress.min(0.95)
+	}));
+	let text = if !terrain.0 {
+		"Preparing terrain collision…".to_string()
+	} else if status.outstanding > 0 {
+		format!("Streaming world… {} jobs remaining", status.outstanding)
+	} else {
+		"Settling the initial view…".to_string()
+	};
+	explainer.write(LoadingExplainerText(text));
+	if terrain.0 && status.settled {
+		flow.set(GameFlow::World);
 	}
 }
 

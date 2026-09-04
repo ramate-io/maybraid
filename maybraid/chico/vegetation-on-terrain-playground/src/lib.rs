@@ -26,17 +26,22 @@ pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
-pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
+pub use groves::{
+	DurhamGroveSample, DurhamGroveTerrainCache, OwnedDurhamTerrain, StoredDurhamTerrain,
+};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
 	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	SpawnTerrainReady,
 };
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
+use bevy::log::info_span;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
+use bevy::tasks::{AsyncComputeTaskPool, Task};
 use bump_out::stream_canopy_bump_outs;
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
@@ -56,19 +61,22 @@ use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainGenerationResult,
+	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter,
+	TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
+use futures::FutureExt;
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
+use lod::gen::RegionPresenter;
 use lod::lod_ref::LodRef;
 use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use lod_first_load::{FirstLoadActivity, FirstLoadPermit};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{
@@ -199,6 +207,16 @@ struct TerrainPresentationDirty(bool);
 #[derive(Resource, Default)]
 struct TerrainPresentPending(bool);
 
+#[derive(Resource, Default)]
+struct TerrainGenerationTask {
+	task: Option<Task<CompletedTerrainGeneration>>,
+}
+
+struct CompletedTerrainGeneration {
+	result: TerrainGenerationResult,
+	_permit: Option<FirstLoadPermit>,
+}
+
 #[derive(Resource)]
 struct GrovesDirty(bool);
 
@@ -281,9 +299,12 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.insert_resource(layout_for(&playground))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
+			.init_resource::<TerrainGenerationTask>()
 			.insert_resource(GrovesDirty(true))
+			.init_resource::<DurhamGroveTerrainCache>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+			.add_systems(Update, refresh_grove_terrain_cache.before(LodPresentSystems::Produce))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
@@ -354,6 +375,20 @@ impl Plugin for VegetationOnTerrainPlugin {
 			);
 		}
 	}
+}
+
+fn refresh_grove_terrain_cache(
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	mut cache: ResMut<DurhamGroveTerrainCache>,
+) {
+	if cache.terrain.is_some() && !store.is_changed() && !layout.is_changed() && !base.is_changed()
+	{
+		return;
+	}
+	cache.terrain =
+		Some(OwnedDurhamTerrain::new(store.height_snapshot(), layout.clone(), base.0.clone()));
 }
 
 /// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.
@@ -572,55 +607,60 @@ fn generate_cells(
 	mut index: AvianTerrainIndex,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
+	mut generation: ResMut<TerrainGenerationTask>,
+	activity: Option<Res<FirstLoadActivity>>,
 	mut world_base: ResMut<WorldBaseTerrain>,
 	mode: Res<PlaygroundMode>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
 	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
-	if !dirty.0 {
+	if let Some(task) = generation.task.as_mut() {
+		let Some(completed) = (&mut *task).now_or_never() else {
+			return;
+		};
+		generation.task = None;
+		if dirty.0 {
+			// A command changed the generation inputs while this task ran.
+			return;
+		}
+		let terrain_cells = completed.result.terrain_cells;
+		let water_cells = completed.result.water_cells;
+		index.apply_generation(completed.result);
+		info!("generated terrain_cells={terrain_cells} water_cells={water_cells}");
+
+		if let Some(base) = index.base_noise() {
+			world_base.0 = base.clone();
+		}
+		let layout = index.layout().clone();
+		if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
+			let center = layout.region_center_xz();
+			if let Some(elevation) = index.composed_height_at(center.x, center.z) {
+				respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
+			}
+			commands.entity(player).insert(AwaitingTerrainSurface);
+		}
+		if *mode == PlaygroundMode::Free {
+			if let Ok((mut transform, mut controller)) = cameras.single_mut() {
+				let center = layout.region_center_xz();
+				let elevation = index
+					.composed_height_at(center.x, center.z)
+					.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
+				refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
+			}
+		}
+		pending.0 = true;
 		return;
 	}
 
-	index.clear();
-
-	let layout = index.layout().clone();
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let terrains =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	let waters =
-		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
-	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
-
-	if let Some(base) = index.base_noise() {
-		world_base.0 = base.clone();
+	if !dirty.0 {
+		return;
 	}
-
-	if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-		let center = layout.region_center_xz();
-		if let Some(elevation) = index.composed_height_at(center.x, center.z) {
-			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
-		}
-		commands.entity(player).insert(AwaitingTerrainSurface);
-	}
-
-	if *mode == PlaygroundMode::Free {
-		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-			let center = layout.region_center_xz();
-			let elevation = index
-				.composed_height_at(center.x, center.z)
-				.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
-			refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
-		}
-	}
-
+	let input = index.generation_input();
+	let permit = activity.as_ref().map(|activity| activity.begin());
+	generation.task = Some(AsyncComputeTaskPool::get().spawn(async move {
+		let _span = info_span!("durham_terrain_generation").entered();
+		CompletedTerrainGeneration { result: input.generate(), _permit: permit }
+	}));
 	dirty.0 = false;
 	pending.0 = true;
 }
@@ -631,8 +671,9 @@ fn present_cells(
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
+	generation: Res<TerrainGenerationTask>,
 ) {
-	if !pending.0 {
+	if !pending.0 || generation.task.is_some() {
 		return;
 	}
 

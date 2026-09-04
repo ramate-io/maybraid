@@ -7,17 +7,17 @@ use bevy::prelude::*;
 use chico_forests::{ChicoGrove, ForestIndex};
 use chico_groves::{GroveHeightModulation, ModulatedGroveSample};
 use chico_sbs_trees_playground::forest_stream::ForestPresenterState;
-use chico_vegetation_on_terrain_playground::{
-	DurhamGroveSample, StoredDurhamTerrain, WorldBaseTerrain,
-};
+use chico_vegetation_on_terrain_playground::{DurhamGroveSample, DurhamGroveTerrainCache};
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
+use lod_first_load::FirstLoadActivity;
 use richmond_development_models::{DevelopmentCell, DevelopmentIndex, PadComplex};
 
-struct DevelopmentPadModulation<'a>(&'a PadComplex);
+#[derive(Clone)]
+struct DevelopmentPadModulation(PadComplex);
 
-impl GroveHeightModulation for DevelopmentPadModulation<'_> {
+impl GroveHeightModulation for DevelopmentPadModulation {
 	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
 		self.0.modify_elevation(base_height, x, z)
 	}
@@ -30,7 +30,8 @@ pub struct DevelopmentForestPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, ForestPresenterState>,
 	development: DevelopmentIndex<'w>,
-	base: Res<'w, WorldBaseTerrain>,
+	terrain: Res<'w, DurhamGroveTerrainCache>,
+	activity: Option<Res<'w, FirstLoadActivity>>,
 }
 
 impl RegionPresenter<ChicoGrove, ForestIndex> for DevelopmentForestPresenter<'_, '_> {
@@ -53,16 +54,24 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DevelopmentForestPresenter<'_,
 		}
 
 		let pads = self.development.store.merged_pad_complex(bounds);
-		let terrain = StoredDurhamTerrain::new(
-			self.development.terrain_store(),
-			self.development.layout(),
-			&self.base.0,
+		let Some(terrain) = self.terrain.terrain.clone() else {
+			return;
+		};
+		let modulation = DevelopmentPadModulation(pads);
+		self.state.present_with_world(
+			&mut self.commands,
+			id,
+			version,
+			grove,
+			lod_ref,
+			|| {
+				ModulatedGroveSample::new(
+					DurhamGroveSample::from_terrain(terrain),
+					vec![modulation],
+				)
+			},
+			self.activity.as_deref(),
 		);
-		let raw = DurhamGroveSample::from_terrain(terrain);
-		let modulation = DevelopmentPadModulation(&pads);
-		let world = ModulatedGroveSample::new(raw, &modulation);
-		self.state
-			.present_with_world(&mut self.commands, id, version, grove, lod_ref, &world);
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -109,8 +118,8 @@ mod tests {
 			PadParams::default(),
 		);
 		let base = FlatTerrainSample { elevation: 3.0, steepness: 0.0 };
-		let modulation = DevelopmentPadModulation(&pad);
-		let sample = ModulatedGroveSample::new(base, &modulation);
+		let modulation = DevelopmentPadModulation(pad);
+		let sample = ModulatedGroveSample::new(base, vec![modulation]);
 
 		assert!((sample.height_at(Vec3::ZERO) - 12.0).abs() < 1e-5);
 		assert!((sample.height_at(Vec3::new(1_000.0, 0.0, 1_000.0)) - 3.0).abs() < 1e-5);

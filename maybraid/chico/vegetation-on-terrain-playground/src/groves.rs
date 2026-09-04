@@ -15,7 +15,9 @@ use chico_groves::{
 	WanderingAcaciaParams, WildGrassParams,
 };
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
-use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
+use durham_terrain_models::{
+	BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainHeightSnapshot,
+};
 use lod::gen::LodScene;
 
 use crate::commands::GroveKind;
@@ -49,7 +51,39 @@ impl GroveTerrain for StoredDurhamTerrain<'_> {
 	}
 }
 
+/// Sendable Durham height sample shared by background grove-growth tasks.
+#[derive(Clone)]
+pub struct OwnedDurhamTerrain {
+	snapshot: TerrainHeightSnapshot,
+	layout: TerrainCellLayout,
+	fallback: BaseTerrainNoise,
+}
+
+impl OwnedDurhamTerrain {
+	pub fn new(
+		snapshot: TerrainHeightSnapshot,
+		layout: TerrainCellLayout,
+		fallback: BaseTerrainNoise,
+	) -> Self {
+		Self { snapshot, layout, fallback }
+	}
+}
+
+impl GroveTerrain for OwnedDurhamTerrain {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.snapshot
+			.composed_height_at(&self.layout, position.x, position.z)
+			.unwrap_or_else(|| self.fallback.height_at(position.x, position.z))
+	}
+}
+
+#[derive(Resource, Clone, Default)]
+pub struct DurhamGroveTerrainCache {
+	pub terrain: Option<OwnedDurhamTerrain>,
+}
+
 /// Grove sample generic over any terrain height field.
+#[derive(Clone)]
 pub struct DurhamGroveSample<T> {
 	terrain: T,
 }

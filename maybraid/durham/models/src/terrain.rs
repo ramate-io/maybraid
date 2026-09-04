@@ -49,7 +49,10 @@ pub use cell::{
 };
 pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
 pub use config::TerrainConfig;
-pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
+pub use index::{
+	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainGenerationInput,
+	TerrainGenerationResult, TerrainHeightSnapshot,
+};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,

@@ -7,7 +7,7 @@ use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use procedural_common::Bounds2;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use richmond_urbanization::UrbanizationIndex;
 
@@ -29,6 +29,9 @@ pub(crate) struct StoredEntry<T> {
 pub struct DevelopmentEntryStore {
 	next_version: u64,
 	pub(crate) cells: HashMap<Id, StoredEntry<DevelopmentCell>>,
+	pad_cells: HashMap<(i32, i32), Vec<Id>>,
+	pad_cells_by_development: HashMap<Id, Vec<(i32, i32)>>,
+	merged_pads: HashMap<Id, PadComplex>,
 	pub(crate) padded: HashMap<Id, StoredEntry<TerrainWithPads>>,
 	pub(crate) developments: HashMap<Id, StoredEntry<BuiltDevelopment>>,
 	dirty_pad_regions: Vec<Bounds2>,
@@ -37,6 +40,9 @@ pub struct DevelopmentEntryStore {
 impl DevelopmentEntryStore {
 	pub fn clear(&mut self) {
 		self.cells.clear();
+		self.pad_cells.clear();
+		self.pad_cells_by_development.clear();
+		self.merged_pads.clear();
 		self.padded.clear();
 		self.developments.clear();
 		self.dirty_pad_regions.clear();
@@ -71,27 +77,34 @@ impl DevelopmentEntryStore {
 	///
 	/// Returning one complex is important for overlapping pads: sequential
 	/// modulation would let later ease skirts smear earlier exact terraces.
-	pub fn merged_pad_complex(&self, region: Aabb3d) -> PadComplex {
+	pub fn merged_pad_complex(&mut self, region: Aabb3d) -> PadComplex {
+		let cache_key = Id::from_cell(region);
+		if let Some(cached) = self.merged_pads.get(&cache_key) {
+			return cached.clone();
+		}
 		let bounds = Bounds2::from_xz(region.min.x, region.min.z, region.max.x, region.max.z);
-		let nodes = self
-			.cells
-			.values()
-			.filter(|entry| {
-				entry.value.is_filled()
-					&& region.min.x < entry.bounds.max.x
-					&& region.max.x > entry.bounds.min.x
-					&& region.min.z < entry.bounds.max.z
-					&& region.max.z > entry.bounds.min.z
-			})
+		let mut ids = HashSet::new();
+		for cell in pad_index_cells(bounds) {
+			if let Some(indexed) = self.pad_cells.get(&cell) {
+				ids.extend(indexed.iter().copied());
+			}
+		}
+		let nodes = ids
+			.into_iter()
+			.filter_map(|id| self.cells.get(&id))
 			.flat_map(|entry| entry.value.pad_complexes())
 			.flat_map(|complex| complex.pads.iter())
 			.filter(|node| node.correction_intersects(bounds))
 			.cloned()
 			.collect();
-		PadComplex::from_nodes(nodes)
+		let merged = PadComplex::from_nodes(nodes);
+		self.merged_pads.insert(cache_key, merged.clone());
+		merged
 	}
 
 	fn mark_development_change(&mut self, id: Id, development: &DevelopmentCell) {
+		self.unindex_development_pads(id);
+		self.merged_pads.clear();
 		let previous: Vec<_> = self
 			.cells
 			.get(&id)
@@ -107,6 +120,40 @@ impl DevelopmentEntryStore {
 				.filter(|complex| !complex.is_empty())
 				.map(|complex| complex.bounds),
 		);
+		self.index_development_pads(id, development);
+	}
+
+	fn index_development_pads(&mut self, id: Id, development: &DevelopmentCell) {
+		let mut indexed_cells = HashSet::new();
+		for complex in development.pad_complexes().filter(|complex| !complex.is_empty()) {
+			for cell in pad_index_cells(complex.bounds) {
+				if !indexed_cells.insert(cell) {
+					continue;
+				}
+				let ids = self.pad_cells.entry(cell).or_default();
+				if !ids.contains(&id) {
+					ids.push(id);
+				}
+			}
+		}
+		if !indexed_cells.is_empty() {
+			self.pad_cells_by_development.insert(id, indexed_cells.into_iter().collect());
+		}
+	}
+
+	fn unindex_development_pads(&mut self, id: Id) {
+		let Some(indexed_cells) = self.pad_cells_by_development.remove(&id) else {
+			return;
+		};
+		for cell in indexed_cells {
+			let remove_cell = self.pad_cells.get_mut(&cell).is_some_and(|ids| {
+				ids.retain(|candidate| *candidate != id);
+				ids.is_empty()
+			});
+			if remove_cell {
+				self.pad_cells.remove(&cell);
+			}
+		}
 	}
 
 	/// Remove only padded terrain cells touched by changed pad support.
@@ -159,6 +206,16 @@ impl DevelopmentEntryStore {
 	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
 		self.developments.get(&id).map(|e| &e.value)
 	}
+}
+
+const PAD_INDEX_CELL_XZ: f32 = 160.0;
+
+fn pad_index_cells(bounds: Bounds2) -> impl Iterator<Item = (i32, i32)> {
+	let min_x = (bounds.min.x / PAD_INDEX_CELL_XZ).floor() as i32;
+	let min_z = (bounds.min.y / PAD_INDEX_CELL_XZ).floor() as i32;
+	let max_x = (((bounds.max.x - 1e-3) / PAD_INDEX_CELL_XZ).floor() as i32).max(min_x);
+	let max_z = (((bounds.max.y - 1e-3) / PAD_INDEX_CELL_XZ).floor() as i32).max(min_z);
+	(min_x..=max_x).flat_map(move |x| (min_z..=max_z).map(move |z| (x, z)))
 }
 
 /// System-local index: development store plus read-only Durham terrain.
@@ -296,21 +353,19 @@ mod tests {
 		let first_bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
 		let second_bounds =
 			Aabb3d::from_min_max(Vec3::new(100.0, 0.0, 0.0), Vec3::new(200.0, 100.0, 100.0));
+		let first_id = Id::from_cell(first_bounds);
+		let first = DevelopmentCell::with_les_halles(first_bounds, 12.0, &config);
+		store.mark_development_change(first_id, &first);
 		store.cells.insert(
-			Id::from_cell(first_bounds),
-			StoredEntry {
-				value: DevelopmentCell::with_les_halles(first_bounds, 12.0, &config),
-				bounds: first_bounds,
-				version: Version(1),
-			},
+			first_id,
+			StoredEntry { value: first, bounds: first_bounds, version: Version(1) },
 		);
+		let second_id = Id::from_cell(second_bounds);
+		let second = DevelopmentCell::with_les_halles(second_bounds, 24.0, &config);
+		store.mark_development_change(second_id, &second);
 		store.cells.insert(
-			Id::from_cell(second_bounds),
-			StoredEntry {
-				value: DevelopmentCell::with_les_halles(second_bounds, 24.0, &config),
-				bounds: second_bounds,
-				version: Version(2),
-			},
+			second_id,
+			StoredEntry { value: second, bounds: second_bounds, version: Version(2) },
 		);
 
 		let merged = store.merged_pad_complex(Aabb3d::from_min_max(

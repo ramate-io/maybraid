@@ -7,6 +7,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
 use durham_terrain_models::{
 	BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
 };
@@ -69,6 +70,10 @@ pub enum PlaygroundMode {
 
 #[derive(Component)]
 pub struct Player;
+
+/// True once composed terrain and a terrain collider are both ready at startup.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct SpawnTerrainReady(pub bool);
 
 /// Gravity off until composed height + a terrain trimesh exist.
 #[derive(Component)]
@@ -138,6 +143,7 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<PadMovementEnabled>()
 			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
+			.init_resource::<SpawnTerrainReady>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -225,9 +231,10 @@ pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
+	mut ready: ResMut<SpawnTerrainReady>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,
-	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
+	terrain_roots: Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
 	children: Query<&Children>,
 	colliders: Query<(), With<Collider>>,
 ) {
@@ -237,6 +244,7 @@ pub(crate) fn snap_player_to_composed_surface(
 
 	let center = layout.region_center_xz();
 	let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) else {
+		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
 		return;
@@ -248,25 +256,29 @@ pub(crate) fn snap_player_to_composed_surface(
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(&terrain_roots, &children, &colliders) {
+	if terrain_collider_ready(center, &terrain_roots, &children, &colliders) {
+		ready.0 = true;
 		gravity.0 = PLAY_GRAVITY_SCALE;
 		if let Ok(entity) = awaiting.single() {
 			commands.entity(entity).remove::<AwaitingTerrainSurface>();
 		}
 	} else {
+		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
 	}
 }
 
 fn terrain_collider_ready(
-	roots: &Query<Entity, With<TerrainTrimeshCollider>>,
+	spawn: Vec3,
+	roots: &Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
 	children: &Query<&Children>,
 	colliders: &Query<(), With<Collider>>,
 ) -> bool {
 	roots
 		.iter()
-		.any(|root| children.iter_descendants(root).any(|child| colliders.contains(child)))
+		.filter(|(_, chunk)| chunk.column_contains_point(spawn))
+		.any(|(root, _)| children.iter_descendants(root).any(|child| colliders.contains(child)))
 }
 
 /// Reposition the player after terrain layout regeneration.

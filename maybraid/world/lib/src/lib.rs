@@ -13,6 +13,7 @@ mod material_lib;
 mod ui;
 
 pub use camera::CameraPov;
+pub use chico_vegetation_on_terrain_playground::SpawnTerrainReady;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;
@@ -28,7 +29,8 @@ use chico_vegetation_on_terrain_playground::{
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::{Bullseye, OpenLattice};
+use lod::{Bullseye, LodLevelRootPending, OpenLattice};
+use lod_first_load::{FirstLoadActivity, FirstLoadPermit, FirstLoadPlugin};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
@@ -75,7 +77,8 @@ impl WorldPlugin {
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(PlaygroundMode::Character)
+		app.add_plugins(FirstLoadPlugin)
+			.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
 			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
@@ -109,6 +112,7 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
+		app.add_systems(Update, (track_pending_lod_roots, release_completed_lod_roots).chain());
 		if self.debug_chrome {
 			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -148,6 +152,25 @@ impl Plugin for WorldPlugin {
 				.chain()
 				.after(TransformSystems::Propagate),
 		);
+	}
+}
+
+fn track_pending_lod_roots(
+	mut commands: Commands,
+	activity: Res<FirstLoadActivity>,
+	pending: Query<Entity, (Added<LodLevelRootPending>, Without<FirstLoadPermit>)>,
+) {
+	for entity in &pending {
+		commands.entity(entity).insert(activity.begin());
+	}
+}
+
+fn release_completed_lod_roots(
+	mut commands: Commands,
+	completed: Query<Entity, (With<FirstLoadPermit>, Without<LodLevelRootPending>)>,
+) {
+	for entity in &completed {
+		commands.entity(entity).remove::<FirstLoadPermit>();
 	}
 }
 

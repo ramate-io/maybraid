@@ -4,7 +4,9 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::ecs::system::SystemParam;
+use bevy::log::info_span;
 use bevy::prelude::*;
+use bevy::tasks::{AsyncComputeTaskPool, Task};
 use chico_forests::{
 	forest_world_sample, ChicoGrove, ChicoGroveHost, ForestExtent, ForestGenerateBullseye,
 	ForestGroveTile, ForestIndex, ForestLayer, ForestLodChan, ForestPresentBullseye, LayeringKind,
@@ -12,6 +14,7 @@ use chico_forests::{
 };
 use chico_groves::GroveWorldSample;
 use chico_vegetation_components::spawn_lod_scene_host_with_lod_ref;
+use futures::FutureExt;
 use lod::gen::{
 	Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, LodScene,
 	SpatialIndex, Version,
@@ -22,6 +25,7 @@ use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
+use lod_first_load::{FirstLoadActivity, FirstLoadPermit};
 use procedural_common::NoiseParams;
 
 use crate::camera::CameraController;
@@ -130,6 +134,7 @@ where
 #[derive(Resource, Default)]
 pub struct ForestPresenterState {
 	presented: HashMap<Id, PresentedGrove>,
+	growing: HashMap<Id, GrowingGrove>,
 	/// Replaced hosts waiting for the present-cull despawn budget. FIFO batches
 	/// (one prior grove's entities per slot). `handle` never despawns.
 	pending_despawn: VecDeque<Vec<Entity>>,
@@ -141,6 +146,22 @@ struct PresentedGrove {
 	hidden: bool,
 }
 
+struct GrowingGrove {
+	version: Version,
+	layer: ForestLayer,
+	task: Option<Task<GroveGrowthResult>>,
+	ready: VecDeque<ForestGroveTile>,
+	entities: Vec<Entity>,
+}
+
+struct GroveGrowthResult {
+	tiles: Vec<ForestGroveTile>,
+	_permit: Option<FirstLoadPermit>,
+}
+
+const MAX_GROVE_GROWTH_TASKS: usize = 4;
+const GROVE_HOSTS_PER_QUANTUM: usize = 1;
+
 impl ForestPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for presented in self.presented.values() {
@@ -149,6 +170,7 @@ impl ForestPresenterState {
 			}
 		}
 		self.presented.clear();
+		self.growing.clear();
 		for entities in self.pending_despawn.drain(..) {
 			for entity in entities {
 				commands.entity(entity).despawn();
@@ -182,6 +204,7 @@ impl ForestPresenterState {
 	}
 
 	pub fn remove_stale(&mut self, commands: &mut Commands, wanted: &HashSet<Id>) {
+		self.growing.retain(|id, _| wanted.contains(id));
 		let stale: Vec<Id> =
 			self.presented.keys().copied().filter(|id| !wanted.contains(id)).collect();
 		for id in stale {
@@ -193,33 +216,82 @@ impl ForestPresenterState {
 		}
 	}
 
-	/// Grow (or spawn) with `world`. Returns hosts spawned this slot (empty when
-	/// this call only grew).
-	pub fn present_with_world(
+	/// Grow off-thread, then spawn a bounded number of host trees per present slot.
+	pub fn present_with_world<W>(
 		&mut self,
 		commands: &mut Commands,
 		id: Id,
 		version: Version,
 		grove: &ChicoGrove,
 		lod_ref: &LodRef,
-		world: &impl GroveWorldSample,
-	) -> Vec<Entity> {
+		world: impl FnOnce() -> W,
+		activity: Option<&FirstLoadActivity>,
+	) -> Vec<Entity>
+	where
+		W: GroveWorldSample + Clone + Send + Sync + 'static,
+	{
 		if let Some(previous) = self.retire(id) {
 			for entity in &previous.entities {
 				commands.entity(*entity).insert(Visibility::Hidden);
 			}
 			self.pending_despawn.push_back(previous.entities);
 		}
-		let Some(tiles) = grove.tiles_ready_to_present(world) else {
-			return Vec::new();
-		};
-		let mut entities = Vec::new();
-		for tile in tiles {
-			entities.extend(spawn_forest_grove_tile(commands, tile, grove.layer, lod_ref));
+
+		if self.growing.get(&id).is_some_and(|pending| pending.version != version) {
+			self.growing.remove(&id);
 		}
-		self.presented
-			.insert(id, PresentedGrove { version, entities: entities.clone(), hidden: false });
-		entities
+		if !self.growing.contains_key(&id) {
+			if self.growing.values().filter(|pending| pending.task.is_some()).count()
+				>= MAX_GROVE_GROWTH_TASKS
+			{
+				return Vec::new();
+			}
+			let grove = grove.clone();
+			let layer = grove.layer;
+			let permit = activity.map(FirstLoadActivity::begin);
+			let world = world();
+			let task = AsyncComputeTaskPool::get().spawn(async move {
+				let _span = info_span!("chico_grove_growth").entered();
+				let tiles = grove.ensure_grown(&world).to_vec();
+				GroveGrowthResult { tiles, _permit: permit }
+			});
+			self.growing.insert(
+				id,
+				GrowingGrove {
+					version,
+					layer,
+					task: Some(task),
+					ready: VecDeque::new(),
+					entities: Vec::new(),
+				},
+			);
+			return Vec::new();
+		}
+
+		let pending = self.growing.get_mut(&id).expect("inserted above");
+		if let Some(task) = pending.task.as_mut() {
+			let Some(result) = (&mut *task).now_or_never() else {
+				return Vec::new();
+			};
+			pending.task = None;
+			pending.ready = result.tiles.into();
+		}
+
+		let mut spawned = Vec::new();
+		for _ in 0..GROVE_HOSTS_PER_QUANTUM {
+			let Some(tile) = pending.ready.pop_front() else {
+				break;
+			};
+			let _span = info_span!("chico_grove_host_spawn").entered();
+			spawned.extend(spawn_forest_grove_tile(commands, &tile, pending.layer, lod_ref));
+		}
+		pending.entities.extend(spawned.iter().copied());
+		if pending.task.is_none() && pending.ready.is_empty() {
+			let complete = self.growing.remove(&id).expect("pending grove");
+			self.presented
+				.insert(id, PresentedGrove { version, entities: complete.entities, hidden: false });
+		}
+		spawned
 	}
 
 	pub fn cull(
@@ -229,6 +301,7 @@ impl ForestPresenterState {
 		keep: &HashSet<Id>,
 		mut despawn_budget: u32,
 	) -> u32 {
+		self.growing.retain(|id, _| keep.contains(id));
 		while despawn_budget > 0 {
 			let Some(entities) = self.pending_despawn.pop_front() else {
 				break;
@@ -291,6 +364,7 @@ fn spawn_forest_grove_tile(
 pub struct ForestRegionPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, ForestPresenterState>,
+	activity: Option<Res<'w, FirstLoadActivity>>,
 }
 
 impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> {
@@ -305,7 +379,8 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for ForestRegionPresenter<'_, '_> 
 			version,
 			grove,
 			lod_ref,
-			&forest_world_sample(),
+			forest_world_sample,
+			self.activity.as_deref(),
 		);
 		for entity in entities {
 			self.commands.entity(entity).insert(ShowRoot);

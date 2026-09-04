@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use avian3d::prelude::ColliderDisabled;
 use bevy::ecs::system::SystemParam;
+use bevy::log::info_span;
 use bevy::prelude::*;
 use durham_terrain_models::PresentedTerrainScene;
 use lod::gen::{
@@ -188,28 +189,34 @@ impl UrbanizationPresenterState {
 				continue;
 			}
 			let leaf_id = leaf.id();
-			if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
-				development,
-				leaf_id,
-				lod_ref,
-			)
-			.is_none()
 			{
-				continue;
-			}
-			if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
-				development,
-				leaf_id,
-				lod_ref,
-			)
-			.is_none()
-			{
-				continue;
+				let _span = info_span!("richmond_development_generation").entered();
+				if GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(
+					development,
+					leaf_id,
+					lod_ref,
+				)
+				.is_none()
+				{
+					continue;
+				}
+				if GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate(
+					development,
+					leaf_id,
+					lod_ref,
+				)
+				.is_none()
+				{
+					continue;
+				}
 			}
 			let Some(built) = SpatialIndex::<BuiltDevelopment>::get(development, leaf_id) else {
 				continue;
 			};
-			entities.extend(spawn_tagged_hosts(commands, built));
+			{
+				let _span = info_span!("richmond_host_spawn").entered();
+				entities.extend(spawn_tagged_hosts(commands, built));
+			}
 		}
 
 		self.presented

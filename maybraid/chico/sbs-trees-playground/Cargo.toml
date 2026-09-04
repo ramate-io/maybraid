@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 # `trace` enables Bevy Tracy zones (`system` / `system_commands` / `par_for_each`).
 bevy = { workspace = true, features = ["trace", "debug"] }
+futures = { workspace = true }
 chunk = { workspace = true }
 clap = { workspace = true }
 game-commands = { workspace = true }
@@ -30,6 +31,7 @@ chico-vegetation-components = { workspace = true }
 chico-vegetation-shaders = { workspace = true }
 avian3d = { workspace = true }
 lod = { workspace = true }
+lod-first-load = { workspace = true }
 lod-avian = { workspace = true }
 lod-lazy-refs = { workspace = true }
 material-ref = { workspace = true }
