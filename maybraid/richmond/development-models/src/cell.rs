@@ -1,4 +1,4 @@
-//! 100 m development lattice and occupancy.
+//! 200 m development lattice and occupancy.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Quat, Vec2, Vec3};
@@ -7,7 +7,10 @@ use lod::gen::{Id, OriginalId};
 use std::f32::consts::TAU;
 
 /// Square development-cell edge length (metres).
-pub const DEVELOPMENT_CELL_SIZE: f32 = 100.0;
+pub const DEVELOPMENT_CELL_SIZE: f32 = 200.0;
+
+/// Les Halles keeps its original urban envelope inside the larger shared cell.
+pub const LES_HALLES_MAX_FOOTPRINT: f32 = 72.0;
 
 /// Vertical span used only for origin-cell identity (XZ tiling).
 const CELL_Y: f32 = 1.0;
@@ -18,10 +21,16 @@ pub const DEFAULT_LIKELIHOOD: f32 = 0.28;
 /// Occupancy lattice spacing (world units). Larger → bigger clusters.
 pub const DEFAULT_SPATIAL_CORRELATION: f32 = 300.0;
 
-/// Interior distance (metres) that stays fully flat before the cell-edge ease.
+/// Skirt ease (metres) from the flatten berm out to identity terrain.
 pub const PAD_EDGE_EASE: f32 = 10.0;
 
-/// Inset from the cell edge so the building sits on the planar pad, not the ease.
+/// Extra flatten (metres) outside the building footprint so walls sit on the pad, not the ease.
+pub const PAD_BERM: f32 = 4.0;
+
+/// Rounded-rect corner radius (metres) on the flatten footprint.
+pub const PAD_ROUND: f32 = 2.0;
+
+/// Inset from the cell edge so the building plus berm and ease stay on the tile.
 pub const BUILDING_INSET: f32 = 14.0;
 
 /// Minimum Les Halles footprint on each plan axis (metres).
@@ -31,9 +40,9 @@ pub const MIN_FOOTPRINT: f32 = 36.0;
 pub const MIN_CONFINES_HEIGHT: f32 = 10.0;
 pub const MAX_CONFINES_HEIGHT: f32 = 35.0;
 
-/// Plan-square size available inside the pad (cell minus both building insets).
+/// Plan-square size available to the Les Halles typology.
 pub fn available_footprint() -> f32 {
-	(DEVELOPMENT_CELL_SIZE - 2.0 * BUILDING_INSET).max(MIN_FOOTPRINT)
+	LES_HALLES_MAX_FOOTPRINT.max(MIN_FOOTPRINT)
 }
 
 /// Map a unit sample in \([0, 1]\) onto a heading in \([0, \tau]\).
@@ -67,7 +76,7 @@ pub fn yaw_about_xz(center_xz: Vec2, yaw: f32) -> Transform {
 	Transform { translation: center - rotation * center, rotation, scale: Vec3::ONE }
 }
 
-/// Axis-aligned 100 m development tile.
+/// Axis-aligned development tile.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DevelopmentExtent {
 	min: Vec3,
@@ -200,6 +209,14 @@ mod tests {
 		let cells = DevelopmentExtent::cells_overlapping(region);
 		assert_eq!(cells.len(), 1);
 		assert_eq!(cells[0], DevelopmentExtent::from_cell_index(0, 0));
+	}
+
+	#[test]
+	fn shared_development_lattice_is_two_hundred_metres() {
+		let cell = DevelopmentExtent::from_cell_index(2, -1).aabb();
+		assert!((cell.max.x - cell.min.x - 200.0).abs() < 1e-4);
+		assert!((cell.max.z - cell.min.z - 200.0).abs() < 1e-4);
+		assert!((available_footprint() - LES_HALLES_MAX_FOOTPRINT).abs() < 1e-4);
 	}
 
 	#[test]

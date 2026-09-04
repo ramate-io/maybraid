@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy_math = { workspace = true }
+lod = { workspace = true }
 procedural-common = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-buildings = { workspace = true }

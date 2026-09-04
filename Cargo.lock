@@ -6325,6 +6325,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "lod",
  "material-ref",
  "procedural-common",
  "richmond-building-components",

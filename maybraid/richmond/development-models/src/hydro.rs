@@ -5,6 +5,9 @@ use lod::gen::OriginalId;
 use marazion_watersheds::{WaterFill, WaterSurface};
 use procedural_common::Bounds2;
 
+const SITE_SAMPLE_SIDE: usize = 9;
+const SITE_HEIGHT_QUANTILE: f32 = 0.95;
+
 /// True when `bounds` overlaps any hydro primitive support in `fills`.
 pub fn hydro_overlaps_xz(fills: &[WaterFill], bounds: Bounds2) -> bool {
 	for fill in fills {
@@ -64,6 +67,50 @@ pub fn composed_height_at(
 	store.composed_height_at(layout, x, z)
 }
 
+/// Robust high composed elevation over a yawed rectangular support.
+///
+/// A dense grid over the complete pad influence catches uphill terrain outside
+/// the flatten core. The 95th percentile sits close to that local high without
+/// letting one narrow terrain spike lift the entire terrace.
+pub fn composed_height_upper_on_rect(
+	store: &TerrainEntryStore,
+	layout: &TerrainCellLayout,
+	center: bevy::math::Vec2,
+	half: bevy::math::Vec2,
+	yaw: f32,
+) -> Option<f32> {
+	let (sin, cos) = yaw.sin_cos();
+	let mut heights = [0.0; SITE_SAMPLE_SIDE * SITE_SAMPLE_SIDE];
+	let mut count = 0;
+	for iz in 0..SITE_SAMPLE_SIDE {
+		for ix in 0..SITE_SAMPLE_SIDE {
+			let u = ix as f32 / (SITE_SAMPLE_SIDE - 1) as f32;
+			let v = iz as f32 / (SITE_SAMPLE_SIDE - 1) as f32;
+			let local =
+				bevy::math::Vec2::new(-half.x + 2.0 * half.x * u, -half.y + 2.0 * half.y * v);
+			let p = center
+				+ bevy::math::Vec2::new(
+					cos * local.x + sin * local.y,
+					-sin * local.x + cos * local.y,
+				);
+			if let Some(h) = composed_height_at(store, layout, p.x, p.y) {
+				heights[count] = h;
+				count += 1;
+			}
+		}
+	}
+	upper_quantile(&mut heights[..count], SITE_HEIGHT_QUANTILE)
+}
+
+fn upper_quantile(values: &mut [f32], quantile: f32) -> Option<f32> {
+	if values.is_empty() {
+		return None;
+	}
+	let index = ((values.len() - 1) as f32 * quantile.clamp(0.0, 1.0)).ceil() as usize;
+	let (_, value, _) = values.select_nth_unstable_by(index, f32::total_cmp);
+	Some(*value)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -84,5 +131,16 @@ mod tests {
 		let miss = Bounds2::from_xz(80.0, 80.0, 90.0, 90.0);
 		assert!(hydro_overlaps_xz(&fills, hit));
 		assert!(!hydro_overlaps_xz(&fills, miss));
+	}
+
+	#[test]
+	fn upper_site_height_ignores_one_narrow_spike() -> anyhow::Result<()> {
+		let mut heights: Vec<f32> = (0..80).map(|i| i as f32).collect();
+		heights.push(1000.0);
+		let high = upper_quantile(&mut heights, SITE_HEIGHT_QUANTILE)
+			.ok_or_else(|| anyhow::anyhow!("expected a quantile"))?;
+		anyhow::ensure!(high >= 70.0, "site height should remain near the local high: {high}");
+		anyhow::ensure!(high < 1000.0, "one spike should not lift the terrace: {high}");
+		Ok(())
 	}
 }

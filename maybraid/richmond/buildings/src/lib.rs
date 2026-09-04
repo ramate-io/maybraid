@@ -103,6 +103,7 @@ pub use stacked_rings::{StackedRing, StackedRings};
 pub use storeys::i_apartment::{
 	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };
+pub use storeys::i_livable::{ILivableFloorPlan, ILivableParameterized, ILivableStorey};
 pub use storeys::les_halles::{
 	LesHallesArcadeStorey, LesHallesArcadeUsage, LesHallesCommercialUsage, LesHallesFloorPlan,
 	LesHallesFullStorey, LesHallesLivableFullStorey, LesHallesLivableUsage,
