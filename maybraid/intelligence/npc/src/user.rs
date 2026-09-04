@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use tether_intelligence::TetherObjective;
 
 /// Installed NPC mixer policy. Presence means this entity uses the shared
-/// threat → tether → meander → idle priority stack.
+/// threat → tether → meander priority stack.
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
 pub struct NpcIntelligence {
 	/// Applied while the tactic is Ignore (and as the restore target after combat).

@@ -17,7 +17,6 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 fleeing-intelligence = { workspace = true }
 hiding-intelligence = { workspace = true }
-idling-intelligence = { workspace = true }
 meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }

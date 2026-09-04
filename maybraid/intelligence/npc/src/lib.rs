@@ -1,4 +1,4 @@
-//! Exclusive NPC mixer over threat, tether, meander, and idle.
+//! Exclusive NPC mixer over threat, tether, and meander.
 //!
 //! Personalities are constructors: they stamp coefficients and which actuators
 //! exist. They do not re-score tactics. [`ThreatManagementIntelligence`] remains

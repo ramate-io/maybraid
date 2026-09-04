@@ -127,19 +127,34 @@ pub fn choose_poi(
 			state.cycle_cursor = 0;
 			state.cycle_round = 0;
 			state.cycle_capacity = None;
-			best(candidates.iter().copied(), &mut |candidate| {
+			let novelty = novelty_weight.max(0.0);
+			let repeat = repeat_weight.max(0.0);
+			let cooldown = revisit_cooldown_secs.max(0.0);
+			let mut fresh = Vec::new();
+			let mut cooled = Vec::new();
+			for candidate in candidates.iter().copied() {
 				let base = score(candidate);
-				let Some(last_visited) = state.last_visited_at(candidate.id) else {
-					return base * novelty_weight.max(0.0);
-				};
-				let age = (now - last_visited).max(0.0);
-				let cooldown = revisit_cooldown_secs.max(0.0);
-				if age < cooldown {
-					return 0.0;
+				if !base.is_finite() || base <= 0.0 {
+					continue;
 				}
-				base * repeat_weight.max(0.0)
-			})
-			.map(|candidate| candidate.id)
+				match state.last_visited_at(candidate.id) {
+					None => fresh.push((candidate, base * novelty)),
+					Some(last_visited) => {
+						let age = (now - last_visited).max(0.0);
+						let weight = base * repeat;
+						if weight <= 0.0 {
+							continue;
+						}
+						if cooldown <= 0.0 || age >= cooldown {
+							fresh.push((candidate, weight));
+						} else {
+							// Prefer the stalest cooled POI so a small cluster keeps moving.
+							cooled.push((candidate, weight * (1.0 + age)));
+						}
+					}
+				}
+			}
+			best_scored(fresh).or_else(|| best_scored(cooled)).map(|candidate| candidate.id)
 		}
 	}
 }
@@ -148,11 +163,15 @@ fn best(
 	candidates: impl Iterator<Item = KnownPoi>,
 	score: &mut impl FnMut(KnownPoi) -> f32,
 ) -> Option<KnownPoi> {
+	best_scored(candidates.filter_map(|candidate| {
+		let weight = score(candidate);
+		weight.is_finite().then_some((candidate, weight))
+	}))
+}
+
+fn best_scored(candidates: impl IntoIterator<Item = (KnownPoi, f32)>) -> Option<KnownPoi> {
 	candidates
-		.filter_map(|candidate| {
-			let weight = score(candidate);
-			weight.is_finite().then_some((candidate, weight))
-		})
+		.into_iter()
 		.filter(|(_, weight)| *weight > 0.0)
 		.max_by(|(a, a_weight), (b, b_weight)| {
 			a_weight.total_cmp(b_weight).then_with(|| b.id.cmp(&a.id))

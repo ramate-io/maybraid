@@ -11,11 +11,10 @@ idle stack:
 1. Threat tactic ≠ Ignore  → combat or evade actuators
 2. Tether unsatisfied      → leash / stalk (when Ignore, or Combat if kept)
 3. Meander                 → local POI goal
-4. Idle                    → cheap Reach around home when there is no PoiGoal
 ```
 
 [`mix_npc_brains`](src/plugin.rs) runs after threat-management selection.
-Combat and Evade disable meandering and idle, and drop an active `PoiGoal`. Tether is
+Combat and Evade disable meandering and drop an active `PoiGoal`. Tether is
 disabled during Evade and during Combat unless `keep_tether_in_combat` is set
 (Hunt can flip that without changing the personality). Firearm movement and
 flee/hide already no-op when their grants are retracted.

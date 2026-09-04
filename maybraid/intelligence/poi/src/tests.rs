@@ -133,12 +133,12 @@ fn cycle_roster_has_an_explicit_stable_order() -> anyhow::Result<()> {
 }
 
 #[test]
-fn weighted_policy_observes_a_hard_revisit_cooldown() -> anyhow::Result<()> {
-	let candidate = KnownPoi {
-		id: PoiId(4),
+fn weighted_policy_prefers_novelty_then_keeps_circulating() -> anyhow::Result<()> {
+	let poi = |id, x| KnownPoi {
+		id: PoiId(id),
 		entity: None,
 		kind: CAMP,
-		position: Vec3::ZERO,
+		position: Vec3::X * x,
 		arrival_radius: 1.0,
 		salience: 1.0,
 		confidence: 1.0,
@@ -146,15 +146,19 @@ fn weighted_policy_observes_a_hard_revisit_cooldown() -> anyhow::Result<()> {
 		first_observed_at: 0.0,
 		last_observed_at: 0.0,
 	};
+	let camp = poi(4, 0.0);
+	let other = poi(7, 8.0);
 	let policy = PoiVisitPolicy::Weighted {
 		novelty_weight: 2.0,
 		revisit_cooldown_secs: 10.0,
 		repeat_weight: 1.0,
 	};
 	let mut visits = PoiVisitState::default();
-	visits.complete(candidate.id, 5.0);
-	assert_eq!(choose_poi(&mut visits, policy, &[candidate], 6.0, |_| 1.0), None);
-	assert_eq!(choose_poi(&mut visits, policy, &[candidate], 15.0, |_| 1.0), Some(candidate.id));
+	visits.complete(camp.id, 5.0);
+	assert_eq!(choose_poi(&mut visits, policy, &[camp], 6.0, |_| 1.0), Some(camp.id));
+	assert_eq!(choose_poi(&mut visits, policy, &[camp, other], 6.0, |_| 1.0), Some(other.id));
+	visits.complete(other.id, 6.0);
+	assert_eq!(choose_poi(&mut visits, policy, &[camp, other], 7.0, |_| 1.0), Some(camp.id));
 	Ok(())
 }
 

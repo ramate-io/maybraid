@@ -56,7 +56,7 @@ and Roam.
 
 - **High (~200 m), cull hard.** Spotting/threat interaction is ~80 m; 200 m is
   seeing the pack before it thinks. This is the only band that should run
-  spotting, threat discovery, firearm, evasion, meander, idle, and the NPC mixer.
+  spotting, threat discovery, firearm, evasion, meander, and the NPC mixer.
 - **Medium.** Optional impostors, or empty. Do not put half-intelligence here.
 - **Low / UltraLow.** Host only. The group still sees a Guard on the POI.
 

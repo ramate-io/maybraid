@@ -4217,17 +4217,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4a2c462a4d927d512f5f882a033ddd62f33a05bb9f230d98f736ac3dc85938f"
 
 [[package]]
-name = "idling-intelligence"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "movement-intelligence",
- "poi-intelligence",
- "tether-intelligence",
-]
-
-[[package]]
 name = "image"
 version = "0.25.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5066,7 +5055,6 @@ dependencies = [
  "firearm-intelligence",
  "fleeing-intelligence",
  "hiding-intelligence",
- "idling-intelligence",
  "meandering-intelligence",
  "movement-intelligence",
  "poi-intelligence",
@@ -5789,7 +5777,6 @@ dependencies = [
  "firearm-intelligence",
  "fleeing-intelligence",
  "hiding-intelligence",
- "idling-intelligence",
  "lod-avian",
  "maybraid-character-controller",
  "maybraid-input",

@@ -21,7 +21,6 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 fleeing-intelligence = { workspace = true }
 hiding-intelligence = { workspace = true }
-idling-intelligence = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
