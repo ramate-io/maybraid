@@ -1,4 +1,4 @@
-//! Les Halles and Shepherds Village developments on Durham terrain.
+//! Les Halles, Shepherds Village, and Shepherds Commune on Durham terrain.
 
 pub mod camera;
 pub mod commands;
@@ -33,8 +33,8 @@ use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
 	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex,
 	LesHallesDevelopment, LesHallesStoreView, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, ShepherdsVillageDevelopment, ShepherdsVillageStoreView,
-	TerrainWithPads,
+	RichmondDevelopmentModelsPlugin, ShepherdsCommuneDevelopment, ShepherdsCommuneStoreView,
+	ShepherdsVillageDevelopment, ShepherdsVillageStoreView, TerrainWithPads,
 };
 use std::f32::consts::PI;
 
@@ -310,12 +310,18 @@ fn generate_developments(
 		region,
 		&lod_ref,
 	);
+	let communes = GeneratingSpatialIndex::<ShepherdsCommuneDevelopment>::get_or_generate_region(
+		&mut development_index,
+		region,
+		&lod_ref,
+	);
 	info!(
-		"generated development_cells={} padded={} les_halles={} shepherds_villages={}",
+		"generated development_cells={} padded={} les_halles={} shepherds_villages={} shepherds_communes={}",
 		cells.len(),
 		padded.len(),
 		les_halles.len(),
-		shepherds.len()
+		shepherds.len(),
+		communes.len()
 	);
 
 	pending_dev.0 = false;
@@ -409,7 +415,20 @@ fn spawn_hosts(
 		};
 		shepherds_n += spawn_development_hosts(&mut commands, dev);
 	}
-	info!("spawned {n} Les Halles host roots and {shepherds_n} Shepherds building host roots");
+	let commune_view = ShepherdsCommuneStoreView::new(&store);
+	let mut commune_n = 0usize;
+	for tracked in
+		SpatialIndex::<ShepherdsCommuneDevelopment>::tracked_ids_for(&commune_view, region)
+	{
+		let Some(dev) = SpatialIndex::<ShepherdsCommuneDevelopment>::get(&commune_view, tracked.0)
+		else {
+			continue;
+		};
+		commune_n += spawn_development_hosts(&mut commands, dev);
+	}
+	info!(
+		"spawned {n} Les Halles host roots, {shepherds_n} Shepherds Village host roots, and {commune_n} Shepherds Commune host roots"
+	);
 	dirty.0 = false;
 }
 

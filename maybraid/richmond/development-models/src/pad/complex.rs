@@ -4,10 +4,11 @@ use bevy::math::Vec2;
 use durham_terrain_models::terrain::{ElevationModulation, TerrainSdf};
 use procedural_common::Bounds2;
 
+use super::index::PadFootprintIndex;
 use super::node::{PadNode, PadStage};
-use super::PadParams;
+use super::{nodes_from_graded_polyline, PadParams};
 
-/// Bag of pad nodes blended by flatten-over-ease priority (HydroComplex analog).
+/// Bag of pad nodes blended by occupancy softmax, with flatten terraces exact.
 ///
 /// [`Self::bounds`] is the union of each node's yawed support AABB (flatten +
 /// ease), not the development cell. Early-out is a conservative OBB AABB;
@@ -16,22 +17,32 @@ use super::PadParams;
 pub struct PadComplex {
 	pub bounds: Bounds2,
 	pub pads: Vec<PadNode>,
+	index: PadFootprintIndex,
 }
 
 impl PadComplex {
 	pub fn new(bounds: Bounds2) -> Self {
-		Self { bounds, pads: Vec::new() }
+		Self { bounds, pads: Vec::new(), index: PadFootprintIndex::build(bounds, &[]) }
 	}
 
 	pub fn with_pads(mut self, pads: Vec<PadNode>) -> Self {
 		self.pads = pads;
 		self.bounds = union_pad_bounds(&self.pads);
+		self.index = PadFootprintIndex::build(self.bounds, &self.pads);
 		self
 	}
 
 	pub fn from_nodes(pads: Vec<PadNode>) -> Self {
 		let bounds = union_pad_bounds(&pads);
-		Self { bounds, pads }
+		let index = PadFootprintIndex::build(bounds, &pads);
+		Self { bounds, pads, index }
+	}
+
+	/// Flatten / grade / ease must blend in one pass. Sequential complexes let a
+	/// later ease skirt undo an earlier terrace and smear overlapping path
+	/// skirts into a general lift.
+	pub fn union_all(complexes: impl IntoIterator<Item = Self>) -> Self {
+		Self::from_nodes(complexes.into_iter().flat_map(|c| c.pads).collect())
 	}
 
 	/// One rectangular flatten terrace for a yawed building plan.
@@ -51,12 +62,26 @@ impl PadComplex {
 		)])
 	}
 
+	/// One graded reach node per polyline segment, analog of hydro `nodes_from_polyline`.
+	pub fn graded_polyline(
+		path: &[Vec2],
+		levels: &[f32],
+		half_width: f32,
+		params: PadParams,
+	) -> Self {
+		Self::from_nodes(nodes_from_graded_polyline(path, levels, half_width, params))
+	}
+
 	pub fn is_empty(&self) -> bool {
 		self.pads.is_empty()
 	}
 
-	pub fn nodes_intersecting(&self, p: Vec2) -> Vec<&PadNode> {
-		self.pads.iter().filter(|node| node.contains_index_point(p)).collect()
+	pub fn nodes_intersecting(&self, p: Vec2) -> impl Iterator<Item = &PadNode> {
+		self.index
+			.candidates(p)
+			.iter()
+			.filter_map(|&id| self.pads.get(id))
+			.filter(move |node| node.contains_index_point(p))
 	}
 
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
@@ -65,7 +90,7 @@ impl PadComplex {
 			return elevation;
 		}
 		let nodes = self.nodes_intersecting(p);
-		PadNode::elevation_blend(&nodes, elevation, p)
+		PadNode::elevation_blend(nodes, elevation, p)
 	}
 
 	pub fn classification_at(&self, x: f32, z: f32) -> Option<PadStage> {
@@ -77,7 +102,7 @@ impl PadComplex {
 				best = Some((node, phi));
 			}
 		}
-		best.and_then(|(n, _)| n.classification(p))
+		best.and_then(|(node, phi)| node.classification_at_distance(phi))
 	}
 }
 

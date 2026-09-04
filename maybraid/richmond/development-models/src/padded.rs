@@ -31,10 +31,17 @@ pub struct TerrainWithPads {
 }
 
 impl TerrainWithPads {
-	pub fn compose(terrain: &Terrain, pads: &[PadComplex]) -> Self {
+	pub fn compose<'a>(terrain: &Terrain, pads: impl IntoIterator<Item = &'a PadComplex>) -> Self {
 		let mut sdf: TerrainSdf = terrain.sdf.terrain.clone();
+		let mut pad_count = 0;
+		let mut nodes = Vec::new();
 		for pad in pads {
-			sdf.add_elevation_modulation(Box::new(pad.clone()) as Box<dyn ElevationModulation>);
+			pad_count += 1;
+			nodes.extend(pad.pads.iter().cloned());
+		}
+		let merged = PadComplex::from_nodes(nodes);
+		if !merged.is_empty() {
+			sdf.add_elevation_modulation(Box::new(merged) as Box<dyn ElevationModulation>);
 		}
 		Self {
 			cell: terrain.cell,
@@ -44,7 +51,7 @@ impl TerrainWithPads {
 			// Building-skirt pads can still meet origin-cell faces on a large
 			// footprint; interior skirts close the CpuShot crack.
 			wall_faces: WallFaces::ALL,
-			pad_count: pads.len(),
+			pad_count,
 		}
 	}
 

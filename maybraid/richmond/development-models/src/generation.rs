@@ -1,4 +1,4 @@
-//! [`GenerationScheme`] for development cells, padded terrain, and Les Halles.
+//! [`GenerationScheme`] for development cells, padded terrain, and building hosts.
 
 use bevy::math::bounding::Aabb3d;
 use durham_terrain_models::origin_cell_ids_for_layout;
@@ -9,12 +9,13 @@ use richmond_buildings::Fit;
 use richmond_developments::PlacedBuilding;
 
 use crate::cell::DevelopmentExtent;
+use crate::commune::build_shepherds_commune;
 use crate::development::{select_kind, DevelopmentCell, DevelopmentKind};
 use crate::hydro::{composed_height_at, terrain_hydro_overlaps};
 use crate::index::DevelopmentIndex;
 use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
-use crate::shepherds::ShepherdsVillageDevelopment;
+use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 use crate::village::build_shepherds_village;
 
 impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
@@ -61,6 +62,13 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 					None => Self::empty(cell),
 				}
 			}
+			DevelopmentKind::ShepherdsCommune => {
+				match build_shepherds_commune(spatial_index.terrain_store(), &layout, cell, &config)
+				{
+					Some((commune, pads)) => Self::with_shepherds_commune(cell, commune, pads),
+					None => Self::empty(cell),
+				}
+			}
 		};
 		Some((development, cell))
 	}
@@ -99,11 +107,11 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 				continue;
 			};
 			for complex in dev.pad_complexes() {
-				pads.push(complex.clone());
+				pads.push(complex);
 			}
 		}
 
-		let padded = TerrainWithPads::compose(&terrain, &pads);
+		let padded = TerrainWithPads::compose(&terrain, pads);
 		Some((padded, bounds))
 	}
 
@@ -178,6 +186,29 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for ShepherdsVillageDevelopment 
 		let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 		let content = cell.shepherds_village()?;
 		Some((Self { village: content.village.clone() }, cell.cell))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {
+	}
+}
+
+impl<'w> GenerationScheme<DevelopmentIndex<'w>> for ShepherdsCommuneDevelopment {
+	fn original_ids_for(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		region: Aabb3d,
+	) -> Vec<OriginalId> {
+		spatial_index.store.filled_original_ids(region)
+	}
+
+	fn build_with_id(
+		spatial_index: &mut DevelopmentIndex<'w>,
+		id: Id,
+		lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		GeneratingSpatialIndex::<DevelopmentCell>::get_or_generate(spatial_index, id, lod_ref)?;
+		let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
+		let content = cell.shepherds_commune()?;
+		Some((Self { commune: content.commune.clone() }, cell.cell))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut DevelopmentIndex<'w>, _lod_ref: &LodRef) {

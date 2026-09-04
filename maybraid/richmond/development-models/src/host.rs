@@ -12,7 +12,7 @@ use richmond_developments::{
 };
 
 use crate::cell::yaw_about_xz;
-use crate::{LesHallesDevelopment, ShepherdsVillageDevelopment};
+use crate::{LesHallesDevelopment, ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
@@ -63,22 +63,33 @@ impl DevelopmentHosts for LesHallesDevelopment {
 
 impl DevelopmentHosts for ShepherdsVillageDevelopment {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
-		self.village
-			.buildings
-			.iter()
-			.map(|placed| {
-				let transform = yaw_about_xz(placed.center_xz, placed.yaw);
-				match &placed.building {
-					ShepherdsBuilding::House(house) => {
-						DevelopmentHost::ShepherdsHouse(house.clone(), transform)
-					}
-					ShepherdsBuilding::Hut(hut) => {
-						DevelopmentHost::ShepherdsHut(hut.clone(), transform)
-					}
-				}
-			})
-			.collect()
+		shepherd_building_hosts(&self.village.buildings)
 	}
+}
+
+impl DevelopmentHosts for ShepherdsCommuneDevelopment {
+	fn hosts(&self) -> Vec<DevelopmentHost> {
+		shepherd_building_hosts(self.commune.buildings())
+	}
+}
+
+fn shepherd_building_hosts<'a>(
+	buildings: impl IntoIterator<Item = &'a richmond_developments::ShepherdsVillageBuilding>,
+) -> Vec<DevelopmentHost> {
+	buildings
+		.into_iter()
+		.map(|placed| {
+			let transform = yaw_about_xz(placed.center_xz, placed.yaw);
+			match &placed.building {
+				ShepherdsBuilding::House(house) => {
+					DevelopmentHost::ShepherdsHouse(house.clone(), transform)
+				}
+				ShepherdsBuilding::Hut(hut) => {
+					DevelopmentHost::ShepherdsHut(hut.clone(), transform)
+				}
+			}
+		})
+		.collect()
 }
 
 fn spawn<T>(commands: &mut Commands, building: &T, transform: Transform) -> Vec<Entity>
