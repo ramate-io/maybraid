@@ -37,7 +37,8 @@ per-pack counts and distance to public.
 
 Each proto-mob has a **local POI cluster** inside its leash so Ignore can
 meander between camp / forage / gate / pit. Visit cooldown ranks novelty; it
-does not freeze a pack that only knows those local destinations.
+does not freeze a pack that only knows those local destinations. Grazers linger
+about six seconds at a reached POI; brawlers about two.
 
 Personalities keep their own spotting / discovery horizons (grazer ~40 m,
 assassin ~72 m). Closing distance is what flips Ignore → Evade or Combat.

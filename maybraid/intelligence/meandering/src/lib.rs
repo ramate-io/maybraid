@@ -12,6 +12,8 @@ pub struct MeanderingIntelligenceUser {
 	pub radius: f32,
 	pub visit_policy: PoiVisitPolicy,
 	pub selection_interval: f32,
+	/// Seconds to remain at a reached POI before the goal completes.
+	pub linger_secs: f32,
 	/// Higher-order grant. When false, this brain does not start new POI goals.
 	pub enabled: bool,
 	next_selection_at: f32,
@@ -23,6 +25,7 @@ impl Default for MeanderingIntelligenceUser {
 			radius: 200.0,
 			visit_policy: PoiVisitPolicy::default(),
 			selection_interval: 0.25,
+			linger_secs: 4.0,
 			enabled: true,
 			next_selection_at: 0.0,
 		}
@@ -124,7 +127,14 @@ pub fn select_meandering_goals(
 			continue;
 		};
 		knowledge.include_source(id, PoiSource::OBJECTIVE);
-		begin_poi_goal(&mut commands, entity, known, now, state.as_deref_mut());
+		begin_poi_goal(
+			&mut commands,
+			entity,
+			known,
+			now,
+			meandering.linger_secs,
+			state.as_deref_mut(),
+		);
 	}
 }
 

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoalState, PoiGoalStatus, PoiId,
+	choose_poi, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId,
 	PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy, PoiObservation,
 	PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
 };
@@ -169,6 +169,35 @@ fn goal_state_advances_generation_when_replaced() -> anyhow::Result<()> {
 	assert_eq!(state.begin(PoiId(2)), 2);
 	assert_eq!(state.target, PoiId(2));
 	assert_eq!(state.status, PoiGoalStatus::Active);
+	Ok(())
+}
+
+#[test]
+fn linger_completes_only_after_dwelling() -> anyhow::Result<()> {
+	let mut goal = PoiGoal::new(1, PoiId(4), None, CAMP, Vec3::ZERO, 1.0, 0.0, 2.0);
+	assert!(!goal.linger_ready(true, 0.5));
+	assert_eq!(goal.arrived_at(), Some(0.5));
+	assert!(!goal.linger_ready(true, 2.4));
+	assert!(goal.linger_ready(true, 2.5));
+	Ok(())
+}
+
+#[test]
+fn leaving_the_disk_resets_linger() -> anyhow::Result<()> {
+	let mut goal = PoiGoal::new(1, PoiId(4), None, CAMP, Vec3::ZERO, 1.0, 0.0, 2.0);
+	assert!(!goal.linger_ready(true, 1.0));
+	assert!(!goal.linger_ready(false, 2.0));
+	assert!(goal.arrived_at().is_none());
+	assert!(!goal.linger_ready(true, 2.1));
+	assert_eq!(goal.arrived_at(), Some(2.1));
+	Ok(())
+}
+
+#[test]
+fn zero_linger_completes_on_first_arrival() -> anyhow::Result<()> {
+	let mut goal = PoiGoal::new(1, PoiId(4), None, CAMP, Vec3::ZERO, 1.0, 0.0, 0.0);
+	assert!(goal.linger_ready(true, 0.0));
+	assert!(!goal.linger_ready(false, 0.0));
 	Ok(())
 }
 

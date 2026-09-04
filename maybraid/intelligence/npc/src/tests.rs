@@ -10,7 +10,7 @@ use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic}
 use crate::{mix_npc_brains, NpcInstall, NpcIntelligence, NpcIntelligencePlugin, Personality};
 
 fn dummy_goal() -> PoiGoal {
-	PoiGoal::new(1, PoiId(1), None, PoiKind::new("test/place"), Vec3::X, 1.0, 0.0)
+	PoiGoal::new(1, PoiId(1), None, PoiKind::new("test/place"), Vec3::X, 1.0, 0.0, 0.0)
 }
 
 #[test]
@@ -22,7 +22,9 @@ fn grazer_is_unarmed_and_evade_capable() {
 	assert!(world.get::<FirearmIntelligence>(npc).is_none());
 	assert!(world.get::<CombatTargeting>(npc).is_none());
 	assert!(world.get::<NpcIntelligence>(npc).is_some());
-	assert!(world.get::<MeanderingIntelligenceUser>(npc).is_some());
+	assert!(world
+		.get::<MeanderingIntelligenceUser>(npc)
+		.is_some_and(|user| { (user.linger_secs - 6.0).abs() < 1e-4 }));
 	assert!(world.get::<ThreatManagementIntelligence>(npc).is_some_and(|threat| threat
 		.combat
 		.by_health

@@ -88,6 +88,7 @@ pub struct PersonalitySpec {
 	pub combat: Option<CombatPersonality>,
 	pub evade: Option<EvadePersonality>,
 	pub meander_radius: f32,
+	pub linger_secs: f32,
 	pub visit_policy: PoiVisitPolicy,
 	pub tether: PersonalityTether,
 	pub tether_added_radius: f32,
@@ -163,6 +164,7 @@ impl PersonalitySpec {
 			combat: None,
 			evade: Some(EvadePersonality { flee_distance: 14.0, flee_radius: 20.0, hide: true }),
 			meander_radius: 36.0,
+			linger_secs: 6.0,
 			visit_policy: PoiVisitPolicy::default(),
 			tether: PersonalityTether::Leash { radius: 24.0 },
 			tether_added_radius: 16.0,
@@ -200,6 +202,7 @@ impl PersonalitySpec {
 			}),
 			evade: Some(EvadePersonality { flee_distance: 10.0, flee_radius: 16.0, hide: true }),
 			meander_radius: 28.0,
+			linger_secs: 5.0,
 			visit_policy: PoiVisitPolicy::default(),
 			tether: PersonalityTether::Leash { radius: 16.0 },
 			tether_added_radius: 10.0,
@@ -238,6 +241,7 @@ impl PersonalitySpec {
 			}),
 			evade: Some(EvadePersonality { flee_distance: 6.0, flee_radius: 14.0, hide: true }),
 			meander_radius: 32.0,
+			linger_secs: 2.5,
 			visit_policy: PoiVisitPolicy::default(),
 			tether: PersonalityTether::Stalk { without: 8.0, within: 22.0 },
 			tether_added_radius: 4.0,
@@ -279,6 +283,7 @@ impl PersonalitySpec {
 			}),
 			evade: Some(EvadePersonality { flee_distance: 8.0, flee_radius: 12.0, hide: false }),
 			meander_radius: 20.0,
+			linger_secs: 2.0,
 			visit_policy: PoiVisitPolicy::default(),
 			tether: PersonalityTether::Leash { radius: 8.0 },
 			tether_added_radius: 2.0,
@@ -320,6 +325,7 @@ impl PersonalitySpec {
 			}),
 			evade: Some(EvadePersonality { flee_distance: 3.0, flee_radius: 12.0, hide: true }),
 			meander_radius: 24.0,
+			linger_secs: 3.0,
 			visit_policy: PoiVisitPolicy::default(),
 			tether: PersonalityTether::Stalk { without: 12.0, within: 28.0 },
 			tether_added_radius: 3.0,
@@ -395,6 +401,7 @@ impl PersonalitySpec {
 
 		let mut meandering = MeanderingIntelligenceUser::new(self.meander_radius);
 		meandering.visit_policy = self.visit_policy;
+		meandering.linger_secs = self.linger_secs.max(0.0);
 
 		commands.entity(entity).insert((
 			npc,

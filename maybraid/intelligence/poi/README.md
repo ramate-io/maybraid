@@ -8,8 +8,9 @@ Shared point-of-interest discovery and retained knowledge.
 - `PoiKnowledge` unions source ownership, retains old findings, and accepts directed
   `PoiObservation` messages from any other discovery system.
 - `PoiGoal` hands a selected destination to routing when available, otherwise directly
-  to movement. `PoiGoalState` preserves generation-tagged completion state and
-  `PoiGoalCompleted` notifies one-shot consumers on arrival.
+  to movement. `linger_secs` keeps the goal active after first arrival; leaving the
+  disk resets that clock. `PoiGoalState` preserves generation-tagged completion
+  state and `PoiGoalCompleted` notifies one-shot consumers once linger finishes.
 
 `PoiVisitPolicy::Cycle` deliberately uses a roster and cursor. Once its roster reaches
 the requested size, higher-order users repeat that exact sequence instead of trying to
