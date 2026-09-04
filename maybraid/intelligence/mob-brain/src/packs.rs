@@ -1,4 +1,4 @@
-//! Traveling packs: the host is the tether, journeying relocates it.
+//! Packs: stationary occupy/watch plus traveling roam (loose) and hunt (tight).
 
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
@@ -8,20 +8,21 @@ use mob_intelligence::{
 use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{
-	PoiIntelligenceUser, PoiInterests, PoiKnowledge, PoiLearningPolicy, PoiVisitPolicy,
-	PoiVisitState,
+	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiVisitPolicy, PoiVisitState,
 };
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId};
 
-use crate::scene::{JOURNEY_TILE, WAYPOINT};
+use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
 
 const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackKind {
-	Herd,
+	Occupy,
+	Watch,
 	Roam,
 	Hunt,
 }
@@ -33,7 +34,14 @@ pub struct PackRecipe {
 	pub at: Vec2,
 	pub leash: f32,
 	pub travel: f32,
+	pub journey_linger: f32,
 	pub members: &'static [MemberSpec],
+}
+
+impl PackRecipe {
+	pub fn traveling(&self) -> bool {
+		self.travel > 0.0
+	}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -48,6 +56,14 @@ impl MemberSpec {
 		Self { personality: Personality::Grazer, armed: false, keep_tether_in_combat: false }
 	}
 
+	const fn civilian() -> Self {
+		Self { personality: Personality::Civilian, armed: false, keep_tether_in_combat: false }
+	}
+
+	const fn brawler() -> Self {
+		Self { personality: Personality::Brawler, armed: true, keep_tether_in_combat: false }
+	}
+
 	const fn predator() -> Self {
 		Self { personality: Personality::Predator, armed: true, keep_tether_in_combat: true }
 	}
@@ -57,45 +73,114 @@ impl MemberSpec {
 	}
 }
 
-const HERD: &[MemberSpec] = &[
+const OCCUPY: &[MemberSpec] = &[
 	MemberSpec::grazer(),
 	MemberSpec::grazer(),
 	MemberSpec::grazer(),
 	MemberSpec::grazer(),
-	MemberSpec::grazer(),
+	MemberSpec::civilian(),
+	MemberSpec::civilian(),
+	MemberSpec::civilian(),
+	MemberSpec::civilian(),
 ];
-const ROAM: &[MemberSpec] =
-	&[MemberSpec::grazer(), MemberSpec::grazer(), MemberSpec::grazer(), MemberSpec::grazer()];
+const WATCH: &[MemberSpec] =
+	&[MemberSpec::brawler(), MemberSpec::brawler(), MemberSpec::brawler(), MemberSpec::brawler()];
+const ROAM: &[MemberSpec] = &[
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::civilian(),
+	MemberSpec::civilian(),
+];
 const HUNT: &[MemberSpec] =
 	&[MemberSpec::predator(), MemberSpec::predator(), MemberSpec::assassin()];
 
-pub fn recipes() -> [PackRecipe; 3] {
+pub fn recipes() -> [PackRecipe; 4] {
 	[
 		PackRecipe {
-			kind: PackKind::Herd,
-			name: "herd",
-			at: Vec2::new(-70.0, 30.0),
-			leash: 12.0,
-			travel: 2.4,
-			members: HERD,
+			kind: PackKind::Occupy,
+			name: "occupy",
+			at: Vec2::new(-110.0, 105.0),
+			leash: 20.0,
+			travel: 0.0,
+			journey_linger: 0.0,
+			members: OCCUPY,
+		},
+		PackRecipe {
+			kind: PackKind::Watch,
+			name: "watch",
+			at: Vec2::new(118.0, 95.0),
+			leash: 10.0,
+			travel: 0.0,
+			journey_linger: 0.0,
+			members: WATCH,
 		},
 		PackRecipe {
 			kind: PackKind::Roam,
 			name: "roam",
-			at: Vec2::new(50.0, -55.0),
-			leash: 18.0,
-			travel: 4.2,
+			at: Vec2::new(-45.0, -55.0),
+			leash: 24.0,
+			travel: 1.7,
+			journey_linger: 4.5,
 			members: ROAM,
 		},
 		PackRecipe {
 			kind: PackKind::Hunt,
 			name: "hunt",
-			at: Vec2::new(15.0, 85.0),
+			at: Vec2::new(70.0, -115.0),
 			leash: 16.0,
-			travel: 6.0,
+			travel: 5.4,
+			journey_linger: 1.2,
 			members: HUNT,
 		},
 	]
+}
+
+pub fn interests(kind: PackKind) -> PoiInterests {
+	match kind {
+		PackKind::Occupy => {
+			PoiInterests::new([PoiInterest::new(CAMP, 1.4), PoiInterest::new(FORAGE, 0.8)])
+		}
+		PackKind::Watch => PoiInterests::one(GATE),
+		PackKind::Roam => {
+			PoiInterests::new([PoiInterest::new(FORAGE, 1.3), PoiInterest::new(CAMP, 0.5)])
+		}
+		PackKind::Hunt => PoiInterests::default(),
+	}
+}
+
+/// Local destinations: occupy/watch clusters plus forage along the pad for roam.
+pub fn poi_placements() -> Vec<(PoiKind, Vec2)> {
+	let mut placements = Vec::new();
+	for recipe in recipes() {
+		let radius = recipe.leash * 0.7;
+		let (primary, primary_n, secondary, secondary_n) = match recipe.kind {
+			PackKind::Occupy => (CAMP, 10, Some(FORAGE), 4),
+			PackKind::Watch => (GATE, 5, None, 0),
+			PackKind::Roam => (FORAGE, 4, Some(CAMP), 2),
+			PackKind::Hunt => continue,
+		};
+		let total = primary_n + secondary_n;
+		for index in 0..total {
+			let kind = if index < primary_n { primary } else { secondary.unwrap_or(primary) };
+			placements.push((kind, disk_point(recipe.at, radius, index, total)));
+		}
+	}
+	placements.extend(forage_along_waypoints());
+	placements
+}
+
+fn forage_along_waypoints() -> Vec<(PoiKind, Vec2)> {
+	let mut placements = Vec::new();
+	for (index, at) in waypoint_xz().into_iter().enumerate() {
+		let offset = disk_point(Vec2::ZERO, 16.0, index, 10);
+		placements.push((FORAGE, at + offset));
+		if index % 3 == 0 {
+			placements.push((CAMP, at - offset * 0.6));
+		}
+	}
+	placements
 }
 
 #[derive(Resource)]
@@ -133,16 +218,18 @@ pub fn spawn_packs(
 					.with_keep_tether_in_combat(spec.keep_tether_in_combat.then_some(true))
 			})
 			.collect();
-		let host = spawn_mob(
-			commands,
-			Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y),
-			MobInstall::new(id, recipe.leash, members)
-				.with_travel(MobTravel::new(recipe.travel))
-				.with_respawn(MobRespawn::never())
-				.with_affiliations(mob_intelligence::MobAffiliations::new(wildlife_pack())),
-		);
+		let mut install = MobInstall::new(id, recipe.leash, members)
+			.with_respawn(MobRespawn::never())
+			.with_affiliations(mob_intelligence::MobAffiliations::new(wildlife_pack()))
+			.with_interests(interests(recipe.kind));
+		if recipe.traveling() {
+			install = install.with_travel(MobTravel::new(recipe.travel));
+		}
+		let host = spawn_mob(commands, Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y), install);
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
-		stamp_journey(commands, host, id.0);
+		if recipe.traveling() {
+			stamp_journey(commands, host, id.0, recipe.journey_linger);
+		}
 		commands.spawn((
 			Name::new("TetherMarker"),
 			ChildOf(host),
@@ -159,14 +246,14 @@ pub fn spawn_packs(
 	commands.insert_resource(visuals);
 }
 
-fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64) {
+fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: f32) {
 	let mut journey = JourneyingIntelligenceUser::new(seed);
 	journey.tile_size = JOURNEY_TILE;
 	journey.min_tile_distance = 1;
 	journey.max_tile_distance = 5;
 	journey.tile_probes = 16;
 	journey.selection_interval = 0.2;
-	journey.linger_secs = 2.5;
+	journey.linger_secs = linger_secs;
 	journey.empty_tile_retry_secs = 4.0;
 	journey.visit_policy = PoiVisitPolicy::Weighted {
 		novelty_weight: 2.0,
@@ -225,25 +312,30 @@ fn wildlife_pack() -> Affiliations {
 	affiliations
 }
 
-/// Members follow the host; they do not pick the same long-range waypoints.
-pub fn quiet_member_meander(
-	mut members: Query<&mut PoiIntelligenceUser, Added<mob_intelligence::MemberOf>>,
-) {
-	for mut learner in &mut members {
-		learner.interests = PoiInterests::default();
-	}
-}
-
 fn member_offset(index: usize, count: usize, radius: f32) -> Vec2 {
 	let angle = index as f32 / count.max(1) as f32 * TAU;
 	Vec2::new(angle.cos(), angle.sin()) * radius
 }
 
+fn disk_point(center: Vec2, radius: f32, index: usize, count: usize) -> Vec2 {
+	if count <= 1 {
+		return center;
+	}
+	const GOLDEN: f32 = 2.399_963;
+	let t = (index as f32 + 0.5) / count as f32;
+	let r = radius * t.sqrt();
+	let angle = index as f32 * GOLDEN;
+	center + Vec2::new(angle.cos(), angle.sin()) * r
+}
+
 struct PersonalityColors {
 	grazer: Handle<StandardMaterial>,
+	civilian: Handle<StandardMaterial>,
+	brawler: Handle<StandardMaterial>,
 	predator: Handle<StandardMaterial>,
 	assassin: Handle<StandardMaterial>,
-	herd_host: Handle<StandardMaterial>,
+	occupy_host: Handle<StandardMaterial>,
+	watch_host: Handle<StandardMaterial>,
 	roam_host: Handle<StandardMaterial>,
 	hunt_host: Handle<StandardMaterial>,
 }
@@ -252,9 +344,12 @@ impl PersonalityColors {
 	fn new(materials: &mut Assets<StandardMaterial>) -> Self {
 		Self {
 			grazer: materials.add(Color::srgb(0.42, 0.82, 0.38)),
+			civilian: materials.add(Color::srgb(0.86, 0.72, 0.4)),
+			brawler: materials.add(Color::srgb(0.9, 0.22, 0.24)),
 			predator: materials.add(Color::srgb(0.95, 0.48, 0.14)),
 			assassin: materials.add(Color::srgb(0.58, 0.32, 0.88)),
-			herd_host: materials.add(Color::srgb(0.2, 0.95, 0.55)),
+			occupy_host: materials.add(Color::srgb(0.55, 0.95, 0.4)),
+			watch_host: materials.add(Color::srgb(0.95, 0.62, 0.2)),
 			roam_host: materials.add(Color::srgb(0.35, 0.7, 1.0)),
 			hunt_host: materials.add(Color::srgb(1.0, 0.28, 0.22)),
 		}
@@ -262,9 +357,9 @@ impl PersonalityColors {
 
 	fn handle(&self, personality: Personality) -> Handle<StandardMaterial> {
 		match personality {
-			Personality::Grazer | Personality::Civilian | Personality::Brawler => {
-				self.grazer.clone()
-			}
+			Personality::Grazer => self.grazer.clone(),
+			Personality::Civilian => self.civilian.clone(),
+			Personality::Brawler => self.brawler.clone(),
 			Personality::Predator => self.predator.clone(),
 			Personality::Assassin => self.assassin.clone(),
 		}
@@ -272,7 +367,8 @@ impl PersonalityColors {
 
 	fn host(&self, kind: PackKind) -> Handle<StandardMaterial> {
 		match kind {
-			PackKind::Herd => self.herd_host.clone(),
+			PackKind::Occupy => self.occupy_host.clone(),
+			PackKind::Watch => self.watch_host.clone(),
 			PackKind::Roam => self.roam_host.clone(),
 			PackKind::Hunt => self.hunt_host.clone(),
 		}
@@ -285,15 +381,42 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn three_packs_travel_at_different_speeds() {
+	fn packs_mix_stationary_loose_and_tight() {
 		let recipes = recipes();
-		assert_eq!(recipes.len(), 3);
-		let herd = recipes.iter().find(|recipe| recipe.kind == PackKind::Herd).unwrap();
+		assert_eq!(recipes.len(), 4);
+		let occupy = recipes.iter().find(|recipe| recipe.kind == PackKind::Occupy).unwrap();
+		let watch = recipes.iter().find(|recipe| recipe.kind == PackKind::Watch).unwrap();
 		let roam = recipes.iter().find(|recipe| recipe.kind == PackKind::Roam).unwrap();
 		let hunt = recipes.iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap();
-		assert!(herd.travel < roam.travel);
+		assert!(!occupy.traveling());
+		assert!(!watch.traveling());
+		assert!(roam.traveling());
+		assert!(hunt.traveling());
 		assert!(roam.travel < hunt.travel);
+		assert!(OCCUPY.iter().any(|spec| spec.personality == Personality::Civilian));
+		assert!(WATCH.iter().all(|spec| spec.personality == Personality::Brawler));
 		assert!(HUNT.iter().all(|spec| spec.keep_tether_in_combat && spec.armed));
-		assert_eq!(recipes.iter().map(|recipe| recipe.members.len()).sum::<usize>(), 12);
+		assert_eq!(recipes.iter().map(|recipe| recipe.members.len()).sum::<usize>(), 21);
+	}
+
+	#[test]
+	fn hunt_members_have_no_local_interests() {
+		assert!(interests(PackKind::Hunt).is_empty());
+		assert!(interests(PackKind::Roam).iter().any(|interest| interest.kind == FORAGE));
+		assert!(interests(PackKind::Occupy).iter().any(|interest| interest.kind == CAMP));
+		assert!(interests(PackKind::Watch).iter().any(|interest| interest.kind == GATE));
+	}
+
+	#[test]
+	fn local_pois_cover_stationary_and_roam() {
+		let placements = poi_placements();
+		assert!(placements
+			.iter()
+			.any(|(kind, at)| *kind == CAMP && at.distance(Vec2::new(-110.0, 105.0)) < 20.0));
+		assert!(placements
+			.iter()
+			.any(|(kind, at)| *kind == GATE && at.distance(Vec2::new(118.0, 95.0)) < 10.0));
+		assert!(placements.iter().filter(|(kind, _)| *kind == FORAGE).count() >= 10);
+		assert!(!placements.is_empty());
 	}
 }

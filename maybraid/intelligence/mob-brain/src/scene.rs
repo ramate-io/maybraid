@@ -3,12 +3,16 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
-use poi_intelligence::{GlobalPoi, Poi, PoiId, PoiKind};
+use poi_intelligence::{GlobalPoi, LocalPoi, Poi, PoiId, PoiKind};
 
 pub const PAD_SIDE: f32 = 360.0;
 pub const PAD_EXTENT: f32 = PAD_SIDE * 0.5;
 pub const JOURNEY_TILE: f32 = 48.0;
 pub const WAYPOINT: PoiKind = PoiKind::new("mob-brain/waypoint");
+pub const CAMP: PoiKind = PoiKind::new("mob-brain/camp");
+pub const GATE: PoiKind = PoiKind::new("mob-brain/gate");
+pub const FORAGE: PoiKind = PoiKind::new("mob-brain/forage");
+const LOCAL_POI_ID_START: u64 = 11;
 
 pub fn waypoint_xz() -> [Vec2; 10] {
 	[
@@ -72,6 +76,35 @@ pub fn setup_waypoints(
 				.with_arrival_radius(5.0)
 				.with_salience(1.0),
 			GlobalPoi,
+		));
+	}
+}
+
+pub fn setup_local_pois(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	placements: impl IntoIterator<Item = (PoiKind, Vec2)>,
+) {
+	let mesh = meshes.add(Sphere::new(0.85));
+	let camp = materials.add(Color::srgb(0.25, 0.78, 0.42));
+	let gate = materials.add(Color::srgb(0.95, 0.72, 0.2));
+	let forage = materials.add(Color::srgb(0.35, 0.62, 0.95));
+	for (index, (kind, at)) in placements.into_iter().enumerate() {
+		let material = match kind {
+			CAMP => camp.clone(),
+			GATE => gate.clone(),
+			_ => forage.clone(),
+		};
+		commands.spawn((
+			Name::new(format!("local-{index}")),
+			Mesh3d(mesh.clone()),
+			MeshMaterial3d(material),
+			Transform::from_xyz(at.x, 0.9, at.y),
+			Poi::new(PoiId(LOCAL_POI_ID_START + index as u64), kind)
+				.with_arrival_radius(2.0)
+				.with_salience(1.0),
+			LocalPoi,
 		));
 	}
 }

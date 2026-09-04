@@ -1,4 +1,4 @@
-//! Traveling pack hosts. Members leash to the host; the host journeys the tether.
+//! Stationary occupy/watch plus traveling roam (loose local POI) and hunt (tight).
 
 mod camera;
 mod packs;
@@ -18,17 +18,19 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use journeying_intelligence::JourneyingIntelligencePlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
-use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin, MobTravel};
+use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
-use packs::{quiet_member_meander, spawn_packs, PackKind};
+use packs::{spawn_packs, PackKind};
 use player::{Npc, PlayerPlugin};
 use poi_intelligence::{PoiGoal, PoiIntelligencePlugin, PoiSystems};
-use scene::{setup_ground, setup_lighting, setup_waypoints, PAD_EXTENT, PAD_SIDE};
+use scene::{
+	setup_ground, setup_lighting, setup_local_pois, setup_waypoints, PAD_EXTENT, PAD_SIDE,
+};
 use spotting_intelligence::SpottingSystems;
 use tether_intelligence::TetherPlugin;
 use threat_intelligence::ThreatIntelligencePlugin;
@@ -104,6 +106,7 @@ impl Plugin for MobBrainPlaygroundPlugin {
 					setup_lighting,
 					setup_ground,
 					setup_waypoints,
+					setup_local_scene_pois,
 					spawn_scene_actors,
 					setup_hud,
 				)
@@ -111,15 +114,19 @@ impl Plugin for MobBrainPlaygroundPlugin {
 			)
 			.add_systems(
 				Update,
-				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
-					quiet_member_meander.after(mob_intelligence::MobSystems::Bind),
-				),
+				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
 			)
 			.add_systems(Update, draw_debug_world)
 			.add_systems(Update, update_status_text);
 	}
+}
+
+fn setup_local_scene_pois(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+	setup_local_pois(&mut commands, &mut meshes, &mut materials, packs::poi_placements());
 }
 
 fn spawn_scene_actors(
@@ -139,7 +146,7 @@ fn setup_hud(mut commands: Commands) {
 				top: Val::Px(12.0),
 				left: Val::Px(12.0),
 				padding: UiRect::all(Val::Px(12.0)),
-				max_width: Val::Px(560.0),
+				max_width: Val::Px(640.0),
 				..default()
 			},
 			BackgroundColor(Color::srgba(0.015, 0.02, 0.035, 0.9)),
@@ -154,13 +161,13 @@ fn setup_hud(mut commands: Commands) {
 		});
 }
 
-type DebugHost<'a> =
-	(Entity, &'a Mob, &'a GlobalTransform, Option<&'a PoiGoal>, Option<&'a MobTravel>);
+type DebugHost<'a> = (Entity, &'a Mob, &'a PackKind, &'a GlobalTransform, Option<&'a PoiGoal>);
+type DebugMember<'a> = (&'a MemberOf, &'a GlobalTransform, Option<&'a PoiGoal>);
 
 fn draw_debug_world(
 	mut gizmos: Gizmos,
 	hosts: Query<DebugHost<'_>>,
-	members: Query<(&MemberOf, &GlobalTransform), With<Npc>>,
+	members: Query<DebugMember<'_>, With<Npc>>,
 ) {
 	let edge = PAD_EXTENT;
 	let grid = Color::srgba(0.35, 0.42, 0.5, 0.18);
@@ -171,12 +178,13 @@ fn draw_debug_world(
 		x += 50.0;
 	}
 
-	for (host, mob, transform, goal, travel) in &hosts {
+	for (host, mob, kind, transform, goal) in &hosts {
 		let at = transform.translation();
-		let ring = match travel.map(|travel| travel.speed) {
-			Some(speed) if speed >= 5.0 => Color::srgb(1.0, 0.35, 0.28),
-			Some(speed) if speed >= 3.5 => Color::srgb(0.4, 0.75, 1.0),
-			_ => Color::srgb(0.3, 0.95, 0.55),
+		let ring = match kind {
+			PackKind::Occupy => Color::srgb(0.55, 0.95, 0.4),
+			PackKind::Watch => Color::srgb(0.95, 0.62, 0.2),
+			PackKind::Roam => Color::srgb(0.4, 0.75, 1.0),
+			PackKind::Hunt => Color::srgb(1.0, 0.35, 0.28),
 		};
 		xz_ring(&mut gizmos, at, mob.leash, ring.with_alpha(0.45));
 		if let Some(goal) = goal {
@@ -186,15 +194,22 @@ fn draw_debug_world(
 				Color::srgb(1.0, 0.85, 0.2),
 			);
 		}
-		for (membership, member) in &members {
+		for (membership, member, local) in &members {
 			if membership.mob != host {
 				continue;
 			}
 			gizmos.line(
 				at + Vec3::Y * 1.6,
 				member.translation() + Vec3::Y * 1.2,
-				Color::srgba(1.0, 1.0, 1.0, 0.35),
+				Color::srgba(1.0, 1.0, 1.0, 0.28),
 			);
+			if let Some(local) = local {
+				gizmos.line(
+					member.translation() + Vec3::Y * 1.2,
+					local.location.point + Vec3::Y * 0.9,
+					Color::srgb(0.35, 0.95, 0.55),
+				);
+			}
 		}
 	}
 }
@@ -217,7 +232,7 @@ type HostStatus<'a> = (Entity, &'a PackKind, &'a Name, &'a GlobalTransform, Opti
 fn update_status_text(
 	diagnostics: Res<DiagnosticsStore>,
 	hosts: Query<HostStatus<'_>>,
-	members: Query<(&MemberOf, &GlobalTransform), With<Npc>>,
+	members: Query<(&MemberOf, &GlobalTransform, Has<PoiGoal>), With<Npc>>,
 	mut text: Query<&mut Text, With<StatusText>>,
 ) {
 	let Ok(mut text) = text.single_mut() else {
@@ -230,27 +245,29 @@ fn update_status_text(
 	let mut status = format!(
 		"mob-brain   {PAD_SIDE:.0} m pad   fps {fps:.0}\n\
 		 WASD fly  mouse look  Space/Shift up/down  Ctrl sprint\n\
-		 glowing orb = pack tether (host)   yellow line = journey goal\n\
-		 white lines = members leashed to that moving center\n\n"
+		 occupy/watch stay put   roam browses then catches up   hunt stays tight\n\
+		 yellow = host journey   green = member local POI   white = leash\n\n"
 	);
 	let mut rows: Vec<_> = hosts.iter().collect();
 	rows.sort_by_key(|(entity, ..)| entity.to_bits());
 	for (entity, kind, name, transform, goal) in rows {
 		let at = transform.translation();
 		let mut count = 0;
+		let mut poi = 0;
 		let mut farthest = 0.0_f32;
-		for (membership, member) in &members {
+		for (membership, member, has_goal) in &members {
 			if membership.mob != entity {
 				continue;
 			}
 			count += 1;
+			poi += usize::from(has_goal);
 			farthest = farthest.max(member.translation().xz().distance(at.xz()));
 		}
 		let dest = goal
 			.map(|goal| format!("{:.0},{:.0}", goal.location.point.x, goal.location.point.z))
 			.unwrap_or_else(|| "idle".into());
 		status.push_str(&format!(
-			"{:<5} {kind:?}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  stretch {farthest:.0}\n",
+			"{:<5} {kind:?}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  poi {poi}  stretch {farthest:.0}\n",
 			name.as_str(),
 			at.x,
 			at.z,

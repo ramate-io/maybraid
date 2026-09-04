@@ -14,10 +14,13 @@ idle stack:
 ```
 
 [`mix_npc_brains`](src/plugin.rs) runs after threat-management selection.
-Combat and Evade disable meandering and drop an active `PoiGoal`. Tether is
-disabled during Evade and during Combat unless `keep_tether_in_combat` is set
-(Hunt can flip that without changing the personality). Firearm movement and
-flee/hide already no-op when their grants are retracted.
+Combat and Evade disable meandering and drop an active `PoiGoal`. On Ignore,
+meander is granted only while the tether is satisfied (or the NPC has no
+tether); an unsatisfied leash or stalk drops `PoiGoal` so the member catches
+up, then meander resumes. Tether is disabled during Evade and during Combat
+unless `keep_tether_in_combat` is set (Hunt can flip that without changing the
+personality). Firearm movement and flee/hide already no-op when their grants
+are retracted.
 
 ## Personalities
 
@@ -34,5 +37,6 @@ subject, rules of engagement, and `armed`. See [HORIZON.md](HORIZON.md) for
 groups, mob hosts, and LodScene.
 
 The [personalities playground](../personalities) is a 400 m square High-fulfill
-smoke. The [mob-brain playground](../mob-brain) is the next step: hosts journey
-the tether and members follow.
+smoke. The [mob-brain playground](../mob-brain) mixes stationary packs with
+traveling hosts so members can linger on local POIs, then catch the moving
+tether.

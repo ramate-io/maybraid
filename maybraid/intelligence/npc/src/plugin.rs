@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiSystems};
-use tether_intelligence::{TetherIntelligenceUser, TetherSystems};
+use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherSystems};
 use threat_management_intelligence::{
 	ThreatManagementIntelligence, ThreatManagementSystems, ThreatTactic,
 };
@@ -17,6 +17,7 @@ type NpcMixers<'w, 's> = Query<
 		&'static ThreatManagementIntelligence,
 		Option<&'static mut MeanderingIntelligenceUser>,
 		Option<&'static mut TetherIntelligenceUser>,
+		Option<&'static TetherMemory>,
 		Has<PoiGoal>,
 	),
 >;
@@ -42,22 +43,30 @@ impl Plugin for NpcIntelligencePlugin {
 	}
 }
 
-/// Priority mixer: Combat/Evade preempt tether and meander; Ignore restores
-/// them.
+/// Priority mixer: Combat/Evade preempt tether and meander. Ignore restores
+/// tether; meander only while that tether is satisfied (or absent).
 pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
-	for (entity, npc, management, mut meandering, mut tether, has_goal) in &mut npcs {
+	for (entity, npc, management, mut meandering, mut tether, memory, has_goal) in &mut npcs {
 		let tactic = management.tactic;
 		let acting = tactic != ThreatTactic::Ignore;
-		if let Some(meandering) = meandering.as_deref_mut() {
-			meandering.enabled = !acting;
-		}
-		if acting && has_goal {
-			commands.entity(entity).remove::<PoiGoal>();
-		}
 		if let Some(tether) = tether.as_deref_mut() {
 			apply_tether(npc, tactic, tether);
 		}
+		let pulling = tether_is_pulling(tether.as_deref(), memory);
+		if let Some(meandering) = meandering.as_deref_mut() {
+			meandering.enabled = !acting && !pulling;
+		}
+		if (acting || pulling) && has_goal {
+			commands.entity(entity).remove::<PoiGoal>();
+		}
 	}
+}
+
+fn tether_is_pulling(
+	tether: Option<&TetherIntelligenceUser>,
+	memory: Option<&TetherMemory>,
+) -> bool {
+	tether.is_some_and(|tether| tether.enabled) && memory.is_some_and(|memory| !memory.satisfied)
 }
 
 fn apply_tether(npc: &NpcIntelligence, tactic: ThreatTactic, tether: &mut TetherIntelligenceUser) {

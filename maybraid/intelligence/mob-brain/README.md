@@ -6,27 +6,31 @@ Run:
 cargo run -p mob-brain-playground --release
 ```
 
-A **360 m pad** where pack **hosts** journey between global waypoints. Each
-host is the tether. Members install with that host as subject, so when the
-center walks, NPCs are pulled along (leash for grazers, stalk for hunt).
+A **360 m pad** mixing **stationary** packs from the personalities playground
+with **traveling** hosts. Each host is the tether. Members keep their NPC
+mixer: Ignore + a satisfied leash meanders local POIs; an unsatisfied tether
+drops that goal so they catch up. Hunt members have empty interests, so they
+stay on the stalk.
 
-This is still a flat High-fulfill stand-in: no `LodSceneHost`. Personalities
-live on the members; the mob brain moves the tether.
+No `LodSceneHost`. Personalities live on the members; the mob brain moves the
+tether when the pack travels.
 
 ## What to watch
 
 | Pack | Host | Members |
 |---|---|---|
-| herd | slow green orb (~2.4 m/s) | five grazers, tight leash |
-| roam | blue orb (~4.2 m/s) | four grazers, looser leash |
-| hunt | red orb (~6 m/s) | predators + assassin, stalk the host |
+| occupy | green orb, stays put | grazers + unarmed civilians on camp/forage in the leash |
+| watch | orange orb, stays put | brawlers on a gate cluster |
+| roam | slow blue orb (~1.7 m/s) | grazers + civilians; linger on forage along the pad, then catch the host |
+| hunt | fast red orb (~5.4 m/s) | predators + assassin; stalk the host, no local meander |
 
-Yellow line = current journey `PoiGoal`. White lines = members to host.
-Yellow spheres = waypoints. HUD lists host xz, destination, count, and how
-far the farthest member has stretched.
+Yellow line = host journey `PoiGoal`. Green line = member local `PoiGoal`.
+White lines = members to host. Small green/blue/amber spheres = local POIs;
+larger yellow spheres = waypoints. HUD `poi` is how many members currently
+have a local goal; `stretch` is the farthest member from the host.
 
-Members do **not** pick those long-range waypoints themselves. Ignore + tether
-is the idle stack, so reroute is the host walking out of the leash.
+Roam is the mixer demo: grazer linger (~6 s) plus a slow host so people peel
+off to forage, then the leash pulls them back. Hunt is the tight contrast.
 
 ## Controls
 
