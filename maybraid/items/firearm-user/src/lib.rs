@@ -5,18 +5,32 @@ mod fire;
 mod hold;
 mod pose;
 mod reticle;
+mod rumble;
+mod weapon;
 
 use bevy::prelude::*;
 use crozon_characters::CharacterMotionSystems;
+use damage::DamageSystems;
+use firearms::FirearmWeaponSystems;
+use maybraid_input::PadRumbleSystems;
 use player::{PlayerPoseSystems, PlayerSystems};
 use player_camera::PlayerCameraSystems;
 use std::f32::consts::FRAC_PI_2;
 
 pub use hold::{sync_hands_to_firearm, HoldingArms};
 pub use pose::{
-	pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with, stamp_holding_arms, HeldFirearm,
+	pose_held_firearm, spawn_held_firearm, spawn_held_firearm_with, spawn_held_kit,
+	stamp_holding_arms, HeldFirearm,
 };
 pub use reticle::{spawn_reticle, Reticle};
+pub use weapon::{live_weapon_from_stats, LiveWeapon, RECOIL_PITCH_PER_UNIT};
+
+/// Firearm-user schedule points other combat systems can order against.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FirearmUserSystems {
+	/// Travel the queued recoil path into look / camera.
+	Recoil,
+}
 
 /// Capsule/NPC using a firearm.
 ///
@@ -86,7 +100,11 @@ pub struct FirearmUserPlugin;
 
 impl Plugin for FirearmUserPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
+		if !app.is_plugin_added::<damage::DamagePlugin>() {
+			app.add_plugins(damage::DamagePlugin);
+		}
+		app.add_message::<maybraid_input::PadRumble>()
+			.add_systems(Update, fire::apply_fire_intents.in_set(PlayerSystems::Intent))
 			.add_systems(
 				Update,
 				(pose::stamp_holding_arms, pose::pose_held_firearm).in_set(PlayerPoseSystems::Item),
@@ -98,6 +116,26 @@ impl Plugin for FirearmUserPlugin {
 					.in_set(PlayerPoseSystems::Overlay)
 					.after(CharacterMotionSystems::Anim),
 			)
-			.add_systems(PostUpdate, reticle::update_reticle.after(TransformSystems::Propagate));
+			.add_systems(
+				PostUpdate,
+				(reticle::ingest_hit_markers, reticle::update_reticle)
+					.chain()
+					.after(TransformSystems::Propagate)
+					.after(DamageSystems::Apply),
+			)
+			.add_systems(
+				PostUpdate,
+				rumble::pulse_combat_rumble
+					.after(FirearmWeaponSystems::Fire)
+					.after(DamageSystems::Apply)
+					.before(PadRumbleSystems::FanOut),
+			)
+			.add_systems(PostUpdate, fire::queue_weapon_recoil.after(FirearmWeaponSystems::Fire))
+			.add_systems(
+				Update,
+				fire::advance_weapon_recoil
+					.in_set(PlayerCameraSystems::Body)
+					.in_set(FirearmUserSystems::Recoil),
+			);
 	}
 }

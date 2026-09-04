@@ -18,7 +18,7 @@ use crozon_characters::{
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	AnimClip, AnimRef, AnimRefRoot, CharacterMembers, CharacterRecipe, CharacterRig,
-	CharacterRigRole, CharacterRoot, ComponentsOnly, RigSkeletonKind,
+	CharacterRigRole, CharacterRoot, ComponentsOnly, LocomotionCapsule, RigSkeletonKind,
 };
 use game_commands::ui::GameCommandStatusText;
 use lod::gen::LodScene;
@@ -175,7 +175,8 @@ pub(crate) fn apply_set_character(
 
 	for (entity, request) in &requests {
 		clear_herd(&mut commands, &visuals, &herd, &mut capsules);
-		restore_player_controller(&mut commands, player);
+		let hull = species_hull(request.species);
+		restore_player_controller(&mut commands, player, hull);
 		for spawned in spawn_species(&mut commands, request.species, Transform::IDENTITY) {
 			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
 		}
@@ -220,8 +221,12 @@ pub(crate) fn apply_stampede(
 			let elevation = store
 				.composed_height_at(&layout, x, z)
 				.unwrap_or_else(|| base.0.height_at(x, z));
-			let body =
-				spawn_character_controller(&mut commands, controller_spawn_point(x, z, elevation));
+			let hull = species_hull(species);
+			let body = spawn_character_controller(
+				&mut commands,
+				controller_spawn_point(x, z, elevation, hull),
+				hull,
+			);
 			commands.entity(body).insert((
 				Name::new(format!("stampede-{}", species.label())),
 				StampedeMember { offset },
@@ -260,13 +265,16 @@ fn clear_herd(
 pub(crate) fn respawn_stampede_members<F: QueryFilter>(
 	layout: &TerrainCellLayout,
 	height_at: impl Fn(f32, f32) -> f32,
-	members: &mut Query<(&StampedeMember, &mut Transform, &mut LinearVelocity), F>,
+	members: &mut Query<
+		(&StampedeMember, &LocomotionCapsule, &mut Transform, &mut LinearVelocity),
+		F,
+	>,
 ) {
 	let center = layout.region_center_xz();
-	for (member, mut transform, mut velocity) in members {
+	for (member, hull, mut transform, mut velocity) in members {
 		let x = center.x + member.offset.x;
 		let z = center.z + member.offset.z;
-		transform.translation = controller_spawn_point(x, z, height_at(x, z));
+		transform.translation = controller_spawn_point(x, z, height_at(x, z), *hull);
 		**velocity = Vec3::ZERO;
 	}
 }
@@ -441,5 +449,43 @@ fn spawn_species(
 		CharacterSpecies::Thumplus => spawn_preview!(ThumplusConfig),
 		CharacterSpecies::Mistler => spawn_preview!(MistlerConfig),
 		CharacterSpecies::Tuberwaber => spawn_preview!(TuberwaberConfig),
+	}
+}
+
+fn species_hull(species: CharacterSpecies) -> LocomotionCapsule {
+	macro_rules! hull {
+		($config:ty) => {
+			<$config>::default_preview().locomotion_capsule()
+		};
+	}
+	match species {
+		CharacterSpecies::Braidman => hull!(BraidmanConfig),
+		CharacterSpecies::Brenal => hull!(BrenalConfig),
+		CharacterSpecies::Caole => hull!(CaoleConfig),
+		CharacterSpecies::Epiphant => hull!(EpiphantConfig),
+		CharacterSpecies::Hars => hull!(HarsConfig),
+		CharacterSpecies::Yilter => hull!(YilterConfig),
+		CharacterSpecies::Sonyak => hull!(SonyakConfig),
+		CharacterSpecies::Claber => hull!(ClaberConfig),
+		CharacterSpecies::Croconot => hull!(CroconotConfig),
+		CharacterSpecies::Brodler => hull!(BrodlerConfig),
+		CharacterSpecies::Mygr => hull!(MygrConfig),
+		CharacterSpecies::Dui => hull!(DuiConfig),
+		CharacterSpecies::Lidder => hull!(LidderConfig),
+		CharacterSpecies::Chupri => hull!(ChupriConfig),
+		CharacterSpecies::Brokker => hull!(BrokkerConfig),
+		CharacterSpecies::Tipple => hull!(TippleConfig),
+		CharacterSpecies::Topple => hull!(ToppleConfig),
+		CharacterSpecies::Kispar => hull!(KisparConfig),
+		CharacterSpecies::Tapp => hull!(TappConfig),
+		CharacterSpecies::Kaller => hull!(KallerConfig),
+		CharacterSpecies::Kappler => hull!(KapplerConfig),
+		CharacterSpecies::Wumbus => hull!(WumbusConfig),
+		CharacterSpecies::Lero => hull!(LeroConfig),
+		CharacterSpecies::Spibmom => hull!(SpibmomConfig),
+		CharacterSpecies::Grener => hull!(GrenerConfig),
+		CharacterSpecies::Thumplus => hull!(ThumplusConfig),
+		CharacterSpecies::Mistler => hull!(MistlerConfig),
+		CharacterSpecies::Tuberwaber => hull!(TuberwaberConfig),
 	}
 }

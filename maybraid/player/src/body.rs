@@ -3,6 +3,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use crozon_characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
@@ -57,24 +58,32 @@ pub enum MovementAction {
 	Jump,
 }
 
-pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: Vec3) -> Entity {
-	let collider = Collider::capsule(crate::CAPSULE_RADIUS, crate::CAPSULE_LENGTH);
+pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: LocomotionCapsule) {
+	let collider = Collider::capsule(hull.radius, hull.length);
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
-	commands
+	commands.entity(body).insert((
+		hull,
+		collider,
+		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+			.with_max_distance(GROUND_CAST_DISTANCE)
+			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
+	));
+}
+
+pub(crate) fn spawn_character_controller(
+	commands: &mut Commands,
+	translation: Vec3,
+	hull: LocomotionCapsule,
+) -> Entity {
+	let body = commands
 		.spawn((
 			CharacterController,
 			Transform::from_translation(translation),
 			Visibility::default(),
 			RigidBody::Dynamic,
-			collider,
 			PhysicsInteractionLayer::animated_layers(),
-			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-				.with_max_distance(GROUND_CAST_DISTANCE)
-				.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 			LockedAxes::ROTATION_LOCKED,
-		))
-		.insert((
 			MovementAcceleration(MOVE_ACCEL),
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
@@ -84,7 +93,9 @@ pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: V
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(1.25),
 		))
-		.id()
+		.id();
+	apply_locomotion_capsule(commands, body, hull);
+	body
 }
 
 pub(crate) fn update_grounded(

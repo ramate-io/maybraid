@@ -212,16 +212,9 @@ impl AvianMovementSurface<'_, '_> {
 		max_steps: usize,
 		filter: &SpatialQueryFilter,
 	) -> Option<(Vec<Vec3>, FallProfile)> {
-		if self.segment_clear(
-			ability.hip_point(from),
-			ability.hip_point(to),
-			ability.agent_radius(),
-			filter,
-		) {
-			let direct = vec![to];
-			if let Some(fall) = self.fall_profile(from, &direct, ability, filter) {
-				return Some((direct, fall));
-			}
+		let direct = [to];
+		if let Some(walk) = self.trace_ground_path(from, &direct, ability, filter) {
+			return Some(walk);
 		}
 		if max_steps < 2 {
 			return None;
@@ -229,8 +222,7 @@ impl AvianMovementSurface<'_, '_> {
 		let delta = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
 		let len = delta.length();
 		if len < 1e-3 {
-			let direct = vec![to];
-			return self.fall_profile(from, &direct, ability, filter).map(|fall| (direct, fall));
+			return self.trace_ground_path(from, &direct, ability, filter);
 		}
 		let dir = delta / len;
 		let perp = Vec3::new(-dir.z, 0.0, dir.x);
@@ -242,51 +234,77 @@ impl AvianMovementSurface<'_, '_> {
 					from.y,
 					from.z + dir.z * (len * 0.45) + perp.z * dist * sign,
 				);
-				if self.segment_clear(
-					ability.hip_point(from),
-					ability.hip_point(via),
-					ability.agent_radius(),
-					filter,
-				) && self.segment_clear(
-					ability.hip_point(via),
-					ability.hip_point(to),
-					ability.agent_radius(),
-					filter,
-				) {
-					let detour = vec![via, to];
-					if let Some(fall) = self.fall_profile(from, &detour, ability, filter) {
-						return Some((detour, fall));
-					}
+				let detour = [via, to];
+				if let Some(walk) = self.trace_ground_path(from, &detour, ability, filter) {
+					return Some(walk);
 				}
 			}
 		}
 		None
 	}
 
-	fn fall_profile<A: movement_intelligence::MovementBody>(
+	/// Ground-snap a route in short sequential samples.
+	///
+	/// `max_fall` limits one unsupported local drop, not the cumulative
+	/// elevation change of an otherwise supported downhill walk.
+	fn trace_ground_path<A: movement_intelligence::MovementBody>(
 		&self,
 		from: Vec3,
 		waypoints: &[Vec3],
 		ability: &A,
 		filter: &SpatialQueryFilter,
-	) -> Option<FallProfile> {
+	) -> Option<(Vec<Vec3>, FallProfile)> {
 		let max_fall = ability.max_fall().max(0.0);
 		let probe_lift = ability.max_step().max(0.05) + 0.08;
 		let probe_distance = probe_lift + max_fall + 0.05;
 		let spacing = (ability.agent_radius() * 0.75).clamp(0.2, 0.5);
-		let mut max_drop = 0.0_f32;
-		for point in path_samples(from, waypoints, spacing) {
-			let feet_y = point.y - ability.feet_below_origin();
-			let origin = Vec3::new(point.x, feet_y + probe_lift, point.z);
-			let hit = self.spatial.cast_ray(origin, Dir3::NEG_Y, probe_distance, true, filter)?;
-			let drop = (hit.distance - probe_lift).max(0.0);
-			if drop > max_fall + 0.04 {
-				return None;
+		let feet_below_origin = ability.feet_below_origin();
+		let mut previous = from;
+		let mut ground_y = from.y - feet_below_origin;
+		let mut fall = FallProfile::default();
+		let mut snapped_waypoints = Vec::with_capacity(waypoints.len());
+
+		for waypoint in waypoints {
+			let start = previous;
+			let length = start.xz().distance(waypoint.xz());
+			let count = (length / spacing).ceil().max(1.0) as usize;
+			for i in 1..=count {
+				let t = i as f32 / count as f32;
+				let xz = start.xz().lerp(waypoint.xz(), t);
+				let origin = Vec3::new(xz.x, ground_y + probe_lift, xz.y);
+				let hit =
+					self.spatial.cast_ray(origin, Dir3::NEG_Y, probe_distance, true, filter)?;
+				// A near-zero hit means the probe origin is inside Fixed
+				// geometry: the surface rose farther than max_step.
+				if hit.distance < 0.02 {
+					return None;
+				}
+				let next_ground_y = origin.y - hit.distance;
+				if !admit_ground_delta(
+					&mut fall,
+					next_ground_y - ground_y,
+					ability.max_step(),
+					max_fall,
+				) {
+					return None;
+				}
+				let next = Vec3::new(xz.x, next_ground_y + feet_below_origin, xz.y);
+				if !self.segment_clear(
+					ability.hip_point(previous),
+					ability.hip_point(next),
+					ability.agent_radius(),
+					filter,
+				) {
+					return None;
+				}
+				previous = next;
+				ground_y = next_ground_y;
 			}
-			max_drop = max_drop.max(drop);
+			snapped_waypoints.push(previous);
 		}
-		let risk = normalized_fall_risk(max_drop, max_fall);
-		Some(FallProfile { max_drop, risk })
+
+		fall.risk = normalized_fall_risk(fall.max_drop, max_fall);
+		Some((snapped_waypoints, fall))
 	}
 
 	fn segment_clear(
@@ -350,19 +368,13 @@ fn path_length(start: Vec3, waypoints: &[Vec3]) -> f32 {
 	total
 }
 
-fn path_samples(start: Vec3, waypoints: &[Vec3], spacing: f32) -> Vec<Vec3> {
-	let mut samples = Vec::new();
-	let mut previous = start;
-	let spacing = spacing.max(0.05);
-	for end in waypoints {
-		let length = previous.xz().distance(end.xz());
-		let count = (length / spacing).ceil().max(1.0) as usize;
-		for i in 1..=count {
-			samples.push(previous.lerp(*end, i as f32 / count as f32));
-		}
-		previous = *end;
+fn admit_ground_delta(profile: &mut FallProfile, delta: f32, max_step: f32, max_fall: f32) -> bool {
+	const SLOP: f32 = 0.04;
+	if delta > max_step.max(0.0) + SLOP || -delta > max_fall.max(0.0) + SLOP {
+		return false;
 	}
-	samples
+	profile.max_drop = profile.max_drop.max((-delta).max(0.0));
+	true
 }
 
 fn normalized_fall_risk(drop: f32, tolerance: f32) -> f32 {
@@ -389,12 +401,28 @@ mod tests {
 	}
 
 	#[test]
-	fn path_samples_cover_each_segment_and_endpoint() -> anyhow::Result<()> {
-		let points =
-			path_samples(Vec3::ZERO, &[Vec3::new(1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 1.0)], 0.4);
-		assert!(points.len() >= 6, "{points:?}");
-		assert_eq!(points.last().copied(), Some(Vec3::new(1.0, 0.0, 1.0)));
-		assert!(points.iter().any(|p| (*p - Vec3::X).length() < 1e-4));
+	fn cumulative_supported_descent_is_not_treated_as_one_fall() -> anyhow::Result<()> {
+		let mut profile = FallProfile::default();
+		for _ in 0..20 {
+			assert!(admit_ground_delta(&mut profile, -0.3, 0.4, 1.2));
+		}
+		assert!((profile.max_drop - 0.3).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn one_unsupported_drop_is_rejected() -> anyhow::Result<()> {
+		let mut profile = FallProfile::default();
+		assert!(!admit_ground_delta(&mut profile, -1.5, 0.4, 1.2));
+		assert_eq!(profile, FallProfile::default());
+		Ok(())
+	}
+
+	#[test]
+	fn one_too_tall_step_is_rejected() -> anyhow::Result<()> {
+		let mut profile = FallProfile::default();
+		assert!(!admit_ground_delta(&mut profile, 0.6, 0.4, 1.2));
+		assert_eq!(profile, FallProfile::default());
 		Ok(())
 	}
 

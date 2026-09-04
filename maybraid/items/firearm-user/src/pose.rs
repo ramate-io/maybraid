@@ -7,11 +7,12 @@ use crozon_characters::{
 };
 use firearms::{
 	firearm_bounds, spawn_firearm_components, FireOnTrigger, FirearmConcept, FirearmMembers,
-	FirearmRoot, ProjectileSource, Weapon, WeaponTrigger,
+	FirearmRoot, ProjectileSource, WeaponTrigger,
 };
 use player::{PlayerLook, PlayerUse};
 
 use crate::hold::HoldingArms;
+use crate::weapon::{LiveWeapon, RecoilPattern};
 use crate::{FirearmUser, FirearmUserSettings};
 
 #[derive(Component)]
@@ -43,15 +44,31 @@ pub fn spawn_held_firearm_with(
 	user: Entity,
 	settings: FirearmUserSettings,
 ) -> Entity {
-	let kit = FirearmConcept::Bullpup.kit();
+	spawn_held_kit(commands, user, settings, FirearmConcept::Bullpup.kit(), LiveWeapon::default())
+}
+
+pub fn spawn_held_kit<T>(
+	commands: &mut Commands,
+	user: Entity,
+	settings: FirearmUserSettings,
+	kit: T,
+	live: LiveWeapon,
+) -> Entity
+where
+	T: firearms::FirearmComponents + Clone + Default + Send + Sync + 'static,
+{
 	let bounds = firearm_bounds(&kit);
 	let scale = held_scale_from_bounds(bounds, settings.held_length);
 	let entities = spawn_firearm_components(commands, &kit, Transform::IDENTITY, bounds);
 	let mut root = Entity::PLACEHOLDER;
 	for entity in entities {
 		commands.entity(entity).insert((
-			Name::new("held-bullpup"),
-			Weapon::bolt(),
+			Name::new("held-firearm"),
+			live.weapon,
+			live.payload,
+			live.fire,
+			live.recoil,
+			RecoilPattern::from_seed(live.recoil_seed),
 			FireOnTrigger,
 			WeaponTrigger(false),
 			ProjectileSource(user),

@@ -1,160 +1,112 @@
-//! Sightline-backed target observation and memory.
+//! Adapt generic visual contacts into combat target memory and factors.
 
-use avian3d::prelude::{LinearVelocity, SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
-use lod_avian::PhysicsInteractionLayer;
-use movement_intelligence::{MovementBody, MovementIntelligence};
+use combat_targeting::{CombatContact, CombatTargeting, TargetFactors, TargetSource};
+use spotting_intelligence::SpottingUser;
 
 use crate::combat::FirearmIntelligence;
-use crate::los::clear_segment;
-use crate::movement::FirearmMovementIntelligence;
-use crate::target::{
-	allocate_vision, cascade_vision, rank_candidates, retain_live_candidates, upsert_observation,
-	FirearmSpotting, SpottedTarget, TargetCapsule,
-};
 
-pub(crate) fn spot_firearm_targets(
-	spatial: SpatialQuery,
-	time: Res<Time>,
-	mut spotters: Query<(
-		&Transform,
-		&MovementIntelligence,
-		&FirearmSpotting,
-		&mut FirearmIntelligence,
-		&mut FirearmMovementIntelligence,
-	)>,
-	targets: Query<(&Transform, Option<&LinearVelocity>)>,
+/// Refresh combat memory from successful generic spotting contacts.
+pub(crate) fn sync_spotted_combat_targets(
+	mut combatants: Query<(&Transform, &SpottingUser, &FirearmIntelligence, &mut CombatTargeting)>,
 ) {
-	let now = time.elapsed_secs();
-	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
-	for (transform, movement, spotting, mut combat, mut combat_movement) in &mut spotters {
-		let memory = combat.settings.target_spotting_memory.max(0.0);
-		retain_live_candidates(&mut combat.objective.0, &spotting.candidates, now, memory);
-		combat_movement.objective.0.clear();
-
-		let observer = movement.ability.eye_point(transform.translation);
-		let mut live = Vec::new();
-		for candidate in &spotting.candidates {
-			let Ok((target, velocity)) = targets.get(candidate.entity) else {
-				continue;
-			};
-			live.push((
-				*candidate,
-				target.translation,
-				velocity.map_or(Vec3::ZERO, |velocity| velocity.0),
-			));
-		}
-
-		let ranked_keys: Vec<(Entity, Vec3)> = live
-			.iter()
-			.map(|(candidate, position, _)| (candidate.entity, *position))
+	for (transform, spotting, firearm, mut targeting) in &mut combatants {
+		targeting.memory_secs = firearm.settings.target_spotting_memory.max(0.0);
+		targeting.algebra.continuity = firearm.settings.focus.clamp(0.0, 1.0) * 8.0;
+		let forgotten: Vec<Entity> = targeting
+			.memory
+			.keys()
+			.filter(|entity| !spotting.contacts.contains_key(entity))
+			.copied()
 			.collect();
-		let order = rank_candidates(observer, &ranked_keys, combat.engaged, combat.settings.focus);
-		let mut rays = allocate_vision(combat.settings.vision, order.len(), combat.settings.focus);
-		cascade_vision(&mut rays, SPOT_SAMPLE_COUNT as u16);
-
-		for (candidate, position, movement_vector) in &live {
-			let observation = SpottedTarget {
-				entity: candidate.entity,
-				position: *position,
-				capsule: candidate.capsule,
-				visible: candidate.capsule.center_mass(*position),
-				visible_head: None,
-				movement_vector: *movement_vector,
-				spotted_at: now,
-			};
-			upsert_observation(&mut combat_movement.objective.0, observation);
+		for entity in forgotten {
+			targeting.memory.remove(&entity);
+			targeting.remove_source(entity, TargetSource::SPOTTING);
 		}
 
-		for (rank, &index) in order.iter().enumerate() {
-			let budget = rays.get(rank).copied().unwrap_or(0) as usize;
-			if budget == 0 {
-				continue;
-			}
-			let (candidate, position, movement_vector) = live[index];
-			let (visible, visible_head) =
-				visible_points(observer, position, candidate.capsule, budget, &spatial, &filter);
-			let observation = SpottedTarget {
-				entity: candidate.entity,
-				position,
-				capsule: candidate.capsule,
-				visible: visible.unwrap_or_else(|| candidate.capsule.center_mass(position)),
-				visible_head,
-				movement_vector,
-				spotted_at: now,
-			};
-			upsert_observation(&mut combat_movement.objective.0, observation);
-			let Some(visible) = visible else {
-				continue;
-			};
-			upsert_observation(
-				&mut combat.objective.0,
-				SpottedTarget { visible, visible_head, ..observation },
+		if !targeting.enabled {
+			targeting.clear_source(TargetSource::SPOTTING);
+			continue;
+		}
+
+		for contact in spotting.contacts.values() {
+			targeting.upsert_contact(CombatContact {
+				subject: contact.subject,
+				position: contact.position,
+				movement_vector: contact.velocity,
+				visible_point: contact.visible_point,
+				visible_head: contact.visible_head,
+				last_spotted_at: contact.last_success_at,
+			});
+			let delta = contact.position - transform.translation;
+			let distance = Vec2::new(delta.x, delta.z).length();
+			let previous = targeting
+				.active_target(contact.subject)
+				.map_or(TargetFactors::default(), |target| target.factors);
+			targeting.set_factors(
+				contact.subject,
+				TargetFactors { hostility: 1.0, bias: -distance, ..previous },
 			);
 		}
 	}
 }
 
-const SPOT_SAMPLE_COUNT: usize = 9;
-
-fn visible_points(
-	observer: Vec3,
-	position: Vec3,
-	capsule: TargetCapsule,
-	budget: usize,
-	spatial: &SpatialQuery,
-	filter: &SpatialQueryFilter,
-) -> (Option<Vec3>, Option<Vec3>) {
-	let samples = capsule_samples(observer, position, capsule);
-	let mut body = None;
-	let mut head = None;
-	for (index, point) in samples.into_iter().take(budget.min(SPOT_SAMPLE_COUNT)).enumerate() {
-		if !clear_segment(observer, point, spatial, filter) {
-			continue;
-		}
-		if index == 1 {
-			head = Some(point);
-		} else {
-			body = body.or(Some(point));
-		}
-	}
-	(body.or(head), head)
-}
-
-fn capsule_samples(
-	observer: Vec3,
-	position: Vec3,
-	capsule: TargetCapsule,
-) -> [Vec3; SPOT_SAMPLE_COUNT] {
-	let toward =
-		Vec3::new(position.x - observer.x, 0.0, position.z - observer.z).normalize_or(Vec3::Z);
-	let right = Vec3::new(toward.z, 0.0, -toward.x) * (capsule.radius * 0.8);
-	let center = capsule.center_mass(position);
-	let head = capsule.head(position);
-	let hips = position - Vec3::Y * (capsule.half_height * 0.45);
-	[
-		center,
-		head,
-		hips,
-		center + right,
-		center - right,
-		head + right,
-		head - right,
-		hips + right,
-		hips - right,
-	]
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::ecs::system::RunSystemOnce;
+	use spotting_intelligence::{InterestLayers, SpotDirective, SpottedContact, SpottingSettings};
 
 	#[test]
-	fn capsule_samples_cover_center_head_and_sides() {
-		let samples = capsule_samples(Vec3::Z * 5.0, Vec3::ZERO, TargetCapsule::new(0.4, 0.9));
-		assert_eq!(samples[0], Vec3::ZERO);
-		assert!(samples[1].y > 0.0);
-		assert!(samples[3].x.abs() > 0.2);
-		assert_eq!(samples[3].x, -samples[4].x);
+	fn spotted_contacts_enter_weighted_combat_memory(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting =
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.5));
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.1),
+		);
+		world.spawn((
+			Transform::default(),
+			spotting,
+			FirearmIntelligence::new(),
+			CombatTargeting::default(),
+		));
+
+		world.run_system_once(sync_spotted_combat_targets)?;
+		let targeting = world.query::<&CombatTargeting>().single(&world)?;
+		assert_eq!(targeting.contact(target).map(|contact| contact.position), Some(Vec3::X * 4.0));
+		assert_eq!(targeting.active_target(target).map(|target| target.factors.bias), Some(-4.0));
+		world.query::<&mut SpottingUser>().single_mut(&mut world)?.contacts.clear();
+		world.run_system_once(sync_spotted_combat_targets)?;
+		let targeting = world.query::<&CombatTargeting>().single(&world)?;
+		assert!(targeting.contact(target).is_none());
+		assert!(targeting.active_target(target).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn disabled_targeting_does_not_admit_spotted_contacts(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting =
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.5));
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.1),
+		);
+		let mut targeting = CombatTargeting::default();
+		targeting.enabled = false;
+		world.spawn((Transform::default(), spotting, FirearmIntelligence::new(), targeting));
+		world.run_system_once(sync_spotted_combat_targets)?;
+		let targeting = world.query::<&CombatTargeting>().single(&world)?;
+		assert!(targeting.contact(target).is_none());
+		assert!(targeting.active_target(target).is_none());
+		Ok(())
 	}
 }

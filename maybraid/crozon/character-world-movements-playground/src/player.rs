@@ -10,9 +10,8 @@ use std::f32::consts::PI;
 
 use crate::camera::CameraController;
 use crate::WorldBaseTerrain;
+use crozon_characters::LocomotionCapsule;
 
-pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
-pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
 const MOVE_ACCEL: f32 = 40.0;
 const MOVE_DAMPING: f32 = 0.92;
 const JUMP_IMPULSE: f32 = 8.0;
@@ -116,36 +115,32 @@ fn spawn_player(
 ) {
 	let center = layout.region_center_xz();
 	let spawn = player_spawn_point(&layout, base.0.height_at(center.x, center.z));
-	let player = spawn_character_controller(&mut commands, spawn);
+	let hull = LocomotionCapsule::HUMANOID;
+	let player = spawn_character_controller(&mut commands, spawn, hull);
 	commands.entity(player).insert((Name::new("Player"), Player, CameraFollow));
 	commands.spawn((
 		Name::new("PlayerCapsule"),
 		PlayerCapsule,
 		ChildOf(player),
-		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
+		Mesh3d(meshes.add(Capsule3d::new(hull.radius, hull.length))),
 		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
 	));
 }
 
 /// Dynamic capsule that receives [`MovementAction`] (WASD / jump).
-pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: Vec3) -> Entity {
-	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
-	let mut caster_shape = collider.clone();
-	caster_shape.set_scale(Vec3::splat(0.99), 10);
-	commands
+pub(crate) fn spawn_character_controller(
+	commands: &mut Commands,
+	translation: Vec3,
+	hull: LocomotionCapsule,
+) -> Entity {
+	let body = commands
 		.spawn((
 			CharacterController,
 			Transform::from_translation(translation),
 			Visibility::default(),
 			RigidBody::Dynamic,
-			collider,
 			PhysicsInteractionLayer::animated_layers(),
-			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-				.with_max_distance(GROUND_CAST_DISTANCE)
-				.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 			LockedAxes::ROTATION_LOCKED,
-		))
-		.insert((
 			MovementAcceleration(MOVE_ACCEL),
 			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
@@ -155,20 +150,35 @@ pub(crate) fn spawn_character_controller(commands: &mut Commands, translation: V
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(1.25),
 		))
-		.id()
+		.id();
+	apply_locomotion_capsule(commands, body, hull);
+	body
 }
 
-pub(crate) fn capsule_half_height() -> f32 {
-	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
+pub(crate) fn apply_locomotion_capsule(
+	commands: &mut Commands,
+	body: Entity,
+	hull: LocomotionCapsule,
+) {
+	let collider = Collider::capsule(hull.radius, hull.length);
+	let mut caster_shape = collider.clone();
+	caster_shape.set_scale(Vec3::splat(0.99), 10);
+	commands.entity(body).insert((
+		hull,
+		collider,
+		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+			.with_max_distance(GROUND_CAST_DISTANCE)
+			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
+	));
 }
 
-pub fn controller_spawn_point(x: f32, z: f32, elevation: f32) -> Vec3 {
-	Vec3::new(x, elevation + capsule_half_height() + 0.5, z)
+pub fn controller_spawn_point(x: f32, z: f32, elevation: f32, hull: LocomotionCapsule) -> Vec3 {
+	Vec3::new(x, elevation + hull.half_height() + 0.5, z)
 }
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	controller_spawn_point(center.x, center.z, elevation)
+	controller_spawn_point(center.x, center.z, elevation, LocomotionCapsule::HUMANOID)
 }
 
 /// Reposition the player after terrain generation.
@@ -188,20 +198,18 @@ pub(crate) fn park_player_for_stampede(
 }
 
 /// Restore the home capsule after the herd is cleared.
-pub(crate) fn restore_player_controller(commands: &mut Commands, player: Entity) {
-	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
-	let mut caster_shape = collider.clone();
-	caster_shape.set_scale(Vec3::splat(0.99), 10);
+pub(crate) fn restore_player_controller(
+	commands: &mut Commands,
+	player: Entity,
+	hull: LocomotionCapsule,
+) {
 	commands.entity(player).insert((
 		CharacterController,
-		collider,
 		PhysicsInteractionLayer::animated_layers(),
-		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-			.with_max_distance(GROUND_CAST_DISTANCE)
-			.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 		GravityScale(1.25),
 		CameraFollow,
 	));
+	apply_locomotion_capsule(commands, player, hull);
 }
 
 pub fn respawn_player_on_layout(

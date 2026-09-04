@@ -2571,6 +2571,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
+name = "combat-targeting"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2942,6 +2950,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crozon-character-ragdoll"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "crozon-character-motion",
+ "crozon-characters",
+ "crozon-rigs",
+ "damage",
+ "lod-avian",
+ "player",
+ "rigs",
+]
+
+[[package]]
 name = "crozon-character-shaders"
 version = "0.0.1"
 dependencies = [
@@ -3046,6 +3070,14 @@ name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
+
+[[package]]
+name = "damage"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "projectiles",
+]
 
 [[package]]
 name = "dasp_sample"
@@ -3313,6 +3345,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "evasion-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "spotting-intelligence",
+]
+
+[[package]]
 name = "event-listener"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3364,12 +3405,16 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "combat-targeting",
  "crozon-characters",
+ "damage",
  "firearm-user",
  "firearms",
  "lod-avian",
  "movement-intelligence",
  "player",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
 ]
 
 [[package]]
@@ -3378,11 +3423,14 @@ version = "0.0.1"
 dependencies = [
  "avian3d",
  "bevy",
+ "crozon-character-items",
  "crozon-characters",
  "crozon-rigs",
+ "damage",
  "firearms",
  "lod-avian",
  "maybraid-character-controller",
+ "maybraid-input",
  "player",
  "player-camera",
 ]
@@ -3395,6 +3443,7 @@ dependencies = [
  "bevy",
  "bevy_hanabi",
  "clap",
+ "damage",
  "firearms-components",
  "lod",
  "lod-avian",
@@ -3420,13 +3469,21 @@ dependencies = [
  "avian3d",
  "bevy",
  "clap",
+ "combat-targeting",
+ "crozon-character-items",
+ "crozon-character-ragdoll",
  "crozon-characters",
+ "damage",
+ "evasion-intelligence",
  "firearm-intelligence",
  "firearm-user",
  "firearms",
+ "fleeing-intelligence",
  "game-commands",
+ "hiding-intelligence",
  "lod",
  "lod-avian",
+ "material-ref",
  "maybraid-character-controller",
  "maybraid-input",
  "movement-intelligence",
@@ -3436,11 +3493,15 @@ dependencies = [
  "player",
  "player-camera",
  "procedural-common",
- "projectiles",
  "richmond-building-components",
  "richmond-building-physics",
  "richmond-buildings",
  "richmond-developments",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
+ "threat-intelligence",
+ "threat-intelligence-damage",
+ "threat-management-intelligence",
 ]
 
 [[package]]
@@ -3457,6 +3518,16 @@ checksum = "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "fleeing-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "evasion-intelligence",
+ "movement-intelligence",
 ]
 
 [[package]]
@@ -3978,6 +4049,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
+name = "hiding-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "evasion-intelligence",
+ "lod-avian",
+ "movement-intelligence",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4319,6 +4404,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "journeying-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "meandering-intelligence",
+ "poi-intelligence",
+]
+
+[[package]]
 name = "js-sys"
 version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4615,6 +4710,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "objc2 0.6.4",
+ "objc2-core-haptics",
  "objc2-foundation 0.3.2",
  "objc2-game-controller",
 ]
@@ -4664,6 +4760,15 @@ dependencies = [
  "bevy",
  "maybraid-input",
  "maybraid-world",
+]
+
+[[package]]
+name = "meandering-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "poi-intelligence",
 ]
 
 [[package]]
@@ -5183,6 +5288,16 @@ dependencies = [
  "dispatch2",
  "libc",
  "objc2 0.6.4",
+]
+
+[[package]]
+name = "objc2-core-haptics"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbf2dae8a5e651adec3af54059cbce15e3aadbf8913da9782e1e1affc29aa512"
+dependencies = [
+ "objc2 0.6.4",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]
@@ -5755,6 +5870,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "poi-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "gimme-core",
+ "movement-intelligence",
+ "routing-intelligence",
+]
+
+[[package]]
+name = "poi-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "journeying-intelligence",
+ "meandering-intelligence",
+ "movement-intelligence",
+ "poi-intelligence",
+]
+
+[[package]]
 name = "polling"
 version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6324,6 +6461,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "routing-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "lod-avian",
+ "movement-intelligence",
+]
+
+[[package]]
+name = "routing-playground"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "lod-avian",
+ "log",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "player",
+ "render-item",
+ "routing-intelligence",
+ "tether-intelligence",
+]
+
+[[package]]
 name = "rstar"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6702,6 +6874,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "spotting-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+]
+
+[[package]]
+name = "spotting-intelligence-avian"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "lod-avian",
+ "spotting-intelligence",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6876,6 +7067,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tether-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "movement-intelligence",
+ "routing-intelligence",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6922,6 +7123,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "threat-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "gimme-core",
+ "spotting-intelligence",
+]
+
+[[package]]
+name = "threat-intelligence-damage"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "threat-intelligence",
+]
+
+[[package]]
+name = "threat-management-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "combat-targeting",
+ "damage",
+ "evasion-intelligence",
+ "spotting-intelligence",
+ "threat-intelligence",
 ]
 
 [[package]]

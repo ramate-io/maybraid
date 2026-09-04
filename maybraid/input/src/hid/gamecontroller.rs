@@ -2,18 +2,32 @@
 
 use std::collections::{HashMap, HashSet};
 use std::ptr::from_ref;
+use std::time::Duration;
 
 use bevy::input::gamepad::{
-	GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent,
-	RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent, RawGamepadEvent,
+	GamepadAxis, GamepadButton, GamepadConnection, GamepadConnectionEvent, GamepadRumbleIntensity,
+	GamepadRumbleRequest, RawGamepadAxisChangedEvent, RawGamepadButtonChangedEvent,
+	RawGamepadEvent,
 };
 use bevy::input::InputSystems;
 use bevy::prelude::*;
+use objc2::rc::Retained;
+use objc2::runtime::{NSObject, ProtocolObject};
+use objc2::{msg_send, AnyThread, Message};
+use objc2_core_haptics::{
+	CHHapticDynamicParameter, CHHapticEngine, CHHapticEvent, CHHapticEventParameter,
+	CHHapticEventParameterIDHapticIntensity, CHHapticEventParameterIDHapticSharpness,
+	CHHapticEventTypeHapticContinuous, CHHapticPattern, CHHapticPatternPlayer,
+	CHHapticTimeImmediate,
+};
+use objc2_foundation::NSArray;
 use objc2_game_controller::{
-	GCController, GCControllerButtonInput, GCControllerDirectionPad, GCDevice, GCExtendedGamepad,
+	GCController, GCControllerButtonInput, GCControllerDirectionPad, GCDevice, GCDeviceHaptics,
+	GCExtendedGamepad, GCHapticsLocality, GCHapticsLocalityDefault, GCHapticsLocalityHandles,
 };
 
 use super::value_changed;
+use crate::rumble::PadRumbleSystems;
 
 pub struct GameControllerPlugin;
 
@@ -21,7 +35,8 @@ impl Plugin for GameControllerPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<GameControllerPads>()
 			.add_systems(PreStartup, (enable_background_events, poll_game_controllers).chain())
-			.add_systems(PreUpdate, poll_game_controllers.before(InputSystems));
+			.add_systems(PreUpdate, poll_game_controllers.before(InputSystems))
+			.add_systems(PostUpdate, play_gamecontroller_rumble.in_set(PadRumbleSystems::Play));
 	}
 }
 
@@ -30,8 +45,25 @@ struct GameControllerPads {
 	pads: HashMap<usize, PadState>,
 }
 
+/// GameController / Core Haptics objects are main-thread only. This plugin
+/// already polls on the Bevy thread that pumps CFRunLoop.
+struct MainThreadRc<T>(Retained<T>);
+
+// SAFETY: `GameControllerPlugin` systems run on the main thread that owns these
+// Objective-C objects. They are never sent to another thread.
+unsafe impl<T> Send for MainThreadRc<T> {}
+unsafe impl<T> Sync for MainThreadRc<T> {}
+
+struct LivePulse {
+	player: MainThreadRc<ProtocolObject<dyn CHHapticPatternPlayer>>,
+	until: f32,
+}
+
 struct PadState {
 	entity: Entity,
+	controller: MainThreadRc<GCController>,
+	engine: Option<MainThreadRc<CHHapticEngine>>,
+	pulses: Vec<LivePulse>,
 	axes: HashMap<GamepadAxis, f32>,
 	buttons: HashMap<GamepadButton, f32>,
 }
@@ -105,7 +137,23 @@ fn sync_controller(
 		);
 		connection_events.write(event.clone());
 		raw_events.write(event.into());
-		PadState { entity, axes: HashMap::new(), buttons: HashMap::new() }
+		let name = controller_name(controller);
+		// SAFETY: live controller; `haptics` is nil when the OS has no rumble path.
+		let has_haptics = unsafe { controller.haptics() }.is_some();
+		info!("pad_rumble: connected name={name} entity={entity:?} haptics={has_haptics}");
+		if name == "Controller" {
+			info!(
+				"pad_rumble: generic 'Controller' name is usually USB Xbox; Apple rumble often only works over Bluetooth"
+			);
+		}
+		PadState {
+			entity,
+			controller: MainThreadRc(controller.retain()),
+			engine: None,
+			pulses: Vec::new(),
+			axes: HashMap::new(),
+			buttons: HashMap::new(),
+		}
 	});
 	emit_extended(state, &extended, raw_events);
 }
@@ -213,4 +261,200 @@ unsafe fn emit_button(
 	}
 	state.buttons.insert(button, value);
 	raw_events.write(RawGamepadButtonChangedEvent::new(state.entity, button, value).into());
+}
+
+fn play_gamecontroller_rumble(
+	time: Res<Time>,
+	mut requests: MessageReader<GamepadRumbleRequest>,
+	mut pads: ResMut<GameControllerPads>,
+) {
+	let now = time.elapsed_secs();
+	for state in pads.pads.values_mut() {
+		expire_pulses(state, now);
+	}
+	for request in requests.read() {
+		match request {
+			GamepadRumbleRequest::Stop { gamepad } => {
+				if let Some(state) = pad_mut(&mut pads, *gamepad) {
+					clear_pulses(state);
+					state.engine = None;
+				}
+			}
+			GamepadRumbleRequest::Add { gamepad, duration, intensity } => {
+				let Some(state) = pad_mut(&mut pads, *gamepad) else {
+					let known: Vec<Entity> = pads.pads.values().map(|state| state.entity).collect();
+					warn!("pad_rumble: no PadState for Gamepad {gamepad:?} (known {known:?})");
+					continue;
+				};
+				play_pulse(state, now, *intensity, *duration);
+			}
+		}
+	}
+}
+
+fn expire_pulses(state: &mut PadState, now: f32) {
+	let mut keep = Vec::new();
+	for pulse in state.pulses.drain(..) {
+		if now < pulse.until {
+			keep.push(pulse);
+			continue;
+		}
+		let _ = unsafe { pulse.player.0.stopAtTime_error(CHHapticTimeImmediate) };
+	}
+	state.pulses = keep;
+}
+
+fn clear_pulses(state: &mut PadState) {
+	for pulse in state.pulses.drain(..) {
+		let _ = unsafe { pulse.player.0.stopAtTime_error(CHHapticTimeImmediate) };
+	}
+}
+
+fn pad_mut(pads: &mut GameControllerPads, gamepad: Entity) -> Option<&mut PadState> {
+	pads.pads.values_mut().find(|state| state.entity == gamepad)
+}
+
+fn ensure_engine(state: &mut PadState) -> Option<Retained<CHHapticEngine>> {
+	if let Some(engine) = &state.engine {
+		return Some(engine.0.clone());
+	}
+	let engine = start_engine(&state.controller.0)?;
+	state.engine = Some(MainThreadRc(engine.clone()));
+	Some(engine)
+}
+
+fn start_engine(controller: &GCController) -> Option<Retained<CHHapticEngine>> {
+	let name = controller_name(controller);
+	// SAFETY: `controller` is a live `GCController` retained on `PadState`.
+	let Some(haptics) = (unsafe { controller.haptics() }) else {
+		warn!("pad_rumble: {name} has no GCDevice.haptics (USB Xbox on Mac often nil)");
+		return None;
+	};
+	let Some(engine) = create_engine(&haptics) else {
+		return None;
+	};
+	// SAFETY: new engine; `playsHapticsOnly` must be set before start.
+	unsafe {
+		engine.setPlaysHapticsOnly(true);
+		engine.setAutoShutdownEnabled(false);
+		if let Err(err) = engine.startAndReturnError() {
+			warn!("pad_rumble: {name} engine start failed: {err:?}");
+			return None;
+		}
+	}
+	info!("pad_rumble: {name} haptic engine started");
+	Some(engine)
+}
+
+/// `createEngineWithLocality:` is macOS 11+, but objc2 0.3.2 only binds it on
+/// iOS / tvOS / visionOS. Call it directly so Xbox pads rumble on Mac too.
+fn create_engine(haptics: &GCDeviceHaptics) -> Option<Retained<CHHapticEngine>> {
+	// SAFETY: Apple exports these locality strings from GameController.framework.
+	let localities =
+		unsafe { [("Handles", GCHapticsLocalityHandles), ("Default", GCHapticsLocalityDefault)] };
+	for (label, locality) in localities {
+		if let Some(engine) = create_engine_at(haptics, locality) {
+			info!("pad_rumble: engine locality={label}");
+			return Some(engine);
+		}
+		warn!("pad_rumble: createEngineWithLocality:{label} failed");
+	}
+	None
+}
+
+fn create_engine_at(
+	haptics: &GCDeviceHaptics,
+	locality: &GCHapticsLocality,
+) -> Option<Retained<CHHapticEngine>> {
+	// SAFETY: GameController documents this selector on `GCDeviceHaptics`.
+	let engine: Option<Retained<NSObject>> =
+		unsafe { msg_send![haptics, createEngineWithLocality: locality] };
+	let object = engine?;
+	object.downcast().ok()
+}
+
+fn play_pulse(
+	state: &mut PadState,
+	now: f32,
+	intensity: GamepadRumbleIntensity,
+	duration: Duration,
+) {
+	let name = controller_name(&state.controller.0);
+	let Some(engine) = ensure_engine(state) else {
+		warn!("pad_rumble: no haptic engine for {name}");
+		return;
+	};
+	let weak = intensity.weak_motor.clamp(0.0, 1.0);
+	let strong = intensity.strong_motor.clamp(0.0, 1.0);
+	let total = weak + strong;
+	if total <= 0.0 || duration.is_zero() {
+		warn!("pad_rumble: {name} play skipped (zero intensity or duration)");
+		return;
+	}
+	let haptic_intensity = total.min(1.0);
+	// Xbox rumble motors want low sharpness; 0.7 reads as a click, not a shake.
+	let sharpness = (0.12 + 0.25 * (weak / total)).clamp(0.0, 0.45);
+	let secs = duration.as_secs_f64().max(0.08);
+	let Some(pattern) = haptic_pattern(haptic_intensity, sharpness, secs) else {
+		warn!("pad_rumble: {name} pattern build failed");
+		return;
+	};
+	// SAFETY: keep the player retained until `until` or Core Haptics cancels on drop.
+	let result = unsafe { engine.createPlayerWithPattern_error(&pattern) };
+	let player = match result {
+		Ok(player) => player,
+		Err(err) => {
+			warn!("pad_rumble: {name} player create failed: {err:?}");
+			return;
+		}
+	};
+	if let Err(err) = unsafe { player.startAtTime_error(CHHapticTimeImmediate) } {
+		warn!("pad_rumble: {name} play failed: {err:?}");
+		return;
+	}
+	let until = now + duration.as_secs_f32().max(0.08);
+	info!(
+		"pad_rumble: {name} play ok duration={duration:?} intensity={haptic_intensity:.2} sharpness={sharpness:.2} live_until={until:.3}"
+	);
+	state.pulses.push(LivePulse { player: MainThreadRc(player), until });
+}
+
+fn haptic_pattern(
+	intensity: f32,
+	sharpness: f32,
+	duration: f64,
+) -> Option<Retained<CHHapticPattern>> {
+	// SAFETY: Core Haptics inits copy the parameter values into the event.
+	unsafe {
+		let intensity = CHHapticEventParameter::initWithParameterID_value(
+			CHHapticEventParameter::alloc(),
+			CHHapticEventParameterIDHapticIntensity,
+			intensity,
+		);
+		let sharpness = CHHapticEventParameter::initWithParameterID_value(
+			CHHapticEventParameter::alloc(),
+			CHHapticEventParameterIDHapticSharpness,
+			sharpness,
+		);
+		let params = NSArray::from_retained_slice(&[intensity, sharpness]);
+		let event = CHHapticEvent::initWithEventType_parameters_relativeTime_duration(
+			CHHapticEvent::alloc(),
+			CHHapticEventTypeHapticContinuous,
+			&params,
+			0.0,
+			duration,
+		);
+		let events = NSArray::from_retained_slice(&[event]);
+		let parameters = NSArray::<CHHapticDynamicParameter>::from_retained_slice(&[]);
+		CHHapticPattern::initWithEvents_parameters_error(
+			CHHapticPattern::alloc(),
+			&events,
+			&parameters,
+		)
+		.map_err(|err| {
+			warn!("pad_rumble: CHHapticPattern init failed: {err:?}");
+			err
+		})
+		.ok()
+	}
 }

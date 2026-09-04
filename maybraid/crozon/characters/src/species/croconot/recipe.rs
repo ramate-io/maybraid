@@ -14,7 +14,7 @@ use super::{
 use crate::{
 	assembly::CharacterPartSlot,
 	assets::AssetNormalization,
-	components::CharacterComponents,
+	components::{CharacterComponents, LocomotionCapsule},
 	layer::Layers,
 	nodes::{PartNode, RigNode},
 	presets::{BuildPreset, GenderPreset},
@@ -62,6 +62,10 @@ impl Default for Croconot {
 }
 
 impl CharacterComponents for Croconot {
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::QUADRUPED
+	}
+
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
 		let pose = CroconotPose {
 			gender: self.gender,

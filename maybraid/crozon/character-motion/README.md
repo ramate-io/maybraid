@@ -41,6 +41,9 @@ apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rota
 UltraLow: sync strips markers → far hosts still tick time, but bone writes and
 rays are archetype-filtered out.
 
+`SuspendAnimation` leaves mailbox time intact while an external pose driver,
+such as `crozon-character-ragdoll`, owns the bones.
+
 ## LOD: host markers
 
 **Do not stamp motion markers on level-content children.** Chunk fulfill only

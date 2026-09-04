@@ -181,6 +181,83 @@ Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.ht
 
 Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
 
+## Spotting and combat targeting
+
+Keep semantic eligibility, visual knowledge, combat membership, and weapon
+opportunity as separate layers:
+
+1. [`SpotSubject`](maybraid/intelligence/spotting/lib/src/subject.rs) identifies
+   something that may be observed. Semantic interest layers describe what it
+   is; they are not physics collision layers.
+2. [`SpottingUser`](maybraid/intelligence/spotting/lib/src/user.rs) owns
+   directives, explicit subject hints, and remembered visual contacts.
+   Broadphase discovery and explicit hints are complementary candidate sources:
+   merge both into the same bounded visibility executor.
+3. A candidate becomes a [`SpottedContact`](maybraid/intelligence/spotting/lib/src/contact.rs)
+   only after a successful visibility probe. Being a known enemy, objective, or
+   recent attacker is not equivalent to currently seeing it.
+4. [`CombatTargeting`](maybraid/intelligence/combat/targeting/src/targeting.rs)
+   owns semantic target membership, contact snapshots, factor algebra, and
+   ranking. Use independent [`TargetSource`](maybraid/intelligence/combat/targeting/src/source.rs)
+   bits so enemyship, objectives, spotting, and received fire can add or remove
+   their own reasons without overwriting one another.
+5. Weapon intelligence consumes actionable ranked contacts and contributes
+   weapon-specific opportunity. Eye-level spotting and muzzle-level trajectory
+   validation are distinct visibility tasks and should retain separate caches
+   and cadences. Whether the combatant may actually raise the trigger is a
+   per-entity [`FirearmEngagement`](maybraid/intelligence/combat/firearm/src/engagement.rs)
+   grant (`Hold`, `ReturnFire`, or `WeaponsFree`), not a global fire lock and
+   not a substitute for threat classification.
+6. [`threat-intelligence-damage`](maybraid/intelligence/threat/damage) maps
+   [`DamageApplied`](maybraid/damage/src/lib.rs) onto decaying individual
+   antagonism and a directed `RECEIVED_DAMAGE` observation. That is typed
+   knowledge for the victim; it does not fabricate a sighting.
+
+An active target may intentionally have no current contact memory. Consumers
+must therefore select the highest-ranked target with the knowledge they require,
+not blindly take rank zero and fail when its contact is absent. Likewise,
+eligibility filters must describe the **target**, not the observer: filtering
+firearm trajectory subjects with `Without<FirearmIntelligence>` excludes every
+armed NPC from NPC-to-NPC combat. Exclude self explicitly by entity identity.
+
+Gameplay events should write typed knowledge rather than secretly bypassing the
+pipeline. For example, a session may flip combatants from `Hold` to
+`WeaponsFree`, while received fire or applied damage adds a source-owned
+observation or decaying antagonism; neither event should fabricate a successful
+sighting. Avoid reading live transforms as remembered knowledge. Resolve live
+transforms only inside the visibility executor that is actively checking them,
+then store the resulting observation snapshot.
+
+Applications own budgets and cadence. Keep reusable spotting and targeting
+plugins cadence-neutral; configure discovery, respotting, ranking, movement,
+and muzzle validation independently in the application. Add a vertical
+integration test that exercises `candidate source → visibility → contact →
+target rank → weapon trajectory`, including peer combatants that carry the same
+intelligence components as the observer.
+
+Civilian evasion follows the same knowledge split. [`EvasionIntelligenceUser`](maybraid/intelligence/evasion/src/user.rs)
+is assailant memory and exclusive hide | flee routing, not a movement mixer.
+[`fleeing-intelligence`](maybraid/intelligence/fleeing) and
+[`hiding-intelligence`](maybraid/intelligence/hiding) consume that signal and
+write [`MovementObjective`](maybraid/intelligence/movement/lib/src/objective.rs).
+A heard shot is `RECEIVED_FIRE`, never a fake sighting. Hide occupancy queries
+must identify other subjects by entity, not `Without<EvasionIntelligenceUser>`.
+Combat spotting looks for [`CHARACTER`](maybraid/intelligence/spotting/lib/src/layers.rs);
+civilians use a distinct `CIVILIAN` interest layer so they occupy hide pockets
+without entering firearm target memory.
+
+Long-range walking is [`routing-intelligence`](maybraid/intelligence/routing).
+Band segment lengths belong to the mover. Routing commits a corridor, then
+writes a nearby [`Reach`](maybraid/intelligence/movement/lib/src/objective.rs);
+it does not replace local movement planning.
+
+Following a live entity is [`tether-intelligence`](maybraid/intelligence/tether).
+Install [`TetherIntelligenceUser`](maybraid/intelligence/tether/src/user.rs) for
+the duty and set `enabled` when it may write; keep
+[`TetherMemory`](maybraid/intelligence/tether/src/memory.rs) when the brain is
+popped. Close remaining work goes to movement; far remaining work goes to
+routing. Do not add/remove the user every time `satisfied` flips.
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.

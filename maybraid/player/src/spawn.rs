@@ -7,21 +7,29 @@ use crozon_characters::{character_bounds, CharacterComponents, CharacterRoot, Co
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::body::spawn_character_controller;
+use crate::body::{apply_locomotion_capsule, spawn_character_controller};
 use crate::identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCapsule, PlayerLook, PlayerVisual,
 	PlayerYawOwner,
 };
 
-pub const CAPSULE_RADIUS: f32 = 0.4;
-pub const CAPSULE_LENGTH: f32 = 1.0;
+pub use crozon_characters::LocomotionCapsule;
+
+/// Humanoid default; live bodies carry [`LocomotionCapsule`] from the recipe.
+pub const CAPSULE_RADIUS: f32 = LocomotionCapsule::HUMANOID.radius;
+pub const CAPSULE_LENGTH: f32 = LocomotionCapsule::HUMANOID.length;
 
 pub fn capsule_spawn_height() -> f32 {
-	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.15
+	LocomotionCapsule::HUMANOID.spawn_height()
 }
 
 pub fn spawn_player(commands: &mut Commands) -> Entity {
-	let player = spawn_character_controller(commands, Vec3::new(0.0, capsule_spawn_height(), 0.0));
+	spawn_player_with_hull(commands, LocomotionCapsule::HUMANOID)
+}
+
+pub fn spawn_player_with_hull(commands: &mut Commands, hull: LocomotionCapsule) -> Entity {
+	let player =
+		spawn_character_controller(commands, Vec3::new(0.0, hull.spawn_height(), 0.0), hull);
 	commands.entity(player).insert((
 		Name::new("Player"),
 		Player,
@@ -34,7 +42,16 @@ pub fn spawn_player(commands: &mut Commands) -> Entity {
 }
 
 pub fn spawn_npc(commands: &mut Commands, translation: Vec3, look: PlayerLook) -> Entity {
-	let npc = spawn_character_controller(commands, translation);
+	spawn_npc_with_hull(commands, translation, look, LocomotionCapsule::HUMANOID)
+}
+
+pub fn spawn_npc_with_hull(
+	commands: &mut Commands,
+	translation: Vec3,
+	look: PlayerLook,
+	hull: LocomotionCapsule,
+) -> Entity {
+	let npc = spawn_character_controller(commands, translation, hull);
 	commands.entity(npc).insert((Name::new("Npc"), Npc, look, PlayerYawOwner::Wish));
 	npc
 }
@@ -55,12 +72,30 @@ pub fn spawn_capsule_mesh(
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
 ) {
+	spawn_capsule_mesh_with_hull(
+		commands,
+		body,
+		name,
+		LocomotionCapsule::HUMANOID,
+		meshes,
+		materials,
+	);
+}
+
+pub fn spawn_capsule_mesh_with_hull(
+	commands: &mut Commands,
+	body: Entity,
+	name: &'static str,
+	hull: LocomotionCapsule,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
 	commands.spawn((
 		Name::new(name),
 		PlayerCapsule,
 		ChildOf(body),
 		Visibility::Hidden,
-		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
+		Mesh3d(meshes.add(Capsule3d::new(hull.radius, hull.length))),
 		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
 	));
 }
@@ -98,6 +133,8 @@ fn spawn_character_visual<
 	extra: impl Bundle,
 ) -> Entity {
 	let host = ComponentsOnly(recipe);
+	let hull = host.locomotion_capsule();
+	apply_locomotion_capsule(commands, body, hull);
 	let bounds = character_bounds(&host.0);
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
@@ -160,7 +197,5 @@ fn needs_body_visual<BodyFilter: QueryFilter, VisualFilter: QueryFilter>(
 	bodies: Query<Entity, BodyFilter>,
 	visuals: Query<&ChildOf, VisualFilter>,
 ) -> Option<Entity> {
-	let body = bodies.single().ok()?;
-	let has_visual = visuals.iter().any(|child| child.parent() == body);
-	(!has_visual).then_some(body)
+	bodies.iter().find(|&body| !visuals.iter().any(|child| child.parent() == body))
 }

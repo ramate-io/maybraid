@@ -14,9 +14,11 @@ use crozon_characters::{
 		epiphant::{Epiphant, EpiphantConfig},
 		hars::{Hars, HarsConfig},
 		sonyak::{Sonyak, SonyakConfig},
+		topple::{Topple, ToppleConfig},
 		ylter::{Yilter, YilterConfig},
 	},
-	CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, Layer, PartNode, RigId,
+	CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, Layer, LocomotionCapsule,
+	PartNode, RigId,
 };
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
@@ -82,6 +84,24 @@ fn clothed_braidman_adds_clothing_layer() {
 	assert_eq!(clothed_parts.len(), inner_len + 1);
 	assert!(clothed_parts.labeled.contains_key(&Layer::new("clothing")));
 	assert_eq!(clothed.rig_nodes_for_level(LodSceneLevel::High).len(), 2);
+}
+
+#[test]
+fn braidman_uses_the_humanoid_hull() {
+	let braidman = Braidman::from_config(&BraidmanConfig::default_preview());
+	assert_eq!(braidman.locomotion_capsule(), LocomotionCapsule::HUMANOID);
+	let clothed = BraidmanConfig::default_preview().clothed();
+	assert_eq!(clothed.locomotion_capsule(), LocomotionCapsule::HUMANOID);
+}
+
+#[test]
+fn whelp_and_quadruped_hulls_differ_from_humanoid() {
+	let topple = Topple::from_config(&ToppleConfig::default_preview());
+	assert_eq!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID.scaled(0.30));
+	let brenal = Brenal::from_config(&BrenalConfig::default_preview());
+	assert_eq!(brenal.locomotion_capsule(), LocomotionCapsule::QUADRUPED);
+	assert_ne!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID);
+	assert_ne!(brenal.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 }
 
 #[test]

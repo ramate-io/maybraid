@@ -21,6 +21,45 @@ use rigs::AssemblyRoot;
 use crate::scene_children::{maybe_component, scene_children};
 use crate::socket::{RigId, SkinRef};
 
+/// Rest-pose locomotion hull. Matches Avian `Collider::capsule(radius, length)`:
+/// `length` is the cylinder; total height is `length + 2 * radius`.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct LocomotionCapsule {
+	pub radius: f32,
+	pub length: f32,
+}
+
+impl LocomotionCapsule {
+	/// Standing ~1.8 m humanoid (Braidman and other unscaled bipeds).
+	pub const HUMANOID: Self = Self { radius: 0.4, length: 1.0 };
+	/// Low vertical stand-in for a quadruped (not a horizontal body hull).
+	pub const QUADRUPED: Self = Self { radius: 0.35, length: 0.4 };
+	const GROUND_CLEARANCE: f32 = 0.15;
+
+	pub fn scaled(self, scale: f32) -> Self {
+		Self { radius: self.radius * scale.max(0.0), length: self.length * scale.max(0.0) }
+	}
+
+	pub fn half_height(self) -> f32 {
+		self.radius + self.length * 0.5
+	}
+
+	pub fn spawn_height(self) -> f32 {
+		self.half_height() + Self::GROUND_CLEARANCE
+	}
+
+	/// Upper half of the top hemisphere, in local Y of the capsule origin.
+	pub fn headshot_min_local_y(self) -> f32 {
+		self.length * 0.5 + self.radius * 0.5
+	}
+}
+
+impl Default for LocomotionCapsule {
+	fn default() -> Self {
+		Self::HUMANOID
+	}
+}
+
 /// Domain IR exposed by a character (or character wrapper) for structural composition.
 pub trait CharacterComponents {
 	fn rig_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RigNode> {
@@ -29,6 +68,11 @@ pub trait CharacterComponents {
 
 	fn part_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartNode> {
 		Layers::new()
+	}
+
+	/// Physics hull baked from the rest / species baseline, not the posed mesh.
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		LocomotionCapsule::HUMANOID
 	}
 }
 
@@ -42,6 +86,10 @@ pub trait CharacterRecipe {
 
 	fn clothed(&self) -> Clothed<Self::Components> {
 		Clothed::new(self.components(), self.clothing_layers())
+	}
+
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		self.components().locomotion_capsule()
 	}
 }
 
@@ -65,6 +113,10 @@ impl<T: CharacterComponents + ?Sized> CharacterComponents for &T {
 
 	fn part_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		(**self).part_nodes_for_level(level)
+	}
+
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		(**self).locomotion_capsule()
 	}
 }
 
@@ -142,6 +194,10 @@ impl<T: CharacterComponents> CharacterComponents for Clothed<T> {
 		}
 		out
 	}
+
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		self.inner.locomotion_capsule()
+	}
 }
 
 /// Newtype: present a [`CharacterComponents`] value as a structural [`LodScene`] host.
@@ -187,6 +243,10 @@ impl<T: CharacterComponents + Send + Sync + 'static> CharacterComponents for Com
 
 	fn part_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
 		self.0.part_nodes_for_level(level)
+	}
+
+	fn locomotion_capsule(&self) -> LocomotionCapsule {
+		self.0.locomotion_capsule()
 	}
 }
 
@@ -284,4 +344,26 @@ pub fn component_only_scene(
 /// Approximate AABB for a standing humanoid (High can be large; bands are identical).
 pub fn character_bounds(_character: &impl CharacterComponents) -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::new(-1.5, -0.25, -1.5), Vec3::new(1.5, 2.75, 1.5))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn humanoid_hull_matches_the_legacy_capsule() {
+		let hull = LocomotionCapsule::HUMANOID;
+		assert!((hull.radius - 0.4).abs() < 1e-5);
+		assert!((hull.length - 1.0).abs() < 1e-5);
+		assert!((hull.half_height() - 0.9).abs() < 1e-5);
+		assert!((hull.spawn_height() - 1.05).abs() < 1e-5);
+		assert!((hull.headshot_min_local_y() - 0.7).abs() < 1e-5);
+	}
+
+	#[test]
+	fn scaled_hull_keeps_proportions() {
+		let hull = LocomotionCapsule::HUMANOID.scaled(0.30);
+		assert!((hull.radius - 0.12).abs() < 1e-5);
+		assert!((hull.length - 0.30).abs() < 1e-5);
+	}
 }
