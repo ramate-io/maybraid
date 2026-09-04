@@ -13,7 +13,7 @@ use richmond_developments::{
 	HUT_MIN_FOOTPRINT,
 };
 
-use crate::finish::DevelopmentFinish;
+use crate::finish::{DevelopmentFinish, DevelopmentFinishRole, SuburbanPaletteBias};
 use crate::scatter::{ScatterChoice, ScatterRecipe};
 
 #[derive(Debug, Clone, Copy)]
@@ -79,6 +79,76 @@ pub(crate) fn fit_shepherds_building(
 	hash: SeededHash,
 	noise: NoiseParams,
 ) -> Option<ShepherdsVillageBuilding> {
+	fit_shepherds_building_with_role(kind, center, yaw, footprint, height, hash, noise, None)
+}
+
+pub(crate) fn fit_shepherds_building_for_role(
+	kind: ShepherdsBuildingKind,
+	center: Vec2,
+	yaw: f32,
+	footprint: Vec2,
+	height: f32,
+	hash: SeededHash,
+	noise: NoiseParams,
+	role: DevelopmentFinishRole,
+) -> Option<ShepherdsVillageBuilding> {
+	fit_shepherds_building_with_role(kind, center, yaw, footprint, height, hash, noise, Some(role))
+}
+
+pub(crate) fn fit_suburban_building(
+	kind: ShepherdsBuildingKind,
+	center: Vec2,
+	yaw: f32,
+	footprint: Vec2,
+	height: f32,
+	hash: SeededHash,
+	noise: NoiseParams,
+	bias: SuburbanPaletteBias,
+) -> Option<ShepherdsVillageBuilding> {
+	fit_shepherds_building_with_finish(
+		kind,
+		center,
+		yaw,
+		footprint,
+		height,
+		hash,
+		noise,
+		Some((DevelopmentFinishRole::SuburbanHome, Some(bias))),
+	)
+}
+
+fn fit_shepherds_building_with_role(
+	kind: ShepherdsBuildingKind,
+	center: Vec2,
+	yaw: f32,
+	footprint: Vec2,
+	height: f32,
+	hash: SeededHash,
+	noise: NoiseParams,
+	role: Option<DevelopmentFinishRole>,
+) -> Option<ShepherdsVillageBuilding> {
+	fit_shepherds_building_with_finish(
+		kind,
+		center,
+		yaw,
+		footprint,
+		height,
+		hash,
+		noise,
+		role.map(|role| (role, None)),
+	)
+}
+
+fn fit_shepherds_building_with_finish(
+	kind: ShepherdsBuildingKind,
+	center: Vec2,
+	yaw: f32,
+	footprint: Vec2,
+	height: f32,
+	hash: SeededHash,
+	noise: NoiseParams,
+	finish_role: Option<(DevelopmentFinishRole, Option<SuburbanPaletteBias>)>,
+) -> Option<ShepherdsVillageBuilding> {
 	let authored_height = shepherds_authored_height(kind);
 	let confines = Confines::new(
 		Aabb3d::from_min_max(
@@ -96,7 +166,15 @@ pub(crate) fn fit_shepherds_building(
 		ShepherdsBuildingKind::House => {
 			let (house, _) = ShepherdsHouse::fit_to_confines(&confines, noise).ok()?;
 			let wooden = house.wall_style == PanelStyle::RibAndPlank;
-			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
+			let finish = finish_role.map_or_else(
+				|| DevelopmentFinish::pick_shepherds(hash, wooden),
+				|(role, bias)| {
+					bias.map_or_else(
+						|| DevelopmentFinish::pick_for_role(hash, role, wooden),
+						|bias| DevelopmentFinish::pick_suburban_home(hash, bias, wooden),
+					)
+				},
+			);
 			ShepherdsBuilding::House(Arc::new(
 				house.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
 			))
@@ -104,7 +182,15 @@ pub(crate) fn fit_shepherds_building(
 		ShepherdsBuildingKind::Hut => {
 			let (hut, _) = ShepherdsHut::fit_to_confines(&confines, noise).ok()?;
 			let wooden = hut.wall_style == PanelStyle::RibAndPlank;
-			let finish = DevelopmentFinish::pick_shepherds(hash, wooden);
+			let finish = finish_role.map_or_else(
+				|| DevelopmentFinish::pick_shepherds(hash, wooden),
+				|(role, bias)| {
+					bias.map_or_else(
+						|| DevelopmentFinish::pick_for_role(hash, role, wooden),
+						|bias| DevelopmentFinish::pick_suburban_home(hash, bias, wooden),
+					)
+				},
+			);
 			ShepherdsBuilding::Hut(Arc::new(
 				hut.with_finish(ShepherdsFinish { wall: finish.wall, roof: finish.roof }),
 			))
@@ -121,4 +207,69 @@ pub(crate) fn fit_shepherds_building(
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
 	a + (b - a) * t.clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod tests {
+	use richmond_developments::{ShepherdsBuilding, ShepherdsFinish};
+
+	use super::*;
+
+	fn fitted_finish(
+		building: &ShepherdsVillageBuilding,
+	) -> anyhow::Result<(&ShepherdsFinish, bool)> {
+		let (finish, wooden) = match &building.building {
+			ShepherdsBuilding::House(house) => {
+				(house.finish.as_ref(), house.wall_style == PanelStyle::RibAndPlank)
+			}
+			ShepherdsBuilding::Hut(hut) => {
+				(hut.finish.as_ref(), hut.wall_style == PanelStyle::RibAndPlank)
+			}
+		};
+		finish
+			.map(|finish| (finish, wooden))
+			.ok_or_else(|| anyhow::anyhow!("fitted shepherds building should have a finish"))
+	}
+
+	#[test]
+	fn role_aware_fit_selects_role_finish_without_changing_legacy_fit() -> anyhow::Result<()> {
+		let hash = SeededHash::new(37);
+		let args = (
+			ShepherdsBuildingKind::House,
+			Vec2::new(20.0, 30.0),
+			0.0,
+			Vec2::new(18.0, 16.0),
+			4.0,
+			hash,
+			NoiseParams::default(),
+		);
+		let legacy = fit_shepherds_building(args.0, args.1, args.2, args.3, args.4, args.5, args.6)
+			.ok_or_else(|| anyhow::anyhow!("legacy house should fit"))?;
+		let role_aware = fit_shepherds_building_for_role(
+			args.0,
+			args.1,
+			args.2,
+			args.3,
+			args.4,
+			args.5,
+			args.6,
+			DevelopmentFinishRole::SuburbanHome,
+		)
+		.ok_or_else(|| anyhow::anyhow!("role-aware house should fit"))?;
+
+		let (legacy_finish, legacy_wooden) = fitted_finish(&legacy)?;
+		let (role_finish, role_wooden) = fitted_finish(&role_aware)?;
+		let expected_legacy = DevelopmentFinish::pick_shepherds(hash, legacy_wooden);
+		let expected_role = DevelopmentFinish::pick_for_role(
+			hash,
+			DevelopmentFinishRole::SuburbanHome,
+			role_wooden,
+		);
+		assert_eq!(legacy_finish.wall, expected_legacy.wall);
+		assert_eq!(legacy_finish.roof, expected_legacy.roof);
+		assert_eq!(role_finish.wall, expected_role.wall);
+		assert_eq!(role_finish.roof, expected_role.roof);
+		assert_ne!(legacy_finish, role_finish);
+		Ok(())
+	}
 }

@@ -16,6 +16,11 @@
 //! Concrete towers live under [`crate::monotower`] submodules (e.g.
 //! [`les_halles`](crate::monotower::les_halles)).
 
+pub mod apartment;
 pub mod les_halles;
 
+pub use apartment::{
+	ApartmentMonotower, SingleHighrise, SingleHighriseFloorPlan, SingleHighrisePlan,
+	SingleHighriseShaftSlot, SingleHighriseStorey,
+};
 pub use les_halles::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};

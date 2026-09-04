@@ -1,4 +1,4 @@
-//! Les Halles, Shepherds Village, Shepherds Commune, and Ring Fort on Durham terrain.
+//! Richmond's complete development catalog on Durham terrain.
 
 pub mod camera;
 pub mod commands;
@@ -6,7 +6,7 @@ mod hosts;
 mod ui;
 
 pub use camera::CameraController;
-pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
+pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::math::{IVec2, UVec2};
@@ -15,7 +15,8 @@ use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
 use commands::{
-	RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed, RequestTerrainRadius,
+	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
+	RequestTerrainRadius,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
@@ -31,11 +32,9 @@ use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use richmond_development_models::{
-	DevelopmentCell, DevelopmentConfig, DevelopmentEntryStore, DevelopmentIndex,
-	LesHallesDevelopment, LesHallesStoreView, PaddedStoreView, PaddedTerrainPresenter,
-	RichmondDevelopmentModelsPlugin, RingFortDevelopment, RingFortStoreView,
-	ShepherdsCommuneDevelopment, ShepherdsCommuneStoreView, ShepherdsVillageDevelopment,
-	ShepherdsVillageStoreView, TerrainWithPads,
+	BuiltDevelopment, BuiltDevelopmentStoreView, DevelopmentCell, DevelopmentConfig,
+	DevelopmentEntryStore, DevelopmentIndex, PaddedStoreView, PaddedTerrainPresenter,
+	RichmondDevelopmentModelsPlugin, TerrainWithPads,
 };
 use std::f32::consts::PI;
 
@@ -64,11 +63,12 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 #[derive(Resource, Clone)]
 pub struct PlaygroundConfig {
 	pub terrain_radius: i32,
+	pub focus_development: Option<DevelopmentFocus>,
 }
 
 impl Default for PlaygroundConfig {
 	fn default() -> Self {
-		Self { terrain_radius: DEFAULT_TERRAIN_RADIUS }
+		Self { terrain_radius: DEFAULT_TERRAIN_RADIUS, focus_development: None }
 	}
 }
 
@@ -95,6 +95,13 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		let base = BaseTerrainNoise::from_config(&config);
 		let playground = self.config.clone();
 		let layout = cell_layout(playground.terrain_radius);
+		let mut development_config = DevelopmentConfig {
+			likelihood: PLAYGROUND_LIKELIHOOD,
+			..DevelopmentConfig::from_world_seed(42)
+		};
+		if let Some(focus) = playground.focus_development {
+			focus.apply(&mut development_config);
+		}
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(RichmondDevelopmentModelsPlugin)
@@ -114,10 +121,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(playground.clone())
 			.insert_resource(layout)
-			.insert_resource(DevelopmentConfig {
-				likelihood: PLAYGROUND_LIKELIHOOD,
-				..DevelopmentConfig::from_world_seed(42)
-			})
+			.insert_resource(development_config)
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<DevelopmentsGeneratePending>()
 			.init_resource::<TerrainPresentPending>()
@@ -190,6 +194,7 @@ fn apply_commands(
 	mut status: ResMut<GameCommandStatusText>,
 	seeds: Query<(Entity, &RequestSeed)>,
 	likelihoods: Query<(Entity, &RequestLikelihood)>,
+	focuses: Query<(Entity, &RequestDevelopmentFocus)>,
 	radii: Query<(Entity, &RequestTerrainRadius)>,
 	rebuild: Query<Entity, With<RequestRebuild>>,
 ) {
@@ -208,6 +213,13 @@ fn apply_commands(
 		development.likelihood = request.0.clamp(0.0, 1.0);
 		dirty.0 = true;
 		status.0 = format!("likelihood {:.2} (regen)", development.likelihood);
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &focuses {
+		request.0.apply(&mut development);
+		playground.focus_development = (request.0 != DevelopmentFocus::All).then_some(request.0);
+		dirty.0 = true;
+		status.0 = format!("focus-development {} (regen)", request.0);
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &radii {
@@ -306,34 +318,16 @@ fn generate_developments(
 		region,
 		&lod_ref,
 	);
-	let les_halles = GeneratingSpatialIndex::<LesHallesDevelopment>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let shepherds = GeneratingSpatialIndex::<ShepherdsVillageDevelopment>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let communes = GeneratingSpatialIndex::<ShepherdsCommuneDevelopment>::get_or_generate_region(
-		&mut development_index,
-		region,
-		&lod_ref,
-	);
-	let ring_forts = GeneratingSpatialIndex::<RingFortDevelopment>::get_or_generate_region(
+	let developments = GeneratingSpatialIndex::<BuiltDevelopment>::get_or_generate_region(
 		&mut development_index,
 		region,
 		&lod_ref,
 	);
 	info!(
-		"generated development_cells={} padded={} les_halles={} shepherds_villages={} shepherds_communes={} ring_forts={}",
+		"generated development_cells={} padded={} developments={}",
 		cells.len(),
 		padded.len(),
-		les_halles.len(),
-		shepherds.len(),
-		communes.len(),
-		ring_forts.len()
+		developments.len(),
 	);
 
 	pending_dev.0 = false;
@@ -407,48 +401,15 @@ fn spawn_hosts(
 	}
 
 	let region = layout.request_region();
-	let view = LesHallesStoreView::new(&store);
+	let view = BuiltDevelopmentStoreView::new(&store);
 	let mut n = 0usize;
-	for tracked in SpatialIndex::<LesHallesDevelopment>::tracked_ids_for(&view, region) {
-		let Some(dev) = SpatialIndex::<LesHallesDevelopment>::get(&view, tracked.0) else {
+	for tracked in SpatialIndex::<BuiltDevelopment>::tracked_ids_for(&view, region) {
+		let Some(dev) = SpatialIndex::<BuiltDevelopment>::get(&view, tracked.0) else {
 			continue;
 		};
 		n += spawn_development_hosts(&mut commands, dev);
 	}
-	let shepherds_view = ShepherdsVillageStoreView::new(&store);
-	let mut shepherds_n = 0usize;
-	for tracked in
-		SpatialIndex::<ShepherdsVillageDevelopment>::tracked_ids_for(&shepherds_view, region)
-	{
-		let Some(dev) =
-			SpatialIndex::<ShepherdsVillageDevelopment>::get(&shepherds_view, tracked.0)
-		else {
-			continue;
-		};
-		shepherds_n += spawn_development_hosts(&mut commands, dev);
-	}
-	let commune_view = ShepherdsCommuneStoreView::new(&store);
-	let mut commune_n = 0usize;
-	for tracked in
-		SpatialIndex::<ShepherdsCommuneDevelopment>::tracked_ids_for(&commune_view, region)
-	{
-		let Some(dev) = SpatialIndex::<ShepherdsCommuneDevelopment>::get(&commune_view, tracked.0)
-		else {
-			continue;
-		};
-		commune_n += spawn_development_hosts(&mut commands, dev);
-	}
-	let ring_fort_view = RingFortStoreView::new(&store);
-	let mut ring_fort_n = 0usize;
-	for tracked in SpatialIndex::<RingFortDevelopment>::tracked_ids_for(&ring_fort_view, region) {
-		let Some(dev) = SpatialIndex::<RingFortDevelopment>::get(&ring_fort_view, tracked.0) else {
-			continue;
-		};
-		ring_fort_n += spawn_development_hosts(&mut commands, dev);
-	}
-	info!(
-		"spawned {n} Les Halles host roots, {shepherds_n} Shepherds Village host roots, {commune_n} Shepherds Commune host roots, and {ring_fort_n} Ring Fort host roots"
-	);
+	info!("spawned {n} development host roots");
 	dirty.0 = false;
 }
 

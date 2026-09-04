@@ -1,6 +1,6 @@
 //! Deterministic, recipe-driven jittered-grid scattering.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::{Aabb2d, Aabb3d};
 use bevy::math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
@@ -42,8 +42,26 @@ pub struct ScatterPlan<K> {
 
 impl<K: Clone> ScatterRecipe<K> {
 	pub fn plan(&self, cell: Aabb3d, root: SeededHash) -> ScatterPlan<K> {
+		self.plan_in_bounds(
+			Aabb2d {
+				min: Vec2::new(cell.min.x, cell.min.z),
+				max: Vec2::new(cell.max.x, cell.max.z),
+			},
+			root,
+		)
+	}
+
+	/// Plan the same deterministic jittered grid inside an arbitrary 2D region.
+	///
+	/// This is the non-cell counterpart to [`Self::plan`]. Candidate centers stay
+	/// within the recipe inset; callers can apply stricter footprint containment.
+	pub fn plan_in_bounds(&self, bounds: Aabb2d, root: SeededHash) -> ScatterPlan<K> {
 		assert!(self.grid_side > 1, "scatter grid requires at least two rows");
 		assert!(!self.choices.is_empty(), "scatter recipe requires a choice");
+		assert!(
+			(bounds.max - bounds.min).min_element() >= 2.0 * self.cell_inset.max(0.0),
+			"scatter bounds must contain the requested inset"
+		);
 
 		let count_range = self.max_count.saturating_sub(self.min_count) + 1;
 		let target_count = self.min_count + (root.unit(101) * count_range as f32).floor() as usize;
@@ -61,7 +79,7 @@ impl<K: Clone> ScatterRecipe<K> {
 				let choice = self.pick_choice(hash.unit(1));
 				ScatterCandidate {
 					slot,
-					center: self.candidate_center(cell, slot, hash),
+					center: self.candidate_center(bounds, slot, hash),
 					yaw: sample_confines_yaw(hash.unit(4)),
 					footprint: Vec2::new(
 						lerp(choice.min_footprint, choice.max_footprint, hash.unit(2)),
@@ -81,11 +99,11 @@ impl<K: Clone> ScatterRecipe<K> {
 		Bounds2 { min: candidate.center - half, max: candidate.center + half }
 	}
 
-	fn candidate_center(&self, cell: Aabb3d, slot: usize, hash: SeededHash) -> Vec2 {
+	fn candidate_center(&self, bounds: Aabb2d, slot: usize, hash: SeededHash) -> Vec2 {
 		let ix = slot % self.grid_side;
 		let iz = slot / self.grid_side;
-		let min = Vec2::new(cell.min.x + self.cell_inset, cell.min.z + self.cell_inset);
-		let max = Vec2::new(cell.max.x - self.cell_inset, cell.max.z - self.cell_inset);
+		let min = bounds.min + Vec2::splat(self.cell_inset);
+		let max = bounds.max - Vec2::splat(self.cell_inset);
 		let denominator = (self.grid_side - 1) as f32;
 		let base = Vec2::new(
 			lerp(min.x, max.x, ix as f32 / denominator),
@@ -166,5 +184,75 @@ mod tests {
 		assert!((3..=5).contains(&plan.target_count));
 		assert_eq!(plan.candidates.len(), 16);
 		assert!(plan.candidates.iter().all(|candidate| candidate.kind == Kind::Enabled));
+	}
+
+	#[test]
+	fn plan_in_bounds_is_deterministic_and_region_local() -> anyhow::Result<()> {
+		let recipe = ScatterRecipe {
+			grid_side: 3,
+			min_count: 4,
+			max_count: 6,
+			cell_inset: 3.0,
+			jitter: 1.5,
+			clearance: 0.5,
+			choices: vec![ScatterChoice {
+				kind: Kind::Enabled,
+				weight: 1.0,
+				min_footprint: 4.0,
+				max_footprint: 6.0,
+			}],
+		};
+		let bounds = Aabb2d { min: Vec2::new(70.0, -40.0), max: Vec2::new(104.0, -8.0) };
+		let first = recipe.plan_in_bounds(bounds, SeededHash::new(73));
+		let second = recipe.plan_in_bounds(bounds, SeededHash::new(73));
+		anyhow::ensure!(first.target_count == second.target_count);
+		anyhow::ensure!(first.candidates.len() == second.candidates.len());
+		for (a, b) in first.candidates.iter().zip(&second.candidates) {
+			anyhow::ensure!(a.slot == b.slot);
+			anyhow::ensure!(a.center == b.center);
+			anyhow::ensure!(a.yaw == b.yaw);
+			anyhow::ensure!(a.footprint == b.footprint);
+			anyhow::ensure!(
+				a.center.x >= bounds.min.x + recipe.cell_inset
+					&& a.center.x <= bounds.max.x - recipe.cell_inset
+			);
+			anyhow::ensure!(
+				a.center.y >= bounds.min.y + recipe.cell_inset
+					&& a.center.y <= bounds.max.y - recipe.cell_inset
+			);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn plan_delegates_to_matching_xz_bounds() {
+		let recipe = ScatterRecipe {
+			grid_side: 2,
+			min_count: 1,
+			max_count: 2,
+			cell_inset: 2.0,
+			jitter: 1.0,
+			clearance: 0.0,
+			choices: vec![ScatterChoice {
+				kind: Kind::Enabled,
+				weight: 1.0,
+				min_footprint: 4.0,
+				max_footprint: 5.0,
+			}],
+		};
+		let cell =
+			Aabb3d::from_min_max(Vec3::new(10.0, -100.0, 30.0), Vec3::new(50.0, 100.0, 80.0));
+		let bounds = Aabb2d {
+			min: Vec2::new(cell.min.x, cell.min.z),
+			max: Vec2::new(cell.max.x, cell.max.z),
+		};
+		let from_cell = recipe.plan(cell, SeededHash::new(9));
+		let from_bounds = recipe.plan_in_bounds(bounds, SeededHash::new(9));
+		assert_eq!(from_cell.target_count, from_bounds.target_count);
+		assert!(from_cell.candidates.iter().zip(from_bounds.candidates).all(|(a, b)| a.slot
+			== b.slot
+			&& a.center == b.center
+			&& a.yaw == b.yaw
+			&& a.footprint == b.footprint));
 	}
 }

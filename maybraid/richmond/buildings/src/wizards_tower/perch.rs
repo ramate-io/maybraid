@@ -6,6 +6,7 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::PartitionStyle;
@@ -28,6 +29,7 @@ pub struct WizardsTowerPerch {
 	pub ring_wall: PortalRingWall,
 	pub floor_caps: [FloorNode; 4],
 	pub floor_rects: [FloorNode; 4],
+	pub wall_material: Option<MaterialRef>,
 }
 
 impl WizardsTowerPerch {
@@ -59,7 +61,12 @@ impl WizardsTowerPerch {
 			style: PartitionStyle::RoughStonework,
 		});
 
-		Self { storey_height, ring_wall, floor_caps, floor_rects, constraints }
+		Self { storey_height, ring_wall, floor_caps, floor_rects, wall_material: None, constraints }
+	}
+
+	pub fn with_wall_material(mut self, material: MaterialRef) -> Self {
+		self.wall_material = Some(material);
+		self
 	}
 
 	pub(crate) fn emit_external_features(
@@ -103,7 +110,11 @@ impl WizardsTowerPerch {
 impl BuildingComponents for WizardsTowerPerch {
 	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		if Self::is_structure_level(level) {
-			self.ring_wall.sweep.partition_nodes_for_level(level)
+			let mut out = self.ring_wall.sweep.partition_nodes_for_level(level);
+			if let Some(material) = &self.wall_material {
+				out = out.with_material(material.clone());
+			}
+			out
 		} else {
 			Layers::new()
 		}
