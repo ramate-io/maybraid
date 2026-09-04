@@ -7,17 +7,18 @@ use cache::{handle::MeshHandleCache, mesh::MeshCache};
 use chunk::cascade::CascadeChunk;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MeshId(String);
+pub struct MeshId(Arc<str>);
 
 impl MeshId {
 	pub fn new(id: String) -> Self {
-		Self(id)
+		Self(id.into())
 	}
 
 	pub fn with_suffix(&self, suffix: &str) -> Self {
-		Self(format!("{}{}", self.0, suffix))
+		Self(format!("{}{}", self.0, suffix).into())
 	}
 }
 

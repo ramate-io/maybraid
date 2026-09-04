@@ -10,6 +10,8 @@ use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMate
 use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
 
+use richmond_urbanization::UrbanizationIndex;
+
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
 use crate::index::DevelopmentEntryStore;
@@ -54,6 +56,7 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 
 		app.init_resource::<DevelopmentEntryStore>()
 			.init_resource::<DevelopmentConfig>()
+			.init_resource::<UrbanizationIndex>()
 			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull));
 	}

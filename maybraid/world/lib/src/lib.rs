@@ -1,9 +1,10 @@
-//! Assembled world model: Durham terrain, streamed forest, sky dome.
+//! Assembled world model: Durham terrain, streamed forest, urbanization, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
-//! cover the grove fill ring.
+//! cover the grove fill ring. Urbanization hopscotch streams at the same
+//! 1 km / 3 km rings without re-registering Durham (vegetation owns terrain).
 
 mod camera;
 pub mod commands;
@@ -21,8 +22,8 @@ use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig, PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin,
-	RequestSetCharacter, VegetationOnTerrainPlugin,
+	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
+	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -31,6 +32,9 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
+use richmond_developments_on_terrain_playground::{
+	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
+};
 
 /// Steepest walkable slope. 80°+ walls must not count as floor.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 50.0_f32.to_radians();
@@ -47,7 +51,7 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
-/// Assembled world: Durham terrain, streamed forest, sky dome, character.
+/// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
 /// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
@@ -83,8 +87,17 @@ impl Plugin for WorldPlugin {
 			}))
 			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(VegetationOnTerrainPlugin {
-				config: PlaygroundConfig::world_defaults(),
+				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
+				register_forest_lod: false,
+				register_bump_out_lod: false,
+			})
+			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
+			.add_plugins(DevelopmentsOnTerrainPlugin {
+				config: DevelopmentsPlaygroundConfig::world_defaults(),
+				commands: false,
+				own_terrain: false,
+				register_development_forest_lod: true,
 			})
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))

@@ -19,6 +19,7 @@ fn main() {
 			focus_development: startup.focus_development,
 			..PlaygroundConfig::default()
 		},
+		..Default::default()
 	};
 
 	let assets_path = assets_root();

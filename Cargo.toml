@@ -12,6 +12,7 @@ members = [
   "maybraid/richmond/buildings-playground",
   "maybraid/richmond/developments",
   "maybraid/richmond/development-models",
+  "maybraid/richmond/urbanization",
   "maybraid/richmond/developments-on-terrain-playground",
 
   "maybraid/menu/components",
@@ -243,6 +244,7 @@ richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
 richmond-developments = { path = "maybraid/richmond/developments" }
 richmond-development-models = { path = "maybraid/richmond/development-models" }
+richmond-urbanization = { path = "maybraid/richmond/urbanization" }
 richmond-developments-on-terrain-playground = { path = "maybraid/richmond/developments-on-terrain-playground" }
 
 menu-components = { path = "maybraid/menu/components" }

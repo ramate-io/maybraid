@@ -7,7 +7,7 @@ use render_item::mesh::{IdentifiedMesh, MeshId};
 use render_item::NormalizeChunk;
 use sdf::{Sdf, Sign, SignBoundary, SignUniformIntervals};
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Trait for elevation modulations that modify terrain height in 2.5D.
 pub trait ElevationModulation: Send + Sync + Debug {
@@ -151,19 +151,34 @@ impl IdentifiedMesh for TerrainSdf {
 }
 
 /// World SDF: heightfield terrain with an optional tube carve (difference).
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ComposedTerrain {
-	pub terrain: TerrainSdf,
-	pub tube: Option<sdf::TubeSdf>,
+	terrain: TerrainSdf,
+	tube: Option<sdf::TubeSdf>,
+	mesh_id: OnceLock<MeshId>,
+}
+
+impl Debug for ComposedTerrain {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ComposedTerrain")
+			.field("terrain", &self.terrain)
+			.field("tube", &self.tube)
+			.finish()
+	}
 }
 
 impl ComposedTerrain {
 	pub fn from_terrain(terrain: TerrainSdf) -> Self {
-		Self { terrain, tube: None }
+		Self { terrain, tube: None, mesh_id: OnceLock::new() }
+	}
+
+	pub fn terrain(&self) -> &TerrainSdf {
+		&self.terrain
 	}
 
 	pub fn with_tube(mut self, tube: sdf::TubeSdf) -> Self {
 		self.tube = Some(tube);
+		self.mesh_id = OnceLock::new();
 		self
 	}
 }
@@ -198,6 +213,6 @@ impl NormalizeChunk for ComposedTerrain {
 
 impl IdentifiedMesh for ComposedTerrain {
 	fn id(&self) -> MeshId {
-		MeshId::new(format!("{:?}", self))
+		self.mesh_id.get_or_init(|| MeshId::new(format!("{self:?}"))).clone()
 	}
 }

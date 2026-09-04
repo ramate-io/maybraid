@@ -31,6 +31,25 @@ pub enum DevelopmentKind {
 	OldCityMarket,
 }
 
+impl From<richmond_urbanization::UrbanDevelopmentKind> for DevelopmentKind {
+	fn from(kind: richmond_urbanization::UrbanDevelopmentKind) -> Self {
+		use richmond_urbanization::UrbanDevelopmentKind as U;
+		match kind {
+			U::Empty => Self::Empty,
+			U::LesHalles => Self::LesHalles,
+			U::ShepherdsVillage => Self::ShepherdsVillage,
+			U::ShepherdsCommune => Self::ShepherdsCommune,
+			U::RingFort => Self::RingFort,
+			U::TempleComplex => Self::TempleComplex,
+			U::SingleHighrise => Self::SingleHighrise,
+			U::SuburbanHomes => Self::SuburbanHomes,
+			U::WizardsTower => Self::WizardsTower,
+			U::SkybridgeBazaar => Self::SkybridgeBazaar,
+			U::OldCityMarket => Self::OldCityMarket,
+		}
+	}
+}
+
 /// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
 #[derive(Debug, Clone)]
 pub struct DevelopmentPad {
