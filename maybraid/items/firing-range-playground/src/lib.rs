@@ -56,6 +56,7 @@ use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
+use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 
 pub struct FiringRangePlugin;
 
@@ -87,6 +88,7 @@ impl Plugin for FiringRangePlugin {
 			)
 			.add_plugins(FirearmIntelligencePlugin)
 			.add_plugins(ThreatIntelligencePlugin)
+			.add_plugins(ThreatIntelligenceDamagePlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)
@@ -197,12 +199,6 @@ impl Plugin for FiringRangePlugin {
 				)
 					.chain()
 					.after(::damage::DamageSystems::Down),
-			)
-			.add_systems(
-				PostUpdate,
-				engagement::gate_npc_fire
-					.after(FirearmIntelligenceSystems::Fire)
-					.before(FirearmWeaponSystems::Fire),
 			)
 			.add_systems(
 				PostUpdate,

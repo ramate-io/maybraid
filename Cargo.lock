@@ -3406,6 +3406,7 @@ dependencies = [
  "bevy",
  "combat-targeting",
  "crozon-characters",
+ "damage",
  "firearm-user",
  "firearms",
  "lod-avian",
@@ -3498,6 +3499,7 @@ dependencies = [
  "spotting-intelligence",
  "spotting-intelligence-avian",
  "threat-intelligence",
+ "threat-intelligence-damage",
 ]
 
 [[package]]
@@ -7106,6 +7108,16 @@ dependencies = [
  "bevy",
  "gimme-core",
  "spotting-intelligence",
+]
+
+[[package]]
+name = "threat-intelligence-damage"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "threat-intelligence",
 ]
 
 [[package]]

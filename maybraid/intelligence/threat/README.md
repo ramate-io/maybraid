@@ -3,8 +3,9 @@
 Local semantic threat discovery with retained per-recipient knowledge.
 
 - `ThreatSubject` supplies stable identity and salience.
-- `Affiliations` records weighted group memberships and directional antagonist
-  beliefs; individual entities also have reserved singular groups.
+- `Affiliations` records weighted group memberships plus directional antagonist
+  and ally beliefs; individual entities also have reserved singular groups.
+  Net threat is max aggravation minus max mitigation.
 - A Gimme typed index provides bounded local candidate scans.
 - `ThreatObservation` is the directed inbox for sessions, received fire,
   sharing, and other non-spatial discovery sources.

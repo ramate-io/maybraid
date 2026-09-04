@@ -103,6 +103,7 @@ members = [
   "maybraid/intelligence/meandering",
   "maybraid/intelligence/journeying",
   "maybraid/intelligence/threat",
+  "maybraid/intelligence/threat/damage",
   "maybraid/intelligence/poi-playground",
   "maybraid/intelligence/routing-playground",
   "maybraid/chico/sdf",
@@ -343,6 +344,7 @@ poi-intelligence = { path = "maybraid/intelligence/poi" }
 meandering-intelligence = { path = "maybraid/intelligence/meandering" }
 journeying-intelligence = { path = "maybraid/intelligence/journeying" }
 threat-intelligence = { path = "maybraid/intelligence/threat" }
+threat-intelligence-damage = { path = "maybraid/intelligence/threat/damage" }
 poi-playground = { path = "maybraid/intelligence/poi-playground" }
 routing-playground = { path = "maybraid/intelligence/routing-playground" }
 items-playground = { path = "maybraid/items/playground" }

@@ -38,11 +38,16 @@ impl AffiliationStrength {
 	}
 }
 
-/// What this actor belongs to and which groups it currently considers hostile.
+/// What this actor belongs to, hunts, and spares.
+///
+/// Antagonism and mitigation are both directional observer beliefs matched
+/// against the candidate's memberships. Net threat is max aggravation minus
+/// max mitigation, clamped at zero.
 #[derive(Component, Clone, Debug, Default, PartialEq)]
 pub struct Affiliations {
 	pub memberships: BTreeMap<ThreatGroupId, AffiliationStrength>,
 	pub known_antagonists: BTreeMap<ThreatGroupId, AffiliationStrength>,
+	pub known_allies: BTreeMap<ThreatGroupId, AffiliationStrength>,
 }
 
 impl Affiliations {
@@ -64,24 +69,42 @@ impl Affiliations {
 		self.known_antagonists.remove(&group);
 	}
 
+	pub fn mitigate(&mut self, group: ThreatGroupId, strength: AffiliationStrength) {
+		self.known_allies.insert(group, strength);
+	}
+
+	pub fn stop_mitigating(&mut self, group: ThreatGroupId) {
+		self.known_allies.remove(&group);
+	}
+
 	/// Directional hostility of `self` toward the candidate's memberships.
 	pub fn threat_weight(&self, candidate: &Self, now: f32) -> f32 {
-		candidate
-			.memberships
-			.iter()
-			.filter_map(|(group, membership)| {
-				let antagonism = self.known_antagonists.get(group)?;
-				Some(membership.effective(now) * antagonism.effective(now))
-			})
-			.filter(|weight| weight.is_finite())
-			.fold(0.0, f32::max)
+		let aggravation = overlap_weight(&self.known_antagonists, &candidate.memberships, now);
+		let mitigation = overlap_weight(&self.known_allies, &candidate.memberships, now);
+		(aggravation - mitigation).max(0.0)
 	}
 
 	pub fn maintain(&mut self, now: f32) {
 		self.memberships.retain(|_, strength| strength.effective(now) >= MIN_STRENGTH);
 		self.known_antagonists
 			.retain(|_, strength| strength.effective(now) >= MIN_STRENGTH);
+		self.known_allies.retain(|_, strength| strength.effective(now) >= MIN_STRENGTH);
 	}
+}
+
+fn overlap_weight(
+	beliefs: &BTreeMap<ThreatGroupId, AffiliationStrength>,
+	memberships: &BTreeMap<ThreatGroupId, AffiliationStrength>,
+	now: f32,
+) -> f32 {
+	memberships
+		.iter()
+		.filter_map(|(group, membership)| {
+			let belief = beliefs.get(group)?;
+			Some(membership.effective(now) * belief.effective(now))
+		})
+		.filter(|weight| weight.is_finite())
+		.fold(0.0, f32::max)
 }
 
 fn finite_weight(weight: f32) -> f32 {

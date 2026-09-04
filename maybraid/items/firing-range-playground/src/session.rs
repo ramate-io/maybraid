@@ -7,7 +7,9 @@ use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
 use evasion_intelligence::{EvasionIntelligenceUser, EvasionSettings};
-use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
+use firearm_intelligence::{
+	FirearmEngagement, FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting,
+};
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
@@ -409,6 +411,7 @@ pub(crate) fn install_npc_combat(
 		spotting,
 		CombatTargeting::default(),
 		FirearmTargeting::default(),
+		FirearmEngagement::hold(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));

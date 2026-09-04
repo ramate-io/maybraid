@@ -17,6 +17,19 @@ fn ffa_affiliations(id: ThreatId) -> Affiliations {
 	affiliations
 }
 
+const PUBLIC: ThreatGroupId = ThreatGroupId::group(2);
+const GUARD: ThreatGroupId = ThreatGroupId::group(3);
+const CRIMINAL: ThreatGroupId = ThreatGroupId::group(4);
+
+fn guard_affiliations(id: ThreatId) -> Affiliations {
+	let mut affiliations = Affiliations::with_self(id);
+	affiliations.join(PUBLIC, AffiliationStrength::permanent(1.0));
+	affiliations.join(GUARD, AffiliationStrength::permanent(1.0));
+	affiliations.antagonize(PUBLIC, AffiliationStrength::permanent(1.0));
+	affiliations.mitigate(GUARD, AffiliationStrength::permanent(1.0));
+	affiliations
+}
+
 #[test]
 fn shared_ffa_group_classifies_another_member_as_a_threat() -> anyhow::Result<()> {
 	let mut world = World::new();
@@ -34,6 +47,30 @@ fn shared_ffa_group_classifies_another_member_as_a_threat() -> anyhow::Result<()
 		.observe(&record, &recipient, ThreatSource::LOCAL_SCAN, 1.0, 0.0, 0.2)
 		.is_some());
 	assert_eq!(knowledge.len(), 1);
+	Ok(())
+}
+
+#[test]
+fn guard_mitigation_cancels_public_aggravation() -> anyhow::Result<()> {
+	let civilian = {
+		let mut affiliations = Affiliations::with_self(ThreatId(2));
+		affiliations.join(PUBLIC, AffiliationStrength::permanent(1.0));
+		affiliations
+	};
+	let other_guard = guard_affiliations(ThreatId(3));
+	let guard = guard_affiliations(ThreatId(1));
+	assert!(guard.threat_weight(&civilian, 0.0) >= 0.2);
+	assert_eq!(guard.threat_weight(&other_guard, 0.0), 0.0);
+	Ok(())
+}
+
+#[test]
+fn stronger_aggravation_survives_mitigation() -> anyhow::Result<()> {
+	let mut rogue = guard_affiliations(ThreatId(2));
+	rogue.join(CRIMINAL, AffiliationStrength::permanent(2.0));
+	let mut guard = guard_affiliations(ThreatId(1));
+	guard.antagonize(CRIMINAL, AffiliationStrength::permanent(1.0));
+	assert!((guard.threat_weight(&rogue, 0.0) - 1.0).abs() < 1e-5);
 	Ok(())
 }
 

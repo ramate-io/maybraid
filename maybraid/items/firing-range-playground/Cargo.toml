@@ -48,6 +48,7 @@ richmond-developments = { workspace = true }
 spotting-intelligence = { workspace = true }
 spotting-intelligence-avian = { workspace = true }
 threat-intelligence = { workspace = true }
+threat-intelligence-damage = { workspace = true }
 
 [lints]
 workspace = true
