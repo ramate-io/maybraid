@@ -12,6 +12,9 @@ impl InterestLayers {
 	pub const VEGETATION: Self = Self(1 << 2);
 	pub const COMMERCE: Self = Self(1 << 3);
 	pub const LANDMARK: Self = Self(1 << 4);
+	/// Unarmed bystanders. Combat directives that look for [`Self::CHARACTER`]
+	/// do not match this bit, so civilians stay out of firearm target memory.
+	pub const CIVILIAN: Self = Self(1 << 5);
 
 	pub const NONE: Self = Self(0);
 	pub const ALL: Self = Self(
@@ -19,7 +22,8 @@ impl InterestLayers {
 			| Self::WEAPON.0
 			| Self::VEGETATION.0
 			| Self::COMMERCE.0
-			| Self::LANDMARK.0,
+			| Self::LANDMARK.0
+			| Self::CIVILIAN.0,
 	);
 
 	pub const fn from_bits(bits: u32) -> Self {
@@ -63,6 +67,8 @@ mod tests {
 		assert!(things.intersects(InterestLayers::CHARACTER));
 		assert!(things.intersects(InterestLayers::WEAPON));
 		assert!(!things.intersects(InterestLayers::VEGETATION));
+		assert!(!things.intersects(InterestLayers::CIVILIAN));
+		assert!(InterestLayers::ALL.intersects(InterestLayers::CIVILIAN));
 		assert_eq!(things.bits(), InterestLayers::CHARACTER.bits() | InterestLayers::WEAPON.bits());
 		Ok(())
 	}

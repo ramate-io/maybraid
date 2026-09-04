@@ -26,3 +26,11 @@ Spotting deliberately resolves a known subject's exact live location at probe ti
 - [`firearm-intelligence`](combat/firearm) — adapts spotted character contacts into combat targets, contributes firearm opportunity, writes movement / look, validates posed-muzzle aim trajectories, and gates the actual trigger.
 
 The layers form `(semantic broadphase + explicit hints) → visual contact memory → combat contact and weighted target set → firearm trajectory choice`. Applications own cadence; the reusable plugins remain cadence-neutral.
+
+## Evasion
+
+- [`evasion-intelligence`](evasion) — assailant memory, source-owned membership, and an exclusive hide | flee signal. This is the civilian analogue of combat targeting, not a movement mixer.
+- [`fleeing-intelligence`](fleeing) — writes `FleeFrom` while the signal is flee.
+- [`hiding-intelligence`](hiding) — writes `Reach` to a nearby low-vantage, low-occupancy pocket while the signal is hide.
+
+The layers form `(semantic broadphase + explicit hints) → visual contact memory → assailant rank + signal → hide | flee → movement objective`. Combat `CHARACTER` subjects and civilian subjects stay on distinct interest layers so firearm targeting does not discover bystanders.

@@ -3344,6 +3344,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "evasion-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "spotting-intelligence",
+]
+
+[[package]]
 name = "event-listener"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3463,10 +3472,13 @@ dependencies = [
  "crozon-character-ragdoll",
  "crozon-characters",
  "damage",
+ "evasion-intelligence",
  "firearm-intelligence",
  "firearm-user",
  "firearms",
+ "fleeing-intelligence",
  "game-commands",
+ "hiding-intelligence",
  "lod",
  "lod-avian",
  "material-ref",
@@ -3501,6 +3513,16 @@ checksum = "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "fleeing-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "evasion-intelligence",
+ "movement-intelligence",
 ]
 
 [[package]]
@@ -4020,6 +4042,20 @@ name = "hexf-parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
+name = "hiding-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "evasion-intelligence",
+ "lod-avian",
+ "movement-intelligence",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
+]
 
 [[package]]
 name = "iana-time-zone"

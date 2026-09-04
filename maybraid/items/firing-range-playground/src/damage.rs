@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use combat_targeting::CombatTargeting;
+use evasion_intelligence::EvasionIntelligenceUser;
 use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
 use firearm_user::FirearmUser;
+use fleeing_intelligence::FleeingUser;
+use hiding_intelligence::{HideClaim, HidingUser};
 use movement_intelligence::{MovementIntelligence, ReplanMovement};
 use player::{LocomotionCapsule, MoveWish, Npc, Player};
 use spotting_intelligence::{SpotSubject, SpottingUser};
@@ -24,19 +27,21 @@ pub(crate) fn headshot_band_for(hull: LocomotionCapsule) -> HeadshotBand {
 pub(crate) struct CombatRespawn {
 	pub player_at: Option<f32>,
 	pub npc_at: Vec<f32>,
+	pub civilian_at: Vec<f32>,
 }
 
 impl CombatRespawn {
 	pub fn clear(&mut self) {
 		self.player_at = None;
 		self.npc_at.clear();
+		self.civilian_at.clear();
 	}
 }
 
 type DownedCombatants<'w, 's> = Query<
 	'w,
 	's,
-	(Entity, Option<&'static FirearmUser>, Has<Player>, Has<Npc>),
+	(Entity, Option<&'static FirearmUser>, Has<Player>, Has<Npc>, Has<crate::session::Civilian>),
 	Added<::damage::Downed>,
 >;
 
@@ -48,12 +53,16 @@ pub(crate) fn queue_downed_respawns(
 	combatants: DownedCombatants,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, user, is_player, is_npc) in &combatants {
+	for (entity, user, is_player, is_npc, is_civilian) in &combatants {
 		commands.entity(entity).remove::<(
 			FirearmIntelligence,
 			FirearmMovementIntelligence,
 			FirearmTargeting,
 			CombatTargeting,
+			EvasionIntelligenceUser,
+			FleeingUser,
+			HidingUser,
+			HideClaim,
 			SpottingUser,
 			SpotSubject,
 			MovementIntelligence,
@@ -64,7 +73,9 @@ pub(crate) fn queue_downed_respawns(
 			respawn.player_at = Some(now + RESPAWN_SECS);
 			engagement.reset();
 		}
-		if is_npc {
+		if is_civilian {
+			respawn.civilian_at.push(now + RESPAWN_SECS);
+		} else if is_npc {
 			respawn.npc_at.push(now + RESPAWN_SECS);
 		}
 		if let Some(user) = user {
@@ -101,6 +112,7 @@ mod tests {
 				SpottingUser::default(),
 				SpotSubject::new(InterestLayers::CHARACTER, SpotBounds::capsule(0.4, 0.9)),
 				CombatTargeting::default(),
+				EvasionIntelligenceUser::default(),
 				FirearmTargeting::default(),
 				MovementIntelligence::new(movement_intelligence::MovementObjective::Reach(
 					movement_intelligence::MovementLocation::new(Vec3::ZERO, 0.4),
@@ -114,6 +126,7 @@ mod tests {
 		assert!(app.world().get::<SpottingUser>(entity).is_none());
 		assert!(app.world().get::<SpotSubject>(entity).is_none());
 		assert!(app.world().get::<CombatTargeting>(entity).is_none());
+		assert!(app.world().get::<EvasionIntelligenceUser>(entity).is_none());
 		assert!(app.world().get::<MovementIntelligence>(entity).is_none());
 		assert!(app.world().get::<MoveWish>(entity).is_none());
 		assert_eq!(app.world().resource::<CombatRespawn>().npc_at.len(), 1);

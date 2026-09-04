@@ -6,11 +6,14 @@ use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
 use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
+use evasion_intelligence::{EvasionIntelligenceUser, EvasionSettings};
 use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
 use firearms::FirearmConcept;
+use fleeing_intelligence::{FleeingSettings, FleeingUser};
+use hiding_intelligence::{HidingSettings, HidingUser};
 use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, VantageStandoffs,
 };
@@ -28,6 +31,8 @@ use crate::loadout::{roll_combatant, CombatantLoadout};
 use crate::spec_kit::RolledFirearm;
 
 pub(crate) const DEFAULT_FFA_NPCS: u16 = 6;
+pub(crate) const DEFAULT_AFFA_COMBATANTS: u16 = 4;
+pub(crate) const DEFAULT_AFFA_CIVILIANS: u16 = 6;
 
 /// Outside the 36 m Les Halles stack, on the pad. Grows with count so neighbors stay apart.
 const FFA_RING_MIN: f32 = 24.0;
@@ -47,6 +52,7 @@ pub(crate) enum RangeMode {
 	#[default]
 	Duel,
 	FreeForAll,
+	AssaultFreeForAll,
 	TestDummy,
 }
 
@@ -54,13 +60,14 @@ pub(crate) enum RangeMode {
 pub(crate) struct RangeSession {
 	pub mode: RangeMode,
 	pub npc_count: u16,
+	pub civilian_count: u16,
 	pub seed: Option<u64>,
 	pub epoch: u32,
 }
 
 impl Default for RangeSession {
 	fn default() -> Self {
-		Self { mode: RangeMode::Duel, npc_count: 1, seed: None, epoch: 0 }
+		Self { mode: RangeMode::Duel, npc_count: 1, civilian_count: 0, seed: None, epoch: 0 }
 	}
 }
 
@@ -68,12 +75,27 @@ impl RangeSession {
 	pub fn enter_duel(&mut self) {
 		self.mode = RangeMode::Duel;
 		self.npc_count = 1;
+		self.civilian_count = 0;
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
 	pub fn enter_free_for_all(&mut self, npcs: u16, seed: Option<u64>) {
 		self.mode = RangeMode::FreeForAll;
 		self.npc_count = npcs.max(1);
+		self.civilian_count = 0;
+		self.seed = seed;
+		self.epoch = self.epoch.wrapping_add(1);
+	}
+
+	pub fn enter_assault_free_for_all(
+		&mut self,
+		combatants: u16,
+		civilians: u16,
+		seed: Option<u64>,
+	) {
+		self.mode = RangeMode::AssaultFreeForAll;
+		self.npc_count = combatants.max(1);
+		self.civilian_count = civilians.max(1);
 		self.seed = seed;
 		self.epoch = self.epoch.wrapping_add(1);
 	}
@@ -81,11 +103,16 @@ impl RangeSession {
 	pub fn enter_test_dummy(&mut self) {
 		self.mode = RangeMode::TestDummy;
 		self.npc_count = 1;
+		self.civilian_count = 0;
 		self.epoch = self.epoch.wrapping_add(1);
 	}
 
 	pub fn is_free_for_all(&self) -> bool {
 		self.mode == RangeMode::FreeForAll
+	}
+
+	pub fn is_assault_free_for_all(&self) -> bool {
+		self.mode == RangeMode::AssaultFreeForAll
 	}
 
 	pub fn is_test_dummy(&self) -> bool {
@@ -100,6 +127,10 @@ pub(crate) struct AppliedSession {
 
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub(crate) struct TestDummy;
+
+/// Unarmed NPC that installs evasion rather than firearm combat.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub(crate) struct Civilian;
 
 #[derive(Component, Clone, Debug)]
 pub(crate) struct CombatantKit {
@@ -119,7 +150,7 @@ type UnarmedBodies<'w, 's> = Query<
 	'w,
 	's,
 	(Entity, Has<Npc>, Option<&'static CombatantKit>),
-	(Or<(With<Player>, With<Npc>)>, Without<FirearmUser>, Without<TestDummy>),
+	(Or<(With<Player>, With<Npc>)>, Without<FirearmUser>, Without<TestDummy>, Without<Civilian>),
 >;
 
 #[allow(clippy::too_many_arguments)]
@@ -150,6 +181,18 @@ pub(crate) fn apply_session(
 				&spawn,
 				&mut rng.0,
 				session.npc_count,
+				&mut meshes,
+				&mut materials,
+			);
+		}
+		RangeMode::AssaultFreeForAll => {
+			rng.0 = session.seed.map(ItemRng::from_seed).unwrap_or_else(ItemRng::from_entropy);
+			rebuild_assault_free_for_all(
+				&mut commands,
+				&spawn,
+				&mut rng.0,
+				session.npc_count,
+				session.civilian_count,
 				&mut meshes,
 				&mut materials,
 			);
@@ -223,6 +266,87 @@ fn rebuild_free_for_all(
 	for index in 0..npc_count {
 		spawn_generated_npc(commands, spawn, index, npc_count, rng, meshes, materials);
 	}
+}
+
+fn rebuild_assault_free_for_all(
+	commands: &mut Commands,
+	spawn: &LesHallesSpawn,
+	rng: &mut ItemRng,
+	combatants: u16,
+	civilians: u16,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	spawn_generated_player(commands, spawn, rng, meshes, materials);
+	let total = combatants + civilians;
+	for index in 0..combatants {
+		spawn_generated_npc(commands, spawn, index, total, rng, meshes, materials);
+	}
+	for index in 0..civilians {
+		spawn_generated_civilian(commands, spawn, combatants + index, total, meshes, materials);
+	}
+}
+
+pub(crate) fn spawn_generated_civilian(
+	commands: &mut Commands,
+	spawn: &LesHallesSpawn,
+	index: u16,
+	count: u16,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+) {
+	let translation = npc_translation(spawn, index, count);
+	let npc = spawn_npc_with_hidden_capsule(
+		commands,
+		translation,
+		PlayerLook { yaw: spawn.look_yaw, ..default() },
+		meshes,
+		materials,
+	);
+	install_npc_civilian(commands, npc, translation, Some(Health::default()));
+}
+
+pub(crate) fn install_npc_civilian(
+	commands: &mut Commands,
+	npc: Entity,
+	at: Vec3,
+	health: Option<Health>,
+) {
+	let hull = LocomotionCapsule::HUMANOID;
+	let mut movement =
+		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, hull.radius)));
+	movement.ability.agent_radius = hull.radius;
+	movement.ability.feet_below_origin = hull.half_height();
+	movement.ability.candidate_budget.max_candidates = 6;
+	movement.ability.candidate_budget.horizon = 24.0;
+	let eye_offset = Vec3::Y * (movement.ability.eye_height - movement.ability.feet_below_origin);
+	let directive = SpotDirective {
+		layers: InterestLayers::CHARACTER,
+		range: COMBAT_SPOTTING_RANGE,
+		priority: 1,
+		desired_count: 4,
+		freshness_secs: 0.5,
+		discovery_interval_secs: COMBAT_DISCOVERY_SECS,
+		respot_interval_secs: 0.125,
+		max_samples_per_subject: 4,
+	};
+	let spotting =
+		SpottingUser::new(eye_offset, [directive]).with_settings(SpottingSettings::new(4, 4, 4.0));
+	commands.entity(npc).insert((
+		Civilian,
+		movement,
+		spotting,
+		EvasionIntelligenceUser::new(EvasionSettings { flee_distance: 8.0, memory_secs: 4.0 }),
+		FleeingUser::new(FleeingSettings { radius: 16.0 }),
+		HidingUser::new(HidingSettings {
+			horizon: 14.0,
+			occupancy_radius: 2.4,
+			azimuths: 8,
+			standoffs: [4.0, 8.0],
+		}),
+		health.unwrap_or_default(),
+		headshot_band_for(hull),
+	));
 }
 
 pub(crate) fn install_npc_combat(
@@ -473,5 +597,29 @@ mod tests {
 		assert!(session.is_test_dummy());
 		assert_eq!(session.npc_count, 1);
 		assert_ne!(session.mode, RangeMode::Duel);
+	}
+
+	#[test]
+	fn assault_free_for_all_keeps_civilians_and_combatants() {
+		let mut session = RangeSession::default();
+		session.enter_assault_free_for_all(4, 6, Some(3));
+		assert!(session.is_assault_free_for_all());
+		assert_eq!(session.npc_count, 4);
+		assert_eq!(session.civilian_count, 6);
+		assert_eq!(session.seed, Some(3));
+	}
+
+	#[test]
+	fn civilian_installs_evasion_without_a_gun() {
+		let mut world = World::new();
+		let npc = world.spawn(Npc).id();
+		install_npc_civilian(&mut world.commands(), npc, Vec3::ZERO, None);
+		world.flush();
+		assert!(world.get::<Civilian>(npc).is_some());
+		assert!(world.get::<EvasionIntelligenceUser>(npc).is_some());
+		assert!(world.get::<FleeingUser>(npc).is_some());
+		assert!(world.get::<HidingUser>(npc).is_some());
+		assert!(world.get::<CombatTargeting>(npc).is_none());
+		assert!(world.get::<FirearmIntelligence>(npc).is_none());
 	}
 }
