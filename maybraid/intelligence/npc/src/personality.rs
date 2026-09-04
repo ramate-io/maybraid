@@ -112,7 +112,7 @@ pub struct NpcInstall {
 	pub spotting_range: Option<f32>,
 	/// When false, skip combat brains even if the spec has them (unarmed civilian).
 	pub armed: bool,
-	/// Mob override. `None` keeps the personality default (Hunt flips this on).
+	/// Unused by the mixer. Pack lock/release is the mob-level stickiness.
 	pub keep_tether_in_combat: Option<bool>,
 }
 

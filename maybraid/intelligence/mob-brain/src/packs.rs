@@ -21,9 +21,10 @@ use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
 const GRAZER_GROUP: ThreatGroupId = ThreatGroupId::group(4);
 const HUNT_GROUP: ThreatGroupId = ThreatGroupId::group(3);
 const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
-pub const HUNT_STANDOFF: f32 = 16.0;
 const PREY: PoiKind = PoiKind::new("mob-brain/prey");
 const PREY_POI: PoiId = PoiId(10_000);
+const HUNT_ARRIVAL: f32 = 12.0;
+const HUNT_LOCK_SECS: f32 = 6.0;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackKind {
@@ -76,11 +77,11 @@ impl MemberSpec {
 	}
 
 	const fn predator() -> Self {
-		Self { personality: Personality::Predator, armed: true, keep_tether_in_combat: true }
+		Self { personality: Personality::Predator, armed: true, keep_tether_in_combat: false }
 	}
 
 	const fn assassin() -> Self {
-		Self { personality: Personality::Assassin, armed: true, keep_tether_in_combat: true }
+		Self { personality: Personality::Assassin, armed: true, keep_tether_in_combat: false }
 	}
 }
 
@@ -146,7 +147,7 @@ pub fn recipes() -> [PackRecipe; 4] {
 			leash: 16.0,
 			travel: 4.0,
 			journey: false,
-			journey_linger: 0.0,
+			journey_linger: HUNT_LOCK_SECS,
 			members: HUNT,
 		},
 	]
@@ -263,8 +264,7 @@ pub fn spawn_packs(
 	commands.insert_resource(visuals);
 }
 
-/// Hunt host holds a standoff on the roaming herd tether. Members then Combat;
-/// grazers Evade.
+/// Hunt host travels onto the herd. Arrival locks member tethers onto that host.
 pub fn hunt_tracks_herd(
 	time: Res<Time>,
 	mut commands: Commands,
@@ -277,17 +277,18 @@ pub fn hunt_tracks_herd(
 		return;
 	};
 	let now = time.elapsed_secs();
-	for (hunt, kind, transform) in &hosts {
+	let at = Vec3::new(prey_at.x, 0.0, prey_at.z);
+	for (hunt, kind, _) in &hosts {
 		if *kind != PackKind::Hunt {
 			continue;
 		}
-		let point = chase_standoff(transform.translation().xz(), prey_at.xz(), HUNT_STANDOFF);
-		let at = Vec3::new(point.x, 0.0, point.y);
 		if let Ok(mut goal) = goals.get_mut(hunt) {
 			goal.target = PREY_POI;
 			goal.kind = PREY;
 			goal.poi_entity = Some(prey);
 			goal.location.point = at;
+			goal.location.radius = HUNT_ARRIVAL;
+			goal.linger_secs = HUNT_LOCK_SECS;
 			continue;
 		}
 		commands.entity(hunt).insert(PoiGoal::new(
@@ -296,21 +297,11 @@ pub fn hunt_tracks_herd(
 			Some(prey),
 			PREY,
 			at,
-			4.0,
+			HUNT_ARRIVAL,
 			now,
-			0.0,
+			HUNT_LOCK_SECS,
 		));
 	}
-}
-
-/// Approach the prey from the hunter's current side and hold `standoff` metres.
-pub fn chase_standoff(from: Vec2, prey: Vec2, standoff: f32) -> Vec2 {
-	let offset = from - prey;
-	let distance = offset.length();
-	if distance <= 1e-3 {
-		return prey + Vec2::X * standoff.max(0.0);
-	}
-	prey + offset * (standoff.max(0.0) / distance)
 }
 
 fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: f32) {
@@ -488,7 +479,7 @@ mod tests {
 		assert!(roam.travel < hunt.travel);
 		assert!(ROAM.iter().all(|spec| spec.personality == Personality::Grazer));
 		assert!(WATCH.iter().all(|spec| spec.personality == Personality::Brawler));
-		assert!(HUNT.iter().all(|spec| spec.keep_tether_in_combat && spec.armed));
+		assert!(HUNT.iter().all(|spec| spec.armed && !spec.keep_tether_in_combat));
 		assert_eq!(recipes.iter().map(|recipe| recipe.members.len()).sum::<usize>(), 21);
 		assert!(
 			recipes
@@ -510,14 +501,10 @@ mod tests {
 	}
 
 	#[test]
-	fn chase_holds_a_standoff_on_the_prey_side() {
-		let prey = Vec2::ZERO;
-		let from = Vec2::new(80.0, 0.0);
-		let held = chase_standoff(from, prey, 16.0);
-		assert!((held.x - 16.0).abs() < 1e-4);
-		assert!(held.y.abs() < 1e-4);
-		let close = chase_standoff(Vec2::new(4.0, 0.0), prey, 16.0);
-		assert!((close.x - 16.0).abs() < 1e-4);
+	fn hunt_lock_linger_matches_the_chase_goal() {
+		let hunt = recipes().into_iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap();
+		assert!((hunt.journey_linger - HUNT_LOCK_SECS).abs() < 1e-4);
+		assert!(!hunt.journeys());
 	}
 
 	#[test]

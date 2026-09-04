@@ -7,10 +7,13 @@ cargo run -p mob-brain-playground --release
 ```
 
 A **360 m pad** mixing stationary packs with a **roaming herd** and a **hunt**
-that tracks it. Each host is the tether. Hunt does not journey waypoints: the
-playground points that host at a standoff on the herd tether. Members keep the
-NPC mixer. Hunt antagonizes grazers; the herd antagonizes hunt. Occupy and
-watch stay wildlife so they do not join the chase.
+that tracks it. Each host is the pack tether. After a host arrives, member
+tethers **lock** onto the destination (waypoint or herd host) for the linger,
+then restore to the own host. Combat and Evade still own NPC movement; tether
+does not write during those tactics.
+
+Hunt antagonizes grazers; the herd antagonizes hunt. Occupy and watch stay
+wildlife so they do not join the chase.
 
 No `LodSceneHost`. Personalities live on the members.
 
@@ -20,16 +23,16 @@ No `LodSceneHost`. Personalities live on the members.
 |---|---|---|
 | occupy | green orb, stays put | grazers + civilians on camp/forage |
 | watch | orange orb, stays put | brawlers on a gate cluster |
-| herd | slow blue orb (~1.7 m/s) | grazers browsing forage, then fleeing when hunt closes |
-| hunt | red orb (~4 m/s) | predators + assassin; stalk the host, Combat the herd |
+| herd | slow blue orb (~1.7 m/s) | grazers; lock onto waypoints after each hop, flee when hunt closes |
+| hunt | red orb (~4 m/s) | predators + assassin; lock onto the herd host after closing |
 
-Sequence: magenta line = hunt tracking the herd center. Predators Combat
-inside ~48 m. Grazers Evade inside ~24 m and peel off (tether drops on Evade).
-Dots: green Ignore, yellow Evade, red Combat. HUD `gap` is host-to-host
-distance; `I E C` are per-pack tactic counts.
+Sequence: magenta line = hunt traveling onto the herd. Magenta ring + HUD
+`lock` = member tethers sitting on that destination. Red dots = Combat
+(firearm range, no leash). Yellow dots = Evade (tether off). After lock
+releases, members gather on their own host again.
 
-Yellow line = host travel goal (waypoints for the herd, standoff for hunt).
-Green = member local POI. White = leash.
+Yellow line = host travel goal. Green = member local POI. White = leash to
+current tether subject.
 
 ## Controls
 

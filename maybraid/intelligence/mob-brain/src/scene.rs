@@ -4,6 +4,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
 use poi_intelligence::{GlobalPoi, LocalPoi, Poi, PoiId, PoiKind};
+use tether_intelligence::Tether;
 
 pub const PAD_SIDE: f32 = 360.0;
 pub const PAD_EXTENT: f32 = PAD_SIDE * 0.5;
@@ -76,6 +77,7 @@ pub fn setup_waypoints(
 				.with_arrival_radius(5.0)
 				.with_salience(1.0),
 			GlobalPoi,
+			Tether,
 		));
 	}
 }

@@ -24,6 +24,7 @@ the playground stamps today; see [ROSTER.md](ROSTER.md).
 - [`MobAffiliations`](src/roster.rs) and [`PoiInterests`](../poi): copied onto members at bind
 - [`MobRespawn`](src/roster.rs): delay + lives; emits [`MobMemberNeeded`](src/roster.rs)
 - optional [`MobTravel`](src/travel.rs) toward a [`PoiGoal`](../poi)
+- [`MobTetherLock`](src/lock.rs): after arrival, member tethers sit on the destination entity for the goal linger, then restore to the host. Combat/Evade still own NPC movement.
 
 Systems query the roster, not `With<Npc>` children. `npc-intelligence` stays
 LodScene-ignorant.
@@ -40,6 +41,6 @@ The app spawns bodies. This crate never depends on character controllers.
 ## Playground
 
 The [personalities playground](../personalities) is a flat High-fulfill stand-in
-for individual mixers. The [mob-brain playground](../mob-brain) is the same
-fulfill, with hosts that **journey the tether** so members reroute onto a moving
-center.
+for individual mixers. The [mob-brain playground](../mob-brain) journeys hosts
+and **locks** member tethers onto the destination (waypoint or prey host) after
+arrival.

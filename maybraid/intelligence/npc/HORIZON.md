@@ -83,7 +83,7 @@ Civilian, Hunt is Predator + Assassin.
 | Mob | Tether | Travel | Notes |
 |---|---|---|---|
 | Roam 1–18 | weak | journey **the tether** | members meander inside the leash |
-| Hunt 1–12 | weak; members stalk | same | on Combat, inner leash; `keep_tether_in_combat` |
+| Hunt 1–12 | weak; members stalk | same | lock member tethers onto prey after arrival; Combat is firearm-only |
 | Occupy 1–32 | strong, fixed | none | grazers / civilians |
 | Guard 4–20 | strong, one POI | relocate on signal | antagonize public; small discovery radius |
 | FFA 8–16 | strong (arena) | none | FFA affiliations; Hold until player fire |

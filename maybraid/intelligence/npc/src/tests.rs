@@ -179,7 +179,7 @@ fn ignore_restores_meander_and_idle_tether() {
 }
 
 #[test]
-fn combat_disables_tether_unless_kept() {
+fn combat_always_disables_tether() {
 	let mut world = World::new();
 	let anchor = world.spawn_empty().id();
 	let idle = TetherObjective::Tether(anchor, 12.0);
@@ -191,7 +191,7 @@ fn combat_disables_tether_unless_kept() {
 			NpcIntelligence {
 				idle_tether: Some(idle),
 				engaged_tether: Some(engaged),
-				keep_tether_in_combat: false,
+				keep_tether_in_combat: true,
 			},
 			threat,
 			TetherIntelligenceUser::new(idle).with_enabled(true),
@@ -200,7 +200,7 @@ fn combat_disables_tether_unless_kept() {
 	world.run_system_once(mix_npc_brains).unwrap();
 	assert!(world
 		.get::<TetherIntelligenceUser>(npc)
-		.is_some_and(|user| { !user.enabled && user.objective == engaged }));
+		.is_some_and(|user| { !user.enabled && user.objective == idle }));
 }
 
 #[test]

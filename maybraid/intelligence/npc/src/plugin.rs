@@ -43,8 +43,8 @@ impl Plugin for NpcIntelligencePlugin {
 	}
 }
 
-/// Priority mixer: Combat/Evade preempt tether and meander. Ignore restores
-/// tether; meander only while that tether is satisfied (or absent).
+/// Priority mixer: Combat/Evade own movement. Ignore restores tether; meander
+/// only while that tether is satisfied (or absent).
 pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
 	for (entity, npc, management, mut meandering, mut tether, memory, has_goal) in &mut npcs {
 		let tactic = management.tactic;
@@ -77,13 +77,7 @@ fn apply_tether(npc: &NpcIntelligence, tactic: ThreatTactic, tether: &mut Tether
 				tether.objective = objective;
 			}
 		}
-		ThreatTactic::Combat => {
-			if let Some(objective) = npc.engaged_tether.or(npc.idle_tether) {
-				tether.objective = objective;
-			}
-			tether.enabled = npc.keep_tether_in_combat;
-		}
-		ThreatTactic::Evade => {
+		ThreatTactic::Combat | ThreatTactic::Evade => {
 			tether.enabled = false;
 		}
 	}

@@ -7,12 +7,14 @@
 mod bind;
 mod host;
 mod lifecycle;
+mod lock;
 mod member;
 mod plugin;
 mod roster;
 mod travel;
 
 pub use host::{install_mob_journeying, spawn_mob, Mob, MobId, MobIdAlloc, MobInstall};
+pub use lock::MobTetherLock;
 pub use member::{MemberOf, MobMemberBody, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};
 pub use roster::{

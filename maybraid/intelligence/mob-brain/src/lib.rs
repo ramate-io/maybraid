@@ -18,7 +18,9 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use journeying_intelligence::JourneyingIntelligencePlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
-use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin, MobSystems};
+use mob_intelligence::{
+	MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin, MobSystems, MobTetherLock,
+};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -164,7 +166,14 @@ fn setup_hud(mut commands: Commands) {
 		});
 }
 
-type DebugHost<'a> = (Entity, &'a Mob, &'a PackKind, &'a GlobalTransform, Option<&'a PoiGoal>);
+type DebugHost<'a> = (
+	Entity,
+	&'a Mob,
+	&'a PackKind,
+	&'a GlobalTransform,
+	Option<&'a PoiGoal>,
+	Option<&'a MobTetherLock>,
+);
 type DebugMember<'a> =
 	(&'a MemberOf, &'a GlobalTransform, Option<&'a PoiGoal>, &'a ThreatManagementIntelligence);
 
@@ -184,7 +193,7 @@ fn draw_debug_world(
 
 	let mut roam_at = None;
 	let mut hunt_at = None;
-	for (host, mob, kind, transform, goal) in &hosts {
+	for (host, mob, kind, transform, goal, lock) in &hosts {
 		let at = transform.translation();
 		match kind {
 			PackKind::Roam => roam_at = Some(at),
@@ -204,6 +213,9 @@ fn draw_debug_world(
 				goal.location.point + Vec3::Y * 1.2,
 				Color::srgb(1.0, 0.85, 0.2),
 			);
+		}
+		if lock.is_some() {
+			xz_ring(&mut gizmos, at, 3.0, Color::srgb(0.95, 0.35, 0.85).with_alpha(0.8));
 		}
 		for (membership, member, local, management) in &members {
 			if membership.mob != host {
@@ -251,7 +263,14 @@ fn xz_ring(gizmos: &mut Gizmos, center: Vec3, radius: f32, color: Color) {
 	gizmos.linestrip(points, color);
 }
 
-type HostStatus<'a> = (Entity, &'a PackKind, &'a Name, &'a GlobalTransform, Option<&'a PoiGoal>);
+type HostStatus<'a> = (
+	Entity,
+	&'a PackKind,
+	&'a Name,
+	&'a GlobalTransform,
+	Option<&'a PoiGoal>,
+	Option<&'a MobTetherLock>,
+);
 type MemberStatus<'a> =
 	(&'a MemberOf, &'a GlobalTransform, Has<PoiGoal>, &'a ThreatManagementIntelligence);
 
@@ -270,7 +289,7 @@ fn update_status_text(
 		.unwrap_or(0.0);
 	let mut hunt_at = None;
 	let mut roam_at = None;
-	for (_, kind, _, transform, _) in &hosts {
+	for (_, kind, _, transform, _, _) in &hosts {
 		match kind {
 			PackKind::Hunt => hunt_at = Some(transform.translation()),
 			PackKind::Roam => roam_at = Some(transform.translation()),
@@ -284,12 +303,12 @@ fn update_status_text(
 	let mut status = format!(
 		"mob-brain   {PAD_SIDE:.0} m pad   fps {fps:.0}\n\
 		 WASD fly  mouse look  Space/Shift up/down  Ctrl sprint\n\
-		 magenta = hunt tracks herd   gap {gap:.0} m\n\
+		 magenta = hunt tracks herd   gap {gap:.0} m   magenta ring = tether lock\n\
 		 dots: green Ignore  yellow Evade  red Combat\n\n"
 	);
 	let mut rows: Vec<_> = hosts.iter().collect();
 	rows.sort_by_key(|(entity, ..)| entity.to_bits());
-	for (entity, kind, name, transform, goal) in rows {
+	for (entity, kind, name, transform, goal, lock) in rows {
 		let at = transform.translation();
 		let mut count = 0;
 		let mut poi = 0;
@@ -313,8 +332,9 @@ fn update_status_text(
 		let dest = goal
 			.map(|goal| format!("{:.0},{:.0}", goal.location.point.x, goal.location.point.z))
 			.unwrap_or_else(|| "idle".into());
+		let phase = if lock.is_some() { "lock" } else { "    " };
 		status.push_str(&format!(
-			"{:<5} {kind:?}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  I {ignore} E {evade} C {combat}  poi {poi}  stretch {farthest:.0}\n",
+			"{:<5} {kind:?} {phase}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  I {ignore} E {evade} C {combat}  poi {poi}  stretch {farthest:.0}\n",
 			name.as_str(),
 			at.x,
 			at.z,

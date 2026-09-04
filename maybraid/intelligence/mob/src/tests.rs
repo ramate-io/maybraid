@@ -4,15 +4,19 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use damage::Health;
 use npc_intelligence::{NpcInstall, NpcIntelligence, Personality};
-use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
+use poi_intelligence::{PoiGoal, PoiId, PoiInterest, PoiInterests, PoiKind};
 use tether_intelligence::{Tether, TetherIntelligenceUser, TetherObjective};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatSubject};
 
 use crate::bind::bind_mob_members;
 use crate::lifecycle::write_back_mob_roster;
+use crate::lock::{
+	apply_mob_tether_subjects, expire_mob_tether_locks, forget_mob_tether_lock_when_leaving,
+	lock_mobs_on_poi_arrival,
+};
 use crate::{
 	spawn_mob, MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin,
-	MobMemberNeeded, MobRespawn, MobRoster, MobSlot, RosterMember,
+	MobMemberNeeded, MobRespawn, MobRoster, MobSlot, MobTetherLock, RosterMember,
 };
 
 const PACK: ThreatGroupId = ThreatGroupId::group(9);
@@ -205,4 +209,90 @@ fn preinstalled_mixer_is_retargeted_to_the_host() {
 		world.get::<TetherIntelligenceUser>(plant).map(|user| user.objective.subject()),
 		Some(subject) if subject == host
 	));
+}
+
+#[test]
+fn lock_retargets_member_tethers_to_the_destination() {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let host = spawn_host(
+		&mut world,
+		MobId(10),
+		vec![RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false)],
+	);
+	let dest = world.spawn((Transform::from_xyz(20.0, 0.0, 0.0), Tether)).id();
+	let plant = world.spawn((Transform::default(), MobSlot(0), MobId(10))).id();
+	world.run_system_once(bind_mob_members).expect("bind");
+	world.flush();
+	world
+		.entity_mut(host)
+		.insert(MobTetherLock { subject: dest, generation: 1, until: 8.0 });
+	world.run_system_once(apply_mob_tether_subjects).expect("apply");
+	assert!(matches!(
+		world.get::<TetherIntelligenceUser>(plant).map(|user| user.objective.subject()),
+		Some(subject) if subject == dest
+	));
+}
+
+#[test]
+fn expired_lock_restores_the_host_subject() {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let host = spawn_host(
+		&mut world,
+		MobId(11),
+		vec![RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false)],
+	);
+	let dest = world.spawn((Transform::from_xyz(20.0, 0.0, 0.0), Tether)).id();
+	let plant = world.spawn((Transform::default(), MobSlot(0), MobId(11))).id();
+	world.run_system_once(bind_mob_members).expect("bind");
+	world.flush();
+	world
+		.entity_mut(host)
+		.insert(MobTetherLock { subject: dest, generation: 1, until: -1.0 });
+	world.run_system_once(expire_mob_tether_locks).expect("expire");
+	world.flush();
+	world.run_system_once(apply_mob_tether_subjects).expect("apply");
+	assert!(world.get::<MobTetherLock>(host).is_none());
+	assert!(matches!(
+		world.get::<TetherIntelligenceUser>(plant).map(|user| user.objective.subject()),
+		Some(subject) if subject == host
+	));
+}
+
+#[test]
+fn arrival_locks_once_until_the_host_leaves() {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let at = Vec3::new(6.0, 0.0, 2.0);
+	let host = spawn_host(
+		&mut world,
+		MobId(12),
+		vec![RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false)],
+	);
+	let dest = world.spawn((Transform::from_translation(at), Tether)).id();
+	world.entity_mut(host).insert((
+		GlobalTransform::from_translation(at),
+		PoiGoal::new(3, PoiId(40), Some(dest), PoiKind::new("mob/camp"), at, 4.0, 0.0, 2.5),
+	));
+	world.run_system_once(lock_mobs_on_poi_arrival).expect("lock");
+	world.flush();
+	assert!(world
+		.get::<MobTetherLock>(host)
+		.is_some_and(|lock| lock.subject == dest && lock.generation == 3));
+
+	world
+		.entity_mut(host)
+		.insert(crate::lock::MobTetherLockMemory { generation: 3 });
+	world.entity_mut(host).remove::<MobTetherLock>();
+	world.run_system_once(lock_mobs_on_poi_arrival).expect("no-relock");
+	world.flush();
+	assert!(world.get::<MobTetherLock>(host).is_none());
+
+	world
+		.entity_mut(host)
+		.insert(GlobalTransform::from_translation(Vec3::new(80.0, 0.0, 0.0)));
+	world.run_system_once(forget_mob_tether_lock_when_leaving).expect("leave");
+	world.flush();
+	assert!(world.get::<crate::lock::MobTetherLockMemory>(host).is_none());
 }

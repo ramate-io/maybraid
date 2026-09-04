@@ -85,7 +85,7 @@ pub(crate) fn bind_mob_members(
 		if !has_mixer {
 			personality.install(&mut commands, plant, install);
 		} else {
-			retarget_tether(host, plant, &mut bind.mixers, &mut bind.tethers);
+			retarget_member_tether(host, plant, &mut bind.mixers, &mut bind.tethers);
 			if let Ok(mut learner) = bind.learners.get_mut(plant) {
 				if let Ok(host_interests) = bind.interests.get(host) {
 					learner.interests = host_interests.0.clone();
@@ -129,21 +129,21 @@ pub(crate) fn propagate_mob_membership(
 	}
 }
 
-fn retarget_tether(
-	host: Entity,
+pub(crate) fn retarget_member_tether(
+	subject: Entity,
 	plant: Entity,
 	mixers: &mut Query<&mut NpcIntelligence>,
 	tethers: &mut Query<&mut TetherIntelligenceUser>,
 ) {
 	if let Ok(mut mixer) = mixers.get_mut(plant) {
 		if let Some(idle) = mixer.idle_tether.as_mut() {
-			*idle = idle.with_subject(host);
+			*idle = idle.with_subject(subject);
 		}
 		if let Some(engaged) = mixer.engaged_tether.as_mut() {
-			*engaged = engaged.with_subject(host);
+			*engaged = engaged.with_subject(subject);
 		}
 	}
 	if let Ok(mut tether) = tethers.get_mut(plant) {
-		tether.objective = tether.objective.with_subject(host);
+		tether.objective = tether.objective.with_subject(subject);
 	}
 }

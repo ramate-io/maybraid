@@ -14,13 +14,12 @@ idle stack:
 ```
 
 [`mix_npc_brains`](src/plugin.rs) runs after threat-management selection.
-Combat and Evade disable meandering and drop an active `PoiGoal`. On Ignore,
-meander is granted only while the tether is satisfied (or the NPC has no
-tether); an unsatisfied leash or stalk drops `PoiGoal` so the member catches
-up, then meander resumes. Tether is disabled during Evade and during Combat
-unless `keep_tether_in_combat` is set (Hunt can flip that without changing the
-personality). Firearm movement and flee/hide already no-op when their grants
-are retracted.
+Combat and Evade disable meandering **and** tether, and drop an active
+`PoiGoal`. On Ignore, meander is granted only while the tether is satisfied (or
+the NPC has no tether); an unsatisfied leash or stalk drops `PoiGoal` so the
+member catches up, then meander resumes. Firearm movement and flee/hide already
+no-op when their grants are retracted. Sticking to prey or a POI is a
+[mob tether lock](../mob) (subject swap after arrival), not tether-during-Combat.
 
 ## Personalities
 
