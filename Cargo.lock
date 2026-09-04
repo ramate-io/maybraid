@@ -4847,6 +4847,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "mob-brain-playground"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "damage",
+ "evasion-intelligence",
+ "firearm-intelligence",
+ "fleeing-intelligence",
+ "hiding-intelligence",
+ "journeying-intelligence",
+ "lod-avian",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "meandering-intelligence",
+ "mob-intelligence",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "npc-intelligence",
+ "player",
+ "poi-intelligence",
+ "spotting-intelligence",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-management-intelligence",
+]
+
+[[package]]
+name = "mob-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "firearm-intelligence",
+ "journeying-intelligence",
+ "npc-intelligence",
+ "poi-intelligence",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-management-intelligence",
+]
+
+[[package]]
 name = "movement-intelligence"
 version = "0.0.1"
 dependencies = [
@@ -5781,6 +5826,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-input",
  "meandering-intelligence",
+ "mob-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",

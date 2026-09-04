@@ -83,7 +83,7 @@ Civilian, Hunt is Predator + Assassin.
 | Mob | Tether | Travel | Notes |
 |---|---|---|---|
 | Roam 1–18 | weak | journey **the tether** | members meander inside the leash |
-| Hunt 1–12 | weak; members stalk | same | on Combat, inner leash; `keep_tether_in_combat` |
+| Hunt 1–12 | weak; members stalk | same | lock member tethers onto prey after arrival; Combat is firearm-only |
 | Occupy 1–32 | strong, fixed | none | grazers / civilians |
 | Guard 4–20 | strong, one POI | relocate on signal | antagonize public; small discovery radius |
 | FFA 8–16 | strong (arena) | none | FFA affiliations; Hold until player fire |
@@ -98,9 +98,12 @@ Keep `npc-intelligence` ignorant of LodScene. High fulfill calls the same
 `Personality` constructors the firing range uses. Mob systems query a roster,
 not children.
 
-The [personalities playground](../personalities) is a flat High-fulfill stand-in:
-one host entity per proto-mob, members installed with those constructors. It is
-not a LodScene and must not become the mob crate.
+The [mob crate](../mob) is that host brain (roster, tether, affiliations, travel,
+respawn). Bind is documented in [ROSTER.md](../mob/ROSTER.md): High BSN stays
+Entity-free; a slot wish is patched to a live `Entity` after spawn.
+
+The [personalities playground](../personalities) is a flat High-fulfill stand-in
+that now uses that brain. It is not a LodScene.
 
 Failure mode: NPC brains parented to the mob host but **not** under the High
 root, so they survive cull. Presence of the personality / mixer bundle **is**

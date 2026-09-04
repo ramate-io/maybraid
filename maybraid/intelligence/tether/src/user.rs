@@ -69,6 +69,9 @@ impl TetherIntelligenceUser {
 	}
 
 	/// Snapshot the subject and decide whether to write local movement, a route, or hold.
+	///
+	/// A retracted grant returns [`TetherAction::None`] even if this brain was
+	/// writing. Hold pins position and would stomp flee or firearm movement.
 	pub fn evaluate(
 		&mut self,
 		memory: &mut TetherMemory,
@@ -81,10 +84,7 @@ impl TetherIntelligenceUser {
 			self.last_remaining = None;
 			self.last_applied = None;
 			self.stuck_seconds = 0.0;
-			if self.was_writing {
-				self.was_writing = false;
-				return TetherAction::Hold;
-			}
+			self.was_writing = false;
 			return TetherAction::None;
 		}
 
@@ -151,6 +151,8 @@ pub enum TetherAction {
 	None,
 	Local(MovementObjective),
 	Route(Vec3),
+	/// Pin pose after remaining work became satisfied while the grant is on.
+	/// Disable returns [`Self::None`] instead so other brains can write.
 	Hold,
 }
 
@@ -161,9 +163,5 @@ pub fn install_tether(commands: &mut Commands, entity: Entity, user: TetherIntel
 }
 
 fn sticky_satisfied(was: bool, remaining: f32, added_radius: f32) -> bool {
-	if remaining <= 0.0 {
-		true
-	} else {
-		was && remaining <= added_radius
-	}
+	if remaining <= 0.0 { true } else { was && remaining <= added_radius }
 }

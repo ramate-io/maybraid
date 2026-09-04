@@ -1,5 +1,5 @@
 [package]
-name = "personalities-playground"
+name = "mob-brain-playground"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -10,7 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [[bin]]
-name = "personalities"
+name = "mob-brain"
 path = "src/main.rs"
 
 [dependencies]
@@ -21,6 +21,7 @@ evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
 fleeing-intelligence = { workspace = true }
 hiding-intelligence = { workspace = true }
+journeying-intelligence = { workspace = true }
 lod-avian = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }

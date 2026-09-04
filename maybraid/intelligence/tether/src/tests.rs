@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use movement_intelligence::MovementObjective;
 
 use crate::memory::TetherMemory;
-use crate::objective::{ring_point, StalkRadii, TetherObjective};
+use crate::objective::{StalkRadii, TetherObjective, ring_point};
 use crate::user::{TetherAction, TetherIntelligenceUser};
 
 fn subject() -> Entity {
@@ -130,15 +130,16 @@ fn progress_does_not_replan() -> anyhow::Result<()> {
 }
 
 #[test]
-fn disabled_grant_holds_once_then_idles() -> anyhow::Result<()> {
+fn disabled_grant_does_not_hold() -> anyhow::Result<()> {
 	let mut user = TetherIntelligenceUser::new(TetherObjective::Tether(subject(), 4.0))
 		.with_horizon(8.0)
 		.with_stuck_timeout(0.0);
 	let mut memory = TetherMemory::new(subject());
-	let _ = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 40.0, 0.25, 1.0);
+	let writing = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 40.0, 0.25, 1.0);
+	assert!(matches!(writing, TetherAction::Route(_)));
 	user.enabled = false;
 	let release = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 40.0, 0.25, 2.0);
-	assert!(matches!(release, TetherAction::Hold));
+	assert!(matches!(release, TetherAction::None));
 	let idle = user.evaluate(&mut memory, Vec3::ZERO, Vec3::X * 40.0, 0.25, 3.0);
 	assert!(matches!(idle, TetherAction::None));
 	Ok(())
