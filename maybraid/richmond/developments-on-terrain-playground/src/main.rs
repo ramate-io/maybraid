@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use richmond_developments_on_terrain_playground::{
-	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand,
+	DevelopmentsOnTerrainPlugin, PendingStartupCommand, PlaygroundCommand, PlaygroundConfig,
 };
 
 fn assets_root() -> PathBuf {
@@ -10,10 +10,17 @@ fn assets_root() -> PathBuf {
 }
 
 fn main() {
-	let startup = PlaygroundCommand::parse_startup_command().unwrap_or_else(|e| {
+	let startup = PlaygroundCommand::parse_startup().unwrap_or_else(|e| {
 		eprintln!("{e}");
 		std::process::exit(2);
 	});
+	let plugin = DevelopmentsOnTerrainPlugin {
+		config: PlaygroundConfig {
+			focus_development: startup.focus_development,
+			..PlaygroundConfig::default()
+		},
+		..Default::default()
+	};
 
 	let assets_path = assets_root();
 	App::new()
@@ -29,7 +36,7 @@ fn main() {
 				})
 				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 		)
-		.insert_resource(PendingStartupCommand(startup))
-		.add_plugins(DevelopmentsOnTerrainPlugin::default())
+		.insert_resource(PendingStartupCommand(startup.command))
+		.add_plugins(plugin)
 		.run();
 }

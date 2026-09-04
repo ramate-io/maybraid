@@ -29,5 +29,5 @@ where
 		id,
 		lod_ref,
 	)?;
-	Some(pre.sdf.terrain.height_at_with_all_modulations(x, z))
+	Some(pre.sdf.terrain().height_at_with_all_modulations(x, z))
 }

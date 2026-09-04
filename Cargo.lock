@@ -2411,6 +2411,7 @@ dependencies = [
 name = "chico-vegetation-on-terrain-playground"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "avian3d",
  "bevy",
  "chico-bumpout",
@@ -4769,6 +4770,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-sky",
+ "richmond-developments-on-terrain-playground",
 ]
 
 [[package]]
@@ -6507,6 +6509,7 @@ dependencies = [
  "richmond-building-shaders",
  "richmond-buildings",
  "richmond-developments",
+ "richmond-urbanization",
  "scene-ref",
 ]
 
@@ -6527,18 +6530,39 @@ dependencies = [
 name = "richmond-developments-on-terrain-playground"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "avian3d",
  "bevy",
+ "chico-forests",
+ "chico-groves",
+ "chico-sbs-trees-playground",
+ "chico-vegetation-on-terrain-playground",
  "clap",
  "durham-terrain",
  "durham-terrain-models",
  "game-commands",
  "lod",
+ "lod-cascade",
  "log",
+ "procedural-common",
  "render-item",
  "richmond-building-components",
  "richmond-buildings",
  "richmond-development-models",
  "richmond-developments",
+ "richmond-urbanization",
+ "terrain-chunk-ref",
+]
+
+[[package]]
+name = "richmond-urbanization"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "lod",
+ "procedural-common",
 ]
 
 [[package]]

@@ -164,6 +164,58 @@ pub(crate) fn update_grounded(
 	}
 }
 
+/// Most upright contact within the walkable slope, if any.
+fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+	let mut best: Option<(f32, Vec3)> = None;
+	for hit in hits.iter() {
+		let normal = (-hit.normal2).normalize_or_zero();
+		if normal.length_squared() < 1e-8 {
+			continue;
+		}
+		let angle = normal.angle_between(Vec3::Y).abs();
+		if let Some(max) = max_slope {
+			if angle > max.0 {
+				continue;
+			}
+		}
+		if best.is_none_or(|(best_angle, _)| angle < best_angle) {
+			best = Some((angle, normal));
+		}
+	}
+	best.map(|(_, normal)| normal)
+}
+
+/// Accelerate along the ground plane when a walkable normal is known; else XZ only.
+fn accelerate_wish(
+	velocity: &mut LinearVelocity,
+	wish: Vec3,
+	accel: f32,
+	dt: f32,
+	ground_normal: Option<Vec3>,
+) {
+	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
+	if wish.length_squared() < 1e-8 {
+		return;
+	}
+	let drive = match ground_normal {
+		Some(normal) => {
+			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
+			if along.length_squared() > 1e-8 {
+				along
+			} else {
+				wish
+			}
+		}
+		None => wish,
+	};
+	if ground_normal.is_some() {
+		**velocity += drive * accel * dt;
+	} else {
+		velocity.x += drive.x * accel * dt;
+		velocity.z += drive.z * accel * dt;
+	}
+}
+
 pub(crate) fn apply_character_movement(
 	mut commands: Commands,
 	time: Res<Time>,
@@ -172,6 +224,8 @@ pub(crate) fn apply_character_movement(
 		(
 			Entity,
 			&PlayerLook,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
 			&MovementAcceleration,
 			&JumpImpulse,
 			&mut LinearVelocity,
@@ -182,15 +236,17 @@ pub(crate) fn apply_character_movement(
 ) {
 	let dt = time.delta_secs();
 	for action in reader.read() {
-		for (entity, look, accel, jump, mut velocity, grounded) in &mut controllers {
+		for (entity, look, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers
+		{
 			let yaw = Quat::from_axis_angle(Vec3::Y, look.yaw);
 			let forward = yaw * -Vec3::Z;
 			let right = yaw * Vec3::X;
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					velocity.x += wish.x * accel.0 * dt;
-					velocity.z += wish.z * accel.0 * dt;
+					let ground =
+						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
 					if grounded {
@@ -209,19 +265,25 @@ pub(crate) fn apply_character_movement(
 pub(crate) fn apply_wish_movement(
 	time: Res<Time>,
 	mut controllers: Query<
-		(&MoveWish, &MovementAcceleration, &mut LinearVelocity),
+		(
+			&MoveWish,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
+			&MovementAcceleration,
+			&mut LinearVelocity,
+			Has<Grounded>,
+		),
 		(With<CharacterController>, Without<Player>),
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (wish, accel, mut velocity) in &mut controllers {
+	for (wish, hits, max_slope, accel, mut velocity, grounded) in &mut controllers {
 		let dir = Vec3::new(wish.0.x, 0.0, wish.0.z);
 		if dir.length_squared() < 1e-6 {
 			continue;
 		}
-		let dir = dir.normalize();
-		velocity.x += dir.x * accel.0 * dt;
-		velocity.z += dir.z * accel.0 * dt;
+		let ground = grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+		accelerate_wish(&mut velocity, dir, accel.0, dt, ground);
 	}
 }
 

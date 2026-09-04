@@ -32,7 +32,7 @@ pub struct TerrainWithPads {
 
 impl TerrainWithPads {
 	pub fn compose<'a>(terrain: &Terrain, pads: impl IntoIterator<Item = &'a PadComplex>) -> Self {
-		let mut sdf: TerrainSdf = terrain.sdf.terrain.clone();
+		let mut sdf: TerrainSdf = terrain.sdf.terrain().clone();
 		let mut pad_count = 0;
 		let mut nodes = Vec::new();
 		for pad in pads {

@@ -6,14 +6,16 @@ use bevy::prelude::*;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
 use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
+use procedural_common::Bounds2;
 use std::collections::HashMap;
 
+use richmond_urbanization::UrbanizationIndex;
+
+use crate::artifact::BuiltDevelopment;
 use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
-use crate::les_halles::LesHallesDevelopment;
+use crate::pad::PadComplex;
 use crate::padded::TerrainWithPads;
-use crate::ring_fort::RingFortDevelopment;
-use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StoredEntry<T> {
@@ -28,15 +30,16 @@ pub struct DevelopmentEntryStore {
 	next_version: u64,
 	pub(crate) cells: HashMap<Id, StoredEntry<DevelopmentCell>>,
 	pub(crate) padded: HashMap<Id, StoredEntry<TerrainWithPads>>,
-	pub(crate) les_halles: HashMap<Id, StoredEntry<LesHallesDevelopment>>,
-	pub(crate) shepherds_villages: HashMap<Id, StoredEntry<ShepherdsVillageDevelopment>>,
-	pub(crate) shepherds_communes: HashMap<Id, StoredEntry<ShepherdsCommuneDevelopment>>,
-	pub(crate) ring_forts: HashMap<Id, StoredEntry<RingFortDevelopment>>,
+	pub(crate) developments: HashMap<Id, StoredEntry<BuiltDevelopment>>,
+	dirty_pad_regions: Vec<Bounds2>,
 }
 
 impl DevelopmentEntryStore {
 	pub fn clear(&mut self) {
-		*self = Self::default();
+		self.cells.clear();
+		self.padded.clear();
+		self.developments.clear();
+		self.dirty_pad_regions.clear();
 	}
 
 	fn stamp(&mut self) -> Version {
@@ -64,24 +67,97 @@ impl DevelopmentEntryStore {
 			.collect()
 	}
 
-	pub fn les_halles(&self, id: Id) -> Option<&LesHallesDevelopment> {
-		self.les_halles.get(&id).map(|e| &e.value)
+	/// Merge pad nodes affecting `region` into one sample-time blend pass.
+	///
+	/// Returning one complex is important for overlapping pads: sequential
+	/// modulation would let later ease skirts smear earlier exact terraces.
+	pub fn merged_pad_complex(&self, region: Aabb3d) -> PadComplex {
+		let bounds = Bounds2::from_xz(region.min.x, region.min.z, region.max.x, region.max.z);
+		let nodes = self
+			.cells
+			.values()
+			.filter(|entry| {
+				entry.value.is_filled()
+					&& region.min.x < entry.bounds.max.x
+					&& region.max.x > entry.bounds.min.x
+					&& region.min.z < entry.bounds.max.z
+					&& region.max.z > entry.bounds.min.z
+			})
+			.flat_map(|entry| entry.value.pad_complexes())
+			.flat_map(|complex| complex.pads.iter())
+			.filter(|node| node.correction_intersects(bounds))
+			.cloned()
+			.collect();
+		PadComplex::from_nodes(nodes)
+	}
+
+	fn mark_development_change(&mut self, id: Id, development: &DevelopmentCell) {
+		let previous: Vec<_> = self
+			.cells
+			.get(&id)
+			.into_iter()
+			.flat_map(|entry| entry.value.pad_complexes())
+			.filter(|complex| !complex.is_empty())
+			.map(|complex| complex.bounds)
+			.collect();
+		self.dirty_pad_regions.extend(previous);
+		self.dirty_pad_regions.extend(
+			development
+				.pad_complexes()
+				.filter(|complex| !complex.is_empty())
+				.map(|complex| complex.bounds),
+		);
+	}
+
+	/// Remove only padded terrain cells touched by changed pad support.
+	pub fn invalidate_dirty_padded(&mut self) -> usize {
+		let dirty = std::mem::take(&mut self.dirty_pad_regions);
+		if dirty.is_empty() {
+			return 0;
+		}
+		let previous_len = self.padded.len();
+		self.padded.retain(|_, entry| {
+			!dirty.iter().any(|region| {
+				region.min.x < entry.bounds.max.x
+					&& region.max.x > entry.bounds.min.x
+					&& region.min.y < entry.bounds.max.z
+					&& region.max.y > entry.bounds.min.z
+			})
+		});
+		previous_len - self.padded.len()
 	}
 
 	pub fn padded(&self, id: Id) -> Option<&TerrainWithPads> {
 		self.padded.get(&id).map(|e| &e.value)
 	}
 
-	pub fn shepherds_village(&self, id: Id) -> Option<&ShepherdsVillageDevelopment> {
-		self.shepherds_villages.get(&id).map(|e| &e.value)
+	/// Finest padded terrain cell with the greatest XZ overlap with `region`.
+	pub fn padded_terrain_for(&self, region: Aabb3d) -> Option<&TerrainWithPads> {
+		let mut best: Option<(f32, f32, &TerrainWithPads)> = None;
+		for entry in self.padded.values() {
+			let overlap_x = (region.max.x.min(entry.bounds.max.x)
+				- region.min.x.max(entry.bounds.min.x))
+			.max(0.0);
+			let overlap_z = (region.max.z.min(entry.bounds.max.z)
+				- region.min.z.max(entry.bounds.min.z))
+			.max(0.0);
+			let overlap = overlap_x * overlap_z;
+			if overlap <= 1e-3 {
+				continue;
+			}
+			let span = (entry.bounds.max.x - entry.bounds.min.x)
+				.max(entry.bounds.max.z - entry.bounds.min.z);
+			if best.is_none_or(|(best_overlap, best_span, _)| {
+				overlap > best_overlap || (overlap == best_overlap && span < best_span)
+			}) {
+				best = Some((overlap, span, &entry.value));
+			}
+		}
+		best.map(|(_, _, terrain)| terrain)
 	}
 
-	pub fn shepherds_commune(&self, id: Id) -> Option<&ShepherdsCommuneDevelopment> {
-		self.shepherds_communes.get(&id).map(|e| &e.value)
-	}
-
-	pub fn ring_fort(&self, id: Id) -> Option<&RingFortDevelopment> {
-		self.ring_forts.get(&id).map(|e| &e.value)
+	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
+		self.developments.get(&id).map(|e| &e.value)
 	}
 }
 
@@ -92,11 +168,13 @@ pub struct DevelopmentIndex<'w> {
 	pub terrain: Res<'w, TerrainEntryStore>,
 	pub layout: Res<'w, TerrainCellLayout>,
 	pub config: Res<'w, DevelopmentConfig>,
+	pub urbanization: ResMut<'w, UrbanizationIndex>,
 }
 
 impl DevelopmentIndex<'_> {
 	pub fn clear(&mut self) {
 		self.store.clear();
+		self.urbanization.clear();
 	}
 
 	pub fn config(&self) -> &DevelopmentConfig {
@@ -113,7 +191,7 @@ impl DevelopmentIndex<'_> {
 }
 
 macro_rules! impl_spatial {
-	($ty:ty, $field:ident, $view:ident) => {
+	($ty:ty, $field:ident, $view:ident $(, $before_insert:ident)?) => {
 		impl<'w> SpatialIndex<$ty> for DevelopmentIndex<'w> {
 			fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
 				self.store
@@ -145,6 +223,7 @@ macro_rules! impl_spatial {
 			}
 
 			fn insert(&mut self, id: Id, t: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
+				$(self.store.$before_insert(id, &t);)?
 				let version = self.store.stamp();
 				self.store.$field.insert(id, StoredEntry { value: t, bounds, version });
 			}
@@ -197,9 +276,85 @@ macro_rules! impl_spatial {
 	};
 }
 
-impl_spatial!(DevelopmentCell, cells, DevelopmentCellStoreView);
+impl_spatial!(DevelopmentCell, cells, DevelopmentCellStoreView, mark_development_change);
 impl_spatial!(TerrainWithPads, padded, PaddedStoreView);
-impl_spatial!(LesHallesDevelopment, les_halles, LesHallesStoreView);
-impl_spatial!(ShepherdsVillageDevelopment, shepherds_villages, ShepherdsVillageStoreView);
-impl_spatial!(ShepherdsCommuneDevelopment, shepherds_communes, ShepherdsCommuneStoreView);
-impl_spatial!(RingFortDevelopment, ring_forts, RingFortStoreView);
+impl_spatial!(BuiltDevelopment, developments, BuiltDevelopmentStoreView);
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::DevelopmentConfig;
+	use anyhow::Result;
+	use durham_terrain_models::{ComposedTerrain, TerrainSdf};
+	use render_item::sdf::cpu_shot::WallFaces;
+	use std::sync::Arc;
+
+	#[test]
+	fn merged_pad_complex_collects_overlapping_cells_in_one_pass() -> Result<()> {
+		let mut store = DevelopmentEntryStore::default();
+		let config = DevelopmentConfig::default();
+		let first_bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
+		let second_bounds =
+			Aabb3d::from_min_max(Vec3::new(100.0, 0.0, 0.0), Vec3::new(200.0, 100.0, 100.0));
+		store.cells.insert(
+			Id::from_cell(first_bounds),
+			StoredEntry {
+				value: DevelopmentCell::with_les_halles(first_bounds, 12.0, &config),
+				bounds: first_bounds,
+				version: Version(1),
+			},
+		);
+		store.cells.insert(
+			Id::from_cell(second_bounds),
+			StoredEntry {
+				value: DevelopmentCell::with_les_halles(second_bounds, 24.0, &config),
+				bounds: second_bounds,
+				version: Version(2),
+			},
+		);
+
+		let merged = store.merged_pad_complex(Aabb3d::from_min_max(
+			Vec3::new(40.0, 500.0, 0.0),
+			Vec3::new(160.0, 501.0, 100.0),
+		));
+		assert_eq!(merged.pads.len(), 2);
+		assert!((merged.modify_elevation(0.0, 50.0, 50.0) - 12.0).abs() < 1e-5);
+		assert!((merged.modify_elevation(7.0, 500.0, 500.0) - 7.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn development_changes_only_invalidate_overlapping_padded_terrain() {
+		let mut store = DevelopmentEntryStore::default();
+		let config = DevelopmentConfig::default();
+		let changed_bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 100.0, 100.0));
+		let distant_bounds = Aabb3d::from_min_max(
+			Vec3::new(1_000.0, 0.0, 1_000.0),
+			Vec3::new(1_100.0, 100.0, 1_100.0),
+		);
+		let development = DevelopmentCell::with_les_halles(changed_bounds, 12.0, &config);
+		store.mark_development_change(Id::from_cell(changed_bounds), &development);
+
+		for bounds in [changed_bounds, distant_bounds] {
+			store.padded.insert(
+				Id::from_cell(bounds),
+				StoredEntry {
+					value: TerrainWithPads {
+						cell: bounds,
+						sdf: Arc::new(ComposedTerrain::from_terrain(TerrainSdf::new(1, 20.0))),
+						material: Handle::default(),
+						res_2: 3,
+						wall_faces: WallFaces::NONE,
+						pad_count: 0,
+					},
+					bounds,
+					version: Version(1),
+				},
+			);
+		}
+
+		assert_eq!(store.invalidate_dirty_padded(), 1);
+		assert!(!store.padded.contains_key(&Id::from_cell(changed_bounds)));
+		assert!(store.padded.contains_key(&Id::from_cell(distant_bounds)));
+	}
+}

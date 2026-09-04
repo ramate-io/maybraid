@@ -5,8 +5,8 @@
 //! Stairs and roof are deferred to the tower consumer — shafts remain
 //! [`SpaceKind::InternalSpace`] residuals.
 
-use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -14,7 +14,7 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
+use richmond_building_components::{BuildingComponents, BuildingStructuralLodProbe, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::openings::{OpeningLabel, Openings};
@@ -133,6 +133,16 @@ impl BuildingComponents for MixedUseLesHallesStorey {
 			Self::Livable { usage, .. } => usage.label_nodes_for_level(level),
 			Self::Arcade { .. } => Layers::new(),
 		}
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		let plan = self.floor_plan();
+		let half = plan.outer * 0.5;
+		let center = plan.center_xz;
+		Some(BuildingStructuralLodProbe::new([Aabb2d {
+			min: Vec2::new(center.x - half.x, center.z - half.y),
+			max: Vec2::new(center.x + half.x, center.z + half.y),
+		}]))
 	}
 }
 
@@ -284,6 +294,13 @@ impl BuildingComponents for MixedUseLesHallesMonotower {
 			out.extend(floor.label_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn structural_lod(&self) -> Option<BuildingStructuralLodProbe> {
+		self.floors
+			.iter()
+			.filter_map(BuildingComponents::structural_lod)
+			.reduce(|a, b| a.merge(b))
 	}
 }
 

@@ -38,5 +38,8 @@ maybraid-input = { workspace = true }
 material-ref = { workspace = true }
 procedural-common = { workspace = true, features = ["clap"] }
 
+[dev-dependencies]
+anyhow = { workspace = true }
+
 [lints]
 workspace = true

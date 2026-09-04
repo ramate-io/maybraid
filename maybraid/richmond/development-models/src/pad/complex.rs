@@ -32,7 +32,10 @@ impl PadComplex {
 		self
 	}
 
-	pub fn from_nodes(pads: Vec<PadNode>) -> Self {
+	pub fn from_nodes(mut pads: Vec<PadNode>) -> Self {
+		// Development cells live in a HashMap. Canonicalize the merged order so
+		// equivalent terrain cells produce the same blend ties and mesh identity.
+		pads.sort_by_cached_key(|node| format!("{node:?}"));
 		let bounds = union_pad_bounds(&pads);
 		let index = PadFootprintIndex::build(bounds, &pads);
 		Self { bounds, pads, index }
@@ -117,6 +120,12 @@ impl ElevationModulation for PadComplex {
 	) -> f32 {
 		PadComplex::modify_elevation(self, elevation, x, z)
 	}
+
+	fn mesh_identity(&self) -> String {
+		// The footprint index contains HashMap buckets. They accelerate sampling
+		// but do not affect geometry and must not enter persistent mesh keys.
+		format!("PadComplex {{ bounds: {:?}, pads: {:?} }}", self.bounds, self.pads)
+	}
 }
 
 fn union_pad_bounds(pads: &[PadNode]) -> Bounds2 {
@@ -131,4 +140,29 @@ fn union_pad_bounds(pads: &[PadNode]) -> Bounds2 {
 		return Bounds2::from_xz(0.0, 0.0, 0.0, 0.0);
 	}
 	Bounds2 { min, max }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn identity_is_independent_of_merged_node_order() {
+		let first = PadNode::rectangular_flatten_default(
+			Vec2::new(10.0, 20.0),
+			Vec2::splat(4.0),
+			0.25,
+			3.0,
+		);
+		let second = PadNode::rectangular_flatten_default(
+			Vec2::new(-30.0, 5.0),
+			Vec2::new(8.0, 2.0),
+			-0.5,
+			7.0,
+		);
+		let forward = PadComplex::from_nodes(vec![first.clone(), second.clone()]);
+		let reverse = PadComplex::from_nodes(vec![second, first]);
+
+		assert_eq!(forward.mesh_identity(), reverse.mesh_identity());
+	}
 }

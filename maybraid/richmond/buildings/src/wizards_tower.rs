@@ -33,6 +33,7 @@ use lod::gen::{
 };
 use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 
 use richmond_building_components::floors::FloorNode;
@@ -70,6 +71,10 @@ pub struct WizardsTower {
 	pub storey_height: f32,
 	/// The stacked circular column (floors + top perch).
 	pub column: WizardsTowerColumn,
+	/// Finish stamped onto the exterior ring walls.
+	pub wall_material: Option<MaterialRef>,
+	/// Finish stamped onto high-detail room partitions.
+	pub room_material: Option<MaterialRef>,
 }
 
 impl WizardsTower {
@@ -96,7 +101,27 @@ impl WizardsTower {
 			floor_count,
 			storey_height: column.storey_height,
 			column,
+			wall_material: None,
+			room_material: None,
 		}
+	}
+
+	/// Stamp exterior shell walls and high-detail room partitions without changing LOD behavior.
+	pub fn with_finish(mut self, wall: MaterialRef, room: MaterialRef) -> Self {
+		self.column = self.column.with_materials(wall.clone(), room.clone());
+		self.wall_material = Some(wall);
+		self.room_material = Some(room);
+		self
+	}
+
+	pub fn with_wall_material(self, wall: MaterialRef) -> Self {
+		let room = self.room_material.clone().unwrap_or_else(|| wall.clone());
+		self.with_finish(wall, room)
+	}
+
+	pub fn with_room_material(self, room: MaterialRef) -> Self {
+		let wall = self.wall_material.clone().unwrap_or_else(|| room.clone());
+		self.with_finish(wall, room)
 	}
 
 	/// Map unit noise to floor count in `10..=30`.
@@ -223,5 +248,74 @@ impl LodScene for WizardsTower {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
 		lod_host_scene_pending(level, self.constraints.aabb)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
+
+	use super::*;
+
+	fn tower() -> WizardsTower {
+		let constraints = CellConstraints::cell_owned(Aabb3d::from_min_max(
+			Vec3::new(-10.0, 0.0, -10.0),
+			Vec3::new(10.0, 80.0, 10.0),
+		));
+		WizardsTower::new(&constraints, 0.0)
+	}
+
+	#[test]
+	fn every_floor_has_non_overlapping_rooms_clear_of_shaft() {
+		let tower = tower();
+		for floor in &tower.column.floors {
+			assert_eq!(floor.rooms.len(), 4);
+			let center = (floor.constraints.aabb.min + floor.constraints.aabb.max) * 0.5;
+			let radius = 0.5
+				* (floor.constraints.aabb.max.x - floor.constraints.aabb.min.x)
+					.min(floor.constraints.aabb.max.z - floor.constraints.aabb.min.z);
+			let shaft_half = floor_fill::SPIRE_HALF_FRAC * radius;
+			for (index, room) in floor.rooms.iter().enumerate() {
+				let bounds = room.constraints.aabb;
+				assert!(bounds.min.cmpge(floor.constraints.aabb.min).all());
+				assert!(bounds.max.cmple(floor.constraints.aabb.max).all());
+				let avoids_shaft = bounds.max.x <= center.x - shaft_half
+					|| bounds.min.x >= center.x + shaft_half
+					|| bounds.max.z <= center.z - shaft_half
+					|| bounds.min.z >= center.z + shaft_half;
+				assert!(avoids_shaft);
+				for other in floor.rooms.iter().skip(index + 1) {
+					let overlap_x = (bounds.max.x.min(other.constraints.aabb.max.x)
+						- bounds.min.x.max(other.constraints.aabb.min.x))
+					.max(0.0);
+					let overlap_z = (bounds.max.z.min(other.constraints.aabb.max.z)
+						- bounds.min.z.max(other.constraints.aabb.min.z))
+					.max(0.0);
+					assert!(overlap_x * overlap_z <= 1e-4);
+				}
+			}
+		}
+	}
+
+	#[test]
+	fn finishes_stamp_shell_and_high_only_rooms() {
+		let wall = MaterialRef::named("wizard-shell");
+		let room = MaterialRef::named("wizard-room");
+		let tower = tower().with_finish(wall.clone(), room.clone());
+		for floor in &tower.column.floors {
+			let shell: Vec<_> = floor.partition_nodes_for_level(LodSceneLevel::Medium).flatten();
+			assert!(!shell.is_empty());
+			assert!(shell.iter().all(|node| node.material.as_ref() == Some(&wall)));
+			assert!(floor
+				.rooms
+				.iter()
+				.all(|authored_room| authored_room.wall_material.as_ref() == Some(&room)));
+		}
+		let high = tower.partition_nodes_for_level(LodSceneLevel::High).len();
+		let medium = tower.partition_nodes_for_level(LodSceneLevel::Medium).len();
+		let low = tower.partition_nodes_for_level(LodSceneLevel::Low).len();
+		assert!(high > medium);
+		assert_eq!(low, 0);
 	}
 }

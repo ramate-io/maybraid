@@ -5,6 +5,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
@@ -87,6 +88,16 @@ impl WizardsTowerColumn {
 		portal_noise: NoiseParams,
 	) -> Self {
 		Self::new(tower_constraints, floor_count, WALL_HEIGHT_METERS, portal_noise)
+	}
+
+	pub fn with_materials(mut self, wall: MaterialRef, room: MaterialRef) -> Self {
+		self.floors = self
+			.floors
+			.into_iter()
+			.map(|floor| floor.with_materials(wall.clone(), room.clone()))
+			.collect();
+		self.perch = self.perch.with_wall_material(wall);
+		self
 	}
 
 	fn vertical_slab(parent: &Aabb3d, y_min: f32, y_max: f32) -> Aabb3d {

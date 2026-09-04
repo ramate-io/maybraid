@@ -7,7 +7,10 @@ use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
 use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMaterialRefPlugin};
+use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
+
+use richmond_urbanization::UrbanizationIndex;
 
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
 use crate::config::DevelopmentConfig;
@@ -46,10 +49,14 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		if !app.is_plugin_added::<LabelWireframePlugin>() {
 			app.add_plugins(LabelWireframePlugin);
 		}
+		if !app.is_plugin_added::<TowerSilhouettePlugin>() {
+			app.add_plugins(TowerSilhouettePlugin);
+		}
 		register_developments_buildings_lod_plugin(app);
 
 		app.init_resource::<DevelopmentEntryStore>()
 			.init_resource::<DevelopmentConfig>()
+			.init_resource::<UrbanizationIndex>()
 			.init_resource::<PaddedTerrainPresenterState>()
 			.add_systems(Update, apply_parent_confines.after(LodRefreshSystems::Cull));
 	}
