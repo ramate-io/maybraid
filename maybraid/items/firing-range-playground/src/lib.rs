@@ -51,6 +51,7 @@ use richmond_building_components::{
 };
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, LoadoutRng, RangeMode, RangeSession};
+use spotting_intelligence::SpottingSystems;
 
 pub struct FiringRangePlugin;
 
@@ -84,11 +85,19 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(MovementRealizationPlugin)
 			.configure_sets(
 				Update,
+				SpottingSystems::Observe.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				Update,
 				FirearmIntelligenceSystems::Spotting.run_if(on_timer(Duration::from_millis(125))),
 			)
 			.configure_sets(
 				Update,
 				FirearmIntelligenceSystems::Movement.run_if(on_timer(Duration::from_millis(125))),
+			)
+			.configure_sets(
+				PostUpdate,
+				FirearmIntelligenceSystems::ValidateAim.run_if(on_timer(Duration::from_millis(33))),
 			)
 			.configure_sets(
 				PostUpdate,
@@ -132,9 +141,8 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_npc_character,
 					session::spawn_held_system,
 					respawn_combatants,
-					vantage::assign_combat_targets
-						.run_if(on_timer(Duration::from_millis(125)))
-						.before(FirearmIntelligenceSystems::Spotting),
+					(vantage::sync_combat_spot_subjects, vantage::sync_combat_rosters)
+						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

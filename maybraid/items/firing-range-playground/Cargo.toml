@@ -17,6 +17,7 @@ path = "src/main.rs"
 avian3d = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
+combat-targeting = { workspace = true }
 crozon-character-items = { workspace = true }
 crozon-character-ragdoll = { workspace = true }
 crozon-characters = { workspace = true }
@@ -41,6 +42,8 @@ richmond-building-components = { workspace = true }
 richmond-building-physics = { workspace = true }
 richmond-buildings = { workspace = true }
 richmond-developments = { workspace = true }
+spotting-intelligence = { workspace = true }
+spotting-intelligence-avian = { workspace = true }
 
 [lints]
 workspace = true

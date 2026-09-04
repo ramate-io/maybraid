@@ -3,14 +3,17 @@
 Braidman on a flat range, plus a standing NPC braidman down-left of the pad
 body. Both hold a bullpup through [`firearm-user`](../firearm-user/). The
 followed player fires from the pad. The NPC installs
-[`firearm-intelligence`](../../intelligence/combat/firearm): perception copies
-the player into [`FirearmSpotting`](../../intelligence/combat/firearm/src/target.rs)
-(and, in free-for-all, every other live combatant);
-visible observations feed firearm combat until spotting memory expires.
-The NPC traces `vision` capsule samples per frame (default 9) and spends
-`focus` of that budget on the highest-ranked target.
-Look tracks the live capsule; fire needs that sightline to stay fresh.
-Firearm movement hunts those candidates even without a current sightline, then
+[`spotting-intelligence`](../../intelligence/spotting/lib),
+[`combat-targeting`](../../intelligence/combat/targeting), and
+[`firearm-intelligence`](../../intelligence/combat/firearm). Live combatants
+register one semantic character proxy. Avian broadphase discovers nearby
+proxies, bounded eye probes remember visible contacts, and the combat algebra
+ranks the active set by hostility, distance, firearm opportunity, and
+engagement continuity. Fresh contacts can satisfy the spotting directive and
+skip further discovery until they need refreshing.
+Look tracks the inferred live capsule; fire needs both a fresh sighting and a
+posed-muzzle trajectory accepted by the obstruction policy. Firearm movement
+reads that same weighted target list, then
 writes [`VantageOn`](../../intelligence/movement/lib/src/objective.rs)
 into [`movement-intelligence`](../../intelligence/movement/lib) at an ~8 m
 standoff (no close-range flee). Lost sightlines raise sightline weight so the
@@ -45,15 +48,22 @@ takes a shot. Player death (or switching mode) resets that ceasefire.
 `free-for-all` is a generated-loadout benchmark: one rolled player (starter
 clothing plus one gallery-style firearm from
 [`crozon-character-items`](../../crozon/character-items)) and `--npcs` rolled
-NPCs spread around the pad and on the upper storey, all of whom list every other
-combatant as a spotting candidate. Combat
+NPCs spread around the pad and on the upper storey. Each NPC discovers a
+bounded set of character subjects inside an 80 m perception envelope. The live
+enemyship roster supplies explicit spotting hints, while Avian broadphase can
+still discover other matching subjects; both paths share the same visibility
+executor and eight-subject candidate budget. The perception envelope is
+independent of the shorter movement-planning horizon. Combat
 still waits for the player's first shot. Rolled guns keep gallery looks
 (material and palette per slot) and sample projectile / cadence from the
 session RNG rather than reseeding from spec identity, so a run is not locked
 to one color or to lasers. As an application-level performance policy, the
-playground samples spotting and movement decisions at 8 Hz, checks fire control
-at roughly 30 Hz, uses bounded movement-search budgets, and immediately retires
-downed AI. It keeps the reusable intelligence plugins cadence-neutral. `duel`
+playground samples discovery, respotting, and movement decisions at 8 Hz,
+with up to eight initial sight probes per pass,
+validates and checks fire control at roughly 30 Hz, uses bounded movement-search
+budgets, caches unchanged aim trajectories briefly, and immediately retires
+downed spotting/targeting users and subjects. It keeps the reusable intelligence
+plugins cadence-neutral. `duel`
 restores the 1v1 bullpup pad fight
 (100 HP / 25 DPC). `test-dummy` (`dummy`) spawns the player with that same
 bullpup and a stationary unarmed braidman at the NPC pad pose — no combat AI,
