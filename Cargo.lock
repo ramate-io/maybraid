@@ -6391,6 +6391,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "routing-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "lod-avian",
+ "movement-intelligence",
+]
+
+[[package]]
+name = "routing-playground"
+version = "0.0.1"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "game-commands",
+ "lod",
+ "lod-avian",
+ "log",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "player",
+ "render-item",
+ "routing-intelligence",
+]
+
+[[package]]
 name = "rstar"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
