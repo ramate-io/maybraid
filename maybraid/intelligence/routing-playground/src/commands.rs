@@ -21,13 +21,27 @@ pub enum PlaygroundCommand {
 	/// Switch between free-look fly camera and third-person character control.
 	#[command(subcommand)]
 	Mode(Mode),
-	/// Set the router's destination in world XZ metres.
+	/// Set the router's destination in world XZ metres (disables tether grant).
 	Go {
 		#[arg(allow_hyphen_values = true)]
 		x: f32,
 		#[arg(allow_hyphen_values = true)]
 		z: f32,
 	},
+	/// Leash the NPC to the player.
+	Tether {
+		#[arg(default_value_t = 8.0)]
+		radius: f32,
+	},
+	/// Keep the NPC on a ring around the player.
+	Stalk {
+		#[arg(default_value_t = 12.0)]
+		radius: f32,
+	},
+	/// Higher-order grant off: tether stays installed but does not write.
+	Idle,
+	/// Higher-order grant on.
+	Drive,
 }
 
 #[derive(Clone, Subcommand)]
@@ -51,6 +65,22 @@ pub struct RequestGo {
 	pub z: f32,
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestTether {
+	pub radius: f32,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestStalk {
+	pub radius: f32,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestTetherIdle;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestTetherDrive;
+
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
 		<Self as GameCommand>::long_help_string()
@@ -68,6 +98,22 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Go { x, z } => {
 				commands.spawn(RequestGo { x, z });
 				*console = format!("go {x:.0} {z:.0}: pending");
+			}
+			PlaygroundCommand::Tether { radius } => {
+				commands.spawn(RequestTether { radius });
+				*console = format!("tether {radius:.0}: pending");
+			}
+			PlaygroundCommand::Stalk { radius } => {
+				commands.spawn(RequestStalk { radius });
+				*console = format!("stalk {radius:.0}: pending");
+			}
+			PlaygroundCommand::Idle => {
+				commands.spawn(RequestTetherIdle);
+				*console = "idle: pending".into();
+			}
+			PlaygroundCommand::Drive => {
+				commands.spawn(RequestTetherDrive);
+				*console = "drive: pending".into();
 			}
 		}
 	}

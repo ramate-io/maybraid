@@ -38,4 +38,5 @@ The layers form `(semantic broadphase + explicit hints) → visual contact memor
 ## Routing
 
 - [`routing-intelligence`](routing) — hierarchical long-range corridors. Band segment lengths are per-user policy. Coarse chords are probed for buildings and cliffs; finer bands search along the committed corridor. The current fine hop is written as `Reach` for movement intelligence.
-- [`routing-playground`](routing-playground) — Durham patch (vegetation-on-terrain camera / lighting, no groves). One NPC walks a long hop; gizmos show coarse → fine corridors. `cargo run -p routing-playground --release`.
+- [`tether-intelligence`](tether) — stay inside a leash or on a standoff ring around a live entity. The user is the installed brain (`enabled` is the higher-order grant); [`TetherMemory`](tether/src/memory.rs) survives uninstall. Close remaining work writes `Reach` / `EdgeOf`; far remaining work sets a routing destination.
+- [`routing-playground`](routing-playground) — Durham patch (models-playground survey camera, vegetation lighting, no groves). One NPC tethers or stalks the player; gizmos show coarse → fine corridors. `cargo run -p routing-playground --release`.

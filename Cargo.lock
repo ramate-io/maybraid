@@ -6422,6 +6422,7 @@ dependencies = [
  "player",
  "render-item",
  "routing-intelligence",
+ "tether-intelligence",
 ]
 
 [[package]]
@@ -6993,6 +6994,16 @@ dependencies = [
  "terrain",
  "thiserror 1.0.69",
  "vegetation-sdf",
+]
+
+[[package]]
+name = "tether-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "movement-intelligence",
+ "routing-intelligence",
 ]
 
 [[package]]

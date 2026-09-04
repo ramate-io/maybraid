@@ -282,11 +282,8 @@ fn play_gamecontroller_rumble(
 			}
 			GamepadRumbleRequest::Add { gamepad, duration, intensity } => {
 				let Some(state) = pad_mut(&mut pads, *gamepad) else {
-					let known: Vec<Entity> =
-						pads.pads.values().map(|state| state.entity).collect();
-					warn!(
-						"pad_rumble: no PadState for Gamepad {gamepad:?} (known {known:?})"
-					);
+					let known: Vec<Entity> = pads.pads.values().map(|state| state.entity).collect();
+					warn!("pad_rumble: no PadState for Gamepad {gamepad:?} (known {known:?})");
 					continue;
 				};
 				play_pulse(state, now, *intensity, *duration);
@@ -353,9 +350,8 @@ fn start_engine(controller: &GCController) -> Option<Retained<CHHapticEngine>> {
 /// iOS / tvOS / visionOS. Call it directly so Xbox pads rumble on Mac too.
 fn create_engine(haptics: &GCDeviceHaptics) -> Option<Retained<CHHapticEngine>> {
 	// SAFETY: Apple exports these locality strings from GameController.framework.
-	let localities = unsafe {
-		[("Handles", GCHapticsLocalityHandles), ("Default", GCHapticsLocalityDefault)]
-	};
+	let localities =
+		unsafe { [("Handles", GCHapticsLocalityHandles), ("Default", GCHapticsLocalityDefault)] };
 	for (label, locality) in localities {
 		if let Some(engine) = create_engine_at(haptics, locality) {
 			info!("pad_rumble: engine locality={label}");

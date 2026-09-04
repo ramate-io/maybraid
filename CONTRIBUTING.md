@@ -243,6 +243,13 @@ Band segment lengths belong to the mover. Routing commits a corridor, then
 writes a nearby [`Reach`](maybraid/intelligence/movement/lib/src/objective.rs);
 it does not replace local movement planning.
 
+Following a live entity is [`tether-intelligence`](maybraid/intelligence/tether).
+Install [`TetherIntelligenceUser`](maybraid/intelligence/tether/src/user.rs) for
+the duty and set `enabled` when it may write; keep
+[`TetherMemory`](maybraid/intelligence/tether/src/memory.rs) when the brain is
+popped. Close remaining work goes to movement; far remaining work goes to
+routing. Do not add/remove the user every time `satisfied` flips.
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.
