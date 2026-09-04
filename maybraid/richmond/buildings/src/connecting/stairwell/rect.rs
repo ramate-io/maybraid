@@ -1,10 +1,10 @@
 //! Rectangular flight inside an exclusive [`WellAabb`].
 //!
-//! Hug each wall CCW. Corner pads are axis-aligned. Each flight fills its wall
-//! so the last walkable leading (\(X = +1\)) meets the end pad — leftover plan
-//! is pad, not an overshoot. The walk-off landing is a door strip. Extra full
-//! laps only when going would fall under
-//! [`super::laws::MIN_GOING`] and rise-per-lap still has
+//! Hug each wall CCW. Corner pads are axis-aligned and at least as wide as the
+//! tread so the last leading meets the next flight. A circuit wall with no
+//! treads still gets a full-face strip so two runs are not stranded across a
+//! gap. The walk-off landing is a door strip. Extra full laps only when going
+//! would fall under [`super::laws::MIN_GOING`] and rise-per-lap still has
 //! [`super::laws::MIN_HEADROOM`]. A skinny well may collapse the hole.
 
 use bevy_math::{Vec2, Vec3};
@@ -41,7 +41,13 @@ pub(crate) fn fit(well: &WellAabb, style: PanelStyle, thickness: f32) -> Fit {
 		}
 		let last = i + 1 == sides.len();
 		if !last {
-			corners.push(corner_slab(well, side, y, pad, style, thickness));
+			if k == 0 {
+				// No treads on this wall: a full-face strip so the next flight is
+				// not stranded across a gap.
+				corners.push(well.face_strip(side, y, pad, style, thickness));
+			} else {
+				corners.push(corner_slab(well, side, y, pad, style, thickness));
+			}
 		}
 	}
 	let depth = width + MIN_LANDING;
@@ -64,7 +70,10 @@ pub(super) fn flight_end_leading(well: &WellAabb, side: WellSide) -> Vec2 {
 
 fn corner_pad_m(well: &WellAabb, width: f32) -> f32 {
 	let shortest = (2.0 * well.half_x()).min(2.0 * well.half_z());
-	width.min(shortest * 0.35).max(MIN_LANDING)
+	// Match the tread width so the turn pad actually meets both flights. Cap so
+	// each wall still keeps a leftover I ([`MIN_RUN`]).
+	let max_pad = ((shortest - MIN_RUN) * 0.5).max(MIN_LANDING);
+	width.min(max_pad).max(MIN_LANDING)
 }
 
 fn wall_run(well: &WellAabb, side: WellSide, pad: f32) -> f32 {

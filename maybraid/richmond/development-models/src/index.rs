@@ -12,6 +12,7 @@ use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
 use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
+use crate::ring_fort::RingFortDevelopment;
 use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,7 @@ pub struct DevelopmentEntryStore {
 	pub(crate) les_halles: HashMap<Id, StoredEntry<LesHallesDevelopment>>,
 	pub(crate) shepherds_villages: HashMap<Id, StoredEntry<ShepherdsVillageDevelopment>>,
 	pub(crate) shepherds_communes: HashMap<Id, StoredEntry<ShepherdsCommuneDevelopment>>,
+	pub(crate) ring_forts: HashMap<Id, StoredEntry<RingFortDevelopment>>,
 }
 
 impl DevelopmentEntryStore {
@@ -76,6 +78,10 @@ impl DevelopmentEntryStore {
 
 	pub fn shepherds_commune(&self, id: Id) -> Option<&ShepherdsCommuneDevelopment> {
 		self.shepherds_communes.get(&id).map(|e| &e.value)
+	}
+
+	pub fn ring_fort(&self, id: Id) -> Option<&RingFortDevelopment> {
+		self.ring_forts.get(&id).map(|e| &e.value)
 	}
 }
 
@@ -196,3 +202,4 @@ impl_spatial!(TerrainWithPads, padded, PaddedStoreView);
 impl_spatial!(LesHallesDevelopment, les_halles, LesHallesStoreView);
 impl_spatial!(ShepherdsVillageDevelopment, shepherds_villages, ShepherdsVillageStoreView);
 impl_spatial!(ShepherdsCommuneDevelopment, shepherds_communes, ShepherdsCommuneStoreView);
+impl_spatial!(RingFortDevelopment, ring_forts, RingFortStoreView);

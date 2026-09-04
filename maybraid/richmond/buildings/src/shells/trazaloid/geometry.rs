@@ -10,22 +10,24 @@ pub(super) const GAP_EPS: f32 = 1e-4;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct PlanRect {
 	pub y: f32,
+	pub cx: f32,
+	pub cz: f32,
 	pub half_x: f32,
 	pub half_z: f32,
 }
 
 impl PlanRect {
 	pub fn sw(self) -> Vec3 {
-		Vec3::new(-self.half_x, self.y, -self.half_z)
+		Vec3::new(self.cx - self.half_x, self.y, self.cz - self.half_z)
 	}
 	pub fn se(self) -> Vec3 {
-		Vec3::new(self.half_x, self.y, -self.half_z)
+		Vec3::new(self.cx + self.half_x, self.y, self.cz - self.half_z)
 	}
 	pub fn ne(self) -> Vec3 {
-		Vec3::new(self.half_x, self.y, self.half_z)
+		Vec3::new(self.cx + self.half_x, self.y, self.cz + self.half_z)
 	}
 	pub fn nw(self) -> Vec3 {
-		Vec3::new(-self.half_x, self.y, self.half_z)
+		Vec3::new(self.cx - self.half_x, self.y, self.cz + self.half_z)
 	}
 
 	pub fn full_x(self) -> f32 {
@@ -93,12 +95,31 @@ impl TrazaloidParams {
 		let inset = self.waist_horizontal_offset.max(0.0);
 		let waist_x = (silhouette_x - inset).max(EXTENT_EPS);
 		let waist_z = (silhouette_z - inset).max(EXTENT_EPS);
+		let origin = self.origin;
 
 		[
-			PlanRect { y: 0.0, half_x: foot_x, half_z: foot_z },
-			PlanRect { y: lower_h, half_x: waist_x, half_z: waist_z },
-			PlanRect { y: lower_h + gap, half_x: waist_x, half_z: waist_z },
-			PlanRect { y: lower_h + gap + upper_h, half_x: ridge_x, half_z: ridge_z },
+			PlanRect { y: origin.y, cx: origin.x, cz: origin.z, half_x: foot_x, half_z: foot_z },
+			PlanRect {
+				y: origin.y + lower_h,
+				cx: origin.x,
+				cz: origin.z,
+				half_x: waist_x,
+				half_z: waist_z,
+			},
+			PlanRect {
+				y: origin.y + lower_h + gap,
+				cx: origin.x,
+				cz: origin.z,
+				half_x: waist_x,
+				half_z: waist_z,
+			},
+			PlanRect {
+				y: origin.y + lower_h + gap + upper_h,
+				cx: origin.x,
+				cz: origin.z,
+				half_x: ridge_x,
+				half_z: ridge_z,
+			},
 		]
 	}
 
@@ -114,7 +135,8 @@ impl TrazaloidParams {
 		let ridge_c = corners(ridge);
 
 		for i in 0..4 {
-			let radial = (foot_c[i] - Vec3::new(0.0, foot_c[i].y, 0.0)).normalize_or_zero();
+			let radial = (foot_c[i] - Vec3::new(self.origin.x, foot_c[i].y, self.origin.z))
+				.normalize_or_zero();
 			let radial = if radial.length_squared() > 0.0 { radial } else { Vec3::X };
 			posts.push(PostSegment { start: foot_c[i], end: waist_c[i], radial_hint: radial });
 			if gap > GAP_EPS {

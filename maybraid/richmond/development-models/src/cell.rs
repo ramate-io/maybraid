@@ -1,4 +1,4 @@
-//! 200 m development lattice and occupancy.
+//! 300 m development lattice and occupancy.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{Quat, Vec2, Vec3};
@@ -7,10 +7,18 @@ use lod::gen::{Id, OriginalId};
 use std::f32::consts::TAU;
 
 /// Square development-cell edge length (metres).
-pub const DEVELOPMENT_CELL_SIZE: f32 = 200.0;
+pub const DEVELOPMENT_CELL_SIZE: f32 = 300.0;
 
 /// Les Halles keeps its original urban envelope inside the larger shared cell.
 pub const LES_HALLES_MAX_FOOTPRINT: f32 = 72.0;
+
+/// Ring fort courtyard + corner keeps need a wide curtain wall inside the cell.
+pub const RING_FORT_MAX_FOOTPRINT: f32 = 240.0;
+/// Minimum ring-fort plan so a keep-bearing gallery and courtyard still fit.
+pub const RING_FORT_MIN_FOOTPRINT: f32 = 120.0;
+/// Confines height for the courtyard ring only (2–4 storeys at 3 m).
+pub const RING_FORT_MIN_CONFINES_HEIGHT: f32 = 8.0;
+pub const RING_FORT_MAX_CONFINES_HEIGHT: f32 = 13.0;
 
 /// Vertical span used only for origin-cell identity (XZ tiling).
 const CELL_Y: f32 = 1.0;
@@ -212,10 +220,10 @@ mod tests {
 	}
 
 	#[test]
-	fn shared_development_lattice_is_two_hundred_metres() {
+	fn shared_development_lattice_is_three_hundred_metres() {
 		let cell = DevelopmentExtent::from_cell_index(2, -1).aabb();
-		assert!((cell.max.x - cell.min.x - 200.0).abs() < 1e-4);
-		assert!((cell.max.z - cell.min.z - 200.0).abs() < 1e-4);
+		assert!((cell.max.x - cell.min.x - 300.0).abs() < 1e-4);
+		assert!((cell.max.z - cell.min.z - 300.0).abs() < 1e-4);
 		assert!((available_footprint() - LES_HALLES_MAX_FOOTPRINT).abs() < 1e-4);
 	}
 

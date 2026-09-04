@@ -87,17 +87,17 @@ fn centered_square_clip(rect: PlanRect, size: f32) -> Vec<Vec3> {
 	let max_half = (rect.half_x.min(rect.half_z) - EXTENT_EPS).max(EXTENT_EPS);
 	let half = (size * 0.5).clamp(EXTENT_EPS, max_half);
 	vec![
-		Vec3::new(-half, rect.y, -half),
-		Vec3::new(half, rect.y, -half),
-		Vec3::new(half, rect.y, half),
-		Vec3::new(-half, rect.y, half),
+		Vec3::new(rect.cx - half, rect.y, rect.cz - half),
+		Vec3::new(rect.cx + half, rect.y, rect.cz - half),
+		Vec3::new(rect.cx + half, rect.y, rect.cz + half),
+		Vec3::new(rect.cx - half, rect.y, rect.cz + half),
 	]
 }
 
 fn slab_volume_aabb(rect: PlanRect) -> Aabb3d {
 	Aabb3d::from_min_max(
-		Vec3::new(-rect.half_x, rect.y - SLAB_Y_HALF, -rect.half_z),
-		Vec3::new(rect.half_x, rect.y + SLAB_Y_HALF, rect.half_z),
+		Vec3::new(rect.cx - rect.half_x, rect.y - SLAB_Y_HALF, rect.cz - rect.half_z),
+		Vec3::new(rect.cx + rect.half_x, rect.y + SLAB_Y_HALF, rect.cz + rect.half_z),
 	)
 }
 

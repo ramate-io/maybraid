@@ -7,7 +7,8 @@ use richmond_developments::{ShepherdsCommune, ShepherdsVillage};
 
 use crate::cell::{
 	available_footprint, cell_selected, inscribe_yawed_extents, sample_confines_yaw,
-	MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT,
+	MAX_CONFINES_HEIGHT, MIN_CONFINES_HEIGHT, MIN_FOOTPRINT, RING_FORT_MAX_CONFINES_HEIGHT,
+	RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_CONFINES_HEIGHT, RING_FORT_MIN_FOOTPRINT,
 };
 use crate::config::DevelopmentConfig;
 use crate::finish::DevelopmentFinish;
@@ -21,6 +22,7 @@ pub enum DevelopmentKind {
 	LesHalles,
 	ShepherdsVillage,
 	ShepherdsCommune,
+	RingFort,
 }
 
 /// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
@@ -54,6 +56,16 @@ pub struct ShepherdsCommuneCell {
 	pub commune: ShepherdsCommune,
 }
 
+/// Data owned only by a selected ring-fort cell.
+#[derive(Debug, Clone)]
+pub struct RingFortCell {
+	pub pad: DevelopmentPad,
+	pub confines_height: f32,
+	pub confines_extent_xz: Vec2,
+	pub confines_yaw: f32,
+	pub finish: DevelopmentFinish,
+}
+
 /// Mutually exclusive content generated for one development tile.
 #[derive(Debug, Clone)]
 pub enum DevelopmentContent {
@@ -61,6 +73,7 @@ pub enum DevelopmentContent {
 	LesHalles(LesHallesCell),
 	ShepherdsVillage(ShepherdsVillageCell),
 	ShepherdsCommune(ShepherdsCommuneCell),
+	RingFort(RingFortCell),
 }
 
 /// One development tile after selection.
@@ -81,6 +94,7 @@ impl DevelopmentCell {
 			DevelopmentContent::LesHalles(_) => DevelopmentKind::LesHalles,
 			DevelopmentContent::ShepherdsVillage(_) => DevelopmentKind::ShepherdsVillage,
 			DevelopmentContent::ShepherdsCommune(_) => DevelopmentKind::ShepherdsCommune,
+			DevelopmentContent::RingFort(_) => DevelopmentKind::RingFort,
 		}
 	}
 
@@ -98,6 +112,7 @@ impl DevelopmentCell {
 			DevelopmentContent::LesHalles(content) => std::slice::from_ref(&content.pad),
 			DevelopmentContent::ShepherdsVillage(content) => &content.pads,
 			DevelopmentContent::ShepherdsCommune(content) => &content.pads,
+			DevelopmentContent::RingFort(content) => std::slice::from_ref(&content.pad),
 		};
 		pads.iter()
 	}
@@ -127,33 +142,48 @@ impl DevelopmentCell {
 		}
 	}
 
+	pub fn ring_fort(&self) -> Option<&RingFortCell> {
+		match &self.content {
+			DevelopmentContent::RingFort(content) => Some(content),
+			_ => None,
+		}
+	}
+
 	/// Unrotated confines AABB sitting on the pad (world space).
 	///
-	/// Les Halles authors against this axis-aligned box. Its sampled yaw is
-	/// recorded on [`Confines::roll`] and applied at host spawn about the cell center.
-	/// Label wireframes fill the AABB with identity local yaw so they inherit that pose.
+	/// Les Halles and ring forts author against this axis-aligned box. Sampled
+	/// yaw is recorded on [`Confines::roll`] and applied at host spawn about the
+	/// cell center.
 	pub fn confines_bounds(&self) -> Option<Aabb3d> {
-		let content = self.les_halles()?;
+		let (extent, height, pad_h) = match &self.content {
+			DevelopmentContent::LesHalles(content) => {
+				(content.confines_extent_xz, content.confines_height, content.pad.height)
+			}
+			DevelopmentContent::RingFort(content) => {
+				(content.confines_extent_xz, content.confines_height, content.pad.height)
+			}
+			_ => return None,
+		};
 		let c = Vec2::new(
 			(self.cell.min.x + self.cell.max.x) * 0.5,
 			(self.cell.min.z + self.cell.max.z) * 0.5,
 		);
-		let hx = content.confines_extent_xz.x * 0.5;
-		let hz = content.confines_extent_xz.y * 0.5;
-		let y0 = content.pad.height;
+		let hx = extent.x * 0.5;
+		let hz = extent.y * 0.5;
 		Some(Aabb3d::from_min_max(
-			bevy::math::Vec3::new(c.x - hx, y0, c.y - hz),
-			bevy::math::Vec3::new(c.x + hx, y0 + content.confines_height, c.y + hz),
+			bevy::math::Vec3::new(c.x - hx, pad_h, c.y - hz),
+			bevy::math::Vec3::new(c.x + hx, pad_h + height, c.y + hz),
 		))
 	}
 
 	/// Fitted confines: unrotated AABB plus yaw on [`Confines::roll`].
 	pub fn confines(&self) -> Option<Confines> {
-		Some(Confines::new(
-			self.confines_bounds()?,
-			self.les_halles()?.confines_yaw,
-			Openings::new(),
-		))
+		let yaw = match &self.content {
+			DevelopmentContent::LesHalles(content) => content.confines_yaw,
+			DevelopmentContent::RingFort(content) => content.confines_yaw,
+			_ => return None,
+		};
+		Some(Confines::new(self.confines_bounds()?, yaw, Openings::new()))
 	}
 
 	pub fn with_les_halles(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
@@ -207,6 +237,38 @@ impl DevelopmentCell {
 			content: DevelopmentContent::ShepherdsCommune(ShepherdsCommuneCell { pads, commune }),
 		}
 	}
+
+	pub fn with_ring_fort(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
+		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
+		let max_foot = RING_FORT_MAX_FOOTPRINT;
+		let yaw = sample_confines_yaw(hash.unit(37));
+		let extent_x =
+			RING_FORT_MIN_FOOTPRINT + (max_foot - RING_FORT_MIN_FOOTPRINT) * hash.unit(11);
+		let extent_z =
+			RING_FORT_MIN_FOOTPRINT + (max_foot - RING_FORT_MIN_FOOTPRINT) * hash.unit(13);
+		let confines_height = RING_FORT_MIN_CONFINES_HEIGHT
+			+ (RING_FORT_MAX_CONFINES_HEIGHT - RING_FORT_MIN_CONFINES_HEIGHT) * hash.unit(17);
+		let confines_extent_xz = inscribe_yawed_extents(extent_x, extent_z, yaw, max_foot);
+		Self {
+			cell,
+			content: DevelopmentContent::RingFort(RingFortCell {
+				pad: DevelopmentPad {
+					height: pad_height,
+					complex: PadComplex::building_skirt(
+						cell_center_xz(cell),
+						confines_extent_xz * 0.5,
+						yaw,
+						pad_height,
+						PadParams::default(),
+					),
+				},
+				confines_height,
+				confines_extent_xz,
+				confines_yaw: yaw,
+				finish: DevelopmentFinish::pick(hash),
+			}),
+		}
+	}
 }
 
 pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind {
@@ -217,7 +279,8 @@ pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind 
 	let les_halles = config.les_halles_weight.max(0.0);
 	let shepherds = config.shepherds_village_weight.max(0.0);
 	let commune = config.shepherds_commune_weight.max(0.0);
-	let total = les_halles + shepherds + commune;
+	let ring_fort = config.ring_fort_weight.max(0.0);
+	let total = les_halles + shepherds + commune + ring_fort;
 	if total <= f32::EPSILON {
 		return DevelopmentKind::Empty;
 	}
@@ -227,8 +290,10 @@ pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind 
 		DevelopmentKind::LesHalles
 	} else if pick < les_halles + shepherds {
 		DevelopmentKind::ShepherdsVillage
-	} else {
+	} else if pick < les_halles + shepherds + commune {
 		DevelopmentKind::ShepherdsCommune
+	} else {
+		DevelopmentKind::RingFort
 	}
 }
 
@@ -305,6 +370,7 @@ mod tests {
 			les_halles_weight: 1.0,
 			shepherds_village_weight: 0.0,
 			shepherds_commune_weight: 0.0,
+			ring_fort_weight: 0.0,
 			..DevelopmentConfig::default()
 		};
 		assert_eq!(select_kind(cell, &les_halles), DevelopmentKind::LesHalles);
@@ -312,6 +378,7 @@ mod tests {
 			les_halles_weight: 0.0,
 			shepherds_village_weight: 1.0,
 			shepherds_commune_weight: 0.0,
+			ring_fort_weight: 0.0,
 			..les_halles
 		};
 		assert_eq!(select_kind(cell, &shepherds), DevelopmentKind::ShepherdsVillage);
@@ -319,8 +386,17 @@ mod tests {
 			les_halles_weight: 0.0,
 			shepherds_village_weight: 0.0,
 			shepherds_commune_weight: 1.0,
+			ring_fort_weight: 0.0,
 			..les_halles
 		};
 		assert_eq!(select_kind(cell, &commune), DevelopmentKind::ShepherdsCommune);
+		let ring_fort = DevelopmentConfig {
+			les_halles_weight: 0.0,
+			shepherds_village_weight: 0.0,
+			shepherds_commune_weight: 0.0,
+			ring_fort_weight: 1.0,
+			..les_halles
+		};
+		assert_eq!(select_kind(cell, &ring_fort), DevelopmentKind::RingFort);
 	}
 }

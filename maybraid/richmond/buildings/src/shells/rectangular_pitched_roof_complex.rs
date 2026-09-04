@@ -8,6 +8,7 @@
 mod decompose;
 mod geometry;
 mod openings;
+mod plan_holes;
 mod topology;
 mod valleys;
 
@@ -17,6 +18,7 @@ mod tests;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
+use material_ref::MaterialRef;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
@@ -28,6 +30,7 @@ use crate::shells::pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, Ro
 use decompose::decompose_volumes;
 use geometry::VolumeCandidate;
 use openings::apply_openings;
+use plan_holes::punch_plan_holes;
 use topology::resolve_junctions;
 pub use valleys::ValleySegment;
 use valleys::{apply_valleys, finish_coaxial_ridge_meets};
@@ -298,6 +301,16 @@ impl RectangularPitchedRoofComplexParams {
 		self
 	}
 
+	/// Subtract axis-aligned plan holes from the authored massing boxes.
+	///
+	/// Use this for tower / courtyard voids. Pitch [`OpeningLabel::Passage`] /
+	/// [`OpeningLabel::Aperture`] openings only clip a face after the volumes
+	/// have already been solved.
+	pub fn with_plan_holes(mut self, holes: impl IntoIterator<Item = Aabb3d>) -> Self {
+		self.volumes = punch_plan_holes(self.volumes, holes);
+		self
+	}
+
 	/// Solve geometry (ignoring current openings), author a pitch opening on a
 	/// resolved roof half, and attach it under `id`.
 	pub fn with_pitch_opening(
@@ -352,6 +365,16 @@ impl RectangularPitchedRoofComplex {
 
 	pub fn valleys(&self) -> &[ValleySegment] {
 		&self.valleys
+	}
+
+	/// Stamp a roof shader look onto every child pitch (kit style unchanged).
+	pub fn with_surface_material(mut self, material: MaterialRef) -> Self {
+		self.roofs = self
+			.roofs
+			.into_iter()
+			.map(|roof| roof.with_surface_material(material.clone()))
+			.collect();
+		self
 	}
 }
 

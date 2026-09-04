@@ -6,12 +6,14 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::{Component, Transform};
-use bevy::scene::prelude::Scene;
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
-use lod::SceneChunk;
+use lod::{LodLazyPending, SceneChunk};
+use material_ref::{MaterialRef, MaterialRefRoot, PropagateToDescendants};
 
+use crate::layer::Layers;
 use crate::lod_band::{placement_bounds, warm_mesh_lod_culls};
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
@@ -20,6 +22,9 @@ use crate::placed::Placement;
 use crate::scene_children::{pose, scene_children};
 
 /// Authoring IR for a partition feature (primitive — no portals).
+///
+/// [`Self::style`] picks the kit GLB path. [`Self::material`] is an optional
+/// shader look ([`MaterialRef`]) stamped onto that kit after spawn.
 #[derive(Debug, Clone, PartialEq, Component, Default)]
 pub struct PartitionNode {
 	pub style: PartitionStyle,
@@ -27,11 +32,18 @@ pub struct PartitionNode {
 	pub placement: Placement,
 	/// External silhouette vs internal detail gating.
 	pub confines: ParentConfines,
+	pub material: Option<MaterialRef>,
 }
 
 impl PartitionNode {
 	pub fn new(style: PartitionStyle, geometry: PartitionGeometry, placement: Placement) -> Self {
-		Self { style, geometry, placement, confines: ParentConfines::External }
+		Self {
+			style,
+			geometry,
+			placement,
+			confines: ParentConfines::External,
+			material: None,
+		}
 	}
 
 	pub fn rough_stone(geometry: PartitionGeometry, placement: Placement) -> Self {
@@ -40,6 +52,11 @@ impl PartitionNode {
 
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
 		self.confines = confines;
+		self
+	}
+
+	pub fn with_material(mut self, material: MaterialRef) -> Self {
+		self.material = Some(material);
 		self
 	}
 
@@ -62,7 +79,7 @@ impl PartitionNode {
 			.into_iter()
 			.filter_map(|piece| {
 				let transform = pose(piece.placement);
-				match self.style {
+				let scene = match self.style {
 					PartitionStyle::RoughStonework => match piece.geom {
 						PartitionTile::Joint => {
 							if !JointLod::included_at(level) {
@@ -95,9 +112,31 @@ impl PartitionNode {
 							}
 						}
 					},
-				}
+				}?;
+				Some(material_kit_scene(scene, self.material.clone()))
 			})
 			.collect()
+	}
+}
+
+impl Layers<PartitionNode> {
+	/// Stamp a shader look onto every partition, leaving kit [`PartitionStyle`] unchanged.
+	pub fn with_material(self, material: MaterialRef) -> Self {
+		self.map(|node| node.with_material(material.clone()))
+	}
+}
+
+fn material_kit_scene(scene: Box<dyn Scene>, material: Option<MaterialRef>) -> Box<dyn Scene> {
+	match material {
+		Some(material) => Box::new((
+			bsn! {
+				template_value(MaterialRefRoot(material))
+				PropagateToDescendants
+				LodLazyPending
+			},
+			scene,
+		)),
+		None => scene,
 	}
 }
 
@@ -200,3 +239,21 @@ macro_rules! impl_partition_mesh_lod_scene {
 }
 
 pub(crate) use impl_partition_mesh_lod_scene;
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::partitions::geometry::PartitionGeometry;
+	use crate::placed::Placement;
+
+	#[test]
+	fn with_material_stamps_ref_without_changing_style() {
+		let node = PartitionNode::rough_stone(PartitionGeometry::linear(), Placement::default())
+			.with_material(MaterialRef::named("stucco"));
+		assert_eq!(node.style, PartitionStyle::RoughStonework);
+		assert_eq!(
+			node.material.as_ref().map(|m| &m.name),
+			Some(&material_ref::MaterialId::named("stucco"))
+		);
+	}
+}

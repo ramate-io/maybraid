@@ -6,13 +6,19 @@ use bevy::prelude::{Commands, Entity, Transform};
 use richmond_building_components::{
 	building_bounds, spawn_building_components, BuildingComponents,
 };
-use richmond_buildings::{ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof};
+use richmond_buildings::{
+	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
+};
 use richmond_developments::{
-	MixedUseLesHallesHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut,
+	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, RingFortHost,
+	ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
-use crate::{LesHallesDevelopment, ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
+use crate::{
+	LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
+	ShepherdsVillageDevelopment,
+};
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
@@ -21,6 +27,11 @@ pub enum DevelopmentHost {
 	LesHallesRoof(PitchedRoof, Transform),
 	ShepherdsHouse(Arc<ShepherdsHouse>, Transform),
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
+	RingFortCircularTower(Arc<CircularTower>, Transform),
+	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
+	RingFortGalleryTerrace(GalleryTerrace, Transform),
+	RingFortGalleryColonnade(GalleryColonnade, Transform),
+	RingFortGalleryRoof(RectangularPitchedRoofComplex, Transform),
 }
 
 impl DevelopmentHost {
@@ -31,6 +42,19 @@ impl DevelopmentHost {
 			Self::LesHallesRoof(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHouse(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHut(building, transform) => spawn(commands, building, *transform),
+			Self::RingFortCircularTower(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortTrazaloidTower(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortGalleryTerrace(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortGalleryColonnade(building, transform) => {
+				spawn(commands, building, *transform)
+			}
+			Self::RingFortGalleryRoof(building, transform) => spawn(commands, building, *transform),
 		}
 	}
 }
@@ -70,6 +94,49 @@ impl DevelopmentHosts for ShepherdsVillageDevelopment {
 impl DevelopmentHosts for ShepherdsCommuneDevelopment {
 	fn hosts(&self) -> Vec<DevelopmentHost> {
 		shepherd_building_hosts(self.commune.buildings())
+	}
+}
+
+impl DevelopmentHosts for RingFortDevelopment {
+	fn hosts(&self) -> Vec<DevelopmentHost> {
+		let transform = self.host_transform();
+		self.building
+			.building
+			.hosts()
+			.into_iter()
+			.filter_map(|host| match host {
+				RingFortHost::Ring(host) => match *host {
+					MixedUseLesHallesHost::Storey(storey) => {
+						Some(DevelopmentHost::LesHallesStorey(Arc::new(storey), transform))
+					}
+					MixedUseLesHallesHost::Stairwell(stairwell) => {
+						Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+					}
+					MixedUseLesHallesHost::Roof(_) => None,
+				},
+				RingFortHost::Circular(tower) => {
+					Some(DevelopmentHost::RingFortCircularTower(tower, transform))
+				}
+				RingFortHost::Trazaloid(tower) => {
+					Some(DevelopmentHost::RingFortTrazaloidTower(tower, transform))
+				}
+				RingFortHost::Terrace(terrace) => {
+					Some(DevelopmentHost::RingFortGalleryTerrace(terrace, transform))
+				}
+				RingFortHost::TerraceStairwell(stairwell) => {
+					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+				}
+				RingFortHost::GalleryColonnade(colonnade) => {
+					Some(DevelopmentHost::RingFortGalleryColonnade(colonnade, transform))
+				}
+				RingFortHost::GalleryRoof(roof) => {
+					Some(DevelopmentHost::RingFortGalleryRoof(roof, transform))
+				}
+				RingFortHost::KeepStairwell(stairwell) => {
+					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+				}
+			})
+			.collect()
 	}
 }
 

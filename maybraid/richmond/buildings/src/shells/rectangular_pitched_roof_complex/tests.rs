@@ -351,3 +351,26 @@ fn coaxial_nested_decomposes_to_end_meets() {
 		assert!(vols[m.vol_cap].end_free[0] && vols[m.vol_cap].end_free[1]);
 	}
 }
+
+#[test]
+fn plan_holes_cut_a_courtyard_ring_corner() {
+	let hole = Aabb3d::from_min_max(Vec3::new(4.0, 2.0, 4.0), Vec3::new(8.0, 5.0, 8.0));
+	let complex = RectangularPitchedRoofComplexParams::ring().with_plan_holes([hole]).build();
+	let volumes = &complex.params().volumes;
+	let keep = Vec3::new(6.0, 0.0, 6.0);
+	assert!(
+		!volumes
+			.iter()
+			.any(|v| keep.x > v.min.x && keep.x < v.max.x && keep.z > v.min.z && keep.z < v.max.z),
+		"NE corner should be a hole"
+	);
+	let gallery = Vec3::new(0.0, 0.0, 6.0);
+	assert!(
+		volumes.iter().any(|v| gallery.x > v.min.x
+			&& gallery.x < v.max.x
+			&& gallery.z > v.min.z
+			&& gallery.z < v.max.z),
+		"north gallery should remain"
+	);
+	assert!(!complex.roofs().is_empty());
+}

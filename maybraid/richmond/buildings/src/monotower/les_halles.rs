@@ -57,6 +57,14 @@ impl MixedUseLesHallesStorey {
 		}
 	}
 
+	pub fn floor_plan_mut(&mut self) -> &mut LesHallesFloorPlan {
+		match self {
+			Self::Arcade { floor_plan, .. }
+			| Self::Commercial { floor_plan, .. }
+			| Self::Livable { floor_plan, .. } => floor_plan,
+		}
+	}
+
 	pub fn is_arcade(&self) -> bool {
 		matches!(self, Self::Arcade { .. })
 	}
@@ -144,12 +152,12 @@ impl MixedUseLesHallesMonotower {
 	pub fn floor_count(&self) -> usize {
 		self.floors.len()
 	}
-}
 
-impl Fit for MixedUseLesHallesMonotower {
-	fn fit_to_confines(
+	/// Fit a mixed-use stack whose shell knobs come from `sample_shell`.
+	pub fn fit_sampled(
 		confines: &Confines,
 		noise: NoiseParams,
+		sample_shell: fn(&Confines, NoiseParams) -> Result<LesHallesParameterized, FitError>,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let (_, _, total_h) = footprint_extents(confines)?;
 		let n_storeys = LesHallesParameterized::sample_monotower_storey_count(confines, noise);
@@ -164,7 +172,7 @@ impl Fit for MixedUseLesHallesMonotower {
 		// Shell sampling uses a representative single-storey slice.
 		let y0 = confines.bounds.min.y;
 		let shell_confines = slice_confines(confines, y0, storey_height, Openings::new());
-		let params = LesHallesParameterized::sample_monotower(&shell_confines, noise)?;
+		let params = sample_shell(&shell_confines, noise)?;
 
 		let shaft_slots = resolve_shaft_slots(&params, confines, noise);
 		let upper_n = n_storeys.saturating_sub(1);
@@ -225,6 +233,23 @@ impl Fit for MixedUseLesHallesMonotower {
 		};
 		let _ = used_h;
 		Ok((tower, residual))
+	}
+
+	/// Fit with [`LesHallesParameterized::sample_curtain`] gallery depths.
+	pub fn fit_curtain(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		Self::fit_sampled(confines, noise, LesHallesParameterized::sample_curtain)
+	}
+}
+
+impl Fit for MixedUseLesHallesMonotower {
+	fn fit_to_confines(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		Self::fit_sampled(confines, noise, LesHallesParameterized::sample_monotower)
 	}
 }
 
