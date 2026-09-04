@@ -1,13 +1,22 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use bevy::window::WindowFocused;
 use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore};
 use game_commands::command::TextEntryFocus;
 use lod::LodViewer;
-use maybraid_input::{PadButton, VirtualPad};
 use std::f32::consts::PI;
 
 use crate::playground_player::PlaygroundMode;
+
+/// Near-overhead view of the player/router fixture. Keeping the camera almost
+/// directly over the sampled center avoids putting an intervening Durham ridge
+/// between the camera and the actors.
+const CAMERA_HEIGHT: f32 = 140.0;
+/// Matches the controller's 0.1 radian pitch guard at this height.
+const CAMERA_BACK: f32 = 14.0;
+const FLY_SPEED: f32 = 80.0;
+/// Drop one-frame cursor jumps from window create / focus (otherwise pitch
+/// slams to the sky and the patch is gone).
+const MAX_LOOK_DELTA: f32 = 80.0;
 
 #[derive(Component)]
 pub struct CameraController {
@@ -23,11 +32,8 @@ pub fn setup_camera(
 	world_base: Res<crate::WorldBaseTerrain>,
 ) {
 	let center = layout.region_center_xz();
-	let look_at = camera_look_at(
-		&layout,
-		crate::playground_player::holding_elevation(&world_base.0, center.x, center.z),
-	);
-	let camera_pos = look_at + Vec3::new(0.0, 24.0, 48.0);
+	let look_at = camera_look_at(&layout, world_base.0.height_at(center.x, center.z));
+	let camera_pos = look_at + survey_offset();
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
 
@@ -35,13 +41,7 @@ pub fn setup_camera(
 		Camera3d::default(),
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 8_000.0, ..default() }),
-		DistanceFog {
-			color: Color::srgba(0.55, 0.65, 0.72, 1.0),
-			directional_light_color: Color::srgba(1.0, 0.92, 0.78, 0.35),
-			directional_light_exponent: 24.0,
-			falloff: FogFalloff::Linear { start: 700.0, end: 4500.0 },
-		},
-		CameraController { speed: 40.0, sensitivity: 0.005, yaw, pitch },
+		CameraController { speed: FLY_SPEED, sensitivity: 0.005, yaw, pitch },
 		LodViewer,
 		Msaa::Off,
 		DepthPrepass,
@@ -55,12 +55,7 @@ pub fn refocus_camera_on_layout(
 	controller: &mut CameraController,
 ) {
 	let center = layout.region_center_xz();
-	refocus_camera_on_elevation(
-		layout,
-		crate::playground_player::holding_elevation(base, center.x, center.z),
-		transform,
-		controller,
-	);
+	refocus_camera_on_elevation(layout, base.height_at(center.x, center.z), transform, controller);
 }
 
 pub fn refocus_camera_on_elevation(
@@ -70,14 +65,14 @@ pub fn refocus_camera_on_elevation(
 	controller: &mut CameraController,
 ) {
 	let look_at = camera_look_at(layout, elevation);
-	let camera_pos = look_at + Vec3::new(0.0, 24.0, 48.0);
+	let camera_pos = look_at + survey_offset();
 	*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
 	controller.yaw = yaw;
 	controller.pitch = pitch;
 }
 
-/// Composed height when the cell is stored; otherwise the holding altitude.
+/// Composed height when the cell is stored; otherwise base noise.
 pub fn surface_or_hold(
 	layout: &TerrainCellLayout,
 	store: &TerrainEntryStore,
@@ -86,7 +81,11 @@ pub fn surface_or_hold(
 	let center = layout.region_center_xz();
 	store
 		.composed_height_at(layout, center.x, center.z)
-		.unwrap_or_else(|| crate::playground_player::holding_elevation(base, center.x, center.z))
+		.unwrap_or_else(|| base.height_at(center.x, center.z))
+}
+
+fn survey_offset() -> Vec3 {
+	Vec3::new(0.0, CAMERA_HEIGHT, CAMERA_BACK)
 }
 
 fn camera_look_at(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
@@ -108,7 +107,7 @@ fn yaw_pitch_from_rotation(rotation: Quat) -> (f32, f32) {
 /// change so Shift does not stay held and drop the fly camera through the floor.
 pub fn release_modifiers_on_focus_change(
 	mut keyboard: ResMut<ButtonInput<KeyCode>>,
-	mut focus: MessageReader<WindowFocused>,
+	mut focus: MessageReader<bevy::window::WindowFocused>,
 ) {
 	if focus.read().next().is_none() {
 		return;
@@ -133,7 +132,7 @@ fn command_held(keyboard: &ButtonInput<KeyCode>) -> bool {
 
 pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
-	pad: Res<VirtualPad>,
+	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
 	mode: Res<PlaygroundMode>,
@@ -143,14 +142,19 @@ pub fn camera_controller(
 		return;
 	};
 
-	// Screenshot selection drags the mouse; Command chords are not look/fly.
 	if command_held(&keyboard_input) {
 		return;
 	}
 
-	controller.yaw -= pad.look_stick.x * controller.sensitivity;
-	controller.pitch -= pad.look_stick.y * controller.sensitivity;
-	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+	let mut mouse_delta = Vec2::ZERO;
+	for event in mouse_motion.read() {
+		mouse_delta += event.delta;
+	}
+	if mouse_delta.length() <= MAX_LOOK_DELTA {
+		controller.yaw -= mouse_delta.x * controller.sensitivity;
+		controller.pitch -= mouse_delta.y * controller.sensitivity;
+		controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+	}
 
 	if *mode == PlaygroundMode::Character {
 		return;
@@ -167,10 +171,19 @@ pub fn camera_controller(
 	let mut movement = Vec3::ZERO;
 	let forward = transform.forward();
 	let right = transform.right();
-	let wish = pad.move_stick;
-	movement += *forward * wish.y;
-	movement += *right * wish.x;
-	if pad.pressed(PadButton::A) {
+	if keyboard_input.pressed(KeyCode::KeyW) {
+		movement += *forward;
+	}
+	if keyboard_input.pressed(KeyCode::KeyS) {
+		movement -= *forward;
+	}
+	if keyboard_input.pressed(KeyCode::KeyA) {
+		movement -= *right;
+	}
+	if keyboard_input.pressed(KeyCode::KeyD) {
+		movement += *right;
+	}
+	if keyboard_input.pressed(KeyCode::Space) {
 		movement += Vec3::Y;
 	}
 	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {

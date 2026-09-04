@@ -31,6 +31,7 @@ movement-realization = { workspace = true }
 player = { workspace = true }
 render-item = { workspace = true }
 routing-intelligence = { workspace = true }
+tether-intelligence = { workspace = true }
 
 [lints]
 workspace = true

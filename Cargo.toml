@@ -98,6 +98,7 @@ members = [
   "maybraid/intelligence/fleeing",
   "maybraid/intelligence/hiding",
   "maybraid/intelligence/routing",
+  "maybraid/intelligence/tether",
   "maybraid/intelligence/routing-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
@@ -332,6 +333,7 @@ evasion-intelligence = { path = "maybraid/intelligence/evasion" }
 fleeing-intelligence = { path = "maybraid/intelligence/fleeing" }
 hiding-intelligence = { path = "maybraid/intelligence/hiding" }
 routing-intelligence = { path = "maybraid/intelligence/routing" }
+tether-intelligence = { path = "maybraid/intelligence/tether" }
 routing-playground = { path = "maybraid/intelligence/routing-playground" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }

@@ -1,6 +1,6 @@
 //! Hierarchical routing on a Durham fine-grid patch.
 //!
-//! Same camera, lighting, and command drawer as vegetation-on-terrain — no groves.
+//! Models-playground survey camera, vegetation lighting and command drawer — no groves.
 
 pub mod camera;
 pub mod commands;
@@ -22,7 +22,10 @@ use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
-use commands::{RequestGo, RequestModeCharacter, RequestModeFree};
+use commands::{
+	RequestGo, RequestModeCharacter, RequestModeFree, RequestStalk, RequestTether,
+	RequestTetherDrive, RequestTetherIdle,
+};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
@@ -34,7 +37,7 @@ use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
+use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
@@ -57,6 +60,10 @@ use routing_intelligence::{
 	RoutingIntelligenceUser, RoutingPlugin, RoutingSettings, RoutingSystems,
 };
 use std::f32::consts::PI;
+use tether_intelligence::{
+	install_tether, StalkRadii, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
+	TetherSystems,
+};
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const START_OFFSET_XZ: Vec2 = Vec2::new(-48.0, -24.0);
@@ -129,6 +136,7 @@ impl Plugin for RoutingPlaygroundPlugin {
 			.add_plugins(MaybraidPlayerPlugin)
 			.add_plugins(MovementIntelligencePlugin::<AvianMovementSurface<'_, '_>>::default())
 			.add_plugins(RoutingPlugin)
+			.add_plugins(TetherPlugin)
 			.add_plugins(MovementRealizationPlugin)
 			.insert_resource(MovementIntelligenceLimits {
 				max_budget: CandidateBudget { max_candidates: 12, max_steps: 3, horizon: 28.0 },
@@ -142,12 +150,12 @@ impl Plugin for RoutingPlaygroundPlugin {
 			.init_resource::<TerrainPresentPending>()
 			.configure_sets(
 				Update,
-				RoutingSystems::Plan.run_if(on_timer(Duration::from_millis(250))),
+				(
+					TetherSystems::Write.run_if(on_timer(Duration::from_millis(250))),
+					RoutingSystems::Plan.run_if(on_timer(Duration::from_millis(250))),
+				),
 			)
-			.add_systems(
-				Startup,
-				(setup_camera, setup_lighting, setup_presentation_assets, spawn_router),
-			)
+			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(
 				Update,
@@ -155,8 +163,10 @@ impl Plugin for RoutingPlaygroundPlugin {
 					release_modifiers_on_focus_change.before(camera_controller),
 					camera_controller,
 					apply_mode_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					apply_go_command.after(apply_mode_commands),
-					generate_cells.after(apply_go_command),
+					apply_tether_commands.after(apply_mode_commands),
+					apply_go_command.after(apply_tether_commands),
+					spawn_router.after(apply_go_command),
+					generate_cells.after(spawn_router),
 					present_cells.after(generate_cells),
 					snap_player_to_composed_surface
 						.after(present_cells)
@@ -244,6 +254,55 @@ fn apply_mode_commands(
 	}
 }
 
+fn apply_tether_commands(
+	mut commands: Commands,
+	mut status: Option<ResMut<game_commands::ui::GameCommandStatusText>>,
+	players: Query<Entity, With<Player>>,
+	tether: Query<(Entity, &RequestTether)>,
+	stalk: Query<(Entity, &RequestStalk)>,
+	idle: Query<Entity, With<RequestTetherIdle>>,
+	drive: Query<Entity, With<RequestTetherDrive>>,
+	mut users: Query<&mut TetherIntelligenceUser, With<Npc>>,
+) {
+	let Ok(player) = players.single() else {
+		return;
+	};
+	for (entity, request) in &tether {
+		for mut user in &mut users {
+			user.objective = TetherObjective::Tether(player, request.radius.max(0.4));
+			user.enabled = true;
+		}
+		ui::write_status(&mut status, format!("tether r={:.0}", request.radius));
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &stalk {
+		let radii = StalkRadii::new(request.without, request.within);
+		for mut user in &mut users {
+			user.objective = TetherObjective::Stalk(player, radii);
+			user.enabled = true;
+		}
+		ui::write_status(
+			&mut status,
+			format!("stalk without={:.0} within={:.0}", radii.without(), radii.within()),
+		);
+		commands.entity(entity).despawn();
+	}
+	for entity in &idle {
+		for mut user in &mut users {
+			user.enabled = false;
+		}
+		ui::write_status(&mut status, "tether idle");
+		commands.entity(entity).despawn();
+	}
+	for entity in &drive {
+		for mut user in &mut users {
+			user.enabled = true;
+		}
+		ui::write_status(&mut status, "tether drive");
+		commands.entity(entity).despawn();
+	}
+}
+
 fn apply_go_command(
 	mut commands: Commands,
 	mut goal: ResMut<RoutingGoal>,
@@ -251,13 +310,19 @@ fn apply_go_command(
 	layout: Res<TerrainCellLayout>,
 	mut status: Option<ResMut<game_commands::ui::GameCommandStatusText>>,
 	requests: Query<(Entity, &RequestGo)>,
-	mut routers: Query<&mut RoutingIntelligenceUser, With<Npc>>,
+	mut routers: Query<
+		(&mut RoutingIntelligenceUser, Option<&mut TetherIntelligenceUser>),
+		With<Npc>,
+	>,
 ) {
 	for (entity, request) in &requests {
 		goal.0 = Vec2::new(request.x, request.z);
 		if let Some(elevation) = store.composed_height_at(&layout, request.x, request.z) {
 			let destination = Vec3::new(request.x, elevation, request.z);
-			for mut routing in &mut routers {
+			for (mut routing, tether) in &mut routers {
+				if let Some(mut tether) = tether {
+					tether.enabled = false;
+				}
 				routing.set_destination(destination);
 			}
 			ui::write_status(&mut status, format!("go {0:.0} {1:.0}", request.x, request.z));
@@ -325,8 +390,17 @@ fn generate_cells(
 			let center = layout.region_center_xz();
 			let elevation = index
 				.composed_height_at(center.x, center.z)
-				.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
+				.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
 			refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
+			info!(
+				"survey camera=({:.0},{:.0},{:.0}) look_y={:.0}",
+				transform.translation.x,
+				transform.translation.y,
+				transform.translation.z,
+				elevation
+			);
+		} else {
+			warn!("survey camera: expected one Camera3d, skip refocus");
 		}
 	}
 
@@ -345,9 +419,6 @@ fn present_cells(
 		return;
 	}
 
-	terrain_presenter.clear_presented();
-	water_presenter.clear_presented();
-
 	let region = layout.request_region();
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
@@ -358,8 +429,23 @@ fn present_cells(
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let terrain_wanted = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	terrain_presenter.remove_stale(&terrain_wanted);
 	let water_view = WaterStoreView::new(&store, &layout);
 	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
+	let water_wanted = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
+		.into_iter()
+		.map(|tracked| tracked.0)
+		.collect();
+	water_presenter.remove_stale(&water_wanted);
+	info!(
+		"presented terrain_scenes={} water_scenes={}",
+		terrain_presenter.presented_ids().len(),
+		water_presenter.presented_ids().len()
+	);
 	pending.0 = false;
 }
 
@@ -369,7 +455,16 @@ fn spawn_router(
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
+	players: Query<Entity, With<Player>>,
+	routers: Query<(), With<Npc>>,
 ) {
+	if !routers.is_empty() {
+		return;
+	}
+	let Ok(player) = players.single() else {
+		return;
+	};
+	commands.entity(player).insert(Tether);
 	let start_xz = offset_xz(&layout, START_OFFSET_XZ);
 	let elevation = holding_elevation(&base.0, start_xz.x, start_xz.y);
 	let spawn = spawn_point_at(start_xz.x, start_xz.y, elevation);
@@ -381,26 +476,27 @@ fn spawn_router(
 	movement.ability.candidate_budget.max_candidates = 8;
 	movement.ability.candidate_budget.max_steps = 3;
 	let routing = RoutingIntelligenceUser::new(RoutingSettings::from_segments(ROUTING_BANDS));
+	let tether = TetherIntelligenceUser::new(TetherObjective::Tether(player, 8.0))
+		.with_horizon(28.0)
+		.with_added_radius(2.0);
 	commands
 		.entity(npc)
 		.insert((AwaitingRouterSurface, GravityScale(0.0), movement, routing));
+	install_tether(&mut commands, npc, tether);
+	info!("spawned router npc={npc} tether_anchor={player}");
 }
 
 fn snap_router_to_composed_surface(
 	mut commands: Commands,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
-	goal: Res<RoutingGoal>,
 	awaiting: Query<Entity, (With<Npc>, With<AwaitingRouterSurface>)>,
-	mut routers: Query<
-		(&mut Transform, &mut LinearVelocity, &mut GravityScale, &mut RoutingIntelligenceUser),
-		With<Npc>,
-	>,
+	mut routers: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Npc>>,
 	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
 	children: Query<&Children>,
 	colliders: Query<(), With<avian3d::prelude::Collider>>,
 ) {
-	let Ok((mut transform, mut velocity, mut gravity, mut routing)) = routers.single_mut() else {
+	let Ok((mut transform, mut velocity, mut gravity)) = routers.single_mut() else {
 		return;
 	};
 
@@ -419,9 +515,6 @@ fn snap_router_to_composed_surface(
 
 	if terrain_collider_ready(&terrain_roots, &children, &colliders) {
 		gravity.0 = 1.25;
-		if let Some(goal_elevation) = store.composed_height_at(&layout, goal.0.x, goal.0.y) {
-			routing.set_destination(Vec3::new(goal.0.x, goal_elevation, goal.0.y));
-		}
 		if let Ok(entity) = awaiting.single() {
 			commands.entity(entity).remove::<AwaitingRouterSurface>();
 		}
