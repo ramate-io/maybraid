@@ -1,14 +1,12 @@
 //! Duel vs free-for-all session. FFA rebuilds the field from generated loadouts.
 
 use bevy::prelude::*;
+use combat_targeting::CombatTargeting;
 use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
 use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
-use firearm_intelligence::{
-	FirearmIntelligence, FirearmMovementIntelligence, FirearmMovementObjective, FirearmObjective,
-	FirearmSpotting,
-};
+use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
@@ -20,6 +18,7 @@ use player::{
 	spawn_npc_visual, spawn_npc_with_hidden_capsule, spawn_player_visual,
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerVisual,
 };
+use spotting_intelligence::{InterestLayers, SpotDirective, SpottingSettings, SpottingUser};
 use std::f32::consts::FRAC_PI_2;
 
 use crate::damage::{headshot_band_for, CombatRespawn, Health};
@@ -238,22 +237,40 @@ pub(crate) fn install_npc_combat(
 	movement.ability.candidate_budget.horizon = 30.0;
 	movement.ability.vantage_standoffs = VantageStandoffs::from_radii(&[6.0, 10.0]);
 	movement.ability.vantage_azimuths = 4;
-	let mut combat = FirearmIntelligence::new(FirearmObjective::default());
+	let mut combat = FirearmIntelligence::new();
 	combat.settings.accuracy = 0.88;
 	combat.settings.motion_tracking = 0.55;
 	combat.settings.counter_recoil = 0.75;
 	combat.settings.vision = 4;
 	combat.settings.trigger_happiness = 0.9;
-	let mut combat_movement = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+	let mut combat_movement = FirearmMovementIntelligence::new();
 	combat_movement.settings.range = (8.0, 1.0);
 	combat_movement.settings.cover = 0.5;
 	combat_movement.settings.flee = (0.0, 8.0);
+	let eye_offset = Vec3::Y * (movement.ability.eye_height - movement.ability.feet_below_origin);
+	let directive = SpotDirective {
+		layers: InterestLayers::CHARACTER,
+		range: movement.ability.candidate_budget.horizon,
+		priority: 1,
+		desired_count: usize::from(combat.settings.vision.max(1)),
+		freshness_secs: combat.settings.fire_spotting_freshness.max(0.125),
+		discovery_interval_secs: 0.25,
+		respot_interval_secs: 0.125,
+		max_samples_per_subject: usize::from(combat.settings.vision.max(1)),
+	};
+	let spotting = SpottingUser::new(eye_offset, [directive]).with_settings(SpottingSettings::new(
+		movement.ability.candidate_budget.max_candidates,
+		usize::from(combat.settings.vision.max(1)),
+		combat.settings.target_spotting_memory,
+	));
 	let mut entity = commands.entity(npc);
 	entity.insert((
 		movement,
 		combat_movement,
 		combat,
-		FirearmSpotting::default(),
+		spotting,
+		CombatTargeting::default(),
+		FirearmTargeting::default(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));

@@ -1,8 +1,10 @@
 use bevy::prelude::*;
-use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmSpotting};
+use combat_targeting::CombatTargeting;
+use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
 use firearm_user::FirearmUser;
 use movement_intelligence::{MovementIntelligence, ReplanMovement};
 use player::{LocomotionCapsule, MoveWish, Npc, Player};
+use spotting_intelligence::{SpotSubject, SpottingUser};
 
 pub(crate) const RESPAWN_SECS: f32 = 2.0;
 pub(crate) const HEADSHOT_MULTIPLIER: f32 = 1.25;
@@ -50,7 +52,10 @@ pub(crate) fn queue_downed_respawns(
 		commands.entity(entity).remove::<(
 			FirearmIntelligence,
 			FirearmMovementIntelligence,
-			FirearmSpotting,
+			FirearmTargeting,
+			CombatTargeting,
+			SpottingUser,
+			SpotSubject,
 			MovementIntelligence,
 			ReplanMovement,
 			MoveWish,
@@ -71,6 +76,7 @@ pub(crate) fn queue_downed_respawns(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use spotting_intelligence::{InterestLayers, SpotBounds};
 
 	#[test]
 	fn headshot_band_is_the_upper_half_of_the_top_hemisphere() {
@@ -92,7 +98,10 @@ mod tests {
 			.spawn((
 				Npc,
 				::damage::Downed { source: None, point: Vec3::ZERO, at: 0.0 },
-				FirearmSpotting::default(),
+				SpottingUser::default(),
+				SpotSubject::new(InterestLayers::CHARACTER, SpotBounds::capsule(0.4, 0.9)),
+				CombatTargeting::default(),
+				FirearmTargeting::default(),
 				MovementIntelligence::new(movement_intelligence::MovementObjective::Reach(
 					movement_intelligence::MovementLocation::new(Vec3::ZERO, 0.4),
 				)),
@@ -102,7 +111,9 @@ mod tests {
 
 		app.update();
 
-		assert!(app.world().get::<FirearmSpotting>(entity).is_none());
+		assert!(app.world().get::<SpottingUser>(entity).is_none());
+		assert!(app.world().get::<SpotSubject>(entity).is_none());
+		assert!(app.world().get::<CombatTargeting>(entity).is_none());
 		assert!(app.world().get::<MovementIntelligence>(entity).is_none());
 		assert!(app.world().get::<MoveWish>(entity).is_none());
 		assert_eq!(app.world().resource::<CombatRespawn>().npc_at.len(), 1);

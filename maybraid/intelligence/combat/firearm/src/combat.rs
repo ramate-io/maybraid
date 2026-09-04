@@ -1,17 +1,16 @@
 //! Firearm combat brain: who to shoot, how to aim, when to fire.
 
-use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
+use combat_targeting::{CombatContact, CombatTargeting};
 use crozon_characters::CharacterRoot;
 use firearm_user::FirearmUser;
 use firearms::{muzzle_world, BoneMap, FirearmMembers, RigRoot, WeaponFired, WeaponTrigger};
-use lod_avian::PhysicsInteractionLayer;
 use movement_intelligence::{MovementBody, MovementIntelligence};
 use player::{PlayerLook, PlayerYawOwner};
+use spotting_intelligence::{SpotBounds, SpotSubject};
 use std::f32::consts::FRAC_PI_2;
 
-use crate::los::clear_segment;
-use crate::target::{live_aim_point, pick_target, FirearmObjective, SpottedTarget};
+use crate::targeting::FirearmTargeting;
 
 /// How a firearm combatant aims and stays on a target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,12 +64,10 @@ impl Default for FirearmIntelligenceSettings {
 	}
 }
 
-/// Per-user firearm combat install. Fields [`FirearmObjective`].
+/// Per-user firearm aim and trigger state.
 #[derive(Component, Debug, Clone)]
 pub struct FirearmIntelligence {
-	pub objective: FirearmObjective,
 	pub settings: FirearmIntelligenceSettings,
-	pub(crate) engaged: Option<Entity>,
 	aiming_head: bool,
 	next_aim_choice_at: f32,
 	next_trigger_at: f32,
@@ -84,11 +81,9 @@ pub struct FirearmIntelligence {
 }
 
 impl FirearmIntelligence {
-	pub fn new(objective: FirearmObjective) -> Self {
+	pub fn new() -> Self {
 		Self {
-			objective,
 			settings: FirearmIntelligenceSettings::default(),
-			engaged: None,
 			aiming_head: false,
 			next_aim_choice_at: 0.0,
 			next_trigger_at: 0.0,
@@ -101,11 +96,11 @@ impl FirearmIntelligence {
 			counter_recoil_ready_at: 0.0,
 		}
 	}
+}
 
-	pub fn has_fresh_sight(&self, entity: Entity, now: f32) -> bool {
-		self.objective.0.iter().any(|target| {
-			target.entity == entity && target.is_fresh(now, self.settings.fire_spotting_freshness)
-		})
+impl Default for FirearmIntelligence {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 
@@ -121,6 +116,8 @@ pub(crate) fn aim_at_firearm_targets(
 		&MovementIntelligence,
 		&FirearmUser,
 		&mut FirearmIntelligence,
+		&mut CombatTargeting,
+		&FirearmTargeting,
 		&mut PlayerLook,
 	)>,
 	guns: Query<&FirearmMembers>,
@@ -130,31 +127,55 @@ pub(crate) fn aim_at_firearm_targets(
 ) {
 	let elapsed = time.elapsed_secs();
 	let dt = time.delta_secs();
-	for (entity, transform, movement, user, mut brain, mut look) in &mut combatants {
+	for (
+		entity,
+		transform,
+		movement,
+		user,
+		mut brain,
+		mut targeting,
+		firearm_targeting,
+		mut look,
+	) in &mut combatants
+	{
 		let from = aim_pivot(user.held, transform.translation, movement, &guns, &maps, &globals);
-		let desired = pick_target(from, &brain.objective.0, brain.engaged, brain.settings.focus)
+		let desired = targeting
+			.current()
+			.and_then(|ranked| targeting.contact(ranked.entity))
 			.copied()
 			.map(|target| {
-				if brain.engaged != Some(target.entity) || elapsed >= brain.next_aim_choice_at {
+				if targeting.engaged != Some(target.subject) || elapsed >= brain.next_aim_choice_at
+				{
 					brain.aiming_head = frac_noise(
 						entity.to_bits() as f32 * 0.013
-							+ target.entity.to_bits() as f32 * 0.019
+							+ target.subject.to_bits() as f32 * 0.019
 							+ elapsed.floor(),
 					) < brain.settings.headshots.clamp(0.0, 1.0);
 					brain.next_aim_choice_at = elapsed + 1.5;
 				}
-				brain.engaged = Some(target.entity);
-				let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
-				let current = bodies.get(target.entity).ok().map(|transform| transform.translation);
-				let aim_at = live_aim_point(target, headshots, current);
+				targeting.engage(target.subject);
+				let current =
+					bodies.get(target.subject).ok().map(|transform| transform.translation);
+				let remembered = target.aim_point(brain.aiming_head);
+				let aim_at = current
+					.map_or(remembered, |position| remembered + (position - target.position));
 				let perceived =
-					perceive_motion(aim_at, target.movement_vector, brain.settings.motion_tracking);
+					firearm_targeting.select(target.subject, brain.aiming_head, false).map_or_else(
+						|| {
+							perceive_motion(
+								aim_at,
+								target.movement_vector,
+								brain.settings.motion_tracking,
+							)
+						},
+						|trajectory| trajectory.aim_point,
+					);
 				let to = perceived - from;
 				let (yaw, pitch) = look_angles(to, brain.settings.accuracy, entity, elapsed);
 				Vec2::new(yaw, pitch)
 			});
 		if desired.is_none() {
-			brain.engaged = None;
+			targeting.clear_engagement();
 		}
 		realize_aim(&mut brain, &mut look, desired, elapsed, dt);
 	}
@@ -220,7 +241,7 @@ fn realize_aim(
 /// its local yaw cone.
 pub(crate) fn orient_firearm_combatants(
 	time: Res<Time>,
-	combatants: Query<(&PlayerLook, &FirearmIntelligence)>,
+	combatants: Query<(&PlayerLook, &FirearmIntelligence, &CombatTargeting)>,
 	mut visuals: Query<
 		(&ChildOf, &mut Transform, Option<&mut PlayerYawOwner>),
 		With<CharacterRoot>,
@@ -228,10 +249,10 @@ pub(crate) fn orient_firearm_combatants(
 ) {
 	let amount = (time.delta_secs() * 5.0).clamp(0.0, 1.0);
 	for (child_of, mut visual, yaw_owner) in &mut visuals {
-		let Ok((look, brain)) = combatants.get(child_of.parent()) else {
+		let Ok((look, _, targeting)) = combatants.get(child_of.parent()) else {
 			continue;
 		};
-		if brain.engaged.is_none() {
+		if targeting.engaged.is_none() {
 			if let Some(mut yaw_owner) = yaw_owner {
 				*yaw_owner = PlayerYawOwner::Wish;
 			}
@@ -250,18 +271,23 @@ pub(crate) fn orient_firearm_combatants(
 /// Hold the trigger when the posed bore is on a freshly spotted point and the
 /// obstruction policy allows the shot.
 pub(crate) fn fire_at_spotted_targets(
-	spatial: SpatialQuery,
 	time: Res<Time>,
-	mut combatants: Query<(Entity, &mut FirearmIntelligence, &FirearmUser)>,
+	mut combatants: Query<(
+		Entity,
+		&mut FirearmIntelligence,
+		&FirearmUser,
+		&CombatTargeting,
+		&FirearmTargeting,
+	)>,
 	guns: Query<&FirearmMembers>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
+	subjects: Query<&SpotSubject>,
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
 	let now = time.elapsed_secs();
-	let filter = SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed);
-	for (entity, mut brain, user) in &mut combatants {
-		let target = engaged_target(&brain).copied();
+	for (entity, mut brain, user, targeting, firearm_targeting) in &mut combatants {
+		let target = engaged_target(targeting).copied();
 		let Some(target) = target else {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
@@ -274,39 +300,37 @@ pub(crate) fn fire_at_spotted_targets(
 		};
 		let (muzzle, bore) = muzzle_world(global);
 		let fresh = target.is_fresh(now, brain.settings.fire_spotting_freshness);
-		let headshots = if brain.aiming_head { 1.0 } else { 0.0 };
-		let aim_at = perceive_motion(
-			target.aim_point(headshots),
-			target.movement_vector,
-			brain.settings.motion_tracking,
-		);
-		let center = perceive_motion(
-			target.capsule.center_mass(target.position),
-			target.movement_vector,
-			brain.settings.motion_tracking,
-		);
-		let delta = center - muzzle;
-		let distance = delta.length();
-		if !fresh || distance <= 1e-4 {
+		let allow_blocked = willing_to_fire_through_wall(entity, now, brain.settings.wall_firing);
+		let Some(trajectory) =
+			firearm_targeting.select(target.subject, brain.aiming_head, allow_blocked)
+		else {
+			brain.on_target = false;
+			set_trigger(user, false, &mut triggers);
+			continue;
+		};
+		if !fresh || trajectory.distance <= 1e-4 {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;
 		}
+		let delta = trajectory.aim_point - muzzle;
+		let distance = delta.length();
 		let desired = delta / distance;
-		let aligned = bore.dot(desired)
-			>= fire_alignment(brain.settings.accuracy, distance, target.capsule.radius);
+		let radius =
+			subjects.get(target.subject).ok().map_or(0.4, |subject| match subject.bounds {
+				SpotBounds::Capsule { radius, .. } => radius,
+			});
+		let aligned =
+			bore.dot(desired) >= fire_alignment(brain.settings.accuracy, distance, radius);
 		if aligned {
 			brain.last_aligned_at = now;
 		}
 		let within_alignment_grace = brain.on_target
 			&& now - brain.last_aligned_at <= brain.settings.alignment_grace.max(0.0);
-		let blocked = !clear_segment(muzzle, aim_at, &spatial, &filter);
-		let obstruction_allowed =
-			!blocked || willing_to_fire_through_wall(entity, now, brain.settings.wall_firing);
 		if !hold_trigger(
 			aligned,
 			within_alignment_grace,
-			obstruction_allowed,
+			trajectory.clear || allow_blocked,
 			brain.settings.trigger_happiness,
 		) {
 			brain.on_target = false;
@@ -321,12 +345,12 @@ pub(crate) fn fire_at_spotted_targets(
 	}
 }
 
-fn engaged_target(brain: &FirearmIntelligence) -> Option<&SpottedTarget> {
-	let engaged = brain.engaged?;
-	brain.objective.0.iter().find(|target| target.entity == engaged)
+fn engaged_target(targeting: &CombatTargeting) -> Option<&CombatContact> {
+	let engaged = targeting.engaged?;
+	targeting.contact(engaged)
 }
 
-fn gun_landmark<'a>(
+pub(crate) fn gun_landmark<'a>(
 	held: Entity,
 	name: &str,
 	guns: &Query<&FirearmMembers>,
@@ -401,7 +425,7 @@ fn motion_tracking_delay(skill: f32) -> f32 {
 	0.3 + (0.03 - 0.3) * skill
 }
 
-fn perceive_motion(position: Vec3, velocity: Vec3, skill: f32) -> Vec3 {
+pub(crate) fn perceive_motion(position: Vec3, velocity: Vec3, skill: f32) -> Vec3 {
 	position - velocity * motion_tracking_delay(skill)
 }
 
@@ -500,7 +524,7 @@ mod tests {
 
 	#[test]
 	fn tracking_rate_limits_aim_travel() {
-		let mut brain = FirearmIntelligence::new(FirearmObjective::default());
+		let mut brain = FirearmIntelligence::new();
 		brain.settings.tracking_rate = 1.0;
 		let mut look = PlayerLook::default();
 		realize_aim(&mut brain, &mut look, Some(Vec2::new(1.0, 0.0)), 0.1, 0.1);
@@ -539,7 +563,7 @@ mod tests {
 
 	#[test]
 	fn recoil_displacement_survives_the_next_aim_tick() {
-		let mut brain = FirearmIntelligence::new(FirearmObjective::default());
+		let mut brain = FirearmIntelligence::new();
 		brain.counter_recoil_ready_at = 1.0;
 		let mut look = PlayerLook::default();
 		realize_aim(&mut brain, &mut look, Some(Vec2::ZERO), 0.0, 0.0);
@@ -600,19 +624,16 @@ mod tests {
 
 	#[test]
 	fn fresh_sight_requires_a_recent_combat_observation() {
-		let mut brain = FirearmIntelligence::new(FirearmObjective::default());
 		let entity = Entity::from_bits(1);
-		assert!(!brain.has_fresh_sight(entity, 1.0));
-		brain.objective.0.push(SpottedTarget {
-			entity,
+		let contact = CombatContact {
+			subject: entity,
 			position: Vec3::ZERO,
-			capsule: crate::target::TargetCapsule::new(0.4, 0.9),
-			visible: Vec3::ZERO,
+			visible_point: Vec3::ZERO,
 			visible_head: None,
 			movement_vector: Vec3::ZERO,
-			spotted_at: 0.9,
-		});
-		assert!(brain.has_fresh_sight(entity, 1.0));
-		assert!(!brain.has_fresh_sight(entity, 1.5));
+			last_spotted_at: 0.9,
+		};
+		assert!(contact.is_fresh(1.0, 0.2));
+		assert!(!contact.is_fresh(1.5, 0.2));
 	}
 }

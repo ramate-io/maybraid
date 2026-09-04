@@ -90,6 +90,9 @@ members = [
   "maybraid/intelligence/movement/lib",
   "maybraid/intelligence/movement/avian",
   "maybraid/intelligence/movement/richmond",
+  "maybraid/intelligence/spotting/lib",
+  "maybraid/intelligence/spotting/avian",
+  "maybraid/intelligence/combat/targeting",
   "maybraid/intelligence/combat/firearm",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
@@ -316,6 +319,9 @@ firearm-user = { path = "maybraid/items/firearm-user" }
 movement-intelligence = { path = "maybraid/intelligence/movement/lib" }
 movement-intelligence-avian = { path = "maybraid/intelligence/movement/avian" }
 movement-intelligence-richmond = { path = "maybraid/intelligence/movement/richmond" }
+spotting-intelligence = { path = "maybraid/intelligence/spotting/lib" }
+spotting-intelligence-avian = { path = "maybraid/intelligence/spotting/avian" }
+combat-targeting = { path = "maybraid/intelligence/combat/targeting" }
 firearm-intelligence = { path = "maybraid/intelligence/combat/firearm" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }

@@ -1,12 +1,12 @@
 //! Firearm movement brain: where to stand relative to combat targets.
 
 use bevy::prelude::*;
+use combat_targeting::CombatTargeting;
 use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, ReplanMovement,
 };
 
 use crate::combat::FirearmIntelligence;
-use crate::target::{pick_target, FirearmMovementObjective};
 
 const REFRESH_DISTANCE: f32 = 0.6;
 
@@ -30,18 +30,16 @@ impl Default for FirearmMovementIntelligenceSettings {
 	}
 }
 
-/// Per-user firearm movement install. Fields [`FirearmMovementObjective`] and
-/// writes [`MovementIntelligence::objective`].
+/// Per-user firearm movement policy. Writes [`MovementIntelligence::objective`].
 #[derive(Component, Debug, Clone)]
 pub struct FirearmMovementIntelligence {
-	pub objective: FirearmMovementObjective,
 	pub settings: FirearmMovementIntelligenceSettings,
 	driving: bool,
 }
 
 impl FirearmMovementIntelligence {
-	pub fn new(objective: FirearmMovementObjective) -> Self {
-		Self { objective, settings: FirearmMovementIntelligenceSettings::default(), driving: false }
+	pub fn new() -> Self {
+		Self { settings: FirearmMovementIntelligenceSettings::default(), driving: false }
 	}
 
 	pub fn compose(&self, from: Vec3, target: Vec3) -> MovementObjective {
@@ -71,21 +69,27 @@ impl FirearmMovementIntelligence {
 	}
 }
 
+impl Default for FirearmMovementIntelligence {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 pub(crate) fn write_firearm_movement_objectives(
 	time: Res<Time>,
 	mut combatants: Query<(
 		Entity,
 		&Transform,
 		&FirearmIntelligence,
+		&CombatTargeting,
 		&mut FirearmMovementIntelligence,
 		&mut MovementIntelligence,
 	)>,
 	mut commands: Commands,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, transform, combat, mut brain, mut movement) in &mut combatants {
-		let Some(target) =
-			pick_target(transform.translation, &brain.objective.0, None, 0.0).copied()
+	for (entity, transform, combat, targeting, mut brain, mut movement) in &mut combatants {
+		let Some(target) = targeting.best().and_then(|ranked| targeting.contact(ranked.entity))
 		else {
 			if brain.driving {
 				brain.driving = false;
@@ -102,7 +106,7 @@ pub(crate) fn write_firearm_movement_objectives(
 		let next = brain.compose_sight(
 			transform.translation,
 			target.position,
-			combat.has_fresh_sight(target.entity, now),
+			target.is_fresh(now, combat.settings.fire_spotting_freshness),
 		);
 		if !should_replan(movement.objective, next) {
 			continue;
@@ -134,7 +138,7 @@ mod tests {
 
 	#[test]
 	fn compose_vantage_when_outside_flee_range() -> anyhow::Result<()> {
-		let brain = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+		let brain = FirearmMovementIntelligence::new();
 		let objective = brain.compose(Vec3::ZERO, Vec3::X * 6.0);
 		assert!(objective.is_vantage_on());
 		assert!((objective.location().radius - 1.4).abs() < 1e-4);
@@ -145,7 +149,7 @@ mod tests {
 
 	#[test]
 	fn compose_flee_when_inside_trigger_distance() -> anyhow::Result<()> {
-		let brain = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+		let brain = FirearmMovementIntelligence::new();
 		let objective = brain.compose(Vec3::ZERO, Vec3::X * 0.5);
 		assert!(matches!(objective, MovementObjective::FleeFrom(_)));
 		assert!((objective.location().radius - 8.0).abs() < 1e-4);
@@ -154,7 +158,7 @@ mod tests {
 
 	#[test]
 	fn cover_scales_hide_but_not_sightline() -> anyhow::Result<()> {
-		let mut brain = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+		let mut brain = FirearmMovementIntelligence::new();
 		brain.settings.cover = 0.5;
 		let objective = brain.compose(Vec3::ZERO, Vec3::X * 6.0);
 		assert!((objective.hide_weight() - 5.0).abs() < 1e-4);
@@ -185,7 +189,7 @@ mod tests {
 
 	#[test]
 	fn lost_sightline_boosts_search_over_cover() {
-		let brain = FirearmMovementIntelligence::new(FirearmMovementObjective::default());
+		let brain = FirearmMovementIntelligence::new();
 		let seen = brain.compose_sight(Vec3::ZERO, Vec3::X * 6.0, true);
 		let hunt = brain.compose_sight(Vec3::ZERO, Vec3::X * 6.0, false);
 		assert!(hunt.sightline_weight() > seen.sightline_weight());

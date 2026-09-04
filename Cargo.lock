@@ -2570,6 +2570,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
+name = "combat-targeting"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3387,12 +3395,15 @@ dependencies = [
  "anyhow",
  "avian3d",
  "bevy",
+ "combat-targeting",
  "crozon-characters",
  "firearm-user",
  "firearms",
  "lod-avian",
  "movement-intelligence",
  "player",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
 ]
 
 [[package]]
@@ -3447,6 +3458,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "clap",
+ "combat-targeting",
  "crozon-character-items",
  "crozon-character-ragdoll",
  "crozon-characters",
@@ -3471,6 +3483,8 @@ dependencies = [
  "richmond-building-physics",
  "richmond-buildings",
  "richmond-developments",
+ "spotting-intelligence",
+ "spotting-intelligence-avian",
 ]
 
 [[package]]
@@ -6716,6 +6730,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
 dependencies = [
  "bitflags 2.13.0",
+]
+
+[[package]]
+name = "spotting-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+]
+
+[[package]]
+name = "spotting-intelligence-avian"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "lod-avian",
+ "spotting-intelligence",
 ]
 
 [[package]]
