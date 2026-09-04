@@ -37,6 +37,8 @@ pub(crate) const DEFAULT_AFFA_CIVILIANS: u16 = 6;
 /// Outside the 36 m Les Halles stack, on the pad. Grows with count so neighbors stay apart.
 const FFA_RING_MIN: f32 = 24.0;
 const FFA_RING_MAX: f32 = 36.0;
+/// Recycle fleeing civilians once they leave this xz disk around the pad origin.
+pub(crate) const FLEE_OUT_RANGE: f32 = 48.0;
 const FFA_NEIGHBOR: f32 = 14.0;
 const FFA_PLAYER_CLEARANCE: f32 = 10.0;
 /// Inside the tower footprint, on the upper storey gallery.
@@ -113,6 +115,14 @@ impl RangeSession {
 
 	pub fn is_assault_free_for_all(&self) -> bool {
 		self.mode == RangeMode::AssaultFreeForAll
+	}
+
+	pub fn is_generated_field(&self) -> bool {
+		self.is_free_for_all() || self.is_assault_free_for_all()
+	}
+
+	pub fn field_count(&self) -> u16 {
+		self.npc_count + self.civilian_count
 	}
 
 	pub fn is_test_dummy(&self) -> bool {

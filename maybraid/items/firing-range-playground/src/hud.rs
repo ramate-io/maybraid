@@ -1,6 +1,7 @@
 //! Always-on combat HUD: health bars, world-space counters, directional hit ticks.
 
 use bevy::prelude::*;
+use evasion_intelligence::EvasionIntelligenceUser;
 use game_commands::GameCommandDrawerVisible;
 use player::{LocomotionCapsule, Npc, Player};
 
@@ -11,6 +12,9 @@ const BAR_WIDTH: f32 = 240.0;
 const BAR_HEIGHT: f32 = 18.0;
 const WORLD_BAR_WIDTH: f32 = 120.0;
 const WORLD_BAR_HEIGHT: f32 = 8.0;
+const EVASION_DOT_SIZE: f32 = 10.0;
+const FLEE_DOT: Color = Color::srgb(1.0, 0.38, 0.72);
+const HIDE_DOT: Color = Color::srgb(0.28, 0.52, 1.0);
 const INDICATOR_COUNT: usize = 8;
 const INDICATOR_RADIUS: f32 = 148.0;
 const INDICATOR_LIFE: f32 = 1.4;
@@ -50,6 +54,9 @@ pub(crate) struct WorldHudFill;
 
 #[derive(Component)]
 pub(crate) struct WorldHudLabel;
+
+#[derive(Component)]
+pub(crate) struct WorldEvasionDot;
 
 #[derive(Component)]
 pub(crate) struct WorldHealthAnchor {
@@ -230,7 +237,7 @@ fn spawn_world_bar(parent: Entity, target: Entity, commands: &mut Commands) {
 				left: Val::Px(0.0),
 				top: Val::Px(0.0),
 				width: Val::Px(WORLD_BAR_WIDTH),
-				height: Val::Px(WORLD_BAR_HEIGHT + 14.0),
+				height: Val::Px(WORLD_BAR_HEIGHT + 26.0),
 				flex_direction: FlexDirection::Column,
 				align_items: AlignItems::Center,
 				row_gap: Val::Px(2.0),
@@ -240,6 +247,18 @@ fn spawn_world_bar(parent: Entity, target: Entity, commands: &mut Commands) {
 			Pickable::IGNORE,
 		))
 		.with_children(|anchor| {
+			anchor.spawn((
+				WorldEvasionDot,
+				Node {
+					width: Val::Px(EVASION_DOT_SIZE),
+					height: Val::Px(EVASION_DOT_SIZE),
+					border_radius: BorderRadius::all(Val::Px(EVASION_DOT_SIZE)),
+					..default()
+				},
+				BackgroundColor(FLEE_DOT),
+				Visibility::Hidden,
+				Pickable::IGNORE,
+			));
 			anchor.spawn((
 				WorldHudLabel,
 				Text::new(""),
@@ -275,7 +294,7 @@ fn spawn_world_bar(parent: Entity, target: Entity, commands: &mut Commands) {
 pub(crate) fn ensure_world_health_bars(
 	mut commands: Commands,
 	hud: Query<Entity, With<CombatHudRoot>>,
-	npcs: Query<Entity, With<Npc>>,
+	npcs: Query<Entity, (With<Npc>, Without<::damage::Downed>)>,
 	anchors: Query<(Entity, &WorldHealthAnchor)>,
 ) {
 	let Ok(hud) = hud.single() else {
@@ -299,20 +318,20 @@ pub(crate) fn ensure_world_health_bars(
 
 pub(crate) fn sync_health_hud(
 	session: Res<RangeSession>,
-	players: Query<&Health, With<Player>>,
-	npcs: Query<&Health, With<Npc>>,
+	players: Query<&Health, (With<Player>, Without<::damage::Downed>)>,
+	npcs: Query<&Health, (With<Npc>, Without<::damage::Downed>)>,
 	mut fills: Query<(&CombatantHud, &mut Node, &mut BackgroundColor), With<HudBarFill>>,
 	mut labels: Query<(&CombatantHud, &mut Text), With<HudBarLabel>>,
 ) {
 	let player = players.single().ok().copied();
 	let alive = npcs.iter().count();
-	let total = session.npc_count.max(1);
+	let total = session.field_count().max(1);
 	let npc = npcs.single().ok().copied();
 	let field_fraction = (alive as f32 / total as f32).clamp(0.0, 1.0);
 	for (kind, mut node, mut color) in &mut fills {
 		let fraction = match *kind {
 			CombatantHud::Player => player.map(Health::fraction).unwrap_or(0.0),
-			CombatantHud::Npc if session.is_free_for_all() => field_fraction,
+			CombatantHud::Npc if session.is_generated_field() => field_fraction,
 			CombatantHud::Npc => npc.map(Health::fraction).unwrap_or(0.0),
 		};
 		node.width = Val::Percent(fraction * 100.0);
@@ -321,7 +340,7 @@ pub(crate) fn sync_health_hud(
 	for (kind, mut text) in &mut labels {
 		text.0 = match *kind {
 			CombatantHud::Player => label_text(CombatantHud::Player, player),
-			CombatantHud::Npc if session.is_free_for_all() => {
+			CombatantHud::Npc if session.is_generated_field() => {
 				format!("FIELD  {alive}/{total}")
 			}
 			CombatantHud::Npc => label_text(CombatantHud::Npc, npc),
@@ -400,22 +419,38 @@ type WorldBarFills<'w, 's> = Query<
 	'w,
 	's,
 	(&'static mut Node, &'static mut BackgroundColor),
-	(With<WorldHudFill>, Without<WorldHealthAnchor>),
+	(With<WorldHudFill>, Without<WorldHealthAnchor>, Without<WorldEvasionDot>),
+>;
+type WorldEvasionDots<'w, 's> = Query<
+	'w,
+	's,
+	(&'static mut BackgroundColor, &'static mut Visibility),
+	(With<WorldEvasionDot>, Without<WorldHealthAnchor>, Without<WorldHudFill>),
+>;
+type WorldBarAnchors<'w, 's> = Query<
+	'w,
+	's,
+	(Entity, &'static WorldHealthAnchor, &'static mut Node, &'static mut Visibility),
+	(With<WorldHealthAnchor>, Without<WorldEvasionDot>, Without<WorldHudFill>),
 >;
 
 pub(crate) fn sync_world_health_bars(
 	cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-	npcs: Query<(&GlobalTransform, &Health, Option<&LocomotionCapsule>), With<Npc>>,
-	mut anchors: Query<(Entity, &WorldHealthAnchor, &mut Node, &mut Visibility)>,
+	npcs: Query<
+		(&GlobalTransform, &Health, Option<&LocomotionCapsule>, Option<&EvasionIntelligenceUser>),
+		(With<Npc>, Without<::damage::Downed>),
+	>,
+	mut anchors: WorldBarAnchors,
 	children: Query<&Children>,
 	mut fills: WorldBarFills,
 	mut labels: Query<&mut Text, With<WorldHudLabel>>,
+	mut dots: WorldEvasionDots,
 ) {
 	let Ok((camera, camera_transform)) = cameras.single() else {
 		return;
 	};
 	for (anchor_entity, anchor, mut node, mut visibility) in &mut anchors {
-		let Ok((transform, health, hull)) = npcs.get(anchor.target) else {
+		let Ok((transform, health, hull, evasion)) = npcs.get(anchor.target) else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
@@ -423,7 +458,7 @@ pub(crate) fn sync_world_health_bars(
 		let head = transform.translation() + Vec3::Y * lift;
 		if let Ok(screen) = camera.world_to_viewport(camera_transform, head) {
 			node.left = Val::Px(screen.x - WORLD_BAR_WIDTH * 0.5);
-			node.top = Val::Px(screen.y - 22.0);
+			node.top = Val::Px(screen.y - 34.0);
 			*visibility = Visibility::Visible;
 		} else {
 			*visibility = Visibility::Hidden;
@@ -433,6 +468,15 @@ pub(crate) fn sync_world_health_bars(
 			continue;
 		};
 		for child in kids {
+			if let Ok((mut color, mut dot_visibility)) = dots.get_mut(*child) {
+				match evasion_dot_color(evasion) {
+					Some(fill) => {
+						color.0 = fill;
+						*dot_visibility = Visibility::Visible;
+					}
+					None => *dot_visibility = Visibility::Hidden,
+				}
+			}
 			if let Ok(mut text) = labels.get_mut(*child) {
 				text.0 = format!("{:.0}", health.current);
 			}
@@ -447,6 +491,17 @@ pub(crate) fn sync_world_health_bars(
 				color.0 = bar_color(health.fraction());
 			}
 		}
+	}
+}
+
+fn evasion_dot_color(evasion: Option<&EvasionIntelligenceUser>) -> Option<Color> {
+	let signal = evasion?.signal;
+	if signal.is_flee() {
+		Some(FLEE_DOT)
+	} else if signal.is_hide() {
+		Some(HIDE_DOT)
+	} else {
+		None
 	}
 }
 
@@ -763,5 +818,32 @@ mod tests {
 		assert!(band.contains(&target, crown));
 		assert!(!band.contains(&target, Vec3::new(4.0, 1.0, -2.0)));
 		assert!(!band.contains(&target, Vec3::new(4.0, 1.0 - capsule.length * 0.5, -2.0)));
+	}
+
+	#[test]
+	fn flee_dot_is_pink_and_hide_dot_is_blue() {
+		let mut fleeing = EvasionIntelligenceUser::default();
+		fleeing.signal.actuator = evasion_intelligence::EvasionActuator::Flee;
+		let mut hiding = EvasionIntelligenceUser::default();
+		hiding.signal.actuator = evasion_intelligence::EvasionActuator::Hide;
+		let flee = evasion_dot_color(Some(&fleeing));
+		let hide = evasion_dot_color(Some(&hiding));
+		let idle = evasion_dot_color(Some(&EvasionIntelligenceUser::default()));
+		assert!(flee.is_some_and(|color| {
+			let color = color.to_srgba();
+			color.red > color.blue && color.red > color.green
+		}));
+		assert!(hide.is_some_and(|color| {
+			let color = color.to_srgba();
+			color.blue > color.red && color.blue > color.green
+		}));
+		assert!(idle.is_none());
+	}
+
+	#[test]
+	fn world_health_bar_queries_are_disjoint() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_systems(Update, sync_world_health_bars);
+		app.update();
 	}
 }

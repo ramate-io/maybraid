@@ -24,8 +24,8 @@ pub(crate) fn sync_command_status_text(
 	armed: Res<WeaponsArmed>,
 	engagement: Res<NpcEngagement>,
 	session: Res<RangeSession>,
-	players: Query<&Health, With<Player>>,
-	npcs: Query<&Health, With<Npc>>,
+	players: Query<&Health, (With<Player>, Without<::damage::Downed>)>,
+	npcs: Query<&Health, (With<Npc>, Without<::damage::Downed>)>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
 	let fire = if armed.0 { "armed" } else { "paused" };

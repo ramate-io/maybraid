@@ -65,7 +65,11 @@ proxies use the `CIVILIAN` interest layer, so combat `CHARACTER` directives do
 not discover them. A shot is a
 `RECEIVED_FIRE` stimulus (last-known position plus decaying threat), not a
 fabricated sighting. Occupancy counts live character subjects and hide claims
-so civilians do not pile into the same pocket.
+so civilians do not pile into the same pocket. In this mode, civilians who
+flee more than 48 m xz from the pad origin despawn and return on the spawn
+ring. Downed NPCs (armed or civilian) respawn after two seconds even while
+the corpse is still on the field. A pink HUD dot marks a fleeing civilian; a
+blue dot marks a hiding one.
 
 Rolled guns keep gallery looks
 (material and palette per slot) and sample projectile / cadence from the
