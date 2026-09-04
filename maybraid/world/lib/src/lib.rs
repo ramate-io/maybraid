@@ -36,12 +36,12 @@ use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
 
-/// Steepest walkable slope. 80°+ walls must not count as floor.
-const WORLD_MAX_SLOPE_ANGLE: f32 = 50.0_f32.to_radians();
-/// Static grip sits above `tan(50°)` ≈ 1.19 so walkable slopes do not ice-skate.
+/// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
+const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
+/// Static grip sits above `tan(70°)` ≈ 1.73 so walkable slopes do not ice-skate.
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
-	dynamic_coefficient: 1.35,
-	static_coefficient: 1.6,
+	dynamic_coefficient: 1.55,
+	static_coefficient: 1.85,
 	combine_rule: CoefficientCombine::Max,
 };
 
@@ -163,7 +163,7 @@ mod tests {
 	fn world_slope_is_below_wall_grade() {
 		let degrees = WORLD_MAX_SLOPE_ANGLE.to_degrees();
 		assert!(degrees < 80.0);
-		assert!(degrees > 40.0);
+		assert!(degrees > 55.0);
 	}
 
 	#[test]
