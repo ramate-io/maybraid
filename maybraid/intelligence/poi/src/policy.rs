@@ -80,14 +80,13 @@ impl Default for PoiLearningPolicy {
 pub enum PoiVisitPolicy {
 	Weighted {
 		novelty_weight: f32,
+		/// Prefer not to return before this many seconds. Not a hard freeze:
+		/// if every candidate is still cooling, selection keeps circulating.
 		revisit_cooldown_secs: f32,
 		repeat_weight: f32,
 	},
 	/// Learn up to `roster_size` destinations, then visit that roster in order.
-	Cycle {
-		roster_size: usize,
-		reshuffle_each_cycle: bool,
-	},
+	Cycle { roster_size: usize, reshuffle_each_cycle: bool },
 }
 
 impl Default for PoiVisitPolicy {

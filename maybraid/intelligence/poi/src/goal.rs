@@ -9,7 +9,7 @@ use crate::{KnownPoi, PoiId, PoiKind, PoiKnowledge, PoiRegistry, PoiSource};
 type CompletablePoiGoal<'a> = (
 	Entity,
 	&'a GlobalTransform,
-	&'a PoiGoal,
+	&'a mut PoiGoal,
 	Option<&'a mut RoutingIntelligenceUser>,
 	Option<&'a mut PoiKnowledge>,
 	Option<&'a mut PoiGoalState>,
@@ -51,6 +51,10 @@ pub struct PoiGoal {
 	pub kind: PoiKind,
 	pub location: MovementLocation,
 	pub selected_at: f32,
+	/// Seconds to remain inside [`Self::location`] after first arrival before
+	/// the goal completes. Zero finishes on the first containing sample.
+	pub linger_secs: f32,
+	arrived_at: Option<f32>,
 }
 
 impl PoiGoal {
@@ -62,6 +66,7 @@ impl PoiGoal {
 		position: Vec3,
 		arrival_radius: f32,
 		selected_at: f32,
+		linger_secs: f32,
 	) -> Self {
 		Self {
 			generation,
@@ -70,7 +75,27 @@ impl PoiGoal {
 			kind,
 			location: MovementLocation::new(position, arrival_radius.max(0.0)),
 			selected_at,
+			linger_secs: linger_secs.max(0.0),
+			arrived_at: None,
 		}
+	}
+
+	pub fn arrived_at(self) -> Option<f32> {
+		self.arrived_at
+	}
+
+	/// Starts the linger clock on first containment; leaving the disk resets it.
+	pub fn linger_ready(&mut self, inside: bool, now: f32) -> bool {
+		if !inside {
+			self.arrived_at = None;
+			return false;
+		}
+		let linger = self.linger_secs.max(0.0);
+		if linger <= 0.0 {
+			return true;
+		}
+		let arrived = *self.arrived_at.get_or_insert(now);
+		now - arrived >= linger
 	}
 }
 
@@ -107,6 +132,7 @@ pub fn begin_poi_goal(
 	user: Entity,
 	known: KnownPoi,
 	now: f32,
+	linger_secs: f32,
 	state: Option<&mut PoiGoalState>,
 ) {
 	let generation = if let Some(state) = state {
@@ -123,6 +149,7 @@ pub fn begin_poi_goal(
 		known.position,
 		known.arrival_radius,
 		now,
+		linger_secs,
 	));
 }
 
@@ -138,19 +165,24 @@ pub fn drive_poi_goals(
 		if let Some(mut routing) = routing {
 			routing.set_destination(goal.location.point);
 		} else {
-			movement.objective = MovementObjective::Reach(goal.location);
-			commands.entity(entity).insert(ReplanMovement);
+			let next = MovementObjective::Reach(goal.location);
+			if movement.objective != next {
+				movement.objective = next;
+				commands.entity(entity).insert(ReplanMovement);
+			}
 		}
 	}
 }
 
 /// Completes entity-bound goals independently of movement's internal plan state.
 pub fn complete_poi_goals(
+	time: Res<Time>,
 	mut users: Query<CompletablePoiGoal<'_>>,
 	mut completed: MessageWriter<PoiGoalCompleted>,
 	mut commands: Commands,
 ) {
-	for (entity, transform, goal, mut routing, mut knowledge, mut state) in &mut users {
+	let now = time.elapsed_secs();
+	for (entity, transform, mut goal, mut routing, mut knowledge, mut state) in &mut users {
 		if state.as_deref().is_some_and(|state| {
 			state.generation != goal.generation
 				|| state.target != goal.target
@@ -165,7 +197,8 @@ pub fn complete_poi_goals(
 			commands.entity(entity).remove::<PoiGoal>();
 			continue;
 		}
-		if !goal.location.contains(transform.translation()) {
+		let inside = goal.location.contains(transform.translation());
+		if !goal.linger_ready(inside, now) {
 			continue;
 		}
 		if let Some(routing) = routing.as_deref_mut() {

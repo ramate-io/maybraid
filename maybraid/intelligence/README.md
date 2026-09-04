@@ -37,6 +37,16 @@ against a subject's memberships, then mitigating beliefs are subtracted. Threat
 knowledge proposes spotting candidates; only spotting can establish visual contact.
 Management then grants an exclusive Ignore | Evade | Combat tactic over that set.
 
+## NPC
+
+- [`npc-intelligence`](npc) — one mixer (threat → tether → meander) and named
+  personality constructors. Personalities stamp coefficients and which actuators
+  exist; they do not re-score tactics. [Horizon](npc/HORIZON.md): groups over
+  mobs like forests over groves; High-band NPCs, mob brain always on the host.
+- [`personalities-playground`](personalities) — 400 m square pad of proto-mobs.
+  Fly the survey camera; public follows look-at so distance drives tactics.
+  `cargo run -p personalities-playground --release`.
+
 ## Combat
 
 - [`combat-targeting`](combat/targeting) — combat contact memory, source-owned active-set membership, factor algebra, decaying influences, continuity, and cached weight ranking.

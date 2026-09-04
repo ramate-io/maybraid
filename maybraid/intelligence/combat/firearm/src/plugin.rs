@@ -2,9 +2,9 @@
 
 use bevy::prelude::*;
 use combat_targeting::{CombatTargetingPlugin, CombatTargetingSystems};
-use damage::DamageSystems;
+use damage::{DamageApplied, DamageSystems};
 use firearm_user::FirearmUserSystems;
-use firearms::{FirearmHostSystems, FirearmWeaponSystems};
+use firearms::{FirearmHostSystems, FirearmWeaponSystems, WeaponFired};
 use movement_intelligence::MovementIntelligenceSystems;
 use player::PlayerPoseSystems;
 use spotting_intelligence::SpottingSystems;
@@ -39,6 +39,7 @@ impl Plugin for FirearmIntelligencePlugin {
 		if !app.is_plugin_added::<CombatTargetingPlugin>() {
 			app.add_plugins(CombatTargetingPlugin);
 		}
+		app.add_message::<DamageApplied>().add_message::<WeaponFired>();
 		app.configure_sets(
 			Update,
 			(
@@ -81,11 +82,22 @@ impl Plugin for FirearmIntelligencePlugin {
 			PostUpdate,
 			validate_firearm_aim_trajectories.in_set(FirearmIntelligenceSystems::ValidateAim),
 		)
-		.add_systems(
-			PostUpdate,
-			authorize_return_fire_from_damage.after(DamageSystems::Apply),
-		)
+		.add_systems(PostUpdate, authorize_return_fire_from_damage.after(DamageSystems::Apply))
 		.add_systems(PostUpdate, fire_at_spotted_targets.in_set(FirearmIntelligenceSystems::Fire))
 		.add_systems(PostUpdate, note_weapon_recoil.after(FirearmWeaponSystems::Fire));
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy::ecs::message::Messages;
+
+	#[test]
+	fn plugin_registers_messages_its_systems_read() {
+		let mut app = App::new();
+		app.add_plugins(MinimalPlugins).add_plugins(FirearmIntelligencePlugin);
+		assert!(app.world().get_resource::<Messages<DamageApplied>>().is_some());
+		assert!(app.world().get_resource::<Messages<WeaponFired>>().is_some());
 	}
 }

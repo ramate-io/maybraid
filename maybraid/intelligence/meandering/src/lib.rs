@@ -12,6 +12,10 @@ pub struct MeanderingIntelligenceUser {
 	pub radius: f32,
 	pub visit_policy: PoiVisitPolicy,
 	pub selection_interval: f32,
+	/// Seconds to remain at a reached POI before the goal completes.
+	pub linger_secs: f32,
+	/// Higher-order grant. When false, this brain does not start new POI goals.
+	pub enabled: bool,
 	next_selection_at: f32,
 }
 
@@ -21,6 +25,8 @@ impl Default for MeanderingIntelligenceUser {
 			radius: 200.0,
 			visit_policy: PoiVisitPolicy::default(),
 			selection_interval: 0.25,
+			linger_secs: 4.0,
+			enabled: true,
 			next_selection_at: 0.0,
 		}
 	}
@@ -78,6 +84,9 @@ pub fn select_meandering_goals(
 	for (entity, transform, mut meandering, learner, mut knowledge, mut visits, mut state) in
 		&mut users
 	{
+		if !meandering.enabled {
+			continue;
+		}
 		if now < meandering.next_selection_at {
 			continue;
 		}
@@ -103,6 +112,10 @@ pub fn select_meandering_goals(
 				})
 				.collect()
 		};
+		let candidates = not_already_there(at, candidates);
+		if candidates.is_empty() {
+			continue;
+		}
 		let Some(id) =
 			choose_poi(&mut visits, meandering.visit_policy, &candidates, now, |known| {
 				meandering_score(known, at, radius, &learner.interests)
@@ -114,7 +127,14 @@ pub fn select_meandering_goals(
 			continue;
 		};
 		knowledge.include_source(id, PoiSource::OBJECTIVE);
-		begin_poi_goal(&mut commands, entity, known, now, state.as_deref_mut());
+		begin_poi_goal(
+			&mut commands,
+			entity,
+			known,
+			now,
+			meandering.linger_secs,
+			state.as_deref_mut(),
+		);
 	}
 }
 
@@ -131,6 +151,16 @@ fn meandering_score(
 
 fn xz_distance(a: Vec3, b: Vec3) -> f32 {
 	a.xz().distance(b.xz())
+}
+
+/// Skip POIs the mover is already standing in so completing one does not
+/// immediately re-issue the same goal. If every known destination is here,
+/// wait; discovery can still add another.
+fn not_already_there(at: Vec3, candidates: Vec<KnownPoi>) -> Vec<KnownPoi> {
+	candidates
+		.into_iter()
+		.filter(|known| xz_distance(at, known.position) > known.arrival_radius)
+		.collect()
 }
 
 #[cfg(test)]
@@ -158,6 +188,28 @@ mod tests {
 			meandering_score(known(1, 10.0), Vec3::ZERO, 200.0, &interests)
 				> meandering_score(known(2, 100.0), Vec3::ZERO, 200.0, &interests)
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn skips_pois_the_mover_already_occupies() -> anyhow::Result<()> {
+		let kind = PoiKind::new("test/place");
+		let here = KnownPoi {
+			id: PoiId(1),
+			entity: None,
+			kind,
+			position: Vec3::ZERO,
+			arrival_radius: 2.0,
+			salience: 1.0,
+			confidence: 1.0,
+			sources: PoiSource::LOCAL_SCAN,
+			first_observed_at: 0.0,
+			last_observed_at: 0.0,
+		};
+		let away = KnownPoi { id: PoiId(2), position: Vec3::X * 10.0, ..here };
+		assert!(not_already_there(Vec3::ZERO, vec![here]).is_empty());
+		assert_eq!(not_already_there(Vec3::ZERO, vec![here, away]).len(), 1);
+		assert_eq!(not_already_there(Vec3::ZERO, vec![here, away])[0].id, PoiId(2));
 		Ok(())
 	}
 }

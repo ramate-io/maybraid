@@ -25,6 +25,7 @@ pub struct JourneyingIntelligenceUser {
 	pub seed: u64,
 	pub selection_interval: f32,
 	pub empty_tile_retry_secs: f32,
+	pub linger_secs: f32,
 	selection_step: u64,
 	next_selection_at: f32,
 	empty_tiles: HashMap<IVec2, f32>,
@@ -41,6 +42,7 @@ impl Default for JourneyingIntelligenceUser {
 			seed: 0,
 			selection_interval: 0.5,
 			empty_tile_retry_secs: 30.0,
+			linger_secs: 0.0,
 			selection_step: 0,
 			next_selection_at: 0.0,
 			empty_tiles: HashMap::new(),
@@ -147,7 +149,14 @@ pub fn select_journeying_goals(
 			continue;
 		};
 		knowledge.include_source(id, PoiSource::OBJECTIVE);
-		begin_poi_goal(&mut commands, entity, known, now, state.as_deref_mut());
+		begin_poi_goal(
+			&mut commands,
+			entity,
+			known,
+			now,
+			journeying.linger_secs,
+			state.as_deref_mut(),
+		);
 	}
 }
 

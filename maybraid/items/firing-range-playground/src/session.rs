@@ -1,29 +1,20 @@
 //! Duel vs free-for-all session. FFA rebuilds the field from generated loadouts.
 
 use bevy::prelude::*;
-use combat_targeting::CombatTargeting;
 use crozon_character_items::{FirearmSpec, FirearmStats, ItemRng};
 use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
-use evasion_intelligence::{EvasionIntelligenceUser, EvasionSettings};
-use firearm_intelligence::{
-	FirearmEngagement, FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting,
-};
+use firearm_intelligence::FirearmEngagement;
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
 use firearms::FirearmConcept;
-use fleeing_intelligence::{FleeingSettings, FleeingUser};
-use hiding_intelligence::{HidingSettings, HidingUser};
-use movement_intelligence::{
-	MovementIntelligence, MovementLocation, MovementObjective, VantageStandoffs,
-};
+use npc_intelligence::{NpcBody, NpcInstall, Personality};
 use player::{
 	spawn_npc_visual, spawn_npc_with_hidden_capsule, spawn_player_visual,
 	spawn_player_with_hidden_capsule, Npc, Player, PlayerLook, PlayerVisual,
 };
-use spotting_intelligence::{InterestLayers, SpotDirective, SpottingSettings, SpottingUser};
 use std::f32::consts::FRAC_PI_2;
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -48,9 +39,6 @@ const FFA_PLAYER_CLEARANCE: f32 = 10.0;
 const FFA_UPPER_RING_MIN: f32 = 10.0;
 const FFA_UPPER_RING_MAX: f32 = 15.0;
 const COMBAT_SPOTTING_RANGE: f32 = 80.0;
-const COMBAT_SPOTTING_CANDIDATES: usize = 8;
-const COMBAT_SPOTTING_SAMPLES: usize = 8;
-const COMBAT_DISCOVERY_SECS: f32 = 0.125;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum RangeMode {
@@ -326,41 +314,21 @@ pub(crate) fn install_npc_civilian(
 	health: Option<Health>,
 ) {
 	let hull = LocomotionCapsule::HUMANOID;
-	let mut movement =
-		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, hull.radius)));
-	movement.ability.agent_radius = hull.radius;
-	movement.ability.feet_below_origin = hull.half_height();
-	movement.ability.candidate_budget.max_candidates = 6;
-	movement.ability.candidate_budget.horizon = 24.0;
-	let eye_offset = Vec3::Y * (movement.ability.eye_height - movement.ability.feet_below_origin);
-	let directive = SpotDirective {
-		layers: InterestLayers::CHARACTER,
-		range: COMBAT_SPOTTING_RANGE,
-		priority: 1,
-		desired_count: 4,
-		freshness_secs: 0.5,
-		discovery_interval_secs: COMBAT_DISCOVERY_SECS,
-		respot_interval_secs: 0.125,
-		max_samples_per_subject: 4,
-	};
-	let spotting =
-		SpottingUser::new(eye_offset, [directive]).with_settings(SpottingSettings::new(4, 4, 4.0));
-	commands.entity(npc).insert((
-		Civilian,
-		movement,
-		spotting,
-		EvasionIntelligenceUser::new(EvasionSettings { flee_distance: 8.0, memory_secs: 4.0 }),
-		FleeingUser::new(FleeingSettings { radius: 16.0 }),
-		HidingUser::new(HidingSettings {
-			horizon: 14.0,
-			occupancy_radius: 2.4,
-			azimuths: 8,
-			standoffs: [4.0, 8.0],
-		}),
-		ThreatManagementIntelligence::civilian(),
-		health.unwrap_or_default(),
-		headshot_band_for(hull),
-	));
+	Personality::Civilian.install(
+		commands,
+		npc,
+		NpcInstall {
+			at,
+			body: npc_body(hull),
+			health: health.unwrap_or_default(),
+			armed: false,
+			spotting_range: Some(COMBAT_SPOTTING_RANGE),
+			discovery_radius: Some(COMBAT_SPOTTING_RANGE),
+			threat_override: Some(ThreatManagementIntelligence::civilian()),
+			..NpcInstall::default()
+		},
+	);
+	commands.entity(npc).insert((Civilian, headshot_band_for(hull)));
 }
 
 pub(crate) fn install_npc_combat(
@@ -371,56 +339,30 @@ pub(crate) fn install_npc_combat(
 	health: Option<Health>,
 ) {
 	let hull = hull_from_kit(kit.as_ref());
-	let mut movement =
-		MovementIntelligence::new(MovementObjective::Reach(MovementLocation::new(at, hull.radius)));
-	movement.ability.agent_radius = hull.radius;
-	movement.ability.feet_below_origin = hull.half_height();
-	movement.ability.candidate_budget.max_candidates = 8;
-	movement.ability.candidate_budget.horizon = 30.0;
-	movement.ability.vantage_standoffs = VantageStandoffs::from_radii(&[6.0, 10.0]);
-	movement.ability.vantage_azimuths = 4;
-	let mut combat = FirearmIntelligence::new();
-	combat.settings.accuracy = 0.88;
-	combat.settings.motion_tracking = 0.55;
-	combat.settings.counter_recoil = 0.75;
-	combat.settings.vision = 4;
-	combat.settings.trigger_happiness = 0.9;
-	let mut combat_movement = FirearmMovementIntelligence::new();
-	combat_movement.settings.range = (8.0, 1.0);
-	combat_movement.settings.cover = 0.5;
-	combat_movement.settings.flee = (0.0, 8.0);
-	let eye_offset = Vec3::Y * (movement.ability.eye_height - movement.ability.feet_below_origin);
-	let directive = SpotDirective {
-		layers: InterestLayers::CHARACTER,
-		range: COMBAT_SPOTTING_RANGE,
-		priority: 1,
-		desired_count: COMBAT_SPOTTING_CANDIDATES,
-		freshness_secs: combat.settings.fire_spotting_freshness.max(0.125),
-		discovery_interval_secs: COMBAT_DISCOVERY_SECS,
-		respot_interval_secs: 0.125,
-		max_samples_per_subject: usize::from(combat.settings.vision.max(1)),
-	};
-	let spotting = SpottingUser::new(eye_offset, [directive]).with_settings(SpottingSettings::new(
-		COMBAT_SPOTTING_CANDIDATES,
-		COMBAT_SPOTTING_SAMPLES,
-		combat.settings.target_spotting_memory,
-	));
+	Personality::Brawler.install(
+		commands,
+		npc,
+		NpcInstall {
+			at,
+			body: npc_body(hull),
+			health: health.unwrap_or_default(),
+			armed: true,
+			engagement: Some(FirearmEngagement::hold()),
+			spotting_range: Some(COMBAT_SPOTTING_RANGE),
+			discovery_radius: Some(COMBAT_SPOTTING_RANGE),
+			threat_override: Some(ThreatManagementIntelligence::ffa()),
+			..NpcInstall::default()
+		},
+	);
 	let mut entity = commands.entity(npc);
-	entity.insert((
-		movement,
-		combat_movement,
-		combat,
-		spotting,
-		CombatTargeting::default(),
-		FirearmTargeting::default(),
-		FirearmEngagement::hold(),
-		ThreatManagementIntelligence::ffa(),
-		health.unwrap_or_default(),
-		headshot_band_for(hull),
-	));
+	entity.insert(headshot_band_for(hull));
 	if let Some(kit) = kit {
 		entity.insert(kit);
 	}
+}
+
+fn npc_body(hull: LocomotionCapsule) -> NpcBody {
+	NpcBody { agent_radius: hull.radius, feet_below_origin: hull.half_height(), eye_height: 1.45 }
 }
 
 fn hull_from_appearance(appearance: &BraidmanConfig) -> LocomotionCapsule {
@@ -536,6 +478,11 @@ pub(crate) fn spawn_player_character(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use combat_targeting::CombatTargeting;
+	use evasion_intelligence::EvasionIntelligenceUser;
+	use firearm_intelligence::FirearmIntelligence;
+	use fleeing_intelligence::FleeingUser;
+	use hiding_intelligence::HidingUser;
 
 	#[test]
 	fn npc_ring_stays_on_the_spawn_plane() {
@@ -602,8 +549,6 @@ mod tests {
 		let ground_b = npc_translation(&spawn, 2, 6);
 		assert!(ground_a.distance(ground_b) > 30.0);
 		assert!(ground_a.distance(ground_b) < COMBAT_SPOTTING_RANGE);
-		assert!(COMBAT_DISCOVERY_SECS <= 0.125);
-		assert!(COMBAT_SPOTTING_SAMPLES >= COMBAT_SPOTTING_CANDIDATES);
 	}
 
 	#[test]
@@ -638,5 +583,6 @@ mod tests {
 		assert!(world.get::<HidingUser>(npc).is_some());
 		assert!(world.get::<CombatTargeting>(npc).is_none());
 		assert!(world.get::<FirearmIntelligence>(npc).is_none());
+		assert!(world.get::<npc_intelligence::NpcIntelligence>(npc).is_some());
 	}
 }

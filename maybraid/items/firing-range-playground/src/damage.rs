@@ -5,8 +5,11 @@ use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, Fir
 use firearm_user::FirearmUser;
 use fleeing_intelligence::FleeingUser;
 use hiding_intelligence::{HideClaim, HidingUser};
+use meandering_intelligence::MeanderingIntelligenceUser;
 use movement_intelligence::{MovementIntelligence, ReplanMovement};
+use npc_intelligence::NpcIntelligence;
 use player::{LocomotionCapsule, MoveWish, Npc, Player};
+use poi_intelligence::{PoiGoal, PoiIntelligenceUser, PoiKnowledge, PoiVisitState};
 use spotting_intelligence::{SpotSubject, SpottingUser};
 
 use crate::session::{Civilian, RangeSession, FLEE_OUT_RANGE};
@@ -75,6 +78,16 @@ pub(crate) fn queue_downed_respawns(
 			threat_management_intelligence::ThreatManagementIntelligence,
 			threat_management_intelligence::CombatSelected,
 			threat_management_intelligence::EvadeSelected,
+			NpcIntelligence,
+		)>();
+		commands.entity(entity).remove::<(
+			MeanderingIntelligenceUser,
+			PoiIntelligenceUser,
+			PoiKnowledge,
+			PoiVisitState,
+			PoiGoal,
+			tether_intelligence::TetherIntelligenceUser,
+			tether_intelligence::TetherMemory,
 		)>();
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
