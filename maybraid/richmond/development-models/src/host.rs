@@ -16,8 +16,9 @@ use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
 use richmond_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, RingFortHost,
-	ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge, TrazaloidTower,
+	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, OldCityMarketTerrace,
+	RingFortHost, ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge,
+	TempleSanctum, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
@@ -33,14 +34,16 @@ pub enum DevelopmentHost {
 	LesHallesRoof(Box<PitchedRoof>, Transform),
 	ShepherdsHouse(Arc<ShepherdsHouse>, Transform),
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
+	OldCityMarketTerrace(Arc<OldCityMarketTerrace>, Transform),
 	RingFortCircularTower(Arc<CircularTower>, Transform),
 	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
 	RingFortGalleryTerrace(Box<GalleryTerrace>, Transform),
 	RingFortGalleryColonnade(Box<GalleryColonnade>, Transform),
 	RingFortGalleryRoof(Box<RectangularPitchedRoofComplex>, Transform),
 	SingleHighrise(Arc<SingleHighrise>, Transform),
+	TempleSanctum(Arc<TempleSanctum>, Transform),
 	WizardsTower(Arc<WizardsTower>, Transform),
-	Skybridge(Arc<Skybridge>, Transform),
+	SkybridgeHall(Arc<Skybridge>, Transform),
 }
 
 impl DevelopmentHost {
@@ -55,6 +58,9 @@ impl DevelopmentHost {
 			}
 			Self::ShepherdsHouse(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHut(building, transform) => spawn(commands, building, *transform),
+			Self::OldCityMarketTerrace(building, transform) => {
+				spawn(commands, building, *transform)
+			}
 			Self::RingFortCircularTower(building, transform) => {
 				spawn(commands, building, *transform)
 			}
@@ -71,10 +77,11 @@ impl DevelopmentHost {
 				spawn(commands, building.as_ref(), *transform)
 			}
 			Self::SingleHighrise(building, transform) => spawn(commands, building, *transform),
+			Self::TempleSanctum(building, transform) => spawn(commands, building, *transform),
 			Self::WizardsTower(building, transform) => {
 				spawn_wizards_tower(commands, building, *transform)
 			}
-			Self::Skybridge(building, transform) => spawn(commands, building, *transform),
+			Self::SkybridgeHall(building, transform) => spawn(commands, building, *transform),
 		}
 	}
 }
@@ -92,13 +99,16 @@ impl DevelopmentHosts for BuiltDevelopment {
 			Self::RingFort(development) => development.hosts(),
 			Self::TempleComplex(development) => {
 				let mut hosts = shepherd_building_hosts(&development.halls);
-				hosts.push(single_highrise_host(&development.sanctum));
+				hosts.push(DevelopmentHost::TempleSanctum(
+					Arc::new(development.sanctum.building.clone()),
+					yaw_about_xz(development.sanctum.center_xz, development.sanctum.yaw),
+				));
 				hosts
 			}
 			Self::SingleHighrise(development) => {
 				vec![single_highrise_host(&development.building)]
 			}
-			Self::SuburbanHomes(development) => shepherd_building_hosts(&development.homes),
+			Self::SuburbanHomes(development) => shepherd_building_hosts(development.buildings()),
 			Self::WizardsTower(development) => vec![DevelopmentHost::WizardsTower(
 				Arc::new(development.building.building.tower.clone()),
 				development.host_transform(),
@@ -107,14 +117,23 @@ impl DevelopmentHosts for BuiltDevelopment {
 				let mut hosts = shepherd_building_hosts(&development.market);
 				hosts.extend(development.towers.iter().map(single_highrise_host));
 				hosts.extend(development.bridges.iter().map(|placed| {
-					DevelopmentHost::Skybridge(
+					DevelopmentHost::SkybridgeHall(
 						Arc::new(placed.building.clone()),
 						yaw_about_xz(placed.center_xz, placed.yaw),
 					)
 				}));
 				hosts
 			}
-			Self::OldCityMarket(development) => shepherd_building_hosts(&development.buildings),
+			Self::OldCityMarket(development) => {
+				let mut hosts = shepherd_building_hosts(development.buildings());
+				hosts.extend(development.terraces().map(|terrace| {
+					DevelopmentHost::OldCityMarketTerrace(
+						Arc::new(terrace.building.clone()),
+						yaw_about_xz(terrace.center_xz, terrace.yaw),
+					)
+				}));
+				hosts
+			}
 		}
 	}
 }
@@ -255,4 +274,87 @@ where
 {
 	let bounds = building_bounds(building);
 	spawn_building_components(commands, building, transform, bounds)
+}
+
+#[cfg(test)]
+mod tests {
+	use bevy::math::bounding::Aabb3d;
+	use bevy::math::{Vec2, Vec3};
+	use procedural_common::NoiseParams;
+	use richmond_buildings::{Confines, Fit};
+	use richmond_developments::PlacedBuilding;
+
+	use super::{DevelopmentHost, DevelopmentHosts};
+	use crate::archetype_generation::{ArchetypeGenerator, PlacedDevelopment};
+	use crate::BuiltDevelopment;
+
+	#[test]
+	fn placed_single_highrise_emits_exactly_one_host() -> anyhow::Result<()> {
+		let cell = Aabb3d::from_min_max(Vec3::new(-30.0, 0.0, -30.0), Vec3::new(30.0, 64.0, 30.0));
+		let confines = Confines::from_bounds(cell);
+		let (building, _) = richmond_developments::SingleHighrise::fit_to_confines(
+			&confines,
+			NoiseParams::default(),
+		)?;
+		let development = BuiltDevelopment::SingleHighrise(Box::new(PlacedDevelopment {
+			cell,
+			building: PlacedBuilding {
+				center_xz: Vec2::ZERO,
+				yaw: 0.0,
+				footprint: Vec2::splat(60.0),
+				ground_height: 0.0,
+				building,
+			},
+		}));
+		let hosts = development.hosts();
+		assert_eq!(hosts.len(), 1);
+		assert!(matches!(hosts[0], DevelopmentHost::SingleHighrise(..)));
+		Ok(())
+	}
+
+	#[test]
+	fn suburban_and_skybridge_hosts_stay_bounded_and_include_new_buildings() -> anyhow::Result<()> {
+		let cell = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(300.0, 1.0, 300.0));
+		let suburban_confines = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(45.0, 10.0, 45.0),
+			Vec3::new(255.0, 26.0, 255.0),
+		));
+		let suburban = ArchetypeGenerator::build_suburban_homes(
+			cell,
+			&suburban_confines,
+			NoiseParams { seed: 29, ..NoiseParams::default() },
+		)
+		.ok_or_else(|| anyhow::anyhow!("suburban neighborhood did not fit"))?;
+		let expected = suburban.buildings().count();
+		let hosts = BuiltDevelopment::SuburbanHomes(Box::new(suburban)).hosts();
+		assert_eq!(hosts.len(), expected);
+		assert!(hosts.len() <= 13);
+		assert!(hosts.iter().all(|host| matches!(
+			host,
+			DevelopmentHost::ShepherdsHouse(..) | DevelopmentHost::ShepherdsHut(..)
+		)));
+
+		let bazaar_confines = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(50.0, 10.0, 50.0),
+			Vec3::new(250.0, 90.0, 250.0),
+		));
+		let bazaar = ArchetypeGenerator::build_skybridge_bazaar(
+			cell,
+			&bazaar_confines,
+			NoiseParams::default(),
+		)
+		.ok_or_else(|| anyhow::anyhow!("skybridge bazaar did not fit"))?;
+		let expected = bazaar.market.len() + bazaar.towers.len() + bazaar.bridges.len();
+		let hosts = BuiltDevelopment::SkybridgeBazaar(Box::new(bazaar)).hosts();
+		assert_eq!(hosts.len(), expected);
+		assert!(hosts.len() <= 21);
+		assert_eq!(
+			hosts
+				.iter()
+				.filter(|host| matches!(host, DevelopmentHost::SkybridgeHall(..)))
+				.count(),
+			2
+		);
+		Ok(())
+	}
 }

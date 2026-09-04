@@ -267,6 +267,27 @@ mod tests {
 	}
 
 	#[test]
+	fn every_archetype_focus_preset_parses() -> Result<(), String> {
+		let presets = [
+			("temple-complex", DevelopmentFocus::TempleComplex),
+			("single-highrise", DevelopmentFocus::SingleHighrise),
+			("suburban-homes", DevelopmentFocus::SuburbanHomes),
+			("wizards-tower", DevelopmentFocus::WizardsTower),
+			("skybridge-bazaar", DevelopmentFocus::SkybridgeBazaar),
+			("old-city-market", DevelopmentFocus::OldCityMarket),
+		];
+		for (name, expected) in presets {
+			let startup =
+				PlaygroundCommand::parse_startup_tail(vec![
+					format!("--focus-development={name}").into()
+				])?;
+			assert_eq!(startup.focus_development, Some(expected), "{name}");
+			assert!(startup.command.is_none(), "{name}");
+		}
+		Ok(())
+	}
+
+	#[test]
 	fn focus_assigns_exclusive_weight() {
 		let mut config = DevelopmentConfig::default();
 		DevelopmentFocus::TempleComplex.apply(&mut config);

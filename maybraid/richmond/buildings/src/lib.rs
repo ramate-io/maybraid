@@ -60,7 +60,10 @@ pub use fit::{
 	aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError, FitTarget,
 	MultiConfines, MultiFit, SpaceKind, StackRegion,
 };
-pub use monotower::{MixedUseLesHallesMonotower, MixedUseLesHallesStorey};
+pub use monotower::{
+	ApartmentMonotower, MixedUseLesHallesMonotower, MixedUseLesHallesStorey, SingleHighrise,
+	SingleHighriseFloorPlan, SingleHighrisePlan, SingleHighriseShaftSlot, SingleHighriseStorey,
+};
 pub use openings::{
 	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows,
 	sync_connectable_openings_from_mapped, BaySpec, MappedOpening, MappedOpeningQuad,

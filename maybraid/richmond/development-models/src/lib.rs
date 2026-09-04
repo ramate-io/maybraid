@@ -20,6 +20,7 @@ pub mod host;
 pub mod hydro;
 pub mod index;
 pub mod les_halles;
+pub mod market;
 pub mod pad;
 pub mod padded;
 pub mod plugin;
@@ -44,9 +45,10 @@ pub use cell::{
 pub use config::DevelopmentConfig;
 pub use development::{
 	select_kind, ArchetypeCell, DevelopmentCell, DevelopmentContent, DevelopmentKind,
-	DevelopmentPad, LesHallesCell, RingFortCell, ShepherdsCommuneCell, ShepherdsVillageCell,
+	DevelopmentPad, LesHallesCell, OldCityMarketCell, RingFortCell, ShepherdsCommuneCell,
+	ShepherdsVillageCell,
 };
-pub use finish::DevelopmentFinish;
+pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
 pub use host::{DevelopmentHost, DevelopmentHosts};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,

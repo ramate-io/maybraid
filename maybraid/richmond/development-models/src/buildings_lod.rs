@@ -18,7 +18,7 @@ use richmond_buildings::{
 };
 use richmond_developments::{
 	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, SingleHighrise,
-	Skybridge, TrazaloidTower,
+	Skybridge as SkybridgeHall, TempleSanctum, TrazaloidTower,
 };
 use std::sync::Arc;
 
@@ -111,7 +111,8 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, ComponentsOnly<GalleryColonnade>);
 		avian_host!(app, ComponentsOnly<RectangularPitchedRoofComplex>);
 		avian_host!(app, ComponentsOnly<Arc<SingleHighrise>>);
+		avian_host!(app, ComponentsOnly<Arc<TempleSanctum>>);
 		avian_host!(app, WizardsTower);
-		avian_host!(app, ComponentsOnly<Arc<Skybridge>>);
+		avian_host!(app, ComponentsOnly<Arc<SkybridgeHall>>);
 	}
 }

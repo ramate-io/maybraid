@@ -52,6 +52,11 @@ impl PadParams {
 		Self { berm: 6.0, ease: 16.0, round: PAD_ROUND }
 	}
 
+	/// Shared market terrace: compact apron around a whole stall cluster.
+	pub fn market() -> Self {
+		Self { berm: 3.0, ease: 12.0, round: 2.0 }
+	}
+
 	/// Flatten half-extents: building plan plus berm.
 	pub fn flatten_half(self, building_half: Vec2) -> Vec2 {
 		building_half + Vec2::splat(self.berm.max(0.0))

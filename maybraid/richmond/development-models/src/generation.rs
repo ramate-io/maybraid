@@ -72,6 +72,17 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 					None => Self::empty(cell),
 				}
 			}
+			DevelopmentKind::OldCityMarket => {
+				match ArchetypeGenerator::build_old_city_market(
+					spatial_index.terrain_store(),
+					&layout,
+					cell,
+					&config,
+				) {
+					Some((market, pads)) => Self::with_old_city_market(cell, market, pads),
+					None => Self::empty(cell),
+				}
+			}
 			DevelopmentKind::RingFort => {
 				let center = extent.center();
 				let Some(height) =
@@ -93,8 +104,7 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for DevelopmentCell {
 			| DevelopmentKind::SingleHighrise
 			| DevelopmentKind::SuburbanHomes
 			| DevelopmentKind::WizardsTower
-			| DevelopmentKind::SkybridgeBazaar
-			| DevelopmentKind::OldCityMarket) => {
+			| DevelopmentKind::SkybridgeBazaar) => {
 				let center = extent.center();
 				let Some(height) =
 					composed_height_at(spatial_index.terrain_store(), &layout, center.x, center.z)
@@ -252,11 +262,11 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for BuiltDevelopment {
 			DevelopmentKind::TempleComplex => {
 				let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 				let confines = cell.confines()?;
-				let wall = cell.archetype()?.finish.wall.clone();
+				let finish = cell.archetype()?.finish.clone();
 				let noise = NoiseParams { seed, ..NoiseParams::default() };
 				BuiltDevelopment::TempleComplex(Box::new(
 					ArchetypeGenerator::build_temple_complex(cell_aabb, &confines, noise)?
-						.with_landmark_material(wall),
+						.with_finish(finish.wall, finish.roof),
 				))
 			}
 			DevelopmentKind::SingleHighrise => {
@@ -281,28 +291,28 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for BuiltDevelopment {
 			DevelopmentKind::WizardsTower => {
 				let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 				let confines = cell.confines()?;
+				let finish = cell.archetype()?.finish.clone();
 				let noise = NoiseParams { seed, ..NoiseParams::default() };
-				BuiltDevelopment::WizardsTower(Box::new(ArchetypeGenerator::build_wizards_tower(
-					cell_aabb, confines, noise,
-				)?))
+				let mut development =
+					ArchetypeGenerator::build_wizards_tower(cell_aabb, confines, noise)?;
+				development.building.building =
+					development.building.building.with_finish(finish.wall, finish.roof);
+				BuiltDevelopment::WizardsTower(Box::new(development))
 			}
 			DevelopmentKind::SkybridgeBazaar => {
 				let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
 				let confines = cell.confines()?;
-				let wall = cell.archetype()?.finish.wall.clone();
+				let connector = cell.archetype()?.finish.wall.clone();
 				let noise = NoiseParams { seed, ..NoiseParams::default() };
 				BuiltDevelopment::SkybridgeBazaar(Box::new(
 					ArchetypeGenerator::build_skybridge_bazaar(cell_aabb, &confines, noise)?
-						.with_tower_material(wall),
+						.with_bridge_material(connector),
 				))
 			}
 			DevelopmentKind::OldCityMarket => {
 				let cell = SpatialIndex::<DevelopmentCell>::get(spatial_index, id)?;
-				let confines = cell.confines()?;
-				let noise = NoiseParams { seed, ..NoiseParams::default() };
-				BuiltDevelopment::OldCityMarket(Box::new(
-					ArchetypeGenerator::build_old_city_market(cell_aabb, &confines, noise)?,
-				))
+				let content = cell.old_city_market()?;
+				BuiltDevelopment::OldCityMarket(Box::new(content.market.clone()))
 			}
 		};
 		Some((built, cell_aabb))

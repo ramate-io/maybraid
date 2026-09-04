@@ -3,7 +3,7 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use procedural_common::SeededHash;
-use richmond_developments::{ShepherdsCommune, ShepherdsVillage};
+use richmond_developments::{OldCityMarket, ShepherdsCommune, ShepherdsVillage};
 
 use crate::cell::{
 	available_footprint, cell_selected, inscribe_yawed_extents, sample_confines_yaw,
@@ -11,7 +11,7 @@ use crate::cell::{
 	RING_FORT_MAX_FOOTPRINT, RING_FORT_MIN_CONFINES_HEIGHT, RING_FORT_MIN_FOOTPRINT,
 };
 use crate::config::DevelopmentConfig;
-use crate::finish::DevelopmentFinish;
+use crate::finish::{DevelopmentFinish, DevelopmentFinishRole};
 use crate::pad::{cell_center_xz, PadComplex, PadParams};
 use richmond_buildings::{Confines, Openings};
 
@@ -62,6 +62,13 @@ pub struct ShepherdsCommuneCell {
 	pub commune: ShepherdsCommune,
 }
 
+/// Data owned only by a connected Old City Market cell.
+#[derive(Debug, Clone)]
+pub struct OldCityMarketCell {
+	pub pads: Vec<DevelopmentPad>,
+	pub market: OldCityMarket,
+}
+
 /// Data owned only by a selected ring-fort cell.
 #[derive(Debug, Clone)]
 pub struct RingFortCell {
@@ -90,6 +97,7 @@ pub enum DevelopmentContent {
 	LesHalles(LesHallesCell),
 	ShepherdsVillage(ShepherdsVillageCell),
 	ShepherdsCommune(ShepherdsCommuneCell),
+	OldCityMarket(OldCityMarketCell),
 	RingFort(RingFortCell),
 	Archetype(ArchetypeCell),
 }
@@ -112,6 +120,7 @@ impl DevelopmentCell {
 			DevelopmentContent::LesHalles(_) => DevelopmentKind::LesHalles,
 			DevelopmentContent::ShepherdsVillage(_) => DevelopmentKind::ShepherdsVillage,
 			DevelopmentContent::ShepherdsCommune(_) => DevelopmentKind::ShepherdsCommune,
+			DevelopmentContent::OldCityMarket(_) => DevelopmentKind::OldCityMarket,
 			DevelopmentContent::RingFort(_) => DevelopmentKind::RingFort,
 			DevelopmentContent::Archetype(content) => content.kind,
 		}
@@ -131,6 +140,7 @@ impl DevelopmentCell {
 			DevelopmentContent::LesHalles(content) => std::slice::from_ref(&content.pad),
 			DevelopmentContent::ShepherdsVillage(content) => &content.pads,
 			DevelopmentContent::ShepherdsCommune(content) => &content.pads,
+			DevelopmentContent::OldCityMarket(content) => &content.pads,
 			DevelopmentContent::RingFort(content) => std::slice::from_ref(&content.pad),
 			DevelopmentContent::Archetype(content) => std::slice::from_ref(&content.pad),
 		};
@@ -158,6 +168,13 @@ impl DevelopmentCell {
 	pub fn shepherds_commune(&self) -> Option<&ShepherdsCommuneCell> {
 		match &self.content {
 			DevelopmentContent::ShepherdsCommune(content) => Some(content),
+			_ => None,
+		}
+	}
+
+	pub fn old_city_market(&self) -> Option<&OldCityMarketCell> {
+		match &self.content {
+			DevelopmentContent::OldCityMarket(content) => Some(content),
 			_ => None,
 		}
 	}
@@ -269,6 +286,17 @@ impl DevelopmentCell {
 		}
 	}
 
+	pub fn with_old_city_market(
+		cell: Aabb3d,
+		market: OldCityMarket,
+		pads: Vec<DevelopmentPad>,
+	) -> Self {
+		Self {
+			cell,
+			content: DevelopmentContent::OldCityMarket(OldCityMarketCell { pads, market }),
+		}
+	}
+
 	pub fn with_ring_fort(cell: Aabb3d, pad_height: f32, config: &DevelopmentConfig) -> Self {
 		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
 		let max_foot = RING_FORT_MAX_FOOTPRINT;
@@ -332,7 +360,19 @@ impl DevelopmentCell {
 				confines_height,
 				confines_extent_xz,
 				confines_yaw: yaw,
-				finish: DevelopmentFinish::pick(hash),
+				finish: DevelopmentFinish::pick_for_role(
+					hash,
+					match kind {
+						DevelopmentKind::TempleComplex => DevelopmentFinishRole::Temple,
+						DevelopmentKind::SingleHighrise => DevelopmentFinishRole::Highrise,
+						DevelopmentKind::SuburbanHomes => DevelopmentFinishRole::SuburbanHome,
+						DevelopmentKind::WizardsTower => DevelopmentFinishRole::WizardsTower,
+						DevelopmentKind::SkybridgeBazaar => DevelopmentFinishRole::Connector,
+						DevelopmentKind::OldCityMarket => DevelopmentFinishRole::OldCityMarket,
+						_ => DevelopmentFinishRole::DefaultUrban,
+					},
+					false,
+				),
 			}),
 		}
 	}

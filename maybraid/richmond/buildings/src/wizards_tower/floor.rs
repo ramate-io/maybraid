@@ -10,6 +10,7 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
+use material_ref::MaterialRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::PartitionStyle;
@@ -24,6 +25,7 @@ use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTol
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::wizards_tower::must_assign_cardinal_portals;
+use crate::wizards_tower::WizardsTowerRoom;
 use crate::CellConstraints;
 
 /// One storey of the circular tower.
@@ -40,8 +42,12 @@ pub struct WizardsTowerFloor {
 	pub floor_rects: [FloorNode; 4],
 	/// Circular tread spire inside the spire square, fitted to storey \(Y\) bindings.
 	pub arc_spire: ArcSpire,
+	/// Four usable corner rooms, clear of the central stair shaft.
+	pub rooms: [WizardsTowerRoom; 4],
 	/// Warm lantern point light hanging over the usable floor (no mesh yet).
 	pub lantern: Vec3,
+	pub wall_material: Option<MaterialRef>,
+	pub room_material: Option<MaterialRef>,
 }
 
 impl WizardsTowerFloor {
@@ -97,8 +103,27 @@ impl WizardsTowerFloor {
 			fit_tolerance: FitTolerance::default(),
 			turns: 1.0,
 		});
+		let rooms = WizardsTowerRoom::quadrants(&constraints, radius, spire_half);
 
-		Self { storey_height, ring_wall, floor_caps, floor_rects, arc_spire, lantern, constraints }
+		Self {
+			storey_height,
+			ring_wall,
+			floor_caps,
+			floor_rects,
+			arc_spire,
+			rooms,
+			lantern,
+			wall_material: None,
+			room_material: None,
+			constraints,
+		}
+	}
+
+	pub fn with_materials(mut self, wall: MaterialRef, room: MaterialRef) -> Self {
+		self.wall_material = Some(wall);
+		self.room_material = Some(room.clone());
+		self.rooms = self.rooms.map(|authored_room| authored_room.with_wall_material(room.clone()));
+		self
 	}
 
 	pub(crate) fn emit_external_features(
@@ -118,6 +143,11 @@ impl WizardsTowerFloor {
 			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
 		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
 			children.push(Box::new(node.scene_with_lod(lod_ref)));
+		}
+		for room in &self.rooms {
+			for node in room.partition_nodes_for_level(LodSceneLevel::High).flatten() {
+				children.push(Box::new(node.scene_with_lod(lod_ref)));
+			}
 		}
 		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
 	}
@@ -183,11 +213,19 @@ impl WizardsTowerFloor {
 
 impl BuildingComponents for WizardsTowerFloor {
 	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
-		if Self::is_structure_level(level) {
-			self.ring_wall.sweep.partition_nodes_for_level(level)
-		} else {
-			Layers::new()
+		if !Self::is_structure_level(level) {
+			return Layers::new();
 		}
+		let mut out = self.ring_wall.sweep.partition_nodes_for_level(level);
+		if let Some(material) = &self.wall_material {
+			out = out.with_material(material.clone());
+		}
+		if Self::is_detail_level(level) {
+			for room in &self.rooms {
+				out.extend(room.partition_nodes_for_level(level));
+			}
+		}
+		out
 	}
 
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
@@ -196,13 +234,17 @@ impl BuildingComponents for WizardsTowerFloor {
 		}
 		let confines =
 			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
-		Layers::from_free(
+		let mut out = Layers::from_free(
 			self.floor_caps
 				.iter()
 				.chain(self.floor_rects.iter())
 				.map(|n| n.clone().with_confines(confines))
 				.collect(),
-		)
+		);
+		for room in &self.rooms {
+			out.extend(room.floor_nodes_for_level(level));
+		}
+		out
 	}
 
 	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
