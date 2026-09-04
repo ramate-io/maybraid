@@ -3500,6 +3500,7 @@ dependencies = [
  "spotting-intelligence-avian",
  "threat-intelligence",
  "threat-intelligence-damage",
+ "threat-management-intelligence",
 ]
 
 [[package]]
@@ -7117,6 +7118,19 @@ dependencies = [
  "anyhow",
  "bevy",
  "damage",
+ "threat-intelligence",
+]
+
+[[package]]
+name = "threat-management-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "combat-targeting",
+ "damage",
+ "evasion-intelligence",
+ "spotting-intelligence",
  "threat-intelligence",
 ]
 

@@ -26,6 +26,11 @@ pub fn rank_assailants(
 ) {
 	let now = time.elapsed_secs();
 	for (transform, mut evasion) in &mut users {
+		if !evasion.enabled {
+			evasion.signal = crate::EvasionSignal::idle();
+			evasion.ranked.clear();
+			continue;
+		}
 		if evasion.needs_rebalance(now) {
 			evasion.rebalance(now, transform.translation);
 		}

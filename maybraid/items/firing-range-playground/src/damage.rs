@@ -71,6 +71,11 @@ pub(crate) fn queue_downed_respawns(
 			ReplanMovement,
 			MoveWish,
 		)>();
+		commands.entity(entity).remove::<(
+			threat_management_intelligence::ThreatManagementIntelligence,
+			threat_management_intelligence::CombatSelected,
+			threat_management_intelligence::EvadeSelected,
+		)>();
 		if is_player {
 			respawn.player_at = Some(now + RESPAWN_SECS);
 			engagement.reset();

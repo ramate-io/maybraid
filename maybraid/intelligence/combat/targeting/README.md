@@ -28,6 +28,10 @@ membership route.
 Engagement adds one continuity unit only to the temporary factors used during
 ranking. It does not rewrite caller-owned `ActiveTarget::factors`.
 
+`enabled` is the higher-order grant. When false, spotting adapters must not
+admit `SPOTTING` membership and ranking clears the cached order. Entities
+without a management brain stay enabled.
+
 ## Opportunity and distance
 
 The rank system uses `Time` for memory expiry and influence decay, but does not

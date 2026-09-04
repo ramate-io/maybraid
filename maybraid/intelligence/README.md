@@ -27,10 +27,15 @@ Spotting deliberately resolves a known subject's exact live location at probe ti
   inboxes, retained threat memory, and source-owned spotting-hint export.
 - [`threat-intelligence-damage`](threat/damage) — maps applied injury onto
   decaying individual antagonism and a directed `RECEIVED_DAMAGE` observation.
+- [`threat-management-intelligence`](threat-management) — exclusive Ignore |
+  Evade | Combat grant over retained knowledge. Combat and evade populate
+  `ENEMYSHIP` membership; ignore retracts both so spotting, POI, and meander
+  can still drive.
 
 Threat classification is directional: a recipient's antagonist memory is matched
 against a subject's memberships, then mitigating beliefs are subtracted. Threat
 knowledge proposes spotting candidates; only spotting can establish visual contact.
+Management then grants an exclusive Ignore | Evade | Combat tactic over that set.
 
 ## Combat
 

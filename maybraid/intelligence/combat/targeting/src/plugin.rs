@@ -22,6 +22,11 @@ impl Plugin for CombatTargetingPlugin {
 pub fn rank_combat_targets(time: Res<Time>, mut combatants: Query<&mut CombatTargeting>) {
 	let now = time.elapsed_secs();
 	for mut targeting in &mut combatants {
+		if !targeting.enabled {
+			targeting.ranked.clear();
+			targeting.clear_engagement();
+			continue;
+		}
 		if targeting.needs_rebalance(now) {
 			targeting.rebalance(now);
 		}

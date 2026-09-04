@@ -57,6 +57,7 @@ use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
 use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
 use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
+use threat_management_intelligence::ThreatManagementPlugin;
 
 pub struct FiringRangePlugin;
 
@@ -89,6 +90,7 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(FirearmIntelligencePlugin)
 			.add_plugins(ThreatIntelligencePlugin)
 			.add_plugins(ThreatIntelligenceDamagePlugin)
+			.add_plugins(ThreatManagementPlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)
@@ -172,11 +174,7 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_npc_character,
 					session::spawn_held_system,
 					(damage::queue_flee_out_respawns, respawn_combatants).chain(),
-					(
-						vantage::sync_combat_spot_subjects,
-						vantage::sync_threat_combat_membership,
-						vantage::sync_threat_evasion_membership,
-					)
+					vantage::sync_combat_spot_subjects
 						.after(ThreatSystems::Discover)
 						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,

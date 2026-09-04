@@ -93,6 +93,8 @@ pub struct CombatTargeting {
 	pub algebra: TargetAlgebra,
 	pub engaged: Option<Entity>,
 	pub memory_secs: f32,
+	/// Higher-order grant. When false, spotting and ranking do not admit new work.
+	pub enabled: bool,
 	pub dirty: bool,
 	pub(crate) next_rebalance_at: f32,
 }
@@ -130,6 +132,18 @@ impl CombatTargeting {
 		}
 		self.dirty |= changed;
 		changed
+	}
+
+	pub fn clear_source(&mut self, source: TargetSource) {
+		let subjects: Vec<_> = self
+			.active
+			.iter()
+			.filter(|(_, target)| target.has_source(source))
+			.map(|(entity, _)| *entity)
+			.collect();
+		for entity in subjects {
+			self.remove_source(entity, source);
+		}
 	}
 
 	pub fn exclude(&mut self, entity: Entity, source: TargetSource) -> bool {
@@ -273,6 +287,7 @@ impl Default for CombatTargeting {
 			algebra: TargetAlgebra::default(),
 			engaged: None,
 			memory_secs: 3.0,
+			enabled: true,
 			dirty: true,
 			next_rebalance_at: 0.0,
 		}
@@ -322,6 +337,21 @@ mod tests {
 		assert_eq!(influence.decayed_value(2.0), 8.0);
 		assert_eq!(influence.decayed_value(6.0), 4.0);
 		assert_eq!(influence.decayed_value(10.0), 2.0);
+		Ok(())
+	}
+
+	#[test]
+	fn clear_source_removes_matching_membership() -> anyhow::Result<()> {
+		let entity = Entity::from_bits(1);
+		let mut targeting = CombatTargeting::default();
+		targeting.include(entity, TargetSource::ENEMYSHIP | TargetSource::SPOTTING);
+		targeting.clear_source(TargetSource::SPOTTING);
+		assert!(targeting
+			.active_target(entity)
+			.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP)
+				&& !target.has_source(TargetSource::SPOTTING)));
+		targeting.clear_source(TargetSource::ENEMYSHIP);
+		assert!(targeting.active_target(entity).is_none());
 		Ok(())
 	}
 

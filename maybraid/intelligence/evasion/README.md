@@ -11,8 +11,10 @@ of `Idle`, `Flee`, or `Hide`. It does not write
 Typical flow:
 
 1. Perception calls `upsert_sighting`; this records memory and includes `SPOTTING`.
-2. Roster / shot adapters call `include` or `note_stimulus` for `ENEMYSHIP` and
-   `RECEIVED_FIRE`. A shot must not fabricate a successful sighting.
+2. Threat-management or other policy adapters call `include` or `note_stimulus`
+   for `ENEMYSHIP` and `RECEIVED_FIRE`. A shot must not fabricate a successful
+   sighting. `enabled` is the higher-order grant; when false, spotting does not
+   admit new assailants and ranking emits idle.
 3. [`EvasionPlugin`](src/plugin.rs) rebalances and routes the signal by distance
    to the best actionable contact.
 4. [`fleeing-intelligence`](../fleeing) or [`hiding-intelligence`](../hiding)

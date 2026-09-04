@@ -1,9 +1,6 @@
 //! Register live combatants as semantic spotting subjects.
 
-use std::collections::HashSet;
-
 use bevy::prelude::*;
-use combat_targeting::{CombatTargeting, TargetSource};
 use damage::Downed;
 use evasion_intelligence::{
 	AssailantContact, AssailantFactor, AssailantSource, EvasionIntelligenceUser, TimedInfluence,
@@ -15,6 +12,7 @@ use threat_intelligence::{
 	AffiliationStrength, Affiliations, ThreatDiscoveryPolicy, ThreatGroupId, ThreatId,
 	ThreatIntelligenceUser, ThreatKnowledge, ThreatObservation, ThreatSource, ThreatSubject,
 };
+use threat_management_intelligence::{CombatSelected, EvadeSelected, ThreatManagementIntelligence};
 
 use crate::session::Civilian;
 
@@ -100,9 +98,14 @@ pub(crate) fn sync_range_threat_actors(
 		}
 	}
 	for entity in &downed {
-		commands
-			.entity(entity)
-			.remove::<(ThreatSubject, ThreatIntelligenceUser, ThreatKnowledge)>();
+		commands.entity(entity).remove::<(
+			ThreatSubject,
+			ThreatIntelligenceUser,
+			ThreatKnowledge,
+			ThreatManagementIntelligence,
+			CombatSelected,
+			EvadeSelected,
+		)>();
 	}
 }
 
@@ -139,52 +142,6 @@ pub(crate) fn seed_range_threat_observations(
 				ThreatSource::SESSION,
 				1.0,
 			));
-		}
-	}
-}
-
-/// Project retained semantic threats into combat-target membership.
-pub(crate) fn sync_threat_combat_membership(
-	mut users: Query<(&ThreatKnowledge, &mut CombatTargeting), With<Npc>>,
-) {
-	for (knowledge, mut targeting) in &mut users {
-		let active: HashSet<Entity> = knowledge.iter().filter_map(|known| known.entity).collect();
-		for subject in active.iter().copied() {
-			targeting.include(subject, TargetSource::ENEMYSHIP);
-		}
-		let retired: Vec<_> = targeting
-			.active
-			.iter()
-			.filter_map(|(subject, target)| {
-				(target.has_source(TargetSource::ENEMYSHIP) && !active.contains(subject))
-					.then_some(*subject)
-			})
-			.collect();
-		for subject in retired {
-			targeting.remove_source(subject, TargetSource::ENEMYSHIP);
-		}
-	}
-}
-
-/// Project retained semantic threats into civilian evasion membership.
-pub(crate) fn sync_threat_evasion_membership(
-	mut civilians: Query<(&ThreatKnowledge, &mut EvasionIntelligenceUser), With<Civilian>>,
-) {
-	for (knowledge, mut evasion) in &mut civilians {
-		let active: HashSet<Entity> = knowledge.iter().filter_map(|known| known.entity).collect();
-		for subject in active.iter().copied() {
-			evasion.include(subject, AssailantSource::ENEMYSHIP);
-		}
-		let retired: Vec<_> = evasion
-			.active
-			.iter()
-			.filter_map(|(subject, assailant)| {
-				(assailant.has_source(AssailantSource::ENEMYSHIP) && !active.contains(subject))
-					.then_some(*subject)
-			})
-			.collect();
-		for subject in retired {
-			evasion.remove_source(subject, AssailantSource::ENEMYSHIP);
 		}
 	}
 }
@@ -247,7 +204,9 @@ pub(crate) fn note_civilian_received_fire(
 mod tests {
 	use super::*;
 	use bevy::ecs::system::RunSystemOnce;
+	use combat_targeting::{CombatTargeting, TargetSource};
 	use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
+	use threat_management_intelligence::ThreatManagementPlugin;
 
 	#[test]
 	fn live_combatant_gets_one_character_subject() -> Result<(), bevy::ecs::system::RunSystemError>
@@ -299,10 +258,10 @@ mod tests {
 	}
 
 	#[test]
-	fn threat_membership_drives_combat_and_evasion_adapters(
-	) -> Result<(), bevy::ecs::system::RunSystemError> {
-		let mut world = World::new();
-		let threat = world.spawn_empty().id();
+	fn threat_membership_drives_combat_and_evasion_adapters() {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, ThreatManagementPlugin));
+		let threat = app.world_mut().spawn_empty().id();
 		let threat_id = ThreatId(threat.to_bits());
 		let record = threat_intelligence::ThreatRecord {
 			id: threat_id,
@@ -322,44 +281,60 @@ mod tests {
 			0.0,
 			0.2,
 		);
-		let combatant = world.spawn((Npc, knowledge.clone(), CombatTargeting::default())).id();
-		let civilian =
-			world.spawn((Npc, Civilian, knowledge, EvasionIntelligenceUser::default())).id();
-		world.run_system_once(sync_threat_combat_membership)?;
-		world.run_system_once(sync_threat_evasion_membership)?;
-		let targeting = world.get::<CombatTargeting>(combatant);
-		assert!(targeting.is_some_and(|targeting| {
-			targeting
-				.active_target(threat)
-				.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP))
+		let combatant = app
+			.world_mut()
+			.spawn((
+				Npc,
+				GlobalTransform::default(),
+				knowledge.clone(),
+				CombatTargeting::default(),
+				ThreatManagementIntelligence::ffa(),
+			))
+			.id();
+		let civilian = app
+			.world_mut()
+			.spawn((
+				Npc,
+				Civilian,
+				GlobalTransform::default(),
+				knowledge,
+				EvasionIntelligenceUser::default(),
+				ThreatManagementIntelligence::civilian(),
+			))
+			.id();
+		app.update();
+		assert!(app.world().get::<CombatTargeting>(combatant).is_some_and(|targeting| {
+			targeting.enabled
+				&& targeting
+					.active_target(threat)
+					.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP))
 		}));
-		let evasion = world.get::<EvasionIntelligenceUser>(civilian);
-		assert!(evasion.is_some_and(|evasion| {
-			evasion
-				.active_assailant(threat)
-				.is_some_and(|assailant| assailant.has_source(AssailantSource::ENEMYSHIP))
+		assert!(app.world().get::<EvasionIntelligenceUser>(civilian).is_some_and(|evasion| {
+			evasion.enabled
+				&& evasion
+					.active_assailant(threat)
+					.is_some_and(|assailant| assailant.has_source(AssailantSource::ENEMYSHIP))
 		}));
-		Ok(())
 	}
 
 	#[test]
 	fn startup_inbox_seeds_ffa_opponent_but_not_self() {
 		let mut app = App::new();
-		app.add_plugins((MinimalPlugins, ThreatIntelligencePlugin))
+		app.add_plugins((MinimalPlugins, ThreatIntelligencePlugin, ThreatManagementPlugin))
 			.add_systems(Update, sync_range_threat_actors.in_set(ThreatSystems::Prepare))
 			.add_systems(
 				Update,
 				seed_range_threat_observations
 					.in_set(ThreatSystems::Ingest)
 					.before(threat_intelligence::ingest_threat_observations),
-			)
-			.add_systems(Update, sync_threat_combat_membership.after(ThreatSystems::Discover));
+			);
 		let observer = app
 			.world_mut()
 			.spawn((
 				Npc,
 				SpottingUser::default(),
 				CombatTargeting::default(),
+				ThreatManagementIntelligence::ffa(),
 				GlobalTransform::default(),
 			))
 			.id();
@@ -371,10 +346,11 @@ mod tests {
 		assert!(app.world().get::<ThreatKnowledge>(observer).is_some_and(|knowledge| {
 			knowledge.get(observer_id).is_none() && knowledge.get(opponent_id).is_some()
 		}));
-		assert!(app
-			.world()
-			.get::<CombatTargeting>(observer)
-			.and_then(|targeting| targeting.active_target(opponent))
-			.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP)));
+		assert!(app.world().get::<CombatTargeting>(observer).is_some_and(|targeting| {
+			targeting.enabled
+				&& targeting
+					.active_target(opponent)
+					.is_some_and(|target| target.has_source(TargetSource::ENEMYSHIP))
+		}));
 	}
 }

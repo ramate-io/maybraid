@@ -82,6 +82,8 @@ pub struct EvasionIntelligenceUser {
 	pub algebra: AssailantAlgebra,
 	pub settings: EvasionSettings,
 	pub signal: EvasionSignal,
+	/// Higher-order grant. When false, spotting does not admit new assailants and ranking idles.
+	pub enabled: bool,
 	pub dirty: bool,
 	pub(crate) next_rebalance_at: f32,
 }
@@ -133,6 +135,18 @@ impl EvasionIntelligenceUser {
 		}
 		self.dirty |= changed;
 		changed
+	}
+
+	pub fn clear_source(&mut self, source: AssailantSource) {
+		let subjects: Vec<_> = self
+			.active
+			.iter()
+			.filter(|(_, assailant)| assailant.has_source(source))
+			.map(|(entity, _)| *entity)
+			.collect();
+		for entity in subjects {
+			self.remove_source(entity, source);
+		}
 	}
 
 	pub fn set_factors(&mut self, entity: Entity, factors: AssailantFactors) -> bool {
@@ -248,6 +262,7 @@ impl Default for EvasionIntelligenceUser {
 			algebra: AssailantAlgebra::default(),
 			settings: EvasionSettings::default(),
 			signal: EvasionSignal::idle(),
+			enabled: true,
 			dirty: true,
 			next_rebalance_at: 0.0,
 		}

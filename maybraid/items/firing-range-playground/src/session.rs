@@ -25,6 +25,7 @@ use player::{
 };
 use spotting_intelligence::{InterestLayers, SpotDirective, SpottingSettings, SpottingUser};
 use std::f32::consts::FRAC_PI_2;
+use threat_management_intelligence::ThreatManagementIntelligence;
 
 use crate::damage::{headshot_band_for, CombatRespawn, Health};
 use crate::engagement::NpcEngagement;
@@ -356,6 +357,7 @@ pub(crate) fn install_npc_civilian(
 			azimuths: 8,
 			standoffs: [4.0, 8.0],
 		}),
+		ThreatManagementIntelligence::civilian(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));
@@ -412,6 +414,7 @@ pub(crate) fn install_npc_combat(
 		CombatTargeting::default(),
 		FirearmTargeting::default(),
 		FirearmEngagement::hold(),
+		ThreatManagementIntelligence::ffa(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));
@@ -630,6 +633,7 @@ mod tests {
 		world.flush();
 		assert!(world.get::<Civilian>(npc).is_some());
 		assert!(world.get::<EvasionIntelligenceUser>(npc).is_some());
+		assert!(world.get::<ThreatManagementIntelligence>(npc).is_some());
 		assert!(world.get::<FleeingUser>(npc).is_some());
 		assert!(world.get::<HidingUser>(npc).is_some());
 		assert!(world.get::<CombatTargeting>(npc).is_none());

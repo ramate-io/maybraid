@@ -13,6 +13,8 @@ Local semantic threat discovery with retained per-recipient knowledge.
   affiliation weights decay.
 - Threat-owned spotting hints feed candidates to spotting without fabricating
   visual contacts.
+- Acting on that set is [`threat-management-intelligence`](../threat-management):
+  exclusive Ignore | Evade | Combat over retained knowledge.
 
 Static memberships normally use `AffiliationStrength::permanent`; temporary
 suspicion and hostility can use a half-life.

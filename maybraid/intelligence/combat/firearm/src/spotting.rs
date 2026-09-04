@@ -24,6 +24,11 @@ pub(crate) fn sync_spotted_combat_targets(
 			targeting.remove_source(entity, TargetSource::SPOTTING);
 		}
 
+		if !targeting.enabled {
+			targeting.clear_source(TargetSource::SPOTTING);
+			continue;
+		}
+
 		for contact in spotting.contacts.values() {
 			targeting.upsert_contact(CombatContact {
 				subject: contact.subject,
@@ -76,6 +81,28 @@ mod tests {
 		assert_eq!(targeting.contact(target).map(|contact| contact.position), Some(Vec3::X * 4.0));
 		assert_eq!(targeting.active_target(target).map(|target| target.factors.bias), Some(-4.0));
 		world.query::<&mut SpottingUser>().single_mut(&mut world)?.contacts.clear();
+		world.run_system_once(sync_spotted_combat_targets)?;
+		let targeting = world.query::<&CombatTargeting>().single(&world)?;
+		assert!(targeting.contact(target).is_none());
+		assert!(targeting.active_target(target).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn disabled_targeting_does_not_admit_spotted_contacts(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting =
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.5));
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.1),
+		);
+		let mut targeting = CombatTargeting::default();
+		targeting.enabled = false;
+		world.spawn((Transform::default(), spotting, FirearmIntelligence::new(), targeting));
 		world.run_system_once(sync_spotted_combat_targets)?;
 		let targeting = world.query::<&CombatTargeting>().single(&world)?;
 		assert!(targeting.contact(target).is_none());
