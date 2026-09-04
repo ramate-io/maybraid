@@ -61,7 +61,8 @@ use routing_intelligence::{
 };
 use std::f32::consts::PI;
 use tether_intelligence::{
-	install_tether, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin, TetherSystems,
+	install_tether, StalkRadii, Tether, TetherIntelligenceUser, TetherObjective, TetherPlugin,
+	TetherSystems,
 };
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
@@ -275,11 +276,15 @@ fn apply_tether_commands(
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &stalk {
+		let radii = StalkRadii::new(request.without, request.within);
 		for mut user in &mut users {
-			user.objective = TetherObjective::Stalk(player, request.radius.max(0.4));
+			user.objective = TetherObjective::Stalk(player, radii);
 			user.enabled = true;
 		}
-		ui::write_status(&mut status, format!("stalk r={:.0}", request.radius));
+		ui::write_status(
+			&mut status,
+			format!("stalk without={:.0} within={:.0}", radii.without(), radii.within()),
+		);
 		commands.entity(entity).despawn();
 	}
 	for entity in &idle {

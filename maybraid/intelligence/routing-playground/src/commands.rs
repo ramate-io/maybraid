@@ -33,10 +33,12 @@ pub enum PlaygroundCommand {
 		#[arg(default_value_t = 8.0)]
 		radius: f32,
 	},
-	/// Keep the NPC on a ring around the player.
+	/// Keep the NPC outside `without` and inside `within` around the player.
 	Stalk {
+		#[arg(default_value_t = 8.0)]
+		without: f32,
 		#[arg(default_value_t = 12.0)]
-		radius: f32,
+		within: f32,
 	},
 	/// Higher-order grant off: tether stays installed but does not write.
 	Idle,
@@ -72,7 +74,8 @@ pub struct RequestTether {
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestStalk {
-	pub radius: f32,
+	pub without: f32,
+	pub within: f32,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -103,9 +106,9 @@ impl PlaygroundCommand {
 				commands.spawn(RequestTether { radius });
 				*console = format!("tether {radius:.0}: pending");
 			}
-			PlaygroundCommand::Stalk { radius } => {
-				commands.spawn(RequestStalk { radius });
-				*console = format!("stalk {radius:.0}: pending");
+			PlaygroundCommand::Stalk { without, within } => {
+				commands.spawn(RequestStalk { without, within });
+				*console = format!("stalk {without:.0} {within:.0}: pending");
 			}
 			PlaygroundCommand::Idle => {
 				commands.spawn(RequestTetherIdle);
@@ -143,5 +146,28 @@ impl GameCommand for PlaygroundCommand {
 
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		Self::react(self, commands, console);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn stalk_parses_annulus_and_defaults() {
+		let PlaygroundCommand::Stalk { without, within } =
+			PlaygroundCommand::parse_line("stalk 6 14")
+				.expect("explicit stalk annulus should parse")
+		else {
+			panic!("expected stalk command");
+		};
+		assert_eq!((without, within), (6.0, 14.0));
+
+		let PlaygroundCommand::Stalk { without, within } =
+			PlaygroundCommand::parse_line("stalk").expect("default stalk annulus should parse")
+		else {
+			panic!("expected stalk command");
+		};
+		assert_eq!((without, within), (8.0, 12.0));
 	}
 }

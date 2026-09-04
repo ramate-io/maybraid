@@ -7,11 +7,13 @@ use crate::playground_player::PlaygroundMode;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Routing on Durham — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `tether`, `stalk`, `go <x> <z>`, `mode character`, `help`"
-			.into(),
+		empty_console_text:
+			"Console: `tether`, `stalk <without> <within>`, `go <x> <z>`, `mode character`, `help`"
+				.into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
 		controls_hint:
-			"help — tether [r] — stalk [r] — idle|drive — go <x> <z> — mode free|character".into(),
+			"help — tether [r] — stalk [without] [within] — idle|drive — go <x> <z> — mode free|character"
+				.into(),
 	}
 }
 
@@ -27,7 +29,9 @@ pub(crate) fn sync_command_status_text(
 	let tether = tethers.iter().next().map(|(user, memory)| {
 		let kind = match user.objective {
 			tether_intelligence::TetherObjective::Tether(_, r) => format!("tether r={r:.0}"),
-			tether_intelligence::TetherObjective::Stalk(_, r) => format!("stalk r={r:.0}"),
+			tether_intelligence::TetherObjective::Stalk(_, radii) => {
+				format!("stalk {:.0}..{:.0}", radii.without(), radii.within())
+			}
 		};
 		let grant = if user.enabled { "drive" } else { "idle" };
 		let done = if memory.satisfied { "ok" } else { "open" };

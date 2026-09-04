@@ -2,8 +2,8 @@
 
 Durham fine-grid terrain (same 4×4 / ~640 m patch as vegetation-on-terrain,
 without groves). A magenta NPC tethers to the tan player capsule by default
-(or stalks a ring around them). Far remaining work uses hierarchical routing;
-close remaining work uses local movement.
+(or stalks within an annulus around them). Far remaining work uses hierarchical
+routing; close remaining work uses local movement.
 
 Fly camera is the default: **WASD**, mouse look, **Space** up / **Shift** down
 (starts in a near-overhead fixture view so the player, NPC, and initial route
@@ -21,7 +21,7 @@ cargo run -p routing-playground --release
 
 ```
 /tether 8
-/stalk 12
+/stalk 8 12
 /idle
 /drive
 /go 220 48

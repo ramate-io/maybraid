@@ -132,7 +132,7 @@ impl TetherIntelligenceUser {
 		self.stuck_seconds = 0.0;
 		self.was_writing = true;
 		if remaining <= self.horizon {
-			TetherAction::Local(self.objective.movement_objective(subject))
+			TetherAction::Local(self.objective.movement_objective(from, subject))
 		} else {
 			TetherAction::Route(self.objective.route_point(from, subject))
 		}

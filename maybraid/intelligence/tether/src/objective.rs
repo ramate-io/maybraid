@@ -3,11 +3,43 @@
 use bevy::prelude::*;
 use movement_intelligence::{MovementLocation, MovementObjective};
 
-/// Follow policy. Radius is the leash (tether) or standoff (stalk).
+/// Allowed stalking annulus around a subject.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StalkRadii {
+	/// Remain outside this radius.
+	without: f32,
+	/// Remain inside this radius.
+	within: f32,
+}
+
+impl StalkRadii {
+	pub fn new(without: f32, within: f32) -> Self {
+		let without = without.max(0.0);
+		Self { without, within: within.max(without) }
+	}
+
+	pub fn contains(self, distance: f32) -> bool {
+		distance >= self.without && distance <= self.within
+	}
+
+	pub fn without(self) -> f32 {
+		self.without
+	}
+
+	pub fn within(self) -> f32 {
+		self.within
+	}
+
+	fn nearest(self, distance: f32) -> f32 {
+		distance.clamp(self.without, self.within)
+	}
+}
+
+/// Follow policy. Tether stays inside a leash; stalk stays within an annulus.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TetherObjective {
 	Tether(Entity, f32),
-	Stalk(Entity, f32),
+	Stalk(Entity, StalkRadii),
 }
 
 impl TetherObjective {
@@ -17,34 +49,34 @@ impl TetherObjective {
 		}
 	}
 
-	pub fn radius(self) -> f32 {
-		match self {
-			Self::Tether(_, radius) | Self::Stalk(_, radius) => radius.max(0.0),
-		}
-	}
-
 	pub fn with_subject(self, subject: Entity) -> Self {
 		match self {
 			Self::Tether(_, radius) => Self::Tether(subject, radius),
-			Self::Stalk(_, radius) => Self::Stalk(subject, radius),
+			Self::Stalk(_, radii) => Self::Stalk(subject, radii),
 		}
 	}
 
 	/// Horizontal work left before the objective is geometrically met.
 	pub fn remaining(self, from: Vec3, subject: Vec3) -> f32 {
 		let dist = xz(from, subject);
-		let radius = self.radius();
 		match self {
-			Self::Tether(_, _) => (dist - radius).max(0.0),
-			Self::Stalk(_, _) => (dist - radius).abs(),
+			Self::Tether(_, radius) => (dist - radius.max(0.0)).max(0.0),
+			Self::Stalk(_, radii) if dist < radii.without => radii.without - dist,
+			Self::Stalk(_, radii) if dist > radii.within => dist - radii.within,
+			Self::Stalk(_, _) => 0.0,
 		}
 	}
 
-	pub fn movement_objective(self, subject: Vec3) -> MovementObjective {
-		let location = MovementLocation::new(subject, self.radius().max(0.4));
+	pub fn movement_objective(self, from: Vec3, subject: Vec3) -> MovementObjective {
 		match self {
-			Self::Tether(_, _) => MovementObjective::Reach(location),
-			Self::Stalk(_, _) => MovementObjective::EdgeOf(location),
+			Self::Tether(_, radius) => {
+				MovementObjective::Reach(MovementLocation::new(subject, radius.max(0.4)))
+			}
+			Self::Stalk(_, radii) => {
+				let distance = xz(from, subject);
+				let boundary = if distance < radii.without { radii.without } else { radii.within };
+				MovementObjective::EdgeOf(MovementLocation::new(subject, boundary.max(0.4)))
+			}
 		}
 	}
 
@@ -52,7 +84,10 @@ impl TetherObjective {
 	pub fn route_point(self, from: Vec3, subject: Vec3) -> Vec3 {
 		match self {
 			Self::Tether(_, _) => subject,
-			Self::Stalk(_, _) => ring_point(from, subject, self.radius()),
+			Self::Stalk(_, radii) => {
+				let distance = xz(from, subject);
+				ring_point(from, subject, radii.nearest(distance))
+			}
 		}
 	}
 }
