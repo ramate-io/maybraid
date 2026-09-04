@@ -3,13 +3,14 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use mob_intelligence::{
-	spawn_mob, MobIdAlloc, MobInstall, MobMemberBody, MobRespawn, MobSlot, MobTravel, RosterMember,
+	spawn_mob, Mob, MobIdAlloc, MobInstall, MobMemberBody, MobRespawn, MobSlot, MobTravel,
+	RosterMember,
 };
 use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{
-	PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
-	PoiVisitPolicy, PoiVisitState,
+	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
+	PoiLearningPolicy, PoiVisitPolicy, PoiVisitState,
 };
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
@@ -17,7 +18,12 @@ use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId};
 
 use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
 
+const GRAZER_GROUP: ThreatGroupId = ThreatGroupId::group(4);
+const HUNT_GROUP: ThreatGroupId = ThreatGroupId::group(3);
 const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
+pub const HUNT_STANDOFF: f32 = 16.0;
+const PREY: PoiKind = PoiKind::new("mob-brain/prey");
+const PREY_POI: PoiId = PoiId(10_000);
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackKind {
@@ -34,6 +40,7 @@ pub struct PackRecipe {
 	pub at: Vec2,
 	pub leash: f32,
 	pub travel: f32,
+	pub journey: bool,
 	pub journey_linger: f32,
 	pub members: &'static [MemberSpec],
 }
@@ -41,6 +48,10 @@ pub struct PackRecipe {
 impl PackRecipe {
 	pub fn traveling(&self) -> bool {
 		self.travel > 0.0
+	}
+
+	pub fn journeys(&self) -> bool {
+		self.journey
 	}
 }
 
@@ -90,8 +101,8 @@ const ROAM: &[MemberSpec] = &[
 	MemberSpec::grazer(),
 	MemberSpec::grazer(),
 	MemberSpec::grazer(),
-	MemberSpec::civilian(),
-	MemberSpec::civilian(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
 ];
 const HUNT: &[MemberSpec] =
 	&[MemberSpec::predator(), MemberSpec::predator(), MemberSpec::assassin()];
@@ -104,6 +115,7 @@ pub fn recipes() -> [PackRecipe; 4] {
 			at: Vec2::new(-110.0, 105.0),
 			leash: 20.0,
 			travel: 0.0,
+			journey: false,
 			journey_linger: 0.0,
 			members: OCCUPY,
 		},
@@ -113,25 +125,28 @@ pub fn recipes() -> [PackRecipe; 4] {
 			at: Vec2::new(118.0, 95.0),
 			leash: 10.0,
 			travel: 0.0,
+			journey: false,
 			journey_linger: 0.0,
 			members: WATCH,
 		},
 		PackRecipe {
 			kind: PackKind::Roam,
-			name: "roam",
-			at: Vec2::new(-45.0, -55.0),
+			name: "herd",
+			at: Vec2::new(-55.0, -35.0),
 			leash: 24.0,
 			travel: 1.7,
+			journey: true,
 			journey_linger: 4.5,
 			members: ROAM,
 		},
 		PackRecipe {
 			kind: PackKind::Hunt,
 			name: "hunt",
-			at: Vec2::new(70.0, -115.0),
+			at: Vec2::new(45.0, -50.0),
 			leash: 16.0,
-			travel: 5.4,
-			journey_linger: 1.2,
+			travel: 4.0,
+			journey: false,
+			journey_linger: 0.0,
 			members: HUNT,
 		},
 	]
@@ -220,14 +235,16 @@ pub fn spawn_packs(
 			.collect();
 		let mut install = MobInstall::new(id, recipe.leash, members)
 			.with_respawn(MobRespawn::never())
-			.with_affiliations(mob_intelligence::MobAffiliations::new(wildlife_pack()))
+			.with_affiliations(mob_intelligence::MobAffiliations::new(pack_affiliations(
+				recipe.kind,
+			)))
 			.with_interests(interests(recipe.kind));
 		if recipe.traveling() {
 			install = install.with_travel(MobTravel::new(recipe.travel));
 		}
 		let host = spawn_mob(commands, Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y), install);
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
-		if recipe.traveling() {
+		if recipe.journeys() {
 			stamp_journey(commands, host, id.0, recipe.journey_linger);
 		}
 		commands.spawn((
@@ -244,6 +261,56 @@ pub fn spawn_packs(
 		}
 	}
 	commands.insert_resource(visuals);
+}
+
+/// Hunt host holds a standoff on the roaming herd tether. Members then Combat;
+/// grazers Evade.
+pub fn hunt_tracks_herd(
+	time: Res<Time>,
+	mut commands: Commands,
+	hosts: Query<(Entity, &PackKind, &GlobalTransform), With<Mob>>,
+	mut goals: Query<&mut PoiGoal>,
+) {
+	let Some((prey, prey_at)) = hosts.iter().find_map(|(entity, kind, transform)| {
+		(*kind == PackKind::Roam).then_some((entity, transform.translation()))
+	}) else {
+		return;
+	};
+	let now = time.elapsed_secs();
+	for (hunt, kind, transform) in &hosts {
+		if *kind != PackKind::Hunt {
+			continue;
+		}
+		let point = chase_standoff(transform.translation().xz(), prey_at.xz(), HUNT_STANDOFF);
+		let at = Vec3::new(point.x, 0.0, point.y);
+		if let Ok(mut goal) = goals.get_mut(hunt) {
+			goal.target = PREY_POI;
+			goal.kind = PREY;
+			goal.poi_entity = Some(prey);
+			goal.location.point = at;
+			continue;
+		}
+		commands.entity(hunt).insert(PoiGoal::new(
+			1,
+			PREY_POI,
+			Some(prey),
+			PREY,
+			at,
+			4.0,
+			now,
+			0.0,
+		));
+	}
+}
+
+/// Approach the prey from the hunter's current side and hold `standoff` metres.
+pub fn chase_standoff(from: Vec2, prey: Vec2, standoff: f32) -> Vec2 {
+	let offset = from - prey;
+	let distance = offset.length();
+	if distance <= 1e-3 {
+		return prey + Vec2::X * standoff.max(0.0);
+	}
+	prey + offset * (standoff.max(0.0) / distance)
 }
 
 fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: f32) {
@@ -303,6 +370,30 @@ fn spawn_member(
 		Mesh3d(visuals.capsule.clone()),
 		MeshMaterial3d(visuals.colors.handle(spec.personality)),
 	));
+}
+
+fn pack_affiliations(kind: PackKind) -> Affiliations {
+	match kind {
+		PackKind::Hunt => hunt_pack(),
+		PackKind::Roam => grazer_pack(),
+		PackKind::Occupy | PackKind::Watch => wildlife_pack(),
+	}
+}
+
+fn hunt_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
+	affiliations.join(HUNT_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations.antagonize(GRAZER_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations.mitigate(HUNT_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations
+}
+
+fn grazer_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
+	affiliations.join(GRAZER_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations.antagonize(HUNT_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations.mitigate(GRAZER_GROUP, AffiliationStrength::permanent(1.0));
+	affiliations
 }
 
 fn wildlife_pack() -> Affiliations {
@@ -391,12 +482,42 @@ mod tests {
 		assert!(!occupy.traveling());
 		assert!(!watch.traveling());
 		assert!(roam.traveling());
+		assert!(roam.journeys());
 		assert!(hunt.traveling());
+		assert!(!hunt.journeys());
 		assert!(roam.travel < hunt.travel);
-		assert!(OCCUPY.iter().any(|spec| spec.personality == Personality::Civilian));
+		assert!(ROAM.iter().all(|spec| spec.personality == Personality::Grazer));
 		assert!(WATCH.iter().all(|spec| spec.personality == Personality::Brawler));
 		assert!(HUNT.iter().all(|spec| spec.keep_tether_in_combat && spec.armed));
 		assert_eq!(recipes.iter().map(|recipe| recipe.members.len()).sum::<usize>(), 21);
+		assert!(
+			recipes
+				.iter()
+				.find(|recipe| recipe.kind == PackKind::Roam)
+				.unwrap()
+				.at
+				.distance(recipes.iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap().at)
+				> 40.0
+		);
+	}
+
+	#[test]
+	fn hunt_antagonizes_the_herd() {
+		assert!(pack_affiliations(PackKind::Hunt).known_antagonists.contains_key(&GRAZER_GROUP));
+		assert!(pack_affiliations(PackKind::Roam).known_antagonists.contains_key(&HUNT_GROUP));
+		assert!(pack_affiliations(PackKind::Occupy).known_antagonists.is_empty());
+		assert!(pack_affiliations(PackKind::Watch).known_antagonists.is_empty());
+	}
+
+	#[test]
+	fn chase_holds_a_standoff_on_the_prey_side() {
+		let prey = Vec2::ZERO;
+		let from = Vec2::new(80.0, 0.0);
+		let held = chase_standoff(from, prey, 16.0);
+		assert!((held.x - 16.0).abs() < 1e-4);
+		assert!(held.y.abs() < 1e-4);
+		let close = chase_standoff(Vec2::new(4.0, 0.0), prey, 16.0);
+		assert!((close.x - 16.0).abs() < 1e-4);
 	}
 
 	#[test]

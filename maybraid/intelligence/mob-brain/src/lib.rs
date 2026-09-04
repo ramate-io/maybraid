@@ -1,4 +1,4 @@
-//! Stationary occupy/watch plus traveling roam (loose local POI) and hunt (tight).
+//! Stationary occupy/watch, a roaming herd, and a hunt that tracks that herd.
 
 mod camera;
 mod packs;
@@ -18,14 +18,14 @@ use hiding_intelligence::{HidingPlugin, HidingSystems};
 use journeying_intelligence::JourneyingIntelligencePlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
-use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin};
+use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin, MobSystems};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
-use packs::{spawn_packs, PackKind};
+use packs::{hunt_tracks_herd, spawn_packs, PackKind};
 use player::{Npc, PlayerPlugin};
 use poi_intelligence::{PoiGoal, PoiIntelligencePlugin, PoiSystems};
 use scene::{
@@ -34,7 +34,9 @@ use scene::{
 use spotting_intelligence::SpottingSystems;
 use tether_intelligence::TetherPlugin;
 use threat_intelligence::ThreatIntelligencePlugin;
-use threat_management_intelligence::ThreatManagementPlugin;
+use threat_management_intelligence::{
+	ThreatManagementIntelligence, ThreatManagementPlugin, ThreatTactic,
+};
 
 pub use camera::CameraController;
 pub use packs::recipes;
@@ -116,6 +118,7 @@ impl Plugin for MobBrainPlaygroundPlugin {
 				Update,
 				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
 			)
+			.add_systems(Update, hunt_tracks_herd.before(MobSystems::Travel))
 			.add_systems(Update, draw_debug_world)
 			.add_systems(Update, update_status_text);
 	}
@@ -162,7 +165,8 @@ fn setup_hud(mut commands: Commands) {
 }
 
 type DebugHost<'a> = (Entity, &'a Mob, &'a PackKind, &'a GlobalTransform, Option<&'a PoiGoal>);
-type DebugMember<'a> = (&'a MemberOf, &'a GlobalTransform, Option<&'a PoiGoal>);
+type DebugMember<'a> =
+	(&'a MemberOf, &'a GlobalTransform, Option<&'a PoiGoal>, &'a ThreatManagementIntelligence);
 
 fn draw_debug_world(
 	mut gizmos: Gizmos,
@@ -178,8 +182,15 @@ fn draw_debug_world(
 		x += 50.0;
 	}
 
+	let mut roam_at = None;
+	let mut hunt_at = None;
 	for (host, mob, kind, transform, goal) in &hosts {
 		let at = transform.translation();
+		match kind {
+			PackKind::Roam => roam_at = Some(at),
+			PackKind::Hunt => hunt_at = Some(at),
+			_ => {}
+		}
 		let ring = match kind {
 			PackKind::Occupy => Color::srgb(0.55, 0.95, 0.4),
 			PackKind::Watch => Color::srgb(0.95, 0.62, 0.2),
@@ -194,7 +205,7 @@ fn draw_debug_world(
 				Color::srgb(1.0, 0.85, 0.2),
 			);
 		}
-		for (membership, member, local) in &members {
+		for (membership, member, local, management) in &members {
 			if membership.mob != host {
 				continue;
 			}
@@ -210,7 +221,20 @@ fn draw_debug_world(
 					Color::srgb(0.35, 0.95, 0.55),
 				);
 			}
+			let tactic = match management.tactic {
+				ThreatTactic::Ignore => Color::srgb(0.35, 0.9, 0.45),
+				ThreatTactic::Evade => Color::srgb(0.95, 0.85, 0.2),
+				ThreatTactic::Combat => Color::srgb(1.0, 0.25, 0.2),
+			};
+			gizmos.sphere(
+				Isometry3d::from_translation(member.translation() + Vec3::Y * 2.1),
+				0.28,
+				tactic,
+			);
 		}
+	}
+	if let (Some(hunt), Some(roam)) = (hunt_at, roam_at) {
+		gizmos.line(hunt + Vec3::Y * 2.6, roam + Vec3::Y * 2.6, Color::srgb(0.95, 0.35, 0.85));
 	}
 }
 
@@ -228,11 +252,13 @@ fn xz_ring(gizmos: &mut Gizmos, center: Vec3, radius: f32, color: Color) {
 }
 
 type HostStatus<'a> = (Entity, &'a PackKind, &'a Name, &'a GlobalTransform, Option<&'a PoiGoal>);
+type MemberStatus<'a> =
+	(&'a MemberOf, &'a GlobalTransform, Has<PoiGoal>, &'a ThreatManagementIntelligence);
 
 fn update_status_text(
 	diagnostics: Res<DiagnosticsStore>,
 	hosts: Query<HostStatus<'_>>,
-	members: Query<(&MemberOf, &GlobalTransform, Has<PoiGoal>), With<Npc>>,
+	members: Query<MemberStatus<'_>, With<Npc>>,
 	mut text: Query<&mut Text, With<StatusText>>,
 ) {
 	let Ok(mut text) = text.single_mut() else {
@@ -242,11 +268,24 @@ fn update_status_text(
 		.get(&FrameTimeDiagnosticsPlugin::FPS)
 		.and_then(|d| d.smoothed())
 		.unwrap_or(0.0);
+	let mut hunt_at = None;
+	let mut roam_at = None;
+	for (_, kind, _, transform, _) in &hosts {
+		match kind {
+			PackKind::Hunt => hunt_at = Some(transform.translation()),
+			PackKind::Roam => roam_at = Some(transform.translation()),
+			_ => {}
+		}
+	}
+	let gap = hunt_at
+		.zip(roam_at)
+		.map(|(hunt, roam)| hunt.xz().distance(roam.xz()))
+		.unwrap_or(0.0);
 	let mut status = format!(
 		"mob-brain   {PAD_SIDE:.0} m pad   fps {fps:.0}\n\
 		 WASD fly  mouse look  Space/Shift up/down  Ctrl sprint\n\
-		 occupy/watch stay put   roam browses then catches up   hunt stays tight\n\
-		 yellow = host journey   green = member local POI   white = leash\n\n"
+		 magenta = hunt tracks herd   gap {gap:.0} m\n\
+		 dots: green Ignore  yellow Evade  red Combat\n\n"
 	);
 	let mut rows: Vec<_> = hosts.iter().collect();
 	rows.sort_by_key(|(entity, ..)| entity.to_bits());
@@ -254,20 +293,28 @@ fn update_status_text(
 		let at = transform.translation();
 		let mut count = 0;
 		let mut poi = 0;
+		let mut ignore = 0;
+		let mut evade = 0;
+		let mut combat = 0;
 		let mut farthest = 0.0_f32;
-		for (membership, member, has_goal) in &members {
+		for (membership, member, has_goal, management) in &members {
 			if membership.mob != entity {
 				continue;
 			}
 			count += 1;
 			poi += usize::from(has_goal);
 			farthest = farthest.max(member.translation().xz().distance(at.xz()));
+			match management.tactic {
+				ThreatTactic::Ignore => ignore += 1,
+				ThreatTactic::Evade => evade += 1,
+				ThreatTactic::Combat => combat += 1,
+			}
 		}
 		let dest = goal
 			.map(|goal| format!("{:.0},{:.0}", goal.location.point.x, goal.location.point.z))
 			.unwrap_or_else(|| "idle".into());
 		status.push_str(&format!(
-			"{:<5} {kind:?}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  poi {poi}  stretch {farthest:.0}\n",
+			"{:<5} {kind:?}  host {:>6.0},{:>6.0}  dest {dest}  n {count}  I {ignore} E {evade} C {combat}  poi {poi}  stretch {farthest:.0}\n",
 			name.as_str(),
 			at.x,
 			at.z,

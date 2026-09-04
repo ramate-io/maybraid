@@ -37,6 +37,5 @@ subject, rules of engagement, and `armed`. See [HORIZON.md](HORIZON.md) for
 groups, mob hosts, and LodScene.
 
 The [personalities playground](../personalities) is a 400 m square High-fulfill
-smoke. The [mob-brain playground](../mob-brain) mixes stationary packs with
-traveling hosts so members can linger on local POIs, then catch the moving
-tether.
+smoke. The [mob-brain playground](../mob-brain) mixes stationary packs with a
+roaming herd and a hunt that tracks it until grazers flee.
