@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use idling_intelligence::{IdlingIntelligenceUser, IdlingSystems};
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiSystems};
 use tether_intelligence::{TetherIntelligenceUser, TetherSystems};
@@ -16,6 +17,7 @@ type NpcMixers<'w, 's> = Query<
 		&'static NpcIntelligence,
 		&'static ThreatManagementIntelligence,
 		Option<&'static mut MeanderingIntelligenceUser>,
+		Option<&'static mut IdlingIntelligenceUser>,
 		Option<&'static mut TetherIntelligenceUser>,
 		Has<PoiGoal>,
 	),
@@ -36,19 +38,24 @@ impl Plugin for NpcIntelligencePlugin {
 			NpcIntelligenceSystems::Mix
 				.after(ThreatManagementSystems::Select)
 				.before(PoiSystems::Select)
-				.before(TetherSystems::Write),
+				.before(TetherSystems::Write)
+				.before(IdlingSystems::Write),
 		)
 		.add_systems(Update, mix_npc_brains.in_set(NpcIntelligenceSystems::Mix));
 	}
 }
 
-/// Priority mixer: Combat/Evade preempt tether and meander; Ignore restores them.
+/// Priority mixer: Combat/Evade preempt tether, meander, and idle; Ignore
+/// restores them.
 pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
-	for (entity, npc, management, mut meandering, mut tether, has_goal) in &mut npcs {
+	for (entity, npc, management, mut meandering, mut idling, mut tether, has_goal) in &mut npcs {
 		let tactic = management.tactic;
 		let acting = tactic != ThreatTactic::Ignore;
 		if let Some(meandering) = meandering.as_deref_mut() {
 			meandering.enabled = !acting;
+		}
+		if let Some(idling) = idling.as_deref_mut() {
+			idling.enabled = !acting;
 		}
 		if acting && has_goal {
 			commands.entity(entity).remove::<PoiGoal>();

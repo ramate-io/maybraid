@@ -5,6 +5,8 @@ use bevy::prelude::*;
 use lod_avian::PhysicsInteractionLayer;
 use poi_intelligence::{LocalPoi, Poi, PoiId, PoiKind};
 
+use crate::mobs::poi_placements;
+
 pub const PAD_SIDE: f32 = 400.0;
 pub const PAD_EXTENT: f32 = PAD_SIDE * 0.5;
 pub const SPOTTING_RING: f32 = 80.0;
@@ -102,35 +104,18 @@ pub fn setup_pois(
 			Mesh3d(local.clone()),
 			MeshMaterial3d(material),
 			Transform::from_xyz(at.x, 1.2, at.y),
-			Poi::new(id, kind).with_arrival_radius(3.5).with_salience(1.0),
+			Poi::new(id, kind).with_arrival_radius(2.0).with_salience(1.0),
 			LocalPoi,
 		));
 	};
 
-	spawn(CAMP, Vec2::new(-55.0, 10.0), camp_mat.clone());
-	spawn(CAMP, Vec2::new(-68.0, 4.0), camp_mat.clone());
-	spawn(CAMP, Vec2::new(-46.0, 22.0), camp_mat.clone());
-	spawn(CAMP, Vec2::new(-50.0, -6.0), camp_mat);
-
-	spawn(GATE, Vec2::new(80.0, 20.0), gate_mat);
-
-	spawn(PIT, Vec2::new(120.0, -40.0), pit_mat.clone());
-	spawn(PIT, Vec2::new(112.0, -48.0), pit_mat);
-
-	spawn(FORAGE, Vec2::new(-90.0, -90.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(-104.0, -78.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(-76.0, -102.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(-14.0, 18.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(-22.0, 8.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(-6.0, 26.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(162.0, 170.0), forage_mat.clone());
-	spawn(FORAGE, Vec2::new(178.0, 162.0), forage_mat.clone());
-	for x in [-100.0_f32, 0.0, 100.0] {
-		for z in [-100.0_f32, 0.0, 100.0] {
-			if x.abs() < 1.0 && z.abs() < 1.0 {
-				continue;
-			}
-			spawn(FORAGE, Vec2::new(x, z), forage_mat.clone());
-		}
+	for (kind, at) in poi_placements() {
+		let material = match kind {
+			CAMP => camp_mat.clone(),
+			GATE => gate_mat.clone(),
+			PIT => pit_mat.clone(),
+			_ => forage_mat.clone(),
+		};
+		spawn(kind, at, material);
 	}
 }

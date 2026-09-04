@@ -10,7 +10,7 @@ use firearm_intelligence::FirearmEngagement;
 use lod_avian::PhysicsInteractionLayer;
 use npc_intelligence::{NpcBody, NpcInstall, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
-use poi_intelligence::{PoiInterest, PoiInterests};
+use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{
@@ -383,6 +383,46 @@ fn interests(kind: MobKind) -> PoiInterests {
 	}
 }
 
+/// Local destinations packed inside each proto-mob leash so Ignore can meander.
+pub fn poi_placements() -> Vec<(PoiKind, Vec2)> {
+	let mut placements = Vec::new();
+	for recipe in recipes() {
+		let radius = recipe.leash * 0.7;
+		let (primary, primary_n, secondary, secondary_n) = match recipe.kind {
+			MobKind::Occupy => (CAMP, 10, Some(FORAGE), 4),
+			MobKind::Herd => (CAMP, 7, Some(FORAGE), 3),
+			MobKind::Flock => (FORAGE, 8, Some(CAMP), 2),
+			MobKind::Roam => (FORAGE, 8, Some(CAMP), 3),
+			MobKind::Monk => (FORAGE, 7, None, 0),
+			MobKind::Watch => (GATE, 5, None, 0),
+			MobKind::Guard => (GATE, 6, None, 0),
+			MobKind::Hunt => (FORAGE, 6, None, 0),
+			MobKind::Ffa => (PIT, 6, None, 0),
+		};
+		let total = primary_n + secondary_n;
+		for index in 0..total {
+			let kind = if index < primary_n {
+				primary
+			} else {
+				secondary.expect("secondary POI count without a kind")
+			};
+			placements.push((kind, disk_point(recipe.at, radius, index, total)));
+		}
+	}
+	placements
+}
+
+fn disk_point(center: Vec2, radius: f32, index: usize, count: usize) -> Vec2 {
+	if count <= 1 {
+		return center;
+	}
+	const GOLDEN: f32 = 2.399_963;
+	let t = (index as f32 + 0.5) / count as f32;
+	let r = radius * t.sqrt();
+	let angle = index as f32 * GOLDEN;
+	center + Vec2::new(angle.cos(), angle.sin()) * r
+}
+
 fn affiliations(kind: MobKind, id: ThreatId) -> Affiliations {
 	match kind {
 		MobKind::Guard | MobKind::Watch => guard_affiliations(id),
@@ -506,5 +546,30 @@ mod tests {
 		assert!(grazer.threat_weight(&public, 0.0) >= 0.2);
 		let flock = recipes().into_iter().find(|recipe| recipe.kind == MobKind::Flock).unwrap();
 		assert!(flock.at.length() < SPOTTING_RING * 0.5);
+	}
+
+	#[test]
+	fn packs_have_meander_destinations_inside_the_leash() {
+		let placements = poi_placements();
+		for recipe in recipes() {
+			let wanted = interests(recipe.kind);
+			let nearby = placements
+				.iter()
+				.filter(|(kind, at)| {
+					wanted.contains(*kind) && at.distance(recipe.at) <= recipe.leash + 0.05
+				})
+				.count();
+			assert!(nearby >= 4, "{} expected local POIs, got {nearby}", recipe.name);
+		}
+		assert!(placements.len() >= 40);
+	}
+
+	#[test]
+	fn disk_points_stay_inside_the_leash() {
+		let center = Vec2::new(3.0, -2.0);
+		for index in 0..12 {
+			assert!(disk_point(center, 10.0, index, 12).distance(center) <= 10.0 + 1e-3);
+		}
+		assert_eq!(disk_point(center, 10.0, 0, 1), center);
 	}
 }

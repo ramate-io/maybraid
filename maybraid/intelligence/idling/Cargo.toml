@@ -1,5 +1,5 @@
 [package]
-name = "npc-intelligence"
+name = "idling-intelligence"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -11,20 +11,9 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-combat-targeting = { workspace = true }
-damage = { workspace = true }
-evasion-intelligence = { workspace = true }
-firearm-intelligence = { workspace = true }
-fleeing-intelligence = { workspace = true }
-hiding-intelligence = { workspace = true }
-idling-intelligence = { workspace = true }
-meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }
-spotting-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
-threat-intelligence = { workspace = true }
-threat-management-intelligence = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

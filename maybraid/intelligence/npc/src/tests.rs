@@ -2,6 +2,7 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use combat_targeting::CombatTargeting;
 use firearm_intelligence::FirearmIntelligence;
+use idling_intelligence::IdlingIntelligenceUser;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiId, PoiKind};
 use tether_intelligence::{TetherIntelligenceUser, TetherObjective};
@@ -23,6 +24,7 @@ fn grazer_is_unarmed_and_evade_capable() {
 	assert!(world.get::<CombatTargeting>(npc).is_none());
 	assert!(world.get::<NpcIntelligence>(npc).is_some());
 	assert!(world.get::<MeanderingIntelligenceUser>(npc).is_some());
+	assert!(world.get::<IdlingIntelligenceUser>(npc).is_some());
 	assert!(world.get::<ThreatManagementIntelligence>(npc).is_some_and(|threat| threat
 		.combat
 		.by_health
@@ -119,7 +121,7 @@ fn assassin_prefers_a_stalking_idle_tether() {
 }
 
 #[test]
-fn combat_retracts_meander_and_drops_the_poi_goal() {
+fn combat_retracts_meander_and_idle_and_drops_the_poi_goal() {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, NpcIntelligencePlugin));
 	let npc = app
@@ -132,6 +134,7 @@ fn combat_retracts_meander_and_drops_the_poi_goal() {
 				threat
 			},
 			MeanderingIntelligenceUser::default(),
+			IdlingIntelligenceUser::default(),
 			dummy_goal(),
 		))
 		.id();
@@ -140,11 +143,12 @@ fn combat_retracts_meander_and_drops_the_poi_goal() {
 		.world()
 		.get::<MeanderingIntelligenceUser>(npc)
 		.is_some_and(|user| !user.enabled));
+	assert!(app.world().get::<IdlingIntelligenceUser>(npc).is_some_and(|user| !user.enabled));
 	assert!(app.world().get::<PoiGoal>(npc).is_none());
 }
 
 #[test]
-fn ignore_restores_meander_and_idle_tether() {
+fn ignore_restores_meander_idle_and_idle_tether() {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, NpcIntelligencePlugin));
 	let anchor = app.world_mut().spawn_empty().id();
@@ -154,12 +158,15 @@ fn ignore_restores_meander_and_idle_tether() {
 	tether.objective = engaged;
 	let mut meandering = MeanderingIntelligenceUser::default();
 	meandering.enabled = false;
+	let mut idling = IdlingIntelligenceUser::default();
+	idling.enabled = false;
 	let npc = app
 		.world_mut()
 		.spawn((
 			NpcIntelligence { idle_tether: Some(idle), engaged_tether: Some(engaged), ..default() },
 			ThreatManagementIntelligence::default(),
 			meandering,
+			idling,
 			tether,
 		))
 		.id();
@@ -168,6 +175,7 @@ fn ignore_restores_meander_and_idle_tether() {
 		.world()
 		.get::<MeanderingIntelligenceUser>(npc)
 		.is_some_and(|user| user.enabled));
+	assert!(app.world().get::<IdlingIntelligenceUser>(npc).is_some_and(|user| user.enabled));
 	assert!(app
 		.world()
 		.get::<TetherIntelligenceUser>(npc)

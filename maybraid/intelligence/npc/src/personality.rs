@@ -8,6 +8,7 @@ use firearm_intelligence::{
 };
 use fleeing_intelligence::{FleeingSettings, FleeingUser};
 use hiding_intelligence::{HidingSettings, HidingUser};
+use idling_intelligence::IdlingIntelligenceUser;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use movement_intelligence::{
 	MovementIntelligence, MovementLocation, MovementObjective, VantageStandoffs,
@@ -395,6 +396,10 @@ impl PersonalitySpec {
 
 		let mut meandering = MeanderingIntelligenceUser::new(self.meander_radius);
 		meandering.visit_policy = self.visit_policy;
+		let idle_radius = match self.tether {
+			PersonalityTether::Leash { radius } => (radius * 0.4).clamp(3.5, 9.0),
+			PersonalityTether::Stalk { within, .. } => (within * 0.22).clamp(3.5, 8.0),
+		};
 
 		commands.entity(entity).insert((
 			npc,
@@ -413,6 +418,7 @@ impl PersonalitySpec {
 				threat_threshold: 0.2,
 			}),
 			meandering,
+			IdlingIntelligenceUser::around(install.at, idle_radius),
 			learning,
 			PoiKnowledge::default(),
 			PoiVisitState::default(),

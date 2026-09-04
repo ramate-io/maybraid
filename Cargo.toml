@@ -101,6 +101,7 @@ members = [
   "maybraid/intelligence/tether",
   "maybraid/intelligence/poi",
   "maybraid/intelligence/meandering",
+  "maybraid/intelligence/idling",
   "maybraid/intelligence/journeying",
   "maybraid/intelligence/threat",
   "maybraid/intelligence/threat/damage",
@@ -345,6 +346,7 @@ routing-intelligence = { path = "maybraid/intelligence/routing" }
 tether-intelligence = { path = "maybraid/intelligence/tether" }
 poi-intelligence = { path = "maybraid/intelligence/poi" }
 meandering-intelligence = { path = "maybraid/intelligence/meandering" }
+idling-intelligence = { path = "maybraid/intelligence/idling" }
 journeying-intelligence = { path = "maybraid/intelligence/journeying" }
 threat-intelligence = { path = "maybraid/intelligence/threat" }
 threat-intelligence-damage = { path = "maybraid/intelligence/threat/damage" }

@@ -16,6 +16,7 @@ use evasion_intelligence::{EvasionPlugin, EvasionSystems};
 use firearm_intelligence::{FirearmIntelligencePlugin, FirearmIntelligenceSystems};
 use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
+use idling_intelligence::IdlingPlugin;
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
 use mobs::{clamp_to_pad, spawn_mobs, spawn_presence, MobMember, ProtoMob, PublicPresence};
@@ -68,6 +69,7 @@ impl Plugin for PersonalitiesPlaygroundPlugin {
 			.add_plugins(HidingPlugin)
 			.add_plugins(PoiIntelligencePlugin)
 			.add_plugins(MeanderingIntelligencePlugin)
+			.add_plugins(IdlingPlugin)
 			.add_plugins(TetherPlugin)
 			.add_plugins(MovementRealizationPlugin)
 			.configure_sets(
