@@ -34,6 +34,5 @@ subject, rules of engagement, and `armed`. See [HORIZON.md](HORIZON.md) for
 groups, mob hosts, and LodScene.
 
 The [personalities playground](../personalities) is a 400 m square High-fulfill
-smoke: each pack is a [`mob-intelligence`](../mob) host, members bind through
-`MobSlot`, and flying the camera moves public so spotting distance can flip
-tactics.
+smoke. The [mob-brain playground](../mob-brain) is the next step: hosts journey
+the tether and members follow.

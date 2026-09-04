@@ -39,6 +39,7 @@ The app spawns bodies. This crate never depends on character controllers.
 
 ## Playground
 
-The [personalities playground](../personalities) is still a flat High-fulfill
-stand-in. It now uses this brain (shared tether host, roster bind) instead of
-stamping `MobMember { mob: host }` by hand.
+The [personalities playground](../personalities) is a flat High-fulfill stand-in
+for individual mixers. The [mob-brain playground](../mob-brain) is the same
+fulfill, with hosts that **journey the tether** so members reroute onto a moving
+center.
