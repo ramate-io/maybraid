@@ -37,13 +37,7 @@ pub struct PartitionNode {
 
 impl PartitionNode {
 	pub fn new(style: PartitionStyle, geometry: PartitionGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-			confines: ParentConfines::External,
-			material: None,
-		}
+		Self { style, geometry, placement, confines: ParentConfines::External, material: None }
 	}
 
 	pub fn rough_stone(geometry: PartitionGeometry, placement: Placement) -> Self {

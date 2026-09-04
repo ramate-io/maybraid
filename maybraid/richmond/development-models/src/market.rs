@@ -29,6 +29,9 @@ const MAX_MARKET_RELIEF: f32 = 6.0;
 const SITE_SEPARATION: f32 = 1.5;
 const CORE_CLEARANCE: f32 = 3.0;
 const MIN_MARKET_STALLS: usize = 24;
+/// Half-range of stall yaw about the nearest corridor quarter-turn.
+/// Half-range of stall yaw about the nearest corridor quarter-turn.
+const STALL_YAW_JITTER: f32 = 0.35;
 
 #[derive(Debug, Clone, Copy)]
 struct MarketSitePlan {
@@ -379,15 +382,25 @@ fn fit_site_buildings(
 	let terrace_bounds = Bounds2 { min: bounds.min, max: bounds.max };
 	let mut occupied = Vec::<Bounds2>::new();
 	let mut buildings = Vec::with_capacity(plan.target_count);
-	for mut candidate in plan.candidates {
+	for candidate in plan.candidates {
 		if buildings.len() >= plan.target_count {
 			break;
 		}
-		candidate.yaw =
+		let yaw_hash = SeededHash::new(
+			site_hash
+				.seed
+				.wrapping_add((candidate.slot as u32 + 1).wrapping_mul(0x51ED_270B)),
+		);
+		// Reserve space on a corridor quarter-turn so dense pads stay viable, then
+		// crook the authored stall for an organic market look.
+		let pack_yaw =
 			(site.yaw / std::f32::consts::FRAC_PI_2).round() * std::f32::consts::FRAC_PI_2;
-		let collision = recipe.collision_bounds(&candidate);
+		let visual_yaw = pack_yaw + (yaw_hash.unit(4) - 0.5) * 2.0 * STALL_YAW_JITTER;
+		let mut pack_candidate = candidate.clone();
+		pack_candidate.yaw = pack_yaw;
+		let collision = recipe.collision_bounds(&pack_candidate);
 		if !bounds_contains(terrace_bounds, collision)
-			|| candidate.center.distance(site.center) < CORE_CLEARANCE
+			|| pack_candidate.center.distance(site.center) < CORE_CLEARANCE
 			|| occupied.iter().copied().any(|occupied| bounds_intersect(occupied, collision))
 		{
 			continue;
@@ -406,7 +419,7 @@ fn fit_site_buildings(
 		let Some(building) = fit_shepherds_building_for_role(
 			candidate.kind,
 			candidate.center,
-			candidate.yaw,
+			visual_yaw,
 			candidate.footprint,
 			height + MARKET_PLATFORM_HEIGHT,
 			hash,
@@ -576,10 +589,12 @@ mod tests {
 			let mut occupied = Vec::new();
 			let recipe = market_recipe(site.tier);
 			for building in &site.buildings {
+				let pack_yaw = (building.yaw / std::f32::consts::FRAC_PI_2).round()
+					* std::f32::consts::FRAC_PI_2;
 				let candidate = crate::scatter::ScatterCandidate {
 					slot: 0,
 					center: building.center_xz,
-					yaw: building.yaw,
+					yaw: pack_yaw,
 					footprint: building.footprint,
 					kind: ShepherdsBuildingKind::Hut,
 				};
@@ -594,6 +609,29 @@ mod tests {
 				occupied_market.push(collision);
 			}
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn market_stalls_use_varied_yaw() -> anyhow::Result<()> {
+		let (market, _) = flat_market(73)?;
+		let stall_yaws: Vec<f32> = market.buildings().map(|building| building.yaw).collect();
+		anyhow::ensure!(!stall_yaws.is_empty(), "market should place stalls");
+		let unique_bins = stall_yaws
+			.iter()
+			.map(|yaw| (yaw.rem_euclid(std::f32::consts::TAU) / 0.2).floor() as i32)
+			.collect::<std::collections::BTreeSet<_>>();
+		anyhow::ensure!(
+			unique_bins.len() >= 3,
+			"expected stall yaw variety, got {} bins from {:?}",
+			unique_bins.len(),
+			stall_yaws
+		);
+		let all_quarter_turned = stall_yaws.iter().all(|yaw| {
+			let phase = yaw.rem_euclid(std::f32::consts::FRAC_PI_2);
+			phase < 1e-3 || (std::f32::consts::FRAC_PI_2 - phase) < 1e-3
+		});
+		anyhow::ensure!(!all_quarter_turned, "stalls should not all snap to quarter turns");
 		Ok(())
 	}
 
