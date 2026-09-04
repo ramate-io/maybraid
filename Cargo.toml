@@ -102,6 +102,7 @@ members = [
   "maybraid/intelligence/poi",
   "maybraid/intelligence/meandering",
   "maybraid/intelligence/journeying",
+  "maybraid/intelligence/poi-playground",
   "maybraid/intelligence/routing-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
@@ -340,6 +341,7 @@ tether-intelligence = { path = "maybraid/intelligence/tether" }
 poi-intelligence = { path = "maybraid/intelligence/poi" }
 meandering-intelligence = { path = "maybraid/intelligence/meandering" }
 journeying-intelligence = { path = "maybraid/intelligence/journeying" }
+poi-playground = { path = "maybraid/intelligence/poi-playground" }
 routing-playground = { path = "maybraid/intelligence/routing-playground" }
 items-playground = { path = "maybraid/items/playground" }
 firing-range-playground = { path = "maybraid/items/firing-range-playground" }

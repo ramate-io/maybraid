@@ -44,6 +44,8 @@ The layers form `(semantic broadphase + explicit hints) → visual contact memor
   radius and hands it to POI goal routing.
 - [`journeying-intelligence`](journeying) — probes distant tiles for learned POIs,
   then routes to one when available.
+- [`poi-playground`](poi-playground) — flat visual comparison of weighted and
+  fixed-cycle meandering and journeying. Run with `cargo run -p poi-playground --release`.
 
 POI visit policy is explicit: exploration delays revisits, while cycling fills a
 fixed-size roster and advances a cursor through it. Discovery cadence, acquisition

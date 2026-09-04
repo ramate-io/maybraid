@@ -5875,6 +5875,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "poi-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "journeying-intelligence",
+ "meandering-intelligence",
+ "movement-intelligence",
+ "poi-intelligence",
+]
+
+[[package]]
 name = "polling"
 version = "3.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
