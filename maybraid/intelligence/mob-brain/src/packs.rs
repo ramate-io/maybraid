@@ -3,11 +3,11 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use mob_intelligence::{
-	spawn_mob, Mob, MobIdAlloc, MobInstall, MobMemberBody, MobRespawn, MobSlot, MobTravel,
-	RosterMember,
+	Mob, MobIdAlloc, MobInstall, MobMemberBody, MobRespawn, MobSlot, MobTetherLock, MobTravel,
+	RosterMember, spawn_mob,
 };
 use npc_intelligence::{NpcBody, Personality};
-use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
+use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, LocomotionCapsule, PlayerLook, spawn_npc};
 use poi_intelligence::{
 	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
 	PoiLearningPolicy, PoiVisitPolicy, PoiVisitState,
@@ -16,7 +16,7 @@ use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId};
 
-use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
+use crate::scene::{CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT, waypoint_xz};
 
 const GRAZER_GROUP: ThreatGroupId = ThreatGroupId::group(4);
 const HUNT_GROUP: ThreatGroupId = ThreatGroupId::group(3);
@@ -24,7 +24,9 @@ const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
 const PREY: PoiKind = PoiKind::new("mob-brain/prey");
 const PREY_POI: PoiId = PoiId(10_000);
 const HUNT_ARRIVAL: f32 = 12.0;
-const HUNT_LOCK_SECS: f32 = 6.0;
+const HUNT_LOCK_SECS: f32 = 3.0;
+const HUNT_BROWSE_SECS: f32 = 8.0;
+const HUNT_JOURNEY_LINGER: f32 = 2.5;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PackKind {
@@ -146,8 +148,8 @@ pub fn recipes() -> [PackRecipe; 4] {
 			at: Vec2::new(45.0, -50.0),
 			leash: 16.0,
 			travel: 4.0,
-			journey: false,
-			journey_linger: HUNT_LOCK_SECS,
+			journey: true,
+			journey_linger: HUNT_JOURNEY_LINGER,
 			members: HUNT,
 		},
 	]
@@ -162,7 +164,9 @@ pub fn interests(kind: PackKind) -> PoiInterests {
 		PackKind::Roam => {
 			PoiInterests::new([PoiInterest::new(FORAGE, 1.3), PoiInterest::new(CAMP, 0.5)])
 		}
-		PackKind::Hunt => PoiInterests::default(),
+		PackKind::Hunt => {
+			PoiInterests::new([PoiInterest::new(FORAGE, 1.2), PoiInterest::new(CAMP, 0.4)])
+		}
 	}
 }
 
@@ -175,7 +179,7 @@ pub fn poi_placements() -> Vec<(PoiKind, Vec2)> {
 			PackKind::Occupy => (CAMP, 10, Some(FORAGE), 4),
 			PackKind::Watch => (GATE, 5, None, 0),
 			PackKind::Roam => (FORAGE, 4, Some(CAMP), 2),
-			PackKind::Hunt => continue,
+			PackKind::Hunt => (FORAGE, 6, Some(CAMP), 2),
 		};
 		let total = primary_n + secondary_n;
 		for index in 0..total {
@@ -245,6 +249,9 @@ pub fn spawn_packs(
 		}
 		let host = spawn_mob(commands, Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y), install);
 		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
+		if recipe.kind == PackKind::Hunt {
+			commands.entity(host).insert(HuntNovelty::default());
+		}
 		if recipe.journeys() {
 			stamp_journey(commands, host, id.0, recipe.journey_linger);
 		}
@@ -264,11 +271,52 @@ pub fn spawn_packs(
 	commands.insert_resource(visuals);
 }
 
+/// After a herd lock expires, pause chase so the host can journey and members
+/// can meander forage before the pack re-acquires.
+#[derive(Component, Clone, Copy, Debug)]
+pub(crate) struct HuntNovelty {
+	browse_until: f32,
+	chase_generation: u64,
+}
+
+impl Default for HuntNovelty {
+	fn default() -> Self {
+		Self { browse_until: 0.0, chase_generation: 1 }
+	}
+}
+
+impl HuntNovelty {
+	fn browsing(self, now: f32) -> bool {
+		self.browse_until > now
+	}
+}
+
+/// Hunt lock expiry starts a browse window. Waypoint locks during browse
+/// must not reset it.
+pub fn start_hunt_browse(
+	time: Res<Time>,
+	mut released: RemovedComponents<MobTetherLock>,
+	mut hunts: Query<&mut HuntNovelty>,
+) {
+	let now = time.elapsed_secs();
+	for entity in released.read() {
+		let Ok(mut novelty) = hunts.get_mut(entity) else {
+			continue;
+		};
+		if novelty.browsing(now) {
+			continue;
+		}
+		novelty.browse_until = now + HUNT_BROWSE_SECS;
+	}
+}
+
 /// Hunt host travels onto the herd. Arrival locks member tethers onto that host.
+/// After the lock expires, chase pauses so journeying / forage can run.
 pub fn hunt_tracks_herd(
 	time: Res<Time>,
 	mut commands: Commands,
 	hosts: Query<(Entity, &PackKind, &GlobalTransform), With<Mob>>,
+	mut hunts: Query<(Entity, Option<&MobTetherLock>, &mut HuntNovelty)>,
 	mut goals: Query<&mut PoiGoal>,
 ) {
 	let Some((prey, prey_at)) = hosts.iter().find_map(|(entity, kind, transform)| {
@@ -278,30 +326,62 @@ pub fn hunt_tracks_herd(
 	};
 	let now = time.elapsed_secs();
 	let at = Vec3::new(prey_at.x, 0.0, prey_at.z);
-	for (hunt, kind, _) in &hosts {
-		if *kind != PackKind::Hunt {
+	for (hunt, lock, mut novelty) in &mut hunts {
+		if lock.is_some() {
+			write_prey_goal(
+				&mut commands,
+				hunt,
+				&mut goals,
+				prey,
+				at,
+				now,
+				novelty.chase_generation,
+			);
 			continue;
 		}
-		if let Ok(mut goal) = goals.get_mut(hunt) {
-			goal.target = PREY_POI;
-			goal.kind = PREY;
-			goal.poi_entity = Some(prey);
-			goal.location.point = at;
-			goal.location.radius = HUNT_ARRIVAL;
-			goal.linger_secs = HUNT_LOCK_SECS;
+		if novelty.browsing(now) {
+			if goals.get(hunt).is_ok_and(|goal| goal.kind == PREY) {
+				commands.entity(hunt).remove::<PoiGoal>();
+			}
 			continue;
 		}
-		commands.entity(hunt).insert(PoiGoal::new(
-			1,
-			PREY_POI,
-			Some(prey),
-			PREY,
-			at,
-			HUNT_ARRIVAL,
-			now,
-			HUNT_LOCK_SECS,
-		));
+		if novelty.browse_until > 0.0 {
+			novelty.chase_generation = novelty.chase_generation.saturating_add(1).max(1);
+			novelty.browse_until = 0.0;
+		}
+		write_prey_goal(&mut commands, hunt, &mut goals, prey, at, now, novelty.chase_generation);
 	}
+}
+
+fn write_prey_goal(
+	commands: &mut Commands,
+	hunt: Entity,
+	goals: &mut Query<&mut PoiGoal>,
+	prey: Entity,
+	at: Vec3,
+	now: f32,
+	generation: u64,
+) {
+	if let Ok(mut goal) = goals.get_mut(hunt) {
+		goal.generation = generation;
+		goal.target = PREY_POI;
+		goal.kind = PREY;
+		goal.poi_entity = Some(prey);
+		goal.location.point = at;
+		goal.location.radius = HUNT_ARRIVAL;
+		goal.linger_secs = HUNT_LOCK_SECS;
+		return;
+	}
+	commands.entity(hunt).insert(PoiGoal::new(
+		generation,
+		PREY_POI,
+		Some(prey),
+		PREY,
+		at,
+		HUNT_ARRIVAL,
+		now,
+		HUNT_LOCK_SECS,
+	));
 }
 
 fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: f32) {
@@ -314,9 +394,9 @@ fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: 
 	journey.linger_secs = linger_secs;
 	journey.empty_tile_retry_secs = 4.0;
 	journey.visit_policy = PoiVisitPolicy::Weighted {
-		novelty_weight: 2.0,
-		revisit_cooldown_secs: 10.0,
-		repeat_weight: 0.8,
+		novelty_weight: 2.5,
+		revisit_cooldown_secs: 8.0,
+		repeat_weight: 0.6,
 	};
 	let mut learner = PoiIntelligenceUser::new(PoiInterests::one(WAYPOINT));
 	learner.policy = PoiLearningPolicy {
@@ -475,7 +555,7 @@ mod tests {
 		assert!(roam.traveling());
 		assert!(roam.journeys());
 		assert!(hunt.traveling());
-		assert!(!hunt.journeys());
+		assert!(hunt.journeys());
 		assert!(roam.travel < hunt.travel);
 		assert!(ROAM.iter().all(|spec| spec.personality == Personality::Grazer));
 		assert!(WATCH.iter().all(|spec| spec.personality == Personality::Brawler));
@@ -501,15 +581,17 @@ mod tests {
 	}
 
 	#[test]
-	fn hunt_lock_linger_matches_the_chase_goal() {
+	fn hunt_lock_linger_is_shorter_than_browse() {
 		let hunt = recipes().into_iter().find(|recipe| recipe.kind == PackKind::Hunt).unwrap();
-		assert!((hunt.journey_linger - HUNT_LOCK_SECS).abs() < 1e-4);
-		assert!(!hunt.journeys());
+		assert!((hunt.journey_linger - HUNT_JOURNEY_LINGER).abs() < 1e-4);
+		assert!(hunt.journeys());
+		assert!(HUNT_LOCK_SECS < HUNT_BROWSE_SECS);
 	}
 
 	#[test]
-	fn hunt_members_have_no_local_interests() {
-		assert!(interests(PackKind::Hunt).is_empty());
+	fn hunt_members_forage_between_chases() {
+		assert!(interests(PackKind::Hunt).iter().any(|interest| interest.kind == FORAGE));
+		assert!(interests(PackKind::Hunt).iter().any(|interest| interest.kind == CAMP));
 		assert!(interests(PackKind::Roam).iter().any(|interest| interest.kind == FORAGE));
 		assert!(interests(PackKind::Occupy).iter().any(|interest| interest.kind == CAMP));
 		assert!(interests(PackKind::Watch).iter().any(|interest| interest.kind == GATE));
@@ -518,13 +600,22 @@ mod tests {
 	#[test]
 	fn local_pois_cover_stationary_and_roam() {
 		let placements = poi_placements();
-		assert!(placements
-			.iter()
-			.any(|(kind, at)| *kind == CAMP && at.distance(Vec2::new(-110.0, 105.0)) < 20.0));
-		assert!(placements
-			.iter()
-			.any(|(kind, at)| *kind == GATE && at.distance(Vec2::new(118.0, 95.0)) < 10.0));
+		assert!(
+			placements
+				.iter()
+				.any(|(kind, at)| *kind == CAMP && at.distance(Vec2::new(-110.0, 105.0)) < 20.0)
+		);
+		assert!(
+			placements
+				.iter()
+				.any(|(kind, at)| *kind == GATE && at.distance(Vec2::new(118.0, 95.0)) < 10.0)
+		);
 		assert!(placements.iter().filter(|(kind, _)| *kind == FORAGE).count() >= 10);
+		assert!(
+			placements
+				.iter()
+				.any(|(kind, at)| *kind == FORAGE && at.distance(Vec2::new(45.0, -50.0)) < 16.0)
+		);
 		assert!(!placements.is_empty());
 	}
 }

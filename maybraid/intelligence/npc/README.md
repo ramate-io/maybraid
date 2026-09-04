@@ -17,8 +17,8 @@ idle stack:
 Combat and Evade disable meandering **and** tether, and drop an active
 `PoiGoal`. On Ignore, meander is granted only while the tether is satisfied (or
 the NPC has no tether); an unsatisfied leash or stalk drops `PoiGoal` so the
-member catches up, then meander resumes. Firearm movement and flee/hide already
-no-op when their grants are retracted. Sticking to prey or a POI is a
+member catches up, then meander resumes. Retracting tether does not Hold in
+place, so firearm movement and flee can write. Sticking to prey or a POI is a
 [mob tether lock](../mob) (subject swap after arrival), not tether-during-Combat.
 
 ## Personalities

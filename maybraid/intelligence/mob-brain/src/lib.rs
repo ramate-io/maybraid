@@ -27,11 +27,11 @@ use movement_intelligence::{
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
-use packs::{hunt_tracks_herd, spawn_packs, PackKind};
+use packs::{PackKind, hunt_tracks_herd, spawn_packs, start_hunt_browse};
 use player::{Npc, PlayerPlugin};
 use poi_intelligence::{PoiGoal, PoiIntelligencePlugin, PoiSystems};
 use scene::{
-	setup_ground, setup_lighting, setup_local_pois, setup_waypoints, PAD_EXTENT, PAD_SIDE,
+	PAD_EXTENT, PAD_SIDE, setup_ground, setup_lighting, setup_local_pois, setup_waypoints,
 };
 use spotting_intelligence::SpottingSystems;
 use tether_intelligence::TetherPlugin;
@@ -120,7 +120,10 @@ impl Plugin for MobBrainPlaygroundPlugin {
 				Update,
 				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
 			)
-			.add_systems(Update, hunt_tracks_herd.before(MobSystems::Travel))
+			.add_systems(
+				Update,
+				(start_hunt_browse, hunt_tracks_herd).chain().before(MobSystems::Travel),
+			)
 			.add_systems(Update, draw_debug_world)
 			.add_systems(Update, update_status_text);
 	}
