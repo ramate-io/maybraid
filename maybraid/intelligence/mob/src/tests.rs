@@ -9,14 +9,14 @@ use tether_intelligence::{Tether, TetherIntelligenceUser, TetherObjective};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatSubject};
 
 use crate::bind::bind_mob_members;
-use crate::lifecycle::write_back_mob_roster;
+use crate::lifecycle::{queue_downed_member_deaths, write_back_mob_roster};
 use crate::lock::{
 	apply_mob_tether_subjects, expire_mob_tether_locks, forget_mob_tether_lock_when_leaving,
 	lock_mobs_on_poi_arrival,
 };
 use crate::{
-	spawn_mob, MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin,
-	MobMemberNeeded, MobRespawn, MobRoster, MobSlot, MobTetherLock, RosterMember,
+	MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin, MobMemberNeeded,
+	MobRespawn, MobRespawnAt, MobRoster, MobSlot, MobTetherLock, RosterMember, spawn_mob,
 };
 
 const PACK: ThreatGroupId = ThreatGroupId::group(9);
@@ -118,18 +118,19 @@ fn occupied_slot_does_not_steal_a_live_member() {
 }
 
 #[test]
-fn writeback_clears_the_pointer_and_schedules_respawn() {
+fn writeback_clears_a_culled_pointer_without_respawn() {
 	let mut world = World::new();
-	world.init_resource::<Time>();
 	let pose = Vec3::new(8.0, 0.9, -2.0);
 	let host = spawn_host(
 		&mut world,
 		MobId(4),
 		vec![RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false)],
 	);
-	world
-		.entity_mut(host)
-		.insert(MobRespawn { delay_secs: 1.0, max_lives: Some(1) });
+	world.entity_mut(host).insert(MobRespawn {
+		delay_secs: 1.0,
+		max_replacements: Some(3),
+		..MobRespawn::default()
+	});
 	let plant = world.spawn((Transform::from_translation(pose), MobSlot(0), MobId(4))).id();
 	world.run_system_once(bind_mob_members).expect("bind");
 	world.flush();
@@ -145,36 +146,132 @@ fn writeback_clears_the_pointer_and_schedules_respawn() {
 	world.run_system_once(write_back_mob_roster).expect("writeback");
 	let member = world.get::<MobRoster>(host).and_then(|roster| roster.get(0)).expect("slot");
 	assert!(member.entity.is_none());
-	assert!(member.respawn_at.is_some());
-	assert_eq!(member.lives_used, 1);
+	assert!(member.respawn_at.is_none());
+	assert_eq!(member.replacements_used, 0);
 }
 
 #[test]
-fn respawn_emits_one_needed_message() {
+fn downed_schedules_a_replacement_and_queues_despawn() {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let pose = Vec3::new(8.0, 0.9, -2.0);
+	let host = spawn_host(
+		&mut world,
+		MobId(14),
+		vec![RosterMember::new(Personality::Grazer, pose).with_armed(false)],
+	);
+	world.entity_mut(host).insert(MobRespawn {
+		delay_secs: 1.0,
+		max_replacements: Some(1),
+		corpse_secs: 0.5,
+		..MobRespawn::default()
+	});
+	let plant = world.spawn((Transform::from_translation(pose), MobSlot(0), MobId(14))).id();
+	world.run_system_once(bind_mob_members).expect("bind");
+	world.flush();
+	world
+		.entity_mut(plant)
+		.insert((Health::from_max(40.0), damage::Downed { source: None, point: pose, at: 0.0 }));
+	world.run_system_once(queue_downed_member_deaths).expect("downed");
+	world.flush();
+	let member = world.get::<MobRoster>(host).and_then(|roster| roster.get(0)).expect("slot");
+	assert!(member.respawn_at.is_some());
+	assert_eq!(member.replacements_used, 1);
+	assert!((member.health.current - 40.0).abs() < 1e-4);
+	assert!(world.get::<damage::DespawnAfter>(plant).is_some());
+}
+
+#[test]
+fn cull_does_not_respawn_when_the_policy_is_missing() {
+	let mut world = World::new();
+	let host = spawn_host(
+		&mut world,
+		MobId(15),
+		vec![RosterMember::new(Personality::Grazer, Vec3::ZERO).with_armed(false)],
+	);
+	world.entity_mut(host).remove::<MobRespawn>();
+	let plant = world.spawn((Transform::default(), MobSlot(0), MobId(15))).id();
+	world.run_system_once(bind_mob_members).expect("bind");
+	world.flush();
+	world.init_resource::<Time>();
+	world
+		.entity_mut(plant)
+		.insert(damage::Downed { source: None, point: Vec3::ZERO, at: 0.0 });
+	world.run_system_once(queue_downed_member_deaths).expect("downed");
+	world.flush();
+	let member = world.get::<MobRoster>(host).and_then(|roster| roster.get(0)).expect("slot");
+	assert!(member.respawn_at.is_none());
+	assert_eq!(member.replacements_used, 0);
+}
+
+#[test]
+fn respawn_emits_at_the_host_with_full_health() {
 	let mut app = App::new();
 	app.add_plugins(MinimalPlugins).add_plugins(MobIntelligencePlugin);
-	let pose = Vec3::new(1.0, 0.9, 0.0);
+	let last = Vec3::new(1.0, 0.9, 4.0);
+	let host_at = Vec3::new(3.0, 0.0, 1.0);
 	let host = spawn_mob(
 		&mut app.world_mut().commands(),
-		Transform::default(),
-		MobInstall::new(MobId(5), 8.0, vec![RosterMember::new(Personality::Grazer, pose)])
-			.with_respawn(MobRespawn { delay_secs: 0.0, max_lives: Some(1) }),
+		Transform::from_translation(host_at),
+		MobInstall::new(MobId(5), 8.0, vec![RosterMember::new(Personality::Grazer, last)])
+			.with_respawn(MobRespawn {
+				delay_secs: 0.0,
+				max_replacements: Some(1),
+				at: MobRespawnAt::Host,
+				..MobRespawn::default()
+			}),
 	);
 	app.world_mut().flush();
-	{
-		let mut roster = app.world_mut().get_mut::<MobRoster>(host).expect("roster");
-		let member = roster.get_mut(0).expect("slot");
-		member.entity = Some(Entity::from_bits(99));
-	}
+	let plant = app
+		.world_mut()
+		.spawn((Transform::from_translation(last), MobSlot(0), MobId(5)))
+		.id();
+	app.world_mut().run_system_once(bind_mob_members).expect("bind");
+	app.world_mut().flush();
+	app.world_mut().entity_mut(plant).insert((
+		Health { current: 0.0, max: 40.0 },
+		damage::Downed { source: None, point: last, at: 0.0 },
+	));
+	app.world_mut().run_system_once(queue_downed_member_deaths).expect("downed");
+	app.world_mut().flush();
+	app.world_mut().entity_mut(plant).despawn();
 	app.world_mut().run_system_once(write_back_mob_roster).expect("writeback");
 	app.update();
 	let events: Vec<_> =
 		app.world_mut().resource_mut::<Messages<MobMemberNeeded>>().drain().collect();
-	assert_eq!(events, vec![MobMemberNeeded { mob: host, id: MobId(5), slot: 0, pose }]);
+	assert_eq!(events.len(), 1);
+	assert_eq!(events[0].mob, host);
+	assert_eq!(events[0].slot, 0);
+	assert!((events[0].pose.x - host_at.x).abs() < 1e-4);
+	assert!((events[0].pose.z - host_at.z).abs() < 1e-4);
+	assert!((events[0].pose.y - last.y).abs() < 1e-4);
+	let member = app
+		.world()
+		.get::<MobRoster>(host)
+		.and_then(|roster| roster.get(0))
+		.expect("slot");
+	assert!((member.health.current - member.health.max).abs() < 1e-4);
 	app.update();
 	let again: Vec<_> =
 		app.world_mut().resource_mut::<Messages<MobMemberNeeded>>().drain().collect();
 	assert!(again.is_empty());
+}
+
+#[test]
+fn last_pose_respawn_keeps_the_death_site() {
+	assert_eq!(
+		crate::lifecycle::spawn_pose(MobRespawnAt::LastPose, Vec3::X * 9.0, Vec3::Z * 2.0),
+		Vec3::Z * 2.0
+	);
+}
+
+#[test]
+fn replacements_count_after_the_original() {
+	assert!(!MobRespawn::never().allows(0));
+	let one = MobRespawn { max_replacements: Some(1), ..MobRespawn::default() };
+	assert!(one.allows(0));
+	assert!(!one.allows(1));
+	assert!(MobRespawn::default().allows(8));
 }
 
 #[test]
@@ -277,9 +374,11 @@ fn arrival_locks_once_until_the_host_leaves() {
 	));
 	world.run_system_once(lock_mobs_on_poi_arrival).expect("lock");
 	world.flush();
-	assert!(world
-		.get::<MobTetherLock>(host)
-		.is_some_and(|lock| lock.subject == dest && lock.generation == 3));
+	assert!(
+		world
+			.get::<MobTetherLock>(host)
+			.is_some_and(|lock| lock.subject == dest && lock.generation == 3)
+	);
 
 	world
 		.entity_mut(host)

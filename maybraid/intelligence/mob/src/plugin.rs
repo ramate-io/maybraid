@@ -4,7 +4,7 @@ use tether_intelligence::TetherSystems;
 
 use crate::bind::{bind_mob_members, propagate_mob_membership};
 use crate::host::MobIdAlloc;
-use crate::lifecycle::{respawn_mob_members, write_back_mob_roster};
+use crate::lifecycle::{queue_downed_member_deaths, respawn_mob_members, write_back_mob_roster};
 use crate::lock::{
 	apply_mob_tether_subjects, expire_mob_tether_locks, forget_mob_tether_lock_when_leaving,
 	lock_mobs_on_poi_arrival,
@@ -49,7 +49,9 @@ impl Plugin for MobIntelligencePlugin {
 				(
 					bind_mob_members.in_set(MobSystems::Bind),
 					propagate_mob_membership.in_set(MobSystems::Propagate),
-					write_back_mob_roster.in_set(MobSystems::Writeback),
+					(queue_downed_member_deaths, write_back_mob_roster)
+						.chain()
+						.in_set(MobSystems::Writeback),
 					respawn_mob_members.in_set(MobSystems::Respawn),
 					travel_mobs.in_set(MobSystems::Travel),
 					(

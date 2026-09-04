@@ -8,7 +8,7 @@ use tether_intelligence::TetherIntelligenceUser;
 use threat_intelligence::{ThreatId, ThreatSubject};
 
 use crate::host::{Mob, MobId};
-use crate::member::{resolve_host, MemberOf, MobMemberBody, MobSlot};
+use crate::member::{MemberOf, MobMemberBody, MobSlot, resolve_host};
 use crate::roster::{MobAffiliations, MobInterests, MobRoster};
 
 type Wish<'a> = (

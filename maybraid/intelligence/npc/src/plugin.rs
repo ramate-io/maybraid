@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use damage::Downed;
 use meandering_intelligence::MeanderingIntelligenceUser;
 use poi_intelligence::{PoiGoal, PoiSystems};
 use tether_intelligence::{TetherIntelligenceUser, TetherMemory, TetherSystems};
@@ -19,6 +20,7 @@ type NpcMixers<'w, 's> = Query<
 		Option<&'static mut TetherIntelligenceUser>,
 		Option<&'static TetherMemory>,
 		Has<PoiGoal>,
+		Has<Downed>,
 	),
 >;
 
@@ -43,14 +45,15 @@ impl Plugin for NpcIntelligencePlugin {
 	}
 }
 
-/// Priority mixer: Combat/Evade own movement. Ignore restores tether; meander
+/// Priority mixer: Combat/Evade/Downed own movement. Ignore restores tether; meander
 /// only while that tether is satisfied (or absent).
 pub fn mix_npc_brains(mut commands: Commands, mut npcs: NpcMixers) {
-	for (entity, npc, management, mut meandering, mut tether, memory, has_goal) in &mut npcs {
+	for (entity, npc, management, mut meandering, mut tether, memory, has_goal, downed) in &mut npcs
+	{
 		let tactic = management.tactic;
-		let acting = tactic != ThreatTactic::Ignore;
+		let acting = downed || tactic != ThreatTactic::Ignore;
 		if let Some(tether) = tether.as_deref_mut() {
-			apply_tether(npc, tactic, tether);
+			apply_tether(npc, tactic, downed, tether);
 		}
 		let pulling = tether_is_pulling(tether.as_deref(), memory);
 		if let Some(meandering) = meandering.as_deref_mut() {
@@ -69,7 +72,16 @@ fn tether_is_pulling(
 	tether.is_some_and(|tether| tether.enabled) && memory.is_some_and(|memory| !memory.satisfied)
 }
 
-fn apply_tether(npc: &NpcIntelligence, tactic: ThreatTactic, tether: &mut TetherIntelligenceUser) {
+fn apply_tether(
+	npc: &NpcIntelligence,
+	tactic: ThreatTactic,
+	downed: bool,
+	tether: &mut TetherIntelligenceUser,
+) {
+	if downed {
+		tether.enabled = false;
+		return;
+	}
 	match tactic {
 		ThreatTactic::Ignore => {
 			tether.enabled = true;

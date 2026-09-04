@@ -53,9 +53,15 @@ High cull
   write pose / health onto the roster
   despawn the plant
   roster[slot].entity = None
+  do **not** schedule [`MobMemberNeeded`](src/roster.rs)
+
+Death
+  `Downed` → replacement clock + `DespawnAfter`
+  writeback clears the pointer
+  after delay, [`MobMemberNeeded`](src/roster.rs) at the host (full HP)
 ```
 
-Fulfill and cull are the only times the live link changes. Refresh must not
+Fulfill, cull, and death are the times the live link changes. Refresh must not
 rebind. Trickle spawn is the chunk budget; `LodLazyPending` is not required for
 the link.
 
@@ -79,8 +85,9 @@ so serialized High content can stay as dumb as every other grove plant.
 
 The mob brain runs off the roster: spec, last pose, health, cheap summaries.
 Occupying, relocating the tether, and pack antagonism cannot require live NPC
-queries. Respawn is a [`MobMemberNeeded`](src/roster.rs) message; the app spawns
-the body and stamps the wish again.
+queries. Death respawn is a [`MobMemberNeeded`](src/roster.rs) message after the
+corpse despawns; the app spawns the body and stamps the wish again. High cull
+is the other vacancy: clear the pointer and wait for fulfill.
 
 Journeying / `MobTravel` move the **host** (the tether). Members follow through
 tether intelligence, not by parenting.

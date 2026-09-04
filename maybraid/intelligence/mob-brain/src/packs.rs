@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use mob_intelligence::{
-	Mob, MobIdAlloc, MobInstall, MobMemberBody, MobRespawn, MobSlot, MobTetherLock, MobTravel,
-	RosterMember, spawn_mob,
+	Mob, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobRespawn, MobSlot,
+	MobTetherLock, MobTravel, RosterMember, spawn_mob,
 };
 use npc_intelligence::{NpcBody, Personality};
 use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, LocomotionCapsule, PlayerLook, spawn_npc};
@@ -206,7 +206,7 @@ fn forage_along_waypoints() -> Vec<(PoiKind, Vec2)> {
 }
 
 #[derive(Resource)]
-struct NpcVisuals {
+pub(crate) struct NpcVisuals {
 	capsule: Handle<Mesh>,
 	colors: PersonalityColors,
 }
@@ -443,6 +443,28 @@ fn spawn_member(
 		Mesh3d(visuals.capsule.clone()),
 		MeshMaterial3d(visuals.colors.handle(spec.personality)),
 	));
+}
+
+pub fn spawn_needed_members(
+	mut commands: Commands,
+	mut needed: MessageReader<MobMemberNeeded>,
+	visuals: Res<NpcVisuals>,
+	rosters: Query<&mob_intelligence::MobRoster>,
+) {
+	for request in needed.read() {
+		let Ok(roster) = rosters.get(request.mob) else {
+			continue;
+		};
+		let Some(member) = roster.get(request.slot) else {
+			continue;
+		};
+		let spec = MemberSpec {
+			personality: member.personality,
+			armed: member.armed,
+			keep_tether_in_combat: member.keep_tether_in_combat.unwrap_or(false),
+		};
+		spawn_member(&mut commands, &visuals, request.id, request.slot, spec, request.pose);
+	}
 }
 
 fn pack_affiliations(kind: PackKind) -> Affiliations {

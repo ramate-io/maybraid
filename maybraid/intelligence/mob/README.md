@@ -22,7 +22,7 @@ the playground stamps today; see [ROSTER.md](ROSTER.md).
 - [`MobRoster`](src/roster.rs): personality spec, last pose, health, live `Entity`
 - [`Tether`](../tether) marker so members can leash / stalk the host
 - [`MobAffiliations`](src/roster.rs) and [`PoiInterests`](../poi): copied onto members at bind
-- [`MobRespawn`](src/roster.rs): delay + lives; emits [`MobMemberNeeded`](src/roster.rs)
+- [`MobRespawn`](src/roster.rs): delay + replacement cap; death emits [`MobMemberNeeded`](src/roster.rs) after despawn. Cull only clears the live pointer.
 - optional [`MobTravel`](src/travel.rs) toward a [`PoiGoal`](../poi)
 - [`MobTetherLock`](src/lock.rs): after arrival, member tethers sit on the destination entity for the goal linger, then restore to the host. Combat/Evade still own NPC movement.
 
