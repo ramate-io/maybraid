@@ -7,7 +7,9 @@ use crozon_characters::{
 	species::braidman::BraidmanConfig, CharacterRecipe, CharacterRoot, LocomotionCapsule,
 };
 use evasion_intelligence::{EvasionIntelligenceUser, EvasionSettings};
-use firearm_intelligence::{FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting};
+use firearm_intelligence::{
+	FirearmEngagement, FirearmIntelligence, FirearmMovementIntelligence, FirearmTargeting,
+};
 use firearm_user::{
 	live_weapon_from_stats, spawn_held_kit, FirearmUser, FirearmUserSettings, LiveWeapon,
 };
@@ -23,6 +25,7 @@ use player::{
 };
 use spotting_intelligence::{InterestLayers, SpotDirective, SpottingSettings, SpottingUser};
 use std::f32::consts::FRAC_PI_2;
+use threat_management_intelligence::ThreatManagementIntelligence;
 
 use crate::damage::{headshot_band_for, CombatRespawn, Health};
 use crate::engagement::NpcEngagement;
@@ -354,6 +357,7 @@ pub(crate) fn install_npc_civilian(
 			azimuths: 8,
 			standoffs: [4.0, 8.0],
 		}),
+		ThreatManagementIntelligence::civilian(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));
@@ -409,6 +413,8 @@ pub(crate) fn install_npc_combat(
 		spotting,
 		CombatTargeting::default(),
 		FirearmTargeting::default(),
+		FirearmEngagement::hold(),
+		ThreatManagementIntelligence::ffa(),
 		health.unwrap_or_default(),
 		headshot_band_for(hull),
 	));
@@ -627,6 +633,7 @@ mod tests {
 		world.flush();
 		assert!(world.get::<Civilian>(npc).is_some());
 		assert!(world.get::<EvasionIntelligenceUser>(npc).is_some());
+		assert!(world.get::<ThreatManagementIntelligence>(npc).is_some());
 		assert!(world.get::<FleeingUser>(npc).is_some());
 		assert!(world.get::<HidingUser>(npc).is_some());
 		assert!(world.get::<CombatTargeting>(npc).is_none());

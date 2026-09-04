@@ -21,6 +21,11 @@ pub fn sync_spotted_assailants(
 			}
 		}
 
+		if !evasion.enabled {
+			evasion.clear_source(AssailantSource::SPOTTING);
+			continue;
+		}
+
 		for contact in spotting.contacts.values() {
 			evasion.upsert_sighting(AssailantContact {
 				subject: contact.subject,
@@ -71,6 +76,28 @@ mod tests {
 		world.run_system_once(sync_spotted_assailants)?;
 		let evasion = world.query::<&EvasionIntelligenceUser>().single(&world)?;
 		assert_eq!(evasion.contact(target).map(|contact| contact.position), Some(Vec3::X * 4.0));
+		Ok(())
+	}
+
+	#[test]
+	fn disabled_evasion_does_not_admit_spotted_contacts(
+	) -> Result<(), bevy::ecs::system::RunSystemError> {
+		let target = Entity::from_bits(7);
+		let mut world = World::new();
+		let mut spotting =
+			SpottingUser::new(Vec3::Y, [SpotDirective::new(InterestLayers::CHARACTER, 20.0)])
+				.with_settings(SpottingSettings::new(4, 4, 2.5));
+		spotting.contacts.insert(
+			target,
+			SpottedContact::new(target, Vec3::X * 4.0, Vec3::ZERO, Vec3::X * 4.0, None, 1.0, 0.1),
+		);
+		let mut evasion = EvasionIntelligenceUser::default();
+		evasion.enabled = false;
+		world.spawn((Transform::default(), spotting, evasion));
+		world.run_system_once(sync_spotted_assailants)?;
+		let evasion = world.query::<&EvasionIntelligenceUser>().single(&world)?;
+		assert!(evasion.contact(target).is_none());
+		assert!(evasion.active_assailant(target).is_none());
 		Ok(())
 	}
 }

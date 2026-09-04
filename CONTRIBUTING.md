@@ -204,7 +204,14 @@ opportunity as separate layers:
 5. Weapon intelligence consumes actionable ranked contacts and contributes
    weapon-specific opportunity. Eye-level spotting and muzzle-level trajectory
    validation are distinct visibility tasks and should retain separate caches
-   and cadences.
+   and cadences. Whether the combatant may actually raise the trigger is a
+   per-entity [`FirearmEngagement`](maybraid/intelligence/combat/firearm/src/engagement.rs)
+   grant (`Hold`, `ReturnFire`, or `WeaponsFree`), not a global fire lock and
+   not a substitute for threat classification.
+6. [`threat-intelligence-damage`](maybraid/intelligence/threat/damage) maps
+   [`DamageApplied`](maybraid/damage/src/lib.rs) onto decaying individual
+   antagonism and a directed `RECEIVED_DAMAGE` observation. That is typed
+   knowledge for the victim; it does not fabricate a sighting.
 
 An active target may intentionally have no current contact memory. Consumers
 must therefore select the highest-ranked target with the knowledge they require,
@@ -214,11 +221,12 @@ firearm trajectory subjects with `Without<FirearmIntelligence>` excludes every
 armed NPC from NPC-to-NPC combat. Exclude self explicitly by entity identity.
 
 Gameplay events should write typed knowledge rather than secretly bypassing the
-pipeline. For example, a shot may open a ceasefire gate, while received fire
-adds a `RECEIVED_FIRE` source or decaying threat influence; neither event should
-fabricate a successful sighting. Avoid reading live transforms as remembered
-knowledge. Resolve live transforms only inside the visibility executor that is
-actively checking them, then store the resulting observation snapshot.
+pipeline. For example, a session may flip combatants from `Hold` to
+`WeaponsFree`, while received fire or applied damage adds a source-owned
+observation or decaying antagonism; neither event should fabricate a successful
+sighting. Avoid reading live transforms as remembered knowledge. Resolve live
+transforms only inside the visibility executor that is actively checking them,
+then store the resulting observation snapshot.
 
 Applications own budgets and cadence. Keep reusable spotting and targeting
 plugins cadence-neutral; configure discovery, respotting, ranking, movement,

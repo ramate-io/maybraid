@@ -55,6 +55,9 @@ use richmond_building_components::{
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
+use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
+use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
+use threat_management_intelligence::ThreatManagementPlugin;
 
 pub struct FiringRangePlugin;
 
@@ -85,6 +88,9 @@ impl Plugin for FiringRangePlugin {
 				MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default(),
 			)
 			.add_plugins(FirearmIntelligencePlugin)
+			.add_plugins(ThreatIntelligencePlugin)
+			.add_plugins(ThreatIntelligenceDamagePlugin)
+			.add_plugins(ThreatManagementPlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)
@@ -153,6 +159,13 @@ impl Plugin for FiringRangePlugin {
 					.chain(),
 			)
 			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+			.add_systems(Update, vantage::sync_range_threat_actors.in_set(ThreatSystems::Prepare))
+			.add_systems(
+				Update,
+				vantage::seed_range_threat_observations
+					.in_set(ThreatSystems::Ingest)
+					.before(threat_intelligence::ingest_threat_observations),
+			)
 			.add_systems(
 				Update,
 				(
@@ -161,11 +174,8 @@ impl Plugin for FiringRangePlugin {
 					session::spawn_npc_character,
 					session::spawn_held_system,
 					(damage::queue_flee_out_respawns, respawn_combatants).chain(),
-					(
-						vantage::sync_combat_spot_subjects,
-						vantage::sync_combat_rosters,
-						vantage::sync_evasion_rosters,
-					)
+					vantage::sync_combat_spot_subjects
+						.after(ThreatSystems::Discover)
 						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),
@@ -187,12 +197,6 @@ impl Plugin for FiringRangePlugin {
 				)
 					.chain()
 					.after(::damage::DamageSystems::Down),
-			)
-			.add_systems(
-				PostUpdate,
-				engagement::gate_npc_fire
-					.after(FirearmIntelligenceSystems::Fire)
-					.before(FirearmWeaponSystems::Fire),
 			)
 			.add_systems(
 				PostUpdate,

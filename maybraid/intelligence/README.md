@@ -20,10 +20,27 @@ Walk colliders for Richmond IR live in [`richmond-building-physics`](../richmond
 
 Spotting deliberately resolves a known subject's exact live location at probe time. Its memory records when visibility last succeeded and when another attempt is due; fresh contacts can satisfy a directive and skip discovery work. Position uncertainty is deferred to a higher-fidelity model.
 
+## Threats
+
+- [`threat-intelligence`](threat) — weighted group and individual affiliations
+  (antagonism and mitigation), Gimme-backed local discovery, directed findings
+  inboxes, retained threat memory, and source-owned spotting-hint export.
+- [`threat-intelligence-damage`](threat/damage) — maps applied injury onto
+  decaying individual antagonism and a directed `RECEIVED_DAMAGE` observation.
+- [`threat-management-intelligence`](threat-management) — exclusive Ignore |
+  Evade | Combat grant over retained knowledge. Combat and evade populate
+  `ENEMYSHIP` membership; ignore retracts both so spotting, POI, and meander
+  can still drive.
+
+Threat classification is directional: a recipient's antagonist memory is matched
+against a subject's memberships, then mitigating beliefs are subtracted. Threat
+knowledge proposes spotting candidates; only spotting can establish visual contact.
+Management then grants an exclusive Ignore | Evade | Combat tactic over that set.
+
 ## Combat
 
 - [`combat-targeting`](combat/targeting) — combat contact memory, source-owned active-set membership, factor algebra, decaying influences, continuity, and cached weight ranking.
-- [`firearm-intelligence`](combat/firearm) — adapts spotted character contacts into combat targets, contributes firearm opportunity, writes movement / look, validates posed-muzzle aim trajectories, and gates the actual trigger.
+- [`firearm-intelligence`](combat/firearm) — adapts spotted character contacts into combat targets, contributes firearm opportunity, writes movement / look, validates posed-muzzle aim trajectories, and gates the actual trigger through per-combatant [`FirearmEngagement`](combat/firearm/src/engagement.rs) (`Hold` | `ReturnFire` | `WeaponsFree`).
 
 The layers form `(semantic broadphase + explicit hints) → visual contact memory → combat contact and weighted target set → firearm trajectory choice`. Applications own cadence; the reusable plugins remain cadence-neutral.
 

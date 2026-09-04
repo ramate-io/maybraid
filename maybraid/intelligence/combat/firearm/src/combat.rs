@@ -10,7 +10,36 @@ use player::{PlayerLook, PlayerYawOwner};
 use spotting_intelligence::{SpotBounds, SpotSubject};
 use std::f32::consts::FRAC_PI_2;
 
+use crate::engagement::{allows_fire, FirearmEngagement};
 use crate::targeting::FirearmTargeting;
+
+type FirearmAimControl<'w, 's> = Query<
+	'w,
+	's,
+	(
+		Entity,
+		&'static Transform,
+		&'static MovementIntelligence,
+		&'static FirearmUser,
+		&'static mut FirearmIntelligence,
+		&'static mut CombatTargeting,
+		&'static FirearmTargeting,
+		&'static mut PlayerLook,
+	),
+>;
+
+type FirearmFireControl<'w, 's> = Query<
+	'w,
+	's,
+	(
+		Entity,
+		&'static mut FirearmIntelligence,
+		&'static FirearmUser,
+		&'static CombatTargeting,
+		&'static FirearmTargeting,
+		Option<&'static FirearmEngagement>,
+	),
+>;
 
 /// How a firearm combatant aims and stays on a target.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -110,16 +139,7 @@ impl Default for FirearmIntelligence {
 /// rotates about the shoulder; aiming from the barrel tip pitches the bore high.
 pub(crate) fn aim_at_firearm_targets(
 	time: Res<Time>,
-	mut combatants: Query<(
-		Entity,
-		&Transform,
-		&MovementIntelligence,
-		&FirearmUser,
-		&mut FirearmIntelligence,
-		&mut CombatTargeting,
-		&FirearmTargeting,
-		&mut PlayerLook,
-	)>,
+	mut combatants: FirearmAimControl,
 	guns: Query<&FirearmMembers>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
@@ -266,13 +286,7 @@ pub(crate) fn orient_firearm_combatants(
 /// obstruction policy allows the shot.
 pub(crate) fn fire_at_spotted_targets(
 	time: Res<Time>,
-	mut combatants: Query<(
-		Entity,
-		&mut FirearmIntelligence,
-		&FirearmUser,
-		&CombatTargeting,
-		&FirearmTargeting,
-	)>,
+	mut combatants: FirearmFireControl,
 	guns: Query<&FirearmMembers>,
 	maps: Query<&BoneMap, With<RigRoot>>,
 	globals: Query<&GlobalTransform>,
@@ -280,9 +294,14 @@ pub(crate) fn fire_at_spotted_targets(
 	mut triggers: Query<&mut WeaponTrigger>,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, mut brain, user, targeting, firearm_targeting) in &mut combatants {
+	for (entity, mut brain, user, targeting, firearm_targeting, engagement) in &mut combatants {
 		let target = engaged_target(targeting).copied();
 		let Some(target) = target else {
+			brain.on_target = false;
+			set_trigger(user, false, &mut triggers);
+			continue;
+		};
+		if !allows_fire(engagement, target.subject) {
 			brain.on_target = false;
 			set_trigger(user, false, &mut triggers);
 			continue;

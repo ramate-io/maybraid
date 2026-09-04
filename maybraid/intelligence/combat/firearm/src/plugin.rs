@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use combat_targeting::{CombatTargetingPlugin, CombatTargetingSystems};
+use damage::DamageSystems;
 use firearm_user::FirearmUserSystems;
 use firearms::{FirearmHostSystems, FirearmWeaponSystems};
 use movement_intelligence::MovementIntelligenceSystems;
@@ -12,6 +13,7 @@ use spotting_intelligence_avian::SpottingAvianPlugin;
 use crate::combat::{
 	aim_at_firearm_targets, fire_at_spotted_targets, note_weapon_recoil, orient_firearm_combatants,
 };
+use crate::engagement::authorize_return_fire_from_damage;
 use crate::movement::write_firearm_movement_objectives;
 use crate::spotting::sync_spotted_combat_targets;
 use crate::targeting::validate_firearm_aim_trajectories;
@@ -78,6 +80,10 @@ impl Plugin for FirearmIntelligencePlugin {
 		.add_systems(
 			PostUpdate,
 			validate_firearm_aim_trajectories.in_set(FirearmIntelligenceSystems::ValidateAim),
+		)
+		.add_systems(
+			PostUpdate,
+			authorize_return_fire_from_damage.after(DamageSystems::Apply),
 		)
 		.add_systems(PostUpdate, fire_at_spotted_targets.in_set(FirearmIntelligenceSystems::Fire))
 		.add_systems(PostUpdate, note_weapon_recoil.after(FirearmWeaponSystems::Fire));

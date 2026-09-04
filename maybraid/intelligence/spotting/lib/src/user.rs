@@ -4,15 +4,46 @@ use bevy::prelude::*;
 
 use crate::{SpotDirective, SpottedContact};
 
-/// A semantic reason to explicitly consider one subject during discovery.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// Independent owner of one semantic spotting hint contribution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SpottingHintSource(u8);
+
+impl SpottingHintSource {
+	pub const EXPLICIT: Self = Self(0);
+	pub const THREAT: Self = Self(1);
+}
+
+/// Source-owned semantic reasons to consider one subject during discovery.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpottingHint {
-	pub priority: i32,
+	priorities: BTreeMap<SpottingHintSource, i32>,
 }
 
 impl SpottingHint {
-	pub const fn new(priority: i32) -> Self {
-		Self { priority }
+	pub fn new(priority: i32) -> Self {
+		let mut hint = Self::default();
+		hint.set(SpottingHintSource::EXPLICIT, priority);
+		hint
+	}
+
+	pub fn priority(&self) -> i32 {
+		self.priorities.values().copied().max().unwrap_or(0)
+	}
+
+	pub fn has_source(&self, source: SpottingHintSource) -> bool {
+		self.priorities.contains_key(&source)
+	}
+
+	pub fn set(&mut self, source: SpottingHintSource, priority: i32) {
+		self.priorities.insert(source, priority);
+	}
+
+	pub fn remove(&mut self, source: SpottingHintSource) {
+		self.priorities.remove(&source);
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.priorities.is_empty()
 	}
 }
 
@@ -61,11 +92,29 @@ impl SpottingUser {
 	}
 
 	pub fn hint(&mut self, subject: Entity, hint: SpottingHint) {
-		self.hints.insert(subject, hint);
+		let priority = hint.priority();
+		self.hints
+			.entry(subject)
+			.or_default()
+			.set(SpottingHintSource::EXPLICIT, priority);
+	}
+
+	pub fn hint_from(&mut self, subject: Entity, source: SpottingHintSource, priority: i32) {
+		self.hints.entry(subject).or_default().set(source, priority);
 	}
 
 	pub fn remove_hint(&mut self, subject: Entity) {
 		self.hints.remove(&subject);
+	}
+
+	pub fn remove_hint_source(&mut self, subject: Entity, source: SpottingHintSource) {
+		let Some(hint) = self.hints.get_mut(&subject) else {
+			return;
+		};
+		hint.remove(source);
+		if hint.is_empty() {
+			self.hints.remove(&subject);
+		}
 	}
 
 	pub fn forget_stale(&mut self, now: f32) {
@@ -124,5 +173,18 @@ mod tests {
 		assert_eq!(user.advance_sample_cursor(), 0);
 		assert_eq!(user.advance_sample_cursor(), 1);
 		assert_eq!(user.advance_sample_cursor(), 2);
+	}
+
+	#[test]
+	fn removing_threat_hint_preserves_explicit_owner() {
+		let subject = Entity::from_bits(1);
+		let mut user = SpottingUser::default();
+		user.hint(subject, SpottingHint::new(2));
+		user.hint_from(subject, SpottingHintSource::THREAT, 5);
+		assert_eq!(user.hints.get(&subject).map(SpottingHint::priority), Some(5));
+		user.remove_hint_source(subject, SpottingHintSource::THREAT);
+		assert!(user.hints.get(&subject).is_some_and(|hint| {
+			hint.has_source(SpottingHintSource::EXPLICIT) && hint.priority() == 2
+		}));
 	}
 }
