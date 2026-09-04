@@ -22,7 +22,7 @@ pub use contact::SpottedContact;
 pub use directive::{SpotContactView, SpotDirective};
 pub use layers::InterestLayers;
 pub use subject::SpotSubject;
-pub use user::{SpottingHint, SpottingSettings, SpottingUser};
+pub use user::{SpottingHint, SpottingHintSource, SpottingSettings, SpottingUser};
 
 /// Shared schedule location for spotting backends.
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -20,6 +20,16 @@ Walk colliders for Richmond IR live in [`richmond-building-physics`](../richmond
 
 Spotting deliberately resolves a known subject's exact live location at probe time. Its memory records when visibility last succeeded and when another attempt is due; fresh contacts can satisfy a directive and skip discovery work. Position uncertainty is deferred to a higher-fidelity model.
 
+## Threats
+
+- [`threat-intelligence`](threat) — weighted group and individual affiliations,
+  Gimme-backed local discovery, directed findings inboxes, retained threat memory,
+  and source-owned spotting-hint export.
+
+Threat classification is directional: a recipient's antagonist memory is matched
+against a subject's memberships. Threat knowledge proposes spotting candidates;
+only spotting can establish visual contact.
+
 ## Combat
 
 - [`combat-targeting`](combat/targeting) — combat contact memory, source-owned active-set membership, factor algebra, decaying influences, continuity, and cached weight ranking.

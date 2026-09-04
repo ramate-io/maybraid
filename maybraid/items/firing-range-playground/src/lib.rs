@@ -55,6 +55,7 @@ use richmond_building_components::{
 use richmond_building_physics::BuildingWalkColliderPlugin;
 use session::{AppliedSession, Civilian, LoadoutRng, RangeMode, RangeSession};
 use spotting_intelligence::SpottingSystems;
+use threat_intelligence::{ThreatIntelligencePlugin, ThreatSystems};
 
 pub struct FiringRangePlugin;
 
@@ -85,6 +86,7 @@ impl Plugin for FiringRangePlugin {
 				MovementIntelligencePlugin::<RichmondAvianMovementSurface<'_, '_>>::default(),
 			)
 			.add_plugins(FirearmIntelligencePlugin)
+			.add_plugins(ThreatIntelligencePlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)
@@ -153,6 +155,13 @@ impl Plugin for FiringRangePlugin {
 					.chain(),
 			)
 			.add_systems(PreUpdate, gate_pad.before(VirtualPadSystems::Produce))
+			.add_systems(Update, vantage::sync_range_threat_actors.in_set(ThreatSystems::Prepare))
+			.add_systems(
+				Update,
+				vantage::seed_range_threat_observations
+					.in_set(ThreatSystems::Ingest)
+					.before(threat_intelligence::ingest_threat_observations),
+			)
 			.add_systems(
 				Update,
 				(
@@ -163,9 +172,10 @@ impl Plugin for FiringRangePlugin {
 					(damage::queue_flee_out_respawns, respawn_combatants).chain(),
 					(
 						vantage::sync_combat_spot_subjects,
-						vantage::sync_combat_rosters,
-						vantage::sync_evasion_rosters,
+						vantage::sync_threat_combat_membership,
+						vantage::sync_threat_evasion_membership,
 					)
+						.after(ThreatSystems::Discover)
 						.before(SpottingSystems::Observe),
 					les_halles::draw_circulation_gizmos,
 					apply_parent_confines.after(LodRefreshSystems::Cull),

@@ -204,7 +204,7 @@ pub fn observe_spotting(
 						subject.bounds.sample_count(),
 					);
 					candidate.rank.directive_priority =
-						candidate.rank.directive_priority.saturating_add(hint.priority);
+						candidate.rank.directive_priority.saturating_add(hint.priority());
 					merge_candidate(&mut candidates, candidate);
 				}
 			}
