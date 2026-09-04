@@ -70,6 +70,24 @@ fn predator_stores_an_inner_combat_tether() {
 }
 
 #[test]
+fn install_can_keep_tether_in_combat() {
+	let mut world = World::new();
+	let anchor = world.spawn_empty().id();
+	let npc = world.spawn_empty().id();
+	Personality::Predator.install(
+		&mut world.commands(),
+		npc,
+		NpcInstall {
+			tether: Some(anchor),
+			keep_tether_in_combat: Some(true),
+			..NpcInstall::default()
+		},
+	);
+	world.flush();
+	assert!(world.get::<NpcIntelligence>(npc).is_some_and(|npc| npc.keep_tether_in_combat));
+}
+
+#[test]
 fn brawler_installs_combat_and_flee_without_hiding() {
 	let mut world = World::new();
 	let npc = world.spawn_empty().id();

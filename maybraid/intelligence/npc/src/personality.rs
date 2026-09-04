@@ -111,6 +111,8 @@ pub struct NpcInstall {
 	pub spotting_range: Option<f32>,
 	/// When false, skip combat brains even if the spec has them (unarmed civilian).
 	pub armed: bool,
+	/// Mob override. `None` keeps the personality default (Hunt flips this on).
+	pub keep_tether_in_combat: Option<bool>,
 }
 
 impl Default for NpcInstall {
@@ -126,6 +128,7 @@ impl Default for NpcInstall {
 			discovery_radius: None,
 			spotting_range: None,
 			armed: true,
+			keep_tether_in_combat: None,
 		}
 	}
 }
@@ -379,7 +382,9 @@ impl PersonalitySpec {
 		let npc = NpcIntelligence {
 			idle_tether,
 			engaged_tether,
-			keep_tether_in_combat: self.keep_tether_in_combat,
+			keep_tether_in_combat: install
+				.keep_tether_in_combat
+				.unwrap_or(self.keep_tether_in_combat),
 		};
 
 		let mut learning = PoiIntelligenceUser::new(install.poi_interests);

@@ -98,6 +98,10 @@ Keep `npc-intelligence` ignorant of LodScene. High fulfill calls the same
 `Personality` constructors the firing range uses. Mob systems query a roster,
 not children.
 
+The [personalities playground](../personalities) is a flat High-fulfill stand-in:
+one host entity per proto-mob, members installed with those constructors. It is
+not a LodScene and must not become the mob crate.
+
 Failure mode: NPC brains parented to the mob host but **not** under the High
 root, so they survive cull. Presence of the personality / mixer bundle **is**
 “this member is in High.”

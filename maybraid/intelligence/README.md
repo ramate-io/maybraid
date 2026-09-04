@@ -43,6 +43,9 @@ Management then grants an exclusive Ignore | Evade | Combat tactic over that set
   personality constructors. Personalities stamp coefficients and which actuators
   exist; they do not re-score tactics. [Horizon](npc/HORIZON.md): groups over
   mobs like forests over groves; High-band NPCs, mob brain always on the host.
+- [`personalities-playground`](personalities) — 400 m square pad of proto-mobs.
+  Fly the survey camera; public follows look-at so distance drives tactics.
+  `cargo run -p personalities-playground --release`.
 
 ## Combat
 

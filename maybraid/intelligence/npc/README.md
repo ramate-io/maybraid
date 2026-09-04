@@ -32,3 +32,7 @@ flee/hide already no-op when their grants are retracted.
 Mobs override `threat_override`, affiliations, POI interests, the tether
 subject, rules of engagement, and `armed`. See [HORIZON.md](HORIZON.md) for
 groups, mob hosts, and LodScene.
+
+The [personalities playground](../personalities) is a 400 m square High-fulfill
+smoke: proto-mobs share a tether host, members use these constructors, and
+flying the camera moves public so spotting distance can flip tactics.
