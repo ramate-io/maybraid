@@ -3485,12 +3485,15 @@ dependencies = [
  "material-ref",
  "maybraid-character-controller",
  "maybraid-input",
+ "meandering-intelligence",
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-intelligence-richmond",
  "movement-realization",
+ "npc-intelligence",
  "player",
  "player-camera",
+ "poi-intelligence",
  "procedural-common",
  "richmond-building-components",
  "richmond-building-physics",
@@ -3498,6 +3501,7 @@ dependencies = [
  "richmond-developments",
  "spotting-intelligence",
  "spotting-intelligence-avian",
+ "tether-intelligence",
  "threat-intelligence",
  "threat-intelligence-damage",
  "threat-management-intelligence",
@@ -5038,6 +5042,27 @@ name = "nonmax"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "610a5acd306ec67f907abe5567859a3c693fb9886eb1f012ab8f2a47bef3db51"
+
+[[package]]
+name = "npc-intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "combat-targeting",
+ "damage",
+ "evasion-intelligence",
+ "firearm-intelligence",
+ "fleeing-intelligence",
+ "hiding-intelligence",
+ "meandering-intelligence",
+ "movement-intelligence",
+ "poi-intelligence",
+ "spotting-intelligence",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-management-intelligence",
+]
 
 [[package]]
 name = "ntapi"

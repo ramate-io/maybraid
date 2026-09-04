@@ -44,6 +44,7 @@ use movement_intelligence::{
 };
 use movement_intelligence_richmond::RichmondAvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
+use npc_intelligence::NpcIntelligencePlugin;
 use player::{
 	spawn_npc_with_hidden_capsule, spawn_player_with_hidden_capsule, Npc, Player, PlayerLook,
 	PlayerPlugin,
@@ -91,6 +92,7 @@ impl Plugin for FiringRangePlugin {
 			.add_plugins(ThreatIntelligencePlugin)
 			.add_plugins(ThreatIntelligenceDamagePlugin)
 			.add_plugins(ThreatManagementPlugin)
+			.add_plugins(NpcIntelligencePlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)

@@ -12,6 +12,8 @@ pub struct MeanderingIntelligenceUser {
 	pub radius: f32,
 	pub visit_policy: PoiVisitPolicy,
 	pub selection_interval: f32,
+	/// Higher-order grant. When false, this brain does not start new POI goals.
+	pub enabled: bool,
 	next_selection_at: f32,
 }
 
@@ -21,6 +23,7 @@ impl Default for MeanderingIntelligenceUser {
 			radius: 200.0,
 			visit_policy: PoiVisitPolicy::default(),
 			selection_interval: 0.25,
+			enabled: true,
 			next_selection_at: 0.0,
 		}
 	}
@@ -78,6 +81,9 @@ pub fn select_meandering_goals(
 	for (entity, transform, mut meandering, learner, mut knowledge, mut visits, mut state) in
 		&mut users
 	{
+		if !meandering.enabled {
+			continue;
+		}
 		if now < meandering.next_selection_at {
 			continue;
 		}
