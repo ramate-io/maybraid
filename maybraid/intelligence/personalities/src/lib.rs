@@ -1,4 +1,4 @@
-//! 400 m square pad of proto-mobs. Fly toward a pack; the white public capsule
+//! 400 m square pad of packs. Fly toward a pack; the white public capsule
 //! follows the camera look-at so distance drives Ignore | Evade | Combat.
 
 mod camera;
@@ -18,7 +18,8 @@ use fleeing_intelligence::{FleeingPlugin, FleeingSystems};
 use hiding_intelligence::{HidingPlugin, HidingSystems};
 use maybraid_character_controller::CharacterControllerPlugin;
 use meandering_intelligence::MeanderingIntelligencePlugin;
-use mobs::{clamp_to_pad, spawn_mobs, spawn_presence, MobMember, ProtoMob, PublicPresence};
+use mob_intelligence::{MemberOf, Mob, MobIdAlloc, MobIntelligencePlugin};
+use mobs::{clamp_to_pad, spawn_mobs, spawn_needed_members, spawn_presence, PublicPresence};
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
@@ -63,6 +64,7 @@ impl Plugin for PersonalitiesPlaygroundPlugin {
 			.add_plugins(ThreatIntelligencePlugin)
 			.add_plugins(ThreatManagementPlugin)
 			.add_plugins(NpcIntelligencePlugin)
+			.add_plugins(MobIntelligencePlugin)
 			.add_plugins(EvasionPlugin)
 			.add_plugins(FleeingPlugin)
 			.add_plugins(HidingPlugin)
@@ -110,6 +112,7 @@ impl Plugin for PersonalitiesPlaygroundPlugin {
 				)
 					.chain(),
 			)
+			.add_systems(Update, spawn_needed_members.after(mob_intelligence::MobSystems::Respawn))
 			.add_systems(
 				Update,
 				(
@@ -127,9 +130,10 @@ fn spawn_scene_actors(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut ids: ResMut<MobIdAlloc>,
 ) {
 	spawn_presence(&mut commands, &mut meshes, &mut materials);
-	spawn_mobs(&mut commands, &mut meshes, &mut materials);
+	spawn_mobs(&mut commands, &mut meshes, &mut materials, &mut ids);
 }
 
 fn setup_hud(mut commands: Commands) {
@@ -183,7 +187,7 @@ fn sync_presence(cameras: Query<&Transform, With<Camera3d>>, mut presence: Prese
 fn draw_debug_world(
 	mut gizmos: Gizmos,
 	presence: Query<&GlobalTransform, With<PublicPresence>>,
-	mobs: Query<(&ProtoMob, &GlobalTransform)>,
+	mobs: Query<(&Mob, &GlobalTransform)>,
 	members: Query<(&GlobalTransform, &ThreatManagementIntelligence), With<Npc>>,
 ) {
 	let edge = PAD_EXTENT;
@@ -232,12 +236,12 @@ fn xz_ring(gizmos: &mut Gizmos, center: Vec3, radius: f32, color: Color) {
 	gizmos.linestrip(points, color);
 }
 
-type MemberStatus<'a> = (&'a MobMember, &'a ThreatManagementIntelligence, &'a GlobalTransform);
+type MemberStatus<'a> = (&'a MemberOf, &'a ThreatManagementIntelligence, &'a GlobalTransform);
 
 fn update_status_text(
 	diagnostics: Res<DiagnosticsStore>,
 	presence: Query<&GlobalTransform, With<PublicPresence>>,
-	mobs: Query<(Entity, &ProtoMob, &Name)>,
+	mobs: Query<(Entity, &MobKind, &Name)>,
 	members: Query<MemberStatus<'_>>,
 	mut text: Query<&mut Text, With<StatusText>>,
 ) {
@@ -265,7 +269,7 @@ fn update_status_text(
 
 	let mut rows: Vec<_> = mobs.iter().collect();
 	rows.sort_by_key(|(entity, ..)| entity.to_bits());
-	for (entity, mob, name) in rows {
+	for (entity, kind, name) in rows {
 		let mut ignore = 0;
 		let mut evade = 0;
 		let mut combat = 0;
@@ -283,11 +287,10 @@ fn update_status_text(
 		}
 		let nearest = if nearest.is_finite() { nearest } else { 0.0 };
 		status.push_str(&format!(
-			"{:<7} {:>2}  d {:>5.0}  I {ignore}  E {evade}  C {combat}  {:?}\n",
+			"{:<7} {:>2}  d {:>5.0}  I {ignore}  E {evade}  C {combat}  {kind:?}\n",
 			name.as_str(),
 			ignore + evade + combat,
 			nearest,
-			mob.kind,
 		));
 	}
 	*text = Text::new(status);

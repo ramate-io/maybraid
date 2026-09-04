@@ -28,6 +28,7 @@ meandering-intelligence = { workspace = true }
 movement-intelligence = { workspace = true }
 movement-intelligence-avian = { workspace = true }
 movement-realization = { workspace = true }
+mob-intelligence = { workspace = true }
 npc-intelligence = { workspace = true }
 player = { workspace = true }
 poi-intelligence = { workspace = true }

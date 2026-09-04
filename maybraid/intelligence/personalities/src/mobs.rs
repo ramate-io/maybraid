@@ -1,14 +1,18 @@
-//! Proto-mobs: a shared tether host plus personality-stamped members.
+//! Playground recipes on top of the mob core brain.
 //!
-//! This is not a LodScene host. The later mob brain should keep a roster like
-//! this and fulfill High with the same [`Personality::install`] path.
+//! Packs are [`Mob`] hosts with a roster. Members spawn as Entity-free
+//! [`MobSlot`] + [`MobId`] wishes; bind installs personality and membership.
 
 use avian3d::prelude::{Collider, LockedAxes, RigidBody};
 use bevy::prelude::*;
 use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use lod_avian::PhysicsInteractionLayer;
-use npc_intelligence::{NpcBody, NpcInstall, Personality};
+use mob_intelligence::{
+	spawn_mob, MobAffiliations, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobSlot,
+	RosterMember,
+};
+use npc_intelligence::{NpcBody, Personality};
 use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{PoiInterest, PoiInterests, PoiKind};
 use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
@@ -27,7 +31,7 @@ pub const GRAZER: ThreatGroupId = ThreatGroupId::group(4);
 pub const FFA: ThreatGroupId = ThreatGroupId::group(5);
 pub const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MobKind {
 	Herd,
 	Occupy,
@@ -38,17 +42,6 @@ pub enum MobKind {
 	Ffa,
 	Flock,
 	Monk,
-}
-
-#[derive(Component, Clone, Copy, Debug)]
-pub struct ProtoMob {
-	pub kind: MobKind,
-	pub leash: f32,
-}
-
-#[derive(Component, Clone, Copy, Debug)]
-pub struct MobMember {
-	pub mob: Entity,
 }
 
 #[derive(Component)]
@@ -278,64 +271,130 @@ pub fn spawn_presence(
 	presence
 }
 
+#[derive(Resource)]
+pub struct NpcVisuals {
+	capsule: Handle<Mesh>,
+	colors: PersonalityColors,
+}
+
 pub fn spawn_mobs(
 	commands: &mut Commands,
 	meshes: &mut Assets<Mesh>,
 	materials: &mut Assets<StandardMaterial>,
+	ids: &mut MobIdAlloc,
 ) {
-	let capsule = meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH));
-	let colors = PersonalityColors::new(materials);
-	let hull = LocomotionCapsule::HUMANOID;
-	let body = NpcBody {
-		agent_radius: hull.radius,
-		feet_below_origin: hull.half_height(),
-		eye_height: 1.45,
+	let visuals = NpcVisuals {
+		capsule: meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH)),
+		colors: PersonalityColors::new(materials),
 	};
+	let hull = LocomotionCapsule::HUMANOID;
 	for recipe in recipes() {
-		let host = commands
-			.spawn((
-				Name::new(recipe.name),
-				ProtoMob { kind: recipe.kind, leash: recipe.leash },
-				Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y),
-				Visibility::default(),
-			))
-			.id();
-		for (index, spec) in recipe.members.iter().copied().enumerate() {
+		let id = ids.allocate();
+		let members: Vec<_> = recipe
+			.members
+			.iter()
+			.copied()
+			.enumerate()
+			.map(|(index, spec)| {
+				let offset =
+					member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
+				let at =
+					Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
+				roster_member(spec, at)
+			})
+			.collect();
+		let host = spawn_mob(
+			commands,
+			Transform::from_xyz(recipe.at.x, 0.0, recipe.at.y),
+			MobInstall::new(id, recipe.leash, members)
+				.with_interests(interests(recipe.kind))
+				.with_affiliations(MobAffiliations::new(pack_affiliations(recipe.kind))),
+		);
+		commands.entity(host).insert((Name::new(recipe.name), recipe.kind));
+		let roster = members_poses(recipe);
+		for (slot, spec, at) in roster {
+			spawn_member(commands, &visuals, id, slot, spec, at);
+		}
+	}
+	commands.insert_resource(visuals);
+}
+
+fn members_poses(recipe: MobRecipe) -> Vec<(u16, MemberSpec, Vec3)> {
+	let hull = LocomotionCapsule::HUMANOID;
+	recipe
+		.members
+		.iter()
+		.copied()
+		.enumerate()
+		.map(|(index, spec)| {
 			let offset = member_offset(index, recipe.members.len(), (recipe.leash * 0.45).max(2.5));
 			let at = Vec3::new(recipe.at.x + offset.x, hull.spawn_height(), recipe.at.y + offset.y);
-			let npc = spawn_npc(commands, at, PlayerLook::default());
-			spec.personality.install(
-				commands,
-				npc,
-				NpcInstall {
-					at,
-					body,
-					health: Health::default(),
-					tether: Some(host),
-					poi_interests: interests(recipe.kind),
-					armed: spec.armed,
-					keep_tether_in_combat: spec.keep_tether_in_combat.then_some(true),
-					engagement: spec.ffa.then(FirearmEngagement::weapons_free),
-					threat_override: spec.ffa.then(ThreatManagementIntelligence::ffa),
-					discovery_radius: spec.discovery_radius,
-					..NpcInstall::default()
-				},
-			);
-			commands.entity(npc).insert((
-				MobMember { mob: host },
-				SpotSubject::new(
-					InterestLayers::CHARACTER,
-					SpotBounds::capsule(hull.radius, hull.half_height()),
-				),
-			));
-			stamp_threat(commands, npc, affiliations(recipe.kind, ThreatId(npc.to_bits())));
-			commands.spawn((
-				Name::new("NpcCapsule"),
-				ChildOf(npc),
-				Mesh3d(capsule.clone()),
-				MeshMaterial3d(colors.handle(spec.personality)),
-			));
-		}
+			(index as u16, spec, at)
+		})
+		.collect()
+}
+
+fn roster_member(spec: MemberSpec, at: Vec3) -> RosterMember {
+	RosterMember::new(spec.personality, at)
+		.with_armed(spec.armed)
+		.with_keep_tether_in_combat(spec.keep_tether_in_combat.then_some(true))
+		.with_discovery_radius(spec.discovery_radius)
+		.with_engagement(spec.ffa.then(FirearmEngagement::weapons_free))
+		.with_threat_override(spec.ffa.then(ThreatManagementIntelligence::ffa))
+}
+
+fn spawn_member(
+	commands: &mut Commands,
+	visuals: &NpcVisuals,
+	id: mob_intelligence::MobId,
+	slot: u16,
+	spec: MemberSpec,
+	at: Vec3,
+) {
+	let hull = LocomotionCapsule::HUMANOID;
+	let npc = spawn_npc(commands, at, PlayerLook::default());
+	commands.entity(npc).insert((
+		MobSlot(slot),
+		id,
+		MobMemberBody(NpcBody {
+			agent_radius: hull.radius,
+			feet_below_origin: hull.half_height(),
+			eye_height: 1.45,
+		}),
+		SpotSubject::new(
+			InterestLayers::CHARACTER,
+			SpotBounds::capsule(hull.radius, hull.half_height()),
+		),
+	));
+	commands.spawn((
+		Name::new("NpcCapsule"),
+		ChildOf(npc),
+		Mesh3d(visuals.capsule.clone()),
+		MeshMaterial3d(visuals.colors.handle(spec.personality)),
+	));
+}
+
+pub fn spawn_needed_members(
+	mut commands: Commands,
+	mut needed: MessageReader<MobMemberNeeded>,
+	visuals: Res<NpcVisuals>,
+	rosters: Query<&mob_intelligence::MobRoster>,
+) {
+	for request in needed.read() {
+		let Ok(roster) = rosters.get(request.mob) else {
+			continue;
+		};
+		let Some(member) = roster.get(request.slot) else {
+			continue;
+		};
+		let spec = MemberSpec {
+			personality: member.personality,
+			armed: member.armed,
+			keep_tether_in_combat: member.keep_tether_in_combat.unwrap_or(false),
+			ffa: member.threat_override.is_some(),
+			discovery_radius: member.discovery_radius,
+		};
+		spawn_member(&mut commands, &visuals, request.id, request.slot, spec, request.pose);
 	}
 }
 
@@ -383,7 +442,7 @@ fn interests(kind: MobKind) -> PoiInterests {
 	}
 }
 
-/// Local destinations packed inside each proto-mob leash so Ignore can meander.
+/// Local destinations packed inside each pack leash so Ignore can meander.
 pub fn poi_placements() -> Vec<(PoiKind, Vec2)> {
 	let mut placements = Vec::new();
 	for recipe in recipes() {
@@ -401,11 +460,7 @@ pub fn poi_placements() -> Vec<(PoiKind, Vec2)> {
 		};
 		let total = primary_n + secondary_n;
 		for index in 0..total {
-			let kind = if index < primary_n {
-				primary
-			} else {
-				secondary.expect("secondary POI count without a kind")
-			};
+			let kind = if index < primary_n { primary } else { secondary.unwrap_or(primary) };
 			placements.push((kind, disk_point(recipe.at, radius, index, total)));
 		}
 	}
@@ -423,13 +478,13 @@ fn disk_point(center: Vec2, radius: f32, index: usize, count: usize) -> Vec2 {
 	center + Vec2::new(angle.cos(), angle.sin()) * r
 }
 
-fn affiliations(kind: MobKind, id: ThreatId) -> Affiliations {
+fn pack_affiliations(kind: MobKind) -> Affiliations {
 	match kind {
-		MobKind::Guard | MobKind::Watch => guard_affiliations(id),
-		MobKind::Hunt => hunt_affiliations(id),
-		MobKind::Ffa => ffa_affiliations(id),
-		MobKind::Flock | MobKind::Monk => indifferent_affiliations(id),
-		MobKind::Herd | MobKind::Occupy | MobKind::Roam => grazer_affiliations(id),
+		MobKind::Guard | MobKind::Watch => guard_pack(),
+		MobKind::Hunt => hunt_pack(),
+		MobKind::Ffa => ffa_pack(),
+		MobKind::Flock | MobKind::Monk => wildlife_pack(),
+		MobKind::Herd | MobKind::Occupy | MobKind::Roam => grazer_pack(),
 	}
 }
 
@@ -439,16 +494,16 @@ pub fn public_affiliations(id: ThreatId) -> Affiliations {
 	affiliations
 }
 
-fn guard_affiliations(id: ThreatId) -> Affiliations {
-	let mut affiliations = Affiliations::with_self(id);
+fn guard_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
 	affiliations.join(GUARD, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(PUBLIC, AffiliationStrength::permanent(1.0));
 	affiliations.mitigate(GUARD, AffiliationStrength::permanent(1.0));
 	affiliations
 }
 
-fn hunt_affiliations(id: ThreatId) -> Affiliations {
-	let mut affiliations = Affiliations::with_self(id);
+fn hunt_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
 	affiliations.join(HUNT, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(PUBLIC, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(GRAZER, AffiliationStrength::permanent(1.0));
@@ -456,8 +511,8 @@ fn hunt_affiliations(id: ThreatId) -> Affiliations {
 	affiliations
 }
 
-fn grazer_affiliations(id: ThreatId) -> Affiliations {
-	let mut affiliations = Affiliations::with_self(id);
+fn grazer_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
 	affiliations.join(GRAZER, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(PUBLIC, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(HUNT, AffiliationStrength::permanent(1.0));
@@ -465,18 +520,43 @@ fn grazer_affiliations(id: ThreatId) -> Affiliations {
 	affiliations
 }
 
-fn indifferent_affiliations(id: ThreatId) -> Affiliations {
-	let mut affiliations = Affiliations::with_self(id);
+fn wildlife_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
 	affiliations.join(WILDLIFE, AffiliationStrength::permanent(1.0));
 	affiliations.mitigate(WILDLIFE, AffiliationStrength::permanent(1.0));
 	affiliations
 }
 
-fn ffa_affiliations(id: ThreatId) -> Affiliations {
-	let mut affiliations = Affiliations::with_self(id);
+fn ffa_pack() -> Affiliations {
+	let mut affiliations = Affiliations::default();
 	affiliations.join(FFA, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(FFA, AffiliationStrength::permanent(1.0));
 	affiliations
+}
+
+#[cfg(test)]
+fn guard_affiliations(id: ThreatId) -> Affiliations {
+	MobAffiliations::new(guard_pack()).for_member(id)
+}
+
+#[cfg(test)]
+fn hunt_affiliations(id: ThreatId) -> Affiliations {
+	MobAffiliations::new(hunt_pack()).for_member(id)
+}
+
+#[cfg(test)]
+fn grazer_affiliations(id: ThreatId) -> Affiliations {
+	MobAffiliations::new(grazer_pack()).for_member(id)
+}
+
+#[cfg(test)]
+fn indifferent_affiliations(id: ThreatId) -> Affiliations {
+	MobAffiliations::new(wildlife_pack()).for_member(id)
+}
+
+#[cfg(test)]
+fn ffa_affiliations(id: ThreatId) -> Affiliations {
+	MobAffiliations::new(ffa_pack()).for_member(id)
 }
 
 fn stamp_threat(commands: &mut Commands, entity: Entity, affiliations: Affiliations) {
@@ -498,6 +578,7 @@ pub fn clamp_to_pad(xz: Vec2) -> Vec2 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
 	use super::*;
 	use crate::scene::{HIGH_RING, SPOTTING_RING};
@@ -533,7 +614,9 @@ mod tests {
 		let public = public_affiliations(ThreatId(1));
 		let guard = guard_affiliations(ThreatId(2));
 		let ffa = ffa_affiliations(ThreatId(3));
+		let hunt = hunt_affiliations(ThreatId(6));
 		assert!(guard.threat_weight(&public, 0.0) >= 0.2);
+		assert!(hunt.threat_weight(&public, 0.0) >= 0.2);
 		assert_eq!(ffa.threat_weight(&public, 0.0), 0.0);
 	}
 

@@ -1,4 +1,4 @@
-//! Flat 400 m pad, sparse cover, and POIs the proto-mobs meander toward.
+//! Flat 400 m pad, sparse cover, and POIs the packs meander toward.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;

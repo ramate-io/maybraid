@@ -6,10 +6,11 @@ Run:
 cargo run -p personalities-playground --release
 ```
 
-A **400 m square** pad (not 400 m²) with proto-mobs at ranges that matter to
-the NPC stack: spotting (~80 m), High (~200 m), and beyond. The later mob
-brain is still a roster; this playground is High fulfill with a shared tether
-host per pack.
+A **400 m square** pad (not 400 m²) with packs at ranges that matter to the
+NPC stack: spotting (~80 m), High (~200 m), and beyond. Each pack is a
+[`mob-intelligence`](../mob) host: roster, shared tether, pack affiliations.
+Members spawn as `MobSlot` + `MobId` wishes; bind installs personality. See
+[ROSTER.md](../mob/ROSTER.md) for the later LodScene patch.
 
 ## Controls
 
@@ -17,7 +18,7 @@ WASD fly, mouse look, Space / Shift up / down, Ctrl sprint. The white capsule
 is **public** and follows the camera look-at on the pad, so flying toward a
 pack is how you change distance.
 
-## Proto-mobs
+## Packs
 
 | Pack | Where | Mix |
 |---|---|---|
@@ -35,10 +36,10 @@ Cyan ring = 80 m spotting. Magenta ring = 200 m High. Dots on NPCs are the
 current threat tactic (green Ignore, yellow Evade, red Combat). HUD lists
 per-pack counts and distance to public.
 
-Each proto-mob has a **local POI cluster** inside its leash so Ignore can
-meander between camp / forage / gate / pit. Visit cooldown ranks novelty; it
-does not freeze a pack that only knows those local destinations. Grazers linger
-about six seconds at a reached POI; brawlers about two.
+Each pack has a **local POI cluster** inside its leash so Ignore can meander
+between camp / forage / gate / pit. Visit cooldown ranks novelty; it does not
+freeze a pack that only knows those local destinations. Grazers linger about
+six seconds at a reached POI; brawlers about two.
 
 Personalities keep their own spotting / discovery horizons (grazer ~40 m,
 assassin ~72 m). Closing distance is what flips Ignore → Evade or Combat.

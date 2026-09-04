@@ -106,6 +106,7 @@ members = [
   "maybraid/intelligence/threat/damage",
   "maybraid/intelligence/threat-management",
   "maybraid/intelligence/npc",
+  "maybraid/intelligence/mob",
   "maybraid/intelligence/personalities",
   "maybraid/intelligence/poi-playground",
   "maybraid/intelligence/routing-playground",
@@ -350,6 +351,7 @@ threat-intelligence = { path = "maybraid/intelligence/threat" }
 threat-intelligence-damage = { path = "maybraid/intelligence/threat/damage" }
 threat-management-intelligence = { path = "maybraid/intelligence/threat-management" }
 npc-intelligence = { path = "maybraid/intelligence/npc" }
+mob-intelligence = { path = "maybraid/intelligence/mob" }
 personalities-playground = { path = "maybraid/intelligence/personalities" }
 poi-playground = { path = "maybraid/intelligence/poi-playground" }
 routing-playground = { path = "maybraid/intelligence/routing-playground" }
