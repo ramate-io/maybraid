@@ -31,6 +31,7 @@ material-ref = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }
+maybraid-mobs = { workspace = true }
 mob-characters = { workspace = true }
 mob-groups = { workspace = true }
 meandering-intelligence = { workspace = true }

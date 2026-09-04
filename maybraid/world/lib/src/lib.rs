@@ -137,13 +137,15 @@ impl Plugin for WorldPlugin {
 				.before(PlayerControlSystems),
 		);
 		if self.debug_chrome {
-			app.add_systems(
+			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
 				Update,
 				(
 					control::echo_character_intents
 						.after(CharacterControlSystems)
 						.before(game_commands::ui::update_debug_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
+					ui::sync_mob_debug_pins,
+					ui::draw_mob_debug_gizmos,
 				),
 			);
 		}

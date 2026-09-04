@@ -4778,6 +4778,7 @@ dependencies = [
  "material-ref",
  "maybraid-character-controller",
  "maybraid-input",
+ "maybraid-mobs",
  "maybraid-sky",
  "meandering-intelligence",
  "mob-characters",

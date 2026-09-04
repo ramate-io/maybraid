@@ -1,5 +1,11 @@
 use bevy::prelude::*;
+use bevy::text::FontSize;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
+use maybraid_mobs::{MobKind, MobScene};
+
+const HUD_PIN_COUNT: usize = 8;
+const HUD_MARGIN: f32 = 22.0;
+const HUD_PIN_WIDTH: f32 = 118.0;
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
@@ -13,14 +19,307 @@ pub fn ui_config() -> GameCommandUiConfig {
 	}
 }
 
+#[derive(Component)]
+pub(crate) struct MobDebugHud;
+
+#[derive(Component)]
+pub(crate) struct MobDebugPin {
+	target: Entity,
+}
+
+#[derive(Bundle)]
+struct MobDebugPinBundle {
+	name: Name,
+	pin: MobDebugPin,
+	node: Node,
+	background: BackgroundColor,
+	text: Text,
+	font: TextFont,
+	color: TextColor,
+	pickable: Pickable,
+	visibility: Visibility,
+}
+
+pub(crate) fn spawn_mob_debug_hud(mut commands: Commands) {
+	commands.spawn((
+		Name::new("mob-debug-hud"),
+		MobDebugHud,
+		Node {
+			position_type: PositionType::Absolute,
+			width: Val::Percent(100.0),
+			height: Val::Percent(100.0),
+			..default()
+		},
+		Pickable::IGNORE,
+	));
+}
+
 pub(crate) fn sync_command_status_text(
 	mut status: ResMut<GameCommandStatusText>,
-	mut seeded: Local<bool>,
+	camera: Query<&GlobalTransform, With<Camera3d>>,
+	hosts: Query<(&MobScene, &GlobalTransform)>,
 ) {
-	if *seeded {
-		return;
+	let mut nearest = ranked_hosts(&camera, &hosts);
+	nearest.truncate(4);
+	let presented = hosts.iter().count();
+	let nearest_line = if nearest.is_empty() {
+		"none in present ring".into()
+	} else {
+		nearest
+			.iter()
+			.map(|host| format!("{:?} {:.0}m", host.kind, host.distance))
+			.collect::<Vec<_>>()
+			.join("   ")
+	};
+	status.0 = format!(
+		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km\n\
+		 mobs {presented} presented   nearest {nearest_line}\n\
+		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside 200 m"
+	);
+}
+
+pub(crate) fn draw_mob_debug_gizmos(
+	mut gizmos: Gizmos,
+	hosts: Query<(&MobScene, &GlobalTransform)>,
+) {
+	for (scene, transform) in &hosts {
+		let at = transform.translation();
+		let color = kind_color(scene.mob.kind);
+		gizmos.line(at, at + Vec3::Y * 18.0, color);
+		gizmos.sphere(Isometry3d::from_translation(at + Vec3::Y * 18.0), 1.4, color);
+		xz_ring(&mut gizmos, at, 6.0, color.with_alpha(0.7));
+		xz_ring(&mut gizmos, at, scene.high_radius, color.with_alpha(0.18));
 	}
-	*seeded = true;
-	status.0 =
-		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km  sky 350–1200 m".into();
+}
+
+pub(crate) fn sync_mob_debug_pins(
+	mut commands: Commands,
+	camera: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+	hud: Query<Entity, With<MobDebugHud>>,
+	hosts: Query<(Entity, &MobScene, &GlobalTransform)>,
+	mut pins: Query<(
+		Entity,
+		&MobDebugPin,
+		&mut Node,
+		&mut BackgroundColor,
+		&mut Text,
+		&mut Visibility,
+	)>,
+) {
+	let Ok(hud) = hud.single() else {
+		return;
+	};
+	let Ok((camera, camera_transform)) = camera.single() else {
+		for (_, _, _, _, _, mut visibility) in &mut pins {
+			*visibility = Visibility::Hidden;
+		}
+		return;
+	};
+	let ranked = ranked_hosts_with_entity(&camera_transform, &hosts);
+	let wanted: Vec<_> = ranked.into_iter().take(HUD_PIN_COUNT).collect();
+	let mut assigned = Vec::new();
+	for (pin_entity, pin, mut node, mut background, mut text, mut visibility) in &mut pins {
+		let Some(host) = wanted.iter().find(|host| host.entity == pin.target) else {
+			commands.entity(pin_entity).despawn();
+			continue;
+		};
+		let Some((screen, on_screen)) = project_mob_pin(camera, camera_transform, host.at) else {
+			*visibility = Visibility::Hidden;
+			continue;
+		};
+		place_pin(&mut node, screen);
+		background.0 = kind_color(host.kind).with_alpha(if on_screen { 0.72 } else { 0.92 });
+		text.0 = format!("{:?} {:.0}m", host.kind, host.distance);
+		*visibility = Visibility::Visible;
+		assigned.push(host.entity);
+	}
+	for host in wanted {
+		if assigned.contains(&host.entity) {
+			continue;
+		}
+		let Some((screen, on_screen)) = project_mob_pin(camera, camera_transform, host.at) else {
+			continue;
+		};
+		commands.entity(hud).with_children(|root| {
+			root.spawn(MobDebugPinBundle {
+				name: Name::new("mob-debug-pin"),
+				pin: MobDebugPin { target: host.entity },
+				node: pin_node(screen),
+				background: BackgroundColor(kind_color(host.kind).with_alpha(if on_screen {
+					0.72
+				} else {
+					0.92
+				})),
+				text: Text::new(format!("{:?} {:.0}m", host.kind, host.distance)),
+				font: TextFont { font_size: FontSize::Px(13.0), ..default() },
+				color: TextColor(Color::WHITE),
+				pickable: Pickable::IGNORE,
+				visibility: Visibility::Visible,
+			});
+		});
+	}
+}
+
+struct RankedHost {
+	entity: Entity,
+	kind: MobKind,
+	at: Vec3,
+	distance: f32,
+}
+
+fn ranked_hosts(
+	camera: &Query<&GlobalTransform, With<Camera3d>>,
+	hosts: &Query<(&MobScene, &GlobalTransform)>,
+) -> Vec<RankedHost> {
+	let Ok(camera) = camera.single() else {
+		return Vec::new();
+	};
+	let origin = camera.translation();
+	let mut ranked: Vec<_> = hosts
+		.iter()
+		.map(|(scene, transform)| RankedHost {
+			entity: Entity::PLACEHOLDER,
+			kind: scene.mob.kind,
+			at: transform.translation(),
+			distance: transform.translation().xz().distance(origin.xz()),
+		})
+		.collect();
+	ranked.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+	ranked
+}
+
+fn ranked_hosts_with_entity(
+	camera: &GlobalTransform,
+	hosts: &Query<(Entity, &MobScene, &GlobalTransform)>,
+) -> Vec<RankedHost> {
+	let origin = camera.translation();
+	let mut ranked: Vec<_> = hosts
+		.iter()
+		.map(|(entity, scene, transform)| RankedHost {
+			entity,
+			kind: scene.mob.kind,
+			at: transform.translation(),
+			distance: transform.translation().xz().distance(origin.xz()),
+		})
+		.collect();
+	ranked.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+	ranked
+}
+
+fn project_mob_pin(
+	camera: &Camera,
+	camera_transform: &GlobalTransform,
+	world: Vec3,
+) -> Option<(Vec2, bool)> {
+	let rect = camera.logical_viewport_rect()?;
+	let mut ndc = camera.world_to_ndc(camera_transform, world)?;
+	let in_frustum = ndc.z > 0.0 && ndc.z < 1.0;
+	if !in_frustum {
+		ndc.x = -ndc.x;
+		ndc.y = -ndc.y;
+	}
+	ndc.y = -ndc.y;
+	let mut screen = (ndc.truncate() + Vec2::ONE) / 2.0 * rect.size() + rect.min;
+	let on_screen = in_frustum
+		&& screen.x >= rect.min.x
+		&& screen.x <= rect.max.x
+		&& screen.y >= rect.min.y
+		&& screen.y <= rect.max.y;
+	if !on_screen {
+		screen = clamp_to_rect(
+			rect.center(),
+			screen,
+			rect.min + Vec2::splat(HUD_MARGIN),
+			rect.max - Vec2::splat(HUD_MARGIN),
+		);
+	}
+	Some((screen, on_screen))
+}
+
+fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
+	let dir = point - center;
+	if dir.length_squared() < 1e-6 {
+		return Vec2::new(center.x.clamp(min.x, max.x), center.y.clamp(min.y, max.y));
+	}
+	let mut t = f32::INFINITY;
+	if dir.x.abs() > 1e-6 {
+		let edge = if dir.x > 0.0 { max.x } else { min.x };
+		t = t.min((edge - center.x) / dir.x);
+	}
+	if dir.y.abs() > 1e-6 {
+		let edge = if dir.y > 0.0 { max.y } else { min.y };
+		t = t.min((edge - center.y) / dir.y);
+	}
+	center + dir * t.clamp(0.0, 1.0)
+}
+
+fn pin_node(screen: Vec2) -> Node {
+	Node {
+		position_type: PositionType::Absolute,
+		left: Val::Px(screen.x - HUD_PIN_WIDTH * 0.5),
+		top: Val::Px(screen.y - 12.0),
+		width: Val::Px(HUD_PIN_WIDTH),
+		padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)),
+		justify_content: JustifyContent::Center,
+		..default()
+	}
+}
+
+fn place_pin(node: &mut Node, screen: Vec2) {
+	node.left = Val::Px(screen.x - HUD_PIN_WIDTH * 0.5);
+	node.top = Val::Px(screen.y - 12.0);
+}
+
+fn kind_color(kind: MobKind) -> Color {
+	match kind {
+		MobKind::Herd => Color::srgb(0.35, 0.9, 0.45),
+		MobKind::Pack => Color::srgb(0.95, 0.55, 0.2),
+		MobKind::Raider => Color::srgb(1.0, 0.32, 0.28),
+		MobKind::Guard => Color::srgb(0.35, 0.55, 1.0),
+		MobKind::Pleb => Color::srgb(0.95, 0.85, 0.3),
+		MobKind::Rambles => Color::srgb(0.4, 0.85, 1.0),
+		MobKind::Brawler => Color::srgb(0.95, 0.4, 0.85),
+	}
+}
+
+fn xz_ring(gizmos: &mut Gizmos, center: Vec3, radius: f32, color: Color) {
+	let mut points = Vec::with_capacity(49);
+	for index in 0..=48 {
+		let angle = index as f32 / 48.0 * std::f32::consts::TAU;
+		points.push(Vec3::new(
+			center.x + angle.cos() * radius,
+			center.y + 0.4,
+			center.z + angle.sin() * radius,
+		));
+	}
+	gizmos.linestrip(points, color);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn clamp_hits_the_near_edge() {
+		let clamped = clamp_to_rect(
+			Vec2::new(100.0, 100.0),
+			Vec2::new(400.0, 100.0),
+			Vec2::splat(20.0),
+			Vec2::splat(180.0),
+		);
+		assert!((clamped.x - 180.0).abs() < 1e-3);
+		assert!((clamped.y - 100.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn clamp_keeps_an_interior_point() {
+		let clamped = clamp_to_rect(
+			Vec2::new(100.0, 100.0),
+			Vec2::new(120.0, 110.0),
+			Vec2::splat(20.0),
+			Vec2::splat(180.0),
+		);
+		assert!((clamped.x - 120.0).abs() < 1e-3);
+		assert!((clamped.y - 110.0).abs() < 1e-3);
+	}
 }
