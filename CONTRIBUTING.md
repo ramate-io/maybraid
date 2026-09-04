@@ -181,6 +181,52 @@ Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.ht
 
 Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
 
+## Spotting and combat targeting
+
+Keep semantic eligibility, visual knowledge, combat membership, and weapon
+opportunity as separate layers:
+
+1. [`SpotSubject`](maybraid/intelligence/spotting/lib/src/subject.rs) identifies
+   something that may be observed. Semantic interest layers describe what it
+   is; they are not physics collision layers.
+2. [`SpottingUser`](maybraid/intelligence/spotting/lib/src/user.rs) owns
+   directives, explicit subject hints, and remembered visual contacts.
+   Broadphase discovery and explicit hints are complementary candidate sources:
+   merge both into the same bounded visibility executor.
+3. A candidate becomes a [`SpottedContact`](maybraid/intelligence/spotting/lib/src/contact.rs)
+   only after a successful visibility probe. Being a known enemy, objective, or
+   recent attacker is not equivalent to currently seeing it.
+4. [`CombatTargeting`](maybraid/intelligence/combat/targeting/src/targeting.rs)
+   owns semantic target membership, contact snapshots, factor algebra, and
+   ranking. Use independent [`TargetSource`](maybraid/intelligence/combat/targeting/src/source.rs)
+   bits so enemyship, objectives, spotting, and received fire can add or remove
+   their own reasons without overwriting one another.
+5. Weapon intelligence consumes actionable ranked contacts and contributes
+   weapon-specific opportunity. Eye-level spotting and muzzle-level trajectory
+   validation are distinct visibility tasks and should retain separate caches
+   and cadences.
+
+An active target may intentionally have no current contact memory. Consumers
+must therefore select the highest-ranked target with the knowledge they require,
+not blindly take rank zero and fail when its contact is absent. Likewise,
+eligibility filters must describe the **target**, not the observer: filtering
+firearm trajectory subjects with `Without<FirearmIntelligence>` excludes every
+armed NPC from NPC-to-NPC combat. Exclude self explicitly by entity identity.
+
+Gameplay events should write typed knowledge rather than secretly bypassing the
+pipeline. For example, a shot may open a ceasefire gate, while received fire
+adds a `RECEIVED_FIRE` source or decaying threat influence; neither event should
+fabricate a successful sighting. Avoid reading live transforms as remembered
+knowledge. Resolve live transforms only inside the visibility executor that is
+actively checking them, then store the resulting observation snapshot.
+
+Applications own budgets and cadence. Keep reusable spotting and targeting
+plugins cadence-neutral; configure discovery, respotting, ranking, movement,
+and muzzle validation independently in the application. Add a vertical
+integration test that exercises `candidate source → visibility → contact →
+target rank → weapon trajectory`, including peer combatants that carry the same
+intelligence components as the observer.
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.
