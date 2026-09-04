@@ -29,9 +29,17 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
   travel, hunt, tether-lock, and respawn intelligence. Only High emits character
   plants, one chunk at a time; lower levels retain the host brain.
 - [`groups`](groups) provides `MobGroup`, the five group families, and the
-  `MobWorldSample` adapter seam. Richmond/Chico integration supplies elevation,
-  urbanization, and vegetation at runtime, then queues resolved groups through
-  `PendingMobGroups`; the core generation crates do not own either concrete world.
+  `MobWorldSample` adapter seam. `MaybraidWorld` selects sparse 400 m mob cells
+  from the live Richmond/Chico model configuration, generates them in a 3 km
+  ring, and presents cell → group → `MobScene` hosts in a 1 km ring. Spawn
+  elevation is resolved against composed Durham terrain and Richmond pads at
+  presentation time. `PendingMobGroups` remains available for focused tests and
+  manual playground scenes.
+
+The world publishes one global POI for each presented grove and urban setting,
+local POIs for presented storeys, and a budgeted local vegetation POI for at most
+one real plant host per 48 m spatial bucket. Child POIs leave the registry with
+their LOD host, so discovery never retains culled scene anchors.
 
 High character plants carry only `MobSlot` (and `MobId` for detached death
 replacements). `MobSystems::Bind` resolves the live entity, installs the tether

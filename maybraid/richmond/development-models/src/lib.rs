@@ -53,7 +53,7 @@ pub use development::{
 	ShepherdsVillageCell,
 };
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
-pub use host::{DevelopmentHost, DevelopmentHosts};
+pub use host::{DevelopmentHost, DevelopmentHosts, InteriorArea};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
 };

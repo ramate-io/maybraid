@@ -15,7 +15,8 @@ pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use urbanization_stream::{
 	parse_urbanization_kind, register_urbanization_lod, stream_radii_m, stream_urbanization,
-	UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE, DEFAULT_URBANIZATION_STREAM_RADIUS,
+	UrbanSetting, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
+	DEFAULT_URBANIZATION_STREAM_RADIUS,
 };
 
 use bevy::math::{IVec2, UVec2};

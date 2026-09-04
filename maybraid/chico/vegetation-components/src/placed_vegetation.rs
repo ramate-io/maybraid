@@ -1,6 +1,6 @@
 //! Posed + material-stamped vegetation for nesting under grove [`LodScene`](lod::LodScene) hosts.
 
-use bevy::prelude::Component;
+use bevy::prelude::{Component, Vec3};
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
 
@@ -37,6 +37,24 @@ pub struct PlacedVegetation<T: Send + Sync + 'static> {
 	pub stick_material: MaterialRef,
 	pub ball_material: MaterialRef,
 	pub frond_material: MaterialRef,
+}
+
+/// Type-erased semantic anchor for one real vegetation instance.
+///
+/// World integrations can discover these incrementally without knowing the
+/// concrete tree or bush type. The anchor is parent-local because flattened
+/// vegetation bakes [`Placement`] into emitted geometry rather than the host
+/// entity's [`Transform`](bevy::prelude::Transform).
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct VegetationInstance {
+	pub anchor: Vec3,
+	pub radius: f32,
+}
+
+impl VegetationInstance {
+	pub fn new(anchor: Vec3, radius: f32) -> Self {
+		Self { anchor, radius: radius.max(0.05) }
+	}
 }
 
 impl<T: Send + Sync + 'static> PlacedVegetation<T> {

@@ -121,6 +121,16 @@ pub struct UrbanizationPaddedTerrainState {
 	wanted: HashSet<Id>,
 }
 
+/// Type-erased anchor for one presented urban setting.
+///
+/// The world layer turns this into a global POI without coupling Richmond
+/// generation or presentation to a particular intelligence implementation.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct UrbanSetting {
+	pub id: Id,
+	pub arrival_radius: f32,
+}
+
 struct PresentedUrbanization {
 	version: Version,
 	entities: Vec<Entity>,
@@ -206,9 +216,27 @@ impl UrbanizationPresenterState {
 			{
 				continue;
 			}
+			let Some(cell) = SpatialIndex::<DevelopmentCell>::get(development, leaf_id) else {
+				continue;
+			};
 			let Some(built) = SpatialIndex::<BuiltDevelopment>::get(development, leaf_id) else {
 				continue;
 			};
+			let center = (leaf.bounds.min + leaf.bounds.max) * 0.5;
+			let elevation = cell.pads().next().map(|pad| pad.height).unwrap_or(center.y);
+			let arrival_radius = ((leaf.bounds.max.x - leaf.bounds.min.x)
+				.min(leaf.bounds.max.z - leaf.bounds.min.z)
+				* 0.25)
+				.clamp(8.0, 128.0);
+			entities.push(
+				commands
+					.spawn((
+						Name::new("urban-setting"),
+						UrbanSetting { id: leaf_id, arrival_radius },
+						Transform::from_xyz(center.x, elevation, center.z),
+					))
+					.id(),
+			);
 			entities.extend(spawn_tagged_hosts(commands, built));
 		}
 

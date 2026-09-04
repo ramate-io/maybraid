@@ -9,14 +9,20 @@
 mod camera;
 pub mod commands;
 mod control;
+mod intelligence;
 mod material_lib;
+mod mobs;
+mod poi;
 mod ui;
 
 pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;
+pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
+pub use mobs::WorldMobsPlugin;
+pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
@@ -99,6 +105,9 @@ impl Plugin for WorldPlugin {
 				own_terrain: false,
 				register_development_forest_lod: true,
 			})
+			.add_plugins(WorldMobsPlugin)
+			.add_plugins(WorldIntelligencePlugin)
+			.add_plugins(WorldPoiPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
