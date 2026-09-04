@@ -21,14 +21,15 @@ pack is how you change distance.
 
 | Pack | Where | Mix |
 |---|---|---|
-| herd | ~26 m | Grazers — should Evade immediately |
+| herd | ~26 m | Grazers — Evade public |
 | watch | ~33 m | Brawlers / guards — Combat inside spotting |
+| flock | ~23 m | Grazers that do **not** antagonize public — stay Ignore and meander |
 | occupy | ~56 m | Grazers + unarmed civilians |
 | guard | ~82 m | Gate brawlers, small discovery radius |
 | roam | ~127 m | Grazers / civilians, Ignore until you approach |
 | ffa | ~126 m | Brawlers who antagonize each other |
 | hunt | ~151 m | Predators + assassins, `keep_tether_in_combat` |
-| monk | ~240 m | Lone grazer, beyond High |
+| monk | ~240 m | Lone grazer, wildlife affiliations — Ignore even up close |
 
 Cyan ring = 80 m spotting. Magenta ring = 200 m High. Dots on NPCs are the
 current threat tactic (green Ignore, yellow Evade, red Combat). HUD lists

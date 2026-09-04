@@ -25,6 +25,7 @@ pub const GUARD: ThreatGroupId = ThreatGroupId::group(2);
 pub const HUNT: ThreatGroupId = ThreatGroupId::group(3);
 pub const GRAZER: ThreatGroupId = ThreatGroupId::group(4);
 pub const FFA: ThreatGroupId = ThreatGroupId::group(5);
+pub const WILDLIFE: ThreatGroupId = ThreatGroupId::group(6);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MobKind {
@@ -35,6 +36,7 @@ pub enum MobKind {
 	Roam,
 	Hunt,
 	Ffa,
+	Flock,
 	Monk,
 }
 
@@ -160,10 +162,24 @@ const FFA_PIT: &[MemberSpec] = &[
 	MemberSpec::ffa(),
 	MemberSpec::ffa(),
 ];
+const FLOCK: &[MemberSpec] = &[
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+	MemberSpec::grazer(),
+];
 const MONK: &[MemberSpec] = &[MemberSpec::grazer()];
 
-pub fn recipes() -> [MobRecipe; 8] {
+pub fn recipes() -> [MobRecipe; 9] {
 	[
+		MobRecipe {
+			kind: MobKind::Flock,
+			name: "flock",
+			at: Vec2::new(-14.0, 18.0),
+			leash: 16.0,
+			members: FLOCK,
+		},
 		MobRecipe {
 			kind: MobKind::Herd,
 			name: "herd",
@@ -358,7 +374,7 @@ fn interests(kind: MobKind) -> PoiInterests {
 		MobKind::Occupy | MobKind::Herd => {
 			PoiInterests::new([PoiInterest::new(CAMP, 1.4), PoiInterest::new(FORAGE, 0.8)])
 		}
-		MobKind::Roam | MobKind::Monk => {
+		MobKind::Roam | MobKind::Monk | MobKind::Flock => {
 			PoiInterests::new([PoiInterest::new(FORAGE, 1.3), PoiInterest::new(CAMP, 0.6)])
 		}
 		MobKind::Guard | MobKind::Watch => PoiInterests::one(GATE),
@@ -372,7 +388,8 @@ fn affiliations(kind: MobKind, id: ThreatId) -> Affiliations {
 		MobKind::Guard | MobKind::Watch => guard_affiliations(id),
 		MobKind::Hunt => hunt_affiliations(id),
 		MobKind::Ffa => ffa_affiliations(id),
-		MobKind::Herd | MobKind::Occupy | MobKind::Roam | MobKind::Monk => grazer_affiliations(id),
+		MobKind::Flock | MobKind::Monk => indifferent_affiliations(id),
+		MobKind::Herd | MobKind::Occupy | MobKind::Roam => grazer_affiliations(id),
 	}
 }
 
@@ -405,6 +422,13 @@ fn grazer_affiliations(id: ThreatId) -> Affiliations {
 	affiliations.antagonize(PUBLIC, AffiliationStrength::permanent(1.0));
 	affiliations.antagonize(HUNT, AffiliationStrength::permanent(1.0));
 	affiliations.mitigate(GRAZER, AffiliationStrength::permanent(1.0));
+	affiliations
+}
+
+fn indifferent_affiliations(id: ThreatId) -> Affiliations {
+	let mut affiliations = Affiliations::with_self(id);
+	affiliations.join(WILDLIFE, AffiliationStrength::permanent(1.0));
+	affiliations.mitigate(WILDLIFE, AffiliationStrength::permanent(1.0));
 	affiliations
 }
 
@@ -455,7 +479,7 @@ mod tests {
 
 	#[test]
 	fn proto_mobs_fit_a_good_crowd() {
-		assert_eq!(member_count(), 45);
+		assert_eq!(member_count(), 50);
 		assert!(member_count() >= 32);
 	}
 
@@ -471,5 +495,16 @@ mod tests {
 		let ffa = ffa_affiliations(ThreatId(3));
 		assert!(guard.threat_weight(&public, 0.0) >= 0.2);
 		assert_eq!(ffa.threat_weight(&public, 0.0), 0.0);
+	}
+
+	#[test]
+	fn flock_and_monk_do_not_treat_public_as_a_threat() {
+		let public = public_affiliations(ThreatId(1));
+		let wildlife = indifferent_affiliations(ThreatId(4));
+		let grazer = grazer_affiliations(ThreatId(5));
+		assert_eq!(wildlife.threat_weight(&public, 0.0), 0.0);
+		assert!(grazer.threat_weight(&public, 0.0) >= 0.2);
+		let flock = recipes().into_iter().find(|recipe| recipe.kind == MobKind::Flock).unwrap();
+		assert!(flock.at.length() < SPOTTING_RING * 0.5);
 	}
 }

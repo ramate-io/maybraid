@@ -120,6 +120,11 @@ pub fn setup_pois(
 	spawn(FORAGE, Vec2::new(-90.0, -90.0), forage_mat.clone());
 	spawn(FORAGE, Vec2::new(-104.0, -78.0), forage_mat.clone());
 	spawn(FORAGE, Vec2::new(-76.0, -102.0), forage_mat.clone());
+	spawn(FORAGE, Vec2::new(-14.0, 18.0), forage_mat.clone());
+	spawn(FORAGE, Vec2::new(-22.0, 8.0), forage_mat.clone());
+	spawn(FORAGE, Vec2::new(-6.0, 26.0), forage_mat.clone());
+	spawn(FORAGE, Vec2::new(162.0, 170.0), forage_mat.clone());
+	spawn(FORAGE, Vec2::new(178.0, 162.0), forage_mat.clone());
 	for x in [-100.0_f32, 0.0, 100.0] {
 		for z in [-100.0_f32, 0.0, 100.0] {
 			if x.abs() < 1.0 && z.abs() < 1.0 {
