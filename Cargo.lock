@@ -4729,6 +4729,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "maybraid-mobs"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "damage",
+ "journeying-intelligence",
+ "lod",
+ "mob-characters",
+ "mob-intelligence",
+ "poi-intelligence",
+ "tether-intelligence",
+ "threat-intelligence",
+]
+
+[[package]]
 name = "maybraid-sky"
 version = "0.0.1"
 dependencies = [
@@ -4873,6 +4889,38 @@ dependencies = [
  "tether-intelligence",
  "threat-intelligence",
  "threat-management-intelligence",
+]
+
+[[package]]
+name = "mob-characters"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "crozon-character-items",
+ "crozon-characters",
+ "crozon-inventory-user",
+ "damage",
+ "firearm-user",
+ "firearms",
+ "lod",
+ "material-ref",
+ "mob-intelligence",
+ "npc-intelligence",
+ "player",
+ "poi-intelligence",
+ "routing-intelligence",
+ "spotting-intelligence",
+]
+
+[[package]]
+name = "mob-groups"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "maybraid-mobs",
+ "mob-characters",
 ]
 
 [[package]]

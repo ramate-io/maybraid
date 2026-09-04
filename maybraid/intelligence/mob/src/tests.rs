@@ -4,7 +4,9 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use damage::Health;
 use npc_intelligence::{NpcInstall, NpcIntelligence, Personality};
-use poi_intelligence::{PoiGoal, PoiId, PoiInterest, PoiInterests, PoiKind};
+use poi_intelligence::{
+	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind,
+};
 use tether_intelligence::{Tether, TetherIntelligenceUser, TetherObjective};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatSubject};
 
@@ -15,8 +17,8 @@ use crate::lock::{
 	lock_mobs_on_poi_arrival,
 };
 use crate::{
-	MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin, MobMemberNeeded,
-	MobRespawn, MobRespawnAt, MobRoster, MobSlot, MobTetherLock, RosterMember, spawn_mob,
+	spawn_mob, MemberOf, Mob, MobAffiliations, MobId, MobInstall, MobIntelligencePlugin,
+	MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster, MobSlot, MobTetherLock, RosterMember,
 };
 
 const PACK: ThreatGroupId = ThreatGroupId::group(9);
@@ -60,10 +62,15 @@ fn host_is_a_tether_anchor() {
 fn bind_by_mob_id_stamps_membership_and_installs() {
 	let mut world = World::new();
 	let pose = Vec3::new(4.0, 0.9, 2.0);
+	let personal = PoiKind::new("mob/personal");
 	let host = spawn_host(
 		&mut world,
 		MobId(7),
-		vec![RosterMember::new(Personality::Grazer, pose).with_armed(false)],
+		vec![
+			RosterMember::new(Personality::Grazer, pose)
+				.with_armed(false)
+				.with_interests(PoiInterests::one(personal)),
+		],
 	);
 	let plant = world.spawn((Transform::from_translation(pose), MobSlot(0), MobId(7))).id();
 	world.run_system_once(bind_mob_members).expect("bind");
@@ -79,6 +86,9 @@ fn bind_by_mob_id_stamps_membership_and_installs() {
 	let affiliations = world.get::<threat_intelligence::Affiliations>(plant).expect("affiliations");
 	assert!(affiliations.memberships.contains_key(&PACK));
 	assert!(world.get::<ThreatSubject>(plant).is_some());
+	let learner = world.get::<PoiIntelligenceUser>(plant).expect("POI learner");
+	assert!(learner.interests.contains(personal));
+	assert!(learner.interests.contains(PoiKind::new("mob/camp")));
 }
 
 #[test]
@@ -374,11 +384,9 @@ fn arrival_locks_once_until_the_host_leaves() {
 	));
 	world.run_system_once(lock_mobs_on_poi_arrival).expect("lock");
 	world.flush();
-	assert!(
-		world
-			.get::<MobTetherLock>(host)
-			.is_some_and(|lock| lock.subject == dest && lock.generation == 3)
-	);
+	assert!(world
+		.get::<MobTetherLock>(host)
+		.is_some_and(|lock| lock.subject == dest && lock.generation == 3));
 
 	world
 		.entity_mut(host)

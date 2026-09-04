@@ -88,28 +88,30 @@ impl MobInstall {
 	}
 }
 
-/// Spawn the always-on host: roster, tether marker, pack tables, optional travel.
-pub fn spawn_mob(commands: &mut Commands, transform: Transform, install: MobInstall) -> Entity {
+/// Stamp the always-on mob brain onto an existing semantic scene host.
+pub fn install_mob(commands: &mut Commands, host: Entity, install: MobInstall) {
 	let interests = install.interests.clone();
-	let host = commands
-		.spawn((
-			Mob::new(install.leash),
-			install.id,
-			MobRoster::new(install.members),
-			install.affiliations,
-			install.respawn,
-			MobInterests(interests.clone()),
-			Tether,
-			transform,
-			Visibility::default(),
-		))
-		.id();
+	commands.entity(host).insert((
+		Mob::new(install.leash),
+		install.id,
+		MobRoster::new(install.members),
+		install.affiliations,
+		install.respawn,
+		MobInterests(interests.clone()),
+		Tether,
+	));
 	if let Some(travel) = install.travel {
 		commands.entity(host).insert(travel);
 	}
 	if install.journey {
 		install_mob_journeying(commands, host, interests, install.id.0);
 	}
+}
+
+/// Spawn the always-on host: roster, tether marker, pack tables, optional travel.
+pub fn spawn_mob(commands: &mut Commands, transform: Transform, install: MobInstall) -> Entity {
+	let host = commands.spawn((transform, Visibility::default())).id();
+	install_mob(commands, host, install);
 	host
 }
 

@@ -8,7 +8,7 @@ use tether_intelligence::TetherIntelligenceUser;
 use threat_intelligence::{ThreatId, ThreatSubject};
 
 use crate::host::{Mob, MobId};
-use crate::member::{MemberOf, MobMemberBody, MobSlot, resolve_host};
+use crate::member::{resolve_host, MemberOf, MobMemberBody, MobSlot};
 use crate::roster::{MobAffiliations, MobInterests, MobRoster};
 
 type Wish<'a> = (
@@ -16,6 +16,7 @@ type Wish<'a> = (
 	&'a MobSlot,
 	Option<&'a MobId>,
 	Option<&'a Transform>,
+	Option<&'a GlobalTransform>,
 	Option<&'a MobMemberBody>,
 	Has<NpcIntelligence>,
 );
@@ -42,7 +43,7 @@ pub(crate) fn bind_mob_members(
 	mut bind: BindWorld,
 ) {
 	let mut claimed: Vec<(Entity, u16)> = Vec::new();
-	for (plant, slot, wish_id, transform, body, has_mixer) in &wishes {
+	for (plant, slot, wish_id, transform, global, body, has_mixer) in &wishes {
 		let Some(host) =
 			resolve_host(plant, wish_id.copied(), &bind.child_of, &bind.hosts, &bind.mobs)
 		else {
@@ -64,7 +65,17 @@ pub(crate) fn bind_mob_members(
 			continue;
 		}
 
-		let at = transform.map(|transform| transform.translation).unwrap_or(member.pose);
+		let at = if wish_id.is_none() {
+			global
+				.map(GlobalTransform::translation)
+				.or_else(|| transform.map(|transform| transform.translation))
+				.unwrap_or(member.pose)
+		} else {
+			transform
+				.map(|transform| transform.translation)
+				.or_else(|| global.map(GlobalTransform::translation))
+				.unwrap_or(member.pose)
+		};
 		member.entity = Some(plant);
 		member.pose = at;
 		member.respawn_at = None;
@@ -88,7 +99,7 @@ pub(crate) fn bind_mob_members(
 			retarget_member_tether(host, plant, &mut bind.mixers, &mut bind.tethers);
 			if let Ok(mut learner) = bind.learners.get_mut(plant) {
 				if let Ok(host_interests) = bind.interests.get(host) {
-					learner.interests = host_interests.0.clone();
+					learner.interests = member.interests.combined(&host_interests.0);
 				}
 			}
 		}
@@ -104,6 +115,7 @@ pub(crate) fn propagate_mob_membership(
 	changed_affiliations: Query<(Entity, &MobAffiliations), Changed<MobAffiliations>>,
 	changed_interests: ChangedMobInterests,
 	members: Query<(Entity, &MemberOf)>,
+	rosters: Query<&MobRoster>,
 	mut learners: Query<&mut PoiIntelligenceUser>,
 ) {
 	for (host, affiliations) in &changed_affiliations {
@@ -118,12 +130,18 @@ pub(crate) fn propagate_mob_membership(
 		}
 	}
 	for (host, interests) in &changed_interests {
+		let Ok(roster) = rosters.get(host) else {
+			continue;
+		};
 		for (plant, membership) in &members {
 			if membership.mob != host {
 				continue;
 			}
+			let Some(member) = roster.get(membership.slot) else {
+				continue;
+			};
 			if let Ok(mut learner) = learners.get_mut(plant) {
-				learner.interests = interests.0.clone();
+				learner.interests = member.interests.combined(&interests.0);
 			}
 		}
 	}

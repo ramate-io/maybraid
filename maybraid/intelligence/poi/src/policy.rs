@@ -44,6 +44,21 @@ impl PoiInterests {
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
+
+	/// Add another ordered interest table, summing duplicate kind weights.
+	pub fn combined(&self, other: &Self) -> Self {
+		let mut combined = self.0.clone();
+		for interest in other.iter() {
+			if let Some(existing) =
+				combined.iter_mut().find(|existing| existing.kind == interest.kind)
+			{
+				existing.weight += interest.weight;
+			} else {
+				combined.push(interest);
+			}
+		}
+		Self(combined)
+	}
 }
 
 /// Discovery cadence, acquisition rate, and memory bounds.
@@ -92,5 +107,24 @@ pub enum PoiVisitPolicy {
 impl Default for PoiVisitPolicy {
 	fn default() -> Self {
 		Self::Weighted { novelty_weight: 1.5, revisit_cooldown_secs: 60.0, repeat_weight: 1.0 }
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn combined_interests_retain_both_tables_and_sum_duplicates() {
+		let camp = PoiKind::new("test/camp");
+		let forage = PoiKind::new("test/forage");
+		let personal = PoiInterests::new([
+			PoiInterest::new(camp, 0.5),
+			PoiInterest::new(forage, 1.0),
+		]);
+		let mob = PoiInterests::one(camp);
+		let combined = personal.combined(&mob);
+		assert_eq!(combined.weight(camp), Some(1.5));
+		assert_eq!(combined.weight(forage), Some(1.0));
 	}
 }

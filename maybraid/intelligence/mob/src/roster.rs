@@ -111,6 +111,7 @@ pub struct RosterMember {
 	pub spotting_range: Option<f32>,
 	pub engagement: Option<FirearmEngagement>,
 	pub threat_override: Option<ThreatManagementIntelligence>,
+	pub interests: PoiInterests,
 	pub pose: Vec3,
 	pub health: Health,
 	pub entity: Option<Entity>,
@@ -129,6 +130,7 @@ impl RosterMember {
 			spotting_range: None,
 			engagement: None,
 			threat_override: None,
+			interests: PoiInterests::default(),
 			pose,
 			health: Health::default(),
 			entity: None,
@@ -166,6 +168,11 @@ impl RosterMember {
 		self
 	}
 
+	pub fn with_interests(mut self, interests: PoiInterests) -> Self {
+		self.interests = interests;
+		self
+	}
+
 	pub fn npc_install(
 		&self,
 		host: Entity,
@@ -178,7 +185,7 @@ impl RosterMember {
 			body,
 			health: self.health,
 			tether: Some(host),
-			poi_interests: interests,
+			poi_interests: self.interests.combined(&interests),
 			engagement: self.engagement.clone(),
 			threat_override: self.threat_override,
 			discovery_radius: self.discovery_radius,

@@ -15,11 +15,14 @@ pub(crate) fn policy(respawn: Option<&MobRespawn>) -> MobRespawn {
 pub(crate) fn queue_downed_member_deaths(
 	time: Res<Time>,
 	mut commands: Commands,
-	downed: Query<(Entity, &MemberOf, &Transform, Option<&Health>), Added<Downed>>,
+	downed: Query<
+		(Entity, &MemberOf, &Transform, &GlobalTransform, Has<ChildOf>, Option<&Health>),
+		Added<Downed>,
+	>,
 	mut rosters: Query<(&mut MobRoster, Option<&MobRespawn>), With<Mob>>,
 ) {
 	let now = time.elapsed_secs();
-	for (entity, membership, transform, health) in &downed {
+	for (entity, membership, transform, global, parented, health) in &downed {
 		let Ok((mut roster, respawn)) = rosters.get_mut(membership.mob) else {
 			continue;
 		};
@@ -30,7 +33,7 @@ pub(crate) fn queue_downed_member_deaths(
 		if member.entity != Some(entity) {
 			continue;
 		}
-		member.pose = transform.translation;
+		member.pose = member_translation(transform, global, parented);
 		if let Some(health) = health {
 			member.health = *health;
 		}
@@ -40,13 +43,19 @@ pub(crate) fn queue_downed_member_deaths(
 }
 
 pub(crate) fn write_back_mob_roster(
-	members: Query<(Entity, &MemberOf, &Transform, Option<&Health>)>,
+	members: Query<(Entity, &MemberOf, &Transform, &GlobalTransform, Has<ChildOf>, Option<&Health>)>,
 	mut rosters: Query<(Entity, &mut MobRoster), With<Mob>>,
 ) {
 	let live: Vec<_> = members
 		.iter()
-		.map(|(entity, membership, transform, health)| {
-			(entity, membership.mob, membership.slot, transform.translation, health.copied())
+		.map(|(entity, membership, transform, global, parented, health)| {
+			(
+				entity,
+				membership.mob,
+				membership.slot,
+				member_translation(transform, global, parented),
+				health.copied(),
+			)
 		})
 		.collect();
 
@@ -68,6 +77,10 @@ pub(crate) fn write_back_mob_roster(
 			member.entity = None;
 		}
 	}
+}
+
+fn member_translation(transform: &Transform, global: &GlobalTransform, parented: bool) -> Vec3 {
+	if parented { global.translation() } else { transform.translation }
 }
 
 pub(crate) fn respawn_mob_members(

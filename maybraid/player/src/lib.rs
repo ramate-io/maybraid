@@ -11,8 +11,9 @@ use crozon_characters::CharacterMotionSystems;
 use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
-	apply_locomotion_capsule, CharacterController, Grounded, JumpWish, Jumping, MoveWish,
-	MovementAction, PlayerControlSystems,
+	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
+	CharacterController, Grounded, JumpWish, Jumping, MoveWish, MovementAction,
+	PlayerControlSystems,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,

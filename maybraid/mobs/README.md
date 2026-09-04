@@ -16,7 +16,28 @@ For this version, we propose to take a direct gen model on available grove and u
 
 Spawning APIs from groups targeting the Richmond Surface model `Arc<RichmonSurfaceModel>` (forgot if this is the actual name) to determine where reasonable spawn points are. We will likely make this its own crate. I'm not sure if we want to bake the Richmond type in here so that we have the right respawn brain, or if we author a patch system that will apply/make available the Richmond spawn points model at runtime. 
 
-Groups may put multiple mobs over the same area. We typically use large `400m` cells and allocate 2-12 mobs per cell. We may even use multiple groups over the same POI initialization to create a more dynamic feel. 
+Groups may put multiple mobs over the same area. We typically use large `400m` cells and allocate 2-12 mobs per cell. We may even use multiple groups over the same POI initialization to create a more dynamic feel.
+
+## Implementation
+
+- [`characters`](characters) provides `MobCharacter<Build, Species, Inventory, Brains>`,
+  the resolved `CharacterSceneRecipe`, and `MobCharacterScenesPlugin`. A scene plant
+  becomes the physical NPC controller, its real inventory bag and selected firearm,
+  the personality intelligence users, and a nested Crozon character-model LodScene.
+- [`mobs`](mobs) provides `Mob<Roster, Intelligence>` and the resolved `MobScene`
+  semantic LodScene. Its always-on host owns roster, affiliations, POI/journey,
+  travel, hunt, tether-lock, and respawn intelligence. Only High emits character
+  plants, one chunk at a time; lower levels retain the host brain.
+- [`groups`](groups) provides `MobGroup`, the five group families, and the
+  `MobWorldSample` adapter seam. Richmond/Chico integration supplies elevation,
+  urbanization, and vegetation at runtime, then queues resolved groups through
+  `PendingMobGroups`; the core generation crates do not own either concrete world.
+
+High character plants carry only `MobSlot` (and `MobId` for detached death
+replacements). `MobSystems::Bind` resolves the live entity, installs the tether
+context, and combines character-local POI interests with the mob interest table.
+LOD cull writes the live snapshot back to the roster; death replacement invokes the
+same `CharacterSceneRecipe` used by initial High fulfillment.
 
 ## Characters
 Initial proposed characters are as follows:

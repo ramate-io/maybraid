@@ -13,7 +13,9 @@ mod plugin;
 mod roster;
 mod travel;
 
-pub use host::{Mob, MobId, MobIdAlloc, MobInstall, install_mob_journeying, spawn_mob};
+pub use host::{
+	install_mob, install_mob_journeying, spawn_mob, Mob, MobId, MobIdAlloc, MobInstall,
+};
 pub use lock::MobTetherLock;
 pub use member::{MemberOf, MobMemberBody, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};

@@ -71,30 +71,49 @@ pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: Loc
 	));
 }
 
+/// Stamp the dynamic character controller onto an existing scene plant.
+///
+/// The caller owns [`Transform`], so semantic LOD fulfillment can preserve the
+/// transform authored by its scene recipe.
+pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: LocomotionCapsule) {
+	commands.entity(body).insert((
+		CharacterController,
+		Visibility::default(),
+		RigidBody::Dynamic,
+		PhysicsInteractionLayer::animated_layers(),
+		LockedAxes::ROTATION_LOCKED,
+		MovementAcceleration(MOVE_ACCEL),
+		MovementDampingFactor(MOVE_DAMPING),
+		JumpImpulse(JUMP_IMPULSE),
+		MaxSlopeAngle(MAX_SLOPE_ANGLE),
+		MoveWish::default(),
+		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
+		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
+		GravityScale(1.25),
+	));
+	apply_locomotion_capsule(commands, body, hull);
+}
+
+/// Scale run acceleration and jump impulse from character-sheet factors.
+pub fn apply_character_mobility(
+	commands: &mut Commands,
+	body: Entity,
+	running_factor: f32,
+	jump_factor: f32,
+) {
+	commands.entity(body).insert((
+		MovementAcceleration(MOVE_ACCEL * running_factor.max(0.01)),
+		JumpImpulse(JUMP_IMPULSE * jump_factor.max(0.01)),
+	));
+}
+
 pub(crate) fn spawn_character_controller(
 	commands: &mut Commands,
 	translation: Vec3,
 	hull: LocomotionCapsule,
 ) -> Entity {
-	let body = commands
-		.spawn((
-			CharacterController,
-			Transform::from_translation(translation),
-			Visibility::default(),
-			RigidBody::Dynamic,
-			PhysicsInteractionLayer::animated_layers(),
-			LockedAxes::ROTATION_LOCKED,
-			MovementAcceleration(MOVE_ACCEL),
-			MovementDampingFactor(MOVE_DAMPING),
-			JumpImpulse(JUMP_IMPULSE),
-			MaxSlopeAngle(MAX_SLOPE_ANGLE),
-			MoveWish::default(),
-			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
-			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
-			GravityScale(1.25),
-		))
-		.id();
-	apply_locomotion_capsule(commands, body, hull);
+	let body = commands.spawn(Transform::from_translation(translation)).id();
+	apply_character_controller(commands, body, hull);
 	body
 }
 

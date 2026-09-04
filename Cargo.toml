@@ -78,6 +78,9 @@ members = [
   "maybraid/input",
   "maybraid/player",
   "maybraid/player-camera",
+  "maybraid/mobs/characters",
+  "maybraid/mobs/mobs",
+  "maybraid/mobs/groups",
   "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/damage",
@@ -353,6 +356,9 @@ threat-intelligence-damage = { path = "maybraid/intelligence/threat/damage" }
 threat-management-intelligence = { path = "maybraid/intelligence/threat-management" }
 npc-intelligence = { path = "maybraid/intelligence/npc" }
 mob-intelligence = { path = "maybraid/intelligence/mob" }
+mob-characters = { path = "maybraid/mobs/characters" }
+maybraid-mobs = { path = "maybraid/mobs/mobs" }
+mob-groups = { path = "maybraid/mobs/groups" }
 personalities-playground = { path = "maybraid/intelligence/personalities" }
 mob-brain-playground = { path = "maybraid/intelligence/mob-brain" }
 poi-playground = { path = "maybraid/intelligence/poi-playground" }

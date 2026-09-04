@@ -9,7 +9,7 @@ use crate::MobId;
 ///
 /// Pair with [`MobId`] when the plant is not under the host. Slot-only wishes
 /// bind by walking to an ancestor [`crate::Mob`].
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MobSlot(pub u16);
 
 /// Resolved membership. Written by bind; cleared when the plant despawns.
