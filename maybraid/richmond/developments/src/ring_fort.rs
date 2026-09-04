@@ -168,13 +168,7 @@ impl Fit for RingFort {
 			let spec = sample_keep_spec(&cfg, center, i, max_half);
 			keeps.push(spec.build(origin, (sx, sz)));
 		}
-		let corner_half = [
-			keeps[0].plan_half_extent(),
-			keeps[1].plan_half_extent(),
-			keeps[2].plan_half_extent(),
-			keeps[3].plan_half_extent(),
-		];
-		let roof = gallery_roof(last, corner_half);
+		let roof = gallery_roof(last, &keeps);
 
 		let mut nodes = Vec::with_capacity(5);
 		nodes.push(RingFortSite::Ring(Box::new(ring)));
@@ -235,8 +229,11 @@ fn sample_keep_spec(cfg: &NoiseConfig, center: Vec3, index: usize, max_half: f32
 	}
 }
 
-/// Four gallery pitches from outer wall to courtyard, shortened so corner keeps sit in holes.
-fn gallery_roof(plan: &LesHallesFloorPlan, corner_half: [f32; 4]) -> RectangularPitchedRoofComplex {
+/// Four gallery pitches from outer wall to courtyard, with keep footprints punched out.
+fn gallery_roof(
+	plan: &LesHallesFloorPlan,
+	keeps: &[RingFortKeep],
+) -> RectangularPitchedRoofComplex {
 	let cx = plan.center_xz.x;
 	let cz = plan.center_xz.z;
 	let y0 = plan.center_xz.y + plan.storey_height;
@@ -249,18 +246,6 @@ fn gallery_roof(plan: &LesHallesFloorPlan, corner_half: [f32; 4]) -> Rectangular
 	let rise = (gx.min(gz) * 0.55).clamp(2.2, 4.5);
 	let y1 = y0 + rise;
 
-	let clamp_inset =
-		|half: f32, gallery: f32, rim: f32| (gallery * 0.5 + half).min((rim - 1.2).max(0.0));
-	let gw = plan.parameterized.gallery_width;
-	let ne_x = clamp_inset(corner_half[0], gw, gx);
-	let ne_z = clamp_inset(corner_half[0], gw, gz);
-	let nw_x = clamp_inset(corner_half[1], gw, gx);
-	let nw_z = clamp_inset(corner_half[1], gw, gz);
-	let se_x = clamp_inset(corner_half[2], gw, gx);
-	let se_z = clamp_inset(corner_half[2], gw, gz);
-	let sw_x = clamp_inset(corner_half[3], gw, gx);
-	let sw_z = clamp_inset(corner_half[3], gw, gz);
-
 	let mut volumes = Vec::new();
 	let mut push = |min_x: f32, max_x: f32, min_z: f32, max_z: f32| {
 		if max_x - min_x > 0.4 && max_z - min_z > 0.4 {
@@ -270,12 +255,14 @@ fn gallery_roof(plan: &LesHallesFloorPlan, corner_half: [f32; 4]) -> Rectangular
 			));
 		}
 	};
-	push(cx - ox + nw_x, cx + ox - ne_x, cz + iz, cz + oz);
-	push(cx - ox + sw_x, cx + ox - se_x, cz - oz, cz - iz);
-	push(cx - ox, cx - ix, cz - oz + sw_z, cz + oz - nw_z);
-	push(cx + ix, cx + ox, cz - oz + se_z, cz + oz - ne_z);
+	push(cx - ox, cx + ox, cz + iz, cz + oz);
+	push(cx - ox, cx + ox, cz - oz, cz - iz);
+	push(cx - ox, cx - ix, cz - oz, cz + oz);
+	push(cx + ix, cx + ox, cz - oz, cz + oz);
 
+	let holes: Vec<Aabb3d> = keeps.iter().flat_map(|keep| keep.roof_holes(y0, y1)).collect();
 	RectangularPitchedRoofComplexParams::new(volumes)
+		.with_plan_holes(holes)
 		.overhang(Overhang::Fixed(0.45))
 		.end_cap(EndCap::Hip)
 		.style(PanelStyle::ShepherdsThatch)
@@ -378,7 +365,11 @@ mod tests {
 		let ring = fort.ring().ok_or_else(|| anyhow::anyhow!("missing courtyard ring"))?;
 		let last = ring.last_plan().ok_or_else(|| anyhow::anyhow!("ring has no storey"))?;
 		let volumes = &fort.roof.params().volumes;
-		anyhow::ensure!(volumes.len() == 4, "expected 4 gallery bars, got {}", volumes.len());
+		anyhow::ensure!(
+			volumes.len() >= 4,
+			"expected gallery bars after keep holes, got {}",
+			volumes.len()
+		);
 
 		let court = last.center_xz;
 		anyhow::ensure!(
@@ -398,11 +389,19 @@ mod tests {
 
 		for keep in fort.keeps() {
 			let c = keep.center_xz();
-			anyhow::ensure!(
-				!volumes.iter().any(|v| xz_covers(v, c, 0.05)),
-				"roof covers keep at {:?}",
-				c
-			);
+			let h = keep.plan_half_extent() * 0.5;
+			for p in [
+				c,
+				Vec3::new(c.x + h, 0.0, c.z),
+				Vec3::new(c.x - h, 0.0, c.z),
+				Vec3::new(c.x, 0.0, c.z + h),
+				Vec3::new(c.x, 0.0, c.z - h),
+			] {
+				anyhow::ensure!(
+					!volumes.iter().any(|v| xz_covers(v, p, 0.05)),
+					"roof covers keep at {p:?}"
+				);
+			}
 		}
 		Ok(())
 	}

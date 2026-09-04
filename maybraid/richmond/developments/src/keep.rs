@@ -2,15 +2,16 @@
 
 use lod::gen::LodSceneLevel;
 use material_ref::MaterialRef;
+use richmond_building_components::floors::FloorGeometry;
 use richmond_building_components::panels::PanelStyle;
 use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::{
-	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode,
+	BuildingComponents, FloorNode, JointNode, Layers, PanelNode, PartitionNode, Placement,
 };
 use richmond_buildings::{
-	ArcFloor, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingStairwell, Opening, OpeningId,
-	OpeningLabel, Openings, StairwellKind, Trazaloid, TrazaloidParams, TrazaloidSide,
-	TrazaloidSlab, WellAabb, WellSide,
+	ArcFloor, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingStairwell, OpeningId, OpeningLabel,
+	Openings, StairwellKind, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, WellAabb,
+	WellSide,
 };
 
 use bevy_math::bounding::Aabb3d;
@@ -18,6 +19,8 @@ use bevy_math::{Vec2, Vec3};
 
 pub const TOWER_STOREY_HEIGHT: f32 = 3.2;
 const KEEP_TREAD_FILL: f32 = 0.55;
+/// Extra plan clearance so gallery hips do not leak into a keep.
+const ROOF_HOLE_PAD: f32 = 0.3;
 
 /// Shell plus the wells that climb it.
 #[derive(Debug, Clone, PartialEq)]
@@ -81,6 +84,7 @@ impl BuildingComponents for CircularTower {
 pub struct TrazaloidTower {
 	storeys: Vec<Trazaloid>,
 	wall_material: Option<MaterialRef>,
+	well_half: f32,
 }
 
 impl TrazaloidTower {
@@ -128,6 +132,22 @@ impl BuildingComponents for TrazaloidTower {
 		}
 		out
 	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
+		if !matches!(level, LodSceneLevel::High) {
+			return Layers::new();
+		}
+		let mut out = Layers::new();
+		for (i, storey) in self.storeys.iter().enumerate() {
+			let params = storey.params();
+			let hole = (i > 0).then_some(self.well_half);
+			for node in keep_rect_floor(params.origin, params.footprint.x, params.footprint.y, hole)
+			{
+				out.push_free(node);
+			}
+		}
+		out
+	}
 }
 
 /// Circular [`ArcTower`] or stacked [`Trazaloid`] keep at a ring-fort corner.
@@ -163,6 +183,33 @@ impl RingFortKeep {
 		match self {
 			Self::Circular(keep) => &keep.stairwells,
 			Self::Trazaloid(keep) => &keep.stairwells,
+		}
+	}
+
+	/// Plan holes for the gallery roof: one rectangle for a trazaloid keep,
+	/// four quadrant squares covering a circular keep.
+	pub fn roof_holes(&self, y0: f32, y1: f32) -> Vec<Aabb3d> {
+		let c = self.center_xz();
+		let half = self.plan_half_extent() + ROOF_HOLE_PAD;
+		match self {
+			Self::Trazaloid(_) => vec![Aabb3d::from_min_max(
+				Vec3::new(c.x - half, y0, c.z - half),
+				Vec3::new(c.x + half, y1, c.z + half),
+			)],
+			Self::Circular(_) => {
+				let xs = [c.x - half, c.x];
+				let zs = [c.z - half, c.z];
+				let mut holes = Vec::with_capacity(4);
+				for &x0 in &xs {
+					for &z0 in &zs {
+						holes.push(Aabb3d::from_min_max(
+							Vec3::new(x0, y0, z0),
+							Vec3::new(x0 + half, y1, z0 + half),
+						));
+					}
+				}
+				holes
+			}
 		}
 	}
 
@@ -215,7 +262,7 @@ impl BuildingComponents for RingFortKeep {
 	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		match self {
 			Self::Circular(keep) => keep.shell.floor_nodes_for_level(level),
-			Self::Trazaloid(_) => Layers::new(),
+			Self::Trazaloid(keep) => keep.shell.floor_nodes_for_level(level),
 		}
 	}
 
@@ -235,6 +282,57 @@ fn stamp_stairs(
 		.into_iter()
 		.map(|stair| stair.with_surface_material(wall.clone()))
 		.collect()
+}
+
+fn keep_rect_floor(origin: Vec3, width: f32, depth: f32, hole_half: Option<f32>) -> Vec<FloorNode> {
+	let width = width.max(1e-4);
+	let depth = depth.max(1e-4);
+	let cx = origin.x;
+	let cz = origin.z;
+	let y = origin.y;
+	let center = Vec3::new(cx, y, cz);
+	let Some(hh) = hole_half.filter(|h| *h > 1e-4) else {
+		return vec![rect_floor_slab(center, width, depth)];
+	};
+	let hx = width * 0.5;
+	let hz = depth * 0.5;
+	let hh = hh.min(hx * 0.92).min(hz * 0.92);
+	let hole_min_x = cx - hh;
+	let hole_max_x = cx + hh;
+	let hole_min_z = cz - hh;
+	let hole_max_z = cz + hh;
+	let min_x = cx - hx;
+	let max_x = cx + hx;
+	let min_z = cz - hz;
+	let max_z = cz + hz;
+	let mut nodes = Vec::new();
+	let south = hole_min_z - min_z;
+	let north = max_z - hole_max_z;
+	let west = hole_min_x - min_x;
+	let east = max_x - hole_max_x;
+	if south > 0.15 {
+		nodes.push(rect_floor_slab(Vec3::new(cx, y, 0.5 * (min_z + hole_min_z)), width, south));
+	}
+	if north > 0.15 {
+		nodes.push(rect_floor_slab(Vec3::new(cx, y, 0.5 * (hole_max_z + max_z)), width, north));
+	}
+	if west > 0.15 {
+		nodes.push(rect_floor_slab(Vec3::new(0.5 * (min_x + hole_min_x), y, cz), west, hh * 2.0));
+	}
+	if east > 0.15 {
+		nodes.push(rect_floor_slab(Vec3::new(0.5 * (hole_max_x + max_x), y, cz), east, hh * 2.0));
+	}
+	nodes
+}
+
+fn rect_floor_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
+	let width_x = width_x.max(1e-4);
+	let depth_z = depth_z.max(1e-4);
+	let origin = Vec3::new(center.x - 0.5 * width_x, center.y, center.z - 0.5 * depth_z);
+	FloorNode::rough_stone(
+		FloorGeometry::rectangle(),
+		Placement::new(origin, 0.0).with_scale(Vec3::new(width_x, 0.2, depth_z)),
+	)
 }
 
 fn keep_well_half(plan_half: f32) -> f32 {
@@ -268,13 +366,6 @@ fn keep_stairwells(
 		);
 	}
 	out
-}
-
-fn shaft_opening(half: f32, y0: f32, y1: f32) -> Opening {
-	Opening::new(
-		Aabb3d::from_min_max(Vec3::new(-half, y0, -half), Vec3::new(half, y1, half)),
-		OpeningLabel::Shaft,
-	)
 }
 
 fn build_circular_tower(origin: Vec3, radius: f32, floors: usize, hole: f32) -> CircularTower {
@@ -326,10 +417,6 @@ fn build_trazaloid_tower(
 		let ridge = base.lerp(ridge_top, t1);
 		let y = origin.y + i as f32 * TOWER_STOREY_HEIGHT;
 		let mut openings = Openings::new();
-		openings.insert(
-			OpeningId::new("stair_shaft"),
-			shaft_opening(well_half, -0.25, TOWER_STOREY_HEIGHT + 0.25),
-		);
 		if i == 0 {
 			for (k, side) in inner.into_iter().enumerate() {
 				openings.insert(
@@ -352,7 +439,7 @@ fn build_trazaloid_tower(
 				upper_height: TOWER_STOREY_HEIGHT * 0.35,
 				band_vertical_offset: TOWER_STOREY_HEIGHT * 0.13,
 				openings,
-				floor: TrazaloidSlab::Solid,
+				floor: TrazaloidSlab::None,
 				ceiling: if i + 1 == floors { TrazaloidSlab::Solid } else { TrazaloidSlab::None },
 				style: PanelStyle::RoughStonework,
 				..TrazaloidParams::default()
@@ -360,11 +447,65 @@ fn build_trazaloid_tower(
 			.build(),
 		);
 	}
-	TrazaloidTower { storeys, wall_material: None }
+	TrazaloidTower { storeys, wall_material: None, well_half }
 }
 
 fn inward_sides(sx: f32, sz: f32) -> [TrazaloidSide; 2] {
 	let x_side = if sx > 0.0 { TrazaloidSide::West } else { TrazaloidSide::East };
 	let z_side = if sz > 0.0 { TrazaloidSide::South } else { TrazaloidSide::North };
 	[x_side, z_side]
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn trazaloid_keep_owns_floors_with_stair_holes() -> anyhow::Result<()> {
+		let origin = Vec3::new(40.0, 12.0, -25.0);
+		let keep = RingFortKeep::trazaloid(origin, 16.0, 5, (1.0, 1.0));
+		let RingFortKeep::Trazaloid(keep) = keep else {
+			anyhow::bail!("expected trazaloid keep");
+		};
+		let n = keep.shell.storey_count();
+		anyhow::ensure!(n == 5, "storey count {n}");
+		for (i, storey) in keep.shell.storeys().iter().enumerate() {
+			anyhow::ensure!(
+				storey.floor().is_none(),
+				"storey {i} panel floor would cover kit flooring"
+			);
+			if i + 1 == n {
+				anyhow::ensure!(storey.ceiling().is_some(), "top storey should own the ceiling");
+			} else {
+				anyhow::ensure!(
+					storey.ceiling().is_none(),
+					"storey {i} should not cover the floor above"
+				);
+			}
+		}
+		let floors = keep.shell.floor_nodes_for_level(LodSceneLevel::High);
+		let nodes: Vec<_> = floors.flatten();
+		anyhow::ensure!(!nodes.is_empty(), "trazaloid keep should emit floor nodes");
+		let ground = keep_rect_floor(origin, 16.0, 16.0, None);
+		anyhow::ensure!(ground.len() == 1, "ground floor is one slab");
+		let intermediate = keep_rect_floor(
+			origin + Vec3::Y * TOWER_STOREY_HEIGHT,
+			16.0,
+			16.0,
+			Some(keep.shell.well_half),
+		);
+		anyhow::ensure!(intermediate.len() == 4, "intermediate floors keep a stair hole");
+		anyhow::ensure!(nodes.len() > ground.len(), "upper storeys should add holed floors");
+		Ok(())
+	}
+
+	#[test]
+	fn roof_holes_are_rect_or_four_squares() -> anyhow::Result<()> {
+		let origin = Vec3::new(10.0, 4.0, 8.0);
+		let circular = RingFortKeep::circular(origin, 7.0, 6);
+		anyhow::ensure!(circular.roof_holes(4.0, 8.0).len() == 4);
+		let trazaloid = RingFortKeep::trazaloid(origin, 14.0, 6, (-1.0, 1.0));
+		anyhow::ensure!(trazaloid.roof_holes(4.0, 8.0).len() == 1);
+		Ok(())
+	}
 }

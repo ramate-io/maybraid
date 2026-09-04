@@ -209,3 +209,31 @@ fn origin_translates_plan_and_west_passage() -> anyhow::Result<()> {
 	);
 	Ok(())
 }
+
+#[test]
+fn shaft_cuts_floor_when_origin_is_translated() -> anyhow::Result<()> {
+	let origin = Vec3::new(40.0, 12.0, -25.0);
+	let mut openings = Openings::new();
+	openings.insert(
+		"shaft",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(-1.0, -0.5, -1.0),
+				Vec3::new(1.0, 0.5, 1.0),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	let t = TrazaloidParams::default()
+		.origin(origin)
+		.ceiling(TrazaloidSlab::None)
+		.floor(TrazaloidSlab::Solid)
+		.openings(openings)
+		.build();
+	let floor = t.floor().ok_or_else(|| anyhow::anyhow!("translated floor missing"))?;
+	anyhow::ensure!(
+		matches!(floor.pieces()[0], ClippedStripPiece::Clipped(_)),
+		"shaft should cut the world-space floor slab"
+	);
+	Ok(())
+}
