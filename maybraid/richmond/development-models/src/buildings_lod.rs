@@ -12,11 +12,13 @@ use richmond_building_components::{
 	ComponentsOnly, DoorNode, FloorNode, FurnitureNode, JointNode, LabelNode, PanelNode,
 	PartitionNode, RoofNode, StairNode,
 };
+use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
 use richmond_developments::{
-	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, TrazaloidTower,
+	CircularTower, GalleryColonnade, GalleryTerrace, ShepherdsHouse, ShepherdsHut, SingleHighrise,
+	Skybridge, TrazaloidTower,
 };
 use std::sync::Arc;
 
@@ -108,5 +110,8 @@ impl Plugin for DevelopmentsBuildingsLodPlugin {
 		avian_host!(app, ComponentsOnly<GalleryTerrace>);
 		avian_host!(app, ComponentsOnly<GalleryColonnade>);
 		avian_host!(app, ComponentsOnly<RectangularPitchedRoofComplex>);
+		avian_host!(app, ComponentsOnly<Arc<SingleHighrise>>);
+		avian_host!(app, WizardsTower);
+		avian_host!(app, ComponentsOnly<Arc<Skybridge>>);
 	}
 }

@@ -2,44 +2,57 @@
 
 use std::sync::Arc;
 
-use bevy::prelude::{Commands, Entity, Transform};
+use bevy::prelude::{
+	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
+};
+use lod::gen::LodScene;
+use lod::lod_host_scene_pending;
+use lod::lod_ref::LodRef;
 use richmond_building_components::{
 	building_bounds, spawn_building_components, BuildingComponents,
 };
+use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	ConnectingStairwell, MixedUseLesHallesStorey, PitchedRoof, RectangularPitchedRoofComplex,
 };
 use richmond_developments::{
 	CircularTower, GalleryColonnade, GalleryTerrace, MixedUseLesHallesHost, RingFortHost,
-	ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, TrazaloidTower,
+	ShepherdsBuilding, ShepherdsHouse, ShepherdsHut, SingleHighrise, Skybridge, TrazaloidTower,
 };
 
 use crate::cell::yaw_about_xz;
 use crate::{
-	LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
+	BuiltDevelopment, LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
 	ShepherdsVillageDevelopment,
 };
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {
 	LesHallesStorey(Arc<MixedUseLesHallesStorey>, Transform),
-	LesHallesStairwell(ConnectingStairwell, Transform),
-	LesHallesRoof(PitchedRoof, Transform),
+	LesHallesStairwell(Box<ConnectingStairwell>, Transform),
+	LesHallesRoof(Box<PitchedRoof>, Transform),
 	ShepherdsHouse(Arc<ShepherdsHouse>, Transform),
 	ShepherdsHut(Arc<ShepherdsHut>, Transform),
 	RingFortCircularTower(Arc<CircularTower>, Transform),
 	RingFortTrazaloidTower(Arc<TrazaloidTower>, Transform),
-	RingFortGalleryTerrace(GalleryTerrace, Transform),
-	RingFortGalleryColonnade(GalleryColonnade, Transform),
-	RingFortGalleryRoof(RectangularPitchedRoofComplex, Transform),
+	RingFortGalleryTerrace(Box<GalleryTerrace>, Transform),
+	RingFortGalleryColonnade(Box<GalleryColonnade>, Transform),
+	RingFortGalleryRoof(Box<RectangularPitchedRoofComplex>, Transform),
+	SingleHighrise(Arc<SingleHighrise>, Transform),
+	WizardsTower(Arc<WizardsTower>, Transform),
+	Skybridge(Arc<Skybridge>, Transform),
 }
 
 impl DevelopmentHost {
 	pub fn spawn(&self, commands: &mut Commands) -> Vec<Entity> {
 		match self {
 			Self::LesHallesStorey(building, transform) => spawn(commands, building, *transform),
-			Self::LesHallesStairwell(building, transform) => spawn(commands, building, *transform),
-			Self::LesHallesRoof(building, transform) => spawn(commands, building, *transform),
+			Self::LesHallesStairwell(building, transform) => {
+				spawn(commands, building.as_ref(), *transform)
+			}
+			Self::LesHallesRoof(building, transform) => {
+				spawn(commands, building.as_ref(), *transform)
+			}
 			Self::ShepherdsHouse(building, transform) => spawn(commands, building, *transform),
 			Self::ShepherdsHut(building, transform) => spawn(commands, building, *transform),
 			Self::RingFortCircularTower(building, transform) => {
@@ -49,18 +62,61 @@ impl DevelopmentHost {
 				spawn(commands, building, *transform)
 			}
 			Self::RingFortGalleryTerrace(building, transform) => {
-				spawn(commands, building, *transform)
+				spawn(commands, building.as_ref(), *transform)
 			}
 			Self::RingFortGalleryColonnade(building, transform) => {
-				spawn(commands, building, *transform)
+				spawn(commands, building.as_ref(), *transform)
 			}
-			Self::RingFortGalleryRoof(building, transform) => spawn(commands, building, *transform),
+			Self::RingFortGalleryRoof(building, transform) => {
+				spawn(commands, building.as_ref(), *transform)
+			}
+			Self::SingleHighrise(building, transform) => spawn(commands, building, *transform),
+			Self::WizardsTower(building, transform) => {
+				spawn_wizards_tower(commands, building, *transform)
+			}
+			Self::Skybridge(building, transform) => spawn(commands, building, *transform),
 		}
 	}
 }
 
 pub trait DevelopmentHosts {
 	fn hosts(&self) -> Vec<DevelopmentHost>;
+}
+
+impl DevelopmentHosts for BuiltDevelopment {
+	fn hosts(&self) -> Vec<DevelopmentHost> {
+		match self {
+			Self::LesHalles(development) => development.hosts(),
+			Self::ShepherdsVillage(development) => development.hosts(),
+			Self::ShepherdsCommune(development) => development.hosts(),
+			Self::RingFort(development) => development.hosts(),
+			Self::TempleComplex(development) => {
+				let mut hosts = shepherd_building_hosts(&development.halls);
+				hosts.push(single_highrise_host(&development.sanctum));
+				hosts
+			}
+			Self::SingleHighrise(development) => {
+				vec![single_highrise_host(&development.building)]
+			}
+			Self::SuburbanHomes(development) => shepherd_building_hosts(&development.homes),
+			Self::WizardsTower(development) => vec![DevelopmentHost::WizardsTower(
+				Arc::new(development.building.building.tower.clone()),
+				development.host_transform(),
+			)],
+			Self::SkybridgeBazaar(development) => {
+				let mut hosts = shepherd_building_hosts(&development.market);
+				hosts.extend(development.towers.iter().map(single_highrise_host));
+				hosts.extend(development.bridges.iter().map(|placed| {
+					DevelopmentHost::Skybridge(
+						Arc::new(placed.building.clone()),
+						yaw_about_xz(placed.center_xz, placed.yaw),
+					)
+				}));
+				hosts
+			}
+			Self::OldCityMarket(development) => shepherd_building_hosts(&development.buildings),
+		}
+	}
 }
 
 impl DevelopmentHosts for LesHallesDevelopment {
@@ -75,10 +131,10 @@ impl DevelopmentHosts for LesHallesDevelopment {
 					DevelopmentHost::LesHallesStorey(Arc::new(storey), transform)
 				}
 				MixedUseLesHallesHost::Stairwell(stairwell) => {
-					DevelopmentHost::LesHallesStairwell(stairwell, transform)
+					DevelopmentHost::LesHallesStairwell(Box::new(stairwell), transform)
 				}
 				MixedUseLesHallesHost::Roof(roof) => {
-					DevelopmentHost::LesHallesRoof(roof, transform)
+					DevelopmentHost::LesHallesRoof(Box::new(roof), transform)
 				}
 			})
 			.collect()
@@ -110,7 +166,7 @@ impl DevelopmentHosts for RingFortDevelopment {
 						Some(DevelopmentHost::LesHallesStorey(Arc::new(storey), transform))
 					}
 					MixedUseLesHallesHost::Stairwell(stairwell) => {
-						Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+						Some(DevelopmentHost::LesHallesStairwell(Box::new(stairwell), transform))
 					}
 					MixedUseLesHallesHost::Roof(_) => None,
 				},
@@ -121,19 +177,17 @@ impl DevelopmentHosts for RingFortDevelopment {
 					Some(DevelopmentHost::RingFortTrazaloidTower(tower, transform))
 				}
 				RingFortHost::Terrace(terrace) => {
-					Some(DevelopmentHost::RingFortGalleryTerrace(terrace, transform))
+					Some(DevelopmentHost::RingFortGalleryTerrace(Box::new(terrace), transform))
 				}
-				RingFortHost::TerraceStairwell(stairwell) => {
-					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+				RingFortHost::TerraceStairwell(stairwell)
+				| RingFortHost::KeepStairwell(stairwell) => {
+					Some(DevelopmentHost::LesHallesStairwell(Box::new(stairwell), transform))
 				}
 				RingFortHost::GalleryColonnade(colonnade) => {
-					Some(DevelopmentHost::RingFortGalleryColonnade(colonnade, transform))
+					Some(DevelopmentHost::RingFortGalleryColonnade(Box::new(colonnade), transform))
 				}
 				RingFortHost::GalleryRoof(roof) => {
-					Some(DevelopmentHost::RingFortGalleryRoof(roof, transform))
-				}
-				RingFortHost::KeepStairwell(stairwell) => {
-					Some(DevelopmentHost::LesHallesStairwell(stairwell, transform))
+					Some(DevelopmentHost::RingFortGalleryRoof(Box::new(roof), transform))
 				}
 			})
 			.collect()
@@ -157,6 +211,42 @@ fn shepherd_building_hosts<'a>(
 			}
 		})
 		.collect()
+}
+
+fn single_highrise_host(
+	placed: &richmond_developments::PlacedBuilding<SingleHighrise>,
+) -> DevelopmentHost {
+	DevelopmentHost::SingleHighrise(
+		Arc::new(placed.building.clone()),
+		yaw_about_xz(placed.center_xz, placed.yaw),
+	)
+}
+
+fn spawn_wizards_tower(
+	commands: &mut Commands,
+	building: &Arc<WizardsTower>,
+	transform: Transform,
+) -> Vec<Entity> {
+	let bounds = building.scene_bounds();
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &bounds,
+	};
+	let level = building.scene_lod_level(&lod_ref);
+	let entity = commands
+		.spawn_scene((
+			lod_host_scene_pending(level, bounds),
+			bsn! {
+				template_value(transform)
+				Visibility::default()
+			},
+		))
+		.id();
+	commands.entity(entity).insert(building.as_ref().clone());
+	vec![entity]
 }
 
 fn spawn<T>(commands: &mut Commands, building: &T, transform: Transform) -> Vec<Entity>

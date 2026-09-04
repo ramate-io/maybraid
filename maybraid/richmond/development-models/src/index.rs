@@ -8,12 +8,10 @@ use lod::gen::{Id, OriginalId, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 
+use crate::artifact::BuiltDevelopment;
 use crate::config::DevelopmentConfig;
 use crate::development::DevelopmentCell;
-use crate::les_halles::LesHallesDevelopment;
 use crate::padded::TerrainWithPads;
-use crate::ring_fort::RingFortDevelopment;
-use crate::shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
 
 #[derive(Debug, Clone)]
 pub(crate) struct StoredEntry<T> {
@@ -28,10 +26,7 @@ pub struct DevelopmentEntryStore {
 	next_version: u64,
 	pub(crate) cells: HashMap<Id, StoredEntry<DevelopmentCell>>,
 	pub(crate) padded: HashMap<Id, StoredEntry<TerrainWithPads>>,
-	pub(crate) les_halles: HashMap<Id, StoredEntry<LesHallesDevelopment>>,
-	pub(crate) shepherds_villages: HashMap<Id, StoredEntry<ShepherdsVillageDevelopment>>,
-	pub(crate) shepherds_communes: HashMap<Id, StoredEntry<ShepherdsCommuneDevelopment>>,
-	pub(crate) ring_forts: HashMap<Id, StoredEntry<RingFortDevelopment>>,
+	pub(crate) developments: HashMap<Id, StoredEntry<BuiltDevelopment>>,
 }
 
 impl DevelopmentEntryStore {
@@ -64,24 +59,12 @@ impl DevelopmentEntryStore {
 			.collect()
 	}
 
-	pub fn les_halles(&self, id: Id) -> Option<&LesHallesDevelopment> {
-		self.les_halles.get(&id).map(|e| &e.value)
-	}
-
 	pub fn padded(&self, id: Id) -> Option<&TerrainWithPads> {
 		self.padded.get(&id).map(|e| &e.value)
 	}
 
-	pub fn shepherds_village(&self, id: Id) -> Option<&ShepherdsVillageDevelopment> {
-		self.shepherds_villages.get(&id).map(|e| &e.value)
-	}
-
-	pub fn shepherds_commune(&self, id: Id) -> Option<&ShepherdsCommuneDevelopment> {
-		self.shepherds_communes.get(&id).map(|e| &e.value)
-	}
-
-	pub fn ring_fort(&self, id: Id) -> Option<&RingFortDevelopment> {
-		self.ring_forts.get(&id).map(|e| &e.value)
+	pub fn development(&self, id: Id) -> Option<&BuiltDevelopment> {
+		self.developments.get(&id).map(|e| &e.value)
 	}
 }
 
@@ -199,7 +182,4 @@ macro_rules! impl_spatial {
 
 impl_spatial!(DevelopmentCell, cells, DevelopmentCellStoreView);
 impl_spatial!(TerrainWithPads, padded, PaddedStoreView);
-impl_spatial!(LesHallesDevelopment, les_halles, LesHallesStoreView);
-impl_spatial!(ShepherdsVillageDevelopment, shepherds_villages, ShepherdsVillageStoreView);
-impl_spatial!(ShepherdsCommuneDevelopment, shepherds_communes, ShepherdsCommuneStoreView);
-impl_spatial!(RingFortDevelopment, ring_forts, RingFortStoreView);
+impl_spatial!(BuiltDevelopment, developments, BuiltDevelopmentStoreView);

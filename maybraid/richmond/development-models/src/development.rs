@@ -23,6 +23,12 @@ pub enum DevelopmentKind {
 	ShepherdsVillage,
 	ShepherdsCommune,
 	RingFort,
+	TempleComplex,
+	SingleHighrise,
+	SuburbanHomes,
+	WizardsTower,
+	SkybridgeBazaar,
+	OldCityMarket,
 }
 
 /// Pad baked from a post-Marazion height sample: flatten terrace + ease skirt.
@@ -66,6 +72,17 @@ pub struct RingFortCell {
 	pub finish: DevelopmentFinish,
 }
 
+/// Shared selection payload for the new solitary, campus, and neighborhood layouts.
+#[derive(Debug, Clone)]
+pub struct ArchetypeCell {
+	pub kind: DevelopmentKind,
+	pub pad: DevelopmentPad,
+	pub confines_height: f32,
+	pub confines_extent_xz: Vec2,
+	pub confines_yaw: f32,
+	pub finish: DevelopmentFinish,
+}
+
 /// Mutually exclusive content generated for one development tile.
 #[derive(Debug, Clone)]
 pub enum DevelopmentContent {
@@ -74,6 +91,7 @@ pub enum DevelopmentContent {
 	ShepherdsVillage(ShepherdsVillageCell),
 	ShepherdsCommune(ShepherdsCommuneCell),
 	RingFort(RingFortCell),
+	Archetype(ArchetypeCell),
 }
 
 /// One development tile after selection.
@@ -89,12 +107,13 @@ impl DevelopmentCell {
 	}
 
 	pub fn kind(&self) -> DevelopmentKind {
-		match self.content {
+		match &self.content {
 			DevelopmentContent::Empty => DevelopmentKind::Empty,
 			DevelopmentContent::LesHalles(_) => DevelopmentKind::LesHalles,
 			DevelopmentContent::ShepherdsVillage(_) => DevelopmentKind::ShepherdsVillage,
 			DevelopmentContent::ShepherdsCommune(_) => DevelopmentKind::ShepherdsCommune,
 			DevelopmentContent::RingFort(_) => DevelopmentKind::RingFort,
+			DevelopmentContent::Archetype(content) => content.kind,
 		}
 	}
 
@@ -113,6 +132,7 @@ impl DevelopmentCell {
 			DevelopmentContent::ShepherdsVillage(content) => &content.pads,
 			DevelopmentContent::ShepherdsCommune(content) => &content.pads,
 			DevelopmentContent::RingFort(content) => std::slice::from_ref(&content.pad),
+			DevelopmentContent::Archetype(content) => std::slice::from_ref(&content.pad),
 		};
 		pads.iter()
 	}
@@ -149,6 +169,13 @@ impl DevelopmentCell {
 		}
 	}
 
+	pub fn archetype(&self) -> Option<&ArchetypeCell> {
+		match &self.content {
+			DevelopmentContent::Archetype(content) => Some(content),
+			_ => None,
+		}
+	}
+
 	/// Unrotated confines AABB sitting on the pad (world space).
 	///
 	/// Les Halles and ring forts author against this axis-aligned box. Sampled
@@ -160,6 +187,9 @@ impl DevelopmentCell {
 				(content.confines_extent_xz, content.confines_height, content.pad.height)
 			}
 			DevelopmentContent::RingFort(content) => {
+				(content.confines_extent_xz, content.confines_height, content.pad.height)
+			}
+			DevelopmentContent::Archetype(content) => {
 				(content.confines_extent_xz, content.confines_height, content.pad.height)
 			}
 			_ => return None,
@@ -181,6 +211,7 @@ impl DevelopmentCell {
 		let yaw = match &self.content {
 			DevelopmentContent::LesHalles(content) => content.confines_yaw,
 			DevelopmentContent::RingFort(content) => content.confines_yaw,
+			DevelopmentContent::Archetype(content) => content.confines_yaw,
 			_ => return None,
 		};
 		Some(Confines::new(self.confines_bounds()?, yaw, Openings::new()))
@@ -269,6 +300,54 @@ impl DevelopmentCell {
 			}),
 		}
 	}
+
+	pub fn with_archetype(
+		cell: Aabb3d,
+		pad_height: f32,
+		kind: DevelopmentKind,
+		config: &DevelopmentConfig,
+	) -> Self {
+		let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
+		let (min_foot, max_foot, min_height, max_height, rotates) = archetype_envelope(kind);
+		let max_foot = max_foot.min(RING_FORT_MAX_FOOTPRINT);
+		let yaw = if rotates { sample_confines_yaw(hash.unit(37)) } else { 0.0 };
+		let extent_x = min_foot + (max_foot - min_foot) * hash.unit(11);
+		let extent_z = min_foot + (max_foot - min_foot) * hash.unit(13);
+		let confines_height = min_height + (max_height - min_height) * hash.unit(17);
+		let confines_extent_xz = inscribe_yawed_extents(extent_x, extent_z, yaw, max_foot);
+		Self {
+			cell,
+			content: DevelopmentContent::Archetype(ArchetypeCell {
+				kind,
+				pad: DevelopmentPad {
+					height: pad_height,
+					complex: PadComplex::building_skirt(
+						cell_center_xz(cell),
+						confines_extent_xz * 0.5,
+						yaw,
+						pad_height,
+						PadParams::default(),
+					),
+				},
+				confines_height,
+				confines_extent_xz,
+				confines_yaw: yaw,
+				finish: DevelopmentFinish::pick(hash),
+			}),
+		}
+	}
+}
+
+fn archetype_envelope(kind: DevelopmentKind) -> (f32, f32, f32, f32, bool) {
+	match kind {
+		DevelopmentKind::SingleHighrise => (34.0, 52.0, 48.0, 104.0, true),
+		DevelopmentKind::WizardsTower => (24.0, 42.0, 48.0, 104.0, true),
+		DevelopmentKind::TempleComplex => (130.0, 190.0, 48.0, 64.0, false),
+		DevelopmentKind::SkybridgeBazaar => (160.0, 220.0, 64.0, 96.0, false),
+		DevelopmentKind::SuburbanHomes => (190.0, 230.0, 12.0, 16.0, false),
+		DevelopmentKind::OldCityMarket => (180.0, 235.0, 12.0, 18.0, false),
+		_ => unreachable!("only new archetypes use the shared envelope"),
+	}
 }
 
 pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind {
@@ -276,25 +355,32 @@ pub fn select_kind(cell: Aabb3d, config: &DevelopmentConfig) -> DevelopmentKind 
 	{
 		return DevelopmentKind::Empty;
 	}
-	let les_halles = config.les_halles_weight.max(0.0);
-	let shepherds = config.shepherds_village_weight.max(0.0);
-	let commune = config.shepherds_commune_weight.max(0.0);
-	let ring_fort = config.ring_fort_weight.max(0.0);
-	let total = les_halles + shepherds + commune + ring_fort;
+	let weighted = [
+		(DevelopmentKind::LesHalles, config.les_halles_weight),
+		(DevelopmentKind::ShepherdsVillage, config.shepherds_village_weight),
+		(DevelopmentKind::ShepherdsCommune, config.shepherds_commune_weight),
+		(DevelopmentKind::RingFort, config.ring_fort_weight),
+		(DevelopmentKind::TempleComplex, config.temple_complex_weight),
+		(DevelopmentKind::SingleHighrise, config.single_highrise_weight),
+		(DevelopmentKind::SuburbanHomes, config.suburban_homes_weight),
+		(DevelopmentKind::WizardsTower, config.wizards_tower_weight),
+		(DevelopmentKind::SkybridgeBazaar, config.skybridge_bazaar_weight),
+		(DevelopmentKind::OldCityMarket, config.old_city_market_weight),
+	];
+	let total: f32 = weighted.iter().map(|(_, weight)| weight.max(0.0)).sum();
 	if total <= f32::EPSILON {
 		return DevelopmentKind::Empty;
 	}
 	let hash = SeededHash::new(config.seed.wrapping_add(cell_salt(cell)));
-	let pick = hash.unit(44) * total;
-	if pick < les_halles {
-		DevelopmentKind::LesHalles
-	} else if pick < les_halles + shepherds {
-		DevelopmentKind::ShepherdsVillage
-	} else if pick < les_halles + shepherds + commune {
-		DevelopmentKind::ShepherdsCommune
-	} else {
-		DevelopmentKind::RingFort
+	let mut pick = hash.unit(44) * total;
+	for (kind, weight) in weighted {
+		let weight = weight.max(0.0);
+		if weight > 0.0 && pick < weight {
+			return kind;
+		}
+		pick -= weight;
 	}
+	DevelopmentKind::OldCityMarket
 }
 
 pub(crate) fn cell_salt(cell: Aabb3d) -> u32 {
@@ -371,6 +457,12 @@ mod tests {
 			shepherds_village_weight: 0.0,
 			shepherds_commune_weight: 0.0,
 			ring_fort_weight: 0.0,
+			temple_complex_weight: 0.0,
+			single_highrise_weight: 0.0,
+			suburban_homes_weight: 0.0,
+			wizards_tower_weight: 0.0,
+			skybridge_bazaar_weight: 0.0,
+			old_city_market_weight: 0.0,
 			..DevelopmentConfig::default()
 		};
 		assert_eq!(select_kind(cell, &les_halles), DevelopmentKind::LesHalles);
@@ -398,5 +490,43 @@ mod tests {
 			..les_halles
 		};
 		assert_eq!(select_kind(cell, &ring_fort), DevelopmentKind::RingFort);
+	}
+
+	#[test]
+	fn new_archetype_weights_are_independently_selectable() {
+		let cell = DevelopmentExtent::from_cell_index(0, 0).aabb();
+		for kind in [
+			DevelopmentKind::TempleComplex,
+			DevelopmentKind::SingleHighrise,
+			DevelopmentKind::SuburbanHomes,
+			DevelopmentKind::WizardsTower,
+			DevelopmentKind::SkybridgeBazaar,
+			DevelopmentKind::OldCityMarket,
+		] {
+			let mut config = DevelopmentConfig {
+				likelihood: 1.0,
+				les_halles_weight: 0.0,
+				shepherds_village_weight: 0.0,
+				shepherds_commune_weight: 0.0,
+				ring_fort_weight: 0.0,
+				temple_complex_weight: 0.0,
+				single_highrise_weight: 0.0,
+				suburban_homes_weight: 0.0,
+				wizards_tower_weight: 0.0,
+				skybridge_bazaar_weight: 0.0,
+				old_city_market_weight: 0.0,
+				..DevelopmentConfig::default()
+			};
+			match kind {
+				DevelopmentKind::TempleComplex => config.temple_complex_weight = 1.0,
+				DevelopmentKind::SingleHighrise => config.single_highrise_weight = 1.0,
+				DevelopmentKind::SuburbanHomes => config.suburban_homes_weight = 1.0,
+				DevelopmentKind::WizardsTower => config.wizards_tower_weight = 1.0,
+				DevelopmentKind::SkybridgeBazaar => config.skybridge_bazaar_weight = 1.0,
+				DevelopmentKind::OldCityMarket => config.old_city_market_weight = 1.0,
+				_ => unreachable!(),
+			}
+			assert_eq!(select_kind(cell, &config), kind);
+		}
 	}
 }

@@ -5,6 +5,7 @@
 //! buildings; Shepherds Commune lays the same buildings along a connecting grade;
 //! Ring Fort wraps a courtyard curtain wall with corner keeps.
 
+pub mod archetypes;
 pub mod connected;
 pub mod curtain_ring;
 pub mod keep;
@@ -13,6 +14,10 @@ pub mod placed;
 pub mod ring_fort;
 pub mod shepherds;
 
+pub use archetypes::{
+	OldCityMarket, SingleHighrise, Skybridge, SkybridgeBazaar, SolitaryWizardsTower, SuburbanHomes,
+	TempleComplex,
+};
 pub use connected::{ConnectedDevelopment, DevelopmentEdge};
 pub use curtain_ring::CurtainRing;
 pub use keep::{CircularTower, Keep, RingFortKeep, TrazaloidTower};

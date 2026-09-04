@@ -7,6 +7,7 @@ use richmond_building_components::{
 	apply_parent_confines, FurnitureWireframePlugin, LabelWireframePlugin,
 };
 use richmond_building_shaders::{RichmondBuildingShadersPlugin, RichmondUrbanMaterialRefPlugin};
+use richmond_buildings::wizards_tower::TowerSilhouettePlugin;
 use scene_ref::SceneRefPlugin;
 
 use crate::buildings_lod::register_developments_buildings_lod_plugin;
@@ -45,6 +46,9 @@ impl Plugin for RichmondDevelopmentModelsPlugin {
 		}
 		if !app.is_plugin_added::<LabelWireframePlugin>() {
 			app.add_plugins(LabelWireframePlugin);
+		}
+		if !app.is_plugin_added::<TowerSilhouettePlugin>() {
+			app.add_plugins(TowerSilhouettePlugin);
 		}
 		register_developments_buildings_lod_plugin(app);
 
