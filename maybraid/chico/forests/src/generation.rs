@@ -10,7 +10,8 @@ use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 
 use crate::bump_out::{
 	blend_selection_neighborhood, bump_out_cell_bounds, bump_out_cells_overlapping,
-	bump_out_in_inner_hole, CanopyBumpOut, BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M,
+	bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut, MediumCanopyBumpOut,
+	BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
 };
 use crate::grove::{grove_from_id, grove_id};
 use crate::index::ForestIndex;
@@ -162,6 +163,40 @@ impl GenerationScheme<ForestIndex> for CanopyBumpOut {
 	}
 }
 
+impl GenerationScheme<ForestIndex> for MediumCanopyBumpOut {
+	fn original_ids_for(_spatial_index: &mut ForestIndex, region: Aabb3d) -> Vec<OriginalId> {
+		MediumCanopyBumpOut::cells_overlapping(region)
+			.filter_map(|(ix, iz)| {
+				let bounds = MediumCanopyBumpOut::cell_bounds(ix, iz);
+				if !medium_bump_out_in_band(bounds, region) {
+					return None;
+				}
+				Some(OriginalId(lod::gen::Id::from_cell(bounds)))
+			})
+			.collect()
+	}
+
+	fn build_with_id(
+		spatial_index: &mut ForestIndex,
+		id: lod::gen::Id,
+		_lod_ref: &LodRef,
+	) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+		let size = (bounds.max.x - bounds.min.x).max(1e-3);
+		if (size - MEDIUM_BUMP_OUT_CELL_XZ).abs() > 1e-2 {
+			return None;
+		}
+		let neighborhood = Aabb3d::from_min_max(
+			Vec3::new(bounds.min.x - size, bounds.min.y, bounds.min.z - size),
+			Vec3::new(bounds.max.x + size, bounds.max.y, bounds.max.z + size),
+		);
+		ensure_forests_for_bounds(spatial_index, neighborhood);
+		let samples = blend_selection_neighborhood(spatial_index, bounds);
+		let bump_out = MediumCanopyBumpOut(CanopyBumpOut { bounds, samples });
+		Some((bump_out, bounds))
+	}
+}
+
 fn ensure_forest_ring(index: &mut ForestIndex, forest: ForestExtent) {
 	index.ensure_forest_selected(forest);
 	let (ix, iz) = ForestExtent::cell_index_containing(forest.center());
@@ -290,6 +325,10 @@ impl LodCullRegions for ForestPresentLattice {
 /// Channel marker for canopy bump-out generate / present messages.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct BumpOutLodChan;
+
+/// Channel marker for medium-terrain canopy bump-out messages.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MediumBumpOutLodChan;
 
 fn bump_out_cell_index(position: Vec3) -> (i32, i32) {
 	let s = BUMP_OUT_CELL_XZ;
@@ -593,6 +632,20 @@ mod tests {
 		);
 		assert!(!lod::gen::SpatialIndex::<ChicoForest>::tracked_ids_for(&index, neighborhood)
 			.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn medium_bump_outs_use_the_medium_terrain_grid() -> Result<()> {
+		let region =
+			ForestExtent::xz_radius_aabb(Vec3::ZERO, crate::MEDIUM_BUMP_OUT_OUTER_RADIUS_M);
+		let ids = MediumCanopyBumpOut::original_ids_for(&mut ForestIndex::default(), region);
+		assert!(!ids.is_empty());
+		for OriginalId(id) in ids {
+			let bounds = id.origin_cell_bounds().ok_or_else(|| anyhow::anyhow!("cell"))?;
+			assert!((bounds.max.x - bounds.min.x - MEDIUM_BUMP_OUT_CELL_XZ).abs() < 1e-2);
+			assert!(medium_bump_out_in_band(bounds, region));
+		}
 		Ok(())
 	}
 }

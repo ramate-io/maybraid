@@ -11,7 +11,8 @@ use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 
 use crate::bump_out::{
-	bump_out_cells_overlapping, bump_out_in_inner_hole, CanopyBumpOut, BUMP_OUT_CELL_XZ,
+	bump_out_cells_overlapping, bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut,
+	MediumCanopyBumpOut, BUMP_OUT_CELL_XZ,
 };
 use crate::{
 	select_cell, ChicoForest, ChicoGrove, ForestExtent, LayeringKind, NeighborLayers,
@@ -28,6 +29,7 @@ pub struct ForestIndex {
 	grove_cells: HashMap<(i32, i32), Vec<Id>>,
 	bump_outs: HashMap<Id, BumpOutEntry>,
 	bump_out_cells: HashMap<(i32, i32), Id>,
+	medium_bump_outs: HashMap<Id, MediumBumpOutEntry>,
 	pub noise: NoiseParams,
 	pub layering: Option<LayeringKind>,
 }
@@ -53,6 +55,13 @@ struct BumpOutEntry {
 	version: Version,
 }
 
+#[derive(Clone)]
+struct MediumBumpOutEntry {
+	value: MediumCanopyBumpOut,
+	bounds: Aabb3d,
+	version: Version,
+}
+
 impl Default for ForestIndex {
 	fn default() -> Self {
 		Self {
@@ -62,6 +71,7 @@ impl Default for ForestIndex {
 			grove_cells: HashMap::new(),
 			bump_outs: HashMap::new(),
 			bump_out_cells: HashMap::new(),
+			medium_bump_outs: HashMap::new(),
 			noise: NoiseParams::default(),
 			layering: None,
 		}
@@ -75,6 +85,7 @@ impl ForestIndex {
 		self.grove_cells.clear();
 		self.bump_outs.clear();
 		self.bump_out_cells.clear();
+		self.medium_bump_outs.clear();
 		self.next_version = 0;
 	}
 
@@ -304,6 +315,43 @@ impl SpatialIndex<CanopyBumpOut> for ForestIndex {
 		}
 		self.bump_outs.insert(id, BumpOutEntry { value: t, bounds, version });
 		self.index_bump_out(id, bounds);
+	}
+}
+
+impl SpatialIndex<MediumCanopyBumpOut> for ForestIndex {
+	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
+		self.medium_bump_outs
+			.iter()
+			.filter(|(_, entry)| {
+				region.intersects(&entry.bounds) && medium_bump_out_in_band(entry.bounds, region)
+			})
+			.map(|(id, _)| TrackedId(*id))
+			.collect()
+	}
+
+	fn storage_status(&self, id: Id) -> StorageStatus {
+		if self.medium_bump_outs.contains_key(&id) {
+			StorageStatus::TrackedWithin
+		} else {
+			StorageStatus::NotTracked
+		}
+	}
+
+	fn get(&self, id: Id) -> Option<&MediumCanopyBumpOut> {
+		self.medium_bump_outs.get(&id).map(|entry| &entry.value)
+	}
+
+	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+		self.medium_bump_outs.get(&id).map(|entry| entry.bounds)
+	}
+
+	fn version(&self, id: Id) -> Option<Version> {
+		self.medium_bump_outs.get(&id).map(|entry| entry.version)
+	}
+
+	fn insert(&mut self, id: Id, value: MediumCanopyBumpOut, bounds: Aabb3d, _lod_ref: &LodRef) {
+		let version = self.next_version();
+		self.medium_bump_outs.insert(id, MediumBumpOutEntry { value, bounds, version });
 	}
 }
 

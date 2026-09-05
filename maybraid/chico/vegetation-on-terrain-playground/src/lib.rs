@@ -16,8 +16,10 @@ pub mod player;
 mod ui;
 
 pub use bump_out::{
-	bump_out_from_cell, bump_out_noise, fine_terrain_for, register_bump_out_lod, terrain_chunk_ref,
-	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
+	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
+	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
+	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
@@ -381,7 +383,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 			register_forest_lod::<DurhamForestPresenter>(app);
 		}
 		if self.register_bump_out_lod {
-			register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
+			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
+				app,
+			);
 		}
 		if !app.is_plugin_added::<VirtualPadPlugin>() {
 			app.add_plugins(VirtualPadPlugin::default());
@@ -822,6 +826,9 @@ mod tests {
 		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
 		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
 		assert_eq!(WORLD_TERRAIN_BACKGROUND_RADIUS_M, 3_840.0);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_INNER_RADIUS_M, WORLD_TERRAIN_NEAR_RADIUS_M);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_OUTER_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_ANCHOR_STEP_M, WORLD_TERRAIN_PRESENT_STEP_M);
 	}
 
 	#[test]

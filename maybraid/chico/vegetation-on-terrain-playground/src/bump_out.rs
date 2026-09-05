@@ -6,6 +6,7 @@
 //! (`Terrain::mesh_builder`), so overlay copies the cached mesh handle.
 
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::Aabb3d;
@@ -13,7 +14,8 @@ use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use chico_forests::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ForestExtent,
-	ForestIndex, BUMP_OUT_OUTER_RADIUS_M,
+	ForestIndex, MediumBumpOutLodChan, MediumCanopyBumpOut, BUMP_OUT_OUTER_RADIUS_M,
+	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
 use durham_terrain_models::{
 	cascade_chunk_for_cell, Terrain, TerrainCellLayout, TerrainEntryStore, TerrainMeshBuilder,
@@ -41,10 +43,20 @@ use crate::PlaygroundConfig;
 pub type WorldTerrainBuilder = TerrainMeshBuilder;
 
 /// Presenter bookkeeping for spawned bump-out entities.
-#[derive(Resource, Default)]
-pub struct CanopyBumpOutPresenterState {
+#[derive(Resource)]
+pub struct BumpOutPresenterState<M: Send + Sync + 'static> {
 	presented: HashMap<Id, PresentedBumpOut>,
+	_marker: PhantomData<fn() -> M>,
 }
+
+impl<M: Send + Sync + 'static> Default for BumpOutPresenterState<M> {
+	fn default() -> Self {
+		Self { presented: HashMap::new(), _marker: PhantomData }
+	}
+}
+
+pub type CanopyBumpOutPresenterState = BumpOutPresenterState<CanopyBumpOut>;
+pub type MediumCanopyBumpOutPresenterState = BumpOutPresenterState<MediumCanopyBumpOut>;
 
 struct PresentedBumpOut {
 	version: Version,
@@ -53,7 +65,7 @@ struct PresentedBumpOut {
 	terrain_key: TerrainChunkKey,
 }
 
-impl CanopyBumpOutPresenterState {
+impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 	pub fn clear(&mut self, commands: &mut Commands) {
 		for presented in self.presented.values() {
 			commands.entity(presented.entity).despawn();
@@ -165,13 +177,62 @@ impl RegionPresenter<CanopyBumpOut, ForestIndex> for DurhamCanopyBumpOutPresente
 	}
 }
 
+/// Durham-backed presenter for the medium (320 m) terrain stream.
+#[derive(SystemParam)]
+pub struct DurhamMediumCanopyBumpOutPresenter<'w, 's> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, MediumCanopyBumpOutPresenterState>,
+	store: Res<'w, TerrainEntryStore>,
+	layout: Res<'w, TerrainCellLayout>,
+	forest: Res<'w, ForestIndex>,
+}
+
+impl RegionPresenter<MediumCanopyBumpOut, ForestIndex>
+	for DurhamMediumCanopyBumpOutPresenter<'_, '_>
+{
+	fn presented_version(&self, id: Id) -> Option<Version> {
+		self.state.presented_version(id)
+	}
+
+	fn handle(&mut self, id: Id, version: Version, cell: &MediumCanopyBumpOut, _lod_ref: &LodRef) {
+		let Some(bump_out) = bump_out_from_cell(&cell.0, bump_out_noise(&self.forest.noise)) else {
+			return;
+		};
+		let view = TerrainStoreView::new(&self.store, &self.layout);
+		let Some(terrain) = medium_terrain_for(&view, cell.0.bounds) else {
+			return;
+		};
+		self.state
+			.present(&mut self.commands, id, version, bump_out, terrain_chunk_ref(terrain));
+	}
+
+	fn hide(&mut self, id: Id) {
+		self.state.hide(&mut self.commands, id);
+	}
+
+	fn is_hidden(&self, id: Id) -> bool {
+		self.state.is_hidden(id)
+	}
+
+	fn presented_ids(&self) -> Vec<Id> {
+		self.state.presented_ids()
+	}
+
+	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
+		self.state.remove_stale(&mut self.commands, wanted);
+	}
+}
+
 /// Independent bump-out generate / present / cull on [`ForestIndex`].
-pub fn register_bump_out_lod<Pr>(app: &mut App)
+pub fn register_bump_out_lod<Pr, MediumPr>(app: &mut App)
 where
 	Pr: SystemParam + 'static,
 	for<'w, 's> Pr::Item<'w, 's>: RegionPresenter<CanopyBumpOut, ForestIndex>,
+	MediumPr: SystemParam + 'static,
+	for<'w, 's> MediumPr::Item<'w, 's>: RegionPresenter<MediumCanopyBumpOut, ForestIndex>,
 {
 	app.init_resource::<CanopyBumpOutPresenterState>()
+		.init_resource::<MediumCanopyBumpOutPresenterState>()
 		.add_plugins(LodGenerateRegionPlugin::<
 			BumpOutGenerateBullseye,
 			With<LodViewer>,
@@ -201,6 +262,25 @@ where
 			Pr,
 			BumpOutLodChan,
 		>::default())
+		.add_plugins(LodGeneratePlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			MediumBumpOutLodChan,
+			With<LodViewer>,
+		>::default())
+		.add_plugins(LodPresentPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			MediumPr,
+			MediumBumpOutLodChan,
+			With<LodViewer>,
+		>::default())
+		.add_plugins(LodPresentCullPlugin::<
+			MediumCanopyBumpOut,
+			ForestIndex,
+			MediumPr,
+			MediumBumpOutLodChan,
+		>::default())
 		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 }
 
@@ -212,10 +292,17 @@ pub struct BumpOutStreamLod<'w> {
 	generate_queue: ResMut<'w, LodGenerateQueue<CanopyBumpOut>>,
 	present_queue: ResMut<'w, LodPresentQueue<CanopyBumpOut>>,
 	presenter: ResMut<'w, CanopyBumpOutPresenterState>,
+	medium_generate_queue: ResMut<'w, LodGenerateQueue<MediumCanopyBumpOut>>,
+	medium_present_queue: ResMut<'w, LodPresentQueue<MediumCanopyBumpOut>>,
+	medium_presenter: ResMut<'w, MediumCanopyBumpOutPresenterState>,
 	generate_regions: MessageWriter<'w, LodGenerateRegion<BumpOutLodChan>>,
 	present_regions: MessageWriter<'w, LodPresentRegion<BumpOutLodChan>>,
+	medium_generate_regions: MessageWriter<'w, LodGenerateRegion<MediumBumpOutLodChan>>,
+	medium_present_regions: MessageWriter<'w, LodPresentRegion<MediumBumpOutLodChan>>,
 	generate_keep: ResMut<'w, LodGenerateKeepRegion<BumpOutLodChan>>,
 	keep: ResMut<'w, LodPresentKeepRegion<BumpOutLodChan>>,
+	medium_generate_keep: ResMut<'w, LodGenerateKeepRegion<MediumBumpOutLodChan>>,
+	medium_keep: ResMut<'w, LodPresentKeepRegion<MediumBumpOutLodChan>>,
 }
 
 impl BumpOutStreamLod<'_> {
@@ -225,6 +312,7 @@ impl BumpOutStreamLod<'_> {
 		spec: Option<&ForestStreamSpec>,
 		camera: Option<Vec3>,
 		last_key: &mut Option<String>,
+		last_medium_region: &mut Option<Aabb3d>,
 	) {
 		let Some(spec) = spec else {
 			self.generate.enabled = false;
@@ -234,7 +322,13 @@ impl BumpOutStreamLod<'_> {
 			self.generate_queue.clear();
 			self.present_queue.clear();
 			self.presenter.clear(commands);
+			self.medium_generate_keep.region = None;
+			self.medium_keep.region = None;
+			self.medium_generate_queue.clear();
+			self.medium_present_queue.clear();
+			self.medium_presenter.clear(commands);
 			last_key.take();
+			last_medium_region.take();
 			return;
 		};
 
@@ -244,6 +338,9 @@ impl BumpOutStreamLod<'_> {
 			self.generate_queue.clear();
 			self.present_queue.clear();
 			self.presenter.clear(commands);
+			self.medium_generate_queue.clear();
+			self.medium_present_queue.clear();
+			self.medium_presenter.clear(commands);
 			*last_key = Some(key);
 		}
 
@@ -262,6 +359,18 @@ impl BumpOutStreamLod<'_> {
 			self.generate_regions.write(LodGenerateRegion::new(aabb));
 			self.present_regions.write(LodPresentRegion::new(aabb));
 		}
+
+		let step = MEDIUM_BUMP_OUT_ANCHOR_STEP_M;
+		let anchor = Vec3::new((cam.x / step).round() * step, 0.0, (cam.z / step).round() * step);
+		let medium_region = ForestExtent::xz_radius_aabb(anchor, MEDIUM_BUMP_OUT_OUTER_RADIUS_M);
+		let medium_region_changed = *last_medium_region != Some(medium_region);
+		self.medium_generate_keep.region = Some(medium_region);
+		self.medium_keep.region = Some(medium_region);
+		if key_changed || medium_region_changed {
+			self.medium_generate_regions.write(LodGenerateRegion::new(medium_region));
+			self.medium_present_regions.write(LodPresentRegion::new(medium_region));
+			*last_medium_region = Some(medium_region);
+		}
 	}
 }
 
@@ -271,12 +380,34 @@ pub fn stream_canopy_bump_outs(
 	camera: Query<&Transform, With<Camera3d>>,
 	mut lod: BumpOutStreamLod,
 	mut last_key: Local<Option<String>>,
+	mut last_medium_region: Local<Option<Aabb3d>>,
 ) {
 	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, config.forest.as_ref(), cam, &mut last_key);
+	lod.apply_spec(
+		&mut commands,
+		config.forest.as_ref(),
+		cam,
+		&mut last_key,
+		&mut last_medium_region,
+	);
 }
 
 pub fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> Option<&'a Terrain> {
+	terrain_for_cell_size(view, bounds, TERRAIN_CELL_SIZE)
+}
+
+pub fn medium_terrain_for<'a>(
+	view: &'a TerrainStoreView<'a>,
+	bounds: Aabb3d,
+) -> Option<&'a Terrain> {
+	terrain_for_cell_size(view, bounds, MEDIUM_BUMP_OUT_CELL_XZ)
+}
+
+fn terrain_for_cell_size<'a>(
+	view: &'a TerrainStoreView<'a>,
+	bounds: Aabb3d,
+	target_size: f32,
+) -> Option<&'a Terrain> {
 	let mut best: Option<(f32, &'a Terrain)> = None;
 	for TrackedId(id) in view.tracked_ids_for(bounds) {
 		let Some(terrain) = view.get(id) else {
@@ -286,7 +417,7 @@ pub fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> O
 			continue;
 		};
 		let size = (cell.max.x - cell.min.x).max(1e-3);
-		if size > TERRAIN_CELL_SIZE * 1.5 {
+		if (size - target_size).abs() > target_size * 0.25 {
 			continue;
 		}
 		let overlap = xz_overlap_area(bounds, cell);

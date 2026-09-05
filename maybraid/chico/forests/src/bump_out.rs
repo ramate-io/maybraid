@@ -24,6 +24,14 @@ pub const BUMP_OUT_INNER_RADIUS_M: f32 = 1000.0;
 
 /// Outer radius of the bump-out annulus (metres).
 pub const BUMP_OUT_OUTER_RADIUS_M: f32 = 5000.0;
+/// Edge length of one medium terrain bump-out cell.
+pub const MEDIUM_BUMP_OUT_CELL_XZ: f32 = 2.0 * BUMP_OUT_CELL_XZ;
+/// Inner edge shared with the 160 m terrain stream.
+pub const MEDIUM_BUMP_OUT_INNER_RADIUS_M: f32 = 8.0 * BUMP_OUT_CELL_XZ;
+/// Outer edge shared with the 640 m terrain stream.
+pub const MEDIUM_BUMP_OUT_OUTER_RADIUS_M: f32 = 16.0 * BUMP_OUT_CELL_XZ;
+/// Anchor quantization shared by all moving terrain streams.
+pub const MEDIUM_BUMP_OUT_ANCHOR_STEP_M: f32 = 4.0 * BUMP_OUT_CELL_XZ;
 
 /// Authored canopy / cover fields sampled from a grove selection identifier.
 pub trait BumpOutSelection {
@@ -77,7 +85,10 @@ impl BumpOutSelectionSample {
 	}
 }
 
-/// Select-only canopy proxy on one 160 m terrain cell. No grow, no mesh.
+/// Select-only canopy proxy sampled over one terrain cell. No grow, no mesh.
+///
+/// The base stream uses 160 m cells. [`MediumCanopyBumpOut`] wraps the same
+/// sampled representation on the 320 m terrain grid.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanopyBumpOut {
 	pub bounds: Aabb3d,
@@ -95,6 +106,29 @@ impl CanopyBumpOut {
 
 	pub fn center_palette(&self) -> [Color; 3] {
 		self.samples[4].palette
+	}
+}
+
+/// Select-only canopy proxy matched to one medium (320 m) terrain cell.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MediumCanopyBumpOut(pub CanopyBumpOut);
+
+impl MediumCanopyBumpOut {
+	pub fn cell_bounds(ix: i32, iz: i32) -> Aabb3d {
+		let size = MEDIUM_BUMP_OUT_CELL_XZ;
+		Aabb3d::from_min_max(
+			Vec3::new(ix as f32 * size, 0.0, iz as f32 * size),
+			Vec3::new((ix + 1) as f32 * size, 1.0, (iz + 1) as f32 * size),
+		)
+	}
+
+	pub fn cells_overlapping(region: Aabb3d) -> impl Iterator<Item = (i32, i32)> {
+		let size = MEDIUM_BUMP_OUT_CELL_XZ;
+		let min_x = (region.min.x / size).floor() as i32;
+		let max_x = ((region.max.x / size).ceil() as i32 - 1).max(min_x);
+		let min_z = (region.min.z / size).floor() as i32;
+		let max_z = ((region.max.z / size).ceil() as i32 - 1).max(min_z);
+		(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
 	}
 }
 
@@ -128,6 +162,14 @@ pub fn bump_out_in_inner_hole(bounds: Aabb3d, region: Aabb3d) -> bool {
 	let origin =
 		Vec3::new((region.min.x + region.max.x) * 0.5, 0.0, (region.min.z + region.max.z) * 0.5);
 	bump_out_chebyshev_xz(bounds, origin) < BUMP_OUT_INNER_RADIUS_M
+}
+
+/// Whether a 320 m cell center lies in the visible medium-terrain annulus.
+pub fn medium_bump_out_in_band(bounds: Aabb3d, region: Aabb3d) -> bool {
+	let origin =
+		Vec3::new((region.min.x + region.max.x) * 0.5, 0.0, (region.min.z + region.max.z) * 0.5);
+	let radius = bump_out_chebyshev_xz(bounds, origin);
+	(MEDIUM_BUMP_OUT_INNER_RADIUS_M..=MEDIUM_BUMP_OUT_OUTER_RADIUS_M).contains(&radius)
 }
 
 impl SelectedLayers {

@@ -10,7 +10,9 @@ pub mod urbanization_stream;
 
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
-pub use development_bump_out::DevelopmentCanopyBumpOutPresenter;
+pub use development_bump_out::{
+	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
+};
 pub use development_forest::DevelopmentForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
 pub use urbanization_stream::{
@@ -177,7 +179,10 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
 			register_forest_lod::<DevelopmentForestPresenter>(app);
-			register_bump_out_lod::<DevelopmentCanopyBumpOutPresenter>(app);
+			register_bump_out_lod::<
+				DevelopmentCanopyBumpOutPresenter,
+				DevelopmentMediumCanopyBumpOutPresenter,
+			>(app);
 		}
 
 		if self.commands {
