@@ -82,7 +82,7 @@ impl Plugin for StickPhysicsPlugin {
 }
 
 /// Register a flattened vegetation source without adding another update system.
-pub(crate) fn register_vegetation_stick_colliders<T>(app: &mut App)
+pub fn register_vegetation_stick_colliders<T>(app: &mut App)
 where
 	T: VegetationComponents + Component,
 {

@@ -23,7 +23,7 @@ pub use bump_out::{
 };
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
-pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
+pub use chico_forests::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamForestPresenter;
@@ -53,9 +53,10 @@ use camera::{
 };
 use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
+use chico_forests::{
+	drive_forest_stream, stream_radii_m, ForestPlugin, ForestStream, VegetationViewPlugin,
+};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
-use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
-use chico_sbs_trees_playground::register_vegetation_view;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
 	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
@@ -372,7 +373,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 					}),
 			);
 		}
-		register_vegetation_view(app);
+		if !app.is_plugin_added::<VegetationViewPlugin>() {
+			app.add_plugins(VegetationViewPlugin);
+		}
 		app.add_plugins(
 			TerrainLodPlugin::<TerrainLodRegion, With<LodViewer>, TerrainLodChannel>::default(),
 		);
@@ -380,7 +383,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
 		if self.register_forest_lod {
-			register_forest_lod::<DurhamForestPresenter>(app);
+			app.add_plugins(ForestPlugin::<DurhamForestPresenter>::default());
 		}
 		if self.register_bump_out_lod {
 			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
@@ -409,6 +412,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			})
 			.insert_resource(GrovesDirty(true))
 			.init_resource::<DurhamGroveTerrainCache>()
+			.init_resource::<ForestStream>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(Update, refresh_grove_terrain_cache.before(LodPresentSystems::Produce))
@@ -428,6 +432,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 					spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
 					stream_durham_forest
 						.after(apply_commands)
+						.before(drive_forest_stream)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce)
 						.run_if(terrain_streaming_enabled),
@@ -465,6 +470,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 						.run_if(terrain_streaming_enabled),
 					spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
 					stream_durham_forest
+						.before(drive_forest_stream)
 						.before(LodGenerateSystems::Produce)
 						.before(LodPresentSystems::Produce)
 						.run_if(terrain_streaming_enabled),

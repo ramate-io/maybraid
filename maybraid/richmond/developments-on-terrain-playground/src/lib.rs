@@ -26,7 +26,7 @@ use bevy::prelude::*;
 use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
-use chico_sbs_trees_playground::forest_stream::register_forest_lod;
+use chico_forests::ForestPlugin;
 use chico_vegetation_on_terrain_playground::{
 	register_bump_out_lod, terrain_streaming_enabled, TerrainStreamingEnabled,
 };
@@ -178,7 +178,7 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		app.add_plugins(RichmondDevelopmentModelsPlugin);
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
-			register_forest_lod::<DevelopmentForestPresenter>(app);
+			app.add_plugins(ForestPlugin::<DevelopmentForestPresenter>::default());
 			register_bump_out_lod::<
 				DevelopmentCanopyBumpOutPresenter,
 				DevelopmentMediumCanopyBumpOutPresenter,

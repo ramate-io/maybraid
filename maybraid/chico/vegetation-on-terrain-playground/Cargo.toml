@@ -23,7 +23,6 @@ chico-groves = { workspace = true, features = ["render"] }
 chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }
 chico-bumpout = { workspace = true }
-chico-sbs-trees-playground = { path = "../sbs-trees-playground" }
 chico-vegetation-shaders = { workspace = true }
 lod = { workspace = true }
 lod-first-load = { workspace = true }

@@ -1,14 +1,14 @@
 //! Vegetation LOD refresh: bullseye + spotlight → Avian index → levels → chunk sync.
 //!
 //! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for
-//! any leftover nested kit nodes. Isolated plants and woody grove children share one
-//! family: [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
-//! Groves register as themselves. Cull uses a rotating [`OpenLattice`] annulus.
+//! leftover nested kit nodes. Woody grove children share one family:
+//! [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
+//! Typed grove roots stay registered for playground `/grove`. Cull uses a rotating
+//! [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
-use chico_forests::ChicoGroveHost;
 use chico_groves::{
 	Alpine, AridConiferSapling, BraidGrass, BushScrub, ChristmasTaiga, CommonTufts,
 	ConiferMassives, ConiferSapling, DateGrove, Dryland, ForlornSavanna, GoettingenFollow,
@@ -35,6 +35,7 @@ use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
 use lod_lazy_refs::LodLazyRefsPlugin;
 use scene_ref::SceneRefAdmitBudget;
 
+use crate::host::ChicoGroveHost;
 use crate::stick_physics::{register_vegetation_stick_colliders, StickPhysicsPlugin};
 
 /// Channel marker for bullseye [`lod::LodSceneRefreshRegion`] messages.
@@ -49,7 +50,7 @@ pub struct VegetationSpotlight;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct VegetationCull;
 
-/// Isolated `/show` plant and grove-nested plant host.
+/// Isolated plant and grove-nested plant host.
 type FlattenedPlant<T> = FlattenedComponentsOnly<PlacedVegetation<std::sync::Arc<T>>>;
 
 /// Register Avian refresh + cull for one LOD host type (fine-phase or structural).
@@ -177,7 +178,7 @@ impl Plugin for VegetationLodRefreshPlugin {
 		avian_host!(app, Shamanhome);
 		avian_host!(app, DateGrove);
 
-		// Isolated /show plants and grove-nested plants.
+		// Isolated plants and grove-nested plants.
 		flattened_plant_host!(app, StorybookTree);
 		flattened_plant_host!(app, VaseTree);
 		flattened_plant_host!(app, JungleStorybookTree);

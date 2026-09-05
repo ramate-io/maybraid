@@ -4,9 +4,8 @@ use std::collections::HashSet;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use chico_forests::{ChicoGrove, ForestIndex};
+use chico_forests::{ChicoGrove, ForestIndex, ForestPresenterState};
 use chico_groves::{GroveHeightModulation, ModulatedGroveSample};
-use chico_sbs_trees_playground::forest_stream::ForestPresenterState;
 use chico_vegetation_on_terrain_playground::{DurhamGroveSample, DurhamGroveTerrainCache};
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Version};
 use lod::lod_ref::LodRef;
@@ -23,8 +22,7 @@ impl GroveHeightModulation for DevelopmentPadModulation {
 	}
 }
 
-/// Present forest groves against Durham terrain with all overlapping
-/// development pads blended in one pass.
+/// Present forest groves against Durham terrain with overlapping pads blended in.
 #[derive(SystemParam)]
 pub struct DevelopmentForestPresenter<'w, 's> {
 	commands: Commands<'w, 's>,

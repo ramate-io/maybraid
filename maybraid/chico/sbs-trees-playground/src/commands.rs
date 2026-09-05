@@ -1,13 +1,13 @@
 //! In-game clap command hierarchy.
 
-pub mod render;
-pub mod show;
-
 use bevy::prelude::*;
+use chico_forests::{
+	parse_layering_kind, ForestStream, ForestStreamSpec, LayeringKind, DEFAULT_FOREST_NOISE,
+	DEFAULT_FOREST_STREAM_RADIUS,
+};
 use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
-pub use render::Render;
-pub use show::Show;
+use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 pub const PLAYGROUND_CLI_NAME: &str = "chico-sbs";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -23,14 +23,32 @@ pub type Script = CommandScript<PlaygroundCommand>;
 pub enum PlaygroundCommand {
 	Help,
 	Script(Script),
-	#[command(subcommand)]
-	Render(Render),
-	/// LodScene / VegetationComponents presentation (migrated trees).
-	#[command(subcommand)]
-	Show(Show),
+	/// Stream the unified Chico forest (Hopscotch 1600 m cells).
+	Forest(ForestArgs),
 	/// LOD / mesh CPU proxies (triangle counts, etc.).
 	#[command(subcommand)]
 	Stats(Stats),
+}
+
+#[derive(Clone, clap::Args)]
+#[command(rename_all = "kebab-case")]
+pub struct ForestArgs {
+	/// Pin a well-known layering (`lush-jungle`, `ag-town`, …). Omit to Hopscotch.
+	#[arg(value_parser = parse_layering_kind, value_name = "LAYERING")]
+	pub layering: Option<LayeringKind>,
+
+	/// Hopscotch / layer-throw noise (`seed,frequency,amplitude,octaves[,type]`).
+	#[arg(
+		long,
+		default_value = DEFAULT_FOREST_NOISE,
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
+	)]
+	pub noise: NoiseParams,
+
+	/// Present-ring multiplier (`1` = 1 km present / 3 km generate; `0` = one 100 m tile).
+	#[arg(long, default_value_t = DEFAULT_FOREST_STREAM_RADIUS)]
+	pub stream_radius: u32,
 }
 
 #[derive(Clone, Subcommand)]
@@ -67,8 +85,14 @@ impl PlaygroundCommand {
 		match self {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
 			PlaygroundCommand::Script(s) => s.run(commands, console),
-			PlaygroundCommand::Render(r) => r.react(commands),
-			PlaygroundCommand::Show(s) => s.react(commands),
+			PlaygroundCommand::Forest(args) => {
+				commands.insert_resource(ForestStream(Some(ForestStreamSpec {
+					noise: args.noise,
+					stream_radius: args.stream_radius,
+					layering: args.layering,
+				})));
+				*console = "forest: streaming".into();
+			}
 			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}
@@ -98,5 +122,22 @@ impl GameCommand for PlaygroundCommand {
 
 	fn react(self, commands: &mut Commands, console: &mut String) {
 		Self::react(self, commands, console);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn forest_defaults_parse() {
+		let cmd = PlaygroundCommand::parse_line("forest").expect("parse");
+		match cmd {
+			PlaygroundCommand::Forest(args) => {
+				assert!(args.layering.is_none());
+				assert_eq!(args.stream_radius, DEFAULT_FOREST_STREAM_RADIUS);
+			}
+			_ => panic!("expected forest"),
+		}
 	}
 }

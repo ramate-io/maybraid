@@ -67,15 +67,17 @@ impl PlaygroundDiag {
 	}
 }
 
-pub struct PlaygroundTimingPlugin;
+pub struct LogFps {
+	pub enabled: bool,
+}
 
-impl Plugin for PlaygroundTimingPlugin {
+impl Plugin for LogFps {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<FrameTimeDiagnosticsPlugin>() {
 			app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		}
 		if !app.world().contains_resource::<PlaygroundDiag>() {
-			app.insert_resource(PlaygroundDiag::from_env());
+			app.insert_resource(PlaygroundDiag { fps: self.enabled });
 		}
 		app.add_systems(Update, log_frame_timing);
 	}

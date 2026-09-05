@@ -2270,12 +2270,21 @@ name = "chico-forests"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "avian3d",
  "bevy",
  "bevy_math",
  "chico-groves",
+ "chico-sbs-trees",
+ "chico-vegetation-components",
+ "chico-vegetation-shaders",
+ "futures",
  "gimme-gen",
  "lod",
+ "lod-avian",
+ "lod-first-load",
+ "lod-lazy-refs",
  "procedural-common",
+ "scene-ref",
 ]
 
 [[package]]
@@ -2336,32 +2345,13 @@ name = "chico-sbs-trees-playground"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "avian3d",
  "bevy",
- "chico-ball-components",
  "chico-forests",
- "chico-groves",
- "chico-sbs-geometry",
- "chico-sbs-trees",
- "chico-sdf",
- "chico-stick-components",
- "chico-tree-components",
  "chico-vegetation-components",
- "chico-vegetation-shaders",
- "chunk",
  "clap",
- "futures",
  "game-commands",
  "lod",
- "lod-avian",
- "lod-first-load",
- "lod-lazy-refs",
- "log",
- "material-ref",
  "procedural-common",
- "render-item",
- "scene-ref",
- "sdf",
 ]
 
 [[package]]
@@ -2419,7 +2409,6 @@ dependencies = [
  "chico-bumpout",
  "chico-forests",
  "chico-groves",
- "chico-sbs-trees-playground",
  "chico-vegetation-components",
  "chico-vegetation-shaders",
  "chunk",
@@ -6444,7 +6433,6 @@ dependencies = [
  "bevy",
  "chico-forests",
  "chico-groves",
- "chico-sbs-trees-playground",
  "chico-vegetation-on-terrain-playground",
  "clap",
  "durham-terrain",

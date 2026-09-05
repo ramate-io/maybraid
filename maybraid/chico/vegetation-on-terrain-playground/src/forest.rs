@@ -1,14 +1,10 @@
-//! Durham-height forest stream. Reuses generate / present / cull; grows on
-//! [`DurhamGroveSample`] so tiles sit on real ground.
+//! Durham-height forest stream. Grows on [`DurhamGroveSample`] so tiles sit on real ground.
 
 use std::collections::HashSet;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use chico_forests::{ChicoGrove, ForestIndex};
-use chico_sbs_trees_playground::forest_stream::{
-	ForestPresenterState, ForestStreamLod, FOREST_CAMERA_SPEED,
-};
+use chico_forests::{ChicoGrove, ForestIndex, ForestPresenterState, ForestStream};
 use lod::gen::{Id, Version};
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
@@ -19,6 +15,7 @@ use crate::groves::{DurhamGroveSample, DurhamGroveTerrainCache};
 use crate::PlaygroundConfig;
 
 const PATCH_CAMERA_SPEED: f32 = 40.0;
+const FOREST_CAMERA_SPEED: f32 = 80.0;
 
 /// Present forest groves grown against the live Durham height field.
 #[derive(SystemParam)]
@@ -77,12 +74,9 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DurhamForestPresenter<'_, '_> 
 
 /// Enable the forest bullseyes when [`PlaygroundConfig::forest`] is set.
 pub fn stream_durham_forest(
-	mut commands: Commands,
 	config: Res<PlaygroundConfig>,
-	camera: Query<&Transform, With<Camera3d>>,
+	mut stream: ResMut<ForestStream>,
 	mut controller: Query<&mut CameraController, With<Camera3d>>,
-	mut lod: ForestStreamLod,
-	mut last_key: Local<Option<String>>,
 	mut forest_camera: Local<bool>,
 ) {
 	let spec = config.forest.as_ref();
@@ -92,7 +86,5 @@ pub fn stream_durham_forest(
 		}
 		*forest_camera = spec.is_some();
 	}
-
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, spec, cam, &mut last_key);
+	stream.0 = spec.copied();
 }
