@@ -3,13 +3,16 @@
 use bevy::prelude::*;
 use maybraid_character_controller::CharacterIntent;
 
-use crate::body::{CharacterController, MoveWish, MovementAction};
+use crate::body::{CharacterController, JumpWish, MoveWish};
 use crate::identity::{Player, PlayerLook};
 
 pub(crate) fn apply_move_intents(
+	mut commands: Commands,
 	mut intents: MessageReader<CharacterIntent>,
-	mut wishes: Query<(&mut MoveWish, &PlayerLook), (With<CharacterController>, With<Player>)>,
-	mut movement: MessageWriter<MovementAction>,
+	mut wishes: Query<
+		(Entity, &mut MoveWish, &PlayerLook),
+		(With<CharacterController>, With<Player>),
+	>,
 ) {
 	let mut move_stick = Vec2::ZERO;
 	let mut jump = false;
@@ -21,21 +24,35 @@ pub(crate) fn apply_move_intents(
 		}
 	}
 
-	for (mut wish, look) in &mut wishes {
-		wish.0 = if move_stick == Vec2::ZERO {
-			Vec3::ZERO
-		} else {
-			let yaw = Quat::from_axis_angle(Vec3::Y, look.yaw);
-			let forward = yaw * -Vec3::Z;
-			let right = yaw * Vec3::X;
-			(right * move_stick.x + forward * move_stick.y).normalize_or_zero()
-		};
+	for (entity, mut wish, look) in &mut wishes {
+		wish.0 = look_wish(look.yaw, move_stick);
+		if jump {
+			commands.entity(entity).insert(JumpWish);
+		}
 	}
+}
 
-	if move_stick != Vec2::ZERO {
-		movement.write(MovementAction::Move(move_stick));
+fn look_wish(yaw: f32, stick: Vec2) -> Vec3 {
+	if stick == Vec2::ZERO {
+		return Vec3::ZERO;
 	}
-	if jump {
-		movement.write(MovementAction::Jump);
+	let yaw = Quat::from_axis_angle(Vec3::Y, yaw);
+	let forward = yaw * -Vec3::Z;
+	let right = yaw * Vec3::X;
+	(right * stick.x + forward * stick.y).normalize_or_zero()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn look_wish_is_camera_relative_xz() {
+		let forward = look_wish(0.0, Vec2::Y);
+		assert!((forward.z + 1.0).abs() < 1e-4, "{forward}");
+		assert!(forward.y.abs() < 1e-6);
+		let right = look_wish(0.0, Vec2::X);
+		assert!((right.x - 1.0).abs() < 1e-4, "{right}");
+		assert!(right.y.abs() < 1e-6);
 	}
 }

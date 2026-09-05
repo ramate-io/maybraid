@@ -15,7 +15,9 @@ stays on the followed body). Insert [`CharacterLocomotion`](src/body.rs) before
 Grounded wish accel follows this frame's walkable contact plane so hillside
 heading is along the slope, not world XZ into the mesh. Last plane is only a
 [`Grounded`](src/body.rs) snap when the caster missed. Off the ground, gravity
-owns Y (XZ heading only). Jumping is true air.
+owns Y (XZ heading only). Jumping is true air. Pad [`CharacterIntent`](../controllers/character/src/intent.rs)
+and NPC drive both write [`MoveWish`](src/body.rs) / [`JumpWish`](src/body.rs);
+Body applies those for every capsule.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

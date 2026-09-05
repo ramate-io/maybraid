@@ -7,8 +7,6 @@ use crozon_characters::LocomotionCapsule;
 use lod_avian::PhysicsInteractionLayer;
 use std::f32::consts::PI;
 
-use crate::identity::{Player, PlayerLook};
-
 pub(crate) const MOVE_ACCEL: f32 = 40.0;
 pub(crate) const MOVE_DAMPING: f32 = 0.92;
 pub(crate) const JUMP_IMPULSE: f32 = 8.0;
@@ -50,7 +48,7 @@ impl Default for WalkableGround {
 	}
 }
 
-/// One-shot jump request for non-player capsules. Consumed in Body when grounded.
+/// One-shot jump request. Consumed in Body when grounded.
 #[derive(Component, Debug, Clone, Copy, Default)]
 #[component(storage = "SparseSet")]
 pub struct JumpWish;
@@ -82,12 +80,6 @@ pub(crate) struct JumpImpulse(pub f32);
 
 #[derive(Component)]
 pub(crate) struct MaxSlopeAngle(pub f32);
-
-#[derive(Message)]
-pub enum MovementAction {
-	Move(Vec2),
-	Jump,
-}
 
 pub fn apply_locomotion_capsule(commands: &mut Commands, body: Entity, hull: LocomotionCapsule) {
 	let collider = Collider::capsule(hull.radius, hull.length);
@@ -300,70 +292,7 @@ fn accelerate_wish(
 	}
 }
 
-pub(crate) fn apply_character_movement(
-	mut commands: Commands,
-	time: Res<Time>,
-	mut reader: MessageReader<MovementAction>,
-	mut controllers: Query<
-		(
-			Entity,
-			&PlayerLook,
-			&ShapeHits,
-			Option<&MaxSlopeAngle>,
-			Option<&WalkableGround>,
-			&MovementAcceleration,
-			&JumpImpulse,
-			&mut LinearVelocity,
-			Has<Grounded>,
-			Has<Jumping>,
-		),
-		(With<CharacterController>, With<Player>),
-	>,
-) {
-	let dt = time.delta_secs();
-	for action in reader.read() {
-		for (
-			entity,
-			look,
-			hits,
-			max_slope,
-			walkable,
-			accel,
-			jump,
-			mut velocity,
-			grounded,
-			jumping,
-		) in &mut controllers
-		{
-			let yaw = Quat::from_axis_angle(Vec3::Y, look.yaw);
-			let forward = yaw * -Vec3::Z;
-			let right = yaw * Vec3::X;
-			match action {
-				MovementAction::Move(direction) => {
-					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let contact = walkable_ground_normal(hits, max_slope);
-					let ground = ground_plane_for_wish(
-						contact,
-						walkable.map(|plane| plane.normal),
-						grounded,
-						jumping,
-					);
-					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
-				}
-				MovementAction::Jump => {
-					if grounded {
-						velocity.y = jump.0;
-						commands.entity(entity).insert(Jumping { left_ground: false });
-					}
-				}
-			}
-		}
-	}
-}
-
-/// Apply [`MoveWish`] for non-player capsules (NPC intelligence, etc.).
-///
-/// Pad-driven players use [`apply_character_movement`] from [`MovementAction`] instead.
+/// Apply [`MoveWish`] for every capsule. Pad intent and NPC drive both write it.
 pub(crate) fn apply_wish_movement(
 	time: Res<Time>,
 	mut controllers: Query<
@@ -377,32 +306,29 @@ pub(crate) fn apply_wish_movement(
 			Has<Grounded>,
 			Has<Jumping>,
 		),
-		(With<CharacterController>, Without<Player>),
+		With<CharacterController>,
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in &mut controllers
+	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in
+		&mut controllers
 	{
 		if wish.0.length_squared() < 1e-6 {
 			continue;
 		}
 		let contact = walkable_ground_normal(hits, max_slope);
-		let ground = ground_plane_for_wish(
-			contact,
-			walkable.map(|plane| plane.normal),
-			grounded,
-			jumping,
-		);
+		let ground =
+			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, jumping);
 		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
 	}
 }
 
-/// Consume [`JumpWish`] on grounded NPC capsules. Players jump via [`MovementAction`].
+/// Consume [`JumpWish`] on grounded capsules.
 pub(crate) fn apply_wish_jump(
 	mut commands: Commands,
 	mut controllers: Query<
 		(Entity, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
-		(With<CharacterController>, With<JumpWish>, Without<Player>),
+		(With<CharacterController>, With<JumpWish>),
 	>,
 ) {
 	for (entity, jump, mut velocity, grounded) in &mut controllers {

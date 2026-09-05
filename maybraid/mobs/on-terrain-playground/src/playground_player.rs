@@ -13,11 +13,13 @@ use durham_terrain_models::{
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
-use player::{ground_plane_for_wish, walkable_contact_normal, wish_on_ground, WalkableGround};
+use player::{
+	JumpWish, WalkableGround, ground_plane_for_wish, walkable_contact_normal, wish_on_ground,
+};
 use std::f32::consts::PI;
 
-use crate::camera::CameraController;
 use crate::WorldBaseTerrain;
+use crate::camera::CameraController;
 
 pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
 pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
@@ -105,13 +107,7 @@ struct JumpImpulse(f32);
 #[derive(Component)]
 struct MaxSlopeAngle(f32);
 
-#[derive(Message, Clone, Copy, Debug)]
-pub enum MovementAction {
-	Move(Vec2),
-	Jump,
-}
-
-/// When false, a downstream controller writes [`MovementAction`] / [`MoveWish`].
+/// When false, a downstream controller writes [`MoveWish`].
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct PadMovementEnabled(pub bool);
 
@@ -139,14 +135,14 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<PadMovementEnabled>()
 			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
-			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
 				Update,
 				(
 					keyboard_movement_input,
 					update_grounded,
-					apply_character_movement,
+					apply_wish_movement,
+					apply_wish_jump,
 					apply_movement_damping,
 					follow_character_camera,
 				)
@@ -287,19 +283,19 @@ pub fn respawn_player_on_layout(
 }
 
 fn keyboard_movement_input(
+	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	text_focus: Res<TextEntryFocus>,
 	pad_movement: Res<PadMovementEnabled>,
 	pad: Res<VirtualPad>,
 	cameras: Query<&CameraController, With<Camera3d>>,
-	mut wishes: Query<&mut MoveWish, With<Player>>,
-	mut writer: MessageWriter<MovementAction>,
+	mut wishes: Query<(Entity, &mut MoveWish), With<Player>>,
 ) {
 	if !pad_movement.0 {
 		return;
 	}
 	if *mode != PlaygroundMode::Character || text_focus.0 {
-		for mut wish in &mut wishes {
+		for (_, mut wish) in &mut wishes {
 			wish.0 = Vec3::ZERO;
 		}
 		return;
@@ -319,15 +315,12 @@ fn keyboard_movement_input(
 	} else {
 		Vec3::ZERO
 	};
-	for mut wish in &mut wishes {
+	let jump = pad.just_pressed(PadButton::A);
+	for (entity, mut wish) in &mut wishes {
 		wish.0 = wish_dir;
-	}
-
-	if direction != Vec2::ZERO {
-		writer.write(MovementAction::Move(direction));
-	}
-	if pad.just_pressed(PadButton::A) {
-		writer.write(MovementAction::Jump);
+		if jump {
+			commands.entity(entity).insert(JumpWish);
+		}
 	}
 }
 
@@ -404,20 +397,17 @@ fn accelerate_wish(
 	}
 }
 
-fn apply_character_movement(
-	mut commands: Commands,
+/// Apply [`MoveWish`] for the playground capsule.
+fn apply_wish_movement(
 	mode: Res<PlaygroundMode>,
 	time: Res<Time>,
-	cameras: Query<&CameraController, With<Camera3d>>,
-	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
 		(
-			Entity,
+			&MoveWish,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
 			Option<&WalkableGround>,
 			&MovementAcceleration,
-			&JumpImpulse,
 			&mut LinearVelocity,
 			Has<Grounded>,
 			Has<Jumping>,
@@ -426,43 +416,36 @@ fn apply_character_movement(
 	>,
 ) {
 	if *mode != PlaygroundMode::Character {
-		for _ in reader.read() {}
 		return;
 	}
 
-	let Ok(camera) = cameras.single() else {
-		for _ in reader.read() {}
-		return;
-	};
-
-	let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
-	let forward = yaw * -Vec3::Z;
-	let right = yaw * Vec3::X;
 	let dt = time.delta_secs();
+	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in
+		&mut controllers
+	{
+		if wish.0.length_squared() < 1e-6 {
+			continue;
+		}
+		let contact = walkable_contact_normal(hits, max_slope.map(|angle| angle.0));
+		let ground =
+			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, jumping);
+		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
+	}
+}
 
-	for action in reader.read() {
-		for (entity, hits, max_slope, walkable, accel, jump, mut velocity, grounded, jumping) in
-			&mut controllers
-		{
-			match action {
-				MovementAction::Move(direction) => {
-					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let contact = walkable_contact_normal(hits, max_slope.map(|angle| angle.0));
-					let ground = ground_plane_for_wish(
-						contact,
-						walkable.map(|plane| plane.normal),
-						grounded,
-						jumping,
-					);
-					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
-				}
-				MovementAction::Jump => {
-					if grounded {
-						velocity.y = jump.0;
-						commands.entity(entity).insert(Jumping { left_ground: false });
-					}
-				}
-			}
+fn apply_wish_jump(
+	mode: Res<PlaygroundMode>,
+	mut commands: Commands,
+	mut controllers: Query<
+		(Entity, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
+		(With<CharacterController>, With<JumpWish>),
+	>,
+) {
+	for (entity, jump, mut velocity, grounded) in &mut controllers {
+		commands.entity(entity).remove::<JumpWish>();
+		if *mode == PlaygroundMode::Character && grounded {
+			velocity.y = jump.0;
+			commands.entity(entity).insert(Jumping { left_ground: false });
 		}
 	}
 }
