@@ -118,10 +118,8 @@ mod tests {
 	fn combined_interests_retain_both_tables_and_sum_duplicates() {
 		let camp = PoiKind::new("test/camp");
 		let forage = PoiKind::new("test/forage");
-		let personal = PoiInterests::new([
-			PoiInterest::new(camp, 0.5),
-			PoiInterest::new(forage, 1.0),
-		]);
+		let personal =
+			PoiInterests::new([PoiInterest::new(camp, 0.5), PoiInterest::new(forage, 1.0)]);
 		let mob = PoiInterests::one(camp);
 		let combined = personal.combined(&mob);
 		assert_eq!(combined.weight(camp), Some(1.5));

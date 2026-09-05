@@ -1,8 +1,9 @@
 //! Hierarchical long-range routing. Bands are per-user policy, not a crate ladder.
 //!
-//! A [`RoutingIntelligenceUser`] commits coarse-to-fine corridors, then
-//! [`write_route_objectives`] hands the current fine hop to
-//! [`movement_intelligence::MovementObjective::Reach`]. This crate does not write
+//! A [`RoutingIntelligenceUser`] commits coarse-to-fine corridors. Callers
+//! either hand the current fine hop to [`movement_intelligence::MovementObjective::Reach`]
+//! ([`write_route_objectives`]) or consume [`RoutingIntelligenceUser::current_hop`]
+//! themselves (journeying mob hosts). This crate does not write
 //! [`player::MoveWish`].
 
 mod avian;

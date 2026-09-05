@@ -3,11 +3,11 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use mob_intelligence::{
-	Mob, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded, MobRespawn, MobSlot,
-	MobTetherLock, MobTravel, RosterMember, spawn_mob,
+	install_mob_routing, spawn_mob, Mob, MobIdAlloc, MobInstall, MobMemberBody, MobMemberNeeded,
+	MobRespawn, MobSlot, MobTetherLock, MobTravel, RosterMember,
 };
 use npc_intelligence::{NpcBody, Personality};
-use player::{CAPSULE_LENGTH, CAPSULE_RADIUS, LocomotionCapsule, PlayerLook, spawn_npc};
+use player::{spawn_npc, LocomotionCapsule, PlayerLook, CAPSULE_LENGTH, CAPSULE_RADIUS};
 use poi_intelligence::{
 	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind, PoiKnowledge,
 	PoiLearningPolicy, PoiVisitPolicy, PoiVisitState,
@@ -16,7 +16,7 @@ use spotting_intelligence::{InterestLayers, SpotBounds, SpotSubject};
 use std::f32::consts::TAU;
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId};
 
-use crate::scene::{CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT, waypoint_xz};
+use crate::scene::{waypoint_xz, CAMP, FORAGE, GATE, JOURNEY_TILE, WAYPOINT};
 
 const GRAZER_GROUP: ThreatGroupId = ThreatGroupId::group(4);
 const HUNT_GROUP: ThreatGroupId = ThreatGroupId::group(3);
@@ -412,6 +412,7 @@ fn stamp_journey(commands: &mut Commands, host: Entity, seed: u64, linger_secs: 
 		PoiKnowledge::default(),
 		PoiVisitState::default(),
 	));
+	install_mob_routing(commands, host);
 }
 
 fn spawn_member(
@@ -625,22 +626,16 @@ mod tests {
 	#[test]
 	fn local_pois_cover_stationary_and_roam() {
 		let placements = poi_placements();
-		assert!(
-			placements
-				.iter()
-				.any(|(kind, at)| *kind == CAMP && at.distance(Vec2::new(-110.0, 105.0)) < 20.0)
-		);
-		assert!(
-			placements
-				.iter()
-				.any(|(kind, at)| *kind == GATE && at.distance(Vec2::new(118.0, 95.0)) < 10.0)
-		);
+		assert!(placements
+			.iter()
+			.any(|(kind, at)| *kind == CAMP && at.distance(Vec2::new(-110.0, 105.0)) < 20.0));
+		assert!(placements
+			.iter()
+			.any(|(kind, at)| *kind == GATE && at.distance(Vec2::new(118.0, 95.0)) < 10.0));
 		assert!(placements.iter().filter(|(kind, _)| *kind == FORAGE).count() >= 10);
-		assert!(
-			placements
-				.iter()
-				.any(|(kind, at)| *kind == FORAGE && at.distance(Vec2::new(45.0, -50.0)) < 16.0)
-		);
+		assert!(placements
+			.iter()
+			.any(|(kind, at)| *kind == FORAGE && at.distance(Vec2::new(45.0, -50.0)) < 16.0));
 		assert!(!placements.is_empty());
 	}
 }

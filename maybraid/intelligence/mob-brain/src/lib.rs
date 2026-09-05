@@ -27,11 +27,12 @@ use movement_intelligence::{
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
 use npc_intelligence::NpcIntelligencePlugin;
-use packs::{PackKind, hunt_tracks_herd, spawn_needed_members, spawn_packs, start_hunt_browse};
+use packs::{hunt_tracks_herd, spawn_needed_members, spawn_packs, start_hunt_browse, PackKind};
 use player::{Npc, PlayerPlugin};
 use poi_intelligence::{PoiGoal, PoiIntelligencePlugin, PoiSystems};
+use routing_intelligence::RoutingPlugin;
 use scene::{
-	PAD_EXTENT, PAD_SIDE, setup_ground, setup_lighting, setup_local_pois, setup_waypoints,
+	setup_ground, setup_lighting, setup_local_pois, setup_waypoints, PAD_EXTENT, PAD_SIDE,
 };
 use spotting_intelligence::SpottingSystems;
 use tether_intelligence::TetherPlugin;
@@ -76,6 +77,7 @@ impl Plugin for MobBrainPlaygroundPlugin {
 			.add_plugins(JourneyingIntelligencePlugin)
 			.add_plugins(MeanderingIntelligencePlugin)
 			.add_plugins(TetherPlugin)
+			.add_plugins(RoutingPlugin)
 			.add_plugins(MovementRealizationPlugin)
 			.configure_sets(
 				Update,

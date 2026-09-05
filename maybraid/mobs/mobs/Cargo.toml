@@ -17,6 +17,7 @@ lod = { workspace = true }
 mob-characters = { workspace = true }
 mob-intelligence = { workspace = true }
 poi-intelligence = { workspace = true }
+routing-intelligence = { workspace = true }
 tether-intelligence = { workspace = true }
 threat-intelligence = { workspace = true }
 

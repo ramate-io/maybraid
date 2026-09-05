@@ -154,22 +154,27 @@ pub fn begin_poi_goal(
 }
 
 /// Converts newly selected or moved POI goals into route or movement objectives.
+///
+/// Routing-only users (journeying mob hosts) do not need [`MovementIntelligence`].
 pub fn drive_poi_goals(
 	mut users: Query<
-		(Entity, &PoiGoal, &mut MovementIntelligence, Option<&mut RoutingIntelligenceUser>),
-		Changed<PoiGoal>,
+		(Entity, &PoiGoal, Option<&mut MovementIntelligence>, Option<&mut RoutingIntelligenceUser>),
+		(Changed<PoiGoal>, Or<(With<MovementIntelligence>, With<RoutingIntelligenceUser>)>),
 	>,
 	mut commands: Commands,
 ) {
-	for (entity, goal, mut movement, routing) in &mut users {
+	for (entity, goal, movement, routing) in &mut users {
 		if let Some(mut routing) = routing {
 			routing.set_destination(goal.location.point);
-		} else {
-			let next = MovementObjective::Reach(goal.location);
-			if movement.objective != next {
-				movement.objective = next;
-				commands.entity(entity).insert(ReplanMovement);
-			}
+			continue;
+		}
+		let Some(mut movement) = movement else {
+			continue;
+		};
+		let next = MovementObjective::Reach(goal.location);
+		if movement.objective != next {
+			movement.objective = next;
+			commands.entity(entity).insert(ReplanMovement);
 		}
 	}
 }

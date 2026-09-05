@@ -43,7 +43,14 @@ pub(crate) fn queue_downed_member_deaths(
 }
 
 pub(crate) fn write_back_mob_roster(
-	members: Query<(Entity, &MemberOf, &Transform, &GlobalTransform, Has<ChildOf>, Option<&Health>)>,
+	members: Query<(
+		Entity,
+		&MemberOf,
+		&Transform,
+		&GlobalTransform,
+		Has<ChildOf>,
+		Option<&Health>,
+	)>,
 	mut rosters: Query<(Entity, &mut MobRoster), With<Mob>>,
 ) {
 	let live: Vec<_> = members
@@ -80,7 +87,11 @@ pub(crate) fn write_back_mob_roster(
 }
 
 fn member_translation(transform: &Transform, global: &GlobalTransform, parented: bool) -> Vec3 {
-	if parented { global.translation() } else { transform.translation }
+	if parented {
+		global.translation()
+	} else {
+		transform.translation
+	}
 }
 
 pub(crate) fn respawn_mob_members(

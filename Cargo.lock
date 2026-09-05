@@ -4741,6 +4741,7 @@ dependencies = [
  "mob-characters",
  "mob-intelligence",
  "poi-intelligence",
+ "routing-intelligence",
  "tether-intelligence",
  "threat-intelligence",
 ]
@@ -4912,6 +4913,7 @@ dependencies = [
  "npc-intelligence",
  "player",
  "poi-intelligence",
+ "routing-intelligence",
  "spotting-intelligence",
  "tether-intelligence",
  "threat-intelligence",
@@ -4961,6 +4963,7 @@ dependencies = [
  "journeying-intelligence",
  "npc-intelligence",
  "poi-intelligence",
+ "routing-intelligence",
  "tether-intelligence",
  "threat-intelligence",
  "threat-management-intelligence",

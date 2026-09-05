@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use poi_intelligence::PoiSystems;
+use routing_intelligence::RoutingSystems;
 use tether_intelligence::TetherSystems;
 
 use crate::bind::{bind_mob_members, propagate_mob_membership};
@@ -36,12 +37,17 @@ impl Plugin for MobIntelligencePlugin {
 					MobSystems::Propagate,
 					MobSystems::Writeback,
 					MobSystems::Respawn,
-					MobSystems::Travel,
 					MobSystems::Lock,
 				)
 					.chain()
 					.before(TetherSystems::Write)
 					.before(PoiSystems::Select),
+			)
+			.configure_sets(
+				Update,
+				// After routing Plan+Write. Do not order before Tether Write:
+				// that set already runs before Plan, which would cycle.
+				MobSystems::Travel.after(RoutingSystems::Write),
 			)
 			.add_systems(PostStartup, bind_mob_members)
 			.add_systems(

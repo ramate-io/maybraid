@@ -1,10 +1,13 @@
+use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 
 use crate::{
-	choose_poi, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState, PoiGoalStatus, PoiId,
-	PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy, PoiObservation,
-	PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
+	choose_poi, drive_poi_goals, GlobalPoi, KnownPoi, LocalPoi, Poi, PoiGoal, PoiGoalState,
+	PoiGoalStatus, PoiId, PoiInterest, PoiInterests, PoiKind, PoiKnowledge, PoiLearningPolicy,
+	PoiObservation, PoiRegistry, PoiSource, PoiVisitPolicy, PoiVisitState,
 };
+use movement_intelligence::MovementIntelligence;
+use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 
 const CAMP: PoiKind = PoiKind::new("test/camp");
 const WATER: PoiKind = PoiKind::new("test/water");
@@ -205,5 +208,21 @@ fn zero_linger_completes_on_first_arrival() -> anyhow::Result<()> {
 fn marker_types_are_zero_sized() -> anyhow::Result<()> {
 	assert_eq!(std::mem::size_of::<LocalPoi>(), 0);
 	assert_eq!(std::mem::size_of::<GlobalPoi>(), 0);
+	Ok(())
+}
+
+#[test]
+fn drive_sets_a_route_without_movement_intelligence() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let user = world
+		.spawn((
+			PoiGoal::new(1, PoiId(1), None, CAMP, Vec3::X * 40.0, 4.0, 0.0, 0.0),
+			RoutingIntelligenceUser::new(RoutingSettings::from_segments([40.0])),
+		))
+		.id();
+	world.run_system_once(drive_poi_goals).expect("drive");
+	let routing = world.get::<RoutingIntelligenceUser>(user).expect("routing");
+	assert_eq!(routing.destination, Some(Vec3::X * 40.0));
+	assert!(world.get::<MovementIntelligence>(user).is_none());
 	Ok(())
 }

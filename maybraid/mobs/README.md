@@ -33,7 +33,11 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
   from the live Richmond/Chico model configuration, generates them in a 3 km
   ring, and presents cell → group → `MobScene` hosts in a 1 km ring. Spawn
   elevation is resolved against composed Durham terrain and Richmond pads at
-  presentation time. `PendingMobGroups` remains available for focused tests and
+  presentation time. Journeying hosts are `RoutingIntelligenceUser`s: POI goals
+  become a coarse Fixed-layer corridor, and `MobTravel` lerps the tether along
+  those hops (including hop Y). High character plants follow by tether and keep
+  Avian movement for combat; they do not inherit host routing.
+  `PendingMobGroups` remains available for focused tests and
   manual playground scenes.
 
 The world publishes one global POI for each presented grove and urban setting,

@@ -3,10 +3,13 @@
 use bevy::prelude::*;
 use journeying_intelligence::JourneyingIntelligenceUser;
 use poi_intelligence::{PoiIntelligenceUser, PoiInterests, PoiKnowledge, PoiVisitState};
+use routing_intelligence::{RoutingIntelligenceUser, RoutingSettings};
 use tether_intelligence::Tether;
 
 use crate::roster::{MobAffiliations, MobInterests, MobRespawn, MobRoster, RosterMember};
 use crate::travel::MobTravel;
+
+const HOST_ROUTING_BANDS: [f32; 3] = [160.0, 80.0, 32.0];
 
 /// Stable pack identity. Safe to stamp on High BSN; it is not an [`Entity`].
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -116,6 +119,10 @@ pub fn spawn_mob(commands: &mut Commands, transform: Transform, install: MobInst
 }
 
 /// Distant-tile travel for **moving the tether**. The host must not meander.
+///
+/// Journeying hosts are [`RoutingIntelligenceUser`]s so [`PoiGoal`]s become
+/// coarse Fixed-layer corridors. [`MobTravel`] still slides the transform;
+/// they do not run movement-intelligence replans.
 pub fn install_mob_journeying(
 	commands: &mut Commands,
 	host: Entity,
@@ -128,4 +135,18 @@ pub fn install_mob_journeying(
 		PoiKnowledge::default(),
 		PoiVisitState::default(),
 	));
+	install_mob_routing(commands, host);
+}
+
+/// Corridor planner only. The host does not get a character controller.
+pub fn install_mob_routing(commands: &mut Commands, host: Entity) {
+	commands
+		.entity(host)
+		.insert(RoutingIntelligenceUser::new(host_routing_settings()));
+}
+
+fn host_routing_settings() -> RoutingSettings {
+	let mut settings = RoutingSettings::from_segments(HOST_ROUTING_BANDS);
+	settings.arrival_radius = 8.0;
+	settings
 }

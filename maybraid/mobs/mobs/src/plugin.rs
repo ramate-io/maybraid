@@ -10,6 +10,7 @@ use mob_intelligence::{
 	MobSystems, MobTetherLock, RosterMember,
 };
 use poi_intelligence::{PoiGoal, PoiId, PoiIntelligencePlugin, PoiKind};
+use routing_intelligence::RoutingPlugin;
 use tether_intelligence::TetherPlugin;
 
 use crate::{MobKind, MobScene};
@@ -59,6 +60,9 @@ impl Plugin for MobScenesPlugin {
 		}
 		if !app.is_plugin_added::<TetherPlugin>() {
 			app.add_plugins(TetherPlugin);
+		}
+		if !app.is_plugin_added::<RoutingPlugin>() {
+			app.add_plugins(RoutingPlugin);
 		}
 		add_lod_refresh_chunk_full_for::<MobScene>(app);
 		app.configure_sets(

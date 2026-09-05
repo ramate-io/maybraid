@@ -6,9 +6,9 @@ use npc_intelligence::NpcIntelligence;
 use poi_intelligence::PoiGoal;
 use tether_intelligence::TetherIntelligenceUser;
 
-use crate::Mob;
 use crate::bind::retarget_member_tether;
 use crate::member::MemberOf;
+use crate::Mob;
 
 type ArrivalHost<'a> = (
 	Entity,

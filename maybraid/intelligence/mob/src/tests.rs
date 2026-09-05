@@ -5,8 +5,9 @@ use bevy::prelude::*;
 use damage::Health;
 use npc_intelligence::{NpcInstall, NpcIntelligence, Personality};
 use poi_intelligence::{
-	PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind,
+	drive_poi_goals, PoiGoal, PoiId, PoiIntelligenceUser, PoiInterest, PoiInterests, PoiKind,
 };
+use routing_intelligence::{LayerPlan, RoutePlan, RoutingIntelligenceUser};
 use tether_intelligence::{Tether, TetherIntelligenceUser, TetherObjective};
 use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatSubject};
 
@@ -66,11 +67,9 @@ fn bind_by_mob_id_stamps_membership_and_installs() {
 	let host = spawn_host(
 		&mut world,
 		MobId(7),
-		vec![
-			RosterMember::new(Personality::Grazer, pose)
-				.with_armed(false)
-				.with_interests(PoiInterests::one(personal)),
-		],
+		vec![RosterMember::new(Personality::Grazer, pose)
+			.with_armed(false)
+			.with_interests(PoiInterests::one(personal))],
 	);
 	let plant = world.spawn((Transform::from_translation(pose), MobSlot(0), MobId(7))).id();
 	world.run_system_once(bind_mob_members).expect("bind");
@@ -292,6 +291,94 @@ fn travel_steps_the_host_across_the_ground() {
 	assert!((at.z - 1.0).abs() < 1e-3);
 	let arrived = crate::travel::step_xz(Vec3::X * 9.0, Vec3::X * 10.0, 4.0);
 	assert!((arrived.x - 10.0).abs() < 1e-4);
+}
+
+#[test]
+fn travel_lerps_along_a_routing_chord() {
+	let at = crate::travel::step_chord(Vec3::ZERO, Vec3::new(6.0, 8.0, 0.0), 5.0);
+	assert!((at - Vec3::new(3.0, 4.0, 0.0)).length() < 1e-3);
+}
+
+#[test]
+fn journeying_host_is_a_routing_user() {
+	let mut world = World::new();
+	let host = spawn_mob(
+		&mut world.commands(),
+		Transform::from_xyz(3.0, 0.0, 1.0),
+		MobInstall::new(MobId(21), 12.0, vec![RosterMember::new(Personality::Grazer, Vec3::X)])
+			.with_journey(true)
+			.with_travel(crate::MobTravel::new(2.0)),
+	);
+	world.flush();
+	assert!(world.get::<RoutingIntelligenceUser>(host).is_some());
+	assert!(world.get::<journeying_intelligence::JourneyingIntelligenceUser>(host).is_some());
+}
+
+#[test]
+fn poi_goal_hands_the_host_to_routing() {
+	let mut world = World::new();
+	let host = spawn_mob(
+		&mut world.commands(),
+		Transform::from_xyz(3.0, 0.0, 1.0),
+		MobInstall::new(MobId(22), 12.0, vec![RosterMember::new(Personality::Grazer, Vec3::X)])
+			.with_journey(true)
+			.with_travel(crate::MobTravel::new(2.0)),
+	);
+	world.flush();
+	let dest = Vec3::new(40.0, 6.0, 0.0);
+	world.entity_mut(host).insert(PoiGoal::new(
+		1,
+		PoiId(9),
+		None,
+		PoiKind::new("mob/camp"),
+		dest,
+		8.0,
+		0.0,
+		0.0,
+	));
+	world.run_system_once(drive_poi_goals).expect("drive");
+	let routing = world.get::<RoutingIntelligenceUser>(host).expect("routing");
+	assert_eq!(routing.destination, Some(dest));
+}
+
+#[test]
+fn travel_follows_a_routing_hop_including_y() {
+	let mut world = World::new();
+	world.init_resource::<Time>();
+	let host = spawn_mob(
+		&mut world.commands(),
+		Transform::from_xyz(0.0, 1.0, 0.0),
+		MobInstall::new(MobId(23), 12.0, vec![RosterMember::new(Personality::Grazer, Vec3::X)])
+			.with_journey(true)
+			.with_travel(crate::MobTravel::new(10.0)),
+	);
+	world.flush();
+	let dest = Vec3::new(80.0, 5.0, 0.0);
+	world.entity_mut(host).insert(PoiGoal::new(
+		1,
+		PoiId(9),
+		None,
+		PoiKind::new("mob/camp"),
+		dest,
+		8.0,
+		0.0,
+		0.0,
+	));
+	{
+		let mut routing = world.get_mut::<RoutingIntelligenceUser>(host).expect("routing");
+		routing.destination = Some(dest);
+		routing.plan = RoutePlan {
+			layers: vec![LayerPlan {
+				segment: 40.0,
+				waypoints: vec![Vec3::new(0.0, 1.0, 0.0), Vec3::new(40.0, 4.0, 0.0), dest],
+			}],
+		};
+	}
+	world.resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(0.5));
+	world.run_system_once(crate::travel::travel_mobs).expect("travel");
+	let at = world.get::<Transform>(host).expect("transform").translation;
+	assert!(at.x > 0.5);
+	assert!(at.y > 1.0);
 }
 
 #[test]

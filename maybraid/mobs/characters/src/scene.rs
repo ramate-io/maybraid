@@ -177,7 +177,7 @@ pub(crate) fn materialize_character_scenes(
 			);
 		}
 
-		if recipe.brains.uses_long_range_routing() || belongs_to_mob {
+		if recipe.brains.uses_long_range_routing() && !belongs_to_mob {
 			commands.entity(body).insert(RoutingIntelligenceUser::new(
 				RoutingSettings::from_segments(ROUTING_BANDS),
 			));
