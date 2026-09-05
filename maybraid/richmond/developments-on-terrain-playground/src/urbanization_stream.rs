@@ -6,7 +6,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use avian3d::prelude::{Collider, ColliderDisabled};
 use bevy::ecs::system::SystemParam;
 use bevy::log::info_span;
 use bevy::prelude::*;
@@ -449,37 +448,31 @@ pub fn present_urbanization_padded_terrain(
 	presenter.remove_stale(&state.wanted);
 }
 
-/// Hide raw Durham roots while their padded replacements are active, and
-/// disable every raw trimesh collider in those scene hierarchies.
+/// Hide raw Durham visuals while their padded replacements are active.
+///
+/// Raw collision stays live: stable terrain colliders are independent of visual
+/// LOD and must never be disabled during a raw/padded presentation handoff.
 pub fn sync_raw_terrain_replacements(
 	mut commands: Commands,
 	state: Res<UrbanizationPaddedTerrainState>,
 	raw_roots: Query<(Entity, &PresentedTerrainScene)>,
 	padded_roots: Query<(Entity, &PresentedPaddedTerrainScene)>,
 	children: Query<&Children>,
-	colliders: Query<(), (With<Collider>, Without<ColliderDisabled>)>,
+	meshes: Query<(), With<Mesh3d>>,
 ) {
 	let ready: HashSet<Id> = padded_roots
 		.iter()
-		.filter(|(root, _)| children.iter_descendants(*root).any(|child| colliders.contains(child)))
+		.filter(|(root, _)| children.iter_descendants(*root).any(|child| meshes.contains(child)))
 		.map(|(_, presented)| presented.0)
 		.collect();
 	for (root, presented) in &raw_roots {
-		// Keep the raw collider live until the replacement's async mesh has
-		// produced its collider. This makes the handoff atomic for characters.
+		// Keep raw collision live before, during, and after the visual handoff.
 		let replaced = state.wanted.contains(&presented.0) && ready.contains(&presented.0);
 		commands.entity(root).insert(if replaced {
 			Visibility::Hidden
 		} else {
 			Visibility::Inherited
 		});
-		for entity in std::iter::once(root).chain(children.iter_descendants(root)) {
-			if replaced {
-				commands.entity(entity).insert(ColliderDisabled);
-			} else {
-				commands.entity(entity).remove::<ColliderDisabled>();
-			}
-		}
 	}
 }
 

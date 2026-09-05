@@ -6,7 +6,7 @@
 use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::Terrain;
+use crate::terrain::{Terrain, TerrainColliderHost, TERRAIN_CELL_SIZE};
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
@@ -20,6 +20,7 @@ use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
 /// One concentric mesh-LOD band on the fine (base-sized) cell grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,8 +180,63 @@ struct PresentedEntry {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PresentedTerrainScene(pub Id);
 
+/// Near-stream terrain host (160 m cells, render + stable collision).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainNear;
+
+/// Far-stream terrain host (320 m render-only cells).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainFar;
+
+/// Background-stream terrain host (640 m render-only cells).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct TerrainBackground;
+
+/// Marker policy for one moving terrain scale presenter.
+pub trait TerrainStreamMarker: Component + Default {
+	const CELL_SIZE_MULTIPLE: f32;
+	const COLLIDER: bool;
+}
+
+impl TerrainStreamMarker for TerrainNear {
+	const CELL_SIZE_MULTIPLE: f32 = 1.0;
+	const COLLIDER: bool = true;
+}
+
+impl TerrainStreamMarker for TerrainFar {
+	const CELL_SIZE_MULTIPLE: f32 = 2.0;
+	const COLLIDER: bool = false;
+}
+
+impl TerrainStreamMarker for TerrainBackground {
+	const CELL_SIZE_MULTIPLE: f32 = 4.0;
+	const COLLIDER: bool = false;
+}
+
 impl TerrainPresenterState {
 	pub fn clear(&mut self, commands: &mut Commands) {
+		for entry in self.presented.values() {
+			commands.entity(entry.entity).despawn();
+		}
+		self.presented.clear();
+	}
+}
+
+/// Independent runtime bookkeeping for one moving terrain scale.
+#[derive(Resource)]
+pub struct TerrainStreamPresenterState<M: TerrainStreamMarker> {
+	presented: HashMap<Id, PresentedEntry>,
+	_marker: PhantomData<M>,
+}
+
+impl<M: TerrainStreamMarker> Default for TerrainStreamPresenterState<M> {
+	fn default() -> Self {
+		Self { presented: HashMap::new(), _marker: PhantomData }
+	}
+}
+
+impl<M: TerrainStreamMarker> TerrainStreamPresenterState<M> {
+	fn clear(&mut self, commands: &mut Commands) {
 		for entry in self.presented.values() {
 			commands.entity(entry.entity).despawn();
 		}
@@ -244,7 +300,86 @@ pub struct TerrainRegionPresenter<'w, 's> {
 	state: ResMut<'w, TerrainPresenterState>,
 }
 
+/// Scale-filtered presenter used by moving near / far / background streams.
+#[derive(SystemParam)]
+pub struct TerrainStreamRegionPresenter<'w, 's, M: TerrainStreamMarker> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, TerrainStreamPresenterState<M>>,
+}
+
+pub type TerrainNearRegionPresenter<'w, 's> = TerrainStreamRegionPresenter<'w, 's, TerrainNear>;
+pub type TerrainFarRegionPresenter<'w, 's> = TerrainStreamRegionPresenter<'w, 's, TerrainFar>;
+pub type TerrainBackgroundRegionPresenter<'w, 's> =
+	TerrainStreamRegionPresenter<'w, 's, TerrainBackground>;
+
 impl<'w, 's> TerrainRegionPresenter<'w, 's> {
+	pub fn clear_presented(&mut self) {
+		self.state.clear(&mut self.commands);
+	}
+}
+
+impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
+	fn matches(value: &Terrain) -> bool {
+		let size = Vec3::from(value.cell.max - value.cell.min).x;
+		(size - M::CELL_SIZE_MULTIPLE * TERRAIN_CELL_SIZE).abs() < 1e-3
+	}
+
+	/// Present this scale's generated cells and retire hosts outside its keep.
+	pub fn present(&mut self, store: &TerrainEntryStore, region: Aabb3d, lod_ref: &LodRef) {
+		let wanted: HashSet<Id> = store
+			.terrain
+			.iter()
+			.filter(|(_, entry)| region.intersects(&entry.bounds) && Self::matches(&entry.value))
+			.map(|(id, _)| *id)
+			.collect();
+
+		for id in &wanted {
+			let Some(entry) = store.terrain.get(id) else {
+				continue;
+			};
+			if self.state.presented.get(id).is_some_and(|shown| shown.version == entry.version) {
+				continue;
+			}
+			if let Some(previous) = self.state.presented.remove(id) {
+				self.commands.entity(previous.entity).despawn();
+			}
+			let value = &entry.value;
+			let min = Vec3::from(value.cell.min);
+			let max = Vec3::from(value.cell.max);
+			let transform = Transform::from_translation((min + max) * 0.5);
+			let level = value.scene_lod_level(lod_ref);
+			let entity = self
+				.commands
+				.spawn_scene((
+					lod_host_scene_pending(level, value.scene_bounds()),
+					bsn! {
+						template_value(transform)
+						Visibility::default()
+					},
+				))
+				.insert((value.clone(), PresentedTerrainScene(*id), M::default()))
+				.id();
+			if M::COLLIDER {
+				self.commands.entity(entity).insert(TerrainColliderHost);
+			}
+			self.state
+				.presented
+				.insert(*id, PresentedEntry { version: entry.version, entity });
+		}
+
+		let stale: Vec<(Id, Entity)> = self
+			.state
+			.presented
+			.iter()
+			.filter(|(id, _)| !wanted.contains(id))
+			.map(|(id, entry)| (*id, entry.entity))
+			.collect();
+		for (id, entity) in stale {
+			self.commands.entity(entity).despawn();
+			self.state.presented.remove(&id);
+		}
+	}
+
 	pub fn clear_presented(&mut self) {
 		self.state.clear(&mut self.commands);
 	}
@@ -272,7 +407,7 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 					Visibility::default()
 				},
 			))
-			.insert((value.clone(), PresentedTerrainScene(id)))
+			.insert((value.clone(), PresentedTerrainScene(id), TerrainColliderHost))
 			.id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}

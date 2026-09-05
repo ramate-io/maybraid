@@ -6,13 +6,13 @@ mod shell;
 pub use flow::{GameFlow, HomeRoute, WorldPause};
 
 use bevy::prelude::*;
-use lod_first_load::FirstLoadStatus;
+use lod_first_load::{FirstLoadActivity, FirstLoadStatus};
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
 use maybraid_world::{
-	PlayerPhysicsEnabled, SpawnTerrainReady, TerrainStreamingEnabled, WorldGameplayEnabled,
-	WorldPlugin,
+	PlayerPhysicsEnabled, TerrainStreamingEnabled, WorldGameplayEnabled, WorldPlugin,
+	WorldSceneryVisible,
 };
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
@@ -26,8 +26,9 @@ use menu_screens::{
 use std::path::{Path, PathBuf};
 
 use crate::shell::{
-	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
-	enter_loading, enter_world, enter_world_menu, exit_world_menu, spawn_menu_ui_camera,
+	apply_shell_look, attach_preview_camera, despawn_loading_backdrop, detach_preview_camera,
+	enter_characters, enter_home, enter_loading, enter_world, enter_world_menu, exit_world_menu,
+	spawn_loading_backdrop, stamp_preview_render_layers,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -43,6 +44,8 @@ impl Plugin for GamePlugin {
 			.insert_resource(WorldGameplayEnabled(false))
 			.insert_resource(PlayerPhysicsEnabled(false))
 			.insert_resource(TerrainStreamingEnabled(false))
+			.insert_resource(WorldSceneryVisible(false))
+			.init_resource::<LoadingDrain>()
 			.insert_resource(ClearColor(MENU_CLEAR))
 			.init_state::<GameFlow>()
 			.add_sub_state::<WorldPause>()
@@ -56,7 +59,6 @@ impl Plugin for GamePlugin {
 				MenuControllerPlugin,
 				LoadingScreenPlugin,
 			))
-			.add_systems(Startup, spawn_menu_ui_camera)
 			.add_systems(
 				OnEnter(GameFlow::Home),
 				(enter_home, apply_shell_look, attach_preview_camera),
@@ -68,8 +70,15 @@ impl Plugin for GamePlugin {
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
 			.add_systems(
 				OnEnter(GameFlow::LoadingWorld),
-				(enter_loading, apply_shell_look, detach_preview_camera),
+				(
+					enter_loading,
+					begin_loading_drain,
+					spawn_loading_backdrop,
+					apply_shell_look,
+					detach_preview_camera,
+				),
 			)
+			.add_systems(OnExit(GameFlow::LoadingWorld), despawn_loading_backdrop)
 			.add_systems(
 				OnEnter(GameFlow::World),
 				(enter_world, apply_shell_look, detach_preview_camera),
@@ -77,10 +86,11 @@ impl Plugin for GamePlugin {
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
-			.add_systems(PostStartup, apply_shell_look)
+			.add_systems(PostStartup, (enter_home, apply_shell_look, attach_preview_camera))
 			.add_systems(
 				Update,
 				(
+					stamp_preview_render_layers,
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					update_world_loading.run_if(in_state(GameFlow::LoadingWorld)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
@@ -93,12 +103,23 @@ impl Plugin for GamePlugin {
 	}
 }
 
+/// This visit's first-load drain. Done when jobs hit zero after work started.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+struct LoadingDrain {
+	started_at: u64,
+	saw_work: bool,
+}
+
+impl LoadingDrain {
+	fn ready(self, outstanding: u64, started: u64) -> bool {
+		outstanding == 0 && (self.saw_work || started > self.started_at)
+	}
+}
+
 fn route_home_choice(
 	mut choices: MessageReader<HomeMenuChoice>,
 	mut flow: ResMut<NextState<GameFlow>>,
 	mut mode: ResMut<GameMode>,
-	status: Res<FirstLoadStatus>,
-	terrain: Res<SpawnTerrainReady>,
 ) {
 	let Some(choice) = choices.read().last().copied() else {
 		return;
@@ -106,38 +127,33 @@ fn route_home_choice(
 	match HomeRoute::from_choice(choice) {
 		HomeRoute::World { label } => {
 			mode.label = String::from(label);
-			flow.set(if status.settled && terrain.0 {
-				GameFlow::World
-			} else {
-				GameFlow::LoadingWorld
-			});
+			flow.set(GameFlow::LoadingWorld);
 		}
 		HomeRoute::Characters => flow.set(GameFlow::Characters),
 		HomeRoute::Unimplemented => {}
 	}
 }
 
+fn begin_loading_drain(activity: Res<FirstLoadActivity>, mut drain: ResMut<LoadingDrain>) {
+	*drain = LoadingDrain { started_at: activity.snapshot().started, saw_work: false };
+}
+
 fn update_world_loading(
 	status: Res<FirstLoadStatus>,
-	terrain: Res<SpawnTerrainReady>,
+	mut drain: ResMut<LoadingDrain>,
 	mut progress: MessageWriter<LoadingProgress>,
 	mut explainer: MessageWriter<LoadingExplainerText>,
 	mut flow: ResMut<NextState<GameFlow>>,
 ) {
-	progress.write(LoadingProgress(if terrain.0 {
-		status.progress
-	} else {
-		status.progress.min(0.95)
-	}));
-	let text = if !terrain.0 {
-		"Preparing terrain collision…".to_string()
-	} else if status.outstanding > 0 {
+	drain.saw_work |= status.outstanding > 0;
+	let ready = drain.ready(status.outstanding, status.started);
+	progress.write(LoadingProgress(if ready { 1.0 } else { status.progress.min(0.95) }));
+	explainer.write(LoadingExplainerText(if status.outstanding > 0 {
 		format!("Streaming world… {} jobs remaining", status.outstanding)
 	} else {
-		"Settling the initial view…".to_string()
-	};
-	explainer.write(LoadingExplainerText(text));
-	if terrain.0 && status.settled {
+		"Streaming world…".to_string()
+	}));
+	if ready {
 		flow.set(GameFlow::World);
 	}
 }
@@ -205,5 +221,16 @@ mod tests {
 	fn crate_assets_contain_barlow() {
 		let font = assets_root().join("fonts/barlow/BarlowSemiCondensed-Regular.ttf");
 		assert!(font.is_file(), "expected Barlow at {}", font.display());
+	}
+
+	#[test]
+	fn loading_enters_when_jobs_seen_and_drained() {
+		use super::LoadingDrain;
+		let idle = LoadingDrain { started_at: 4, saw_work: false };
+		assert!(!idle.ready(0, 4));
+		assert!(idle.ready(0, 5));
+		let busy = LoadingDrain { started_at: 4, saw_work: true };
+		assert!(!busy.ready(2, 6));
+		assert!(busy.ready(0, 4));
 	}
 }

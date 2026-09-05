@@ -2,14 +2,18 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::VegetationOnTerrainMaterialLib;
+use chico_vegetation_on_terrain_playground::{
+	init_vegetation_on_terrain_material_caches, VegetationOnTerrainMaterialLib,
+};
+use crozon_characters::material_lib::{init_crozon_material_caches, ClothingMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
+use richmond_building_shaders::{init_richmond_urban_material_caches, UrbanSurfaceMaterialLib};
 
-/// World-model lib: vegetation-on-terrain (bump-out + Chico + Standard).
-///
-/// Further domain libs (Durham recipes on [`MaterialRef`], sky) compose here.
+/// Clothing, then urban surfaces, then vegetation (Standard last).
 #[derive(SystemParam)]
 pub struct WorldMaterialLib<'w> {
+	pub clothing: ClothingMaterialLib<'w>,
+	pub urban: UrbanSurfaceMaterialLib<'w>,
 	pub vegetation: VegetationOnTerrainMaterialLib<'w>,
 }
 
@@ -20,22 +24,24 @@ impl MaterialLib for WorldMaterialLib<'_> {
 		material_ref: &MaterialRef,
 		commands: &mut Commands,
 	) -> bool {
-		self.vegetation.try_fulfill(entity, material_ref, commands)
+		self.clothing.try_fulfill(entity, material_ref, commands)
+			|| self.urban.try_fulfill(entity, material_ref, commands)
+			|| self.vegetation.try_fulfill(entity, material_ref, commands)
 	}
 
 	fn fulfill(&mut self, entity: Entity, material_ref: &MaterialRef, commands: &mut Commands) {
-		self.vegetation.fulfill(entity, material_ref, commands);
+		let _ = self.try_fulfill(entity, material_ref, commands);
 	}
 }
 
-/// Installs [`WorldMaterialLib`] as the single [`MaterialRefPlugin`] for Maybraid World.
-///
-/// Add this before [`chico_vegetation_on_terrain_playground::VegetationOnTerrainPlugin`] so
-/// nested domain fulfill plugins skip.
+/// Single world [`MaterialRefPlugin`]. Add before vegetation / developments.
 pub struct WorldMaterialRefPlugin;
 
 impl Plugin for WorldMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
+		init_crozon_material_caches(app);
+		init_richmond_urban_material_caches(app);
+		init_vegetation_on_terrain_material_caches(app);
 		if material_ref_plugin_installed(app) {
 			return;
 		}

@@ -25,6 +25,7 @@ maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }
 chico-vegetation-on-terrain-playground = { workspace = true }
+richmond-building-shaders = { workspace = true }
 richmond-developments-on-terrain-playground = { workspace = true }
 
 [lints]

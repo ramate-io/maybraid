@@ -17,7 +17,7 @@ pub use chico_vegetation_on_terrain_playground::{
 	PlayerPhysicsEnabled, SpawnTerrainReady, TerrainStreamingEnabled,
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::WorldGameplayEnabled;
+pub use control::{WorldGameplayEnabled, WorldSceneryVisible};
 pub use game_commands::command::PendingStartupCommand;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 
@@ -107,6 +107,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -114,7 +115,13 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
-		app.add_systems(Update, (track_pending_lod_roots, release_completed_lod_roots).chain());
+		app.add_systems(
+			Update,
+			(
+				(track_pending_lod_roots, release_completed_lod_roots).chain(),
+				control::sync_world_scenery,
+			),
+		);
 		if self.debug_chrome {
 			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())

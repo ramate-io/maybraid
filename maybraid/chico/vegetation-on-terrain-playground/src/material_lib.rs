@@ -9,6 +9,13 @@ use material_ref::{
 	StandardMaterialLib, StandardMaterialRefCache,
 };
 
+/// Inserts bump-out / Chico / Standard caches. Idempotent.
+pub fn init_vegetation_on_terrain_material_caches(app: &mut App) {
+	init_chico_material_caches(app);
+	init_bump_out_material_caches(app);
+	app.init_resource::<StandardMaterialRefCache>();
+}
+
 /// Vegetation playground / world-view lib: bump-out, then leaf/stick/frond, then Standard.
 #[derive(SystemParam)]
 pub struct VegetationOnTerrainMaterialLib<'w> {
@@ -41,9 +48,7 @@ pub struct VegetationOnTerrainMaterialRefPlugin;
 
 impl Plugin for VegetationOnTerrainMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
-		init_chico_material_caches(app);
-		init_bump_out_material_caches(app);
-		app.init_resource::<StandardMaterialRefCache>();
+		init_vegetation_on_terrain_material_caches(app);
 		if material_ref_plugin_installed(app) {
 			return;
 		}

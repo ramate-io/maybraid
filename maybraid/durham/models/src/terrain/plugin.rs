@@ -8,7 +8,9 @@ use crate::terrain::marazion::{
 	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout,
 	MarazionWatershedConfigs,
 };
-use crate::terrain::presentation::TerrainPresenterState;
+use crate::terrain::presentation::{
+	TerrainBackground, TerrainFar, TerrainNear, TerrainPresenterState, TerrainStreamPresenterState,
+};
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -46,6 +48,9 @@ impl Plugin for TerrainPlugin {
 			.insert_resource(pre_pocket_low)
 			.insert_resource(pre_pocket_high)
 			.init_resource::<TerrainPresenterState>()
+			.init_resource::<TerrainStreamPresenterState<TerrainNear>>()
+			.init_resource::<TerrainStreamPresenterState<TerrainFar>>()
+			.init_resource::<TerrainStreamPresenterState<TerrainBackground>>()
 			.init_resource::<TerrainFrictionConfig>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}

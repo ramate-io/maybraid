@@ -28,7 +28,6 @@ use crate::terrain::marazion::{
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
-use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -47,10 +46,13 @@ use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, TerrainCellRing,
+	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
-pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
+pub use collider::{
+	TerrainColliderHost, TerrainColliderMeshSource, TerrainFrictionConfig, TerrainTrimeshCollider,
+	TERRAIN_FRICTION,
+};
 pub use config::TerrainConfig;
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainGenerationInput,
@@ -92,8 +94,10 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
-	PresentedTerrainScene, TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState,
-	TerrainRegionPresenter, TerrainStoreView,
+	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
+	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
+	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
@@ -145,6 +149,8 @@ pub struct Terrain {
 	pub sdf: Arc<ComposedTerrain>,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
+	/// Moving presentation band for streamed near / far / background terrain.
+	pub stream_ring: Option<TerrainCellRing>,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
 	pub wall_faces: WallFaces,
 }
@@ -177,8 +183,7 @@ impl Terrain {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
+			TerrainColliderMeshSource
 		}
 	}
 
@@ -192,6 +197,9 @@ impl Terrain {
 	}
 
 	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		if let Some(ring) = self.stream_ring {
+			return ring.level_for(self.center(), viewer.translation);
+		}
 		let delta = viewer.translation - self.center();
 		let factor = Vec2::new(delta.x, delta.z).length() / self.edge();
 		if factor <= 3.0 {
@@ -206,6 +214,9 @@ impl Terrain {
 	}
 
 	fn res_2_for_level(&self, level: LodSceneLevel) -> u8 {
+		if self.stream_ring.is_some() {
+			return self.res_2;
+		}
 		let size_multiple = (self.edge() / cell::TERRAIN_CELL_SIZE).max(1.0).log2().round() as u8;
 		let high = 5_u8.saturating_sub(size_multiple).max(3);
 		match level {
@@ -218,18 +229,22 @@ impl Terrain {
 	}
 
 	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if self.stream_ring.is_some() && level != LodSceneLevel::High {
+			return Box::new(());
+		}
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2_for_level(level));
 		let transform = Transform::from_translation(chunk.origin - self.center());
 		let builder = self.mesh_builder();
 		let material = self.material.clone();
-		if level == LodSceneLevel::High {
+		let seeds_collision = level == LodSceneLevel::High
+			&& self.stream_ring.is_none_or(|ring| ring.high_inner_radius <= 0.0);
+		if seeds_collision {
 			Box::new(bsn! {
 				template_value(transform)
 				template_value(chunk)
 				template(move |_ctx| Ok(Cached::new(builder.clone())))
 				MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-				template(move |_ctx| Ok(RigidBody::Static))
-				TerrainTrimeshCollider
+				TerrainColliderMeshSource
 			})
 		} else {
 			Box::new(bsn! {
@@ -586,6 +601,13 @@ where
 		)?;
 		let material = assets.material.clone();
 		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let layout = GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
+		let cell_size = Vec3::from(bounds.max - bounds.min).x;
+		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
 
 		Some((
 			Self {
@@ -598,6 +620,7 @@ where
 				sdf,
 				material,
 				res_2,
+				stream_ring,
 				wall_faces,
 			},
 			bounds,

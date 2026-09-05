@@ -41,7 +41,7 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Marks a bookkeeping entity as a tracked terrain cell.
@@ -158,6 +158,18 @@ impl TerrainHeightSnapshot {
 				return Some(sdf.terrain().height_at_with_all_modulations(x, z));
 			}
 		}
+		for ring in &layout.stream_rings {
+			let size = ring.cell_size.max(1e-3);
+			let cell = cell_bounds(
+				(x / size).floor() as i32,
+				(z / size).floor() as i32,
+				size,
+				layout.vertical_half_extent,
+			);
+			if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+				return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
 		None
 	}
 }
@@ -212,6 +224,18 @@ impl TerrainEntryStore {
 			let ocell = cell_bounds(oix, oiz, g, layout.vertical_half_extent);
 			let oid = Id::from_cell(ocell);
 			if let Some(entry) = self.terrain.get(&oid) {
+				return Some(entry.value.sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
+		for ring in &layout.stream_rings {
+			let g = ring.cell_size.max(1e-3);
+			let cell = cell_bounds(
+				(x / g).floor() as i32,
+				(z / g).floor() as i32,
+				g,
+				layout.vertical_half_extent,
+			);
+			if let Some(entry) = self.terrain.get(&Id::from_cell(cell)) {
 				return Some(entry.value.sdf.terrain().height_at_with_all_modulations(x, z));
 			}
 		}
@@ -515,17 +539,19 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		}
 	}
 
-	/// Merge a streamed generation batch without discarding previously
-	/// generated terrain cells.
+	/// Install one complete streamed generation set.
+	///
+	/// Cells whose ids remain wanted keep their existing ECS entities and
+	/// versions. This is important for stable near-terrain collider ownership:
+	/// moving the stream must not rebuild cells that remain under the player.
 	pub fn apply_generation_region(&mut self, result: TerrainGenerationResult) {
 		let TerrainGenerationResult { mut store, .. } = result;
+		let wanted_terrain: HashSet<Id> = store.terrain.keys().copied().collect();
+		let wanted_water: HashSet<Id> = store.water.keys().copied().collect();
 
 		for (id, entry) in store.terrain.drain() {
-			if let Some(existing) = self.store.terrain.remove(&id) {
-				if let Some(entity) = existing.entity {
-					self.store.entity_to_id.remove(&entity);
-					self.commands.entity(entity).despawn();
-				}
+			if self.store.terrain.contains_key(&id) {
+				continue;
 			}
 			let entity = self.spawn_cell_entity(id, entry.bounds);
 			let version = self.store.next_version();
@@ -540,13 +566,32 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 				},
 			);
 		}
+		let stale_terrain: Vec<Id> = self
+			.store
+			.terrain
+			.keys()
+			.filter(|id| !wanted_terrain.contains(id))
+			.copied()
+			.collect();
+		for id in stale_terrain {
+			if let Some(entry) = self.store.terrain.remove(&id) {
+				if let Some(entity) = entry.entity {
+					self.store.entity_to_id.remove(&entity);
+					self.commands.entity(entity).despawn();
+				}
+			}
+		}
 		for (id, entry) in store.water.drain() {
+			if self.store.water.contains_key(&id) {
+				continue;
+			}
 			let version = self.store.next_version();
 			self.store.water.insert(
 				id,
 				StoredEntry { value: entry.value, bounds: entry.bounds, version, entity: None },
 			);
 		}
+		self.store.water.retain(|id, _| wanted_water.contains(id));
 		// Runtime height fallback only needs the universal base-noise entry.
 		for (id, mut entry) in store.base_noise.drain() {
 			entry.version = self.store.next_version();

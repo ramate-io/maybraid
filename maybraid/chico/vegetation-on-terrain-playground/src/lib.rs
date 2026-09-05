@@ -29,7 +29,10 @@ pub use game_commands::command::PendingStartupCommand;
 pub use groves::{
 	DurhamGroveSample, DurhamGroveTerrainCache, OwnedDurhamTerrain, StoredDurhamTerrain,
 };
-pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
+pub use material_lib::{
+	init_vegetation_on_terrain_material_caches, VegetationOnTerrainMaterialLib,
+	VegetationOnTerrainMaterialRefPlugin,
+};
 pub use player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
 	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled,
@@ -52,7 +55,7 @@ use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
-use chico_sbs_trees_playground::{register_vegetation_view, VegetationBullseye, VegetationCull};
+use chico_sbs_trees_playground::register_vegetation_view;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
 	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
@@ -61,11 +64,12 @@ use commands::{
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainGenerationResult,
-	TerrainMeshBuilder, TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter,
-	TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
-	TERRAIN_CELL_SIZE,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
+	TerrainBackgroundRegionPresenter, TerrainCellLayout, TerrainCellRing, TerrainConfig,
+	TerrainEntryStore, TerrainFarRegionPresenter, TerrainGenerationResult, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainNearRegionPresenter, TerrainPresentationAssets,
+	TerrainRegionPresenter, TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter,
+	WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
 use futures::FutureExt;
@@ -79,9 +83,10 @@ use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{
 	LodGenerateRegionPlugin, LodGenerateSystems, LodPresentRegionPlugin, LodPresentSystems,
-	LodRefreshRegions, LodRefreshRegionsStatus, LodSceneHost, LodViewer,
+	LodRefreshRegions, LodRefreshRegionsStatus, LodSceneHost, LodSceneRefreshRegionPlugin,
+	LodViewer,
 };
-use lod_avian::{AvianLodSceneCullPlugin, AvianLodSceneRefreshPlugin};
+use lod_avian::AvianLodSceneRefreshPlugin;
 use lod_first_load::{FirstLoadActivity, FirstLoadPermit};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
@@ -97,16 +102,22 @@ use terrain_chunk_ref::{TerrainChunkRefCache, TerrainChunkRefPlugin};
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Playable disk from
-/// [#675](https://github.com/ramate-io/maybraid/pull/675); bump-outs attach to these
-/// cells instead of expanding generate.
-const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
-/// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
-const WORLD_OUTER_2X_ROWS: i32 = 2;
-/// 4× macro ring past the 2× ring.
-const WORLD_OUTER_4X_ROWS: i32 = 1;
-const WORLD_TERRAIN_GENERATE_EDGE_M: f32 = 3_200.0;
-const WORLD_TERRAIN_PRESENT_EDGE_M: f32 = 2_400.0;
+/// Near-stream High half-extent (8 × 160 m = 1.28 km).
+const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 8;
+/// Near 160 m cells end on a boundary shared by the 320 m grid.
+const WORLD_TERRAIN_NEAR_RADIUS_M: f32 = 8.0 * TERRAIN_CELL_SIZE;
+/// Far 320 m cells end on a boundary shared by the 640 m grid.
+const WORLD_TERRAIN_FAR_RADIUS_M: f32 = 16.0 * TERRAIN_CELL_SIZE;
+/// Background 640 m cells provide the horizon out to the existing world edge.
+const WORLD_TERRAIN_BACKGROUND_RADIUS_M: f32 = 24.0 * TERRAIN_CELL_SIZE;
+/// Keep one near-band width of empty hosts around each visible band.
+const WORLD_TERRAIN_CULL_MARGIN_M: f32 = WORLD_TERRAIN_NEAR_RADIUS_M;
+const WORLD_TERRAIN_STREAM_EDGE_M: f32 =
+	2.0 * (WORLD_TERRAIN_BACKGROUND_RADIUS_M + WORLD_TERRAIN_CULL_MARGIN_M);
+/// Keep annulus boundaries aligned to the coarsest (640 m) global grid.
+const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
+/// The retention width permits less frequent semantic regeneration.
+const WORLD_TERRAIN_GENERATE_STEP_M: f32 = WORLD_TERRAIN_NEAR_RADIUS_M;
 const WORLD_TERRAIN_QUERY_HEIGHT_M: f32 = 20_000.0;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
@@ -122,11 +133,7 @@ fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 }
 
 fn world_lod_bands() -> Vec<TerrainMeshLodBand> {
-	vec![
-		TerrainMeshLodBand { max_radius_cells: 2, res_2: 5 },
-		TerrainMeshLodBand { max_radius_cells: 5, res_2: 3 },
-		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
-	]
+	vec![TerrainMeshLodBand { max_radius_cells: WORLD_FINE_HALF_EXTENT_CELLS, res_2: 5 }]
 }
 
 fn cell_layout(half_extent: i32) -> TerrainCellLayout {
@@ -144,9 +151,29 @@ fn world_cell_layout() -> TerrainCellLayout {
 	layout.origin = IVec2::new(-WORLD_FINE_HALF_EXTENT_CELLS, -WORLD_FINE_HALF_EXTENT_CELLS);
 	let n = (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32;
 	layout.extents = UVec2::new(n, n);
-	layout.outer_rings = vec![
-		OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_2X_ROWS },
-		OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_4X_ROWS },
+	layout.outer_rings.clear();
+	layout.stream_rings = vec![
+		TerrainCellRing {
+			cell_size: TERRAIN_CELL_SIZE,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: 0.0,
+			high_outer_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
+		TerrainCellRing {
+			cell_size: 2.0 * TERRAIN_CELL_SIZE,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: WORLD_TERRAIN_NEAR_RADIUS_M,
+			high_outer_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
+		TerrainCellRing {
+			cell_size: 4.0 * TERRAIN_CELL_SIZE,
+			anchor_step: WORLD_TERRAIN_PRESENT_STEP_M,
+			high_inner_radius: WORLD_TERRAIN_FAR_RADIUS_M,
+			high_outer_radius: WORLD_TERRAIN_BACKGROUND_RADIUS_M,
+			cull_margin: WORLD_TERRAIN_CULL_MARGIN_M,
+		},
 	];
 	layout
 }
@@ -241,12 +268,16 @@ struct TerrainGenerationTask {
 
 struct CompletedTerrainGeneration {
 	result: TerrainGenerationResult,
+	region: Aabb3d,
 	streamed: bool,
 	_permit: Option<FirstLoadPermit>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
 struct TerrainLodChannel;
+
+#[derive(Debug, Clone, Copy, Default)]
+struct TerrainSceneRefreshChannel;
 
 #[derive(Resource, Debug, Clone, Copy, Default)]
 struct TerrainGenerateRing;
@@ -257,20 +288,16 @@ struct TerrainPresentRing;
 #[derive(Resource, Default)]
 struct TerrainGenerationRegions(VecDeque<Aabb3d>);
 
-fn terrain_ring_region(position: Vec3, edge: f32) -> Aabb3d {
-	let cell = TERRAIN_CELL_SIZE;
-	let center = Vec3::new(
-		(position.x / cell).floor().mul_add(cell, cell * 0.5),
-		0.0,
-		(position.z / cell).floor().mul_add(cell, cell * 0.5),
-	);
+fn terrain_ring_region(position: Vec3, edge: f32, step: f32) -> Aabb3d {
+	let center =
+		Vec3::new((position.x / step).round() * step, 0.0, (position.z / step).round() * step);
 	let half = Vec3::new(edge * 0.5, WORLD_TERRAIN_QUERY_HEIGHT_M * 0.5, edge * 0.5);
 	Aabb3d::from_min_max(center - half, center + half)
 }
 
-fn terrain_ring_status(lod_ref: &LodRef, edge: f32) -> LodRefreshRegionsStatus {
-	let current = terrain_ring_region(lod_ref.current_transform.translation, edge);
-	let previous = terrain_ring_region(lod_ref.previous_transform.translation, edge);
+fn terrain_ring_status(lod_ref: &LodRef, edge: f32, step: f32) -> LodRefreshRegionsStatus {
+	let current = terrain_ring_region(lod_ref.current_transform.translation, edge, step);
+	let previous = terrain_ring_region(lod_ref.previous_transform.translation, edge, step);
 	if current == previous {
 		LodRefreshRegionsStatus::Unchanged
 	} else {
@@ -280,13 +307,13 @@ fn terrain_ring_status(lod_ref: &LodRef, edge: f32) -> LodRefreshRegionsStatus {
 
 impl LodRefreshRegions for TerrainGenerateRing {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		terrain_ring_status(lod_ref, WORLD_TERRAIN_GENERATE_EDGE_M)
+		terrain_ring_status(lod_ref, WORLD_TERRAIN_STREAM_EDGE_M, WORLD_TERRAIN_GENERATE_STEP_M)
 	}
 }
 
 impl LodRefreshRegions for TerrainPresentRing {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		terrain_ring_status(lod_ref, WORLD_TERRAIN_PRESENT_EDGE_M)
+		terrain_ring_status(lod_ref, WORLD_TERRAIN_STREAM_EDGE_M, WORLD_TERRAIN_PRESENT_STEP_M)
 	}
 }
 
@@ -358,8 +385,16 @@ impl Plugin for VegetationOnTerrainPlugin {
 				With<LodViewer>,
 				TerrainLodChannel,
 			>::default(),
-			AvianLodSceneRefreshPlugin::<Terrain, VegetationBullseye, With<Camera>>::without_full_scan_cull(),
-			AvianLodSceneCullPlugin::<Terrain, VegetationCull, With<Camera>>::default(),
+			LodSceneRefreshRegionPlugin::<
+				TerrainPresentRing,
+				With<LodViewer>,
+				TerrainSceneRefreshChannel,
+			>::default(),
+			AvianLodSceneRefreshPlugin::<
+				Terrain,
+				TerrainSceneRefreshChannel,
+				With<LodViewer>,
+			>::default(),
 		));
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
@@ -569,19 +604,15 @@ fn setup_presentation_assets(
 	let material = terrain_materials.add(DurhamTerrainShader::default());
 	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match playground.coverage {
 		TerrainCoverage::FinePatch => (Vec::new(), None, None),
-		TerrainCoverage::PlayableWorld => {
-			let s = TERRAIN_CELL_SIZE;
-			let fine_half = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-			let mid_half = fine_half + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-			(vec![fine_half, mid_half], Some(2.0 * s), Some(2))
-		}
+		TerrainCoverage::PlayableWorld => (Vec::new(), Some(2.0 * TERRAIN_CELL_SIZE), Some(5)),
 	};
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
 		lod_bands: lod_bands_for(&playground),
 		outer_add_walls: true,
-		fine_grid_max_radius: Some(playground.terrain_radius),
+		fine_grid_max_radius: (playground.coverage == TerrainCoverage::FinePatch)
+			.then_some(playground.terrain_radius),
 		macro_seam_half_extents,
 		macro_cell_min_size,
 		macro_res_2,
@@ -724,12 +755,20 @@ fn initialize_terrain_lod_regions(
 		.or_else(|_| cameras.single().map(|transform| transform.translation))
 		.unwrap_or(Vec3::ZERO);
 	if generate_keep.region.is_none() {
-		let region = terrain_ring_region(position, WORLD_TERRAIN_GENERATE_EDGE_M);
+		let region = terrain_ring_region(
+			position,
+			WORLD_TERRAIN_STREAM_EDGE_M,
+			WORLD_TERRAIN_GENERATE_STEP_M,
+		);
 		generate_keep.region = Some(region);
 		generate.write(LodGenerateRegion::new(region));
 	}
 	if present_keep.region.is_none() {
-		let region = terrain_ring_region(position, WORLD_TERRAIN_PRESENT_EDGE_M);
+		let region = terrain_ring_region(
+			position,
+			WORLD_TERRAIN_STREAM_EDGE_M,
+			WORLD_TERRAIN_PRESENT_STEP_M,
+		);
 		present_keep.region = Some(region);
 		present.write(LodPresentRegion::new(region));
 	}
@@ -760,14 +799,15 @@ fn generate_cells(
 			return;
 		};
 		generation.task = None;
-		if !dirty.0 {
+		let stale = completed.streamed
+			&& generate_keep
+				.live_region()
+				.is_some_and(|live_region| live_region != completed.region);
+		if !dirty.0 && !stale {
 			let terrain_cells = completed.result.terrain_cells;
 			let water_cells = completed.result.water_cells;
 			if completed.streamed {
 				index.apply_generation_region(completed.result);
-				if let Some(region) = generate_keep.live_region() {
-					index.retain_generation_region(region);
-				}
 			} else {
 				index.apply_generation(completed.result);
 			}
@@ -817,6 +857,7 @@ fn generate_cells(
 		let _span = info_span!("durham_terrain_generation").entered();
 		CompletedTerrainGeneration {
 			result: input.generate_region(region),
+			region,
 			streamed,
 			_permit: permit,
 		}
@@ -826,6 +867,9 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
+	mut near_presenter: TerrainNearRegionPresenter,
+	mut far_presenter: TerrainFarRegionPresenter,
+	mut background_presenter: TerrainBackgroundRegionPresenter,
 	mut water_presenter: WaterRegionPresenter,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
@@ -866,15 +910,23 @@ fn present_cells(
 		bounds: &region,
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
 	if streamed {
-		let wanted: HashSet<_> = SpatialIndex::<Terrain>::tracked_ids_for(&terrain_view, region)
-			.into_iter()
-			.map(|tracked| tracked.0)
-			.collect();
-		terrain_presenter.remove_stale(&wanted);
+		near_presenter.present(&store, region, &lod_ref);
+		far_presenter.present(&store, region, &lod_ref);
+		background_presenter.present(&store, region, &lod_ref);
+	} else {
+		RegionPresenter::<Terrain, _>::present(
+			&mut terrain_presenter,
+			&terrain_view,
+			region,
+			&lod_ref,
+		);
 	}
-	let water_view = WaterStoreView::new(&store, &layout);
+	let water_view = if streamed {
+		WaterStoreView::for_stream(&store, &layout, viewer.translation)
+	} else {
+		WaterStoreView::new(&store, &layout)
+	};
 	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
 	if streamed {
 		let wanted: HashSet<_> = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
@@ -897,18 +949,16 @@ fn spawn_groves(
 	terrain_dirty: Res<TerrainPresentationDirty>,
 	roots: Query<Entity, With<GroveRoot>>,
 ) {
+	if config.forest.is_some() {
+		dirty.0 = false;
+		return;
+	}
 	if !dirty.0 || pending.0 || terrain_dirty.0 {
 		return;
 	}
 
 	for entity in &roots {
 		commands.entity(entity).despawn();
-	}
-
-	if config.forest.is_some() {
-		info!("forest stream on; tiled groves cleared");
-		dirty.0 = false;
-		return;
 	}
 
 	let n = spawn_tiled_groves(&mut commands, &config, &store, &layout, &base.0);
@@ -944,24 +994,26 @@ mod tests {
 	}
 
 	#[test]
-	fn world_fine_grid_stays_at_sixteen_cells() {
-		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
-		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
+	fn world_near_stream_stays_at_eight_cells() {
+		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 8);
+		assert_eq!(world_lod_bands(), vec![TerrainMeshLodBand { max_radius_cells: 8, res_2: 5 }]);
 	}
 
 	#[test]
-	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
+	fn world_origin_cells_use_three_moving_scales() {
 		let layout = world_cell_layout();
+		assert_eq!(layout.stream_rings.len(), 3);
+		assert_eq!(layout.stream_rings[0].cell_size, TERRAIN_CELL_SIZE);
+		assert_eq!(layout.stream_rings[1].cell_size, 2.0 * TERRAIN_CELL_SIZE);
+		assert_eq!(layout.stream_rings[2].cell_size, 4.0 * TERRAIN_CELL_SIZE);
 		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
-		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
+		assert!(ids.len() > 32 * 32);
 	}
 
 	#[test]
-	fn world_macro_rings_stay_inside_seven_km() {
-		let s = TERRAIN_CELL_SIZE;
-		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
-		assert!(outer < 7_000.0, "playable half-extent {outer}");
+	fn world_stream_boundaries_align_all_three_grids() {
+		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_BACKGROUND_RADIUS_M, 3_840.0);
 	}
 }

@@ -211,7 +211,6 @@ fn spawn_player(
 			Transform::from_translation(spawn),
 			Visibility::default(),
 			RigidBody::Dynamic,
-			RigidBodyDisabled,
 			collider,
 			PhysicsInteractionLayer::animated_layers(),
 			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
@@ -269,9 +268,10 @@ pub(crate) fn snap_player_to_composed_surface(
 		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale),
 		With<Player>,
 	>,
-	terrain_roots: Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
-	children: Query<&Children>,
-	colliders: Query<(), (With<Collider>, Without<ColliderDisabled>)>,
+	terrain_colliders: Query<
+		&CascadeChunk,
+		(With<TerrainTrimeshCollider>, With<Collider>, Without<ColliderDisabled>),
+	>,
 ) {
 	let Ok((player, mut transform, mut velocity, mut gravity)) = players.single_mut() else {
 		return;
@@ -280,7 +280,7 @@ pub(crate) fn snap_player_to_composed_surface(
 		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
-		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+		commands.entity(player).insert(AwaitingTerrainSurface);
 		return;
 	}
 
@@ -289,7 +289,7 @@ pub(crate) fn snap_player_to_composed_surface(
 		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
-		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+		commands.entity(player).insert(AwaitingTerrainSurface);
 		return;
 	};
 
@@ -299,34 +299,32 @@ pub(crate) fn snap_player_to_composed_surface(
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(position, &terrain_roots, &children, &colliders) {
+	if terrain_collider_ready(position, &terrain_colliders) {
 		ready.0 = true;
 		if physics_enabled.0 {
 			gravity.0 = PLAY_GRAVITY_SCALE;
-			commands.entity(player).remove::<(AwaitingTerrainSurface, RigidBodyDisabled)>();
+			commands.entity(player).remove::<AwaitingTerrainSurface>();
 		} else {
 			gravity.0 = 0.0;
 			**velocity = Vec3::ZERO;
-			commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+			commands.entity(player).insert(AwaitingTerrainSurface);
 		}
 	} else {
 		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
-		commands.entity(player).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+		commands.entity(player).insert(AwaitingTerrainSurface);
 	}
 }
 
 fn terrain_collider_ready(
 	spawn: Vec3,
-	roots: &Query<(Entity, &CascadeChunk), With<TerrainTrimeshCollider>>,
-	children: &Query<&Children>,
-	colliders: &Query<(), (With<Collider>, Without<ColliderDisabled>)>,
+	colliders: &Query<
+		&CascadeChunk,
+		(With<TerrainTrimeshCollider>, With<Collider>, Without<ColliderDisabled>),
+	>,
 ) -> bool {
-	roots
-		.iter()
-		.filter(|(_, chunk)| chunk.column_contains_point(spawn))
-		.any(|(root, _)| children.iter_descendants(root).any(|child| colliders.contains(child)))
+	colliders.iter().any(|chunk| chunk.column_contains_point(spawn))
 }
 
 fn queue_fallen_player_respawn(
@@ -360,7 +358,7 @@ fn queue_fallen_player_respawn(
 	ready.0 = false;
 	gravity.0 = 0.0;
 	**velocity = Vec3::ZERO;
-	commands.entity(entity).insert((AwaitingTerrainSurface, RigidBodyDisabled));
+	commands.entity(entity).insert(AwaitingTerrainSurface);
 }
 
 fn respawn_fallen_player(

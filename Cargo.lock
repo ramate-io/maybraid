@@ -4801,6 +4801,7 @@ dependencies = [
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-sky",
+ "richmond-building-shaders",
  "richmond-developments-on-terrain-playground",
 ]
 
