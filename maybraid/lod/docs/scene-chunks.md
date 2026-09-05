@@ -53,7 +53,7 @@ Cancel: if the desired level changes, pending roots for other levels are despawn
 add_lod_refresh_chunk_full_for::<MyHost>(app); // update + chunk fulfill + cull
 // or
 add_lod_refresh_chunk_for::<MyHost>(app);      // fulfill only (probe / region writes level)
-// or Avian region stack (see chico sbs-trees-playground `vegetation_lod.rs`)
+// or Avian region stack (see [`chico-forests` `view.rs`](../../chico/forests/src/view.rs))
 ```
 
 Pending hosts use [`SemanticLodScene::host`](../lib/src/scene/lod_scene.rs) (core pending

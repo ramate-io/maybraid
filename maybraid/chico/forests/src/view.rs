@@ -3,7 +3,7 @@
 //! Fine-phase domain hosts ([`FoliageNode`], [`StickNode`]) stay registered for
 //! leftover nested kit nodes. Woody grove children share one family:
 //! [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>`.
-//! Typed grove roots stay registered for playground `/grove`. Cull uses a rotating
+//! Typed grove roots stay registered for leftover nested hosts. Cull uses a rotating
 //! [`OpenLattice`] annulus.
 
 use avian3d::prelude::PhysicsPlugins;

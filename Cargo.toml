@@ -70,7 +70,6 @@ members = [
   "maybraid/chico/lib",
   "maybraid/chico/shaders",
   "maybraid/chico/sbs-trees",
-  "maybraid/chico/sbs-trees-playground",
   "maybraid/chico/bumpout",
   "maybraid/chico/bumpout-playground",
   "maybraid/chico/vegetation-on-terrain-playground",

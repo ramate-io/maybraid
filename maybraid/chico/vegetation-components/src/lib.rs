@@ -525,7 +525,7 @@ where
 
 /// Spawn a [`FlattenedComponentsOnly`]`<`[`PlacedVegetation`]`<`[`std::sync::Arc`]`<T>>>` host.
 ///
-/// Isolated `/show` / `/render` plants use this family so they share grove plant hosts.
+/// Grove plants (and any identity-posed preview) use this family so they share one host type.
 pub fn spawn_flattened_placed_vegetation<T>(
 	commands: &mut Commands,
 	vegetation: &T,
@@ -543,7 +543,7 @@ where
 
 /// Spawn a typed [`LodScene`] host (grove roots that nest flattened plant hosts).
 ///
-/// Isolated `/show` uses a throwaway identity viewer (grove at the origin).
+/// Identity `LodRef` at the origin is only for origin-centered previews.
 /// Forest present must use [`spawn_lod_scene_host_with_lod_ref`] so the first
 /// [`lod::LodSceneLevel`] is the camera band, not distance-to-origin.
 pub fn spawn_lod_scene_host<T>(

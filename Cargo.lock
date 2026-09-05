@@ -2306,20 +2306,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chico-sbs-trees-playground"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-forests",
- "chico-vegetation-components",
- "clap",
- "game-commands",
- "lod",
- "procedural-common",
-]
-
-[[package]]
 name = "chico-sdf"
 version = "0.0.1"
 dependencies = [

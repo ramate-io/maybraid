@@ -28,8 +28,7 @@ fn is_frond_geometry(geometry: &FoliageGeometry) -> bool {
 ///
 /// Placement is baked into emitted nodes and [`structural_lod`] so banding uses
 /// parent-local positions (camera [`LodRef`](lod::LodRef) is world-space). Nest as
-/// [`crate::FlattenedComponentsOnly`]`<PlacedVegetation<T>>` under a grove or isolated
-/// `/show` host.
+/// [`crate::FlattenedComponentsOnly`]`<PlacedVegetation<T>>` under a grove host.
 #[derive(Debug, Clone, PartialEq, Component)]
 pub struct PlacedVegetation<T: Send + Sync + 'static> {
 	pub vegetation: T,

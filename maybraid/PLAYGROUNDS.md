@@ -1,6 +1,6 @@
 # Playgrounds
 
-A playground is a **single-layer** developer app next to the crate it inspects (`chico-sbs-trees-playground`, `richmond-buildings-playground`, …). Assembled world — Durham terrain, streamed forest, urbanization, character — lives in [`maybraid-world`](world/) and runs as [`maybraid-world-playground`](world/playground/).
+A playground is a **single-layer** developer app next to the crate it inspects (`richmond-buildings-playground`, `durham-terrain-models-playground`, …). Assembled world — Durham terrain, streamed forest, urbanization, character — lives in [`maybraid-world`](world/) and runs as [`maybraid-world-playground`](world/playground/).
 
 Do not keep a second assembled-world app. Parameters and streaming knobs belong on `WorldPlugin` / `maybraid-world`, not on a parallel vegetation-on-terrain binary.
 
@@ -17,6 +17,12 @@ If the crate is also a **library** used by world or another host, retire the **b
 ## Retired
 
 Last commit that still contained these trees: [`af1f65fe59f0b6d01061ca2716119c9df7c68f06`](https://github.com/ramate-io/maybraid/commit/af1f65fe59f0b6d01061ca2716119c9df7c68f06).
+
+### `maybraid/chico/sbs-trees-playground`
+
+- **Last commit:** [`4e2e1a35657840bb0ace01eb2e8d68bfecbb3e90`](https://github.com/ramate-io/maybraid/commit/4e2e1a35657840bb0ace01eb2e8d68bfecbb3e90)
+- **Did:** Isolated `/show` plants and tiled groves (`vast-orchards`, `monster-grass-plains`, …), then a leftover flat-ground `/forest` streamer after `ForestPlugin` moved into `chico-forests`. By this commit the `/show` catalog was already gone.
+- **Replacement:** [`maybraid-world-playground`](world/playground/) for streamed forest on Durham. Isolated plant `/show` is not hosted anywhere; restore this crate if that catalog is needed again.
 
 ### `maybraid/chico/vegetation-on-terrain-playground` (binary)
 
