@@ -14,9 +14,15 @@ Capsules use the world steep-hill setup from
 [#718](https://github.com/ramate-io/maybraid/pull/718): 70° walkable slope,
 terrain friction 2.55/2.95 Max (static > tan(70°) ≈ 2.75), and grounded wish
 projected onto the contact plane so XZ accel does not dig into the hill. Default
-Durham trimesh grip (0.95 static) only holds ~44°.
+Durham trimesh grip (0.95 static) only holds ~44°. Quadruped visuals get the
+same Avian terrain-pitch apply as vegetation-on-terrain (`face_wish` is XZ-only).
 
 Default cast is a **herd** (≤6 members). `/pack` and `/both` swap the list.
+Playground herds use an 80 m leash (pack 48 m) copied onto member tethers after
+bind — grazer personality still defaults to 24 m. Host journeying uses 48 m
+tiles and `min_tile_distance = 1` so the 90 m forage ring is a neighboring
+cell. Yellow spheres are `GlobalPoi` forage; smaller blue/green markers are
+`LocalPoi` snacks inside the meander radius.
 
 ```bash
 cargo run -p mob-on-terrain-playground --release

@@ -9,6 +9,7 @@ pub mod camera;
 mod catalog;
 pub mod commands;
 mod mobs;
+mod pitch;
 mod playground_player;
 mod ui;
 
@@ -29,6 +30,7 @@ use camera::{
 	setup_camera, surface_or_hold,
 };
 use commands::{RequestModeCharacter, RequestModeFree};
+use crozon_characters::CharacterMotionSystems;
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
@@ -50,13 +52,15 @@ use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use maybraid_character_controller::CharacterControllerPlugin;
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
-use maybraid_mobs::MobScenesPlugin;
+use maybraid_mobs::{MobSceneSystems, MobScenesPlugin};
 use meandering_intelligence::MeanderingIntelligencePlugin;
+use mob_intelligence::MobSystems;
 use movement_intelligence::{
 	CandidateBudget, MovementIntelligenceLimits, MovementIntelligencePlugin,
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
+use npc_intelligence::NpcIntelligenceSystems;
 use player::{CharacterLocomotion as NpcLocomotion, PlayerPlugin as MaybraidPlayerPlugin};
 use poi_intelligence::PoiSystems;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -69,6 +73,7 @@ use threat_intelligence_damage::ThreatIntelligenceDamagePlugin;
 use threat_management_intelligence::ThreatManagementPlugin;
 
 use crate::mobs::PlaygroundState;
+use crate::pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use crate::playground_player::{
 	respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface,
 	CharacterLocomotion, Player, PlayerControlSystems, PlayerPlugin,
@@ -225,6 +230,14 @@ impl Plugin for MobOnTerrainPlaygroundPlugin {
 						.before(PlayerControlSystems),
 					mobs::spawn_forage_pois.after(present_cells),
 					mobs::spawn_playground_mobs.after(mobs::spawn_forage_pois),
+					mobs::tune_playground_journeying.after(MobSceneSystems::Install),
+					mobs::widen_playground_member_leashes
+						.after(MobSystems::Bind)
+						.before(NpcIntelligenceSystems::Mix),
+					sync_suspend_terrain_pitch,
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(sync_suspend_terrain_pitch),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					mobs::draw_debug_gizmos,
 				),

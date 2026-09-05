@@ -2,7 +2,7 @@
 //! this playground keeps the roster tiny so host Y and plant follow are readable.
 
 use bevy::prelude::*;
-use maybraid_mobs::{MobKind, MobScene};
+use maybraid_mobs::{MobKind, MobRosterRecipe, MobScene};
 
 /// Stable seed for `MobScene::of_kind`. Count is truncated after generation.
 pub const PLAYGROUND_NUM: f32 = 4.0;
@@ -10,6 +10,11 @@ pub const HERD_MEMBERS: usize = 6;
 pub const PACK_MEMBERS: usize = 4;
 /// Whole 4×4 patch stays High so plants do not cull while the host journeys.
 pub const HIGH_RADIUS: f32 = 2_000.0;
+/// Same tile as the mob-brain pad so a 90 m forage ring is a neighboring cell.
+pub const JOURNEY_TILE: f32 = 48.0;
+/// Grazer personality is 24 m; this patch needs room to meander without a yank.
+pub const HERD_LEASH: f32 = 80.0;
+pub const PACK_LEASH: f32 = 48.0;
 
 /// Which authored hosts to present.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -44,8 +49,18 @@ impl PlaygroundCast {
 	}
 }
 
+pub fn playground_leash(kind: MobKind) -> f32 {
+	match kind {
+		MobKind::Pack => PACK_LEASH,
+		_ => HERD_LEASH,
+	}
+}
+
 pub fn scene_for(kind: MobKind) -> MobScene {
 	let mut scene = MobScene::of_kind(kind, PLAYGROUND_NUM).with_high_radius(HIGH_RADIUS);
+	let leash = playground_leash(kind);
+	scene.mob.intelligence.leash = leash;
+	scene.mob.roster = MobRosterRecipe::from_kind(kind, PLAYGROUND_NUM, leash);
 	scene.mob.roster.members.truncate(member_cap(kind));
 	scene
 }
@@ -80,5 +95,26 @@ mod tests {
 		let kinds: Vec<_> =
 			PlaygroundCast::Both.placements().iter().map(|(kind, _)| *kind).collect();
 		assert_eq!(kinds, vec![MobKind::Herd, MobKind::Pack]);
+	}
+
+	#[test]
+	fn playground_leashes_outgrow_personality_defaults() {
+		assert!(scene_for(MobKind::Herd).mob.intelligence.leash > 24.0);
+		assert!(scene_for(MobKind::Pack).mob.intelligence.leash > 16.0);
+	}
+
+	#[test]
+	fn forage_ring_occupies_neighbor_journey_tiles() {
+		let host = Vec2::new(-40.0, -20.0);
+		let host_tile = (host / JOURNEY_TILE).floor().as_ivec2();
+		let mut other = 0u32;
+		for index in 0..8 {
+			let angle = index as f32 / 8.0 * std::f32::consts::TAU;
+			let at = Vec2::new(angle.cos() * 90.0, angle.sin() * 90.0);
+			if (at / JOURNEY_TILE).floor().as_ivec2() != host_tile {
+				other += 1;
+			}
+		}
+		assert!(other >= 4, "host tile {host_tile:?} other={other}");
 	}
 }
