@@ -34,6 +34,22 @@ impl Default for CharacterLocomotion {
 #[derive(Component, Default)]
 pub struct MoveWish(pub Vec3);
 
+/// Last walkable contact plane. Default is world up (flat XZ heading).
+///
+/// Used only while [`Grounded`]: if the down-cast misses for a snap frame, drive
+/// still follows this plane instead of ramming world XZ into the mesh. Off the
+/// ground, gravity owns Y.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct WalkableGround {
+	pub normal: Vec3,
+}
+
+impl Default for WalkableGround {
+	fn default() -> Self {
+		Self { normal: Vec3::Y }
+	}
+}
+
 /// One-shot jump request for non-player capsules. Consumed in Body when grounded.
 #[derive(Component, Debug, Clone, Copy, Default)]
 #[component(storage = "SparseSet")]
@@ -102,6 +118,7 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		JumpImpulse(JUMP_IMPULSE),
 		MaxSlopeAngle(MAX_SLOPE_ANGLE),
 		MoveWish::default(),
+		WalkableGround::default(),
 		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 		GravityScale(1.25),
@@ -158,6 +175,9 @@ pub(crate) fn update_grounded(
 	>,
 ) {
 	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping) in &mut query {
+		if let Some(normal) = walkable_contact_normal(hits, max_slope_angle.map(|angle| angle.0)) {
+			commands.entity(entity).insert(WalkableGround { normal });
+		}
 		let mut is_grounded = hits.iter().any(|hit| {
 			if let Some(angle) = max_slope_angle {
 				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
@@ -191,7 +211,7 @@ pub(crate) fn update_grounded(
 }
 
 /// Most upright contact within the walkable slope, if any.
-fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+pub fn walkable_contact_normal(hits: &ShapeHits, max_slope_angle: Option<f32>) -> Option<Vec3> {
 	let mut best: Option<(f32, Vec3)> = None;
 	for hit in hits.iter() {
 		let normal = (-hit.normal2).normalize_or_zero();
@@ -199,8 +219,8 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 			continue;
 		}
 		let angle = normal.angle_between(Vec3::Y).abs();
-		if let Some(max) = max_slope {
-			if angle > max.0 {
+		if let Some(max) = max_slope_angle {
+			if angle > max {
 				continue;
 			}
 		}
@@ -211,6 +231,55 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 	best.map(|(_, normal)| normal)
 }
 
+fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+	walkable_contact_normal(hits, max_slope.map(|angle| angle.0))
+}
+
+/// Contact plane used to turn a wish into capsule accel.
+///
+/// Jumping and true air are XZ only (gravity owns Y). A walkable hit this frame
+/// is the plane. Last plane is only for a [`Grounded`] snap when the caster
+/// missed — never after walking off a ridge.
+pub fn ground_plane_for_wish(
+	contact: Option<Vec3>,
+	last: Option<Vec3>,
+	grounded: bool,
+	jumping: bool,
+) -> Option<Vec3> {
+	if jumping {
+		return None;
+	}
+	if let Some(normal) = contact {
+		return Some(normal);
+	}
+	if grounded {
+		return last;
+	}
+	None
+}
+
+/// Unit drive for a movement wish. Compass heading on the contact plane.
+///
+/// Wish Y is ignored so a raised waypoint cannot become a launch vector. No
+/// plane → XZ only (does not fly).
+pub fn wish_on_ground(wish: Vec3, ground_normal: Option<Vec3>) -> Vec3 {
+	let heading = Vec3::new(wish.x, 0.0, wish.z);
+	if heading.length_squared() < 1e-8 {
+		return Vec3::ZERO;
+	}
+	let Some(normal) = ground_normal.map(|normal| normal.normalize_or_zero()) else {
+		return heading.normalize();
+	};
+	if normal.length_squared() < 1e-8 {
+		return heading.normalize();
+	}
+	let along = heading - normal * heading.dot(normal);
+	if along.length_squared() > 1e-8 {
+		return along.normalize();
+	}
+	Vec3::ZERO
+}
+
 /// Accelerate along the ground plane when a walkable normal is known; else XZ only.
 fn accelerate_wish(
 	velocity: &mut LinearVelocity,
@@ -219,21 +288,10 @@ fn accelerate_wish(
 	dt: f32,
 	ground_normal: Option<Vec3>,
 ) {
-	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
-	if wish.length_squared() < 1e-8 {
+	let drive = wish_on_ground(wish, ground_normal);
+	if drive.length_squared() < 1e-8 {
 		return;
 	}
-	let drive = match ground_normal {
-		Some(normal) => {
-			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
-			if along.length_squared() > 1e-8 {
-				along
-			} else {
-				wish
-			}
-		}
-		None => wish,
-	};
 	if ground_normal.is_some() {
 		**velocity += drive * accel * dt;
 	} else {
@@ -252,17 +310,30 @@ pub(crate) fn apply_character_movement(
 			&PlayerLook,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
+			Option<&WalkableGround>,
 			&MovementAcceleration,
 			&JumpImpulse,
 			&mut LinearVelocity,
 			Has<Grounded>,
+			Has<Jumping>,
 		),
 		(With<CharacterController>, With<Player>),
 	>,
 ) {
 	let dt = time.delta_secs();
 	for action in reader.read() {
-		for (entity, look, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers
+		for (
+			entity,
+			look,
+			hits,
+			max_slope,
+			walkable,
+			accel,
+			jump,
+			mut velocity,
+			grounded,
+			jumping,
+		) in &mut controllers
 		{
 			let yaw = Quat::from_axis_angle(Vec3::Y, look.yaw);
 			let forward = yaw * -Vec3::Z;
@@ -270,8 +341,13 @@ pub(crate) fn apply_character_movement(
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let ground =
-						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					let contact = walkable_ground_normal(hits, max_slope);
+					let ground = ground_plane_for_wish(
+						contact,
+						walkable.map(|plane| plane.normal),
+						grounded,
+						jumping,
+					);
 					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
@@ -295,21 +371,29 @@ pub(crate) fn apply_wish_movement(
 			&MoveWish,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
+			Option<&WalkableGround>,
 			&MovementAcceleration,
 			&mut LinearVelocity,
 			Has<Grounded>,
+			Has<Jumping>,
 		),
 		(With<CharacterController>, Without<Player>),
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (wish, hits, max_slope, accel, mut velocity, grounded) in &mut controllers {
-		let dir = Vec3::new(wish.0.x, 0.0, wish.0.z);
-		if dir.length_squared() < 1e-6 {
+	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in &mut controllers
+	{
+		if wish.0.length_squared() < 1e-6 {
 			continue;
 		}
-		let ground = grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
-		accelerate_wish(&mut velocity, dir, accel.0, dt, ground);
+		let contact = walkable_ground_normal(hits, max_slope);
+		let ground = ground_plane_for_wish(
+			contact,
+			walkable.map(|plane| plane.normal),
+			grounded,
+			jumping,
+		);
+		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
 	}
 }
 
@@ -360,10 +444,42 @@ mod tests {
 	}
 
 	#[test]
+	fn uphill_point_wish_climbs_along_the_slope() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		accelerate_wish(&mut velocity, Vec3::new(1.0, 1.0, 0.0), 40.0, 1.0, Some(normal));
+		assert!(velocity.y > 1.0, "XZ heading on the plane must add uphill Y, got {}", velocity.y);
+		assert!(velocity.x > 0.0);
+		assert!(velocity.y.abs() < 40.0);
+	}
+
+	#[test]
+	fn last_plane_is_only_for_grounded_snap() {
+		let slope = Vec3::new(-0.2, 0.98, 0.0);
+		assert_eq!(ground_plane_for_wish(None, Some(slope), true, false), Some(slope));
+		assert_eq!(ground_plane_for_wish(None, Some(slope), false, false), None);
+		assert_eq!(ground_plane_for_wish(None, Some(Vec3::Y), true, true), None);
+	}
+
+	#[test]
 	fn airborne_wish_stays_xz() {
 		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
-		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, None);
+		accelerate_wish(&mut velocity, Vec3::new(1.0, 4.0, 0.0), 40.0, 1.0, None);
 		assert!((velocity.y + 5.0).abs() < 1e-4);
 		assert!(velocity.x > 0.0);
+	}
+
+	#[test]
+	fn wish_on_ground_does_not_fly() {
+		let drive = wish_on_ground(Vec3::new(0.0, 1.0, 0.0), None);
+		assert!(drive.length() < 1e-4, "{drive}");
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let along = wish_on_ground(Vec3::X, Some(normal));
+		assert!(along.y > 0.0);
+		assert!((along.dot(normal)).abs() < 1e-4, "{along} · {normal}");
+		let from_3d = wish_on_ground(Vec3::new(1.0, 10.0, 0.0), Some(normal));
+		assert!((from_3d - along).length() < 1e-4, "{from_3d} vs {along}");
 	}
 }

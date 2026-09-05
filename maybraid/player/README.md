@@ -12,6 +12,10 @@ reuses the capsule, [`PlayerLook`](src/identity.rs), and locomotion clips
 without pad input, `CameraFollow`, or `PlayerVisual` (so first-person face hide
 stays on the followed body). Insert [`CharacterLocomotion`](src/body.rs) before
 [`PlayerPlugin`] to cap the walkable slope (default ~81°; Durham uses ~70°).
+Grounded wish accel follows this frame's walkable contact plane so hillside
+heading is along the slope, not world XZ into the mesh. Last plane is only a
+[`Grounded`](src/body.rs) snap when the caster missed. Off the ground, gravity
+owns Y (XZ heading only). Jumping is true air.
 
 ```text
 CharacterIntent ─► wish / jump          (this crate)

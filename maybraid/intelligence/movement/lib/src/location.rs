@@ -84,6 +84,10 @@ impl MovementLocation {
 	}
 
 	/// Flattened wish from `from` toward this point (y = 0).
+	///
+	/// Height is the motor's job: XZ heading projected onto this frame's
+	/// walkable plane. A 3D waypoint vector is a launch when the capsule is
+	/// off the mesh.
 	pub fn xz_wish_from(self, from: Vec3) -> Vec3 {
 		Vec3::new(self.point.x - from.x, 0.0, self.point.z - from.z).normalize_or_zero()
 	}

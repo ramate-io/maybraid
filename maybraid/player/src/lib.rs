@@ -12,8 +12,9 @@ use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
 	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
-	CharacterController, CharacterLocomotion, Grounded, JumpWish, Jumping, MoveWish,
-	MovementAction, PlayerControlSystems,
+	ground_plane_for_wish, walkable_contact_normal, wish_on_ground, CharacterController,
+	CharacterLocomotion, Grounded, JumpWish, Jumping, MoveWish, MovementAction,
+	PlayerControlSystems, WalkableGround,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,

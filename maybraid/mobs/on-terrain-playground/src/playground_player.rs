@@ -13,6 +13,7 @@ use durham_terrain_models::{
 use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
+use player::{ground_plane_for_wish, walkable_contact_normal, wish_on_ground, WalkableGround};
 use std::f32::consts::PI;
 
 use crate::camera::CameraController;
@@ -193,6 +194,7 @@ fn spawn_player(
 			JumpImpulse(JUMP_IMPULSE),
 			MaxSlopeAngle(locomotion.max_slope_angle),
 			MoveWish::default(),
+			WalkableGround::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(0.0),
@@ -349,6 +351,9 @@ fn update_grounded(
 	}
 
 	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping) in &mut query {
+		if let Some(normal) = walkable_contact_normal(hits, max_slope_angle.map(|angle| angle.0)) {
+			commands.entity(entity).insert(WalkableGround { normal });
+		}
 		let mut is_grounded = hits.iter().any(|hit| {
 			if let Some(angle) = max_slope_angle {
 				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
@@ -379,27 +384,6 @@ fn update_grounded(
 	}
 }
 
-/// Most upright contact within the walkable slope, if any.
-fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
-	let mut best: Option<(f32, Vec3)> = None;
-	for hit in hits.iter() {
-		let normal = (-hit.normal2).normalize_or_zero();
-		if normal.length_squared() < 1e-8 {
-			continue;
-		}
-		let angle = normal.angle_between(Vec3::Y).abs();
-		if let Some(max) = max_slope {
-			if angle > max.0 {
-				continue;
-			}
-		}
-		if best.is_none_or(|(best_angle, _)| angle < best_angle) {
-			best = Some((angle, normal));
-		}
-	}
-	best.map(|(_, normal)| normal)
-}
-
 /// Accelerate along the ground plane when a walkable normal is known; else XZ only.
 fn accelerate_wish(
 	velocity: &mut LinearVelocity,
@@ -408,21 +392,10 @@ fn accelerate_wish(
 	dt: f32,
 	ground_normal: Option<Vec3>,
 ) {
-	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
-	if wish.length_squared() < 1e-8 {
+	let drive = wish_on_ground(wish, ground_normal);
+	if drive.length_squared() < 1e-8 {
 		return;
 	}
-	let drive = match ground_normal {
-		Some(normal) => {
-			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
-			if along.length_squared() > 1e-8 {
-				along
-			} else {
-				wish
-			}
-		}
-		None => wish,
-	};
 	if ground_normal.is_some() {
 		**velocity += drive * accel * dt;
 	} else {
@@ -442,10 +415,12 @@ fn apply_character_movement(
 			Entity,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
+			Option<&WalkableGround>,
 			&MovementAcceleration,
 			&JumpImpulse,
 			&mut LinearVelocity,
 			Has<Grounded>,
+			Has<Jumping>,
 		),
 		With<CharacterController>,
 	>,
@@ -466,12 +441,19 @@ fn apply_character_movement(
 	let dt = time.delta_secs();
 
 	for action in reader.read() {
-		for (entity, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers {
+		for (entity, hits, max_slope, walkable, accel, jump, mut velocity, grounded, jumping) in
+			&mut controllers
+		{
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let ground =
-						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					let contact = walkable_contact_normal(hits, max_slope.map(|angle| angle.0));
+					let ground = ground_plane_for_wish(
+						contact,
+						walkable.map(|plane| plane.normal),
+						grounded,
+						jumping,
+					);
 					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
