@@ -4,6 +4,7 @@ mod brain;
 mod kind;
 mod plugin;
 mod roster;
+mod roster_ref;
 mod scene;
 
 pub use brain::MobBrain;

@@ -1,4 +1,6 @@
-//! Semantic mob LodScene host with trickled High character plants.
+//! Semantic mob LodScene host with trickled High roster stubs.
+
+use std::sync::Arc;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -7,8 +9,8 @@ use lod::gen::{LodScene, LodSceneCulls, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::{cull_non_adjacent_bands, SceneChunk};
 use mob_characters::FromMobNumber;
-use mob_intelligence::MobSlot;
 
+use crate::roster_ref::MemberRosterRef;
 use crate::{MobBrain, MobKind, MobMemberRecipe, MobRosterRecipe};
 
 pub const DEFAULT_MOB_HIGH_RADIUS: f32 = 200.0;
@@ -96,14 +98,13 @@ impl MobScene {
 		}
 	}
 
-	fn member_scene(member: &MobMemberRecipe, slot: u16) -> impl Scene + 'static {
-		let recipe = member.character.clone();
-		let transform = Transform::from_translation(member.offset);
+	fn member_stub(member: &MobMemberRecipe, slot: u16) -> impl Scene + 'static {
+		let roster = MemberRosterRef::new(Arc::clone(&member.character), slot, member.offset);
 		bsn! {
-			template_value(recipe)
-			template_value(MobSlot(slot))
-			template_value(transform)
-			Visibility::default()
+			Name::new("roster-stub")
+			template_value(roster)
+			Transform::default()
+			Visibility::Hidden
 		}
 	}
 
@@ -115,7 +116,7 @@ impl MobScene {
 			.iter()
 			.enumerate()
 			.map(|(slot, member)| {
-				Box::new(Self::member_scene(member, slot as u16)) as Box<dyn Scene>
+				Box::new(Self::member_stub(member, slot as u16)) as Box<dyn Scene>
 			})
 			.collect();
 		bsn! {
@@ -167,7 +168,7 @@ impl LodScene for MobScene {
 		let mut iter = members.into_iter().enumerate();
 		SceneChunk::lazy(count as u32, count, move || {
 			let (slot, member) = iter.next()?;
-			Some(SceneChunk::weighted(1, Self::member_scene(&member, slot as u16)))
+			Some(SceneChunk::weighted(1, Self::member_stub(&member, slot as u16)))
 		})
 	}
 
@@ -225,6 +226,19 @@ mod tests {
 				.scene_lod_culls(lod_ref, LodSceneLevel::UltraLow)
 				.should_cull(LodSceneLevel::High));
 		});
+	}
+
+	#[test]
+	fn high_plants_are_roster_ref_stubs() {
+		let mob = MobScene::of_kind(MobKind::Pleb, 4.0);
+		assert!(!mob.mob.roster.members.is_empty());
+		for (slot, member) in mob.mob.roster.members.iter().enumerate() {
+			let stub =
+				MemberRosterRef::new(Arc::clone(&member.character), slot as u16, member.offset);
+			assert_eq!(stub.slot, slot as u16);
+			assert_eq!(stub.offset, member.offset);
+			assert!(Arc::ptr_eq(&stub.recipe, &member.character));
+		}
 	}
 
 	#[test]

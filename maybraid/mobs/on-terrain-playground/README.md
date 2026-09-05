@@ -8,7 +8,8 @@ dragging High plants through the sky.
 There is no vegetation and no 400 m mob LOD stream. Hosts spawn only after
 composed height and a terrain trimesh exist. Journeying still uses the production
 stack: the host is a corridor planner (`RoutingIntelligenceUser`); `MobTravel`
-slides it along hops (including Y); High plants follow by tether.
+slides it along hops (including Y); High plants follow by tether, not by
+`ChildOf` the moving host.
 
 Capsules use the world steep-hill setup from
 [#718](https://github.com/ramate-io/maybraid/pull/718): 70° walkable slope,

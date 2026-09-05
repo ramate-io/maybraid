@@ -1,5 +1,7 @@
 //! Character roster construction for each mob family.
 
+use std::sync::Arc;
+
 use bevy::prelude::*;
 use mob_characters::{
 	CharacterBrains, CharacterBuild, CharacterInventory, CharacterSceneRecipe, CharacterSpecies,
@@ -10,7 +12,7 @@ use crate::MobKind;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MobMemberRecipe {
-	pub character: CharacterSceneRecipe,
+	pub character: Arc<CharacterSceneRecipe>,
 	pub offset: Vec3,
 }
 
@@ -44,7 +46,7 @@ impl MobRosterRecipe {
 			let radius = (leash * 0.45).max(1.5);
 			let offset =
 				disk_offset(slot, count, radius, character.locomotion_capsule().spawn_height());
-			members.push(MobMemberRecipe { character, offset });
+			members.push(MobMemberRecipe { character: Arc::new(character), offset });
 		}
 		Self { members }
 	}

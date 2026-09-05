@@ -35,8 +35,10 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
   elevation is resolved against composed Durham terrain and Richmond pads at
   presentation time. Journeying hosts are `RoutingIntelligenceUser`s: POI goals
   become a coarse Fixed-layer corridor, and `MobTravel` lerps the tether along
-  those hops (including hop Y). High character plants follow by tether and keep
-  Avian movement for combat; they do not inherit host routing.
+  those hops (including hop Y). High emits `RosterRef` stubs under the host LOD
+  tree; fulfill spawns character capsules unparented so host travel cannot tow
+  them. Plants follow by tether and keep Avian movement for combat; they do not
+  inherit host routing.
   `PendingMobGroups` remains available for focused tests and
   manual playground scenes. [`on-terrain-playground`](on-terrain-playground)
   is the pointed Durham patch (one short herd or pack, no world stream).
@@ -46,11 +48,13 @@ local POIs for presented storeys, and a budgeted local vegetation POI for at mos
 one real plant host per 48 m spatial bucket. Child POIs leave the registry with
 their LOD host, so discovery never retains culled scene anchors.
 
-High character plants carry only `MobSlot` (and `MobId` for detached death
-replacements). `MobSystems::Bind` resolves the live entity, installs the tether
-context, and combines character-local POI interests with the mob interest table.
-LOD cull writes the live snapshot back to the roster; death replacement invokes the
-same `CharacterSceneRecipe` used by initial High fulfillment.
+High character plants are `RosterRef` stubs (`ChildOf` the host for cull only).
+Fulfill spawns the live body with `MobSlot` + `MobId` off the host transform
+tree. `MobSystems::Bind` resolves the live entity, installs the tether context,
+and combines character-local POI interests with the mob interest table.
+LOD cull despawns the stub, then the still-bound body; death replacement invokes
+the same `CharacterSceneRecipe` used by initial High fulfillment and must not
+use the cull path.
 
 ## Characters
 Initial proposed characters are as follows:

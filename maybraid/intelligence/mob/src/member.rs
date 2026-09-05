@@ -7,8 +7,8 @@ use crate::MobId;
 
 /// High-plant wish: which roster slot this body should occupy.
 ///
-/// Pair with [`MobId`] when the plant is not under the host. Slot-only wishes
-/// bind by walking to an ancestor [`crate::Mob`].
+/// Pair with [`MobId`] when the plant is not under the host (the usual High
+/// fulfill path). Slot-only wishes bind by walking to an ancestor [`crate::Mob`].
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MobSlot(pub u16);
 
@@ -30,7 +30,7 @@ impl From<NpcBody> for MobMemberBody {
 }
 
 /// Walk `ChildOf` to the nearest ancestor [`crate::Mob`] (not any LOD host).
-pub(crate) fn ancestor_mob(
+pub fn ancestor_mob(
 	entity: Entity,
 	child_of: &Query<&ChildOf>,
 	mobs: &Query<(), With<crate::Mob>>,

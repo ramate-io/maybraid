@@ -7,15 +7,17 @@ NPC mixers exist only while a High plant is bound into a roster slot.
 Mob host (always)
   roster, Tether, pack affiliations, PoiInterests
   optional journey + RoutingIntelligenceUser (plans a corridor)
-  MobTravel slides the tether along hops
-           ↓ bind
-High plant: MobSlot + optional MobId
+    MobTravel slides the tether along hops
+           ↓ High stub (ChildOf, cull handle)
+RosterRef { recipe, slot, offset }  — no capsule
+           ↓ fulfill (unparented body)
+High plant: MobSlot + MobId
   Personality::install, MemberOf { mob, slot }
 ```
 
 This crate does **not** pick Guard vs Occupy. Callers own kind recipes. It does
-**not** implement LodScene. High fulfill later stamps the same Entity-free wish
-the playground stamps today; see [ROSTER.md](ROSTER.md).
+**not** implement LodScene. High BSN carries [`RosterRef`](src/roster_ref.rs);
+the app spawns the unparented body. See [ROSTER.md](ROSTER.md).
 
 ## What the host owns
 
@@ -32,9 +34,10 @@ LodScene-ignorant.
 
 ## Bind
 
-Plants carry [`MobSlot`](src/member.rs) and, when they are not under the host,
-the host's [`MobId`](src/host.rs). Bind writes [`MemberOf`](src/member.rs) and
-`roster[slot].entity`. If the mixer is missing, it calls `Personality::install`
+Live bodies carry [`MobSlot`](src/member.rs) and the host's [`MobId`](src/host.rs).
+High BSN stamps a [`RosterRef`](src/roster_ref.rs) stub instead of parenting the
+capsule. Fulfill spawns the body in world space; bind writes [`MemberOf`](src/member.rs)
+and `roster[slot].entity`. If the mixer is missing, it calls `Personality::install`
 with the host as tether subject.
 
 The app spawns bodies. Journeying hosts plan corridors against Fixed colliders;

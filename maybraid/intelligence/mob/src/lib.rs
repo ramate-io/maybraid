@@ -1,8 +1,8 @@
 //! Pack-level brain: roster, shared tether, affiliations, POI interests, travel.
 //!
 //! This crate does not implement LodScene and does not pick mob kinds. High
-//! plants carry an Entity-free wish ([`MobSlot`], optional [`MobId`]); bind
-//! writes the live [`MemberOf`] pointer. See [ROSTER.md](ROSTER.md).
+//! stubs carry an Entity-free [`RosterRef`]; fulfill spawns the live body with
+//! [`MobSlot`] and [`MobId`], and bind writes [`MemberOf`]. See [ROSTER.md](ROSTER.md).
 //! Journeying hosts plan corridors with [`routing_intelligence`] and slide along
 //! those hops; they are not movement-intelligence users.
 
@@ -13,6 +13,7 @@ mod lock;
 mod member;
 mod plugin;
 mod roster;
+mod roster_ref;
 mod travel;
 
 pub use host::{
@@ -20,12 +21,13 @@ pub use host::{
 	MobInstall,
 };
 pub use lock::MobTetherLock;
-pub use member::{MemberOf, MobMemberBody, MobSlot};
+pub use member::{ancestor_mob, MemberOf, MobMemberBody, MobSlot};
 pub use plugin::{MobIntelligencePlugin, MobSystems};
 pub use roster::{
 	MobAffiliations, MobInterests, MobMemberNeeded, MobRespawn, MobRespawnAt, MobRoster,
 	RosterMember,
 };
+pub use roster_ref::{RosterBinding, RosterRef};
 pub use travel::MobTravel;
 
 #[cfg(test)]

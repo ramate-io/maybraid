@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use damage::Health;
 use journeying_intelligence::JourneyingIntelligencePlugin;
-use lod::add_lod_refresh_chunk_full_for;
+use lod::{add_lod_refresh_chunk_full_for, LodChunkFulfillSystems, LodSceneLevel};
 use mob_characters::{CharacterSceneSystems, MobCharacterScenesPlugin};
 use mob_intelligence::{
 	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobSlot,
@@ -35,6 +35,7 @@ impl Default for PackPursuit {
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MobSceneSystems {
 	Install,
+	Fulfill,
 	Pursuit,
 	Respawn,
 }
@@ -67,7 +68,20 @@ impl Plugin for MobScenesPlugin {
 		add_lod_refresh_chunk_full_for::<MobScene>(app);
 		app.configure_sets(
 			Update,
-			(MobSceneSystems::Install, MobSceneSystems::Pursuit, MobSceneSystems::Respawn).chain(),
+			(
+				MobSceneSystems::Install,
+				MobSceneSystems::Fulfill,
+				MobSceneSystems::Pursuit,
+				MobSceneSystems::Respawn,
+			)
+				.chain(),
+		)
+		.configure_sets(
+			Update,
+			MobSceneSystems::Fulfill
+				.after(LodChunkFulfillSystems::Drain)
+				.before(CharacterSceneSystems::Materialize)
+				.before(MobSystems::Bind),
 		)
 		.add_systems(
 			Update,
@@ -87,6 +101,7 @@ impl Plugin for MobScenesPlugin {
 			Update,
 			spawn_needed_members.in_set(MobSceneSystems::Respawn).after(MobSystems::Respawn),
 		);
+		crate::roster_ref::configure_roster_ref_systems(app);
 	}
 }
 
@@ -135,12 +150,15 @@ fn install_mob_scenes(
 fn spawn_needed_members(
 	mut commands: Commands,
 	mut needed: MessageReader<MobMemberNeeded>,
-	mobs: Query<&MobScene>,
+	mobs: Query<(&MobScene, Option<&LodSceneLevel>)>,
 ) {
 	for request in needed.read() {
-		let Ok(mob) = mobs.get(request.mob) else {
+		let Ok((mob, level)) = mobs.get(request.mob) else {
 			continue;
 		};
+		if level.is_some_and(|level| *level != LodSceneLevel::High) {
+			continue;
+		}
 		let Some(member) = mob.mob.roster.members.get(request.slot as usize) else {
 			continue;
 		};
