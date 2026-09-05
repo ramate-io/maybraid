@@ -4970,6 +4970,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "mob-on-terrain-playground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "avian3d",
+ "bevy",
+ "clap",
+ "durham-terrain",
+ "durham-terrain-models",
+ "evasion-intelligence",
+ "firearm-intelligence",
+ "firearm-user",
+ "firearms",
+ "fleeing-intelligence",
+ "game-commands",
+ "hiding-intelligence",
+ "lod",
+ "lod-avian",
+ "log",
+ "maybraid-character-controller",
+ "maybraid-input",
+ "maybraid-mobs",
+ "meandering-intelligence",
+ "mob-characters",
+ "mob-intelligence",
+ "movement-intelligence",
+ "movement-intelligence-avian",
+ "movement-realization",
+ "player",
+ "poi-intelligence",
+ "render-item",
+ "routing-intelligence",
+ "spotting-intelligence",
+ "tether-intelligence",
+ "threat-intelligence",
+ "threat-intelligence-damage",
+ "threat-management-intelligence",
+]
+
+[[package]]
 name = "movement-intelligence"
 version = "0.0.1"
 dependencies = [

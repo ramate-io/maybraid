@@ -82,6 +82,7 @@ members = [
   "maybraid/mobs/characters",
   "maybraid/mobs/mobs",
   "maybraid/mobs/groups",
+  "maybraid/mobs/on-terrain-playground",
   "maybraid/movement-realization",
   "maybraid/projectiles",
   "maybraid/damage",
@@ -361,6 +362,7 @@ mob-intelligence = { path = "maybraid/intelligence/mob" }
 mob-characters = { path = "maybraid/mobs/characters" }
 maybraid-mobs = { path = "maybraid/mobs/mobs" }
 mob-groups = { path = "maybraid/mobs/groups" }
+mob-on-terrain-playground = { path = "maybraid/mobs/on-terrain-playground" }
 personalities-playground = { path = "maybraid/intelligence/personalities" }
 mob-brain-playground = { path = "maybraid/intelligence/mob-brain" }
 poi-playground = { path = "maybraid/intelligence/poi-playground" }

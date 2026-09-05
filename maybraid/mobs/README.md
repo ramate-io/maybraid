@@ -38,7 +38,8 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
   those hops (including hop Y). High character plants follow by tether and keep
   Avian movement for combat; they do not inherit host routing.
   `PendingMobGroups` remains available for focused tests and
-  manual playground scenes.
+  manual playground scenes. [`on-terrain-playground`](on-terrain-playground)
+  is the pointed Durham patch (one short herd or pack, no world stream).
 
 The world publishes one global POI for each presented grove and urban setting,
 local POIs for presented storeys, and a budgeted local vegetation POI for at most
