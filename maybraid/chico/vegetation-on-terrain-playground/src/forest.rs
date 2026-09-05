@@ -6,14 +6,18 @@ use bevy::prelude::*;
 use chico_forests::TerrainHeightSource;
 use chico_groves::TerrainGroveSample;
 use durham_terrain_models::{
-	TerrainCellLayout, TerrainEntryStore, TerrainLodCell, TerrainLodIndex,
+	TerrainCellLayout, TerrainEntryStore, TerrainLodCell, TerrainLodIndex, TerrainStoreView,
 };
 use lod::gen::GeneratingSpatialIndex;
 use lod::lod_ref::LodRef;
 
+use crate::bump_out::{
+	terrain_chunk_ref, terrain_for_cell_size, TerrainMeshSource, WorldTerrainBuilder,
+};
 use crate::camera::CameraController;
 use crate::groves::OwnedDurhamTerrain;
 use crate::{ForestStream, PlaygroundConfig, WorldBaseTerrain};
+use terrain_chunk_ref::TerrainChunkRef;
 
 const PATCH_CAMERA_SPEED: f32 = 40.0;
 const FOREST_CAMERA_SPEED: f32 = 80.0;
@@ -43,6 +47,17 @@ impl TerrainHeightSource for DurhamHeight<'_> {
 			self.layout.clone(),
 			self.base.0.clone(),
 		)))
+	}
+}
+
+impl TerrainMeshSource for DurhamHeight<'_> {
+	fn mesh_for(
+		&self,
+		bounds: Aabb3d,
+		cell_size: f32,
+	) -> Option<TerrainChunkRef<WorldTerrainBuilder>> {
+		let view = TerrainStoreView::new(&self.store, &self.layout);
+		terrain_for_cell_size(&view, bounds, cell_size).map(terrain_chunk_ref)
 	}
 }
 

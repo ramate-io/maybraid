@@ -1,7 +1,8 @@
 //! Durham-backed vegetation host used by `maybraid-world`.
 //!
 //! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
-//! `/forest` still streams the unified Chico forest on Durham height for world.
+//! Durham + character stay on [`VegetationOnTerrainPlugin`]. Groves and canopy
+//! bump-outs register through [`VegetationPlugin`].
 
 mod bump_out;
 pub mod camera;
@@ -14,16 +15,17 @@ mod material_lib;
 mod pitch;
 pub mod player;
 mod ui;
+mod vegetation;
 
 pub use bump_out::{
 	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
-	register_bump_out_lod, terrain_chunk_ref, CanopyBumpOutPresenterState,
-	DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter,
-	MediumCanopyBumpOutPresenterState, WorldTerrainBuilder,
+	register_bump_out_lod, terrain_chunk_ref, BumpOutPresenter, CanopyBumpOutPresenter,
+	CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenter, MediumCanopyBumpOutPresenterState,
+	TerrainMeshSource, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
-pub use chico_forests::ForestStreamSpec;
+pub use chico_forests::{ForestStreamSpec, OnTerrain};
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use forest::DurhamHeight;
@@ -38,6 +40,7 @@ pub use player::{
 	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled,
 	PlayerPlugin, PlayerRespawn, PlaygroundMode, SpawnTerrainReady,
 };
+pub use vegetation::VegetationPlugin;
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
@@ -51,10 +54,7 @@ use camera::{
 };
 use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
-use chico_forests::{
-	drive_forest_stream, stream_radii_m, ForestPlugin, ForestPresenter, ForestStream, OnTerrain,
-	VegetationViewPlugin,
-};
+use chico_forests::{drive_forest_stream, stream_radii_m, ForestStream, VegetationViewPlugin};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
@@ -319,24 +319,17 @@ impl LodRefreshRegions for TerrainLodRegion {
 #[derive(Resource)]
 struct GrovesDirty(bool);
 
+/// Durham terrain, character, and camera. Groves and bump-outs are
+/// [`VegetationPlugin`].
 pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// Register Durham forest present (`ForestPresenter<OnTerrain<DurhamHeight>>`).
-	pub register_forest_lod: bool,
-	/// Register the plain Durham-backed canopy bump-out presenter.
-	pub register_bump_out_lod: bool,
 }
 
 impl Default for VegetationOnTerrainPlugin {
 	fn default() -> Self {
-		Self {
-			config: PlaygroundConfig::default(),
-			commands: true,
-			register_forest_lod: true,
-			register_bump_out_lod: true,
-		}
+		Self { config: PlaygroundConfig::default(), commands: true }
 	}
 }
 
@@ -380,14 +373,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 		);
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
-		}
-		if self.register_forest_lod {
-			app.add_plugins(ForestPlugin::<ForestPresenter<OnTerrain<DurhamHeight>>>::default());
-		}
-		if self.register_bump_out_lod {
-			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
-				app,
-			);
 		}
 		if !app.is_plugin_added::<VirtualPadPlugin>() {
 			app.add_plugins(VirtualPadPlugin::default());

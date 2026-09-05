@@ -10,9 +10,6 @@ pub mod urbanization_stream;
 
 pub use camera::CameraController;
 pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYGROUND_CLI_NAME};
-pub use development_bump_out::{
-	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
-};
 pub use development_forest::DevelopmentExclusions;
 pub use game_commands::command::PendingStartupCommand;
 pub use urbanization_stream::{
@@ -26,10 +23,7 @@ use bevy::prelude::*;
 use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
-use chico_forests::{ForestPlugin, ForestPresenter, OnTerrain};
-use chico_vegetation_on_terrain_playground::{
-	register_bump_out_lod, terrain_streaming_enabled, DurhamHeight, TerrainStreamingEnabled,
-};
+use chico_vegetation_on_terrain_playground::{terrain_streaming_enabled, TerrainStreamingEnabled};
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
 	RequestTerrainRadius,
@@ -138,18 +132,11 @@ pub struct DevelopmentsOnTerrainPlugin {
 	pub commands: bool,
 	/// When false, skip Durham terrain plugins and patch generate/present.
 	pub own_terrain: bool,
-	/// Register the development-pad-aware forest presenter.
-	pub register_development_forest_lod: bool,
 }
 
 impl Default for DevelopmentsOnTerrainPlugin {
 	fn default() -> Self {
-		Self {
-			config: PlaygroundConfig::default(),
-			commands: true,
-			own_terrain: true,
-			register_development_forest_lod: false,
-		}
+		Self { config: PlaygroundConfig::default(), commands: true, own_terrain: true }
 	}
 }
 
@@ -177,15 +164,6 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 
 		app.add_plugins(RichmondDevelopmentModelsPlugin);
 		register_urbanization_lod(app);
-		if self.register_development_forest_lod {
-			app.add_plugins(ForestPlugin::<
-				ForestPresenter<DevelopmentExclusions<OnTerrain<DurhamHeight>>>,
-			>::default());
-			register_bump_out_lod::<
-				DevelopmentCanopyBumpOutPresenter,
-				DevelopmentMediumCanopyBumpOutPresenter,
-			>(app);
-		}
 
 		if self.commands {
 			app.add_plugins(

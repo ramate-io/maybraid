@@ -48,7 +48,7 @@ impl GroveWorldSource for FlatWorld<'_> {
 /// Seek a terrain height model in the gen stack, then snapshot it for grow.
 #[derive(SystemParam)]
 pub struct OnTerrain<'w, 's, H: SystemParam + 'static> {
-	height: StaticSystemParam<'w, 's, H>,
+	pub height: StaticSystemParam<'w, 's, H>,
 }
 
 impl<H: SystemParam + 'static> GroveWorldSource for OnTerrain<'_, '_, H>

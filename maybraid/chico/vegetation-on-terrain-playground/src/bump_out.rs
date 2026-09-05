@@ -1,25 +1,25 @@
 //! Canopy bump-outs as a Lod generate / present layer.
 //!
 //! Generate stores [`CanopyBumpOut`] on [`ForestIndex`] (selection neighborhood, no grow).
-//! Present looks up the matching Durham 160 m cell and spawns [`BumpOut`] with
-//! the same [`TerrainChunkRef<WorldTerrainBuilder>`] identity Durham fill uses
-//! (`Terrain::mesh_builder`), so overlay copies the cached mesh handle.
+//! Present asks [`TerrainMeshSource`] for the matching terrain mesh (160 m near /
+//! 320 m far) and spawns [`BumpOut`] with that [`TerrainChunkRef<WorldTerrainBuilder>`]
+//! identity so overlay copies the cached mesh handle.
 
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use chico_forests::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ForestExtent,
-	ForestIndex, MediumBumpOutLodChan, MediumCanopyBumpOut, BUMP_OUT_OUTER_RADIUS_M,
-	MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
+	ForestIndex, MediumBumpOutLodChan, MediumCanopyBumpOut, OnTerrain, BUMP_OUT_CELL_XZ,
+	BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_CELL_XZ,
+	MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
 use durham_terrain_models::{
-	cascade_chunk_for_cell, Terrain, TerrainCellLayout, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainStoreView, TERRAIN_CELL_SIZE,
+	cascade_chunk_for_cell, Terrain, TerrainMeshBuilder, TerrainStoreView, TERRAIN_CELL_SIZE,
 };
 use lod::gen::{
 	Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, SpatialIndex, TrackedId,
@@ -41,6 +41,31 @@ use crate::ForestStreamSpec;
 use crate::PlaygroundConfig;
 
 pub type WorldTerrainBuilder = TerrainMeshBuilder;
+
+/// Terrain mesh identity for a bump cell of `cell_size` (160 m near / 320 m far).
+///
+/// Skip this tick when the matching cell is not in the store yet — same as forest
+/// `sample` returning `None`. Do not wrap terrain LOD plugins here.
+pub trait TerrainMeshSource {
+	fn mesh_for(
+		&self,
+		bounds: Aabb3d,
+		cell_size: f32,
+	) -> Option<TerrainChunkRef<WorldTerrainBuilder>>;
+}
+
+impl<H: SystemParam + 'static> TerrainMeshSource for OnTerrain<'_, '_, H>
+where
+	for<'a, 'b> H::Item<'a, 'b>: TerrainMeshSource,
+{
+	fn mesh_for(
+		&self,
+		bounds: Aabb3d,
+		cell_size: f32,
+	) -> Option<TerrainChunkRef<WorldTerrainBuilder>> {
+		self.height.mesh_for(bounds, cell_size)
+	}
+}
 
 /// Presenter bookkeeping for spawned bump-out entities.
 #[derive(Resource)]
@@ -133,77 +158,67 @@ impl<M: Send + Sync + 'static> BumpOutPresenterState<M> {
 	}
 }
 
-/// Durham-backed presenter: generic spawn path over [`WorldTerrainBuilder`].
+trait BumpCell: Send + Sync + 'static {
+	fn bump_cell(&self) -> &CanopyBumpOut;
+	fn terrain_cell_size() -> f32;
+}
+
+impl BumpCell for CanopyBumpOut {
+	fn bump_cell(&self) -> &CanopyBumpOut {
+		self
+	}
+
+	fn terrain_cell_size() -> f32 {
+		BUMP_OUT_CELL_XZ
+	}
+}
+
+impl BumpCell for MediumCanopyBumpOut {
+	fn bump_cell(&self) -> &CanopyBumpOut {
+		&self.0
+	}
+
+	fn terrain_cell_size() -> f32 {
+		MEDIUM_BUMP_OUT_CELL_XZ
+	}
+}
+
+/// Spawn bump-outs by looking up a terrain mesh from composed source `S`.
 #[derive(SystemParam)]
-pub struct DurhamCanopyBumpOutPresenter<'w, 's> {
+pub struct BumpOutPresenter<'w, 's, S: SystemParam + 'static, M: Send + Sync + 'static> {
 	commands: Commands<'w, 's>,
-	state: ResMut<'w, CanopyBumpOutPresenterState>,
-	store: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
+	state: ResMut<'w, BumpOutPresenterState<M>>,
+	source: StaticSystemParam<'w, 's, S>,
 	forest: Res<'w, ForestIndex>,
 }
 
-impl RegionPresenter<CanopyBumpOut, ForestIndex> for DurhamCanopyBumpOutPresenter<'_, '_> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented_version(id)
-	}
+pub type CanopyBumpOutPresenter<'w, 's, S> = BumpOutPresenter<'w, 's, S, CanopyBumpOut>;
+pub type MediumCanopyBumpOutPresenter<'w, 's, S> = BumpOutPresenter<'w, 's, S, MediumCanopyBumpOut>;
 
-	fn handle(&mut self, id: Id, version: Version, cell: &CanopyBumpOut, _lod_ref: &LodRef) {
-		let Some(bump_out) = bump_out_from_cell(cell, bump_out_noise(&self.forest.noise)) else {
-			return;
-		};
-		let view = TerrainStoreView::new(&self.store, &self.layout);
-		let Some(terrain) = fine_terrain_for(&view, cell.bounds) else {
-			return;
-		};
-		self.state
-			.present(&mut self.commands, id, version, bump_out, terrain_chunk_ref(terrain));
-	}
-
-	fn hide(&mut self, id: Id) {
-		self.state.hide(&mut self.commands, id);
-	}
-
-	fn is_hidden(&self, id: Id) -> bool {
-		self.state.is_hidden(id)
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented_ids()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		self.state.remove_stale(&mut self.commands, wanted);
-	}
-}
-
-/// Durham-backed presenter for the medium (320 m) terrain stream.
-#[derive(SystemParam)]
-pub struct DurhamMediumCanopyBumpOutPresenter<'w, 's> {
-	commands: Commands<'w, 's>,
-	state: ResMut<'w, MediumCanopyBumpOutPresenterState>,
-	store: Res<'w, TerrainEntryStore>,
-	layout: Res<'w, TerrainCellLayout>,
-	forest: Res<'w, ForestIndex>,
-}
-
-impl RegionPresenter<MediumCanopyBumpOut, ForestIndex>
-	for DurhamMediumCanopyBumpOutPresenter<'_, '_>
+impl<S, M> RegionPresenter<M, ForestIndex> for BumpOutPresenter<'_, '_, S, M>
+where
+	S: SystemParam + 'static,
+	for<'a, 'b> S::Item<'a, 'b>: TerrainMeshSource,
+	M: BumpCell,
+	ForestIndex: SpatialIndex<M>,
 {
 	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented_version(id)
+		let cell = SpatialIndex::<M>::get(&*self.forest, id)?;
+		let terrain_ref = self.source.mesh_for(cell.bump_cell().bounds, M::terrain_cell_size())?;
+		self.state.presented_version_for_terrain(id, terrain_ref.key())
 	}
 
-	fn handle(&mut self, id: Id, version: Version, cell: &MediumCanopyBumpOut, _lod_ref: &LodRef) {
-		let Some(bump_out) = bump_out_from_cell(&cell.0, bump_out_noise(&self.forest.noise)) else {
+	fn handle(&mut self, id: Id, version: Version, cell: &M, _lod_ref: &LodRef) {
+		let bump_cell = cell.bump_cell();
+		let Some(bump_out) = bump_out_from_cell(bump_cell, bump_out_noise(&self.forest.noise))
+		else {
 			return;
 		};
-		let view = TerrainStoreView::new(&self.store, &self.layout);
-		let Some(terrain) = medium_terrain_for(&view, cell.0.bounds) else {
+		let Some(terrain_ref) = self.source.mesh_for(bump_cell.bounds, M::terrain_cell_size())
+		else {
 			return;
 		};
-		self.state
-			.present(&mut self.commands, id, version, bump_out, terrain_chunk_ref(terrain));
+		self.state.present(&mut self.commands, id, version, bump_out, terrain_ref);
 	}
 
 	fn hide(&mut self, id: Id) {
@@ -403,7 +418,7 @@ pub fn medium_terrain_for<'a>(
 	terrain_for_cell_size(view, bounds, MEDIUM_BUMP_OUT_CELL_XZ)
 }
 
-fn terrain_for_cell_size<'a>(
+pub(crate) fn terrain_for_cell_size<'a>(
 	view: &'a TerrainStoreView<'a>,
 	bounds: Aabb3d,
 	target_size: f32,

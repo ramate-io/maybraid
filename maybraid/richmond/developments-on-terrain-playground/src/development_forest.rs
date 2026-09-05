@@ -11,8 +11,8 @@ use richmond_development_models::{pad::PadStage, DevelopmentCell, DevelopmentInd
 /// Present forest groves against an inner world sample after pad marshalling.
 #[derive(SystemParam)]
 pub struct DevelopmentExclusions<'w, 's, Inner: SystemParam + 'static> {
-	inner: StaticSystemParam<'w, 's, Inner>,
-	development: DevelopmentIndex<'w>,
+	pub(crate) inner: StaticSystemParam<'w, 's, Inner>,
+	pub(crate) development: DevelopmentIndex<'w>,
 }
 
 impl<Inner: SystemParam + 'static> GroveWorldSource for DevelopmentExclusions<'_, '_, Inner>

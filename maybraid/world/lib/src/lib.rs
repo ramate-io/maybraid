@@ -5,6 +5,10 @@
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
 //! 1 km / 3 km rings without re-registering Durham (vegetation owns terrain).
+//!
+//! Plugin list: Durham/character via `VegetationOnTerrainPlugin`, groves +
+//! bump-outs via `VegetationPlugin<DevelopmentExclusions<OnTerrain<DurhamHeight>>>`,
+//! then Richmond urbanization.
 
 mod camera;
 pub mod commands;
@@ -24,9 +28,10 @@ pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
-	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, DurhamHeight, OnTerrain,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig,
+	PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter,
+	VegetationOnTerrainPlugin, VegetationPlugin,
 };
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -37,7 +42,8 @@ use maybraid_character_controller::{CharacterControlSystems, CharacterController
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
 use richmond_developments_on_terrain_playground::{
-	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
+	DevelopmentExclusions, DevelopmentsOnTerrainPlugin,
+	PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
 
 /// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
@@ -94,15 +100,15 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
-				register_forest_lod: false,
-				register_bump_out_lod: false,
 			})
+			.add_plugins(
+				VegetationPlugin::<DevelopmentExclusions<OnTerrain<DurhamHeight>>>::default(),
+			)
 			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,
 				own_terrain: false,
-				register_development_forest_lod: true,
 			})
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
