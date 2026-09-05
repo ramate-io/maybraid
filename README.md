@@ -1,16 +1,13 @@
 # Maybraid
 
 - [General use](#general-use)
-- [Demos](#demos)
-    - [Navigable](#navigable)
-    - [Playable](#playable)
 - [Playgrounds](#playgrounds)
 - [Organization](#organization)
 
-A game of procedural generation and peer-based state. 
+A game of procedural generation and peer-based state.
 
 > [!NOTE]
-> Maybraid is currently in very early development. You will find mostly playgrounds from procedural generation and core mechanics concepts.
+> Maybraid is currently in very early development. Layer playgrounds sit next to their crates; assembled world runs as `maybraid-world-playground`.
 
 | Task | Description |
 |------|-------------|
@@ -22,47 +19,18 @@ A game of procedural generation and peer-based state.
 
 To use this repository, install [Determinate Systems Nix](https://determinate.systems/blog/determinate-nix-installer/). Then `cd` into the working directory for the repository and `nix develop`.
 
-## Demos
-
-### Navigable
-Demos that you can navigate, but can't play as a character.
-
-- [`demos/naturescapes`](./demos/naturescapes/): a demo allowing you to navigate the naturescapes of Maybraid. 
-
-```shell
-cargo run --release -p naturescapes-demo
-```
-
-### Playable
-> [!NOTE]
-> Nothing here yet. 
-
-Demos where you can play as a character. 
-
 ## Playgrounds
-There are several playgrounds in active development:
 
-- [`playgrounds/skill-map`](./playgrounds/skill-map/): a playground demonstrating a very simple skill map which spawns fireballs when the user hits pink squares and locks down when the user hits blue squares. 
-
-```shell
-cargo run --release -p skill-map-playground
-```
-
-- [`playground/objects`](./playgrounds/objects/): a playground for inspecting various mesh objects. To run,
+Assembled world:
 
 ```shell
-cargo run --release -p objects-playground
+cargo run -p maybraid-world-playground
 ```
 
-- [`playgrounds/terrain`](./playgrounds/): a playground for inspecting terrain and large-scale LOD concepts.
-
-```shell
-cargo run --release -p terrain-playground`
-```
+Single-layer playgrounds live next to their crates. Retired apps and how to restore them: [`maybraid/PLAYGROUNDS.md`](./maybraid/PLAYGROUNDS.md).
 
 ## Organization
 
-- **[`rfc`](./rfc/):** proposals and specifications providing both institutional memory of the project and the latest designs. 
-- **[`procedures`](./procedures/):** procedural generation primitives and routines, also currently houses the core rendering engine. 
-- **[`playground`](./playgrounds/):** applications for developers to run while playing with their systems.
-- **[`demos`](./demos/):** demonstrations of features intended for a particular audience. 
+- **[`rfc`](./rfc/):** proposals and specifications providing both institutional memory of the project and the latest designs.
+- **[`maybraid`](./maybraid/):** game crates (Durham, Chico, Richmond, Crozon, world).
+- **[`procedures/comproc`](./procedures/comproc/):** shared guillotine / noise primitives still used by Durham Jersey stamps.

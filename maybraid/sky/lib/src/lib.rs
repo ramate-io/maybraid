@@ -15,7 +15,7 @@ pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
 /// Peak wash. Stay well under 1 so ridges are not cut out by an opaque band.
 pub const DEFAULT_MAX_ALPHA: f32 = 0.32;
 
-/// Clear / dome blue used by the vegetation-on-terrain and world playgrounds.
+/// Clear / dome blue used by the world playground.
 pub const SKY_BLUE: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
 
 #[derive(Component)]

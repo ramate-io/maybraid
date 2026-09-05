@@ -31,6 +31,12 @@ Sometimes, particularly during early development of a model, the game object may
 > [!IMPORTANT]
 > Please update this section if increasing or different layers are consistently implemented at the `-models` level.
 
+## Playgrounds
+
+Iterate a **single layer** in a `*-playground` crate next to that layer. Compose Durham + forest + urbanization + character in [`world`](world/) (`cargo run -p maybraid-world-playground`). Do not add a second assembled-world binary.
+
+Retiring a playground: [PLAYGROUNDS.md](PLAYGROUNDS.md) (record last commit and what it did under Retired, then delete).
+
 ## Chico vegetation trees (LOD)
 
 Learnings from migrating ball-stick trees (Sope’s Banyan, Penmarch / Kamakura torch, Rory’s Head-trained) onto [`chico-vegetation-components`](./chico/vegetation-components/) + [`chico-sbs-trees`](./chico/sbs-trees/).

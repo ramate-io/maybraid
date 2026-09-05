@@ -117,22 +117,7 @@ members = [
   "maybraid/gimme/core",
   "maybraid/gimme/gen",
 
-  # legacy still being refactored out: engine
-  "engine",
-
-  # playgrounds
-  "playgrounds/terrain",
-  "playgrounds/objects",
-  "playgrounds/skill-map",
-  "playgrounds/pathfinding",
-
-  # legacy still being refactored out: procedures
-  "procedures/terrain",
-  "procedures/vegetation",
-  "procedures/buildings",
   "procedures/comproc",
-  "procedures/skill-map",
-  "procedures/intelligence",
 
   # general utilities
   ## sdf
@@ -141,9 +126,6 @@ members = [
   "util/game-commands",
   "util/camera-controls",
   "util/render-item",
-
-  # demos
-  "demos/naturescapes"
 
 ]
 
@@ -239,12 +221,7 @@ camera-controls = { path = "util/camera-controls" }
 bevy-character-ui-menu-renderer = { path = "maybraid/crozon/bevy-character-ui-menu-renderer" }
 character-ui-menu = { path = "maybraid/crozon/character-ui-menu" }
 
-terrain = { path = "procedures/terrain" }
-vegetation-sdf = { path = "procedures/vegetation" }
-buildings = { path = "procedures/buildings" }
-engine = { path = "engine" }
-comproc = { "path" = "procedures/comproc" }
-skill-map = {"path" = "procedures/skill-map" }
+comproc = { path = "procedures/comproc" }
 
 durham-terrain = { path = "maybraid/durham/lib" }
 durham-terrain-shaders = { path = "maybraid/durham/shaders" }

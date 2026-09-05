@@ -258,6 +258,12 @@ the duty and set `enabled` when it may write; keep
 popped. Close remaining work goes to movement; far remaining work goes to
 routing. Do not add/remove the user every time `satisfied` flips.
 
+## Playgrounds
+
+A playground is a **single-layer** developer app next to the crate it inspects. Assembled world lives in [`maybraid-world`](maybraid/world/) (`cargo run -p maybraid-world-playground`). Do not keep a second vegetation-on-terrain (or similar) app that duplicates world streaming.
+
+When a playground is no longer worth maintaining, retire it: record path, last commit, and what it did under [Retired](maybraid/PLAYGROUNDS.md#retired) **before** deleting, then drop the crate from the workspace. Convention: [maybraid/PLAYGROUNDS.md](maybraid/PLAYGROUNDS.md).
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.

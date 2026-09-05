@@ -1,7 +1,7 @@
-//! Small Durham fine-grid patch for iterating Chico groves on real ground.
+//! Durham-backed vegetation host used by `maybraid-world`.
 //!
-//! `/forest` streams the unified Chico forest on Durham height (A/B against
-//! tiled `/grove`).
+//! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
+//! `/forest` still streams the unified Chico forest on Durham height for world.
 
 mod bump_out;
 pub mod camera;

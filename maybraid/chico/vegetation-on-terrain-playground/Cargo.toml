@@ -9,10 +9,6 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
-[[bin]]
-name = "chico-vegetation-on-terrain"
-path = "src/main.rs"
-
 [dependencies]
 bevy = { workspace = true }
 chunk = { workspace = true }
