@@ -196,6 +196,10 @@ impl TerrainEntryStore {
 		self.terrain.get(&id).map(|entry| &entry.value)
 	}
 
+	pub fn water(&self, id: Id) -> Option<&Water> {
+		self.water.get(&id).map(|entry| &entry.value)
+	}
+
 	pub fn height_snapshot(&self) -> TerrainHeightSnapshot {
 		TerrainHeightSnapshot {
 			terrain: Arc::new(
@@ -308,6 +312,48 @@ impl TerrainGenerationInput {
 		let water_cells =
 			GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref)
 				.len();
+		TerrainGenerationResult { store: index.store, terrain_cells, water_cells }
+	}
+
+	/// Generate an explicit, already-prioritized batch of origin-cell ids.
+	pub fn generate_ids(self, ids: Vec<Id>) -> TerrainGenerationResult {
+		let mut bounds = ids.iter().filter_map(|id| id.origin_cell_bounds());
+		let Some(first) = bounds.next() else {
+			return TerrainGenerationResult {
+				store: TerrainEntryStore::default(),
+				terrain_cells: 0,
+				water_cells: 0,
+			};
+		};
+		let mut min = Vec3::from(first.min);
+		let mut max = Vec3::from(first.max);
+		for bounds in bounds {
+			min = min.min(Vec3::from(bounds.min));
+			max = max.max(Vec3::from(bounds.max));
+		}
+		let region = Aabb3d::from_min_max(min, max);
+		let transform = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &transform,
+			current_transform: &transform,
+			bounds: &region,
+		};
+		let mut index = TerrainGenerationIndex { store: TerrainEntryStore::default(), input: self };
+		let mut terrain_cells = 0;
+		let mut water_cells = 0;
+		for id in ids {
+			if GeneratingSpatialIndex::<Terrain>::get_one_or_generate(&mut index, id, &lod_ref)
+				.is_some()
+			{
+				terrain_cells += 1;
+			}
+			if GeneratingSpatialIndex::<Water>::get_one_or_generate(&mut index, id, &lod_ref)
+				.is_some()
+			{
+				water_cells += 1;
+			}
+		}
 		TerrainGenerationResult { store: index.store, terrain_cells, water_cells }
 	}
 }
@@ -545,9 +591,14 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	/// versions. This is important for stable near-terrain collider ownership:
 	/// moving the stream must not rebuild cells that remain under the player.
 	pub fn apply_generation_region(&mut self, result: TerrainGenerationResult) {
+		let wanted: HashSet<Id> = result.store.terrain.keys().copied().collect();
+		self.apply_generation_batch(result);
+		self.retain_generation_ids(&wanted);
+	}
+
+	/// Merge one streamed generation batch without replacing stable existing cells.
+	pub fn apply_generation_batch(&mut self, result: TerrainGenerationResult) {
 		let TerrainGenerationResult { mut store, .. } = result;
-		let wanted_terrain: HashSet<Id> = store.terrain.keys().copied().collect();
-		let wanted_water: HashSet<Id> = store.water.keys().copied().collect();
 
 		for (id, entry) in store.terrain.drain() {
 			if self.store.terrain.contains_key(&id) {
@@ -566,21 +617,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 				},
 			);
 		}
-		let stale_terrain: Vec<Id> = self
-			.store
-			.terrain
-			.keys()
-			.filter(|id| !wanted_terrain.contains(id))
-			.copied()
-			.collect();
-		for id in stale_terrain {
-			if let Some(entry) = self.store.terrain.remove(&id) {
-				if let Some(entity) = entry.entity {
-					self.store.entity_to_id.remove(&entity);
-					self.commands.entity(entity).despawn();
-				}
-			}
-		}
 		for (id, entry) in store.water.drain() {
 			if self.store.water.contains_key(&id) {
 				continue;
@@ -591,12 +627,26 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 				StoredEntry { value: entry.value, bounds: entry.bounds, version, entity: None },
 			);
 		}
-		self.store.water.retain(|id, _| wanted_water.contains(id));
 		// Runtime height fallback only needs the universal base-noise entry.
 		for (id, mut entry) in store.base_noise.drain() {
 			entry.version = self.store.next_version();
 			self.store.base_noise.insert(id, entry);
 		}
+	}
+
+	/// Retire streamed cells that are outside the latest complete plan.
+	pub fn retain_generation_ids(&mut self, wanted: &HashSet<Id>) {
+		let stale_terrain: Vec<Id> =
+			self.store.terrain.keys().filter(|id| !wanted.contains(id)).copied().collect();
+		for id in stale_terrain {
+			if let Some(entry) = self.store.terrain.remove(&id) {
+				if let Some(entity) = entry.entity {
+					self.store.entity_to_id.remove(&entity);
+					self.commands.entity(entity).despawn();
+				}
+			}
+		}
+		self.store.water.retain(|id, _| wanted.contains(id));
 	}
 
 	/// Drop streamed semantic cells outside the live generation ring.

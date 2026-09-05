@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use bevy::ecs::system::SystemParam;
 use bevy::log::info_span;
 use bevy::prelude::*;
+use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::PresentedTerrainScene;
 use lod::gen::{
 	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
@@ -459,6 +460,7 @@ pub fn sync_raw_terrain_replacements(
 	padded_roots: Query<(Entity, &PresentedPaddedTerrainScene)>,
 	children: Query<&Children>,
 	meshes: Query<(), With<Mesh3d>>,
+	raw_terrain_meshes: Query<(), With<MeshMaterial3d<DurhamTerrainShader>>>,
 ) {
 	let ready: HashSet<Id> = padded_roots
 		.iter()
@@ -468,11 +470,16 @@ pub fn sync_raw_terrain_replacements(
 	for (root, presented) in &raw_roots {
 		// Keep raw collision live before, during, and after the visual handoff.
 		let replaced = state.wanted.contains(&presented.0) && ready.contains(&presented.0);
-		commands.entity(root).insert(if replaced {
-			Visibility::Hidden
-		} else {
-			Visibility::Inherited
-		});
+		commands.entity(root).insert(Visibility::Inherited);
+		for child in children.iter_descendants(root) {
+			if raw_terrain_meshes.contains(child) {
+				commands.entity(child).insert(if replaced {
+					Visibility::Hidden
+				} else {
+					Visibility::Inherited
+				});
+			}
+		}
 	}
 }
 

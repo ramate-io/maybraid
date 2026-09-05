@@ -3,7 +3,7 @@
 use bevy::log::info_span;
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3;
-use durham_terrain_models::{origin_cell_ids_for_layout, TERRAIN_CELL_SIZE};
+use durham_terrain_models::origin_cell_ids_for_layout;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
@@ -202,13 +202,6 @@ impl<'w> GenerationScheme<DevelopmentIndex<'w>> for TerrainWithPads {
 		region: Aabb3d,
 	) -> Vec<OriginalId> {
 		origin_cell_ids_for_layout(spatial_index.layout(), region)
-			.into_iter()
-			.filter(|id| {
-				id.0.origin_cell_bounds().is_some_and(|bounds| {
-					(bounds.max.x - bounds.min.x - TERRAIN_CELL_SIZE).abs() < 1e-3
-				})
-			})
-			.collect()
 	}
 
 	fn build_with_id(

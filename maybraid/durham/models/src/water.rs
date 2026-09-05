@@ -84,6 +84,20 @@ impl Water {
 			MeshMaterial3d::<RefractionWater>({material.clone()})
 		}
 	}
+
+	/// Visual scene positioned relative to a shared terrain-chunk host.
+	pub fn scene_relative_to(&self, parent_center: Vec3) -> impl Scene + 'static {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin - parent_center);
+		let sdf = self.sdf.clone();
+		let material = self.material.clone();
+		bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(sdf.clone())))
+			MeshMaterial3d::<RefractionWater>({material.clone()})
+		}
+	}
 }
 
 impl LodScene for Water {

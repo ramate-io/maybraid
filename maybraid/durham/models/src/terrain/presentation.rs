@@ -343,7 +343,8 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 			if let Some(previous) = self.state.presented.remove(id) {
 				self.commands.entity(previous.entity).despawn();
 			}
-			let value = &entry.value;
+			let mut value = entry.value.clone();
+			value.presented_water = store.water(*id).cloned();
 			let min = Vec3::from(value.cell.min);
 			let max = Vec3::from(value.cell.max);
 			let transform = Transform::from_translation((min + max) * 0.5);
@@ -357,7 +358,7 @@ impl<M: TerrainStreamMarker> TerrainStreamRegionPresenter<'_, '_, M> {
 						Visibility::default()
 					},
 				))
-				.insert((value.clone(), PresentedTerrainScene(*id), M::default()))
+				.insert((value, PresentedTerrainScene(*id), M::default()))
 				.id();
 			if M::COLLIDER {
 				self.commands.entity(entity).insert(TerrainColliderHost);

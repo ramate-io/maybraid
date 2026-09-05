@@ -76,34 +76,12 @@ impl WaterPresenterState {
 /// Read-only spatial-index view over the water entry map for presentation.
 pub struct WaterStoreView<'a> {
 	store: &'a TerrainEntryStore,
-	layout: &'a TerrainCellLayout,
-	stream_anchor: Option<Vec3>,
+	_layout: &'a TerrainCellLayout,
 }
 
 impl<'a> WaterStoreView<'a> {
 	pub fn new(store: &'a TerrainEntryStore, layout: &'a TerrainCellLayout) -> Self {
-		Self { store, layout, stream_anchor: None }
-	}
-
-	/// View only the visible High portions of moving terrain streams.
-	pub fn for_stream(
-		store: &'a TerrainEntryStore,
-		layout: &'a TerrainCellLayout,
-		stream_anchor: Vec3,
-	) -> Self {
-		Self { store, layout, stream_anchor: Some(stream_anchor) }
-	}
-
-	fn includes(&self, bounds: Aabb3d) -> bool {
-		let Some(anchor) = self.stream_anchor else {
-			return true;
-		};
-		let size = Vec3::from(bounds.max - bounds.min).x;
-		let Some(ring) = self.layout.stream_ring_for_cell_size(size) else {
-			return false;
-		};
-		let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
-		ring.level_for(center, anchor) == lod::LodSceneLevel::High
+		Self { store, _layout: layout }
 	}
 }
 
@@ -112,7 +90,7 @@ impl SpatialIndex<Water> for WaterStoreView<'_> {
 		self.store
 			.water
 			.iter()
-			.filter(|(_, entry)| region.intersects(&entry.bounds) && self.includes(entry.bounds))
+			.filter(|(_, entry)| region.intersects(&entry.bounds))
 			.map(|(id, _)| TrackedId(*id))
 			.collect()
 	}

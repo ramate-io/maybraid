@@ -28,6 +28,7 @@ use crate::terrain::marazion::{
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
+use crate::water::Water;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -151,6 +152,8 @@ pub struct Terrain {
 	pub res_2: u8,
 	/// Moving presentation band for streamed near / far / background terrain.
 	pub stream_ring: Option<TerrainCellRing>,
+	/// Optional water content presented in the same streamed LOD root.
+	pub(crate) presented_water: Option<Water>,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
 	pub wall_faces: WallFaces,
 }
@@ -238,7 +241,7 @@ impl Terrain {
 		let material = self.material.clone();
 		let seeds_collision = level == LodSceneLevel::High
 			&& self.stream_ring.is_none_or(|ring| ring.high_inner_radius <= 0.0);
-		if seeds_collision {
+		let terrain_scene: Box<dyn Scene> = if seeds_collision {
 			Box::new(bsn! {
 				template_value(transform)
 				template_value(chunk)
@@ -253,7 +256,11 @@ impl Terrain {
 				template(move |_ctx| Ok(Cached::new(builder.clone())))
 				MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
 			})
-		}
+		};
+		let Some(water) = self.presented_water.as_ref() else {
+			return terrain_scene;
+		};
+		Box::new((terrain_scene, water.scene_relative_to(self.center())))
 	}
 }
 
@@ -621,6 +628,7 @@ where
 				material,
 				res_2,
 				stream_ring,
+				presented_water: None,
 				wall_faces,
 			},
 			bounds,

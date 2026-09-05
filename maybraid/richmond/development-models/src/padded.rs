@@ -46,9 +46,7 @@ impl TerrainWithPads {
 			sdf: Arc::new(ComposedTerrain::from_terrain(sdf)),
 			material: terrain.material.clone(),
 			res_2: terrain.res_2,
-			// Building-skirt pads can still meet origin-cell faces on a large
-			// footprint; interior skirts close the CpuShot crack.
-			wall_faces: WallFaces::ALL,
+			wall_faces: terrain.wall_faces,
 			pad_count,
 		}
 	}

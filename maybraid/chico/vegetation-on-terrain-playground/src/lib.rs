@@ -64,12 +64,12 @@ use commands::{
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
-	TerrainBackgroundRegionPresenter, TerrainCellLayout, TerrainCellRing, TerrainConfig,
-	TerrainEntryStore, TerrainFarRegionPresenter, TerrainGenerationResult, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainNearRegionPresenter, TerrainPresentationAssets,
-	TerrainRegionPresenter, TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter,
-	WaterStoreView, TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, AvianTerrainIndex, BaseTerrainNoise, ComposedWater,
+	DurhamTerrainModelsPlugin, Terrain, TerrainBackgroundRegionPresenter, TerrainCellLayout,
+	TerrainCellRing, TerrainConfig, TerrainEntryStore, TerrainFarRegionPresenter,
+	TerrainGenerationResult, TerrainMeshBuilder, TerrainMeshLodBand, TerrainNearRegionPresenter,
+	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use forest::stream_durham_forest;
 use futures::FutureExt;
@@ -78,7 +78,7 @@ use game_commands::command::{
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::gen::{LodGenerateKeepRegion, LodGenerateRegion, RegionPresenter, SpatialIndex};
+use lod::gen::{Id, LodGenerateKeepRegion, LodGenerateRegion, RegionPresenter};
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion};
 use lod::{
@@ -118,7 +118,10 @@ const WORLD_TERRAIN_STREAM_EDGE_M: f32 =
 const WORLD_TERRAIN_PRESENT_STEP_M: f32 = 4.0 * TERRAIN_CELL_SIZE;
 /// The retention width permits less frequent semantic regeneration.
 const WORLD_TERRAIN_GENERATE_STEP_M: f32 = WORLD_TERRAIN_NEAR_RADIUS_M;
-const WORLD_TERRAIN_QUERY_HEIGHT_M: f32 = 20_000.0;
+const WORLD_TERRAIN_QUERY_MIN_Y: f32 = -8_000.0;
+const WORLD_TERRAIN_QUERY_MAX_Y: f32 = 8_000.0;
+const INITIAL_TERRAIN_GENERATION_CELLS: usize = 4;
+const TERRAIN_GENERATION_BATCH_CELLS: usize = 12;
 
 /// Fine-only patch vs playable world extents (fine grid + macro rings).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -269,7 +272,6 @@ struct TerrainGenerationTask {
 struct CompletedTerrainGeneration {
 	result: TerrainGenerationResult,
 	region: Aabb3d,
-	streamed: bool,
 	_permit: Option<FirstLoadPermit>,
 }
 
@@ -286,13 +288,72 @@ struct TerrainGenerateRing;
 struct TerrainPresentRing;
 
 #[derive(Resource, Default)]
-struct TerrainGenerationRegions(VecDeque<Aabb3d>);
+struct TerrainGenerationPlan {
+	region: Option<Aabb3d>,
+	batches: VecDeque<Vec<Id>>,
+	desired: HashSet<Id>,
+	retire_stale: bool,
+	terrain_cells: usize,
+	water_cells: usize,
+}
+
+impl TerrainGenerationPlan {
+	fn rebuild(&mut self, layout: &TerrainCellLayout, region: Aabb3d) {
+		let anchor = (Vec3::from(region.min) + Vec3::from(region.max)) * 0.5;
+		let mut ids: Vec<_> = origin_cell_ids_for_layout(layout, region)
+			.into_iter()
+			.map(|original| original.0)
+			.collect();
+		ids.sort_by(|a, b| {
+			let rank = |id: &Id| {
+				let Some(bounds) = id.origin_cell_bounds() else {
+					return (u8::MAX, f32::MAX);
+				};
+				let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+				let cell_size = bounds.max.x - bounds.min.x;
+				let Some((scale, ring)) = layout
+					.stream_rings
+					.iter()
+					.copied()
+					.enumerate()
+					.find(|(_, ring)| (ring.cell_size - cell_size).abs() < 1e-3)
+				else {
+					return (u8::MAX, f32::MAX);
+				};
+				let visible = ring.level_for(center, anchor) == lod::LodSceneLevel::High;
+				let stage = scale as u8 + if visible { 0 } else { layout.stream_rings.len() as u8 };
+				let delta = center - anchor;
+				(stage, delta.x * delta.x + delta.z * delta.z)
+			};
+			rank(a)
+				.partial_cmp(&rank(b))
+				.unwrap_or(std::cmp::Ordering::Equal)
+				.then_with(|| a.cmp(b))
+		});
+		self.desired = ids.iter().copied().collect();
+		self.batches.clear();
+		let first = ids.len().min(INITIAL_TERRAIN_GENERATION_CELLS);
+		if first != 0 {
+			self.batches.push_back(ids[..first].to_vec());
+		}
+		self.batches.extend(
+			ids[first..].chunks(TERRAIN_GENERATION_BATCH_CELLS).map(|chunk| chunk.to_vec()),
+		);
+		self.region = Some(region);
+		self.retire_stale = true;
+		self.terrain_cells = 0;
+		self.water_cells = 0;
+	}
+}
 
 fn terrain_ring_region(position: Vec3, edge: f32, step: f32) -> Aabb3d {
 	let center =
 		Vec3::new((position.x / step).round() * step, 0.0, (position.z / step).round() * step);
-	let half = Vec3::new(edge * 0.5, WORLD_TERRAIN_QUERY_HEIGHT_M * 0.5, edge * 0.5);
-	Aabb3d::from_min_max(center - half, center + half)
+	let half_xz = edge * 0.5;
+	Aabb3d::from_min_max(
+		Vec3::new(center.x - half_xz, WORLD_TERRAIN_QUERY_MIN_Y, center.z - half_xz),
+		Vec3::new(center.x + half_xz, WORLD_TERRAIN_QUERY_MAX_Y, center.z + half_xz),
+	)
 }
 
 fn terrain_ring_status(lod_ref: &LodRef, edge: f32, step: f32) -> LodRefreshRegionsStatus {
@@ -423,7 +484,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.init_resource::<TerrainGenerationTask>()
-			.init_resource::<TerrainGenerationRegions>()
+			.init_resource::<TerrainGenerationPlan>()
 			.insert_resource(TerrainGenerateRing)
 			.insert_resource(TerrainPresentRing)
 			.insert_resource(GrovesDirty(true))
@@ -610,7 +671,8 @@ fn setup_presentation_assets(
 		config: config.clone(),
 		material,
 		lod_bands: lod_bands_for(&playground),
-		outer_add_walls: true,
+		// Moving coarse rings must not emit full-depth walls on every cell face.
+		outer_add_walls: playground.coverage == TerrainCoverage::FinePatch,
 		fine_grid_max_radius: (playground.coverage == TerrainCoverage::FinePatch)
 			.then_some(playground.terrain_radius),
 		macro_seam_half_extents,
@@ -779,7 +841,7 @@ fn generate_cells(
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mut generation: ResMut<TerrainGenerationTask>,
-	mut regions: ResMut<TerrainGenerationRegions>,
+	mut plan: ResMut<TerrainGenerationPlan>,
 	mut generated_regions: MessageReader<LodGenerateRegion<TerrainLodChannel>>,
 	generate_keep: Res<LodGenerateKeepRegion<TerrainLodChannel>>,
 	activity: Option<Res<FirstLoadActivity>>,
@@ -788,10 +850,22 @@ fn generate_cells(
 	mode: Res<PlaygroundMode>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
 ) {
-	for generated in generated_regions.read() {
-		if !regions.0.iter().any(|region| *region == generated.region) {
-			regions.0.push_back(generated.region);
-		}
+	let streamed = config.coverage == TerrainCoverage::PlayableWorld;
+	let region_changed = generated_regions.read().next().is_some();
+	if dirty.0 {
+		index.clear();
+		plan.region = None;
+		dirty.0 = false;
+	}
+	let requested_region =
+		if streamed { generate_keep.region } else { Some(index.layout().request_region()) };
+	if (region_changed || plan.region.is_none())
+		&& requested_region.is_some_and(|region| plan.region != Some(region))
+	{
+		plan.rebuild(
+			index.layout(),
+			requested_region.unwrap_or_else(|| index.layout().request_region()),
+		);
 	}
 
 	if let Some(task) = generation.task.as_mut() {
@@ -799,25 +873,38 @@ fn generate_cells(
 			return;
 		};
 		generation.task = None;
-		let stale = completed.streamed
-			&& generate_keep
-				.live_region()
-				.is_some_and(|live_region| live_region != completed.region);
-		if !dirty.0 && !stale {
-			let terrain_cells = completed.result.terrain_cells;
-			let water_cells = completed.result.water_cells;
-			if completed.streamed {
-				index.apply_generation_region(completed.result);
-			} else {
-				index.apply_generation(completed.result);
+		if plan.region == Some(completed.region) {
+			let initial_batch = plan.terrain_cells == 0;
+			plan.terrain_cells += completed.result.terrain_cells;
+			plan.water_cells += completed.result.water_cells;
+			index.apply_generation_batch(completed.result);
+			if initial_batch {
+				info!(
+					"generated initial terrain batch terrain_cells={} water_cells={}",
+					plan.terrain_cells, plan.water_cells
+				);
 			}
-			info!("generated terrain_cells={terrain_cells} water_cells={water_cells}");
-
 			if let Some(base) = index.base_noise() {
 				world_base.0 = base.clone();
 			}
-			let layout = index.layout().clone();
-			if !completed.streamed && *mode == PlaygroundMode::Free {
+			pending.0 = true;
+		}
+	}
+
+	let Some(region) = plan.region else {
+		return;
+	};
+	let Some(ids) = plan.batches.pop_front() else {
+		if plan.retire_stale {
+			index.retain_generation_ids(&plan.desired);
+			plan.retire_stale = false;
+			pending.0 = true;
+			info!(
+				"generated terrain_cells={} water_cells={}",
+				plan.terrain_cells, plan.water_cells
+			);
+			if !streamed && *mode == PlaygroundMode::Free {
+				let layout = index.layout().clone();
 				if let Ok((mut transform, mut controller)) = cameras.single_mut() {
 					let center = layout.region_center_xz();
 					let elevation = index
@@ -831,36 +918,18 @@ fn generate_cells(
 					);
 				}
 			}
-			pending.0 = true;
 		}
-	}
-
-	let streamed = config.coverage == TerrainCoverage::PlayableWorld;
-	if dirty.0 {
-		regions.0.clear();
-		if streamed {
-			index.clear();
-			if let Some(region) = generate_keep.region {
-				regions.0.push_back(region);
-			}
-		} else {
-			regions.0.push_back(index.layout().request_region());
-		}
-		dirty.0 = false;
-	}
-	let Some(region) = regions.0.pop_front() else {
 		return;
 	};
 	let input = index.generation_input();
-	let permit = activity.as_ref().map(|activity| activity.begin());
+	// The first visible near batch is sufficient to hand off from the loading
+	// screen; retention and distant rings continue streaming afterward.
+	let permit = (plan.terrain_cells == 0)
+		.then(|| activity.as_ref().map(|activity| activity.begin()))
+		.flatten();
 	generation.task = Some(AsyncComputeTaskPool::get().spawn(async move {
 		let _span = info_span!("durham_terrain_generation").entered();
-		CompletedTerrainGeneration {
-			result: input.generate_region(region),
-			region,
-			streamed,
-			_permit: permit,
-		}
+		CompletedTerrainGeneration { result: input.generate_ids(ids), region, _permit: permit }
 	}));
 	pending.0 = true;
 }
@@ -922,18 +991,9 @@ fn present_cells(
 			&lod_ref,
 		);
 	}
-	let water_view = if streamed {
-		WaterStoreView::for_stream(&store, &layout, viewer.translation)
-	} else {
-		WaterStoreView::new(&store, &layout)
-	};
-	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
-	if streamed {
-		let wanted: HashSet<_> = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
-			.into_iter()
-			.map(|tracked| tracked.0)
-			.collect();
-		water_presenter.remove_stale(&wanted);
+	if !streamed {
+		let water_view = WaterStoreView::new(&store, &layout);
+		RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
 	}
 	pending.0 = false;
 }
@@ -1015,5 +1075,39 @@ mod tests {
 		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
 		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
 		assert_eq!(WORLD_TERRAIN_BACKGROUND_RADIUS_M, 3_840.0);
+	}
+
+	#[test]
+	fn world_generation_starts_with_visible_near_cells() {
+		let layout = world_cell_layout();
+		let region = terrain_ring_region(
+			Vec3::ZERO,
+			WORLD_TERRAIN_STREAM_EDGE_M,
+			WORLD_TERRAIN_GENERATE_STEP_M,
+		);
+		let mut plan = TerrainGenerationPlan::default();
+		plan.rebuild(&layout, region);
+		let first = plan.batches.front().expect("non-empty world generation plan");
+		assert_eq!(first.len(), INITIAL_TERRAIN_GENERATION_CELLS);
+		for id in first {
+			let bounds = id.origin_cell_bounds().expect("origin cell");
+			assert!((bounds.max.x - bounds.min.x - TERRAIN_CELL_SIZE).abs() < 1e-3);
+			let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+			assert_eq!(
+				layout.stream_rings[0].level_for(center, Vec3::ZERO),
+				lod::LodSceneLevel::High
+			);
+		}
+	}
+
+	#[test]
+	fn world_producer_spans_supported_height() {
+		let region = terrain_ring_region(
+			Vec3::ZERO,
+			WORLD_TERRAIN_STREAM_EDGE_M,
+			WORLD_TERRAIN_GENERATE_STEP_M,
+		);
+		assert_eq!(region.min.y, WORLD_TERRAIN_QUERY_MIN_Y);
+		assert_eq!(region.max.y, WORLD_TERRAIN_QUERY_MAX_Y);
 	}
 }
