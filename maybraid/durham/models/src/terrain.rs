@@ -12,6 +12,7 @@ pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod stream;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::jersey::{
@@ -102,6 +103,7 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use stream::{TerrainLodCell, TerrainLodIndex, TerrainLodPlugin, TerrainLodPresenter};
 
 /// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.
 pub type TerrainMeshBuilder = CpuShotBuilder<Arc<ComposedTerrain>>;
@@ -607,7 +609,7 @@ where
 			lod_ref,
 		)?;
 		let material = assets.material.clone();
-		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let (fallback_res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
 		let layout = GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
@@ -615,6 +617,7 @@ where
 		)?;
 		let cell_size = Vec3::from(bounds.max - bounds.min).x;
 		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
+		let res_2 = stream_ring.map(|ring| ring.res_2).unwrap_or(fallback_res_2);
 
 		Some((
 			Self {

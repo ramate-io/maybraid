@@ -3203,6 +3203,7 @@ dependencies = [
  "chunk",
  "comproc",
  "durham-terrain",
+ "futures",
  "jersey-terrain-stamps",
  "lod",
  "lod-avian",

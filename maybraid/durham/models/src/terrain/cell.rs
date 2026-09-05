@@ -72,6 +72,8 @@ pub struct OuterCellRing {
 pub struct TerrainCellRing {
 	/// Edge length of cells in this stream.
 	pub cell_size: f32,
+	/// Cascade mesh resolution for this stream (`2^res_2` samples per axis).
+	pub res_2: u8,
 	/// World-space lattice used to quantize the shared moving anchor.
 	pub anchor_step: f32,
 	/// Inner edge of the visible High annulus (`0` for the near stream).
@@ -441,6 +443,7 @@ mod tests {
 		layout.stream_rings = vec![
 			TerrainCellRing {
 				cell_size: TERRAIN_CELL_SIZE,
+				res_2: 5,
 				anchor_step: 4.0 * TERRAIN_CELL_SIZE,
 				high_inner_radius: 0.0,
 				high_outer_radius: 8.0 * TERRAIN_CELL_SIZE,
@@ -448,6 +451,7 @@ mod tests {
 			},
 			TerrainCellRing {
 				cell_size: 2.0 * TERRAIN_CELL_SIZE,
+				res_2: 4,
 				anchor_step: 4.0 * TERRAIN_CELL_SIZE,
 				high_inner_radius: 8.0 * TERRAIN_CELL_SIZE,
 				high_outer_radius: 16.0 * TERRAIN_CELL_SIZE,

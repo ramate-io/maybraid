@@ -571,6 +571,12 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		}
 	}
 
+	pub fn generated_cell(&self, id: Id) -> Option<(Terrain, Option<Water>)> {
+		let terrain = self.store.terrain.get(&id)?.value.clone();
+		let water = self.store.water.get(&id).map(|entry| entry.value.clone());
+		Some((terrain, water))
+	}
+
 	pub fn apply_generation(&mut self, result: TerrainGenerationResult) {
 		self.clear();
 		*self.store = result.store;
