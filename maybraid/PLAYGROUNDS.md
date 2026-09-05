@@ -58,4 +58,4 @@ Last commit that still contained these trees: [`af1f65fe59f0b6d01061ca2716119c9d
 
 - **Last commit:** [`af1f65fe59f0b6d01061ca2716119c9df7c68f06`](https://github.com/ramate-io/maybraid/commit/af1f65fe59f0b6d01061ca2716119c9df7c68f06)
 - **Did:** Pre-Maybraid generation: 2.5D height-oracle terrain SDF ([RFC-105](../rfc/rfc-000-000-105-procedural-terrain/README.md)), ball-stick `vegetation-sdf`, early building meshes, skill-map noise, and local pathfinding. Replaced by Durham, Chico, Richmond, and `maybraid/intelligence`.
-- **Kept:** [`procedures/comproc`](../procedures/comproc/) — Durham Jersey stamps still use guillotine + `NoiseConfig`.
+- **Moved:** `comproc` (guillotine + noise) now lives at [`maybraid/procedural/comproc`](procedural/comproc/). SDF / ball-stick modules that only served the old stack were dropped.

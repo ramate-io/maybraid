@@ -65,6 +65,7 @@ members = [
   "maybraid/crozon/playground",
 
   "maybraid/procedural/common",
+  "maybraid/procedural/comproc",
 
   "maybraid/chico/lib",
   "maybraid/chico/shaders",
@@ -116,8 +117,6 @@ members = [
   "maybraid/chico/forests",
   "maybraid/gimme/core",
   "maybraid/gimme/gen",
-
-  "procedures/comproc",
 
   # general utilities
   ## sdf
@@ -221,7 +220,7 @@ camera-controls = { path = "util/camera-controls" }
 bevy-character-ui-menu-renderer = { path = "maybraid/crozon/bevy-character-ui-menu-renderer" }
 character-ui-menu = { path = "maybraid/crozon/character-ui-menu" }
 
-comproc = { path = "procedures/comproc" }
+comproc = { path = "maybraid/procedural/comproc" }
 
 durham-terrain = { path = "maybraid/durham/lib" }
 durham-terrain-shaders = { path = "maybraid/durham/shaders" }

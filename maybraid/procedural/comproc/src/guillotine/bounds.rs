@@ -1,6 +1,6 @@
 //! Axis-aligned hyper-rectangles used as guillotine roots and leaf regions.
 
-use bevy::math::{Vec2, Vec3, Vec4};
+use bevy_math::{Vec2, Vec3, Vec4};
 
 /// Axis-aligned hyper-rectangle `[min, max]` in `D` dimensions.
 ///

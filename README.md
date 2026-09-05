@@ -32,5 +32,4 @@ Single-layer playgrounds live next to their crates. Retired apps and how to rest
 ## Organization
 
 - **[`rfc`](./rfc/):** proposals and specifications providing both institutional memory of the project and the latest designs.
-- **[`maybraid`](./maybraid/):** game crates (Durham, Chico, Richmond, Crozon, world).
-- **[`procedures/comproc`](./procedures/comproc/):** shared guillotine / noise primitives still used by Durham Jersey stamps.
+- **[`maybraid`](./maybraid/):** game crates (Durham, Chico, Richmond, Crozon, world). Shared procedural primitives live under [`maybraid/procedural`](./maybraid/procedural/) (`common`, `comproc`).

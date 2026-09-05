@@ -2526,16 +2526,8 @@ name = "comproc"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bevy",
- "chrono",
- "chunk",
- "log",
+ "bevy_math",
  "noise",
- "rayon",
- "render-item",
- "sdf",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]

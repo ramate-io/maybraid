@@ -1,7 +1,7 @@
 use super::*;
 use crate::noise::config::NoiseConfig;
 use anyhow::{bail, Result};
-use bevy::math::{Vec2, Vec3, Vec4};
+use bevy_math::{Vec2, Vec3, Vec4};
 use noise::{NoiseFn, Perlin, Seedable};
 
 fn cutter<const D: usize>(seed: u32, config: GuillotineConfig, depth: u8) -> Guillotine<D, Perlin>

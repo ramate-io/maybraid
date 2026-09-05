@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy_math::{Vec2, Vec3, Vec4};
 use noise::{NoiseFn, Seedable};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};

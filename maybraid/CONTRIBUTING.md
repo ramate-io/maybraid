@@ -8,7 +8,7 @@ There are a few key organization and naming rules that will help to track Maybra
 
 Early implementations, particularly those following an RFC, will often have a name that is a proper noun. For example, [Crozon](./crozon/) and [Durham](./durham/) which are early implementations of characters and terrain types and systems respectively. 
 
-While the assets associated with these layers should continue to sit behind this proper name, more general logic should increasingly be moved into more generally named crates and directories as the implementation matures.
+General logic that is no longer tied to a proper-noun implementation belongs in a generally named crate — for example [`procedural/common`](procedural/common/) and [`procedural/comproc`](procedural/comproc/) (guillotine partitions, noise sampling).
 
 ### `-models` Crates
 
