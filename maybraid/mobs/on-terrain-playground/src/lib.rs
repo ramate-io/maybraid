@@ -20,7 +20,7 @@ pub use playground_player::PlaygroundMode;
 
 use std::time::Duration;
 
-use avian3d::prelude::LinearVelocity;
+use avian3d::prelude::{CoefficientCombine, Friction, LinearVelocity};
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
@@ -32,8 +32,8 @@ use commands::{RequestModeCharacter, RequestModeFree};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainFrictionConfig, TerrainMeshBuilder,
+	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
 };
 use evasion_intelligence::{EvasionPlugin, EvasionSystems};
@@ -57,7 +57,7 @@ use movement_intelligence::{
 };
 use movement_intelligence_avian::AvianMovementSurface;
 use movement_realization::MovementRealizationPlugin;
-use player::PlayerPlugin as MaybraidPlayerPlugin;
+use player::{CharacterLocomotion as NpcLocomotion, PlayerPlugin as MaybraidPlayerPlugin};
 use poi_intelligence::PoiSystems;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use routing_intelligence::RoutingSystems;
@@ -70,11 +70,19 @@ use threat_management_intelligence::ThreatManagementPlugin;
 
 use crate::mobs::PlaygroundState;
 use crate::playground_player::{
-	respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface, Player,
-	PlayerControlSystems, PlayerPlugin,
+	respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface,
+	CharacterLocomotion, Player, PlayerControlSystems, PlayerPlugin,
 };
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
+/// Same walkable cap as the world playground ([#718](https://github.com/ramate-io/maybraid/pull/718)).
+const PLAYGROUND_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
+/// Static grip sits above `tan(70°)` ≈ 2.75 so walkable slopes do not ice-skate.
+const PLAYGROUND_TERRAIN_FRICTION: Friction = Friction {
+	dynamic_coefficient: 2.55,
+	static_coefficient: 2.95,
+	combine_rule: CoefficientCombine::Max,
+};
 
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
@@ -109,7 +117,10 @@ impl Plugin for MobOnTerrainPlaygroundPlugin {
 		let base = BaseTerrainNoise::from_config(&config);
 		let layout = cell_layout(DEFAULT_TERRAIN_RADIUS);
 
-		app.add_plugins(DurhamTerrainModelsPlugin)
+		app.insert_resource(TerrainFrictionConfig(PLAYGROUND_TERRAIN_FRICTION))
+			.insert_resource(NpcLocomotion { max_slope_angle: PLAYGROUND_MAX_SLOPE_ANGLE })
+			.insert_resource(CharacterLocomotion { max_slope_angle: PLAYGROUND_MAX_SLOPE_ANGLE })
+			.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default())
@@ -410,4 +421,21 @@ fn sync_pad_gameplay(
 ) {
 	let text = focus.is_some_and(|focus| focus.0) || blocked.is_some_and(|blocked| blocked.0);
 	enabled.0 = !text;
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn playground_slope_is_below_wall_grade() {
+		let degrees = PLAYGROUND_MAX_SLOPE_ANGLE.to_degrees();
+		assert!(degrees < 80.0);
+		assert!(degrees > 55.0);
+	}
+
+	#[test]
+	fn playground_terrain_static_friction_holds_max_walkable_slope() {
+		assert!(PLAYGROUND_TERRAIN_FRICTION.static_coefficient > PLAYGROUND_MAX_SLOPE_ANGLE.tan());
+	}
 }

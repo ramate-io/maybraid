@@ -12,8 +12,8 @@ use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
 	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
-	CharacterController, Grounded, JumpWish, Jumping, MoveWish, MovementAction,
-	PlayerControlSystems,
+	CharacterController, CharacterLocomotion, Grounded, JumpWish, Jumping, MoveWish,
+	MovementAction, PlayerControlSystems,
 };
 pub use identity::{
 	CameraFollow, Npc, Player, PlayerCameraAim, PlayerCameraPose, PlayerCapsule, PlayerLook,
@@ -47,6 +47,7 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_message::<MovementAction>()
+			.init_resource::<CharacterLocomotion>()
 			.configure_sets(
 				Update,
 				(
@@ -72,6 +73,7 @@ impl Plugin for PlayerPlugin {
 					.chain()
 					.in_set(PlayerSystems::Body),
 			)
+			.add_systems(PostUpdate, body::sync_character_locomotion)
 			.add_systems(
 				Update,
 				(locomotion::face_wish_yaw, drive_player_locomotion)

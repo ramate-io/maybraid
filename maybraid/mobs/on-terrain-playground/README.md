@@ -10,6 +10,12 @@ composed height and a terrain trimesh exist. Journeying still uses the productio
 stack: the host is a corridor planner (`RoutingIntelligenceUser`); `MobTravel`
 slides it along hops (including Y); High plants follow by tether.
 
+Capsules use the world steep-hill setup from
+[#718](https://github.com/ramate-io/maybraid/pull/718): 70° walkable slope,
+terrain friction 2.55/2.95 Max (static > tan(70°) ≈ 2.75), and grounded wish
+projected onto the contact plane so XZ accel does not dig into the hill. Default
+Durham trimesh grip (0.95 static) only holds ~44°.
+
 Default cast is a **herd** (≤6 members). `/pack` and `/both` swap the list.
 
 ```bash

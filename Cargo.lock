@@ -4787,6 +4787,7 @@ dependencies = [
  "movement-intelligence",
  "movement-intelligence-avian",
  "movement-realization",
+ "player",
  "poi-intelligence",
  "procedural-common",
  "richmond-development-models",

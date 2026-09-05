@@ -16,6 +16,21 @@ pub(crate) const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
 pub(crate) const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 
+/// Walkable grounded slope for FFA / NPC capsules. Insert before [`crate::PlayerPlugin`]
+/// to override the default (~81°). World / Durham playgrounds use ~70° so cliffs
+/// never count as floor; static terrain friction should exceed `tan(this)`.
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct CharacterLocomotion {
+	/// Hits steeper than this (radians from up) are not grounded.
+	pub max_slope_angle: f32,
+}
+
+impl Default for CharacterLocomotion {
+	fn default() -> Self {
+		Self { max_slope_angle: MAX_SLOPE_ANGLE }
+	}
+}
+
 #[derive(Component, Default)]
 pub struct MoveWish(pub Vec3);
 
@@ -92,6 +107,17 @@ pub fn apply_character_controller(commands: &mut Commands, body: Entity, hull: L
 		GravityScale(1.25),
 	));
 	apply_locomotion_capsule(commands, body, hull);
+}
+
+/// Copy [`CharacterLocomotion`] onto newly spawned capsules. Runs in PostUpdate
+/// so scene materialize in Update is visible the same frame.
+pub(crate) fn sync_character_locomotion(
+	locomotion: Res<CharacterLocomotion>,
+	mut slopes: Query<&mut MaxSlopeAngle, Added<MaxSlopeAngle>>,
+) {
+	for mut slope in &mut slopes {
+		slope.0 = locomotion.max_slope_angle;
+	}
 }
 
 /// Scale run acceleration and jump impulse from character-sheet factors.
@@ -310,5 +336,34 @@ pub(crate) fn apply_movement_damping(
 	for (damping, mut velocity) in &mut query {
 		velocity.x *= damping.0;
 		velocity.z *= damping.0;
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn default_locomotion_keeps_legacy_slope() {
+		assert!((CharacterLocomotion::default().max_slope_angle - MAX_SLOPE_ANGLE).abs() < 1e-6);
+	}
+
+	#[test]
+	fn grounded_wish_climbs_along_the_slope() {
+		let mut velocity = LinearVelocity(Vec3::ZERO);
+		let slope = 70.0_f32.to_radians();
+		// Hill rises in +X, so the normal tilts downhill (−X).
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, Some(normal));
+		assert!(velocity.y > 1.0, "grounded drive must add uphill Y, got {}", velocity.y);
+		assert!(velocity.x > 0.0);
+	}
+
+	#[test]
+	fn airborne_wish_stays_xz() {
+		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
+		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, None);
+		assert!((velocity.y + 5.0).abs() < 1e-4);
+		assert!(velocity.x > 0.0);
 	}
 }

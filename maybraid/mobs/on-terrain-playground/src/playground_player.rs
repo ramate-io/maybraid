@@ -43,8 +43,8 @@ pub struct MoveWish(pub Vec3);
 pub struct PlayerControlSystems;
 
 /// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
-/// (~81°) max slope. World playground uses a shallower cap so 80°+ walls do
-/// not count as floor.
+/// (~81°) max slope. Durham playgrounds use ~70° so 80°+ cliffs do not count
+/// as floor.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterLocomotion {
 	/// Hits steeper than this (radians from up) are not grounded.
@@ -379,6 +379,58 @@ fn update_grounded(
 	}
 }
 
+/// Most upright contact within the walkable slope, if any.
+fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+	let mut best: Option<(f32, Vec3)> = None;
+	for hit in hits.iter() {
+		let normal = (-hit.normal2).normalize_or_zero();
+		if normal.length_squared() < 1e-8 {
+			continue;
+		}
+		let angle = normal.angle_between(Vec3::Y).abs();
+		if let Some(max) = max_slope {
+			if angle > max.0 {
+				continue;
+			}
+		}
+		if best.is_none_or(|(best_angle, _)| angle < best_angle) {
+			best = Some((angle, normal));
+		}
+	}
+	best.map(|(_, normal)| normal)
+}
+
+/// Accelerate along the ground plane when a walkable normal is known; else XZ only.
+fn accelerate_wish(
+	velocity: &mut LinearVelocity,
+	wish: Vec3,
+	accel: f32,
+	dt: f32,
+	ground_normal: Option<Vec3>,
+) {
+	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
+	if wish.length_squared() < 1e-8 {
+		return;
+	}
+	let drive = match ground_normal {
+		Some(normal) => {
+			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
+			if along.length_squared() > 1e-8 {
+				along
+			} else {
+				wish
+			}
+		}
+		None => wish,
+	};
+	if ground_normal.is_some() {
+		**velocity += drive * accel * dt;
+	} else {
+		velocity.x += drive.x * accel * dt;
+		velocity.z += drive.z * accel * dt;
+	}
+}
+
 fn apply_character_movement(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
@@ -386,7 +438,15 @@ fn apply_character_movement(
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
-		(Entity, &MovementAcceleration, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
+		(
+			Entity,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
+			&MovementAcceleration,
+			&JumpImpulse,
+			&mut LinearVelocity,
+			Has<Grounded>,
+		),
 		With<CharacterController>,
 	>,
 ) {
@@ -406,12 +466,13 @@ fn apply_character_movement(
 	let dt = time.delta_secs();
 
 	for action in reader.read() {
-		for (entity, accel, jump, mut velocity, grounded) in &mut controllers {
+		for (entity, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers {
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					velocity.x += wish.x * accel.0 * dt;
-					velocity.z += wish.z * accel.0 * dt;
+					let ground =
+						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
 					if grounded {

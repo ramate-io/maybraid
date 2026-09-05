@@ -44,10 +44,10 @@ use richmond_developments_on_terrain_playground::{
 
 /// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
-/// Static grip sits above `tan(70°)` ≈ 1.73 so walkable slopes do not ice-skate.
+/// Static grip sits above `tan(70°)` ≈ 2.75 so walkable slopes do not ice-skate.
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
-	dynamic_coefficient: 1.55,
-	static_coefficient: 1.85,
+	dynamic_coefficient: 2.55,
+	static_coefficient: 2.95,
 	combine_rule: CoefficientCombine::Max,
 };
 
@@ -85,6 +85,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
 			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
+			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
