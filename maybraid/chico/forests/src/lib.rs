@@ -26,6 +26,7 @@ mod recipe;
 mod stick_physics;
 mod stream;
 mod view;
+mod world;
 
 pub use assemble::{
 	assemble, assemble_isolated, grow_tile, presenting_recipes, AssembledForest, ForestGroveTile,
@@ -60,7 +61,7 @@ pub use kind::{
 };
 pub use layer::{select_layers, throw_layer};
 pub use plugin::{ForestPlugin, VegetationViewPlugin};
-pub use present::{FlatForestPresenter, ForestPresenterState};
+pub use present::{FlatForestPresenter, ForestPresenter, ForestPresenterState};
 pub use recipe::ForestGroveRecipe;
 pub use stream::{
 	drive_forest_stream, parse_layering_kind, stream_radii_m, ForestStream, ForestStreamLod,
@@ -69,3 +70,4 @@ pub use stream::{
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,
 };
+pub use world::{FlatWorld, GroveWorldSource, OnTerrain, TerrainHeightSource};

@@ -13,7 +13,7 @@ pub use commands::{DevelopmentFocus, PlaygroundCommand, PlaygroundStartup, PLAYG
 pub use development_bump_out::{
 	DevelopmentCanopyBumpOutPresenter, DevelopmentMediumCanopyBumpOutPresenter,
 };
-pub use development_forest::DevelopmentForestPresenter;
+pub use development_forest::DevelopmentExclusions;
 pub use game_commands::command::PendingStartupCommand;
 pub use urbanization_stream::{
 	parse_urbanization_kind, register_urbanization_lod, stream_radii_m, stream_urbanization,
@@ -26,9 +26,9 @@ use bevy::prelude::*;
 use camera::{
 	camera_controller, refocus_camera_on_layout, release_modifiers_on_focus_change, setup_camera,
 };
-use chico_forests::ForestPlugin;
+use chico_forests::{ForestPlugin, ForestPresenter, OnTerrain};
 use chico_vegetation_on_terrain_playground::{
-	register_bump_out_lod, terrain_streaming_enabled, TerrainStreamingEnabled,
+	register_bump_out_lod, terrain_streaming_enabled, DurhamHeight, TerrainStreamingEnabled,
 };
 use commands::{
 	RequestDevelopmentFocus, RequestLikelihood, RequestMeshStats, RequestRebuild, RequestSeed,
@@ -178,7 +178,9 @@ impl Plugin for DevelopmentsOnTerrainPlugin {
 		app.add_plugins(RichmondDevelopmentModelsPlugin);
 		register_urbanization_lod(app);
 		if self.register_development_forest_lod {
-			app.add_plugins(ForestPlugin::<DevelopmentForestPresenter>::default());
+			app.add_plugins(ForestPlugin::<
+				ForestPresenter<DevelopmentExclusions<OnTerrain<DurhamHeight>>>,
+			>::default());
 			register_bump_out_lod::<
 				DevelopmentCanopyBumpOutPresenter,
 				DevelopmentMediumCanopyBumpOutPresenter,

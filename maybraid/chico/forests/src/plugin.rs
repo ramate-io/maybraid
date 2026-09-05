@@ -48,7 +48,7 @@ impl Plugin for VegetationViewPlugin {
 	}
 }
 
-/// Generate, present, and cull [`ChicoGrove`]. `Pr` grows tiles against a world sample.
+/// Generate, present, and cull [`ChicoGrove`]. `Pr` is [`ForestPresenter`]`<S>` for a world source `S`.
 pub struct ForestPlugin<Pr> {
 	_marker: PhantomData<fn() -> Pr>,
 }

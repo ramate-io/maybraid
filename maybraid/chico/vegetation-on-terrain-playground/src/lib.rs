@@ -26,11 +26,9 @@ pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
 pub use chico_forests::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
-pub use forest::DurhamForestPresenter;
+pub use forest::DurhamHeight;
 pub use game_commands::command::PendingStartupCommand;
-pub use groves::{
-	DurhamGroveSample, DurhamGroveTerrainCache, OwnedDurhamTerrain, StoredDurhamTerrain,
-};
+pub use groves::{OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{
 	init_vegetation_on_terrain_material_caches, VegetationOnTerrainMaterialLib,
 	VegetationOnTerrainMaterialRefPlugin,
@@ -54,7 +52,8 @@ use camera::{
 use character::{apply_set_character, drive_player_locomotion};
 use chico_bumpout::ChicoBumpOutPlugin;
 use chico_forests::{
-	drive_forest_stream, stream_radii_m, ForestPlugin, ForestStream, VegetationViewPlugin,
+	drive_forest_stream, stream_radii_m, ForestPlugin, ForestPresenter, ForestStream, OnTerrain,
+	VegetationViewPlugin,
 };
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
@@ -324,7 +323,7 @@ pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
-	/// Register the plain Durham-backed forest presenter.
+	/// Register Durham forest present (`ForestPresenter<OnTerrain<DurhamHeight>>`).
 	pub register_forest_lod: bool,
 	/// Register the plain Durham-backed canopy bump-out presenter.
 	pub register_bump_out_lod: bool,
@@ -383,7 +382,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
 		if self.register_forest_lod {
-			app.add_plugins(ForestPlugin::<DurhamForestPresenter>::default());
+			app.add_plugins(ForestPlugin::<ForestPresenter<OnTerrain<DurhamHeight>>>::default());
 		}
 		if self.register_bump_out_lod {
 			register_bump_out_lod::<DurhamCanopyBumpOutPresenter, DurhamMediumCanopyBumpOutPresenter>(
@@ -411,11 +410,9 @@ impl Plugin for VegetationOnTerrainPlugin {
 				..default()
 			})
 			.insert_resource(GrovesDirty(true))
-			.init_resource::<DurhamGroveTerrainCache>()
 			.init_resource::<ForestStream>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
 			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
-			.add_systems(Update, refresh_grove_terrain_cache.before(LodPresentSystems::Produce))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
@@ -497,20 +494,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 			);
 		}
 	}
-}
-
-fn refresh_grove_terrain_cache(
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	base: Res<WorldBaseTerrain>,
-	mut cache: ResMut<DurhamGroveTerrainCache>,
-) {
-	if cache.terrain.is_some() && !store.is_changed() && !layout.is_changed() && !base.is_changed()
-	{
-		return;
-	}
-	cache.terrain =
-		Some(OwnedDurhamTerrain::new(store.height_snapshot(), layout.clone(), base.0.clone()));
 }
 
 /// Count total vs view-visible mesh triangles (`ViewVisibility`) and LOD probe hosts.

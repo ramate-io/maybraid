@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{StaticSystemParam, SystemParam};
 use bevy::log::info_span;
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -15,9 +15,8 @@ use lod::presentation::RegionPresenter;
 use lod::LodScene;
 use lod_first_load::{FirstLoadActivity, FirstLoadPermit};
 
-use crate::{
-	forest_world_sample, ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer,
-};
+use crate::world::GroveWorldSource;
+use crate::{ChicoGrove, ChicoGroveHost, ForestGroveTile, ForestIndex, ForestLayer};
 
 const MAX_GROVE_GROWTH_TASKS: usize = 4;
 const GROVE_HOSTS_PER_QUANTUM: usize = 1;
@@ -247,27 +246,35 @@ fn spawn_forest_grove_tile(
 	spawn_grove_host(commands, &ChicoGroveHost::new(tile.clone(), layer), lod_ref)
 }
 
-/// Flat-ground presenter for the SBS trees playground.
+/// Present [`ChicoGrove`] via a composed [`GroveWorldSource`].
 #[derive(SystemParam)]
-pub struct FlatForestPresenter<'w, 's> {
+pub struct ForestPresenter<'w, 's, S: SystemParam + 'static> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, ForestPresenterState>,
+	source: StaticSystemParam<'w, 's, S>,
 	activity: Option<Res<'w, FirstLoadActivity>>,
 }
 
-impl RegionPresenter<ChicoGrove, ForestIndex> for FlatForestPresenter<'_, '_> {
+impl<S: SystemParam + 'static> RegionPresenter<ChicoGrove, ForestIndex>
+	for ForestPresenter<'_, '_, S>
+where
+	for<'a, 'b> S::Item<'a, 'b>: GroveWorldSource,
+{
 	fn presented_version(&self, id: Id) -> Option<Version> {
 		self.state.presented_version(id)
 	}
 
 	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
+		let Some(world) = self.source.sample(grove, lod_ref) else {
+			return;
+		};
 		self.state.present_with_world(
 			&mut self.commands,
 			id,
 			version,
 			grove,
 			lod_ref,
-			forest_world_sample,
+			move || world,
 			self.activity.as_deref(),
 		);
 	}
@@ -297,6 +304,9 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for FlatForestPresenter<'_, '_> {
 		self.state.cull(&mut self.commands, spatial_index, keep, despawn_budget)
 	}
 }
+
+/// Flat-ground forest presenter.
+pub type FlatForestPresenter<'w, 's> = ForestPresenter<'w, 's, crate::world::FlatWorld<'s>>;
 
 #[cfg(test)]
 mod tests {

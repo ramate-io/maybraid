@@ -1,43 +1,29 @@
-//! Forest presentation against Durham terrain after Richmond pad modulation.
+//! Forest world source: overlapping developments modulate height and punch flatten/grade.
 
-use std::collections::HashSet;
-
-use bevy::ecs::system::SystemParam;
-use bevy::prelude::*;
-use chico_forests::{ChicoGrove, ForestIndex, ForestPresenterState};
-use chico_groves::{GroveHeightModulation, ModulatedGroveSample};
-use chico_vegetation_on_terrain_playground::{DurhamGroveSample, DurhamGroveTerrainCache};
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Version};
+use bevy::ecs::system::{StaticSystemParam, SystemParam};
+use bevy::math::Vec3;
+use chico_forests::{ChicoGrove, GroveWorldSource};
+use chico_groves::GroveWorldSample;
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, OriginalId};
 use lod::lod_ref::LodRef;
-use lod::presentation::RegionPresenter;
-use lod_first_load::FirstLoadActivity;
-use richmond_development_models::{DevelopmentCell, DevelopmentIndex, PadComplex};
+use richmond_development_models::{pad::PadStage, DevelopmentCell, DevelopmentIndex, PadComplex};
 
-#[derive(Clone)]
-struct DevelopmentPadModulation(PadComplex);
-
-impl GroveHeightModulation for DevelopmentPadModulation {
-	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
-		self.0.modify_elevation(base_height, x, z)
-	}
-}
-
-/// Present forest groves against Durham terrain with overlapping pads blended in.
+/// Present forest groves against an inner world sample after pad marshalling.
 #[derive(SystemParam)]
-pub struct DevelopmentForestPresenter<'w, 's> {
-	commands: Commands<'w, 's>,
-	state: ResMut<'w, ForestPresenterState>,
+pub struct DevelopmentExclusions<'w, 's, Inner: SystemParam + 'static> {
+	inner: StaticSystemParam<'w, 's, Inner>,
 	development: DevelopmentIndex<'w>,
-	terrain: Res<'w, DurhamGroveTerrainCache>,
-	activity: Option<Res<'w, FirstLoadActivity>>,
 }
 
-impl RegionPresenter<ChicoGrove, ForestIndex> for DevelopmentForestPresenter<'_, '_> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented_version(id)
-	}
-
-	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
+impl<Inner: SystemParam + 'static> GroveWorldSource for DevelopmentExclusions<'_, '_, Inner>
+where
+	for<'a, 'b> Inner::Item<'a, 'b>: GroveWorldSource,
+{
+	fn sample(
+		&mut self,
+		grove: &ChicoGrove,
+		lod_ref: &LodRef,
+	) -> Option<impl GroveWorldSample + Clone + Send + Sync + 'static> {
 		let bounds = grove.aabb();
 		let ids = <DevelopmentCell as GenerationScheme<DevelopmentIndex<'_>>>::original_ids_for(
 			&mut self.development,
@@ -50,51 +36,47 @@ impl RegionPresenter<ChicoGrove, ForestIndex> for DevelopmentForestPresenter<'_,
 				lod_ref,
 			);
 		}
-
 		let pads = self.development.store.merged_pad_complex(bounds);
-		let Some(terrain) = self.terrain.terrain.clone() else {
-			return;
-		};
-		let modulation = DevelopmentPadModulation(pads);
-		self.state.present_with_world(
-			&mut self.commands,
-			id,
-			version,
-			grove,
-			lod_ref,
-			|| {
-				ModulatedGroveSample::new(
-					DurhamGroveSample::from_terrain(terrain),
-					vec![modulation],
-				)
-			},
-			self.activity.as_deref(),
-		);
+		let base = self.inner.sample(grove, lod_ref)?;
+		Some(DevelopmentGroveSample { base, pads })
+	}
+}
+
+/// Inner height field with pad terraces and flatten/grade planting holes.
+#[derive(Clone)]
+pub struct DevelopmentGroveSample<Base> {
+	base: Base,
+	pads: PadComplex,
+}
+
+impl<Base: GroveWorldSample> GroveWorldSample for DevelopmentGroveSample<Base> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.pads
+			.modify_elevation(self.base.height_at(position), position.x, position.z)
 	}
 
-	fn hide(&mut self, id: Id) {
-		self.state.hide(&mut self.commands, id);
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		const EPS: f32 = 1.0;
+		let h = self.height_at(position);
+		let hx = self.height_at(position + Vec3::new(EPS, 0.0, 0.0));
+		let hz = self.height_at(position + Vec3::new(0.0, 0.0, EPS));
+		let dx = (hx - h) / EPS;
+		let dz = (hz - h) / EPS;
+		(dx * dx + dz * dz).sqrt()
 	}
 
-	fn is_hidden(&self, id: Id) -> bool {
-		self.state.is_hidden(id)
+	fn exclusion_zones(&self) -> &[bevy::math::bounding::Aabb3d] {
+		self.base.exclusion_zones()
 	}
 
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented_ids()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		self.state.remove_stale(&mut self.commands, wanted);
-	}
-
-	fn cull(
-		&mut self,
-		spatial_index: &ForestIndex,
-		keep: &HashSet<Id>,
-		despawn_budget: u32,
-	) -> u32 {
-		self.state.cull(&mut self.commands, spatial_index, keep, despawn_budget)
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		if !self.base.allows_placement_at(position) {
+			return false;
+		}
+		!matches!(
+			self.pads.classification_at(position.x, position.z),
+			Some(PadStage::Flatten | PadStage::Grade)
+		)
 	}
 }
 
@@ -103,7 +85,7 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use bevy::math::Vec2;
-	use chico_groves::{FlatTerrainSample, GroveWorldSample};
+	use chico_groves::FlatTerrainSample;
 	use richmond_development_models::PadParams;
 
 	#[test]
@@ -115,12 +97,15 @@ mod tests {
 			12.0,
 			PadParams::default(),
 		);
-		let base = FlatTerrainSample { elevation: 3.0, steepness: 0.0 };
-		let modulation = DevelopmentPadModulation(pad);
-		let sample = ModulatedGroveSample::new(base, vec![modulation]);
+		let sample = DevelopmentGroveSample {
+			base: FlatTerrainSample { elevation: 3.0, steepness: 0.0 },
+			pads: pad,
+		};
 
 		assert!((sample.height_at(Vec3::ZERO) - 12.0).abs() < 1e-5);
 		assert!((sample.height_at(Vec3::new(1_000.0, 0.0, 1_000.0)) - 3.0).abs() < 1e-5);
+		assert!(!sample.allows_placement_at(Vec3::ZERO));
+		assert!(sample.allows_placement_at(Vec3::new(1_000.0, 3.0, 1_000.0)));
 		Ok(())
 	}
 }

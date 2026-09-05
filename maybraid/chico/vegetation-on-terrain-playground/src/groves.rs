@@ -10,9 +10,9 @@ use chico_groves::{
 	LowBushParams, MonsterGrassParams, OrchardParams, PalmShadeParams, RiparianGeneralParams,
 	RiparianMixParams, RiverineGreenParams, RollingOaksParams, ShamanhomeParams,
 	SpottyBushesParams, StorytellersParams, StrangeOasisParams, TallGrassParams,
-	TemperateLowerMassivesParams, TemperateMassivesParams, TradeWindsParams, TropicalThicketParams,
-	TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams, VineyardParams,
-	WanderingAcaciaParams, WildGrassParams,
+	TemperateLowerMassivesParams, TemperateMassivesParams, TerrainGroveSample, TradeWindsParams,
+	TropicalThicketParams, TropicalTuftsParams, TropicalUndergrowthParams, UnendingJungleParams,
+	VineyardParams, WanderingAcaciaParams, WildGrassParams,
 };
 use chico_vegetation_components::{spawn_lod_scene_host, vegetation_bounds, VegetationComponents};
 use durham_terrain_models::{
@@ -26,7 +26,7 @@ use crate::PlaygroundConfig;
 #[derive(Component)]
 pub struct GroveRoot;
 
-/// Stored Durham height field used by [`DurhamGroveSample`].
+/// Stored Durham height field used by [`TerrainGroveSample`].
 pub struct StoredDurhamTerrain<'a> {
 	store: &'a TerrainEntryStore,
 	layout: &'a TerrainCellLayout,
@@ -77,43 +77,6 @@ impl GroveTerrain for OwnedDurhamTerrain {
 	}
 }
 
-#[derive(Resource, Clone, Default)]
-pub struct DurhamGroveTerrainCache {
-	pub terrain: Option<OwnedDurhamTerrain>,
-}
-
-/// Grove sample generic over any terrain height field.
-#[derive(Clone)]
-pub struct DurhamGroveSample<T> {
-	terrain: T,
-}
-
-impl<T: GroveTerrain> DurhamGroveSample<T> {
-	pub fn from_terrain(terrain: T) -> Self {
-		Self { terrain }
-	}
-}
-
-impl<'a> DurhamGroveSample<StoredDurhamTerrain<'a>> {
-	pub fn new(
-		store: &'a TerrainEntryStore,
-		layout: &'a TerrainCellLayout,
-		fallback: &'a BaseTerrainNoise,
-	) -> Self {
-		Self::from_terrain(StoredDurhamTerrain::new(store, layout, fallback))
-	}
-}
-
-impl<T: GroveTerrain> GroveWorldSample for DurhamGroveSample<T> {
-	fn height_at(&self, position: Vec3) -> f32 {
-		self.terrain.height_at(position)
-	}
-
-	fn steepness_at(&self, position: Vec3) -> f32 {
-		self.terrain.steepness_at(position)
-	}
-}
-
 pub fn spawn_tiled_groves(
 	commands: &mut Commands,
 	config: &PlaygroundConfig,
@@ -121,7 +84,7 @@ pub fn spawn_tiled_groves(
 	layout: &TerrainCellLayout,
 	fallback: &BaseTerrainNoise,
 ) -> usize {
-	let world = DurhamGroveSample::new(store, layout, fallback);
+	let world = TerrainGroveSample::new(StoredDurhamTerrain::new(store, layout, fallback));
 	let tile = config.grove_extent_xz.max(1.0);
 	let radius = config.tile_radius.max(0);
 	let mut count = 0usize;
@@ -320,8 +283,8 @@ mod tests {
 	}
 
 	#[test]
-	fn generic_durham_sample_delegates_terrain_sampling() -> Result<()> {
-		let sample = DurhamGroveSample::from_terrain(TestTerrain);
+	fn generic_terrain_sample_delegates_height() -> Result<()> {
+		let sample = TerrainGroveSample::new(TestTerrain);
 		let position = Vec3::new(6.0, 123.0, 2.0);
 		assert!((sample.height_at(position) - 8.0).abs() < 1e-5);
 		assert!((sample.steepness_at(position) - 8.0).abs() < 1e-5);

@@ -180,6 +180,39 @@ where
 	}
 }
 
+/// [`GroveWorldSample`] that unions extra AABB holes onto a base field.
+#[derive(Debug, Clone)]
+pub struct ExcludingGroveSample<Base> {
+	pub base: Base,
+	pub zones: Vec<Aabb3d>,
+}
+
+impl<Base: GroveWorldSample> ExcludingGroveSample<Base> {
+	pub fn new(base: Base, extra: impl IntoIterator<Item = Aabb3d>) -> Self {
+		let mut zones = base.exclusion_zones().to_vec();
+		zones.extend(extra);
+		Self { base, zones }
+	}
+}
+
+impl<Base: GroveWorldSample> GroveWorldSample for ExcludingGroveSample<Base> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.base.height_at(position)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		self.base.steepness_at(position)
+	}
+
+	fn exclusion_zones(&self) -> &[Aabb3d] {
+		&self.zones
+	}
+
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		self.base.allows_placement_at(position) && !point_in_any_aabb(position, &self.zones)
+	}
+}
+
 /// Uniform world sample for CLI previews and isolation tests.
 ///
 /// `elevation` is a constant world-metre height (CLI flag kept for existing scripts).
@@ -301,6 +334,15 @@ mod tests {
 
 		let sample =
 			SampleWithExclusion { zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)] };
+		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
+		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn excluding_sample_unions_extra_holes() -> Result<()> {
+		let base = FlatTerrainSample::default();
+		let sample = ExcludingGroveSample::new(base, [Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)]);
 		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
 		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
 		Ok(())

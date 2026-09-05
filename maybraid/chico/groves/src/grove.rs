@@ -51,8 +51,9 @@ pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
 pub use terrain::{
-	FlatTerrainSample, FnHeightSample, GroveHeightModulation, GroveHeightModulationStack,
-	GroveTerrain, GroveWorldSample, ModulatedGroveSample, PlacementConstraints, TerrainGroveSample,
+	ExcludingGroveSample, FlatTerrainSample, FnHeightSample, GroveHeightModulation,
+	GroveHeightModulationStack, GroveTerrain, GroveWorldSample, ModulatedGroveSample,
+	PlacementConstraints, TerrainGroveSample,
 };
 pub use tuft_patch::GroveTuftPatch;
 
