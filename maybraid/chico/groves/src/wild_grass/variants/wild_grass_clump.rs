@@ -3,7 +3,7 @@
 //! Blade width is **length-proportional** (`length * width_factor`), so short and tall
 //! varietals stay equally grass-thin.
 
-use chico_ball_components::tuft::BladeTuftShape;
+use chico_sbs_geometry::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::wild_grass::WildGrassClump;

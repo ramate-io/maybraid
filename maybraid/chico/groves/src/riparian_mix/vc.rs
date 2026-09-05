@@ -97,7 +97,7 @@ impl QuantizedPlant for ShelteredTemperateConifer {
 	fn build_unit(num: u32) -> (TemperateConifer, f32) {
 		let samples = SHELTERED_TEMPERATE_CONIFER.build_with_noise(unit_build_noise(num));
 		let mut params = TemperateConiferParams::default();
-		params.geometry = samples.geometry;
+		params.geometry = samples.geometry.into();
 		params.frond_world_scale = samples.frond_world_scale;
 		params.fronds_per_joint = samples.fronds_per_joint;
 		params.frond_length_fraction = samples.frond_length_fraction;

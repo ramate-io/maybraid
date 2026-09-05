@@ -11,14 +11,9 @@
 //! trunk sticks into a collection; frond collections stay separate.
 
 mod crown;
-pub mod render_item_plugin;
-#[allow(dead_code)]
-mod stick;
-#[allow(dead_code)]
-mod tuft;
 
 use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
+use chico_sbs_geometry::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, WaialeaPalmChain, WaialeaPalmSbs};
 use chico_vegetation_components::{
 	chico_stick_material_ref, FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,

@@ -13,11 +13,6 @@
 //! Medium uses denser straight branch samples (+20% vs storybook) with a layered canopy proxy;
 //! Low is stalk-only.
 
-#[allow(dead_code)]
-mod canopy;
-#[allow(dead_code)]
-pub(crate) mod joint_ball;
-pub mod render_item_plugin;
 pub(crate) mod stick;
 
 use bevy::prelude::*;

@@ -4,7 +4,7 @@ use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
-use chico_tree_components::{HighBushFoliageStyle, HighBushShootsShape};
+use chico_sbs_geometry::{HighBushFoliageStyle, HighBushShootsShape};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::tropical_thicket::TropicalThicketBush;

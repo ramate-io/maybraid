@@ -13,13 +13,9 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 clap = { workspace = true }
 chico-sdf = { workspace = true }
-chico-ball-components = { workspace = true, features = ["clap"] }
-chico-stick-components = { workspace = true }
-chico-tree-components = { workspace = true, features = ["clap"] }
 chico-vegetation-components = { workspace = true }
 chico-sbs-geometry = { workspace = true, features = ["clap", "render"] }
 procedural-common = { workspace = true, features = ["clap"] }
-render-item = { workspace = true }
 lod = { workspace = true }
 log = { workspace = true }
 

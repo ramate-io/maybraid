@@ -1,11 +1,11 @@
 //! VegetationComponents emission for jungle growth clusters (palm fronds + spears, no ball mass).
 //!
-//! Approximates legacy [`JungleGrowth`](chico_tree_components::JungleGrowth) foliage without the
-//! inner dirt/wood ball: a short palm-frond crown plus a couple upward spear fronds.
+//! Approximates jungle-growth foliage without the inner dirt/wood ball: a short palm-frond
+//! crown plus a couple upward spear fronds.
 
 use bevy::prelude::*;
-use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::render::mix_seed::node_mix_seed;
+use chico_sbs_geometry::{FrondCrownShape, FrondRachisSegment};
 use chico_vegetation_components::{FoliageNode, FrondCollection, FrondRun, Placement};
 
 use crate::palm_tree::world_space_frond_shape;
@@ -101,9 +101,7 @@ fn palm_frond_shape(params: JungleGrowthVcParams) -> FrondCrownShape {
 	world_space_frond_shape(local, params.foliage_world_scale())
 }
 
-fn frond_runs_to_collection_runs(
-	runs: Vec<Vec<chico_ball_components::frond::FrondRachisSegment>>,
-) -> Vec<FrondRun> {
+fn frond_runs_to_collection_runs(runs: Vec<Vec<FrondRachisSegment>>) -> Vec<FrondRun> {
 	runs.into_iter()
 		.filter_map(|run| {
 			let placements: Vec<Placement> = run

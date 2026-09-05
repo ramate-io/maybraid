@@ -1,11 +1,10 @@
 //! **Jungle Growth** — frond crown + upward spears as [`VegetationComponents`].
 //!
-//! Isolated `/show` counterpart to the Honu / Jungle Storybook cluster helper in
-//! [`crate::jungle_growth_vc`]. Approximates legacy
-//! [`chico_tree_components::JungleGrowth`] foliage without the inner dirt/wood ball.
+//! Isolated counterpart to the Honu / Jungle Storybook cluster helper in
+//! [`crate::jungle_growth_vc`]. Approximates jungle-growth foliage without the inner dirt/wood ball.
 
 use bevy::prelude::*;
-use chico_tree_components::JungleGrowthShape;
+use chico_sbs_geometry::JungleGrowthShape;
 use chico_vegetation_components::{
 	FoliageNode, Layers, StickNode, StructuralLod, VegetationComponents,
 };

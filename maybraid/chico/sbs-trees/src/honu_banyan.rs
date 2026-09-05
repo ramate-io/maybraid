@@ -13,7 +13,6 @@
 //! - **Low** — trunk + ~1/4 descenders; cheap canopy balls + mid proxy
 
 mod canopy;
-pub mod render_item_plugin;
 mod stick;
 
 use bevy::prelude::*;

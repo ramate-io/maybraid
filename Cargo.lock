@@ -2225,18 +2225,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chico-ball-components"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-sdf",
- "clap",
- "procedural-common",
- "render-item",
-]
-
-[[package]]
 name = "chico-bumpout"
 version = "0.0.1"
 dependencies = [
@@ -2294,10 +2282,8 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
- "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sbs-trees",
- "chico-tree-components",
  "chico-vegetation-components",
  "chico-vegetation-shaders",
  "clap",
@@ -2327,17 +2313,13 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
- "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sdf",
- "chico-stick-components",
- "chico-tree-components",
  "chico-vegetation-components",
  "clap",
  "lod",
  "log",
  "procedural-common",
- "render-item",
 ]
 
 [[package]]
@@ -2359,32 +2341,6 @@ name = "chico-sdf"
 version = "0.0.1"
 dependencies = [
  "sdf-common",
-]
-
-[[package]]
-name = "chico-stick-components"
-version = "0.0.1"
-dependencies = [
- "bevy",
- "chico-sdf",
- "log",
- "procedural-common",
- "render-item",
- "sdf-common",
-]
-
-[[package]]
-name = "chico-tree-components"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
- "chico-ball-components",
- "chico-sbs-geometry",
- "chico-stick-components",
- "clap",
- "procedural-common",
- "render-item",
 ]
 
 [[package]]

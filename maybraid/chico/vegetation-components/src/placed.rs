@@ -132,7 +132,7 @@ fn hashed_ball_euler(p: Vec3) -> (f32, f32, f32) {
 /// Deterministic sample in `[0, 1)` from `p`'s IEEE bits and a decorrelation lane.
 ///
 /// Integer mixing (lowbias32) so nearby positions and large-magnitude float seeds
-/// stay distinct — the same class of failure as `chico_ball_components` jitter.
+/// stay distinct — the same class of failure as `chico_sbs_geometry` jitter.
 fn unit_hash(p: Vec3, lane: u32) -> f32 {
 	let mut h = p.x.to_bits()
 		^ p.y.to_bits().rotate_left(11)
