@@ -144,6 +144,9 @@ impl Plugin for WorldPlugin {
 			.add_systems(
 				Update,
 				(
+					camera::turn_body_with_look
+						.after(CharacterMotionSystems::Anim)
+						.before(CharacterMotionSystems::Elevation),
 					pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
 					pitch::apply_avian_terrain_pitch
 						.in_set(CharacterMotionSystems::Elevation)
@@ -164,10 +167,6 @@ impl Plugin for WorldPlugin {
 			);
 		}
 		app.add_systems(
-			PostUpdate,
-			camera::turn_body_with_look.before(TransformSystems::Propagate),
-		)
-		.add_systems(
 			PostUpdate,
 			(camera::sync_first_person_head_visibility, camera::follow_world_camera)
 				.chain()

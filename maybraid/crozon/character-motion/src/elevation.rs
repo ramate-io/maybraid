@@ -8,30 +8,24 @@
 //! Front/hind rays follow [`TerrainPitch::sagittal`] (live shoulder–hip) when
 //! that axis is set, otherwise Bevy mesh `+Z`. Wheelbase is the first rest
 //! measure, not the pitched chord. Capsule children sample from the parent
-//! origin so support Y cannot lift the next ray. Locomotion yaw is stored on
-//! [`TerrainPitch`] unless the visual has [`TerrainPitchUsesVisualYaw`]. Pitch and
-//! roll follow every sample (exponential + rate cap). Support Y still uses a
-//! centimetre deadband.
+//! origin so support Y cannot lift the next ray. Locomotion, look, and combat
+//! write [`CharacterHeading`], so pitch never infers yaw from its own output.
+//! Pitch, roll, and support continuously follow valid samples.
 
-use bevy::ecs::query::Has;
 use bevy::prelude::*;
 use ground::ElevationProbe;
 
-use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch, TerrainPitchUsesVisualYaw};
+use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
 use crate::pitch::{
-	adopt_yaw, facing_with_support_tilt, observed_pitch, observed_roll, pitched_half_run,
-	sample_facing, smooth_toward, support_offset, xz_dir, TerrainPitch, TerrainPitchProbe,
-	MAX_TILT, MIN_SUPPORT_CHANGE, SUPPORT_RATE, TILT_RATE,
+	facing_with_support_tilt, follow_target, observed_pitch, observed_roll, pitched_half_run,
+	sample_facing, support_offset, CharacterHeading, TerrainPitch, TerrainPitchProbe, MAX_TILT,
+	SUPPORT_RATE, TILT_RATE,
 };
 
 /// Start the ray this far above the body so it clears the capsule.
 pub const PROBE_LIFT: f32 = 2.0;
 /// Extra downward reach after the uphill clearance, for downhill samples.
 pub const PROBE_MAX_DISTANCE: f32 = 6.0;
-/// Diagnostic: write yaw-only rotation and zero support Y. Gizmos still sample.
-/// Off: real tilt. On: clip-vs-pitch check.
-pub const KILL_TERRAIN_PITCH_POSE: bool = false;
-
 /// Draw last-frame front/hind hits. Playgrounds leave this on; set `false` to hide.
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DrawTerrainPitchProbes(pub bool);
@@ -53,10 +47,6 @@ fn probe_from_y(origin_y: f32, half_span: f32) -> f32 {
 
 fn probe_distance(half_span: f32) -> f32 {
 	probe_clearance(half_span) + PROBE_MAX_DISTANCE
-}
-
-fn visual_plus_z(visual: &Transform) -> Option<Vec3> {
-	xz_dir(-*visual.forward())
 }
 
 /// Local visual under a capsule sits near the parent origin. World-placed hosts
@@ -103,13 +93,7 @@ pub fn apply_terrain_pitch<P>(
 	time: Res<Time>,
 	mut probe: P,
 	mut visuals: Query<
-		(
-			Entity,
-			&mut Transform,
-			&GlobalTransform,
-			&mut TerrainPitch,
-			Has<TerrainPitchUsesVisualYaw>,
-		),
+		(Entity, &mut Transform, &GlobalTransform, &mut TerrainPitch, &mut CharacterHeading),
 		With<ApplyTerrainPitch>,
 	>,
 	child_of: Query<&ChildOf>,
@@ -119,13 +103,8 @@ pub fn apply_terrain_pitch<P>(
 	P: ElevationProbe,
 {
 	let dt = time.delta_secs();
-	for (entity, mut visual, global, mut pitch, uses_visual_yaw) in &mut visuals {
-		let Some(observed_yaw) = visual_plus_z(&visual) else {
-			continue;
-		};
-		let yaw_facing =
-			if uses_visual_yaw { observed_yaw } else { adopt_yaw(pitch.yaw_facing, observed_yaw) };
-		pitch.yaw_facing = yaw_facing;
+	for (entity, mut visual, global, mut pitch, mut heading) in &mut visuals {
+		let yaw_facing = heading.resolve(&visual);
 		let ray_facing = sample_facing(pitch.sagittal, yaw_facing);
 		let right = Vec3::new(yaw_facing.z, 0.0, -yaw_facing.x);
 
@@ -148,7 +127,7 @@ pub fn apply_terrain_pitch<P>(
 			}
 		};
 
-		let (center, _) = sample(origin);
+		let (center, center_hit) = sample(origin);
 		let center_h = center.y;
 		let mut run = pitch.half_span;
 		let mut front = center;
@@ -157,46 +136,40 @@ pub fn apply_terrain_pitch<P>(
 		let mut hind_hit = false;
 		let mut left_h = center_h;
 		let mut right_h = center_h;
+		let mut support_hits = false;
 		if !suspend {
-			let (coarse_front, _) = sample(origin + ray_facing * pitch.half_span);
-			let (coarse_hind, _) = sample(origin - ray_facing * pitch.half_span);
+			let (coarse_front, coarse_front_hit) = sample(origin + ray_facing * pitch.half_span);
+			let (coarse_hind, coarse_hind_hit) = sample(origin - ray_facing * pitch.half_span);
 			let coarse = observed_pitch(coarse_front.y, coarse_hind.y, pitch.half_span);
 			run = pitched_half_run(pitch.half_span, coarse);
 			(front, front_hit) = sample(origin + ray_facing * run);
 			(hind, hind_hit) = sample(origin - ray_facing * run);
+			support_hits =
+				center_hit && coarse_front_hit && coarse_hind_hit && front_hit && hind_hit;
 			if pitch.roll_weight > 0.0 {
-				left_h = sample(origin - right * pitch.half_width).0.y;
-				right_h = sample(origin + right * pitch.half_width).0.y;
+				let (left, left_hit) = sample(origin - right * pitch.half_width);
+				let (right, right_hit) = sample(origin + right * pitch.half_width);
+				left_h = left.y;
+				right_h = right.y;
+				support_hits &= left_hit && right_hit;
 			}
 		}
 
-		let (target_pitch, target_roll, target_support) = if suspend {
-			(0.0, 0.0, 0.0)
-		} else {
-			(
+		let targets = if suspend {
+			Some((0.0, 0.0, 0.0))
+		} else if support_hits {
+			Some((
 				observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
 				observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
 				support_offset(center_h, front.y, hind.y),
-			)
+			))
+		} else {
+			None
 		};
-		pitch.pitch = smooth_toward(
-			pitch.pitch,
-			&mut pitch.accepted_pitch,
-			target_pitch,
-			dt,
-			0.0,
-			TILT_RATE,
-			suspend,
-		);
-		pitch.roll = smooth_toward(
-			pitch.roll,
-			&mut pitch.accepted_roll,
-			target_roll,
-			dt,
-			0.0,
-			TILT_RATE,
-			suspend,
-		);
+		if let Some((target_pitch, target_roll, _)) = targets {
+			pitch.pitch = follow_target(pitch.pitch, target_pitch, dt, TILT_RATE);
+			pitch.roll = follow_target(pitch.roll, target_roll, dt, TILT_RATE);
+		}
 		pitch.probe = TerrainPitchProbe {
 			origin: Vec3::new(origin.x, center_h, origin.z),
 			front,
@@ -206,36 +179,17 @@ pub fn apply_terrain_pitch<P>(
 			visual_facing: yaw_facing,
 			sample_facing: ray_facing,
 		};
-		if KILL_TERRAIN_PITCH_POSE {
-			pitch.pitch = 0.0;
-			pitch.roll = 0.0;
-			pitch.support = 0.0;
-			pitch.accepted_pitch = 0.0;
-			pitch.accepted_roll = 0.0;
-			pitch.accepted_support = 0.0;
-			visual.rotation = facing_with_support_tilt(yaw_facing, ray_facing, 0.0, 0.0);
-			if offset_local_y {
-				visual.translation.y = 0.0;
-			}
-			continue;
-		}
 		visual.rotation = facing_with_support_tilt(yaw_facing, ray_facing, pitch.pitch, pitch.roll);
 		if offset_local_y {
-			pitch.support = smooth_toward(
-				pitch.support,
-				&mut pitch.accepted_support,
-				target_support,
-				dt,
-				MIN_SUPPORT_CHANGE,
-				SUPPORT_RATE,
-				suspend,
-			);
+			if let Some((_, _, target_support)) = targets {
+				pitch.support = follow_target(pitch.support, target_support, dt, SUPPORT_RATE);
+			}
 			visual.translation.y = pitch.support;
 		}
 	}
 }
 
-/// Front = lime, hind = orange, misses = red. Yellow = sample axis, cyan = mesh `+Z`.
+/// Front = lime, hind = orange, misses = red. Yellow = sample axis, cyan = heading.
 /// Magenta = live girdle bones/midpoints. A red ring means girdles were seen but
 /// the XZ run was too short to accept as a sagittal axis.
 pub fn draw_terrain_pitch_probes(

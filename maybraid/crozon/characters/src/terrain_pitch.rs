@@ -8,12 +8,12 @@ use crozon_character_motion::{BoneMap, CharacterRig, CharacterRigRole, RigSkelet
 use crate::member::{CharacterMembers, CharacterRoot};
 
 pub use crozon_character_motion::pitch::{
-	adopt_yaw, default_half_span, default_half_width, facing_with_support_tilt, facing_with_tilt,
-	girdle_midpoint, half_span_from_girdles, half_width_from_sides, measured_support_half,
-	observed_pitch, observed_roll, pitch_weight, pitched_half_run, roll_weight, sagittal_axis,
-	sample_facing, smooth_toward, step_toward, support_offset, TerrainPitch, MAX_TILT,
-	MIN_SUPPORT_CHANGE, MIN_TILT_CHANGE, QUADRUPED_FRONT, QUADRUPED_HIND, QUADRUPED_LEFT,
-	QUADRUPED_RIGHT, SUPPORT_RATE, TILT_RATE, TILT_SMOOTH, YAW_ADOPT,
+	default_half_span, default_half_width, facing_with_support_tilt, facing_with_tilt,
+	follow_target, girdle_midpoint, half_span_from_girdles, half_width_from_sides,
+	measured_support_half, observed_pitch, observed_roll, pitch_weight, pitched_half_run,
+	roll_weight, sagittal_axis, sample_facing, step_toward, support_offset, CharacterHeading,
+	TerrainPitch, MAX_TILT, QUADRUPED_FRONT, QUADRUPED_HIND, QUADRUPED_LEFT, QUADRUPED_RIGHT,
+	SUPPORT_RATE, TILT_RATE, TILT_SMOOTH,
 };
 
 /// Insert [`TerrainPitch`] on character roots that opted in with [`ApplyTerrainPitch`],
@@ -21,7 +21,7 @@ pub use crozon_character_motion::pitch::{
 pub fn prepare_character_terrain_pitch(
 	mut commands: Commands,
 	new_visuals: Query<
-		(Entity, &CharacterMembers),
+		(Entity, &CharacterMembers, &Transform, Option<&CharacterHeading>),
 		(With<CharacterRoot>, With<ApplyTerrainPitch>, Without<TerrainPitch>),
 	>,
 	mut pitched: Query<
@@ -31,7 +31,7 @@ pub fn prepare_character_terrain_pitch(
 	rigs: Query<(&CharacterRig, &BoneMap)>,
 	globals: Query<&GlobalTransform>,
 ) {
-	for (entity, members) in &new_visuals {
+	for (entity, members, transform, heading) in &new_visuals {
 		let Some(kind) = body_skeleton(members, &rigs) else {
 			continue;
 		};
@@ -39,7 +39,11 @@ pub fn prepare_character_terrain_pitch(
 		if let Some(bones) = body_bones(members, &rigs) {
 			record_quadruped_girdles(&mut pitch, kind, bones, &globals);
 		}
-		commands.entity(entity).insert(pitch);
+		let mut entity_commands = commands.entity(entity);
+		entity_commands.insert(pitch);
+		if heading.is_none() {
+			entity_commands.insert(CharacterHeading::from_rotation(transform.rotation));
+		}
 	}
 
 	for (members, mut pitch) in &mut pitched {

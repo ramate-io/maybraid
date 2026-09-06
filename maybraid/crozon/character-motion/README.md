@@ -93,16 +93,10 @@ Order elevation after physics / locomotion.
 | System | Does |
 |---|---|
 | Player physics / `ShapeCaster` | Capsule ground, jump |
-| `drive_player_locomotion` | Wish → `AnimRefRoot` clip |
+| `drive_player_locomotion` | Wish → explicit `CharacterHeading` + `AnimRefRoot` clip |
 | `prepare_character_terrain_pitch` | Measure girdles, insert `TerrainPitch` |
 | `sync_suspend_terrain_pitch` | `Jumping` → `SuspendTerrainPitch` on the body |
 | `apply_terrain_pitch::<AvianElevationProbe>` | Probe colliders, write visual rotation |
-
-### In `player`
-
-| System | Does |
-|---|---|
-| `sync_terrain_pitch_visual_yaw` | `PlayerYawOwner::Look` → `TerrainPitchUsesVisualYaw` on the pitched visual |
 
 ## How to implement behaviors
 
@@ -130,26 +124,22 @@ keeps the lowest standable collider so grove Host AABBs and tree sticks do
 not steal the terrain trimesh. Side rays run only when
 `TerrainPitch.roll_weight > 0`. Quadruped front/hind rays follow the live
 shoulder–hip axis (`TerrainPitch.sagittal`); gizmos: lime/orange ray hits, yellow sample axis, cyan
-mesh `+Z`, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
+explicit heading, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
 ring on the origin means girdles were found but the XZ run was too short.
-Insert `DrawTerrainPitchProbes(false)` to hide. NPCs store locomotion yaw on
-`TerrainPitch` and only replace it when the visual heading turns past
-`YAW_ADOPT`, so apply does not rebuild yaw from a pitched `forward`. Look-owned
-player visuals stamp `TerrainPitchUsesVisualYaw` (`PlayerYawOwner::Look`) and
-take this frame's flattened heading so mouse look is not held behind that gate.
-`KILL_TERRAIN_PITCH_POSE` slams tilt to zero for clip-vs-pitch checks (off).
-Pitch and roll follow every probe sample with exponential smoothing and a rate
-cap. Support Y still has a centimetre deadband so vertical probe noise does not
-bob the mesh.
+Insert `DrawTerrainPitchProbes(false)` to hide. Locomotion, look, and combat
+write `CharacterHeading`; terrain pitch reads that source instead of recovering
+yaw from the tilted transform it wrote last frame. Pitch, roll, and support Y
+continuously follow valid probe targets with exponential smoothing and a rate
+cap. If center, coarse, or final support rays miss, apply holds the last pose
+instead of substituting capsule Y as terrain height.
 
 ### Jump / airborne
 
 Insert `SuspendTerrainPitch` on the visual or any ancestor (typically the
-physics capsule). Pitch apply force-accepts zero tilt and support offset while
-that marker is on the ancestor chain (deadband does not keep a leftover pose
-in the air). Local Y `support_offset` is applied only when the visual is a
-near-origin child of a body, not when local translation is world-sized under
-a group root.
+physics capsule). Pitch apply targets zero tilt and support offset while that
+marker is on the ancestor chain. Local Y `support_offset` is applied only when
+the visual is a near-origin child of a body, not when local translation is
+world-sized under a group root.
 
 ## What this crate is not
 

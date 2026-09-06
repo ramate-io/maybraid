@@ -3,54 +3,32 @@
 use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use crozon_characters::{
-	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterMembers, CharacterRig, CharacterRigRole,
-	CharacterRoot, JumpParams, RigSkeletonKind,
+	AnimClip, AnimProgress, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRig,
+	CharacterRigRole, CharacterRoot, JumpParams, RigSkeletonKind,
 };
 
 use crate::body::{CharacterController, Jumping, MoveWish, LEAP_SPEED};
 use crate::identity::PlayerYawOwner;
 
 const WALK_SPEED: f32 = 1.0;
-const FACE_DEADZONE: f32 = 0.05;
-const TURN_RATE: f32 = 5.5;
 
 pub(crate) fn face_wish_yaw(
 	time: Res<Time>,
 	wishes: Query<&MoveWish, With<CharacterController>>,
-	mut visuals: Query<(&mut Transform, Option<&PlayerYawOwner>, &ChildOf), With<CharacterRoot>>,
+	mut visuals: Query<
+		(&mut Transform, &mut CharacterHeading, Option<&PlayerYawOwner>, &ChildOf),
+		With<CharacterRoot>,
+	>,
 ) {
-	for (mut visual, owner, child_of) in &mut visuals {
+	for (mut visual, mut heading, owner, child_of) in &mut visuals {
 		if owner.copied().unwrap_or_default() != PlayerYawOwner::Wish {
 			continue;
 		}
 		let Ok(wish) = wishes.get(child_of.parent()) else {
 			continue;
 		};
-		face_wish(&mut visual, wish.0, time.delta_secs());
+		heading.turn_toward(&mut visual, wish.0, time.delta_secs());
 	}
-}
-
-fn face_wish(visual: &mut Transform, wish: Vec3, dt: f32) {
-	let target = Vec3::new(wish.x, 0.0, wish.z);
-	if target.length_squared() < 1e-4 {
-		return;
-	}
-	let target = target.normalize();
-	let current = {
-		let facing = -visual.forward();
-		let xz = Vec3::new(facing.x, 0.0, facing.z);
-		if xz.length_squared() < 1e-4 {
-			visual.look_to(-target, Vec3::Y);
-			return;
-		}
-		xz.normalize()
-	};
-	let angle = current.angle_between(target);
-	if angle < FACE_DEADZONE {
-		return;
-	}
-	let t = (TURN_RATE * dt / angle).min(1.0);
-	visual.look_to(-current.slerp(target, t), Vec3::Y);
 }
 
 pub fn drive_player_locomotion(

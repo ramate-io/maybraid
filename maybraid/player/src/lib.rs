@@ -78,12 +78,6 @@ impl Plugin for PlayerPlugin {
 				Update,
 				(locomotion::face_wish_yaw, drive_player_locomotion)
 					.in_set(PlayerSystems::Locomotion),
-			)
-			.add_systems(
-				Update,
-				identity::sync_terrain_pitch_visual_yaw
-					.after(PlayerSystems::Locomotion)
-					.before(CharacterMotionSystems::Elevation),
 			);
 	}
 }

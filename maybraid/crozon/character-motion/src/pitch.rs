@@ -15,6 +15,54 @@ use bevy::prelude::*;
 
 use crate::rig::RigSkeletonKind;
 
+/// Ground-plane heading owned by locomotion, look, or combat.
+///
+/// Terrain pitch reads this source value instead of trying to recover yaw from
+/// the tilted [`Transform`] that it wrote on the previous frame.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct CharacterHeading(pub Vec3);
+
+/// Ignore sub-degree changes in movement direction.
+pub const HEADING_DEADZONE: f32 = 0.01;
+/// Maximum body-heading turn rate in radians per second.
+pub const HEADING_TURN_RATE: f32 = 5.5;
+
+impl CharacterHeading {
+	pub fn from_rotation(rotation: Quat) -> Self {
+		Self(xz_dir(rotation * Vec3::Z).unwrap_or(Vec3::Z))
+	}
+
+	/// Return a normalized heading, initializing an unset heading from `visual`.
+	pub fn resolve(&mut self, visual: &Transform) -> Vec3 {
+		let facing = xz_dir(self.0).or_else(|| xz_dir(-*visual.forward())).unwrap_or(Vec3::Z);
+		self.0 = facing;
+		facing
+	}
+
+	/// Store `facing` and write its yaw to the visual.
+	pub fn set(&mut self, visual: &mut Transform, facing: Vec3) {
+		let Some(facing) = xz_dir(facing) else {
+			return;
+		};
+		self.0 = facing;
+		visual.look_to(-facing, Vec3::Y);
+	}
+
+	/// Slerp this ground-plane heading toward a movement wish.
+	pub fn turn_toward(&mut self, visual: &mut Transform, wish: Vec3, dt: f32) {
+		let current = self.resolve(visual);
+		let Some(target) = xz_dir(wish) else {
+			return;
+		};
+		let angle = current.angle_between(target);
+		if angle < HEADING_DEADZONE {
+			return;
+		}
+		let t = (HEADING_TURN_RATE * dt / angle).min(1.0);
+		self.set(visual, current.slerp(target, t));
+	}
+}
+
 /// Last probe locations for gizmos. Written by [`crate::elevation::apply_terrain_pitch`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TerrainPitchProbe {
@@ -23,7 +71,7 @@ pub struct TerrainPitchProbe {
 	pub hind: Vec3,
 	pub front_hit: bool,
 	pub hind_hit: bool,
-	/// Flattened Bevy mesh `+Z` (`-forward`).
+	/// Explicit ground-plane character heading.
 	pub visual_facing: Vec3,
 	/// Axis actually used for front/hind rays.
 	pub sample_facing: Vec3,
@@ -56,17 +104,8 @@ pub struct TerrainPitch {
 	pub roll: f32,
 	/// Smoothed local Y for a capsule child. Ignored for world-placed hosts.
 	pub support: f32,
-	/// Last probe target the displayed pitch is following.
-	pub accepted_pitch: f32,
-	/// Last probe target the displayed roll is following.
-	pub accepted_roll: f32,
-	/// Last probe target that passed the support deadband.
-	pub accepted_support: f32,
 	/// Unit XZ hind→front from live girdles. [`Vec3::ZERO`] until measured.
 	pub sagittal: Vec3,
-	/// Ground-plane yaw used to rebuild tilt. Look-owned visuals replace this
-	/// every frame; others keep it until [`YAW_ADOPT`].
-	pub yaw_facing: Vec3,
 	/// Rest wheelbase is frozen after the first good girdle measure.
 	pub support_locked: bool,
 	pub probe: TerrainPitchProbe,
@@ -83,11 +122,7 @@ impl TerrainPitch {
 			pitch: 0.0,
 			roll: 0.0,
 			support: 0.0,
-			accepted_pitch: 0.0,
-			accepted_roll: 0.0,
-			accepted_support: 0.0,
 			sagittal: Vec3::ZERO,
-			yaw_facing: Vec3::ZERO,
 			support_locked: false,
 			probe: TerrainPitchProbe::default(),
 			girdles: TerrainPitchGirdles::default(),
@@ -132,20 +167,12 @@ impl TerrainPitch {
 
 /// Match Durham / playground walkable slopes so long bodies can follow the mesh.
 pub const MAX_TILT: f32 = 80.0_f32.to_radians();
-/// Max rad/s toward the accepted tilt. Large snaps still take several frames.
+/// Max rad/s toward the sampled tilt. Large changes still take several frames.
 pub const TILT_RATE: f32 = 3.0;
 /// Exponential follow rate (1/s) so sub-rate-cap noise is low-passed, not copied.
 pub const TILT_SMOOTH: f32 = 4.0;
-/// Historical tilt deadband. Apply pitch/roll uses `min_change` 0; tests still
-/// exercise [`accept_target`] with this gate.
-pub const MIN_TILT_CHANGE: f32 = 8.0_f32.to_radians();
-/// Max m/s toward the accepted support offset.
+/// Max m/s toward the sampled support offset.
 pub const SUPPORT_RATE: f32 = 0.8;
-/// Ignore new support samples closer than this to the accepted offset.
-pub const MIN_SUPPORT_CHANGE: f32 = 0.12;
-/// Adopt a new visual heading only when locomotion clearly turned (flatten noise
-/// from a pitched quat stays well below this; `face_wish` writes above ~3°).
-pub const YAW_ADOPT: f32 = 0.06;
 
 const HUMANOID_HALF_SPAN: f32 = 0.22;
 const QUADRUPED_HALF_SPAN: f32 = 1.2;
@@ -256,18 +283,6 @@ pub fn sample_facing(sagittal: Vec3, visual_facing: Vec3) -> Vec3 {
 	xz_unit(sagittal).unwrap_or(visual_facing)
 }
 
-/// Keep `stored` yaw unless `observed` is a real turn (or `stored` is unset).
-pub fn adopt_yaw(stored: Vec3, observed: Vec3) -> Vec3 {
-	if stored.length_squared() < 1e-6 {
-		return observed;
-	}
-	if stored.angle_between(observed) >= YAW_ADOPT {
-		observed
-	} else {
-		stored
-	}
-}
-
 fn slope_angle(high_side: f32, low_side: f32, half_run: f32) -> f32 {
 	let run = (2.0 * half_run).max(1e-3);
 	((high_side - low_side) / run).atan().clamp(-MAX_TILT, MAX_TILT)
@@ -292,34 +307,11 @@ pub fn step_toward_rate(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
 	current + (target - current).clamp(-max_step, max_step)
 }
 
-/// Keep `accepted` unless `observed` moved by at least `min_change`.
-pub fn accept_target(accepted: f32, observed: f32, min_change: f32) -> f32 {
-	if (observed - accepted).abs() >= min_change {
-		observed
-	} else {
-		accepted
-	}
-}
-
-/// Exponential blend toward `accepted`, then clamp to `rate`.
-pub fn follow_target(current: f32, accepted: f32, dt: f32, rate: f32) -> f32 {
+/// Exponential blend toward `target`, then clamp to `rate`.
+pub fn follow_target(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
 	let alpha = 1.0 - (-TILT_SMOOTH * dt.max(0.0)).exp();
-	let blended = current + (accepted - current) * alpha;
+	let blended = current + (target - current) * alpha;
 	step_toward_rate(current, blended, dt, rate)
-}
-
-/// Deadband the probe target, then follow it. `force` skips the deadband (jump).
-pub fn smooth_toward(
-	current: f32,
-	accepted: &mut f32,
-	observed: f32,
-	dt: f32,
-	min_change: f32,
-	rate: f32,
-	force: bool,
-) -> f32 {
-	*accepted = if force { observed } else { accept_target(*accepted, observed, min_change) };
-	follow_target(current, *accepted, dt, rate)
 }
 
 /// Yaw from flattened facing (`look_to(-facing)`), then local pitch and roll.
@@ -327,7 +319,7 @@ pub fn facing_with_tilt(facing_xz: Vec3, pitch: f32, roll: f32) -> Quat {
 	facing_with_support_tilt(facing_xz, facing_xz, pitch, roll)
 }
 
-/// Keep locomotion yaw on `yaw_facing`, pitch about the axis perpendicular to `sagittal`.
+/// Compose explicit heading with pitch about the axis perpendicular to `sagittal`.
 ///
 /// When the shoulder–hip axis is not mesh `+Z`, local `X` would bank the spine
 /// instead of planting it. World lateral is `Y × sagittal`, brought into the
@@ -499,21 +491,21 @@ mod tests {
 	}
 
 	#[test]
-	fn adopt_yaw_keeps_stored_for_flatten_noise_and_takes_a_real_turn() {
-		let stored = Vec3::Z;
-		let noise = Quat::from_rotation_y(YAW_ADOPT * 0.4) * stored;
-		assert_eq!(adopt_yaw(stored, noise), stored);
-		let turned = Vec3::X;
-		assert_eq!(adopt_yaw(stored, turned), turned);
-		assert_eq!(adopt_yaw(Vec3::ZERO, stored), stored);
+	fn heading_resolves_initial_visual_rotation() {
+		let rotation = Quat::from_rotation_y(0.7);
+		let visual = Transform::from_rotation(rotation);
+		let mut heading = CharacterHeading::default();
+		assert!((heading.resolve(&visual) - rotation * Vec3::Z).length() < 1e-5);
 	}
 
 	#[test]
-	fn pitched_visual_flatten_stays_under_yaw_adopt() {
-		let yaw = Vec3::Z;
-		let q = facing_with_support_tilt(yaw, yaw, -0.6, 0.0);
-		let flat = xz_dir(q * Vec3::Z).expect("pitched +Z still has XZ");
-		assert!(yaw.angle_between(flat) < YAW_ADOPT);
+	fn heading_accepts_small_real_turns() {
+		let mut visual = Transform::IDENTITY;
+		let mut heading = CharacterHeading::from_rotation(visual.rotation);
+		let target = Quat::from_rotation_y(0.02) * Vec3::Z;
+		heading.turn_toward(&mut visual, target, 1.0 / 120.0);
+		assert!((heading.0 - target).length() < 1e-5);
+		assert!((-*visual.forward() - target).length() < 1e-5);
 	}
 
 	#[test]
@@ -566,17 +558,6 @@ mod tests {
 	}
 
 	#[test]
-	fn accept_target_ignores_sub_threshold_noise() {
-		let accepted = 0.4;
-		assert_eq!(
-			accept_target(accepted, accepted + MIN_TILT_CHANGE * 0.5, MIN_TILT_CHANGE),
-			accepted
-		);
-		let next = accepted + MIN_TILT_CHANGE * 1.01;
-		assert_eq!(accept_target(accepted, next, MIN_TILT_CHANGE), next);
-	}
-
-	#[test]
 	fn follow_target_damps_small_error_and_caps_large() {
 		let dt = 1.0 / 60.0;
 		let small = follow_target(0.0, 0.02, dt, TILT_RATE);
@@ -584,27 +565,5 @@ mod tests {
 		assert!(small < 0.02);
 		let large = follow_target(0.0, 2.0, dt, TILT_RATE);
 		assert!((large - TILT_RATE * dt).abs() < 1e-5);
-	}
-
-	#[test]
-	fn smooth_toward_with_zero_deadband_retargets_every_sample() {
-		let dt = 1.0 / 60.0;
-		let mut accepted = 0.0;
-		let out = smooth_toward(0.0, &mut accepted, 0.01, dt, 0.0, TILT_RATE, false);
-		assert_eq!(accepted, 0.01);
-		assert!(out > 0.0);
-		assert!(out < 0.01);
-	}
-
-	#[test]
-	fn smooth_toward_forces_zero_below_the_deadband() {
-		let dt = 1.0 / 60.0;
-		let mut accepted = 0.02;
-		let held = smooth_toward(0.02, &mut accepted, 0.0, dt, MIN_TILT_CHANGE, TILT_RATE, false);
-		assert_eq!(accepted, 0.02);
-		assert!((held - 0.02).abs() < 1e-6);
-		let out = smooth_toward(0.02, &mut accepted, 0.0, dt, MIN_TILT_CHANGE, TILT_RATE, true);
-		assert_eq!(accepted, 0.0);
-		assert!(out < 0.02);
 	}
 }

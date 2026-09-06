@@ -23,7 +23,7 @@ pub use clip::{
 };
 pub use elevation::{
 	apply_terrain_pitch, draw_terrain_pitch_probes, is_local_visual_child, probe_origin,
-	DrawTerrainPitchProbes, KILL_TERRAIN_PITCH_POSE,
+	DrawTerrainPitchProbes,
 };
 pub use mailbox::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimMailbox,
@@ -31,9 +31,8 @@ pub use mailbox::{
 };
 pub use markers::{
 	AnimateBones, AnimateEffects, ApplyTerrainPitch, SuspendAnimation, SuspendTerrainPitch,
-	TerrainPitchUsesVisualYaw,
 };
-pub use pitch::TerrainPitch;
+pub use pitch::{CharacterHeading, TerrainPitch};
 pub use plugin::{CharacterMotionPlugin, CharacterMotionSystems};
 pub use policy::{motion_policy, MotionPolicy};
 pub use rig::{

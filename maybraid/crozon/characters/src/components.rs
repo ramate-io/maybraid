@@ -15,7 +15,7 @@ use crate::assets::AssetNormalization;
 use crate::layer::Layers;
 use crate::member::CharacterRoot;
 use crate::nodes::{PartNode, RigNode};
-use crozon_character_motion::motion_policy;
+use crozon_character_motion::{motion_policy, CharacterHeading};
 use rigs::AssemblyRoot;
 
 use crate::scene_children::{maybe_component, scene_children};
@@ -311,6 +311,7 @@ impl<T: CharacterComponents + Send + Sync + 'static> LodScene for ComponentsOnly
 				template_value(host)
 				AssemblyRoot
 				CharacterRoot
+				CharacterHeading::default()
 				Visibility::default()
 			},
 			maybe_component(policy.apply_terrain_pitch()),

@@ -10,7 +10,7 @@ use bevy::math::Affine3A;
 use bevy::prelude::*;
 use crozon_character_motion::{
 	AnimBone, ApplyTerrainPitch, CharacterMotionSystems, CharacterRig, CharacterRigRole,
-	RigSkeletonKind, SuspendAnimation, TerrainPitchUsesVisualYaw,
+	RigSkeletonKind, SuspendAnimation,
 };
 use crozon_characters::CharacterRoot;
 use damage::{DamageSystems, DespawnAfter, Downed};
@@ -304,12 +304,9 @@ fn finish_corpse_handoffs(
 		let ragdoll_ready = ragdolls.iter().any(|ragdoll| ragdoll.corpse == handoff.visual);
 		let timed_out = now - handoff.started_at >= settings.handoff_wait_secs.max(0.0);
 		if ragdoll_ready || timed_out {
-			commands.entity(handoff.visual).remove::<(
-				PlayerVisual,
-				PlayerYawOwner,
-				ApplyTerrainPitch,
-				TerrainPitchUsesVisualYaw,
-			)>();
+			commands
+				.entity(handoff.visual)
+				.remove::<(PlayerVisual, PlayerYawOwner, ApplyTerrainPitch)>();
 			commands
 				.entity(body)
 				.remove::<(Player, Npc, CameraFollow, PlayerCameraAim, CharacterController)>()
