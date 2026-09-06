@@ -1,10 +1,12 @@
 //! Streamed 400 m mob cells over Richmond and Chico selection models.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::time::Duration;
 
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
+use bevy::time::common_conditions::on_timer;
 use chico_forests::{ForestExtent, ForestIndex, LayeringKind, SelectedLayers};
 use chico_vegetation_on_terrain_playground::WorldBaseTerrain;
 use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
@@ -16,9 +18,13 @@ use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
 use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use lod::{
-	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
-	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
+	update_lod_host_levels, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
+	LodNode, LodNodePose, LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin,
+	LodPresentSystems, LodRefreshSystems, LodSceneRefreshAabb, LodSceneRefreshRegion,
+	LodSceneRefreshRegionPlugin, LodViewer,
 };
+use lod_avian::AvianLodSceneRefreshPlugin;
+use maybraid_mobs::{MobLodRefreshMode, MobScene, MobSceneSystems};
 use mob_groups::{GroupKind, MobEnvironmentSample, MobGroup, MobGroupsPlugin, MobWorldSample};
 use procedural_common::NoiseParams;
 use richmond_development_models::DevelopmentEntryStore;
@@ -29,6 +35,9 @@ const MOB_GENERATE_RADIUS: f32 = 3_000.0;
 const MOB_PRESENT_RADIUS: f32 = 1_000.0;
 const MOB_WORLD_SEED: u64 = 42;
 const MOB_CELL_OCCUPANCY_PERCENT: u64 = 35;
+const MOB_HIGH_LOD_REFRESH_RADIUS: f32 = 250.0;
+const MOB_HIGH_LOD_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
+const MOB_HIGH_LOD_RECONCILE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct MobCellExtent {
@@ -326,6 +335,29 @@ fn refresh_status(enabled: bool, radius: f32, lod_ref: &LodRef) -> LodRefreshReg
 #[derive(Clone, Copy, Debug, Default)]
 struct MobLodChan;
 
+#[derive(Clone, Copy, Debug, Default)]
+struct MobHighLodChan;
+
+#[derive(Resource, Default)]
+struct MobHighLodRegion;
+
+impl MobHighLodRegion {
+	fn region_at(center: Vec3) -> Aabb3d {
+		let half = Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS);
+		Aabb3d::from_min_max(center - half, center + half)
+	}
+}
+
+impl LodRefreshRegions for MobHighLodRegion {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		if lod_ref.previous_transform.translation == lod_ref.current_transform.translation {
+			LodRefreshRegionsStatus::Unchanged
+		} else {
+			LodRefreshRegionsStatus::Changed(Self::region_at(lod_ref.current_transform.translation))
+		}
+	}
+}
+
 #[derive(Resource, Default)]
 struct WorldMobPresenterState {
 	presented: HashMap<Id, PresentedMobCell>,
@@ -359,16 +391,14 @@ impl WorldMobPresenterState {
 }
 
 #[derive(SystemParam)]
-struct WorldMobPresenter<'w, 's> {
-	commands: Commands<'w, 's>,
-	state: ResMut<'w, WorldMobPresenterState>,
+struct WorldMobSurface<'w> {
 	terrain: Res<'w, TerrainEntryStore>,
 	layout: Res<'w, TerrainCellLayout>,
 	base: Res<'w, WorldBaseTerrain>,
 	developments: Res<'w, DevelopmentEntryStore>,
 }
 
-impl WorldMobPresenter<'_, '_> {
+impl WorldMobSurface<'_> {
 	fn surface_height(&self, xz: Vec2) -> f32 {
 		let raw = self
 			.terrain
@@ -380,6 +410,13 @@ impl WorldMobPresenter<'_, '_> {
 		);
 		self.developments.merged_pad_complex(probe).modify_elevation(raw, xz.x, xz.y)
 	}
+}
+
+#[derive(SystemParam)]
+struct WorldMobPresenter<'w, 's> {
+	commands: Commands<'w, 's>,
+	state: ResMut<'w, WorldMobPresenterState>,
+	surface: WorldMobSurface<'w>,
 }
 
 impl RegionPresenter<WorldMobCell, WorldMobIndex> for WorldMobPresenter<'_, '_> {
@@ -418,7 +455,7 @@ impl RegionPresenter<WorldMobCell, WorldMobIndex> for WorldMobPresenter<'_, '_> 
 			for placed in &group.mobs {
 				let mut transform = placed.transform;
 				let xz = Vec2::new(transform.translation.x, transform.translation.z);
-				transform.translation.y = self.surface_height(xz);
+				transform.translation.y = self.surface.surface_height(xz);
 				let mob = placed.scene.spawn(&mut self.commands, transform);
 				self.commands.entity(mob).insert(ChildOf(group_root));
 			}
@@ -512,6 +549,32 @@ fn stream_world_mobs(
 	*previous_cell = Some(current);
 }
 
+fn fit_world_mob_hosts_to_surface(
+	surface: WorldMobSurface,
+	mut hosts: Query<&mut Transform, (With<MobScene>, Changed<Transform>)>,
+) {
+	for mut transform in &mut hosts {
+		let xz = Vec2::new(transform.translation.x, transform.translation.z);
+		let y = surface.surface_height(xz);
+		if y.is_finite() && (transform.translation.y - y).abs() > 1e-3 {
+			transform.translation.y = y;
+		}
+	}
+}
+
+fn pulse_world_mob_high_lod(
+	nodes: Query<&LodNodePose, (With<LodNode>, With<LodViewer>)>,
+	mut refresh: MessageWriter<LodSceneRefreshRegion<MobHighLodChan>>,
+	mut bus: MessageWriter<LodSceneRefreshAabb>,
+) {
+	let regions = nodes.iter().map(|pose| MobHighLodRegion::region_at(pose.current.translation));
+	let union = regions.reduce(|a, b| Aabb3d::from_min_max(a.min.min(b.min), a.max.max(b.max)));
+	if let Some(region) = union {
+		refresh.write(LodSceneRefreshRegion::new(region));
+		bus.write(LodSceneRefreshAabb { region });
+	}
+}
+
 fn xz_radius_aabb(center: Vec3, radius: f32) -> Aabb3d {
 	Aabb3d::from_min_max(
 		Vec3::new(center.x - radius, 0.0, center.z - radius),
@@ -535,6 +598,7 @@ pub struct WorldMobsPlugin;
 
 impl Plugin for WorldMobsPlugin {
 	fn build(&self, app: &mut App) {
+		app.insert_resource(MobLodRefreshMode::Indexed);
 		if !app.is_plugin_added::<MobGroupsPlugin>() {
 			app.add_plugins(MobGroupsPlugin);
 		}
@@ -571,6 +635,18 @@ impl Plugin for WorldMobsPlugin {
 				WorldMobPresenter<'_, '_>,
 				MobLodChan,
 			>::default())
+			.add_plugins(LodSceneRefreshRegionPlugin::<
+				MobHighLodRegion,
+				With<LodViewer>,
+				MobHighLodChan,
+			>::default())
+			.add_plugins(
+				AvianLodSceneRefreshPlugin::<
+					MobScene,
+					MobHighLodChan,
+					With<LodViewer>,
+				>::default(),
+			)
 			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
 			.add_systems(
 				Update,
@@ -578,7 +654,23 @@ impl Plugin for WorldMobsPlugin {
 					.after(LodGenerateSystems::Produce)
 					.before(LodGenerateSystems::Drain),
 			)
-			.add_systems(Update, stream_world_mobs.before(LodGenerateSystems::Produce));
+			.add_systems(Update, stream_world_mobs.before(LodGenerateSystems::Produce))
+			.add_systems(
+				Update,
+				fit_world_mob_hosts_to_surface.in_set(MobSceneSystems::Surface),
+			)
+			.add_systems(
+				Update,
+				pulse_world_mob_high_lod
+					.run_if(on_timer(MOB_HIGH_LOD_REFRESH_INTERVAL))
+					.in_set(LodRefreshSystems::ProduceRegions),
+			)
+			.add_systems(
+				Update,
+				update_lod_host_levels::<MobScene, (), With<LodViewer>>
+					.run_if(on_timer(MOB_HIGH_LOD_RECONCILE_INTERVAL))
+					.in_set(LodRefreshSystems::UpdateLevels),
+			);
 	}
 }
 
@@ -591,6 +683,14 @@ mod tests {
 		let region =
 			Aabb3d::from_min_max(Vec3::new(-199.0, 0.0, -199.0), Vec3::new(201.0, 1.0, 201.0));
 		assert_eq!(MobCellExtent::cells_overlapping(region).len(), 4);
+	}
+
+	#[test]
+	fn high_lod_index_region_follows_the_viewer_in_three_dimensions() {
+		let center = Vec3::new(10.0, 120.0, -20.0);
+		let region = MobHighLodRegion::region_at(center);
+		assert_eq!(Vec3::from(region.min), center - Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS));
+		assert_eq!(Vec3::from(region.max), center + Vec3::splat(MOB_HIGH_LOD_REFRESH_RADIUS));
 	}
 
 	#[test]

@@ -10,6 +10,7 @@ use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic}
 const HUD_PIN_COUNT: usize = 8;
 const HUD_MARGIN: f32 = 22.0;
 const HUD_PIN_WIDTH: f32 = 118.0;
+const HUD_PIN_WORLD_HEIGHT: f32 = 4.0;
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
@@ -216,7 +217,7 @@ pub(crate) fn sync_mob_debug_pins(
 		}
 		return;
 	};
-	let ranked = ranked_hosts_with_entity(&camera_transform, &hosts);
+	let ranked = ranked_hosts_with_entity(camera_transform, &hosts);
 	let wanted: Vec<_> = ranked.into_iter().take(HUD_PIN_COUNT).collect();
 	let mut assigned = Vec::new();
 	for (pin_entity, pin, mut node, mut background, mut text, mut visibility) in &mut pins {
@@ -224,7 +225,9 @@ pub(crate) fn sync_mob_debug_pins(
 			commands.entity(pin_entity).despawn();
 			continue;
 		};
-		let Some((screen, on_screen)) = project_mob_pin(camera, camera_transform, host.at) else {
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, mob_pin_anchor(host.at))
+		else {
 			*visibility = Visibility::Hidden;
 			continue;
 		};
@@ -238,7 +241,9 @@ pub(crate) fn sync_mob_debug_pins(
 		if assigned.contains(&host.entity) {
 			continue;
 		}
-		let Some((screen, on_screen)) = project_mob_pin(camera, camera_transform, host.at) else {
+		let Some((screen, on_screen)) =
+			project_mob_pin(camera, camera_transform, mob_pin_anchor(host.at))
+		else {
 			continue;
 		};
 		commands.entity(hud).with_children(|root| {
@@ -337,6 +342,10 @@ fn project_mob_pin(
 	Some((screen, on_screen))
 }
 
+fn mob_pin_anchor(host: Vec3) -> Vec3 {
+	host + Vec3::Y * HUD_PIN_WORLD_HEIGHT
+}
+
 fn clamp_to_rect(center: Vec2, point: Vec2, min: Vec2, max: Vec2) -> Vec2 {
 	let dir = point - center;
 	if dir.length_squared() < 1e-6 {
@@ -422,6 +431,12 @@ mod tests {
 		);
 		assert!((clamped.x - 120.0).abs() < 1e-3);
 		assert!((clamped.y - 110.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn mob_pin_anchor_is_lifted_above_the_surface() {
+		let host = Vec3::new(4.0, 12.0, -3.0);
+		assert_eq!(mob_pin_anchor(host), Vec3::new(4.0, 16.0, -3.0));
 	}
 
 	#[test]

@@ -27,15 +27,18 @@ Groups may put multiple mobs over the same area. We typically use large `400m` c
 - [`mobs`](mobs) provides `Mob<Roster, Intelligence>` and the resolved `MobScene`
   semantic LodScene. Its always-on host owns roster, affiliations, POI/journey,
   travel, hunt, tether-lock, and respawn intelligence. Only High emits character
-  plants, one chunk at a time; lower levels retain the host brain.
+  plants, one chunk at a time; lower levels retain the host brain. The High
+  decision follows the traveling host's current transform rather than its
+  original spawn anchor.
 - [`groups`](groups) provides `MobGroup`, the five group families, and the
   `MobWorldSample` adapter seam. `MaybraidWorld` selects sparse 400 m mob cells
   from the live Richmond/Chico model configuration, generates them in a 3 km
   ring, and presents cell → group → `MobScene` hosts in a 1 km ring. Spawn
   elevation is resolved against composed Durham terrain and Richmond pads at
-  presentation time. Journeying hosts are `RoutingIntelligenceUser`s: POI goals
-  become a coarse Fixed-layer corridor, and `MobTravel` lerps the tether along
-  those hops (including hop Y). High emits `RosterRef` stubs under the host LOD
+  presentation time and traveling hosts are fitted again as their XZ changes.
+  Journeying hosts are `RoutingIntelligenceUser`s: POI goals become a coarse
+  Fixed-layer corridor, and `MobTravel` lerps the tether along those hops. High
+  emits `RosterRef` stubs under the host LOD
   tree; fulfill spawns character capsules unparented so host travel cannot tow
   them. Plants follow by tether and keep Avian movement for combat; they do not
   inherit host routing.
@@ -54,7 +57,10 @@ tree. `MobSystems::Bind` resolves the live entity, installs the tether context,
 and combines character-local POI interests with the mob interest table.
 LOD cull despawns the stub, then the still-bound body; death replacement invokes
 the same `CharacterSceneRecipe` used by initial High fulfillment and must not
-use the cull path.
+use the cull path. A replacement rejected outside High is released and retried;
+the default policy chooses among weighted nearby mob-interest POIs without
+immediately repeating one, then uses a deterministic varied host-relative
+fallback when none are available.
 
 ## Characters
 Initial proposed characters are as follows:

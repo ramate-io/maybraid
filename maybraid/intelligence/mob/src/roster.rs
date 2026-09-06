@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use damage::Health;
 use firearm_intelligence::FirearmEngagement;
 use npc_intelligence::{NpcBody, NpcInstall, Personality};
-use poi_intelligence::PoiInterests;
+use poi_intelligence::{PoiId, PoiInterests};
 use threat_intelligence::{Affiliations, ThreatId};
 use threat_management_intelligence::ThreatManagementIntelligence;
 
@@ -44,9 +44,11 @@ impl MobAffiliations {
 /// Where a replacement plant is stamped.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MobRespawnAt {
-	/// Host XZ, last recorded feet height. Pack default.
-	#[default]
+	/// Host XZ, last recorded feet height.
 	Host,
+	/// A weighted nearby point of interest, with varied host-relative fallback.
+	#[default]
+	Poi,
 	LastPose,
 }
 
@@ -66,7 +68,7 @@ pub struct MobRespawn {
 
 impl Default for MobRespawn {
 	fn default() -> Self {
-		Self { delay_secs: 8.0, max_replacements: None, at: MobRespawnAt::Host, corpse_secs: 0.35 }
+		Self { delay_secs: 8.0, max_replacements: None, at: MobRespawnAt::Poi, corpse_secs: 4.0 }
 	}
 }
 
@@ -76,7 +78,7 @@ impl MobRespawn {
 			delay_secs: 0.0,
 			max_replacements: Some(0),
 			at: MobRespawnAt::Host,
-			corpse_secs: 0.35,
+			corpse_secs: 4.0,
 		}
 	}
 
@@ -118,6 +120,7 @@ pub struct RosterMember {
 	pub replacements_used: u32,
 	pub respawn_at: Option<f32>,
 	pub spawn_requested: bool,
+	pub last_respawn_poi: Option<PoiId>,
 }
 
 impl RosterMember {
@@ -137,6 +140,7 @@ impl RosterMember {
 			replacements_used: 0,
 			respawn_at: None,
 			spawn_requested: false,
+			last_respawn_poi: None,
 		}
 	}
 
