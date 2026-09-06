@@ -3,7 +3,10 @@
 use bevy::prelude::*;
 use damage::Health;
 use journeying_intelligence::JourneyingIntelligencePlugin;
-use lod::{add_lod_refresh_chunk_full_for, LodChunkFulfillSystems, LodSceneLevel};
+use lod::{
+	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, LodChunkFulfillSystems,
+	LodSceneLevel,
+};
 use mob_characters::{CharacterSceneSystems, MobCharacterScenesPlugin};
 use mob_intelligence::{
 	install_mob, MobIdAlloc, MobInstall, MobIntelligencePlugin, MobMemberNeeded, MobSlot,
@@ -19,6 +22,7 @@ const PREY_POI: PoiKind = PoiKind::new("mobs/prey");
 const PACK_LOCK_SECS: f32 = 45.0;
 const PACK_BROWSE_SECS: f32 = 8.0;
 const PACK_ARRIVAL_RADIUS: f32 = 12.0;
+const RESPAWN_RETRY_SECS: f32 = 1.0;
 
 #[derive(Component, Clone, Copy, Debug)]
 struct PackPursuit {
@@ -38,6 +42,15 @@ pub enum MobSceneSystems {
 	Fulfill,
 	Pursuit,
 	Respawn,
+	Surface,
+	Center,
+}
+
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MobLodRefreshMode {
+	#[default]
+	FullScan,
+	Indexed,
 }
 
 pub struct MobScenesPlugin;
@@ -65,7 +78,10 @@ impl Plugin for MobScenesPlugin {
 		if !app.is_plugin_added::<RoutingPlugin>() {
 			app.add_plugins(RoutingPlugin);
 		}
-		add_lod_refresh_chunk_full_for::<MobScene>(app);
+		match app.world().get_resource::<MobLodRefreshMode>().copied().unwrap_or_default() {
+			MobLodRefreshMode::FullScan => add_lod_refresh_chunk_full_for::<MobScene>(app),
+			MobLodRefreshMode::Indexed => add_lod_refresh_chunk_for::<MobScene>(app),
+		}
 		app.configure_sets(
 			Update,
 			(
@@ -82,6 +98,12 @@ impl Plugin for MobScenesPlugin {
 				.after(LodChunkFulfillSystems::Drain)
 				.before(CharacterSceneSystems::Materialize)
 				.before(MobSystems::Bind),
+		)
+		.configure_sets(
+			Update,
+			(MobSceneSystems::Surface, MobSceneSystems::Center)
+				.chain()
+				.after(MobSystems::Travel),
 		)
 		.add_systems(
 			Update,
@@ -100,7 +122,8 @@ impl Plugin for MobScenesPlugin {
 		.add_systems(
 			Update,
 			spawn_needed_members.in_set(MobSceneSystems::Respawn).after(MobSystems::Respawn),
-		);
+		)
+		.add_systems(Update, sync_mob_scene_centers.in_set(MobSceneSystems::Center));
 		crate::roster_ref::configure_roster_ref_systems(app);
 	}
 }
@@ -148,15 +171,21 @@ fn install_mob_scenes(
 }
 
 fn spawn_needed_members(
+	time: Res<Time>,
 	mut commands: Commands,
 	mut needed: MessageReader<MobMemberNeeded>,
-	mobs: Query<(&MobScene, Option<&LodSceneLevel>)>,
+	mut mobs: Query<(&MobScene, Option<&LodSceneLevel>, &mut mob_intelligence::MobRoster)>,
 ) {
+	let retry_at = time.elapsed_secs() + RESPAWN_RETRY_SECS;
 	for request in needed.read() {
-		let Ok((mob, level)) = mobs.get(request.mob) else {
+		let Ok((mob, level, mut roster)) = mobs.get_mut(request.mob) else {
 			continue;
 		};
 		if level.is_some_and(|level| *level != LodSceneLevel::High) {
+			if let Some(member) = roster.get_mut(request.slot) {
+				member.spawn_requested = false;
+				member.respawn_at = Some(retry_at);
+			}
 			continue;
 		}
 		let Some(member) = mob.mob.roster.members.get(request.slot as usize) else {
@@ -164,6 +193,12 @@ fn spawn_needed_members(
 		};
 		let body = member.character.spawn(&mut commands, Transform::from_translation(request.pose));
 		commands.entity(body).insert((MobSlot(request.slot), request.id));
+	}
+}
+
+fn sync_mob_scene_centers(mut hosts: Query<(&Transform, &mut MobScene), Changed<Transform>>) {
+	for (transform, mut scene) in &mut hosts {
+		scene.center = transform.translation;
 	}
 }
 
@@ -242,5 +277,84 @@ fn packs_track_herds(
 				PACK_LOCK_SECS,
 			));
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use anyhow::Result;
+	use bevy::ecs::system::RunSystemOnce;
+	use npc_intelligence::Personality;
+
+	use super::*;
+	use mob_intelligence::{MobId, MobMemberNeeded, MobRoster};
+
+	#[test]
+	fn plugin_update_schedule_is_acyclic() -> Result<()> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+			.insert_resource(MobLodRefreshMode::Indexed)
+			.add_plugins(MobScenesPlugin);
+		app.world_mut()
+			.schedule_scope(Update, |world, schedule| schedule.initialize(world))
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+		Ok(())
+	}
+
+	#[test]
+	fn rejected_low_lod_respawn_is_retryable() -> Result<()> {
+		let mut world = World::new();
+		world.init_resource::<Time>();
+		world.init_resource::<Messages<MobMemberNeeded>>();
+		let host = world
+			.spawn((
+				MobScene::of_kind(MobKind::Herd, 0.2),
+				Transform::default(),
+				LodSceneLevel::UltraLow,
+				MobRoster::new(vec![RosterMember::new(Personality::Grazer, Vec3::Y)]),
+			))
+			.id();
+		{
+			let mut roster = world
+				.get_mut::<MobRoster>(host)
+				.ok_or_else(|| anyhow::anyhow!("missing roster"))?;
+			let member =
+				roster.get_mut(0).ok_or_else(|| anyhow::anyhow!("missing roster member"))?;
+			member.spawn_requested = true;
+		}
+		world.resource_mut::<Messages<MobMemberNeeded>>().write(MobMemberNeeded {
+			mob: host,
+			id: MobId(7),
+			slot: 0,
+			pose: Vec3::Y,
+		});
+
+		world
+			.run_system_once(spawn_needed_members)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		let member = world
+			.get::<MobRoster>(host)
+			.and_then(|roster| roster.get(0))
+			.ok_or_else(|| anyhow::anyhow!("missing roster member after retry"))?;
+		assert!(!member.spawn_requested);
+		assert_eq!(member.respawn_at, Some(RESPAWN_RETRY_SECS));
+		Ok(())
+	}
+
+	#[test]
+	fn moving_host_updates_the_mob_lod_center() -> Result<()> {
+		let mut world = World::new();
+		let at = Vec3::new(40.0, 12.0, -9.0);
+		let host = world
+			.spawn((MobScene::of_kind(MobKind::Pack, 0.4), Transform::from_translation(at)))
+			.id();
+
+		world
+			.run_system_once(sync_mob_scene_centers)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.get::<MobScene>(host).map(|scene| scene.center), Some(at));
+		Ok(())
 	}
 }

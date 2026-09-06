@@ -17,19 +17,21 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	AnimClip, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRecipe,
-	CharacterRig, CharacterRigRole, CharacterRoot, ComponentsOnly, RigSkeletonKind,
+	AnimClip, AnimId, AnimRef, AnimRefRoot, CharacterAppearance, CharacterHeading,
+	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	ComponentsOnly, RigSkeletonKind,
 };
 use game_commands::ui::GameCommandStatusText;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::commands::RequestModeCharacter;
-use crate::player::{Jumping, MoveWish, Player, PlayerCapsule};
+use crate::player::{Grounded, Jumping, MoveWish, Player, PlayerCapsule, WalkableGround};
 use avian3d::prelude::LinearVelocity;
 
 const WALK_SPEED: f32 = 1.0;
 const RUN_SPEED: f32 = 5.0;
+const RUN_EXIT_SPEED: f32 = 4.5;
 
 /// Species for `/set-character`. Default preview recipe, no concepts sliders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
@@ -109,24 +111,36 @@ pub struct RequestSetCharacter {
 	pub species: CharacterSpecies,
 }
 
+/// Replace the terrain player visual with a configured, inventory-clothed appearance.
+#[derive(Component, Debug, Clone)]
+pub struct RequestSetCharacterAppearance {
+	pub appearance: CharacterAppearance,
+}
+
 pub(crate) fn apply_set_character(
 	mut commands: Commands,
 	mut status: Option<ResMut<GameCommandStatusText>>,
-	requests: Query<(Entity, &RequestSetCharacter)>,
+	species_requests: Query<(Entity, &RequestSetCharacter)>,
+	appearance_requests: Query<(Entity, &RequestSetCharacterAppearance)>,
 	players: Query<Entity, With<Player>>,
-	visuals: Query<Entity, With<PlayerVisual>>,
+	visuals: Query<(Entity, &ChildOf), With<PlayerVisual>>,
 	mut capsules: Query<&mut Visibility, With<PlayerCapsule>>,
 ) {
 	let Ok(player) = players.single() else {
-		for (entity, _) in &requests {
+		for (entity, _) in &species_requests {
+			commands.entity(entity).despawn();
+		}
+		for (entity, _) in &appearance_requests {
 			commands.entity(entity).despawn();
 		}
 		return;
 	};
 
-	for (entity, request) in &requests {
-		for visual in &visuals {
-			commands.entity(visual).try_despawn();
+	for (entity, request) in &species_requests {
+		for (visual, child_of) in &visuals {
+			if child_of.parent() == player {
+				commands.entity(visual).try_despawn();
+			}
 		}
 		for mut visibility in &mut capsules {
 			*visibility = Visibility::Hidden;
@@ -145,13 +159,39 @@ pub(crate) fn apply_set_character(
 		);
 		commands.entity(entity).despawn();
 	}
+	for (entity, request) in &appearance_requests {
+		for (visual, child_of) in &visuals {
+			if child_of.parent() == player {
+				commands.entity(visual).try_despawn();
+			}
+		}
+		for mut visibility in &mut capsules {
+			*visibility = Visibility::Hidden;
+		}
+
+		for spawned in spawn_appearance(&mut commands, &request.appearance, Transform::IDENTITY) {
+			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
+		}
+		commands.spawn(RequestModeCharacter);
+		crate::ui::write_status(
+			&mut status,
+			format!(
+				"set-character {} — mode character, WASD move, Space jump",
+				request.appearance.species_id()
+			),
+		);
+		commands.entity(entity).despawn();
+	}
 }
 
 /// Walk / run / jump on the body mailbox from player speed and grounded state.
 pub(crate) fn drive_player_locomotion(
 	mut commands: Commands,
 	time: Res<Time>,
-	players: Query<(&LinearVelocity, &MoveWish, Has<Jumping>), With<Player>>,
+	players: Query<
+		(&LinearVelocity, &MoveWish, Has<Jumping>, Has<Grounded>, Option<&WalkableGround>),
+		With<Player>,
+	>,
 	mut visuals: Query<
 		(&CharacterMembers, &mut Transform, &mut CharacterHeading),
 		(With<PlayerVisual>, With<CharacterRoot>),
@@ -159,15 +199,15 @@ pub(crate) fn drive_player_locomotion(
 	rigs: Query<&CharacterRig>,
 	anims: Query<&AnimRefRoot>,
 ) {
-	let Ok((velocity, wish, jumping)) = players.single() else {
+	let Ok((velocity, wish, jumping, grounded, walkable)) = players.single() else {
 		return;
 	};
 	let Ok((members, mut visual, mut heading)) = visuals.single_mut() else {
 		return;
 	};
 
-	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
-	let speed = horizontal.length();
+	let ground_normal = grounded.then(|| walkable.map(|ground| ground.normal)).flatten();
+	let speed = locomotion_speed(velocity, ground_normal);
 	heading.turn_toward(&mut visual, wish.0, time.delta_secs());
 
 	for member in members.iter() {
@@ -177,26 +217,43 @@ pub(crate) fn drive_player_locomotion(
 		if rig.role != CharacterRigRole::Body {
 			continue;
 		}
-		let clip = locomotion_clip(rig.skeleton, jumping, speed);
+		let current = anims.get(member).ok();
+		let clip =
+			locomotion_clip(rig.skeleton, jumping, speed, current.map(|root| root.0.clip.id()));
 		let desired = AnimRef::new(clip);
-		let needs = match anims.get(member) {
-			Ok(root) => root.0 != desired,
-			Err(_) => true,
-		};
+		let needs = current.is_none_or(|root| root.0 != desired);
 		if needs {
 			commands.entity(member).insert(AnimRefRoot(desired));
 		}
 	}
 }
 
-fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> AnimClip {
+fn locomotion_speed(velocity: &LinearVelocity, ground_normal: Option<Vec3>) -> f32 {
+	if let Some(normal) = ground_normal.map(Vec3::normalize_or_zero) {
+		if normal.length_squared() > 1e-8 {
+			return (**velocity - normal * velocity.dot(normal)).length();
+		}
+	}
+	Vec3::new(velocity.x, 0.0, velocity.z).length()
+}
+
+fn locomotion_clip(
+	skeleton: RigSkeletonKind,
+	jumping: bool,
+	speed: f32,
+	current: Option<AnimId>,
+) -> AnimClip {
+	let was_running = current.is_some_and(|id| {
+		matches!(id, AnimId::Run | AnimId::Gallop | AnimId::DorsoventralUndulation)
+	});
+	let running = speed > if was_running { RUN_EXIT_SPEED } else { RUN_SPEED };
 	match skeleton {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => {
 			if jumping && speed > RUN_SPEED {
 				AnimClip::leap()
 			} else if jumping {
 				AnimClip::jump()
-			} else if speed > RUN_SPEED {
+			} else if running {
 				AnimClip::run()
 			} else if speed > WALK_SPEED {
 				AnimClip::walk()
@@ -207,7 +264,7 @@ fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> Anim
 		RigSkeletonKind::Quadruped => {
 			if jumping {
 				AnimClip::leap()
-			} else if speed > RUN_SPEED {
+			} else if running {
 				AnimClip::gallop()
 			} else if speed > WALK_SPEED {
 				AnimClip::quadruped_run()
@@ -216,7 +273,7 @@ fn locomotion_clip(skeleton: RigSkeletonKind, jumping: bool, speed: f32) -> Anim
 			}
 		}
 		RigSkeletonKind::Forelimbed => {
-			if speed > RUN_SPEED {
+			if running {
 				AnimClip::dorsoventral_undulation()
 			} else if speed > WALK_SPEED {
 				AnimClip::lateral_undulation()
@@ -283,5 +340,76 @@ fn spawn_species(
 		CharacterSpecies::Thumplus => spawn_preview!(ThumplusConfig),
 		CharacterSpecies::Mistler => spawn_preview!(MistlerConfig),
 		CharacterSpecies::Tuberwaber => spawn_preview!(TuberwaberConfig),
+	}
+}
+
+fn spawn_appearance(
+	commands: &mut Commands,
+	appearance: &CharacterAppearance,
+	transform: Transform,
+) -> Vec<Entity> {
+	macro_rules! spawn_config {
+		($config:expr) => {{
+			let clothed = CharacterRecipe::clothed($config);
+			let bounds = character_bounds(&clothed);
+			let identity = Transform::IDENTITY;
+			let lod_ref = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &identity,
+				current_transform: &identity,
+				bounds: &bounds,
+			};
+			let host = ComponentsOnly(clothed);
+			vec![commands
+				.spawn_scene((
+					host.host(&lod_ref),
+					bsn! {
+						template_value(transform)
+					},
+				))
+				.id()]
+		}};
+	}
+	match appearance {
+		CharacterAppearance::Braidman(config) => spawn_config!(config),
+		CharacterAppearance::Brodler(config) => spawn_config!(config),
+		CharacterAppearance::Mygr(config) => spawn_config!(config),
+		CharacterAppearance::Dui(config) => spawn_config!(config),
+		CharacterAppearance::Wumbus(config) => spawn_config!(config),
+		CharacterAppearance::Lero(config) => spawn_config!(config),
+		CharacterAppearance::Spibmom(config) => spawn_config!(config),
+		CharacterAppearance::Tuberwaber(config) => spawn_config!(config),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn grounded_locomotion_uses_surface_speed() {
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(slope.sin(), slope.cos(), 0.0);
+		let downhill = LinearVelocity(Vec3::new(7.0 * slope.cos(), -7.0 * slope.sin(), 0.0));
+		assert!((locomotion_speed(&downhill, Some(normal)) - 7.0).abs() < 1e-5);
+		assert!(locomotion_speed(&downhill, None) < RUN_SPEED);
+	}
+
+	#[test]
+	fn run_clip_has_exit_hysteresis() {
+		let run = locomotion_clip(
+			RigSkeletonKind::Humanoid,
+			false,
+			RUN_EXIT_SPEED + 0.1,
+			Some(AnimId::Run),
+		);
+		let walk = locomotion_clip(
+			RigSkeletonKind::Humanoid,
+			false,
+			RUN_EXIT_SPEED + 0.1,
+			Some(AnimId::Walk),
+		);
+		assert_eq!(run.id(), AnimId::Run);
+		assert_eq!(walk.id(), AnimId::Walk);
 	}
 }

@@ -7,8 +7,8 @@ mod roster;
 mod roster_ref;
 mod scene;
 
-pub use brain::MobBrain;
+pub use brain::{player_affiliations, MobBrain, FFA_GROUP, PLAYER_GROUP};
 pub use kind::MobKind;
-pub use plugin::{MobSceneSystems, MobScenesPlugin};
+pub use plugin::{MobLodRefreshMode, MobSceneSystems, MobScenesPlugin};
 pub use roster::{MobMemberRecipe, MobRosterRecipe};
 pub use scene::{Mob, MobScene, DEFAULT_MOB_HIGH_RADIUS};

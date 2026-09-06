@@ -20,11 +20,15 @@ use crate::WorldBaseTerrain;
 
 pub(crate) const CAPSULE_RADIUS: f32 = 0.4;
 pub(crate) const CAPSULE_LENGTH: f32 = 1.0;
+const MOVE_SPEED: f32 = 7.0;
 const MOVE_ACCEL: f32 = 40.0;
-const MOVE_DAMPING: f32 = 0.92;
+const MOVE_BRAKE: f32 = 50.0;
+const AIR_CONTROL: f32 = 0.25;
 const JUMP_IMPULSE: f32 = 8.0;
-/// Default walkable slope (~81°). Playgrounds override via [`CharacterLocomotion`].
+/// Default maximum uphill drive (~81°). Downhill travel remains unrestricted.
 const DEFAULT_MAX_SLOPE_ANGLE: f32 = PI * 0.45;
+/// Reject near-vertical side contacts as support while retaining steep cliffs.
+const MIN_SUPPORT_NORMAL_Y: f32 = 0.05;
 /// Third-person orbit for a ~2 m humanoid (capsule center is hip height).
 pub const CAMERA_DISTANCE: f32 = 3.6;
 pub const CAMERA_HEIGHT: f32 = 1.1;
@@ -43,11 +47,11 @@ pub struct MoveWish(pub Vec3);
 pub struct PlayerControlSystems;
 
 /// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
-/// (~81°) max slope. World playground uses a shallower cap so 80°+ walls do
-/// not count as floor (~60°).
+/// (~81°) uphill limit. The limit only removes drive toward the top of steeper
+/// surfaces; downhill and contour movement remain available.
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterLocomotion {
-	/// Hits steeper than this (radians from up) are not grounded.
+	/// Uphill drive is blocked above this angle (radians from up).
 	pub max_slope_angle: f32,
 }
 
@@ -85,6 +89,21 @@ struct CharacterController;
 #[component(storage = "SparseSet")]
 pub(crate) struct Grounded;
 
+/// Last valid support plane.
+///
+/// A descending capsule can briefly outrun its down-cast between terrain
+/// facets. Reuse this only while [`Grounded`] bridges that probe miss.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WalkableGround {
+	pub(crate) normal: Vec3,
+}
+
+impl Default for WalkableGround {
+	fn default() -> Self {
+		Self { normal: Vec3::Y }
+	}
+}
+
 /// Space jump is in flight. Cleared on landing, not on shapecast misses.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -94,9 +113,6 @@ pub struct Jumping {
 
 #[derive(Component)]
 struct MovementAcceleration(f32);
-
-#[derive(Component)]
-struct MovementDampingFactor(f32);
 
 #[derive(Component)]
 struct JumpImpulse(f32);
@@ -146,7 +162,6 @@ impl Plugin for PlayerPlugin {
 					keyboard_movement_input,
 					update_grounded,
 					apply_character_movement,
-					apply_movement_damping,
 					follow_character_camera,
 				)
 					.chain()
@@ -167,6 +182,21 @@ fn spawn_player(
 	// so the capsule / follow-cam are not born under jersey plateaus.
 	let center = layout.region_center_xz();
 	let spawn = player_spawn_point(&layout, holding_elevation(&base.0, center.x, center.z));
+	let player =
+		spawn_player_body(&mut commands, &mut meshes, &mut materials, locomotion.as_ref(), spawn);
+	commands.entity(player).insert(AwaitingTerrainSurface);
+}
+
+/// Spawn the terrain player's dynamic capsule at a known body-center position.
+///
+/// Call [`player_position_above_surface`] when the input is a terrain/POI surface point.
+pub fn spawn_player_body(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	locomotion: &CharacterLocomotion,
+	spawn: Vec3,
+) -> Entity {
 	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
@@ -175,7 +205,6 @@ fn spawn_player(
 		.spawn((
 			Name::new("Player"),
 			Player,
-			AwaitingTerrainSurface,
 			CharacterController,
 			Transform::from_translation(spawn),
 			Visibility::default(),
@@ -186,13 +215,14 @@ fn spawn_player(
 				.with_max_distance(GROUND_CAST_DISTANCE)
 				.with_query_filter(SpatialQueryFilter::from_mask(PhysicsInteractionLayer::Fixed)),
 			LockedAxes::ROTATION_LOCKED,
+			ActiveCollisionHooks::MODIFY_CONTACTS,
 		))
 		.insert((
 			MovementAcceleration(MOVE_ACCEL),
-			MovementDampingFactor(MOVE_DAMPING),
 			JumpImpulse(JUMP_IMPULSE),
 			MaxSlopeAngle(locomotion.max_slope_angle),
 			MoveWish::default(),
+			WalkableGround::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(0.0),
@@ -205,10 +235,16 @@ fn spawn_player(
 		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
 		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
 	));
+	player
 }
 
 pub(crate) fn capsule_half_height() -> f32 {
 	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
+}
+
+/// Lift a terrain/POI surface point to a safe player capsule center.
+pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
+	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
 /// Elevation used before [`TerrainEntryStore`] has the cell underfoot.
@@ -218,7 +254,7 @@ pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
+	player_position_above_surface(Vec3::new(center.x, elevation, center.z))
 }
 
 pub(crate) fn snap_player_to_composed_surface(
@@ -333,9 +369,9 @@ fn update_grounded(
 			Entity,
 			&ShapeHits,
 			&LinearVelocity,
-			Option<&MaxSlopeAngle>,
 			Has<Grounded>,
 			Option<&mut Jumping>,
+			&mut WalkableGround,
 		),
 		With<CharacterController>,
 	>,
@@ -344,14 +380,12 @@ fn update_grounded(
 		return;
 	}
 
-	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping) in &mut query {
-		let mut is_grounded = hits.iter().any(|hit| {
-			if let Some(angle) = max_slope_angle {
-				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
-			} else {
-				true
-			}
-		});
+	for (entity, hits, velocity, was_grounded, jumping, mut walkable) in &mut query {
+		let support = support_ground_normal(hits);
+		if let Some(normal) = support {
+			walkable.normal = normal;
+		}
+		let mut is_grounded = support.is_some();
 		if !is_grounded
 			&& was_grounded
 			&& jumping.is_none()
@@ -375,20 +409,15 @@ fn update_grounded(
 	}
 }
 
-/// Most upright contact within the walkable slope, if any.
-fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+/// Most upright support under the capsule, including slopes too steep to climb.
+fn support_ground_normal(hits: &ShapeHits) -> Option<Vec3> {
 	let mut best: Option<(f32, Vec3)> = None;
 	for hit in hits.iter() {
-		let normal = (-hit.normal2).normalize_or_zero();
-		if normal.length_squared() < 1e-8 {
+		let normal = hit.normal1.normalize_or_zero();
+		if normal.length_squared() < 1e-8 || normal.y <= MIN_SUPPORT_NORMAL_Y {
 			continue;
 		}
 		let angle = normal.angle_between(Vec3::Y).abs();
-		if let Some(max) = max_slope {
-			if angle > max.0 {
-				continue;
-			}
-		}
 		if best.is_none_or(|(best_angle, _)| angle < best_angle) {
 			best = Some((angle, normal));
 		}
@@ -396,52 +425,80 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 	best.map(|(_, normal)| normal)
 }
 
-/// Accelerate along the ground plane when a walkable normal is known; else XZ only.
-fn accelerate_wish(
+/// Unit surface drive. Only the uphill component is removed above the climb cap.
+fn ground_drive(wish: Vec3, normal: Vec3, max_slope: f32) -> Vec3 {
+	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
+	let normal = normal.normalize_or_zero();
+	if wish.length_squared() < 1e-8 || normal.length_squared() < 1e-8 {
+		return Vec3::ZERO;
+	}
+	let mut drive = wish - normal * wish.dot(normal);
+	if normal.angle_between(Vec3::Y).abs() > max_slope {
+		let uphill = (Vec3::Y - normal * normal.y).normalize_or_zero();
+		let uphill_amount = drive.dot(uphill);
+		if uphill_amount > 0.0 {
+			drive -= uphill * uphill_amount;
+		}
+	}
+	if drive.length_squared() < 1e-8 {
+		Vec3::ZERO
+	} else {
+		drive.normalize()
+	}
+}
+
+fn move_toward(current: Vec3, target: Vec3, max_delta: f32) -> Vec3 {
+	let delta = target - current;
+	if delta.length_squared() <= max_delta * max_delta {
+		target
+	} else {
+		current + delta.normalize_or_zero() * max_delta
+	}
+}
+
+fn control_ground_velocity(
 	velocity: &mut LinearVelocity,
 	wish: Vec3,
+	normal: Vec3,
+	max_slope: f32,
 	accel: f32,
 	dt: f32,
-	ground_normal: Option<Vec3>,
 ) {
+	let normal = normal.normalize_or_zero();
+	let tangent = **velocity - normal * velocity.dot(normal);
+	let target = ground_drive(wish, normal, max_slope) * MOVE_SPEED;
+	let rate = if target.length_squared() > 1e-8 { accel } else { MOVE_BRAKE };
+	**velocity = move_toward(tangent, target, rate * dt);
+}
+
+fn control_air_velocity(velocity: &mut LinearVelocity, wish: Vec3, accel: f32, dt: f32) {
 	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
 	if wish.length_squared() < 1e-8 {
 		return;
 	}
-	let drive = match ground_normal {
-		Some(normal) => {
-			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
-			if along.length_squared() > 1e-8 {
-				along
-			} else {
-				wish
-			}
-		}
-		None => wish,
-	};
-	if ground_normal.is_some() {
-		**velocity += drive * accel * dt;
-	} else {
-		velocity.x += drive.x * accel * dt;
-		velocity.z += drive.z * accel * dt;
-	}
+	let horizontal = Vec3::new(velocity.x, 0.0, velocity.z);
+	let next = move_toward(horizontal, wish * MOVE_SPEED, accel * AIR_CONTROL * dt);
+	velocity.x = next.x;
+	velocity.z = next.z;
 }
 
 fn apply_character_movement(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
 	time: Res<Time>,
-	cameras: Query<&CameraController, With<Camera3d>>,
 	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
 		(
 			Entity,
+			&MoveWish,
 			&ShapeHits,
-			Option<&MaxSlopeAngle>,
+			&MaxSlopeAngle,
+			&WalkableGround,
 			&MovementAcceleration,
 			&JumpImpulse,
 			&mut LinearVelocity,
 			Has<Grounded>,
+			Option<&Jumping>,
 		),
 		With<CharacterController>,
 	>,
@@ -451,47 +508,33 @@ fn apply_character_movement(
 		return;
 	}
 
-	let Ok(camera) = cameras.single() else {
-		for _ in reader.read() {}
-		return;
-	};
-
-	let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
-	let forward = yaw * -Vec3::Z;
-	let right = yaw * Vec3::X;
 	let dt = time.delta_secs();
-
+	let mut jump_requested = false;
 	for action in reader.read() {
-		for (entity, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers {
-			match action {
-				MovementAction::Move(direction) => {
-					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let ground =
-						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
-					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
-				}
-				MovementAction::Jump => {
-					if grounded {
-						velocity.y = jump.0;
-						commands.entity(entity).insert(Jumping { left_ground: false });
-					}
-				}
+		jump_requested |= matches!(action, MovementAction::Jump);
+	}
+
+	for (entity, wish, hits, max_slope, walkable, accel, jump, mut velocity, grounded, jumping) in
+		&mut controllers
+	{
+		if let Some(normal) = grounded_plane(hits, walkable, grounded) {
+			if jumping.is_none() {
+				control_ground_velocity(&mut velocity, wish.0, normal, max_slope.0, accel.0, dt);
+			} else {
+				control_air_velocity(&mut velocity, wish.0, accel.0, dt);
 			}
+		} else {
+			control_air_velocity(&mut velocity, wish.0, accel.0, dt);
+		}
+		if jump_requested && grounded {
+			velocity.y = jump.0;
+			commands.entity(entity).insert(Jumping { left_ground: false });
 		}
 	}
 }
 
-fn apply_movement_damping(
-	mode: Res<PlaygroundMode>,
-	mut query: Query<(&MovementDampingFactor, &mut LinearVelocity), With<CharacterController>>,
-) {
-	if *mode != PlaygroundMode::Character {
-		return;
-	}
-	for (damping, mut velocity) in &mut query {
-		velocity.x *= damping.0;
-		velocity.z *= damping.0;
-	}
+fn grounded_plane(hits: &ShapeHits, walkable: &WalkableGround, grounded: bool) -> Option<Vec3> {
+	grounded.then(|| support_ground_normal(hits).unwrap_or(walkable.normal))
 }
 
 fn follow_character_camera(
@@ -539,5 +582,39 @@ mod tests {
 		assert!(
 			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
 		);
+	}
+
+	#[test]
+	fn regular_slopes_allow_equal_uphill_and_downhill_drive() {
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let uphill = ground_drive(Vec3::X, normal, 70.0_f32.to_radians());
+		let downhill = ground_drive(Vec3::NEG_X, normal, 70.0_f32.to_radians());
+		assert!((uphill.length() - 1.0).abs() < 1e-5);
+		assert!((downhill.length() - 1.0).abs() < 1e-5);
+		assert!((uphill + downhill).length() < 1e-5);
+		assert!(uphill.y > 0.0);
+		assert!(downhill.y < 0.0);
+	}
+
+	#[test]
+	fn cliff_gate_removes_only_uphill_drive() {
+		let slope = 80.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let uphill = ground_drive(Vec3::X, normal, 70.0_f32.to_radians());
+		let downhill = ground_drive(Vec3::NEG_X, normal, 70.0_f32.to_radians());
+		let contour = ground_drive(Vec3::Z, normal, 70.0_f32.to_radians());
+		assert!(uphill.length_squared() < 1e-8);
+		assert!((downhill.length() - 1.0).abs() < 1e-5);
+		assert_eq!(contour, Vec3::Z);
+	}
+
+	#[test]
+	fn grounded_probe_miss_reuses_last_support_plane() {
+		let hits = ShapeHits::default();
+		let normal = Vec3::new(-0.4, 0.9, 0.0).normalize();
+		let walkable = WalkableGround { normal };
+		assert_eq!(grounded_plane(&hits, &walkable, true), Some(normal));
+		assert_eq!(grounded_plane(&hits, &walkable, false), None);
 	}
 }

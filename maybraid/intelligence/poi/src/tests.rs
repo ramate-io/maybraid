@@ -46,6 +46,24 @@ fn registry_separates_local_and_sparse_global_sets() -> anyhow::Result<()> {
 }
 
 #[test]
+fn weighted_nearby_choice_avoids_the_previous_poi() -> anyhow::Result<()> {
+	let mut world = World::new();
+	let first = world.spawn_empty().id();
+	let second = world.spawn_empty().id();
+	let far = world.spawn_empty().id();
+	let mut registry = PoiRegistry::default();
+	registry.upsert(first, Poi::new(PoiId(1), CAMP), Vec3::X * 20.0, true, false)?;
+	registry.upsert(second, Poi::new(PoiId(2), CAMP), Vec3::Z * 24.0, false, true)?;
+	registry.upsert(far, Poi::new(PoiId(3), CAMP), Vec3::X * 400.0, false, true)?;
+	let interests = PoiInterests::one(CAMP);
+
+	let selected = registry.choose_nearby(Vec3::ZERO, 160.0, &interests, Some(PoiId(1)), 42);
+
+	assert_eq!(selected.map(|record| record.id), Some(PoiId(2)));
+	Ok(())
+}
+
+#[test]
 fn registry_tracks_an_entity_when_its_poi_id_changes() -> anyhow::Result<()> {
 	let mut world = World::new();
 	let entity = world.spawn_empty().id();
