@@ -15,6 +15,7 @@ mod mobs;
 mod pitch;
 mod poi;
 mod ui;
+mod weapon;
 
 pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
@@ -134,25 +135,25 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman)
-			.add_systems(
-				Update,
-				control::apply_intents_to_movement
-					.after(CharacterControlSystems)
-					.before(PlayerControlSystems),
-			)
-			.add_systems(
-				Update,
-				(
-					camera::turn_body_with_look
-						.after(CharacterMotionSystems::Anim)
-						.before(CharacterMotionSystems::Elevation),
-					pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					pitch::apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(pitch::sync_suspend_terrain_pitch),
-				),
-			);
+		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
+			Update,
+			control::apply_intents_to_movement
+				.after(CharacterControlSystems)
+				.before(PlayerControlSystems),
+		);
+		weapon::configure(app);
+		app.add_systems(
+			Update,
+			(
+				camera::turn_body_with_look
+					.after(CharacterMotionSystems::Anim)
+					.before(CharacterMotionSystems::Elevation),
+				pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
+				pitch::apply_avian_terrain_pitch
+					.in_set(CharacterMotionSystems::Elevation)
+					.after(pitch::sync_suspend_terrain_pitch),
+			),
+		);
 		if self.debug_chrome {
 			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
 				Update,
