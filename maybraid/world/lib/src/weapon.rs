@@ -43,11 +43,16 @@ impl WorldPlayerLoadout {
 #[derive(Component)]
 struct AppliedWorldPlayerLoadout(WorldPlayerLoadout);
 
+/// The replacement lifecycle already queued this body's configured visual.
+#[derive(Component)]
+pub(crate) struct WorldPlayerAppearanceRequested;
+
 type WorldPlayerEquipment<'a> = (
 	Entity,
 	Option<&'a FirearmUser>,
 	Option<&'a InventoryUser>,
 	Option<&'a AppliedWorldPlayerLoadout>,
+	Has<WorldPlayerAppearanceRequested>,
 );
 
 type WorldPlayerVisual<'a> = (Entity, &'a ChildOf, Has<MaybraidPlayerVisual>);
@@ -68,7 +73,7 @@ fn arm_world_player(
 	if !gameplay.0 {
 		return;
 	}
-	for (player, firearm_user, inventory_user, applied) in &players {
+	for (player, firearm_user, inventory_user, applied, appearance_requested) in &players {
 		let Some((visual, _, presented)) =
 			visuals.iter().find(|(_, child, _)| child.parent() == player)
 		else {
@@ -106,7 +111,9 @@ fn arm_world_player(
 			commands.entity(player).remove::<InventoryUser>();
 		}
 		let Some(loadout) = loadout.as_ref() else {
-			commands.entity(player).remove::<AppliedWorldPlayerLoadout>();
+			commands
+				.entity(player)
+				.remove::<(AppliedWorldPlayerLoadout, WorldPlayerAppearanceRequested)>();
 			commands.entity(player).insert(Health::default());
 			apply_character_mobility(&mut commands, player, 1.0, 1.0);
 			if applied.is_some() {
@@ -128,7 +135,11 @@ fn arm_world_player(
 			f32::from(sheet.jump) / f32::from(CharacterSheet::BASE.jump),
 		);
 		spawn_bag(&mut commands, player, loadout.inventory.clone());
-		commands.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
+		if !appearance_requested {
+			commands
+				.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
+		}
+		commands.entity(player).remove::<WorldPlayerAppearanceRequested>();
 		if let Some(InventoryItem::Firearm { spec, stats }) = loadout.inventory.primary_weapon() {
 			let live = live_weapon_from_stats(*stats, sheet.damage).with_weapon_identity(spec);
 			spawn_held_kit(
@@ -157,12 +168,19 @@ pub(crate) fn configure(app: &mut App) {
 
 #[cfg(test)]
 mod tests {
+	use bevy::ecs::system::RunSystemOnce;
+	use bevy::prelude::*;
+	use chico_vegetation_on_terrain_playground::{
+		Player as VegetationPlayer, PlayerVisual as VegetationPlayerVisual, PlaygroundMode,
+		RequestSetCharacterAppearance,
+	};
 	use crozon_character_items::{
 		ClothingMaterial, ClothingMesh, FirearmMesh, Inventory, InventoryItem, ItemColor,
 	};
-	use crozon_characters::CharacterAppearance;
+	use crozon_characters::{CharacterAppearance, CharacterRoot};
 
-	use crate::weapon::WorldPlayerLoadout;
+	use crate::weapon::{arm_world_player, WorldPlayerAppearanceRequested, WorldPlayerLoadout};
+	use crate::WorldGameplayEnabled;
 
 	#[test]
 	fn world_loadout_keeps_primary_weapon_and_worn_clothing() {
@@ -186,5 +204,27 @@ mod tests {
 				Some(ItemColor::Green)
 			);
 		}
+	}
+
+	#[test]
+	fn respawn_does_not_replace_the_visual_twice() -> anyhow::Result<()> {
+		let mut world = World::new();
+		world.insert_resource(PlaygroundMode::Character);
+		world.insert_resource(WorldGameplayEnabled(true));
+		world.insert_resource(WorldPlayerLoadout::new(
+			"active",
+			CharacterAppearance::default(),
+			Inventory::default(),
+		));
+		let player = world.spawn((VegetationPlayer, WorldPlayerAppearanceRequested)).id();
+		world.spawn((VegetationPlayerVisual, CharacterRoot, ChildOf(player)));
+
+		world
+			.run_system_once(arm_world_player)
+			.map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+		assert_eq!(world.query::<&RequestSetCharacterAppearance>().iter(&world).count(), 0);
+		assert!(world.get::<WorldPlayerAppearanceRequested>(player).is_none());
+		Ok(())
 	}
 }

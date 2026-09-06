@@ -22,6 +22,7 @@ use richmond_development_models::DevelopmentEntryStore;
 use spotting_intelligence::SpotSubject;
 use threat_intelligence::{Affiliations, ThreatSubject};
 
+use crate::weapon::WorldPlayerAppearanceRequested;
 use crate::{WorldGameplayEnabled, WorldPlayerLoadout};
 
 const PLAYER_RESPAWN_FALLBACK_MIN_RADIUS: f32 = 8.0;
@@ -53,6 +54,9 @@ struct WorldPlayerRespawnState {
 	generation: u64,
 	last_poi: Option<PoiId>,
 }
+
+#[derive(Component)]
+struct PlayerDeathGlaze;
 
 #[derive(SystemParam)]
 struct WorldPlayerSurface<'w> {
@@ -90,14 +94,51 @@ impl Plugin for WorldPlayerLifecyclePlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<WorldPlayerRespawnConfig>()
 			.init_resource::<WorldPlayerRespawnState>()
+			.add_systems(Startup, spawn_player_death_glaze)
 			.add_systems(
 				PostUpdate,
 				queue_downed_world_player
 					.after(DamageSystems::Down)
 					.after(CharacterRagdollSystems::Handoff),
 			)
-			.add_systems(Update, respawn_world_player.after(PoiSystems::Index));
+			.add_systems(Update, respawn_world_player.after(PoiSystems::Index))
+			.add_systems(Update, sync_player_death_glaze.after(respawn_world_player));
 	}
+}
+
+fn spawn_player_death_glaze(mut commands: Commands) {
+	commands.spawn((
+		Name::new("player-death-glaze"),
+		PlayerDeathGlaze,
+		Node {
+			position_type: PositionType::Absolute,
+			left: Val::Px(0.0),
+			top: Val::Px(0.0),
+			width: Val::Percent(100.0),
+			height: Val::Percent(100.0),
+			..default()
+		},
+		BackgroundColor(death_glaze_color(0.0)),
+		GlobalZIndex(i32::MAX - 4),
+		Visibility::Hidden,
+		Pickable::IGNORE,
+	));
+}
+
+fn sync_player_death_glaze(
+	state: Res<WorldPlayerRespawnState>,
+	mut glaze: Query<(&mut BackgroundColor, &mut Visibility), With<PlayerDeathGlaze>>,
+) {
+	let Ok((mut color, mut visibility)) = glaze.single_mut() else {
+		return;
+	};
+	let Some(pending) = state.pending.as_ref() else {
+		color.0 = death_glaze_color(0.0);
+		*visibility = Visibility::Hidden;
+		return;
+	};
+	color.0 = death_glaze_color(death_glaze_alpha(&pending.timer));
+	*visibility = Visibility::Visible;
 }
 
 fn queue_downed_world_player(
@@ -186,12 +227,31 @@ fn respawn_world_player(
 	state.last_poi = poi.map(|poi| poi.id);
 	state.pending = None;
 
-	spawn_player_body(&mut commands, &mut meshes, &mut materials, locomotion.as_ref(), position);
+	let player = spawn_player_body(
+		&mut commands,
+		&mut meshes,
+		&mut materials,
+		locomotion.as_ref(),
+		position,
+	);
 	if let Some(loadout) = loadout {
+		commands.entity(player).insert(WorldPlayerAppearanceRequested);
 		commands.spawn(RequestSetCharacterAppearance { appearance: loadout.appearance.clone() });
 	} else {
 		commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
 	}
+}
+
+fn death_glaze_alpha(timer: &Timer) -> f32 {
+	let elapsed = timer.elapsed_secs();
+	let remaining = timer.remaining_secs();
+	let fade_in = (elapsed / 0.18).clamp(0.0, 1.0);
+	let fade_out = (remaining / 0.35).clamp(0.0, 1.0);
+	0.68 * fade_in * fade_out
+}
+
+fn death_glaze_color(alpha: f32) -> Color {
+	Color::srgba(0.2, 0.005, 0.025, alpha)
 }
 
 fn player_respawn_interests() -> PoiInterests {
@@ -266,6 +326,16 @@ mod tests {
 		let config = WorldPlayerRespawnConfig::default();
 		assert_eq!(config.delay_secs, 4.0);
 		assert_eq!(config.poi_radius, 160.0);
+	}
+
+	#[test]
+	fn death_glaze_fades_in_and_out() {
+		let mut timer = Timer::from_seconds(4.0, TimerMode::Once);
+		assert_eq!(death_glaze_alpha(&timer), 0.0);
+		timer.tick(std::time::Duration::from_secs_f32(0.5));
+		assert!((death_glaze_alpha(&timer) - 0.68).abs() < 1e-5);
+		timer.tick(std::time::Duration::from_secs_f32(3.4));
+		assert!(death_glaze_alpha(&timer) < 0.3);
 	}
 
 	#[test]
