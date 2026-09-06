@@ -15,7 +15,9 @@ bevy = { workspace = true }
 chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }
 clap = { workspace = true }
+combat-hud = { workspace = true }
 crozon-characters = { workspace = true }
+damage = { workspace = true }
 durham-terrain-models = { workspace = true }
 evasion-intelligence = { workspace = true }
 firearm-intelligence = { workspace = true }
@@ -34,6 +36,7 @@ maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-mobs = { workspace = true }
 player = { workspace = true }
+player-camera = { workspace = true }
 mob-characters = { workspace = true }
 mob-groups = { workspace = true }
 meandering-intelligence = { workspace = true }

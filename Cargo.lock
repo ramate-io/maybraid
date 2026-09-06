@@ -2571,6 +2571,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
+name = "combat-hud"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "damage",
+ "player",
+]
+
+[[package]]
 name = "combat-targeting"
 version = "0.0.1"
 dependencies = [
@@ -3469,6 +3478,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "clap",
+ "combat-hud",
  "combat-targeting",
  "crozon-character-items",
  "crozon-character-ragdoll",
@@ -4765,7 +4775,9 @@ dependencies = [
  "chico-vegetation-components",
  "chico-vegetation-on-terrain-playground",
  "clap",
+ "combat-hud",
  "crozon-characters",
+ "damage",
  "durham-terrain-models",
  "evasion-intelligence",
  "firearm-intelligence",
@@ -4790,6 +4802,7 @@ dependencies = [
  "movement-intelligence-avian",
  "movement-realization",
  "player",
+ "player-camera",
  "poi-intelligence",
  "procedural-common",
  "richmond-development-models",
