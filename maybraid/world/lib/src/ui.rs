@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use damage::Downed;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
 use maybraid_mobs::{MobKind, MobScene};
+use player::Npc;
+use threat_management_intelligence::{ThreatManagementIntelligence, ThreatTactic};
 
 const HUD_PIN_COUNT: usize = 8;
 const HUD_MARGIN: f32 = 22.0;
@@ -74,7 +77,8 @@ pub(crate) fn sync_command_status_text(
 	status.0 = format!(
 		"world  character  forest hopscotch  urbanization hopscotch  grove 1 km  bump-outs 1–5 km\n\
 		 mobs {presented} presented   nearest {nearest_line}\n\
-		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside 200 m"
+		 HUD pins = 8 nearest (edge-clamped)   colored pole = host   plants only inside 200 m\n\
+		 NPC behavior: gray circle = ignore   amber diamond = evade   red cross = combat"
 	);
 }
 
@@ -89,6 +93,58 @@ pub(crate) fn draw_mob_debug_gizmos(
 		gizmos.sphere(Isometry3d::from_translation(at + Vec3::Y * 18.0), 1.4, color);
 		xz_ring(&mut gizmos, at, 6.0, color.with_alpha(0.7));
 		xz_ring(&mut gizmos, at, scene.high_radius, color.with_alpha(0.18));
+	}
+}
+
+pub(crate) fn draw_npc_behavior_gizmos(
+	mut gizmos: Gizmos,
+	npcs: Query<
+		(&GlobalTransform, Option<&ThreatManagementIntelligence>),
+		(With<Npc>, Without<Downed>),
+	>,
+) {
+	for (transform, intelligence) in &npcs {
+		let tactic = intelligence.map(|intelligence| intelligence.tactic).unwrap_or_default();
+		let color = behavior_color(tactic);
+		let body = transform.translation();
+		let marker = body + Vec3::Y * 3.0;
+		gizmos.line(body + Vec3::Y, marker, color);
+		draw_behavior_glyph(&mut gizmos, marker, tactic, color);
+	}
+}
+
+fn draw_behavior_glyph(gizmos: &mut Gizmos, at: Vec3, tactic: ThreatTactic, color: Color) {
+	const RADIUS: f32 = 0.38;
+	match tactic {
+		ThreatTactic::Ignore => {
+			gizmos.sphere(Isometry3d::from_translation(at), RADIUS, color);
+		}
+		ThreatTactic::Evade => {
+			gizmos.linestrip(
+				[
+					at + Vec3::Y * RADIUS,
+					at + Vec3::X * RADIUS,
+					at - Vec3::Y * RADIUS,
+					at - Vec3::X * RADIUS,
+					at + Vec3::Y * RADIUS,
+				],
+				color,
+			);
+		}
+		ThreatTactic::Combat => {
+			let diagonal = Vec3::new(RADIUS, RADIUS, 0.0);
+			let counter = Vec3::new(RADIUS, -RADIUS, 0.0);
+			gizmos.line(at - diagonal, at + diagonal, color);
+			gizmos.line(at - counter, at + counter, color);
+		}
+	}
+}
+
+fn behavior_color(tactic: ThreatTactic) -> Color {
+	match tactic {
+		ThreatTactic::Ignore => Color::srgb(0.55, 0.62, 0.7),
+		ThreatTactic::Evade => Color::srgb(1.0, 0.68, 0.08),
+		ThreatTactic::Combat => Color::srgb(1.0, 0.12, 0.08),
 	}
 }
 
@@ -321,5 +377,15 @@ mod tests {
 		);
 		assert!((clamped.x - 120.0).abs() < 1e-3);
 		assert!((clamped.y - 110.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn behavior_modes_have_distinct_colors() {
+		let ignore = behavior_color(ThreatTactic::Ignore);
+		let evade = behavior_color(ThreatTactic::Evade);
+		let combat = behavior_color(ThreatTactic::Combat);
+		assert_ne!(ignore, evade);
+		assert_ne!(evade, combat);
+		assert_ne!(combat, ignore);
 	}
 }

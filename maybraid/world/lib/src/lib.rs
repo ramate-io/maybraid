@@ -35,7 +35,7 @@ use chico_vegetation_on_terrain_playground::{
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
 use combat_hud::CombatHudPlugin;
-use crozon_characters::CharacterMotionSystems;
+use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -65,6 +65,7 @@ const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 const WORLD_COMBAT_HUD: CombatHudPlugin =
 	CombatHudPlugin { health_bars: false, hit_markers: true, directional_damage: true };
+const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
@@ -102,6 +103,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
+			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.input_debug_enabled,
@@ -184,6 +186,7 @@ impl Plugin for WorldPlugin {
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					ui::sync_mob_debug_pins,
 					ui::draw_mob_debug_gizmos,
+					ui::draw_npc_behavior_gizmos,
 				),
 			);
 		}
@@ -221,5 +224,10 @@ mod tests {
 		assert!(!WORLD_COMBAT_HUD.health_bars);
 		assert!(WORLD_COMBAT_HUD.hit_markers);
 		assert!(WORLD_COMBAT_HUD.directional_damage);
+	}
+
+	#[test]
+	fn world_disables_terrain_pitch_gizmos() {
+		assert!(!WORLD_TERRAIN_PITCH_GIZMOS.0);
 	}
 }
