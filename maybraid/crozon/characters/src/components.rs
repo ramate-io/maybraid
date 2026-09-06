@@ -40,6 +40,14 @@ impl LocomotionCapsule {
 		Self { radius: self.radius * scale.max(0.0), length: self.length * scale.max(0.0) }
 	}
 
+	/// Standing quadruped hull whose bottom matches rest-pose limb length.
+	///
+	/// `limb_scale` is the product of species baseline, slider, and lanky length
+	/// layers (`1.0` = stock [`Self::QUADRUPED`]).
+	pub fn quadruped_for_limb_length(limb_scale: f32) -> Self {
+		Self::QUADRUPED.scaled(limb_scale.max(0.0))
+	}
+
 	pub fn half_height(self) -> f32 {
 		self.radius + self.length * 0.5
 	}
@@ -70,7 +78,8 @@ pub trait CharacterComponents {
 		Layers::new()
 	}
 
-	/// Physics hull baked from the rest / species baseline, not the posed mesh.
+	/// Physics hull baked from rest-pose proportions (species / slider / lanky
+	/// limb length), not the animated mesh.
 	fn locomotion_capsule(&self) -> LocomotionCapsule {
 		LocomotionCapsule::HUMANOID
 	}
@@ -365,5 +374,14 @@ mod tests {
 		let hull = LocomotionCapsule::HUMANOID.scaled(0.30);
 		assert!((hull.radius - 0.12).abs() < 1e-5);
 		assert!((hull.length - 0.30).abs() < 1e-5);
+	}
+
+	#[test]
+	fn quadruped_limb_hull_scales_the_stock_stand_in() {
+		let hull = LocomotionCapsule::quadruped_for_limb_length(1.35);
+		assert_eq!(hull, LocomotionCapsule::QUADRUPED.scaled(1.35));
+		assert!(
+			(hull.half_height() - LocomotionCapsule::QUADRUPED.half_height() * 1.35).abs() < 1e-5
+		);
 	}
 }

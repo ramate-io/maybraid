@@ -15,6 +15,8 @@ pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
 
 /// Limb length (~0.8× the prior 1.75 lanky baseline).
 const LIMB_LENGTH: f32 = 1.4;
+/// Extra front/hind length the Lanky build stacks on the species baseline.
+const LANKY_LIMB_SCALE: f32 = 1.1;
 const TORSO_THICKNESS: f32 = 1.2;
 const RUMBLER_BACK_RIDGE_LENGTH: f32 = 1.35;
 const RUMBLER_LEG_THICKNESS: f32 = 1.05;
@@ -49,6 +51,18 @@ impl YilterPose {
 		ResolvedRigPose::new().with_layer(
 			RigPoseLayer::new("ylter neck tip counterpitch")
 				.with_rotation(BoneRotation::pitch_x("head_socket", HEAD_SOCKET_PITCH)),
+		)
+	}
+
+	/// Rest-pose support height relative to the stock quadruped hull (`1.0`).
+	pub fn rest_limb_scale(self) -> f32 {
+		let sliders = self.sliders.clamped();
+		crate::species::common::quadruped_rest_limb_scale(
+			LIMB_LENGTH,
+			sliders.arm_length,
+			sliders.leg_length,
+			LANKY_LIMB_SCALE,
+			self.build,
 		)
 	}
 
@@ -104,8 +118,8 @@ impl YilterPose {
 				layer = YilterSliders::apply_chest_thickness(layer, 1.05);
 			}
 			BuildPreset::Lanky => {
-				layer = YilterSliders::apply_leg_length(layer, 1.1);
-				layer = YilterSliders::apply_arm_length(layer, 1.1);
+				layer = YilterSliders::apply_leg_length(layer, LANKY_LIMB_SCALE);
+				layer = YilterSliders::apply_arm_length(layer, LANKY_LIMB_SCALE);
 			}
 			BuildPreset::Average => {}
 		}

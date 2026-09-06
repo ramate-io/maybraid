@@ -7,6 +7,8 @@ use crate::{
 use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 const LIMB_LENGTH: f32 = 1.0;
+/// Extra front/hind length the Lanky build stacks on the species baseline.
+const LANKY_LIMB_SCALE: f32 = 1.1;
 const TORSO_THICKNESS: f32 = 1.15;
 const LEG_THICKNESS: f32 = 1.1;
 
@@ -29,6 +31,18 @@ impl SonyakPose {
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
+	}
+
+	/// Rest-pose support height relative to the stock quadruped hull (`1.0`).
+	pub fn rest_limb_scale(self) -> f32 {
+		let sliders = self.sliders.clamped();
+		crate::species::common::quadruped_rest_limb_scale(
+			LIMB_LENGTH,
+			sliders.arm_length,
+			sliders.leg_length,
+			LANKY_LIMB_SCALE,
+			self.build,
+		)
 	}
 
 	fn species_baseline(self) -> RigPoseLayer {
@@ -77,8 +91,8 @@ impl SonyakPose {
 				layer = SonyakSliders::apply_chest_thickness(layer, 1.05);
 			}
 			BuildPreset::Lanky => {
-				layer = SonyakSliders::apply_leg_length(layer, 1.1);
-				layer = SonyakSliders::apply_arm_length(layer, 1.1);
+				layer = SonyakSliders::apply_leg_length(layer, LANKY_LIMB_SCALE);
+				layer = SonyakSliders::apply_arm_length(layer, LANKY_LIMB_SCALE);
 			}
 			BuildPreset::Average => {}
 		}

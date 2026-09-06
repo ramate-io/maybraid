@@ -17,8 +17,8 @@ use crozon_characters::{
 		topple::{Topple, ToppleConfig},
 		ylter::{Yilter, YilterConfig},
 	},
-	CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, Layer, LocomotionCapsule,
-	PartNode, RigId,
+	BuildPreset, CharacterComponents, CharacterPartSlot, CharacterRecipe, Clothed, Layer,
+	LocomotionCapsule, PartNode, RigId,
 };
 use lod::gen::LodSceneLevel;
 use scene_ref::MirrorAxis;
@@ -102,6 +102,31 @@ fn whelp_and_quadruped_hulls_differ_from_humanoid() {
 	assert_eq!(brenal.locomotion_capsule(), LocomotionCapsule::QUADRUPED);
 	assert_ne!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 	assert_ne!(brenal.locomotion_capsule(), LocomotionCapsule::HUMANOID);
+}
+
+#[test]
+fn hars_hull_follows_rest_limb_length() {
+	let hars = Hars::from_config(&HarsConfig::default_preview());
+	assert_eq!(hars.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.35));
+
+	let lanky = Hars::from_config(&HarsConfig::default_preview().with_build(BuildPreset::Lanky));
+	assert_eq!(
+		lanky.locomotion_capsule(),
+		LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.05)
+	);
+
+	let mut long_legs = HarsConfig::default_preview();
+	long_legs.sliders.leg_length = 1.2;
+	let long = Hars::from_config(&long_legs);
+	assert_eq!(long.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.35 * 1.2));
+}
+
+#[test]
+fn ylter_and_croconot_hulls_follow_species_limb_length() {
+	let ylter = Yilter::from_config(&YilterConfig::default_preview());
+	assert_eq!(ylter.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.4 * 1.1));
+	let croconot = Croconot::from_config(&CroconotConfig::default_preview());
+	assert_eq!(croconot.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(0.8));
 }
 
 #[test]
