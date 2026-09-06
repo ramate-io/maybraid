@@ -65,6 +65,11 @@ impl LodRefreshRegions for Bullseye {
 		}
 		LodRefreshRegionsStatus::Changed(self.outer_aabb(self.cell_center(current)))
 	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		let current = self.cell_index(lod_ref.current_transform.translation);
+		Some(self.outer_aabb(self.cell_center(current)))
+	}
 }
 
 #[cfg(test)]
@@ -89,6 +94,16 @@ mod tests {
 		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ZERO);
 		let status = bullseye.lod_refresh_regions(&lod_ref_at(&prev, &curr, &bounds));
 		assert!(matches!(status, LodRefreshRegionsStatus::Unchanged));
+	}
+
+	#[test]
+	fn current_region_is_outer_cube_of_inner_cell() {
+		let bullseye = Bullseye::new(50.0, 500.0);
+		let t = Transform::from_translation(Vec3::new(10.0, 10.0, 10.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ZERO);
+		let region = bullseye.lod_current_region(&lod_ref_at(&t, &t, &bounds)).expect("armed");
+		assert_eq!(region.min.x, -225.0);
+		assert_eq!(region.max.x, 275.0);
 	}
 
 	#[test]

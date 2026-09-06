@@ -14,13 +14,9 @@ use lod::lod_ref::LodRef;
 use crate::bump_out::{
 	terrain_chunk_ref, terrain_for_cell_size, TerrainMeshSource, WorldTerrainBuilder,
 };
-use crate::camera::CameraController;
 use crate::groves::OwnedDurhamTerrain;
-use crate::{ForestStream, PlaygroundConfig, WorldBaseTerrain};
+use crate::WorldBaseTerrain;
 use terrain_chunk_ref::TerrainChunkRef;
-
-const PATCH_CAMERA_SPEED: f32 = 40.0;
-const FOREST_CAMERA_SPEED: f32 = 80.0;
 
 /// Seek overlapping Durham origin cells, then snapshot composed height for grow.
 #[derive(SystemParam)]
@@ -59,21 +55,4 @@ impl TerrainMeshSource for DurhamHeight<'_> {
 		let view = TerrainStoreView::new(&self.store, &self.layout);
 		terrain_for_cell_size(&view, bounds, cell_size).map(terrain_chunk_ref)
 	}
-}
-
-/// Enable the forest bullseyes when [`PlaygroundConfig::forest`] is set.
-pub fn stream_durham_forest(
-	config: Res<PlaygroundConfig>,
-	mut stream: ResMut<ForestStream>,
-	mut controller: Query<&mut CameraController, With<Camera3d>>,
-	mut forest_camera: Local<bool>,
-) {
-	let spec = config.forest.as_ref();
-	if spec.is_some() != *forest_camera {
-		if let Ok(mut ctrl) = controller.single_mut() {
-			ctrl.speed = if spec.is_some() { FOREST_CAMERA_SPEED } else { PATCH_CAMERA_SPEED };
-		}
-		*forest_camera = spec.is_some();
-	}
-	stream.0 = spec.copied();
 }

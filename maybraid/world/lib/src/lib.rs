@@ -7,7 +7,7 @@
 //! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin<Durham>` owns terrain).
 //!
 //! Plugin list: `WorldMaterialRefPlugin`, `VisualGeometryCorePlugin`,
-//! `TerrainPlugin<Durham>`, character via `VegetationOnTerrainPlugin`, groves +
+//! `TerrainPlugin<Durham>`, character via `VegetationHostPlugin`, groves +
 //! bump-outs via `VegetationPlugin<DevelopmentExclusions<OnTerrain<DurhamHeight>>>`,
 //! then Richmond urbanization.
 
@@ -30,9 +30,8 @@ use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, DurhamHeight, OnTerrain,
-	PadMovementEnabled, PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig,
-	PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter,
-	VegetationOnTerrainPlugin, VegetationPlugin,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlugin,
 };
 use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
@@ -101,11 +100,7 @@ impl Plugin for WorldPlugin {
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
-			.add_plugins(VegetationOnTerrainPlugin {
-				config: VegetationPlaygroundConfig::world_defaults(),
-				commands: false,
-				own_terrain: false,
-			})
+			.add_plugins(VegetationHostPlugin)
 			.add_plugins(
 				VegetationPlugin::<DevelopmentExclusions<OnTerrain<DurhamHeight>>>::default(),
 			)

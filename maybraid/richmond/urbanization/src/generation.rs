@@ -61,20 +61,11 @@ impl Default for UrbanizationGenerateBullseye {
 
 impl LodRefreshRegions for UrbanizationGenerateBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous =
-			UrbanizationExtent::cell_index_containing(lod_ref.previous_transform.translation);
-		let current =
-			UrbanizationExtent::cell_index_containing(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(UrbanizationExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		urbanization_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		urbanization_current_region(self.enabled, lod_ref, self.radius_m)
 	}
 }
 
@@ -93,21 +84,45 @@ impl Default for UrbanizationPresentBullseye {
 
 impl LodRefreshRegions for UrbanizationPresentBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous =
-			UrbanizationExtent::cell_index_containing(lod_ref.previous_transform.translation);
-		let current =
-			UrbanizationExtent::cell_index_containing(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(UrbanizationExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		urbanization_ring_status(self.enabled, lod_ref, self.radius_m)
 	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		urbanization_current_region(self.enabled, lod_ref, self.radius_m)
+	}
+}
+
+fn urbanization_cell_center(position: Vec3) -> Vec3 {
+	let (ix, iz) = UrbanizationExtent::cell_index_containing(position);
+	UrbanizationExtent::from_cell_index(ix, iz).center()
+}
+
+fn urbanization_ring_aabb(position: Vec3, radius: f32) -> Aabb3d {
+	UrbanizationExtent::xz_radius_aabb(urbanization_cell_center(position), radius)
+}
+
+fn urbanization_ring_status(
+	enabled: bool,
+	lod_ref: &LodRef,
+	radius: f32,
+) -> LodRefreshRegionsStatus {
+	if !enabled {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	let previous =
+		UrbanizationExtent::cell_index_containing(lod_ref.previous_transform.translation);
+	let current = UrbanizationExtent::cell_index_containing(lod_ref.current_transform.translation);
+	if current == previous {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	LodRefreshRegionsStatus::Changed(urbanization_ring_aabb(
+		lod_ref.current_transform.translation,
+		radius,
+	))
+}
+
+fn urbanization_current_region(enabled: bool, lod_ref: &LodRef, radius: f32) -> Option<Aabb3d> {
+	enabled.then(|| urbanization_ring_aabb(lod_ref.current_transform.translation, radius))
 }
 
 #[cfg(test)]

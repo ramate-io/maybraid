@@ -1,7 +1,7 @@
 //! Durham-backed vegetation host used by `maybraid-world`.
 //!
 //! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
-//! Character / camera stay on [`VegetationOnTerrainPlugin`]. Groves and canopy
+//! Character / camera stay on [`VegetationHostPlugin`]. Groves and canopy
 //! bump-outs register through [`VegetationPlugin`]. Terrain LOD is
 //! [`TerrainPlugin`](durham_terrain_models::TerrainPlugin) for
 //! [`Durham`](durham_terrain_models::Durham).
@@ -51,14 +51,12 @@ use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::stream_canopy_bump_outs;
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
-use chico_bumpout::ChicoBumpOutPlugin;
-use chico_forests::{drive_forest_stream, stream_radii_m, ForestStream, VegetationViewPlugin};
+use chico_forests::{stream_radii_m, VegetationViewPlugin};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
@@ -71,13 +69,12 @@ use durham_terrain_models::{
 	TerrainPlugin, TerrainPresentationAssets, TerrainPresentationDirty, TERRAIN_CELL_SIZE,
 	WORLD_FINE_HALF_EXTENT_CELLS,
 };
-use forest::stream_durham_forest;
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use lod::{LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
 use player::{respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface};
@@ -145,8 +142,50 @@ impl PlaygroundConfig {
 #[derive(Resource)]
 struct GrovesDirty(bool);
 
-/// Character, camera, and vegetation stream drivers. Terrain LOD is
-/// [`TerrainPlugin`] for [`Durham`]; groves and bump-outs are [`VegetationPlugin`].
+/// Character, camera, snap, and locomotion without tiled groves or stream drivers.
+///
+/// The assembled world plugin uses this. Groves and bump-outs stay on
+/// [`VegetationPlugin`].
+pub struct VegetationHostPlugin;
+
+impl Plugin for VegetationHostPlugin {
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<VirtualPadPlugin>() {
+			app.add_plugins(VirtualPadPlugin::default());
+		}
+		if !app.is_plugin_added::<PlayerPlugin>() {
+			app.add_plugins(PlayerPlugin);
+		}
+		if !app.is_plugin_added::<CharacterHostsPlugin>() {
+			app.add_plugins(CharacterHostsPlugin);
+		}
+		app.add_systems(Startup, setup_camera)
+			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+			.add_systems(
+				Update,
+				(
+					release_modifiers_on_focus_change.before(camera_controller),
+					camera_controller,
+					apply_set_character,
+					apply_mode_commands.after(apply_set_character),
+					snap_player_to_composed_surface
+						.after(LodPresentSystems::Drain)
+						.after(apply_mode_commands)
+						.before(PlayerControlSystems),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
+				),
+			);
+	}
+}
+
+/// Tiled-grove playground host. World uses [`VegetationHostPlugin`] instead.
 pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
@@ -173,9 +212,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 				TerrainCoverage::PlayableWorld => TerrainPlugin::<Durham>::playable_world(),
 			});
 		}
-		if !app.is_plugin_added::<ChicoBumpOutPlugin>() {
-			app.add_plugins(ChicoBumpOutPlugin);
-		}
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -192,90 +228,27 @@ impl Plugin for VegetationOnTerrainPlugin {
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
-		if !app.is_plugin_added::<VirtualPadPlugin>() {
-			app.add_plugins(VirtualPadPlugin::default());
-		}
-		if !app.is_plugin_added::<PlayerPlugin>() {
-			app.add_plugins(PlayerPlugin);
-		}
-		if !app.is_plugin_added::<CharacterHostsPlugin>() {
-			app.add_plugins(CharacterHostsPlugin);
+		if !app.is_plugin_added::<VegetationHostPlugin>() {
+			app.add_plugins(VegetationHostPlugin);
 		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(playground.clone())
 			.insert_resource(GrovesDirty(true))
-			.init_resource::<ForestStream>()
-			.add_systems(Startup, (setup_camera, setup_lighting))
-			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+			.add_systems(Startup, setup_lighting)
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
 				Update,
 				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
-					stream_durham_forest
-						.after(apply_commands)
-						.before(drive_forest_stream)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					apply_set_character.after(apply_commands),
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(LodPresentSystems::Drain)
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
 		} else {
 			app.add_systems(
 				Update,
-				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
-					spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
-					stream_durham_forest
-						.before(drive_forest_stream)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce)
-						.run_if(terrain_streaming_enabled),
-					apply_set_character,
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(LodPresentSystems::Drain)
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
-				),
+				spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
 			);
 		}
 	}

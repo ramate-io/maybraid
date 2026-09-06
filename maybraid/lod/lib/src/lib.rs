@@ -25,9 +25,9 @@ pub use gen::{
 	LodGenerateSystems, LodGenerateTimeBudget, LodGenerated,
 };
 pub use lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, track_lod_nodes, FineLod,
-	LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems, LodRef,
-	LodRequest,
+	collect_node_snapshots, lod_refs_from_snapshots, point_bounds, snapshot_node, track_lod_nodes,
+	FineLod, LodNode, LodNodeBounds, LodNodePlugin, LodNodePose, LodNodeSnapshot, LodNodeSystems,
+	LodRef, LodRequest,
 };
 pub use presentation::{
 	drain_lod_present, drain_lod_present_cull, produce_lod_present_cull_regions,
@@ -38,8 +38,8 @@ pub use presentation::{
 };
 pub use scene::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,
-	apply_lod_cull_requests, begin_chunk_lod_fulfill, begin_chunk_lod_fulfill_erased,
-	cancel_unstarted_cull_for_desired_pending_roots,
+	apply_lod_cull_requests, arm_keep_if_empty, begin_chunk_lod_fulfill,
+	begin_chunk_lod_fulfill_erased, cancel_unstarted_cull_for_desired_pending_roots,
 	cancel_unstarted_cull_for_desired_pending_roots_erased, closest_available_lod_level,
 	complete_chunk_lod_fulfill, cull_bands_with_adjacent_depth, cull_lod_level_roots,
 	cull_named_from_factor, cull_non_adjacent_bands, cull_offset_bands,

@@ -4,8 +4,10 @@ use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use chico_bumpout::ChicoBumpOutPlugin;
 use chico_forests::{
-	CanopyBumpOut, ChicoGrove, ForestIndex, ForestPlugin, ForestPresenter, MediumCanopyBumpOut,
+	install_forest_stream, CanopyBumpOut, ChicoGrove, ForestIndex, ForestPlugin, ForestPresenter,
+	ForestStreamSpec, MediumCanopyBumpOut,
 };
 use lod::presentation::RegionPresenter;
 
@@ -43,7 +45,11 @@ where
 		RegionPresenter<MediumCanopyBumpOut, ForestIndex>,
 {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<ChicoBumpOutPlugin>() {
+			app.add_plugins(ChicoBumpOutPlugin);
+		}
 		app.add_plugins(ForestPlugin::<ForestPresenter<'static, 'static, S>>::default());
+		install_forest_stream(app, ForestStreamSpec::default());
 		register_bump_out_lod::<
 			CanopyBumpOutPresenter<'static, 'static, S>,
 			MediumCanopyBumpOutPresenter<'static, 'static, S>,

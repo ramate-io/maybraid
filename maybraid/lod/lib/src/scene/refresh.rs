@@ -57,8 +57,9 @@ pub use levels::{
 	LodSceneRefreshLevelsFillPlugin, LodSceneRefreshLevelsPlugin,
 };
 pub use regions::{
-	produce_lod_refresh_regions, Bullseye, LodRefreshRegions, LodRefreshRegionsError,
-	LodRefreshRegionsStatus, LodSceneRefreshRegion, LodSceneRefreshRegionPlugin, Spotlight,
+	arm_keep_if_empty, produce_lod_refresh_regions, Bullseye, LodRefreshRegions,
+	LodRefreshRegionsError, LodRefreshRegionsStatus, LodSceneRefreshRegion,
+	LodSceneRefreshRegionPlugin, Spotlight,
 };
 pub use sync::{
 	add_lod_refresh_chunk_for, add_lod_refresh_chunk_full_for, add_lod_refresh_cull_for,

@@ -48,8 +48,9 @@ pub use extent::{ForestExtent, DEFAULT_FOREST_EXTENT_XZ, DEFAULT_FOREST_GROVE_TI
 pub use forest::{neighbor_layers, ChicoForest};
 pub use generation::{
 	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, ForestGenerateBullseye,
-	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, MediumBumpOutLodChan,
-	GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
+	ForestLodChan, ForestPresentBullseye, ForestPresentLattice, MediumBumpOutGenerateBullseye,
+	MediumBumpOutLodChan, MediumBumpOutPresentBullseye, GROVE_GENERATE_RADIUS_M,
+	GROVE_PRESENT_RADIUS_M,
 };
 pub use grove::{grove_from_id, grove_id, ChicoGrove};
 pub use hopscotch::{select as hopscotch_select, HopscotchNode};
@@ -64,8 +65,8 @@ pub use plugin::{ForestPlugin, VegetationViewPlugin};
 pub use present::{FlatForestPresenter, ForestPresenter, ForestPresenterState};
 pub use recipe::ForestGroveRecipe;
 pub use stream::{
-	drive_forest_stream, parse_layering_kind, stream_radii_m, ForestStream, ForestStreamLod,
-	ForestStreamSpec, DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
+	install_forest_stream, parse_layering_kind, stream_radii_m, ForestStreamSpec,
+	DEFAULT_FOREST_NOISE, DEFAULT_FOREST_STREAM_RADIUS,
 };
 pub use view::{
 	VegetationBullseye, VegetationCull, VegetationLodRefreshPlugin, VegetationSpotlight,

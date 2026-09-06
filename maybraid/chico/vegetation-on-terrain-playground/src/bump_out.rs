@@ -13,20 +13,16 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_bumpout::{BumpOut, BumpOutNeighborhood, BumpOutStyle};
 use chico_forests::{
-	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ForestExtent,
-	ForestIndex, MediumBumpOutLodChan, MediumCanopyBumpOut, OnTerrain, BUMP_OUT_CELL_XZ,
-	BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_ANCHOR_STEP_M, MEDIUM_BUMP_OUT_CELL_XZ,
-	MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
+	BumpOutGenerateBullseye, BumpOutLodChan, BumpOutPresentBullseye, CanopyBumpOut, ForestIndex,
+	MediumBumpOutGenerateBullseye, MediumBumpOutLodChan, MediumBumpOutPresentBullseye,
+	MediumCanopyBumpOut, OnTerrain, BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_CELL_XZ,
 };
 use durham_terrain_models::{
 	cascade_chunk_for_cell, Terrain, TerrainMeshBuilder, TerrainStoreView, TERRAIN_CELL_SIZE,
 };
-use lod::gen::{
-	Id, LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion, SpatialIndex, TrackedId,
-	Version,
-};
+use lod::gen::{Id, SpatialIndex, TrackedId, Version};
 use lod::lod_ref::LodRef;
-use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion, RegionPresenter};
+use lod::presentation::RegionPresenter;
 use lod::{
 	LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems, LodPresentCullPlugin,
 	LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
@@ -36,9 +32,6 @@ use procedural_common::NoiseParams;
 use render_item::mesh::IdentifiedMesh;
 use render_item::NormalizeChunk;
 use terrain_chunk_ref::{TerrainChunkKey, TerrainChunkRef};
-
-use crate::ForestStreamSpec;
-use crate::PlaygroundConfig;
 
 pub type WorldTerrainBuilder = TerrainMeshBuilder;
 
@@ -283,6 +276,16 @@ where
 			MediumBumpOutLodChan,
 			With<LodViewer>,
 		>::default())
+		.add_plugins(LodGenerateRegionPlugin::<
+			MediumBumpOutGenerateBullseye,
+			With<LodViewer>,
+			MediumBumpOutLodChan,
+		>::default())
+		.add_plugins(LodPresentRegionPlugin::<
+			MediumBumpOutPresentBullseye,
+			With<LodViewer>,
+			MediumBumpOutLodChan,
+		>::default())
 		.add_plugins(LodPresentPlugin::<
 			MediumCanopyBumpOut,
 			ForestIndex,
@@ -297,114 +300,10 @@ where
 			MediumBumpOutLodChan,
 		>::default())
 		.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
-}
-
-/// Keep / queue / bullseye resources the forest stream drives for bump-outs.
-#[derive(SystemParam)]
-pub struct BumpOutStreamLod<'w> {
-	generate: ResMut<'w, BumpOutGenerateBullseye>,
-	present: ResMut<'w, BumpOutPresentBullseye>,
-	generate_queue: ResMut<'w, LodGenerateQueue<CanopyBumpOut>>,
-	present_queue: ResMut<'w, LodPresentQueue<CanopyBumpOut>>,
-	presenter: ResMut<'w, CanopyBumpOutPresenterState>,
-	medium_generate_queue: ResMut<'w, LodGenerateQueue<MediumCanopyBumpOut>>,
-	medium_present_queue: ResMut<'w, LodPresentQueue<MediumCanopyBumpOut>>,
-	medium_presenter: ResMut<'w, MediumCanopyBumpOutPresenterState>,
-	generate_regions: MessageWriter<'w, LodGenerateRegion<BumpOutLodChan>>,
-	present_regions: MessageWriter<'w, LodPresentRegion<BumpOutLodChan>>,
-	medium_generate_regions: MessageWriter<'w, LodGenerateRegion<MediumBumpOutLodChan>>,
-	medium_present_regions: MessageWriter<'w, LodPresentRegion<MediumBumpOutLodChan>>,
-	generate_keep: ResMut<'w, LodGenerateKeepRegion<BumpOutLodChan>>,
-	keep: ResMut<'w, LodPresentKeepRegion<BumpOutLodChan>>,
-	medium_generate_keep: ResMut<'w, LodGenerateKeepRegion<MediumBumpOutLodChan>>,
-	medium_keep: ResMut<'w, LodPresentKeepRegion<MediumBumpOutLodChan>>,
-}
-
-impl BumpOutStreamLod<'_> {
-	pub fn apply_spec(
-		&mut self,
-		commands: &mut Commands,
-		spec: Option<&ForestStreamSpec>,
-		camera: Option<Vec3>,
-		last_key: &mut Option<String>,
-		last_medium_region: &mut Option<Aabb3d>,
-	) {
-		let Some(spec) = spec else {
-			self.generate.enabled = false;
-			self.present.enabled = false;
-			self.generate_keep.region = None;
-			self.keep.region = None;
-			self.generate_queue.clear();
-			self.present_queue.clear();
-			self.presenter.clear(commands);
-			self.medium_generate_keep.region = None;
-			self.medium_keep.region = None;
-			self.medium_generate_queue.clear();
-			self.medium_present_queue.clear();
-			self.medium_presenter.clear(commands);
-			last_key.take();
-			last_medium_region.take();
-			return;
-		};
-
-		let key = spec.key();
-		let key_changed = last_key.as_ref() != Some(&key);
-		if key_changed {
-			self.generate_queue.clear();
-			self.present_queue.clear();
-			self.presenter.clear(commands);
-			self.medium_generate_queue.clear();
-			self.medium_present_queue.clear();
-			self.medium_presenter.clear(commands);
-			*last_key = Some(key);
-		}
-
-		self.generate.radius_m = BUMP_OUT_OUTER_RADIUS_M;
-		self.generate.enabled = true;
-		self.present.radius_m = BUMP_OUT_OUTER_RADIUS_M;
-		self.present.enabled = true;
-
-		let Some(cam) = camera else {
-			return;
-		};
-		let aabb = ForestExtent::xz_radius_aabb(cam, BUMP_OUT_OUTER_RADIUS_M);
-		self.generate_keep.region = Some(aabb);
-		self.keep.region = Some(aabb);
-		if key_changed {
-			self.generate_regions.write(LodGenerateRegion::new(aabb));
-			self.present_regions.write(LodPresentRegion::new(aabb));
-		}
-
-		let step = MEDIUM_BUMP_OUT_ANCHOR_STEP_M;
-		let anchor = Vec3::new((cam.x / step).round() * step, 0.0, (cam.z / step).round() * step);
-		let medium_region = ForestExtent::xz_radius_aabb(anchor, MEDIUM_BUMP_OUT_OUTER_RADIUS_M);
-		let medium_region_changed = *last_medium_region != Some(medium_region);
-		self.medium_generate_keep.region = Some(medium_region);
-		self.medium_keep.region = Some(medium_region);
-		if key_changed || medium_region_changed {
-			self.medium_generate_regions.write(LodGenerateRegion::new(medium_region));
-			self.medium_present_regions.write(LodPresentRegion::new(medium_region));
-			*last_medium_region = Some(medium_region);
-		}
-	}
-}
-
-pub fn stream_canopy_bump_outs(
-	mut commands: Commands,
-	config: Res<PlaygroundConfig>,
-	camera: Query<&Transform, With<Camera3d>>,
-	mut lod: BumpOutStreamLod,
-	mut last_key: Local<Option<String>>,
-	mut last_medium_region: Local<Option<Aabb3d>>,
-) {
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(
-		&mut commands,
-		config.forest.as_ref(),
-		cam,
-		&mut last_key,
-		&mut last_medium_region,
-	);
+	app.world_mut().resource_mut::<BumpOutGenerateBullseye>().enabled = true;
+	app.world_mut().resource_mut::<BumpOutPresentBullseye>().enabled = true;
+	app.world_mut().resource_mut::<MediumBumpOutGenerateBullseye>().enabled = true;
+	app.world_mut().resource_mut::<MediumBumpOutPresentBullseye>().enabled = true;
 }
 
 pub fn fine_terrain_for<'a>(view: &'a TerrainStoreView<'a>, bounds: Aabb3d) -> Option<&'a Terrain> {

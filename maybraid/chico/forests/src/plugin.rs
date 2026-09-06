@@ -18,7 +18,6 @@ use crate::generation::{ForestGenerateBullseye, ForestLodChan, ForestPresentBull
 use crate::grove::ChicoGrove;
 use crate::index::ForestIndex;
 use crate::present::ForestPresenterState;
-use crate::stream::{drive_forest_stream, ForestStream};
 use crate::view::VegetationLodRefreshPlugin;
 
 /// Shaders, kit caches, and Avian LOD refresh for forest / grove hosts.
@@ -70,7 +69,6 @@ where
 		}
 		app.init_resource::<ForestIndex>()
 			.init_resource::<ForestPresenterState>()
-			.init_resource::<ForestStream>()
 			.insert_resource(LodGenerateBudget { ids_per_frame: 16 })
 			.add_plugins(LodGenerateRegionPlugin::<
 				ForestGenerateBullseye,
@@ -96,12 +94,6 @@ where
 				With<LodViewer>,
 			>::default())
 			.add_plugins(LodPresentCullPlugin::<ChicoGrove, ForestIndex, Pr, ForestLodChan>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
-			.add_systems(
-				Update,
-				drive_forest_stream
-					.before(LodGenerateSystems::Produce)
-					.before(LodPresentSystems::Produce),
-			);
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
 	}
 }

@@ -1,17 +1,15 @@
-//! Camera-driven generate / present keep regions for [`ForestPlugin`](crate::ForestPlugin).
+//! Stamp forest noise / layering and enable grove bullseyes for [`ForestPlugin`].
+//!
+//! Keep is armed by generate / present produce from the lattice disk. Do not
+//! emit a full-ring [`LodGenerateRegion`] / [`LodPresentRegion`] on install.
 
-use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use procedural_common::NoiseParams;
 
 use crate::{
-	ChicoGrove, ForestGenerateBullseye, ForestIndex, ForestLodChan, ForestPresentBullseye,
-	ForestPresenterState, LayeringKind, DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M,
-	GROVE_PRESENT_RADIUS_M,
+	ForestGenerateBullseye, ForestIndex, ForestPresentBullseye, LayeringKind,
+	DEFAULT_FOREST_GROVE_TILE_XZ, GROVE_GENERATE_RADIUS_M, GROVE_PRESENT_RADIUS_M,
 };
-use lod::gen::{LodGenerateKeepRegion, LodGenerateQueue, LodGenerateRegion};
-use lod::presentation::{LodPresentKeepRegion, LodPresentQueue, LodPresentRegion};
-use lod::LodViewer;
 
 /// Default present ring multiplier (`1` → 1 km grove present / 3 km generate).
 pub const DEFAULT_FOREST_STREAM_RADIUS: u32 = 1;
@@ -28,7 +26,7 @@ pub fn parse_layering_kind(name: &str) -> Result<LayeringKind, String> {
 }
 
 /// Live forest-stream knobs (noise / ring / pinned layering).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct ForestStreamSpec {
 	pub noise: NoiseParams,
 	pub stream_radius: u32,
@@ -58,10 +56,6 @@ impl ForestStreamSpec {
 	}
 }
 
-/// Optional active forest stream. `None` tears generate / present down.
-#[derive(Resource, Clone, Default)]
-pub struct ForestStream(pub Option<ForestStreamSpec>);
-
 /// Present / generate metric radii for a stream-radius multiplier.
 pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 	if stream_radius == 0 {
@@ -71,85 +65,29 @@ pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
 	(present, present + (GROVE_GENERATE_RADIUS_M - GROVE_PRESENT_RADIUS_M))
 }
 
-/// Keep / queue / bullseye resources the stream system drives.
-#[derive(SystemParam)]
-pub struct ForestStreamLod<'w> {
-	index: ResMut<'w, ForestIndex>,
-	generate: ResMut<'w, ForestGenerateBullseye>,
-	present: ResMut<'w, ForestPresentBullseye>,
-	generate_queue: ResMut<'w, LodGenerateQueue<ChicoGrove>>,
-	present_queue: ResMut<'w, LodPresentQueue<ChicoGrove>>,
-	presenter: ResMut<'w, ForestPresenterState>,
-	generate_regions: MessageWriter<'w, LodGenerateRegion<ForestLodChan>>,
-	present_regions: MessageWriter<'w, LodPresentRegion<ForestLodChan>>,
-	generate_keep: ResMut<'w, LodGenerateKeepRegion<ForestLodChan>>,
-	keep: ResMut<'w, LodPresentKeepRegion<ForestLodChan>>,
-}
-
-impl ForestStreamLod<'_> {
-	/// Enable or tear down the forest stream from an optional spec and camera.
-	pub fn apply_spec(
-		&mut self,
-		commands: &mut Commands,
-		spec: Option<&ForestStreamSpec>,
-		camera: Option<Vec3>,
-		last_key: &mut Option<String>,
-	) {
-		let Some(spec) = spec else {
-			self.generate.enabled = false;
-			self.present.enabled = false;
-			self.generate_keep.region = None;
-			self.keep.region = None;
-			self.index.clear();
-			self.generate_queue.clear();
-			self.present_queue.clear();
-			self.presenter.clear(commands);
-			last_key.take();
-			return;
-		};
-
-		let key = spec.key();
-		let key_changed = last_key.as_ref() != Some(&key);
-		if key_changed {
-			self.index.clear();
-			self.generate_queue.clear();
-			self.present_queue.clear();
-			self.presenter.clear(commands);
-			*last_key = Some(key);
-		}
-
-		self.index.noise = spec.noise;
-		self.index.layering = spec.layering;
-		let (present_m, generate_m) = stream_radii_m(spec.stream_radius);
-		self.generate.radius_m = generate_m;
-		self.generate.enabled = true;
-		self.present.radius_m = present_m;
-		self.present.enabled = true;
-
-		let Some(cam) = camera else {
-			return;
-		};
-		let generate_aabb = crate::ForestExtent::xz_radius_aabb(cam, generate_m);
-		let present_aabb = crate::ForestExtent::xz_radius_aabb(cam, present_m);
-		self.generate_keep.region = Some(generate_aabb);
-		self.keep.region = Some(present_aabb);
-		if key_changed {
-			self.generate_regions.write(LodGenerateRegion::new(generate_aabb));
-			self.present_regions.write(LodPresentRegion::new(present_aabb));
-		}
+/// Stamp [`ForestIndex`] noise / layering and enable grove bullseyes.
+///
+/// Call after [`crate::ForestPlugin`] so the bullseye resources exist. Does not
+/// write a generate / present region impulse; produce arms keep from the
+/// current lattice disk and drain scans it once.
+pub fn install_forest_stream(app: &mut App, spec: ForestStreamSpec) {
+	let (present_m, generate_m) = stream_radii_m(spec.stream_radius);
+	{
+		let mut index = app.world_mut().resource_mut::<ForestIndex>();
+		index.noise = spec.noise;
+		index.layering = spec.layering;
 	}
-}
-
-/// Keep generate / present queues in sync with [`ForestStream`] and the viewer.
-pub fn drive_forest_stream(
-	mut commands: Commands,
-	stream: Res<ForestStream>,
-	camera: Query<&Transform, With<LodViewer>>,
-	mut lod: ForestStreamLod,
-	mut last_key: Local<Option<String>>,
-) {
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, stream.0.as_ref(), cam, &mut last_key);
+	{
+		let mut generate = app.world_mut().resource_mut::<ForestGenerateBullseye>();
+		generate.radius_m = generate_m;
+		generate.enabled = true;
+	}
+	{
+		let mut present = app.world_mut().resource_mut::<ForestPresentBullseye>();
+		present.radius_m = present_m;
+		present.enabled = true;
+	}
+	app.insert_resource(spec);
 }
 
 #[cfg(test)]

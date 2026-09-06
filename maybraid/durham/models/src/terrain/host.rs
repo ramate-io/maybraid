@@ -282,6 +282,16 @@ impl LodRefreshRegions for TerrainLodRegion {
 			LodRefreshRegionsStatus::Unchanged
 		}
 	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		self.moving.then(|| {
+			terrain_ring_region(
+				lod_ref.current_transform.translation,
+				WORLD_TERRAIN_STREAM_EDGE_M,
+				WORLD_TERRAIN_PRESENT_STEP_M,
+			)
+		})
+	}
 }
 
 fn setup_presentation_assets(

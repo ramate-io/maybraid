@@ -11,7 +11,8 @@ use lod::scene::{LodRefreshRegions, LodRefreshRegionsStatus};
 use crate::bump_out::{
 	blend_selection_neighborhood, bump_out_cell_bounds, bump_out_cells_overlapping,
 	bump_out_in_inner_hole, medium_bump_out_in_band, CanopyBumpOut, MediumCanopyBumpOut,
-	BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_CELL_XZ,
+	BUMP_OUT_CELL_XZ, BUMP_OUT_OUTER_RADIUS_M, MEDIUM_BUMP_OUT_ANCHOR_STEP_M,
+	MEDIUM_BUMP_OUT_CELL_XZ, MEDIUM_BUMP_OUT_OUTER_RADIUS_M,
 };
 use crate::grove::{grove_from_id, grove_id};
 use crate::index::ForestIndex;
@@ -221,18 +222,11 @@ impl Default for ForestGenerateBullseye {
 
 impl LodRefreshRegions for ForestGenerateBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous = grove_tile_index(lod_ref.previous_transform.translation);
-		let current = grove_tile_index(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		grove_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		grove_current_region(self.enabled, lod_ref, self.radius_m)
 	}
 }
 
@@ -251,18 +245,11 @@ impl Default for ForestPresentBullseye {
 
 impl LodRefreshRegions for ForestPresentBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous = grove_tile_index(lod_ref.previous_transform.translation);
-		let current = grove_tile_index(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		grove_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		grove_current_region(self.enabled, lod_ref, self.radius_m)
 	}
 }
 
@@ -270,6 +257,33 @@ fn grove_tile_index(position: Vec3) -> (i32, i32) {
 	let s = DEFAULT_FOREST_GROVE_TILE_XZ;
 	let origin = -crate::DEFAULT_FOREST_EXTENT_XZ * 0.5;
 	(((position.x - origin) / s).floor() as i32, ((position.z - origin) / s).floor() as i32)
+}
+
+fn grove_tile_center(position: Vec3) -> Vec3 {
+	let s = DEFAULT_FOREST_GROVE_TILE_XZ;
+	let origin = -crate::DEFAULT_FOREST_EXTENT_XZ * 0.5;
+	let (ix, iz) = grove_tile_index(position);
+	Vec3::new(origin + (ix as f32 + 0.5) * s, 0.0, origin + (iz as f32 + 0.5) * s)
+}
+
+fn grove_ring_aabb(position: Vec3, radius: f32) -> Aabb3d {
+	ForestExtent::xz_radius_aabb(grove_tile_center(position), radius)
+}
+
+fn grove_ring_status(enabled: bool, lod_ref: &LodRef, radius: f32) -> LodRefreshRegionsStatus {
+	if !enabled {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	let previous = grove_tile_index(lod_ref.previous_transform.translation);
+	let current = grove_tile_index(lod_ref.current_transform.translation);
+	if current == previous {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	LodRefreshRegionsStatus::Changed(grove_ring_aabb(lod_ref.current_transform.translation, radius))
+}
+
+fn grove_current_region(enabled: bool, lod_ref: &LodRef, radius: f32) -> Option<Aabb3d> {
+	enabled.then(|| grove_ring_aabb(lod_ref.current_transform.translation, radius))
 }
 
 /// Channel marker for forest generate / present messages.
@@ -350,18 +364,11 @@ impl Default for BumpOutGenerateBullseye {
 
 impl LodRefreshRegions for BumpOutGenerateBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
-		let current = bump_out_cell_index(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		bump_out_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		bump_out_current_region(self.enabled, lod_ref, self.radius_m)
 	}
 }
 
@@ -380,18 +387,118 @@ impl Default for BumpOutPresentBullseye {
 
 impl LodRefreshRegions for BumpOutPresentBullseye {
 	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
-		if !self.enabled {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
-		let current = bump_out_cell_index(lod_ref.current_transform.translation);
-		if current == previous {
-			return LodRefreshRegionsStatus::Unchanged;
-		}
-		LodRefreshRegionsStatus::Changed(ForestExtent::xz_radius_aabb(
-			lod_ref.current_transform.translation,
-			self.radius_m,
-		))
+		bump_out_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		bump_out_current_region(self.enabled, lod_ref, self.radius_m)
+	}
+}
+
+fn bump_out_cell_center(position: Vec3) -> Vec3 {
+	let s = BUMP_OUT_CELL_XZ;
+	let (ix, iz) = bump_out_cell_index(position);
+	Vec3::new((ix as f32 + 0.5) * s, 0.0, (iz as f32 + 0.5) * s)
+}
+
+fn bump_out_ring_aabb(position: Vec3, radius: f32) -> Aabb3d {
+	ForestExtent::xz_radius_aabb(bump_out_cell_center(position), radius)
+}
+
+fn bump_out_ring_status(enabled: bool, lod_ref: &LodRef, radius: f32) -> LodRefreshRegionsStatus {
+	if !enabled {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	let previous = bump_out_cell_index(lod_ref.previous_transform.translation);
+	let current = bump_out_cell_index(lod_ref.current_transform.translation);
+	if current == previous {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	LodRefreshRegionsStatus::Changed(bump_out_ring_aabb(
+		lod_ref.current_transform.translation,
+		radius,
+	))
+}
+
+fn bump_out_current_region(enabled: bool, lod_ref: &LodRef, radius: f32) -> Option<Aabb3d> {
+	enabled.then(|| bump_out_ring_aabb(lod_ref.current_transform.translation, radius))
+}
+
+fn medium_bump_out_anchor(position: Vec3) -> Vec3 {
+	let step = MEDIUM_BUMP_OUT_ANCHOR_STEP_M;
+	Vec3::new((position.x / step).round() * step, 0.0, (position.z / step).round() * step)
+}
+
+fn medium_bump_out_ring_aabb(position: Vec3, radius: f32) -> Aabb3d {
+	ForestExtent::xz_radius_aabb(medium_bump_out_anchor(position), radius)
+}
+
+fn medium_bump_out_ring_status(
+	enabled: bool,
+	lod_ref: &LodRef,
+	radius: f32,
+) -> LodRefreshRegionsStatus {
+	if !enabled {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	let previous = medium_bump_out_anchor(lod_ref.previous_transform.translation);
+	let current = medium_bump_out_anchor(lod_ref.current_transform.translation);
+	if current == previous {
+		return LodRefreshRegionsStatus::Unchanged;
+	}
+	LodRefreshRegionsStatus::Changed(medium_bump_out_ring_aabb(
+		lod_ref.current_transform.translation,
+		radius,
+	))
+}
+
+fn medium_bump_out_current_region(enabled: bool, lod_ref: &LodRef, radius: f32) -> Option<Aabb3d> {
+	enabled.then(|| medium_bump_out_ring_aabb(lod_ref.current_transform.translation, radius))
+}
+
+/// Medium bump-out generate bullseye: 640 m anchor, far-terrain disk.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct MediumBumpOutGenerateBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for MediumBumpOutGenerateBullseye {
+	fn default() -> Self {
+		Self { radius_m: MEDIUM_BUMP_OUT_OUTER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for MediumBumpOutGenerateBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		medium_bump_out_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		medium_bump_out_current_region(self.enabled, lod_ref, self.radius_m)
+	}
+}
+
+/// Medium bump-out present bullseye: same 640 m anchor as generate.
+#[derive(Resource, Debug, Clone, Copy, PartialEq)]
+pub struct MediumBumpOutPresentBullseye {
+	pub radius_m: f32,
+	pub enabled: bool,
+}
+
+impl Default for MediumBumpOutPresentBullseye {
+	fn default() -> Self {
+		Self { radius_m: MEDIUM_BUMP_OUT_OUTER_RADIUS_M, enabled: false }
+	}
+}
+
+impl LodRefreshRegions for MediumBumpOutPresentBullseye {
+	fn lod_refresh_regions(&self, lod_ref: &LodRef) -> LodRefreshRegionsStatus {
+		medium_bump_out_ring_status(self.enabled, lod_ref, self.radius_m)
+	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		medium_bump_out_current_region(self.enabled, lod_ref, self.radius_m)
 	}
 }
 
@@ -647,5 +754,40 @@ mod tests {
 			assert!(medium_bump_out_in_band(bounds, region));
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn grove_keep_disk_snaps_to_tile_center() {
+		let bullseye = ForestGenerateBullseye { radius_m: 1_000.0, enabled: true };
+		let t = bevy::prelude::Transform::from_translation(Vec3::new(10.0, 0.0, 10.0));
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ZERO);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &t,
+			current_transform: &t,
+			bounds: &bounds,
+		};
+		let region = bullseye.lod_current_region(&lod_ref).expect("enabled");
+		let center = grove_tile_center(t.translation);
+		assert!((region.min.x - (center.x - 1_000.0)).abs() < 1e-3);
+		assert!((region.max.x - (center.x + 1_000.0)).abs() < 1e-3);
+		assert!(matches!(
+			bullseye.lod_refresh_regions(&lod_ref),
+			LodRefreshRegionsStatus::Unchanged
+		));
+	}
+
+	#[test]
+	fn disabled_grove_bullseye_has_no_keep_disk() {
+		let bullseye = ForestGenerateBullseye { radius_m: 1_000.0, enabled: false };
+		let t = bevy::prelude::Transform::IDENTITY;
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ZERO);
+		let lod_ref = LodRef {
+			entity: bevy::prelude::Entity::PLACEHOLDER,
+			previous_transform: &t,
+			current_transform: &t,
+			bounds: &bounds,
+		};
+		assert!(bullseye.lod_current_region(&lod_ref).is_none());
 	}
 }

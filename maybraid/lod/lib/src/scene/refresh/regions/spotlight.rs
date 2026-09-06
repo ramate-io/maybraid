@@ -43,6 +43,10 @@ impl LodRefreshRegions for Spotlight {
 		}
 		LodRefreshRegionsStatus::Changed(self.region_at(curr))
 	}
+
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d> {
+		Some(self.region_at(lod_ref.current_transform.translation))
+	}
 }
 
 #[cfg(test)]

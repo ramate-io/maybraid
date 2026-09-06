@@ -79,6 +79,51 @@ pub trait LodRefreshRegions: Send + Sync + 'static {
 			None => LodRefreshRegionsStatus::Unchanged,
 		})
 	}
+
+	/// Keep / first-scan AABB around this driver right now, ignoring cross thresholds.
+	///
+	/// [`None`] when this producer is disabled. Generate/present produce stamps
+	/// keep from this without emitting a region impulse; drain scans that keep
+	/// once. Lattice-snap the disk the same way [`Self::lod_refresh_regions`] does.
+	fn lod_current_region(&self, lod_ref: &LodRef) -> Option<Aabb3d>;
+
+	/// Union of [`Self::lod_current_region`] over `lod_refs`.
+	fn lod_current_regions_for(
+		&self,
+		lod_refs: &[LodRef],
+	) -> Result<Option<Aabb3d>, LodRefreshRegionsError> {
+		if lod_refs.is_empty() {
+			return Err(LodRefreshRegionsError::Empty);
+		}
+		let mut union: Option<Aabb3d> = None;
+		for lod_ref in lod_refs {
+			let Some(aabb) = self.lod_current_region(lod_ref) else {
+				continue;
+			};
+			union = Some(match union {
+				None => aabb,
+				Some(prev) => union_aabb(prev, aabb),
+			});
+		}
+		Ok(union)
+	}
+}
+
+/// Stamp `keep` from the current lattice disk when it is empty.
+///
+/// Drain's first-scan path picks this up. Do not emit a generate/present
+/// region message here — that would dump the full ring as an impulse.
+pub fn arm_keep_if_empty<P: LodRefreshRegions>(
+	producer: &P,
+	refs: &[LodRef],
+	keep: &mut Option<Aabb3d>,
+) {
+	if keep.is_some() {
+		return;
+	}
+	if let Ok(Some(region)) = producer.lod_current_regions_for(refs) {
+		*keep = Some(region);
+	}
 }
 
 fn union_aabb(a: Aabb3d, b: Aabb3d) -> Aabb3d {
