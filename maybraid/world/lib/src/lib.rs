@@ -8,6 +8,7 @@
 
 mod camera;
 pub mod commands;
+mod contact;
 mod control;
 mod intelligence;
 mod material_lib;
@@ -15,24 +16,26 @@ mod mobs;
 mod pitch;
 mod poi;
 mod ui;
+mod weapon;
 
-pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
+pub use player_camera::CameraPov;
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 
-use avian3d::prelude::{CoefficientCombine, Friction};
+use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
-use crozon_characters::CharacterMotionSystems;
+use combat_hud::CombatHudPlugin;
+use crozon_characters::{CharacterMotionSystems, DrawTerrainPitchProbes};
 use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -40,13 +43,15 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
+use player::PlayerPresentationPlugin;
+use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
 
-/// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
+/// Steepest slope the controlled character can drive uphill.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
-/// Static grip sits above `tan(70°)` ≈ 2.75 so walkable slopes do not ice-skate.
+/// Static grip for mobs and props; controlled-player contacts disable friction.
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
 	dynamic_coefficient: 2.55,
 	static_coefficient: 2.95,
@@ -58,49 +63,63 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 /// Cull annulus starts beyond the present ring.
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
+const WORLD_COMBAT_HUD: CombatHudPlugin =
+	CombatHudPlugin { health_bars: false, hit_markers: true, directional_damage: true };
+const WORLD_TERRAIN_PITCH_GIZMOS: DrawTerrainPitchProbes = DrawTerrainPitchProbes(false);
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
-/// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
+/// Playground chrome (command drawer and FPS HUD) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
 pub struct WorldPlugin {
-	/// `/` console, FPS HUD, and virtual-pad dump.
+	/// `/` console and FPS HUD.
 	pub debug_chrome: bool,
+	/// Upper-left virtual-pad / command-intent dump.
+	pub input_debug_enabled: bool,
 }
 
 impl Default for WorldPlugin {
 	fn default() -> Self {
-		Self { debug_chrome: true }
+		Self { debug_chrome: true, input_debug_enabled: false }
 	}
 }
 
 impl WorldPlugin {
 	/// World systems without playground overlays.
 	pub fn game() -> Self {
-		Self { debug_chrome: false }
+		Self { debug_chrome: false, input_debug_enabled: false }
 	}
 }
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
+			app.add_plugins(
+				PhysicsPlugins::default().with_collision_hooks::<contact::WorldCollisionHooks>(),
+			);
+		}
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
-			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
+			.insert_resource(WORLD_TERRAIN_PITCH_GIZMOS)
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
-				debug_overlay: self.debug_chrome,
+				debug_overlay: self.input_debug_enabled,
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(PlayerPresentationPlugin)
+			.add_plugins(PlayerCameraPlugin)
+			.add_plugins(WORLD_COMBAT_HUD)
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
 				register_forest_lod: false,
 				register_bump_out_lod: false,
+				register_camera: false,
 				register_terrain_pitch: false,
 				own_terrain: false,
 			})
@@ -136,25 +155,29 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman)
-			.add_systems(
-				Update,
-				control::apply_intents_to_movement
-					.after(CharacterControlSystems)
-					.before(PlayerControlSystems),
-			)
-			.add_systems(
-				Update,
-				(
-					camera::turn_body_with_look
-						.after(CharacterMotionSystems::Anim)
-						.before(CharacterMotionSystems::Elevation),
-					pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					pitch::apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(pitch::sync_suspend_terrain_pitch),
-				),
-			);
+		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
+			Update,
+			control::apply_intents_to_movement
+				.after(CharacterControlSystems)
+				.before(PlayerControlSystems),
+		);
+		camera::configure(app);
+		weapon::configure(app);
+		app.configure_sets(
+			Update,
+			PlayerCameraSystems::Body
+				.after(CharacterMotionSystems::Anim)
+				.before(CharacterMotionSystems::Elevation),
+		);
+		app.add_systems(
+			Update,
+			(
+				pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
+				pitch::apply_avian_terrain_pitch
+					.in_set(CharacterMotionSystems::Elevation)
+					.after(pitch::sync_suspend_terrain_pitch),
+			),
+		);
 		if self.debug_chrome {
 			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
 				Update,
@@ -165,15 +188,10 @@ impl Plugin for WorldPlugin {
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					ui::sync_mob_debug_pins,
 					ui::draw_mob_debug_gizmos,
+					ui::draw_npc_behavior_gizmos,
 				),
 			);
 		}
-		app.add_systems(
-			PostUpdate,
-			(camera::sync_first_person_head_visibility, camera::follow_world_camera)
-				.chain()
-				.after(TransformSystems::Propagate),
-		);
 	}
 }
 
@@ -195,5 +213,23 @@ mod tests {
 	#[test]
 	fn world_terrain_static_friction_holds_max_walkable_slope() {
 		assert!(WORLD_TERRAIN_FRICTION.static_coefficient > WORLD_MAX_SLOPE_ANGLE.tan());
+	}
+
+	#[test]
+	fn world_input_debug_overlay_is_opt_in() {
+		assert!(!WorldPlugin::default().input_debug_enabled);
+		assert!(!WorldPlugin::game().input_debug_enabled);
+	}
+
+	#[test]
+	fn world_only_enables_combat_feedback_without_health_bars() {
+		assert!(!WORLD_COMBAT_HUD.health_bars);
+		assert!(WORLD_COMBAT_HUD.hit_markers);
+		assert!(WORLD_COMBAT_HUD.directional_damage);
+	}
+
+	#[test]
+	fn world_disables_terrain_pitch_gizmos() {
+		assert!(!WORLD_TERRAIN_PITCH_GIZMOS.0);
 	}
 }

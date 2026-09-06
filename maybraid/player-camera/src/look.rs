@@ -108,12 +108,16 @@ fn set_yaw_owner(owners: &mut Query<&mut PlayerYawOwner>, entity: Entity, owner:
 pub(crate) fn turn_body_with_look(
 	time: Res<Time>,
 	mut cameras: Query<(&mut CameraController, &FollowCamera), With<Camera3d>>,
+	followers: Query<(), With<CameraFollow>>,
 	mut visuals: Query<
 		(Entity, &mut Transform, &mut CharacterHeading),
 		(With<PlayerVisual>, Without<Camera3d>),
 	>,
 	owners: Query<&PlayerYawOwner>,
 ) {
+	if followers.is_empty() {
+		return;
+	}
 	let Ok((mut controller, follow)) = cameras.single_mut() else {
 		return;
 	};

@@ -12,7 +12,7 @@ use crate::{
 const FIREARM_SEED: u64 = 0xF1A4_A11A_0002_C0DE;
 
 const FAMILY_LASER: f32 = 1.0;
-const FAMILY_RATE_OF_FIRE: f32 = 3.0;
+const FAMILY_RATE_OF_FIRE: f32 = 11.0;
 
 const PEN_PER_LENGTH_TENTH: f32 = 0.10;
 const BARREL_RANGE_PER_TENTH: f32 = 25.0;
@@ -663,6 +663,12 @@ mod tests {
 		assert!(colors.len() >= 5, "body colors {colors:?}");
 		assert!(kinds.len() >= 2, "projectiles {kinds:?}");
 		assert!(greens < N / 2, "green {greens}/{N}");
-		assert!(lasers < (N * 3) / 4, "lasers {lasers}/{N}");
+		assert!(lasers < N / 3, "lasers {lasers}/{N}");
+	}
+
+	#[test]
+	fn base_laser_family_probability_is_one_twelfth() {
+		let probability = FAMILY_LASER / (FAMILY_LASER + FAMILY_RATE_OF_FIRE);
+		assert!((probability - 1.0 / 12.0).abs() < f32::EPSILON);
 	}
 }

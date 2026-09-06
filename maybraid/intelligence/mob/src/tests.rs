@@ -9,7 +9,9 @@ use poi_intelligence::{
 };
 use routing_intelligence::{LayerPlan, RoutePlan, RoutingIntelligenceUser};
 use tether_intelligence::{Tether, TetherIntelligenceUser, TetherObjective};
-use threat_intelligence::{AffiliationStrength, Affiliations, ThreatGroupId, ThreatSubject};
+use threat_intelligence::{
+	AffiliationStrength, Affiliations, ThreatGroupId, ThreatId, ThreatSubject,
+};
 
 use crate::bind::bind_mob_members;
 use crate::lifecycle::{queue_downed_member_deaths, write_back_mob_roster};
@@ -88,6 +90,44 @@ fn bind_by_mob_id_stamps_membership_and_installs() {
 	let learner = world.get::<PoiIntelligenceUser>(plant).expect("POI learner");
 	assert!(learner.interests.contains(personal));
 	assert!(learner.interests.contains(PoiKind::new("mob/camp")));
+}
+
+#[test]
+fn bound_packmates_keep_group_mitigation() {
+	let mut world = World::new();
+	let host = spawn_host(
+		&mut world,
+		MobId(17),
+		vec![
+			RosterMember::new(Personality::Brawler, Vec3::X),
+			RosterMember::new(Personality::Brawler, Vec3::NEG_X),
+		],
+	);
+	let first = world.spawn((Transform::from_xyz(1.0, 0.9, 0.0), MobSlot(0), MobId(17))).id();
+	let second = world.spawn((Transform::from_xyz(-1.0, 0.9, 0.0), MobSlot(1), MobId(17))).id();
+	world.run_system_once(bind_mob_members).expect("bind");
+	world.flush();
+
+	let first_affiliations = world.get::<Affiliations>(first).expect("first affiliations");
+	let second_affiliations = world.get::<Affiliations>(second).expect("second affiliations");
+	assert!(first_affiliations.memberships.contains_key(&PACK));
+	assert!(second_affiliations.memberships.contains_key(&PACK));
+	assert!(first_affiliations.known_allies.contains_key(&PACK));
+	assert!(second_affiliations.known_allies.contains_key(&PACK));
+	assert_eq!(first_affiliations.threat_weight(second_affiliations, 0.0), 0.0);
+	assert_eq!(second_affiliations.threat_weight(first_affiliations, 0.0), 0.0);
+	assert_eq!(
+		world.get::<ThreatSubject>(first).map(|subject| subject.id),
+		Some(ThreatId(first.to_bits()))
+	);
+	assert_eq!(
+		world.get::<ThreatSubject>(second).map(|subject| subject.id),
+		Some(ThreatId(second.to_bits()))
+	);
+	assert!(world.get::<MobRoster>(host).is_some_and(|roster| {
+		roster.get(0).is_some_and(|member| member.entity == Some(first))
+			&& roster.get(1).is_some_and(|member| member.entity == Some(second))
+	}));
 }
 
 #[test]

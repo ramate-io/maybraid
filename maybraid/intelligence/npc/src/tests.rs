@@ -127,6 +127,13 @@ fn assassin_prefers_a_stalking_idle_tether() {
 			.get::<NpcIntelligence>(npc)
 			.is_some_and(|npc| npc.engaged_tether.is_some())
 	);
+	assert!(world.get::<FirearmIntelligence>(npc).is_some_and(|firearm| {
+		firearm.settings.accuracy >= 0.9
+			&& firearm.settings.tracking_rate >= 9.0
+			&& firearm.settings.trigger_happiness >= 0.8
+			&& firearm.settings.vision >= 9
+			&& firearm.settings.fire_spotting_freshness >= 0.3
+	}));
 	assert!(world.get::<hiding_intelligence::HidingUser>(npc).is_some());
 }
 

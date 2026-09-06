@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use combat_targeting::{CombatTargeting, TargetSource};
 use damage::Health;
 use evasion_intelligence::{AssailantSource, EvasionIntelligenceUser};
-use threat_intelligence::ThreatKnowledge;
+use threat_intelligence::{ThreatKnowledge, ThreatSource};
 
 use crate::{
 	nearest_known_xz, proximity, select_tactic, CombatSelected, EvadeSelected,
@@ -46,12 +46,20 @@ pub fn select_threat_tactics(
 			nearest_known_xz(knowledge, transform.translation()),
 			management.proximity_horizon,
 		);
+		let mut scores = management.scores(health_fraction, proximity);
+		if knowledge.iter().any(|known| {
+			known
+				.sources
+				.intersects(ThreatSource::RECEIVED_DAMAGE | ThreatSource::RECEIVED_FIRE)
+		}) {
+			scores.ignore = f32::NEG_INFINITY;
+		}
 		let next = select_tactic(
 			knowledge.is_empty(),
 			management.tactic,
 			targeting.is_some(),
 			evasion.is_some(),
-			management.scores(health_fraction, proximity),
+			scores,
 			management.commitment,
 		);
 		if next != management.tactic {

@@ -133,7 +133,16 @@ impl PlaygroundConfig {
 struct GrovesDirty(bool);
 
 /// Character, camera, snap, and locomotion without owning Durham fill.
-pub struct VegetationHostPlugin;
+pub struct VegetationHostPlugin {
+	/// Spawn and drive the playground fly/follow camera.
+	pub register_camera: bool,
+}
+
+impl Default for VegetationHostPlugin {
+	fn default() -> Self {
+		Self { register_camera: true }
+	}
+}
 
 impl Plugin for VegetationHostPlugin {
 	fn build(&self, app: &mut App) {
@@ -146,13 +155,10 @@ impl Plugin for VegetationHostPlugin {
 		if !app.is_plugin_added::<CharacterHostsPlugin>() {
 			app.add_plugins(CharacterHostsPlugin);
 		}
-		app.add_systems(Startup, setup_camera)
-			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+		app.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(
 				Update,
 				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
 					apply_set_character,
 					apply_mode_commands.after(apply_set_character),
 					snap_player_to_composed_surface
@@ -163,6 +169,12 @@ impl Plugin for VegetationHostPlugin {
 						.before(CharacterMotionSystems::Anim),
 				),
 			);
+		if self.register_camera {
+			app.add_systems(Startup, setup_camera).add_systems(
+				Update,
+				(release_modifiers_on_focus_change.before(camera_controller), camera_controller),
+			);
+		}
 	}
 }
 
@@ -174,6 +186,9 @@ pub struct VegetationOnTerrainPlugin {
 	pub register_forest_lod: bool,
 	/// Register the plain Durham-backed canopy bump-out presenter.
 	pub register_bump_out_lod: bool,
+	/// Spawn and drive the playground fly/follow camera.
+	/// Composed applications can disable this and own the sole gameplay camera.
+	pub register_camera: bool,
 	/// Register Avian terrain pitch apply + player jump suspend.
 	/// World sets this false and owns pitch for NPCs as well as the player.
 	pub register_terrain_pitch: bool,
@@ -188,6 +203,7 @@ impl Default for VegetationOnTerrainPlugin {
 			commands: true,
 			register_forest_lod: true,
 			register_bump_out_lod: true,
+			register_camera: true,
 			register_terrain_pitch: true,
 			own_terrain: true,
 		}
@@ -228,7 +244,7 @@ impl Plugin for VegetationOnTerrainPlugin {
 			register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
 		}
 		if !app.is_plugin_added::<VegetationHostPlugin>() {
-			app.add_plugins(VegetationHostPlugin);
+			app.add_plugins(VegetationHostPlugin { register_camera: self.register_camera });
 		}
 		app.insert_resource(playground.clone())
 			.insert_resource(GrovesDirty(true))
