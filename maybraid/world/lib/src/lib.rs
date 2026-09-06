@@ -65,23 +65,25 @@ const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
 /// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
 ///
-/// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
+/// Playground chrome (command drawer and FPS HUD) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
 pub struct WorldPlugin {
-	/// `/` console, FPS HUD, and virtual-pad dump.
+	/// `/` console and FPS HUD.
 	pub debug_chrome: bool,
+	/// Upper-left virtual-pad / command-intent dump.
+	pub input_debug_enabled: bool,
 }
 
 impl Default for WorldPlugin {
 	fn default() -> Self {
-		Self { debug_chrome: true }
+		Self { debug_chrome: true, input_debug_enabled: false }
 	}
 }
 
 impl WorldPlugin {
 	/// World systems without playground overlays.
 	pub fn game() -> Self {
-		Self { debug_chrome: false }
+		Self { debug_chrome: false, input_debug_enabled: false }
 	}
 }
 
@@ -99,7 +101,7 @@ impl Plugin for WorldPlugin {
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.add_plugins(WorldMaterialRefPlugin)
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
-				debug_overlay: self.debug_chrome,
+				debug_overlay: self.input_debug_enabled,
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
@@ -202,5 +204,11 @@ mod tests {
 	#[test]
 	fn world_terrain_static_friction_holds_max_walkable_slope() {
 		assert!(WORLD_TERRAIN_FRICTION.static_coefficient > WORLD_MAX_SLOPE_ANGLE.tan());
+	}
+
+	#[test]
+	fn world_input_debug_overlay_is_opt_in() {
+		assert!(!WorldPlugin::default().input_debug_enabled);
+		assert!(!WorldPlugin::game().input_debug_enabled);
 	}
 }
