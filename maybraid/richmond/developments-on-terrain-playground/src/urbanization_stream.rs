@@ -12,8 +12,8 @@ use bevy::prelude::*;
 use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::PresentedTerrainScene;
 use lod::gen::{
-	GeneratingSpatialIndex, Id, LodGenerateBudget, LodGenerateKeepRegion, LodGenerateQueue,
-	LodGenerateRegion, SpatialIndex, Version,
+	GeneratingSpatialIndex, GenerationScheme, Id, LodGenerateBudget, LodGenerateKeepRegion,
+	LodGenerateQueue, LodGenerateRegion, OriginalId, SpatialIndex, Version,
 };
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
@@ -98,6 +98,8 @@ pub fn register_urbanization_lod(app: &mut App) {
 		.init_resource::<UrbanizationPresenterState>()
 		.init_resource::<UrbanizationGenerateBullseye>()
 		.init_resource::<UrbanizationPresentBullseye>()
+		.init_resource::<UrbanizationHostBudget>()
+		.init_resource::<UrbanizationPaddedTerrainBudget>()
 		.insert_resource(LodGenerateBudget { ids_per_frame: 8 })
 		.add_plugins(LodGenerateRegionPlugin::<
 			UrbanizationGenerateBullseye,
@@ -125,6 +127,30 @@ pub fn register_urbanization_lod(app: &mut App) {
 			PaddedTerrainRefresh,
 			With<LodViewer>,
 		>::default());
+}
+
+/// Cap host spawn to this many unpresented urbanization cells per frame.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct UrbanizationHostBudget {
+	pub cells_per_frame: usize,
+}
+
+impl Default for UrbanizationHostBudget {
+	fn default() -> Self {
+		Self { cells_per_frame: 1 }
+	}
+}
+
+/// Cap pad bake to this many [`TerrainWithPads`] ids per frame.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct UrbanizationPaddedTerrainBudget {
+	pub ids_per_frame: usize,
+}
+
+impl Default for UrbanizationPaddedTerrainBudget {
+	fn default() -> Self {
+		Self { ids_per_frame: 1 }
+	}
 }
 
 #[derive(Resource, Default)]
@@ -336,6 +362,7 @@ pub fn present_urbanization_hosts(
 	mut commands: Commands,
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	budget: Res<UrbanizationHostBudget>,
 	mut development: DevelopmentIndex,
 	mut state: ResMut<UrbanizationPresenterState>,
 ) {
@@ -372,8 +399,12 @@ pub fn present_urbanization_hosts(
 			.collect();
 
 	let wanted: HashSet<Id> = tracked.iter().map(|(id, _)| *id).collect();
+	let mut remaining = budget.cells_per_frame;
 	for (id, version) in tracked {
 		if state.presented_version(id) == Some(version) {
+			continue;
+		}
+		if remaining == 0 {
 			continue;
 		}
 		let Some(selected) = development.urbanization.get(id).cloned() else {
@@ -387,15 +418,19 @@ pub fn present_urbanization_hosts(
 			&selected,
 			&lod_ref,
 		);
+		remaining -= 1;
 	}
 	state.remove_stale(&mut commands, &wanted);
 }
 
-/// Generate padded Durham cells after the urbanization presenter has
-/// materialized all development pads in the present keep.
+/// Bake a bounded number of padded Durham cells after hosts have written pads.
+///
+/// Skip ids whose Durham cell is not in the terrain store yet. Do not
+/// `get_or_generate_region` the whole present keep.
 pub fn generate_urbanization_padded_terrain(
 	config: Res<crate::PlaygroundConfig>,
 	keep: Res<LodPresentKeepRegion<UrbanizationLodChan>>,
+	budget: Res<UrbanizationPaddedTerrainBudget>,
 	mut development: DevelopmentIndex,
 ) {
 	if config.urbanization.is_none() {
@@ -412,11 +447,29 @@ pub fn generate_urbanization_padded_terrain(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate_region(
-		&mut development,
-		region,
-		&lod_ref,
-	);
+	let mut ids: Vec<Id> = TerrainWithPads::original_ids_for(&mut development, region)
+		.into_iter()
+		.map(|OriginalId(id)| id)
+		.collect();
+	ids.sort();
+	let mut remaining = budget.ids_per_frame;
+	for id in ids {
+		if remaining == 0 {
+			break;
+		}
+		if SpatialIndex::<TerrainWithPads>::get(&development, id).is_some() {
+			continue;
+		}
+		if development.terrain_store().terrain(id).is_none() {
+			continue;
+		}
+		let _ = GeneratingSpatialIndex::<TerrainWithPads>::get_or_generate(
+			&mut development,
+			id,
+			&lod_ref,
+		);
+		remaining -= 1;
+	}
 }
 
 /// Present padded replacements for the urbanization keep and cull stale cells.
@@ -525,5 +578,11 @@ mod tests {
 		assert!((spec.noise.frequency - parsed.frequency).abs() < 1e-8);
 		assert_eq!(spec.stream_radius, DEFAULT_URBANIZATION_STREAM_RADIUS);
 		Ok(())
+	}
+
+	#[test]
+	fn host_and_pad_budgets_default_to_one_id_per_frame() {
+		assert_eq!(UrbanizationHostBudget::default().cells_per_frame, 1);
+		assert_eq!(UrbanizationPaddedTerrainBudget::default().ids_per_frame, 1);
 	}
 }

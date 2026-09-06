@@ -4675,7 +4675,6 @@ dependencies = [
  "maybraid-input",
  "maybraid-sky",
  "richmond-building-shaders",
- "richmond-developments-on-terrain-playground",
  "visual-geometry-core",
 ]
 

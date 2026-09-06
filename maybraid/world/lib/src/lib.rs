@@ -1,15 +1,16 @@
-//! Assembled world model: Durham terrain, streamed forest, urbanization, sky dome.
+//! Assembled world model: Durham terrain, streamed forest, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
-//! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin<Durham>` owns terrain).
-//!
+//! cover the grove fill ring. Grove present GETs Durham height and skips
+//! grow when the overlapping cell is not in the store
+//! ([#720](https://github.com/ramate-io/maybraid/issues/720)).
 //! Plugin list: `WorldMaterialRefPlugin`, `VisualGeometryCorePlugin`,
 //! `TerrainPlugin<Durham>`, character via `VegetationHostPlugin`, groves +
-//! bump-outs via `VegetationPlugin<DevelopmentExclusions<OnTerrain<DurhamHeight>>>`,
-//! then Richmond urbanization.
+//! bump-outs via `VegetationPlugin<OnTerrain<DurhamHeight>>`.
+//! Urbanization stays off this assembly until pad bake and host spawn are
+//! reintroduced on a budget.
 
 mod camera;
 pub mod commands;
@@ -41,10 +42,6 @@ use lod_first_load::{FirstLoadActivity, FirstLoadPermit, FirstLoadPlugin};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
-use richmond_developments_on_terrain_playground::{
-	DevelopmentExclusions, DevelopmentsOnTerrainPlugin,
-	PlaygroundConfig as DevelopmentsPlaygroundConfig,
-};
 use visual_geometry_core::VisualGeometryCorePlugin;
 
 /// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
@@ -62,7 +59,7 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
-/// Assembled world: Durham terrain, streamed forest, urbanization, sky dome, character.
+/// Assembled world: Durham terrain, streamed forest, sky dome, character.
 ///
 /// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
@@ -101,15 +98,7 @@ impl Plugin for WorldPlugin {
 			}))
 			.add_plugins(CharacterControllerPlugin)
 			.add_plugins(VegetationHostPlugin)
-			.add_plugins(
-				VegetationPlugin::<DevelopmentExclusions<OnTerrain<DurhamHeight>>>::default(),
-			)
-			// Urbanization stream only — `TerrainPlugin<Durham>` owns TerrainEntryStore.
-			.add_plugins(DevelopmentsOnTerrainPlugin {
-				config: DevelopmentsPlaygroundConfig::world_defaults(),
-				commands: false,
-				own_terrain: false,
-			})
+			.add_plugins(VegetationPlugin::<OnTerrain<DurhamHeight>>::default())
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()

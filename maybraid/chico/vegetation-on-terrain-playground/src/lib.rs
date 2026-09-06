@@ -33,7 +33,7 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{
 	terrain_streaming_enabled, TerrainCoverage, TerrainStreamingEnabled, WorldBaseTerrain,
 };
-pub use forest::DurhamHeight;
+pub use forest::{durham_store_ready_for, DurhamHeight};
 pub use game_commands::command::PendingStartupCommand;
 pub use groves::{OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{

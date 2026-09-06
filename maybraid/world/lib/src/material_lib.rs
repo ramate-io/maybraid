@@ -7,7 +7,9 @@ use chico_vegetation_on_terrain_playground::{
 };
 use crozon_characters::material_lib::{init_crozon_material_caches, ClothingMaterialLib};
 use material_ref::{material_ref_plugin_installed, MaterialLib, MaterialRef, MaterialRefPlugin};
-use richmond_building_shaders::{init_richmond_urban_material_caches, UrbanSurfaceMaterialLib};
+use richmond_building_shaders::{
+	init_richmond_urban_material_caches, RichmondBuildingShadersPlugin, UrbanSurfaceMaterialLib,
+};
 
 /// Clothing, then urban surfaces, then vegetation (Standard last).
 #[derive(SystemParam)]
@@ -39,6 +41,13 @@ pub struct WorldMaterialRefPlugin;
 
 impl Plugin for WorldMaterialRefPlugin {
 	fn build(&self, app: &mut App) {
+		// `UrbanSurfaceMaterialLib` needs `Assets<UrbanSurfaceMaterial>`, which
+		// `MaterialPlugin` inserts. That used to arrive with
+		// `DevelopmentsOnTerrainPlugin`; keep the shader plugin even when
+		// urbanization is off the world stack.
+		if !app.is_plugin_added::<RichmondBuildingShadersPlugin>() {
+			app.add_plugins(RichmondBuildingShadersPlugin);
+		}
 		init_crozon_material_caches(app);
 		init_richmond_urban_material_caches(app);
 		init_vegetation_on_terrain_material_caches(app);

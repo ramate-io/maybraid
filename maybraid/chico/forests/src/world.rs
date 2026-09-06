@@ -20,7 +20,10 @@ pub trait GroveWorldSource {
 	) -> Option<impl GroveWorldSample + Clone + Send + Sync + 'static>;
 }
 
-/// Height field that [`OnTerrain`] can seek and snapshot.
+/// Height field that [`OnTerrain`] snapshots for grow.
+///
+/// Return `None` when the overlapping cell is not already stored. Grove present
+/// must not `get_or_generate` terrain.
 pub trait TerrainHeightSource {
 	fn ensure_and_sample(
 		&mut self,
