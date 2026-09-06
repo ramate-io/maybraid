@@ -42,7 +42,12 @@ use crate::session::ActiveCharacter;
 use crate::weapon_gallery::{RequestShowWeapons, WeaponGalleryScreen};
 
 #[derive(Component)]
-struct CharacterPreviewRoot;
+pub struct CharacterPreviewRoot;
+
+/// Menu-playground key / fill lights. Composed applications can put these on
+/// the same render layer as [`CharacterPreviewRoot`].
+#[derive(Component)]
+pub struct CharacterPreviewLight;
 
 #[derive(Resource, Default)]
 struct PreviewSyncState {
@@ -97,10 +102,12 @@ impl Plugin for CharacterPreviewPlugin {
 
 fn setup_lighting(mut commands: Commands) {
 	commands.spawn((
+		CharacterPreviewLight,
 		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
+		CharacterPreviewLight,
 		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));

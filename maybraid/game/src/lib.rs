@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use crate::shell::{
 	apply_shell_look, attach_preview_camera, detach_preview_camera, enter_characters, enter_home,
-	enter_world, enter_world_menu, exit_world_menu, spawn_menu_ui_camera,
+	enter_world, enter_world_menu, exit_world_menu, stamp_preview_render_layers,
 };
 
 /// Crate-local asset directory (`maybraid/game/assets`).
@@ -48,7 +48,6 @@ impl Plugin for GamePlugin {
 				CharacterPreviewPlugin,
 				MenuControllerPlugin,
 			))
-			.add_systems(Startup, spawn_menu_ui_camera)
 			.add_systems(
 				OnEnter(GameFlow::Home),
 				(enter_home, apply_shell_look, attach_preview_camera),
@@ -65,10 +64,11 @@ impl Plugin for GamePlugin {
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
 			.add_systems(OnExit(WorldPause::Menu), exit_world_menu)
-			.add_systems(PostStartup, apply_shell_look)
+			.add_systems(PostStartup, (enter_home, apply_shell_look, attach_preview_camera))
 			.add_systems(
 				Update,
 				(
+					stamp_preview_render_layers,
 					route_home_choice.run_if(in_state(GameFlow::Home)),
 					route_in_game_choice.run_if(in_state(WorldPause::Menu)),
 					character_back.run_if(in_state(GameFlow::Characters)),
@@ -135,7 +135,7 @@ fn character_back(
 	spin: Query<(), With<SpinRevealScreen>>,
 	gallery: Query<(), With<GalleryScreen>>,
 ) {
-	if !consume_screen_back(&nav, overlay.0.is_some(), &mut backs) {
+	if !consume_screen_back(nav.as_ref(), overlay.0.is_some(), &mut backs) {
 		return;
 	}
 	if !character.is_empty() {
