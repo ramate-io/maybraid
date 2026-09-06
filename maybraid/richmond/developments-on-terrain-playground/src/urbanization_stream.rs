@@ -12,106 +12,46 @@ use bevy::prelude::*;
 use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::PresentedTerrainScene;
 use lod::gen::{
-	GeneratingSpatialIndex, GenerationScheme, Id, LodGenerateBudget, LodGenerateKeepRegion,
-	LodGenerateQueue, LodGenerateRegion, OriginalId, SpatialIndex, Version,
+	GeneratingSpatialIndex, GenerationScheme, Id, LodGenerateKeepRegion, LodGenerateQueue,
+	LodGenerateRegion, OriginalId, SpatialIndex, Version,
 };
 use lod::lod_ref::LodRef;
 use lod::presentation::{LodPresentKeepRegion, LodPresentRegion, RegionPresenter};
-use lod::{
-	LodGeneratePlugin, LodGenerateRegionPlugin, LodPresentRegionPlugin,
-	LodSceneRefreshRegionPlugin, LodViewer,
-};
+use lod::{LodGenerateBudget, LodPresentRegionPlugin, LodSceneRefreshRegionPlugin, LodViewer};
 use lod_avian::AvianLodSceneRefreshPlugin;
-use procedural_common::NoiseParams;
 use richmond_development_models::{
 	BuiltDevelopment, DevelopmentCell, DevelopmentEntryStore, DevelopmentHosts, DevelopmentIndex,
 	PaddedStoreView, PaddedTerrainPresenter, PresentedPaddedTerrainScene, TerrainWithPads,
 };
 use richmond_urbanization::{
 	SelectedUrbanization, UrbanDevelopmentKind, UrbanizationExtent, UrbanizationGenerateBullseye,
-	UrbanizationIndex, UrbanizationKind, UrbanizationLodChan, UrbanizationPresentBullseye,
-	DEFAULT_URBANIZATION_EXTENT_XZ, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
+	UrbanizationGenerationPlugin, UrbanizationIndex, UrbanizationKind, UrbanizationLodChan,
+	UrbanizationPresentBullseye, DEVELOPMENT_GENERATE_RADIUS_M, DEVELOPMENT_PRESENT_RADIUS_M,
+};
+
+pub use richmond_urbanization::{
+	parse_urbanization_kind, stream_radii_m, UrbanizationStreamSpec, DEFAULT_URBANIZATION_NOISE,
+	DEFAULT_URBANIZATION_STREAM_RADIUS,
 };
 
 use crate::hosts::DevelopmentHostRoot;
 
-/// Default present ring multiplier (`1` → 1 km present / 3 km generate).
-pub const DEFAULT_URBANIZATION_STREAM_RADIUS: u32 = 1;
-
-/// Hopscotch default so neighboring 1600 m cells stay related.
-pub const DEFAULT_URBANIZATION_NOISE: &str = "1337,0.0005,1,1";
-
-/// Clap parser for a well-known urbanization kebab name.
-pub fn parse_urbanization_kind(name: &str) -> Result<UrbanizationKind, String> {
-	UrbanizationKind::from_kebab(name).ok_or_else(|| {
-		let names: Vec<_> = UrbanizationKind::ALL.iter().map(|kind| kind.as_kebab()).collect();
-		format!("unknown urbanization {name:?}; expected one of: {}", names.join(", "))
-	})
-}
-
-/// Live urbanization-stream knobs (noise / ring / pinned kind).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct UrbanizationStreamSpec {
-	pub noise: NoiseParams,
-	pub stream_radius: u32,
-	pub kind: Option<UrbanizationKind>,
-}
-
-impl Default for UrbanizationStreamSpec {
-	fn default() -> Self {
-		Self {
-			noise: NoiseParams {
-				seed: 1337,
-				frequency: 0.0005,
-				amplitude: 1.0,
-				octaves: 1,
-				..default()
-			},
-			stream_radius: DEFAULT_URBANIZATION_STREAM_RADIUS,
-			kind: None,
-		}
-	}
-}
-
-impl UrbanizationStreamSpec {
-	pub fn key(self) -> String {
-		let kind_key = self.kind.map(UrbanizationKind::as_kebab).unwrap_or("hopscotch");
-		format!("urbanization:{kind_key}|{:?}|r={}", self.noise, self.stream_radius)
-	}
-}
-
-/// Present / generate metric radii for a stream-radius multiplier.
-pub fn stream_radii_m(stream_radius: u32) -> (f32, f32) {
-	if stream_radius == 0 {
-		return (DEFAULT_URBANIZATION_EXTENT_XZ, DEFAULT_URBANIZATION_EXTENT_XZ * 2.0);
-	}
-	let present = DEVELOPMENT_PRESENT_RADIUS_M * stream_radius as f32;
-	(present, present + (DEVELOPMENT_GENERATE_RADIUS_M - DEVELOPMENT_PRESENT_RADIUS_M))
-}
-
 /// Generate + present-keep plugins for [`SelectedUrbanization`].
+///
+/// Generate comes from [`UrbanizationGenerationPlugin`]. This also registers
+/// present-keep and padded-terrain scene refresh used by the playground.
 pub fn register_urbanization_lod(app: &mut App) {
 	#[derive(Debug, Clone, Copy, Default)]
 	struct PaddedTerrainRefresh;
 
-	app.init_resource::<UrbanizationIndex>()
-		.init_resource::<UrbanizationPresenterState>()
-		.init_resource::<UrbanizationGenerateBullseye>()
+	if !app.is_plugin_added::<UrbanizationGenerationPlugin>() {
+		app.add_plugins(UrbanizationGenerationPlugin);
+	}
+	app.init_resource::<UrbanizationPresenterState>()
 		.init_resource::<UrbanizationPresentBullseye>()
 		.init_resource::<UrbanizationHostBudget>()
 		.init_resource::<UrbanizationPaddedTerrainBudget>()
 		.insert_resource(LodGenerateBudget { ids_per_frame: 8 })
-		.add_plugins(LodGenerateRegionPlugin::<
-			UrbanizationGenerateBullseye,
-			With<LodViewer>,
-			UrbanizationLodChan,
-		>::default())
-		.add_plugins(LodGeneratePlugin::<
-			SelectedUrbanization,
-			UrbanizationIndex,
-			UrbanizationLodChan,
-			With<LodViewer>,
-		>::default())
 		.add_plugins(LodPresentRegionPlugin::<
 			UrbanizationPresentBullseye,
 			With<LodViewer>,

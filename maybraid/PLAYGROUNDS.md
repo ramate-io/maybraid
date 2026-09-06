@@ -28,7 +28,7 @@ Last commit that still contained these trees: [`af1f65fe59f0b6d01061ca2716119c9d
 
 - **Last commit:** [`af1f65fe59f0b6d01061ca2716119c9df7c68f06`](https://github.com/ramate-io/maybraid/commit/af1f65fe59f0b6d01061ca2716119c9df7c68f06)
 - **Did:** Small Durham fine-grid patch for iterating Chico groves on real ground. `/grove <kind>` tiled one grove type; `/forest` streamed the same generate/present/cull path as SBS, grown on Durham height. Character / free-look, canopy bump-outs, mesh stats.
-- **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate remains as `VegetationHostPlugin` (character / camera) plus `VegetationPlugin<S>` (forest + bump-outs) for `maybraid-world` (`OnTerrain<DurhamHeight>`, get-only) and Richmond developments-on-terrain. World terrain is `TerrainPlugin<Durham>`. World does not register urbanization until pad bake and host spawn stay on a per-frame budget ([#720](https://github.com/ramate-io/maybraid/issues/720)).
+- **Replacement:** [`maybraid-world-playground`](world/playground/) (`cargo run -p maybraid-world-playground`). The crate remains as `VegetationHostPlugin` (character / camera) plus `VegetationPlugin<S>` (forest + bump-outs) for `maybraid-world` (`OnTerrain<DurhamHeight>`, get-only) and Richmond developments-on-terrain. World terrain is `TerrainPlugin<Durham>`. World registers [`UrbanizationGenerationPlugin`](richmond/urbanization/src/plugin.rs) (select-only hopscotch, no pads or hosts) ([#720](https://github.com/ramate-io/maybraid/issues/720) step 3).
 
 ### `playgrounds/terrain` (`terrain-playground`)
 

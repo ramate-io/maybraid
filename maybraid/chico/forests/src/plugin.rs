@@ -3,14 +3,16 @@
 use std::marker::PhantomData;
 
 use bevy::ecs::system::SystemParam;
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chico_vegetation_components::VegetationProceduralPlugin;
 use chico_vegetation_shaders::{
 	init_chico_material_caches, ChicoMaterialRefPlugin, ChicoVegetationShadersPlugin,
 };
 use lod::{
-	LodGenerateBudget, LodGeneratePlugin, LodGenerateRegionPlugin, LodGenerateSystems,
-	LodPresentCullPlugin, LodPresentPlugin, LodPresentRegionPlugin, LodPresentSystems, LodViewer,
+	LodGenerateBudget, LodGenerateKeepRegion, LodGeneratePlugin, LodGenerateRegionPlugin,
+	LodGenerateSystems, LodPresentCullPlugin, LodPresentKeepRegion, LodPresentPlugin,
+	LodPresentRegionPlugin, LodPresentSystems, LodViewer,
 };
 use scene_ref::SceneRefPlugin;
 
@@ -94,6 +96,49 @@ where
 				With<LodViewer>,
 			>::default())
 			.add_plugins(LodPresentCullPlugin::<ChicoGrove, ForestIndex, Pr, ForestLodChan>::default())
-			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain));
+			.configure_sets(Update, LodPresentSystems::Produce.after(LodGenerateSystems::Drain))
+			.add_systems(
+				Update,
+				(
+					log_first_forest_generate_keep.after(LodGenerateSystems::Produce),
+					log_first_forest_present_keep.after(LodPresentSystems::Produce),
+				),
+			);
+	}
+}
+
+fn log_first_forest_generate_keep(
+	keep: Res<LodGenerateKeepRegion<ForestLodChan>>,
+	mut logged: Local<bool>,
+) {
+	log_keep_arm_once("forest generate", keep.region, &mut logged);
+}
+
+fn log_first_forest_present_keep(
+	keep: Res<LodPresentKeepRegion<ForestLodChan>>,
+	mut logged: Local<bool>,
+) {
+	log_keep_arm_once("forest present", keep.region, &mut logged);
+}
+
+fn log_keep_arm_once(label: &'static str, region: Option<Aabb3d>, logged: &mut bool) {
+	let Some(region) = region else {
+		return;
+	};
+	if *logged {
+		return;
+	}
+	*logged = true;
+	let edge_x = region.max.x - region.min.x;
+	let edge_z = region.max.z - region.min.z;
+	let half = edge_x.max(edge_z) * 0.5;
+	info!(
+		"{label} keep first arm min.xz=({:.1},{:.1}) max.xz=({:.1},{:.1}) edge_xz=({:.1},{:.1}) half={:.1}",
+		region.min.x, region.min.z, region.max.x, region.max.z, edge_x, edge_z, half
+	);
+	if half > 7500.0 {
+		warn!(
+			"{label} keep half-extent {half:.0} m looks like terrain stream-edge, not the 1 km / 3 km rings"
+		);
 	}
 }
