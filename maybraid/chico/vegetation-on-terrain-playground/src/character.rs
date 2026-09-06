@@ -123,7 +123,7 @@ pub(crate) fn apply_set_character(
 	species_requests: Query<(Entity, &RequestSetCharacter)>,
 	appearance_requests: Query<(Entity, &RequestSetCharacterAppearance)>,
 	players: Query<Entity, With<Player>>,
-	visuals: Query<Entity, With<PlayerVisual>>,
+	visuals: Query<(Entity, &ChildOf), With<PlayerVisual>>,
 	mut capsules: Query<&mut Visibility, With<PlayerCapsule>>,
 ) {
 	let Ok(player) = players.single() else {
@@ -137,8 +137,10 @@ pub(crate) fn apply_set_character(
 	};
 
 	for (entity, request) in &species_requests {
-		for visual in &visuals {
-			commands.entity(visual).try_despawn();
+		for (visual, child_of) in &visuals {
+			if child_of.parent() == player {
+				commands.entity(visual).try_despawn();
+			}
 		}
 		for mut visibility in &mut capsules {
 			*visibility = Visibility::Hidden;
@@ -158,8 +160,10 @@ pub(crate) fn apply_set_character(
 		commands.entity(entity).despawn();
 	}
 	for (entity, request) in &appearance_requests {
-		for visual in &visuals {
-			commands.entity(visual).try_despawn();
+		for (visual, child_of) in &visuals {
+			if child_of.parent() == player {
+				commands.entity(visual).try_despawn();
+			}
 		}
 		for mut visibility in &mut capsules {
 			*visibility = Visibility::Hidden;

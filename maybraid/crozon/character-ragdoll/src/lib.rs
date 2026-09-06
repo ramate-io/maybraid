@@ -98,6 +98,20 @@ pub struct CharacterRagdollSettings {
 	pub max_simulation_secs: f32,
 }
 
+/// Which downed character roles this plugin should hand off to ragdolls.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CharacterRagdollTargets {
+	pub players: bool,
+	pub npcs: bool,
+	pub unmarked: bool,
+}
+
+impl Default for CharacterRagdollTargets {
+	fn default() -> Self {
+		Self { players: true, npcs: true, unmarked: true }
+	}
+}
+
 impl Default for CharacterRagdollSettings {
 	fn default() -> Self {
 		Self {
@@ -218,7 +232,7 @@ type PendingRigHosts<'w, 's> = Query<
 type DownedBodies<'w, 's> = Query<
 	'w,
 	's,
-	(Entity, &'static Downed, Option<&'static LinearVelocity>),
+	(Entity, &'static Downed, Option<&'static LinearVelocity>, Has<Player>, Has<Npc>),
 	(Without<DespawnAfter>, Without<CorpseHandoff>),
 >;
 
@@ -231,6 +245,7 @@ impl Plugin for CharacterRagdollPlugin {
 			app.add_plugins(damage::DamagePlugin);
 		}
 		app.init_resource::<CharacterRagdollSettings>()
+			.init_resource::<CharacterRagdollTargets>()
 			.init_resource::<RagdollColliders>()
 			.add_message::<RagdollImpulse>()
 			.configure_sets(
@@ -263,12 +278,19 @@ impl Plugin for CharacterRagdollPlugin {
 
 fn begin_corpse_handoffs(
 	time: Res<Time>,
+	targets: Res<CharacterRagdollTargets>,
 	mut commands: Commands,
 	downed: DownedBodies,
 	visuals: Query<(Entity, &ChildOf), With<CharacterRoot>>,
 ) {
 	let now = time.elapsed_secs();
-	for (body, downed, velocity) in &downed {
+	for (body, downed, velocity, player, npc) in &downed {
+		let enabled = (player && targets.players)
+			|| (npc && targets.npcs)
+			|| (!player && !npc && targets.unmarked);
+		if !enabled {
+			continue;
+		}
 		for (visual, child_of) in &visuals {
 			if child_of.parent() != body {
 				continue;
@@ -824,6 +846,7 @@ mod tests {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins)
 			.insert_resource(CharacterRagdollSettings { handoff_wait_secs: 0.0, ..default() })
+			.init_resource::<CharacterRagdollTargets>()
 			.add_systems(
 				Update,
 				(begin_corpse_handoffs, finish_corpse_handoffs, damage::tick_queued_despawns)

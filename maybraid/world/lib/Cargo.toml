@@ -17,6 +17,7 @@ chico-vegetation-components = { workspace = true }
 clap = { workspace = true }
 combat-hud = { workspace = true }
 crozon-character-items = { workspace = true }
+crozon-character-ragdoll = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-inventory-user = { workspace = true }
 damage = { workspace = true }

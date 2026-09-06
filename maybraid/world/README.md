@@ -10,7 +10,9 @@ focus blends onto the firearm sight and its FOV, and the third-person camera
 shapecasts against Fixed terrain and vegetation sticks so it does not clip
 through. Outgoing hits show FFA-style score markers, and incoming damage shows
 directional indicators; health bars remain hidden. Vegetation continues to own
-the player capsule locomotion.
+the player capsule locomotion. Downed players leave a ragdoll corpse, wait four
+active-gameplay seconds, then receive a fresh loadout-equipped body at a
+terrain-fitted nearby urban, interior, or vegetation POI.
 
 ```bash
 cargo run -p maybraid-world-playground

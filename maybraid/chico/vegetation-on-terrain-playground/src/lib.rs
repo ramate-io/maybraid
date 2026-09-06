@@ -34,8 +34,9 @@ pub use game_commands::command::PendingStartupCommand;
 pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish, MovementAction,
-	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	player_position_above_surface, spawn_player_body, CharacterCameraFollowEnabled,
+	CharacterLocomotion, Jumping, MoveWish, MovementAction, PadMovementEnabled, Player,
+	PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;

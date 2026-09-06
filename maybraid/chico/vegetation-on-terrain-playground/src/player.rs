@@ -182,6 +182,21 @@ fn spawn_player(
 	// so the capsule / follow-cam are not born under jersey plateaus.
 	let center = layout.region_center_xz();
 	let spawn = player_spawn_point(&layout, holding_elevation(&base.0, center.x, center.z));
+	let player =
+		spawn_player_body(&mut commands, &mut meshes, &mut materials, locomotion.as_ref(), spawn);
+	commands.entity(player).insert(AwaitingTerrainSurface);
+}
+
+/// Spawn the terrain player's dynamic capsule at a known body-center position.
+///
+/// Call [`player_position_above_surface`] when the input is a terrain/POI surface point.
+pub fn spawn_player_body(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	locomotion: &CharacterLocomotion,
+	spawn: Vec3,
+) -> Entity {
 	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
@@ -190,7 +205,6 @@ fn spawn_player(
 		.spawn((
 			Name::new("Player"),
 			Player,
-			AwaitingTerrainSurface,
 			CharacterController,
 			Transform::from_translation(spawn),
 			Visibility::default(),
@@ -221,10 +235,16 @@ fn spawn_player(
 		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
 		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
 	));
+	player
 }
 
 pub(crate) fn capsule_half_height() -> f32 {
 	CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5
+}
+
+/// Lift a terrain/POI surface point to a safe player capsule center.
+pub fn player_position_above_surface(surface: Vec3) -> Vec3 {
+	surface + Vec3::Y * (capsule_half_height() + 0.5)
 }
 
 /// Elevation used before [`TerrainEntryStore`] has the cell underfoot.
@@ -234,7 +254,7 @@ pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
+	player_position_above_surface(Vec3::new(center.x, elevation, center.z))
 }
 
 pub(crate) fn snap_player_to_composed_surface(

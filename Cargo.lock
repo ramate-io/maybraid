@@ -4658,6 +4658,7 @@ dependencies = [
  "clap",
  "combat-hud",
  "crozon-character-items",
+ "crozon-character-ragdoll",
  "crozon-characters",
  "crozon-inventory-user",
  "damage",
