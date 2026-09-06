@@ -15,12 +15,12 @@ use crate::gen::{
 	Id, LodGenerated, SpatialIndex, QUEUE_KEEP_SLACK_XZ,
 };
 use crate::lod_ref::{
-	collect_node_snapshots, lod_refs_from_snapshots, LodNode, LodNodeBounds, LodNodePlugin,
-	LodNodePose, LodNodeSystems,
+	collect_node_snapshots, lod_refs_from_snapshots, snapshot_node, LodNode, LodNodeBounds,
+	LodNodePlugin, LodNodePose, LodNodeSystems,
 };
 use crate::scene::{
-	LodCullRegionCursor, LodCullRegions, LodCullRegionsStatus, LodRefreshRegions,
-	LodRefreshRegionsStatus,
+	arm_keep_if_empty, LodCullRegionCursor, LodCullRegions, LodCullRegionsStatus,
+	LodRefreshRegions, LodRefreshRegionsStatus,
 };
 
 /// Impulse: present ids tracked in `region` (channel `M`).
@@ -250,14 +250,12 @@ impl Plugin for LodPresentSetsPlugin {
 	}
 }
 
-/// Read pose-changed drivers, emit newly entered [`LodPresentRegion<M>`]
-/// strips, and record the full keep AABB.
+/// Read `F`-filtered [`LodNode`]s. Empty keep is armed from the current lattice
+/// disk without a region impulse. Tile-cross / translation-cross still emits
+/// newly entered [`LodPresentRegion<M>`] strips.
 pub fn produce_lod_present_regions<P, F, M>(
 	producer: Res<P>,
-	nodes: Query<
-		(Entity, &LodNodePose, Option<&LodNodeBounds>),
-		(With<LodNode>, Changed<LodNodePose>, F),
-	>,
+	nodes: Query<(Entity, Ref<LodNodePose>, Option<&LodNodeBounds>), (With<LodNode>, F)>,
 	mut writer: MessageWriter<LodPresentRegion<M>>,
 	mut keep: ResMut<LodPresentKeepRegion<M>>,
 	mut previous: Local<Option<Aabb3d>>,
@@ -266,12 +264,33 @@ pub fn produce_lod_present_regions<P, F, M>(
 	F: QueryFilter + 'static,
 	M: Send + Sync + 'static,
 {
+	let any_changed = nodes.iter().any(|(_, pose, _)| pose.is_changed());
+	if keep.region.is_some() && !any_changed {
+		return;
+	}
 	if nodes.is_empty() {
 		return;
 	}
-	let snapshots = collect_node_snapshots(&nodes);
+	let snapshots: Vec<_> = nodes
+		.iter()
+		.map(|(entity, pose, bounds)| snapshot_node(entity, &pose, bounds))
+		.collect();
 	let refs = lod_refs_from_snapshots(&snapshots);
-	let Ok(LodRefreshRegionsStatus::Changed(region)) = producer.lod_refresh_regions_for(&refs)
+	arm_keep_if_empty(&*producer, &refs, &mut keep.region);
+	if keep.region.is_some() && previous.is_none() {
+		*previous = keep.region;
+	}
+	if !any_changed {
+		return;
+	}
+	let changed: Vec<_> = nodes
+		.iter()
+		.filter(|(_, pose, _)| pose.is_changed())
+		.map(|(entity, pose, bounds)| snapshot_node(entity, &pose, bounds))
+		.collect();
+	let changed_refs = lod_refs_from_snapshots(&changed);
+	let Ok(LodRefreshRegionsStatus::Changed(region)) =
+		producer.lod_refresh_regions_for(&changed_refs)
 	else {
 		return;
 	};

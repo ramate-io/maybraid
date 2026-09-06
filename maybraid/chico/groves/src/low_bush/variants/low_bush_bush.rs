@@ -8,7 +8,7 @@ use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
-use chico_tree_components::{HighBushFoliageStyle, HighBushShootsShape};
+use chico_sbs_geometry::{HighBushFoliageStyle, HighBushShootsShape};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::low_bush::LowBushBush;

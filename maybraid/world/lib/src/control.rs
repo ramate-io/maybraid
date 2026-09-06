@@ -6,6 +6,7 @@ use chico_vegetation_on_terrain_playground::{
 };
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
+use maybraid_sky::SkyDome;
 
 use crate::camera::CameraPov;
 
@@ -14,6 +15,16 @@ use crate::camera::CameraPov;
 pub struct WorldGameplayEnabled(pub bool);
 
 impl Default for WorldGameplayEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+/// Sky, world player, and fog. Off on menu shells so navy clear is the preview backdrop.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorldSceneryVisible(pub bool);
+
+impl Default for WorldSceneryVisible {
 	fn default() -> Self {
 		Self(true)
 	}
@@ -90,5 +101,37 @@ pub(crate) fn echo_character_intents(
 	}
 	if !parts.is_empty() {
 		console.0 = parts.join(" ");
+	}
+}
+
+fn world_distance_fog() -> DistanceFog {
+	DistanceFog {
+		color: Color::srgba(0.55, 0.65, 0.72, 1.0),
+		directional_light_color: Color::srgba(1.0, 0.92, 0.78, 0.35),
+		directional_light_exponent: 24.0,
+		falloff: FogFalloff::Linear { start: 700.0, end: 4500.0 },
+	}
+}
+
+pub(crate) fn sync_world_scenery(
+	visible: Res<WorldSceneryVisible>,
+	mut commands: Commands,
+	mut sky: Query<&mut Visibility, (With<SkyDome>, Without<Player>)>,
+	mut players: Query<&mut Visibility, (With<Player>, Without<SkyDome>)>,
+	cameras: Query<(Entity, Has<DistanceFog>), With<Camera3d>>,
+) {
+	let visibility = if visible.0 { Visibility::Inherited } else { Visibility::Hidden };
+	for mut sky in &mut sky {
+		*sky = visibility;
+	}
+	for mut player in &mut players {
+		*player = visibility;
+	}
+	for (entity, has_fog) in &cameras {
+		if visible.0 && !has_fog {
+			commands.entity(entity).insert(world_distance_fog());
+		} else if !visible.0 && has_fog {
+			commands.entity(entity).remove::<DistanceFog>();
+		}
 	}
 }

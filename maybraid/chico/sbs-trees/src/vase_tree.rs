@@ -12,7 +12,6 @@
 //! banding on upper / outer joints, a stalk-tip apex, and a Low mid-canopy layered proxy.
 
 mod canopy;
-pub mod render_item_plugin;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{

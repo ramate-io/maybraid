@@ -17,5 +17,4 @@ cargo run -p maybraid-world-playground
 In-game: `/` console, `Y` or `F1` drawer. Character: WASD, mouse look, Space jump.
 `mode free` restores the fly camera. FPS is on-screen (toggle with `stats fps`).
 
-A/B the forest against tiled groves in
-`chico-vegetation-on-terrain-playground` (`/forest` vs `/grove`).
+Forest / grove A/B that used to live in the vegetation-on-terrain playground is retired; see [PLAYGROUNDS.md](../PLAYGROUNDS.md#retired).

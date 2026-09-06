@@ -348,20 +348,24 @@ pub fn building_scene_chunks(
 	for node in building.roof_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
-	for node in building.stair_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	for node in building.door_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
 	for node in building.joint_nodes_for_level(level).flatten() {
 		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
 	}
-	for node in building.furniture_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
-	}
-	for node in building.label_nodes_for_level(level).flatten() {
-		chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+	// Structural Medium is the exterior/readable shell. Interior fixtures are
+	// too small to contribute at this distance and dominate dense developments.
+	if matches!(level, LodSceneLevel::High) {
+		for node in building.stair_nodes_for_level(level).flatten() {
+			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+		}
+		for node in building.door_nodes_for_level(level).flatten() {
+			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+		}
+		for node in building.furniture_nodes_for_level(level).flatten() {
+			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+		}
+		for node in building.label_nodes_for_level(level).flatten() {
+			chunks.push(SceneChunk::weighted(1, node.host(lod_ref)));
+		}
 	}
 	if chunks.is_empty() {
 		SceneChunk::primitive(scene_children(Vec::new()))
@@ -392,20 +396,22 @@ pub fn append_component_scenes(
 	for node in building.roof_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
-	for node in building.stair_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.door_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
 	for node in building.joint_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.host(lod_ref)));
 	}
-	for node in building.furniture_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
-	}
-	for node in building.label_nodes_for_level(level).flatten() {
-		children.push(Box::new(node.host(lod_ref)));
+	if matches!(level, LodSceneLevel::High) {
+		for node in building.stair_nodes_for_level(level).flatten() {
+			children.push(Box::new(node.host(lod_ref)));
+		}
+		for node in building.door_nodes_for_level(level).flatten() {
+			children.push(Box::new(node.host(lod_ref)));
+		}
+		for node in building.furniture_nodes_for_level(level).flatten() {
+			children.push(Box::new(node.host(lod_ref)));
+		}
+		for node in building.label_nodes_for_level(level).flatten() {
+			children.push(Box::new(node.host(lod_ref)));
+		}
 	}
 }
 

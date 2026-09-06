@@ -2,7 +2,9 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy::scene::prelude::{bsn, template_value};
 use lod::gen::{Id, LodScene, RegionPresenter, Version};
+use lod::lod_host_scene_pending;
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -53,10 +55,20 @@ impl<'a> RegionPresenter<TerrainWithPads, PaddedStoreView<'a>> for PaddedTerrain
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
+		let min = Vec3::from(value.cell.min);
+		let max = Vec3::from(value.cell.max);
+		let transform = Transform::from_translation((min + max) * 0.5);
+		let level = value.scene_lod_level(lod_ref);
 		let entity = self
 			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedPaddedTerrainScene(id))
+			.spawn_scene((
+				lod_host_scene_pending(level, value.scene_bounds()),
+				bsn! {
+					template_value(transform)
+					Visibility::default()
+				},
+			))
+			.insert((value.clone(), PresentedPaddedTerrainScene(id)))
 			.id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}

@@ -1,7 +1,7 @@
 //! Present-layer [`LodScene`] for a grown forest grove tile ([#652](https://github.com/ramate-io/maybraid/issues/652)).
 //!
-//! `ChicoForest` stays select-only. Playground forest present registers this one
-//! host type. Typed `/show orchard` keeps the concrete grove `LodScene`.
+//! `ChicoForest` stays select-only. Forest / world present registers this one
+//! host type. Typed grove `LodScene`s stay registered on [`VegetationViewPlugin`](crate::VegetationViewPlugin) for leftover nested hosts.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;

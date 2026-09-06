@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use bevy::prelude::{
-	bsn, template_value, Commands, CommandsSceneExt, Entity, Transform, Visibility,
+	bsn, template_value, Commands, CommandsSceneExt, Component, Entity, Transform, Visibility,
 };
 use lod::gen::LodScene;
 use lod::lod_host_scene_pending;
@@ -26,6 +26,10 @@ use crate::{
 	BuiltDevelopment, LesHallesDevelopment, RingFortDevelopment, ShepherdsCommuneDevelopment,
 	ShepherdsVillageDevelopment,
 };
+
+/// Marker on spawned development host roots (cull / stats).
+#[derive(Component)]
+pub struct DevelopmentHostRoot;
 
 #[derive(Debug, Clone)]
 pub enum DevelopmentHost {

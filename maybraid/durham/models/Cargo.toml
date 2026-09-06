@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 lod = { workspace = true }
 lod-avian = { workspace = true }
+futures = { workspace = true }
 procedural-common = { workspace = true }
 sdf = { workspace = true }
 chunk = { workspace = true }
@@ -24,6 +25,7 @@ marazion-watersheds = { workspace = true }
 comproc = { workspace = true }
 noise = { workspace = true }
 log = { workspace = true }
+visual-geometry-core = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

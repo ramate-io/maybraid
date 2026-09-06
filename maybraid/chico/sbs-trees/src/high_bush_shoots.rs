@@ -4,20 +4,19 @@
 //! [`HighBushShoots`]. Sticks emit per segment (High all / Medium subsample / Low sparse);
 //! foliage follows [`HighBushFoliageStyle`] (default layered-ball; cheap-ball at High/Medium
 //! with a layered-ball Low proxy) using the Common High Bush ball-selection rule
-//! (terminals, upper canopy, or branch order > 1) — not plane-splay.
+//! (terminals, upper canopy, or branch order > 1).
 //!
 //! [`HighBushShoots::unit_from_num`] / [`HighBushShootsParams::into_unit_from_num`]
 //! normalize to unit height and key chain noise by a variant index so many plants
 //! share one archetypal mesh (world size goes on [`Placement`] scale). Emission
 //! folds sticks into a collection; cheap balls merge when that style is selected.
 //! Layered balls stay separate nodes (shared GLBs).
-//!
-//! Legacy [`chico_tree_components::HighBushShoots`] RenderItem still uses
-//! [`HighBushFoliageStyle::PlaneSplay`] / Tuft via ball-components.
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{BallStickChain, HighBushChain};
-use chico_tree_components::{should_allocate_foliage, HighBushFoliageStyle, HighBushShootsShape};
+use chico_sbs_geometry::{
+	should_allocate_foliage, BallStickChain, HighBushChain, HighBushFoliageStyle,
+	HighBushShootsShape,
+};
 use chico_vegetation_components::{
 	chico_leaf_material_ref, chico_stick_material_ref, FoliageNode, Layers, Placement, StickNode,
 	StructuralLod, VegetationComponents,
@@ -42,13 +41,7 @@ pub struct HighBushShootsParams {
 
 impl Default for HighBushShootsParams {
 	fn default() -> Self {
-		Self {
-			shape: HighBushShootsShape {
-				// VC path prefers layered-ball terminals; RenderItem keeps PlaneSplay default.
-				foliage_style: HighBushFoliageStyle::LayeredBall,
-				..HighBushShootsShape::default()
-			},
-		}
+		Self { shape: HighBushShootsShape::default() }
 	}
 }
 

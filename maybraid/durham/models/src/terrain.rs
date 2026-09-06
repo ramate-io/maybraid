@@ -4,6 +4,7 @@ pub mod base_noise;
 pub mod cell;
 pub mod collider;
 pub mod config;
+pub mod host;
 pub mod index;
 pub mod jersey;
 pub mod jersey_modulation;
@@ -12,6 +13,7 @@ pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod stream;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::jersey::{
@@ -28,14 +30,17 @@ use crate::terrain::marazion::{
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
-use avian3d::prelude::RigidBody;
+use crate::water::Water;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
+use lod::gen::{
+	cull_non_adjacent_bands, GeneratingSpatialIndex, GenerationScheme, Id, LodScene, LodSceneCulls,
+	LodSceneLevel, LodSceneStatus, OriginalId,
+};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
@@ -44,12 +49,24 @@ use std::sync::Arc;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
-	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, TerrainCellRing,
+	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
-pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
+pub use collider::{
+	TerrainColliderHost, TerrainColliderMeshSource, TerrainFrictionConfig, TerrainTrimeshCollider,
+	TERRAIN_FRICTION,
+};
 pub use config::TerrainConfig;
-pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
+pub use host::{
+	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentationDirty,
+	TerrainStreamingEnabled, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	WORLD_TERRAIN_BACKGROUND_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M, WORLD_TERRAIN_NEAR_RADIUS_M,
+	WORLD_TERRAIN_PRESENT_STEP_M, WORLD_TERRAIN_STREAM_EDGE_M,
+};
+pub use index::{
+	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainGenerationInput,
+	TerrainGenerationResult, TerrainHeightSnapshot,
+};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
@@ -84,13 +101,16 @@ pub use marazion::{
 	MarazionPocketWatersLowPass as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
 	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
-pub use plugin::{register_terrain_plugin, TerrainPlugin};
+pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter,
-	TerrainStoreView,
+	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
+	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
+	TerrainStreamMarker, TerrainStreamPresenterState, TerrainStreamRegionPresenter,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use stream::{TerrainLodCell, TerrainLodIndex, TerrainLodPlugin, TerrainLodPresenter};
 
 /// CpuShot wrapper stored on [`Terrain`] and used by Durham fill + overlay presenters.
 pub type TerrainMeshBuilder = CpuShotBuilder<Arc<ComposedTerrain>>;
@@ -139,6 +159,10 @@ pub struct Terrain {
 	pub sdf: Arc<ComposedTerrain>,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
+	/// Moving presentation band for streamed near / far / background terrain.
+	pub stream_ring: Option<TerrainCellRing>,
+	/// Optional water content presented in the same streamed LOD root.
+	pub(crate) presented_water: Option<Water>,
 	/// Per-face CpuShot edge height walls (LOD seam skirts).
 	pub wall_faces: WallFaces,
 }
@@ -171,23 +195,110 @@ impl Terrain {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
+			TerrainColliderMeshSource
 		}
+	}
+
+	fn center(&self) -> Vec3 {
+		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
+	}
+
+	fn edge(&self) -> f32 {
+		let size = Vec3::from(self.cell.max) - Vec3::from(self.cell.min);
+		size.x.max(size.z).max(1e-3)
+	}
+
+	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		if let Some(ring) = self.stream_ring {
+			return ring.level_for(self.center(), viewer.translation);
+		}
+		let delta = viewer.translation - self.center();
+		let factor = Vec2::new(delta.x, delta.z).length() / self.edge();
+		if factor <= 3.0 {
+			LodSceneLevel::High
+		} else if factor <= 7.0 {
+			LodSceneLevel::Medium
+		} else if factor <= 14.0 {
+			LodSceneLevel::Low
+		} else {
+			LodSceneLevel::UltraLow
+		}
+	}
+
+	fn res_2_for_level(&self, level: LodSceneLevel) -> u8 {
+		if self.stream_ring.is_some() {
+			return self.res_2;
+		}
+		let size_multiple = (self.edge() / cell::TERRAIN_CELL_SIZE).max(1.0).log2().round() as u8;
+		let high = 5_u8.saturating_sub(size_multiple).max(3);
+		match level {
+			LodSceneLevel::High => high,
+			LodSceneLevel::Medium => high.saturating_sub(2).max(2),
+			LodSceneLevel::Low => high.saturating_sub(3).max(1),
+			LodSceneLevel::UltraLow => 1,
+			LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => self.res_2,
+		}
+	}
+
+	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if self.stream_ring.is_some() && level != LodSceneLevel::High {
+			return Box::new(());
+		}
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2_for_level(level));
+		let transform = Transform::from_translation(chunk.origin - self.center());
+		let builder = self.mesh_builder();
+		let material = self.material.clone();
+		let seeds_collision = level == LodSceneLevel::High
+			&& self.stream_ring.is_none_or(|ring| ring.high_inner_radius <= 0.0);
+		let terrain_scene: Box<dyn Scene> = if seeds_collision {
+			Box::new(bsn! {
+				template_value(transform)
+				template_value(chunk)
+				template(move |_ctx| Ok(Cached::new(builder.clone())))
+				MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+				TerrainColliderMeshSource
+			})
+		} else {
+			Box::new(bsn! {
+				template_value(transform)
+				template_value(chunk)
+				template(move |_ctx| Ok(Cached::new(builder.clone())))
+				MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+			})
+		};
+		let Some(water) = self.presented_water.as_ref() else {
+			return terrain_scene;
+		};
+		Box::new((terrain_scene, water.scene_relative_to(self.center())))
 	}
 }
 
 impl LodScene for Terrain {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for(lod_ref.current_transform)
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.scene()
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let previous = self.level_for(lod_ref.previous_transform);
+		let current = self.level_for(lod_ref.current_transform);
+		if previous == current {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(current)
+		}
+	}
+
+	fn scene_lod_culls(&self, _lod_ref: &LodRef, current: LodSceneLevel) -> LodSceneCulls {
+		cull_non_adjacent_bands(current)
+	}
+
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.level_scene(level)
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		let center = self.center();
+		Aabb3d::from_min_max(Vec3::from(self.cell.min) - center, Vec3::from(self.cell.max) - center)
 	}
 }
 
@@ -505,7 +616,15 @@ where
 			lod_ref,
 		)?;
 		let material = assets.material.clone();
-		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let (fallback_res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
+		let layout = GeneratingSpatialIndex::<TerrainCellLayout>::get_one_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
+		let cell_size = Vec3::from(bounds.max - bounds.min).x;
+		let stream_ring = layout.stream_ring_for_cell_size(cell_size);
+		let res_2 = stream_ring.map(|ring| ring.res_2).unwrap_or(fallback_res_2);
 
 		Some((
 			Self {
@@ -518,6 +637,8 @@ where
 				sdf,
 				material,
 				res_2,
+				stream_ring,
+				presented_water: None,
 				wall_faces,
 			},
 			bounds,

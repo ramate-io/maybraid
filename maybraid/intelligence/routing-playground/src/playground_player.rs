@@ -231,9 +231,7 @@ pub(crate) fn snap_player_to_composed_surface(
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,
-	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
-	children: Query<&Children>,
-	colliders: Query<(), With<Collider>>,
+	terrain_colliders: Query<(), (With<TerrainTrimeshCollider>, With<Collider>)>,
 ) {
 	let Ok((mut transform, mut velocity, mut gravity)) = players.single_mut() else {
 		return;
@@ -252,7 +250,7 @@ pub(crate) fn snap_player_to_composed_surface(
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(&terrain_roots, &children, &colliders) {
+	if terrain_collider_ready(&terrain_colliders) {
 		gravity.0 = PLAY_GRAVITY_SCALE;
 		if let Ok(entity) = awaiting.single() {
 			commands.entity(entity).remove::<AwaitingTerrainSurface>();
@@ -264,13 +262,9 @@ pub(crate) fn snap_player_to_composed_surface(
 }
 
 pub(crate) fn terrain_collider_ready(
-	roots: &Query<Entity, With<TerrainTrimeshCollider>>,
-	children: &Query<&Children>,
-	colliders: &Query<(), With<Collider>>,
+	colliders: &Query<(), (With<TerrainTrimeshCollider>, With<Collider>)>,
 ) -> bool {
-	roots
-		.iter()
-		.any(|root| children.iter_descendants(root).any(|child| colliders.contains(child)))
+	!colliders.is_empty()
 }
 
 /// Reposition the player after terrain layout regeneration.

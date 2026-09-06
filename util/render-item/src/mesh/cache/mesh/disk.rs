@@ -104,10 +104,18 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 			.join(self.value_filename_for_cascade_chunk_mesh(identified_mesh, cascade_chunk))
 	}
 
-	pub fn save_mesh(&self, identified_mesh: &T, mesh: &Mesh, cascade_chunk: &CascadeChunk) {
-		// write the mesh to the cache
+	/// Save inline on an I/O worker. Callers own the concurrency bound.
+	pub(crate) fn save_mesh_blocking(
+		&self,
+		identified_mesh: &T,
+		mesh: &Mesh,
+		cascade_chunk: &CascadeChunk,
+	) {
 		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
+		self.write_mesh(cache_path, mesh.clone());
+	}
 
+	fn write_mesh(&self, cache_path: PathBuf, mesh: Mesh) {
 		if let Some(parent) = cache_path.parent() {
 			if let Err(err) = fs::create_dir_all(parent) {
 				log::warn!("Failed to create mesh cache directory {:?}: {}", parent, err);
@@ -115,7 +123,7 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 			}
 		}
 
-		let serialized = SerializedMesh::from_mesh(mesh.clone());
+		let serialized = SerializedMesh::from_mesh(mesh);
 
 		let raw = match bincode::serialize(&serialized) {
 			Ok(bytes) => bytes,
@@ -126,28 +134,15 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 
 		if let Err(err) = fs::write(&cache_path, compressed) {
 			log::warn!("Failed to write mesh cache {:?}: {}", cache_path, err);
+			return;
 		}
-
-		// write the value to the cache
-		let value = self.value_string_for_cascade_chunk(identified_mesh, cascade_chunk);
-		let cache_path = self.path_for_cascade_chunk_value(identified_mesh, cascade_chunk);
-
-		if let Err(err) = fs::write(&cache_path, value) {
-			log::warn!("Failed to write value cache {:?}: {}", cache_path, err);
-		}
+		self.evict_oldest_cached_meshes();
 	}
 
 	pub fn load_mesh(&self, identified_mesh: &T, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
-		// check if the value matches the expected value, this is a Hash + Eq implementation for the CascadeChunk
-		let expected_value = self.value_string_for_cascade_chunk(identified_mesh, cascade_chunk);
-		let actual_value =
-			fs::read_to_string(self.path_for_cascade_chunk_value(identified_mesh, cascade_chunk))
-				.ok()?;
-		if expected_value != actual_value {
-			return None;
-		}
-
-		// load the mesh from the cache
+		// The mesh path hashes both the mesh id and normalized chunk. A second
+		// companion-file read only guarded against a 64-bit hash collision while
+		// adding synchronous I/O to every first handle miss.
 		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
 
 		let compressed = fs::read(cache_path).ok()?;
@@ -158,7 +153,8 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 	}
 
 	pub fn evict_oldest_cached_meshes(&self) {
-		let cache_root = self.cache_dir.join(std::any::type_name::<T>());
+		let cache_root =
+			self.cache_dir.join(env!("CARGO_PKG_VERSION")).join(std::any::type_name::<T>());
 		let entries = match fs::read_dir(&cache_root) {
 			Ok(e) => e,
 			Err(_) => return,

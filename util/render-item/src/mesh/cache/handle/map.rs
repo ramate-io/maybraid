@@ -59,8 +59,13 @@ impl<T: IdentifiedMesh> HandleMap<T> {
 	}
 
 	pub fn get(&self, chunk: &CascadeChunk, mesh_builder: &T) -> Option<Handle<Mesh>> {
+		self.get_by_id(chunk, mesh_builder.id())
+	}
+
+	/// Look up a mesh whose identity has already been computed by the caller.
+	pub fn get_by_id(&self, chunk: &CascadeChunk, mesh_id: MeshId) -> Option<Handle<Mesh>> {
 		let cache = self.cache.read().unwrap();
-		cache.get(&ChunkMeshKey::new(chunk.clone(), mesh_builder.id())).cloned()
+		cache.get(&ChunkMeshKey::new(chunk.clone(), mesh_id)).cloned()
 	}
 
 	pub fn insert(&self, chunk: &CascadeChunk, mesh_builder: &T, mesh: Handle<Mesh>) {

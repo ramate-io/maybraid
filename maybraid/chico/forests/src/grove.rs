@@ -1,6 +1,6 @@
 //! Generated 100 m grove on one forest layer.
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::Vec3;
@@ -15,16 +15,17 @@ pub struct ChicoGrove {
 	pub extent: GroveExtent,
 	pub layer: ForestLayer,
 	pub recipes: Vec<ForestGroveRecipe>,
-	grown: OnceLock<Vec<ForestGroveTile>>,
+	grown: Arc<OnceLock<Vec<ForestGroveTile>>>,
 }
 
 impl Clone for ChicoGrove {
 	fn clone(&self) -> Self {
-		let grown = OnceLock::new();
-		if let Some(tiles) = self.grown.get() {
-			let _ = grown.set(tiles.clone());
+		Self {
+			extent: self.extent,
+			layer: self.layer,
+			recipes: self.recipes.clone(),
+			grown: Arc::clone(&self.grown),
 		}
-		Self { extent: self.extent, layer: self.layer, recipes: self.recipes.clone(), grown }
 	}
 }
 
@@ -34,7 +35,7 @@ impl ChicoGrove {
 		layer: ForestLayer,
 		recipes: Vec<ForestGroveRecipe>,
 	) -> Self {
-		Self { extent, layer, recipes, grown: OnceLock::new() }
+		Self { extent, layer, recipes, grown: Arc::new(OnceLock::new()) }
 	}
 
 	pub fn id(&self) -> Id {

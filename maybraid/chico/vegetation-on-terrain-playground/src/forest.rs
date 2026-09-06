@@ -1,90 +1,79 @@
-//! Durham-height forest stream. Reuses generate / present / cull; grows on
-//! [`DurhamGroveSample`] so tiles sit on real ground.
-
-use std::collections::HashSet;
+//! Durham-height forest stream. Grows on [`TerrainGroveSample`] so tiles sit on real ground.
+//!
+//! Present is get-only: skip grow when the overlapping Durham cell is not in
+//! [`TerrainEntryStore`]. Do not `get_or_generate` [`TerrainLodCell`]s from here
+//! ([#720](https://github.com/ramate-io/maybraid/issues/720) / [#719](https://github.com/ramate-io/maybraid/issues/719) §2).
 
 use bevy::ecs::system::SystemParam;
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use chico_forests::{ChicoGrove, ForestIndex};
-use chico_sbs_trees_playground::forest_stream::{
-	ForestPresenterState, ForestStreamLod, FOREST_CAMERA_SPEED,
-};
-use lod::gen::{Id, Version};
+use chico_forests::TerrainHeightSource;
+use chico_groves::TerrainGroveSample;
+use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore, TerrainStoreView};
 use lod::lod_ref::LodRef;
-use lod::presentation::RegionPresenter;
 
-use crate::camera::CameraController;
-use crate::groves::DurhamGroveSample;
-use crate::{PlaygroundConfig, WorldBaseTerrain};
-use durham_terrain_models::{TerrainCellLayout, TerrainEntryStore};
+use crate::bump_out::{
+	terrain_chunk_ref, terrain_for_cell_size, TerrainMeshSource, WorldTerrainBuilder,
+};
+use crate::groves::OwnedDurhamTerrain;
+use crate::WorldBaseTerrain;
+use terrain_chunk_ref::TerrainChunkRef;
 
-const PATCH_CAMERA_SPEED: f32 = 40.0;
-
-/// Present forest groves grown against the live Durham height field.
+/// Snapshot composed height when the overlapping Durham cell is already stored.
 #[derive(SystemParam)]
-pub struct DurhamForestPresenter<'w, 's> {
-	commands: Commands<'w, 's>,
-	state: ResMut<'w, ForestPresenterState>,
+pub struct DurhamHeight<'w> {
 	store: Res<'w, TerrainEntryStore>,
 	layout: Res<'w, TerrainCellLayout>,
 	base: Res<'w, WorldBaseTerrain>,
 }
 
-impl RegionPresenter<ChicoGrove, ForestIndex> for DurhamForestPresenter<'_, '_> {
-	fn presented_version(&self, id: Id) -> Option<Version> {
-		self.state.presented_version(id)
-	}
+/// Whether [`TerrainEntryStore`] already has composed height at the center of `bounds`.
+pub fn durham_store_ready_for(
+	store: &TerrainEntryStore,
+	layout: &TerrainCellLayout,
+	bounds: Aabb3d,
+) -> bool {
+	let center = (Vec3::from(bounds.min) + Vec3::from(bounds.max)) * 0.5;
+	store.composed_height_at(layout, center.x, center.z).is_some()
+}
 
-	fn handle(&mut self, id: Id, version: Version, grove: &ChicoGrove, lod_ref: &LodRef) {
-		let world = DurhamGroveSample::new(&self.store, &self.layout, &self.base.0);
-		self.state
-			.present_with_world(&mut self.commands, id, version, grove, lod_ref, &world);
-	}
-
-	fn hide(&mut self, id: Id) {
-		self.state.hide(&mut self.commands, id);
-	}
-
-	fn is_hidden(&self, id: Id) -> bool {
-		self.state.is_hidden(id)
-	}
-
-	fn presented_ids(&self) -> Vec<Id> {
-		self.state.presented_ids()
-	}
-
-	fn remove_stale(&mut self, wanted: &HashSet<Id>) {
-		self.state.remove_stale(&mut self.commands, wanted);
-	}
-
-	fn cull(
+impl TerrainHeightSource for DurhamHeight<'_> {
+	fn ensure_and_sample(
 		&mut self,
-		spatial_index: &ForestIndex,
-		keep: &HashSet<Id>,
-		despawn_budget: u32,
-	) -> u32 {
-		self.state.cull(&mut self.commands, spatial_index, keep, despawn_budget)
+		bounds: Aabb3d,
+		_lod_ref: &LodRef,
+	) -> Option<impl chico_groves::GroveWorldSample + Clone + Send + Sync + 'static> {
+		if !durham_store_ready_for(&self.store, &self.layout, bounds) {
+			return None;
+		}
+		Some(TerrainGroveSample::new(OwnedDurhamTerrain::new(
+			self.store.height_snapshot(),
+			self.layout.clone(),
+			self.base.0.clone(),
+		)))
 	}
 }
 
-/// Enable the forest bullseyes when [`PlaygroundConfig::forest`] is set.
-pub fn stream_durham_forest(
-	mut commands: Commands,
-	config: Res<PlaygroundConfig>,
-	camera: Query<&Transform, With<Camera3d>>,
-	mut controller: Query<&mut CameraController, With<Camera3d>>,
-	mut lod: ForestStreamLod,
-	mut last_key: Local<Option<String>>,
-	mut forest_camera: Local<bool>,
-) {
-	let spec = config.forest.as_ref();
-	if spec.is_some() != *forest_camera {
-		if let Ok(mut ctrl) = controller.single_mut() {
-			ctrl.speed = if spec.is_some() { FOREST_CAMERA_SPEED } else { PATCH_CAMERA_SPEED };
-		}
-		*forest_camera = spec.is_some();
+impl TerrainMeshSource for DurhamHeight<'_> {
+	fn mesh_for(
+		&self,
+		bounds: Aabb3d,
+		cell_size: f32,
+	) -> Option<TerrainChunkRef<WorldTerrainBuilder>> {
+		let view = TerrainStoreView::new(&self.store, &self.layout);
+		terrain_for_cell_size(&view, bounds, cell_size).map(terrain_chunk_ref)
 	}
+}
 
-	let cam = camera.single().ok().map(|t| t.translation);
-	lod.apply_spec(&mut commands, spec, cam, &mut last_key);
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn get_only_skips_when_store_has_no_cell() {
+		let store = TerrainEntryStore::default();
+		let layout = TerrainCellLayout::default();
+		let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(100.0, 1.0, 100.0));
+		assert!(!durham_store_ready_for(&store, &layout, bounds));
+	}
 }

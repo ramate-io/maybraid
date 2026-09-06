@@ -28,27 +28,32 @@ pub struct TerrainChunkKey {
 /// [`render_item::sdf::cpu_shot::CpuShotBuilder`] already includes wall-face options in that id.
 #[derive(Component, Debug, Clone)]
 pub struct TerrainChunkRef<T> {
-	pub terrain_model: T,
-	pub chunk: Chunk,
-	pub res_2: u8,
+	terrain_model: T,
+	chunk: Chunk,
+	res_2: u8,
+	key: TerrainChunkKey,
 }
 
 impl<T> TerrainChunkRef<T> {
-	pub fn new(terrain_model: T, chunk: Chunk, res_2: u8) -> Self {
-		Self { terrain_model, chunk, res_2 }
+	pub fn chunk(&self) -> &Chunk {
+		&self.chunk
 	}
 
 	/// Convert the engine-neutral footprint into the existing CPU-shot request type.
 	pub fn cascade_chunk(&self) -> CascadeChunk {
-		let origin = self.chunk.bounds_min();
-		let extent = self.chunk.extent();
+		Self::cascade_chunk_for(&self.chunk, self.res_2)
+	}
+
+	fn cascade_chunk_for(chunk: &Chunk, res_2: u8) -> CascadeChunk {
+		let origin = chunk.bounds_min();
+		let extent = chunk.extent();
 		CascadeChunk {
 			world: 0,
 			origin,
 			size: extent.max_element(),
 			extent: Some(extent),
-			res_2: self.res_2,
-			omit: self.chunk.omit(),
+			res_2,
+			omit: chunk.omit(),
 		}
 	}
 
@@ -62,9 +67,15 @@ impl<T> TerrainChunkRef<T>
 where
 	T: IdentifiedMesh + NormalizeChunk,
 {
-	pub fn key(&self) -> TerrainChunkKey {
-		let chunk = self.terrain_model.normalize_chunk(&self.cascade_chunk());
-		TerrainChunkKey { mesh_id: self.terrain_model.id(), chunk }
+	pub fn new(terrain_model: T, chunk: Chunk, res_2: u8) -> Self {
+		let cascade_chunk = Self::cascade_chunk_for(&chunk, res_2);
+		let normalized = terrain_model.normalize_chunk(&cascade_chunk);
+		let key = TerrainChunkKey { mesh_id: terrain_model.id(), chunk: normalized };
+		Self { terrain_model, chunk, res_2, key }
+	}
+
+	pub fn key(&self) -> &TerrainChunkKey {
+		&self.key
 	}
 }
 
@@ -128,8 +139,7 @@ where
 	}
 
 	pub fn cached_handle(&self, terrain_ref: &TerrainChunkRef<T>) -> Option<Handle<Mesh>> {
-		let chunk = terrain_ref.terrain_model.normalize_chunk(&terrain_ref.cascade_chunk());
-		self.handles.get(&chunk, &terrain_ref.terrain_model)
+		self.handles.get_by_id(&terrain_ref.key.chunk, terrain_ref.key.mesh_id.clone())
 	}
 }
 
@@ -162,13 +172,18 @@ type TerrainChunkRefQueryItem<'a, T> = (
 	Option<&'a TerrainChunkRefEmpty>,
 	Option<&'a Mesh3d>,
 );
+type TerrainChunkRefQueryFilter<T> = Or<(
+	Changed<TerrainChunkRef<T>>,
+	(Without<TerrainChunkRefResolved>, Without<TerrainChunkRefEmpty>),
+	(With<TerrainChunkRefResolved>, Without<Mesh3d>),
+)>;
 
 pub fn fulfill_terrain_chunk_refs<T>(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	cache: Res<TerrainChunkRefCache<T>>,
 	budget: Res<TerrainChunkRefBudget>,
-	query: Query<TerrainChunkRefQueryItem<T>>,
+	query: Query<TerrainChunkRefQueryItem<T>, TerrainChunkRefQueryFilter<T>>,
 ) where
 	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
 {
@@ -176,10 +191,10 @@ pub fn fulfill_terrain_chunk_refs<T>(
 
 	for (entity, terrain_ref, resolved, empty, mesh) in &query {
 		let key = terrain_ref.key();
-		if mesh.is_some() && resolved.is_some_and(|resolved| resolved.0 == key) {
+		if mesh.is_some() && resolved.is_some_and(|resolved| &resolved.0 == key) {
 			continue;
 		}
-		if empty.is_some_and(|empty| empty.0 == key) {
+		if empty.is_some_and(|empty| &empty.0 == key) {
 			continue;
 		}
 
@@ -187,7 +202,7 @@ pub fn fulfill_terrain_chunk_refs<T>(
 			commands
 				.entity(entity)
 				.remove::<TerrainChunkRefEmpty>()
-				.insert((Mesh3d(handle), TerrainChunkRefResolved(key)));
+				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
 			continue;
 		}
 		if !cache.build_on_miss || remaining == 0 {
@@ -202,12 +217,12 @@ pub fn fulfill_terrain_chunk_refs<T>(
 			commands
 				.entity(entity)
 				.remove::<TerrainChunkRefEmpty>()
-				.insert((Mesh3d(handle), TerrainChunkRefResolved(key)));
+				.insert((Mesh3d(handle), TerrainChunkRefResolved(key.clone())));
 		} else {
 			commands
 				.entity(entity)
 				.remove::<(Mesh3d, TerrainChunkRefResolved)>()
-				.insert(TerrainChunkRefEmpty(key));
+				.insert(TerrainChunkRefEmpty(key.clone()));
 		}
 	}
 }
@@ -245,12 +260,14 @@ mod tests {
 	#[derive(Clone)]
 	struct CountingTerrain {
 		builds: Arc<AtomicUsize>,
+		ids: Arc<AtomicUsize>,
 	}
 
 	impl NormalizeChunk for CountingTerrain {}
 
 	impl IdentifiedMesh for CountingTerrain {
 		fn id(&self) -> MeshId {
+			self.ids.fetch_add(1, Ordering::Relaxed);
 			MeshId::new("counting-terrain".into())
 		}
 	}
@@ -265,7 +282,8 @@ mod tests {
 	#[test]
 	fn matching_refs_build_once_and_share_handle() -> anyhow::Result<()> {
 		let builds = Arc::new(AtomicUsize::new(0));
-		let model = CountingTerrain { builds: builds.clone() };
+		let ids = Arc::new(AtomicUsize::new(0));
+		let model = CountingTerrain { builds: builds.clone(), ids: ids.clone() };
 		let terrain_ref = TerrainChunkRef::new(model, Chunk::cube(Vec3::splat(-1.0), 2.0, None), 4);
 
 		let mut app = App::new();
@@ -288,12 +306,18 @@ mod tests {
 
 		assert_eq!(builds.load(Ordering::Relaxed), 1);
 		assert_eq!(a_mesh.0, b_mesh.0);
+		let ids_after_fulfill = ids.load(Ordering::Relaxed);
+		app.update();
+		assert_eq!(ids.load(Ordering::Relaxed), ids_after_fulfill);
 		Ok(())
 	}
 
 	#[test]
 	fn resolution_changes_mesh_identity() {
-		let model = CountingTerrain { builds: Arc::new(AtomicUsize::new(0)) };
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
 		let chunk = Chunk::cube(Vec3::splat(-1.0), 2.0, None);
 		let low = TerrainChunkRef::new(model.clone(), chunk, 3);
 		let high = TerrainChunkRef::new(model, chunk, 5);
@@ -346,7 +370,10 @@ mod tests {
 		let handles = HandleMap::<CountingTerrain>::new();
 		let cache = TerrainChunkRefCache::<CountingTerrain>::new().with_handles(handles.clone());
 		let a = cache.handles();
-		let model = CountingTerrain { builds: Arc::new(AtomicUsize::new(0)) };
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
 		let chunk = CascadeChunk {
 			world: 0,
 			origin: Vec3::ZERO,
@@ -361,9 +388,12 @@ mod tests {
 	}
 
 	#[test]
-	fn cache_only_fulfill_waits_for_an_injected_handle() {
+	fn cache_only_fulfill_waits_for_an_injected_handle() -> anyhow::Result<()> {
 		let handles = HandleMap::<CountingTerrain>::new();
-		let model = CountingTerrain { builds: Arc::new(AtomicUsize::new(0)) };
+		let model = CountingTerrain {
+			builds: Arc::new(AtomicUsize::new(0)),
+			ids: Arc::new(AtomicUsize::new(0)),
+		};
 		let chunk = Chunk::cube(Vec3::splat(-1.0), 2.0, None);
 		let terrain_ref = TerrainChunkRef::new(model.clone(), chunk, 2);
 		let cascade = terrain_ref.cascade_chunk();
@@ -385,8 +415,12 @@ mod tests {
 		let mesh = Handle::default();
 		handles.insert(&cascade, &model, mesh.clone());
 		app.update();
-		let resolved = app.world().get::<Mesh3d>(entity).expect("copied fill handle");
+		let resolved = app
+			.world()
+			.get::<Mesh3d>(entity)
+			.ok_or_else(|| anyhow::anyhow!("fill handle was not copied"))?;
 		assert_eq!(resolved.0, mesh);
 		assert_eq!(model.builds.load(Ordering::Relaxed), 0);
+		Ok(())
 	}
 }

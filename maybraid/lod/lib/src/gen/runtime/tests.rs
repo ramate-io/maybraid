@@ -249,3 +249,56 @@ fn drain_generate_zero_slack_expires_tile_cross() -> Result<()> {
 	.is_none());
 	Ok(())
 }
+
+#[test]
+fn produce_arms_keep_without_a_region_impulse_on_spawn() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(LodGenerateRegionPlugin::<Bullseye, (), GenChan>::default());
+	app.world_mut()
+		.spawn((LodNode, LodNodePose::default(), Transform::from_xyz(10.0, 10.0, 10.0)));
+	let mut cursor = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>().get_cursor();
+
+	app.update();
+	{
+		let keep = app.world().resource::<LodGenerateKeepRegion<GenChan>>();
+		let region = keep.region.ok_or_else(|| anyhow::anyhow!("keep armed"))?;
+		assert_eq!(region.min.x, -225.0);
+		assert_eq!(region.max.x, 275.0);
+		let messages = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>();
+		assert_eq!(cursor.read(messages).count(), 0);
+	}
+
+	app.update();
+	{
+		let messages = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>();
+		assert_eq!(cursor.read(messages).count(), 0, "still frames stay silent");
+	}
+	Ok(())
+}
+
+#[test]
+fn produce_emits_entered_strips_on_inner_cell_cross() -> Result<()> {
+	let mut app = App::new();
+	app.add_plugins(MinimalPlugins)
+		.add_plugins(LodGenerateRegionPlugin::<Bullseye, (), GenChan>::default());
+	let viewer = app
+		.world_mut()
+		.spawn((LodNode, LodNodePose::default(), Transform::from_xyz(10.0, 10.0, 10.0)))
+		.id();
+	let mut cursor = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>().get_cursor();
+	app.update();
+	{
+		let messages = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>();
+		assert_eq!(cursor.read(messages).count(), 0);
+	}
+
+	*app.world_mut().entity_mut(viewer).get_mut::<Transform>().expect("transform") =
+		Transform::from_xyz(60.0, 10.0, 10.0);
+	app.update();
+	{
+		let messages = app.world().resource::<Messages<LodGenerateRegion<GenChan>>>();
+		assert!(cursor.read(messages).count() > 0, "tile-cross emits entered strips");
+	}
+	Ok(())
+}

@@ -16,6 +16,7 @@ serde = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
 rayon = { workspace = true }
+futures = { workspace = true }
 lz4_flex = { workspace = true }
 bincode = { workspace = true }
 
@@ -24,6 +25,7 @@ bevy = { workspace = true, features = ["serialize"] }
 
 sdf = { workspace = true }
 chunk = { workspace = true }
+lod-first-load = { workspace = true }
 
 [lints]
 workspace = true

@@ -6,7 +6,7 @@ Comfortable unique visible meshes: a few hundred. `tree_variants` / `patch_varia
 
 Woody `LodScene` / `VegetationComponents` go through [`WoodyGroveLod`](src/grove/woody_lod.rs). Keep HIGH / MEDIUM / LOW and the policy constructor on the grove (`ordinary` / `keep_low_plants` / `skip_ultralow_bins` / `rory_trunk`). The shared impl is mechanical only. Tuft groves keep authored High/Medium/Low/UltraLow on `VegetationComponents` and take [`impl_tuft_grove_lod!`](src/grove/tuft_lod.rs) so they register as themselves (flattened lazy kits, not nested collection hosts).
 
-File shape: `foo.rs` is the open grove — `definition()`, Cell / Item, palettes, `distribution()`, band constants, and `WOODY_LOD`. Declare file submodules at the top (`pub mod variants;`, `mod vc;`). Clap / build / grow live in [`foo/vc.rs`](src/orchard/vc.rs); render checks in [`foo/vc/tests.rs`](src/orchard/vc/tests.rs); RFC selection tests in [`foo/tests.rs`](src/orchard/tests.rs). Never `mod.rs`. Crate root re-exports **`Foo` + `FooParams` only** (plus [`OasisDatePalm`](src/strange_oasis.rs) for the playground host). Cell / item types stay on the grove module (`chico_groves::orchard::OrchardCell`).
+File shape: `foo.rs` is the open grove — `definition()`, Cell / Item, palettes, `distribution()`, band constants, and `WOODY_LOD`. Declare file submodules at the top (`pub mod variants;`, `mod vc;`). Clap / build / grow live in [`foo/vc.rs`](src/orchard/vc.rs); render checks in [`foo/vc/tests.rs`](src/orchard/vc/tests.rs); RFC selection tests in [`foo/tests.rs`](src/orchard/tests.rs). Never `mod.rs`. Crate root re-exports **`Foo` + `FooParams` only** (plus [`OasisDatePalm`](src/strange_oasis.rs) for the forest / world host). Cell / item types stay on the grove module (`chico_groves::orchard::OrchardCell`).
 
 ## Plant type first
 
@@ -17,7 +17,7 @@ If the tree or tuft still emits one node per stick/ball and has no `into_unit_fr
 1. Add `tree_variants: u32` (woody) or `patch_variants: u32` (tuft) on params, default `100`.
 2. At grow, map placement → archetype with [`patch_variant_index`](src/grove/vc_tuft.rs) (stable hash of world XZ).
 3. Key construction noise with [`variant_noise`](src/grove/vc_tuft.rs) so the same index rebuilds identically.
-4. Call [`QuantizedPlant::grow_num`](../sbs-trees/src/quantized.rs) (or `params.into_unit_from_num` only when building a wrapper’s `build_unit`). Keep **palette / leaf / frond color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Fronds resolve through [`frond_material_from_palette`](src/grove/vc_compose.rs) → [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (sway, no leaf cheese). Preset silhouettes instance the default unit (`HonuBanyan::grow_num`, `BraidOakTree::grow_num`, …) and put sampled cell height on `Placement` only — do not remix grove SBS projection, descenders, or leaf balls onto those meshes. Ordinary Storybook (and similar) that remix height + span implement `QuantizedPlant` on a **wrapper type** (`type Unit = StorybookTree`) so they do not share `StorybookTree`’s `(num)` slot, then nest `Arc<StorybookTree>` / `Arc<DatePalm>` so playground hosts stay on the base type ([Orchard](src/orchard.rs), [Date Grove](src/date_grove.rs)). One wrapper **per authored silhouette const**, not per Kind — two Waialea or two torches must not share a `(wrapper, num)` slot; match the cell enum (see [Palm Shade](src/palm_shade.rs), [High Bush](src/high_bush.rs)). Geometry-only remixes use [`remixed_sbs_plant!`](src/grove/quantized.rs) / [`remixed_bush_plant!`](src/grove/quantized.rs); extra sample fields (conifer splay/apex, thicket palm crowns, oasis trunk+crown) stay as a handwritten `build_unit`. `build_unit` bakes default grove noise, not CLI-overridden `grove_noise`.
+4. Call [`QuantizedPlant::grow_num`](../sbs-trees/src/quantized.rs) (or `params.into_unit_from_num` only when building a wrapper’s `build_unit`). Keep **palette / leaf / frond color** on placement-keyed noise, not on the variant — color is an instance material, not a mesh key. Fronds resolve through [`frond_material_from_palette`](src/grove/vc_compose.rs) → [`ChicoFrondMaterial`](../shaders/src/chico_frond_material.wgsl) (sway, no leaf cheese). Preset silhouettes instance the default unit (`HonuBanyan::grow_num`, `BraidOakTree::grow_num`, …) and put sampled cell height on `Placement` only — do not remix grove SBS projection, descenders, or leaf balls onto those meshes. Ordinary Storybook (and similar) that remix height + span implement `QuantizedPlant` on a **wrapper type** (`type Unit = StorybookTree`) so they do not share `StorybookTree`’s `(num)` slot, then nest `Arc<StorybookTree>` / `Arc<DatePalm>` so forest / world hosts stay on the base type ([Orchard](src/orchard.rs), [Date Grove](src/date_grove.rs)). One wrapper **per authored silhouette const**, not per Kind — two Waialea or two torches must not share a `(wrapper, num)` slot; match the cell enum (see [Palm Shade](src/palm_shade.rs), [High Bush](src/high_bush.rs)). Geometry-only remixes use [`remixed_sbs_plant!`](src/grove/quantized.rs) / [`remixed_bush_plant!`](src/grove/quantized.rs); extra sample fields (conifer splay/apex, thicket palm crowns, oasis trunk+crown) stay as a handwritten `build_unit`. `build_unit` bakes default grove noise, not CLI-overridden `grove_noise`.
 5. Put world size on [`Placement`](../vegetation-components/src/placed.rs):
 
    `Placement::new(position, 0.0).with_scale(Vec3::splat((placed.scale * world_size).max(1e-4)))`
@@ -48,15 +48,15 @@ Woody High and Medium both nest plant hosts; Low swaps the tile to canopy proxie
 
 [Jungle](src/jungle_massives.rs) / [Temperate](src/temperate_massives.rs) / [Conifer Massives](src/conifer_massives.rs) are tall. Alpine / trade winds / rolling oaks / palm shade are mid. Tufts, orchard, and bushes are short.
 
-## Playground host
+## Forest / world host
 
-Register **the flattened wrapper** in [`vegetation_lod.rs`](../sbs-trees-playground/src/vegetation_lod.rs):
+Register **the flattened wrapper** in [`chico-forests` `view.rs`](../forests/src/view.rs) (`VegetationViewPlugin`):
 
 ```rust
 avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);
 ```
 
-Isolated `/show` trees use that same family (identity [`Placement`](../vegetation-components/src/placed.rs)). Do not add a second produce plugin per region channel.
+Forest / world present through [`ChicoGroveHost`](../forests/src/host.rs); do not add a second produce plugin per region channel.
 
 ## Tests
 

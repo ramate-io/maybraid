@@ -3,8 +3,7 @@
 //! [#310](https://github.com/ramate-io/maybraid/issues/310)).
 //!
 //! Common High Bush forms at 50 cm–1.5 m: structured but permeable woody filler above ground
-//! cover. Each placement is a [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs)
-//! bush with dual stick and canopy palettes.
+//! cover. Each placement is a High Bush Shoots plant with dual stick and canopy palettes.
 
 use std::ops::RangeInclusive;
 

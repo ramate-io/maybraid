@@ -7,6 +7,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
 use durham_terrain_models::{
 	BaseTerrainNoise, TerrainCellLayout, TerrainEntryStore, TerrainTrimeshCollider,
 };
@@ -32,6 +33,8 @@ pub const CAMERA_LOOK_HEIGHT: f32 = 0.65;
 const GROUND_CAST_DISTANCE: f32 = 0.45;
 const GROUND_SNAP_SPEED: f32 = 1.5;
 const PLAY_GRAVITY_SCALE: f32 = 1.25;
+const FALL_RESPAWN_DEPTH: f32 = 40.0;
+const FALL_RESPAWN_DELAY_SECS: f32 = 0.75;
 /// Hold above base noise until composed height exists (`height_scale` is 500).
 const HOLD_ABOVE_BASE_FACTOR: f32 = 0.35;
 
@@ -44,7 +47,7 @@ pub struct PlayerControlSystems;
 
 /// Grounded-walk feel. Insert before [`PlayerPlugin`] to override the default
 /// (~81°) max slope. World playground uses a shallower cap so 80°+ walls do
-/// not count as floor.
+/// not count as floor (~60°).
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct CharacterLocomotion {
 	/// Hits steeper than this (radians from up) are not grounded.
@@ -69,6 +72,29 @@ pub enum PlaygroundMode {
 
 #[derive(Component)]
 pub struct Player;
+
+/// True once composed terrain and a terrain collider are both ready at startup.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct SpawnTerrainReady(pub bool);
+
+/// Whether the player rigid body may participate in physics.
+///
+/// Playgrounds default this on. The production shell keeps it off until the
+/// Discovery loading gate has settled.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct PlayerPhysicsEnabled(pub bool);
+
+impl Default for PlayerPhysicsEnabled {
+	fn default() -> Self {
+		Self(true)
+	}
+}
+
+/// Delayed recovery for a player that falls below the streamed surface.
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub struct PlayerRespawn {
+	queued_at: Option<f32>,
+}
 
 /// Gravity off until composed height + a terrain trimesh exist.
 #[derive(Component)]
@@ -138,6 +164,9 @@ impl Plugin for PlayerPlugin {
 			.init_resource::<PadMovementEnabled>()
 			.init_resource::<CharacterCameraFollowEnabled>()
 			.init_resource::<CharacterLocomotion>()
+			.init_resource::<SpawnTerrainReady>()
+			.init_resource::<PlayerPhysicsEnabled>()
+			.init_resource::<PlayerRespawn>()
 			.add_message::<MovementAction>()
 			.add_systems(Startup, spawn_player)
 			.add_systems(
@@ -147,6 +176,8 @@ impl Plugin for PlayerPlugin {
 					update_grounded,
 					apply_character_movement,
 					apply_movement_damping,
+					queue_fallen_player_respawn,
+					respawn_fallen_player,
 					follow_character_camera,
 				)
 					.chain()
@@ -218,55 +249,143 @@ pub fn holding_elevation(base: &BaseTerrainNoise, x: f32, z: f32) -> f32 {
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(center.x, elevation + capsule_half_height() + 0.5, center.z)
+	player_surface_point(center, elevation)
+}
+
+fn player_surface_point(position: Vec3, elevation: f32) -> Vec3 {
+	Vec3::new(position.x, elevation + capsule_half_height() + 0.5, position.z)
 }
 
 pub(crate) fn snap_player_to_composed_surface(
 	mut commands: Commands,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
+	mut ready: ResMut<SpawnTerrainReady>,
+	physics_enabled: Res<PlayerPhysicsEnabled>,
+	respawn: Res<PlayerRespawn>,
 	awaiting: Query<Entity, (With<Player>, With<AwaitingTerrainSurface>)>,
-	mut players: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Player>>,
-	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
-	children: Query<&Children>,
-	colliders: Query<(), With<Collider>>,
+	mut players: Query<
+		(Entity, &mut Transform, &mut LinearVelocity, &mut GravityScale),
+		With<Player>,
+	>,
+	terrain_colliders: Query<
+		&CascadeChunk,
+		(With<TerrainTrimeshCollider>, With<Collider>, Without<ColliderDisabled>),
+	>,
 ) {
-	let Ok((mut transform, mut velocity, mut gravity)) = players.single_mut() else {
+	let Ok((player, mut transform, mut velocity, mut gravity)) = players.single_mut() else {
 		return;
 	};
-
-	let center = layout.region_center_xz();
-	let Some(elevation) = store.composed_height_at(&layout, center.x, center.z) else {
+	if respawn.queued_at.is_some() {
+		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
+		commands.entity(player).insert(AwaitingTerrainSurface);
+		return;
+	}
+
+	let position = transform.translation;
+	let Some(elevation) = store.composed_height_at(&layout, position.x, position.z) else {
+		ready.0 = false;
+		gravity.0 = 0.0;
+		**velocity = Vec3::ZERO;
+		commands.entity(player).insert(AwaitingTerrainSurface);
 		return;
 	};
 
-	let target = player_spawn_point(&layout, elevation);
+	let target = player_surface_point(position, elevation);
 	if awaiting.single().is_ok() {
 		transform.translation = target;
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(&terrain_roots, &children, &colliders) {
-		gravity.0 = PLAY_GRAVITY_SCALE;
-		if let Ok(entity) = awaiting.single() {
-			commands.entity(entity).remove::<AwaitingTerrainSurface>();
+	if terrain_collider_ready(position, &terrain_colliders) {
+		ready.0 = true;
+		if physics_enabled.0 {
+			gravity.0 = PLAY_GRAVITY_SCALE;
+			commands.entity(player).remove::<AwaitingTerrainSurface>();
+		} else {
+			gravity.0 = 0.0;
+			**velocity = Vec3::ZERO;
+			commands.entity(player).insert(AwaitingTerrainSurface);
 		}
 	} else {
+		ready.0 = false;
 		gravity.0 = 0.0;
 		**velocity = Vec3::ZERO;
+		commands.entity(player).insert(AwaitingTerrainSurface);
 	}
 }
 
 fn terrain_collider_ready(
-	roots: &Query<Entity, With<TerrainTrimeshCollider>>,
-	children: &Query<&Children>,
-	colliders: &Query<(), With<Collider>>,
+	spawn: Vec3,
+	colliders: &Query<
+		&CascadeChunk,
+		(With<TerrainTrimeshCollider>, With<Collider>, Without<ColliderDisabled>),
+	>,
 ) -> bool {
-	roots
-		.iter()
-		.any(|root| children.iter_descendants(root).any(|child| colliders.contains(child)))
+	colliders.iter().any(|chunk| chunk.column_contains_point(spawn))
+}
+
+fn queue_fallen_player_respawn(
+	time: Res<Time>,
+	physics: Res<PlayerPhysicsEnabled>,
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	mut respawn: ResMut<PlayerRespawn>,
+	mut ready: ResMut<SpawnTerrainReady>,
+	mut commands: Commands,
+	mut player: Query<
+		(Entity, &Transform, &mut LinearVelocity, &mut GravityScale),
+		(With<Player>, Without<AwaitingTerrainSurface>),
+	>,
+) {
+	if !physics.0 || respawn.queued_at.is_some() {
+		return;
+	}
+	let Ok((entity, transform, mut velocity, mut gravity)) = player.single_mut() else {
+		return;
+	};
+	let at = transform.translation;
+	let surface = store
+		.composed_height_at(&layout, at.x, at.z)
+		.unwrap_or_else(|| holding_elevation(&base.0, at.x, at.z));
+	if at.y >= surface - FALL_RESPAWN_DEPTH {
+		return;
+	}
+	respawn.queued_at = Some(time.elapsed_secs() + FALL_RESPAWN_DELAY_SECS);
+	ready.0 = false;
+	gravity.0 = 0.0;
+	**velocity = Vec3::ZERO;
+	commands.entity(entity).insert(AwaitingTerrainSurface);
+}
+
+fn respawn_fallen_player(
+	time: Res<Time>,
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	base: Res<WorldBaseTerrain>,
+	mut respawn: ResMut<PlayerRespawn>,
+	mut player: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+) {
+	let Some(at) = respawn.queued_at else {
+		return;
+	};
+	if time.elapsed_secs() < at {
+		return;
+	}
+	let Ok((mut transform, mut velocity)) = player.single_mut() else {
+		respawn.queued_at = None;
+		return;
+	};
+	let center = layout.region_center_xz();
+	let elevation = store
+		.composed_height_at(&layout, center.x, center.z)
+		.unwrap_or_else(|| holding_elevation(&base.0, center.x, center.z));
+	transform.translation = player_surface_point(center, elevation);
+	**velocity = Vec3::ZERO;
+	respawn.queued_at = None;
 }
 
 /// Reposition the player after terrain layout regeneration.
@@ -375,6 +494,58 @@ fn update_grounded(
 	}
 }
 
+/// Most upright contact within the walkable slope, if any.
+fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -> Option<Vec3> {
+	let mut best: Option<(f32, Vec3)> = None;
+	for hit in hits.iter() {
+		let normal = (-hit.normal2).normalize_or_zero();
+		if normal.length_squared() < 1e-8 {
+			continue;
+		}
+		let angle = normal.angle_between(Vec3::Y).abs();
+		if let Some(max) = max_slope {
+			if angle > max.0 {
+				continue;
+			}
+		}
+		if best.is_none_or(|(best_angle, _)| angle < best_angle) {
+			best = Some((angle, normal));
+		}
+	}
+	best.map(|(_, normal)| normal)
+}
+
+/// Accelerate along the ground plane when a walkable normal is known; else XZ only.
+fn accelerate_wish(
+	velocity: &mut LinearVelocity,
+	wish: Vec3,
+	accel: f32,
+	dt: f32,
+	ground_normal: Option<Vec3>,
+) {
+	let wish = Vec3::new(wish.x, 0.0, wish.z).normalize_or_zero();
+	if wish.length_squared() < 1e-8 {
+		return;
+	}
+	let drive = match ground_normal {
+		Some(normal) => {
+			let along = (wish - normal * wish.dot(normal)).normalize_or_zero();
+			if along.length_squared() > 1e-8 {
+				along
+			} else {
+				wish
+			}
+		}
+		None => wish,
+	};
+	if ground_normal.is_some() {
+		**velocity += drive * accel * dt;
+	} else {
+		velocity.x += drive.x * accel * dt;
+		velocity.z += drive.z * accel * dt;
+	}
+}
+
 fn apply_character_movement(
 	mut commands: Commands,
 	mode: Res<PlaygroundMode>,
@@ -382,7 +553,15 @@ fn apply_character_movement(
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut reader: MessageReader<MovementAction>,
 	mut controllers: Query<
-		(Entity, &MovementAcceleration, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
+		(
+			Entity,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
+			&MovementAcceleration,
+			&JumpImpulse,
+			&mut LinearVelocity,
+			Has<Grounded>,
+		),
 		With<CharacterController>,
 	>,
 ) {
@@ -402,12 +581,13 @@ fn apply_character_movement(
 	let dt = time.delta_secs();
 
 	for action in reader.read() {
-		for (entity, accel, jump, mut velocity, grounded) in &mut controllers {
+		for (entity, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers {
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					velocity.x += wish.x * accel.0 * dt;
-					velocity.z += wish.z * accel.0 * dt;
+					let ground =
+						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
 					if grounded {

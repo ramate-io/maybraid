@@ -51,11 +51,12 @@ pub mod wild_grass;
 
 pub use grove::{
 	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
-	FlatTerrainSample, FnHeightSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome,
-	GroveCellVariant, GroveDefinition, GroveDistribution, GroveExtent, GroveFrontend,
-	GrovePlacementRanges, GroveRecipe, GroveWorldSample, PaletteColor, PaletteMix, PaletteSlot,
-	PlacementConstraints, PlacementSample, PreparedGroveDistribution, VariantWeightOverrides,
-	DEFAULT_GROVE_EXTENT_XZ,
+	ExcludingGroveSample, FlatTerrainSample, FnHeightSample, ForestGroveBiases, Grove, GroveBucket,
+	GroveCellOutcome, GroveCellVariant, GroveDefinition, GroveDistribution, GroveExtent,
+	GroveFrontend, GroveHeightModulation, GroveHeightModulationStack, GrovePlacementRanges,
+	GroveRecipe, GroveTerrain, GroveWorldSample, ModulatedGroveSample, PaletteColor, PaletteMix,
+	PaletteSlot, PlacementConstraints, PlacementSample, PreparedGroveDistribution,
+	TerrainGroveSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]

@@ -14,7 +14,7 @@ pub use character::{
 };
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
-pub use preview::CharacterPreviewPlugin;
+pub use preview::{CharacterPreviewLight, CharacterPreviewPlugin, CharacterPreviewRoot};
 pub use session::{
 	save_editing_character, ActiveCharacter, CharacterSession, CharacterSessionPlugin,
 	EditingCharacter,

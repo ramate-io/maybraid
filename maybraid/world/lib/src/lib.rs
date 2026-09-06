@@ -1,9 +1,17 @@
-//! Assembled world model: Durham terrain, streamed forest, sky dome.
+//! Assembled world model: Durham terrain, streamed forest, urbanization
+//! generate and budgeted hosts, sky dome.
 //!
 //! Character mode is the default. Forest grove fill is 1 km present / 3 km
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
-//! cover the grove fill ring.
+//! cover the grove fill ring. Grove present GETs Durham height and skips
+//! grow when the overlapping cell is not in the store
+//! ([#720](https://github.com/ramate-io/maybraid/issues/720)).
+//! Plugin list: `WorldMaterialRefPlugin`, `VisualGeometryCorePlugin`,
+//! `TerrainPlugin<Durham>`, character via `VegetationHostPlugin`, groves +
+//! bump-outs via `VegetationPlugin<OnTerrain<DurhamHeight>>`,
+//! `UrbanizationGenerationPlugin` + `UrbanizationPresentationPlugin` +
+//! `UrbanizationHostPlugin` (hopscotch + budgeted hosts; no pads).
 
 mod camera;
 pub mod commands;
@@ -12,32 +20,39 @@ mod material_lib;
 mod ui;
 
 pub use camera::CameraPov;
+pub use chico_vegetation_on_terrain_playground::{
+	PlayerPhysicsEnabled, SpawnTerrainReady, TerrainStreamingEnabled,
+};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
-pub use control::WorldGameplayEnabled;
+pub use control::{WorldGameplayEnabled, WorldSceneryVisible};
 pub use game_commands::command::PendingStartupCommand;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 
 use avian3d::prelude::{CoefficientCombine, Friction};
 use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, PadMovementEnabled,
-	PlayerControlSystems, PlaygroundConfig, PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin,
-	RequestSetCharacter, VegetationOnTerrainPlugin,
+	CharacterCameraFollowEnabled, CharacterLocomotion, CharacterSpecies, DurhamHeight, OnTerrain,
+	PadMovementEnabled, PlayerControlSystems, PlaygroundDiag, PlaygroundMode,
+	PlaygroundTimingPlugin, RequestSetCharacter, VegetationHostPlugin, VegetationPlugin,
 };
-use durham_terrain_models::TerrainFrictionConfig;
+use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
-use lod::{Bullseye, OpenLattice};
+use lod::{Bullseye, LodLevelRootPending, OpenLattice};
+use lod_first_load::{FirstLoadActivity, FirstLoadPermit, FirstLoadPlugin};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
+use richmond_development_models::UrbanizationHostPlugin;
+use richmond_urbanization::{UrbanizationGenerationPlugin, UrbanizationPresentationPlugin};
+use visual_geometry_core::VisualGeometryCorePlugin;
 
-/// Steepest walkable slope. 80°+ walls must not count as floor.
-const WORLD_MAX_SLOPE_ANGLE: f32 = 50.0_f32.to_radians();
-/// Static grip sits above `tan(50°)` ≈ 1.19 so walkable slopes do not ice-skate.
+/// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
+const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
+/// Static grip sits above `tan(70°)` ≈ 1.73 so walkable slopes do not ice-skate.
 const WORLD_TERRAIN_FRICTION: Friction = Friction {
-	dynamic_coefficient: 1.35,
-	static_coefficient: 1.6,
+	dynamic_coefficient: 1.55,
+	static_coefficient: 1.85,
 	combine_rule: CoefficientCombine::Max,
 };
 
@@ -47,7 +62,7 @@ const WORLD_BULLSEYE_OUTER_M: f32 = 2_000.0;
 const WORLD_LATTICE_EXCLUDE_M: f32 = 2_000.0;
 const WORLD_LATTICE_OUTER_M: f32 = 8_000.0;
 
-/// Assembled world: Durham terrain, streamed forest, sky dome, character.
+/// Assembled world: Durham terrain, streamed forest, urbanization hosts, sky dome, character.
 ///
 /// Playground chrome (command drawer, FPS HUD, pad dump) is on by default.
 /// The game executable uses [`WorldPlugin::game`].
@@ -71,24 +86,29 @@ impl WorldPlugin {
 
 impl Plugin for WorldPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(PlaygroundMode::Character)
+		app.add_plugins(FirstLoadPlugin)
+			.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
 			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.add_plugins(WorldMaterialRefPlugin)
+			.add_plugins(VisualGeometryCorePlugin)
+			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.debug_chrome,
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
-			.add_plugins(VegetationOnTerrainPlugin {
-				config: PlaygroundConfig::world_defaults(),
-				commands: false,
-			})
+			.add_plugins(VegetationHostPlugin)
+			.add_plugins(VegetationPlugin::<OnTerrain<DurhamHeight>>::default())
+			.add_plugins(UrbanizationGenerationPlugin::default())
+			.add_plugins(UrbanizationPresentationPlugin::default())
+			.add_plugins(UrbanizationHostPlugin)
 			.insert_resource(PadMovementEnabled(false))
 			.insert_resource(CharacterCameraFollowEnabled(false))
 			.init_resource::<WorldGameplayEnabled>()
+			.init_resource::<WorldSceneryVisible>()
 			.insert_resource(Bullseye { inner: 50.0, outer: WORLD_BULLSEYE_OUTER_M })
 			.insert_resource(OpenLattice {
 				exclude_extent: WORLD_LATTICE_EXCLUDE_M,
@@ -96,6 +116,13 @@ impl Plugin for WorldPlugin {
 				tile_size: 500.0,
 			})
 			.add_plugins(SkyDomePlugin::default());
+		app.add_systems(
+			Update,
+			(
+				(track_pending_lod_roots, release_completed_lod_roots).chain(),
+				control::sync_world_scenery,
+			),
+		);
 		if self.debug_chrome {
 			app.add_plugins(PlaygroundTimingPlugin).add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -138,6 +165,25 @@ impl Plugin for WorldPlugin {
 	}
 }
 
+fn track_pending_lod_roots(
+	mut commands: Commands,
+	activity: Res<FirstLoadActivity>,
+	pending: Query<Entity, (Added<LodLevelRootPending>, Without<FirstLoadPermit>)>,
+) {
+	for entity in &pending {
+		commands.entity(entity).insert(activity.begin());
+	}
+}
+
+fn release_completed_lod_roots(
+	mut commands: Commands,
+	completed: Query<Entity, (With<FirstLoadPermit>, Without<LodLevelRootPending>)>,
+) {
+	for entity in &completed {
+		commands.entity(entity).remove::<FirstLoadPermit>();
+	}
+}
+
 fn spawn_default_braidman(mut commands: Commands) {
 	commands.spawn(RequestSetCharacter { species: CharacterSpecies::Braidman });
 }
@@ -150,7 +196,7 @@ mod tests {
 	fn world_slope_is_below_wall_grade() {
 		let degrees = WORLD_MAX_SLOPE_ANGLE.to_degrees();
 		assert!(degrees < 80.0);
-		assert!(degrees > 40.0);
+		assert!(degrees > 55.0);
 	}
 
 	#[test]

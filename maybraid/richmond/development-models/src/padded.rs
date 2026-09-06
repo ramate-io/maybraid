@@ -1,6 +1,5 @@
 //! Terrain origin cell with development-pad elevation ops applied.
 
-use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -9,9 +8,8 @@ use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::terrain::ElevationModulation;
 use durham_terrain_models::{
 	cascade_chunk_for_cell, ComposedTerrain, Terrain, TerrainMeshBuilder, TerrainSdf,
-	TerrainTrimeshCollider,
 };
-use lod::gen::{Id, LodScene};
+use lod::gen::{Id, LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
@@ -32,7 +30,7 @@ pub struct TerrainWithPads {
 
 impl TerrainWithPads {
 	pub fn compose<'a>(terrain: &Terrain, pads: impl IntoIterator<Item = &'a PadComplex>) -> Self {
-		let mut sdf: TerrainSdf = terrain.sdf.terrain.clone();
+		let mut sdf: TerrainSdf = terrain.sdf.terrain().clone();
 		let mut pad_count = 0;
 		let mut nodes = Vec::new();
 		for pad in pads {
@@ -48,9 +46,7 @@ impl TerrainWithPads {
 			sdf: Arc::new(ComposedTerrain::from_terrain(sdf)),
 			material: terrain.material.clone(),
 			res_2: terrain.res_2,
-			// Building-skirt pads can still meet origin-cell faces on a large
-			// footprint; interior skirts close the CpuShot crack.
-			wall_faces: WallFaces::ALL,
+			wall_faces: terrain.wall_faces,
 			pad_count,
 		}
 	}
@@ -69,23 +65,42 @@ impl TerrainWithPads {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
 		}
+	}
+
+	fn center(&self) -> Vec3 {
+		(Vec3::from(self.cell.min) + Vec3::from(self.cell.max)) * 0.5
+	}
+
+	fn level_scene(&self, level: LodSceneLevel) -> Box<dyn Scene> {
+		if level != LodSceneLevel::High {
+			return Box::new(());
+		}
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin - self.center());
+		let builder = self.mesh_builder();
+		let material = self.material.clone();
+		Box::new(bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(builder.clone())))
+			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+		})
 	}
 }
 
 impl LodScene for TerrainWithPads {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> LodSceneStatus {
+		LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_level(
-		&self,
-		_lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.scene()
+	fn scene_with_level(&self, _lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		self.level_scene(level)
+	}
+
+	fn scene_bounds(&self) -> Aabb3d {
+		let center = self.center();
+		Aabb3d::from_min_max(Vec3::from(self.cell.min) - center, Vec3::from(self.cell.max) - center)
 	}
 }
 

@@ -66,17 +66,27 @@ impl LodNodeSnapshot {
 	}
 }
 
-/// Advance [`LodNodePose`] when the node's [`Transform`] changes.
+/// Advance [`LodNodePose`] when the node's [`Transform`] changes, and seed pose
+/// from [`Transform`] when [`LodNodePose`] is added.
 ///
-/// `previous`/`current` are only updated on motion, so they may disagree while
-/// the node is at rest. Region production keys off [`Changed<LodNodePose>`]
-/// instead of requiring an every-frame collapse of that window.
+/// Required pose defaults to identity. Without this seed, the first track looks
+/// like a teleport from the origin. `previous`/`current` are only updated on
+/// motion after that. Region production keys off [`Changed<LodNodePose>`]
+/// instead of requiring an every-frame collapse.
 pub fn track_lod_nodes(
-	mut nodes: Query<(&Transform, &mut LodNodePose), (With<LodNode>, Changed<Transform>)>,
+	mut nodes: Query<
+		(&Transform, &mut LodNodePose),
+		(With<LodNode>, Or<(Changed<Transform>, Added<LodNodePose>)>),
+	>,
 ) {
 	for (transform, mut pose) in &mut nodes {
-		pose.previous = pose.current;
-		pose.current = *transform;
+		if pose.is_added() {
+			pose.previous = *transform;
+			pose.current = *transform;
+		} else {
+			pose.previous = pose.current;
+			pose.current = *transform;
+		}
 	}
 }
 
@@ -86,17 +96,26 @@ pub fn point_bounds(translation: Vec3) -> Aabb3d {
 }
 
 /// Collect node poses/bounds from a query of drivers.
+pub fn snapshot_node(
+	entity: Entity,
+	pose: &LodNodePose,
+	bounds: Option<&LodNodeBounds>,
+) -> LodNodeSnapshot {
+	LodNodeSnapshot {
+		entity,
+		previous: pose.previous,
+		current: pose.current,
+		bounds: bounds.map(|b| b.0).unwrap_or_else(|| point_bounds(pose.current.translation)),
+	}
+}
+
+/// Collect node poses/bounds from a query of drivers.
 pub fn collect_node_snapshots<F: bevy::ecs::query::QueryFilter>(
 	nodes: &Query<(Entity, &LodNodePose, Option<&LodNodeBounds>), F>,
 ) -> Vec<LodNodeSnapshot> {
 	nodes
 		.iter()
-		.map(|(entity, pose, bounds)| LodNodeSnapshot {
-			entity,
-			previous: pose.previous,
-			current: pose.current,
-			bounds: bounds.map(|b| b.0).unwrap_or_else(|| point_bounds(pose.current.translation)),
-		})
+		.map(|(entity, pose, bounds)| snapshot_node(entity, pose, bounds))
 		.collect()
 }
 

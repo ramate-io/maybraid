@@ -4,6 +4,51 @@ use bevy_math::bounding::{Aabb3d, BoundingVolume};
 use bevy_math::{Vec3, Vec3A};
 use procedural_common::UnitRange;
 
+/// Terrain height field usable by terrain-bound grove world samples.
+///
+/// Heights are world metres. The default steepness is the magnitude of a
+/// one-metre forward finite difference on the height field.
+pub trait GroveTerrain: Send + Sync {
+	/// Surface height in world metres at `position` (XZ).
+	fn height_at(&self, position: Vec3) -> f32;
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		const EPS: f32 = 1.0;
+		let h = self.height_at(position);
+		let hx = self.height_at(position + Vec3::new(EPS, 0.0, 0.0));
+		let hz = self.height_at(position + Vec3::new(0.0, 0.0, EPS));
+		let dx = (hx - h) / EPS;
+		let dz = (hz - h) / EPS;
+		(dx * dx + dz * dz).sqrt()
+	}
+}
+
+/// Generic [`GroveWorldSample`] adapter backed by a [`GroveTerrain`].
+#[derive(Debug, Clone, Copy)]
+pub struct TerrainGroveSample<T> {
+	pub terrain: T,
+}
+
+impl<T> TerrainGroveSample<T> {
+	pub fn new(terrain: T) -> Self {
+		Self { terrain }
+	}
+
+	pub fn into_inner(self) -> T {
+		self.terrain
+	}
+}
+
+impl<T: GroveTerrain> GroveWorldSample for TerrainGroveSample<T> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.terrain.height_at(position)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		self.terrain.steepness_at(position)
+	}
+}
+
 /// World-space height, steepness, and placement exclusion at positions.
 ///
 /// [`Self::height_at`] is world metres (plant Y). Constraint bands stay authored on
@@ -21,6 +66,150 @@ pub trait GroveWorldSample {
 	/// Whether a grove item may occupy `position` on this sample layer.
 	fn allows_placement_at(&self, position: Vec3) -> bool {
 		!point_in_any_aabb(position, self.exclusion_zones())
+	}
+}
+
+/// Post-process a base surface height (building pads, berms, local berms, …).
+///
+/// Implementers fold into [`ModulatedGroveSample`] so forests and groves can sit
+/// on development-modulated ground without baking a specific terrain crate into
+/// selection.
+pub trait GroveHeightModulation: Send + Sync {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32;
+}
+
+impl<F> GroveHeightModulation for F
+where
+	F: Fn(f32, f32, f32) -> f32 + Send + Sync,
+{
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		(self)(base_height, x, z)
+	}
+}
+
+/// Zero or more [`GroveHeightModulation`] layers applied after a base sample.
+pub trait GroveHeightModulationStack: Send + Sync {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32;
+}
+
+impl GroveHeightModulationStack for () {
+	fn modulate_height(&self, base_height: f32, _x: f32, _z: f32) -> f32 {
+		base_height
+	}
+}
+
+impl<M: GroveHeightModulation + ?Sized> GroveHeightModulationStack for &M {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		GroveHeightModulation::modulate_height(*self, base_height, x, z)
+	}
+}
+
+impl<M: GroveHeightModulation> GroveHeightModulationStack for [M] {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		self.iter().fold(base_height, |height, layer| {
+			GroveHeightModulation::modulate_height(layer, height, x, z)
+		})
+	}
+}
+
+impl<M: GroveHeightModulation, const N: usize> GroveHeightModulationStack for [M; N] {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		self.as_slice().modulate_height(base_height, x, z)
+	}
+}
+
+impl<M: GroveHeightModulation> GroveHeightModulationStack for Vec<M> {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		self.as_slice().modulate_height(base_height, x, z)
+	}
+}
+
+impl<M: GroveHeightModulation + ?Sized> GroveHeightModulationStack for Option<&M> {
+	fn modulate_height(&self, base_height: f32, x: f32, z: f32) -> f32 {
+		match self {
+			Some(layer) => GroveHeightModulation::modulate_height(*layer, base_height, x, z),
+			None => base_height,
+		}
+	}
+}
+
+/// [`GroveWorldSample`] that applies a modulation stack on top of a base field.
+#[derive(Debug, Clone, Copy)]
+pub struct ModulatedGroveSample<Base, Mods = ()> {
+	pub base: Base,
+	pub modulations: Mods,
+}
+
+impl<Base, Mods> ModulatedGroveSample<Base, Mods> {
+	pub fn new(base: Base, modulations: Mods) -> Self {
+		Self { base, modulations }
+	}
+
+	pub fn plain(base: Base) -> ModulatedGroveSample<Base, ()> {
+		ModulatedGroveSample { base, modulations: () }
+	}
+}
+
+impl<Base, Mods> GroveWorldSample for ModulatedGroveSample<Base, Mods>
+where
+	Base: GroveWorldSample,
+	Mods: GroveHeightModulationStack,
+{
+	fn height_at(&self, position: Vec3) -> f32 {
+		let base = self.base.height_at(position);
+		self.modulations.modulate_height(base, position.x, position.z)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		// Finite-difference on the modulated surface so pads affect slope gates.
+		const EPS: f32 = 1.0;
+		let h = self.height_at(position);
+		let hx = self.height_at(position + Vec3::new(EPS, 0.0, 0.0));
+		let hz = self.height_at(position + Vec3::new(0.0, 0.0, EPS));
+		let dx = (hx - h) / EPS;
+		let dz = (hz - h) / EPS;
+		(dx * dx + dz * dz).sqrt()
+	}
+
+	fn exclusion_zones(&self) -> &[Aabb3d] {
+		self.base.exclusion_zones()
+	}
+
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		self.base.allows_placement_at(position)
+	}
+}
+
+/// [`GroveWorldSample`] that unions extra AABB holes onto a base field.
+#[derive(Debug, Clone)]
+pub struct ExcludingGroveSample<Base> {
+	pub base: Base,
+	pub zones: Vec<Aabb3d>,
+}
+
+impl<Base: GroveWorldSample> ExcludingGroveSample<Base> {
+	pub fn new(base: Base, extra: impl IntoIterator<Item = Aabb3d>) -> Self {
+		let mut zones = base.exclusion_zones().to_vec();
+		zones.extend(extra);
+		Self { base, zones }
+	}
+}
+
+impl<Base: GroveWorldSample> GroveWorldSample for ExcludingGroveSample<Base> {
+	fn height_at(&self, position: Vec3) -> f32 {
+		self.base.height_at(position)
+	}
+
+	fn steepness_at(&self, position: Vec3) -> f32 {
+		self.base.steepness_at(position)
+	}
+
+	fn exclusion_zones(&self) -> &[Aabb3d] {
+		&self.zones
+	}
+
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		self.base.allows_placement_at(position) && !point_in_any_aabb(position, &self.zones)
 	}
 }
 
@@ -147,6 +336,51 @@ mod tests {
 			SampleWithExclusion { zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)] };
 		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
 		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn excluding_sample_unions_extra_holes() -> Result<()> {
+		let base = FlatTerrainSample::default();
+		let sample = ExcludingGroveSample::new(base, [Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)]);
+		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
+		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn modulated_sample_folds_layers_in_order() -> Result<()> {
+		let base = FlatTerrainSample { elevation: 10.0, steepness: 0.0 };
+		let sample = ModulatedGroveSample::new(base, [|h, _, _| h + 2.0, |h, _, _| h * 2.0]);
+		assert!((sample.height_at(Vec3::ZERO) - 24.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn generic_terrain_sample_delegates_height_and_steepness() -> Result<()> {
+		struct SlopedTerrain;
+
+		impl GroveTerrain for SlopedTerrain {
+			fn height_at(&self, position: Vec3) -> f32 {
+				2.0 * position.x + 3.0 * position.z + 7.0
+			}
+		}
+
+		let sample = TerrainGroveSample::new(SlopedTerrain);
+		let position = Vec3::new(4.0, 99.0, 5.0);
+		assert!((sample.height_at(position) - 30.0).abs() < 1e-5);
+		assert!((sample.steepness_at(position) - 13.0_f32.sqrt()).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn optional_modulation_stack_is_a_no_op_when_absent() -> Result<()> {
+		let base = FlatTerrainSample { elevation: 3.0, steepness: 0.0 };
+		let absent = ModulatedGroveSample::new(base, None::<&dyn GroveHeightModulation>);
+		assert!((absent.height_at(Vec3::ZERO) - 3.0).abs() < 1e-5);
+		let bump = |h: f32, _: f32, _: f32| h + 1.5;
+		let present = ModulatedGroveSample::new(base, Some(&bump as &dyn GroveHeightModulation));
+		assert!((present.height_at(Vec3::ZERO) - 4.5).abs() < 1e-5);
 		Ok(())
 	}
 }

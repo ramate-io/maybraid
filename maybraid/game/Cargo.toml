@@ -20,6 +20,7 @@ maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-menu-controller = { workspace = true }
 maybraid-world = { workspace = true }
+lod-first-load = { workspace = true }
 menu-components = { workspace = true }
 menu-playground = { workspace = true }
 menu-screens = { workspace = true }

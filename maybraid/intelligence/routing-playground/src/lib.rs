@@ -492,9 +492,7 @@ fn snap_router_to_composed_surface(
 	layout: Res<TerrainCellLayout>,
 	awaiting: Query<Entity, (With<Npc>, With<AwaitingRouterSurface>)>,
 	mut routers: Query<(&mut Transform, &mut LinearVelocity, &mut GravityScale), With<Npc>>,
-	terrain_roots: Query<Entity, With<TerrainTrimeshCollider>>,
-	children: Query<&Children>,
-	colliders: Query<(), With<avian3d::prelude::Collider>>,
+	terrain_colliders: Query<(), (With<TerrainTrimeshCollider>, With<avian3d::prelude::Collider>)>,
 ) {
 	let Ok((mut transform, mut velocity, mut gravity)) = routers.single_mut() else {
 		return;
@@ -513,7 +511,7 @@ fn snap_router_to_composed_surface(
 		**velocity = Vec3::ZERO;
 	}
 
-	if terrain_collider_ready(&terrain_roots, &children, &colliders) {
+	if terrain_collider_ready(&terrain_colliders) {
 		gravity.0 = 1.25;
 		if let Ok(entity) = awaiting.single() {
 			commands.entity(entity).remove::<AwaitingRouterSurface>();

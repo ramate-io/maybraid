@@ -1,10 +1,14 @@
-//! Richmond development models: 300 m lattice, terrain pads, and a unified
-//! generation path for solitary buildings, campuses, and neighborhoods.
+//! Richmond development models: urbanization leaves (default) or a legacy
+//! 300 m occupancy lattice, terrain pads, and a unified generation path for
+//! solitary buildings, campuses, and neighborhoods.
 //!
 //! Selection / pad / host generation on top of composed Durham [`Terrain`].
-//! The crate plugin also installs SceneRef, urban surface MaterialRef, placeholder
-//! wireframes, and the Richmond building LOD stack so playgrounds present
-//! [`TerrainWithPads`] and building GLBs without assembling those plugins themselves.
+//! Cell discovery defaults to [`richmond_urbanization`] guillotine leaves;
+//! set [`DevelopmentConfig::use_urbanization`] to `false` for the dense 300 m
+//! lattice. The crate plugin also installs SceneRef, urban surface MaterialRef,
+//! placeholder wireframes, and the Richmond building LOD stack so playgrounds
+//! present [`TerrainWithPads`] and building GLBs without assembling those
+//! plugins themselves.
 
 mod archetype_generation;
 pub mod artifact;
@@ -29,6 +33,7 @@ pub mod ring_fort;
 pub mod scatter;
 pub mod shepherds;
 mod shepherds_fit;
+mod urbanization_host;
 pub mod village;
 
 pub use archetype_generation::PlacedDevelopment;
@@ -49,7 +54,7 @@ pub use development::{
 	ShepherdsVillageCell,
 };
 pub use finish::{DevelopmentFinish, DevelopmentFinishRole};
-pub use host::{DevelopmentHost, DevelopmentHosts};
+pub use host::{DevelopmentHost, DevelopmentHostRoot, DevelopmentHosts};
 pub use hydro::{
 	composed_height_at, composed_height_upper_on_rect, hydro_overlaps_xz, terrain_hydro_overlaps,
 };
@@ -68,3 +73,7 @@ pub use presentation::{PaddedTerrainPresenter, PaddedTerrainPresenterState};
 pub use ring_fort::RingFortDevelopment;
 pub use scatter::{bounds_intersect, ScatterCandidate, ScatterChoice, ScatterPlan, ScatterRecipe};
 pub use shepherds::{ShepherdsCommuneDevelopment, ShepherdsVillageDevelopment};
+pub use urbanization_host::{
+	present_urbanization_hosts, UrbanizationHostBudget, UrbanizationHostPlugin,
+	UrbanizationPresenterState,
+};

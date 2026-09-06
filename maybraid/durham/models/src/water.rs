@@ -84,6 +84,20 @@ impl Water {
 			MeshMaterial3d::<RefractionWater>({material.clone()})
 		}
 	}
+
+	/// Visual scene positioned relative to a shared terrain-chunk host.
+	pub fn scene_relative_to(&self, parent_center: Vec3) -> impl Scene + 'static {
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
+		let transform = Transform::from_translation(chunk.origin - parent_center);
+		let sdf = self.sdf.clone();
+		let material = self.material.clone();
+		bsn! {
+			template_value(transform)
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(sdf.clone())))
+			MeshMaterial3d::<RefractionWater>({material.clone()})
+		}
+	}
 }
 
 impl LodScene for Water {
@@ -140,7 +154,7 @@ where
 			GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id, lod_ref)?;
 		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
-		let terrain_sdf = terrain.sdf.terrain.clone();
+		let terrain_sdf = terrain.sdf.terrain().clone();
 		let fills: Vec<_> = terrain
 			.marazion_fills
 			.iter()

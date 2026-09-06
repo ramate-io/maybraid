@@ -57,62 +57,50 @@ fn spread_noise(t: f32, amount: f32) -> f32 {
     return saturate(0.5 + (x - 0.5) * amount);
 }
 
-fn hash31(p: vec3<f32>) -> f32 {
-    let q = vec3<f32>(
-        dot(p, vec3<f32>(127.1, 311.7, 269.5)),
-        dot(p, vec3<f32>(269.5, 183.3, 127.1)),
-        dot(p, vec3<f32>(183.3, 127.1, 311.7))
-    );
-    return fract(sin(q.x + q.y + q.z) * 43758.5453123);
+fn hash21(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453123);
 }
 
-fn value_noise(p: vec3<f32>, seed: f32) -> f32 {
+fn value_noise_2d(p: vec2<f32>, seed: f32) -> f32 {
     let i = floor(p);
     let nf = fract(p);
     let u = nf * nf * (3.0 - 2.0 * nf);
-    let s = vec3<f32>(seed * 17.13, seed * 31.71, seed * 12.34);
+    let s = vec2<f32>(seed * 17.13, seed * 31.71);
 
-    let a = hash31(i + vec3<f32>(0.0, 0.0, 0.0) + s);
-    let b = hash31(i + vec3<f32>(1.0, 0.0, 0.0) + s);
-    let c = hash31(i + vec3<f32>(0.0, 1.0, 0.0) + s);
-    let d = hash31(i + vec3<f32>(1.0, 1.0, 0.0) + s);
-    let e = hash31(i + vec3<f32>(0.0, 0.0, 1.0) + s);
-    let f = hash31(i + vec3<f32>(1.0, 0.0, 1.0) + s);
-    let g = hash31(i + vec3<f32>(0.0, 1.0, 1.0) + s);
-    let h = hash31(i + vec3<f32>(1.0, 1.0, 1.0) + s);
+    let a = hash21(i + vec2<f32>(0.0, 0.0) + s);
+    let b = hash21(i + vec2<f32>(1.0, 0.0) + s);
+    let c = hash21(i + vec2<f32>(0.0, 1.0) + s);
+    let d = hash21(i + vec2<f32>(1.0, 1.0) + s);
 
-    return mix(
-        mix(mix(a, b, u.x), mix(c, d, u.x), u.y),
-        mix(mix(e, f, u.x), mix(g, h, u.x), u.y),
-        u.z
-    );
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-fn fbm(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
+fn fbm_2d(p: vec2<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
     var sum = 0.0;
     var a = amp;
     var f = freq;
 
-    for (var octave = 0; octave < 4; octave = octave + 1) {
-        sum += value_noise(p * f, seed + f32(octave) * 19.17) * a;
+    for (var octave = 0; octave < 2; octave = octave + 1) {
+        sum += value_noise_2d(p * f, seed + f32(octave) * 19.17) * a;
         f *= 2.03;
         a *= 0.5;
     }
 
-    return saturate(sum);
+    // Preserve approximately the four-octave amplitude while evaluating half
+    // as many frequencies.
+    return saturate(sum * 1.25);
 }
 
-fn domain_warp_offset(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> vec3<f32> {
-    let qx = fbm(p + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0, amp, freq * 0.35);
-    let qy = fbm(p + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0, amp, freq * 0.35);
-    let qz = fbm(p + vec3<f32>(2.9, 61.7, 13.0), seed + 30.0, amp, freq * 0.35);
+fn domain_warp_offset_2d(p: vec2<f32>, seed: f32, amp: f32, freq: f32) -> vec2<f32> {
+    let qx = fbm_2d(p + vec2<f32>(17.1, 3.7), seed + 10.0, amp, freq * 0.35);
+    let qy = fbm_2d(p + vec2<f32>(8.3, 29.4), seed + 20.0, amp, freq * 0.35);
 
-    return (vec3<f32>(qx, qy, qz) - vec3<f32>(0.5)) * 260.0;
+    return (vec2<f32>(qx, qy) - vec2<f32>(0.5)) * 260.0;
 }
 
-fn palette_noise(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
-    let warp = domain_warp_offset(p, seed, amp, freq);
-    let n = fbm(p + warp, seed + 3.0, amp, freq);
+fn palette_noise_2d(p: vec2<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
+    let warp = domain_warp_offset_2d(p, seed, amp, freq);
+    let n = fbm_2d(p + warp, seed + 3.0, amp, freq);
 
     return spread_noise(n, 1.75);
 }
@@ -127,34 +115,38 @@ const SWATCH_INDEX_SOFTNESS: f32 = 0.12;
 fn swatch_sample(t_noise: f32, band: DurhamTerrainBand) -> vec3<f32> {
     let u = min(saturate(t_noise) * 8.0, 8.0 - 1e-4);
     let e = SWATCH_INDEX_SOFTNESS;
+    let i = min(i32(floor(u)), 7);
+    let f = fract(u);
 
-    // `floor(u)` / `fract(u)` jump at swatch seams; per-cell `f` made left/right limits disagree.
-    // In `|u - s| <= e` around seam **s**, blend only **sw[s-1](1)** → **sw[s](0)** in **u** (same
-    // expression from both sides of **s**).
-    for (var s = 1; s < 8; s = s + 1) {
-        let du = u - f32(s);
-        if (abs(du) <= e) {
-            let t = smoothstep(0.0, 1.0, (du + e) / (2.0 * e));
-            return mix(
-                swatch_linear(band.swatches[s - 1], 1.0),
-                swatch_linear(band.swatches[s], 0.0),
-                t
-            );
-        }
+    // Only the two seams adjacent to this cell can be inside the soft interval.
+    if (i > 0 && f <= e) {
+        let t = smoothstep(0.0, 1.0, (f + e) / (2.0 * e));
+        return mix(
+            swatch_linear(band.swatches[i - 1], 1.0),
+            swatch_linear(band.swatches[i], 0.0),
+            t
+        );
+    }
+    if (i < 7 && f >= 1.0 - e) {
+        let t = smoothstep(0.0, 1.0, (f - 1.0 + e) / (2.0 * e));
+        return mix(
+            swatch_linear(band.swatches[i], 1.0),
+            swatch_linear(band.swatches[i + 1], 0.0),
+            t
+        );
     }
 
-    let i = min(i32(floor(u)), 7);
-    return swatch_linear(band.swatches[i], fract(u));
+    return swatch_linear(band.swatches[i], f);
 }
 
-fn band_color(p: vec3<f32>, band: DurhamTerrainBand) -> vec3<f32> {
+fn band_color(p: vec2<f32>, band: DurhamTerrainBand) -> vec3<f32> {
     let seed = band.config.x;
-    let t = palette_noise(p, seed, band.band_scale.y, band.band_scale.x);
+    let t = palette_noise_2d(p, seed, band.band_scale.y, band.band_scale.x);
     return swatch_sample(t, band);
 }
 
 fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
-    let p = world_position + vec3<f32>(1298.0, 18229.0, 0.0);
+    let p = world_position.xz + vec2<f32>(1298.0, 18229.0);
 
     var acc = vec3<f32>(0.0);
     var wsum = 0.0;

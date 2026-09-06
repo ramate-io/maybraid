@@ -12,9 +12,6 @@
 //! folds sticks and cheap balls into collections.
 
 pub mod canopy;
-pub mod render_item_plugin;
-#[allow(dead_code)]
-mod stick;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BallStickChain, FriendsConiferChain, FriendsConiferSbs};

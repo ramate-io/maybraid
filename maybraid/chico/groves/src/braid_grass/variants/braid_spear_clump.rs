@@ -3,7 +3,7 @@
 //! The belly half-width is **length-proportional** (`length * belly_factor`); the base tapers
 //! to roughly a third of the belly, keeping the authored belly→tip ribbon profile.
 
-use chico_ball_components::tuft::SpearTuftShape;
+use chico_sbs_geometry::SpearTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::braid_grass::BraidSpearClump;

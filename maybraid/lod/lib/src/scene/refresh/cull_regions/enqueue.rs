@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 
 use bevy::ecs::query::QueryFilter;
 use bevy::ecs::system::SystemParam;
-use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 
 use crate::lod_ref::lod_refs_from_snapshots;
@@ -115,73 +114,69 @@ pub fn produce_lod_cull_for_region<T>(
 
 /// Enqueue region-scoped culls once for all semantic host types.
 pub fn produce_lod_cull_for_region_erased(world: &mut World) {
-	let (snapshots, hits) = {
-		let cache = world.resource::<LodCullProduceCache>();
-		if cache.region_hits.is_empty() || cache.snapshots.is_empty() {
+	world.resource_scope(|world, cache: Mut<LodCullProduceCache>| {
+		if cache.hit_entities.is_empty() || cache.snapshots.is_empty() {
 			return;
 		}
-		let hits = cache
-			.region_hits
-			.iter()
-			.flat_map(|(_, entities)| entities.iter().copied())
-			.collect::<HashSet<_>>();
-		(cache.snapshots.clone(), hits)
-	};
-	let refs = lod_refs_from_snapshots(&snapshots);
-	let Some(viewer_ref) = refs.first() else {
-		return;
-	};
+		let refs = lod_refs_from_snapshots(&cache.snapshots);
+		let Some(viewer_ref) = refs.first() else {
+			return;
+		};
+		let mut roots = Vec::new();
 
-	for entity in hits {
-		if world.get::<LodNestedRefreshAllowed>(entity).is_none()
-			|| lod_scene_host_or_ancestor_hidden_world(world, entity)
-		{
-			continue;
-		}
-		let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
-			continue;
-		};
-		let Some(mut current_level) = world.get::<LodSceneLevel>(entity).copied() else {
-			continue;
-		};
-		let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
-			continue;
-		};
-		if distance_level < current_level {
-			current_level = distance_level;
-			world.entity_mut(entity).insert(current_level);
-		}
-		let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
-			continue;
-		};
-		if matches!(culls, LodSceneCulls::None) {
-			continue;
-		}
-
-		let roots: Vec<_> = world
-			.get::<Children>(entity)
-			.and_then(|children| {
-				children.iter().find(|child| world.get::<LodLevelRoots>(*child).is_some())
-			})
-			.and_then(|bag| world.get::<Children>(bag))
-			.map(|children| children.iter().collect())
-			.unwrap_or_default();
-		for root_entity in roots {
-			let Some(root) = world.get::<LodLevelRoot>(root_entity).copied() else {
-				continue;
-			};
-			if root.0 == current_level
-				|| world.get::<LodCullInFlight>(root_entity).is_some()
-				|| !culls.should_cull(root.0)
+		for &entity in &cache.hit_entities {
+			if world.get::<LodNestedRefreshAllowed>(entity).is_none()
+				|| lod_scene_host_or_ancestor_hidden_world(world, entity)
 			{
 				continue;
 			}
-			world
-				.entity_mut(root_entity)
-				.insert((LodCullInFlight { started: false }, Visibility::Hidden));
-			world.write_message(LodCullRequest { entity: root_entity });
+			let Some(producer) = world.get::<LodLevelProducer>(entity).copied() else {
+				continue;
+			};
+			let Some(mut current_level) = world.get::<LodSceneLevel>(entity).copied() else {
+				continue;
+			};
+			let Some(distance_level) = producer.level_for(world, entity, viewer_ref) else {
+				continue;
+			};
+			if distance_level < current_level {
+				current_level = distance_level;
+				world.entity_mut(entity).insert(current_level);
+			}
+			let Some(culls) = producer.culls_for(world, entity, viewer_ref, current_level) else {
+				continue;
+			};
+			if matches!(culls, LodSceneCulls::None) {
+				continue;
+			}
+
+			roots.clear();
+			if let Some(root_children) = world
+				.get::<Children>(entity)
+				.and_then(|children| {
+					children.iter().find(|child| world.get::<LodLevelRoots>(*child).is_some())
+				})
+				.and_then(|bag| world.get::<Children>(bag))
+			{
+				roots.extend(root_children.iter());
+			}
+			for root_entity in roots.iter().copied() {
+				let Some(root) = world.get::<LodLevelRoot>(root_entity).copied() else {
+					continue;
+				};
+				if root.0 == current_level
+					|| world.get::<LodCullInFlight>(root_entity).is_some()
+					|| !culls.should_cull(root.0)
+				{
+					continue;
+				}
+				world
+					.entity_mut(root_entity)
+					.insert((LodCullInFlight { started: false }, Visibility::Hidden));
+				world.write_message(LodCullRequest { entity: root_entity });
+			}
 		}
-	}
+	});
 }
 
 fn lod_scene_host_or_ancestor_hidden_world(world: &World, entity: Entity) -> bool {

@@ -5,7 +5,7 @@ use std::ops::RangeInclusive;
 use procedural_common::UnitRange;
 
 #[cfg(feature = "render")]
-use chico_ball_components::tuft::BladeTuftShape;
+use chico_sbs_geometry::BladeTuftShape;
 #[cfg(feature = "render")]
 use chico_sbs_trees::tuft_patch::TuftPatchParams;
 #[cfg(feature = "render")]

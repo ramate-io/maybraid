@@ -258,6 +258,12 @@ the duty and set `enabled` when it may write; keep
 popped. Close remaining work goes to movement; far remaining work goes to
 routing. Do not add/remove the user every time `satisfied` flips.
 
+## Playgrounds
+
+A playground is a **single-layer** developer app next to the crate it inspects. Assembled world lives in [`maybraid-world`](maybraid/world/) (`cargo run -p maybraid-world-playground`). Do not keep a second vegetation-on-terrain (or similar) app that duplicates world streaming.
+
+When a playground is no longer worth maintaining, retire it: record path, last commit, and what it did under [Retired](maybraid/PLAYGROUNDS.md#retired) **before** deleting, then drop the crate from the workspace. Convention: [maybraid/PLAYGROUNDS.md](maybraid/PLAYGROUNDS.md).
+
 ## Performance diagnostics (Tracy first)
 
 Profile LOD and playground hitches with **Tracy**, not in-app `eprintln` / `info!` counters. Bevy already emits `system` / `system_commands` / `par_for_each` zones when built with `trace`. Export a single-frame CSV (“limited to view”) or use `tracy-csvexport` when you need to share a capture.
@@ -274,14 +280,13 @@ Copies of Tracy CSVs and hitch logs from the orchard work (`frame_*.csv`, `*trac
 
 ## Migrating a grove to the orchard (flattened) approach
 
-Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made `/show vast-orchards` scale: one Avian volume per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
+Orchard High/Medium plants are **posed kit content**, not a nest of per-stick / per-ball [`LodSceneHost`](maybraid/lod/lib/src/scene/host.rs)s. That is what made orchard tiles scale: one Avian volume per plant, shared stick/ball [`SceneRef`](maybraid/scene-ref)s, and no fine-phase refresh per kit node.
 
 Canonical example: [`maybraid/chico/groves/src/orchard.rs`](maybraid/chico/groves/src/orchard.rs) (`nest_plant_chunks`) plus helpers in [`grove/vc_compose.rs`](maybraid/chico/groves/src/grove/vc_compose.rs).
 
 1. **Compose with `nest_flattened_plant_chunk`**, not the unused nested-host helpers in [`placed_host.rs`](maybraid/chico/groves/src/grove/placed_host.rs). Those wrap [`ComponentsOnly`](maybraid/chico/vegetation-components/src/lib.rs)`<PlacedVegetation<T>>` and spawn nested [`FoliageNode`](maybraid/chico/vegetation-components/src/foliage/node.rs) / [`StickNode`](maybraid/chico/vegetation-components/src/sticks/node.rs) LOD hosts. Flattened hosts wrap `FlattenedComponentsOnly<PlacedVegetation<T>>` and emit posed kits only.
-2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in the playground:
+2. **Share the plant type with `Arc<T>`** when `T` is large (Storybook trees). Orchard stores `Arc<StorybookTree>` so begin/drain does not clone geometry per chunk. Register **that** wrapper in [`chico-forests` `view.rs`](maybraid/chico/forests/src/view.rs):
    `avian_host!(app, FlattenedComponentsOnly<PlacedVegetation<Arc<YourTree>>>);`
-   in [`vegetation_lod.rs`](maybraid/chico/sbs-trees-playground/src/vegetation_lod.rs). Isolated `/show` trees use the same family.
 3. **Lazy `SceneChunk` for the plant list.** Build one `SceneChunk::lazy(n, n, …)` that yields `nest_flattened_plant_chunk` per plant (see Orchard `nest_plant_chunks`). Begin must not box every `scene_with_level` up front.
 4. **Leave Low / UltraLow as canopy proxies** (`canopy_proxy_site`, `ULTRA_LOW_CANOPY_BIN_METERS`). Flattening is for the High/Medium plant hosts.
 5. **Charge kit weight.** Flattened kits use [`FLATTENED_KIT_CHUNK_WEIGHT`](maybraid/chico/vegetation-components/src/lib.rs) so drain does not admit a full SceneRef / `WorldAssetRoot` wave in one frame.

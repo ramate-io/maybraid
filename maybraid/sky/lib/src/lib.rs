@@ -15,7 +15,7 @@ pub const DEFAULT_SPHERE_RADIUS_M: f32 = 2_800.0;
 /// Peak wash. Stay well under 1 so ridges are not cut out by an opaque band.
 pub const DEFAULT_MAX_ALPHA: f32 = 0.32;
 
-/// Clear / dome blue used by the vegetation-on-terrain and world playgrounds.
+/// Clear / dome blue used by the world playground.
 pub const SKY_BLUE: Color = Color::hsla(201.0, 0.69, 0.62, 1.0);
 
 #[derive(Component)]
@@ -50,8 +50,9 @@ impl Plugin for SkyDomePlugin {
 			max_alpha: self.max_alpha.clamp(0.0, 1.0),
 			color: self.color,
 		};
-		app.insert_resource(settings)
-			.add_systems(Startup, spawn_sky_dome)
+		app.insert_resource(ClearColor(self.color))
+			.insert_resource(settings)
+			.add_systems(Startup, (spawn_sky_dome, spawn_sky_lights))
 			.add_systems(Update, follow_camera);
 	}
 }
@@ -102,6 +103,18 @@ fn follow_camera(
 	};
 	tf.translation = cam.translation();
 	tf.rotation = Quat::IDENTITY;
+}
+
+fn spawn_sky_lights(mut commands: Commands) {
+	commands.insert_resource(GlobalAmbientLight { brightness: 450.0, ..default() });
+	commands.spawn((
+		DirectionalLight { illuminance: 12_000.0, shadow_maps_enabled: true, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
+	));
+	commands.spawn((
+		DirectionalLight { illuminance: 2_500.0, shadow_maps_enabled: false, ..default() },
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
+	));
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {

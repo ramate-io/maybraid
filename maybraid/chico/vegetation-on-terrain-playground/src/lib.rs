@@ -1,7 +1,10 @@
-//! Small Durham fine-grid patch for iterating Chico groves on real ground.
+//! Durham-backed vegetation host used by `maybraid-world`.
 //!
-//! `/forest` streams the unified Chico forest on Durham height (A/B against
-//! tiled `/grove`).
+//! The runnable playground binary is retired; see `maybraid/PLAYGROUNDS.md`.
+//! Character / camera stay on [`VegetationHostPlugin`]. Groves and canopy
+//! bump-outs register through [`VegetationPlugin`]. Terrain LOD is
+//! [`TerrainPlugin`](durham_terrain_models::TerrainPlugin) for
+//! [`Durham`](durham_terrain_models::Durham).
 
 mod bump_out;
 pub mod camera;
@@ -14,97 +17,74 @@ mod material_lib;
 mod pitch;
 pub mod player;
 mod ui;
+mod vegetation;
 
-pub use bump_out::DurhamCanopyBumpOutPresenter;
+pub use bump_out::{
+	bump_out_from_cell, bump_out_noise, fine_terrain_for, medium_terrain_for,
+	register_bump_out_lod, terrain_chunk_ref, BumpOutPresenter, CanopyBumpOutPresenter,
+	CanopyBumpOutPresenterState, MediumCanopyBumpOutPresenter, MediumCanopyBumpOutPresenterState,
+	TerrainMeshSource, WorldTerrainBuilder,
+};
 pub use camera::CameraController;
 pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
-pub use chico_sbs_trees_playground::forest_stream::ForestStreamSpec;
+pub use chico_forests::{ForestStreamSpec, OnTerrain};
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
-pub use forest::DurhamForestPresenter;
+pub use durham_terrain_models::{
+	terrain_streaming_enabled, TerrainCoverage, TerrainStreamingEnabled, WorldBaseTerrain,
+};
+pub use forest::{durham_store_ready_for, DurhamHeight};
 pub use game_commands::command::PendingStartupCommand;
-pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
+pub use groves::{OwnedDurhamTerrain, StoredDurhamTerrain};
+pub use material_lib::{
+	init_vegetation_on_terrain_material_caches, VegetationOnTerrainMaterialLib,
+	VegetationOnTerrainMaterialRefPlugin,
+};
 pub use player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
-	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled,
+	PlayerPlugin, PlayerRespawn, PlaygroundMode, SpawnTerrainReady,
 };
+pub use vegetation::VegetationPlugin;
 
 use avian3d::prelude::LinearVelocity;
 use bevy::camera::visibility::VisibilitySystems;
 use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
-use bump_out::{register_bump_out_lod, stream_canopy_bump_outs};
 use camera::{
 	camera_controller, refocus_camera_on_elevation, release_modifiers_on_focus_change,
 	setup_camera, surface_or_hold,
 };
 use character::{apply_set_character, drive_player_locomotion};
-use chico_bumpout::ChicoBumpOutPlugin;
+use chico_forests::{stream_radii_m, VegetationViewPlugin};
 use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
-use chico_sbs_trees_playground::forest_stream::{register_forest_lod, stream_radii_m};
-use chico_sbs_trees_playground::register_vegetation_view;
 use chico_vegetation_components::{FoliageLodProbe, StickLodProbe};
 use commands::{
 	RequestForest, RequestGrove, RequestGroveExtent, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree, RequestRebuild, RequestTerrainRadius, RequestTileRadius,
 };
 use crozon_characters::{CharacterHostsPlugin, CharacterMotionSystems};
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, RefractionWater};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedWater, DurhamTerrainModelsPlugin, OuterCellRing,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshBuilder,
-	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
+	origin_cell_ids_for_layout, Durham, TerrainCellLayout, TerrainEntryStore, TerrainMeshLodBand,
+	TerrainPlugin, TerrainPresentationAssets, TerrainPresentationDirty, TERRAIN_CELL_SIZE,
+	WORLD_FINE_HALF_EXTENT_CELLS,
 };
-use forest::stream_durham_forest;
 use game_commands::command::{
 	capture_command_line_input, GameCommandPlugin, TextEntryBlocked, TextEntryFocus,
 };
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use groves::{spawn_tiled_groves, GroveRoot};
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
-use lod::lod_ref::LodRef;
-use lod::{LodGenerateSystems, LodPresentSystems, LodSceneHost};
+use lod::{LodPresentSystems, LodSceneHost};
 use maybraid_input::{PadGameplayEnabled, VirtualPadPlugin, VirtualPadSystems};
 use pitch::{apply_avian_terrain_pitch, sync_suspend_terrain_pitch};
-use player::{
-	holding_elevation, respawn_player_on_layout, snap_player_to_composed_surface,
-	AwaitingTerrainSurface,
-};
-use render_item::mesh::handle::{EnforceCachingPlugin, EnforcedCaches};
+use player::{respawn_player_on_layout, snap_player_to_composed_surface, AwaitingTerrainSurface};
 use std::f32::consts::PI;
-use terrain_chunk_ref::{TerrainChunkRefCache, TerrainChunkRefPlugin};
 
 const DEFAULT_TERRAIN_RADIUS: i32 = 2;
 const DEFAULT_TILE_RADIUS: i32 = 1;
 
-/// Fine-grid Chebyshev half-extent (16 × 160 m ≈ 2.6 km). Playable disk from
-/// [#675](https://github.com/ramate-io/maybraid/pull/675); bump-outs attach to these
-/// cells instead of expanding generate.
-const WORLD_FINE_HALF_EXTENT_CELLS: i32 = 16;
-/// 2× macro ring past the fine grid (was 4; that disk was ~5 km half-extent).
-const WORLD_OUTER_2X_ROWS: i32 = 2;
-/// 4× macro ring past the 2× ring.
-const WORLD_OUTER_4X_ROWS: i32 = 1;
-
-/// Fine-only patch vs playable world extents (fine grid + macro rings).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum TerrainCoverage {
-	#[default]
-	FinePatch,
-	PlayableWorld,
-}
-
 fn playground_lod_bands(half_extent: i32) -> Vec<TerrainMeshLodBand> {
 	vec![TerrainMeshLodBand { max_radius_cells: half_extent.max(1), res_2: 5 }]
-}
-
-fn world_lod_bands() -> Vec<TerrainMeshLodBand> {
-	vec![
-		TerrainMeshLodBand { max_radius_cells: 2, res_2: 5 },
-		TerrainMeshLodBand { max_radius_cells: 5, res_2: 3 },
-		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
-	]
 }
 
 fn cell_layout(half_extent: i32) -> TerrainCellLayout {
@@ -117,39 +97,9 @@ fn cell_layout(half_extent: i32) -> TerrainCellLayout {
 	layout
 }
 
-fn world_cell_layout() -> TerrainCellLayout {
-	let mut layout = TerrainCellLayout::default();
-	layout.origin = IVec2::new(-WORLD_FINE_HALF_EXTENT_CELLS, -WORLD_FINE_HALF_EXTENT_CELLS);
-	let n = (2 * WORLD_FINE_HALF_EXTENT_CELLS) as u32;
-	layout.extents = UVec2::new(n, n);
-	layout.outer_rings = vec![
-		OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_2X_ROWS },
-		OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: WORLD_OUTER_4X_ROWS },
-	];
-	layout
-}
-
-fn layout_for(playground: &PlaygroundConfig) -> TerrainCellLayout {
-	match playground.coverage {
-		TerrainCoverage::FinePatch => cell_layout(playground.terrain_radius),
-		TerrainCoverage::PlayableWorld => world_cell_layout(),
-	}
-}
-
-fn lod_bands_for(playground: &PlaygroundConfig) -> Vec<TerrainMeshLodBand> {
-	match playground.coverage {
-		TerrainCoverage::FinePatch => playground_lod_bands(playground.terrain_radius),
-		TerrainCoverage::PlayableWorld => world_lod_bands(),
-	}
-}
-
 fn terrain_cells_for_generate_m(generate_m: f32) -> i32 {
 	(generate_m / TERRAIN_CELL_SIZE).ceil() as i32
 }
-
-/// Base noise used for camera height before (and alongside) generation.
-#[derive(Resource)]
-pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 #[derive(Resource, Clone)]
 pub struct PlaygroundConfig {
@@ -190,48 +140,78 @@ impl PlaygroundConfig {
 }
 
 #[derive(Resource)]
-struct TerrainPresentationDirty(bool);
-
-#[derive(Resource, Default)]
-struct TerrainPresentPending(bool);
-
-#[derive(Resource)]
 struct GrovesDirty(bool);
 
+/// Character, camera, snap, and locomotion without tiled groves or stream drivers.
+///
+/// The assembled world plugin uses this. Groves and bump-outs stay on
+/// [`VegetationPlugin`].
+pub struct VegetationHostPlugin;
+
+impl Plugin for VegetationHostPlugin {
+	fn build(&self, app: &mut App) {
+		if !app.is_plugin_added::<VirtualPadPlugin>() {
+			app.add_plugins(VirtualPadPlugin::default());
+		}
+		if !app.is_plugin_added::<PlayerPlugin>() {
+			app.add_plugins(PlayerPlugin);
+		}
+		if !app.is_plugin_added::<CharacterHostsPlugin>() {
+			app.add_plugins(CharacterHostsPlugin);
+		}
+		app.add_systems(Startup, setup_camera)
+			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+			.add_systems(
+				Update,
+				(
+					release_modifiers_on_focus_change.before(camera_controller),
+					camera_controller,
+					apply_set_character,
+					apply_mode_commands.after(apply_set_character),
+					snap_player_to_composed_surface
+						.after(LodPresentSystems::Drain)
+						.after(apply_mode_commands)
+						.before(PlayerControlSystems),
+					drive_player_locomotion
+						.after(PlayerControlSystems)
+						.before(CharacterMotionSystems::Anim),
+					sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(drive_player_locomotion)
+						.after(sync_suspend_terrain_pitch),
+				),
+			);
+	}
+}
+
+/// Tiled-grove playground host. World uses [`VegetationHostPlugin`] instead.
 pub struct VegetationOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.
 	pub commands: bool,
+	/// When false, the caller owns [`TerrainPlugin`] for [`Durham`].
+	pub own_terrain: bool,
 }
 
 impl Default for VegetationOnTerrainPlugin {
 	fn default() -> Self {
-		Self { config: PlaygroundConfig::default(), commands: true }
+		Self { config: PlaygroundConfig::default(), commands: true, own_terrain: true }
 	}
 }
 
 impl Plugin for VegetationOnTerrainPlugin {
 	fn build(&self, app: &mut App) {
-		let config = TerrainConfig::new(42);
-		let base = BaseTerrainNoise::from_config(&config);
 		let playground = self.config.clone();
 
-		app.add_plugins(DurhamTerrainModelsPlugin)
-			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(ChicoBumpOutPlugin)
-			.add_plugins(EnforceCachingPlugin::<TerrainMeshBuilder, DurhamTerrainShader>::default())
-			.add_plugins(EnforceCachingPlugin::<ComposedWater, RefractionWater>::default());
-		let (terrain_handles, terrain_disk) = {
-			let caches = app.world().resource::<EnforcedCaches<TerrainMeshBuilder>>();
-			(caches.handle_map(), caches.disk_cache())
-		};
-		app.insert_resource(
-			TerrainChunkRefCache::<TerrainMeshBuilder>::new()
-				.with_handles(terrain_handles)
-				.with_optional_disk(terrain_disk)
-				.without_build_on_miss(),
-		)
-		.add_plugins(TerrainChunkRefPlugin::<TerrainMeshBuilder>::default());
+		if self.own_terrain {
+			app.add_plugins(match playground.coverage {
+				TerrainCoverage::FinePatch => {
+					TerrainPlugin::<Durham>::fine_patch(playground.terrain_radius)
+				}
+				TerrainCoverage::PlayableWorld => TerrainPlugin::<Durham>::playable_world(),
+			});
+		}
 		if self.commands {
 			app.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -242,98 +222,33 @@ impl Plugin for VegetationOnTerrainPlugin {
 					}),
 			);
 		}
-		register_vegetation_view(app);
+		if !app.is_plugin_added::<VegetationViewPlugin>() {
+			app.add_plugins(VegetationViewPlugin);
+		}
 		if !app.is_plugin_added::<VegetationOnTerrainMaterialRefPlugin>() {
 			app.add_plugins(VegetationOnTerrainMaterialRefPlugin);
 		}
-		register_forest_lod::<DurhamForestPresenter>(app);
-		register_bump_out_lod::<DurhamCanopyBumpOutPresenter>(app);
-		if !app.is_plugin_added::<VirtualPadPlugin>() {
-			app.add_plugins(VirtualPadPlugin::default());
-		}
-		if !app.is_plugin_added::<PlayerPlugin>() {
-			app.add_plugins(PlayerPlugin);
-		}
-		if !app.is_plugin_added::<CharacterHostsPlugin>() {
-			app.add_plugins(CharacterHostsPlugin);
+		if !app.is_plugin_added::<VegetationHostPlugin>() {
+			app.add_plugins(VegetationHostPlugin);
 		}
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
-			.insert_resource(config.clone())
-			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(playground.clone())
-			.insert_resource(layout_for(&playground))
-			.insert_resource(TerrainPresentationDirty(true))
-			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
-			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
-			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
+			.add_systems(Startup, setup_lighting)
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 		if self.commands {
 			app.add_systems(
 				Update,
 				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					generate_cells.after(apply_commands),
-					present_cells.after(generate_cells),
-					spawn_groves.after(present_cells),
-					stream_durham_forest
-						.after(apply_commands)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
-					apply_set_character.after(apply_commands),
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(present_cells)
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
+					spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
 		} else {
 			app.add_systems(
 				Update,
-				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
-					generate_cells,
-					present_cells.after(generate_cells),
-					spawn_groves.after(present_cells),
-					stream_durham_forest
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
-					stream_canopy_bump_outs
-						.after(stream_durham_forest)
-						.before(LodGenerateSystems::Produce)
-						.before(LodPresentSystems::Produce),
-					apply_set_character,
-					apply_mode_commands.after(apply_set_character),
-					snap_player_to_composed_surface
-						.after(present_cells)
-						.after(apply_mode_commands)
-						.before(PlayerControlSystems),
-					drive_player_locomotion
-						.after(PlayerControlSystems)
-						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
-				),
+				spawn_groves.after(LodPresentSystems::Drain).run_if(terrain_streaming_enabled),
 			);
 		}
 	}
@@ -403,38 +318,6 @@ fn setup_lighting(mut commands: Commands) {
 		DirectionalLight { illuminance: 2_500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
-}
-
-fn setup_presentation_assets(
-	mut commands: Commands,
-	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
-	mut water_materials: ResMut<Assets<RefractionWater>>,
-	config: Res<TerrainConfig>,
-	playground: Res<PlaygroundConfig>,
-) {
-	let material = terrain_materials.add(DurhamTerrainShader::default());
-	let (macro_seam_half_extents, macro_cell_min_size, macro_res_2) = match playground.coverage {
-		TerrainCoverage::FinePatch => (Vec::new(), None, None),
-		TerrainCoverage::PlayableWorld => {
-			let s = TERRAIN_CELL_SIZE;
-			let fine_half = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-			let mid_half = fine_half + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-			(vec![fine_half, mid_half], Some(2.0 * s), Some(2))
-		}
-	};
-	commands.insert_resource(TerrainPresentationAssets {
-		config: config.clone(),
-		material,
-		lod_bands: lod_bands_for(&playground),
-		outer_add_walls: true,
-		fine_grid_max_radius: Some(playground.terrain_radius),
-		macro_seam_half_extents,
-		macro_cell_min_size,
-		macro_res_2,
-	});
-	commands.insert_resource(WaterPresentationAssets {
-		material: water_materials.add(RefractionWater::default()),
-	});
 }
 
 fn apply_commands(
@@ -550,93 +433,6 @@ fn apply_mode_commands(
 	}
 }
 
-fn generate_cells(
-	mut commands: Commands,
-	mut index: AvianTerrainIndex,
-	mut dirty: ResMut<TerrainPresentationDirty>,
-	mut pending: ResMut<TerrainPresentPending>,
-	mut world_base: ResMut<WorldBaseTerrain>,
-	mode: Res<PlaygroundMode>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
-	mut players: Query<(Entity, &mut Transform, &mut LinearVelocity), With<Player>>,
-) {
-	if !dirty.0 {
-		return;
-	}
-
-	index.clear();
-
-	let layout = index.layout().clone();
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-
-	let terrains =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
-	let waters =
-		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
-	info!("generated terrain_cells={} water_cells={}", terrains.len(), waters.len());
-
-	if let Some(base) = index.base_noise() {
-		world_base.0 = base.clone();
-	}
-
-	if let Ok((player, mut transform, mut velocity)) = players.single_mut() {
-		let center = layout.region_center_xz();
-		if let Some(elevation) = index.composed_height_at(center.x, center.z) {
-			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
-		}
-		commands.entity(player).insert(AwaitingTerrainSurface);
-	}
-
-	if *mode == PlaygroundMode::Free {
-		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-			let center = layout.region_center_xz();
-			let elevation = index
-				.composed_height_at(center.x, center.z)
-				.unwrap_or_else(|| holding_elevation(&world_base.0, center.x, center.z));
-			refocus_camera_on_elevation(&layout, elevation, &mut transform, &mut controller);
-		}
-	}
-
-	dirty.0 = false;
-	pending.0 = true;
-}
-
-fn present_cells(
-	mut terrain_presenter: TerrainRegionPresenter,
-	mut water_presenter: WaterRegionPresenter,
-	store: Res<TerrainEntryStore>,
-	layout: Res<TerrainCellLayout>,
-	mut pending: ResMut<TerrainPresentPending>,
-) {
-	if !pending.0 {
-		return;
-	}
-
-	terrain_presenter.clear_presented();
-	water_presenter.clear_presented();
-
-	let region = layout.request_region();
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	let terrain_view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let water_view = WaterStoreView::new(&store, &layout);
-	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
-	pending.0 = false;
-}
-
 fn spawn_groves(
 	mut commands: Commands,
 	config: Res<PlaygroundConfig>,
@@ -644,22 +440,24 @@ fn spawn_groves(
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 	mut dirty: ResMut<GrovesDirty>,
-	pending: Res<TerrainPresentPending>,
-	terrain_dirty: Res<TerrainPresentationDirty>,
 	roots: Query<Entity, With<GroveRoot>>,
 ) {
-	if !dirty.0 || pending.0 || terrain_dirty.0 {
+	if config.forest.is_some() {
+		dirty.0 = false;
+		return;
+	}
+	if !dirty.0 {
+		return;
+	}
+	let terrain_ready = origin_cell_ids_for_layout(&layout, layout.request_region())
+		.into_iter()
+		.all(|original| store.terrain(original.0).is_some());
+	if !terrain_ready {
 		return;
 	}
 
 	for entity in &roots {
 		commands.entity(entity).despawn();
-	}
-
-	if config.forest.is_some() {
-		info!("forest stream on; tiled groves cleared");
-		dirty.0 = false;
-		return;
 	}
 
 	let n = spawn_tiled_groves(&mut commands, &config, &store, &layout, &base.0);
@@ -685,7 +483,6 @@ fn sync_pad_gameplay(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use durham_terrain_models::origin_cell_ids_for_layout;
 
 	#[test]
 	fn world_defaults_keep_grove_fill_at_one_kilometre() {
@@ -695,24 +492,16 @@ mod tests {
 	}
 
 	#[test]
-	fn world_fine_grid_stays_at_sixteen_cells() {
-		assert_eq!(WORLD_FINE_HALF_EXTENT_CELLS, 16);
-		assert!(!world_lod_bands().iter().any(|band| band.max_radius_cells > 16));
-	}
-
-	#[test]
-	fn world_origin_cells_stay_on_fine_disk_plus_macro_rings() {
-		let layout = world_cell_layout();
-		let ids = origin_cell_ids_for_layout(&layout, layout.request_region());
-		assert_eq!(ids.len(), 32 * 32 + 144 + 44);
-	}
-
-	#[test]
-	fn world_macro_rings_stay_inside_seven_km() {
-		let s = TERRAIN_CELL_SIZE;
-		let fine = WORLD_FINE_HALF_EXTENT_CELLS as f32 * s;
-		let mid = fine + WORLD_OUTER_2X_ROWS as f32 * 2.0 * s;
-		let outer = mid + WORLD_OUTER_4X_ROWS as f32 * 4.0 * s;
-		assert!(outer < 7_000.0, "playable half-extent {outer}");
+	fn world_stream_boundaries_align_all_three_grids() {
+		use durham_terrain_models::{
+			WORLD_TERRAIN_BACKGROUND_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M,
+			WORLD_TERRAIN_NEAR_RADIUS_M, WORLD_TERRAIN_PRESENT_STEP_M,
+		};
+		assert_eq!(WORLD_TERRAIN_NEAR_RADIUS_M % (2.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_FAR_RADIUS_M % (4.0 * TERRAIN_CELL_SIZE), 0.0);
+		assert_eq!(WORLD_TERRAIN_BACKGROUND_RADIUS_M, 3_840.0);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_INNER_RADIUS_M, WORLD_TERRAIN_NEAR_RADIUS_M);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_OUTER_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M);
+		assert_eq!(chico_forests::MEDIUM_BUMP_OUT_ANCHOR_STEP_M, WORLD_TERRAIN_PRESENT_STEP_M);
 	}
 }
