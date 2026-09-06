@@ -6,7 +6,8 @@
 use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
 use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::Terrain;
+use crate::terrain::{Terrain, TerrainColliderHost};
+use crate::water::PresentedWaterScene;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
@@ -240,6 +241,7 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 pub struct TerrainRegionPresenter<'w, 's> {
 	commands: Commands<'w, 's>,
 	state: ResMut<'w, TerrainPresenterState>,
+	store: Res<'w, TerrainEntryStore>,
 }
 
 impl<'w, 's> TerrainRegionPresenter<'w, 's> {
@@ -257,12 +259,23 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self
+		let host = self
 			.commands
-			.spawn_scene(value.scene_with_lod(lod_ref))
-			.insert(PresentedTerrainScene(id))
+			.spawn((
+				Name::new("Terrain cell"),
+				TerrainColliderHost,
+				PresentedTerrainScene(id),
+				Transform::IDENTITY,
+				Visibility::default(),
+			))
 			.id();
-		self.state.presented.insert(id, PresentedEntry { version, entity });
+		self.commands.spawn_scene(value.scene_with_lod(lod_ref)).insert(ChildOf(host));
+		if let Some(water) = self.store.water(id) {
+			self.commands
+				.spawn_scene(water.scene_with_lod(lod_ref))
+				.insert((PresentedWaterScene(id), ChildOf(host)));
+		}
+		self.state.presented.insert(id, PresentedEntry { version, entity: host });
 	}
 
 	fn presented_ids(&self) -> Vec<Id> {

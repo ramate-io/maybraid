@@ -277,7 +277,6 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	mut water_presenter: WaterRegionPresenter,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
@@ -286,7 +285,7 @@ fn present_cells(
 		return;
 	}
 
-	let region = layout.request_region();
+	let region = layout.presentation_region();
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -301,13 +300,6 @@ fn present_cells(
 		.map(|tracked| tracked.0)
 		.collect();
 	terrain_presenter.remove_stale(&terrain_wanted);
-	let water_view = WaterStoreView::new(&store, &layout);
-	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
-	let water_wanted = SpatialIndex::<Water>::tracked_ids_for(&water_view, region)
-		.into_iter()
-		.map(|tracked| tracked.0)
-		.collect();
-	water_presenter.remove_stale(&water_wanted);
 
 	pending.0 = false;
 }

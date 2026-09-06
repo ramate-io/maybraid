@@ -10,6 +10,7 @@ pub enum GameFlow {
 	#[default]
 	Home,
 	Characters,
+	LoadingWorld,
 	World,
 }
 

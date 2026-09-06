@@ -1,6 +1,5 @@
 //! Terrain origin cell with development-pad elevation ops applied.
 
-use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -9,7 +8,6 @@ use durham_terrain::shaders::DurhamTerrainShader;
 use durham_terrain_models::terrain::ElevationModulation;
 use durham_terrain_models::{
 	cascade_chunk_for_cell, ComposedTerrain, Terrain, TerrainMeshBuilder, TerrainSdf,
-	TerrainTrimeshCollider,
 };
 use lod::gen::{Id, LodScene};
 use lod::lod_ref::LodRef;
@@ -69,8 +67,6 @@ impl TerrainWithPads {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
 		}
 	}
 }

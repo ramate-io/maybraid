@@ -29,7 +29,6 @@ use crate::terrain::marazion::{
 	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
-use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -48,13 +47,17 @@ pub use cell::{
 	origin_cell_ids_for_layout, MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE,
 	TERRAIN_CELL_SIZE,
 };
-pub use collider::{TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION};
+pub use chunk::cascade::CascadeChunk;
+pub use collider::{
+	terrain_collider_covers_xz, TerrainColliderHost, TerrainColliderMeshSource,
+	TerrainFrictionConfig, TerrainTrimeshCollider, TERRAIN_FRICTION,
+};
 pub use config::TerrainConfig;
 pub use host::{
 	Durham, TerrainCoverage, TerrainPlugin, TerrainPresentPending, TerrainPresentationDirty,
 	WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS, WORLD_OUTER_2X_ROWS, WORLD_OUTER_4X_ROWS,
 };
-pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
+pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainHeightSnapshot};
 pub use jersey::{
 	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
 	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
@@ -176,8 +179,7 @@ impl Terrain {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
-			template(move |_ctx| Ok(RigidBody::Static))
-			TerrainTrimeshCollider
+			TerrainColliderMeshSource
 		}
 	}
 }

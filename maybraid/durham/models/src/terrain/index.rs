@@ -42,6 +42,7 @@ use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Marks a bookkeeping entity as a tracked terrain cell.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -127,6 +128,40 @@ pub struct TerrainEntryStore {
 	entity_to_id: HashMap<Entity, Id>,
 }
 
+/// Cheap owned view of composed height fields for background consumers.
+#[derive(Clone, Default)]
+pub struct TerrainHeightSnapshot {
+	terrain: Arc<HashMap<Id, Arc<crate::terrain::ComposedTerrain>>>,
+}
+
+impl TerrainHeightSnapshot {
+	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
+		let size = layout.cell_size.max(1e-3);
+		let cell = cell_bounds(
+			(x / size).floor() as i32,
+			(z / size).floor() as i32,
+			size,
+			layout.vertical_half_extent,
+		);
+		if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+			return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+		}
+		for outer in &layout.outer_rings {
+			let size = outer.cell_size.max(1e-3);
+			let cell = cell_bounds(
+				(x / size).floor() as i32,
+				(z / size).floor() as i32,
+				size,
+				layout.vertical_half_extent,
+			);
+			if let Some(sdf) = self.terrain.get(&Id::from_cell(cell)) {
+				return Some(sdf.terrain().height_at_with_all_modulations(x, z));
+			}
+		}
+		None
+	}
+}
+
 impl TerrainEntryStore {
 	fn next_version(&mut self) -> Version {
 		self.next_version += 1;
@@ -147,6 +182,21 @@ impl TerrainEntryStore {
 
 	pub fn terrain(&self, id: Id) -> Option<&Terrain> {
 		self.terrain.get(&id).map(|entry| &entry.value)
+	}
+
+	pub fn water(&self, id: Id) -> Option<&Water> {
+		self.water.get(&id).map(|entry| &entry.value)
+	}
+
+	pub fn height_snapshot(&self) -> TerrainHeightSnapshot {
+		TerrainHeightSnapshot {
+			terrain: Arc::new(
+				self.terrain
+					.iter()
+					.map(|(id, entry)| (*id, Arc::clone(&entry.value.sdf)))
+					.collect(),
+			),
+		}
 	}
 
 	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.

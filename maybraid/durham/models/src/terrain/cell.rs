@@ -45,6 +45,11 @@ pub const TERRAIN_CELL_ORIGIN: IVec2 =
 /// (`height_scale=500`, bedrock at `-4 * height_scale`).
 pub const TERRAIN_CELL_VERTICAL_HALF_EXTENT: f32 = 2000.0;
 
+/// Vertical half-extent for presentation / producer queries. Generation cells
+/// keep [`TERRAIN_CELL_VERTICAL_HALF_EXTENT`]; this only widens keep/cull boxes
+/// so tall peaks stay inside the producer volume.
+pub const TERRAIN_PRESENT_VERTICAL_HALF_EXTENT: f32 = 8_000.0;
+
 /// Large AABB for universal (`Id::Universal`) generation deps.
 pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
@@ -116,6 +121,17 @@ impl TerrainCellLayout {
 			}
 		}
 		region
+	}
+
+	/// [`Self::request_region`] with presentation Y covering ±8 km.
+	pub fn presentation_region(&self) -> Aabb3d {
+		let region = self.request_region();
+		let min = Vec3::from(region.min);
+		let max = Vec3::from(region.max);
+		Aabb3d::from_min_max(
+			Vec3::new(min.x, -TERRAIN_PRESENT_VERTICAL_HALF_EXTENT, min.z),
+			Vec3::new(max.x, TERRAIN_PRESENT_VERTICAL_HALF_EXTENT, max.z),
+		)
 	}
 
 	/// World-space center of the request region on XZ (Y = 0).

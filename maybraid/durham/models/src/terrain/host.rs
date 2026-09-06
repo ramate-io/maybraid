@@ -12,6 +12,7 @@ use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin, Re
 use lod::gen::GeneratingSpatialIndex;
 use lod::lod_ref::LodRef;
 use lod::presentation::RegionPresenter;
+use render_item::mesh::handle::MeshFulfillBudget;
 use visual_geometry_core::{
 	install_enforced_mesh_cache, share_terrain_chunk_refs, VisualGeometryCorePlugin,
 };
@@ -23,9 +24,7 @@ use crate::terrain::index::AvianTerrainIndex;
 use crate::terrain::presentation::{
 	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView,
 };
-use crate::water::{
-	ComposedWater, Water, WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
-};
+use crate::water::{ComposedWater, Water, WaterPresentationAssets};
 use crate::{DurhamTerrainModelsPlugin, Terrain, TerrainMeshBuilder};
 
 /// Composed Durham SDF / CpuShot terrain model.
@@ -160,15 +159,20 @@ impl Plugin for TerrainPlugin<Durham> {
 		share_terrain_chunk_refs::<TerrainMeshBuilder>(app, false);
 		install_enforced_mesh_cache::<ComposedWater, RefractionWater>(app);
 
-		app.insert_resource(config)
-			.insert_resource(WorldBaseTerrain(base))
-			.insert_resource(coverage)
-			.insert_resource(layout_for(coverage, terrain_radius))
-			.insert_resource(TerrainFillParams { coverage, terrain_radius })
-			.insert_resource(TerrainPresentationDirty(true))
-			.init_resource::<TerrainPresentPending>()
-			.add_systems(Startup, setup_presentation_assets)
-			.add_systems(Update, (generate_cells, present_cells.after(generate_cells)));
+		let layout = layout_for(coverage, terrain_radius);
+		app.insert_resource(
+			MeshFulfillBudget::<TerrainMeshBuilder>::new(8, 16, 256)
+				.with_prefer_xz(layout.region_center_xz()),
+		)
+		.insert_resource(config)
+		.insert_resource(WorldBaseTerrain(base))
+		.insert_resource(coverage)
+		.insert_resource(layout)
+		.insert_resource(TerrainFillParams { coverage, terrain_radius })
+		.insert_resource(TerrainPresentationDirty(true))
+		.init_resource::<TerrainPresentPending>()
+		.add_systems(Startup, setup_presentation_assets)
+		.add_systems(Update, (generate_cells, present_cells.after(generate_cells)));
 	}
 }
 
@@ -232,6 +236,7 @@ fn generate_cells(
 		bounds: &region,
 	};
 
+	let _span = bevy::log::info_span!("durham_terrain_generate").entered();
 	let terrains =
 		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
 	let waters =
@@ -248,7 +253,6 @@ fn generate_cells(
 
 fn present_cells(
 	mut terrain_presenter: TerrainRegionPresenter,
-	mut water_presenter: WaterRegionPresenter,
 	store: Res<crate::terrain::index::TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
@@ -258,9 +262,8 @@ fn present_cells(
 	}
 
 	terrain_presenter.clear_presented();
-	water_presenter.clear_presented();
 
-	let region = layout.request_region();
+	let region = layout.presentation_region();
 	let identity = Transform::IDENTITY;
 	let lod_ref = LodRef {
 		entity: Entity::PLACEHOLDER,
@@ -270,8 +273,6 @@ fn present_cells(
 	};
 	let terrain_view = TerrainStoreView::new(&store, &layout);
 	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
-	let water_view = WaterStoreView::new(&store, &layout);
-	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
 	pending.0 = false;
 }
 

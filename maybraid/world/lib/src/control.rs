@@ -4,6 +4,10 @@ use bevy::prelude::*;
 use chico_vegetation_on_terrain_playground::{
 	CameraController, MoveWish, MovementAction, Player, PlaygroundMode,
 };
+use durham_terrain_models::{
+	terrain_collider_covers_xz, CascadeChunk, TerrainCellLayout, TerrainEntryStore,
+	TerrainTrimeshCollider,
+};
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
 
@@ -17,6 +21,21 @@ impl Default for WorldGameplayEnabled {
 	fn default() -> Self {
 		Self(true)
 	}
+}
+
+/// Local spawn collider + composed height are ready for Discovery drop-in.
+#[derive(Resource, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct WorldSurfaceReady(pub bool);
+
+pub(crate) fn update_world_surface_ready(
+	store: Res<TerrainEntryStore>,
+	layout: Res<TerrainCellLayout>,
+	colliders: Query<&CascadeChunk, With<TerrainTrimeshCollider>>,
+	mut ready: ResMut<WorldSurfaceReady>,
+) {
+	let center = layout.region_center_xz();
+	ready.0 = terrain_collider_covers_xz(center, colliders.iter())
+		&& store.composed_height_at(&layout, center.x, center.z).is_some();
 }
 
 pub(crate) fn apply_intents_to_movement(
@@ -90,5 +109,24 @@ pub(crate) fn echo_character_intents(
 	}
 	if !parts.is_empty() {
 		console.0 = parts.join(" ");
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use durham_terrain_models::{terrain_collider_covers_xz, CascadeChunk};
+
+	#[test]
+	fn surface_ready_requires_local_column() {
+		let spawn = Vec3::ZERO;
+		let local = CascadeChunk::unit_chunk();
+		let distant = CascadeChunk {
+			origin: Vec3::new(1_000.0, -2_000.0, 1_000.0),
+			size: 160.0,
+			..CascadeChunk::unit_chunk()
+		};
+		assert!(!terrain_collider_covers_xz(spawn, [&distant]));
+		assert!(terrain_collider_covers_xz(spawn, [&local]));
 	}
 }

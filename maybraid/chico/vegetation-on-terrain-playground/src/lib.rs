@@ -29,11 +29,12 @@ pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};
 pub use durham_terrain_models::{TerrainCoverage, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS};
 pub use forest::DurhamForestPresenter;
 pub use game_commands::command::PendingStartupCommand;
-pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
+pub use groves::{DurhamGroveSample, OwnedDurhamTerrain, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
 	CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish, MovementAction,
-	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
+	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPhysicsEnabled,
+	PlayerPlugin, PlaygroundMode,
 };
 
 use avian3d::prelude::LinearVelocity;
