@@ -377,13 +377,16 @@ fn accelerate_wish(
 	accel: f32,
 	dt: f32,
 	ground_normal: Option<Vec3>,
+	gravity: Vec3,
 ) {
 	let drive = wish_on_ground(wish, ground_normal);
 	if drive.length_squared() < 1e-8 {
 		return;
 	}
 	if ground_normal.is_some() {
-		**velocity += drive * accel * dt;
+		let horizontal = Vec2::new(drive.x, drive.z).length().max(0.25);
+		let slope_accel = (accel / horizontal - gravity.dot(drive)).max(0.0);
+		**velocity += drive * slope_accel * dt;
 	} else {
 		velocity.x += drive.x * accel * dt;
 		velocity.z += drive.z * accel * dt;
@@ -393,6 +396,7 @@ fn accelerate_wish(
 /// Apply [`MoveWish`] for every capsule. Pad intent and NPC drive both write it.
 pub(crate) fn apply_wish_movement(
 	time: Res<Time>,
+	gravity: Option<Res<Gravity>>,
 	mut controllers: Query<
 		(
 			&MoveWish,
@@ -400,6 +404,7 @@ pub(crate) fn apply_wish_movement(
 			Option<&MaxSlopeAngle>,
 			Option<&WalkableGround>,
 			&MovementAcceleration,
+			&GravityScale,
 			&mut LinearVelocity,
 			Has<Grounded>,
 			Option<&Jumping>,
@@ -408,7 +413,8 @@ pub(crate) fn apply_wish_movement(
 	>,
 ) {
 	let dt = time.delta_secs();
-	for (wish, hits, max_slope, walkable, accel, mut velocity, grounded, jumping) in
+	let gravity = gravity.map(|gravity| gravity.0).unwrap_or(Vec3::ZERO);
+	for (wish, hits, max_slope, walkable, accel, gravity_scale, mut velocity, grounded, jumping) in
 		&mut controllers
 	{
 		if wish.0.length_squared() < 1e-6 {
@@ -416,13 +422,9 @@ pub(crate) fn apply_wish_movement(
 		}
 		let contact = walkable_ground_normal(hits, max_slope);
 		let airborne = jumping.is_some_and(Jumping::airborne);
-		let ground = ground_plane_for_wish(
-			contact,
-			walkable.map(|plane| plane.normal),
-			grounded,
-			airborne,
-		);
-		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
+		let ground =
+			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
+		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground, gravity * gravity_scale.0);
 	}
 }
 
@@ -511,9 +513,27 @@ mod tests {
 		let slope = 70.0_f32.to_radians();
 		// Hill rises in +X, so the normal tilts downhill (−X).
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, Some(normal));
+		accelerate_wish(&mut velocity, Vec3::X, 40.0, 1.0, Some(normal), Vec3::ZERO);
 		assert!(velocity.y > 1.0, "grounded drive must add uphill Y, got {}", velocity.y);
 		assert!(velocity.x > 0.0);
+	}
+
+	#[test]
+	fn slope_drive_preserves_horizontal_pace_against_gravity() {
+		let gravity = Vec3::NEG_Y * 9.81 * 1.25;
+		let slope = 60.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let tangent_gravity = gravity - normal * gravity.dot(normal);
+		let mut uphill = LinearVelocity(Vec3::ZERO);
+		let mut downhill = LinearVelocity(Vec3::ZERO);
+
+		accelerate_wish(&mut uphill, Vec3::X, 40.0, 1.0, Some(normal), gravity);
+		accelerate_wish(&mut downhill, Vec3::NEG_X, 40.0, 1.0, Some(normal), gravity);
+		uphill.0 += tangent_gravity;
+		downhill.0 += tangent_gravity;
+
+		assert!((uphill.x - 40.0).abs() < 1e-4, "{uphill:?}");
+		assert!((downhill.x + 40.0).abs() < 1e-4, "{downhill:?}");
 	}
 
 	#[test]
@@ -521,10 +541,17 @@ mod tests {
 		let mut velocity = LinearVelocity(Vec3::ZERO);
 		let slope = 45.0_f32.to_radians();
 		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
-		accelerate_wish(&mut velocity, Vec3::new(1.0, 1.0, 0.0), 40.0, 1.0, Some(normal));
+		accelerate_wish(
+			&mut velocity,
+			Vec3::new(1.0, 1.0, 0.0),
+			40.0,
+			1.0,
+			Some(normal),
+			Vec3::ZERO,
+		);
 		assert!(velocity.y > 1.0, "XZ heading on the plane must add uphill Y, got {}", velocity.y);
-		assert!(velocity.x > 0.0);
-		assert!(velocity.y.abs() < 40.0);
+		assert!((velocity.x - 40.0).abs() < 1e-4, "{velocity:?}");
+		assert!((velocity.y - 40.0).abs() < 1e-4, "{velocity:?}");
 	}
 
 	#[test]
@@ -591,7 +618,14 @@ mod tests {
 	#[test]
 	fn airborne_wish_stays_xz() {
 		let mut velocity = LinearVelocity(Vec3::new(0.0, -5.0, 0.0));
-		accelerate_wish(&mut velocity, Vec3::new(1.0, 4.0, 0.0), 40.0, 1.0, None);
+		accelerate_wish(
+			&mut velocity,
+			Vec3::new(1.0, 4.0, 0.0),
+			40.0,
+			1.0,
+			None,
+			Vec3::NEG_Y * 9.81,
+		);
 		assert!((velocity.y + 5.0).abs() < 1e-4);
 		assert!(velocity.x > 0.0);
 	}
