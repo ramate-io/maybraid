@@ -85,6 +85,21 @@ struct CharacterController;
 #[component(storage = "SparseSet")]
 pub(crate) struct Grounded;
 
+/// Last valid walkable support plane.
+///
+/// A descending capsule can briefly outrun its down-cast between terrain
+/// facets. Reuse this only while [`Grounded`] bridges that probe miss.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WalkableGround {
+	pub(crate) normal: Vec3,
+}
+
+impl Default for WalkableGround {
+	fn default() -> Self {
+		Self { normal: Vec3::Y }
+	}
+}
+
 /// Space jump is in flight. Cleared on landing, not on shapecast misses.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
@@ -193,6 +208,7 @@ fn spawn_player(
 			JumpImpulse(JUMP_IMPULSE),
 			MaxSlopeAngle(locomotion.max_slope_angle),
 			MoveWish::default(),
+			WalkableGround::default(),
 			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
 			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
 			GravityScale(0.0),
@@ -336,6 +352,7 @@ fn update_grounded(
 			Option<&MaxSlopeAngle>,
 			Has<Grounded>,
 			Option<&mut Jumping>,
+			&mut WalkableGround,
 		),
 		With<CharacterController>,
 	>,
@@ -344,7 +361,11 @@ fn update_grounded(
 		return;
 	}
 
-	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping) in &mut query {
+	for (entity, hits, velocity, max_slope_angle, was_grounded, jumping, mut walkable) in &mut query
+	{
+		if let Some(normal) = walkable_ground_normal(hits, max_slope_angle) {
+			walkable.normal = normal;
+		}
 		let mut is_grounded = hits.iter().any(|hit| {
 			if let Some(angle) = max_slope_angle {
 				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
@@ -438,6 +459,7 @@ fn apply_character_movement(
 			Entity,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
+			&WalkableGround,
 			&MovementAcceleration,
 			&JumpImpulse,
 			&mut LinearVelocity,
@@ -462,12 +484,13 @@ fn apply_character_movement(
 	let dt = time.delta_secs();
 
 	for action in reader.read() {
-		for (entity, hits, max_slope, accel, jump, mut velocity, grounded) in &mut controllers {
+		for (entity, hits, max_slope, walkable, accel, jump, mut velocity, grounded) in
+			&mut controllers
+		{
 			match action {
 				MovementAction::Move(direction) => {
 					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
-					let ground =
-						grounded.then(|| walkable_ground_normal(hits, max_slope)).flatten();
+					let ground = grounded_plane(hits, max_slope, walkable, grounded);
 					accelerate_wish(&mut velocity, wish, accel.0, dt, ground);
 				}
 				MovementAction::Jump => {
@@ -488,6 +511,7 @@ fn apply_movement_damping(
 			&MovementDampingFactor,
 			&ShapeHits,
 			Option<&MaxSlopeAngle>,
+			&WalkableGround,
 			Has<Grounded>,
 			Option<&Jumping>,
 			&mut LinearVelocity,
@@ -498,12 +522,21 @@ fn apply_movement_damping(
 	if *mode != PlaygroundMode::Character {
 		return;
 	}
-	for (damping, hits, max_slope, grounded, jumping, mut velocity) in &mut query {
-		let ground = (grounded && jumping.is_none())
-			.then(|| walkable_ground_normal(hits, max_slope))
+	for (damping, hits, max_slope, walkable, grounded, jumping, mut velocity) in &mut query {
+		let ground = (jumping.is_none())
+			.then(|| grounded_plane(hits, max_slope, walkable, grounded))
 			.flatten();
 		damp_movement(&mut velocity, damping.0, ground);
 	}
+}
+
+fn grounded_plane(
+	hits: &ShapeHits,
+	max_slope: Option<&MaxSlopeAngle>,
+	walkable: &WalkableGround,
+	grounded: bool,
+) -> Option<Vec3> {
+	grounded.then(|| walkable_ground_normal(hits, max_slope).unwrap_or(walkable.normal))
 }
 
 /// Damp locomotion without tipping slope-tangent velocity into or away from
@@ -583,5 +616,14 @@ mod tests {
 		assert!(downhill.dot(normal).abs() < 1e-5, "{downhill:?}");
 		assert!(uphill.y > 0.0);
 		assert!(downhill.y < 0.0);
+	}
+
+	#[test]
+	fn grounded_probe_miss_reuses_last_walkable_plane() {
+		let hits = ShapeHits::default();
+		let normal = Vec3::new(-0.4, 0.9, 0.0).normalize();
+		let walkable = WalkableGround { normal };
+		assert_eq!(grounded_plane(&hits, None, &walkable, true), Some(normal));
+		assert_eq!(grounded_plane(&hits, None, &walkable, false), None);
 	}
 }
