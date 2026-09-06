@@ -27,6 +27,12 @@ pub enum PlaygroundCommand {
 	Pack,
 	/// Spawn both a short herd and a short pack.
 	Both,
+	/// Spawn a short herd of Hars (same capsule/visual path as other plants).
+	Hars,
+	/// Spawn a short herd of Ylter.
+	Ylter,
+	/// Spawn a Hars herd and a Ylter herd.
+	HarsYlter,
 	/// Regenerate the terrain patch and respawn the current cast.
 	Rebuild,
 }
@@ -56,6 +62,15 @@ pub struct RequestPack;
 pub struct RequestBoth;
 
 #[derive(Component, Debug, Clone, Copy)]
+pub struct RequestHars;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestYlter;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestHarsYlter;
+
+#[derive(Component, Debug, Clone, Copy)]
 pub struct RequestRebuild;
 
 impl PlaygroundCommand {
@@ -83,6 +98,18 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Both => {
 				commands.spawn(RequestBoth);
 				*console = "both: pending".into();
+			}
+			PlaygroundCommand::Hars => {
+				commands.spawn(RequestHars);
+				*console = "hars: pending".into();
+			}
+			PlaygroundCommand::Ylter => {
+				commands.spawn(RequestYlter);
+				*console = "ylter: pending".into();
+			}
+			PlaygroundCommand::HarsYlter => {
+				commands.spawn(RequestHarsYlter);
+				*console = "hars-ylter: pending".into();
 			}
 			PlaygroundCommand::Rebuild => {
 				commands.spawn(RequestRebuild);
@@ -127,6 +154,19 @@ mod tests {
 	fn pack_parses_as_a_cast_switch() {
 		let Ok(PlaygroundCommand::Pack) = PlaygroundCommand::parse_line("pack") else {
 			panic!("expected pack command");
+		};
+	}
+
+	#[test]
+	fn hars_ylter_parses_as_a_cast_switch() {
+		let Ok(PlaygroundCommand::Hars) = PlaygroundCommand::parse_line("hars") else {
+			panic!("expected hars command");
+		};
+		let Ok(PlaygroundCommand::Ylter) = PlaygroundCommand::parse_line("ylter") else {
+			panic!("expected ylter command");
+		};
+		let Ok(PlaygroundCommand::HarsYlter) = PlaygroundCommand::parse_line("hars-ylter") else {
+			panic!("expected hars-ylter command");
 		};
 	}
 }

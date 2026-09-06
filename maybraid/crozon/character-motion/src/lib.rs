@@ -21,7 +21,9 @@ pub use clip::{
 	AnimClip, AnimId, AnimRef, AnimRefRoot, JabParams, JumpParams, TuckParams, TuckedFlipParams,
 	TwoFootedTuckedFlipParams,
 };
-pub use elevation::apply_terrain_pitch;
+pub use elevation::{
+	apply_terrain_pitch, draw_terrain_pitch_probes, is_local_visual_child, DrawTerrainPitchProbes,
+};
 pub use mailbox::{
 	apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox, AnimBone, AnimMailbox, AnimProgress,
 };

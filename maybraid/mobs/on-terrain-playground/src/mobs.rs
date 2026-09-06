@@ -12,8 +12,11 @@ use poi_intelligence::{GlobalPoi, LocalPoi, Poi, PoiId, PoiIntelligenceUser, Poi
 use routing_intelligence::RoutingIntelligenceUser;
 use tether_intelligence::{StalkRadii, TetherIntelligenceUser, TetherObjective};
 
-use crate::catalog::{playground_leash, scene_for, PlaygroundCast, JOURNEY_TILE};
-use crate::commands::{RequestBoth, RequestHerd, RequestPack, RequestRebuild};
+use crate::catalog::{playground_leash, scene_for_placement, PlaygroundCast, JOURNEY_TILE};
+use crate::commands::{
+	RequestBoth, RequestHars, RequestHarsYlter, RequestHerd, RequestPack, RequestRebuild,
+	RequestYlter,
+};
 use crate::playground_player::terrain_collider_ready;
 use crate::ui;
 use crate::TerrainPresentationDirty;
@@ -65,6 +68,9 @@ pub fn apply_cast_commands(
 	herd: Query<Entity, With<RequestHerd>>,
 	pack: Query<Entity, With<RequestPack>>,
 	both: Query<Entity, With<RequestBoth>>,
+	hars: Query<Entity, With<RequestHars>>,
+	ylter: Query<Entity, With<RequestYlter>>,
+	hars_ylter: Query<Entity, With<RequestHarsYlter>>,
 ) {
 	let mut next = None;
 	for entity in &herd {
@@ -77,6 +83,18 @@ pub fn apply_cast_commands(
 	}
 	for entity in &both {
 		next = Some(PlaygroundCast::Both);
+		commands.entity(entity).despawn();
+	}
+	for entity in &hars {
+		next = Some(PlaygroundCast::Hars);
+		commands.entity(entity).despawn();
+	}
+	for entity in &ylter {
+		next = Some(PlaygroundCast::Ylter);
+		commands.entity(entity).despawn();
+	}
+	for entity in &hars_ylter {
+		next = Some(PlaygroundCast::HarsYlter);
 		commands.entity(entity).despawn();
 	}
 	let Some(cast) = next else {
@@ -139,9 +157,9 @@ pub fn spawn_forage_pois(
 	}
 
 	let mut locals = Vec::new();
-	for (kind, offset) in state.cast.placements() {
-		let host = Vec2::new(center.x + offset.x, center.z + offset.y);
-		for (poi_kind, xz) in host_local_snacks(host, playground_leash(*kind)) {
+	for placement in state.cast.placements() {
+		let host = Vec2::new(center.x + placement.offset.x, center.z + placement.offset.y);
+		for (poi_kind, xz) in host_local_snacks(host, playground_leash(placement.kind)) {
 			let Some(elevation) = store.composed_height_at(&layout, xz.x, xz.y) else {
 				return;
 			};
@@ -218,23 +236,23 @@ pub fn spawn_playground_mobs(
 
 	let center = layout.region_center_xz();
 	let mut planned = Vec::new();
-	for (kind, offset) in state.cast.placements() {
-		let xz = Vec2::new(center.x + offset.x, center.z + offset.y);
+	for placement in state.cast.placements() {
+		let xz = Vec2::new(center.x + placement.offset.x, center.z + placement.offset.y);
 		let Some(elevation) = store.composed_height_at(&layout, xz.x, xz.y) else {
 			return;
 		};
-		planned.push((*kind, xz, elevation));
+		planned.push((*placement, xz, elevation));
 	}
 
-	for (kind, xz, elevation) in planned {
+	for (placement, xz, elevation) in planned {
 		let transform = Transform::from_xyz(xz.x, elevation, xz.y);
-		let scene = scene_for(kind);
+		let scene = scene_for_placement(placement);
 		let members = scene.mob.roster.members.len();
 		let host = scene.spawn(&mut commands, transform);
 		commands.entity(host).insert(PlaygroundMobHost);
 		info!(
-			"spawned {:?} members={members} at ({:.1}, {:.1}, {:.1})",
-			kind, xz.x, elevation, xz.y
+			"spawned {:?} species={:?} members={members} at ({:.1}, {:.1}, {:.1})",
+			placement.kind, placement.species, xz.x, elevation, xz.y
 		);
 	}
 	state.mobs_ready = true;

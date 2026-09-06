@@ -47,9 +47,9 @@ pub use components::{
 };
 pub use concepts::ConceptAnimation;
 pub use crozon_character_motion::{
-	apply_terrain_pitch, motion_policy, sync_motion_markers, AnimateBones, AnimateEffects,
-	ApplyTerrainPitch, CharacterMotionPlugin, CharacterMotionSystems, MotionPolicy,
-	SuspendAnimation, SuspendTerrainPitch,
+	apply_terrain_pitch, draw_terrain_pitch_probes, motion_policy, sync_motion_markers,
+	AnimateBones, AnimateEffects, ApplyTerrainPitch, CharacterMotionPlugin, CharacterMotionSystems,
+	DrawTerrainPitchProbes, MotionPolicy, SuspendAnimation, SuspendTerrainPitch,
 };
 pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use hosts::CharacterHostsPlugin;

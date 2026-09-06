@@ -88,7 +88,7 @@ pub(crate) struct Grounded;
 /// Space jump is in flight. Cleared on landing, not on shapecast misses.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
-pub(crate) struct Jumping {
+pub struct Jumping {
 	left_ground: bool,
 }
 

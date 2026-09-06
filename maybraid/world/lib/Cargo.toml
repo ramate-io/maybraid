@@ -23,6 +23,7 @@ firearm-user = { workspace = true }
 firearms = { workspace = true }
 fleeing-intelligence = { workspace = true }
 game-commands = { workspace = true }
+ground-avian = { workspace = true }
 hiding-intelligence = { workspace = true }
 log = { workspace = true }
 lod = { workspace = true }

@@ -3,7 +3,7 @@
 use bevy::ecs::entity::Entity;
 use bevy::math::Vec3;
 
-/// Closest downward hit from an origin.
+/// Downward ground sample from an origin.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GroundHit {
 	pub point: Vec3,
@@ -14,7 +14,9 @@ pub struct GroundHit {
 /// Sample ground under a world-space origin.
 ///
 /// Implementations typically cast a short downward ray and skip the querying
-/// character’s own collider via `exclude`.
+/// character’s own collider via `exclude`. The Avian backend walks Fixed
+/// colliders in the column and returns the lowest standable hit, not the
+/// first volume the ray enters.
 pub trait ElevationProbe {
 	fn hit_down(
 		&mut self,
@@ -23,7 +25,7 @@ pub trait ElevationProbe {
 		exclude: &[Entity],
 	) -> Option<GroundHit>;
 
-	/// Height of the first hit under `(x, from_y, z)`, if any.
+	/// Height of the ground hit under `(x, from_y, z)`, if any.
 	fn height_at(
 		&mut self,
 		x: f32,

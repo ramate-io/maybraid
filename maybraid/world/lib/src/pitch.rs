@@ -1,19 +1,20 @@
-//! Avian pitch apply + copy jump-in-flight onto [`SuspendTerrainPitch`].
+//! Avian pitch apply + jump suspend for the vegetation player and NPC capsules.
 
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
+use chico_vegetation_on_terrain_playground::{Jumping as VegetationJumping, Player};
 use crozon_characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, SuspendTerrainPitch, TerrainPitch,
 };
 use ground_avian::AvianElevationProbe;
-
-use crate::player::{CharacterController, Jumping};
+use player::{CharacterController, Jumping};
 
 pub(crate) fn sync_suspend_terrain_pitch(
 	mut commands: Commands,
-	controllers: Query<(Entity, Has<Jumping>), With<CharacterController>>,
+	players: Query<(Entity, Has<VegetationJumping>), With<Player>>,
+	npcs: Query<(Entity, Has<Jumping>), (With<CharacterController>, Without<Player>)>,
 ) {
-	for (entity, jumping) in &controllers {
+	for (entity, jumping) in players.iter().chain(npcs.iter()) {
 		if jumping {
 			commands.entity(entity).insert(SuspendTerrainPitch);
 		} else {

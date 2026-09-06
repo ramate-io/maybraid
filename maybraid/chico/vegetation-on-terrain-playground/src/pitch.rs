@@ -27,10 +27,11 @@ pub(crate) fn apply_avian_terrain_pitch(
 	time: Res<Time>,
 	probe: AvianElevationProbe,
 	visuals: Query<
-		(Entity, &mut Transform, &mut TerrainPitch, Option<&ChildOf>),
+		(Entity, &mut Transform, &GlobalTransform, &mut TerrainPitch),
 		With<ApplyTerrainPitch>,
 	>,
-	parents: Query<(&GlobalTransform, Has<SuspendTerrainPitch>)>,
+	child_of: Query<&ChildOf>,
+	suspended: Query<(), With<SuspendTerrainPitch>>,
 ) {
-	apply_terrain_pitch(time, probe, visuals, parents);
+	apply_terrain_pitch(time, probe, visuals, child_of, suspended);
 }

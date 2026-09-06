@@ -35,7 +35,8 @@ sync_motion_markers
 
 tick_anim_mailbox          # every body: advance clip time, or [`AnimProgress`]
 apply_anim_mailbox         # With<AnimateBones|AnimateEffects>: sample + write
-apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation + support lift
+apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays along girdle axis → visual rotation + support offset
+draw_terrain_pitch_probes  # PostUpdate gizmos: lime front, orange hind, yellow sample axis, cyan mesh +Z
 ```
 
 UltraLow: sync strips markers → far hosts still tick time, but bone writes and
@@ -81,7 +82,8 @@ No clip sampling. No rays.
 | `prepare_anim_mailbox` | `Anim` | Typed rig + `AnimMailbox` once the bone map is ready |
 | `tick_anim_mailbox` | `Anim` | Advance time on every body mailbox |
 | `apply_anim_mailbox` | `Anim` | Sample/write only `With<AnimateBones\|AnimateEffects>` |
-| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>` |
+| `apply_terrain_pitch<P>` | `Elevation` | **Not registered here** — app adds with a concrete probe; filters `With<ApplyTerrainPitch>`; rays from the visual world pose |
+| `draw_terrain_pitch_probes` | `PostUpdate` | Sample gizmos when [`DrawTerrainPitchProbes`](src/elevation.rs) is true (default) |
 
 Order `CharacterMotionSystems::Anim` after `CharacterHostSystems::Pose`.
 Order elevation after physics / locomotion.
@@ -112,13 +114,25 @@ the shared table `sync_motion_markers` applies. To add a capability, extend
 ### Stand on colliders (not a heightfield)
 
 Implement `ground::ElevationProbe` (or use `AvianElevationProbe`). Wrap the
-generic apply loop in a concrete system. Side rays run only when
-`TerrainPitch.roll_weight > 0`.
+generic apply loop in a concrete system. Rays start at the visual's
+`GlobalTransform` so a host parented to an identity cell/group root still
+samples the slope under the mesh. `AvianElevationProbe` masks
+`PhysicsInteractionLayer::Fixed`, walks past near-start / canopy hits, and
+keeps the lowest standable collider so grove Host AABBs and tree sticks do
+not steal the terrain trimesh. Side rays run only when
+`TerrainPitch.roll_weight > 0`. Quadruped front/hind rays follow the live
+shoulder–hip axis (`TerrainPitch.sagittal`); gizmos: lime/orange ray hits, yellow sample axis, cyan
+mesh `+Z`, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
+ring on the origin means girdles were found but the XZ run was too short.
+Insert `DrawTerrainPitchProbes(false)` to hide.
 
 ### Jump / airborne
 
-Insert `SuspendTerrainPitch` on the **physics parent** of the visual. Pitch
-apply zeros tilt and support lift while that marker is present.
+Insert `SuspendTerrainPitch` on the visual or any ancestor (typically the
+physics capsule). Pitch apply zeros tilt and support offset while that marker
+is on the ancestor chain. Local Y `support_offset` is applied only when the
+visual is a near-origin child of a body, not when local translation is
+world-sized under a group root.
 
 ## What this crate is not
 

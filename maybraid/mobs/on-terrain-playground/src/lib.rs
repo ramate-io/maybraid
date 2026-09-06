@@ -14,7 +14,7 @@ mod playground_player;
 mod ui;
 
 pub use camera::CameraController;
-pub use catalog::{scene_for, PlaygroundCast, HERD_MEMBERS, PACK_MEMBERS};
+pub use catalog::{scene_for, PlaygroundCast, HERD_MEMBERS, PACK_MEMBERS, SPECIES_MEMBERS};
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use playground_player::PlaygroundMode;

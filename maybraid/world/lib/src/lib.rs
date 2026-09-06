@@ -12,6 +12,7 @@ mod control;
 mod intelligence;
 mod material_lib;
 mod mobs;
+mod pitch;
 mod poi;
 mod ui;
 
@@ -31,6 +32,7 @@ use chico_vegetation_on_terrain_playground::{
 	PlayerControlSystems, PlaygroundConfig as VegetationPlaygroundConfig, PlaygroundDiag,
 	PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter, VegetationOnTerrainPlugin,
 };
+use crozon_characters::CharacterMotionSystems;
 use durham_terrain_models::TerrainFrictionConfig;
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
@@ -98,6 +100,7 @@ impl Plugin for WorldPlugin {
 				commands: false,
 				register_forest_lod: false,
 				register_bump_out_lod: false,
+				register_terrain_pitch: false,
 			})
 			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
@@ -131,12 +134,22 @@ impl Plugin for WorldPlugin {
 		} else {
 			app.init_resource::<TextEntryFocus>();
 		}
-		app.add_systems(PostStartup, spawn_default_braidman).add_systems(
-			Update,
-			control::apply_intents_to_movement
-				.after(CharacterControlSystems)
-				.before(PlayerControlSystems),
-		);
+		app.add_systems(PostStartup, spawn_default_braidman)
+			.add_systems(
+				Update,
+				control::apply_intents_to_movement
+					.after(CharacterControlSystems)
+					.before(PlayerControlSystems),
+			)
+			.add_systems(
+				Update,
+				(
+					pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
+					pitch::apply_avian_terrain_pitch
+						.in_set(CharacterMotionSystems::Elevation)
+						.after(pitch::sync_suspend_terrain_pitch),
+				),
+			);
 		if self.debug_chrome {
 			app.add_systems(Startup, ui::spawn_mob_debug_hud).add_systems(
 				Update,

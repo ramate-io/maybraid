@@ -3923,6 +3923,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "ground",
+ "lod-avian",
 ]
 
 [[package]]
@@ -4772,6 +4773,7 @@ dependencies = [
  "firearms",
  "fleeing-intelligence",
  "game-commands",
+ "ground-avian",
  "hiding-intelligence",
  "lod",
  "lod-avian",

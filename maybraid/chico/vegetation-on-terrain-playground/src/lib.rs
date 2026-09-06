@@ -29,7 +29,7 @@ pub use game_commands::command::PendingStartupCommand;
 pub use groves::{DurhamGroveSample, StoredDurhamTerrain};
 pub use material_lib::{VegetationOnTerrainMaterialLib, VegetationOnTerrainMaterialRefPlugin};
 pub use player::{
-	CharacterCameraFollowEnabled, CharacterLocomotion, MoveWish, MovementAction,
+	CharacterCameraFollowEnabled, CharacterLocomotion, Jumping, MoveWish, MovementAction,
 	PadMovementEnabled, Player, PlayerCapsule, PlayerControlSystems, PlayerPlugin, PlaygroundMode,
 };
 
@@ -210,6 +210,9 @@ pub struct VegetationOnTerrainPlugin {
 	pub register_forest_lod: bool,
 	/// Register the plain Durham-backed canopy bump-out presenter.
 	pub register_bump_out_lod: bool,
+	/// Register Avian terrain pitch apply + player jump suspend.
+	/// World sets this false and owns pitch for NPCs as well as the player.
+	pub register_terrain_pitch: bool,
 }
 
 impl Default for VegetationOnTerrainPlugin {
@@ -219,6 +222,7 @@ impl Default for VegetationOnTerrainPlugin {
 			commands: true,
 			register_forest_lod: true,
 			register_bump_out_lod: true,
+			register_terrain_pitch: true,
 		}
 	}
 }
@@ -312,11 +316,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 					drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),
-					sync_suspend_terrain_pitch.after(PlayerControlSystems),
-					apply_avian_terrain_pitch
-						.in_set(CharacterMotionSystems::Elevation)
-						.after(drive_player_locomotion)
-						.after(sync_suspend_terrain_pitch),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -345,6 +344,13 @@ impl Plugin for VegetationOnTerrainPlugin {
 					drive_player_locomotion
 						.after(PlayerControlSystems)
 						.before(CharacterMotionSystems::Anim),
+				),
+			);
+		}
+		if self.register_terrain_pitch {
+			app.add_systems(
+				Update,
+				(
 					sync_suspend_terrain_pitch.after(PlayerControlSystems),
 					apply_avian_terrain_pitch
 						.in_set(CharacterMotionSystems::Elevation)

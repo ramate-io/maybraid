@@ -11,11 +11,13 @@ use crate::playground_player::PlaygroundMode;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Mob on terrain — / for commands — Y or F1 drawer".into(),
-		empty_console_text: "Console: `herd`, `pack`, `both`, `rebuild`, `mode character`, `help`"
-			.into(),
+		empty_console_text:
+			"Console: `herd`, `pack`, `both`, `hars`, `ylter`, `hars-ylter`, `rebuild`, `mode character`, `help`"
+				.into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
-		controls_hint: "herd | pack | both — rebuild — mode free|character — fly WASD Space/Shift"
-			.into(),
+		controls_hint:
+			"herd | pack | both | hars | ylter | hars-ylter — rebuild — mode free|character — fly WASD Space/Shift"
+				.into(),
 	}
 }
 

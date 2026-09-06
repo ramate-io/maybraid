@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use crate::elevation::{draw_terrain_pitch_probes, DrawTerrainPitchProbes};
 use crate::mailbox::{apply_anim_mailbox, prepare_anim_mailbox, tick_anim_mailbox};
 use crate::sync::sync_motion_markers;
 
@@ -12,6 +13,7 @@ pub enum CharacterMotionSystems {
 	/// Sync host markers from the shown LOD band, then prepare + tick + apply clips.
 	Anim,
 	/// `apply_terrain_pitch::<P>` — add this system yourself with a probe.
+	/// Sample from the visual `GlobalTransform`; exclude / suspend via ancestors.
 	Elevation,
 }
 
@@ -23,19 +25,21 @@ pub struct CharacterMotionPlugin;
 
 impl Plugin for CharacterMotionPlugin {
 	fn build(&self, app: &mut App) {
-		app.configure_sets(
-			Update,
-			CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
-		);
-		app.add_systems(
-			Update,
-			(
-				sync_motion_markers,
-				prepare_anim_mailbox.after(sync_motion_markers),
-				tick_anim_mailbox.after(prepare_anim_mailbox),
-				apply_anim_mailbox.after(tick_anim_mailbox),
+		app.init_resource::<DrawTerrainPitchProbes>()
+			.configure_sets(
+				Update,
+				CharacterMotionSystems::Elevation.after(CharacterMotionSystems::Anim),
 			)
-				.in_set(CharacterMotionSystems::Anim),
-		);
+			.add_systems(
+				Update,
+				(
+					sync_motion_markers,
+					prepare_anim_mailbox.after(sync_motion_markers),
+					tick_anim_mailbox.after(prepare_anim_mailbox),
+					apply_anim_mailbox.after(tick_anim_mailbox),
+				)
+					.in_set(CharacterMotionSystems::Anim),
+			)
+			.add_systems(PostUpdate, draw_terrain_pitch_probes);
 	}
 }
