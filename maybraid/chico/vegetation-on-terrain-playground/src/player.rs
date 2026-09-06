@@ -483,15 +483,41 @@ fn apply_character_movement(
 
 fn apply_movement_damping(
 	mode: Res<PlaygroundMode>,
-	mut query: Query<(&MovementDampingFactor, &mut LinearVelocity), With<CharacterController>>,
+	mut query: Query<
+		(
+			&MovementDampingFactor,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
+			Has<Grounded>,
+			Option<&Jumping>,
+			&mut LinearVelocity,
+		),
+		With<CharacterController>,
+	>,
 ) {
 	if *mode != PlaygroundMode::Character {
 		return;
 	}
-	for (damping, mut velocity) in &mut query {
-		velocity.x *= damping.0;
-		velocity.z *= damping.0;
+	for (damping, hits, max_slope, grounded, jumping, mut velocity) in &mut query {
+		let ground = (grounded && jumping.is_none())
+			.then(|| walkable_ground_normal(hits, max_slope))
+			.flatten();
+		damp_movement(&mut velocity, damping.0, ground);
 	}
+}
+
+/// Damp locomotion without tipping slope-tangent velocity into or away from
+/// the ground. Jumping keeps vertical velocity under gravity.
+fn damp_movement(velocity: &mut LinearVelocity, damping: f32, ground_normal: Option<Vec3>) {
+	if let Some(normal) = ground_normal.map(Vec3::normalize_or_zero) {
+		if normal.length_squared() > 1e-8 {
+			let tangent = **velocity - normal * velocity.dot(normal);
+			**velocity = tangent * damping;
+			return;
+		}
+	}
+	velocity.x *= damping;
+	velocity.z *= damping;
 }
 
 fn follow_character_camera(
@@ -539,5 +565,23 @@ mod tests {
 		assert!(
 			(CharacterLocomotion::default().max_slope_angle - DEFAULT_MAX_SLOPE_ANGLE).abs() < 1e-6
 		);
+	}
+
+	#[test]
+	fn slope_damping_is_symmetric_uphill_and_downhill() {
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let uphill = (Vec3::X - normal * Vec3::X.dot(normal)).normalize() * 10.0;
+		let mut uphill = LinearVelocity(uphill);
+		let mut downhill = LinearVelocity(-uphill.0);
+
+		damp_movement(&mut uphill, 0.92, Some(normal));
+		damp_movement(&mut downhill, 0.92, Some(normal));
+
+		assert!((uphill.length() - downhill.length()).abs() < 1e-5);
+		assert!(uphill.dot(normal).abs() < 1e-5, "{uphill:?}");
+		assert!(downhill.dot(normal).abs() < 1e-5, "{downhill:?}");
+		assert!(uphill.y > 0.0);
+		assert!(downhill.y < 0.0);
 	}
 }

@@ -460,12 +460,40 @@ pub(crate) fn advance_jump_phases(
 }
 
 pub(crate) fn apply_movement_damping(
-	mut query: Query<(&MovementDampingFactor, &mut LinearVelocity), With<CharacterController>>,
+	mut query: Query<
+		(
+			&MovementDampingFactor,
+			&ShapeHits,
+			Option<&MaxSlopeAngle>,
+			Option<&WalkableGround>,
+			Has<Grounded>,
+			Option<&Jumping>,
+			&mut LinearVelocity,
+		),
+		With<CharacterController>,
+	>,
 ) {
-	for (damping, mut velocity) in &mut query {
-		velocity.x *= damping.0;
-		velocity.z *= damping.0;
+	for (damping, hits, max_slope, walkable, grounded, jumping, mut velocity) in &mut query {
+		let contact = walkable_ground_normal(hits, max_slope);
+		let airborne = jumping.is_some_and(Jumping::airborne);
+		let ground =
+			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, airborne);
+		damp_movement(&mut velocity, damping.0, ground);
 	}
+}
+
+/// Damp locomotion without tipping slope-tangent velocity into or away from
+/// the ground. Airborne motion keeps vertical velocity under gravity.
+fn damp_movement(velocity: &mut LinearVelocity, damping: f32, ground_normal: Option<Vec3>) {
+	if let Some(normal) = ground_normal.map(Vec3::normalize_or_zero) {
+		if normal.length_squared() > 1e-8 {
+			let tangent = **velocity - normal * velocity.dot(normal);
+			**velocity = tangent * damping;
+			return;
+		}
+	}
+	velocity.x *= damping;
+	velocity.z *= damping;
 }
 
 #[cfg(test)]
@@ -579,5 +607,23 @@ mod tests {
 		assert!((along.dot(normal)).abs() < 1e-4, "{along} · {normal}");
 		let from_3d = wish_on_ground(Vec3::new(1.0, 10.0, 0.0), Some(normal));
 		assert!((from_3d - along).length() < 1e-4, "{from_3d} vs {along}");
+	}
+
+	#[test]
+	fn slope_damping_is_symmetric_uphill_and_downhill() {
+		let slope = 45.0_f32.to_radians();
+		let normal = Vec3::new(-slope.sin(), slope.cos(), 0.0);
+		let uphill = wish_on_ground(Vec3::X, Some(normal)) * 10.0;
+		let mut uphill = LinearVelocity(uphill);
+		let mut downhill = LinearVelocity(-uphill.0);
+
+		damp_movement(&mut uphill, 0.92, Some(normal));
+		damp_movement(&mut downhill, 0.92, Some(normal));
+
+		assert!((uphill.length() - downhill.length()).abs() < 1e-5);
+		assert!(uphill.dot(normal).abs() < 1e-5, "{uphill:?}");
+		assert!(downhill.dot(normal).abs() < 1e-5, "{downhill:?}");
+		assert!(uphill.y > 0.0);
+		assert!(downhill.y < 0.0);
 	}
 }
