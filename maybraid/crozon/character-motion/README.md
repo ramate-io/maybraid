@@ -33,7 +33,7 @@ sync_motion_markers
   → insert/remove AnimateBones / AnimateEffects on body host
   → insert/remove ApplyTerrainPitch on character root
 
-tick_anim_mailbox          # every body: advance clip time
+tick_anim_mailbox          # every body: advance clip time, or [`AnimProgress`]
 apply_anim_mailbox         # With<AnimateBones|AnimateEffects>: sample + write
 apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation
 ```

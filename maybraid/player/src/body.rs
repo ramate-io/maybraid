@@ -53,6 +53,115 @@ impl Default for WalkableGround {
 #[component(storage = "SparseSet")]
 pub struct JumpWish;
 
+/// Takeoff (grounded) → air → land recovery.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JumpPhase {
+	Takeoff,
+	Air,
+	Land,
+}
+
+/// In-flight jump. Impulse waits until takeoff ends; land holds until recovery.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+#[component(storage = "SparseSet")]
+pub struct Jumping {
+	pub phase: JumpPhase,
+	pub left_ground: bool,
+	pub leaping: bool,
+	pub phase_elapsed: f32,
+	pub launch_vy: f32,
+}
+
+/// Horizontal speed at which a jump is a running leap rather than a standing hop.
+pub const LEAP_SPEED: f32 = 5.0;
+const JUMP_TAKEOFF_DURATION: f32 = 0.14;
+const JUMP_LAND_DURATION: f32 = 0.24;
+const FAILED_HOP_SECONDS: f32 = 0.05;
+
+impl Jumping {
+	pub fn start(xz_speed: f32) -> Self {
+		Self {
+			phase: JumpPhase::Takeoff,
+			left_ground: false,
+			leaping: xz_speed > LEAP_SPEED,
+			phase_elapsed: 0.0,
+			launch_vy: 0.0,
+		}
+	}
+
+	pub fn airborne(&self) -> bool {
+		self.phase == JumpPhase::Air
+	}
+
+	/// Normalized 0..1 takeoff / air / land for the leap sampler.
+	pub fn leap_progress(&self, vertical_velocity: f32) -> f32 {
+		match self.phase {
+			JumpPhase::Takeoff => {
+				(self.phase_elapsed / JUMP_TAKEOFF_DURATION).clamp(0.0, 1.0) * LEAP_TAKEOFF_END
+			}
+			JumpPhase::Air => {
+				let launch = self.launch_vy.max(1e-3);
+				let frac = (1.0 - vertical_velocity / launch).clamp(0.0, 2.0) * 0.5;
+				LEAP_TAKEOFF_END + frac.clamp(0.0, 1.0) * (LEAP_AIR_END - LEAP_TAKEOFF_END)
+			}
+			JumpPhase::Land => {
+				LEAP_AIR_END
+					+ (self.phase_elapsed / JUMP_LAND_DURATION).clamp(0.0, 1.0)
+						* (1.0 - LEAP_AIR_END)
+			}
+		}
+	}
+}
+
+/// Advance a jump. Returns true when the shot is done and [`Jumping`] should drop.
+///
+/// Takeoff stays on the ground; impulse fires when takeoff ends or the capsule
+/// leaves the mesh. Land starts on first grounded frame after leaving.
+pub fn tick_jump(
+	jump: &mut Jumping,
+	grounded: bool,
+	velocity: &mut Vec3,
+	impulse: f32,
+	dt: f32,
+) -> bool {
+	match jump.phase {
+		JumpPhase::Takeoff => {
+			jump.phase_elapsed += dt;
+			if jump.phase_elapsed >= JUMP_TAKEOFF_DURATION || !grounded {
+				velocity.y = impulse;
+				jump.launch_vy = impulse;
+				jump.phase = JumpPhase::Air;
+				jump.phase_elapsed = 0.0;
+				if !grounded {
+					jump.left_ground = true;
+				}
+			}
+			false
+		}
+		JumpPhase::Air => {
+			jump.phase_elapsed += dt;
+			if grounded && jump.left_ground {
+				jump.phase = JumpPhase::Land;
+				jump.phase_elapsed = 0.0;
+				false
+			} else {
+				grounded
+					&& !jump.left_ground
+					&& velocity.y <= 0.05
+					&& jump.phase_elapsed > FAILED_HOP_SECONDS
+			}
+		}
+		JumpPhase::Land => {
+			jump.phase_elapsed += dt;
+			jump.phase_elapsed >= JUMP_LAND_DURATION
+		}
+	}
+}
+
+/// Leap sampler windows (must match `malo_animations::animations::leap`).
+const LEAP_TAKEOFF_END: f32 = 0.18;
+const LEAP_AIR_END: f32 = 0.72;
+
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PlayerControlSystems;
 
@@ -62,12 +171,6 @@ pub struct CharacterController;
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 pub struct Grounded;
-
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct Jumping {
-	pub left_ground: bool,
-}
 
 #[derive(Component)]
 pub(crate) struct MovementAcceleration(pub f32);
@@ -179,20 +282,14 @@ pub(crate) fn update_grounded(
 		});
 		if !is_grounded
 			&& was_grounded
-			&& jumping.is_none()
+			&& jumping.as_ref().is_none_or(|jump| !jump.airborne())
 			&& velocity.y > -GROUND_SNAP_SPEED
 			&& velocity.y < GROUND_SNAP_SPEED
 		{
 			is_grounded = true;
 		}
-		let landed = jumping.as_ref().is_some_and(|jump| jump.left_ground);
 		if is_grounded {
 			commands.entity(entity).insert(Grounded);
-			// Clear a hop that never left the ground (snap / short impulse) so the
-			// jump clip does not stick while the capsule is already walking.
-			if landed || (jumping.is_some() && velocity.y <= 0.05) {
-				commands.entity(entity).remove::<Jumping>();
-			}
 		} else {
 			commands.entity(entity).remove::<Grounded>();
 			if let Some(mut jump) = jumping {
@@ -229,16 +326,17 @@ fn walkable_ground_normal(hits: &ShapeHits, max_slope: Option<&MaxSlopeAngle>) -
 
 /// Contact plane used to turn a wish into capsule accel.
 ///
-/// Jumping and true air are XZ only (gravity owns Y). A walkable hit this frame
-/// is the plane. Last plane is only for a [`Grounded`] snap when the caster
-/// missed — never after walking off a ridge.
+/// Airborne jump (and true air) are XZ only (gravity owns Y). Takeoff and land
+/// stay on the walkable plane. A walkable hit this frame is the plane. Last
+/// plane is only for a [`Grounded`] snap when the caster missed — never after
+/// walking off a ridge.
 pub fn ground_plane_for_wish(
 	contact: Option<Vec3>,
 	last: Option<Vec3>,
 	grounded: bool,
-	jumping: bool,
+	airborne: bool,
 ) -> Option<Vec3> {
-	if jumping {
+	if airborne {
 		return None;
 	}
 	if let Some(normal) = contact {
@@ -304,7 +402,7 @@ pub(crate) fn apply_wish_movement(
 			&MovementAcceleration,
 			&mut LinearVelocity,
 			Has<Grounded>,
-			Has<Jumping>,
+			Option<&Jumping>,
 		),
 		With<CharacterController>,
 	>,
@@ -317,25 +415,46 @@ pub(crate) fn apply_wish_movement(
 			continue;
 		}
 		let contact = walkable_ground_normal(hits, max_slope);
-		let ground =
-			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, jumping);
+		let airborne = jumping.is_some_and(Jumping::airborne);
+		let ground = ground_plane_for_wish(
+			contact,
+			walkable.map(|plane| plane.normal),
+			grounded,
+			airborne,
+		);
 		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
 	}
 }
 
-/// Consume [`JumpWish`] on grounded capsules.
+/// Start a jump. Impulse waits for [`advance_jump_phases`].
 pub(crate) fn apply_wish_jump(
 	mut commands: Commands,
 	mut controllers: Query<
-		(Entity, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
-		(With<CharacterController>, With<JumpWish>),
+		(Entity, &LinearVelocity, Has<Grounded>),
+		(With<CharacterController>, With<JumpWish>, Without<Jumping>),
 	>,
 ) {
-	for (entity, jump, mut velocity, grounded) in &mut controllers {
+	for (entity, velocity, grounded) in &mut controllers {
 		commands.entity(entity).remove::<JumpWish>();
 		if grounded {
-			velocity.y = jump.0;
-			commands.entity(entity).insert(Jumping { left_ground: false });
+			let xz = Vec3::new(velocity.x, 0.0, velocity.z).length();
+			commands.entity(entity).insert(Jumping::start(xz));
+		}
+	}
+}
+
+pub(crate) fn advance_jump_phases(
+	mut commands: Commands,
+	time: Res<Time>,
+	mut controllers: Query<
+		(Entity, &JumpImpulse, &mut LinearVelocity, &mut Jumping, Has<Grounded>),
+		With<CharacterController>,
+	>,
+) {
+	let dt = time.delta_secs();
+	for (entity, impulse, mut velocity, mut jumping, grounded) in &mut controllers {
+		if tick_jump(&mut jumping, grounded, &mut velocity, impulse.0, dt) {
+			commands.entity(entity).remove::<Jumping>();
 		}
 	}
 }
@@ -386,6 +505,59 @@ mod tests {
 		assert_eq!(ground_plane_for_wish(None, Some(slope), true, false), Some(slope));
 		assert_eq!(ground_plane_for_wish(None, Some(slope), false, false), None);
 		assert_eq!(ground_plane_for_wish(None, Some(Vec3::Y), true, true), None);
+	}
+
+	#[test]
+	fn takeoff_delays_impulse_until_the_window_ends() {
+		let mut jump = Jumping::start(0.0);
+		let mut velocity = Vec3::ZERO;
+		assert!(!tick_jump(&mut jump, true, &mut velocity, 8.0, 0.05));
+		assert_eq!(jump.phase, JumpPhase::Takeoff);
+		assert!(velocity.y.abs() < 1e-4);
+		assert!(!tick_jump(&mut jump, true, &mut velocity, 8.0, 0.12));
+		assert_eq!(jump.phase, JumpPhase::Air);
+		assert!((velocity.y - 8.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn leaving_the_ground_during_takeoff_launches() {
+		let mut jump = Jumping::start(6.0);
+		let mut velocity = Vec3::ZERO;
+		assert!(jump.leaping);
+		assert!(!tick_jump(&mut jump, false, &mut velocity, 8.0, 0.016));
+		assert_eq!(jump.phase, JumpPhase::Air);
+		assert!(jump.left_ground);
+		assert!((velocity.y - 8.0).abs() < 1e-4);
+	}
+
+	#[test]
+	fn land_starts_on_contact_and_finishes_after_recovery() {
+		let mut jump = Jumping::start(0.0);
+		jump.phase = JumpPhase::Air;
+		jump.left_ground = true;
+		jump.launch_vy = 8.0;
+		let mut velocity = Vec3::new(0.0, -2.0, 0.0);
+		assert!(!tick_jump(&mut jump, true, &mut velocity, 8.0, 0.016));
+		assert_eq!(jump.phase, JumpPhase::Land);
+		assert!(!tick_jump(&mut jump, true, &mut velocity, 8.0, 0.1));
+		assert!(tick_jump(&mut jump, true, &mut velocity, 8.0, 0.2));
+	}
+
+	#[test]
+	fn leap_progress_covers_takeoff_air_and_land() {
+		let takeoff = Jumping::start(0.0);
+		assert!(takeoff.leap_progress(0.0) < 0.18);
+		let mut air = Jumping::start(0.0);
+		air.phase = JumpPhase::Air;
+		air.launch_vy = 8.0;
+		let apex = air.leap_progress(0.0);
+		let descent = air.leap_progress(-8.0);
+		assert!(apex > 0.18 && apex < 0.72, "{apex}");
+		assert!(descent > apex && descent <= 0.72, "{descent}");
+		let mut land = air;
+		land.phase = JumpPhase::Land;
+		land.phase_elapsed = JUMP_LAND_DURATION;
+		assert!((land.leap_progress(0.0) - 1.0).abs() < 1e-4);
 	}
 
 	#[test]

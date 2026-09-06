@@ -14,7 +14,8 @@ use game_commands::command::TextEntryFocus;
 use lod_avian::PhysicsInteractionLayer;
 use maybraid_input::{PadButton, VirtualPad};
 use player::{
-	JumpWish, WalkableGround, ground_plane_for_wish, walkable_contact_normal, wish_on_ground,
+	ground_plane_for_wish, tick_jump, walkable_contact_normal, wish_on_ground, JumpWish, Jumping,
+	WalkableGround,
 };
 use std::f32::consts::PI;
 
@@ -88,13 +89,6 @@ struct CharacterController;
 #[component(storage = "SparseSet")]
 pub(crate) struct Grounded;
 
-/// Space jump is in flight. Cleared on landing, not on shapecast misses.
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub(crate) struct Jumping {
-	left_ground: bool,
-}
-
 #[derive(Component)]
 struct MovementAcceleration(f32);
 
@@ -143,6 +137,7 @@ impl Plugin for PlayerPlugin {
 					update_grounded,
 					apply_wish_movement,
 					apply_wish_jump,
+					advance_jump_phases,
 					apply_movement_damping,
 					follow_character_camera,
 				)
@@ -356,18 +351,14 @@ fn update_grounded(
 		});
 		if !is_grounded
 			&& was_grounded
-			&& jumping.is_none()
+			&& jumping.as_ref().is_none_or(|jump| !jump.airborne())
 			&& velocity.y > -GROUND_SNAP_SPEED
 			&& velocity.y < GROUND_SNAP_SPEED
 		{
 			is_grounded = true;
 		}
-		let landed = jumping.as_ref().is_some_and(|jump| jump.left_ground);
 		if is_grounded {
 			commands.entity(entity).insert(Grounded);
-			if landed {
-				commands.entity(entity).remove::<Jumping>();
-			}
 		} else {
 			commands.entity(entity).remove::<Grounded>();
 			if let Some(mut jump) = jumping {
@@ -410,7 +401,7 @@ fn apply_wish_movement(
 			&MovementAcceleration,
 			&mut LinearVelocity,
 			Has<Grounded>,
-			Has<Jumping>,
+			Option<&Jumping>,
 		),
 		With<CharacterController>,
 	>,
@@ -427,8 +418,13 @@ fn apply_wish_movement(
 			continue;
 		}
 		let contact = walkable_contact_normal(hits, max_slope.map(|angle| angle.0));
-		let ground =
-			ground_plane_for_wish(contact, walkable.map(|plane| plane.normal), grounded, jumping);
+		let airborne = jumping.is_some_and(Jumping::airborne);
+		let ground = ground_plane_for_wish(
+			contact,
+			walkable.map(|plane| plane.normal),
+			grounded,
+			airborne,
+		);
 		accelerate_wish(&mut velocity, wish.0, accel.0, dt, ground);
 	}
 }
@@ -437,15 +433,35 @@ fn apply_wish_jump(
 	mode: Res<PlaygroundMode>,
 	mut commands: Commands,
 	mut controllers: Query<
-		(Entity, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
-		(With<CharacterController>, With<JumpWish>),
+		(Entity, &LinearVelocity, Has<Grounded>),
+		(With<CharacterController>, With<JumpWish>, Without<Jumping>),
 	>,
 ) {
-	for (entity, jump, mut velocity, grounded) in &mut controllers {
+	for (entity, velocity, grounded) in &mut controllers {
 		commands.entity(entity).remove::<JumpWish>();
 		if *mode == PlaygroundMode::Character && grounded {
-			velocity.y = jump.0;
-			commands.entity(entity).insert(Jumping { left_ground: false });
+			let xz = Vec3::new(velocity.x, 0.0, velocity.z).length();
+			commands.entity(entity).insert(Jumping::start(xz));
+		}
+	}
+}
+
+fn advance_jump_phases(
+	mode: Res<PlaygroundMode>,
+	mut commands: Commands,
+	time: Res<Time>,
+	mut controllers: Query<
+		(Entity, &JumpImpulse, &mut LinearVelocity, &mut Jumping, Has<Grounded>),
+		With<CharacterController>,
+	>,
+) {
+	if *mode != PlaygroundMode::Character {
+		return;
+	}
+	let dt = time.delta_secs();
+	for (entity, impulse, mut velocity, mut jumping, grounded) in &mut controllers {
+		if tick_jump(&mut jumping, grounded, &mut velocity, impulse.0, dt) {
+			commands.entity(entity).remove::<Jumping>();
 		}
 	}
 }

@@ -42,6 +42,11 @@ pub struct AnimMailbox {
 	bind_transform: Transform,
 }
 
+/// Sample coordinate for the current clip. When present, [`tick_anim_mailbox`]
+/// uses this instead of advancing wall-clock clip time (jump / leap phases).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct AnimProgress(pub f32);
+
 impl AnimMailbox {
 	fn new(bind_transform: Transform) -> Self {
 		Self {
@@ -121,13 +126,13 @@ pub fn prepare_anim_mailbox(
 pub fn tick_anim_mailbox(
 	time: Res<Time>,
 	mut hosts: Query<
-		(&AnimRefRoot, &mut AnimMailbox, &CharacterRig, &BoneMap),
+		(&AnimRefRoot, &mut AnimMailbox, Option<&AnimProgress>, &CharacterRig, &BoneMap),
 		(With<AnimMailbox>, Without<AnimBone>, Without<SuspendAnimation>),
 	>,
 	bones: Query<(&AnimBone, &mut Transform), Without<AnimMailbox>>,
 ) {
 	let dt = time.delta_secs();
-	for (root, mut mailbox, character_rig, bone_map) in &mut hosts {
+	for (root, mut mailbox, progress, character_rig, bone_map) in &mut hosts {
 		if character_rig.role != CharacterRigRole::Body {
 			continue;
 		}
@@ -144,7 +149,11 @@ pub fn tick_anim_mailbox(
 			mailbox.last = Some(requested_id);
 		}
 
-		mailbox.clip_progress += dt * root.0.speed;
+		if let Some(progress) = progress {
+			mailbox.clip_progress = progress.0;
+		} else {
+			mailbox.clip_progress += dt * root.0.speed;
+		}
 		if mailbox.blending() {
 			mailbox.blend_progress = (mailbox.blend_progress + dt / BLEND_DURATION).min(1.0);
 		}

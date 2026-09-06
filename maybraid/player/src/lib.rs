@@ -12,8 +12,8 @@ use maybraid_character_controller::CharacterControlSystems;
 
 pub use body::{
 	apply_character_controller, apply_character_mobility, apply_locomotion_capsule,
-	ground_plane_for_wish, walkable_contact_normal, wish_on_ground, CharacterController,
-	CharacterLocomotion, Grounded, JumpWish, Jumping, MoveWish, PlayerControlSystems,
+	ground_plane_for_wish, tick_jump, walkable_contact_normal, wish_on_ground, CharacterController,
+	CharacterLocomotion, Grounded, JumpPhase, JumpWish, Jumping, MoveWish, PlayerControlSystems,
 	WalkableGround,
 };
 pub use identity::{
@@ -67,6 +67,7 @@ impl Plugin for PlayerPlugin {
 					body::update_grounded,
 					body::apply_wish_movement,
 					body::apply_wish_jump,
+					body::advance_jump_phases,
 					body::apply_movement_damping,
 				)
 					.chain()

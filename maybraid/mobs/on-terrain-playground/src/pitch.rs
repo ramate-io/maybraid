@@ -6,14 +6,14 @@ use crozon_characters::{
 	apply_terrain_pitch, ApplyTerrainPitch, SuspendTerrainPitch, TerrainPitch,
 };
 use ground_avian::AvianElevationProbe;
-use player::{CharacterController, Jumping as NpcJumping};
+use player::{CharacterController, Jumping};
 
-use crate::playground_player::{Jumping as PlayerJumping, Player};
+use crate::playground_player::Player;
 
 pub(crate) fn sync_suspend_terrain_pitch(
 	mut commands: Commands,
-	players: Query<(Entity, Has<PlayerJumping>), With<Player>>,
-	npcs: Query<(Entity, Has<NpcJumping>), (With<CharacterController>, Without<Player>)>,
+	players: Query<(Entity, Has<Jumping>), With<Player>>,
+	npcs: Query<(Entity, Has<Jumping>), (With<CharacterController>, Without<Player>)>,
 ) {
 	for (entity, jumping) in players.iter().chain(npcs.iter()) {
 		if jumping {
