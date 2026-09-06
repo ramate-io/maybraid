@@ -4,9 +4,10 @@
 //! selection generate. Canopy bump-outs occupy the 1–5 km present keep and
 //! clone Durham fine-cell mesh handles. Vegetation LOD bullseye / lattice
 //! cover the grove fill ring. Urbanization hopscotch streams at the same
-//! 1 km / 3 km rings without re-registering Durham (vegetation owns terrain).
+//! 1 km / 3 km rings without re-registering Durham (`TerrainPlugin<Durham>` owns terrain).
 //!
-//! Plugin list: Durham/character via `VegetationOnTerrainPlugin`, groves +
+//! Plugin list: `WorldMaterialRefPlugin`, `VisualGeometryCorePlugin`,
+//! `TerrainPlugin<Durham>`, character via `VegetationOnTerrainPlugin`, groves +
 //! bump-outs via `VegetationPlugin<DevelopmentExclusions<OnTerrain<DurhamHeight>>>`,
 //! then Richmond urbanization.
 
@@ -33,7 +34,7 @@ use chico_vegetation_on_terrain_playground::{
 	PlaygroundDiag, PlaygroundMode, PlaygroundTimingPlugin, RequestSetCharacter,
 	VegetationOnTerrainPlugin, VegetationPlugin,
 };
-use durham_terrain_models::TerrainFrictionConfig;
+use durham_terrain_models::{Durham, TerrainFrictionConfig, TerrainPlugin};
 use game_commands::command::{GameCommandPlugin, TextEntryFocus};
 use game_commands::ui::GameCommandDrawerConfig;
 use lod::{Bullseye, LodLevelRootPending, OpenLattice};
@@ -45,6 +46,7 @@ use richmond_developments_on_terrain_playground::{
 	DevelopmentExclusions, DevelopmentsOnTerrainPlugin,
 	PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
+use visual_geometry_core::VisualGeometryCorePlugin;
 
 /// Steepest walkable slope. Cliffs (~80°+) stay well above this and never count as floor.
 const WORLD_MAX_SLOPE_ANGLE: f32 = 70.0_f32.to_radians();
@@ -92,6 +94,8 @@ impl Plugin for WorldPlugin {
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
 			.add_plugins(WorldMaterialRefPlugin)
+			.add_plugins(VisualGeometryCorePlugin)
+			.add_plugins(TerrainPlugin::<Durham>::playable_world())
 			.add_plugins(VirtualPadPlugin::new(VirtualPadConfig {
 				debug_overlay: self.debug_chrome,
 				..default()
@@ -100,11 +104,12 @@ impl Plugin for WorldPlugin {
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
+				own_terrain: false,
 			})
 			.add_plugins(
 				VegetationPlugin::<DevelopmentExclusions<OnTerrain<DurhamHeight>>>::default(),
 			)
-			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
+			// Urbanization stream only — `TerrainPlugin<Durham>` owns TerrainEntryStore.
 			.add_plugins(DevelopmentsOnTerrainPlugin {
 				config: DevelopmentsPlaygroundConfig::world_defaults(),
 				commands: false,

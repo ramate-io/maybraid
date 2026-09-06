@@ -2339,7 +2339,6 @@ dependencies = [
  "chunk",
  "clap",
  "crozon-characters",
- "durham-terrain",
  "durham-terrain-models",
  "futures",
  "game-commands",
@@ -3119,6 +3118,7 @@ dependencies = [
  "procedural-common",
  "render-item",
  "sdf",
+ "visual-geometry-core",
 ]
 
 [[package]]
@@ -4676,6 +4676,7 @@ dependencies = [
  "maybraid-sky",
  "richmond-building-shaders",
  "richmond-developments-on-terrain-playground",
+ "visual-geometry-core",
 ]
 
 [[package]]
@@ -7280,6 +7281,18 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "visual-geometry-core"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "lod-lazy-refs",
+ "render-item",
+ "scene-ref",
+ "terrain-chunk-ref",
+]
 
 [[package]]
 name = "voracious_radix_sort"

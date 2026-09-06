@@ -4,6 +4,7 @@ pub mod base_noise;
 pub mod cell;
 pub mod collider;
 pub mod config;
+pub mod host;
 pub mod index;
 pub mod jersey;
 pub mod jersey_modulation;
@@ -56,6 +57,12 @@ pub use collider::{
 	TERRAIN_FRICTION,
 };
 pub use config::TerrainConfig;
+pub use host::{
+	terrain_streaming_enabled, Durham, TerrainCoverage, TerrainPlugin, TerrainPresentationDirty,
+	TerrainStreamingEnabled, WorldBaseTerrain, WORLD_FINE_HALF_EXTENT_CELLS,
+	WORLD_TERRAIN_BACKGROUND_RADIUS_M, WORLD_TERRAIN_FAR_RADIUS_M, WORLD_TERRAIN_NEAR_RADIUS_M,
+	WORLD_TERRAIN_PRESENT_STEP_M, WORLD_TERRAIN_STREAM_EDGE_M,
+};
 pub use index::{
 	AvianTerrainIndex, TerrainCellId, TerrainEntryStore, TerrainGenerationInput,
 	TerrainGenerationResult, TerrainHeightSnapshot,
@@ -94,7 +101,7 @@ pub use marazion::{
 	MarazionPocketWatersLowPass as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
 	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
-pub use plugin::{register_terrain_plugin, TerrainPlugin};
+pub use plugin::{register_terrain_plugin, TerrainResourcesPlugin};
 pub use presentation::{
 	PresentedTerrainScene, TerrainBackground, TerrainBackgroundRegionPresenter, TerrainFar,
 	TerrainFarRegionPresenter, TerrainMeshLodBand, TerrainNear, TerrainNearRegionPresenter,

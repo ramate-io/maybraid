@@ -14,7 +14,7 @@ General logic that is no longer tied to a proper-noun implementation belongs in 
 
 The term "model" and suffix `-models` is used to refer to a layer that defining the base behavior of a game object. Typically, this means taking a lower-order asset, such as tree from [`chico-sbs-trees`](./chico/sbs-trees/), and integrating it with standard game systems such as LOD, generation, and physics. Accordingly, models should typically define plugins that idempotently make available the needed systems for base behaviors.
 
-**Plugin shape:** define one idempotent plugin **per model** (e.g. `TerrainPlugin` beside the terrain types), then compose those plugins at the **crate root** (e.g. `DurhamTerrainModelsPlugin` that only registers each model plugin). Apps should add the crate-root plugin once rather than wiring individual model plugins ad hoc—unless they intentionally need a subset.
+**Plugin shape:** define one idempotent plugin **per model** (e.g. `TerrainResourcesPlugin` beside the terrain types), then compose those plugins at the **crate root** (e.g. `DurhamTerrainModelsPlugin` that only registers each model plugin). World hosts add `TerrainPlugin<Durham>` for shaders, mesh caches, and the LOD stream. Apps should add the crate-root plugin once rather than wiring individual model plugins ad hoc—unless they intentionally need a subset.
 
 Particularly bespoke systems, like player damage, movement, and inventory, are not necessarily considered parts of models until the underlying API is generalized. Before that point, they are expected to be implemented as separate systems acting on the types that the models define.
 

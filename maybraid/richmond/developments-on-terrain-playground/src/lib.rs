@@ -125,7 +125,7 @@ struct HostsDirty(bool);
 /// Richmond developments on Durham terrain.
 ///
 /// Set [`Self::own_terrain`] to `false` when Durham / [`TerrainEntryStore`] are
-/// already owned (e.g. by vegetation-on-terrain in maybraid-world).
+/// already owned (e.g. by [`durham_terrain_models::TerrainPlugin`] in maybraid-world).
 pub struct DevelopmentsOnTerrainPlugin {
 	pub config: PlaygroundConfig,
 	/// When false, the caller owns the command drawer / CLI.

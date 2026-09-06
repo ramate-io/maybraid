@@ -48,7 +48,7 @@ pub struct BuildingsLodRefreshPlugin;
 
 impl Plugin for BuildingsLodRefreshPlugin {
 	fn build(&self, app: &mut App) {
-		// Same sentinel as Durham `TerrainPlugin`: `PhysicsPlugins` is a group.
+		// Same sentinel as Durham `TerrainResourcesPlugin`: `PhysicsPlugins` is a group.
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}

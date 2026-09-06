@@ -13,7 +13,6 @@ rust-version = { workspace = true }
 bevy = { workspace = true }
 chunk = { workspace = true }
 futures = { workspace = true }
-durham-terrain = { workspace = true }
 durham-terrain-models = { workspace = true }
 chico-groves = { workspace = true, features = ["render"] }
 chico-forests = { workspace = true }

@@ -25,6 +25,7 @@ members = [
   "maybraid/scene-ref",
   "maybraid/material-ref",
   "maybraid/terrain-chunk-ref",
+  "maybraid/visual-geometry-core",
 
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
@@ -248,6 +249,7 @@ maybraid-character-controller = { path = "maybraid/controllers/character" }
 scene-ref = { path = "maybraid/scene-ref" }
 material-ref = { path = "maybraid/material-ref" }
 terrain-chunk-ref = { path = "maybraid/terrain-chunk-ref" }
+visual-geometry-core = { path = "maybraid/visual-geometry-core" }
 
 avian3d = "0.7"
 
