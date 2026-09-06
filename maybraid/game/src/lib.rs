@@ -9,10 +9,11 @@ use bevy::prelude::*;
 use maybraid_character_controller::{CharacterControlSystems, CharacterIntent};
 use maybraid_input::MenuNavPad;
 use maybraid_menu_controller::MenuControllerPlugin;
-use maybraid_world::{WorldGameplayEnabled, WorldPlugin};
+use maybraid_world::{WorldGameplayEnabled, WorldPlayerLoadout, WorldPlugin};
 use menu_components::{consume_screen_back, ActiveOverlayKey, ScreenBackPressed, MENU_CLEAR};
 use menu_playground::{
-	CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin, CharacterSessionPlugin,
+	ActiveCharacter, CharacterPreviewPlugin, CharacterScreen, CharacterScreenPlugin,
+	CharacterSessionPlugin,
 };
 use menu_screens::{
 	cancel_pending_create, request_show_gallery, CreateCharacterPlugin, GalleryScreen, GameMode,
@@ -59,7 +60,8 @@ impl Plugin for GamePlugin {
 			.add_systems(OnExit(GameFlow::Characters), detach_preview_camera)
 			.add_systems(
 				OnEnter(GameFlow::World),
-				(enter_world, apply_shell_look, detach_preview_camera),
+				(load_active_player_loadout, enter_world, apply_shell_look, detach_preview_camera)
+					.chain(),
 			)
 			.add_systems(OnEnter(WorldPause::Playing), apply_shell_look)
 			.add_systems(OnEnter(WorldPause::Menu), (enter_world_menu, apply_shell_look))
@@ -78,6 +80,35 @@ impl Plugin for GamePlugin {
 				),
 			);
 	}
+}
+
+fn load_active_player_loadout(
+	mut commands: Commands,
+	active: Option<Res<ActiveCharacter>>,
+	save_root: Res<crozon_character_persist::SaveRoot>,
+) {
+	commands.remove_resource::<WorldPlayerLoadout>();
+	let Some(active) = active else {
+		warn!("entering world without an active character; using the default world loadout");
+		return;
+	};
+	let loadout = match read_player_loadout(save_root.as_ref(), active.id) {
+		Ok(loadout) => loadout,
+		Err(error) => {
+			warn!("failed to load active player {} for world: {error}", active.id.to_hex());
+			return;
+		}
+	};
+	commands.insert_resource(loadout);
+}
+
+fn read_player_loadout(
+	save_root: &crozon_character_persist::SaveRoot,
+	id: crozon_character_persist::CharacterId,
+) -> Result<WorldPlayerLoadout, crozon_character_persist::PersistError> {
+	let model = crozon_character_model_user::load(save_root, id)?;
+	let inventory = crozon_inventory_user::load(save_root, id)?;
+	Ok(WorldPlayerLoadout::new(id.to_hex(), model.appearance, inventory))
 }
 
 fn route_home_choice(
@@ -155,11 +186,33 @@ fn character_back(
 
 #[cfg(test)]
 mod tests {
-	use super::assets_root;
+	use crozon_character_items::Inventory;
+	use crozon_character_model_user::CharacterModel;
+	use crozon_character_persist::{CharacterId, SaveRoot};
+	use crozon_characters::CharacterAppearance;
+
+	use crate::{assets_root, read_player_loadout};
 
 	#[test]
 	fn crate_assets_contain_barlow() {
 		let font = assets_root().join("fonts/barlow/BarlowSemiCondensed-Regular.ttf");
 		assert!(font.is_file(), "expected Barlow at {}", font.display());
+	}
+
+	#[test]
+	fn discovery_reads_the_active_character_files() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let root = SaveRoot::at(dir.path());
+		let id = CharacterId(42);
+		let model = CharacterModel::new(id, "Active", CharacterAppearance::default());
+		let inventory = Inventory::default();
+		crozon_character_model_user::save(&root, &model)?;
+		crozon_inventory_user::save(&root, id, &inventory)?;
+
+		let loadout = read_player_loadout(&root, id)?;
+		assert_eq!(loadout.key, id.to_hex());
+		assert_eq!(loadout.inventory, inventory);
+		assert_eq!(loadout.appearance.species_id(), model.appearance.species_id());
+		Ok(())
 	}
 }

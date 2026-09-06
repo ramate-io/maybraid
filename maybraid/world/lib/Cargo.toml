@@ -16,7 +16,9 @@ chico-forests = { workspace = true }
 chico-vegetation-components = { workspace = true }
 clap = { workspace = true }
 combat-hud = { workspace = true }
+crozon-character-items = { workspace = true }
 crozon-characters = { workspace = true }
+crozon-inventory-user = { workspace = true }
 damage = { workspace = true }
 durham-terrain-models = { workspace = true }
 evasion-intelligence = { workspace = true }

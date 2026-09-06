@@ -15,7 +15,9 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = { workspace = true }
+crozon-character-model-user = { workspace = true }
 crozon-character-playground = { workspace = true }
+crozon-inventory-user = { workspace = true }
 maybraid-character-controller = { workspace = true }
 maybraid-input = { workspace = true }
 maybraid-menu-controller = { workspace = true }
@@ -24,6 +26,12 @@ menu-components = { workspace = true }
 menu-playground = { workspace = true }
 menu-screens = { workspace = true }
 crozon-character-persist = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+crozon-character-items = { workspace = true }
+crozon-characters = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

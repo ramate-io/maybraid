@@ -22,7 +22,9 @@ pub use bump_out::{
 	CanopyBumpOutPresenterState, DurhamCanopyBumpOutPresenter, WorldTerrainBuilder,
 };
 pub use camera::CameraController;
-pub use character::{CharacterSpecies, PlayerVisual, RequestSetCharacter};
+pub use character::{
+	CharacterSpecies, PlayerVisual, RequestSetCharacter, RequestSetCharacterAppearance,
+};
 pub use chico_forests::ForestStreamSpec;
 pub use commands::{GroveKind, PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use diagnostics::{PlaygroundDiag, PlaygroundTimingPlugin, RequestFpsToggle};

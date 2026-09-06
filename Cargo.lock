@@ -4561,9 +4561,14 @@ dependencies = [
 name = "maybraid"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
+ "crozon-character-items",
+ "crozon-character-model-user",
  "crozon-character-persist",
  "crozon-character-playground",
+ "crozon-characters",
+ "crozon-inventory-user",
  "maybraid-character-controller",
  "maybraid-input",
  "maybraid-menu-controller",
@@ -4571,6 +4576,7 @@ dependencies = [
  "menu-components",
  "menu-playground",
  "menu-screens",
+ "tempfile",
 ]
 
 [[package]]
@@ -4651,7 +4657,9 @@ dependencies = [
  "chico-vegetation-on-terrain-playground",
  "clap",
  "combat-hud",
+ "crozon-character-items",
  "crozon-characters",
+ "crozon-inventory-user",
  "damage",
  "durham-terrain-models",
  "evasion-intelligence",

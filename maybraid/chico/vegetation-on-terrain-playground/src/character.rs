@@ -17,8 +17,9 @@ use crozon_characters::{
 		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
 		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
-	AnimClip, AnimId, AnimRef, AnimRefRoot, CharacterHeading, CharacterMembers, CharacterRecipe,
-	CharacterRig, CharacterRigRole, CharacterRoot, ComponentsOnly, RigSkeletonKind,
+	AnimClip, AnimId, AnimRef, AnimRefRoot, CharacterAppearance, CharacterHeading,
+	CharacterMembers, CharacterRecipe, CharacterRig, CharacterRigRole, CharacterRoot,
+	ComponentsOnly, RigSkeletonKind,
 };
 use game_commands::ui::GameCommandStatusText;
 use lod::gen::LodScene;
@@ -110,22 +111,32 @@ pub struct RequestSetCharacter {
 	pub species: CharacterSpecies,
 }
 
+/// Replace the terrain player visual with a configured, inventory-clothed appearance.
+#[derive(Component, Debug, Clone)]
+pub struct RequestSetCharacterAppearance {
+	pub appearance: CharacterAppearance,
+}
+
 pub(crate) fn apply_set_character(
 	mut commands: Commands,
 	mut status: Option<ResMut<GameCommandStatusText>>,
-	requests: Query<(Entity, &RequestSetCharacter)>,
+	species_requests: Query<(Entity, &RequestSetCharacter)>,
+	appearance_requests: Query<(Entity, &RequestSetCharacterAppearance)>,
 	players: Query<Entity, With<Player>>,
 	visuals: Query<Entity, With<PlayerVisual>>,
 	mut capsules: Query<&mut Visibility, With<PlayerCapsule>>,
 ) {
 	let Ok(player) = players.single() else {
-		for (entity, _) in &requests {
+		for (entity, _) in &species_requests {
+			commands.entity(entity).despawn();
+		}
+		for (entity, _) in &appearance_requests {
 			commands.entity(entity).despawn();
 		}
 		return;
 	};
 
-	for (entity, request) in &requests {
+	for (entity, request) in &species_requests {
 		for visual in &visuals {
 			commands.entity(visual).try_despawn();
 		}
@@ -142,6 +153,27 @@ pub(crate) fn apply_set_character(
 			format!(
 				"set-character {} — mode character, WASD move, Space jump",
 				request.species.label()
+			),
+		);
+		commands.entity(entity).despawn();
+	}
+	for (entity, request) in &appearance_requests {
+		for visual in &visuals {
+			commands.entity(visual).try_despawn();
+		}
+		for mut visibility in &mut capsules {
+			*visibility = Visibility::Hidden;
+		}
+
+		for spawned in spawn_appearance(&mut commands, &request.appearance, Transform::IDENTITY) {
+			commands.entity(spawned).insert((ChildOf(player), PlayerVisual));
+		}
+		commands.spawn(RequestModeCharacter);
+		crate::ui::write_status(
+			&mut status,
+			format!(
+				"set-character {} — mode character, WASD move, Space jump",
+				request.appearance.species_id()
 			),
 		);
 		commands.entity(entity).despawn();
@@ -304,6 +336,45 @@ fn spawn_species(
 		CharacterSpecies::Thumplus => spawn_preview!(ThumplusConfig),
 		CharacterSpecies::Mistler => spawn_preview!(MistlerConfig),
 		CharacterSpecies::Tuberwaber => spawn_preview!(TuberwaberConfig),
+	}
+}
+
+fn spawn_appearance(
+	commands: &mut Commands,
+	appearance: &CharacterAppearance,
+	transform: Transform,
+) -> Vec<Entity> {
+	macro_rules! spawn_config {
+		($config:expr) => {{
+			let clothed = CharacterRecipe::clothed($config);
+			let bounds = character_bounds(&clothed);
+			let identity = Transform::IDENTITY;
+			let lod_ref = LodRef {
+				entity: Entity::PLACEHOLDER,
+				previous_transform: &identity,
+				current_transform: &identity,
+				bounds: &bounds,
+			};
+			let host = ComponentsOnly(clothed);
+			vec![commands
+				.spawn_scene((
+					host.host(&lod_ref),
+					bsn! {
+						template_value(transform)
+					},
+				))
+				.id()]
+		}};
+	}
+	match appearance {
+		CharacterAppearance::Braidman(config) => spawn_config!(config),
+		CharacterAppearance::Brodler(config) => spawn_config!(config),
+		CharacterAppearance::Mygr(config) => spawn_config!(config),
+		CharacterAppearance::Dui(config) => spawn_config!(config),
+		CharacterAppearance::Wumbus(config) => spawn_config!(config),
+		CharacterAppearance::Lero(config) => spawn_config!(config),
+		CharacterAppearance::Spibmom(config) => spawn_config!(config),
+		CharacterAppearance::Tuberwaber(config) => spawn_config!(config),
 	}
 }
 

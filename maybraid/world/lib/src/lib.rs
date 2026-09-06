@@ -26,6 +26,7 @@ pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
 pub use player_camera::CameraPov;
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
+pub use weapon::WorldPlayerLoadout;
 
 use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
 use bevy::prelude::*;
