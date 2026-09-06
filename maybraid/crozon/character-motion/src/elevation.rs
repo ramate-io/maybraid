@@ -7,7 +7,9 @@
 //!
 //! Front/hind rays follow [`TerrainPitch::sagittal`] (live shoulder–hip) when
 //! that axis is set, otherwise Bevy mesh `+Z`. Yaw still comes from the visual
-//! so locomotion keeps facing.
+//! so locomotion keeps facing. Probe noise is held behind a deadband; the
+//! displayed pitch, roll, and support Y exponentially follow the accepted
+//! target and stay rate-capped.
 
 use bevy::prelude::*;
 use ground::ElevationProbe;
@@ -15,7 +17,8 @@ use ground::ElevationProbe;
 use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
 use crate::pitch::{
 	facing_with_support_tilt, observed_pitch, observed_roll, pitched_half_run, sample_facing,
-	step_toward, support_offset, xz_dir, TerrainPitch, TerrainPitchProbe, MAX_TILT,
+	smooth_toward, support_offset, xz_dir, TerrainPitch, TerrainPitchProbe, MAX_TILT,
+	MIN_SUPPORT_CHANGE, MIN_TILT_CHANGE, SUPPORT_RATE, TILT_RATE,
 };
 
 /// Start the ray this far above the body so it clears the capsule.
@@ -136,16 +139,33 @@ pub fn apply_terrain_pitch<P>(
 			}
 		}
 
-		let (target_pitch, target_roll) = if suspend {
-			(0.0, 0.0)
+		let (target_pitch, target_roll, target_support) = if suspend {
+			(0.0, 0.0, 0.0)
 		} else {
 			(
 				observed_pitch(front.y, hind.y, run) * pitch.pitch_weight,
 				observed_roll(left_h, right_h, pitch.half_width) * pitch.roll_weight,
+				support_offset(center_h, front.y, hind.y),
 			)
 		};
-		pitch.pitch = step_toward(pitch.pitch, target_pitch, dt);
-		pitch.roll = step_toward(pitch.roll, target_roll, dt);
+		pitch.pitch = smooth_toward(
+			pitch.pitch,
+			&mut pitch.accepted_pitch,
+			target_pitch,
+			dt,
+			MIN_TILT_CHANGE,
+			TILT_RATE,
+			suspend,
+		);
+		pitch.roll = smooth_toward(
+			pitch.roll,
+			&mut pitch.accepted_roll,
+			target_roll,
+			dt,
+			MIN_TILT_CHANGE,
+			TILT_RATE,
+			suspend,
+		);
 		pitch.probe = TerrainPitchProbe {
 			origin: Vec3::new(origin.x, center_h, origin.z),
 			front,
@@ -157,11 +177,16 @@ pub fn apply_terrain_pitch<P>(
 		};
 		visual.rotation = facing_with_support_tilt(visual_facing, ray_facing, pitch.pitch, pitch.roll);
 		if offset_local_y {
-			visual.translation.y = if suspend {
-				0.0
-			} else {
-				support_offset(center_h, front.y, hind.y)
-			};
+			pitch.support = smooth_toward(
+				pitch.support,
+				&mut pitch.accepted_support,
+				target_support,
+				dt,
+				MIN_SUPPORT_CHANGE,
+				SUPPORT_RATE,
+				suspend,
+			);
+			visual.translation.y = pitch.support;
 		}
 	}
 }

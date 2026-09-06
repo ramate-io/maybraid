@@ -52,6 +52,14 @@ pub struct TerrainPitch {
 	pub pitch: f32,
 	/// Local-Z radians (right side up is positive).
 	pub roll: f32,
+	/// Smoothed local Y for a capsule child. Ignored for world-placed hosts.
+	pub support: f32,
+	/// Last probe target that passed the tilt deadband.
+	pub accepted_pitch: f32,
+	/// Last probe target that passed the tilt deadband.
+	pub accepted_roll: f32,
+	/// Last probe target that passed the support deadband.
+	pub accepted_support: f32,
 	/// Unit XZ hind→front from live girdles. [`Vec3::ZERO`] until measured.
 	pub sagittal: Vec3,
 	pub probe: TerrainPitchProbe,
@@ -67,6 +75,10 @@ impl TerrainPitch {
 			roll_weight: roll_weight(kind),
 			pitch: 0.0,
 			roll: 0.0,
+			support: 0.0,
+			accepted_pitch: 0.0,
+			accepted_roll: 0.0,
+			accepted_support: 0.0,
 			sagittal: Vec3::ZERO,
 			probe: TerrainPitchProbe::default(),
 			girdles: TerrainPitchGirdles::default(),
@@ -116,7 +128,16 @@ impl TerrainPitch {
 
 /// Match Durham / playground walkable slopes so long bodies can follow the mesh.
 pub const MAX_TILT: f32 = 80.0_f32.to_radians();
+/// Max rad/s toward the accepted tilt. Large snaps still take several frames.
 pub const TILT_RATE: f32 = 3.0;
+/// Exponential follow rate (1/s) so sub-rate-cap noise is low-passed, not copied.
+pub const TILT_SMOOTH: f32 = 10.0;
+/// Ignore new pitch/roll samples closer than this to the accepted target.
+pub const MIN_TILT_CHANGE: f32 = 2.5_f32.to_radians();
+/// Max m/s toward the accepted support offset.
+pub const SUPPORT_RATE: f32 = 2.0;
+/// Ignore new support samples closer than this to the accepted offset.
+pub const MIN_SUPPORT_CHANGE: f32 = 0.04;
 
 const HUMANOID_HALF_SPAN: f32 = 0.22;
 const QUADRUPED_HALF_SPAN: f32 = 1.2;
@@ -243,9 +264,46 @@ pub fn observed_roll(left_height: f32, right_height: f32, half_width: f32) -> f3
 }
 
 pub fn step_toward(current: f32, target: f32, dt: f32) -> f32 {
-	let delta = target - current;
-	let max_step = TILT_RATE * dt;
-	current + delta.clamp(-max_step, max_step)
+	step_toward_rate(current, target, dt, TILT_RATE)
+}
+
+pub fn step_toward_rate(current: f32, target: f32, dt: f32, rate: f32) -> f32 {
+	let max_step = rate * dt;
+	current + (target - current).clamp(-max_step, max_step)
+}
+
+/// Keep `accepted` unless `observed` moved by at least `min_change`.
+pub fn accept_target(accepted: f32, observed: f32, min_change: f32) -> f32 {
+	if (observed - accepted).abs() >= min_change {
+		observed
+	} else {
+		accepted
+	}
+}
+
+/// Exponential blend toward `accepted`, then clamp to `rate`.
+pub fn follow_target(current: f32, accepted: f32, dt: f32, rate: f32) -> f32 {
+	let alpha = 1.0 - (-TILT_SMOOTH * dt.max(0.0)).exp();
+	let blended = current + (accepted - current) * alpha;
+	step_toward_rate(current, blended, dt, rate)
+}
+
+/// Deadband the probe target, then follow it. `force` skips the deadband (jump).
+pub fn smooth_toward(
+	current: f32,
+	accepted: &mut f32,
+	observed: f32,
+	dt: f32,
+	min_change: f32,
+	rate: f32,
+	force: bool,
+) -> f32 {
+	*accepted = if force {
+		observed
+	} else {
+		accept_target(*accepted, observed, min_change)
+	};
+	follow_target(current, *accepted, dt, rate)
 }
 
 /// Yaw from flattened facing (`look_to(-facing)`), then local pitch and roll.
@@ -448,5 +506,54 @@ mod tests {
 		assert!(!pitch.girdles.sagittal_ok);
 		assert_eq!(pitch.sagittal, Vec3::ZERO);
 		assert!((pitch.half_span - 1.2).abs() < 1e-5);
+	}
+
+	#[test]
+	fn accept_target_ignores_sub_threshold_noise() {
+		let accepted = 0.4;
+		assert_eq!(
+			accept_target(accepted, accepted + MIN_TILT_CHANGE * 0.5, MIN_TILT_CHANGE),
+			accepted
+		);
+		let next = accepted + MIN_TILT_CHANGE * 1.01;
+		assert_eq!(accept_target(accepted, next, MIN_TILT_CHANGE), next);
+	}
+
+	#[test]
+	fn follow_target_damps_small_error_and_caps_large() {
+		let dt = 1.0 / 60.0;
+		let small = follow_target(0.0, 0.02, dt, TILT_RATE);
+		assert!(small > 0.0);
+		assert!(small < 0.02);
+		let large = follow_target(0.0, 2.0, dt, TILT_RATE);
+		assert!((large - TILT_RATE * dt).abs() < 1e-5);
+	}
+
+	#[test]
+	fn smooth_toward_forces_zero_below_the_deadband() {
+		let dt = 1.0 / 60.0;
+		let mut accepted = 0.02;
+		let held = smooth_toward(
+			0.02,
+			&mut accepted,
+			0.0,
+			dt,
+			MIN_TILT_CHANGE,
+			TILT_RATE,
+			false,
+		);
+		assert_eq!(accepted, 0.02);
+		assert!((held - 0.02).abs() < 1e-6);
+		let out = smooth_toward(
+			0.02,
+			&mut accepted,
+			0.0,
+			dt,
+			MIN_TILT_CHANGE,
+			TILT_RATE,
+			true,
+		);
+		assert_eq!(accepted, 0.0);
+		assert!(out < 0.02);
 	}
 }

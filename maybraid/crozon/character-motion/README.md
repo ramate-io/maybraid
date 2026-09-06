@@ -124,15 +124,18 @@ not steal the terrain trimesh. Side rays run only when
 shoulder–hip axis (`TerrainPitch.sagittal`); gizmos: lime/orange ray hits, yellow sample axis, cyan
 mesh `+Z`, magenta bone dots, teal/gold girdle midpoints (magenta chord). A pink
 ring on the origin means girdles were found but the XZ run was too short.
-Insert `DrawTerrainPitchProbes(false)` to hide.
+Insert `DrawTerrainPitchProbes(false)` to hide. Applied pitch, roll, and
+support Y follow an accepted probe target with a deadband, exponential
+smoothing, and a rate cap so trimesh noise does not jitter the mesh.
 
 ### Jump / airborne
 
 Insert `SuspendTerrainPitch` on the visual or any ancestor (typically the
-physics capsule). Pitch apply zeros tilt and support offset while that marker
-is on the ancestor chain. Local Y `support_offset` is applied only when the
-visual is a near-origin child of a body, not when local translation is
-world-sized under a group root.
+physics capsule). Pitch apply force-accepts zero tilt and support offset while
+that marker is on the ancestor chain (deadband does not keep a leftover pose
+in the air). Local Y `support_offset` is applied only when the visual is a
+near-origin child of a body, not when local translation is world-sized under
+a group root.
 
 ## What this crate is not
 
