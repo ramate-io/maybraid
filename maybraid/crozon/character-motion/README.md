@@ -35,7 +35,7 @@ sync_motion_markers
 
 tick_anim_mailbox          # every body: advance clip time, or [`AnimProgress`]
 apply_anim_mailbox         # With<AnimateBones|AnimateEffects>: sample + write
-apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation
+apply_terrain_pitch        # With<ApplyTerrainPitch>: Avian rays → visual rotation + support lift
 ```
 
 UltraLow: sync strips markers → far hosts still tick time, but bone writes and
@@ -117,7 +117,8 @@ generic apply loop in a concrete system. Side rays run only when
 
 ### Jump / airborne
 
-Insert `SuspendTerrainPitch` on the **physics parent** of the visual.
+Insert `SuspendTerrainPitch` on the **physics parent** of the visual. Pitch
+apply zeros tilt and support lift while that marker is present.
 
 ## What this crate is not
 

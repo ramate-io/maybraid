@@ -4,7 +4,8 @@
 //! apply separate pitch and roll weights. Mesh faces `+Z`; positive local `X`
 //! dips the nose, so sagittal slope is negated. Family roll weight is 0
 //! (stand upright); set [`TerrainPitch::roll_weight`] to bank. The capsule
-//! stays upright and owns Y on a side slope.
+//! stays upright and owns world Y; the visual child pitches and lifts so the
+//! support chord stays on the slope.
 
 use bevy::prelude::*;
 
@@ -37,11 +38,12 @@ impl TerrainPitch {
 	}
 }
 
-pub const MAX_TILT: f32 = 40.0_f32.to_radians();
+/// Match Durham / playground walkable slopes so long bodies can follow the mesh.
+pub const MAX_TILT: f32 = 70.0_f32.to_radians();
 pub const TILT_RATE: f32 = 3.0;
 
 const HUMANOID_HALF_SPAN: f32 = 0.22;
-const QUADRUPED_HALF_SPAN: f32 = 0.9;
+const QUADRUPED_HALF_SPAN: f32 = 1.2;
 const FORELIMBED_HALF_SPAN: f32 = 0.4;
 const HUMANOID_HALF_WIDTH: f32 = 0.18;
 const QUADRUPED_HALF_WIDTH: f32 = 0.45;
@@ -73,7 +75,7 @@ pub fn default_half_width(kind: RigSkeletonKind) -> f32 {
 pub fn pitch_weight(kind: RigSkeletonKind) -> f32 {
 	match kind {
 		RigSkeletonKind::Humanoid | RigSkeletonKind::Neck => 0.4,
-		RigSkeletonKind::Quadruped => 0.9,
+		RigSkeletonKind::Quadruped => 1.0,
 		RigSkeletonKind::Forelimbed => 0.7,
 	}
 }
@@ -95,15 +97,16 @@ pub fn girdle_midpoint(positions: impl IntoIterator<Item = Vec3>) -> Option<Vec3
 }
 
 fn measured_half(a: Option<Vec3>, b: Option<Vec3>, fallback: f32) -> f32 {
+	measured_support_half(a, b).unwrap_or(fallback)
+}
+
+/// XZ half-distance between two support samples, if they are far enough apart.
+pub fn measured_support_half(a: Option<Vec3>, b: Option<Vec3>) -> Option<f32> {
 	let (Some(a), Some(b)) = (a, b) else {
-		return fallback;
+		return None;
 	};
 	let delta = Vec2::new(a.x - b.x, a.z - b.z).length() * 0.5;
-	if delta < MIN_MEASURED {
-		fallback
-	} else {
-		delta
-	}
+	(delta >= MIN_MEASURED).then_some(delta)
 }
 
 /// Rest wheelbase from girdle world positions, or the family default.
@@ -157,10 +160,9 @@ pub fn facing_with_tilt(facing_xz: Vec3, pitch: f32, roll: f32) -> Quat {
 }
 
 /// Lift so the pitched front/hind chord stays on the hip-clearance plane.
-/// Side samples stay out: the capsule owns Y on a side slope.
+/// Side samples stay out: the capsule owns world Y on a side slope.
 ///
-/// Visual apply does **not** write this — the capsule owns Y. Kept for tests
-/// and callers that still want a chord residual.
+/// Applied to the visual child's local Y. The physics capsule does not move.
 pub fn support_lift(
 	hip_y: f32,
 	center_height: f32,
@@ -241,6 +243,20 @@ mod tests {
 		let pitch = observed_pitch(0.2, -0.2, half);
 		let lift = support_lift(2.0, 0.0, 0.2, -0.2, half, pitch);
 		assert!(lift < 0.05, "gentle planar slope should need little lift, got {lift}");
+	}
+
+	#[test]
+	fn lift_raises_the_downhill_chord_on_a_steep_plane() {
+		let half = 1.2;
+		let pitch = observed_pitch(2.4, 0.0, half);
+		let lift = support_lift(1.2, 1.2, 2.4, 0.0, half, pitch);
+		assert!(lift > 0.3, "steep slope should lift the downhill hip, got {lift}");
+	}
+
+	#[test]
+	fn measured_support_ignores_stacked_girdles() {
+		let origin = Vec3::new(10.0, 1.0, 4.0);
+		assert_eq!(measured_support_half(Some(origin), Some(origin)), None);
 	}
 
 	#[test]

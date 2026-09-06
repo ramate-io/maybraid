@@ -40,12 +40,27 @@ impl LocomotionCapsule {
 		Self { radius: self.radius * scale.max(0.0), length: self.length * scale.max(0.0) }
 	}
 
-	/// Standing quadruped hull whose bottom matches rest-pose limb length.
+	/// Stretch the cylinder so the capsule bottom sits at `-half_height`.
+	pub fn with_half_height(self, half_height: f32) -> Self {
+		let half = half_height.max(self.radius);
+		Self { radius: self.radius, length: (half - self.radius) * 2.0 }
+	}
+
+	/// Rest-pose feet below the visual/capsule origin.
+	///
+	/// Thigh + shin at rest (`crozon_rigs::quadruped::LegSegmentLengths`), times
+	/// the species / slider / lanky length product.
+	pub fn quadruped_feet_below_origin(limb_scale: f32) -> f32 {
+		let legs = crozon_rigs::quadruped::LegSegmentLengths::default();
+		(legs.upper + legs.lower) * limb_scale.max(0.0)
+	}
+
+	/// Standing quadruped hull whose bottom matches rest-pose foot depth.
 	///
 	/// `limb_scale` is the product of species baseline, slider, and lanky length
-	/// layers (`1.0` = stock [`Self::QUADRUPED`]).
+	/// layers (`1.0` = stock thigh+shin).
 	pub fn quadruped_for_limb_length(limb_scale: f32) -> Self {
-		Self::QUADRUPED.scaled(limb_scale.max(0.0))
+		Self::QUADRUPED.with_half_height(Self::quadruped_feet_below_origin(limb_scale))
 	}
 
 	pub fn half_height(self) -> f32 {
@@ -377,11 +392,13 @@ mod tests {
 	}
 
 	#[test]
-	fn quadruped_limb_hull_scales_the_stock_stand_in() {
+	fn quadruped_limb_hull_matches_rest_pose_foot_depth() {
 		let hull = LocomotionCapsule::quadruped_for_limb_length(1.35);
-		assert_eq!(hull, LocomotionCapsule::QUADRUPED.scaled(1.35));
+		assert!((hull.radius - LocomotionCapsule::QUADRUPED.radius).abs() < 1e-5);
+		assert!((hull.half_height() - 1.35).abs() < 1e-5);
 		assert!(
-			(hull.half_height() - LocomotionCapsule::QUADRUPED.half_height() * 1.35).abs() < 1e-5
+			(hull.half_height() - LocomotionCapsule::quadruped_feet_below_origin(1.35)).abs()
+				< 1e-5
 		);
 	}
 }

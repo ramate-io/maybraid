@@ -99,7 +99,7 @@ fn whelp_and_quadruped_hulls_differ_from_humanoid() {
 	let topple = Topple::from_config(&ToppleConfig::default_preview());
 	assert_eq!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID.scaled(0.30));
 	let brenal = Brenal::from_config(&BrenalConfig::default_preview());
-	assert_eq!(brenal.locomotion_capsule(), LocomotionCapsule::QUADRUPED);
+	assert_eq!(brenal.locomotion_capsule(), LocomotionCapsule::quadruped_for_limb_length(1.0));
 	assert_ne!(topple.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 	assert_ne!(brenal.locomotion_capsule(), LocomotionCapsule::HUMANOID);
 }

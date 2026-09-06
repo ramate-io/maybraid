@@ -1,18 +1,35 @@
 //! Apply [`TerrainPitch`] from an [`ElevationProbe`]. No Durham types.
 //!
 //! Two downward rays (front / hind). Side rays only if `roll_weight > 0`.
-//! Rotation only — the physics capsule owns Y.
+//! The capsule stays upright and owns world Y. The visual child pitches and
+//! lifts so the support chord stays on the slope.
 
 use bevy::prelude::*;
 use ground::ElevationProbe;
 
 use crate::markers::{ApplyTerrainPitch, SuspendTerrainPitch};
-use crate::pitch::{facing_with_tilt, observed_pitch, observed_roll, step_toward, TerrainPitch};
+use crate::pitch::{
+	facing_with_tilt, observed_pitch, observed_roll, step_toward, support_lift, TerrainPitch,
+	MAX_TILT,
+};
 
 /// Start the ray this far above the body so it clears the capsule.
 pub const PROBE_LIFT: f32 = 2.0;
-/// Short downward cast — characters stand on nearby colliders, not a heightfield.
+/// Extra downward reach after the uphill clearance, for downhill samples.
 pub const PROBE_MAX_DISTANCE: f32 = 6.0;
+
+/// Extra height so an uphill sample still starts above the mesh.
+pub fn probe_clearance(half_span: f32) -> f32 {
+	PROBE_LIFT + half_span.max(0.0) * MAX_TILT.tan()
+}
+
+fn probe_from_y(origin_y: f32, half_span: f32) -> f32 {
+	origin_y + probe_clearance(half_span)
+}
+
+fn probe_distance(half_span: f32) -> f32 {
+	probe_clearance(half_span) + PROBE_MAX_DISTANCE
+}
 
 /// Tilt visuals that carry both [`TerrainPitch`] and host [`ApplyTerrainPitch`].
 ///
@@ -49,18 +66,20 @@ pub fn apply_terrain_pitch<P>(
 			None => (visual.translation, Vec::new(), false),
 		};
 
-		let mut sample = |xz: Vec3| {
-			probe
-				.height_at(xz.x, xz.z, origin.y + PROBE_LIFT, PROBE_MAX_DISTANCE, &exclude)
-				.unwrap_or(origin.y)
-		};
+		let from_y = probe_from_y(origin.y, pitch.half_span);
+		let max_distance = probe_distance(pitch.half_span);
+		let mut sample = |xz: Vec3| probe.height_at(xz.x, xz.z, from_y, max_distance, &exclude);
 
-		let front_h = sample(origin + facing * pitch.half_span);
-		let hind_h = sample(origin - facing * pitch.half_span);
+		let center_h = sample(origin).unwrap_or(origin.y);
+		let front_h = sample(origin + facing * pitch.half_span).unwrap_or(center_h);
+		let hind_h = sample(origin - facing * pitch.half_span).unwrap_or(center_h);
 		let (left_h, right_h) = if pitch.roll_weight > 0.0 {
-			(sample(origin - right * pitch.half_width), sample(origin + right * pitch.half_width))
+			(
+				sample(origin - right * pitch.half_width).unwrap_or(center_h),
+				sample(origin + right * pitch.half_width).unwrap_or(center_h),
+			)
 		} else {
-			(origin.y, origin.y)
+			(center_h, center_h)
 		};
 
 		let (target_pitch, target_roll) = if suspend {
@@ -74,5 +93,25 @@ pub fn apply_terrain_pitch<P>(
 		pitch.pitch = step_toward(pitch.pitch, target_pitch, dt);
 		pitch.roll = step_toward(pitch.roll, target_roll, dt);
 		visual.rotation = facing_with_tilt(facing, pitch.pitch, pitch.roll);
+		if child_of.is_some() {
+			visual.translation.y = if suspend {
+				0.0
+			} else {
+				support_lift(origin.y, center_h, front_h, hind_h, pitch.half_span, pitch.pitch)
+			};
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn probe_clearance_starts_above_a_max_tilt_uphill_sample() {
+		let span = 1.2;
+		let clearance = probe_clearance(span);
+		assert!(clearance > span * MAX_TILT.tan());
+		assert!(probe_distance(span) > clearance);
 	}
 }
