@@ -1,13 +1,10 @@
 //! Apply [`CharacterIntent`] to the vegetation capsule / camera-relative wish.
 
 use bevy::prelude::*;
-use chico_vegetation_on_terrain_playground::{
-	CameraController, MoveWish, MovementAction, Player, PlaygroundMode,
-};
+use chico_vegetation_on_terrain_playground::{MoveWish, MovementAction, Player, PlaygroundMode};
 use game_commands::command::{CommandConsoleOutput, TextEntryFocus};
 use maybraid_character_controller::CharacterIntent;
-
-use crate::camera::CameraPov;
+use player_camera::CameraController;
 
 /// When `false`, world movement / POV intents are ignored (menus, pause overlay).
 #[derive(Resource, Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,7 +24,6 @@ pub(crate) fn apply_intents_to_movement(
 	cameras: Query<&CameraController, With<Camera3d>>,
 	mut wishes: Query<&mut MoveWish, With<Player>>,
 	mut movement: MessageWriter<MovementAction>,
-	mut pov: ResMut<CameraPov>,
 ) {
 	if !gameplay.0 || *mode != PlaygroundMode::Character || text_focus.0 {
 		for _ in intents.read() {}
@@ -43,9 +39,6 @@ pub(crate) fn apply_intents_to_movement(
 		match *intent {
 			CharacterIntent::Move(value) => move_stick = value,
 			CharacterIntent::Jump => jump = true,
-			CharacterIntent::SwapPov => {
-				*pov = (*pov).toggle();
-			}
 			_ => {}
 		}
 	}

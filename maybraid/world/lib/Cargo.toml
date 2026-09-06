@@ -34,6 +34,7 @@ maybraid-input = { workspace = true }
 maybraid-sky = { workspace = true }
 maybraid-mobs = { workspace = true }
 player = { workspace = true }
+player-camera = { workspace = true }
 mob-characters = { workspace = true }
 mob-groups = { workspace = true }
 meandering-intelligence = { workspace = true }

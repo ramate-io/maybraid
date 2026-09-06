@@ -4790,6 +4790,7 @@ dependencies = [
  "movement-intelligence-avian",
  "movement-realization",
  "player",
+ "player-camera",
  "poi-intelligence",
  "procedural-common",
  "richmond-development-models",

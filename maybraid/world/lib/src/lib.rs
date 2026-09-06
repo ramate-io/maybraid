@@ -18,13 +18,13 @@ mod poi;
 mod ui;
 mod weapon;
 
-pub use camera::CameraPov;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use control::WorldGameplayEnabled;
 pub use game_commands::command::PendingStartupCommand;
 pub use intelligence::WorldIntelligencePlugin;
 pub use material_lib::{WorldMaterialLib, WorldMaterialRefPlugin};
 pub use mobs::WorldMobsPlugin;
+pub use player_camera::CameraPov;
 pub use poi::{WorldPoiDiscoveryBudget, WorldPoiPlugin, WorldPoiSystems};
 
 use avian3d::prelude::{CoefficientCombine, Friction, PhysicsPlugins, PhysicsSchedulePlugin};
@@ -42,6 +42,8 @@ use lod::{Bullseye, OpenLattice};
 use maybraid_character_controller::{CharacterControlSystems, CharacterControllerPlugin};
 use maybraid_input::{VirtualPadConfig, VirtualPadPlugin};
 use maybraid_sky::SkyDomePlugin;
+use player::PlayerPresentationPlugin;
+use player_camera::{PlayerCameraPlugin, PlayerCameraSystems};
 use richmond_developments_on_terrain_playground::{
 	DevelopmentsOnTerrainPlugin, PlaygroundConfig as DevelopmentsPlaygroundConfig,
 };
@@ -92,7 +94,6 @@ impl Plugin for WorldPlugin {
 		}
 		app.insert_resource(PlaygroundMode::Character)
 			.insert_resource(PlaygroundDiag { fps: self.debug_chrome })
-			.insert_resource(CameraPov::default())
 			.insert_resource(CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(player::CharacterLocomotion { max_slope_angle: WORLD_MAX_SLOPE_ANGLE })
 			.insert_resource(TerrainFrictionConfig(WORLD_TERRAIN_FRICTION))
@@ -102,11 +103,14 @@ impl Plugin for WorldPlugin {
 				..default()
 			}))
 			.add_plugins(CharacterControllerPlugin)
+			.add_plugins(PlayerPresentationPlugin)
+			.add_plugins(PlayerCameraPlugin)
 			.add_plugins(VegetationOnTerrainPlugin {
 				config: VegetationPlaygroundConfig::world_defaults(),
 				commands: false,
 				register_forest_lod: false,
 				register_bump_out_lod: false,
+				register_camera: false,
 				register_terrain_pitch: false,
 			})
 			// Urbanization stream only — vegetation already owns Durham / TerrainEntryStore.
@@ -147,13 +151,17 @@ impl Plugin for WorldPlugin {
 				.after(CharacterControlSystems)
 				.before(PlayerControlSystems),
 		);
+		camera::configure(app);
 		weapon::configure(app);
+		app.configure_sets(
+			Update,
+			PlayerCameraSystems::Body
+				.after(CharacterMotionSystems::Anim)
+				.before(CharacterMotionSystems::Elevation),
+		);
 		app.add_systems(
 			Update,
 			(
-				camera::turn_body_with_look
-					.after(CharacterMotionSystems::Anim)
-					.before(CharacterMotionSystems::Elevation),
 				pitch::sync_suspend_terrain_pitch.after(PlayerControlSystems),
 				pitch::apply_avian_terrain_pitch
 					.in_set(CharacterMotionSystems::Elevation)
@@ -173,12 +181,6 @@ impl Plugin for WorldPlugin {
 				),
 			);
 		}
-		app.add_systems(
-			PostUpdate,
-			(camera::sync_first_person_head_visibility, camera::follow_world_camera)
-				.chain()
-				.after(TransformSystems::Propagate),
-		);
 	}
 }
 

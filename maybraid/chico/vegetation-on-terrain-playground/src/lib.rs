@@ -210,6 +210,9 @@ pub struct VegetationOnTerrainPlugin {
 	pub register_forest_lod: bool,
 	/// Register the plain Durham-backed canopy bump-out presenter.
 	pub register_bump_out_lod: bool,
+	/// Spawn and drive the playground fly/follow camera.
+	/// Composed applications can disable this and own the sole gameplay camera.
+	pub register_camera: bool,
 	/// Register Avian terrain pitch apply + player jump suspend.
 	/// World sets this false and owns pitch for NPCs as well as the player.
 	pub register_terrain_pitch: bool,
@@ -222,6 +225,7 @@ impl Default for VegetationOnTerrainPlugin {
 			commands: true,
 			register_forest_lod: true,
 			register_bump_out_lod: true,
+			register_camera: true,
 			register_terrain_pitch: true,
 		}
 	}
@@ -286,15 +290,19 @@ impl Plugin for VegetationOnTerrainPlugin {
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.insert_resource(GrovesDirty(true))
-			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
+			.add_systems(Startup, (setup_lighting, setup_presentation_assets))
 			.add_systems(PreUpdate, sync_pad_gameplay.before(VirtualPadSystems::Produce))
 			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
+		if self.register_camera {
+			app.add_systems(Startup, setup_camera).add_systems(
+				Update,
+				(release_modifiers_on_focus_change, camera_controller).chain(),
+			);
+		}
 		if self.commands {
 			app.add_systems(
 				Update,
 				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
 					apply_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					generate_cells.after(apply_commands),
 					present_cells.after(generate_cells),
@@ -323,8 +331,6 @@ impl Plugin for VegetationOnTerrainPlugin {
 			app.add_systems(
 				Update,
 				(
-					release_modifiers_on_focus_change.before(camera_controller),
-					camera_controller,
 					generate_cells,
 					present_cells.after(generate_cells),
 					spawn_groves.after(present_cells),
